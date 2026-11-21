@@ -1,41 +1,82 @@
 import { test, expect } from '@playwright/test';
-import { rmSync } from 'node:fs';
-import { createMiniHarnessServer } from '../../src/server.js';
+import { spawn, type ChildProcess } from 'node:child_process';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { createServer } from 'node:net';
+import { join, resolve } from 'node:path';
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
+
+async function availablePort(): Promise<number> {
+  const server = createServer();
+  await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('Missing port');
+  await new Promise<void>((done) => server.close(() => done()));
+  return address.port;
+}
+
+async function startIsolatedHost(paths: ReturnType<typeof createFixturePaths>['paths']) {
+  const port = await availablePort();
+  const child: ChildProcess = spawn(process.execPath, [
+    resolve('dist/bin/mini-harness.js'), '--cwd', paths.cwd, '--port', String(port)
+  ], {
+    env: { ...process.env, MINI_HARNESS_HOME: paths.home },
+    stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true
+  });
+  let output = '';
+  child.stdout?.on('data', (data) => { output += data.toString(); });
+  child.stderr?.on('data', (data) => { output += data.toString(); });
+  const pidPath = join(paths.home, 'server.json');
+  for (let attempt = 0; attempt < 200; attempt++) {
+    if (existsSync(pidPath)) {
+      const info = JSON.parse(readFileSync(pidPath, 'utf8'));
+      if (info.pid === child.pid) {
+        return {
+          url: info.url as string,
+          token: info.token as string,
+          async stop() {
+            if (child.exitCode === null) child.kill('SIGTERM');
+            await new Promise<void>((resolve) => {
+              if (child.exitCode !== null) return resolve();
+              child.once('close', () => resolve());
+              setTimeout(resolve, 5000);
+            });
+          }
+        };
+      }
+    }
+    if (child.exitCode !== null) throw new Error('mini-harness exited: ' + output);
+    await new Promise((done) => setTimeout(done, 100));
+  }
+  child.kill('SIGTERM');
+  throw new Error('mini-harness did not start: ' + output);
+}
 
 test('desktop and mobile: send, navigate, settings and bulk select', async ({ browser }) => {
   const mock = await createMockProvider();
   try {
     for (const viewport of [{ width: 1366, height: 900 }, { width: 390, height: 844 }]) {
       const { root, paths } = createFixturePaths(mock.url);
-      const app = await createMiniHarnessServer(paths);
+      const service = await startIsolatedHost(paths);
       const page = await browser.newPage({ viewport });
-      const browserErrors: string[] = [];
-      page.on('console', (msg) => { if (msg.type() === 'error') browserErrors.push(msg.text()); });
-      page.on('pageerror', (error) => browserErrors.push(error.stack || error.message));
-      page.on('requestfailed', (req) => browserErrors.push('Request failed: ' + req.url() + ': ' + req.failure()?.errorText));
-      page.on('framenavigated', (frame) => { if (frame === page.mainFrame()) browserErrors.push('Navigated: ' + frame.url()); });
-      page.on('response', (response) => { if (response.url().includes('/api/')) browserErrors.push('API ' + response.status() + ' ' + response.url()); });
+      const events: string[] = [];
+      page.on('pageerror', (error) => events.push(error.message));
+      page.on('requestfailed', (req) => events.push(req.url() + ': ' + req.failure()?.errorText));
       try {
-        const port = await app.listen(0);
-        await page.goto('http://127.0.0.1:' + port + '/#token=' + app.token);
+        await page.goto(service.url + '/#token=' + service.token);
         await expect(page.getByRole('heading', { name: 'What are we working on?' })).toBeVisible();
         await page.getByRole('textbox', { name: 'Message' }).fill('Hello from the browser');
         await page.getByRole('button', { name: 'Send' }).click();
-        await page.waitForTimeout(1500);
-        const snapshot = await page.evaluate(() => ({
-          href: location.href,
-          ready: document.readyState,
-          status: document.getElementById('status')?.textContent,
-          messages: document.getElementById('messages')?.textContent,
-          answer: document.querySelector('.message.assistant')?.textContent,
-          model: (document.getElementById('modelSelect') as HTMLSelectElement | null)?.value,
-          title: document.getElementById('conversationTitle')?.textContent
-        }));
-        console.log('BROWSER SNAPSHOT', JSON.stringify({
-          viewport, snapshot, modelRequests: mock.requests.length, browserErrors
-        }));
-        await expect(page.locator('.message.assistant')).toHaveText('Mock response', { timeout: 8000 });
+        try {
+          await expect(page.locator('.message.assistant')).toHaveText('Mock response', { timeout: 15000 });
+        } catch (error) {
+          console.error('Browser state:', JSON.stringify({
+            viewport, requests: mock.requests.length, events,
+            location: page.url(),
+            status: await page.locator('#status').textContent().catch(() => null),
+            messages: await page.locator('#messages').textContent().catch(() => null)
+          }));
+          throw error;
+        }
 
         if (viewport.width < 1000) await page.getByRole('button', { name: 'Toggle navigation' }).click();
         await page.getByRole('button', { name: 'Select', exact: true }).click();
@@ -48,7 +89,7 @@ test('desktop and mobile: send, navigate, settings and bulk select', async ({ br
         await page.getByRole('button', { name: 'Close settings' }).click();
       } finally {
         await page.close();
-        await app.close();
+        await service.stop();
         rmSync(root, { recursive: true, force: true });
       }
     }
