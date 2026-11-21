@@ -3,7 +3,7 @@ import { createReadStream, readFileSync, statSync } from 'node:fs';
 import { dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
-import { mergeSettings, writeJson } from './config.js';
+import { mergeSettings, writeJson, readJson } from './config.js';
 import { MinihRuntime } from './agent.js';
 
 const WEB_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'web');
@@ -103,8 +103,12 @@ export async function createMinihServer(paths, options = {}) {
         const input = await requestBody(req);
         if (typeof input.provider !== 'string' || !/^[a-z0-9-]+$/.test(input.provider) ||
             typeof input.key !== 'string' || !input.key.trim()) return json(res, 400, { error: 'Invalid credential' });
+        const credentialsPath = join(paths.home, 'auth.json');
+        const stored = readJson(credentialsPath, {});
+        stored[input.provider] = { type: 'api_key', key: input.key.trim() };
+        writeJson(credentialsPath, stored);
         await runtime.models.setRuntimeApiKey(input.provider, input.key.trim());
-        return json(res, 200, { ok: true, persisted: false });
+        return json(res, 200, { ok: true, persisted: true });
       }
       return json(res, 404, { error: 'Not found' });
     } catch (error) {

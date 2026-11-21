@@ -6,7 +6,6 @@ import {
 import { PluginHost } from './plugins.js';
 import { SessionRegistry } from './registry.js';
 import { readSettings, writeJson } from './config.js';
-import { selectChildModel } from './subagents.js';
 
 export class MinihRuntime {
   constructor(paths) {
@@ -15,7 +14,6 @@ export class MinihRuntime {
     this.registry = new SessionRegistry(paths);
     this.openSessions = new Map();
     this.busy = new Set();
-    this.currentTaskParent = null;
     this.plugins = new PluginHost(this);
   }
 
@@ -74,7 +72,7 @@ export class MinihRuntime {
       settingsManager,
       sessionManager: manager,
       tools: ['read', 'edit', 'write', 'grep', 'find', 'ls'],
-      customTools: this.plugins.getTools({ child })
+      customTools: this.plugins.getTools({ child, id })
     });
     this.openSessions.set(id, session);
     return session;
@@ -101,7 +99,6 @@ export class MinihRuntime {
     if (this.busy.has(id)) throw new Error('Conversation is already running');
     if (typeof prompt !== 'string' || !prompt.trim() || prompt.length > 200000) throw new Error('Invalid message');
     this.busy.add(id);
-    const previous = this.currentTaskParent;
     let off = () => {};
     try {
       const session = await this.open(id, { child, modelChoice: choice });
@@ -110,7 +107,6 @@ export class MinihRuntime {
         await session.setModel(model);
       }
       const record = this.registry.get(id);
-      this.currentTaskParent = { id, depth: child ? 1 : 0, model: this.modelInfo(session.model) };
       off = session.subscribe((event) => {
         if (event.type === 'message_update' &&
             event.assistantMessageEvent?.type === 'text_delta') {
@@ -130,7 +126,6 @@ export class MinihRuntime {
       return answer;
     } finally {
       off();
-      this.currentTaskParent = previous;
       this.busy.delete(id);
     }
   }

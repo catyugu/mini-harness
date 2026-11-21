@@ -1,4 +1,7 @@
 import { Context } from 'cordis';
+import { readdirSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { Type } from 'typebox';
 import { runShell } from './sandbox.js';
 import { requireChildDepth, selectChildModel, Semaphore } from './subagents.js';
@@ -60,8 +63,19 @@ export class PluginHost {
         return { content: [{ type: 'text', text: JSON.stringify(output) }] };
       }
     }));
-    // Cordis performs plugin initialization asynchronously.
-    await Promise.all(this.fibers.map((fiber) => fiber.ready).filter(Boolean));
+    // External plugin code is trusted executable JavaScript. Only explicitly enabled modules load.
+    for (const entry of readdirSync(this.runtime.paths.plugins, { withFileTypes: true })) {
+      if (!entry.isDirectory() || !this.runtime.settings.plugins[entry.name]) continue;
+      const source = join(this.runtime.paths.plugins, entry.name, 'plugin.js');
+      if (!existsSync(source)) continue;
+      const mod = await import(pathToFileURL(source).href);
+      const load = mod.default ?? mod.apply;
+      if (typeof load !== 'function') throw new Error('Invalid plugin: ' + entry.name);
+      this.fibers.push(this.ctx.plugin((ctx) => load(ctx, {
+        registerTool: (tool) => ctx.effect(() => this.registerTool(entry.name + ':' + tool.name, tool))
+      })));
+    }
+    await Promise.all(this.fibers.map((fiber) => fiber.inertia).filter(Boolean));
   }
 
   registerTool(id, tool) {
@@ -70,8 +84,22 @@ export class PluginHost {
     return () => this.tools.delete(id);
   }
 
-  getTools({ child = false } = {}) {
-    return [...this.tools.values()].filter((tool) => !child || tool.name !== 'delegate');
+  getTools({ child = false, id } = {}) {
+    return [...this.tools.values()].filter((tool) => !child || tool.name !== 'delegate').map((tool) => {
+      if (tool.name !== 'delegate') return tool;
+      // Bind delegation to its owning session, never to global mutable request state.
+      return { ...tool, execute: async (_callId, args, signal) => {
+        if (!id) throw new Error('Delegate has no owning session');
+        const record = this.runtime.registry.get(id);
+        if (!record) throw new Error('Parent conversation not found');
+        requireChildDepth(record.parentId ? 1 : 0);
+        const parent = this.runtime.openSessions.get(id);
+        if (!parent) throw new Error('Parent session not open');
+        const chosen = selectChildModel(args, this.runtime.settings.subagents, this.runtime.modelInfo(parent.model));
+        const result = await this.semaphore.run(() => this.runtime.runChild(id, args.task, chosen, signal), signal);
+        return { content: [{ type: 'text', text: result.text }], details: { sessionId: result.id } };
+      } };
+    });
   }
 
   async close() {

@@ -85,7 +85,8 @@ function renderSessions() {
 function updateSelection() {
   $('bulkActions').classList.toggle('hidden', !state.selecting);
   $('selectedCount').textContent = state.selection.size + ' selected';
-  $('exportSessions').disabled = !$('deleteSessions').disabled = state.selection.size === 0;
+  $('exportSessions').disabled = state.selection.size === 0;
+  $('deleteSessions').disabled = state.selection.size === 0;
 }
 
 function addMessage(role, content) {
@@ -133,6 +134,7 @@ async function send(message) {
   addMessage('user', message);
   const answer = addMessage('assistant', '');
   status('Thinking…');
+  let failed = false;
   try {
     const response = await api('/sessions/' + state.active + '/messages', { method: 'POST', body: JSON.stringify({ message }) });
     if (!response.body) throw new Error('No response stream');
@@ -160,8 +162,8 @@ async function send(message) {
     state.sessions = result;
     renderSessions();
     if (state.active) $('conversationTitle').textContent = state.sessions.find((s) => s.id === state.active)?.title || 'Conversation';
-  } catch (error) { status(error.message); answer.textContent += '\n' + error.message; }
-  finally { state.sending = false; $('send').disabled = false; if (!$('status').textContent.startsWith('Error')) status(''); $('prompt').focus(); }
+  } catch (error) { failed = true; status(error.message); answer.textContent += '\n' + error.message; }
+  finally { state.sending = false; $('send').disabled = false; if (!failed) status(''); $('prompt').focus(); }
 }
 
 function fillSettings() {
