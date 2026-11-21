@@ -4,7 +4,12 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+
+permissions:
+  contents: read
+
 jobs:
+  # Native runners validate platform behavior (including --detached on Windows).
   test:
     runs-on: ${{ matrix.os }}
     strategy:
@@ -17,17 +22,38 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
-      - run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Restore installed npm dependencies
+        id: dependencies
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: npm-modules-v1-${{ runner.os }}-node-${{ matrix.node }}-${{ hashFiles('package.json') }}
+      - name: Install dependencies on cache miss
+        if: steps.dependencies.outputs.cache-hit != 'true'
+        run: npm install --ignore-scripts --no-audit --no-fund
       - run: npm run typecheck
       - run: npm test
       - run: npm run pack:check
+
+  # This official image bundles Chromium and OS libraries; no apt/browser installs.
+  # Keep @playwright/test in package.json pinned to the same version.
   browser:
     runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.56.0-noble
+      options: --ipc=host
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
-      - run: npm install --ignore-scripts --no-audit --no-fund
-      - run: npx playwright install --with-deps chromium
+      - name: Restore browser job npm dependencies
+        id: dependencies
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: npm-modules-v1-playwright-1.56.0-node24-${{ hashFiles('package.json') }}
+      - name: Install dependencies on cache miss
+        if: steps.dependencies.outputs.cache-hit != 'true'
+        run: npm install --ignore-scripts --no-audit --no-fund
       - run: npm run test:browser

@@ -82,6 +82,12 @@ The first milestone targets a usable local shell, not full DSH parity. Rich Mark
 
 Keep Pi's execution internals intact. Build a small adapter instead of replacing its agent loop. Prefer one service and one lifecycle owner per domain; use Cordis for registration and disposal, but avoid proliferating separately published packages. Design user-facing switches so disabling a feature also removes its tools. Preserve upstream license notices where code is reused.
 
+## CI
+
+CI runs TypeScript checks, Pi integration tests and npm package verification on native Linux and Windows runners (Node 22 and 24). Chromium E2E uses the version-pinned official Playwright container image; browser binaries and system libraries are already installed in that image. Jobs cache `node_modules` keyed by the dependency manifest, operating system and Node version, and install dependencies only when that key changes. The browser image and `@playwright/test` versions must be updated together.
+
+GitHub-hosted runners are ephemeral, so each container job still pulls its image when the runner starts; the container avoids recurring browser/system-package setup. Windows remains native to test process and filesystem behavior.
+
 ## License
 
 MIT. See [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
