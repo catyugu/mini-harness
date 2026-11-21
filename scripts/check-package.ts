@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile as exec } from 'node:child_process';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -32,11 +32,25 @@ async function checkPackage() {
   const cli = (...args: string[]) => npm(['exec', '--offline', '--', 'mini-harness', ...args], { cwd: installed, env });
   try {
     const packed = await npm(['pack', '--json', '--pack-destination', work], { cwd: resolve('.') });
-    const [{ filename, files }] = JSON.parse(packed.stdout);
+    const [{ name, filename, integrity, files }] = JSON.parse(packed.stdout);
     assert.ok(files.every(({ path }: { path: string }) => !/^dist\/(?:scripts|test)\//.test(path)));
     await mkdir(installed);
-    await writeFile(join(installed, 'package.json'), '{"private":true}');
-    await npm(['install', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund', join(work, filename)], { cwd: installed });
+    const source = JSON.parse(await readFile('package-lock.json', 'utf8'));
+    const tarball = 'file:../' + filename;
+    const fixture = { name: 'mini-harness-install-check', version: '0.0.0', dependencies: { [name]: tarball } };
+    const { version, license, dependencies, bin, engines } = source.packages[''];
+    // Install the tarball into an empty project while keeping the tested dependency resolutions.
+    const lock = {
+      name: fixture.name, version: fixture.version, lockfileVersion: source.lockfileVersion, requires: true,
+      packages: {
+        ...source.packages,
+        '': fixture,
+        ['node_modules/' + name]: { version, resolved: tarball, integrity, license, dependencies, bin, engines }
+      }
+    };
+    await writeFile(join(installed, 'package.json'), JSON.stringify({ ...fixture, private: true }));
+    await writeFile(join(installed, 'package-lock.json'), JSON.stringify(lock));
+    await npm(['ci', '--prefer-offline', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund'], { cwd: installed });
     assert.match((await cli('--help')).stdout, /minimal Pi harness/);
     const launch = await cli('--detached', '--cwd', paths.cwd, '--port', String(await availablePort()));
     assert.match(launch.stdout, /started independently/);
