@@ -47,7 +47,7 @@ export function json(res: ServerResponse, code: number, data: unknown) {
   res.end(JSON.stringify(data));
 }
 
-export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>, options: {token?:string} = {}) {
+export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>, options: { token?: string; shutdown?: () => void } = {}) {
   const runtime = new MiniHarnessRuntime(paths);
   await runtime.start();
   const isolation = supportsIsolation();
@@ -72,6 +72,11 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
       if (!authorize(req, token)) return json(res, 401, { error: 'Unauthorized' });
       if (req.method !== 'GET' && req.headers.origin && new URL(req.headers.origin).origin !== 'http://' + req.headers.host) {
         return json(res, 403, { error: 'Origin not allowed' });
+      }
+      if (pathname === '/api/status' && req.method === 'GET') return json(res, 200, { pid: process.pid });
+      if (pathname === '/api/shutdown' && req.method === 'POST' && options.shutdown) {
+        res.once('finish', options.shutdown);
+        return json(res, 202, { pid: process.pid });
       }
       if (pathname === '/api/bootstrap' && req.method === 'GET')
         return json(res, 200, { settings: runtime.settings, sessions: runtime.registry.list(), models: runtime.availableModels(), plugins: runtime.plugins.metadata(), workspace: paths.cwd, isolation });
@@ -133,6 +138,7 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
     }
   };
   const server = createServer((req, res) => { void route(req, res); });
+  let closing: Promise<void>;
   return {
     server, runtime, token,
     async listen(port = runtime.settings.port) {
@@ -142,9 +148,12 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
       });
       return (server.address() as AddressInfo).port;
     },
-    async close() {
-      await new Promise((resolve) => server.close(resolve));
-      await runtime.stop();
+    close() {
+      closing ??= Promise.all([
+        new Promise<void>((done) => server.close(() => done())),
+        runtime.stop()
+      ]).then(() => {});
+      return closing;
     }
   };
 }

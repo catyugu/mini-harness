@@ -1,6 +1,6 @@
 {
   "name": "mini-harness",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A minimal, plugin-first Web harness for Pi",
   "license": "MIT",
   "type": "module",
@@ -8,7 +8,9 @@
     "mini-harness": "./dist/bin/mini-harness.js"
   },
   "files": [
-    "dist/",
+    "dist/bin/",
+    "dist/src/",
+    "dist/web/",
     "README.md",
     "SECURITY.md",
     "LICENSE",
@@ -24,7 +26,7 @@
     "test": "npm run build && node --test dist/test/*.test.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "check": "npm run typecheck && npm test",
-    "pack:check": "npm pack --dry-run",
+    "pack:check": "npm run build && node dist/scripts/check-package.js",
     "test:browser": "npm run build && playwright test -c playwright.config.ts"
   },
   "dependencies": {

@@ -1,92 +1,82 @@
 # mini-harness
 
-**mini-harness** is a minimal, local-first Web harness around the [Pi coding-agent SDK](https://github.com/earendil-works/pi). It keeps a DSH-inspired conversation layout and uses [Cordis](https://github.com/cordiverse/cordis) to manage optional plugin lifecycles. The project builds as **one npm package** rather than a workspace of separately published mini-harness packages.
-
-This is the 0.1.0 foundation. Its Pi SDK, HTTP, session, detached-process and browser flows have automated smoke tests; functionality remains deliberately narrow. No DeepSeek-specific accounts, balances, session uploads, official authentication flow, or “More” page are included.
+mini-harness is a local Web harness for the [Pi coding-agent SDK](https://github.com/earendil-works/pi). It ships as one npm package, with [Cordis](https://github.com/cordiverse/cordis) managing tool registration and plugin lifecycles.
 
 ## Start
 
-Requires Node.js 22.19+.
+Requires Node.js 22.19 or later. To build from source:
 
 ```sh
 git clone https://github.com/catyugu/mini-harness.git
 cd mini-harness
-npm install
+npm ci
 npm run build
-node dist/bin/mini-harness.js
-# Or detach from the terminal:
 node dist/bin/mini-harness.js --detached
 ```
 
-The npm package is prepared for publication but has **not yet been published** as part of this PR. After publication, the global command will be `mini-harness`.
-
-Open the URL shown in the terminal. The URL includes a one-time bearer access token in the fragment; the browser retains it for that tab's session. The service binds only to `127.0.0.1`, and all API requests require the token. For remote use, prefer SSH port forwarding; public binding is intentionally unavailable.
-
-All application code, the browser client, and tests are written in **TypeScript**. The `npm run build` pipeline compiles them into `dist/` and copies static assets.
-
-## Verification
-
-```sh
-npm run typecheck
-npm test
-npx playwright install chromium
-npm run test:browser
-npm run pack:check
-```
-
-The automated integration tests run the actual Pi SDK against a local mock model provider (no external API key required). Browser tests launch mini-harness in its own process and exercise Chromium at desktop and mobile viewport sizes. CI runs the Node tests on Windows and Ubuntu, Node.js 22 and 24; Chromium runs on Ubuntu. A live commercial-provider test requires user-supplied credentials.
-
-## Product choices
-
-- **Single package:** `mini-harness` includes CLI, HTTP host, browser client, and built-in plugins. Pi, Cordis, and other runtime libraries remain standard npm dependencies.
-- **Storage:** user configuration in `~/.mini-harness/`; override with `MINI_HARNESS_HOME`. A project can provide `.mini-harness/skills`. Existing DSH data is never migrated or modified.
-- **Models:** Pi model runtime provides generic provider/model support. Choose a model in the header, specify a model ID in settings, and use `~/.mini-harness/models.json` for advanced providers. The UI's API-key editor stores the key locally; no vendor-specific flow.
-- **Sessions:** messages persist in Pi JSONL, while mini-harness keeps a small index for conversation names and parent/child relationships. Multiple conversations can be selected, exported, or permanently deleted. Deleting a parent also deletes its child conversations; no archive or trash is kept.
-- **Plugins:** Cordis owns lifecycle effects and disposers. Built-in Skills, Subagents, and Shell each have an independent switch. A plugin's presentation lives in its existing settings section; no global “More” area.
-- **Skills:** Pi loads Agent Skills via its ResourceLoader, including configured `~/.mini-harness/skills` and project `.mini-harness/skills`.
-- **Subagents:** exactly one child level, with a configurable global concurrency limit (1–16). Each child is stored as its own Pi session and appears under its parent conversation. A model's `delegate` call may override the configured child provider/model.
-- **Shell isolation:** optional shell execution is disabled by default. Linux isolation uses bubblewrap with a new namespace, no network, and only the workspace mounted read-write. On unsupported hosts, isolated mode fails closed. Host mode is an explicit, unrestricted trust decision.
-- **Responsive UI:** sidebar drawer on narrow screens, adaptive composer and settings panel, consistent desktop/mobile conversation management, and light/dark modes.
-
-## Commands
+Open the URL printed by the CLI. The local server listens on `127.0.0.1`. The browser takes the access token from the URL fragment and stores it for the tab. Configuration lives in `~/.mini-harness` by default and can be moved with `MINI_HARNESS_HOME`.
 
 ```text
 mini-harness [--port 3837]
 mini-harness --detached [--port 3837]
+mini-harness status
+mini-harness stop
 mini-harness --help
 ```
 
-The detached process creates `~/.mini-harness/server.json` containing its PID, URL and access token. It writes output to `~/.mini-harness/server.log`. Stop it using your OS process manager; detached mode has no live connection to the terminal that started it. Treat the token as a credential.
+One process owns each configuration directory. `status` reports the PID and URL. `stop` requests an authenticated, graceful shutdown. The CLI clears stale state when it can acquire the instance lock. Detached processes write to `server.log`. Both the log and `server.json` contain the access token.
 
-## Source layout
+## Models, Skills and sessions
 
-```text
-bin/mini-harness.ts  CLI / detached bootstrap
-src/config.ts       storage paths and validated settings
-src/agent.ts        Pi SDK sessions and runtime
-src/plugins.ts      Cordis plugin composition and optional tools
-src/subagents.ts    concurrency control and model selection
-src/sandbox.ts      explicit shell execution policy
-src/registry.ts     conversation index and permanent deletion
-src/server.ts       localhost-only HTTP / streaming API
-web/app.ts          responsive TypeScript client
-web/                static HTML, CSS and branding
-test/               foundation regression tests
+- Select a model in the header or set its provider and ID in Settings. Pi reads credentials from `auth.json` or the environment and custom model definitions from `models.json`, both under the configuration directory.
+- Pi loads Agent Skills from the global `skills/` folder and project `.mini-harness/skills/` folder. Toggle Skills from Settings.
+- Subagents default to one child level and four concurrent child runs. Set the maximum depth to 0–8 and concurrency to 1–16. A child waiting for its descendants yields its execution slot. Explicit delegate arguments take precedence over child defaults and the parent's model. Provider-only calls select a model from that provider, and resolved child models are saved with their sessions.
+- Conversation trees are scoped to the current workspace. Selecting a conversation for export includes its descendants, original Pi JSONL, and parent IDs. Deleting a conversation removes its descendants permanently. The index records pending file cleanup so the next start can finish an interrupted deletion.
+- File tools restrict access to the workspace. Shell is disabled by default. Linux supports bubblewrap isolation. Trusted host mode and local JavaScript plugins use your user permissions. See [SECURITY.md](SECURITY.md).
+
+## Plugins
+
+Put reviewed local plugins in `~/.mini-harness/plugins/<id>/plugin.js`. IDs use lowercase letters, digits and hyphens, and start with a letter. An optional `plugin.json` can provide a title and description for the Settings screen.
+
+```json
+{ "title": "Conversation count", "description": "Give the model the number of conversations." }
 ```
 
-## Scope of 0.1.0
+The entry point is an ESM setup function. Declare needed Cordis services in `inject`. `harnessAgent.availableModels()` and `harnessSessions.get(id)` / `harnessSessions.list()` provide model and conversation metadata. `api.registerTool()` takes a Pi tool definition and returns an unregister function. Tool names must be unique and match the provider-compatible letters, digits, underscores and hyphens. Use `api.onDispose()` for resources owned by the plugin.
 
-The first milestone targets a usable local shell, not full DSH parity. Rich Markdown/trajectory viewers, complete external-plugin compatibility, all-platform sandbox isolation, browser authentication beyond localhost, concurrent multi-instance handling, and desktop packaging remain work in progress. See [SECURITY.md](SECURITY.md) for the current trust boundary.
+```js
+export const inject = ['harnessSessions'];
 
-## Development principles
+export default function setup(ctx, api) {
+  const config = api.defineConfig({ prefix: 'Count' }, (value) => {
+    if (typeof value.prefix !== 'string') throw new Error('prefix must be a string');
+  });
 
-Keep Pi's execution internals intact. Build a small adapter instead of replacing its agent loop. Prefer one service and one lifecycle owner per domain; use Cordis for registration and disposal, but avoid proliferating separately published packages. Design user-facing switches so disabling a feature also removes its tools. Preserve upstream license notices where code is reused.
+  api.registerTool({
+    name: 'conversation_count',
+    label: 'Conversation count',
+    description: 'Count the conversations in the current workspace.',
+    parameters: { type: 'object', properties: {} },
+    async execute(_callId, _args, signal) {
+      signal?.throwIfAborted();
+      return { content: [{ type: 'text', text: config.prefix + ': ' + ctx.harnessSessions.list().length }] };
+    }
+  });
+}
+```
 
-## CI
+Set individual plugin values in `settings.json` under `pluginConfig.<id>`. Enable installed plugins from Settings. Changes to tools or settings require idle conversations. Register tools during setup so each Pi session gets a consistent set, and keep plugin operations responsive to cancellation.
 
-CI runs TypeScript checks, Pi integration tests and npm package verification on native Linux and Windows runners (Node 22 and 24). Chromium E2E runs on the native `ubuntu-24.04` runner, pinned for Playwright 1.56 compatibility. All jobs cache `node_modules` by dependency manifest, operating system and Node version; the browser job additionally caches Chromium binaries. The Playwright installation step verifies Chromium and installs required system libraries.
+## Verification
 
-GitHub-hosted runners are ephemeral. The npm and Chromium caches reduce repeated downloads, while required system packages can still be checked or installed on each run. Windows stays native to verify process and filesystem behavior.
+```sh
+npm run check
+npx playwright install chromium --only-shell
+npm run test:browser
+npm run pack:check
+```
+
+The pack check installs the tarball into a clean project and runs the installed CLI, Web assets and a real Pi conversation against a mock provider. CI covers Node.js 22 and 24 on native Linux and Windows, with Chromium desktop and mobile viewport tests on Ubuntu.
 
 ## License
 

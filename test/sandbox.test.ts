@@ -65,7 +65,7 @@ test('shell reports cancellation and timeouts and bounds output', { timeout: 150
   assert.ok(Buffer.byteLength(result.stdout) <= 1024 * 1024);
 });
 
-test('isolated shell runs without provider process environment', { skip: !supportsIsolation() }, async () => {
+test('isolated shell runs without provider process environment', { skip: process.env.MINI_HARNESS_REQUIRE_ISOLATION !== '1' && !supportsIsolation() }, async () => {
   const shell = await runShell('printf "%s|%s" "$PWD" "$HOME"', process.cwd());
   assert.equal(shell.code, 0);
   assert.equal(shell.stdout, '/workspace|/tmp');
