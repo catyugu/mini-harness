@@ -109,8 +109,8 @@ export class MiniHarnessRuntime {
     if (!session) return [];
     return session.messages.map((m) => ({
       role: m.role,
-      content: m.content,
-      timestamp: m.timestamp
+      content: 'content' in m ? m.content : [],
+      timestamp: 'timestamp' in m ? m.timestamp : undefined
     }));
   }
 
