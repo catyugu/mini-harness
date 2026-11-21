@@ -55,3 +55,28 @@ test('an installed Cordis plugin can use services, configure a tool, and release
   await runtime.updateSettings({ plugins: { example: true } });
   assert.ok((await runtime.open(item.id)).getActiveToolNames().includes('example_count'));
 });
+
+test('file tools have a plugin lifecycle and required plugins cannot be disabled independently', async (t) => {
+  const mock = await createMockProvider();
+  const { root, paths } = createFixturePaths(mock.url);
+  const runtime = new MiniHarnessRuntime(paths);
+  t.after(async () => { await runtime.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
+  const folder = join(paths.plugins, 'dependent');
+  mkdirSync(folder);
+  writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ requires: ['files'] }));
+  writeFileSync(join(folder, 'plugin.js'), `export default (ctx, api) => {
+    api.registerTool({ name: 'dependent_tool', description: 'Fixture', parameters: { type: 'object', properties: {} },
+      execute: async () => ({ content: [{ type: 'text', text: 'ok' }] }) });
+  };`);
+  await runtime.start();
+  const item = runtime.registry.create();
+  assert.ok((await runtime.open(item.id)).getActiveToolNames().includes('read'));
+  await runtime.updateSettings({ plugins: { files: false } });
+  assert.ok(!(await runtime.open(item.id)).getActiveToolNames().includes('read'));
+  await runtime.updateSettings({ plugins: { files: true, dependent: true } });
+  await assert.rejects(runtime.updateSettings({ plugins: { files: false } }), /Required plugin/);
+  assert.equal(runtime.settings.plugins.files, true);
+  assert.ok((await runtime.open(item.id)).getActiveToolNames().includes('dependent_tool'));
+  await runtime.updateSettings({ plugins: { files: false, dependent: false } });
+  assert.equal(runtime.plugins.getTools(item.id).some(({ name }) => name === 'read' || name === 'dependent_tool'), false);
+});

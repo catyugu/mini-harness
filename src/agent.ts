@@ -7,7 +7,6 @@ import { PluginHost } from './plugins.js';
 import { SessionRegistry, type ModelChoice } from './registry.js';
 import { mergeSettings, readSettings, writeJson, type SettingsPatch } from './config.js';
 import { Type } from 'typebox';
-import { Workspace } from './workspace.js';
 import type { ViewMessage, StreamEvent } from './protocol.js';
 import { requireChildDepth, selectChildModel, Semaphore, type ChildLease } from './subagents.js';
 
@@ -93,8 +92,8 @@ export class MiniHarnessRuntime {
       cwd: item.cwd,
       agentDir: this.paths.agent,
       settingsManager,
-      additionalSkillPaths: this.settings.plugins.skills ? [this.paths.skills, this.paths.projectSkills] : [],
-      noSkills: !this.settings.plugins.skills,
+      additionalSkillPaths: this.plugins.ctx.harnessSkills?.paths ?? [],
+      noSkills: !this.plugins.ctx.harnessSkills,
       noExtensions: true
     });
     await loader.reload();
@@ -102,7 +101,7 @@ export class MiniHarnessRuntime {
     const manager = file ? SessionManager.open(file, this.paths.sessions, item.cwd) :
       SessionManager.create(item.cwd, this.paths.sessions, { id: item.id });
     if (item.file !== manager.getSessionFile()) this.registry.update(id, { file: manager.getSessionFile() });
-    const customTools = [...new Workspace(item.cwd, this.paths.home).tools(), ...this.plugins.getTools(id)];
+    const customTools = this.plugins.getTools(id);
     const { session } = await createAgentSession({
       cwd: item.cwd,
       agentDir: this.paths.agent,
