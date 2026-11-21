@@ -80,3 +80,27 @@ test('file tools have a plugin lifecycle and required plugins cannot be disabled
   await runtime.updateSettings({ plugins: { files: false, dependent: false } });
   assert.equal(runtime.plugins.getTools(item.id).some(({ name }) => name === 'read' || name === 'dependent_tool'), false);
 });
+
+test('plugin JSON Schema applies defaults and rejects invalid changes before setup', async (t) => {
+  const mock = await createMockProvider();
+  const { root, paths } = createFixturePaths(mock.url);
+  const runtime = new MiniHarnessRuntime(paths);
+  t.after(async () => { await runtime.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
+  const folder = join(paths.plugins, 'schema');
+  mkdirSync(folder);
+  writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ configSchema: {
+    type: 'object', additionalProperties: false, required: ['count'],
+    properties: { count: { type: 'integer', minimum: 1, maximum: 10, default: 3 } }
+  } }));
+  writeFileSync(join(folder, 'plugin.js'), `export default (ctx, api) => {
+    api.registerTool({ name: 'schema_value', description: 'Fixture', parameters: { type: 'object', properties: {} },
+      execute: async () => ({ content: [{ type: 'text', text: String(api.config.count) }] }) });
+  };`);
+  await runtime.start();
+  await runtime.updateSettings({ plugins: { schema: true } });
+  const item = runtime.registry.create();
+  const tool = runtime.plugins.getTools(item.id).find(({ name }) => name === 'schema_value');
+  assert.match(JSON.stringify(await tool.execute('test', {}, undefined, undefined, undefined)), /3/);
+  await assert.rejects(runtime.updateSettings({ pluginConfig: { schema: { count: 0 } } }), /Invalid configuration/);
+  assert.strictEqual(runtime.plugins.getTools(item.id).find(({ name }) => name === 'schema_value'), tool);
+});

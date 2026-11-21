@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import { Type } from 'typebox';
+import { Check } from 'typebox/value';
 import { defineTool, type ToolDefinition } from '@earendil-works/pi-coding-agent';
 import type { MiniHarnessRuntime } from './agent.js';
 import { readJson, type Settings } from './config.js';
@@ -16,6 +17,7 @@ export interface PluginMetadata {
   description: string;
   trustedCode?: boolean;
   requires?: string[];
+  configSchema?: Record<string, any>;
 }
 
 export const BUILTINS: readonly PluginMetadata[] = Object.freeze([
@@ -45,6 +47,17 @@ declare module 'cordis' {
 }
 
 const reservedTools = new Set(['read', 'edit', 'write', 'grep', 'find', 'ls', 'bash', 'powershell', 'codemode', 'tool_search']);
+
+function configDefaults(schema: Record<string, any>, value: any): any {
+  if (value === undefined && Object.hasOwn(schema, 'default')) value = structuredClone(schema.default);
+  if (schema.type === 'object' && value && typeof value === 'object' && !Array.isArray(value)) {
+    for (const [key, property] of Object.entries(schema.properties ?? {})) {
+      const item = configDefaults(property, value[key]);
+      if (item !== undefined) value[key] = item;
+    }
+  }
+  return value;
+}
 
 export class ToolRegistry {
   private tools = new Map<string, { bind: (id: string) => ToolDefinition; visible: (id: string) => boolean }>();
@@ -100,7 +113,10 @@ export class PluginHost {
       const requires = manifest?.requires ?? [];
       if (!Array.isArray(requires) || requires.some((id) => typeof id !== 'string' || !/^[a-z][a-z0-9-]{0,63}$/.test(id)))
         throw new Error('Invalid plugin dependencies: ' + id);
-      return [{ source, metadata: { id, title, description, requires, trustedCode: true } }];
+      const configSchema = manifest?.configSchema;
+      if (configSchema && (configSchema.type !== 'object' || !configSchema.properties || typeof configSchema.properties !== 'object'))
+        throw new Error('Expected an object configSchema for plugin: ' + id);
+      return [{ source, metadata: { id, title, description, requires, configSchema, trustedCode: true } }];
     });
   }
 
@@ -180,7 +196,7 @@ export class PluginHost {
     const next = [
       ...BUILTINS.map(({ id }): PluginPlan => ({ id, requires: [] })),
       ...this.discover().map(({ source, metadata: { id, requires } }): PluginPlan => ({
-        id, source, requires, config: Object.hasOwn(settings.pluginConfig, id) ? settings.pluginConfig[id] : undefined
+        id, source, requires, config: this.configValues(id, settings)
       }))
     ].filter(({ id }) => Object.hasOwn(settings.plugins, id) && settings.plugins[id]);
     const desired = new Map(next.map((plan) => [plan.id, plan]));
@@ -229,6 +245,15 @@ export class PluginHost {
   }
 
   getTools(id: string) { return this.ctx.harnessTools.forSession(id); }
+
+  private configValues(id: string, settings: Settings) {
+    const schema = this.discover().find(({ metadata }) => metadata.id === id)?.metadata.configSchema;
+    const input = structuredClone(settings.pluginConfig[id] ?? {});
+    if (!schema) return input;
+    const config = configDefaults(schema, input) as Record<string, unknown>;
+    if (!Check(schema, config)) throw new Error('Invalid configuration for plugin: ' + id);
+    return config;
+  }
 
   async close() {
     const failures = [];

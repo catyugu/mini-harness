@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 import {
   createAgentSession, defineTool, ModelRuntime, SessionManager, SettingsManager, DefaultResourceLoader,
   type AgentSession
@@ -27,6 +28,7 @@ export class MiniHarnessRuntime {
   models!: ModelRuntime;
   readonly semaphore: Semaphore;
   private configuring?: Promise<void>;
+  private readonly staleSessions = new Set<string>();
   private stopping = false;
   constructor(paths: ReturnType<typeof import('./config.js').getPaths>) {
     this.paths = paths;
@@ -75,7 +77,8 @@ export class MiniHarnessRuntime {
   async open(id: string): Promise<AgentSession> {
     if (this.configuring || this.stopping) throw new Error('Agent service is unavailable during reconfiguration or shutdown');
     const active = this.openSessions.get(id);
-    if (active) return active;
+    if (active && (!this.staleSessions.has(id) || active.isStreaming)) return active;
+    if (active) { active.dispose(); this.openSessions.delete(id); this.staleSessions.delete(id); }
     const pending = this.openingSessions.get(id);
     if (pending) return pending;
     const opening = this.openNewSession(id);
@@ -180,6 +183,18 @@ export class MiniHarnessRuntime {
     signal.throwIfAborted();
     const session = await this.open(id);
     signal.throwIfAborted();
+    const choice = record.parentId ? record.model : this.settings.model;
+    const model = this.resolveModel(choice);
+    if (model && (session.model?.provider !== model.provider || session.model?.id !== model.id))
+      await session.setModel(model);
+    signal.throwIfAborted();
+    const actual = this.modelInfo(session.model);
+    if (!record.parentId && !isDeepStrictEqual(this.settings.model, actual)) {
+      const next = mergeSettings(this.settings, { model: actual });
+      writeJson(this.paths.settings, next);
+      this.settings = next;
+    }
+    this.registry.update(id, { model: actual });
     if (record.title === 'New conversation') this.registry.update(id, { title: prompt.trim().slice(0, 72) });
     const off = session.subscribe((event) => {
       switch (event.type) {
@@ -287,12 +302,23 @@ export class MiniHarnessRuntime {
   }
 
   async updateSettings(patch: SettingsPatch) {
-    if (this.configuring || this.stopping || this.busy.size || this.openingSessions.size)
-      throw new Error('Cannot change settings while the agent service is busy');
+    if (this.configuring || this.stopping) throw new Error('Agent service is unavailable during reconfiguration or shutdown');
     const next = mergeSettings(this.settings, patch);
     this.resolveModel(next.model);
     if (next.subagents.provider) this.resolveModel({ provider: next.subagents.provider, id: next.subagents.model });
-    // Even a rolled-back change replaces the affected plugin's setup and tool closures.
+    const toolsChanged = !isDeepStrictEqual(next.plugins, this.settings.plugins) ||
+      !isDeepStrictEqual(next.pluginConfig, this.settings.pluginConfig);
+    const depthChanged = next.subagents.maxDepth !== this.settings.subagents.maxDepth;
+    if (!toolsChanged) {
+      writeJson(this.paths.settings, next);
+      this.settings = next;
+      this.semaphore.setLimit(next.subagents.maxParallel);
+      if (depthChanged) for (const id of this.openSessions.keys()) this.staleSessions.add(id);
+      return next;
+    }
+    if (this.busy.size || this.openingSessions.size)
+      throw new Error('Stop active conversations before changing tools or Skills');
+    // Rollback may replace plugin tool closures, so dispose sessions before changing tools.
     for (const session of this.openSessions.values()) session.dispose();
     this.openSessions.clear();
     this.configuring = this.plugins.configure(next, () => writeJson(this.paths.settings, next));
@@ -311,5 +337,6 @@ export class MiniHarnessRuntime {
     for (const session of this.openSessions.values()) session.dispose();
     this.openSessions.clear();
     await this.plugins.close();
+    await this.models?.settleCredentialWrites();
   }
 }

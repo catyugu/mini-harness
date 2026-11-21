@@ -6,7 +6,6 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, Server, ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { getPaths } from './config.js';
-import { writeJson, readJson } from './config.js';
 import { supportsIsolation } from './sandbox.js';
 import { MiniHarnessRuntime } from './agent.js';
 
@@ -130,12 +129,19 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
         const input = await requestBody(req);
         if (typeof input.provider !== 'string' || !/^[a-z0-9-]+$/.test(input.provider) ||
             typeof input.key !== 'string' || !input.key.trim()) return json(res, 400, { error: 'Invalid credential' });
-        const credentialsPath = join(paths.home, 'auth.json');
-        const stored = readJson(credentialsPath, {});
-        stored[input.provider] = { type: 'api_key', key: input.key.trim() };
-        writeJson(credentialsPath, stored);
-        await runtime.models.setRuntimeApiKey(input.provider, input.key.trim());
-        return json(res, 200, { ok: true, persisted: true });
+        if (!runtime.models.getProvider(input.provider)) return json(res, 400, { error: 'Unknown provider' });
+        await runtime.models.login(input.provider, 'api_key', {
+          prompt: async (prompt) => {
+            if (prompt.type !== 'secret') throw new Error('This provider requires additional credential setup through Pi');
+            return input.key.trim();
+          },
+          notify: () => {}
+        });
+        return json(res, 200, { ok: true, persisted: true, models: runtime.availableModels(), status: runtime.models.getProviderAuthStatus(input.provider) });
+      }
+      if (pathname === '/api/models' && req.method === 'GET') {
+        await runtime.models.getAvailable();
+        return json(res, 200, { models: runtime.availableModels() });
       }
       return json(res, 404, { error: 'Not found' });
     } catch (error) {
