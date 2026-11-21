@@ -1,23 +1,40 @@
 # mini-harness
 
-**mini-harness** is a minimal, local-first Web harness around the [Pi coding-agent SDK](https://github.com/earendil-works/pi). It keeps a DSH-inspired conversation layout and uses [Cordis](https://github.com/cordiverse/cordis) to manage optional plugin lifecycles. The published distribution is **one npm package** rather than a workspace of separately published mini-harness packages.
+**mini-harness** is a minimal, local-first Web harness around the [Pi coding-agent SDK](https://github.com/earendil-works/pi). It keeps a DSH-inspired conversation layout and uses [Cordis](https://github.com/cordiverse/cordis) to manage optional plugin lifecycles. The project builds as **one npm package** rather than a workspace of separately published mini-harness packages.
 
-This is an early foundation release (0.1.0). The Web UI and SDK integration are being validated; features marked below are deliberately narrow. No DeepSeek-specific accounts, balances, session uploads, official authentication flow, or “More” page are included.
+This is the 0.1.0 foundation. Its Pi SDK, HTTP, session, detached-process and browser flows have automated smoke tests; functionality remains deliberately narrow. No DeepSeek-specific accounts, balances, session uploads, official authentication flow, or “More” page are included.
 
 ## Start
 
 Requires Node.js 22.19+.
 
 ```sh
-npm install -g mini-harness
-mini-harness
-# or:
-mini-harness --detached
+git clone https://github.com/catyugu/mini-harness.git
+cd mini-harness
+npm install
+npm run build
+node dist/bin/mini-harness.js
+# Or detach from the terminal:
+node dist/bin/mini-harness.js --detached
 ```
+
+The npm package is prepared for publication but has **not yet been published** as part of this PR. After publication, the global command will be `mini-harness`.
 
 Open the URL shown in the terminal. The URL includes a one-time bearer access token in the fragment; the browser retains it for that tab's session. The service binds only to `127.0.0.1`, and all API requests require the token. For remote use, prefer SSH port forwarding; public binding is intentionally unavailable.
 
-Development checkout: `npm install && npm start`. All application code, the browser client, and tests are written in **TypeScript**. The `npm run build` pipeline compiles them into `dist/` and copies static assets. Run `npm run typecheck`, `npm test`, and `npm run pack:check` to validate the distribution.
+All application code, the browser client, and tests are written in **TypeScript**. The `npm run build` pipeline compiles them into `dist/` and copies static assets.
+
+## Verification
+
+```sh
+npm run typecheck
+npm test
+npx playwright install chromium
+npm run test:browser
+npm run pack:check
+```
+
+The automated integration tests run the actual Pi SDK against a local mock model provider (no external API key required). Browser tests launch mini-harness in its own process and exercise Chromium at desktop and mobile viewport sizes. CI runs the Node tests on Windows and Ubuntu, Node.js 22 and 24; Chromium runs on Ubuntu. A live commercial-provider test requires user-supplied credentials.
 
 ## Product choices
 
@@ -44,7 +61,7 @@ The detached process creates `~/.mini-harness/server.json` containing its PID, U
 ## Source layout
 
 ```text
-bin/mini-harness.ts        CLI / detached bootstrap
+bin/mini-harness.ts  CLI / detached bootstrap
 src/config.ts       storage paths and validated settings
 src/agent.ts        Pi SDK sessions and runtime
 src/plugins.ts      Cordis plugin composition and optional tools
