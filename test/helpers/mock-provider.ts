@@ -10,7 +10,9 @@ export interface MockProvider {
   close(): Promise<void>;
 }
 
-export async function createMockProvider(): Promise<MockProvider> {
+type MockAnswer = string | { tool: string; args: Record<string, unknown> };
+
+export async function createMockProvider(reply?: (request: { messages: { role: string; content: string }[] }) => MockAnswer | Promise<MockAnswer>): Promise<MockProvider> {
   const requests: Record<string, unknown>[] = [];
   const server: Server = createServer(async (req, res) => {
     if (req.method !== 'POST' || req.url !== '/v1/chat/completions') {
@@ -28,9 +30,21 @@ export async function createMockProvider(): Promise<MockProvider> {
         JSON.stringify({ id, object: 'chat.completion.chunk', created: 1,
           model: 'mock-model', choices: [{ index: 0, delta, finish_reason }] });
       res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' });
-      res.write('data: ' + item({ role: 'assistant', content: 'Mock ' }, null) + '\n\n');
-      res.write('data: ' + item({ content: 'response' }, null) + '\n\n');
-      res.write('data: ' + item({}, 'stop') + '\n\n');
+      const answer = reply ? await reply({ messages: request.messages.map((message) => ({
+        ...message,
+        content: Array.isArray(message.content) ? message.content.map((part) => part.text ?? '').join('') : message.content
+      })) }) : 'Mock response';
+      if (typeof answer === 'string') {
+        res.write('data: ' + item({ role: 'assistant', content: answer.slice(0, 5) }, null) + '\n\n');
+        res.write('data: ' + item({ content: answer.slice(5) }, null) + '\n\n');
+        res.write('data: ' + item({}, 'stop') + '\n\n');
+      } else {
+        res.write('data: ' + item({ role: 'assistant', tool_calls: [{
+          index: 0, id: 'call_' + id, type: 'function',
+          function: { name: answer.tool, arguments: JSON.stringify(answer.args) }
+        }] }, null) + '\n\n');
+        res.write('data: ' + item({}, 'tool_calls') + '\n\n');
+      }
       res.end('data: [DONE]\n\n');
     } catch (error) {
       res.writeHead(500);

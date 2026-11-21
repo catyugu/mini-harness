@@ -3,9 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#f7f7f8">
+  <meta name="color-scheme" content="light dark">
   <meta name="description" content="mini-harness — a minimal Pi harness">
   <link rel="icon" type="image/svg+xml" href="/logo.svg">
+  <link rel="manifest" href="/manifest.webmanifest">
   <link rel="stylesheet" href="/style.css">
   <title>mini-harness</title>
 </head>
@@ -13,69 +14,86 @@
 <div id="app" class="app">
   <aside id="sidebar" class="sidebar" aria-label="Conversations">
     <div class="sidebar-top">
-      <div class="brand"><img src="/logo.svg" width="26" height="26" alt=""><span>mini-harness</span></div>
-      <button id="sidebarClose" class="icon-button mobile-only" aria-label="Close navigation">✕</button>
+      <div class="brand"><img src="/logo.svg" width="28" height="28" alt=""><span>mini-harness</span></div>
+      <button id="sidebarClose" class="icon-button mobile-only" type="button" aria-label="Close navigation">×</button>
     </div>
-    <button id="newSession" class="new-session"><span class="plus">＋</span> New conversation</button>
+    <button id="newSession" class="new-session" type="button"><span aria-hidden="true">＋</span> New conversation</button>
     <div class="sidebar-caption">
       <span>Conversations</span>
-      <button id="selectMode" class="link-button">Select</button>
+      <button id="selectMode" class="link-button" type="button" aria-pressed="false">Select</button>
     </div>
-    <div id="sessions" class="sessions"></div>
-    <div id="bulkActions" class="bulk-actions hidden">
-      <span id="selectedCount">0 selected</span>
-      <button id="exportSessions" class="subtle">Export</button>
-      <button id="deleteSessions" class="danger">Delete</button>
-      <button id="cancelSelection" class="subtle">Cancel</button>
+    <nav id="sessions" class="sessions" aria-label="Conversation tree"></nav>
+    <div id="bulkActions" class="bulk-actions" hidden>
+      <span id="selectedCount" aria-live="polite"></span>
+      <button id="exportSessions" type="button">Export</button>
+      <button id="deleteSessions" class="danger" type="button">Delete</button>
+      <button id="cancelSelection" type="button">Cancel</button>
     </div>
-    <div class="sidebar-bottom"><button id="settingsOpen" class="bottom-button">⚙ <span>Settings</span></button></div>
+    <div class="sidebar-bottom"><button id="settingsOpen" type="button"><span aria-hidden="true">⚙</span> Settings</button></div>
   </aside>
-  <div id="overlay" class="overlay hidden"></div>
+  <button id="overlay" class="overlay" type="button" aria-label="Close navigation" tabindex="-1" hidden></button>
   <main class="main">
     <header class="topbar">
-      <button id="sidebarOpen" class="icon-button" aria-label="Toggle navigation">☰</button>
+      <button id="sidebarOpen" class="icon-button" type="button" aria-label="Toggle navigation" aria-controls="sidebar">☰</button>
       <div class="title-block"><strong id="conversationTitle">New conversation</strong><small id="workspaceLabel"></small></div>
       <select id="modelSelect" class="model-select" aria-label="Model"><option value="">Auto model</option></select>
     </header>
-    <section id="welcome" class="welcome"><img src="/logo.svg" width="60" height="60" alt=""><h1>What are we working on?</h1><p>A small harness. Just you and your agent.</p></section>
-    <section id="messages" class="messages" role="log" aria-live="polite"></section>
+    <section id="welcome" class="welcome">
+      <img src="/logo.svg" width="52" height="52" alt="">
+      <h1>What are we working on?</h1>
+    </section>
+    <section id="messages" class="messages" aria-label="Messages" hidden></section>
     <div class="composer-wrap">
-      <div id="status" class="status"></div>
+      <div id="status" class="status" role="status"></div>
       <form id="composer" class="composer">
-        <textarea id="prompt" rows="1" placeholder="Ask anything…" aria-label="Message" required></textarea>
-        <div class="composer-footer"><span>Enter to send · Shift+Enter for a new line</span><button id="send" type="submit" aria-label="Send">↑</button></div>
+        <textarea id="prompt" rows="2" placeholder="Ask anything…" aria-label="Message" required></textarea>
+        <div class="composer-footer">
+          <span>Enter to send · Shift+Enter for a new line</span>
+          <button id="stop" type="button" aria-label="Stop response" hidden>■</button>
+          <button id="send" type="submit" aria-label="Send">↑</button>
+        </div>
       </form>
     </div>
   </main>
-  <section id="settingsPanel" class="settings-panel hidden" aria-label="Settings">
-    <div class="settings-header"><h2>Settings</h2><button id="settingsClose" class="icon-button" aria-label="Close settings">✕</button></div>
-    <div class="settings-scroll">
-      <div class="section-title">General</div>
-      <label class="field-label" for="theme">Appearance</label>
-      <select id="theme"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select>
-      <div class="section-title">Provider</div>
-      <p class="hint">Use any model exposed by Pi. Custom providers can be added in ~/.mini-harness/models.json.</p>
-      <label class="field-label" for="provider">Provider</label><input id="provider" placeholder="anthropic">
-      <label class="field-label" for="model">Model ID</label><input id="model" placeholder="Choose a model in the header">
-      <label class="field-label" for="apiKey">API key (optional)</label><input id="apiKey" type="password" autocomplete="off" placeholder="Stored locally on save">
-      <button id="saveCredential" class="small-button">Save API key</button>
-      <div class="section-title">Built-in plugins</div>
-      <p class="hint">Every optional feature can be disabled independently.</p>
-      <label class="switch-line"><span><b>Skills</b><small>Load Agent Skills from the workspace and home directory</small></span><input id="plugin-skills" type="checkbox"></label>
-      <label class="switch-line"><span><b>Subagents</b><small>Delegate tasks to one level of child conversations</small></span><input id="plugin-subagents" type="checkbox"></label>
-      <label class="switch-line"><span><b>Shell</b><small>Optional command execution, isolated by default</small></span><input id="plugin-shell" type="checkbox"></label>
-      <div class="section-title">Subagents</div>
-      <label class="field-label" for="maxParallel">Maximum parallel children</label><input id="maxParallel" type="number" min="1" max="16">
-      <label class="field-label" for="childProvider">Default child provider (optional)</label><input id="childProvider" placeholder="Inherit parent">
-      <label class="field-label" for="childModel">Default child model (optional)</label><input id="childModel" placeholder="Inherit parent">
-      <div class="section-title">Sandbox</div>
-      <p class="hint">Shell execution requires explicit plugin opt-in. Isolated mode needs Linux bubblewrap; host mode executes with your user permissions.</p>
-      <label class="field-label" for="sandboxMode">Shell policy</label><select id="sandboxMode"><option value="isolated">Isolated (Linux)</option><option value="host">Trusted host</option></select>
-      <label class="field-label" for="timeout">Timeout (seconds)</label><input id="timeout" type="number" min="1" max="300">
-      <button id="saveSettings" class="primary full">Save settings</button>
-      <p id="settingsStatus" class="hint"></p>
+  <dialog id="settingsPanel" class="settings-panel" aria-labelledby="settingsTitle">
+    <div class="settings-header">
+      <h2 id="settingsTitle">Settings</h2>
+      <button id="settingsClose" class="icon-button" type="button" aria-label="Close settings">×</button>
     </div>
-  </section>
+    <form id="settingsForm" class="settings-scroll">
+      <section>
+        <h3>Model</h3>
+        <label for="provider">Provider</label><input id="provider" placeholder="Auto provider">
+        <label for="model">Model ID</label><input id="model" placeholder="Auto model">
+        <label for="apiKey">API key</label><input id="apiKey" type="password" autocomplete="off">
+        <button id="saveCredential" class="small-button" type="button">Save API key</button>
+      </section>
+      <section>
+        <h3>Agent</h3>
+        <div class="setting-columns">
+          <div><label for="maxDepth">Maximum child depth</label><input id="maxDepth" type="number" min="0" max="8" required></div>
+          <div><label for="maxParallel">Parallel children</label><input id="maxParallel" type="number" min="1" max="16" required></div>
+        </div>
+        <label for="childProvider">Child provider</label><input id="childProvider" placeholder="Inherit parent">
+        <label for="childModel">Child model</label><input id="childModel" placeholder="Inherit parent">
+      </section>
+      <section><h3>Plugins</h3><div id="pluginSettings"></div></section>
+      <section>
+        <h3>Appearance</h3>
+        <label for="theme">Theme</label>
+        <select id="theme"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select>
+      </section>
+      <section>
+        <h3>Security</h3>
+        <p id="isolationStatus" class="hint"></p>
+        <label for="sandboxMode">Shell policy</label>
+        <select id="sandboxMode"><option value="isolated">Isolated (Linux)</option><option value="host">Trusted host</option></select>
+        <label for="timeout">Timeout (seconds)</label><input id="timeout" type="number" min="1" max="300" required>
+      </section>
+      <p id="settingsStatus" class="hint" role="status"></p>
+      <button id="saveSettings" class="primary" type="submit">Save settings</button>
+    </form>
+  </dialog>
 </div>
 <script type="module" src="/app.js"></script>
 </body>

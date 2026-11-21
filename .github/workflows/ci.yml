@@ -9,34 +9,34 @@ permissions:
   contents: read
 
 jobs:
-  # Native runners validate platform behavior (including --detached on Windows).
   test:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-24.04, windows-latest]
         node: ["22", "24"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
-      - name: Restore installed npm dependencies
-        id: dependencies
-        uses: actions/cache@v4
-        with:
-          path: node_modules
-          key: npm-modules-v1-${{ runner.os }}-node-${{ matrix.node }}-${{ hashFiles('package.json') }}
-      - name: Install dependencies on cache miss
-        if: steps.dependencies.outputs.cache-hit != 'true'
-        run: npm install --ignore-scripts --no-audit --no-fund
-      - run: npm run typecheck
-      - run: npm test
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Set up Linux workspace isolation
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap
+          if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+          bwrap --unshare-all --ro-bind / / -- /usr/bin/prlimit -- /bin/true
+      - run: npm run check
+        env:
+          MINI_HARNESS_REQUIRE_ISOLATION: ${{ runner.os == 'Linux' && '1' || '0' }}
       - run: npm run pack:check
 
-  # Playwright 1.56 requires Ubuntu 24.04, not ubuntu-latest (currently 26.04).
-  # Chromium runs on a native Ubuntu runner without a container.
   browser:
     runs-on: ubuntu-24.04
     steps:
@@ -44,20 +44,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
-      - name: Restore browser job npm dependencies
-        id: dependencies
-        uses: actions/cache@v4
-        with:
-          path: node_modules
-          key: npm-modules-v1-playwright-1.56.0-node24-${{ hashFiles('package.json') }}
-      - name: Install dependencies on cache miss
-        if: steps.dependencies.outputs.cache-hit != 'true'
-        run: npm install --ignore-scripts --no-audit --no-fund
-      - name: Restore Chromium browser cache
-        uses: actions/cache@v4
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
           key: playwright-chromium-1.56.0-ubuntu-24.04
-      - name: Ensure Chromium and system dependencies
-        run: npx playwright install --with-deps chromium
+      - run: npx playwright install --with-deps chromium --only-shell
       - run: npm run test:browser

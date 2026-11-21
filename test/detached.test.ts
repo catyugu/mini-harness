@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
-import { mkdtempSync, mkdirSync, existsSync, readFileSync, rmSync } from 'node:fs';
+import { execFile, spawn } from 'node:child_process';
+import { mkdtempSync, mkdirSync, existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
+import { promisify } from 'node:util';
 import { join, resolve } from 'node:path';
 
 async function unusedPort() {
@@ -16,6 +17,8 @@ async function unusedPort() {
   return port;
 }
 
+const execute = promisify(execFile);
+
 test('--detached starts an independent, accessible server', { timeout: 30000 }, async (t) => {
   const root = mkdtempSync(join(tmpdir(), 'mini-harness-detached-'));
   const cwd = join(root, 'work');
@@ -24,8 +27,15 @@ test('--detached starts an independent, accessible server', { timeout: 30000 }, 
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const port = await unusedPort();
   const cli = resolve('dist/bin/mini-harness.js');
+  const env = { ...process.env, MINI_HARNESS_HOME: home };
+  const command = (...args: string[]) => execute(process.execPath, [cli, ...args], { env, timeout: 15000 });
+  mkdirSync(home);
+  const statePath = join(home, 'server.json');
+  writeFileSync(statePath, 'stale');
+  await assert.rejects(command('status'), (error: NodeJS.ErrnoException) => String(error.code) === '1');
+  assert.equal(existsSync(statePath), false);
   const child = spawn(process.execPath, [cli, '--detached', '--cwd', cwd, '--port', String(port)], {
-    env: { ...process.env, MINI_HARNESS_HOME: home },
+    env,
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true
   });
@@ -37,7 +47,6 @@ test('--detached starts an independent, accessible server', { timeout: 30000 }, 
     child.on('close', (code) => resolve(code));
   });
   assert.equal(exit, 0, out + err);
-  const statePath = join(home, 'server.json');
   assert.ok(existsSync(statePath), 'No detached server metadata: ' + out + err);
   const state = JSON.parse(readFileSync(statePath, 'utf8'));
   assert.ok(Number.isInteger(state.pid) && state.pid > 0);
@@ -48,10 +57,33 @@ test('--detached starts an independent, accessible server', { timeout: 30000 }, 
     assert.equal(response.status, 200);
     const data = await response.json();
     assert.ok(Array.isArray(data.sessions));
+    assert.match((await command('status')).stdout, new RegExp(String(state.pid)));
+    const otherPort = await unusedPort();
+    await assert.rejects(command('--cwd', cwd, '--port', String(otherPort)), /already running/);
+    assert.equal(JSON.parse(readFileSync(statePath, 'utf8')).pid, state.pid);
+    assert.equal((await fetch(state.url + '/api/shutdown', { method: 'POST' })).status, 401);
+    assert.match((await command('stop')).stdout, /stopped/);
+    assert.equal(existsSync(statePath), false);
+    await assert.rejects(command('status'), /Command failed/);
   } finally {
-    try { process.kill(state.pid, 'SIGTERM'); } catch { /* Process may already have exited. */ }
-    for (let attempt = 0; attempt < 80 && existsSync(statePath); attempt++) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
+    if (existsSync(statePath)) await command('stop').catch(() => { try { process.kill(state.pid, 'SIGTERM'); } catch {} });
   }
+});
+
+test('port collisions fail promptly and release the instance lock', { timeout: 20000 }, async (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'mini-harness-port-test-'));
+  const listener = createServer();
+  await new Promise<void>((resolve) => listener.listen(0, '127.0.0.1', resolve));
+  t.after(async () => {
+    await new Promise<void>((resolve) => listener.close(() => resolve()));
+    rmSync(root, { recursive: true, force: true });
+  });
+  const address = listener.address();
+  assert.ok(address && typeof address === 'object');
+  const call = () => execute(process.execPath, [
+    resolve('dist/bin/mini-harness.js'), '--cwd', root, '--port', String(address.port)
+  ], { env: { ...process.env, MINI_HARNESS_HOME: join(root, 'home') }, timeout: 6000 });
+  await assert.rejects(call(), /HTTP port is already in use/);
+  await assert.rejects(call(), /HTTP port is already in use/);
+  assert.equal(existsSync(join(root, 'home', 'server.json')), false);
 });

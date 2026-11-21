@@ -1,8 +1,13 @@
+import { createRequire } from 'node:module';
 import { copyFileSync, mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
-// TypeScript owns the browser app; only static documents and styles are copied.
-mkdirSync('dist/web', { recursive: true });
-for (const asset of ['index.html', 'style.css', 'logo.svg']) {
+const require = createRequire(import.meta.url);
+mkdirSync('dist/web/vendor', { recursive: true });
+for (const asset of ['index.html', 'style.css', 'logo.svg', 'manifest.webmanifest']) {
   copyFileSync(join('web', asset), join('dist/web', asset));
 }
+copyFileSync(join(dirname(require.resolve('marked')), 'marked.esm.js'), 'dist/web/vendor/marked.js');
+copyFileSync(join(dirname(require.resolve('dompurify')), 'purify.es.mjs'), 'dist/web/vendor/purify.js');
+copyFileSync(join(dirname(require.resolve('marked')), '..', 'LICENSE'), 'dist/web/vendor/marked.LICENSE');
+copyFileSync(join(dirname(require.resolve('dompurify')), '..', 'LICENSE'), 'dist/web/vendor/purify.LICENSE');

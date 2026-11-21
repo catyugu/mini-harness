@@ -1,106 +1,200 @@
-import { Context } from 'cordis';
+import { Context, type Fiber } from 'cordis';
 import { readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { isDeepStrictEqual } from 'node:util';
 import { Type } from 'typebox';
+import { defineTool, type ToolDefinition } from '@earendil-works/pi-coding-agent';
+import type { MiniHarnessRuntime } from './agent.js';
+import { readJson, type Settings } from './config.js';
 import { runShell } from './sandbox.js';
-import { requireChildDepth, selectChildModel, Semaphore } from './subagents.js';
 
-export const BUILTINS = Object.freeze([
-  { id: 'skills', title: 'Skills', description: 'Discover Agent Skills from global and project directories.' },
-  { id: 'subagents', title: 'Subagents', description: 'Manage isolated, non-recursive child conversations.' },
-  { id: 'shell', title: 'Shell', description: 'Execute commands inside the configured sandbox or explicitly trusted host.' }
+interface PluginMetadata {
+  id: string;
+  title: string;
+  description: string;
+  trustedCode?: boolean;
+}
+
+export const BUILTINS: readonly PluginMetadata[] = Object.freeze([
+  { id: 'skills', title: 'Skills', description: 'Discover Agent Skills from home and the workspace.' },
+  { id: 'subagents', title: 'Subagents', description: 'Delegate tasks to child conversations.' },
+  { id: 'shell', title: 'Shell', description: 'Run commands using the configured execution policy.' }
 ]);
 
+export interface PluginApi {
+  /** The value comes from settings.pluginConfig[pluginId]. */
+  readonly config: Readonly<Record<string, unknown>>;
+  defineConfig(defaults: Record<string, unknown>, validate?: (config: Readonly<Record<string, unknown>>) => void): Readonly<Record<string, unknown>>;
+  registerTool(tool: ToolDefinition): () => Promise<void>;
+  onDispose(cleanup: () => void | Promise<void>): void;
+}
+
+declare module 'cordis' {
+  interface Context {
+    harnessAgent: Pick<MiniHarnessRuntime, 'availableModels'>;
+    harnessSessions: Pick<MiniHarnessRuntime['registry'], 'get' | 'list'>;
+    harnessTools: ToolRegistry;
+  }
+}
+
+const reservedTools = new Set(['read', 'edit', 'write', 'grep', 'find', 'ls', 'bash', 'powershell', 'codemode', 'tool_search']);
+
+export class ToolRegistry {
+  private tools = new Map<string, { bind: (id: string) => ToolDefinition; visible: (id: string) => boolean }>();
+
+  register(tool: ToolDefinition, bind = (_id: string) => tool, visible = (_id: string) => true) {
+    const { name } = tool;
+    if (!/^[a-zA-Z0-9_-]{1,64}$/.test(name)) throw new Error('Invalid tool name: ' + name);
+    if (reservedTools.has(name) || this.tools.has(name)) throw new Error('Duplicate or reserved tool: ' + name);
+    this.tools.set(name, { bind, visible });
+    return () => { this.tools.delete(name); };
+  }
+
+  forSession(id: string) {
+    return [...this.tools.values()].filter((tool) => tool.visible(id)).map((tool) => tool.bind(id));
+  }
+}
+
+interface PluginPlan {
+  id: string;
+  source?: string;
+  config?: Record<string, unknown>;
+}
+
 export class PluginHost {
-  runtime: any;
-  ctx: Context;
-  fibers: any[];
-  tools: Map<string, any>;
-  semaphore: Semaphore;
-  constructor(runtime: any) {
-    this.runtime = runtime;
-    this.ctx = new Context();
-    this.fibers = [];
-    this.tools = new Map();
-    this.semaphore = new Semaphore(runtime.settings.subagents.maxParallel);
+  readonly ctx = new Context();
+  private readonly mounted = new Map<string, { plan: PluginPlan; fiber: Fiber }>();
+
+  constructor(private readonly runtime: MiniHarnessRuntime) {
+    this.ctx.provide('harnessAgent', { availableModels: () => runtime.availableModels() });
+    this.ctx.provide('harnessSessions', {
+      get: (id) => runtime.registry.get(id),
+      list: () => runtime.registry.list()
+    });
+    this.ctx.provide('harnessTools', new ToolRegistry());
   }
 
-  // Cordis owns each optional feature's registration and cleanup.
-  async activate() {
-    const register = (id: string, setup: () => () => void) => {
-      if (!this.runtime.settings.plugins[id]) return;
-      this.fibers.push(this.ctx.plugin((ctx: Context) => {
-        ctx.effect(() => setup());
-      }));
-    };
-    register('subagents', () => this.registerTool('delegate', {
-      name: 'delegate',
-      label: 'Delegate',
-      description: 'Create a child agent to handle a specific task. Child agents cannot create further agents. Provide provider/model only if you intentionally want to override the default.',
-      parameters: Type.Object({
-        task: Type.String({ minLength: 1, maxLength: 12000 }),
-        provider: Type.Optional(Type.String()),
-        model: Type.Optional(Type.String())
-      }),
-      // getTools() binds a separate executor to each parent conversation.
-      execute: async () => { throw new Error('Delegation requires an owning conversation'); }
-    }));
-    register('shell', () => this.registerTool('sandbox_shell', {
-      name: 'sandbox_shell',
-      label: 'Shell',
-      description: 'Run a shell command in the workspace, subject to the configured sandbox policy.',
-      parameters: Type.Object({ command: Type.String({ minLength: 1, maxLength: 16000 }) }),
-      execute: async (_id, args, signal) => {
-        const output = await runShell(args.command, this.runtime.paths.cwd, {
-          mode: this.runtime.settings.sandbox.mode,
-          timeoutSeconds: this.runtime.settings.sandbox.timeoutSeconds,
-          signal
-        });
-        return { content: [{ type: 'text', text: JSON.stringify(output) }] };
-      }
-    }));
-    // External plugin code is trusted executable JavaScript. Only explicitly enabled modules load.
-    for (const entry of readdirSync(this.runtime.paths.plugins, { withFileTypes: true })) {
-      if (!entry.isDirectory() || !this.runtime.settings.plugins[entry.name]) continue;
-      const source = join(this.runtime.paths.plugins, entry.name, 'plugin.js');
-      if (!existsSync(source)) continue;
-      const mod = await import(pathToFileURL(source).href);
-      const load = mod.default ?? mod.apply;
-      if (typeof load !== 'function') throw new Error('Invalid plugin: ' + entry.name);
-      this.fibers.push(this.ctx.plugin((ctx: Context) => load(ctx, {
-        registerTool: (tool: any) => ctx.effect(() => this.registerTool(entry.name + ':' + tool.name, tool))
-      })));
-    }
-    await Promise.all(this.fibers.map((fiber) => fiber.inertia).filter(Boolean));
-  }
-
-  registerTool(id: string, tool: any) {
-    if (this.tools.has(id)) throw new Error('Duplicate tool: ' + id);
-    this.tools.set(id, tool);
-    return () => this.tools.delete(id);
-  }
-
-  getTools({ child = false, id }: {child?:boolean; id?:string} = {}) {
-    return [...this.tools.values()].filter((tool) => !child || tool.name !== 'delegate').map((tool) => {
-      if (tool.name !== 'delegate') return tool;
-      // Bind delegation to its owning session, never to global mutable request state.
-      return { ...tool, execute: async (_callId, args, signal) => {
-        if (!id) throw new Error('Delegate has no owning session');
-        const record = this.runtime.registry.get(id);
-        if (!record) throw new Error('Parent conversation not found');
-        requireChildDepth(record.parentId ? 1 : 0);
-        const parent = this.runtime.openSessions.get(id);
-        if (!parent) throw new Error('Parent session not open');
-        const chosen = selectChildModel(args, this.runtime.settings.subagents, this.runtime.modelInfo(parent.model));
-        const result: { id: string; text: string } = await this.semaphore.run(() => this.runtime.runChild(id, args.task, chosen, signal), signal) as { id: string; text: string };
-        return { content: [{ type: 'text', text: result.text }], details: { sessionId: result.id } };
-      } };
+  private discover() {
+    const builtins = new Set(BUILTINS.map(({ id }) => id));
+    return readdirSync(this.runtime.paths.plugins, { withFileTypes: true }).flatMap((entry) => {
+      const id = entry.name;
+      if (!entry.isDirectory() || !/^[a-z][a-z0-9-]{0,63}$/.test(id) || builtins.has(id)) return [];
+      const folder = join(this.runtime.paths.plugins, id);
+      const source = join(folder, 'plugin.js');
+      if (!existsSync(source)) return [];
+      let manifest: Partial<PluginMetadata> | null = null;
+      try { manifest = readJson(join(folder, 'plugin.json'), null); }
+      catch (error) { if (!(error instanceof SyntaxError)) throw error; }
+      const title = typeof manifest?.title === 'string' ? manifest.title.slice(0, 100) : id;
+      const description = typeof manifest?.description === 'string' ? manifest.description.slice(0, 300) : 'Runs local JavaScript with your user permissions.';
+      return [{ source, metadata: { id, title, description, trustedCode: true } }];
     });
   }
 
+  metadata() { return [...BUILTINS, ...this.discover().map(({ metadata }) => metadata)]; }
+
+  private async mount(plan: PluginPlan) {
+    const { id, source } = plan;
+    let fiber: Fiber | undefined;
+    try {
+      if (id === 'subagents') {
+        fiber = this.ctx.inject(['harnessTools'], (ctx) => {
+          const tool = this.runtime.delegateTool();
+          ctx.effect(() => ctx.harnessTools.register(tool, (sessionId) => this.runtime.delegateTool(sessionId),
+            (sessionId) => this.runtime.canDelegate(sessionId)));
+        });
+      } else if (id === 'shell') {
+        fiber = this.ctx.inject(['harnessTools'], (ctx) => {
+          ctx.effect(() => ctx.harnessTools.register(defineTool({
+            name: 'sandbox_shell',
+            label: 'Shell',
+            description: 'Run a shell command in the workspace using the configured execution policy.',
+            parameters: Type.Object({ command: Type.String({ minLength: 1, maxLength: 16000 }) }),
+            execute: async (_id, args, signal) => {
+              const output = await runShell(args.command, this.runtime.paths.cwd, {
+                ...this.runtime.settings.sandbox, signal, stateDir: this.runtime.paths.home
+              });
+              return { content: [{ type: 'text', text: JSON.stringify(output) }], details: output };
+            }
+          })));
+        });
+      } else {
+        const mod = await import(pathToFileURL(source).href);
+        const component = mod.default ?? mod.apply;
+        const setup = typeof component === 'function' ? component : component?.apply?.bind(component);
+        if (typeof setup !== 'function') throw new Error('Expected a setup function or a Cordis component');
+        const deps = [...new Set<string>(component.inject ?? mod.inject ?? [])];
+        if (deps.some((dep) => !['harnessAgent', 'harnessSessions'].includes(dep)))
+          throw new Error('Unknown harness service dependency');
+        fiber = this.ctx.inject(deps, async (ctx) => {
+          const values = Object.freeze(structuredClone(plan.config ?? {}));
+          const cleanup = await setup(ctx, {
+            config: values,
+            defineConfig(defaults, validate) {
+              const config = Object.freeze({ ...structuredClone(defaults), ...values });
+              validate?.(config);
+              return config;
+            },
+            registerTool: (tool) => ctx.effect(() => this.ctx.harnessTools.register(tool)),
+            onDispose: (dispose) => { ctx.effect(() => dispose); }
+          } satisfies PluginApi);
+          if (typeof cleanup === 'function') ctx.effect(() => cleanup);
+        });
+      }
+      await fiber.await();
+      this.mounted.set(id, { plan, fiber });
+    } catch (error) {
+      await fiber?.dispose();
+      throw new Error('Plugin ' + id + ': ' + (error instanceof Error ? error.message : String(error)), { cause: error });
+    }
+  }
+
+  private async unmount(id: string) {
+    const installed = this.mounted.get(id);
+    if (!installed) return;
+    this.mounted.delete(id);
+    await installed.fiber.dispose();
+  }
+
+  async configure(settings: Settings, commit = () => {}) {
+    const next = [
+      ...['subagents', 'shell'].map((id): PluginPlan => ({ id })),
+      ...this.discover().map(({ source, metadata: { id } }): PluginPlan => ({
+        id, source, config: Object.hasOwn(settings.pluginConfig, id) ? settings.pluginConfig[id] : undefined
+      }))
+    ].filter(({ id }) => Object.hasOwn(settings.plugins, id) && settings.plugins[id]);
+    const desired = new Map(next.map((plan) => [plan.id, plan]));
+    const obsolete = [...this.mounted.values()].map(({ plan }) => plan).filter((plan) => !isDeepStrictEqual(plan, desired.get(plan.id)));
+    const additions = next.filter((plan) => !isDeepStrictEqual(plan, this.mounted.get(plan.id)?.plan));
+    const unloaded: PluginPlan[] = [];
+    const loaded: string[] = [];
+    try {
+      for (const plan of obsolete.reverse()) {
+        unloaded.unshift(plan);
+        await this.unmount(plan.id);
+      }
+      for (const plan of additions) {
+        await this.mount(plan);
+        loaded.push(plan.id);
+      }
+      commit();
+    } catch (error) {
+      const failures = [];
+      for (const id of loaded.reverse()) {
+        try { await this.unmount(id); } catch (failure) { failures.push(failure); }
+      }
+      for (const plan of unloaded) {
+        try { await this.mount(plan); } catch (failure) { failures.push(failure); }
+      }
+      if (failures.length) throw new AggregateError([error, ...failures], 'Could not restore the previous plugin configuration');
+      throw error;
+    }
+  }
+
+  getTools(id: string) { return this.ctx.harnessTools.forSession(id); }
+
   async close() {
-    await Promise.all(this.fibers.splice(0).map((fiber) => fiber.dispose()));
-    this.tools.clear();
+    for (const id of [...this.mounted.keys()].reverse()) await this.unmount(id);
   }
 }
