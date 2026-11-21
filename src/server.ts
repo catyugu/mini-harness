@@ -71,11 +71,12 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
         return json(res, 200, { settings: runtime.settings, sessions: runtime.registry.list(), models: runtime.availableModels(), plugins: runtime.plugins.metadata() });
       if (pathname === '/api/sessions' && req.method === 'GET') return json(res, 200, runtime.registry.list());
       if (pathname === '/api/sessions' && req.method === 'POST') return json(res, 201, runtime.registry.create());
-      const match = /^\/api\/sessions\/([a-f0-9-]{36})(?:\/(messages))?$/.exec(pathname);
+      const match = /^\/api\/sessions\/([a-f0-9-]{36})(?:\/(messages|cancel))?$/.exec(pathname);
       if (match) {
         const id = match[1];
         if (!runtime.registry.get(id)) return json(res, 404, { error: 'Conversation not found' });
         if (!match[2] && req.method === 'GET') return json(res, 200, await runtime.getConversation(id));
+        if (match[2] === 'cancel' && req.method === 'POST') return json(res, 200, { cancelled: runtime.cancel(id) });
         if (match[2] === 'messages' && req.method === 'POST') {
           const input = await requestBody(req);
           res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
@@ -99,11 +100,10 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
       if (pathname === '/api/sessions/export' && req.method === 'POST') {
         const input = await requestBody(req);
         if (!Array.isArray(input.ids) || input.ids.length > 200) return json(res, 400, { error: 'Invalid selection' });
-        const records = [];
-        for (const id of input.ids) records.push(await runtime.getConversation(id));
+        const records = runtime.export(input.ids);
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8',
           'Content-Disposition': 'attachment; filename="mini-harness-sessions.json"', 'Cache-Control': 'no-store' });
-        return res.end(JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), sessions: records }, null, 2));
+        return res.end(JSON.stringify({ version: 2, exportedAt: new Date().toISOString(), sessions: records }, null, 2));
       }
       if (pathname === '/api/settings' && req.method === 'PATCH') {
         const input = await requestBody(req);

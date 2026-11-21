@@ -42,3 +42,25 @@ test('refuses deletion of files outside managed session directory', () => {
     assert.equal(existsSync(foreign), true);
   } finally { rmSync(temp, { recursive: true, force: true }); }
 });
+
+test('restarts finish a journaled deletion after partial cleanup', () => {
+  const temp = mkdtempSync(join(tmpdir(), 'mini-harness-recovery-'));
+  try {
+    const paths = getPaths(temp, { MINI_HARNESS_HOME: join(temp, 'home') });
+    mkdirSync(paths.sessions, { recursive: true });
+    const registry = new SessionRegistry(paths);
+    const parent = registry.create();
+    const child = registry.create({ parentId: parent.id });
+    const unrelated = registry.create();
+    const parentFile = join(paths.sessions, parent.id + '.jsonl');
+    const childFile = join(paths.sessions, child.id + '.jsonl');
+    writeFileSync(childFile, 'child history');
+    writeFileSync(paths.registry, JSON.stringify({
+      sessions: [unrelated],
+      pendingDelete: [{ ...parent, file: parentFile }, { ...child, file: childFile }]
+    }));
+    const restored = new SessionRegistry(paths);
+    assert.deepEqual(restored.list().map(({ id }) => id), [unrelated.id]);
+    assert.equal(existsSync(childFile), false);
+  } finally { rmSync(temp, { recursive: true, force: true }); }
+});

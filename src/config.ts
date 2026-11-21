@@ -3,12 +3,12 @@ export interface Settings {
   model: {provider: string; id: string};
   plugins: Record<string, boolean>;
   pluginConfig: Record<string, Record<string, unknown>>;
-  subagents: {maxParallel: number; provider: string; model: string};
+  subagents: {maxDepth: number; maxParallel: number; provider: string; model: string};
   sandbox: {mode: 'isolated'|'host'; timeoutSeconds: number};
   appearance: 'system'|'light'|'dark';
 }
-import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { createHash, randomUUID } from 'node:crypto';
+import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 
@@ -17,7 +17,7 @@ export const DEFAULTS = Object.freeze({
   model: { provider: '', id: '' },
   plugins: { skills: true, subagents: true, shell: false },
   pluginConfig: {},
-  subagents: { maxParallel: 2, provider: '', model: '' },
+  subagents: { maxDepth: 1, maxParallel: 4, provider: '', model: '' },
   sandbox: { mode: 'isolated', timeoutSeconds: 60 },
   appearance: 'system'
 });
@@ -48,9 +48,15 @@ export function readJson<T>(file: string, fallback: T): T {
 
 export function writeJson(file: string, value: unknown) {
   mkdirSync(resolve(file, '..'), { recursive: true, mode: 0o700 });
-  const temp = file + '.' + process.pid + '.tmp';
-  writeFileSync(temp, JSON.stringify(value, null, 2) + '\n', { mode: 0o600 });
-  renameSync(temp, file);
+  const temp = file + '.' + randomUUID() + '.tmp';
+  const handle = openSync(temp, 'wx', 0o600);
+  try {
+    try {
+      writeFileSync(handle, JSON.stringify(value, null, 2) + '\n');
+      fsyncSync(handle);
+    } finally { closeSync(handle); }
+    renameSync(temp, file);
+  } finally { rmSync(temp, { force: true }); }
 }
 
 export function validateSettings(input: any) {
@@ -67,7 +73,8 @@ export function validateSettings(input: any) {
     if (!/^[a-z][a-z0-9-]{0,63}$/.test(id) || !config || typeof config !== 'object' || Array.isArray(config))
       throw new Error('Invalid plugin configuration for ' + id);
   }
-  if (!Number.isInteger(s.maxParallel ?? 2) || (s.maxParallel ?? 2) < 1 || (s.maxParallel ?? 2) > 16) throw new Error('maxParallel must be 1..16');
+  if (!Number.isInteger(s.maxDepth ?? 1) || (s.maxDepth ?? 1) < 0 || (s.maxDepth ?? 1) > 8) throw new Error('maxDepth must be 0..8');
+  if (!Number.isInteger(s.maxParallel ?? 4) || (s.maxParallel ?? 4) < 1 || (s.maxParallel ?? 4) > 16) throw new Error('maxParallel must be 1..16');
   for (const value of [s.provider ?? '', s.model ?? '', model.provider ?? '', model.id ?? '']) {
     if (typeof value !== 'string' || value.length > 160) throw new Error('Invalid provider or model');
   }

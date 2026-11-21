@@ -1,53 +1,91 @@
+import type { ModelChoice } from './registry.js';
+
+interface Waiter {
+  signal?: AbortSignal;
+  cancel(): void;
+  start(): void;
+}
+
 export class Semaphore {
-  limit: number;
-  active: number;
-  queue: any[];
-  constructor(limit: number = 2) {
-    this.limit = limit;
-    this.active = 0;
-    this.queue = [];
-  }
+  active = 0;
+  private readonly queue: Waiter[] = [];
+
+  constructor(public limit = 4) {}
+
   setLimit(limit: number) {
     if (!Number.isInteger(limit) || limit < 1 || limit > 16) throw new Error('Invalid parallel limit');
     this.limit = limit;
     this.drain();
   }
-  drain() {
-    while (this.active < this.limit && this.queue.length) {
-      const next = this.queue.shift();
-      if (next.signal?.aborted) { next.reject(next.signal.reason ?? new Error('Aborted')); continue; }
-      next.signal?.removeEventListener('abort', next.cancel);
-      this.active++;
-      next.resolve(() => { this.active--; this.drain(); });
-    }
+
+  private drain() {
+    while (this.active < this.limit && this.queue.length) this.queue.shift().start();
   }
+
   acquire(signal?: AbortSignal): Promise<() => void> {
-    if (signal?.aborted) return Promise.reject(signal.reason ?? new Error('Aborted'));
-    return new Promise<() => void>((resolve, reject) => {
-      const entry: any = { resolve, reject, signal };
-      entry.cancel = () => {
-        const i = this.queue.indexOf(entry);
-        if (i >= 0) this.queue.splice(i, 1);
-        reject(signal.reason ?? new Error('Aborted'));
+    if (signal?.aborted) return Promise.reject(signal.reason);
+    return new Promise((resolve, reject) => {
+      const waiter: Waiter = {
+        signal,
+        cancel: () => {
+          const index = this.queue.indexOf(waiter);
+          if (index >= 0) this.queue.splice(index, 1);
+          reject(signal.reason);
+        },
+        start: () => {
+          signal?.removeEventListener('abort', waiter.cancel);
+          this.active++;
+          let held = true;
+          resolve(() => {
+            if (!held) return;
+            held = false;
+            this.active--;
+            this.drain();
+          });
+        }
       };
-      signal?.addEventListener('abort', entry.cancel, { once: true });
-      this.queue.push(entry);
+      signal?.addEventListener('abort', waiter.cancel, { once: true });
+      this.queue.push(waiter);
       this.drain();
     });
   }
-  async run<T>(work: () => Promise<T>, signal?: AbortSignal): Promise<T> {
-    const release = await this.acquire(signal);
-    try { return await work(); } finally { release(); }
+
+  async run<T>(work: (lease: { pause<R>(task: () => Promise<R>): Promise<R> }) => Promise<T>, signal?: AbortSignal) {
+    let release = await this.acquire(signal);
+    let waiting = 0;
+    try {
+      return await work({
+        pause: async (task) => {
+          waiting++;
+          release?.();
+          release = undefined;
+          try { return await task(); }
+          finally {
+            waiting--;
+            if (!waiting && !signal?.aborted) {
+              const next = await this.acquire(signal);
+              if (waiting) next();
+              else release = next;
+            }
+          }
+        }
+      });
+    } finally { release?.(); }
   }
 }
 
-export function selectChildModel(request: {provider?: string; model?: string}, defaults: {provider:string; model:string}, parent: {provider:string; id:string}) {
-  const explicit = typeof request?.provider === 'string' && request.provider.trim();
-  const provider = explicit ? request.provider.trim() : (defaults.provider || parent.provider || '');
-  const model = explicit ? (request.model || '') : (request?.model || defaults.model || (provider === parent.provider ? parent.id : ''));
-  return { provider, id: model };
+export type ChildLease = Parameters<Parameters<Semaphore['run']>[0]>[0];
+
+export function selectChildModel(request: { provider?: string; model?: string },
+    defaults: { provider: string; model: string }, parent: ModelChoice): ModelChoice {
+  const provider = request.provider?.trim();
+  const model = request.model?.trim();
+  if (provider) return { provider, id: model ?? '' };
+  const inheritedProvider = defaults.provider.trim() || parent.provider;
+  const inheritedModel = defaults.model.trim() || (inheritedProvider === parent.provider ? parent.id : '');
+  return { provider: inheritedProvider, id: model || inheritedModel };
 }
 
-export function requireChildDepth(parentDepth: number): void {
-  if (parentDepth !== 0) throw new Error('Recursive subagents are prohibited');
+export function requireChildDepth(parentDepth: number, maxDepth = 1): void {
+  if (parentDepth >= maxDepth) throw new Error('Recursive subagents reached the configured depth limit');
 }
