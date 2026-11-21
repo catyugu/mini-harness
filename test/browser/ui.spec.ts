@@ -171,7 +171,9 @@ test('plugin schema controls, recursive tree navigation, batch export and perman
       prefix: { type: 'string', title: 'Prefix', default: 'Count' },
       count: { type: 'integer', title: 'Count', minimum: 1, maximum: 9, default: 3 },
       mode: { type: 'string', title: 'Mode', enum: ['brief', 'full'], default: 'brief' },
-      enabled: { type: 'boolean', title: 'Enabled', default: true }
+      enabled: { type: 'boolean', title: 'Enabled', default: true },
+      limits: { type: 'object', title: 'Limits', properties: { threshold: { type: 'number', title: 'Threshold', default: 0.5 } } },
+      tags: { type: 'array', title: 'Tags', items: { type: 'string' }, default: ['base'] }
     }
   } }));
   writeFileSync(join(folder, 'plugin.js'), 'export default (ctx, api) => { if (api.config.prefix === "bad") throw new Error("Bad prefix"); };');
@@ -184,9 +186,12 @@ test('plugin schema controls, recursive tree navigation, batch export and perman
     await page.getByLabel('Count · example', { exact: true }).fill('5');
     await page.getByLabel('Mode · example', { exact: true }).selectOption('"full"');
     await page.getByLabel('Enabled · example', { exact: true }).uncheck();
+    await page.getByLabel('Threshold · example', { exact: true }).fill('0.75');
+    await page.getByLabel('Tags · example', { exact: true }).fill('["custom"]');
     await page.getByRole('button', { name: 'Save settings' }).click();
     await expect(page.locator('#settingsStatus')).toHaveText('Saved.');
-    expect(readJson<any>(paths.settings, {}).pluginConfig.example).toEqual({ prefix: 'Total', count: 5, mode: 'full', enabled: false });
+    expect(readJson<any>(paths.settings, {}).pluginConfig.example).toEqual({ prefix: 'Total', count: 5, mode: 'full', enabled: false,
+      limits: { threshold: 0.75 }, tags: ['custom'] });
     await page.getByLabel('Prefix · example', { exact: true }).fill('bad');
     await page.getByRole('button', { name: 'Save settings' }).click();
     await expect(page.locator('#settingsStatus')).toContainText('Bad prefix');
@@ -257,5 +262,38 @@ test('renders Markdown and tool results, and stops a pending reply', async ({ pa
     await service.stop();
     rmSync(root, { recursive: true, force: true });
     await mock.close();
+  }
+});
+
+test('the global recent model survives history navigation and page reload', async ({ page }) => {
+  const mock = await createMockProvider();
+  const { root, paths } = createFixturePaths(mock.url);
+  const models = readJson<any>(join(paths.home, 'models.json'), {});
+  models.providers['local-mock'].models.push({ ...models.providers['local-mock'].models[0], id: 'second-model', name: 'Second Model' });
+  writeJson(join(paths.home, 'models.json'), models);
+  const service = await startIsolatedHost(paths);
+  try {
+    await page.goto(service.url + '/#token=' + service.token);
+    await page.getByRole('textbox', { name: 'Message' }).fill('Old model conversation');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.locator('.message.assistant')).toHaveText('Mock response');
+    await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeVisible();
+    await page.getByRole('combobox', { name: 'Model', exact: true }).selectOption('local-mock/second-model');
+    await page.getByRole('button', { name: /New conversation/ }).click();
+    await page.getByRole('textbox', { name: 'Message' }).fill('New model conversation');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.locator('.message.assistant')).toHaveText('Mock response');
+    await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeVisible();
+    expect(mock.requests.at(-1).model).toBe('second-model');
+    await page.getByRole('button', { name: 'Old model conversation', exact: true }).click();
+    await expect(page.getByRole('combobox', { name: 'Model', exact: true })).toHaveValue('local-mock/second-model');
+    await page.reload();
+    await expect(page.getByRole('combobox', { name: 'Model', exact: true })).toHaveValue('local-mock/second-model');
+    await page.getByRole('textbox', { name: 'Message' }).fill('Use the recent model');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.locator('.message.assistant')).toHaveCount(2);
+    expect(mock.requests.at(-1).model).toBe('second-model');
+  } finally {
+    await page.close(); await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true });
   }
 });

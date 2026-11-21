@@ -71,8 +71,10 @@ export class ToolRegistry {
   }
 
   forSession(id: string) {
-    return [...this.tools.values()].filter((tool) => tool.visible(id)).map((tool) => tool.bind(id));
+    return this.resources(id).map((tool) => tool.bind(id));
   }
+
+  resources(id: string) { return [...this.tools.values()].filter((tool) => tool.visible(id)); }
 }
 
 interface PluginPlan {
@@ -256,6 +258,7 @@ export class PluginHost {
   }
 
   getTools(id: string) { return this.ctx.harnessTools.forSession(id); }
+  resources(id: string) { return [this.ctx.harnessSkills, ...this.ctx.harnessTools.resources(id)]; }
 
   private configValues(id: string, settings: Settings, schema?: Record<string, any>) {
     const input = structuredClone(settings.pluginConfig[id] ?? {});

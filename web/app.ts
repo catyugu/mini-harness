@@ -1,5 +1,5 @@
 import type { Settings } from '../src/config.js';
-import type { Conversation } from '../src/registry.js';
+import type { Conversation, ModelChoice } from '../src/registry.js';
 import type { MessageContent, StreamEvent, RunEvent, RunInfo, ViewMessage } from '../src/protocol.js';
 import type { PluginMetadata } from '../src/plugins.js';
 import { renderMarkdown } from './markdown.js';
@@ -25,7 +25,7 @@ const narrow = matchMedia('(max-width: 860px)');
 
 interface ModelInfo { provider: string; id: string; name: string; configured: boolean }
 interface Bootstrap { settings: Settings; sessions: Conversation[]; models: ModelInfo[]; plugins: PluginMetadata[]; workspace: string; isolation: boolean }
-interface ConversationView extends Conversation { messages: ViewMessage[]; partial?: string; tools?: Extract<StreamEvent, { type: 'tool' }>[] }
+interface ConversationView extends Conversation { selectedModel: ModelChoice; messages: ViewMessage[]; partial?: string; tools?: Extract<StreamEvent, { type: 'tool' }>[] }
 let bootstrap: Bootstrap;
 let sessions: Conversation[] = [];
 let active: string | undefined;
@@ -36,6 +36,7 @@ let pendingNavigation = false;
 const selection = new Set<string>();
 const expanded = new Set<string>();
 let observing: AbortController;
+let modelChange: Promise<Settings>;
 const isRunning = (run?: RunInfo) => run?.state === 'queued' || run?.state === 'running';
 
 async function api(path: string, options: RequestInit = {}) {
@@ -98,12 +99,14 @@ async function activate(id: string) {
   const request = ++navigation;
   pendingNavigation = true;
   try {
+    await modelChange?.catch(() => {});
     const item = await data<ConversationView>('/sessions/' + id);
     if (request !== navigation) return;
     for (let parent = item.parentId; parent && !expanded.has(parent); parent = sessions.find((entry) => entry.id === parent)?.parentId) {
       expanded.add(parent);
     }
     showConversation(item, item.messages);
+    applySettings({ ...bootstrap.settings, model: item.selectedModel });
     if (isRunning(item.run)) void observe(item);
     else showStatus(item.run?.error ?? '');
     closeDrawer();
@@ -323,7 +326,8 @@ async function send(text: string) {
   try {
     if (!active) showConversation(await createConversation());
     const id = active;
-    await data<RunInfo>('/sessions/' + id + '/runs', payload('POST', { message: text, model: selectedModel() }));
+    await modelChange;
+    await data<RunInfo>('/sessions/' + id + '/runs', payload('POST', { message: text }));
     prompt.value = '';
     adjustPrompt();
     if (request === navigation) {
@@ -369,6 +373,9 @@ async function observe(item: ConversationView) {
           answerText += event.text;
           // Plain text during streaming keeps selection stable. Format at turn boundaries.
           answer.textContent = answerText;
+          break;
+        case 'assistant-end':
+          if (answer) renderMarkdown(answer, answerText);
           break;
         case 'complete':
           if (event.text || answer) {
@@ -523,8 +530,12 @@ function schemaFields(plugin: string, schema: Record<string, any>, values: any, 
     title.textContent = property.title ?? key;
     label.append(title);
     if (property.type === 'object' && property.properties) {
-      label.append(schemaFields(plugin, property, current ?? {}, fieldPath));
-      group.append(label);
+      const section = document.createElement('fieldset');
+      section.className = 'plugin-config';
+      const legend = document.createElement('legend');
+      legend.textContent = title.textContent;
+      section.append(legend, schemaFields(plugin, property, current ?? {}, fieldPath));
+      group.append(section);
       continue;
     }
     let input: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
@@ -576,9 +587,9 @@ function pluginValues() {
     if (field.matches(':disabled')) continue;
     const path: string[] = JSON.parse(field.dataset.path);
     const kind = field.dataset.kind;
-    if (kind !== 'boolean' && !field.value && !field.required) continue;
     let target = config[field.dataset.plugin] ??= {};
     for (const key of path.slice(0, -1)) target = (target[key] ??= {}) as Record<string, unknown>;
+    if (kind !== 'boolean' && !field.value && !field.required) { delete target[path.at(-1)]; continue; }
     target[path.at(-1)] = kind === 'boolean' ? (field as HTMLInputElement).checked :
       kind === 'number' || kind === 'integer' ? Number(field.value) :
       kind === 'enum' || kind === 'json' ? JSON.parse(field.value) : field.value;
@@ -667,8 +678,11 @@ element('saveCredential').onclick = async () => {
   } catch (error) { settingsStatus.textContent = error.message; }
 };
 modelSelect.onchange = async () => {
-  try { applySettings(await data<Settings>('/settings', payload('PATCH', { model: selectedModel() }))); }
+  const update = data<Settings>('/settings', payload('PATCH', { model: selectedModel() }));
+  modelChange = update;
+  try { applySettings(await update); }
   catch (error) { applySettings(bootstrap.settings); report(error); }
+  finally { if (modelChange === update) modelChange = undefined; }
 };
 element<'button'>('stop').onclick = async () => {
   if (!active) return;

@@ -75,3 +75,29 @@ test('credential settings persist using Pi and do not return secrets', async (t)
   assert.doesNotMatch(await response.text(), /fixture-secret/);
   assert.equal(JSON.parse(readFileSync(join(paths.home, 'auth.json'), 'utf8')).anthropic.key, 'fixture-secret');
 });
+
+test('tool availability changes rebuild affected sessions and preserve unrelated sessions', async (t) => {
+  const mock = await createMockProvider();
+  const { root, paths } = createFixturePaths(mock.url);
+  const runtime = new MiniHarnessRuntime(paths);
+  t.after(async () => { await runtime.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
+  await runtime.start();
+  const parent = runtime.registry.create();
+  const child = runtime.registry.create({ parentId: parent.id });
+  const leaf = runtime.registry.create({ parentId: child.id });
+  const originalParent = await runtime.open(parent.id);
+  const originalChild = await runtime.open(child.id);
+  const originalLeaf = await runtime.open(leaf.id);
+  await runtime.updateSettings({ subagents: { maxDepth: 2 } });
+  assert.strictEqual(await runtime.open(parent.id), originalParent);
+  assert.notStrictEqual(await runtime.open(child.id), originalChild);
+  assert.ok((await runtime.open(child.id)).getActiveToolNames().includes('delegate'));
+  assert.strictEqual(await runtime.open(leaf.id), originalLeaf);
+  await runtime.updateSettings({ plugins: { subagents: false } });
+  assert.notStrictEqual(await runtime.open(parent.id), originalParent);
+  assert.ok(!(await runtime.open(parent.id)).getActiveToolNames().includes('delegate'));
+  assert.strictEqual(await runtime.open(leaf.id), originalLeaf);
+  await runtime.updateSettings({ plugins: { skills: false } });
+  assert.equal(runtime.plugins.ctx.harnessSkills, undefined);
+  assert.notStrictEqual(await runtime.open(leaf.id), originalLeaf);
+});

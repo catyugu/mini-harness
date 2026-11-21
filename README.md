@@ -1,83 +1,52 @@
 # mini-harness
 
-mini-harness is a local Web harness for the [Pi coding-agent SDK](https://github.com/earendil-works/pi). It ships as one npm package, with [Cordis](https://github.com/cordiverse/cordis) managing tool registration and plugin lifecycles.
+A minimal local Web harness for the [Pi coding-agent SDK](https://github.com/earendil-works/pi), shipped as one npm package. [Cordis](https://github.com/cordiverse/cordis) manages services, tools and plugin lifecycles.
 
 ## Start
 
-Requires Node.js 22.19 or later. To build from source:
+Requires Node.js 22.19 or later. Install the published package:
 
 ```sh
-git clone https://github.com/catyugu/mini-harness.git
-cd mini-harness
-npm ci
-npm run build
-node dist/bin/mini-harness.js --detached
+npm install -g mini-harness
+mini-harness --detached
 ```
 
-Open the URL printed by the CLI. The local server listens on `127.0.0.1`. The browser takes the access token from the URL fragment and stores it for the tab. Configuration lives in `~/.mini-harness` by default and can be moved with `MINI_HARNESS_HOME`.
+For the v0.3.0 source preview, run `npm ci && npm run build`, then `node dist/bin/mini-harness.js --detached`.
+
+Open the URL printed by the CLI. The server listens on `127.0.0.1`; the browser keeps the access token in tab storage. Configuration lives in `~/.mini-harness`, or `MINI_HARNESS_HOME`.
 
 ```text
-mini-harness [--port 3837]
-mini-harness --detached [--port 3837]
+mini-harness [--cwd path] [--port 3837]
+mini-harness --detached
 mini-harness status
 mini-harness stop
-mini-harness --help
 ```
 
-One process owns each configuration directory. `status` reports the PID and URL. `stop` requests an authenticated, graceful shutdown. The CLI clears stale state when it can acquire the instance lock. Detached processes write to `server.log`. Both the log and `server.json` contain the access token.
+One process owns each configuration directory. Detached processes write to `server.log`; both that log and `server.json` contain the access token. `stop` requests graceful shutdown.
 
-## Models, Skills and sessions
+## Use
 
-- Select a model in the header or set its provider and ID in Settings. Pi reads credentials from `auth.json` or the environment and custom model definitions from `models.json`, both under the configuration directory.
-- Pi loads Agent Skills from the global `skills/` folder and project `.mini-harness/skills/` folder. Toggle Skills from Settings.
-- Subagents default to one child level and four concurrent child runs. Set the maximum depth to 0–8 and concurrency to 1–16. A child waiting for its descendants yields its execution slot. Explicit delegate arguments take precedence over child defaults and the parent's model. Provider-only calls select a model from that provider, and resolved child models are saved with their sessions.
-- Conversation trees are scoped to the current workspace. Selecting a conversation for export includes its descendants, original Pi JSONL, and parent IDs. Deleting a conversation removes its descendants permanently. The index records pending file cleanup so the next start can finish an interrupted deletion.
-- File tools restrict access to the workspace. Shell is disabled by default. Linux supports bubblewrap isolation. Trusted host mode and local JavaScript plugins use your user permissions. See [SECURITY.md](SECURITY.md).
+- Choose a model in the header or Settings. The next main conversation message uses the global selection; sending remembers the actual model across navigation and restarts. Child agents have their own inherited or explicit model and do not change that selection. Pi manages model switching and conversation context.
+- Set API keys in Settings. Pi persists credentials in `auth.json`; custom providers and models go in `models.json`. Credential status reports local configuration; the provider validates access when a request is made.
+- Refreshing, disconnecting or changing conversations leaves tasks running. Reopen a conversation to reconnect, or use Stop to cancel it and its descendants. Server shutdown cancels runs; a restart marks unfinished runs interrupted and restores their saved history.
+- Child agents default to one level and four concurrent executions. Settings allow depth 0–8 and concurrency 1–16. Explicit delegate models override child defaults, which override the parent model. A child awaiting descendants yields its slot. Lowering concurrency lets existing work finish before admitting more children.
+- Expand conversation trees to view children. Selecting a parent for export includes descendants and original Pi JSONL. Permanent deletion cancels the selected trees, waits for their runs, and removes their files.
+- Toggle workspace files, native Skills, subagents, Shell and local plugins in Settings. Pi loads Skills from global `skills/` and project `.mini-harness/skills/` folders. Theme and scheduling settings apply during runs; changing active tools or Skills requires idle conversations.
 
-## Plugins
+Shell is disabled by default. File tools retain workspace access checks; existing Linux shell isolation is unchanged. Trusted host Shell and reviewed JavaScript plugins run with your user permissions. See [SECURITY.md](SECURITY.md).
 
-Put reviewed local plugins in `~/.mini-harness/plugins/<id>/plugin.js`. IDs use lowercase letters, digits and hyphens, and start with a letter. An optional `plugin.json` can provide a title and description for the Settings screen.
+## Develop
 
-```json
-{ "title": "Conversation count", "description": "Give the model the number of conversations." }
-```
-
-The entry point is an ESM setup function. Declare needed Cordis services in `inject`. `harnessAgent.availableModels()` and `harnessSessions.get(id)` / `harnessSessions.list()` provide model and conversation metadata. `api.registerTool()` takes a Pi tool definition and returns an unregister function. Tool names must be unique and match the provider-compatible letters, digits, underscores and hyphens. Use `api.onDispose()` for resources owned by the plugin.
-
-```js
-export const inject = ['harnessSessions'];
-
-export default function setup(ctx, api) {
-  const config = api.defineConfig({ prefix: 'Count' }, (value) => {
-    if (typeof value.prefix !== 'string') throw new Error('prefix must be a string');
-  });
-
-  api.registerTool({
-    name: 'conversation_count',
-    label: 'Conversation count',
-    description: 'Count the conversations in the current workspace.',
-    parameters: { type: 'object', properties: {} },
-    async execute(_callId, _args, signal) {
-      signal?.throwIfAborted();
-      return { content: [{ type: 'text', text: config.prefix + ': ' + ctx.harnessSessions.list().length }] };
-    }
-  });
-}
-```
-
-Set individual plugin values in `settings.json` under `pluginConfig.<id>`. Enable installed plugins from Settings. Changes to tools or settings require idle conversations. Register tools during setup so each Pi session gets a consistent set, and keep plugin operations responsive to cancellation.
-
-## Verification
+See [plugin development](docs/plugins.md) and [changes](CHANGELOG.md).
 
 ```sh
+npm ci
 npm run check
 npx playwright install chromium --only-shell
 npm run test:browser
 npm run pack:check
 ```
 
-The pack check installs the tarball into a clean project and runs the installed CLI, Web assets and a real Pi conversation against a mock provider. CI covers Node.js 22 and 24 on native Linux and Windows, with Chromium desktop and mobile viewport tests on Ubuntu.
-
-## License
+CI covers native Windows/Linux and Node.js 22/24, Chromium desktop/tablet/mobile flows, and a clean tarball installation with the real Pi SDK against a local mock provider. No live provider credentials are needed for tests.
 
 MIT. See [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

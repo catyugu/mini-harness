@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { existsSync, rmSync } from 'node:fs';
 import { createMiniHarnessServer } from '../src/server.js';
 import { SessionRegistry } from '../src/registry.js';
+import type { RunEvent } from '../src/protocol.js';
 import { createFixturePaths, createMockProvider } from './helpers/mock-provider.js';
 
 function gate() {
@@ -85,4 +86,63 @@ test('a crash leaves indexed runs interrupted while retaining the conversation t
   assert.equal(restored.get(child.id).run.state, 'interrupted');
   assert.deepEqual(restored.descendants([parent.id]), [parent.id, child.id]);
   assert.equal(existsSync(paths.registry), true);
+});
+
+test('child queues honor live limits, explicit cancellation, and depth restrictions', { timeout: 15000 }, async (t) => {
+  const held = [gate(), gate(), gate()];
+  const entered = [gate(), gate(), gate()];
+  let requests = 0;
+  const mock = await createMockProvider(async () => {
+    const index = requests++;
+    entered[index].release();
+    await held[index].promise;
+    return 'Done';
+  });
+  const { root, paths } = createFixturePaths(mock.url);
+  const app = await createMiniHarnessServer(paths);
+  t.after(async () => { for (const gate of held) gate.release(); await app.close(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
+  await app.runtime.updateSettings({ subagents: { maxParallel: 1 } });
+  const parent = app.runtime.registry.create();
+  const choice = { provider: 'local-mock', id: 'mock-model' };
+  const first = app.runtime.runChild(parent.id, 'First child', choice);
+  await entered[0].promise;
+  const second = app.runtime.runChild(parent.id, 'Second child', choice);
+  const third = app.runtime.runChild(parent.id, 'Cancelled queued child', choice);
+  const aborted = assert.rejects(third, /cancelled/);
+  const records = app.runtime.registry.list();
+  const queued = records.find(({ title }) => title === 'Cancelled queued child');
+  assert.equal(app.runtime.runInfo(queued.id).state, 'queued');
+  app.runtime.cancel(queued.id);
+  await aborted;
+  assert.equal(app.runtime.runInfo(queued.id).state, 'cancelled');
+  assert.equal(requests, 1);
+  await app.runtime.updateSettings({ subagents: { maxParallel: 2 } });
+  await entered[1].promise;
+  assert.equal(app.runtime.semaphore.active, 2);
+  await app.runtime.updateSettings({ subagents: { maxParallel: 1 } });
+  assert.equal(app.runtime.busy.size, 2, 'Lowering the limit preserves existing executions');
+  const child = app.runtime.registry.list().find(({ title }) => title === 'First child');
+  await assert.rejects(app.runtime.runChild(child.id, 'Too deep', choice), /depth limit/);
+  held[0].release(); held[1].release();
+  await Promise.all([first, second]);
+  assert.equal(app.runtime.semaphore.active, 0);
+  assert.equal(requests, 2, 'Cancelled queued children never reach the provider');
+});
+
+test('late observers receive a saved snapshot and stale cursors cannot attach to a newer run', async (t) => {
+  const mock = await createMockProvider();
+  const { root, paths } = createFixturePaths(mock.url);
+  const app = await createMiniHarnessServer(paths);
+  t.after(async () => { await app.close(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
+  const item = app.runtime.registry.create();
+  await app.runtime.send(item.id, 'First');
+  const first = app.runtime.runInfo(item.id);
+  const events: RunEvent[] = [];
+  app.runtime.watchRun(item.id, first.id, 0, (event) => events.push(event));
+  assert.equal(events.length, 1);
+  assert.equal(events[0].type, 'snapshot');
+  assert.ok(events[0].type === 'snapshot' && events[0].messages.some(({ role }) => role === 'assistant'));
+  await app.runtime.send(item.id, 'Second');
+  assert.throws(() => app.runtime.watchRun(item.id, first.id, 0, () => {}), /Run not found/);
+  assert.throws(() => app.runtime.watchRun(item.id, app.runtime.runInfo(item.id).id, Number.NaN, () => {}), /Invalid event cursor/);
 });

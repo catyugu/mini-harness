@@ -4,6 +4,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { MiniHarnessRuntime } from '../src/agent.js';
 import { createFixturePaths, createMockProvider } from './helpers/mock-provider.js';
+import { mergeSettings } from '../src/config.js';
 
 test('an installed Cordis plugin can use services, configure a tool, and release resources', async (t) => {
   const mock = await createMockProvider();
@@ -103,4 +104,53 @@ test('plugin JSON Schema applies defaults and rejects invalid changes before set
   assert.match(JSON.stringify(await tool.execute('test', {}, undefined, undefined, undefined)), /3/);
   await assert.rejects(runtime.updateSettings({ pluginConfig: { schema: { count: 0 } } }), /Invalid configuration/);
   assert.strictEqual(runtime.plugins.getTools(item.id).find(({ name }) => name === 'schema_value'), tool);
+});
+
+test('dependent plugins restart in order and partial setup or persistence failures restore their resources', async (t) => {
+  const mock = await createMockProvider();
+  const { root, paths } = createFixturePaths(mock.url);
+  const runtime = new MiniHarnessRuntime(paths);
+  t.after(async () => { await runtime.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
+  const log = join(paths.plugins, 'lifecycle.log');
+  for (const id of ['base', 'dependent']) {
+    const folder = join(paths.plugins, id);
+    mkdirSync(folder);
+    writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ requires: id === 'dependent' ? ['base'] : [] }));
+    writeFileSync(join(folder, 'plugin.js'), `
+      import { appendFileSync } from 'node:fs';
+      export default (ctx, api) => {
+        appendFileSync(${JSON.stringify(log)}, 'start ${id}\\n');
+        api.onDispose(() => appendFileSync(${JSON.stringify(log)}, 'stop ${id}\\n'));
+        api.registerTool({ name: '${id}_tool', description: 'Fixture', parameters: {type: 'object', properties: {}},
+          execute: async () => ({content: [{type: 'text', text: String(api.config.value ?? 'original')}]}) });
+        if (api.config.fail) throw new Error('Partial setup failed');
+      };`);
+  }
+  await runtime.start();
+  await runtime.updateSettings({ plugins: { base: true, dependent: true } });
+  await assert.rejects(runtime.updateSettings({ pluginConfig: { base: { fail: true } } }), /Partial setup failed/);
+  assert.match(readFileSync(log, 'utf8'), /stop dependent\nstop base\nstart base\nstop base\nstart base\nstart dependent/);
+  const item = runtime.registry.create();
+  assert.equal(runtime.plugins.getTools(item.id).filter(({ name }) => name === 'base_tool').length, 1);
+  const next = mergeSettings(runtime.settings, { pluginConfig: { base: { value: 'replacement' } } });
+  await assert.rejects(runtime.plugins.configure(next, () => { throw new Error('Persistence failed'); }), /Persistence failed/);
+  const restored = runtime.plugins.getTools(item.id).find(({ name }) => name === 'base_tool');
+  assert.match(JSON.stringify(await restored.execute('test', {}, undefined, undefined, undefined)), /original/);
+  assert.ok(runtime.plugins.getTools(item.id).some(({ name }) => name === 'dependent_tool'));
+});
+
+test('cyclic dependencies reject a configuration before mounting either plugin', async (t) => {
+  const mock = await createMockProvider();
+  const { root, paths } = createFixturePaths(mock.url);
+  const runtime = new MiniHarnessRuntime(paths);
+  t.after(async () => { await runtime.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
+  for (const [id, dependency] of [['first', 'second'], ['second', 'first']]) {
+    const folder = join(paths.plugins, id);
+    mkdirSync(folder);
+    writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ requires: [dependency] }));
+    writeFileSync(join(folder, 'plugin.js'), 'export default () => { throw new Error("Should not mount"); };');
+  }
+  await runtime.start();
+  await assert.rejects(runtime.updateSettings({ plugins: { first: true, second: true } }), /Cyclic plugin/);
+  assert.equal(runtime.settings.plugins.first, undefined);
 });

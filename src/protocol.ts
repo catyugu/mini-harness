@@ -33,7 +33,7 @@ export interface RunInfo {
 export const isRunning = (run?: RunInfo) => run?.state === 'queued' || run?.state === 'running';
 
 export type StreamEvent =
-  | { type: 'assistant-start' }
+  | { type: 'assistant-start' | 'assistant-end' }
   | { type: 'user'; text: string }
   | { type: 'delta' | 'complete'; text: string }
   | { type: 'tool'; id: string; name: string; state: 'running' | 'finished' | 'error'; content?: MessageContent; sessionId?: string }

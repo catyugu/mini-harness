@@ -63,17 +63,22 @@ async function checkPackage() {
     assert.ok(info);
     const headers = { Authorization: 'Bearer ' + info.token, 'Content-Type': 'application/json' };
     const get = (path: string) => fetch(info.url + path, { headers });
-    for (const asset of ['/', '/app.js', '/markdown.js', '/vendor/marked.js', '/vendor/purify.js', '/logo.svg', '/manifest.webmanifest', '/style.css']) {
+    for (const asset of ['/', '/app.js', '/markdown.js', '/vendor/marked.js', '/vendor/purify.js', '/logo.svg', '/manifest.webmanifest', '/style.css', '/icon-192.png', '/icon-512.png', '/favicon.ico']) {
       const response = await get(asset);
       assert.equal(response.status, 200, asset);
       await response.arrayBuffer();
     }
     const bootstrap = await (await get('/api/bootstrap')).json();
-    assert.deepEqual(bootstrap.plugins.map(({ id }) => id), ['skills', 'subagents', 'shell']);
+    assert.deepEqual(bootstrap.plugins.map(({ id }) => id), ['files', 'skills', 'subagents', 'shell']);
     const item = await (await fetch(info.url + '/api/sessions', { method: 'POST', headers, body: '{}' })).json();
-    const url = info.url + '/api/sessions/' + item.id + '/messages';
-    const chat = await fetch(url, { method: 'POST', headers, body: JSON.stringify({ message: 'Pack smoke test' }) });
-    assert.match(await chat.text(), /"complete","text":"Mock response"/);
+    const url = info.url + '/api/sessions/' + item.id;
+    const startedRun = await fetch(url + '/runs', { method: 'POST', headers, body: JSON.stringify({ message: 'Pack smoke test' }) });
+    assert.equal(startedRun.status, 202);
+    const run = await startedRun.json();
+    const chat = await fetch(url + '/events?run=' + run.id, { headers });
+    assert.match(await chat.text(), /Mock response/);
+    const status = await (await fetch(url + '/runs', { headers })).json();
+    assert.equal(status.run.state, 'completed');
     assert.match((await cli('status')).stdout, /is running/);
     assert.match((await cli('stop')).stdout, /stopped/);
     started = false;

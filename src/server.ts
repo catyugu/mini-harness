@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { createReadStream, readFileSync, statSync } from 'node:fs';
+import { createReadStream, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
@@ -59,7 +59,7 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
   await runtime.start();
   const isolation = supportsIsolation();
   const token = options.token ?? randomBytes(32).toString('hex');
-  const streamRun = (req: IncomingMessage, res: ServerResponse, id: string, runId: string, after: number) => {
+  const streamRun = (res: ServerResponse, id: string, runId: string, after: number) => {
     let detach = () => {};
     const heartbeat = setInterval(() => { if (!res.destroyed) res.write('\n'); }, 15000);
     heartbeat.unref();
@@ -123,13 +123,13 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
         }
         if (match[2] === 'events' && req.method === 'GET') {
           await runtime.open(id);
-          streamRun(req, res, id, url.searchParams.get('run'), Number(url.searchParams.get('after') ?? 0));
+          streamRun(res, id, url.searchParams.get('run'), Number(url.searchParams.get('after') ?? 0));
           return;
         }
         if (match[2] === 'messages' && req.method === 'POST') {
           const input = await requestBody(req);
           const run = runtime.startRun(id, input.message, input.model);
-          streamRun(req, res, id, run.id, 0);
+          streamRun(res, id, run.id, 0);
           return;
         }
       }

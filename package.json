@@ -1,6 +1,6 @@
 {
   "name": "mini-harness",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A minimal, plugin-first Web harness for Pi",
   "license": "MIT",
   "type": "module",
@@ -14,7 +14,9 @@
     "README.md",
     "SECURITY.md",
     "LICENSE",
-    "THIRD_PARTY_NOTICES.md"
+    "THIRD_PARTY_NOTICES.md",
+    "CHANGELOG.md",
+    "docs/"
   ],
   "engines": {
     "node": ">=22.19.0"

@@ -160,6 +160,7 @@ export class MiniHarnessRuntime {
     if (!this.registry.get(id)) throw new Error('Conversation not found');
     const session = await this.open(id);
     return { ...this.registry.get(id), messages: this.sessionMessages(id), model: this.modelInfo(session.model),
+      selectedModel: { ...this.settings.model },
       run: this.runInfo(id), partial: this.busy.get(id)?.partial, tools: [...this.busy.get(id)?.tools.values() ?? []], busy: this.busy.has(id) };
   }
 
@@ -188,7 +189,7 @@ export class MiniHarnessRuntime {
     this.registry.update(id, { run: run.info });
     this.busy.set(id, run);
     const publish = (event: StreamEvent) => {
-      if (event.type === 'assistant-start') run.partial = '';
+      if (event.type === 'assistant-start' || event.type === 'assistant-end') run.partial = '';
       if (event.type === 'delta') run.partial += event.text;
       if (event.type === 'tool') {
         if (event.state === 'running') run.tools.set(event.id, event);
@@ -226,9 +227,8 @@ export class MiniHarnessRuntime {
     }).finally(() => {
       run.info.finishedAt = new Date().toISOString();
       publish({ type: 'run', run: { ...run.info } });
-      this.registry.update(id, { run: run.info });
-      this.busy.delete(id);
-      run.listeners.clear();
+      try { this.registry.update(id, { run: run.info }); }
+      finally { this.busy.delete(id); run.listeners.clear(); }
     });
     // Server-owned runs may outlive every observer.
     void run.done.catch(() => {});
@@ -298,6 +298,9 @@ export class MiniHarnessRuntime {
         case 'message_update':
           if (event.assistantMessageEvent?.type === 'text_delta')
             emit({ type: 'delta', text: event.assistantMessageEvent.delta });
+          break;
+        case 'message_end':
+          if (event.message.role === 'assistant') emit({ type: 'assistant-end' });
           break;
         case 'tool_execution_start':
           emit({ type: 'tool', id: event.toolCallId, name: event.toolName, state: 'running' });
@@ -374,7 +377,9 @@ export class MiniHarnessRuntime {
       const text = await this.send(record.id, task, undefined, { signal });
       return { id: record.id, text };
     } catch (error) {
-      this.registry.update(record.id, { title: (signal?.aborted ? '[Cancelled] ' : '[Failed] ') + task.slice(0, 60) });
+      if (this.registry.get(record.id)) this.registry.update(record.id, {
+        title: (signal?.aborted || this.runInfo(record.id)?.state === 'cancelled' ? '[Cancelled] ' : '[Failed] ') + task.slice(0, 60)
+      });
       throw error;
     }
   }
@@ -408,26 +413,39 @@ export class MiniHarnessRuntime {
     this.resolveModel(next.model);
     if (next.subagents.provider) this.resolveModel({ provider: next.subagents.provider, id: next.subagents.model });
     const toolsChanged = this.plugins.needsUpdate(next);
-    const depthChanged = next.subagents.maxDepth !== this.settings.subagents.maxDepth;
+    const previousDepth = this.settings.subagents.maxDepth;
+    const depthChanged = next.subagents.maxDepth !== previousDepth;
     if (!toolsChanged) {
       writeJson(this.paths.settings, next);
       this.settings = next;
       this.semaphore.setLimit(next.subagents.maxParallel);
-      if (depthChanged) for (const id of this.openSessions.keys()) this.staleSessions.add(id);
+      if (depthChanged) for (const id of this.openSessions.keys()) {
+        const depth = this.registry.depth(id);
+        if ((depth < previousDepth) !== (depth < next.subagents.maxDepth)) this.staleSessions.add(id);
+      }
       return next;
     }
     if (this.busy.size || this.openingSessions.size)
       throw new Error('Stop active conversations before changing tools or Skills');
-    // Rollback may replace plugin tool closures, so dispose sessions before changing tools.
-    for (const session of this.openSessions.values()) session.dispose();
-    this.openSessions.clear();
+    const resources = new Map([...this.openSessions.keys()].map((id) => [id, this.plugins.resources(id)]));
     this.configuring = this.plugins.configure(next, () => writeJson(this.paths.settings, next));
     try {
       await this.configuring;
       this.settings = next;
       this.semaphore.setLimit(next.subagents.maxParallel);
       return next;
-    } finally { this.configuring = undefined; }
+    } finally {
+      // A rollback can replace closures too. Keep sessions whose actual resources survived.
+      for (const [id, before] of resources) {
+        const after = this.plugins.resources(id);
+        if (before.length !== after.length || before.some((resource, i) => resource !== after[i])) {
+          this.openSessions.get(id)?.dispose();
+          this.openSessions.delete(id);
+          this.staleSessions.delete(id);
+        }
+      }
+      this.configuring = undefined;
+    }
   }
 
   async stop() {
