@@ -6,7 +6,7 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { getPaths } from './config.js';
-import { mergeSettings, writeJson, readJson } from './config.js';
+import { writeJson, readJson } from './config.js';
 import { MiniHarnessRuntime } from './agent.js';
 
 const WEB_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'web');
@@ -68,7 +68,7 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
         return json(res, 403, { error: 'Origin not allowed' });
       }
       if (pathname === '/api/bootstrap' && req.method === 'GET')
-        return json(res, 200, { settings: runtime.settings, sessions: runtime.registry.list(), models: runtime.availableModels(), plugins: ['skills', 'subagents', 'shell'] });
+        return json(res, 200, { settings: runtime.settings, sessions: runtime.registry.list(), models: runtime.availableModels(), plugins: runtime.plugins.metadata() });
       if (pathname === '/api/sessions' && req.method === 'GET') return json(res, 200, runtime.registry.list());
       if (pathname === '/api/sessions' && req.method === 'POST') return json(res, 201, runtime.registry.create());
       const match = /^\/api\/sessions\/([a-f0-9-]{36})(?:\/(messages))?$/.exec(pathname);
@@ -107,7 +107,7 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
       }
       if (pathname === '/api/settings' && req.method === 'PATCH') {
         const input = await requestBody(req);
-        return json(res, 200, await runtime.updateSettings(input, mergeSettings));
+        return json(res, 200, await runtime.updateSettings(input));
       }
       if (pathname === '/api/credentials' && req.method === 'POST') {
         const input = await requestBody(req);

@@ -2,6 +2,7 @@ export interface Settings {
   port: number;
   model: {provider: string; id: string};
   plugins: Record<string, boolean>;
+  pluginConfig: Record<string, Record<string, unknown>>;
   subagents: {maxParallel: number; provider: string; model: string};
   sandbox: {mode: 'isolated'|'host'; timeoutSeconds: number};
   appearance: 'system'|'light'|'dark';
@@ -15,6 +16,7 @@ export const DEFAULTS = Object.freeze({
   port: 3837,
   model: { provider: '', id: '' },
   plugins: { skills: true, subagents: true, shell: false },
+  pluginConfig: {},
   subagents: { maxParallel: 2, provider: '', model: '' },
   sandbox: { mode: 'isolated', timeoutSeconds: 60 },
   appearance: 'system'
@@ -58,8 +60,12 @@ export function validateSettings(input: any) {
   const model = input.model || {};
   const sandbox = input.sandbox || {};
   for (const [key, value] of Object.entries(p)) {
-    if (!(key in DEFAULTS.plugins) && !/^[a-z][a-z0-9-]{0,63}$/.test(key)) throw new Error('Invalid plugin name');
+    if (!/^[a-z][a-z0-9-]{0,63}$/.test(key)) throw new Error('Invalid plugin name');
     if (typeof value !== 'boolean') throw new Error('Plugin switches must be boolean');
+  }
+  for (const [id, config] of Object.entries(input.pluginConfig ?? {})) {
+    if (!/^[a-z][a-z0-9-]{0,63}$/.test(id) || !config || typeof config !== 'object' || Array.isArray(config))
+      throw new Error('Invalid plugin configuration for ' + id);
   }
   if (!Number.isInteger(s.maxParallel ?? 2) || (s.maxParallel ?? 2) < 1 || (s.maxParallel ?? 2) > 16) throw new Error('maxParallel must be 1..16');
   for (const value of [s.provider ?? '', s.model ?? '', model.provider ?? '', model.id ?? '']) {
@@ -78,6 +84,7 @@ export function readSettings(paths: ReturnType<typeof getPaths>): Settings {
     port: input.port ?? DEFAULTS.port,
     model: { ...DEFAULTS.model, ...input.model },
     plugins: { ...DEFAULTS.plugins, ...input.plugins },
+    pluginConfig: { ...input.pluginConfig },
     subagents: { ...DEFAULTS.subagents, ...input.subagents },
     sandbox: { ...DEFAULTS.sandbox, ...input.sandbox },
     appearance: input.appearance ?? DEFAULTS.appearance
@@ -92,14 +99,15 @@ export function mergeSettings(current: Settings, patch: SettingsPatch): Settings
   if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw new Error('Invalid settings patch');
   const allowed = Object.keys(DEFAULTS);
   if (Object.keys(patch).some((key) => !allowed.includes(key))) throw new Error('Unknown settings field');
-  for (const group of ['model', 'plugins', 'subagents', 'sandbox']) {
+  for (const group of ['model', 'plugins', 'pluginConfig', 'subagents', 'sandbox']) {
     if (group in patch && (!patch[group] || typeof patch[group] !== 'object' || Array.isArray(patch[group]))) throw new Error('Invalid settings section');
   }
   const next: Settings = {
     ...current,
     ...patch,
     model: { ...current.model, ...(patch.model || {}) },
-    plugins: { ...current.plugins, ...(patch.plugins || {}) },
+    plugins: { ...current.plugins, ...patch.plugins },
+    pluginConfig: { ...current.pluginConfig, ...patch.pluginConfig },
     subagents: { ...current.subagents, ...(patch.subagents || {}) },
     sandbox: { ...current.sandbox, ...(patch.sandbox || {}) }
   };

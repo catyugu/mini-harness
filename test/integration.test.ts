@@ -105,7 +105,7 @@ test('subagent tool is mounted in parent only, with an explicit concurrency limi
   const worker = await app.runtime.open(child.id, { child: true });
   assert.ok(parent.getActiveToolNames().includes('delegate'));
   assert.ok(!worker.getActiveToolNames().includes('delegate'));
-  assert.equal(app.runtime.plugins.semaphore.limit, 2);
+  assert.equal(app.runtime.semaphore.limit, 2);
 });
 
 test('concurrent opening of one conversation shares a single Pi AgentSession', { timeout: 30000 }, async (t) => {

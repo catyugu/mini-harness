@@ -1,12 +1,14 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  createAgentSession, ModelRuntime, SessionManager, SettingsManager, DefaultResourceLoader,
+  createAgentSession, defineTool, ModelRuntime, SessionManager, SettingsManager, DefaultResourceLoader,
   type AgentSession
 } from '@earendil-works/pi-coding-agent';
 import { PluginHost } from './plugins.js';
 import { SessionRegistry } from './registry.js';
-import { readSettings, writeJson } from './config.js';
+import { mergeSettings, readSettings, writeJson, type SettingsPatch } from './config.js';
+import { Type } from 'typebox';
+import { requireChildDepth, selectChildModel, Semaphore } from './subagents.js';
 
 export class MiniHarnessRuntime {
   paths: ReturnType<typeof import('./config.js').getPaths>;
@@ -17,6 +19,9 @@ export class MiniHarnessRuntime {
   busy: Set<string>;
   plugins: PluginHost;
   models!: ModelRuntime;
+  readonly semaphore: Semaphore;
+  private updating = false;
+  private stopping = false;
   constructor(paths: ReturnType<typeof import('./config.js').getPaths>) {
     this.paths = paths;
     this.settings = readSettings(paths);
@@ -24,7 +29,8 @@ export class MiniHarnessRuntime {
     this.openSessions = new Map();
     this.openingSessions = new Map();
     this.busy = new Set();
-    this.plugins = new PluginHost(this);
+    this.semaphore = new Semaphore(this.settings.subagents.maxParallel);
+    this.plugins = new PluginHost(this, this.settings);
   }
 
   async start() {
@@ -62,6 +68,7 @@ export class MiniHarnessRuntime {
   }
 
   async open(id: string, options: {child?:boolean;modelChoice?:{provider:string;id:string}} = {}): Promise<AgentSession> {
+    if (this.updating || this.stopping) throw new Error('Agent service is unavailable during reconfiguration or shutdown');
     const active = this.openSessions.get(id);
     if (active) return active;
     const pending = this.openingSessions.get(id);
@@ -88,7 +95,7 @@ export class MiniHarnessRuntime {
     const manager = item.file && existsSync(item.file)
       ? SessionManager.open(item.file, this.paths.sessions, item.cwd)
       : SessionManager.create(item.cwd, this.paths.sessions);
-    const customTools = this.plugins.getTools({ child, id });
+    const customTools = this.plugins.getTools(id);
     const { session } = await createAgentSession({
       cwd: item.cwd,
       agentDir: this.paths.agent,
@@ -160,10 +167,35 @@ export class MiniHarnessRuntime {
     }
   }
 
+  canDelegate(id: string) {
+    const record = this.registry.get(id);
+    return Boolean(record && !record.parentId);
+  }
+
+  delegateTool(id?: string) {
+    return defineTool({
+      name: 'delegate',
+      label: 'Delegate',
+      description: 'Create a child agent for a specific task. Set provider/model to override the default.',
+      parameters: Type.Object({
+        task: Type.String({ minLength: 1, maxLength: 12000 }),
+        provider: Type.Optional(Type.String()),
+        model: Type.Optional(Type.String())
+      }),
+      execute: async (_callId, args, signal) => {
+        const parent = this.openSessions.get(id);
+        if (!parent) throw new Error('Parent session not open');
+        const chosen = selectChildModel(args, this.settings.subagents, this.modelInfo(parent.model));
+        const result = await this.semaphore.run(() => this.runChild(id, args.task, chosen, signal), signal);
+        return { content: [{ type: 'text', text: result.text }], details: { sessionId: result.id } };
+      }
+    });
+  }
+
   async runChild(parentId: string, task: string, chosen: {provider:string;id:string}, signal?:AbortSignal) {
     const parent = this.registry.get(parentId);
     if (!parent) throw new Error('Parent conversation not found');
-    if (parent.parentId) throw new Error('Recursive subagents are prohibited');
+    requireChildDepth(parent.parentId ? 1 : 0);
     const record = this.registry.create({
       parentId, cwd: parent.cwd,
       title: task.slice(0, 72)
@@ -188,21 +220,38 @@ export class MiniHarnessRuntime {
     return this.registry.delete(ids);
   }
 
-  async updateSettings(patch: Partial<import('./config.js').Settings>, mergeSettings: typeof import('./config.js').mergeSettings) {
+  async updateSettings(patch: SettingsPatch) {
+    if (this.updating || this.stopping || this.busy.size || this.openingSessions.size)
+      throw new Error('Cannot change settings while the agent service is busy');
     const next = mergeSettings(this.settings, patch);
-    if (this.busy.size || this.openingSessions.size)
-      throw new Error('Cannot change settings while a conversation is active or opening');
-    for (const session of this.openSessions.values()) session.dispose();
-    this.openSessions.clear();
-    await this.plugins.close();
-    this.settings = next;
-    this.plugins = new PluginHost(this);
-    await this.plugins.activate();
-    writeJson(this.paths.settings, next);
-    return next;
+    this.resolveModel(next.model);
+    this.updating = true;
+    const replacePlugins = JSON.stringify(next.plugins) !== JSON.stringify(this.settings.plugins) ||
+      JSON.stringify(next.pluginConfig) !== JSON.stringify(this.settings.pluginConfig);
+    const candidate = replacePlugins ? new PluginHost(this, next) : undefined;
+    try {
+      await candidate?.activate();
+      writeJson(this.paths.settings, next);
+      for (const session of this.openSessions.values()) session.dispose();
+      this.openSessions.clear();
+      const previous = this.plugins;
+      this.settings = next;
+      this.semaphore.setLimit(next.subagents.maxParallel);
+      if (candidate) {
+        this.plugins = candidate;
+        await previous.close();
+      }
+      return next;
+    } catch (error) {
+      if (candidate && candidate !== this.plugins) await candidate.close();
+      throw error;
+    } finally {
+      this.updating = false;
+    }
   }
 
   async stop() {
+    this.stopping = true;
     await Promise.allSettled(this.openingSessions.values());
     for (const session of this.openSessions.values()) session.dispose();
     this.openSessions.clear();
