@@ -1,0 +1,7 @@
+{
+  "name": "mini-harness",
+  "short_name": "mini-harness",
+  "start_url": "/",
+  "display": "standalone",
+  "icons": [{ "src": "/logo.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

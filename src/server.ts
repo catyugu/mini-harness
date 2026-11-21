@@ -1,17 +1,21 @@
 import { createServer } from 'node:http';
 import { createReadStream, readFileSync, statSync } from 'node:fs';
-import { dirname, extname, join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { getPaths } from './config.js';
 import { writeJson, readJson } from './config.js';
+import { supportsIsolation } from './sandbox.js';
 import { MiniHarnessRuntime } from './agent.js';
 
 const WEB_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'web');
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png' };
+const assets = new Map([
+  ['index.html', 'text/html'], ['app.js', 'text/javascript'], ['markdown.js', 'text/javascript'],
+  ['vendor/marked.js', 'text/javascript'], ['vendor/purify.js', 'text/javascript'],
+  ['style.css', 'text/css'], ['logo.svg', 'image/svg+xml'], ['manifest.webmanifest', 'application/manifest+json']
+]);
 
 export function authorize(request: IncomingMessage, token: string) {
   const auth = request.headers.authorization;
@@ -46,6 +50,7 @@ export function json(res: ServerResponse, code: number, data: unknown) {
 export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>, options: {token?:string} = {}) {
   const runtime = new MiniHarnessRuntime(paths);
   await runtime.start();
+  const isolation = supportsIsolation();
   const token = options.token ?? randomBytes(32).toString('hex');
   const route = async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url || '/', 'http://localhost');
@@ -54,10 +59,11 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
       if (!pathname.startsWith('/api/')) {
         if (req.method !== 'GET' && req.method !== 'HEAD') return json(res, 405, { error: 'Method not allowed' });
         const requested = pathname === '/' ? 'index.html' : decodeURIComponent(pathname.slice(1));
-        if (!/^(index\.html|app\.js|style\.css|logo\.svg)$/.test(requested)) return json(res, 404, { error: 'Not found' });
+        const mime = assets.get(requested);
+        if (!mime) return json(res, 404, { error: 'Not found' });
         const path = join(WEB_DIR, requested);
         const size = statSync(path).size;
-        res.writeHead(200, { 'Content-Type': MIME[extname(path) as keyof typeof MIME] || 'application/octet-stream',
+        res.writeHead(200, { 'Content-Type': mime + '; charset=utf-8',
           'Content-Length': size, 'X-Content-Type-Options': 'nosniff',
           'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'",
           'Referrer-Policy': 'no-referrer' });
@@ -68,7 +74,7 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
         return json(res, 403, { error: 'Origin not allowed' });
       }
       if (pathname === '/api/bootstrap' && req.method === 'GET')
-        return json(res, 200, { settings: runtime.settings, sessions: runtime.registry.list(), models: runtime.availableModels(), plugins: runtime.plugins.metadata() });
+        return json(res, 200, { settings: runtime.settings, sessions: runtime.registry.list(), models: runtime.availableModels(), plugins: runtime.plugins.metadata(), workspace: paths.cwd, isolation });
       if (pathname === '/api/sessions' && req.method === 'GET') return json(res, 200, runtime.registry.list());
       if (pathname === '/api/sessions' && req.method === 'POST') return json(res, 201, runtime.registry.create());
       const match = /^\/api\/sessions\/([a-f0-9-]{36})(?:\/(messages|cancel))?$/.exec(pathname);
