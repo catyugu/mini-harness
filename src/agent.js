@@ -63,6 +63,7 @@ export class MinihRuntime {
     const manager = item.file && existsSync(item.file)
       ? SessionManager.open(item.file, this.paths.sessions, item.cwd)
       : SessionManager.create(item.cwd, this.paths.sessions);
+    const customTools = this.plugins.getTools({ child, id });
     const { session } = await createAgentSession({
       cwd: item.cwd,
       agentDir: this.paths.agent,
@@ -71,8 +72,8 @@ export class MinihRuntime {
       resourceLoader: loader,
       settingsManager,
       sessionManager: manager,
-      tools: ['read', 'edit', 'write', 'grep', 'find', 'ls'],
-      customTools: this.plugins.getTools({ child, id })
+      tools: ['read', 'edit', 'write', 'grep', 'find', 'ls', ...customTools.map((tool) => tool.name)],
+      customTools
     });
     this.openSessions.set(id, session);
     return session;
