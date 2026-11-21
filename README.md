@@ -84,7 +84,7 @@ Keep Pi's execution internals intact. Build a small adapter instead of replacing
 
 ## CI
 
-CI runs TypeScript checks, Pi integration tests and npm package verification on native Linux and Windows runners (Node 22 and 24). Chromium E2E also runs on a native Ubuntu runner. All jobs cache `node_modules` by dependency manifest, operating system and Node version; the browser job additionally caches Chromium binaries. The Playwright installation step verifies Chromium and installs required system libraries.
+CI runs TypeScript checks, Pi integration tests and npm package verification on native Linux and Windows runners (Node 22 and 24). Chromium E2E runs on the native `ubuntu-24.04` runner, pinned for Playwright 1.56 compatibility. All jobs cache `node_modules` by dependency manifest, operating system and Node version; the browser job additionally caches Chromium binaries. The Playwright installation step verifies Chromium and installs required system libraries.
 
 GitHub-hosted runners are ephemeral. The npm and Chromium caches reduce repeated downloads, while required system packages can still be checked or installed on each run. Windows stays native to verify process and filesystem behavior.
 
