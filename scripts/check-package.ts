@@ -23,7 +23,7 @@ async function availablePort() {
 }
 
 async function checkPackage() {
-  const work = await mkdtemp(join(tmpdir(), 'mini-harness-pack-'));
+  const work = await mkdtemp(join(process.env.RUNNER_TEMP || tmpdir(), 'mini-harness-pack-'));
   const mock = await createMockProvider();
   const { root, paths } = createFixturePaths(mock.url);
   const installed = join(work, 'install');
@@ -50,7 +50,11 @@ async function checkPackage() {
     };
     await writeFile(join(installed, 'package.json'), JSON.stringify({ ...fixture, private: true }));
     await writeFile(join(installed, 'package-lock.json'), JSON.stringify(lock));
-    await npm(['ci', '--prefer-offline', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund'], { cwd: installed });
+    const networkPolicy = process.env.CI === 'true' ? '--offline' : '--prefer-offline';
+    console.log('Installing ' + filename + ' and its locked production dependencies');
+    await npm(['ci', networkPolicy, '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund'], {
+      cwd: installed, timeout: 240000
+    });
     assert.match((await cli('--help')).stdout, /minimal Pi harness/);
     const launch = await cli('--detached', '--cwd', paths.cwd, '--port', String(await availablePort()));
     assert.match(launch.stdout, /started independently/);
