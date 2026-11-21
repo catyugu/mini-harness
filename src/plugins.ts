@@ -101,7 +101,7 @@ export class PluginHost {
         const parent = this.runtime.openSessions.get(id);
         if (!parent) throw new Error('Parent session not open');
         const chosen = selectChildModel(args, this.runtime.settings.subagents, this.runtime.modelInfo(parent.model));
-        const result = await this.semaphore.run(() => this.runtime.runChild(id, args.task, chosen, signal), signal);
+        const result: { id: string; text: string } = await this.semaphore.run(() => this.runtime.runChild(id, args.task, chosen, signal), signal) as { id: string; text: string };
         return { content: [{ type: 'text', text: result.text }], details: { sessionId: result.id } };
       } };
     });

@@ -4,6 +4,7 @@ import { dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import type { getPaths } from './config.js';
 import { mergeSettings, writeJson, readJson } from './config.js';
 import { MinihRuntime } from './agent.js';
@@ -122,11 +123,11 @@ export async function createMinihServer(paths: ReturnType<typeof getPaths>, opti
   return {
     server, runtime, token,
     async listen(port = runtime.settings.port) {
-      await new Promise((resolve, reject) => {
+      await new Promise<void>((resolve, reject) => {
         server.once('error', reject);
         server.listen(port, '127.0.0.1', () => { server.off('error', reject); resolve(); });
       });
-      return server.address().port;
+      return (server.address() as AddressInfo).port;
     },
     async close() {
       await new Promise((resolve) => server.close(resolve));

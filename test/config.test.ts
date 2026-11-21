@@ -26,7 +26,7 @@ test('settings merge preserves other sections and validates bounds', () => {
   assert.equal(after.subagents.maxParallel, 4);
   assert.equal(before.plugins.shell, false);
   assert.throws(() => mergeSettings(before, { subagents: { maxParallel: 0 } }), /maxParallel/);
-  assert.throws(() => mergeSettings(before, { sandbox: { mode: 'unknown' } }), /sandbox/);
-  assert.throws(() => mergeSettings(before, { bogus: true }), /Unknown/);
+  assert.throws(() => mergeSettings(before, { sandbox: { mode: 'unknown' as any } }), /sandbox/);
+  assert.throws(() => mergeSettings(before, { bogus: true } as any), /Unknown/);
   assert.throws(() => validateSettings({ ...before, plugins: { shell: 'true' } }), /boolean/);
 });
