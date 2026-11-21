@@ -108,7 +108,7 @@ export class PluginHost {
             description: 'Run a shell command in the workspace using the configured execution policy.',
             parameters: Type.Object({ command: Type.String({ minLength: 1, maxLength: 16000 }) }),
             execute: async (_id, args, signal) => {
-              const output = await runShell(args.command, this.runtime.paths.cwd, { ...this.runtime.settings.sandbox, signal });
+              const output = await runShell(args.command, this.runtime.paths.cwd, { ...this.runtime.settings.sandbox, signal, stateDir: this.runtime.paths.home });
               return { content: [{ type: 'text', text: JSON.stringify(output) }], details: output };
             }
           })));

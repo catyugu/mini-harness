@@ -30,12 +30,13 @@
   "dependencies": {
     "@earendil-works/pi-coding-agent": "1.6.0",
     "cordis": "4.0.0-rc.13",
+    "re2-wasm": "1.0.2",
     "typebox": "1.3.27"
   },
   "devDependencies": {
+    "@playwright/test": "1.56.0",
     "@types/node": "^22.15.0",
-    "typescript": "~5.9.3",
-    "@playwright/test": "1.56.0"
+    "typescript": "~5.9.3"
   },
   "repository": {
     "type": "git",

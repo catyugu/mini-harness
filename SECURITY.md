@@ -1,21 +1,16 @@
 # Security model
 
-mini-harness is a **local developer tool**. Its HTTP listener binds to 127.0.0.1, requires a bearer token on API calls, checks the Origin on state-changing browser requests, and does not offer a public-host mode. Anyone who can read `~/.mini-harness/server.json` can use the local API. Keep that file private. Do not expose the local port to untrusted users or networks.
+mini-harness binds to `127.0.0.1`. Its HTTP API requires a bearer token and checks the Origin on state-changing browser requests. The server state file contains the token. Keep the configuration directory private.
 
-## Execution trust
+## Workspace and execution
 
-Pi's built-in read, write, edit, grep, find, and ls tools operate on the host with the current user's permissions. The optional **sandbox_shell** tool is the only tool governed by the mini-harness sandbox setting. Consequently, mini-harness does **not** claim to provide end-to-end agent or plugin isolation.
-
-Shell is off by default. In isolated mode, mini-harness requires Linux and bubblewrap, fails closed if unavailable, unshares network/other namespaces, and mounts the selected workspace read-write. Host mode deliberately runs commands with the current user's privileges. Do not enable host mode for untrusted prompts or projects.
-
-Subagents inherit the same host-level file capabilities as the parent but cannot delegate again. Parallel limits prevent unbounded child launches; they are not resource or cost quotas.
-
-Cordis plugins and Pi extensions are trusted executable code and may access data and environment secrets. Only install plugins you have reviewed. The initial foundation does not promise to sandbox arbitrary third-party plugins.
+- The Pi file tools use one workspace policy on Linux and Windows. They restrict access to the active workspace and exclude mini-harness storage. Explicit file operations reject links, junctions, nonregular files and files with multiple hard links. Linux walks directories relative to open descriptors and validates the opened file before using it.
+- Windows and other non-Linux platforms check resolved paths, link types and file identity before I/O. These checks assume the workspace is protected from concurrent path changes by untrusted local processes. They provide workspace-level restrictions in a trusted local environment. OS-level containment against concurrent local filesystem manipulation requires a platform-specific sandbox.
+- Shell starts disabled. Linux isolated mode requires working bubblewrap namespaces and `prlimit`. It uses a separate PID and network namespace, clears the environment, exposes the workspace read-write and a limited set of system paths read-only, and applies per-process CPU, file size and descriptor limits. Separate the workspace from the configuration directory. Timeout, cancellation and output caps terminate the shell process group. Per-process limits do not constitute a system-wide resource quota.
+- Trusted host mode runs with your user permissions. On Windows, command-tree termination uses `taskkill`. Local Cordis JavaScript plugins run in-process with your user permissions on every platform. Enable only reviewed plugins. Pi extension discovery is disabled, and Pi Skills can supply instructions to the model. Review workspace Skills before use.
 
 ## Data
 
-Pi conversation history is persisted to `~/.mini-harness/sessions` and indexed by mini-harness. Explicit deletion removes indexed session files, including children. This is permanent from the UI's perspective: no archive or trash. Backups, filesystem snapshots, and provider-side logging remain outside mini-harness's control.
+Pi JSONL session files live under `~/.mini-harness/sessions`. Deleting an indexed conversation recursively removes its descendants and their owned files. Backups, filesystem snapshots and provider-side logs are controlled outside mini-harness.
 
-Credentials are saved under `~/.mini-harness/auth.json` for the selected model provider; environment variables can also supply provider credentials. mini-harness does not contain DeepSeek-specific official authentication or upload controls. Any model request necessarily sends prompt contents to the chosen model provider.
-
-If a sandbox, token, or filesystem control is unavailable, the safe behavior is to reject the operation rather than silently fall back to unrestricted execution.
+Provider credentials can come from the environment or `~/.mini-harness/auth.json`. Model requests send conversation content and selected tool results to the chosen provider.

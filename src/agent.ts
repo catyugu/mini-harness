@@ -8,6 +8,7 @@ import { PluginHost } from './plugins.js';
 import { SessionRegistry } from './registry.js';
 import { mergeSettings, readSettings, writeJson, type SettingsPatch } from './config.js';
 import { Type } from 'typebox';
+import { Workspace } from './workspace.js';
 import { requireChildDepth, selectChildModel, Semaphore } from './subagents.js';
 
 export class MiniHarnessRuntime {
@@ -95,7 +96,7 @@ export class MiniHarnessRuntime {
     const manager = item.file && existsSync(item.file)
       ? SessionManager.open(item.file, this.paths.sessions, item.cwd)
       : SessionManager.create(item.cwd, this.paths.sessions);
-    const customTools = this.plugins.getTools(id);
+    const customTools = [...new Workspace(item.cwd, this.paths.home).tools(), ...this.plugins.getTools(id)];
     const { session } = await createAgentSession({
       cwd: item.cwd,
       agentDir: this.paths.agent,
@@ -104,7 +105,7 @@ export class MiniHarnessRuntime {
       resourceLoader: loader,
       settingsManager,
       sessionManager: manager,
-      tools: ['read', 'edit', 'write', 'grep', 'find', 'ls', ...customTools.map((tool) => tool.name)],
+      tools: customTools.map((tool) => tool.name),
       customTools
     });
     this.openSessions.set(id, session);
