@@ -95,10 +95,14 @@ export function mergeSettings(current: Settings, patch: SettingsPatch): Settings
   for (const group of ['model', 'plugins', 'subagents', 'sandbox']) {
     if (group in patch && (!patch[group] || typeof patch[group] !== 'object' || Array.isArray(patch[group]))) throw new Error('Invalid settings section');
   }
-  const next: Settings = { ...current, ...patch };
-  for (const group of ['model', 'plugins', 'subagents', 'sandbox']) {
-    (next as any)[group] = { ...current[group], ...(patch[group] || {}) };
-  }
+  const next: Settings = {
+    ...current,
+    ...patch,
+    model: { ...current.model, ...(patch.model || {}) },
+    plugins: { ...current.plugins, ...(patch.plugins || {}) },
+    subagents: { ...current.subagents, ...(patch.subagents || {}) },
+    sandbox: { ...current.sandbox, ...(patch.sandbox || {}) }
+  };
   validateSettings(next);
   return next;
 }
