@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 
 const require = createRequire(import.meta.url);
 mkdirSync('dist/web/vendor', { recursive: true });
-for (const asset of ['index.html', 'style.css', 'logo.svg', 'manifest.webmanifest']) {
+for (const asset of ['index.html', 'style.css', 'logo.svg', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'favicon.ico']) {
   copyFileSync(join('web', asset), join('dist/web', asset));
 }
 copyFileSync(join(dirname(require.resolve('marked')), 'marked.esm.js'), 'dist/web/vendor/marked.js');

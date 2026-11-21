@@ -86,7 +86,7 @@ export class MiniHarnessRuntime {
     if (this.configuring || this.stopping) throw new Error('Agent service is unavailable during reconfiguration or shutdown');
     if (this.deleting.has(id)) throw new Error('Conversation is being deleted');
     const active = this.openSessions.get(id);
-    if (active && (!this.staleSessions.has(id) || active.isStreaming)) return active;
+    if (active && (!this.staleSessions.has(id) || this.busy.has(id))) return active;
     if (active) { active.dispose(); this.openSessions.delete(id); this.staleSessions.delete(id); }
     const pending = this.openingSessions.get(id);
     if (pending) return pending;
@@ -176,6 +176,10 @@ export class MiniHarnessRuntime {
       this.resolveModel(model);
     }
     const choice = model ?? (record.parentId ? record.model : this.settings.model);
+    if (this.staleSessions.delete(id)) {
+      this.openSessions.get(id)?.dispose();
+      this.openSessions.delete(id);
+    }
     const run: ActiveRun = {
       info: { id: randomUUID(), sessionId: id, state: 'queued', startedAt: new Date().toISOString(), sequence: 0 },
       controller: new AbortController(), events: [], bytes: 0, partial: '', tools: new Map(), listeners: new Set()
@@ -403,8 +407,7 @@ export class MiniHarnessRuntime {
     const next = mergeSettings(this.settings, patch);
     this.resolveModel(next.model);
     if (next.subagents.provider) this.resolveModel({ provider: next.subagents.provider, id: next.subagents.model });
-    const toolsChanged = !isDeepStrictEqual(next.plugins, this.settings.plugins) ||
-      !isDeepStrictEqual(next.pluginConfig, this.settings.pluginConfig);
+    const toolsChanged = this.plugins.needsUpdate(next);
     const depthChanged = next.subagents.maxDepth !== this.settings.subagents.maxDepth;
     if (!toolsChanged) {
       writeJson(this.paths.settings, next);

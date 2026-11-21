@@ -192,11 +192,11 @@ export class PluginHost {
     await installed.fiber.dispose();
   }
 
-  async configure(settings: Settings, commit = () => {}) {
+  private plans(settings: Settings) {
     const next = [
       ...BUILTINS.map(({ id }): PluginPlan => ({ id, requires: [] })),
-      ...this.discover().map(({ source, metadata: { id, requires } }): PluginPlan => ({
-        id, source, requires, config: this.configValues(id, settings)
+      ...this.discover().filter(({ metadata: { id } }) => settings.plugins[id]).map(({ source, metadata: { id, requires, configSchema } }): PluginPlan => ({
+        id, source, requires, config: this.configValues(id, settings, configSchema)
       }))
     ].filter(({ id }) => Object.hasOwn(settings.plugins, id) && settings.plugins[id]);
     const desired = new Map(next.map((plan) => [plan.id, plan]));
@@ -215,6 +215,17 @@ export class PluginHost {
       ordered.push(plan);
     };
     for (const plan of next) visit(plan.id);
+    return ordered;
+  }
+
+  needsUpdate(settings: Settings) {
+    const next = this.plans(settings);
+    return next.length !== this.mounted.size || next.some((plan) => !isDeepStrictEqual(plan, this.mounted.get(plan.id)?.plan));
+  }
+
+  async configure(settings: Settings, commit = () => {}) {
+    const ordered = this.plans(settings);
+    const desired = new Map(ordered.map((plan) => [plan.id, plan]));
     const affected = new Set([...this.mounted.values()].filter(({ plan }) => !isDeepStrictEqual(plan, desired.get(plan.id))).map(({ plan }) => plan.id));
     for (const plan of ordered) if (plan.requires.some((id) => affected.has(id))) affected.add(plan.id);
     const obsolete = [...this.mounted.values()].map(({ plan }) => plan).filter((plan) => affected.has(plan.id));
@@ -246,8 +257,7 @@ export class PluginHost {
 
   getTools(id: string) { return this.ctx.harnessTools.forSession(id); }
 
-  private configValues(id: string, settings: Settings) {
-    const schema = this.discover().find(({ metadata }) => metadata.id === id)?.metadata.configSchema;
+  private configValues(id: string, settings: Settings, schema?: Record<string, any>) {
     const input = structuredClone(settings.pluginConfig[id] ?? {});
     if (!schema) return input;
     const config = configDefaults(schema, input) as Record<string, unknown>;

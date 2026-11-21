@@ -1,9 +1,10 @@
 import { test, expect } from '@playwright/test';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
+import { readJson, writeJson } from '../../src/config.js';
 
 async function availablePort(): Promise<number> {
   const server = createServer();
@@ -54,7 +55,7 @@ async function startIsolatedHost(paths: ReturnType<typeof createFixturePaths>['p
 test('desktop and mobile: send, navigate, settings and bulk select', async ({ browser }) => {
   const mock = await createMockProvider();
   try {
-    for (const viewport of [{ width: 1366, height: 900 }, { width: 390, height: 844 }]) {
+    for (const viewport of [{ width: 1366, height: 900 }, { width: 768, height: 1024 }, { width: 390, height: 844 }, { width: 320, height: 568 }]) {
       const { root, paths } = createFixturePaths(mock.url);
       const service = await startIsolatedHost(paths);
       const page = await browser.newPage({ viewport });
@@ -86,6 +87,10 @@ test('desktop and mobile: send, navigate, settings and bulk select', async ({ br
         await page.getByRole('button', { name: 'Settings' }).click();
         await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
         await expect(page.getByRole('checkbox', { name: /Shell/ })).not.toBeChecked();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        const dialog = await page.locator('#settingsPanel').boundingBox();
+        expect(dialog.x).toBeGreaterThanOrEqual(0);
+        expect(dialog.x + dialog.width).toBeLessThanOrEqual(viewport.width);
         await page.getByRole('button', { name: 'Close settings' }).click();
       } finally {
         await page.close();
@@ -95,6 +100,120 @@ test('desktop and mobile: send, navigate, settings and bulk select', async ({ br
     }
   } finally {
     await mock.close();
+  }
+});
+
+test('refresh and navigation preserve a run while another conversation completes', async ({ browser }) => {
+  for (const viewport of [{ width: 1366, height: 900 }, { width: 390, height: 844 }]) {
+    let entered: () => void, release: () => void;
+    const waiting = new Promise<void>((done) => { entered = done; });
+    const held = new Promise<void>((done) => { release = done; });
+    const mock = await createMockProvider(async ({ messages }) => {
+      if (messages.at(-1).content === 'Keep working') { entered(); await held; return 'Continued after refresh'; }
+      return 'Independent reply';
+    });
+    const { root, paths } = createFixturePaths(mock.url);
+    const service = await startIsolatedHost(paths);
+    const page = await browser.newPage({ viewport });
+    const openSidebar = async () => { if (viewport.width < 860) await page.getByRole('button', { name: 'Toggle navigation' }).click(); };
+    try {
+      await page.goto(service.url + '/#token=' + service.token);
+      await page.getByRole('textbox', { name: 'Message' }).fill('Keep working');
+      await page.getByRole('button', { name: 'Send', exact: true }).click();
+      await waiting;
+      await page.reload();
+      await expect(page.getByRole('button', { name: 'Stop response' })).toBeVisible();
+      await openSidebar();
+      await page.getByRole('button', { name: 'Settings', exact: true }).click();
+      await page.getByLabel('Theme', { exact: true }).selectOption('dark');
+      await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+      await page.getByLabel('Parallel children', { exact: true }).fill('2');
+      await page.getByRole('button', { name: 'Save settings' }).click();
+      await expect(page.locator('#settingsStatus')).toHaveText('Saved.');
+      await page.getByRole('button', { name: 'Close settings' }).click();
+      await openSidebar();
+      await page.getByRole('button', { name: /New conversation/ }).click();
+      await page.getByRole('textbox', { name: 'Message' }).fill('Second conversation');
+      await page.getByRole('button', { name: 'Send', exact: true }).click();
+      await expect(page.locator('.message.assistant')).toHaveText('Independent reply');
+      await openSidebar();
+      await expect(page.getByRole('button', { name: 'Keep working', exact: true })).toBeVisible();
+      await page.getByRole('button', { name: 'Keep working', exact: true }).click();
+      await expect(page.getByRole('button', { name: 'Stop response' })).toBeVisible();
+      release();
+      await expect(page.locator('.message.assistant')).toHaveText('Continued after refresh');
+      await expect(page.locator('.message.user')).toHaveCount(1);
+      expect(mock.requests).toHaveLength(2);
+      await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    } finally {
+      release(); await page.close(); await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
+
+test('plugin schema controls, recursive tree navigation, batch export and permanent deletion', async ({ page }) => {
+  const mock = await createMockProvider(({ messages }) => {
+    const last = messages.at(-1);
+    if (last.role === 'tool') return 'Delegation complete';
+    if (last.content === 'Parent task') return { tool: 'delegate', args: { task: 'Child task' } };
+    if (last.content === 'Child task') return { tool: 'delegate', args: { task: 'Leaf task' } };
+    return 'Leaf result';
+  });
+  const { root, paths } = createFixturePaths(mock.url);
+  const settings = readJson<any>(paths.settings, {});
+  writeJson(paths.settings, { ...settings, subagents: { maxDepth: 2, maxParallel: 1 } });
+  const folder = join(paths.plugins, 'example');
+  mkdirSync(folder);
+  writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ title: 'Example', configSchema: {
+    type: 'object', required: ['prefix', 'count', 'mode'], additionalProperties: false,
+    properties: {
+      prefix: { type: 'string', title: 'Prefix', default: 'Count' },
+      count: { type: 'integer', title: 'Count', minimum: 1, maximum: 9, default: 3 },
+      mode: { type: 'string', title: 'Mode', enum: ['brief', 'full'], default: 'brief' },
+      enabled: { type: 'boolean', title: 'Enabled', default: true }
+    }
+  } }));
+  writeFileSync(join(folder, 'plugin.js'), 'export default (ctx, api) => { if (api.config.prefix === "bad") throw new Error("Bad prefix"); };');
+  const service = await startIsolatedHost(paths);
+  try {
+    await page.goto(service.url + '/#token=' + service.token);
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.getByRole('checkbox', { name: 'Example', exact: true }).check();
+    await page.getByLabel('Prefix · example', { exact: true }).fill('Total');
+    await page.getByLabel('Count · example', { exact: true }).fill('5');
+    await page.getByLabel('Mode · example', { exact: true }).selectOption('"full"');
+    await page.getByLabel('Enabled · example', { exact: true }).uncheck();
+    await page.getByRole('button', { name: 'Save settings' }).click();
+    await expect(page.locator('#settingsStatus')).toHaveText('Saved.');
+    expect(readJson<any>(paths.settings, {}).pluginConfig.example).toEqual({ prefix: 'Total', count: 5, mode: 'full', enabled: false });
+    await page.getByLabel('Prefix · example', { exact: true }).fill('bad');
+    await page.getByRole('button', { name: 'Save settings' }).click();
+    await expect(page.locator('#settingsStatus')).toContainText('Bad prefix');
+    expect(readJson<any>(paths.settings, {}).pluginConfig.example.prefix).toBe('Total');
+    await page.getByRole('button', { name: 'Close settings' }).click();
+    await page.getByRole('textbox', { name: 'Message' }).fill('Parent task');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.locator('.message.assistant')).toHaveText('Delegation complete');
+    await page.getByRole('button', { name: 'Expand Parent task', exact: true }).click();
+    await page.getByRole('button', { name: 'Expand Child task', exact: true }).click();
+    await page.getByRole('button', { name: 'Leaf task', exact: true }).click();
+    await expect(page.locator('.message.assistant')).toHaveText('Leaf result');
+    await page.reload();
+    await expect(page.locator('#conversationTitle')).toHaveText('Leaf task');
+    await page.getByRole('button', { name: 'Select', exact: true }).click();
+    await page.getByRole('checkbox', { name: 'Select Parent task', exact: true }).check();
+    const download = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Export', exact: true }).click();
+    const exported = JSON.parse(readFileSync(await (await download).path(), 'utf8'));
+    expect(exported.sessions).toHaveLength(3);
+    expect(exported.sessions.every((item) => item.piSession.includes('"type":"message"'))).toBe(true);
+    page.once('dialog', (dialog) => dialog.accept());
+    await page.getByRole('button', { name: 'Delete', exact: true }).click();
+    await expect(page.locator('.session-row')).toHaveCount(0);
+    expect(readJson<any>(paths.registry, {}).sessions).toHaveLength(0);
+  } finally {
+    await page.close(); await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true });
   }
 });
 

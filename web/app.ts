@@ -1,6 +1,7 @@
 import type { Settings } from '../src/config.js';
 import type { Conversation } from '../src/registry.js';
-import type { MessageContent, StreamEvent, ViewMessage } from '../src/protocol.js';
+import type { MessageContent, StreamEvent, RunEvent, RunInfo, ViewMessage } from '../src/protocol.js';
+import type { PluginMetadata } from '../src/plugins.js';
 import { renderMarkdown } from './markdown.js';
 
 function element<K extends keyof HTMLElementTagNameMap>(id: string): HTMLElementTagNameMap[K] {
@@ -23,8 +24,8 @@ const settingsStatus = element('settingsStatus');
 const narrow = matchMedia('(max-width: 860px)');
 
 interface ModelInfo { provider: string; id: string; name: string; configured: boolean }
-interface PluginInfo { id: string; title: string; description: string }
-interface Bootstrap { settings: Settings; sessions: Conversation[]; models: ModelInfo[]; plugins: PluginInfo[]; workspace: string; isolation: boolean }
+interface Bootstrap { settings: Settings; sessions: Conversation[]; models: ModelInfo[]; plugins: PluginMetadata[]; workspace: string; isolation: boolean }
+interface ConversationView extends Conversation { messages: ViewMessage[]; partial?: string; tools?: Extract<StreamEvent, { type: 'tool' }>[] }
 let bootstrap: Bootstrap;
 let sessions: Conversation[] = [];
 let active: string | undefined;
@@ -34,6 +35,8 @@ let navigation = 0;
 let pendingNavigation = false;
 const selection = new Set<string>();
 const expanded = new Set<string>();
+let observing: AbortController;
+const isRunning = (run?: RunInfo) => run?.state === 'queued' || run?.state === 'running';
 
 async function api(path: string, options: RequestInit = {}) {
   if (!token) throw new Error('Open mini-harness using the URL printed by the CLI.');
@@ -70,11 +73,21 @@ function closeDrawer() {
   if (narrow.matches) setSidebar(false);
 }
 
-function showConversation(item?: Pick<Conversation, 'id' | 'title'>, history: ViewMessage[] = []) {
+function showConversation(item?: Conversation, history: ViewMessage[] = []) {
+  observing?.abort();
+  setSending(isRunning(item?.run));
   active = item?.id;
+  if (bootstrap) {
+    if (active) sessionStorage.setItem('mini-harness-active:' + bootstrap.workspace, active);
+    else sessionStorage.removeItem('mini-harness-active:' + bootstrap.workspace);
+  }
   element('conversationTitle').textContent = item?.title ?? 'New conversation';
   messages.replaceChildren();
   for (const message of history) appendHistory(message);
+  if (item?.run?.error) {
+    const error = [...messages.querySelectorAll<HTMLElement>('.message.error')].at(-1) ?? addMessage('error', '');
+    error.textContent = item.run.error;
+  }
   messages.hidden = !messages.childElementCount;
   welcome.hidden = !messages.hidden;
   messages.scrollTop = messages.scrollHeight;
@@ -82,16 +95,17 @@ function showConversation(item?: Pick<Conversation, 'id' | 'title'>, history: Vi
 }
 
 async function activate(id: string) {
-  if (sending) return;
   const request = ++navigation;
   pendingNavigation = true;
   try {
-    const item = await data<Conversation & { messages: ViewMessage[] }>('/sessions/' + id);
+    const item = await data<ConversationView>('/sessions/' + id);
     if (request !== navigation) return;
     for (let parent = item.parentId; parent && !expanded.has(parent); parent = sessions.find((entry) => entry.id === parent)?.parentId) {
       expanded.add(parent);
     }
     showConversation(item, item.messages);
+    if (isRunning(item.run)) void observe(item);
+    else showStatus(item.run?.error ?? '');
     closeDrawer();
   } catch (error) { if (request === navigation) report(error); }
   finally { if (request === navigation) pendingNavigation = false; }
@@ -104,7 +118,7 @@ async function createConversation() {
 }
 
 async function newSession() {
-  if (sending || pendingNavigation) return;
+  if (pendingNavigation) return;
   const request = ++navigation;
   pendingNavigation = true;
   try {
@@ -173,6 +187,14 @@ function renderSessions() {
         row.append(title);
       }
       entry.append(row);
+      if (item.run) {
+        const state = document.createElement('span');
+        state.className = 'run-state';
+        state.dataset.state = item.run.state;
+        state.textContent = item.run.state;
+        state.title = item.run.error ?? item.run.state;
+        row.append(state);
+      }
       if (expanded.has(item.id) && roots.has(item.id)) entry.append(branch(item.id));
       list.append(entry);
     }
@@ -259,7 +281,7 @@ function appendHistory(message: ViewMessage) {
   if (message.error) addMessage('error', message.error);
 }
 
-async function readEvents(response: Response, accept: (event: StreamEvent) => void) {
+async function readEvents(response: Response, accept: (event: RunEvent) => void) {
   if (!response.body) throw new Error('No response stream');
   const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
   let buffer = '';
@@ -285,30 +307,58 @@ function setSending(value: boolean) {
 }
 
 async function syncSessions() {
-  sessions = await data<Conversation[]>('/sessions');
+  const next = await data<Conversation[]>('/sessions');
+  if (JSON.stringify(next) === JSON.stringify(sessions)) return;
+  sessions = next;
+  for (const id of selection) if (!sessions.some((item) => item.id === id)) selection.delete(id);
   if (active) element('conversationTitle').textContent = sessions.find((item) => item.id === active)?.title ?? 'Conversation';
   renderSessions();
 }
 
 async function send(text: string) {
   if (sending || pendingNavigation || !text.trim()) return;
+  const request = ++navigation;
+  pendingNavigation = true;
   setSending(true);
-  prompt.value = '';
-  adjustPrompt();
   try {
     if (!active) showConversation(await createConversation());
-    welcome.hidden = true;
-    messages.hidden = false;
-    addMessage('user', text);
-    messages.scrollTop = messages.scrollHeight;
-    showStatus('Thinking…');
-    const cards = new Map<string, HTMLDetailsElement>();
-    let answer: HTMLElement;
-    let answerText = '';
-    let ended = false;
-    const accept = (event: StreamEvent) => {
+    const id = active;
+    await data<RunInfo>('/sessions/' + id + '/runs', payload('POST', { message: text, model: selectedModel() }));
+    prompt.value = '';
+    adjustPrompt();
+    if (request === navigation) {
+      pendingNavigation = false;
+      await activate(id);
+    }
+    await syncSessions();
+  } catch (error) {
+    if (request === navigation) { report(error); setSending(false); }
+  } finally { if (request === navigation) pendingNavigation = false; }
+}
+
+async function observe(item: ConversationView) {
+  const id = item.id;
+  const controller = new AbortController();
+  observing = controller;
+  let cursor = item.run.sequence;
+  let ended = false;
+  const cards = new Map<string, HTMLDetailsElement>();
+  let answer: HTMLElement;
+  let answerText = item.partial ?? '';
+  if (answerText) answer = addMessage('assistant', answerText);
+  for (const tool of item.tools ?? []) cards.set(tool.id, toolCard(tool));
+  setSending(true);
+  welcome.hidden = true;
+  messages.hidden = false;
+  showStatus(item.run.state === 'queued' ? 'Queued…' : 'Thinking…');
+  const accept = (event: RunEvent) => {
+      if (controller.signal.aborted || active !== id) return;
+      cursor = event.sequence;
       const pinned = scrollIfPinned();
       switch (event.type) {
+        case 'user':
+          addMessage('user', event.text);
+          break;
         case 'assistant-start':
           if (answer) renderMarkdown(answer, answerText);
           answer = undefined;
@@ -325,7 +375,6 @@ async function send(text: string) {
             answer ??= addMessage('assistant', '');
             renderMarkdown(answer, event.text || answerText);
           }
-          ended = true;
           showStatus('');
           break;
         case 'tool':
@@ -337,17 +386,62 @@ async function send(text: string) {
           if (answer) renderMarkdown(answer, answerText);
           addMessage('error', event.error);
           showStatus('');
-          ended = true;
+          break;
+        case 'snapshot':
+          messages.replaceChildren();
+          cards.clear();
+          for (const message of event.messages) appendHistory(message);
+          answerText = event.partial ?? '';
+          answer = answerText ? addMessage('assistant', answerText) : undefined;
+          for (const tool of event.tools ?? []) cards.set(tool.id, toolCard(tool));
+          // Fall through to apply the snapshot's run state.
+        case 'run':
+          ended = !isRunning(event.run);
+          if (ended) showStatus(event.run.error ?? '');
           break;
       }
       if (pinned) messages.scrollTop = messages.scrollHeight;
-    };
-    const response = await api('/sessions/' + active + '/messages', payload('POST', { message: text }));
-    await readEvents(response, accept);
-    if (!ended) throw new Error('The response stream closed before the run finished.');
+  };
+  let retries = 0;
+  while (!ended && !controller.signal.aborted) {
+    try {
+      const response = await api('/sessions/' + id + '/events?run=' + item.run.id + '&after=' + cursor, { signal: controller.signal });
+      await readEvents(response, accept);
+      if (!ended && !controller.signal.aborted) throw new Error('Connection closed');
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      showStatus('Reconnecting…');
+      await new Promise<void>((done) => {
+        const finish = () => { clearTimeout(timer); controller.signal.removeEventListener('abort', finish); done(); };
+        const timer = setTimeout(finish, Math.min(5000, 500 * ++retries));
+        controller.signal.addEventListener('abort', finish, { once: true });
+      });
+      if (controller.signal.aborted) return;
+      try {
+        const latest = await data<ConversationView>('/sessions/' + id, { signal: controller.signal });
+        if (latest.run?.id !== item.run.id || !isRunning(latest.run)) {
+          if (active === id) await activate(id);
+          return;
+        }
+      } catch { /* Retry while this conversation remains selected. */ }
+    }
+  }
+  if (controller.signal.aborted || active !== id) return;
+  try {
+    const latest = await data<ConversationView>('/sessions/' + id, { signal: controller.signal });
+    if (controller.signal.aborted || active !== id) return;
+    showConversation(latest, latest.messages);
+    showStatus(latest.run?.error ?? '');
     await syncSessions();
-  } catch (error) { report(error); }
-  finally { setSending(false); prompt.focus(); }
+    const current = await data<{ settings: Settings }>('/bootstrap');
+    applySettings(current.settings);
+  } catch (error) { if (!controller.signal.aborted) report(error); }
+}
+
+function selectedModel() {
+  const selected = modelSelect.value;
+  const slash = selected.indexOf('/');
+  return slash === -1 ? { provider: '', id: '' } : { provider: selected.slice(0, slash), id: selected.slice(slash + 1) };
 }
 
 function applySettings(settings: Settings) {
@@ -380,6 +474,8 @@ function fillSettings() {
     ? 'File tools are workspace-scoped. Linux shell isolation is available. Trusted host mode uses your user permissions.'
     : 'File tools are workspace-scoped. Shell isolation is unavailable on this host. Trusted host mode uses your user permissions.';
   element('pluginSettings').replaceChildren(...plugins.map((plugin) => {
+    const group = document.createElement('div');
+    group.className = 'plugin-group';
     const label = document.createElement('label');
     label.className = 'switch-line';
     const description = document.createElement('span');
@@ -391,19 +487,116 @@ function fillSettings() {
     const input = document.createElement('input');
     input.type = 'checkbox';
     input.name = plugin.id;
+    input.dataset.pluginSwitch = plugin.id;
     input.setAttribute('aria-label', plugin.title);
     input.checked = Boolean(settings.plugins[plugin.id]);
     label.append(description, input);
-    return label;
+    group.append(label);
+    if (plugin.requires?.length) {
+      const hint = document.createElement('small');
+      hint.className = 'hint';
+      hint.textContent = 'Requires: ' + plugin.requires.join(', ');
+      group.append(hint);
+    }
+    if (plugin.configSchema) {
+      const fields = document.createElement('fieldset');
+      fields.disabled = !input.checked;
+      fields.className = 'plugin-config';
+      fields.append(schemaFields(plugin.id, plugin.configSchema, settings.pluginConfig[plugin.id] ?? {}));
+      input.onchange = () => { fields.disabled = !input.checked; };
+      group.append(fields);
+    }
+    return group;
   }));
+  credentialStatus();
   settingsStatus.textContent = '';
+}
+
+function schemaFields(plugin: string, schema: Record<string, any>, values: any, path: string[] = []) {
+  const group = document.createElement('div');
+  group.className = 'plugin-fields';
+  for (const [key, property] of Object.entries<Record<string, any>>(schema.properties ?? {})) {
+    const current = values?.[key] ?? property.default;
+    const fieldPath = [...path, key];
+    const label = document.createElement('label');
+    const title = document.createElement('span');
+    title.textContent = property.title ?? key;
+    label.append(title);
+    if (property.type === 'object' && property.properties) {
+      label.append(schemaFields(plugin, property, current ?? {}, fieldPath));
+      group.append(label);
+      continue;
+    }
+    let input: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+    if (property.enum) {
+      const select = document.createElement('select');
+      if (!schema.required?.includes(key)) select.add(new Option('Default', ''));
+      for (const option of property.enum) select.add(new Option(String(option), JSON.stringify(option)));
+      if (current !== undefined) select.value = JSON.stringify(current);
+      input = select;
+      input.dataset.kind = 'enum';
+    } else if (['string', 'number', 'integer', 'boolean'].includes(property.type)) {
+      const field = document.createElement('input');
+      field.type = property.type === 'boolean' ? 'checkbox' : property.type === 'string' ? (property.format === 'password' ? 'password' : 'text') : 'number';
+      if (field.type === 'checkbox') field.checked = Boolean(current);
+      else field.value = current === undefined ? '' : String(current);
+      if (field.type === 'number') {
+        field.step = property.type === 'integer' ? '1' : 'any';
+        if (property.minimum !== undefined) field.min = String(property.minimum);
+        if (property.maximum !== undefined) field.max = String(property.maximum);
+      }
+      if (property.minLength !== undefined) field.minLength = property.minLength;
+      if (property.maxLength !== undefined) field.maxLength = property.maxLength;
+      input = field;
+      input.dataset.kind = property.type;
+    } else {
+      input = document.createElement('textarea');
+      input.value = current === undefined ? '' : JSON.stringify(current, null, 2);
+      input.dataset.kind = 'json';
+    }
+    input.dataset.plugin = plugin;
+    input.dataset.path = JSON.stringify(fieldPath);
+    input.setAttribute('aria-label', (property.title ?? key) + ' · ' + plugin);
+    if (schema.required?.includes(key) && input.dataset.kind !== 'boolean') input.required = true;
+    label.append(input);
+    if (property.description) {
+      const hint = document.createElement('small');
+      hint.className = 'hint';
+      hint.textContent = property.description;
+      label.append(hint);
+    }
+    group.append(label);
+  }
+  return group;
+}
+
+function pluginValues() {
+  const config = structuredClone(bootstrap.settings.pluginConfig);
+  for (const field of element('pluginSettings').querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('[data-plugin]')) {
+    if (field.matches(':disabled')) continue;
+    const path: string[] = JSON.parse(field.dataset.path);
+    const kind = field.dataset.kind;
+    if (kind !== 'boolean' && !field.value && !field.required) continue;
+    let target = config[field.dataset.plugin] ??= {};
+    for (const key of path.slice(0, -1)) target = (target[key] ??= {}) as Record<string, unknown>;
+    target[path.at(-1)] = kind === 'boolean' ? (field as HTMLInputElement).checked :
+      kind === 'number' || kind === 'integer' ? Number(field.value) :
+      kind === 'enum' || kind === 'json' ? JSON.parse(field.value) : field.value;
+  }
+  return config;
+}
+
+function credentialStatus() {
+  const provider = value('provider');
+  element('credentialStatus').textContent = !provider ? 'Select a provider to configure credentials.' :
+    bootstrap.models.some((model) => model.provider === provider && model.configured) ? 'Credentials configured.' : 'Credentials needed.';
 }
 
 async function saveSettings() {
   const patch = {
     appearance: value('theme'),
     model: { provider: value('provider'), id: value('model') },
-    plugins: Object.fromEntries([...element('pluginSettings').querySelectorAll('input')].map((input) => [input.name, input.checked])),
+    plugins: Object.fromEntries([...element('pluginSettings').querySelectorAll<HTMLInputElement>('[data-plugin-switch]')].map((input) => [input.name, input.checked])),
     subagents: {
       maxDepth: element<'input'>('maxDepth').valueAsNumber, maxParallel: element<'input'>('maxParallel').valueAsNumber,
       provider: value('childProvider'), model: value('childModel')
@@ -413,6 +606,7 @@ async function saveSettings() {
   const button = element<'button'>('saveSettings');
   button.disabled = true;
   try {
+    Object.assign(patch, { pluginConfig: pluginValues() });
     applySettings(await data<Settings>('/settings', payload('PATCH', patch)));
     settingsStatus.textContent = 'Saved.';
   } catch (error) { settingsStatus.textContent = error.message; }
@@ -458,21 +652,22 @@ element('settingsClose').onclick = () => settingsPanel.close();
 element('newSession').onclick = () => void newSession();
 element('selectMode').onclick = () => toggleSelection(!selecting);
 element('cancelSelection').onclick = () => toggleSelection(false);
+element('selectAll').onclick = () => { for (const item of sessions) selection.add(item.id); renderSessions(); };
 element('exportSessions').onclick = () => void exportSelected().catch(report);
 element('deleteSessions').onclick = () => void deleteSelected().catch(report);
 element<'form'>('settingsForm').onsubmit = (event) => { event.preventDefault(); void saveSettings(); };
 element('saveCredential').onclick = async () => {
   try {
-    await api('/credentials', payload('POST', { provider: value('provider'), key: value('apiKey') }));
+    const result = await data<{ models: ModelInfo[] }>('/credentials', payload('POST', { provider: value('provider'), key: value('apiKey') }));
+    bootstrap.models = result.models;
+    applySettings(bootstrap.settings);
+    credentialStatus();
     element<'input'>('apiKey').value = '';
     settingsStatus.textContent = 'API key saved locally.';
   } catch (error) { settingsStatus.textContent = error.message; }
 };
 modelSelect.onchange = async () => {
-  const selected = modelSelect.value;
-  const slash = selected.indexOf('/');
-  const model = slash === -1 ? { provider: '', id: '' } : { provider: selected.slice(0, slash), id: selected.slice(slash + 1) };
-  try { applySettings(await data<Settings>('/settings', payload('PATCH', { model }))); }
+  try { applySettings(await data<Settings>('/settings', payload('PATCH', { model: selectedModel() }))); }
   catch (error) { applySettings(bootstrap.settings); report(error); }
 };
 element<'button'>('stop').onclick = async () => {
@@ -490,6 +685,23 @@ prompt.onkeydown = (event) => {
   }
 };
 prompt.oninput = adjustPrompt;
+element('provider').oninput = credentialStatus;
+element('refreshModels').onclick = async () => {
+  try {
+    bootstrap.models = (await data<{ models: ModelInfo[] }>('/models')).models;
+    applySettings(bootstrap.settings);
+    credentialStatus();
+    settingsStatus.textContent = 'Model status refreshed.';
+  } catch (error) { settingsStatus.textContent = error.message; }
+};
+element('theme').onchange = async () => {
+  try { applySettings(await data<Settings>('/settings', payload('PATCH', { appearance: value('theme') }))); }
+  catch (error) { settingsStatus.textContent = error.message; }
+};
+const viewport = window.visualViewport;
+const resize = () => document.documentElement.style.setProperty('--app-height', (viewport?.height ?? innerHeight) + 'px');
+viewport?.addEventListener('resize', resize);
+resize();
 
 setSidebar(!narrow.matches);
 void data<Bootstrap>('/bootstrap').then((result) => {
@@ -499,5 +711,7 @@ void data<Bootstrap>('/bootstrap').then((result) => {
   element('workspaceLabel').textContent = result.workspace;
   element('workspaceLabel').title = result.workspace;
   renderSessions();
-  if (sessions.length) void activate(sessions.find((item) => !item.parentId)?.id ?? sessions[0].id);
+  const remembered = sessionStorage.getItem('mini-harness-active:' + result.workspace);
+  if (sessions.length) void activate(sessions.find((item) => item.id === remembered)?.id ?? sessions.find((item) => !item.parentId)?.id ?? sessions[0].id);
+  setInterval(() => { if (!document.hidden) void syncSessions().catch(() => {}); }, 2000);
 }).catch(report);
