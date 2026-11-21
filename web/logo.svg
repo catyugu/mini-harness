@@ -3,8 +3,8 @@
     .tile{fill:#203349}.edge{stroke:#edf2f7}.node{fill:#edf2f7}.accent{fill:#58d4bf}
     @media(prefers-color-scheme:dark){.tile{fill:#dfeaf2}.edge{stroke:#263c51}.node{fill:#263c51}.accent{fill:#0e8878}}
   </style>
-  <rect class="tile" width="64" height="64" rx="15"/>
-  <path class="edge" d="M16 42V22l16 11 16-11v20" fill="none" stroke-width="4" stroke-linejoin="round"/>
-  <g class="node"><circle cx="16" cy="22" r="4.5"/><circle cx="16" cy="42" r="4.5"/><circle cx="32" cy="33" r="4.5"/><circle cx="48" cy="22" r="4.5"/></g>
-  <circle class="accent" cx="48" cy="42" r="5.5"/>
+  <rect class="tile" fill="#203349" width="64" height="64" rx="15"/>
+  <path class="edge" stroke="#edf2f7" d="M16 42V22l16 11 16-11v20" fill="none" stroke-width="4" stroke-linejoin="round"/>
+  <g class="node" fill="#edf2f7"><circle cx="16" cy="22" r="4.5"/><circle cx="16" cy="42" r="4.5"/><circle cx="32" cy="33" r="4.5"/><circle cx="48" cy="22" r="4.5"/></g>
+  <circle class="accent" fill="#58d4bf" cx="48" cy="42" r="5.5"/>
 </svg>

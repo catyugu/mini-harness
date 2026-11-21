@@ -3,12 +3,18 @@ import { createReadStream, readFileSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
-import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { IncomingMessage, Server, ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { getPaths } from './config.js';
 import { writeJson, readJson } from './config.js';
 import { supportsIsolation } from './sandbox.js';
 import { MiniHarnessRuntime } from './agent.js';
+
+declare module 'cordis' {
+  interface Context {
+    harnessWeb: Server;
+  }
+}
 
 const WEB_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'web');
 const assets = new Map([
@@ -138,6 +144,11 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
     }
   };
   const server = createServer((req, res) => { void route(req, res); });
+  const web = runtime.plugins.ctx.inject(['harnessAgent', 'harnessSessions'], (ctx) => {
+    ctx.provide('harnessWeb', server);
+    ctx.effect(() => () => new Promise<void>((done) => server.close(() => done())));
+  });
+  await web.await();
   let closing: Promise<void>;
   return {
     server, runtime, token,
@@ -150,8 +161,7 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
     },
     close() {
       closing ??= Promise.all([
-        new Promise<void>((done) => server.close(() => done())),
-        runtime.stop()
+        web.dispose(), runtime.stop()
       ]).then(() => {});
       return closing;
     }

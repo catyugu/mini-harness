@@ -2,6 +2,7 @@ import { Context, type Fiber } from 'cordis';
 import { readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { isDeepStrictEqual } from 'node:util';
 import { Type } from 'typebox';
 import { defineTool, type ToolDefinition } from '@earendil-works/pi-coding-agent';
 import type { MiniHarnessRuntime } from './agent.js';
@@ -55,14 +56,20 @@ export class ToolRegistry {
   }
 }
 
+interface PluginPlan {
+  id: string;
+  source?: string;
+  config?: Record<string, unknown>;
+}
+
 export class PluginHost {
   readonly ctx = new Context();
-  private readonly fibers: Fiber[] = [];
+  private readonly mounted = new Map<string, { plan: PluginPlan; fiber: Fiber }>();
 
-  constructor(private readonly runtime: MiniHarnessRuntime, private readonly settings: Settings) {
+  constructor(private readonly runtime: MiniHarnessRuntime) {
     this.ctx.provide('harnessAgent', { availableModels: () => runtime.availableModels() });
     this.ctx.provide('harnessSessions', {
-      get: (id) => runtime.registry.get(id) && { ...runtime.registry.get(id) },
+      get: (id) => runtime.registry.get(id),
       list: () => runtime.registry.list()
     });
     this.ctx.provide('harnessTools', new ToolRegistry());
@@ -76,7 +83,9 @@ export class PluginHost {
       const folder = join(this.runtime.paths.plugins, id);
       const source = join(folder, 'plugin.js');
       if (!existsSync(source)) return [];
-      const manifest = readJson<Partial<PluginMetadata> | null>(join(folder, 'plugin.json'), null);
+      let manifest: Partial<PluginMetadata> | null = null;
+      try { manifest = readJson(join(folder, 'plugin.json'), null); }
+      catch (error) { if (!(error instanceof SyntaxError)) throw error; }
       const title = typeof manifest?.title === 'string' ? manifest.title.slice(0, 100) : id;
       const description = typeof manifest?.description === 'string' ? manifest.description.slice(0, 300) : 'Runs local JavaScript with your user permissions.';
       return [{ source, metadata: { id, title, description, trustedCode: true } }];
@@ -85,66 +94,100 @@ export class PluginHost {
 
   metadata() { return [...BUILTINS, ...this.discover().map(({ metadata }) => metadata)]; }
 
-  private async mount(setup: (ctx: Context) => void | Promise<void>, dependencies = ['harnessAgent', 'harnessSessions', 'harnessTools']) {
-    const fiber = this.ctx.inject(dependencies, setup);
-    this.fibers.push(fiber);
-    await fiber.await();
-  }
-
-  async activate() {
+  private async mount(plan: PluginPlan) {
+    const { id, source } = plan;
+    let fiber: Fiber | undefined;
     try {
-      if (this.settings.plugins.subagents) {
-        await this.mount((ctx) => {
+      if (id === 'subagents') {
+        fiber = this.ctx.inject(['harnessTools'], (ctx) => {
           const tool = this.runtime.delegateTool();
-          ctx.effect(() => ctx.harnessTools.register(tool, (id) => this.runtime.delegateTool(id),
-            (id) => this.runtime.canDelegate(id)));
+          ctx.effect(() => ctx.harnessTools.register(tool, (sessionId) => this.runtime.delegateTool(sessionId),
+            (sessionId) => this.runtime.canDelegate(sessionId)));
         });
-      }
-      if (this.settings.plugins.shell) {
-        await this.mount((ctx) => {
+      } else if (id === 'shell') {
+        fiber = this.ctx.inject(['harnessTools'], (ctx) => {
           ctx.effect(() => ctx.harnessTools.register(defineTool({
             name: 'sandbox_shell',
             label: 'Shell',
             description: 'Run a shell command in the workspace using the configured execution policy.',
             parameters: Type.Object({ command: Type.String({ minLength: 1, maxLength: 16000 }) }),
             execute: async (_id, args, signal) => {
-              const output = await runShell(args.command, this.runtime.paths.cwd, { ...this.runtime.settings.sandbox, signal, stateDir: this.runtime.paths.home });
+              const output = await runShell(args.command, this.runtime.paths.cwd, {
+                ...this.runtime.settings.sandbox, signal, stateDir: this.runtime.paths.home
+              });
               return { content: [{ type: 'text', text: JSON.stringify(output) }], details: output };
             }
           })));
         });
+      } else {
+        const mod = await import(pathToFileURL(source).href);
+        const component = mod.default ?? mod.apply;
+        const setup = typeof component === 'function' ? component : component?.apply?.bind(component);
+        if (typeof setup !== 'function') throw new Error('Expected a setup function or a Cordis component');
+        const deps = [...new Set<string>(component.inject ?? mod.inject ?? [])];
+        if (deps.some((dep) => !['harnessAgent', 'harnessSessions'].includes(dep)))
+          throw new Error('Unknown harness service dependency');
+        fiber = this.ctx.inject(deps, async (ctx) => {
+          const values = Object.freeze(structuredClone(plan.config ?? {}));
+          const cleanup = await setup(ctx, {
+            config: values,
+            defineConfig(defaults, validate) {
+              const config = Object.freeze({ ...structuredClone(defaults), ...values });
+              validate?.(config);
+              return config;
+            },
+            registerTool: (tool) => ctx.effect(() => this.ctx.harnessTools.register(tool)),
+            onDispose: (dispose) => { ctx.effect(() => dispose); }
+          } satisfies PluginApi);
+          if (typeof cleanup === 'function') ctx.effect(() => cleanup);
+        });
       }
-      for (const { source, metadata: { id } } of this.discover()) {
-        if (!Object.hasOwn(this.settings.plugins, id) || !this.settings.plugins[id]) continue;
-        try {
-          const mod = await import(pathToFileURL(source).href);
-          const component = mod.default ?? mod.apply;
-          const setup = typeof component === 'function' ? component : component?.apply?.bind(component);
-          if (typeof setup !== 'function') throw new Error('Expected a setup function or a Cordis component');
-          const deps = [...new Set(['harnessTools', ...(component.inject ?? mod.inject ?? [])])];
-          if (deps.some((dep) => !['harnessAgent', 'harnessSessions', 'harnessTools'].includes(dep))) {
-            throw new Error('Unknown harness service dependency');
-          }
-          await this.mount(async (ctx) => {
-            const values = Object.freeze(structuredClone(this.settings.pluginConfig[id] ?? {}));
-            const cleanup = await setup(ctx, {
-              config: values,
-              defineConfig(defaults, validate) {
-                const config = Object.freeze({ ...structuredClone(defaults), ...values });
-                validate?.(config);
-                return config;
-              },
-              registerTool: (tool) => ctx.effect(() => ctx.harnessTools.register(tool)),
-              onDispose: (dispose) => { ctx.effect(() => dispose); }
-            } satisfies PluginApi);
-            if (typeof cleanup === 'function') ctx.effect(() => cleanup);
-          }, deps);
-        } catch (error) {
-          throw new Error('Plugin ' + id + ': ' + (error instanceof Error ? error.message : String(error)), { cause: error });
-        }
-      }
+      await fiber.await();
+      this.mounted.set(id, { plan, fiber });
     } catch (error) {
-      await this.close();
+      await fiber?.dispose();
+      throw new Error('Plugin ' + id + ': ' + (error instanceof Error ? error.message : String(error)), { cause: error });
+    }
+  }
+
+  private async unmount(id: string) {
+    const installed = this.mounted.get(id);
+    if (!installed) return;
+    this.mounted.delete(id);
+    await installed.fiber.dispose();
+  }
+
+  async configure(settings: Settings, commit = () => {}) {
+    const next = [
+      ...['subagents', 'shell'].map((id): PluginPlan => ({ id })),
+      ...this.discover().map(({ source, metadata: { id } }): PluginPlan => ({
+        id, source, config: Object.hasOwn(settings.pluginConfig, id) ? settings.pluginConfig[id] : undefined
+      }))
+    ].filter(({ id }) => Object.hasOwn(settings.plugins, id) && settings.plugins[id]);
+    const desired = new Map(next.map((plan) => [plan.id, plan]));
+    const obsolete = [...this.mounted.values()].map(({ plan }) => plan).filter((plan) => !isDeepStrictEqual(plan, desired.get(plan.id)));
+    const additions = next.filter((plan) => !isDeepStrictEqual(plan, this.mounted.get(plan.id)?.plan));
+    const unloaded: PluginPlan[] = [];
+    const loaded: string[] = [];
+    try {
+      for (const plan of obsolete.reverse()) {
+        unloaded.unshift(plan);
+        await this.unmount(plan.id);
+      }
+      for (const plan of additions) {
+        await this.mount(plan);
+        loaded.push(plan.id);
+      }
+      commit();
+    } catch (error) {
+      const failures = [];
+      for (const id of loaded.reverse()) {
+        try { await this.unmount(id); } catch (failure) { failures.push(failure); }
+      }
+      for (const plan of unloaded) {
+        try { await this.mount(plan); } catch (failure) { failures.push(failure); }
+      }
+      if (failures.length) throw new AggregateError([error, ...failures], 'Could not restore the previous plugin configuration');
       throw error;
     }
   }
@@ -152,6 +195,6 @@ export class PluginHost {
   getTools(id: string) { return this.ctx.harnessTools.forSession(id); }
 
   async close() {
-    for (const fiber of this.fibers.splice(0).reverse()) await fiber.dispose();
+    for (const id of [...this.mounted.keys()].reverse()) await this.unmount(id);
   }
 }

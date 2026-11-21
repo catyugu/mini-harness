@@ -6,6 +6,7 @@ import {
   createLsToolDefinition, createReadToolDefinition, createWriteToolDefinition, truncateHead
 } from '@earendil-works/pi-coding-agent';
 import { RE2 } from 're2-wasm';
+import ignore from 'ignore';
 
 const linux = process.platform === 'linux';
 const windows = process.platform === 'win32';
@@ -50,11 +51,14 @@ export class Workspace {
     const { root, parts } = await this.location(path);
     let dir = root;
     let handle: FileHandle | undefined;
-    if (linux) {
-      handle = await open(root, directories);
-      dir = descriptor(handle);
-    }
     try {
+      if (linux) {
+        const expected = await lstat(root, { bigint: true });
+        handle = await open(root, directories);
+        const current = await handle.stat({ bigint: true });
+        if (expected.dev !== current.dev || expected.ino !== current.ino) throw denied();
+        dir = descriptor(handle);
+      }
       for (const part of parts) {
         const next = resolve(dir, part);
         if (create) {
@@ -77,7 +81,7 @@ export class Workspace {
     } finally { await handle?.close(); }
   }
 
-  private async file<T>(path: string, write: boolean, create: boolean, action: (handle: FileHandle) => Promise<T>) {
+  private async openFile(path: string, write: boolean, create: boolean) {
     path = resolve(this.cwd, path);
     const name = basename(path);
     await this.location(path);
@@ -105,20 +109,23 @@ export class Workspace {
           const current = await lstat(target, { bigint: true });
           if (!samePath(await realpath(target), target) || current.dev !== actual.dev || current.ino !== actual.ino) throw denied();
         }
-        return await action(handle);
-      } finally { await handle.close(); }
+        return handle;
+      } catch (error) {
+        await handle.close();
+        throw error;
+      }
     });
   }
 
+  private async file<T>(path: string, write: boolean, create: boolean, action: (handle: FileHandle) => Promise<T>) {
+    const handle = await this.openFile(path, write, create);
+    try { return await action(handle); }
+    finally { await handle.close(); }
+  }
+
   async *chunks(path: string, signal?: AbortSignal): AsyncGenerator<Uint8Array> {
-    // Keep the validated handle open for the lifetime of the stream.
-    let publish: (handle: FileHandle) => void;
-    let release: () => void;
-    const ready = new Promise<FileHandle>((done) => { publish = done; });
-    const consumed = new Promise<void>((done) => { release = done; });
-    const opened = this.file(path, false, false, async (handle) => { publish(handle); await consumed; });
+    const handle = await this.openFile(path, false, false);
     try {
-      const handle = await Promise.race([ready, opened.then(() => { throw new Error('File was not opened'); })]);
       const size = Math.min((await handle.stat()).size, readLimit);
       for (let offset = 0; offset < size;) {
         signal?.throwIfAborted();
@@ -128,7 +135,7 @@ export class Workspace {
         offset += bytesRead;
         yield buffer.subarray(0, bytesRead);
       }
-    } finally { release(); await opened; }
+    } finally { await handle.close(); }
   }
 
   readFile(path: string) {
@@ -136,8 +143,13 @@ export class Workspace {
       const size = (await handle.stat()).size;
       if (size > readLimit) throw new Error('File exceeds the 16 MiB read limit');
       const buffer = Buffer.allocUnsafe(size);
-      const result = await handle.read(buffer);
-      return buffer.subarray(0, result.bytesRead);
+      let offset = 0;
+      while (offset < size) {
+        const { bytesRead } = await handle.read(buffer, offset, size - offset, offset);
+        if (!bytesRead) break;
+        offset += bytesRead;
+      }
+      return buffer.subarray(0, offset);
     });
   }
 
@@ -181,19 +193,57 @@ export class Workspace {
   }
 
   private async *walk(root: string, signal?: AbortSignal) {
-    const pending = [resolve(this.cwd, root)];
+    type Rules = { dir: string; matcher: ReturnType<typeof ignore> };
+    const withRules = async (dir: string, inherited: Rules[]) => {
+      try {
+        const rules = await this.readFile(resolve(dir, '.gitignore'));
+        if (rules.length <= 128 * 1024) return [...inherited, { dir, matcher: ignore().add(rules.toString('utf8')) }];
+      } catch { /* An absent or unreadable optional ignore file adds no rules. */ }
+      return inherited;
+    };
+    root = resolve(this.cwd, root);
+    await this.location(root);
+    const ancestors: string[] = [];
+    for (let dir = root; !samePath(dir, resolve(this.cwd));) {
+      dir = dirname(dir);
+      ancestors.unshift(dir);
+    }
+    let inherited: Rules[] = [];
+    for (const dir of ancestors) inherited = await withRules(dir, inherited);
+    const pending = [{ dir: root, inherited }];
     let visited = 0;
     while (pending.length) {
-      const dir = pending.pop();
+      signal?.throwIfAborted();
+      const { dir, inherited } = pending.pop();
+      const rules = await withRules(dir, inherited);
       for (const entry of await this.entries(dir)) {
         signal?.throwIfAborted();
         if (++visited > 20000) throw new Error('Search limit reached. Select a narrower directory.');
         if (entry.name === '.git') continue;
         const path = resolve(dir, entry.name);
-        if (entry.directory) pending.push(path);
+        let ignored = false;
+        for (const { dir, matcher } of rules) {
+          const result = matcher.test(relative(dir, path).split(sep).join('/') + (entry.directory ? '/' : ''));
+          if (result.ignored || result.unignored) ignored = result.ignored;
+        }
+        if (ignored) continue;
+        if (entry.directory) pending.push({ dir: path, inherited: rules });
         yield { path, ...entry };
       }
     }
+  }
+
+  private imageType(path: string) {
+    return this.file(path, false, false, async (handle) => {
+      const buffer = Buffer.alloc(12);
+      const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+      const prefix = buffer.subarray(0, bytesRead);
+      if (prefix.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex'))) return 'image/png';
+      if (prefix.subarray(0, 3).equals(Buffer.from('ffd8ff', 'hex'))) return 'image/jpeg';
+      if (/^GIF8[79]a/.test(prefix.toString('ascii', 0, 6))) return 'image/gif';
+      if (prefix.toString('ascii', 0, 4) === 'RIFF' && prefix.toString('ascii', 8, 12) === 'WEBP') return 'image/webp';
+      return null;
+    });
   }
 
   tools() {
@@ -206,7 +256,7 @@ export class Workspace {
     } });
     const grep = createGrepToolDefinition(cwd);
     return [
-      createReadToolDefinition(cwd, { operations: { readFile, access, createReadStream: (path, { signal }) => this.chunks(path, signal) } }),
+      createReadToolDefinition(cwd, { operations: { readFile, access, detectImageMimeType: (path) => this.imageType(path), createReadStream: (path, { signal }) => this.chunks(path, signal) } }),
       createEditToolDefinition(cwd, { operations: { readFile, access, writeFile: (path, content) => this.writeFile(path, content, false) } }),
       createWriteToolDefinition(cwd, { operations: { writeFile: (path, content) => this.writeFile(path, content), mkdir: (path) => this.mkdir(path) } }),
       createLsToolDefinition(cwd, { operations: {
@@ -214,9 +264,9 @@ export class Workspace {
         stat: (path) => this.stat(path),
         readdir: async (path) => (await this.entries(path)).map(({ name }) => name)
       } }),
-      { ...find, description: 'Find files and directories matching a glob in the workspace. Skips links and .git.',
+      { ...find, description: 'Find files and directories matching a glob in the workspace. Respects .gitignore and skips links.',
         promptSnippet: 'Find files by workspace glob' },
-      { ...grep, description: 'Search workspace text files with a literal or RE2 pattern. Skips links and .git.',
+      { ...grep, description: 'Search workspace text files with a literal or RE2 pattern. Respects .gitignore and skips links.',
         promptSnippet: 'Search text files in the workspace',
         execute: async (_id: string, input: Parameters<typeof grep.execute>[1], signal?: AbortSignal) => this.grep(input, signal) }
     ];

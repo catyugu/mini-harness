@@ -1,7 +1,6 @@
 import type { ModelChoice } from './registry.js';
 
 interface Waiter {
-  signal?: AbortSignal;
   cancel(): void;
   start(): void;
 }
@@ -26,7 +25,6 @@ export class Semaphore {
     if (signal?.aborted) return Promise.reject(signal.reason);
     return new Promise((resolve, reject) => {
       const waiter: Waiter = {
-        signal,
         cancel: () => {
           const index = this.queue.indexOf(waiter);
           if (index >= 0) this.queue.splice(index, 1);

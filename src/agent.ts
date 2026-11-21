@@ -24,10 +24,10 @@ export class MiniHarnessRuntime {
   openSessions: Map<string, AgentSession>;
   openingSessions: Map<string, Promise<AgentSession>>;
   readonly busy = new Map<string, ActiveRun>();
-  plugins: PluginHost;
+  readonly plugins: PluginHost;
   models!: ModelRuntime;
   readonly semaphore: Semaphore;
-  private updating = false;
+  private configuring?: Promise<void>;
   private stopping = false;
   constructor(paths: ReturnType<typeof import('./config.js').getPaths>) {
     this.paths = paths;
@@ -36,7 +36,7 @@ export class MiniHarnessRuntime {
     this.openSessions = new Map();
     this.openingSessions = new Map();
     this.semaphore = new Semaphore(this.settings.subagents.maxParallel);
-    this.plugins = new PluginHost(this, this.settings);
+    this.plugins = new PluginHost(this);
   }
 
   async start() {
@@ -45,10 +45,10 @@ export class MiniHarnessRuntime {
       modelsPath: join(this.paths.home, 'models.json'),
       refreshOnCreate: false
     });
-    await this.plugins.activate();
+    await this.plugins.configure(this.settings);
   }
 
-  modelInfo(model: any) {
+  modelInfo(model: AgentSession['model']) {
     return { provider: model?.provider ?? '', id: model?.id ?? '' };
   }
 
@@ -59,7 +59,7 @@ export class MiniHarnessRuntime {
     }));
   }
 
-  resolveModel(choice: {provider:string;id:string} = this.settings.model) {
+  resolveModel(choice: ModelChoice = this.settings.model) {
     if (!choice?.provider) {
       if (choice?.id) throw new Error('A model ID requires a provider');
       return undefined;
@@ -74,7 +74,7 @@ export class MiniHarnessRuntime {
   }
 
   async open(id: string): Promise<AgentSession> {
-    if (this.updating || this.stopping) throw new Error('Agent service is unavailable during reconfiguration or shutdown');
+    if (this.configuring || this.stopping) throw new Error('Agent service is unavailable during reconfiguration or shutdown');
     const active = this.openSessions.get(id);
     if (active) return active;
     const pending = this.openingSessions.get(id);
@@ -152,7 +152,7 @@ export class MiniHarnessRuntime {
   }
 
   async send(id: string, prompt: string, emit: (event: StreamEvent) => void = () => {}, { signal }: { signal?: AbortSignal } = {}) {
-    if (this.updating || this.stopping) throw new Error('Agent service is unavailable during reconfiguration or shutdown');
+    if (this.configuring || this.stopping) throw new Error('Agent service is unavailable during reconfiguration or shutdown');
     if (this.busy.has(id)) throw new Error('Conversation is already running');
     if (typeof prompt !== 'string' || !prompt.trim() || prompt.length > 200000) throw new Error('Invalid message');
     const record = this.registry.get(id);
@@ -288,40 +288,26 @@ export class MiniHarnessRuntime {
   }
 
   async updateSettings(patch: SettingsPatch) {
-    if (this.updating || this.stopping || this.busy.size || this.openingSessions.size)
+    if (this.configuring || this.stopping || this.busy.size || this.openingSessions.size)
       throw new Error('Cannot change settings while the agent service is busy');
     const next = mergeSettings(this.settings, patch);
     this.resolveModel(next.model);
     if (next.subagents.provider) this.resolveModel({ provider: next.subagents.provider, id: next.subagents.model });
-    this.updating = true;
-    const replacePlugins = JSON.stringify(next.plugins) !== JSON.stringify(this.settings.plugins) ||
-      JSON.stringify(next.pluginConfig) !== JSON.stringify(this.settings.pluginConfig);
-    const candidate = replacePlugins ? new PluginHost(this, next) : undefined;
+    this.configuring = this.plugins.configure(next, () => writeJson(this.paths.settings, next));
     try {
-      await candidate?.activate();
-      writeJson(this.paths.settings, next);
+      await this.configuring;
       for (const session of this.openSessions.values()) session.dispose();
       this.openSessions.clear();
-      const previous = this.plugins;
       this.settings = next;
       this.semaphore.setLimit(next.subagents.maxParallel);
-      if (candidate) {
-        this.plugins = candidate;
-        await previous.close();
-      }
       return next;
-    } catch (error) {
-      if (candidate && candidate !== this.plugins) await candidate.close();
-      throw error;
-    } finally {
-      this.updating = false;
-    }
+    } finally { this.configuring = undefined; }
   }
 
   async stop() {
     this.stopping = true;
     for (const id of this.busy.keys()) this.cancel(id);
-    await Promise.allSettled([...this.openingSessions.values(), ...[...this.busy.values()].map(({ done }) => done)]);
+    await Promise.allSettled([this.configuring, ...this.openingSessions.values(), ...[...this.busy.values()].map(({ done }) => done)]);
     for (const session of this.openSessions.values()) session.dispose();
     this.openSessions.clear();
     await this.plugins.close();

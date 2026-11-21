@@ -42,8 +42,11 @@ test('an installed Cordis plugin can use services, configure a tool, and release
   assert.match(JSON.stringify(await tool.execute('test', {}, undefined, undefined, undefined)), /Total: 1/);
   await assert.rejects(runtime.updateSettings({ pluginConfig: { example: { prefix: 12 } } }), /Invalid prefix/);
   assert.equal(runtime.settings.pluginConfig.example.prefix, 'Total');
-  await runtime.updateSettings({ plugins: { example: false } });
   assert.equal(readFileSync(log, 'utf8'), 'dispose\n');
+  await runtime.updateSettings({ plugins: { shell: true } });
+  assert.equal(readFileSync(log, 'utf8'), 'dispose\n', 'Unrelated switches should preserve an active plugin');
+  await runtime.updateSettings({ plugins: { example: false } });
+  assert.equal(readFileSync(log, 'utf8'), 'dispose\ndispose\n');
   assert.ok(!(await runtime.open(item.id)).getActiveToolNames().includes('example_count'));
   await runtime.updateSettings({ plugins: { example: true } });
   assert.ok((await runtime.open(item.id)).getActiveToolNames().includes('example_count'));

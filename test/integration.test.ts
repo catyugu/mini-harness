@@ -162,3 +162,31 @@ test('Pi honors file policy and recursive delegates can finish with one slot', {
   assert.ok(exported.every(({ piSession }) => piSession?.includes('"type":"session"')));
   assert.equal((await app.runtime.getConversation(records[2].id)).model.id, 'mock-model');
 });
+
+test('cancelling a root aborts its active child and preserves indexed history', { timeout: 15000 }, async (t) => {
+  let entered: () => void;
+  let release: () => void;
+  const waiting = new Promise<void>((done) => { entered = done; });
+  const held = new Promise<void>((done) => { release = done; });
+  const mock = await createMockProvider(async ({ messages }) => {
+    if (messages.at(-1)?.content === 'start child') return { tool: 'delegate', args: { task: 'hold child' } };
+    entered();
+    await held;
+    return 'Released';
+  });
+  const { root, paths } = createFixturePaths(mock.url);
+  const app = await createMiniHarnessServer(paths);
+  t.after(async () => { release(); await app.close(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
+  const parent = app.runtime.registry.create();
+  const pending = app.runtime.send(parent.id, 'start child');
+  const aborted = assert.rejects(pending, /cancelled/);
+  await waiting;
+  assert.equal(app.runtime.busy.size, 2);
+  assert.equal(app.runtime.cancel(parent.id), true);
+  await aborted;
+  assert.equal(app.runtime.busy.size, 0);
+  assert.equal(app.runtime.semaphore.active, 0);
+  const child = app.runtime.export([parent.id])[1];
+  assert.equal(child.title, '[Cancelled] hold child');
+  assert.ok(child.piSession?.includes('hold child'));
+});
