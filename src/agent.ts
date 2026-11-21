@@ -7,7 +7,7 @@ import { PluginHost } from './plugins.js';
 import { SessionRegistry } from './registry.js';
 import { readSettings, writeJson } from './config.js';
 
-export class MinihRuntime {
+export class MiniHarnessRuntime {
   paths: ReturnType<typeof import('./config.js').getPaths>;
   settings: import('./config.js').Settings;
   registry: SessionRegistry;

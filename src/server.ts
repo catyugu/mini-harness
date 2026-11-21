@@ -7,7 +7,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { getPaths } from './config.js';
 import { mergeSettings, writeJson, readJson } from './config.js';
-import { MinihRuntime } from './agent.js';
+import { MiniHarnessRuntime } from './agent.js';
 
 const WEB_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'web');
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
@@ -43,8 +43,8 @@ export function json(res: ServerResponse, code: number, data: unknown) {
   res.end(JSON.stringify(data));
 }
 
-export async function createMinihServer(paths: ReturnType<typeof getPaths>, options: {token?:string} = {}) {
-  const runtime = new MinihRuntime(paths);
+export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>, options: {token?:string} = {}) {
+  const runtime = new MiniHarnessRuntime(paths);
   await runtime.start();
   const token = options.token ?? randomBytes(32).toString('hex');
   const route = async (req: IncomingMessage, res: ServerResponse) => {
@@ -95,7 +95,7 @@ export async function createMinihServer(paths: ReturnType<typeof getPaths>, opti
         const records = [];
         for (const id of input.ids) records.push(await runtime.getConversation(id));
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8',
-          'Content-Disposition': 'attachment; filename="minih-sessions.json"', 'Cache-Control': 'no-store' });
+          'Content-Disposition': 'attachment; filename="mini-harness-sessions.json"', 'Cache-Control': 'no-store' });
         return res.end(JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), sessions: records }, null, 2));
       }
       if (pathname === '/api/settings' && req.method === 'PATCH') {

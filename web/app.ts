@@ -2,16 +2,16 @@ export {};
 const $ = (id: string): any => document.getElementById(id);
 const tokenFromUrl = new URLSearchParams(location.hash.slice(1)).get('token');
 if (tokenFromUrl) {
-  sessionStorage.setItem('minih-token', tokenFromUrl);
+  sessionStorage.setItem('mini-harness-token', tokenFromUrl);
   history.replaceState(null, '', location.pathname + location.search);
 }
-const token = sessionStorage.getItem('minih-token');
+const token = sessionStorage.getItem('mini-harness-token');
 interface Conversation { id:string; title:string; parentId:string|null }
 interface ModelInfo {provider:string;id:string;name:string}
 let state: {sessions:Conversation[];models:ModelInfo[];settings:any;active:string|null;selection:Set<string>;selecting:boolean;expanded:Set<string>;sending:boolean} = { sessions: [], models: [], settings: null, active: null, selection: new Set<string>(), selecting: false, expanded: new Set<string>(), sending: false };
 
 async function api(path: string, options: RequestInit = {}): Promise<Response> {
-  if (!token) throw new Error('No access token. Open minih using the URL printed by the CLI.');
+  if (!token) throw new Error('No access token. Open mini-harness using the URL printed by the CLI.');
   const headers = { Authorization: 'Bearer ' + token, ...(options.body ? { 'Content-Type': 'application/json' } : {}) };
   const response = await fetch('/api' + path, { ...options, headers });
   if (!response.ok) {
@@ -206,7 +206,7 @@ async function exportSelected() {
   const blob = await response.blob();
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
-  anchor.href = url; anchor.download = 'minih-sessions.json'; anchor.click();
+  anchor.href = url; anchor.download = 'mini-harness-sessions.json'; anchor.click();
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 async function deleteSelected() {

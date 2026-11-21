@@ -7,9 +7,9 @@ import { getPaths } from '../src/config.js';
 import { SessionRegistry } from '../src/registry.js';
 
 test('nested sessions and cascading permanent deletion', () => {
-  const temp = mkdtempSync(join(tmpdir(), 'minih-sessions-'));
+  const temp = mkdtempSync(join(tmpdir(), 'mini-harness-sessions-'));
   try {
-    const paths = getPaths(temp, { MINIH_HOME: join(temp, 'home') });
+    const paths = getPaths(temp, { MINI_HARNESS_HOME: join(temp, 'home') });
     mkdirSync(paths.sessions, { recursive: true });
     const registry = new SessionRegistry(paths);
     const parent = registry.create({ title: 'root' });
@@ -30,9 +30,9 @@ test('nested sessions and cascading permanent deletion', () => {
 });
 
 test('refuses deletion of files outside managed session directory', () => {
-  const temp = mkdtempSync(join(tmpdir(), 'minih-safe-'));
+  const temp = mkdtempSync(join(tmpdir(), 'mini-harness-safe-'));
   try {
-    const paths = getPaths(temp, { MINIH_HOME: join(temp, 'home') });
+    const paths = getPaths(temp, { MINI_HARNESS_HOME: join(temp, 'home') });
     const registry = new SessionRegistry(paths);
     const item = registry.create();
     const foreign = join(temp, 'other.jsonl');

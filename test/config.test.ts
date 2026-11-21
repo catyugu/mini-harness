@@ -6,11 +6,11 @@ import { join } from 'node:path';
 import { DEFAULTS, getPaths, mergeSettings, readSettings, validateSettings, writeJson } from '../src/config.js';
 
 test('config directories are independent and default safe', () => {
-  const folder = mkdtempSync(join(tmpdir(), 'minih-config-'));
+  const folder = mkdtempSync(join(tmpdir(), 'mini-harness-config-'));
   try {
-    const paths = getPaths(folder, { MINIH_HOME: join(folder, 'home') });
+    const paths = getPaths(folder, { MINI_HARNESS_HOME: join(folder, 'home') });
     assert.ok(paths.sessions.startsWith(paths.home));
-    assert.ok(paths.projectSkills.endsWith(join('.minih', 'skills')));
+    assert.ok(paths.projectSkills.endsWith(join('.mini-harness', 'skills')));
     assert.equal(readSettings(paths).plugins.shell, false);
     assert.equal(readSettings(paths).sandbox.mode, 'isolated');
     writeJson(paths.settings, { appearance: 'dark' });

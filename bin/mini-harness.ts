@@ -8,16 +8,16 @@ import { getPaths, ensurePaths, writeJson, readJson } from '../src/config.js';
 const executable = fileURLToPath(import.meta.url);
 
 function help() {
-  console.log(`minih — minimal Pi harness
+  console.log(`mini-harness — minimal Pi harness
 
 Usage:
-  minih [--port 3837]              Start local web interface
-  minih --detached [--port 3837]   Run independently of this terminal
-  minih --serve --cwd PATH         Internal detached server entry
-  minih --help                     Show help
+  mini-harness [--port 3837]              Start local web interface
+  mini-harness --detached [--port 3837]   Run independently of this terminal
+  mini-harness --serve --cwd PATH         Internal detached server entry
+  mini-harness --help                     Show help
 
-Configuration: ~/.minih/settings.json (or MINIH_HOME)
-Workspace Skills: .minih/skills/
+Configuration: ~/.mini-harness/settings.json (or MINI_HARNESS_HOME)
+Workspace Skills: .mini-harness/skills/
 Access: localhost only; bearer token required for all API endpoints.
 `);
 }
@@ -57,19 +57,19 @@ async function main() {
       await sleep(100);
       const info = readJson(paths.pid, null);
       if (info?.pid === child.pid && info.url && info.token) {
-        console.log('minih started independently (PID ' + child.pid + ')');
+        console.log('mini-harness started independently (PID ' + child.pid + ')');
         console.log(info.url + '/#token=' + info.token);
         return;
       }
     }
     throw new Error('Detached server failed to become ready; see ' + paths.log);
   }
-  const { createMinihServer } = await import('../src/server.js');
-  const app = await createMinihServer(paths);
+  const { createMiniHarnessServer } = await import('../src/server.js');
+  const app = await createMiniHarnessServer(paths);
   const port = await app.listen(args.port);
   const url = 'http://127.0.0.1:' + port;
   writeJson(paths.pid, { pid: process.pid, url, token: app.token, startedAt: new Date().toISOString() });
-  console.log('minih listening at ' + url + '/#token=' + app.token);
+  console.log('mini-harness listening at ' + url + '/#token=' + app.token);
   let ending = false;
   async function stop() {
     if (ending) return;
@@ -86,4 +86,4 @@ async function main() {
   process.once('SIGINT', () => { void stop().then(() => process.exit(0)); });
 }
 
-main().catch((error) => { console.error('minih:', error.message); process.exitCode = 1; });
+main().catch((error) => { console.error('mini-harness:', error.message); process.exitCode = 1; });

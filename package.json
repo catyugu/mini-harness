@@ -1,11 +1,11 @@
 {
-  "name": "minih",
+  "name": "mini-harness",
   "version": "0.1.0",
   "description": "A minimal, plugin-first Web harness for Pi",
   "license": "MIT",
   "type": "module",
   "bin": {
-    "minih": "./dist/bin/minih.js"
+    "mini-harness": "./dist/bin/mini-harness.js"
   },
   "files": [
     "dist/",
@@ -20,7 +20,7 @@
   "scripts": {
     "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
     "build": "npm run clean && tsc -p tsconfig.json && node dist/scripts/copy-assets.js",
-    "start": "npm run build && node dist/bin/minih.js",
+    "start": "npm run build && node dist/bin/mini-harness.js",
     "test": "npm run build && node --test dist/test/*.test.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "check": "npm run typecheck && npm test",
