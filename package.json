@@ -1,0 +1,23 @@
+{
+  "name": "minih",
+  "version": "0.1.0",
+  "description": "A minimal, plugin-first Web harness for Pi",
+  "license": "MIT",
+  "type": "module",
+  "bin": { "minih": "./bin/minih.js" },
+  "files": ["bin/", "src/", "web/", "README.md", "SECURITY.md", "LICENSE", "THIRD_PARTY_NOTICES.md"],
+  "engines": { "node": ">=22.19.0" },
+  "scripts": {
+    "start": "node bin/minih.js",
+    "test": "node --test",
+    "check": "node --check bin/minih.js && node --check src/config.js && node --check src/agent.js && node --check src/server.js && node --check web/app.js && npm test",
+    "pack:check": "npm pack --dry-run"
+  },
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "1.6.0",
+    "cordis": "4.0.0-rc.13",
+    "typebox": "1.3.27"
+  },
+  "repository": { "type": "git", "url": "https://github.com/catyugu/mini-harness.git" },
+  "keywords": ["pi", "agent", "harness", "web", "plugins"]
+}

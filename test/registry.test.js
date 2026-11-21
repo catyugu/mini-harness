@@ -1,0 +1,44 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync, existsSync, writeFileSync, mkdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { getPaths } from '../src/config.js';
+import { SessionRegistry } from '../src/registry.js';
+
+test('nested sessions and cascading permanent deletion', () => {
+  const temp = mkdtempSync(join(tmpdir(), 'minih-sessions-'));
+  try {
+    const paths = getPaths(temp, { MINIH_HOME: join(temp, 'home') });
+    mkdirSync(paths.sessions, { recursive: true });
+    const registry = new SessionRegistry(paths);
+    const parent = registry.create({ title: 'root' });
+    const child = registry.create({ title: 'worker', parentId: parent.id });
+    const second = registry.create({ title: 'unrelated' });
+    const file = join(paths.sessions, child.id + '.jsonl');
+    writeFileSync(file, 'hello');
+    registry.update(child.id, { file });
+    assert.equal(registry.list().length, 3);
+    assert.deepEqual(new Set(registry.descendants([parent.id])), new Set([parent.id, child.id]));
+    const deleted = registry.delete([parent.id]);
+    assert.equal(deleted.length, 2);
+    assert.equal(registry.list().length, 1);
+    assert.equal(registry.list()[0].id, second.id);
+    assert.equal(existsSync(file), false);
+    assert.throws(() => registry.delete(['does-not-exist']), /Unknown conversation/);
+  } finally { rmSync(temp, { recursive: true, force: true }); }
+});
+
+test('refuses deletion of files outside managed session directory', () => {
+  const temp = mkdtempSync(join(tmpdir(), 'minih-safe-'));
+  try {
+    const paths = getPaths(temp, { MINIH_HOME: join(temp, 'home') });
+    const registry = new SessionRegistry(paths);
+    const item = registry.create();
+    const foreign = join(temp, 'other.jsonl');
+    writeFileSync(foreign, 'keep');
+    registry.update(item.id, { file: foreign });
+    assert.throws(() => registry.delete([item.id]), /outside managed storage/);
+    assert.equal(existsSync(foreign), true);
+  } finally { rmSync(temp, { recursive: true, force: true }); }
+});
