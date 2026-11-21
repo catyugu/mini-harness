@@ -1,0 +1,63 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  # Native runners validate platform behavior (including --detached on Windows).
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node: ["22", "24"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Restore installed npm dependencies
+        id: dependencies
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: npm-modules-v1-${{ runner.os }}-node-${{ matrix.node }}-${{ hashFiles('package.json') }}
+      - name: Install dependencies on cache miss
+        if: steps.dependencies.outputs.cache-hit != 'true'
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run pack:check
+
+  # Playwright 1.56 requires Ubuntu 24.04, not ubuntu-latest (currently 26.04).
+  # Chromium runs on a native Ubuntu runner without a container.
+  browser:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Restore browser job npm dependencies
+        id: dependencies
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: npm-modules-v1-playwright-1.56.0-node24-${{ hashFiles('package.json') }}
+      - name: Install dependencies on cache miss
+        if: steps.dependencies.outputs.cache-hit != 'true'
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Restore Chromium browser cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-1.56.0-ubuntu-24.04
+      - name: Ensure Chromium and system dependencies
+        run: npx playwright install --with-deps chromium
+      - run: npm run test:browser
