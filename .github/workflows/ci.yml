@@ -35,13 +35,9 @@ jobs:
       - run: npm test
       - run: npm run pack:check
 
-  # This official image bundles Chromium and OS libraries; no apt/browser installs.
-  # Keep @playwright/test in package.json pinned to the same version.
+  # Chromium runs on a native Ubuntu runner; no container image pull.
   browser:
     runs-on: ubuntu-latest
-    container:
-      image: mcr.microsoft.com/playwright:v1.56.0-noble
-      options: --ipc=host
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -56,4 +52,11 @@ jobs:
       - name: Install dependencies on cache miss
         if: steps.dependencies.outputs.cache-hit != 'true'
         run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Restore Chromium browser cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-1.56.0-${{ runner.os }}
+      - name: Ensure Chromium and system dependencies
+        run: npx playwright install --with-deps chromium
       - run: npm run test:browser
