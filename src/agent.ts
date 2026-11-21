@@ -293,11 +293,12 @@ export class MiniHarnessRuntime {
     const next = mergeSettings(this.settings, patch);
     this.resolveModel(next.model);
     if (next.subagents.provider) this.resolveModel({ provider: next.subagents.provider, id: next.subagents.model });
+    // Even a rolled-back change replaces the affected plugin's setup and tool closures.
+    for (const session of this.openSessions.values()) session.dispose();
+    this.openSessions.clear();
     this.configuring = this.plugins.configure(next, () => writeJson(this.paths.settings, next));
     try {
       await this.configuring;
-      for (const session of this.openSessions.values()) session.dispose();
-      this.openSessions.clear();
       this.settings = next;
       this.semaphore.setLimit(next.subagents.maxParallel);
       return next;

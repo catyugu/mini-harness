@@ -111,7 +111,7 @@ test('renders Markdown and tool results, and stops a pending reply', async ({ pa
       return 'Late response';
     }
     if (last.role === 'user') return { tool: 'ls', args: { path: '.' } };
-    return '### Workspace\n\n```text\nExample\n```\n\n<img src=x onerror="alert(1)">';
+    return '### Workspace\n\n```text\nExample\n```\n\n<img src=x onerror="alert(1)">\n\n<p class="overlay">A tool note</p>';
   });
   const { root, paths } = createFixturePaths(mock.url);
   const service = await startIsolatedHost(paths);
@@ -122,7 +122,8 @@ test('renders Markdown and tool results, and stops a pending reply', async ({ pa
     await expect(page.getByRole('heading', { name: 'Workspace' })).toBeVisible();
     await expect(page.locator('.code-block code')).toHaveText('Example');
     await expect(page.getByRole('button', { name: 'Copy', exact: true })).toBeVisible();
-    await expect(page.locator('.message img')).toHaveCount(0);
+    await expect(page.locator('.message img, .message .overlay')).toHaveCount(0);
+    await expect(page.getByText('A tool note')).toBeVisible();
     await expect(page.locator('.tool-card summary')).toContainText('ls');
     await expect(page.locator('.tool-card summary')).toContainText('Done');
 

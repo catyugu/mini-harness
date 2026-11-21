@@ -36,12 +36,16 @@ test('an installed Cordis plugin can use services, configure a tool, and release
   const item = runtime.registry.create();
   assert.equal(runtime.plugins.metadata().find(({ id }) => id === 'example')?.title, 'Example plugin');
   await runtime.updateSettings({ plugins: { example: true }, pluginConfig: { example: { prefix: 'Total' } } });
-  assert.ok((await runtime.open(item.id)).getActiveToolNames().includes('example_count'));
+  const originalSession = await runtime.open(item.id);
+  assert.ok(originalSession.getActiveToolNames().includes('example_count'));
   const tool = runtime.plugins.getTools(item.id).find(({ name }) => name === 'example_count');
   assert.equal((await tool.execute('test', {}, undefined, undefined, undefined)).content[0].type, 'text');
   assert.match(JSON.stringify(await tool.execute('test', {}, undefined, undefined, undefined)), /Total: 1/);
   await assert.rejects(runtime.updateSettings({ pluginConfig: { example: { prefix: 12 } } }), /Invalid prefix/);
   assert.equal(runtime.settings.pluginConfig.example.prefix, 'Total');
+  const restoredSession = await runtime.open(item.id);
+  assert.notStrictEqual(restoredSession, originalSession);
+  assert.ok(restoredSession.getActiveToolNames().includes('example_count'));
   assert.equal(readFileSync(log, 'utf8'), 'dispose\n');
   await runtime.updateSettings({ plugins: { shell: true } });
   assert.equal(readFileSync(log, 'utf8'), 'dispose\n', 'Unrelated switches should preserve an active plugin');

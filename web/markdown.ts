@@ -9,6 +9,13 @@ export function renderMarkdown(target: HTMLElement, text: string, interactive = 
     ALLOWED_ATTR: ['href', 'title', 'class', 'start'],
     ALLOW_DATA_ATTR: false
   });
+  for (const element of fragment.querySelectorAll('[class]')) {
+    const language = element.matches('pre > code')
+      ? [...element.classList].find((name) => /^language-[\w+-]{1,40}$/.test(name))
+      : undefined;
+    if (language) element.setAttribute('class', language);
+    else element.removeAttribute('class');
+  }
   for (const link of fragment.querySelectorAll('a')) {
     link.target = '_blank';
     link.rel = 'noopener noreferrer';
