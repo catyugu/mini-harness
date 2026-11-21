@@ -79,10 +79,17 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
         if (match[2] === 'messages' && req.method === 'POST') {
           const input = await requestBody(req);
           res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
-          const emit = (event: unknown) => { if (!res.destroyed) res.write(JSON.stringify(event) + '\n'); };
-          try { await runtime.send(id, input.message, emit); }
-          catch (error) { emit({ type: 'error', error: error.message }); }
-          return res.end();
+          const controller = new AbortController();
+          res.once('close', () => {
+            if (!res.writableEnded) controller.abort();
+          });
+          const emit = (event: unknown) => {
+            if (!res.destroyed && !res.writableEnded) res.write(JSON.stringify(event) + '\n');
+          };
+          try { await runtime.send(id, input.message, emit, { signal: controller.signal }); }
+          catch (error) { emit({ type: 'error', error: error instanceof Error ? error.message : String(error) }); }
+          if (!res.destroyed) res.end();
+          return;
         }
       }
       if (pathname === '/api/sessions/delete' && req.method === 'POST') {

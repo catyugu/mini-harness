@@ -1,7 +1,8 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  createAgentSession, ModelRuntime, SessionManager, SettingsManager, DefaultResourceLoader
+  createAgentSession, ModelRuntime, SessionManager, SettingsManager, DefaultResourceLoader,
+  type AgentSession
 } from '@earendil-works/pi-coding-agent';
 import { PluginHost } from './plugins.js';
 import { SessionRegistry } from './registry.js';
@@ -11,7 +12,8 @@ export class MiniHarnessRuntime {
   paths: ReturnType<typeof import('./config.js').getPaths>;
   settings: import('./config.js').Settings;
   registry: SessionRegistry;
-  openSessions: Map<string, any>;
+  openSessions: Map<string, AgentSession>;
+  openingSessions: Map<string, Promise<AgentSession>>;
   busy: Set<string>;
   plugins: PluginHost;
   models!: ModelRuntime;
@@ -20,6 +22,7 @@ export class MiniHarnessRuntime {
     this.settings = readSettings(paths);
     this.registry = new SessionRegistry(paths);
     this.openSessions = new Map();
+    this.openingSessions = new Map();
     this.busy = new Set();
     this.plugins = new PluginHost(this);
   }
@@ -45,16 +48,31 @@ export class MiniHarnessRuntime {
   }
 
   resolveModel(choice: {provider:string;id:string} = this.settings.model) {
-    if (choice?.provider && choice?.id) {
-      const model = this.models.getModel(choice.provider, choice.id);
-      if (!model) throw new Error('Unknown model: ' + choice.provider + '/' + choice.id);
-      return model;
+    if (!choice?.provider) {
+      if (choice?.id) throw new Error('A model ID requires a provider');
+      return undefined;
     }
-    return undefined;
+    // A provider-only override selects one of its available models.
+    const id = choice.id || this.models.getAvailableSnapshot().find((m) => m.provider === choice.provider)?.id ||
+      this.models.getModels(choice.provider)[0]?.id;
+    if (!id) throw new Error('No model is available for provider: ' + choice.provider);
+    const model = this.models.getModel(choice.provider, id);
+    if (!model) throw new Error('Unknown model: ' + choice.provider + '/' + id);
+    return model;
   }
 
-  async open(id: string, { child = false, modelChoice }: {child?:boolean;modelChoice?:{provider:string;id:string}} = {}) {
-    if (this.openSessions.has(id)) return this.openSessions.get(id);
+  async open(id: string, options: {child?:boolean;modelChoice?:{provider:string;id:string}} = {}): Promise<AgentSession> {
+    const active = this.openSessions.get(id);
+    if (active) return active;
+    const pending = this.openingSessions.get(id);
+    if (pending) return pending;
+    const opening = this.openNewSession(id, options);
+    this.openingSessions.set(id, opening);
+    try { return await opening; }
+    finally { this.openingSessions.delete(id); }
+  }
+
+  private async openNewSession(id: string, { child = false, modelChoice }: {child?:boolean;modelChoice?:{provider:string;id:string}} = {}): Promise<AgentSession> {
     const item = this.registry.get(id);
     if (!item) throw new Error('Conversation not found');
     const settingsManager = SettingsManager.inMemory();
@@ -108,9 +126,10 @@ export class MiniHarnessRuntime {
     if (typeof prompt !== 'string' || !prompt.trim() || prompt.length > 200000) throw new Error('Invalid message');
     this.busy.add(id);
     let off = () => {};
+    let cancel: (() => void) | undefined;
     try {
       const session = await this.open(id, { child, modelChoice: choice });
-      if (choice && choice.provider && choice.id) {
+      if (choice?.provider) {
         const model = this.resolveModel(choice);
         await session.setModel(model);
       }
@@ -124,15 +143,18 @@ export class MiniHarnessRuntime {
       });
       if (signal) {
         if (signal.aborted) throw new Error('Aborted');
-        signal.addEventListener('abort', () => { void session.abort(); }, { once: true });
+        cancel = () => { void session.abort(); };
+        signal.addEventListener('abort', cancel, { once: true });
       }
       await session.prompt(prompt);
+      if (signal?.aborted) throw new Error('Agent run cancelled');
       if (session.sessionFile) this.registry.update(id, { file: session.sessionFile });
       if (record.title === 'New conversation') this.registry.update(id, { title: prompt.trim().slice(0, 72) });
       const answer = session.getLastAssistantText() || '';
       emit({ type: 'complete', text: answer });
       return answer;
     } finally {
+      if (cancel) signal?.removeEventListener('abort', cancel);
       off();
       this.busy.delete(id);
     }
@@ -140,12 +162,14 @@ export class MiniHarnessRuntime {
 
   async runChild(parentId: string, task: string, chosen: {provider:string;id:string}, signal?:AbortSignal) {
     const parent = this.registry.get(parentId);
+    if (!parent) throw new Error('Parent conversation not found');
+    if (parent.parentId) throw new Error('Recursive subagents are prohibited');
     const record = this.registry.create({
       parentId, cwd: parent.cwd,
       title: task.slice(0, 72)
     });
     try {
-      const text = await this.send(record.id, task, () => {}, { signal, child: true, choice: chosen.id ? chosen : undefined });
+      const text = await this.send(record.id, task, () => {}, { signal, child: true, choice: chosen.provider ? chosen : undefined });
       return { id: record.id, text };
     } catch (error) {
       this.registry.update(record.id, { title: '[Failed] ' + task.slice(0, 62) });
@@ -155,7 +179,8 @@ export class MiniHarnessRuntime {
 
   async delete(ids: string[]) {
     const all = this.registry.descendants(ids);
-    if (all.some((id) => this.busy.has(id))) throw new Error('Stop active conversations before deleting them');
+    if (all.some((id) => this.busy.has(id) || this.openingSessions.has(id)))
+      throw new Error('Stop active conversations before deleting them');
     for (const id of all) {
       const session = this.openSessions.get(id);
       if (session) { session.dispose(); this.openSessions.delete(id); }
@@ -165,7 +190,8 @@ export class MiniHarnessRuntime {
 
   async updateSettings(patch: Partial<import('./config.js').Settings>, mergeSettings: typeof import('./config.js').mergeSettings) {
     const next = mergeSettings(this.settings, patch);
-    if (this.busy.size) throw new Error('Cannot change settings during an active run');
+    if (this.busy.size || this.openingSessions.size)
+      throw new Error('Cannot change settings while a conversation is active or opening');
     for (const session of this.openSessions.values()) session.dispose();
     this.openSessions.clear();
     await this.plugins.close();
@@ -177,6 +203,7 @@ export class MiniHarnessRuntime {
   }
 
   async stop() {
+    await Promise.allSettled(this.openingSessions.values());
     for (const session of this.openSessions.values()) session.dispose();
     this.openSessions.clear();
     await this.plugins.close();

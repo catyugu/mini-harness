@@ -149,7 +149,7 @@ async function send(message: string) {
       const event = JSON.parse(line);
       if (event.type === 'delta') { answer.textContent += event.text; $('messages').scrollTop = $('messages').scrollHeight; }
       else if (event.type === 'complete') answer.textContent = event.text;
-      else if (event.type === 'error') { status(event.error); answer.textContent += '\n' + event.error; }
+      else if (event.type === 'error') { failed = true; status(event.error); answer.textContent += '\n' + event.error; }
       else if (event.type === 'tool') status('Using ' + event.name + '…');
     };
     for (;;) {

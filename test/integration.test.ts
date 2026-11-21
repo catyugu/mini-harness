@@ -60,6 +60,8 @@ test('real Pi SDK through HTTP: streaming, persistence, Skills, export and perma
     { message: '/skill:verification' });
   assert.equal(skillRequest.status, 200);
   assert.equal((await skillRequest.text()).includes('"type":"error"'), false);
+  assert.ok(JSON.stringify(mock.requests.at(-1)).includes('Mention the verification skill'),
+    'Pi did not expand the native SKILL.md instructions');
 
   await app.close();
   open = false;
@@ -104,4 +106,22 @@ test('subagent tool is mounted in parent only, with an explicit concurrency limi
   assert.ok(parent.getActiveToolNames().includes('delegate'));
   assert.ok(!worker.getActiveToolNames().includes('delegate'));
   assert.equal(app.runtime.plugins.semaphore.limit, 2);
+});
+
+test('concurrent opening of one conversation shares a single Pi AgentSession', { timeout: 30000 }, async (t) => {
+  const mock = await createMockProvider();
+  t.after(() => mock.close());
+  const { root, paths } = createFixturePaths(mock.url);
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const app = await createMiniHarnessServer(paths);
+  t.after(() => app.close());
+  const item = app.runtime.registry.create();
+  const [first, second, third] = await Promise.all([
+    app.runtime.open(item.id),
+    app.runtime.open(item.id),
+    app.runtime.getConversation(item.id)
+  ]);
+  assert.strictEqual(first, second);
+  assert.equal(third.id, item.id);
+  assert.equal(app.runtime.openSessions.size, 1);
 });

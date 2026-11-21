@@ -43,16 +43,8 @@ export class PluginHost {
         provider: Type.Optional(Type.String()),
         model: Type.Optional(Type.String())
       }),
-      execute: async (_id, args, signal) => {
-        const result = await this.semaphore.run(async () => {
-          const parent = this.runtime.currentTaskParent;
-          if (!parent) throw new Error('No parent conversation');
-          requireChildDepth(parent.depth);
-          const chosen = selectChildModel(args, this.runtime.settings.subagents, parent.model);
-          return this.runtime.runChild(parent.id, args.task, chosen, signal);
-        }, signal);
-        return { content: [{ type: 'text', text: result.text }], details: { sessionId: result.id } };
-      }
+      // getTools() binds a separate executor to each parent conversation.
+      execute: async () => { throw new Error('Delegation requires an owning conversation'); }
     }));
     register('shell', () => this.registerTool('sandbox_shell', {
       name: 'sandbox_shell',
