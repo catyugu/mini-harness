@@ -8,6 +8,7 @@ import type { AddressInfo } from 'node:net';
 import type { getPaths } from './config.js';
 import { supportsIsolation } from './sandbox.js';
 import { MiniHarnessRuntime } from './agent.js';
+import { isRunning } from './protocol.js';
 
 declare module 'cordis' {
   interface Context {
@@ -57,6 +58,27 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
   await runtime.start();
   const isolation = supportsIsolation();
   const token = options.token ?? randomBytes(32).toString('hex');
+  const streamRun = (req: IncomingMessage, res: ServerResponse, id: string, runId: string, after: number) => {
+    let detach = () => {};
+    const heartbeat = setInterval(() => { if (!res.destroyed) res.write('\n'); }, 15000);
+    heartbeat.unref();
+    const cleanup = () => { clearInterval(heartbeat); detach(); };
+    res.once('close', cleanup);
+    try {
+      detach = runtime.watchRun(id, runId, after, (event) => {
+        if (!res.headersSent) res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
+        if (res.destroyed || res.writableEnded) return;
+        // Slow or disconnected observers can reconnect from their cursor.
+        if (res.writableLength > 1024 * 1024) { res.destroy(); return; }
+        res.write(JSON.stringify(event) + '\n');
+        if ((event.type === 'run' || event.type === 'snapshot') && !isRunning(event.run)) res.end();
+      });
+      if (!res.headersSent) {
+        res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.flushHeaders();
+      }
+    } catch (error) { cleanup(); throw error; }
+  };
   const route = async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url || '/', 'http://localhost');
     const pathname = url.pathname;
@@ -84,28 +106,29 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
         return json(res, 202, { pid: process.pid });
       }
       if (pathname === '/api/bootstrap' && req.method === 'GET')
-        return json(res, 200, { settings: runtime.settings, sessions: runtime.registry.list(), models: runtime.availableModels(), plugins: runtime.plugins.metadata(), workspace: paths.cwd, isolation });
-      if (pathname === '/api/sessions' && req.method === 'GET') return json(res, 200, runtime.registry.list());
+        return json(res, 200, { settings: runtime.settings, sessions: runtime.registry.list().map((item) => ({ ...item, run: runtime.runInfo(item.id) })), models: runtime.availableModels(), plugins: runtime.plugins.metadata(), workspace: paths.cwd, isolation });
+      if (pathname === '/api/sessions' && req.method === 'GET') return json(res, 200, runtime.registry.list().map((item) => ({ ...item, run: runtime.runInfo(item.id) })));
       if (pathname === '/api/sessions' && req.method === 'POST') return json(res, 201, runtime.registry.create());
-      const match = /^\/api\/sessions\/([a-f0-9-]{36})(?:\/(messages|cancel))?$/.exec(pathname);
+      const match = /^\/api\/sessions\/([a-f0-9-]{36})(?:\/(messages|cancel|runs|events))?$/.exec(pathname);
       if (match) {
         const id = match[1];
         if (!runtime.registry.get(id)) return json(res, 404, { error: 'Conversation not found' });
         if (!match[2] && req.method === 'GET') return json(res, 200, await runtime.getConversation(id));
         if (match[2] === 'cancel' && req.method === 'POST') return json(res, 200, { cancelled: runtime.cancel(id) });
+        if (match[2] === 'runs' && req.method === 'GET') return json(res, 200, { run: runtime.runInfo(id) ?? null });
+        if (match[2] === 'runs' && req.method === 'POST') {
+          const input = await requestBody(req);
+          return json(res, 202, runtime.startRun(id, input.message, input.model));
+        }
+        if (match[2] === 'events' && req.method === 'GET') {
+          await runtime.open(id);
+          streamRun(req, res, id, url.searchParams.get('run'), Number(url.searchParams.get('after') ?? 0));
+          return;
+        }
         if (match[2] === 'messages' && req.method === 'POST') {
           const input = await requestBody(req);
-          res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
-          const controller = new AbortController();
-          res.once('close', () => {
-            if (!res.writableEnded) controller.abort();
-          });
-          const emit = (event: unknown) => {
-            if (!res.destroyed && !res.writableEnded) res.write(JSON.stringify(event) + '\n');
-          };
-          try { await runtime.send(id, input.message, emit, { signal: controller.signal }); }
-          catch (error) { emit({ type: 'error', error: error instanceof Error ? error.message : String(error) }); }
-          if (!res.destroyed) res.end();
+          const run = runtime.startRun(id, input.message, input.model);
+          streamRun(req, res, id, run.id, 0);
           return;
         }
       }
