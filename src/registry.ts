@@ -1,38 +1,45 @@
+export interface Conversation {
+  id: string; title: string; cwd: string; parentId: string|null; file: string|null;
+  createdAt: string; updatedAt: string;
+}
 import { randomUUID } from 'node:crypto';
 import { existsSync, unlinkSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
 import { readJson, writeJson } from './config.js';
 
 export class SessionRegistry {
-  constructor(paths) {
+  paths: ReturnType<typeof import('./config.js').getPaths>;
+  sessions: Conversation[];
+  constructor(paths: ReturnType<typeof import('./config.js').getPaths>) {
     this.paths = paths;
     const data = readJson(paths.registry, { sessions: [] });
     this.sessions = Array.isArray(data.sessions) ? data.sessions : [];
   }
 
   list() { return this.sessions.map((session) => ({ ...session })).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)); }
-  get(id) { return this.sessions.find((entry) => entry.id === id); }
+  get(id: string): Conversation | undefined { return this.sessions.find((entry) => entry.id === id); }
   persist() { writeJson(this.paths.registry, { sessions: this.sessions }); }
 
-  create({ parentId = null, title = 'New conversation', cwd = this.paths.cwd } = {}) {
+  create({ parentId = null, title = 'New conversation', cwd = this.paths.cwd }: {parentId?:string|null; title?:string; cwd?:string} = {}): Conversation {
     if (parentId && !this.get(parentId)) throw new Error('Parent conversation not found');
     const now = new Date().toISOString();
-    const session = { id: randomUUID(), title: String(title).slice(0, 140), cwd, parentId, file: null, createdAt: now, updatedAt: now };
+    const session: Conversation = { id: randomUUID(), title: String(title).slice(0, 140), cwd, parentId, file: null, createdAt: now, updatedAt: now };
     this.sessions.push(session);
     this.persist();
     return { ...session };
   }
 
-  update(id, patch) {
+  update(id: string, patch: Partial<Pick<Conversation,'title'|'file'>>) {
     const item = this.get(id);
     if (!item) throw new Error('Conversation not found');
-    for (const key of ['title', 'file']) if (key in patch) item[key] = patch[key];
+    if (patch.title !== undefined) item.title = patch.title;
+    if (patch.file !== undefined) item.file = patch.file;
     item.updatedAt = new Date().toISOString();
     this.persist();
     return { ...item };
   }
 
-  descendants(ids) {
+  descendants(ids: string[]) {
     const selected = new Set(ids);
     let changed;
     do {
@@ -47,7 +54,7 @@ export class SessionRegistry {
     return [...selected];
   }
 
-  delete(ids) {
+  delete(ids: string[]) {
     if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string' || !this.get(id))) throw new Error('Unknown conversation');
     const all = this.descendants(ids);
     const chosen = new Set(all);

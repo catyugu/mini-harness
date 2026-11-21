@@ -22,8 +22,8 @@ Access: localhost only; bearer token required for all API endpoints.
 `);
 }
 
-function parse(argv) {
-  const args = { detached: false, serve: false, cwd: process.cwd() };
+function parse(argv: string[]) {
+  const args: {help?:boolean;detached:boolean;serve:boolean;cwd:string;port?:number} = { detached: false, serve: false, cwd: process.cwd() };
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i];
     if (flag === '--help' || flag === '-h') args.help = true;
@@ -39,7 +39,7 @@ function parse(argv) {
   return args;
 }
 
-const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
+const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
 
 async function main() {
   const args = parse(process.argv.slice(2));

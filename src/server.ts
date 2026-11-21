@@ -3,6 +3,8 @@ import { createReadStream, readFileSync, statSync } from 'node:fs';
 import { dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { getPaths } from './config.js';
 import { mergeSettings, writeJson, readJson } from './config.js';
 import { MinihRuntime } from './agent.js';
 
@@ -10,7 +12,7 @@ const WEB_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'web');
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png' };
 
-export function authorize(request, token) {
+export function authorize(request: IncomingMessage, token: string) {
   const auth = request.headers.authorization;
   if (!auth?.startsWith('Bearer ')) return false;
   const expected = Buffer.from(token);
@@ -18,7 +20,7 @@ export function authorize(request, token) {
   return supplied.length === expected.length && timingSafeEqual(supplied, expected);
 }
 
-export function requestBody(req, max = 1024 * 1024) {
+export function requestBody(req: IncomingMessage, max: number = 1024 * 1024): Promise<any> {
   return new Promise((resolve, reject) => {
     const chunks = [];
     let size = 0;
@@ -35,16 +37,16 @@ export function requestBody(req, max = 1024 * 1024) {
   });
 }
 
-export function json(res, code, data) {
+export function json(res: ServerResponse, code: number, data: unknown) {
   res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
   res.end(JSON.stringify(data));
 }
 
-export async function createMinihServer(paths, options = {}) {
+export async function createMinihServer(paths: ReturnType<typeof getPaths>, options: {token?:string} = {}) {
   const runtime = new MinihRuntime(paths);
   await runtime.start();
   const token = options.token ?? randomBytes(32).toString('hex');
-  const route = async (req, res) => {
+  const route = async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url || '/', 'http://localhost');
     const pathname = url.pathname;
     try {
@@ -54,7 +56,7 @@ export async function createMinihServer(paths, options = {}) {
         if (!/^(index\.html|app\.js|style\.css|logo\.svg)$/.test(requested)) return json(res, 404, { error: 'Not found' });
         const path = join(WEB_DIR, requested);
         const size = statSync(path).size;
-        res.writeHead(200, { 'Content-Type': MIME[extname(path)] || 'application/octet-stream',
+        res.writeHead(200, { 'Content-Type': MIME[extname(path) as keyof typeof MIME] || 'application/octet-stream',
           'Content-Length': size, 'X-Content-Type-Options': 'nosniff',
           'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'",
           'Referrer-Policy': 'no-referrer' });
@@ -76,7 +78,7 @@ export async function createMinihServer(paths, options = {}) {
         if (match[2] === 'messages' && req.method === 'POST') {
           const input = await requestBody(req);
           res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
-          const emit = (event) => { if (!res.destroyed) res.write(JSON.stringify(event) + '\n'); };
+          const emit = (event: unknown) => { if (!res.destroyed) res.write(JSON.stringify(event) + '\n'); };
           try { await runtime.send(id, input.message, emit); }
           catch (error) { emit({ type: 'error', error: error.message }); }
           return res.end();

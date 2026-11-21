@@ -1,3 +1,11 @@
+export interface Settings {
+  port: number;
+  model: {provider: string; id: string};
+  plugins: Record<string, boolean>;
+  subagents: {maxParallel: number; provider: string; model: string};
+  sandbox: {mode: 'isolated'|'host'; timeoutSeconds: number};
+  appearance: 'system'|'light'|'dark';
+}
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -12,7 +20,7 @@ export const DEFAULTS = Object.freeze({
   appearance: 'system'
 });
 
-export function getPaths(cwd = process.cwd(), env = process.env) {
+export function getPaths(cwd: string = process.cwd(), env: NodeJS.ProcessEnv = process.env) {
   const project = resolve(cwd);
   const home = resolve(env.MINIH_HOME || join(homedir(), '.minih'));
   const key = createHash('sha256').update(process.platform === 'win32' ? project.toLowerCase() : project).digest('hex').slice(0, 16);
@@ -25,25 +33,25 @@ export function getPaths(cwd = process.cwd(), env = process.env) {
   };
 }
 
-export function ensurePaths(paths) {
+export function ensurePaths(paths: ReturnType<typeof getPaths>) {
   for (const path of [paths.home, paths.agent, paths.sessions, paths.skills, paths.plugins]) {
     mkdirSync(path, { recursive: true, mode: 0o700 });
   }
 }
 
-export function readJson(file, fallback) {
+export function readJson<T>(file: string, fallback: T): T {
   if (!existsSync(file)) return structuredClone(fallback);
   return JSON.parse(readFileSync(file, 'utf8'));
 }
 
-export function writeJson(file, value) {
+export function writeJson(file: string, value: unknown) {
   mkdirSync(resolve(file, '..'), { recursive: true, mode: 0o700 });
   const temp = file + '.' + process.pid + '.tmp';
   writeFileSync(temp, JSON.stringify(value, null, 2) + '\n', { mode: 0o600 });
   renameSync(temp, file);
 }
 
-export function validateSettings(input) {
+export function validateSettings(input: any) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Invalid settings object');
   const p = input.plugins || {};
   const s = input.subagents || {};
@@ -64,7 +72,7 @@ export function validateSettings(input) {
   return true;
 }
 
-export function readSettings(paths) {
+export function readSettings(paths: ReturnType<typeof getPaths>): Settings {
   const input = readJson(paths.settings, {});
   const settings = {
     port: input.port ?? DEFAULTS.port,
@@ -75,19 +83,19 @@ export function readSettings(paths) {
     appearance: input.appearance ?? DEFAULTS.appearance
   };
   validateSettings(settings);
-  return settings;
+  return settings as Settings;
 }
 
-export function mergeSettings(current, patch) {
+export function mergeSettings(current: Settings, patch: Partial<Settings>): Settings {
   if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw new Error('Invalid settings patch');
   const allowed = Object.keys(DEFAULTS);
   if (Object.keys(patch).some((key) => !allowed.includes(key))) throw new Error('Unknown settings field');
   for (const group of ['model', 'plugins', 'subagents', 'sandbox']) {
     if (group in patch && (!patch[group] || typeof patch[group] !== 'object' || Array.isArray(patch[group]))) throw new Error('Invalid settings section');
   }
-  const next = { ...current, ...patch };
+  const next: Settings = { ...current, ...patch };
   for (const group of ['model', 'plugins', 'subagents', 'sandbox']) {
-    next[group] = { ...current[group], ...(patch[group] || {}) };
+    (next as any)[group] = { ...current[group], ...(patch[group] || {}) };
   }
   validateSettings(next);
   return next;

@@ -17,7 +17,7 @@ minih --detached
 
 Open the URL shown in the terminal. The URL includes a one-time bearer access token in the fragment; the browser retains it for that tab's session. The service binds only to `127.0.0.1`, and all API requests require the token. For remote use, prefer SSH port forwarding; public binding is intentionally unavailable.
 
-Development checkout: `npm install && npm start`. Run `npm test` for dependency-free foundation tests, `npm run check` for syntax and tests, and `npm run pack:check` to inspect the release contents.
+Development checkout: `npm install && npm start`. All application code, the browser client, and tests are written in **TypeScript**. The `npm run build` pipeline compiles them into `dist/` and copies static assets. Run `npm run typecheck`, `npm test`, and `npm run pack:check` to validate the distribution.
 
 ## Product choices
 
@@ -44,15 +44,16 @@ The detached process creates `~/.minih/server.json` containing its PID, URL and 
 ## Source layout
 
 ```text
-bin/minih.js        CLI / detached bootstrap
-src/config.js       storage paths and validated settings
-src/agent.js        Pi SDK sessions and runtime
-src/plugins.js      Cordis plugin composition and optional tools
-src/subagents.js    concurrency control and model selection
-src/sandbox.js      explicit shell execution policy
-src/registry.js     conversation index and permanent deletion
-src/server.js       localhost-only HTTP / streaming API
-web/                responsive client and branding
+bin/minih.ts        CLI / detached bootstrap
+src/config.ts       storage paths and validated settings
+src/agent.ts        Pi SDK sessions and runtime
+src/plugins.ts      Cordis plugin composition and optional tools
+src/subagents.ts    concurrency control and model selection
+src/sandbox.ts      explicit shell execution policy
+src/registry.ts     conversation index and permanent deletion
+src/server.ts       localhost-only HTTP / streaming API
+web/app.ts          responsive TypeScript client
+web/                static HTML, CSS and branding
 test/               foundation regression tests
 ```
 

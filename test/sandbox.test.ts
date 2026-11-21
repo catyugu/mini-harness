@@ -16,5 +16,5 @@ test('isolation never silently selects a host shell', () => {
   assert.ok(command.args.includes('--bind'));
   assert.equal(command.args[command.args.length - 1], 'pwd');
   assert.throws(() => sandboxCommand('', '/tmp', 'host'), /Invalid command/);
-  assert.throws(() => sandboxCommand('ls', '/tmp', 'invented'), /Unknown/);
+  assert.throws(() => sandboxCommand('ls', '/tmp', 'invented' as any), /Unknown/);
 });

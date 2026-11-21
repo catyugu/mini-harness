@@ -13,7 +13,12 @@ export const BUILTINS = Object.freeze([
 ]);
 
 export class PluginHost {
-  constructor(runtime) {
+  runtime: any;
+  ctx: Context;
+  fibers: any[];
+  tools: Map<string, any>;
+  semaphore: Semaphore;
+  constructor(runtime: any) {
     this.runtime = runtime;
     this.ctx = new Context();
     this.fibers = [];
@@ -23,9 +28,9 @@ export class PluginHost {
 
   // Cordis owns each optional feature's registration and cleanup.
   async activate() {
-    const register = (id, setup) => {
+    const register = (id: string, setup: () => () => void) => {
       if (!this.runtime.settings.plugins[id]) return;
-      this.fibers.push(this.ctx.plugin((ctx) => {
+      this.fibers.push(this.ctx.plugin((ctx: Context) => {
         ctx.effect(() => setup());
       }));
     };
@@ -71,20 +76,20 @@ export class PluginHost {
       const mod = await import(pathToFileURL(source).href);
       const load = mod.default ?? mod.apply;
       if (typeof load !== 'function') throw new Error('Invalid plugin: ' + entry.name);
-      this.fibers.push(this.ctx.plugin((ctx) => load(ctx, {
-        registerTool: (tool) => ctx.effect(() => this.registerTool(entry.name + ':' + tool.name, tool))
+      this.fibers.push(this.ctx.plugin((ctx: Context) => load(ctx, {
+        registerTool: (tool: any) => ctx.effect(() => this.registerTool(entry.name + ':' + tool.name, tool))
       })));
     }
     await Promise.all(this.fibers.map((fiber) => fiber.inertia).filter(Boolean));
   }
 
-  registerTool(id, tool) {
+  registerTool(id: string, tool: any) {
     if (this.tools.has(id)) throw new Error('Duplicate tool: ' + id);
     this.tools.set(id, tool);
     return () => this.tools.delete(id);
   }
 
-  getTools({ child = false, id } = {}) {
+  getTools({ child = false, id }: {child?:boolean; id?:string} = {}) {
     return [...this.tools.values()].filter((tool) => !child || tool.name !== 'delegate').map((tool) => {
       if (tool.name !== 'delegate') return tool;
       // Bind delegation to its owning session, never to global mutable request state.

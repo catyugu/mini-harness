@@ -1,12 +1,12 @@
 import { spawn, spawnSync } from 'node:child_process';
 
-export function supportsIsolation(platform = process.platform, probe = spawnSync) {
+export function supportsIsolation(platform: NodeJS.Platform = process.platform, probe: typeof spawnSync = spawnSync) {
   if (platform !== 'linux') return false;
   try { return probe('bwrap', ['--version'], { stdio: 'ignore', timeout: 1500 }).status === 0; }
   catch { return false; }
 }
 
-export function sandboxCommand(command, cwd, mode, platform = process.platform) {
+export function sandboxCommand(command: string, cwd: string, mode: 'isolated'|'host', platform: NodeJS.Platform = process.platform) {
   if (typeof command !== 'string' || !command.trim() || command.length > 16000) throw new Error('Invalid command');
   if (mode === 'isolated') {
     if (platform !== 'linux') throw new Error('Isolated shell requires Linux and bubblewrap; host execution needs explicit opt-in');
@@ -26,7 +26,7 @@ export function sandboxCommand(command, cwd, mode, platform = process.platform) 
     : { file: '/bin/sh', args: ['-lc', command] };
 }
 
-export async function runShell(command, cwd, { mode = 'isolated', timeoutSeconds = 60, signal } = {}) {
+export async function runShell(command: string, cwd: string, { mode = 'isolated', timeoutSeconds = 60, signal }: {mode?:'isolated'|'host'; timeoutSeconds?:number; signal?:AbortSignal} = {}) {
   if (mode === 'isolated' && !supportsIsolation()) throw new Error('Isolation unavailable: install bubblewrap on Linux or opt into trusted host execution');
   const { file, args } = sandboxCommand(command, cwd, mode);
   return await new Promise((resolve, reject) => {
@@ -39,7 +39,7 @@ export async function runShell(command, cwd, { mode = 'isolated', timeoutSeconds
     const timer = setTimeout(terminate, timeoutSeconds * 1000);
     const abort = () => terminate();
     signal?.addEventListener('abort', abort, { once: true });
-    const append = (key, chunk) => {
+    const append = (key: 'out'|'err', chunk: Buffer) => {
       const value = chunk.toString('utf8');
       if (key === 'out') stdout += value;
       else stderr += value;

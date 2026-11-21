@@ -1,13 +1,16 @@
-const $ = (id) => document.getElementById(id);
+export {};
+const $ = (id: string): any => document.getElementById(id);
 const tokenFromUrl = new URLSearchParams(location.hash.slice(1)).get('token');
 if (tokenFromUrl) {
   sessionStorage.setItem('minih-token', tokenFromUrl);
   history.replaceState(null, '', location.pathname + location.search);
 }
 const token = sessionStorage.getItem('minih-token');
-let state = { sessions: [], models: [], settings: null, active: null, selection: new Set(), selecting: false, expanded: new Set(), sending: false };
+interface Conversation { id:string; title:string; parentId:string|null }
+interface ModelInfo {provider:string;id:string;name:string}
+let state: {sessions:Conversation[];models:ModelInfo[];settings:any;active:string|null;selection:Set<string>;selecting:boolean;expanded:Set<string>;sending:boolean} = { sessions: [], models: [], settings: null, active: null, selection: new Set<string>(), selecting: false, expanded: new Set<string>(), sending: false };
 
-async function api(path, options = {}) {
+async function api(path: string, options: RequestInit = {}): Promise<Response> {
   if (!token) throw new Error('No access token. Open minih using the URL printed by the CLI.');
   const headers = { Authorization: 'Bearer ' + token, ...(options.body ? { 'Content-Type': 'application/json' } : {}) };
   const response = await fetch('/api' + path, { ...options, headers });
@@ -18,12 +21,12 @@ async function api(path, options = {}) {
   }
   return response;
 }
-async function data(path, options) { return (await api(path, options)).json(); }
-const post = (path, payload) => data(path, { method: 'POST', body: JSON.stringify(payload) });
-function status(text) { $('status').textContent = text || ''; }
-function sidebar(open) { $('sidebar').classList.toggle('open', open); $('overlay').classList.toggle('hidden', !open); }
-function settings(open) { $('settingsPanel').classList.toggle('hidden', !open); if (open) fillSettings(); }
-function appearance(value) { document.documentElement.dataset.theme = value; $('app').dataset.theme = value; }
+async function data(path: string, options?: RequestInit) { return (await api(path, options)).json(); }
+const post = (path: string, payload: unknown) => data(path, { method: 'POST', body: JSON.stringify(payload) });
+function status(text: string) { $('status').textContent = text || ''; }
+function sidebar(open: boolean) { $('sidebar').classList.toggle('open', open); $('overlay').classList.toggle('hidden', !open); }
+function settings(open: boolean) { $('settingsPanel').classList.toggle('hidden', !open); if (open) fillSettings(); }
+function appearance(value: string) { document.documentElement.dataset.theme = value; $('app').dataset.theme = value; }
 
 async function refresh() {
   const result = await data('/bootstrap');
@@ -43,7 +46,7 @@ function renderSessions() {
   const box = $('sessions');
   box.replaceChildren();
   const roots = state.sessions.filter((s) => !s.parentId);
-  const add = (item, depth = 0) => {
+  const add = (item: Conversation, depth = 0) => {
     const row = document.createElement('div');
     row.className = 'session-row' + (depth ? ' child' : '') + (state.active === item.id ? ' active' : '');
     row.tabIndex = 0;
@@ -89,7 +92,7 @@ function updateSelection() {
   $('deleteSessions').disabled = state.selection.size === 0;
 }
 
-function addMessage(role, content) {
+function addMessage(role: string, content: any) {
   const el = document.createElement('article');
   el.className = 'message ' + role;
   el.textContent = typeof content === 'string' ? content : Array.isArray(content)
@@ -100,7 +103,7 @@ function addMessage(role, content) {
   return el;
 }
 
-async function activate(id) {
+async function activate(id: string) {
   if (state.sending) return;
   state.active = id;
   const result = await data('/sessions/' + id);
@@ -125,7 +128,7 @@ async function newSession() {
   $('prompt').focus();
 }
 
-async function send(message) {
+async function send(message: string) {
   if (state.sending || !message.trim()) return;
   if (!state.active) await newSession();
   state.sending = true;
@@ -141,7 +144,7 @@ async function send(message) {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
-    const processLine = (line) => {
+    const processLine = (line: string) => {
       if (!line) return;
       const event = JSON.parse(line);
       if (event.type === 'delta') { answer.textContent += event.text; $('messages').scrollTop = $('messages').scrollHeight; }
@@ -243,14 +246,14 @@ $('modelSelect').onchange = () => {
     .then((settings) => { state.settings = settings; })
     .catch((error) => status(error.message));
 };
-$('composer').onsubmit = (event) => {
+$('composer').onsubmit = (event: Event) => {
   event.preventDefault();
   const message = $('prompt').value;
   $('prompt').value = '';
   $('prompt').style.height = '';
   void send(message);
 };
-$('prompt').onkeydown = (event) => {
+$('prompt').onkeydown = (event: KeyboardEvent) => {
   if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
     event.preventDefault(); $('composer').requestSubmit();
   }

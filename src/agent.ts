@@ -8,7 +8,14 @@ import { SessionRegistry } from './registry.js';
 import { readSettings, writeJson } from './config.js';
 
 export class MinihRuntime {
-  constructor(paths) {
+  paths: ReturnType<typeof import('./config.js').getPaths>;
+  settings: import('./config.js').Settings;
+  registry: SessionRegistry;
+  openSessions: Map<string, any>;
+  busy: Set<string>;
+  plugins: PluginHost;
+  models!: ModelRuntime;
+  constructor(paths: ReturnType<typeof import('./config.js').getPaths>) {
     this.paths = paths;
     this.settings = readSettings(paths);
     this.registry = new SessionRegistry(paths);
@@ -26,7 +33,7 @@ export class MinihRuntime {
     await this.plugins.activate();
   }
 
-  modelInfo(model) {
+  modelInfo(model: any) {
     return { provider: model?.provider ?? '', id: model?.id ?? '' };
   }
 
@@ -37,7 +44,7 @@ export class MinihRuntime {
     }));
   }
 
-  resolveModel(choice = this.settings.model) {
+  resolveModel(choice: {provider:string;id:string} = this.settings.model) {
     if (choice?.provider && choice?.id) {
       const model = this.models.getModel(choice.provider, choice.id);
       if (!model) throw new Error('Unknown model: ' + choice.provider + '/' + choice.id);
@@ -46,7 +53,7 @@ export class MinihRuntime {
     return undefined;
   }
 
-  async open(id, { child = false, modelChoice } = {}) {
+  async open(id: string, { child = false, modelChoice }: {child?:boolean;modelChoice?:{provider:string;id:string}} = {}) {
     if (this.openSessions.has(id)) return this.openSessions.get(id);
     const item = this.registry.get(id);
     if (!item) throw new Error('Conversation not found');
@@ -79,7 +86,7 @@ export class MinihRuntime {
     return session;
   }
 
-  sessionMessages(id) {
+  sessionMessages(id: string) {
     const session = this.openSessions.get(id);
     if (!session) return [];
     return session.messages.map((m) => ({
@@ -89,14 +96,14 @@ export class MinihRuntime {
     }));
   }
 
-  async getConversation(id) {
+  async getConversation(id: string) {
     const item = this.registry.get(id);
     if (!item) throw new Error('Conversation not found');
     const session = await this.open(id, { child: Boolean(item.parentId) });
     return { ...item, messages: this.sessionMessages(id), model: this.modelInfo(session.model), busy: this.busy.has(id) };
   }
 
-  async send(id, prompt, emit = () => {}, { signal, child = false, choice } = {}) {
+  async send(id: string, prompt: string, emit: (event:any) => void = () => {}, { signal, child = false, choice }: {signal?:AbortSignal;child?:boolean;choice?:{provider:string;id:string}} = {}) {
     if (this.busy.has(id)) throw new Error('Conversation is already running');
     if (typeof prompt !== 'string' || !prompt.trim() || prompt.length > 200000) throw new Error('Invalid message');
     this.busy.add(id);
@@ -131,7 +138,7 @@ export class MinihRuntime {
     }
   }
 
-  async runChild(parentId, task, chosen, signal) {
+  async runChild(parentId: string, task: string, chosen: {provider:string;id:string}, signal?:AbortSignal) {
     const parent = this.registry.get(parentId);
     const record = this.registry.create({
       parentId, cwd: parent.cwd,
@@ -146,7 +153,7 @@ export class MinihRuntime {
     }
   }
 
-  async delete(ids) {
+  async delete(ids: string[]) {
     const all = this.registry.descendants(ids);
     if (all.some((id) => this.busy.has(id))) throw new Error('Stop active conversations before deleting them');
     for (const id of all) {
@@ -156,7 +163,7 @@ export class MinihRuntime {
     return this.registry.delete(ids);
   }
 
-  async updateSettings(patch, mergeSettings) {
+  async updateSettings(patch: Partial<import('./config.js').Settings>, mergeSettings: typeof import('./config.js').mergeSettings) {
     const next = mergeSettings(this.settings, patch);
     if (this.busy.size) throw new Error('Cannot change settings during an active run');
     for (const session of this.openSessions.values()) session.dispose();
