@@ -57,3 +57,5 @@ npm run pack:check
 CI covers native Windows/Linux and Node.js 22/24, Chromium desktop/tablet/mobile flows, and a clean tarball installation with the real Pi SDK against a local mock provider. No live provider credentials are needed for tests.
 
 MIT. See [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+Deleting a workspace from the sidebar permanently deletes its conversations and subagent histories, but never deletes the workspace's project directory or files.

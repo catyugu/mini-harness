@@ -10,6 +10,7 @@ type SessionRouteHost = NavigationHost & {
   pi: Pick<PiSessions, 'open' | 'queue' | 'queueInput'>;
   runs: Pick<Runs, 'watch' | 'compact' | 'cancel' | 'info' | 'startRun'>;
   getConversation(id: string): Promise<unknown>;
+  createConversation(input: { workspaceId?: string }): ReturnType<SessionRegistry['create']>;
   delete(ids: string[]): Promise<string[]>;
   export(ids: string[]): ReturnType<SessionRegistry['export']>;
 };
@@ -31,7 +32,7 @@ export async function sessionRoutes(runtime: SessionRouteHost, req: IncomingMess
   if (pathname === '/api/sessions' && req.method === 'POST') {
     const input = await requestBody(req);
     if (input?.workspaceId !== undefined && typeof input.workspaceId !== 'string') throw new Error('Invalid workspace ID');
-    return json(res, 201, runtime.registry.create({ workspaceId: input?.workspaceId }));
+    return json(res, 201, runtime.createConversation({ workspaceId: input?.workspaceId }));
   }
   const match = /^\/api\/sessions\/([a-f0-9-]{36})(?:\/(cancel|runs|events|queue|compact))?$/.exec(pathname);
   if (match) {

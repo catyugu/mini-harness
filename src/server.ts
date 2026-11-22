@@ -106,12 +106,11 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
         if (!resource && req.method === 'PATCH')
           return json(res, 200, catalog.rename(id, (await requestBody(req))?.name));
         if (!resource && req.method === 'DELETE') {
-          catalog.remove(id);
-          return json(res, 200, { removed: id });
+          return json(res, 200, await runtime.deleteWorkspace(id));
         }
         if (resource === 'sessions') {
           if (req.method === 'GET') return json(res, 200, runtime.registry.list(id).map((item) => navigationSession(runtime, item.id)));
-          if (req.method === 'POST') return json(res, 201, runtime.registry.create({ workspaceId: id }));
+          if (req.method === 'POST') return json(res, 201, runtime.createConversation({ workspaceId: id }));
         } else if (resource && !configuring && req.method === 'GET') {
           const sessionId = url.searchParams.get('sessionId');
           if (sessionId && runtime.registry.get(sessionId)?.workspaceId !== id)

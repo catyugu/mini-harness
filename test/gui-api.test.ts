@@ -146,14 +146,16 @@ test('workspace registration, session navigation and scoped tools leave an activ
       assert.equal((await request('/sessions/' + session.id + '/runs')).body.run.state, 'running');
       assert.equal((await request(second, 'PATCH', { name: 'Second project' })).body.name, 'Second project');
       assert.deepEqual((await request('/workspaces', 'PUT', { ids: [workspace.id, session.workspaceId] })).body.map(({ id }) => id), [workspace.id, session.workspaceId]);
-      assert.equal((await request(first, 'DELETE')).status, 200);
-      assert.equal((await request(first + '/files/tree')).status, 404);
-      assert.ok(existsSync(paths.cwd));
-      assert.equal((await request('/sessions/' + session.id + '/runs')).body.run.state, 'running');
       release();
       assert.equal((await finish(session.id)).body.run.state, 'completed');
+      const removal = await request(first, 'DELETE');
+      assert.equal(removal.status, 200);
+      assert.ok(removal.body.deleted.includes(session.id));
+      assert.equal((await request(first + '/files/tree')).status, 404);
+      assert.equal((await request('/sessions/' + session.id)).status, 404);
+      assert.ok(existsSync(paths.cwd), 'Delete never removes user workspace files');
       assert.equal((await request('/workspaces', 'POST', { path: cwd })).body.id, session.workspaceId);
-      assert.equal((await request(first + '/sessions')).body[0].id, session.id);
+      assert.deepEqual((await request(first + '/sessions')).body, []);
     } finally { await events.cancel(); }
   } finally { release(); }
 });

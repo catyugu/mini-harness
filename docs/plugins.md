@@ -142,7 +142,7 @@ Register a right-panel tab with `api.rightTab(type, { title, create })`. Both ca
 
 ## GUI API additions
 
-The server runs one Runtime for all registered workspaces. Each conversation has a stable Workspace ID. A request can address a conversation by ID or scope file and Skills requests to a registered Workspace ID.
+The server runs one Runtime for all registered workspaces. Each conversation has a stable Workspace ID. A request can address a conversation by ID or scope file and Skills requests to a registered Workspace ID. Deleting a Workspace permanently deletes all associated conversations and Pi session files, including subagent descendants; it leaves the project directory and its files untouched.
 
 | Request | Result |
 | - | - |

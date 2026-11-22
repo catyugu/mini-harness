@@ -18,6 +18,7 @@ export class MiniHarnessRuntime {
   readonly delegation: Delegation;
   private configuring?: Promise<void>;
   private readonly deleting = new Set<string>();
+  private readonly deletingWorkspaces = new Set<string>();
   private stopping = false;
 
   constructor(readonly paths: Paths) {
@@ -53,6 +54,8 @@ export class MiniHarnessRuntime {
   private assertAvailable(id?: string) {
     if (this.configuring || this.stopping) throw new Error('Agent service is unavailable during reconfiguration or shutdown');
     if (id && this.deleting.has(id)) throw new Error('Conversation is being deleted');
+    if (id && this.deletingWorkspaces.has(this.registry.get(id)?.workspaceId ?? ''))
+      throw new Error('Workspace is being deleted');
   }
 
   private rememberModel(model: ModelChoice) {
@@ -60,6 +63,26 @@ export class MiniHarnessRuntime {
     const next = mergeSettings(this.settings, { model });
     writeJson(this.paths.settings, next);
     this.settings = next;
+  }
+
+  createConversation(input: { workspaceId?: string } = {}) {
+    this.assertAvailable();
+    const workspaceId = input.workspaceId ?? this.registry.workspaces.defaultId;
+    if (!workspaceId || this.deletingWorkspaces.has(workspaceId)) throw new Error('Workspace is being deleted or not available');
+    return this.registry.create({ workspaceId });
+  }
+
+  async deleteWorkspace(id: string) {
+    this.assertAvailable();
+    this.registry.workspaces.get(id);
+    if (this.deletingWorkspaces.has(id)) throw new Error('Workspace is being deleted');
+    this.deletingWorkspaces.add(id);
+    try {
+      const ids = this.registry.list(id).map(({ id }) => id);
+      const deleted = await this.delete(ids);
+      this.registry.workspaces.remove(id);
+      return { removed: id, deleted };
+    } finally { this.deletingWorkspaces.delete(id); }
   }
 
   async getConversation(id: string) {

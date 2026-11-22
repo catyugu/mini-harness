@@ -8,7 +8,7 @@ export const workspacePlugin: BrowserPlugin = {
   id: 'core:workspace', inject: ['miniState'],
   setup(ctx, api) {
     const { miniState: state } = ctx;
-    const picker = workspacePicker(api);
+    const picker = workspacePicker(api, () => state.get().sessions);
     ctx.provide('miniWorkspace', picker);
     state.on('navigation', () => picker.label(state.workspace()), api.signal);
   }
@@ -24,7 +24,7 @@ interface DirectoryListing {
   directories: { name: string; path: string }[];
 }
 
-function workspacePicker(api: FrontendApi) {
+function workspacePicker(api: FrontendApi, sessions: () => { workspaceId: string }[]) {
   const form = document.createElement('form');
   form.className = 'workspace-form';
   const path = document.createElement('input');
@@ -156,7 +156,9 @@ function workspacePicker(api: FrontendApi) {
       name.select();
     },
     async remove(record: WorkspaceRecord) {
-      if (!confirm('Remove workspace "' + record.name + '" from the list? Its directory and conversations will be kept.')) return;
+      const count = sessions().filter((session) => session.workspaceId === record.id).length;
+      if (!confirm('Permanently delete workspace "' + record.name + '" and its ' + count +
+        ' conversation' + (count === 1 ? '' : 's') + ' (including subagents)? Workspace files will be kept.')) return;
       await api.request(workspaceRoute(record.id), { method: 'DELETE' });
     }
   };
