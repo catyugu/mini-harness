@@ -537,6 +537,7 @@ button { border-radius: var(--radius); }
   border: 1px solid var(--border); border-radius: var(--control-radius);
   background: var(--surface);
 }
+.workspace-rename-form .form-error:empty { display: none; }
 .workspace-rename-form .ui-actions { gap: 8px; }
 .workspace-rename-form .ui-actions .ui-button { min-width: 70px; }
 .workspace-empty { padding-inline: 6px; }
