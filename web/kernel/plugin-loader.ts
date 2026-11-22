@@ -1,6 +1,6 @@
 import type { FrontendHost, FrontendSetup } from './extensions.js';
-import type { Bootstrap } from './types.js';
-import { data } from './api.js';
+import type { Bootstrap } from '../types.js';
+import { data } from '../api.js';
 
 export type BrowserPluginFailures = ReadonlyMap<string, unknown>;
 

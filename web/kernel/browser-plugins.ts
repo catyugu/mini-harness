@@ -1,17 +1,17 @@
-import { Context } from './vendor/cordis.js';
-import { data } from './api.js';
-import { BrowserState } from './models/browser-state.js';
+import { Context } from '../vendor/cordis.js';
+import { data } from '../api.js';
+import { BrowserState } from '../models/browser-state.js';
 import { FrontendHost, type BrowserPlugin } from './extensions.js';
 import { createPluginLoader, type BrowserPluginFailures } from './plugin-loader.js';
-import { shellPlugin } from './shell.js';
-import { conversationView } from './ui/conversation.js';
-import { sessionNavigation } from './navigation.js';
-import { settingsPlugin } from './settings.js';
-import { workspacePlugin } from './workspaces.js';
-import { modelPlugin } from './provider-manager.js';
-import { catalogPlugin } from './plugin-manager.js';
-import { hydrateIcons } from './icons.js';
-import type { Bootstrap } from './types.js';
+import { shellPlugin } from '../shell.js';
+import { conversationView } from '../ui/conversation.js';
+import { sessionNavigation } from '../navigation.js';
+import { settingsPlugin } from '../settings.js';
+import { workspacePlugin } from '../workspaces.js';
+import { modelPlugin } from '../provider-manager.js';
+import { catalogPlugin } from '../plugin-manager.js';
+import { hydrateIcons } from '../icons.js';
+import type { Bootstrap } from '../types.js';
 
 declare module 'cordis' {
   interface Context {
