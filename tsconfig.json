@@ -11,9 +11,25 @@
     "skipLibCheck": true,
     "esModuleInterop": true,
     "resolveJsonModule": true,
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "types": ["node"]
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "types": [
+      "node"
+    ]
   },
-  "include": ["bin/**/*.ts", "src/**/*.ts", "web/**/*.ts", "test/**/*.ts", "scripts/**/*.ts"],
-  "exclude": ["dist", "node_modules"]
+  "include": [
+    "bin/**/*.ts",
+    "src/**/*.ts",
+    "features/**/*.ts",
+    "web/**/*.ts",
+    "test/**/*.ts",
+    "scripts/**/*.ts"
+  ],
+  "exclude": [
+    "dist",
+    "node_modules"
+  ]
 }

@@ -10,6 +10,7 @@
   "files": [
     "dist/bin/",
     "dist/src/",
+    "dist/features/",
     "dist/web/",
     "README.md",
     "SECURITY.md",

@@ -1,14 +1,11 @@
 import type { ToolDefinition } from '@earendil-works/pi-coding-agent';
 import { relative, resolve, sep } from 'node:path';
 import type { Context } from 'cordis';
-import { Inspection } from '../inspection.js';
-import type { RouteRequest } from '../transport/http.js';
-import type { BuiltinPlugin } from '../kernel/plugin-api.js';
+import { Inspection } from '../../src/inspection.js';
+import type { RouteRequest } from '../../src/transport/http.js';
 
-export const files: BuiltinPlugin = {
-  id: 'files', title: 'Workspace files', description: 'Read, search and edit files within the workspace.',
-  icon: 'files', browser: '/builtins/files.js', inject: ['harnessState', 'harnessWorkspace', 'harnessTools', 'harnessRoutes'],
-  setup(ctx: Context) {
+
+export function setup(ctx: Context) {
     const { home, cwd } = ctx.harnessState.paths;
     let cachedRoot: string;
     let definitions: ToolDefinition[];
@@ -48,5 +45,4 @@ export const files: BuiltinPlugin = {
     ctx.effect(() => routes.register('GET', '/workspace/files/preview', (req) => inspection(req).preview(path(req))));
     ctx.effect(() => routes.register('GET', '/workspace/files/changes', (req) => inspection(req).changes()));
     ctx.effect(() => routes.register('GET', '/workspace/files/diff', (req) => inspection(req).diff(path(req))));
-  }
-};
+}

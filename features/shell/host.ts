@@ -2,21 +2,14 @@ import { defineTool } from '@earendil-works/pi-coding-agent';
 import type { Context } from 'cordis';
 import { Type } from 'typebox';
 import { Approvals } from './approvals.js';
-import { runShell } from '../sandbox.js';
-import type { BuiltinPlugin } from '../kernel/plugin-api.js';
+import { runShell } from '../../src/sandbox.js';
 
 declare module 'cordis' {
   interface Context { harnessApprovals?: Pick<Approvals, 'has'> }
 }
 
-export const shell: BuiltinPlugin = {
-  id: 'shell', title: 'Shell', description: 'Run commands using the configured execution policy.',
-  preferences: { key: 'sandbox', schema: { ...Type.Object({
-    mode: Type.String({ title: 'Shell policy', enum: ['isolated', 'host'] }),
-    timeoutSeconds: Type.Integer({ title: 'Timeout (seconds)', minimum: 1, maximum: 300 })
-  }) } },
-  icon: 'terminal', browser: '/builtins/shell.js', inject: ['harnessState', 'harnessWorkspace', 'harnessSettings', 'harnessSessionChanged', 'harnessTools', 'harnessRoutes'],
-  setup(ctx: Context) {
+
+export function setup(ctx: Context) {
     const approvals = new Approvals(ctx.harnessSessionChanged);
     ctx.provide('harnessApprovals', approvals);
     ctx.effect(() => () => approvals.close());
@@ -40,5 +33,4 @@ export const shell: BuiltinPlugin = {
       approvals.decide(input.id, input.allow);
       return { ok: true };
     }));
-  }
-};
+}

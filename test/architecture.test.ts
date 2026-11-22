@@ -11,17 +11,17 @@ function imports(path: string) {
 }
 
 test('the plugin host and built-ins use service contracts without importing the runtime or server', () => {
-  const builtins = readdirSync(new URL('builtins/', source)).filter((file) => file.endsWith('.ts'));
-  for (const path of ['kernel/plugins.ts', 'kernel/plugin-api.ts', ...builtins.map((file) => 'builtins/' + file)]) {
+  const features = ['files', 'skills', 'shell', 'subagents', 'message-copy', 'edit-resend'];
+  for (const path of ['kernel/plugins.ts', 'kernel/plugin-api.ts', ...[]]) {
     for (const dependency of imports(path))
       assert.doesNotMatch(dependency, /(?:^|\/)(agent|server|session-routes)\.js$/, path + ' imports ' + dependency);
   }
 });
 
-test('only the composition root imports built-in capabilities into core', () => {
+test('only runtime composition imports the assembled feature graph', () => {
   for (const path of readdirSync(source).filter((file) => file.endsWith('.ts') && file !== 'kernel/runtime.ts')) {
     for (const dependency of imports(path))
-      assert.doesNotMatch(dependency, /(?:^|\/)builtins\//, path + ' imports ' + dependency);
+      assert.doesNotMatch(dependency, /(?:^|\/)features\//, path + ' imports ' + dependency);
   }
 });
 

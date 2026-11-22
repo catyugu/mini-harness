@@ -1,7 +1,7 @@
-import type { Settings } from '../config.js';
-import type { PiSessions } from '../adapters/pi/sessions.js';
-import type { Runs } from '../services/runs.js';
-import type { Conversation, SessionRegistry, ModelChoice } from '../registry.js';
+import type { Settings } from '../../src/config.js';
+import type { PiSessions } from '../../src/adapters/pi/sessions.js';
+import type { Runs } from '../../src/services/runs.js';
+import type { Conversation, SessionRegistry, ModelChoice } from '../../src/registry.js';
 
 interface Waiter {
   cancel(): void;

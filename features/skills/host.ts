@@ -1,12 +1,9 @@
 import { join } from 'node:path';
 import { DefaultResourceLoader, SettingsManager } from '@earendil-works/pi-coding-agent';
 import type { Context } from 'cordis';
-import type { BuiltinPlugin } from '../kernel/plugin-api.js';
 
-export const skills: BuiltinPlugin = {
-  id: 'skills', title: 'Skills', description: 'Discover Agent Skills from home and the workspace.',
-  icon: 'skills', browser: '/builtins/skills.js', inject: ['harnessState', 'harnessRoutes'],
-  setup(ctx: Context) {
+
+export function setup(ctx: Context) {
     const { agent, skills } = ctx.harnessState.paths;
     const paths = (cwd: string) => [skills, join(cwd, '.mini-harness', 'skills')];
     ctx.provide('harnessSkills', { paths });
@@ -18,5 +15,4 @@ export const skills: BuiltinPlugin = {
       await loader.reload();
       return loader.getSkills().skills.map(({ name, description }) => ({ name, description }));
     }));
-  }
-};
+}
