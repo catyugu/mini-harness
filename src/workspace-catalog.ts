@@ -5,7 +5,8 @@ import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:pat
 import { readJson, writeJson, type getPaths } from './config.js';
 import { containsPath } from './workspace.js';
 
-export interface WorkspaceRecord { id: string; path: string; name: string }
+import type { WorkspaceRecord } from './contracts/workspace.js';
+export type { WorkspaceRecord } from './contracts/workspace.js';
 interface CatalogState { records: WorkspaceRecord[] }
 
 // Use the same native resolver as fs/promises.realpath, including Windows long path names.

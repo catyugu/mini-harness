@@ -5,20 +5,8 @@ import { getPaths, readJson, writeJson } from './config.js';
 import { canonicalWorkspacePath, WorkspaceCatalog, workspaceId } from './workspace-catalog.js';
 import { isRunning, type RunInfo } from './protocol.js';
 
-export interface ModelChoice { provider: string; id: string }
-export interface Conversation {
-  id: string;
-  title: string;
-  cwd: string;
-  workspaceId: string;
-  waitingApproval?: boolean;
-  parentId: string | null;
-  file: string | null;
-  model?: ModelChoice;
-  run?: RunInfo;
-  createdAt: string;
-  updatedAt: string;
-}
+import type { ModelChoice, Conversation } from './contracts/conversation.js';
+export type { ModelChoice, Conversation } from './contracts/conversation.js';
 
 type PendingDeletion = Pick<Conversation, 'id' | 'cwd' | 'file'>;
 interface RegistryState { sessions: Conversation[]; pendingDelete?: PendingDeletion[] }
