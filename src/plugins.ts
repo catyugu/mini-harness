@@ -139,18 +139,19 @@ export class PluginHost {
     return ordered;
   }
 
-  needsUpdate(settings: Settings) {
-    const next = this.plans(settings);
-    return next.length !== this.mounted.size || next.some((plan) => !isDeepStrictEqual(plan, this.mounted.get(plan.id)?.plan));
-  }
-
-  async configure(settings: Settings, commit = () => {}) {
+  configure(settings: Settings, commit = () => {}, beforeChange = () => {}) {
     const ordered = this.plans(settings);
     const desired = new Map(ordered.map((plan) => [plan.id, plan]));
     const affected = new Set([...this.mounted.values()].filter(({ plan }) => !isDeepStrictEqual(plan, desired.get(plan.id))).map(({ plan }) => plan.id));
     for (const plan of ordered) if (plan.requires.some((id) => affected.has(id))) affected.add(plan.id);
     const obsolete = [...this.mounted.values()].map(({ plan }) => plan).filter((plan) => affected.has(plan.id));
     const additions = ordered.filter((plan) => affected.has(plan.id) || !this.mounted.has(plan.id));
+    if (!obsolete.length && !additions.length) { commit(); return; }
+    beforeChange();
+    return this.apply(obsolete, additions, commit);
+  }
+
+  private async apply(obsolete: PluginPlan[], additions: PluginPlan[], commit: () => void) {
     const unloaded: PluginPlan[] = [];
     const loaded: string[] = [];
     try {

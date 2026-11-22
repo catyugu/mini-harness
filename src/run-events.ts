@@ -7,7 +7,7 @@ export class RunEvents {
   private tools = new Map<string, Extract<StreamEvent, { type: 'tool' }>>();
   partial = '';
 
-  constructor(private info: RunInfo) {}
+  constructor(readonly info: RunInfo) {}
 
   get activeTools() { return [...this.tools.values()]; }
 

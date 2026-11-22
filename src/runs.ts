@@ -12,16 +12,14 @@ interface RunOptions {
   thinkingLevel?: ThinkingLevel;
 }
 
-interface ActiveRun {
-  info: RunInfo;
+interface Activity {
   controller: AbortController;
-  events: RunEvents;
-  done?: Promise<string>;
+  done?: Promise<unknown>;
+  events?: RunEvents;
 }
 
 export class Runs {
-  private readonly busy = new Map<string, ActiveRun>();
-  private readonly compactions = new Map<string, { done: Promise<void>; controller: AbortController }>();
+  private readonly work = new Map<string, Activity>();
 
   constructor(
     private readonly registry: SessionRegistry,
@@ -31,18 +29,17 @@ export class Runs {
     private readonly schedule: (record: Conversation, task: () => Promise<string>, signal: AbortSignal) => Promise<string>
   ) {}
 
-  get size() { return this.busy.size; }
-  get hasWork() { return Boolean(this.busy.size || this.compactions.size); }
-  active(id: string) { return this.busy.has(id) || this.compactions.has(id); }
-  completion(id: string) { return this.busy.get(id)?.done ?? this.compactions.get(id)?.done; }
+  get size() { return this.work.size; }
+  active(id: string) { return this.work.has(id); }
+  completion(id: string) { return this.work.get(id)?.done; }
 
   view(id: string) {
-    const run = this.busy.get(id);
-    return { run: this.info(id), partial: run?.events.partial, tools: run?.events.activeTools ?? [], busy: Boolean(run) };
+    const events = this.work.get(id)?.events;
+    return { run: this.info(id), partial: events?.partial, tools: events?.activeTools ?? [], busy: Boolean(events) };
   }
 
   signal(id: string, signal?: AbortSignal) {
-    const owner = this.busy.get(id)?.controller.signal;
+    const owner = this.work.get(id)?.controller.signal;
     return owner && signal ? AbortSignal.any([owner, signal]) : owner ?? signal;
   }
 
@@ -62,42 +59,44 @@ export class Runs {
     const choice = model ?? (record.parentId ? record.model : this.defaultModel());
     this.pi.reopenStale(id);
     const info: RunInfo = { id: randomUUID(), sessionId: id, state: 'queued', startedAt: new Date().toISOString(), sequence: 0 };
-    const run: ActiveRun = { info, controller: new AbortController(), events: new RunEvents(info) };
-    const cancellation = signal ? AbortSignal.any([run.controller.signal, signal]) : run.controller.signal;
-    this.registry.update(id, { run: { ...run.info } });
-    this.busy.set(id, run);
+    const events = new RunEvents(info);
+    const controller = new AbortController();
+    const cancellation = signal ? AbortSignal.any([controller.signal, signal]) : controller.signal;
+    this.registry.update(id, { run: { ...info } });
     const publish = (event: StreamEvent) => {
-      const item = run.events.publish(event);
+      const item = events.publish(event);
       try { emit?.(item); } catch { /* An observer cannot terminate the run. */ }
     };
     const promptSession = async () => {
       cancellation.throwIfAborted();
-      run.info.state = 'running';
-      const running = { ...run.info, sequence: run.info.sequence + 1 };
+      info.state = 'running';
+      const running = { ...info, sequence: info.sequence + 1 };
       this.registry.update(id, { run: running });
       publish({ type: 'run', run: running });
       return this.pi.prompt(record, prepared.text, publish, cancellation, choice, prepared.images, thinkingLevel, (path) => {
-        run.info.changedFiles = [...new Set([...(run.info.changedFiles ?? []), path])];
+        info.changedFiles = [...new Set([...(info.changedFiles ?? []), path])];
       });
     };
-    const work = this.schedule(record, promptSession, cancellation);
-    run.done = work.then((text) => {
-      run.info.state = 'completed';
+    const activity: Activity = { controller, events };
+    this.work.set(id, activity);
+    const done = this.schedule(record, promptSession, cancellation).then((text) => {
+      info.state = 'completed';
       return text;
     }, (error) => {
-      run.info.state = cancellation.aborted ? 'cancelled' : 'failed';
-      run.info.error = cancellation.aborted ? 'Agent run cancelled' : error instanceof Error ? error.message : String(error);
-      publish({ type: 'error', error: run.info.error });
-      throw new Error(run.info.error, { cause: error });
+      info.state = cancellation.aborted ? 'cancelled' : 'failed';
+      info.error = cancellation.aborted ? 'Agent run cancelled' : error instanceof Error ? error.message : String(error);
+      publish({ type: 'error', error: info.error });
+      throw new Error(info.error, { cause: error });
     }).finally(() => {
-      run.info.finishedAt = new Date().toISOString();
-      publish({ type: 'run', run: { ...run.info, sequence: run.info.sequence + 1 } });
-      try { this.registry.update(id, { run: { ...run.info } }); }
-      finally { this.busy.delete(id); run.events.close(); }
+      info.finishedAt = new Date().toISOString();
+      publish({ type: 'run', run: { ...info, sequence: info.sequence + 1 } });
+      try { this.registry.update(id, { run: { ...info } }); }
+      finally { this.work.delete(id); events.close(); }
     });
     // Server-owned runs may outlive every observer.
-    void run.done.catch(() => {});
-    return run;
+    activity.done = done;
+    void done.catch(() => {});
+    return { info, done };
   }
 
   async send(id: string, prompt: string, emit?: (event: StreamEvent) => void, options: RunOptions = {}) {
@@ -109,16 +108,16 @@ export class Runs {
   }
 
   info(id: string): RunInfo | undefined {
-    const info = this.busy.get(id)?.info ?? this.registry.get(id)?.run;
+    const info = this.work.get(id)?.events?.info ?? this.registry.get(id)?.run;
     return info && { ...info };
   }
 
   watch(id: string, runId: string, after: number, emit: (event: RunEvent) => void) {
-    const run = this.busy.get(id);
+    const events = this.work.get(id)?.events;
     const info = this.info(id);
     if (!info || info.id !== runId) throw new Error('Run not found');
     if (!Number.isSafeInteger(after) || after < 0 || after > info.sequence) throw new Error('Invalid event cursor');
-    if (run) return run.events.watch(after, emit, () => this.pi.messages(id));
+    if (events) return events.watch(after, emit, () => this.pi.messages(id));
     emit({ type: 'snapshot', messages: this.pi.messages(id), tools: [], run: info, sequence: info.sequence });
     return () => {};
   }
@@ -126,10 +125,10 @@ export class Runs {
   cancel(id: string) {
     let cancelled = false;
     for (const child of this.registry.descendants([id])) {
-      const run = this.busy.get(child);
-      if (run) { cancelled = true; run.controller.abort(new Error('Agent run cancelled')); }
-      const compaction = this.compactions.get(child);
-      if (compaction) { cancelled = true; compaction.controller.abort(new Error('Compaction cancelled')); }
+      const activity = this.work.get(child);
+      if (!activity) continue;
+      cancelled = true;
+      activity.controller.abort(new Error(activity.events ? 'Agent run cancelled' : 'Compaction cancelled'));
     }
     return cancelled;
   }
@@ -138,19 +137,14 @@ export class Runs {
     if (this.active(id)) throw new Error('Stop the open conversation before compacting it');
     const controller = new AbortController();
     const done = this.pi.compact(id, controller.signal);
-    this.compactions.set(id, { done, controller });
+    this.work.set(id, { done, controller });
     try { await done; }
-    finally { this.compactions.delete(id); }
-  }
-
-  async queueInput(id: string, text: string, mode: 'steer' | 'followUp', attachments?: Attachment[]) {
-    if (!this.busy.has(id)) throw new Error('The agent is not streaming; send a new message');
-    return this.pi.queueInput(id, text, mode, attachments);
+    finally { this.work.delete(id); }
   }
 
   async stop() {
-    const ids = [...this.busy.keys(), ...this.compactions.keys()];
-    for (const id of ids) this.cancel(id);
-    await Promise.allSettled(ids.map((id) => this.completion(id)));
+    const active = [...this.work.values()];
+    for (const { controller } of active) controller.abort();
+    await Promise.allSettled(active.map(({ done }) => done));
   }
 }

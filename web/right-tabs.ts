@@ -10,8 +10,13 @@ export interface RightTabType {
   default?: boolean;
 }
 
-type Tab = { key: string; title: string; address?: TabAddress };
-type ScopeTabs = { scope?: TabScope; open: boolean; active?: string; tabs: Map<string, Tab> };
+type Tab = {
+  key: string;
+  title: string;
+  address?: TabAddress;
+  view?: { node: HTMLElement; controller: AbortController };
+};
+type ScopeTabs = { scope?: TabScope; open: boolean; active?: Tab; tabs: Tab[] };
 const scopeKey = (scope?: TabScope) => JSON.stringify([scope?.workspaceId, scope?.sessionId]);
 
 export function createRightTabs(view: {
@@ -19,20 +24,18 @@ export function createRightTabs(view: {
 }, layout: ReturnType<typeof createLayout>, signal: AbortSignal) {
   const types = new Map<string, RightTabType>();
   const states = new Map<string, ScopeTabs>();
-  const mounted = new Map<Tab, { node: HTMLElement; controller: AbortController }>();
   let current = state();
   let nextId = 0;
 
   function state(scope?: TabScope) {
     const key = scopeKey(scope);
-    if (!states.has(key)) states.set(key, { scope, open: false, tabs: new Map() });
+    if (!states.has(key)) states.set(key, { scope, open: false, tabs: [] });
     return states.get(key);
   }
 
   function render(focus = false) {
-    const active = [...current.tabs.values()].find(({ key }) => key === current.active);
-    const entries = [...current.tabs.values()];
-    view.bar.replaceChildren(...entries.map((tab) => {
+    const { active, tabs } = current;
+    view.bar.replaceChildren(...tabs.map((tab) => {
       const item = document.createElement('div');
       item.className = 'right-tab';
       const select = button(tab.title, 'quiet');
@@ -42,14 +45,14 @@ export function createRightTabs(view: {
       select.setAttribute('aria-selected', String(tab === active));
       select.setAttribute('aria-controls', tab.key);
       select.tabIndex = tab === active ? 0 : -1;
-      select.onclick = () => { current.active = tab.key; render(true); };
+      select.onclick = () => { current.active = tab; render(true); };
       const close = iconButton('Close tab ' + tab.title, 'close');
-      close.onclick = () => { remove(current, tab.key); render(true); };
+      close.onclick = () => { remove(current, tab); render(true); };
       item.append(select, close);
       return item;
     }));
-    for (const tab of entries) {
-      const node = mounted.get(tab)?.node ?? mount(tab, (signal) => types.get(tab.address.type).create(tab.address, signal));
+    for (const tab of tabs) {
+      const node = tab.view?.node ?? mount(tab, (signal) => types.get(tab.address.type).create(tab.address, signal));
       node.hidden = tab !== active;
       if (node.parentElement !== view.body) view.body.append(node);
     }
@@ -65,9 +68,9 @@ export function createRightTabs(view: {
   function selectScope(scope?: TabScope) {
     if (scopeKey(scope) === scopeKey(current.scope)) return;
     current.open = layout.panelOpen();
-    for (const tab of current.tabs.values()) {
+    for (const tab of [...current.tabs]) {
       if (tab.address) unmount(tab);
-      else remove(current, tab.key);
+      else remove(current, tab);
     }
     current = state(scope);
     render();
@@ -87,19 +90,18 @@ export function createRightTabs(view: {
     node.setAttribute('role', 'tabpanel');
     node.setAttribute('aria-labelledby', tab.key + '-select');
     node.classList.add('right-tab-content');
-    mounted.set(tab, { node, controller });
+    tab.view = { node, controller };
     return node;
   }
 
   function unmount(tab: Tab) {
-    const view = mounted.get(tab);
-    mounted.delete(tab);
-    view?.controller.abort();
-    view?.node.remove();
+    tab.view?.controller.abort();
+    tab.view?.node.remove();
+    tab.view = undefined;
   }
 
   function reveal(tab: Tab) {
-    current.active = tab.key;
+    current.active = tab;
     layout.closeDrawer(false);
     layout.setPanel(true, true);
     render(true);
@@ -109,25 +111,21 @@ export function createRightTabs(view: {
     const definition = types.get(type);
     if (!definition || !scope) return;
     const target = state(scope);
-    let tab = [...target.tabs.values()].find(({ address }) => address?.type === type && address.path === path);
+    let tab = target.tabs.find(({ address }) => address?.type === type && address.path === path);
     if (!tab) {
       const address = { ...scope, type, path };
       tab = { key: 'right-tab-' + ++nextId, title: definition.title(address), address };
-      target.tabs.set(tab.key, tab);
+      target.tabs.push(tab);
     }
-    target.active = tab.key;
+    target.active = tab;
     if (target === current) reveal(tab);
   }
 
-  function remove(target: ScopeTabs, key: string) {
-    const tab = target.tabs.get(key);
-    if (!tab) return;
-    const keys = [...target.tabs.keys()];
-    target.tabs.delete(key);
-    if (target.active === key) {
-      const index = keys.indexOf(key);
-      target.active = keys[index + 1] ?? keys[index - 1];
-    }
+  function remove(target: ScopeTabs, tab: Tab) {
+    const index = target.tabs.indexOf(tab);
+    if (index === -1) return;
+    target.tabs.splice(index, 1);
+    if (target.active === tab) target.active = target.tabs[index] ?? target.tabs[index - 1];
     unmount(tab);
   }
 
@@ -135,14 +133,14 @@ export function createRightTabs(view: {
     for (const [key, target] of states) {
       const scope = target.scope;
       if (!scope || (workspaces.has(scope.workspaceId) && (!scope.sessionId || sessions.has(scope.sessionId)))) continue;
-      for (const id of target.tabs.keys()) remove(target, id);
+      for (const tab of target.tabs) unmount(tab);
       states.delete(key);
       if (target === current) selectScope();
     }
   }
 
   view.toggle.onclick = () => {
-    if (!layout.panelOpen() && !current.tabs.size && current.scope) {
+    if (!layout.panelOpen() && !current.tabs.length && current.scope) {
       const entry = [...types].find(([, type]) => type.default);
       if (entry) { open(entry[0]); return; }
     }
@@ -150,18 +148,18 @@ export function createRightTabs(view: {
   };
   view.bar.addEventListener('keydown', (event) => {
     if (!(event.target as HTMLElement).matches('[role=tab]')) return;
-    const tabs = [...current.tabs.values()];
-    const index = tabs.findIndex(({ key }) => key === current.active);
+    const { tabs } = current;
+    const index = tabs.indexOf(current.active);
     const target = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 :
       event.key === 'ArrowLeft' ? (index + tabs.length - 1) % tabs.length :
         event.key === 'ArrowRight' ? (index + 1) % tabs.length : undefined;
     if (target === undefined) return;
     event.preventDefault();
-    current.active = tabs[target].key;
+    current.active = tabs[target];
     render(true);
   }, { signal });
   signal.addEventListener('abort', () => {
-    for (const tab of mounted.keys()) unmount(tab);
+    for (const tab of current.tabs) unmount(tab);
     states.clear();
   }, { once: true });
 
@@ -173,8 +171,8 @@ export function createRightTabs(view: {
       render();
       return () => {
         types.delete(type);
-        for (const target of states.values()) for (const tab of target.tabs.values()) {
-          if (tab.address?.type === type) remove(target, tab.key);
+        for (const target of states.values()) for (const tab of [...target.tabs]) {
+          if (tab.address?.type === type) remove(target, tab);
         }
         render();
       };
@@ -182,14 +180,15 @@ export function createRightTabs(view: {
     inspect(owner: string, title: string, node: HTMLElement, signal: AbortSignal) {
       const target = current;
       const key = 'inspect-' + owner;
-      remove(target, key);
-      const tab = { key, title };
-      target.tabs.set(key, tab);
+      const previous = target.tabs.find((tab) => tab.key === key);
+      if (previous) remove(target, previous);
+      const tab = { key, title, view: undefined };
+      target.tabs.push(tab);
       mount(tab, () => node);
       signal.addEventListener('abort', () => {
-        remove(target, key);
+        remove(target, tab);
         if (target === current) render();
-      }, { once: true, signal: mounted.get(tab).controller.signal });
+      }, { once: true, signal: tab.view.controller.signal });
       reveal(tab);
     }
   };

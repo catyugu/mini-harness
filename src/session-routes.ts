@@ -1,33 +1,21 @@
 import { navigationSession } from './navigation-events.js';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { MiniHarnessRuntime } from './agent.js';
-import { json, requestBody } from './http.js';
+import { eventStream, json, requestBody } from './http.js';
 import { isRunning } from './protocol.js';
 
 function streamRun(runtime: MiniHarnessRuntime, res: ServerResponse, id: string, runId: string, after: number) {
-  let detach = () => {};
-  const heartbeat = setInterval(() => { if (!res.destroyed) res.write('\n'); }, 15000);
-  heartbeat.unref();
-  const cleanup = () => { clearInterval(heartbeat); detach(); };
-  res.once('close', cleanup);
-  try {
-    detach = runtime.runs.watch(id, runId, after, (event) => {
-      if (!res.headersSent) res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
-      if (res.destroyed || res.writableEnded) return;
-      // Slow or disconnected observers can reconnect from their cursor.
-      if (res.writableLength > 1024 * 1024) { res.destroy(); return; }
-      res.write(JSON.stringify(event) + '\n');
-      if ((event.type === 'run' || event.type === 'snapshot') && !isRunning(event.run)) res.end();
-    });
-    if (!res.headersSent) {
-      res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store' });
-      res.flushHeaders();
-    }
-  } catch (error) { cleanup(); throw error; }
-};
+  const stream = eventStream(res);
+  const detach = runtime.runs.watch(id, runId, after, (event) => {
+    stream.send(event);
+    if ((event.type === 'run' || event.type === 'snapshot') && !isRunning(event.run)) res.end();
+  });
+  res.once('close', detach);
+  stream.start();
+}
 
 export async function sessionRoutes(runtime: MiniHarnessRuntime, req: IncomingMessage, res: ServerResponse, url: URL,
-  configuring: () => unknown) {
+  configuring: () => boolean) {
   const { pathname } = url;
   if (pathname === '/api/sessions' && req.method === 'GET') return json(res, 200, runtime.registry.list().map((item) => navigationSession(runtime, item.id)));
   if (pathname === '/api/sessions' && req.method === 'POST') {
@@ -44,14 +32,15 @@ export async function sessionRoutes(runtime: MiniHarnessRuntime, req: IncomingMe
       if (typeof input.title !== 'string' || !input.title.trim() || input.title.length > 140) throw new Error('Title must contain 1–140 characters');
       return json(res, 200, runtime.registry.update(id, { title: input.title.trim() }));
     }
+    if (req.method === 'POST' && ['compact', 'runs', 'messages'].includes(match[2]) && configuring())
+      throw new Error('Configuration is changing');
     if (match[2] === 'compact' && req.method === 'POST') {
-      if (configuring()) throw new Error('Configuration is changing');
       await runtime.runs.compact(id);
       return json(res, 200, { ok: true });
     }
     if (match[2] === 'queue' && req.method === 'POST') {
       const input = await requestBody(req, 20 * 1024 * 1024);
-      return json(res, 202, await runtime.runs.queueInput(id, input.message, input.mode, input.attachments));
+      return json(res, 202, await runtime.pi.queueInput(id, input.message, input.mode, input.attachments));
     }
     if (match[2] === 'queue' && req.method === 'GET') {
       const session = await runtime.pi.open(id);
@@ -62,7 +51,6 @@ export async function sessionRoutes(runtime: MiniHarnessRuntime, req: IncomingMe
     if (match[2] === 'runs' && req.method === 'GET') return json(res, 200, { run: runtime.runs.info(id) ?? null });
     if (match[2] === 'runs' && req.method === 'POST') {
       const input = await requestBody(req, 20 * 1024 * 1024);
-      if (configuring()) throw new Error('Configuration is changing');
       return json(res, 202, runtime.runs.startRun(id, input.message, input.model, input.attachments, input.thinkingLevel));
     }
     if (match[2] === 'events' && req.method === 'GET') {
@@ -72,7 +60,6 @@ export async function sessionRoutes(runtime: MiniHarnessRuntime, req: IncomingMe
     }
     if (match[2] === 'messages' && req.method === 'POST') {
       const input = await requestBody(req, 20 * 1024 * 1024);
-      if (configuring()) throw new Error('Configuration is changing');
       const run = runtime.runs.startRun(id, input.message, input.model, input.attachments, input.thinkingLevel);
       streamRun(runtime, res, id, run.id, 0);
       return;

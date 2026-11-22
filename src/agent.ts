@@ -49,7 +49,7 @@ export class MiniHarnessRuntime {
     await this.plugins.configure(this.settings);
   }
 
-  get hasActiveWork() { return this.runs.hasWork || this.pi.hasPending; }
+  get hasActiveWork() { return this.runs.size > 0 || this.pi.hasPending; }
 
   private assertAvailable(id?: string) {
     if (this.configuring || this.stopping) throw new Error('Agent service is unavailable during reconfiguration or shutdown');
@@ -99,16 +99,12 @@ export class MiniHarnessRuntime {
       this.settings = next;
       this.delegation.configure();
     };
-    if (this.plugins.needsUpdate(next)) {
+    this.configuring = this.plugins.configure(next, commit, () => {
       if (this.hasActiveWork) throw new Error('Stop active conversations before changing tools or Skills');
-      this.configuring = this.plugins.configure(next, commit);
-      try { await this.configuring; }
-      finally {
-        this.configuring = undefined;
-        this.pi.reconcileResources();
-      }
-    } else {
-      commit();
+    });
+    try { if (this.configuring) await this.configuring; }
+    finally {
+      this.configuring = undefined;
       this.pi.reconcileResources();
     }
     return next;
