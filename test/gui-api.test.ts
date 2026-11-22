@@ -146,7 +146,9 @@ test('Git inspection includes staged, unstaged and untracked files and refuses l
   writeFileSync(join(paths.cwd, 'file.txt'), 'staged\n'); git('add', '.'); writeFileSync(join(paths.cwd, 'file.txt'), 'after\n');
   writeFileSync(join(paths.cwd, 'new.txt'), 'new\n');
   const inspection = new Inspection(paths.cwd, paths.home);
-  const changes = await inspection.changes(); assert.equal(changes.available, true); assert.equal(changes.files.length, 2);
+  const changes = await inspection.changes(); assert.equal(changes.available, true, JSON.stringify({ reason: changes.reason, workspace: paths.cwd, repository: git('rev-parse', '--show-toplevel').trim() })); assert.equal(changes.files.length, 2);
+  const alias = join(root, 'workspace-alias'); symlinkSync(paths.cwd, alias, process.platform === 'win32' ? 'junction' : 'dir');
+  assert.equal((await new Inspection(alias, paths.home).changes()).available, true, 'Directory aliases must resolve to the same repository root');
   const diff = await inspection.diff('file.txt'); assert.match(diff.content, /Staged/); assert.match(diff.content, /Working tree/);
   assert.match((await inspection.diff('new.txt')).content, /new/);
   await assert.rejects(inspection.preview('../home/settings.json'));

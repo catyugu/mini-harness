@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { realpath } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { resolve, relative } from 'node:path';
 import { Workspace, containsPath } from './workspace.js';
@@ -23,7 +24,11 @@ export class Inspection {
   }
   async changes() {
     try {
-      if (relative(this.cwd, (await this.git(['rev-parse', '--show-toplevel'])).trim()))
+      const [workspaceRoot, repositoryRoot] = await Promise.all([
+        realpath(this.cwd),
+        this.git(['rev-parse', '--show-toplevel']).then((root) => realpath(root.trim()))
+      ]);
+      if (relative(workspaceRoot, repositoryRoot))
         return { available: false, files: [], reason: 'Open the repository root to inspect Git changes.' };
       const records = (await this.git(['status', '--porcelain=v1', '-z', '--untracked-files=normal'])).split('\0');
       const files: { path: string; status: string }[] = [];
