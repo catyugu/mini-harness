@@ -574,7 +574,7 @@ test('file inspection, responsive themes and reduced viewport height keep contro
         await expect(panel.getByRole('tab', { name: 'notes.md', exact: true })).toBeFocused();
         await expect(panel.getByRole('heading', { name: 'Visible file' })).toBeVisible();
         await panel.getByRole('button', { name: 'Source', exact: true }).click();
-        await expect(panel.locator('.file-preview')).toHaveText('# Visible file\nWorkspace content');
+        await expect(panel.locator('.file-preview')).toHaveText(/# Visible file\r?\nWorkspace content/);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
         await panel.getByRole('tab', { name: 'notes.md', exact: true }).focus();
         await page.locator('#workspaceLabel').evaluate((label) => { label.textContent = 'workspace'; });

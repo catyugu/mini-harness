@@ -25,11 +25,11 @@
     "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
     "build": "npm run clean && tsc -p tsconfig.json && node dist/scripts/copy-assets.js",
     "start": "npm run build && node dist/bin/mini-harness.js",
-    "test": "npm run build && node --test dist/test/*.test.js",
+    "test": "npm run build && node --import ./dist/test/helpers/isolate-home.js --test dist/test/*.test.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "check": "npm run typecheck && npm test",
     "pack:check": "npm run build && node dist/scripts/check-package.js",
-    "test:browser": "npm run build && playwright test -c playwright.config.ts"
+    "test:browser": "npm run build && node --import ./dist/test/helpers/isolate-home.js node_modules/@playwright/test/cli.js test -c playwright.config.ts"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "1.6.0",
