@@ -177,7 +177,7 @@ export class Workspace {
     });
   }
 
-  private async entries(path: string) {
+  async entries(path: string = this.cwd) {
     return this.directory(path, false, async (dir) => {
       const result: { name: string; directory: boolean }[] = [];
       for await (const entry of await opendir(dir)) {
@@ -231,6 +231,17 @@ export class Workspace {
         yield { path, ...entry };
       }
     }
+  }
+
+  async searchFiles(query: string) {
+    if (query.length > 200) throw new Error('Search is too long');
+    const files: string[] = [];
+    for await (const entry of this.walk('.')) {
+      const path = relative(this.cwd, entry.path).split(sep).join('/');
+      if (!entry.directory && path.toLowerCase().includes(query.toLowerCase())) files.push(path);
+      if (files.length >= 100) break;
+    }
+    return files;
   }
 
   private imageType(path: string) {
