@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { MiniHarnessRuntime } from '../src/agent.js';
+import { MiniHarnessRuntime } from '../src/kernel/runtime.js';
 import { createMiniHarnessServer } from '../src/server.js';
 import { readJson, writeJson } from '../src/config.js';
 import { createFixturePaths, createMockProvider } from './helpers/mock-provider.js';

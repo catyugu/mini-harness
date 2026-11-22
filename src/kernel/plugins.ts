@@ -4,8 +4,8 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import { Check } from 'typebox/value';
-import { readJson, type Settings } from './config.js';
-import type { BuiltinPlugin, PluginApi, PluginMetadata, SessionRecords } from './kernel/plugin-api.js';
+import { readJson, type Settings } from '../config.js';
+import type { BuiltinPlugin, PluginApi, PluginMetadata, SessionRecords } from './plugin-api.js';
 
 const publicServices = new Set(['harnessModels', 'harnessSessions']);
 

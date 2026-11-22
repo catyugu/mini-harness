@@ -10,7 +10,7 @@ import { json, requestBody } from './http.js';
 import { providerSettings, saveProvider, saveProviderCredential } from './provider-settings.js';
 import { installPlugin, uninstallPlugin, frontendSource } from './plugin-files.js';
 import { supportsIsolation } from './sandbox.js';
-import { MiniHarnessRuntime } from './agent.js';
+import { MiniHarnessRuntime } from './kernel/runtime.js';
 import { sessionRoutes } from './session-routes.js';
 import { navigationSession, navigationSnapshot, streamNavigation } from './navigation-events.js';
 

@@ -1,13 +1,13 @@
 import { Context } from 'cordis';
 import { isDeepStrictEqual } from 'node:util';
 import { PluginHost } from './plugins.js';
-import { SessionRegistry, type ModelChoice } from './registry.js';
-import { mergeSettings, readSettings, writeJson, type Paths, type SettingsPatch } from './config.js';
-import { builtins, Delegation } from './builtins/index.js';
-import { ToolRegistry } from './kernel/plugin-api.js';
-import { RouteRegistry } from './http.js';
-import { PiSessions } from './pi-sessions.js';
-import { Runs } from './runs.js';
+import { SessionRegistry, type ModelChoice } from '../registry.js';
+import { mergeSettings, readSettings, writeJson, type Paths, type SettingsPatch } from '../config.js';
+import { builtins, Delegation } from '../builtins/index.js';
+import { ToolRegistry } from './plugin-api.js';
+import { RouteRegistry } from '../http.js';
+import { PiSessions } from '../pi-sessions.js';
+import { Runs } from '../runs.js';
 
 export class MiniHarnessRuntime {
   settings: ReturnType<typeof readSettings>;
@@ -89,7 +89,7 @@ export class MiniHarnessRuntime {
   }
 
   async reviseAndStart(id: string, input: { sourceEntryId: string; expectedLeafId: string | null; message: string;
-    attachments?: import('./input.js').Attachment[]; model?: ModelChoice; thinkingLevel?: import('./pi-sessions.js').ThinkingLevel }) {
+    attachments?: import('../input.js').Attachment[]; model?: ModelChoice; thinkingLevel?: import('../pi-sessions.js').ThinkingLevel }) {
     this.assertAvailable(id);
     return this.runs.reviseAndStart(id, input);
   }
