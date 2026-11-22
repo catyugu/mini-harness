@@ -5,11 +5,11 @@ import { FrontendHost, type BrowserPlugin } from './extensions.js';
 import { createPluginLoader, type BrowserPluginFailures } from './plugin-loader.js';
 import { shellPlugin } from '../shell.js';
 import { conversationView } from '../ui/conversation.js';
-import { sessionNavigation } from '../navigation.js';
-import { settingsPlugin } from '../settings.js';
-import { workspacePlugin } from '../workspaces.js';
-import { modelPlugin } from '../provider-manager.js';
-import { catalogPlugin } from '../plugin-manager.js';
+import { sessionNavigation } from '../ui/navigation.js';
+import { settingsPlugin } from '../ui/settings.js';
+import { workspacePlugin } from '../ui/workspaces.js';
+import { modelPlugin } from '../ui/provider-manager.js';
+import { catalogPlugin } from '../ui/plugin-manager.js';
 import { hydrateIcons } from '../icons.js';
 import type { Bootstrap } from '../types.js';
 
