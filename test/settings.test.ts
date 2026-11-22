@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { MiniHarnessRuntime } from '../src/kernel/runtime.js';
+import { MiniHarnessRuntime } from '../src/application.js';
 import { createMiniHarnessServer } from '../src/server.js';
 import { readJson, writeJson } from '../src/config.js';
 import { createFixturePaths, createMockProvider } from './helpers/mock-provider.js';
@@ -54,7 +54,7 @@ test('appearance, parallelism and child defaults update without interrupting a r
   const original = await runtime.pi.open(item.id);
   await runtime.updateSettings({ appearance: 'dark', subagents: { maxParallel: 2 } });
   assert.strictEqual(await runtime.pi.open(item.id), original);
-  assert.equal(runtime.delegation.semaphore.limit, 2);
+  assert.equal(runtime.delegation.parallelLimit, 2);
   assert.equal(runtime.runs.active(item.id), true);
   await assert.rejects(runtime.updateSettings({ plugins: { files: false } }), /Stop active/);
   release();

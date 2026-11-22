@@ -1,4 +1,5 @@
 import type { Settings } from '../../src/config.js';
+import type { DelegationPort } from '../../src/contracts/delegation.js';
 import type { PiSessions } from '../../src/adapters/pi/sessions.js';
 import type { Runs } from '../../src/services/runs.js';
 import type { Conversation, SessionRegistry, ModelChoice } from '../../src/services/conversations.js';
@@ -92,8 +93,9 @@ export function requireChildDepth(parentDepth: number, maxDepth = 1): void {
 }
 
 
-export class Delegation {
+export class Delegation implements DelegationPort {
   readonly semaphore: Semaphore;
+  get parallelLimit() { return this.semaphore.limit; }
   private readonly leases = new Map<string, ChildLease>();
 
   constructor(private readonly registry: SessionRegistry, private readonly pi: PiSessions,

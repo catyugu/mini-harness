@@ -2,12 +2,19 @@ import { Context } from 'cordis';
 import { isDeepStrictEqual } from 'node:util';
 import { PluginHost } from './plugins.js';
 import { SessionRegistry, type ModelChoice } from '../services/conversations.js';
-import { mergeSettings, readSettings, writeJson, type Paths, type SettingsPatch } from '../config.js';
-import { builtins, Delegation } from '../../features/index.js';
+import { mergeSettings, readSettings, writeJson, type Paths, type Settings, type SettingsPatch } from '../config.js';
+import type { BuiltinPlugin } from './plugin-api.js';
+import type { DelegationPort } from '../contracts/delegation.js';
 import { ToolRegistry } from './plugin-api.js';
 import { RouteRegistry } from '../transport/http.js';
 import { PiSessions } from '../adapters/pi/sessions.js';
 import { Runs } from '../services/runs.js';
+
+export interface RuntimeComposition {
+  builtins: BuiltinPlugin[];
+  createDelegation(registry: SessionRegistry, pi: PiSessions, runs: () => Runs,
+    settings: () => Settings['subagents'], available: (id: string) => void): DelegationPort;
+}
 
 export class MiniHarnessRuntime {
   settings: ReturnType<typeof readSettings>;
@@ -15,23 +22,23 @@ export class MiniHarnessRuntime {
   readonly plugins: PluginHost;
   readonly pi: PiSessions;
   readonly runs: Runs;
-  readonly delegation: Delegation;
+  readonly delegation: DelegationPort;
   private configuring?: Promise<void>;
   private readonly deleting = new Set<string>();
   private readonly deletingWorkspaces = new Set<string>();
   private stopping = false;
 
-  constructor(readonly paths: Paths) {
+  constructor(readonly paths: Paths, composition: RuntimeComposition) {
     this.settings = readSettings(paths);
     this.registry = new SessionRegistry(paths);
     const ctx = new Context();
     const assertAvailable = (id: string) => this.assertAvailable(id);
     this.pi = new PiSessions(paths, this.registry, ctx, () => this.settings.model,
       (model) => this.rememberModel(model), assertAvailable, (id) => this.runs.active(id));
-    this.delegation = new Delegation(this.registry, this.pi, () => this.runs, () => this.settings.subagents, assertAvailable);
+    this.delegation = composition.createDelegation(this.registry, this.pi, () => this.runs, () => this.settings.subagents, assertAvailable);
     this.runs = new Runs(this.registry, this.pi, () => this.settings.model, assertAvailable,
       (record, task, signal) => this.delegation.schedule(record, task, signal));
-    this.plugins = new PluginHost(ctx, paths.plugins, builtins, (id, pluginId) => this.pi.records(id, pluginId));
+    this.plugins = new PluginHost(ctx, paths.plugins, composition.builtins, (id, pluginId) => this.pi.records(id, pluginId));
     ctx.provide('harnessModels', { list: () => this.pi.availableModels() });
     ctx.provide('harnessSessions', { get: (id) => this.registry.get(id), list: () => this.registry.list() });
     ctx.provide('harnessState', { paths });

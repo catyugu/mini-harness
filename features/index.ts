@@ -18,4 +18,3 @@ export const builtins: BuiltinPlugin[] = [
   { ...shell, setup: shell_setup },
   { ...session_helper, setup: session_helper_setup },
 ];
-export { Delegation } from './subagents/delegation.js';

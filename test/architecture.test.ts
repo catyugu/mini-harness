@@ -55,7 +55,7 @@ test('each built-in capability owns one manifest and co-located host/client entr
 
 test('only composition roots import feature implementations', () => {
   for (const file of files(source)) {
-    if (file === join(source, 'kernel', 'runtime.ts')) continue;
+    if (file === join(source, 'application.ts')) continue;
     for (const dependency of dependencies(file))
       assert.equal(dependency.target.startsWith(features + '/'), false, file + ' imports a feature: ' + dependency.specifier);
   }
