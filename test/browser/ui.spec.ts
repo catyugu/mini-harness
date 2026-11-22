@@ -250,6 +250,7 @@ test('plugin schema controls, recursive tree navigation, batch export and perman
     await ancestors.getByRole('button', { name: 'Child task', exact: true }).click();
     await expect(page.locator('#conversationTitle')).toHaveText('Child task');
     await page.getByRole('button', { name: 'Leaf task', exact: true }).click();
+    await expect(page.locator('#conversationTitle')).toHaveText('Leaf task');
     await page.reload();
     await expect(page.locator('#conversationTitle')).toHaveText('Leaf task');
     await page.getByRole('button', { name: 'Select', exact: true }).click();
