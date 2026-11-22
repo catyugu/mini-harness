@@ -12,6 +12,7 @@
     "dist/src/",
     "dist/features/",
     "dist/web/",
+    "!dist/**/tests/**",
     "README.md",
     "SECURITY.md",
     "LICENSE",
