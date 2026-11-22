@@ -2,9 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { MiniHarnessRuntime } from '../src/application.js';
-import { createFixturePaths, createMockProvider } from './helpers/mock-provider.js';
-import { mergeSettings } from '../src/config.js';
+import { MiniHarnessRuntime } from '../../application.js';
+import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.js';
+import { mergeSettings } from '../../config.js';
 
 test('an installed Cordis plugin can use services, configure a tool, and release resources', async (t) => {
   const mock = await createMockProvider();

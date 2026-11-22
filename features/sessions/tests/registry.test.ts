@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, existsSync, writeFileSync, mkdirSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { getPaths } from '../src/config.js';
-import { SessionRegistry } from '../src/services/conversations.js';
+import { getPaths } from '../../../src/config.js';
+import { SessionRegistry } from '../../../src/services/conversations.js';
 
 test('nested sessions and cascading permanent deletion', () => {
   const temp = mkdtempSync(join(tmpdir(), 'mini-harness-sessions-'));

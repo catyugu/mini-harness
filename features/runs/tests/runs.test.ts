@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, rmSync } from 'node:fs';
-import { createMiniHarnessServer } from '../src/server.js';
-import { SessionRegistry } from '../src/services/conversations.js';
-import type { RunEvent } from '../src/contracts/transport.js';
-import { createFixturePaths, createMockProvider } from './helpers/mock-provider.js';
+import { createMiniHarnessServer } from '../../../src/server.js';
+import { SessionRegistry } from '../../../src/services/conversations.js';
+import type { RunEvent } from '../../../src/contracts/transport.js';
+import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.js';
 
 function gate() {
   let release: () => void;
