@@ -1,14 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, symlinkSync, realpathSync } from 'node:fs';
-import { join } from 'node:path';
-import { execFileSync } from 'node:child_process';
-import { createMiniHarnessServer } from '../../../src/server.js';
-import { prepareInput } from '../../../src/input.js';
-import { Inspection } from '../../files/inspection.js';
-import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.js';
 
-import { fixture, waitUntil } from '../../../test/support/api-fixture.js';
+import { prepareInput } from '../../../src/input.js';
 
 test('attachments enforce encoding, format and byte limits without creating files', () => {
   const png = 'iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAFElEQVR4nGPUCIhigAEmBiSAmwMAKdYA2gR3lpgAAAAASUVORK5CYII=';

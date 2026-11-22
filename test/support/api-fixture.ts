@@ -1,11 +1,9 @@
-import test from 'node:test';
-import assert from 'node:assert/strict';
-import { mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, symlinkSync, realpathSync } from 'node:fs';
-import { join } from 'node:path';
-import { execFileSync } from 'node:child_process';
+
+
+import { rmSync } from 'node:fs';
+
 import { createMiniHarnessServer } from '../../src/server.js';
-import { prepareInput } from '../../src/input.js';
-import { Inspection } from '../../features/files/inspection.js';
+
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
 
 export const waitUntil = async <T>(read: () => T | Promise<T>, accept: (value: T) => boolean) => {

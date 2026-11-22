@@ -1,15 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, symlinkSync, realpathSync } from 'node:fs';
-import { join } from 'node:path';
-import { execFileSync } from 'node:child_process';
-import { createMiniHarnessServer } from '../../../src/server.js';
-import { prepareInput } from '../../../src/input.js';
-import { Inspection } from '../../files/inspection.js';
-import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.js';
 
-import { fixture, waitUntil } from '../../../test/support/api-fixture.js';
-
+import { fixture } from '../../../test/support/api-fixture.js';
 test('manual compaction uses Pi and preserves an idle conversation on failure', async (t) => {
   const { app, mock, request } = await fixture(t);
   const { body: session } = await request('/sessions', 'POST', {});

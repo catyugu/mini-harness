@@ -1,15 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, symlinkSync, realpathSync } from 'node:fs';
+
 import { join } from 'node:path';
-import { execFileSync } from 'node:child_process';
-import { createMiniHarnessServer } from '../../../src/server.js';
-import { prepareInput } from '../../../src/input.js';
-import { Inspection } from '../../files/inspection.js';
-import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.js';
 
-import { fixture, waitUntil } from '../../../test/support/api-fixture.js';
-
+import { fixture } from '../../../test/support/api-fixture.js';
 test('session-helper edits branch the Pi session instead of appending and enforces the active leaf', async (t) => {
   const { request, finish, app } = await fixture(t, ({ messages }) => 'Reply to ' + messages.filter((item) => item.role === 'user').at(-1)?.content);
   const pluginIds = (await request('/bootstrap')).body.plugins.map((plugin) => plugin.id);
