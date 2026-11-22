@@ -6,7 +6,6 @@ export interface TabAddress extends TabScope { type: string; path?: string }
 export interface RightTabType {
   title(address: TabAddress): string;
   create(address: TabAddress, signal: AbortSignal): HTMLElement;
-  launcher?: string;
   default?: boolean;
 }
 
@@ -20,7 +19,7 @@ type ScopeTabs = { scope?: TabScope; open: boolean; active?: Tab; tabs: Tab[] };
 const scopeKey = (scope?: TabScope) => JSON.stringify([scope?.workspaceId, scope?.sessionId]);
 
 export function createRightTabs(view: {
-  root: HTMLElement; bar: HTMLElement; launchers: HTMLElement; body: HTMLElement; toggle: HTMLButtonElement;
+  root: HTMLElement; bar: HTMLElement; body: HTMLElement; toggle: HTMLButtonElement;
 }, layout: ReturnType<typeof createLayout>, signal: AbortSignal) {
   const types = new Map<string, RightTabType>();
   const states = new Map<string, ScopeTabs>();
@@ -56,12 +55,6 @@ export function createRightTabs(view: {
       node.hidden = tab !== active;
       if (node.parentElement !== view.body) view.body.append(node);
     }
-    view.launchers.replaceChildren(...[...types].flatMap(([id, type]) => {
-      if (!current.scope || !type.launcher) return [];
-      const control = button(type.launcher, 'quiet');
-      control.onclick = () => open(id);
-      return [control];
-    }));
     if (focus) (active ? document.getElementById(active.key + '-select') : view.root.querySelector<HTMLElement>('#inspectorClose'))?.focus();
   }
 

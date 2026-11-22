@@ -447,6 +447,7 @@ button { border-radius: var(--radius); }
 .ui-button[data-variant="primary"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .ui-button[data-variant="primary"]:hover:not(:disabled) { opacity: .88; }
 .ui-button[data-variant="quiet"] { border-color: transparent; background: transparent; }
+.file-entry.ui-button { justify-content: flex-start; text-align: left; }
 .ui-button[data-variant="danger"] { color: var(--danger); }
 .ui-card { min-width: 0; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
 .ui-field { display: grid; gap: 5px; min-width: 0; font-size: 13px; }
@@ -531,9 +532,6 @@ button { border-radius: var(--radius); }
 .right-tab .ui-button { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-height: 34px; padding-inline: 6px; font-size: 12px; }
 .right-tab .icon-button { width: 22px; min-width: 22px; min-height: 34px; padding: 3px; }
 .right-tab .icon-button svg { width: 14px; height: 14px; }
-.right-tab-launchers { display: flex; gap: 2px; padding-inline: 9px; border-bottom: 1px solid var(--border); }
-.right-tab-launchers:empty { display: none; }
-.right-tab-launchers .ui-button { min-height: 30px; font-size: 12px; }
 .right-content { min-height: 0; min-width: 0; display: flex; flex: 1; }
 .right-tab-content { overflow: auto; overscroll-behavior: contain; flex: 1; min-width: 0; padding: 8px 12px; }
 .right-tab-content h3 { margin: 12px 0 4px; font-size: 13px; }
@@ -563,7 +561,7 @@ button { border-radius: var(--radius); }
   .right-panel > header { padding-top: env(safe-area-inset-top); }
   .panel-resize { display: none; }
   .workspace-actions .icon-button { min-width: 30px; min-height: 44px; }
-  .right-tab-launchers .ui-button, .file-toolbar > .ui-button { min-height: 36px; }
+  .file-toolbar > .ui-button { min-height: 36px; }
 }
 @media (prefers-reduced-motion: reduce) {
   :root { --motion-button: 0ms; --motion-popup: 0ms; --motion-tree: 0ms; --motion-switch: 0ms; --motion-sidebar: 0ms; --motion-panel: 0ms; }
