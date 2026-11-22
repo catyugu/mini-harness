@@ -1,6 +1,6 @@
 import type { ServerResponse } from 'node:http';
-import type { MiniHarnessRuntime } from './agent.js';
-import type { Conversation } from './registry.js';
+import { eventStream } from './http.js';
+import type { Conversation, SessionRegistry } from './registry.js';
 import type { WorkspaceRecord } from './workspace-catalog.js';
 
 export type NavigationEvent =
@@ -9,39 +9,40 @@ export type NavigationEvent =
   | { type: 'session'; session: Conversation }
   | { type: 'delete'; id: string };
 
-export function navigationSnapshot(runtime: MiniHarnessRuntime) {
+export interface NavigationHost {
+  registry: SessionRegistry;
+  plugins: { ctx: { harnessApprovals?: { has(sessionId: string): boolean } } };
+}
+
+export function navigationSession(runtime: NavigationHost, id: string) {
+  const record = runtime.registry.get(id);
+  return record && { ...record, waitingApproval: runtime.plugins.ctx.harnessApprovals?.has(id) ?? false };
+}
+
+export function navigationSnapshot(runtime: NavigationHost) {
   return {
     workspaces: runtime.registry.workspaces.list(),
-    sessions: runtime.registry.list().map(({ id }) => runtime.navigationSession(id))
+    sessions: runtime.registry.list().map(({ id }) => navigationSession(runtime, id))
   };
 }
 
-export function streamNavigation(runtime: MiniHarnessRuntime, res: ServerResponse, signal: AbortSignal) {
+export function streamNavigation(runtime: NavigationHost, res: ServerResponse, signal: AbortSignal) {
   signal.throwIfAborted();
-  res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8',
-    'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
-  const send = (event: NavigationEvent) => {
-    if (res.destroyed || res.writableEnded) return;
-    if (res.writableLength > 1024 * 1024) { res.destroy(); return; }
-    res.write(JSON.stringify(event) + '\n');
-  };
+  const { send } = eventStream(res);
   const controller = new AbortController();
   const events = { signal: controller.signal };
-  const heartbeat = setInterval(() => { if (!res.destroyed) res.write('\n'); }, 15000);
-  heartbeat.unref();
   const shutdown = () => res.end();
   signal.addEventListener('abort', shutdown, { once: true });
   res.once('close', () => {
     controller.abort();
     signal.removeEventListener('abort', shutdown);
-    clearInterval(heartbeat);
   });
   const registry = runtime.registry;
   registry.events.addEventListener('change', (event: CustomEvent<{ id: string; deleted: boolean }>) => {
     const { id, deleted } = event.detail;
     if (deleted) send({ type: 'delete', id });
     else {
-      const session = runtime.navigationSession(id);
+      const session = navigationSession(runtime, id);
       if (session) send({ type: 'session', session });
     }
   }, events);

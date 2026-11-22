@@ -8,7 +8,9 @@ export const workspacePlugin: BrowserPlugin = {
   id: 'core:workspace', inject: ['miniState'],
   setup(ctx, api) {
     const { miniState: state } = ctx;
-    ctx.provide('miniWorkspace', workspacePicker(api, () => state.get().workspaces));
+    const picker = workspacePicker(api, () => state.get().workspaces);
+    ctx.provide('miniWorkspace', picker);
+    state.on('navigation', () => picker.label(state.workspace()), api.signal);
   }
 };
 

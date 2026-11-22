@@ -1,454 +1,76 @@
-import { prepareInput, type Attachment, type ImageInput } from './input.js';
-import { mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { Context } from 'cordis';
 import { isDeepStrictEqual } from 'node:util';
-import { randomUUID } from 'node:crypto';
-import {
-  createAgentSession, ModelRuntime, SessionManager, SettingsManager, DefaultResourceLoader,
-  type AgentSession
-} from '@earendil-works/pi-coding-agent';
-import { getSupportedThinkingLevels } from '@earendil-works/pi-ai/compat';
-import { RunEvents } from './run-events.js';
 import { PluginHost } from './plugins.js';
 import { SessionRegistry, type ModelChoice } from './registry.js';
-import { getPaths, mergeSettings, readSettings, writeJson, type SettingsPatch } from './config.js';
-import { isRunning, type ViewMessage, type StreamEvent, type RunEvent, type RunInfo } from './protocol.js';
-import { requireChildDepth, Semaphore, type ChildLease } from './subagents.js';
-
-interface ActiveRun {
-  info: RunInfo;
-  controller: AbortController;
-  events: RunEvents;
-  done?: Promise<string>;
-  lease?: ChildLease;
-}
+import { mergeSettings, readSettings, writeJson, type Paths, type SettingsPatch } from './config.js';
+import { builtins, Delegation } from './builtins/index.js';
+import { ToolRegistry } from './plugin-api.js';
+import { RouteRegistry } from './http.js';
+import { PiSessions } from './pi-sessions.js';
+import { Runs } from './runs.js';
 
 export class MiniHarnessRuntime {
-  paths: ReturnType<typeof import('./config.js').getPaths>;
-  settings: import('./config.js').Settings;
-  registry: SessionRegistry;
-  openSessions: Map<string, AgentSession>;
-  openingSessions: Map<string, Promise<AgentSession>>;
-  private readonly waitingApprovals = new Map<string, number>();
-  readonly busy = new Map<string, ActiveRun>();
+  settings: ReturnType<typeof readSettings>;
+  readonly registry: SessionRegistry;
   readonly plugins: PluginHost;
-  models!: ModelRuntime;
-  readonly semaphore: Semaphore;
+  readonly pi: PiSessions;
+  readonly runs: Runs;
+  readonly delegation: Delegation;
   private configuring?: Promise<void>;
-  private readonly staleSessions = new Set<string>();
-  private readonly compactions = new Map<string, { done: Promise<void>; controller: AbortController }>();
   private readonly deleting = new Set<string>();
   private stopping = false;
-  constructor(paths: ReturnType<typeof import('./config.js').getPaths>) {
-    this.paths = paths;
+
+  constructor(readonly paths: Paths) {
     this.settings = readSettings(paths);
     this.registry = new SessionRegistry(paths);
-    this.openSessions = new Map();
-    this.openingSessions = new Map();
-    this.semaphore = new Semaphore(this.settings.subagents.maxParallel);
-    this.plugins = new PluginHost({
-      paths, settings: () => this.settings, models: { list: () => this.availableModels() },
-      sessions: {
-        get: (id) => structuredClone(this.registry.get(id)),
-        list: () => structuredClone(this.registry.list())
-      },
-      workspaces: {
-        resolve: (id) => this.workspacePath(id),
-        approval: (id, waiting) => {
-          const count = this.waitingApprovals.get(id) ?? 0;
-          const next = count + (waiting ? 1 : -1);
-          if (next > 0) this.waitingApprovals.set(id, next);
-          else this.waitingApprovals.delete(id);
-          if (Boolean(count) !== (next > 0)) this.registry.notify(id);
-        }
-      },
-      delegation: this.delegation
-    });
-  }
-
-  workspacePath(id: string) {
-    const item = this.registry.get(id);
-    if (!item) throw new Error('Conversation not found');
-    return this.registry.workspaces.resolveRoot(item.cwd, item.workspaceId);
-  }
-
-  navigationSession(id: string) {
-    const record = this.registry.get(id);
-    return record && { ...record, waitingApproval: this.waitingApprovals.has(id) };
+    const ctx = new Context();
+    const assertAvailable = (id: string) => this.assertAvailable(id);
+    this.pi = new PiSessions(paths, this.registry, ctx, () => this.settings.model,
+      (model) => this.rememberModel(model), assertAvailable, (id) => this.runs.active(id));
+    this.delegation = new Delegation(this.registry, this.pi, () => this.runs, () => this.settings.subagents, assertAvailable);
+    this.runs = new Runs(this.registry, this.pi, () => this.settings.model, assertAvailable,
+      (record, task, signal) => this.delegation.schedule(record, task, signal));
+    this.plugins = new PluginHost(ctx, paths.plugins, builtins, (id, pluginId) => this.pi.records(id, pluginId));
+    ctx.provide('harnessModels', { list: () => this.pi.availableModels() });
+    ctx.provide('harnessSessions', { get: (id) => this.registry.get(id), list: () => this.registry.list() });
+    ctx.provide('harnessState', { paths });
+    ctx.provide('harnessSettings', () => this.settings);
+    ctx.provide('harnessTools', new ToolRegistry());
+    ctx.provide('harnessRoutes', new RouteRegistry());
+    ctx.provide('harnessWorkspace', { resolve: (id) => this.registry.workspacePath(id) });
+    ctx.provide('harnessSessionChanged', (id) => this.registry.notify(id));
+    ctx.provide('harnessDelegation', this.delegation);
   }
 
   async start() {
-    this.models = await ModelRuntime.create({
-      authPath: join(this.paths.home, 'auth.json'),
-      modelsPath: join(this.paths.home, 'models.json'),
-      refreshOnCreate: false
-    });
-    await this.models.getAvailable();
+    await this.pi.start();
     await this.plugins.configure(this.settings);
   }
 
-  modelInfo(model: AgentSession['model']) {
-    return { provider: model?.provider ?? '', id: model?.id ?? '' };
-  }
+  get hasActiveWork() { return this.runs.size > 0 || this.pi.hasPending; }
 
-  availableModels() {
-    const available = new Set(this.models.getAvailableSnapshot().map(({ provider, id }) => JSON.stringify([provider, id])));
-    return this.models.getModels().map((model) => ({
-      provider: model.provider, id: model.id, name: model.name || model.id,
-      configured: available.has(JSON.stringify([model.provider, model.id])), thinkingLevels: getSupportedThinkingLevels(model)
-    }));
-  }
-
-  resolveModel(choice: ModelChoice = this.settings.model, missingOk = false) {
-    if (!choice?.provider) {
-      if (choice?.id) throw new Error('A model ID requires a provider');
-      return undefined;
-    }
-    // A provider-only override selects one of its available models.
-    const id = choice.id || this.models.getAvailableSnapshot().find((m) => m.provider === choice.provider)?.id ||
-      this.models.getModels(choice.provider)[0]?.id;
-    if (!id) {
-      if (!missingOk) throw new Error('No model is available for provider: ' + choice.provider);
-      return undefined;
-    }
-    const model = this.models.getModel(choice.provider, id);
-    if (!model && !missingOk) throw new Error('Unknown model: ' + choice.provider + '/' + id);
-    return model;
-  }
-
-  invalidateProviderSessions(provider: string) {
-    for (const [id, session] of this.openSessions) {
-      if (session.model?.provider === provider) this.staleSessions.add(id);
-    }
-  }
-
-  get hasActiveWork() { return Boolean(this.busy.size || this.openingSessions.size || this.compactions.size); }
-
-  async open(id: string): Promise<AgentSession> {
+  private assertAvailable(id?: string) {
     if (this.configuring || this.stopping) throw new Error('Agent service is unavailable during reconfiguration or shutdown');
-    if (this.deleting.has(id)) throw new Error('Conversation is being deleted');
-    const active = this.openSessions.get(id);
-    if (active && (!this.staleSessions.has(id) || this.busy.has(id) || this.compactions.has(id))) return active;
-    if (active) { active.dispose(); this.openSessions.delete(id); this.staleSessions.delete(id); }
-    const pending = this.openingSessions.get(id);
-    if (pending) return pending;
-    const opening = this.openNewSession(id);
-    this.openingSessions.set(id, opening);
-    try { return await opening; }
-    finally { this.openingSessions.delete(id); }
+    if (id && this.deleting.has(id)) throw new Error('Conversation is being deleted');
   }
 
-  private async openNewSession(id: string): Promise<AgentSession> {
-    const item = this.registry.get(id);
-    if (!item) throw new Error('Conversation not found');
-    const cwd = this.workspacePath(id);
-    const storage = getPaths(item.cwd, { MINI_HARNESS_HOME: this.paths.home }).sessions;
-    mkdirSync(storage, { recursive: true, mode: 0o700 });
-    this.registry.checkSessionDirectory(storage);
-    const settingsManager = SettingsManager.inMemory();
-    const loader = new DefaultResourceLoader({
-      cwd,
-      agentDir: this.paths.agent,
-      settingsManager,
-      additionalSkillPaths: this.plugins.ctx.harnessSkills?.paths(cwd) ?? [],
-      noSkills: !this.plugins.ctx.harnessSkills,
-      noExtensions: true
-    });
-    await loader.reload();
-    const file = this.registry.checkedFile(item);
-    const manager = file ? SessionManager.open(file, storage, cwd) :
-      SessionManager.create(cwd, storage, { id: item.id });
-    if (item.file !== manager.getSessionFile()) this.registry.update(id, { file: manager.getSessionFile() });
-    const customTools = this.plugins.getTools(id);
-    const recordedModel = item.model && this.resolveModel(item.model, true);
-    const { session } = await createAgentSession({
-      cwd,
-      agentDir: this.paths.agent,
-      modelRuntime: this.models,
-      model: recordedModel,
-      resourceLoader: loader,
-      settingsManager,
-      sessionManager: manager,
-      tools: customTools.map((tool) => tool.name),
-      customTools
-    });
-    if (recordedModel && (session.model?.provider !== recordedModel.provider || session.model?.id !== recordedModel.id)) {
-      try { await session.setModel(recordedModel); }
-      catch (error) { session.dispose(); throw error; }
-    }
-    this.openSessions.set(id, session);
-    return session;
-  }
-
-  sessionMessages(id: string): ViewMessage[] {
-    const session = this.openSessions.get(id);
-    if (!session) return [];
-    const argumentsById = new Map<string, unknown>();
-    for (const message of session.messages) if (message.role === 'assistant') {
-      for (const block of message.content) if (block.type === 'toolCall') argumentsById.set(block.id, block.arguments);
-    }
-    return session.messages.flatMap<ViewMessage>((message) => {
-      switch (message.role) {
-        case 'user':
-        case 'assistant':
-          return [{
-            role: message.role, content: message.content, timestamp: message.timestamp,
-            error: message.role === 'assistant' ? message.errorMessage : undefined
-          }];
-        case 'toolResult':
-          return [{
-            role: message.role, content: message.content, timestamp: message.timestamp,
-            arguments: argumentsById.get(message.toolCallId), toolName: message.toolName, toolCallId: message.toolCallId, isError: message.isError,
-            sessionId: message.details && typeof message.details === 'object' && 'sessionId' in message.details &&
-              typeof message.details.sessionId === 'string' ? message.details.sessionId : undefined
-          }];
-        default: return [];
-      }
-    });
+  private rememberModel(model: ModelChoice) {
+    if (isDeepStrictEqual(this.settings.model, model)) return;
+    const next = mergeSettings(this.settings, { model });
+    writeJson(this.paths.settings, next);
+    this.settings = next;
   }
 
   async getConversation(id: string) {
-    if (!this.registry.get(id)) throw new Error('Conversation not found');
-    const session = await this.open(id);
-    return { ...this.registry.get(id), messages: this.sessionMessages(id), model: this.modelInfo(session.model),
-      selectedModel: { ...this.settings.model }, thinkingLevel: session.thinkingLevel,
-      run: this.runInfo(id), partial: this.busy.get(id)?.events.partial, tools: this.busy.get(id)?.events.activeTools ?? [], busy: this.busy.has(id), queue: { steer: session.getSteeringMessages(), followUp: session.getFollowUpMessages() } };
-  }
-
-  private launch(id: string, prompt: string, emit: (event: StreamEvent) => void, { signal, model, attachments, thinkingLevel }: { signal?: AbortSignal; model?: ModelChoice; attachments?: Attachment[]; thinkingLevel?: AgentSession['thinkingLevel'] } = {}) {
-    if (this.configuring || this.stopping) throw new Error('Agent service is unavailable during reconfiguration or shutdown');
-    if (this.busy.has(id) || this.compactions.has(id)) throw new Error('Conversation is already running');
-    if (this.deleting.has(id)) throw new Error('Conversation is being deleted');
-    if (thinkingLevel !== undefined && !['off', 'minimal', 'low', 'medium', 'high', 'xhigh'].includes(thinkingLevel))
-      throw new Error('Invalid thinking level');
-    const prepared = prepareInput(prompt, attachments);
-    prompt = prepared.text;
-    const record = this.registry.get(id);
-    if (!record) throw new Error('Conversation not found');
-    if (model !== undefined) {
-      if (!model || typeof model.provider !== 'string' || typeof model.id !== 'string' ||
-          model.provider.length > 160 || model.id.length > 160) throw new Error('Invalid model choice');
-      this.resolveModel(model);
-    }
-    const choice = model ?? (record.parentId ? record.model : this.settings.model);
-    if (this.staleSessions.delete(id)) {
-      this.openSessions.get(id)?.dispose();
-      this.openSessions.delete(id);
-    }
-    const info: RunInfo = { id: randomUUID(), sessionId: id, state: 'queued', startedAt: new Date().toISOString(), sequence: 0 };
-    const run: ActiveRun = { info, controller: new AbortController(), events: new RunEvents(info) };
-    const cancellation = signal ? AbortSignal.any([run.controller.signal, signal]) : run.controller.signal;
-    this.registry.update(id, { run: run.info });
-    this.busy.set(id, run);
-    const publish = (event: StreamEvent) => {
-      const item = run.events.publish(event);
-      try { emit?.(item); } catch { /* An observer cannot terminate the run. */ }
-    };
-    const promptSession = async () => {
-      cancellation.throwIfAborted();
-      run.info.state = 'running';
-      this.registry.update(id, { run: run.info });
-      publish({ type: 'run', run: { ...run.info } });
-      return this.runPrompt(record, prompt, publish, cancellation, choice, prepared.images, thinkingLevel);
-    };
-    const work = record.parentId ? this.semaphore.run((lease) => {
-      run.lease = lease;
-      return promptSession();
-    }, cancellation) : promptSession();
-    run.done = work.then((text) => {
-      run.info.state = 'completed';
-      return text;
-    }, (error) => {
-      run.info.state = cancellation.aborted ? 'cancelled' : 'failed';
-      run.info.error = cancellation.aborted ? 'Agent run cancelled' : error instanceof Error ? error.message : String(error);
-      publish({ type: 'error', error: run.info.error });
-      throw new Error(run.info.error, { cause: error });
-    }).finally(() => {
-      run.info.finishedAt = new Date().toISOString();
-      publish({ type: 'run', run: { ...run.info } });
-      try { this.registry.update(id, { run: run.info }); }
-      finally { this.busy.delete(id); run.events.close(); }
-    });
-    // Server-owned runs may outlive every observer.
-    void run.done.catch(() => {});
-    return run;
-  }
-
-  async send(id: string, prompt: string, emit: (event: StreamEvent) => void = () => {}, options: { signal?: AbortSignal; model?: ModelChoice; attachments?: Attachment[] } = {}) {
-    return this.launch(id, prompt, emit, options).done;
-  }
-
-  startRun(id: string, prompt: string, model?: ModelChoice, attachments?: Attachment[], thinkingLevel?: AgentSession['thinkingLevel']) {
-    return { ...this.launch(id, prompt, undefined, { model, attachments, thinkingLevel }).info };
-  }
-
-  runInfo(id: string): RunInfo | undefined {
-    const info = this.busy.get(id)?.info ?? this.registry.get(id)?.run;
-    return info && { ...info };
-  }
-
-  watchRun(id: string, runId: string, after: number, emit: (event: RunEvent) => void) {
-    const run = this.busy.get(id);
-    const info = this.runInfo(id);
-    if (!info || info.id !== runId) throw new Error('Run not found');
-    if (!Number.isSafeInteger(after) || after < 0 || after > info.sequence) throw new Error('Invalid event cursor');
-    if (run) return run.events.watch(after, emit, () => this.sessionMessages(id));
-    emit({ type: 'snapshot', messages: this.sessionMessages(id), tools: [], run: info, sequence: info.sequence });
-    return () => {};
-  }
-
-  cancel(id: string) {
-    let cancelled = false;
-    for (const child of this.registry.descendants([id])) {
-      const run = this.busy.get(child);
-      if (run) { cancelled = true; run.controller.abort(new Error('Agent run cancelled')); }
-      const compaction = this.compactions.get(child);
-      if (compaction) { cancelled = true; compaction.controller.abort(new Error('Compaction cancelled')); }
-    }
-    return cancelled;
-  }
-
-  private async runPrompt(record: NonNullable<ReturnType<SessionRegistry['get']>>, prompt: string,
-      emit: (event: StreamEvent) => void, signal: AbortSignal, choice?: ModelChoice, images: ImageInput[] = [], thinkingLevel?: AgentSession['thinkingLevel']) {
-    const { id } = record;
-    signal.throwIfAborted();
-    const session = await this.open(id);
-    signal.throwIfAborted();
-    const model = this.resolveModel(choice);
-    if (model && (session.model?.provider !== model.provider || session.model?.id !== model.id))
-      await session.setModel(model);
-    signal.throwIfAborted();
-    if (images.length && !session.model?.input.includes('image')) throw new Error('The selected model does not support image input. Choose an image-capable model and retry.');
-    if (thinkingLevel !== undefined) session.setThinkingLevel(thinkingLevel);
-    const actual = this.modelInfo(session.model);
-    if (!record.parentId && !isDeepStrictEqual(this.settings.model, actual)) {
-      const next = mergeSettings(this.settings, { model: actual });
-      writeJson(this.paths.settings, next);
-      this.settings = next;
-    }
-    this.registry.update(id, { model: actual });
-    if (record.title === 'New conversation') this.registry.update(id, { title: prompt.trim().slice(0, 72) });
-    const toolCalls = new Map<string, { args: unknown; start: number }>();
-    const off = session.subscribe((event) => {
-      switch (event.type) {
-        case 'message_start':
-          if (event.message.role === 'user') emit({ type: 'user', content: event.message.content, text: typeof event.message.content === 'string' ? event.message.content : event.message.content.filter((block) => block.type === 'text').map((block) => block.text).join('\n') });
-          if (event.message.role === 'assistant') emit({ type: 'assistant-start' });
-          break;
-        case 'message_update':
-          if (event.assistantMessageEvent?.type === 'text_delta')
-            emit({ type: 'delta', text: event.assistantMessageEvent.delta });
-          break;
-        case 'message_end':
-          if (event.message.role === 'assistant') emit({ type: 'assistant-end' });
-          break;
-        case 'tool_execution_start':
-          toolCalls.set(event.toolCallId, { args: event.args, start: performance.now() });
-          emit({ type: 'tool', id: event.toolCallId, name: event.toolName, state: 'running', arguments: event.args });
-          break;
-        case 'tool_execution_update':
-          emit({ type: 'tool', id: event.toolCallId, name: event.toolName, state: 'running', arguments: toolCalls.get(event.toolCallId)?.args, content: event.partialResult?.content });
-          break;
-        case 'tool_execution_end': {
-          const call = toolCalls.get(event.toolCallId);
-          toolCalls.delete(event.toolCallId);
-          const run = this.busy.get(id);
-          const changedPath = event.result?.details?.changedPath;
-          if (!event.isError && typeof changedPath === 'string' && run)
-            run.info.changedFiles = [...new Set([...(run.info.changedFiles ?? []), changedPath])];
-          emit({ type: 'tool', id: event.toolCallId, name: event.toolName, state: event.isError ? 'error' : 'finished',
-            arguments: call?.args, content: event.result?.content, sessionId: event.result?.details?.sessionId,
-            elapsedMs: call ? performance.now() - call.start : undefined });
-          break;
-        }
-      }
-    });
-    const cancel = () => { void session.abort().catch(() => {}); };
-    signal.addEventListener('abort', cancel, { once: true });
-    try {
-      await session.prompt(prompt, { images });
-      signal.throwIfAborted();
-      const last = session.messages.at(-1);
-      if (last?.role === 'assistant' && last.errorMessage) throw new Error(last.errorMessage);
-      const answer = session.getLastAssistantText() || '';
-      emit({ type: 'complete', text: answer });
-      return answer;
-    } finally {
-      signal.removeEventListener('abort', cancel);
-      off();
-      session.clearQueue();
-      if (session.sessionFile && session.sessionFile !== this.registry.get(id)?.file) {
-        this.registry.checkedFile({ cwd: record.cwd, file: session.sessionFile });
-        this.registry.update(id, { file: session.sessionFile });
-      }
-    }
-  }
-
-  async compact(id: string) {
-    if (this.busy.has(id) || this.compactions.has(id)) throw new Error('Stop the open conversation before compacting it');
-    const controller = new AbortController();
-    const done = this.open(id).then(async (session) => {
-      controller.signal.throwIfAborted();
-      const abort = () => session.abortCompaction();
-      controller.signal.addEventListener('abort', abort, { once: true });
-      try { await session.compact(); }
-      finally { controller.signal.removeEventListener('abort', abort); }
-    });
-    this.compactions.set(id, { done, controller });
-    try { await done; }
-    finally { this.compactions.delete(id); }
-  }
-
-  async queueInput(id: string, text: string, mode: 'steer' | 'followUp', attachments?: Attachment[]) {
-    if (!['steer', 'followUp'].includes(mode)) throw new Error('Invalid queue mode');
-    const session = this.openSessions.get(id);
-    if (!this.busy.has(id) || !session?.isStreaming) throw new Error('The agent is not streaming; send a new message');
-    const input = prepareInput(text, attachments);
-    if (session.getSteeringMessages().length + session.getFollowUpMessages().length >= 16) throw new Error('Queue is full');
-    await session[mode](input.text, input.images);
-    return { steer: session.getSteeringMessages(), followUp: session.getFollowUpMessages() };
-  }
-
-  readonly delegation = {
-    depth: (id: string) => this.registry.depth(id),
-    parentModel: (id: string) => {
-      const parent = this.openSessions.get(id);
-      if (!parent) throw new Error('Parent session not open');
-      return this.modelInfo(parent.model);
-    },
-    run: (id: string, task: string, choice: ModelChoice, signal?: AbortSignal) => {
-      const run = this.busy.get(id);
-      const cancellation = run && signal ? AbortSignal.any([run.controller.signal, signal]) : signal ?? run?.controller.signal;
-      const delegate = () => this.runChild(id, task, choice, cancellation);
-      // A child waiting on its descendant yields its concurrency slot.
-      return run?.lease ? run.lease.pause(delegate) : delegate();
-    }
-  };
-
-  async runChild(parentId: string, task: string, choice: ModelChoice, signal?: AbortSignal) {
-    signal?.throwIfAborted();
-    const parent = this.registry.get(parentId);
-    if (!parent) throw new Error('Parent conversation not found');
-    if (this.deleting.has(parentId)) throw new Error('Conversation is being deleted');
-    requireChildDepth(this.registry.depth(parentId), this.settings.subagents.maxDepth);
-    const model = this.resolveModel(choice);
-    const record = this.registry.create({
-      parentId, workspaceId: parent.workspaceId, title: task.slice(0, 72), model: model && this.modelInfo(model)
-    });
-    try {
-      const text = await this.send(record.id, task, undefined, { signal });
-      return { id: record.id, text };
-    } catch (error) {
-      if (this.registry.get(record.id)) this.registry.update(record.id, {
-        title: (signal?.aborted || this.runInfo(record.id)?.state === 'cancelled' ? '[Cancelled] ' : '[Failed] ') + task.slice(0, 60)
-      });
-      throw error;
-    }
+    const session = await this.pi.open(id);
+    return { ...this.registry.get(id), messages: this.pi.messages(id), model: this.pi.modelInfo(session.model),
+      selectedModel: { ...this.settings.model }, thinkingLevel: session.thinkingLevel, ...this.runs.view(id),
+      queue: this.pi.queue(session) };
   }
 
   export(ids: string[]) {
     const all = this.registry.descendants(ids);
-    if (all.some((id) => this.busy.has(id) || this.openingSessions.has(id) || this.compactions.has(id)))
+    if (all.some((id) => this.runs.active(id) || this.pi.openingSession(id)))
       throw new Error('Stop active conversations before exporting them');
     return this.registry.export(ids);
   }
@@ -458,65 +80,39 @@ export class MiniHarnessRuntime {
     if (all.some((id) => this.deleting.has(id))) throw new Error('Conversation is being deleted');
     for (const id of all) this.deleting.add(id);
     try {
-      for (const id of ids) this.cancel(id);
-      await Promise.allSettled(all.flatMap((id) => [this.busy.get(id)?.done, this.openingSessions.get(id), this.compactions.get(id)?.done]));
-      for (const id of all) {
-        this.openSessions.get(id)?.dispose();
-        this.openSessions.delete(id);
-        this.staleSessions.delete(id);
-      }
+      for (const id of ids) this.runs.cancel(id);
+      await Promise.allSettled(all.flatMap((id) => [this.runs.completion(id), this.pi.openingSession(id)]));
+      for (const id of all) this.pi.release(id);
       return this.registry.delete(ids);
     } finally { for (const id of all) this.deleting.delete(id); }
   }
 
   async updateSettings(patch: SettingsPatch) {
-    if (this.configuring || this.stopping) throw new Error('Agent service is unavailable during reconfiguration or shutdown');
+    this.assertAvailable();
     const next = mergeSettings(this.settings, patch);
-    this.resolveModel(next.model);
-    if (next.subagents.provider) this.resolveModel({ provider: next.subagents.provider, id: next.subagents.model });
-    const toolsChanged = this.plugins.needsUpdate(next);
-    const previousDepth = this.settings.subagents.maxDepth;
-    const depthChanged = next.subagents.maxDepth !== previousDepth;
-    if (!toolsChanged) {
+    this.pi.resolveModel(next.model);
+    this.delegation.validate(next.subagents);
+    const commit = () => {
       writeJson(this.paths.settings, next);
       this.settings = next;
-      this.semaphore.setLimit(next.subagents.maxParallel);
-      if (depthChanged) for (const id of this.openSessions.keys()) {
-        const depth = this.registry.depth(id);
-        if ((depth < previousDepth) !== (depth < next.subagents.maxDepth)) this.staleSessions.add(id);
-      }
-      return next;
-    }
-    if (this.hasActiveWork)
-      throw new Error('Stop active conversations before changing tools or Skills');
-    const resources = new Map([...this.openSessions.keys()].map((id) => [id, this.plugins.resources(id)]));
-    this.configuring = this.plugins.configure(next, () => writeJson(this.paths.settings, next));
-    try {
-      await this.configuring;
-      this.settings = next;
-      this.semaphore.setLimit(next.subagents.maxParallel);
-      return next;
-    } finally {
-      // A rollback can replace closures too. Keep sessions whose actual resources survived.
-      for (const [id, before] of resources) {
-        const after = this.plugins.resources(id);
-        if (before.length !== after.length || before.some((resource, i) => resource !== after[i])) {
-          this.openSessions.get(id)?.dispose();
-          this.openSessions.delete(id);
-          this.staleSessions.delete(id);
-        }
-      }
+      this.delegation.configure();
+    };
+    this.configuring = this.plugins.configure(next, commit, () => {
+      if (this.hasActiveWork) throw new Error('Stop active conversations before changing tools or Skills');
+    });
+    try { if (this.configuring) await this.configuring; }
+    finally {
       this.configuring = undefined;
+      this.pi.reconcileResources();
     }
+    return next;
   }
 
   async stop() {
     this.stopping = true;
-    for (const id of [...this.busy.keys(), ...this.compactions.keys()]) this.cancel(id);
-    await Promise.allSettled([this.configuring, ...this.openingSessions.values(), ...[...this.compactions.values()].map(({ done }) => done), ...[...this.busy.values()].map(({ done }) => done)]);
-    for (const session of this.openSessions.values()) session.dispose();
-    this.openSessions.clear();
+    await Promise.allSettled([this.configuring, this.runs.stop(), ...this.pi.pending]);
+    this.pi.close();
     await this.plugins.close();
-    await this.models?.settleCredentialWrites();
+    await this.pi.models?.settleCredentialWrites();
   }
 }

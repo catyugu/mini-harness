@@ -1,22 +1,27 @@
 import { scopedElements } from './api.js';
 import { fromMarkup } from './primitives.js';
 import type { BrowserPlugin } from './extensions.js';
-import type { Slot } from './extensions.js';
 import { hydrateIcons } from './icons.js';
 import { createLayout } from './layout.js';
 import { createRightTabs } from './right-tabs.js';
 
-const slots: Partial<Record<Slot, string>> = {
+const slots = {
   sidebar: 'sidebarExtensions', inspector: 'inspectorExtensions',
   'session-navigation': 'navigationSlot', conversation: 'conversationSlot', dialogs: 'dialogSlot', main: 'mainSlot', 'conversation-header': 'conversationExtensions'
 };
 
 export const shellPlugin: BrowserPlugin = {
-  id: 'core:shell',
+  id: 'core:shell', inject: ['miniState'],
   setup(ctx, api) {
     const { shell, tabs } = createShell(api.signal);
     ctx.provide('miniShell', shell);
     ctx.provide('rightTabs', tabs);
+    const { miniState: state } = ctx;
+    state.on('navigation', () => {
+      const { sessions, workspaces } = state.get();
+      tabs.selectScope(state.scope());
+      tabs.prune(new Set(sessions.map(({ id }) => id)), new Set(workspaces.map(({ id }) => id)));
+    }, api.signal);
   }
 };
 
@@ -73,7 +78,7 @@ function createShell(signal: AbortSignal) {
   hydrateIcons();
 
   const shell = {
-    slot: (name: Slot) => slots[name] ? element(slots[name]) : null,
+    outlet: (name: keyof typeof slots) => element(slots[name]),
     bindNew: (action: () => void, signal: AbortSignal) => element('newSession').addEventListener('click', action, { signal }),
     bindSettings: (action: () => void, signal: AbortSignal) => element('settingsOpen').addEventListener('click', action, { signal }),
     setTitle: (title: string) => { element('conversationTitle').textContent = title; },

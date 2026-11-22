@@ -43,13 +43,10 @@ export interface FrontendApi {
 
 export interface FrontendServices {
   bootstrap(): Bootstrap;
-  sessionTitle(id: string): string | undefined;
   openConversation(id: string): void;
   workspace(): TabScope | undefined;
-  currentConversation(): Conversation | undefined;
-  session(id: string): Conversation | undefined;
+  session(id?: string): Conversation | undefined;
   onConversationChange(listener: () => void, signal: AbortSignal): void;
-  changedFiles(): string[];
   report(error: Error): void;
 }
 export type FrontendSetup = (api: FrontendApi, services: FrontendServices) => void | (() => void) | Promise<void | (() => void)>;
@@ -61,7 +58,8 @@ export interface BrowserPlugin {
 }
 
 export class FrontendHost {
-  private readonly fibers = new Map<string, Fiber>();
+  private readonly plugins = new Map<string, { fiber: Fiber; controller: AbortController }>();
+  private disposed = false;
   private readonly contributions = new WeakMap<HTMLElement, number>();
   private readonly renderers = new Map<string, (tool: ToolView) => HTMLElement | undefined>();
   private readonly actions = new Map<string, (tool: ToolView) => HTMLElement | undefined>();
@@ -83,7 +81,9 @@ export class FrontendHost {
   }
 
   async mountPlugin({ id, inject = [], setup }: BrowserPlugin, config: Record<string, unknown> = {}) {
+    if (this.disposed) throw new Error('Browser host is disposed');
     await this.disable(id);
+    if (this.disposed) throw new Error('Browser host is disposed');
     const controller = new AbortController();
     const fiber = this.ctx.inject(inject, async (ctx) => {
       const own = (install: () => (() => void | Promise<void>)) => {
@@ -106,7 +106,9 @@ export class FrontendHost {
         openTab: (type, path, scope) => {
           if (!controller.signal.aborted) this.ui.tabs().open(id + ':' + type, path, scope);
         },
-        inspect: (title, content) => own(() => this.ui.tabs().inspect(id, title, content)),
+        inspect: (title, content) => {
+          if (!controller.signal.aborted) this.ui.tabs().inspect(id, title, content, controller.signal);
+        },
         config: Object.freeze(structuredClone(config)),
         mount: (slot, node, order = 0) => own(() => {
           const container = this.slot(slot);
@@ -125,27 +127,33 @@ export class FrontendHost {
           else own(() => dispose);
         }
       });
-      if (cleanup) own(() => cleanup);
+      if (cleanup) {
+        if (controller.signal.aborted) await cleanup();
+        else own(() => cleanup);
+      }
     });
-    this.fibers.set(id, fiber);
-    this.controllers.set(id, controller);
+    this.plugins.set(id, { fiber, controller });
     try { await fiber.await(); }
-    catch (error) { await this.disable(id); throw error; }
+    catch (error) {
+      await this.disable(id);
+      throw error;
+    }
   }
 
-  private readonly controllers = new Map<string, AbortController>();
-
   async disable(id: string) {
-    const fiber = this.fibers.get(id);
-    this.fibers.delete(id);
-    this.controllers.get(id)?.abort();
-    this.controllers.delete(id);
-    try { await fiber?.dispose(); }
-    catch (error) { this.services.report(error); }
+    const plugin = this.plugins.get(id);
+    if (!plugin) return;
+    this.plugins.delete(id);
+    plugin.controller.abort();
+    await plugin.fiber.dispose();
   }
 
   async dispose() {
-    for (const id of [...this.fibers.keys()].reverse()) await this.disable(id);
+    this.disposed = true;
+    for (const id of [...this.plugins.keys()].reverse()) {
+      try { await this.disable(id); }
+      catch (error) { this.services.report(error); }
+    }
   }
 
   render(tool: ToolView, action = false) {

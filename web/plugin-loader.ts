@@ -2,11 +2,13 @@ import type { FrontendHost, FrontendSetup } from './extensions.js';
 import type { Bootstrap } from './types.js';
 import { data } from './api.js';
 
-export function createPluginLoader(host: FrontendHost, report: (error: Error) => void) {
+export type BrowserPluginFailures = ReadonlyMap<string, unknown>;
+
+export function createPluginLoader(host: FrontendHost) {
   const mounted = new Map<string, string>();
   let work = Promise.resolve();
 
-  return (snapshot: Bootstrap) => (work = work.then(async () => {
+  async function sync(snapshot: Bootstrap): Promise<BrowserPluginFailures> {
     const enabled = new Map(snapshot.plugins.filter(({ id }) => snapshot.settings.plugins[id]).map((plugin) => [plugin.id, plugin]));
     const signatures = new Map<string, string>();
     const signature = (id: string, visiting = new Set<string>()): string => {
@@ -20,17 +22,19 @@ export function createPluginLoader(host: FrontendHost, report: (error: Error) =>
       return key;
     };
     for (const id of enabled.keys()) signature(id);
+    const failed = new Map<string, unknown>();
     for (const [id, key] of [...mounted].reverse()) {
       if (signatures.get(id) === key) continue;
-      await host.disable(id);
       mounted.delete(id);
+      try { await host.disable(id); }
+      catch (error) { failed.set(id, error); }
     }
-    const failed = new Set<string>();
     for (const [id, key] of signatures) {
       const plugin = enabled.get(id);
       if ((!plugin.browser && !plugin.web) || mounted.has(id)) continue;
       try {
-        if (plugin.requires?.some((parent) => failed.has(parent))) throw new Error('Browser dependency failed: ' + id);
+        if (failed.has(id) || plugin.requires?.some((parent) => failed.has(parent)))
+          throw failed.get(id) ?? new Error('Browser dependency failed');
         let setup: FrontendSetup;
         let config = snapshot.settings.pluginConfig[id];
         if (plugin.browser) setup = (await import(plugin.browser)).default;
@@ -45,9 +49,15 @@ export function createPluginLoader(host: FrontendHost, report: (error: Error) =>
         await host.enable(id, setup, config);
         mounted.set(id, key);
       } catch (error) {
-        failed.add(id);
-        report(error);
+        failed.set(id, error);
       }
     }
-  }).catch(report));
+    return failed;
+  }
+
+  return (snapshot: Bootstrap) => {
+    const update = work.then(() => sync(snapshot));
+    work = update.then(() => {}, () => {});
+    return update;
+  };
 }

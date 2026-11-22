@@ -1,21 +1,30 @@
 import { join } from 'node:path';
-import { readJson, writeJson } from './config.js';
-import type { MiniHarnessRuntime } from './agent.js';
-export function providerSettings(runtime: MiniHarnessRuntime) {
+import { readJson, writeJson, type Settings, type SettingsPatch } from './config.js';
+import type { PiSessions } from './pi-sessions.js';
+
+type ProviderHost = {
+  paths: { home: string };
+  settings: Pick<Settings, 'model'>;
+  pi: Pick<PiSessions, 'models' | 'invalidateProviderSessions'>;
+  delegation: { checkProvider(id: string, removing?: boolean): void };
+  hasActiveWork: boolean;
+  updateSettings(patch: SettingsPatch): Promise<Settings>;
+};
+export function providerSettings(runtime: ProviderHost) {
   const config = readJson<any>(join(runtime.paths.home, 'models.json'), { providers: {} });
-  return runtime.models.getProviders().map((provider) => {
-    const auth = runtime.models.getProviderAuthStatus(provider.id);
+  return runtime.pi.models.getProviders().map((provider) => {
+    const auth = runtime.pi.models.getProviderAuthStatus(provider.id);
     return {
       id: provider.id, name: provider.name ?? provider.id,
       configured: auth.configured, storedCredential: auth.source === 'stored',
       canSetKey: Boolean(provider.auth.apiKey?.login),
       custom: Boolean(config.providers?.[provider.id]),
       baseUrl: config.providers?.[provider.id]?.baseUrl ?? '', api: config.providers?.[provider.id]?.api ?? 'openai-completions',
-      models: runtime.models.getModels(provider.id).map(({ id, name, input, contextWindow, maxTokens, reasoning }) => ({ id, name, input, contextWindow, maxTokens, reasoning }))
+      models: runtime.pi.models.getModels(provider.id).map(({ id, name, input, contextWindow, maxTokens, reasoning }) => ({ id, name, input, contextWindow, maxTokens, reasoning }))
     };
   });
 }
-export async function saveProvider(runtime: MiniHarnessRuntime, input: any, remove = false) {
+export async function saveProvider(runtime: ProviderHost, input: any, remove = false) {
   if (runtime.hasActiveWork) throw new Error('Stop active conversations before changing providers');
   if (!input || typeof input.id !== 'string' || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(input.id)) throw new Error('Invalid provider ID');
   const path = join(runtime.paths.home, 'models.json');
@@ -23,10 +32,10 @@ export async function saveProvider(runtime: MiniHarnessRuntime, input: any, remo
   const next = structuredClone(previous); next.providers ??= {};
   if (remove) {
     if (!Object.hasOwn(next.providers, input.id)) throw new Error('Only custom provider configurations can be removed');
-    if (runtime.settings.subagents.provider === input.id) throw new Error('Change the Subagents provider before removing this endpoint');
+    runtime.delegation.checkProvider(input.id, true);
     delete next.providers[input.id];
   } else {
-    if (input.create && (runtime.models.getProvider(input.id) || Object.hasOwn(next.providers, input.id))) throw new Error('A provider with this ID already exists');
+    if (input.create && (runtime.pi.models.getProvider(input.id) || Object.hasOwn(next.providers, input.id))) throw new Error('A provider with this ID already exists');
     if (input.key !== undefined && typeof input.key !== 'string') throw new Error('Invalid credential');
     if (!['openai-completions', 'openai-responses', 'anthropic-messages', 'google-generative-ai'].includes(input.api)) throw new Error('Unsupported API type');
     let url: URL;
@@ -50,33 +59,32 @@ export async function saveProvider(runtime: MiniHarnessRuntime, input: any, remo
       models: models.map((model) => ({ ...next.providers[input.id]?.models?.find((old) => old.id === model.id), ...model })) };
   }
   const recent = runtime.settings.model;
-  const child = runtime.settings.subagents;
   writeJson(path, next);
   let clearedRecent = false;
   try {
-    await runtime.models.refresh({ allowNetwork: false });
-    if (runtime.models.getError()) throw new Error(runtime.models.getError());
-    if (child.provider === input.id) runtime.resolveModel({ provider: child.provider, id: child.model });
+    await runtime.pi.models.refresh({ allowNetwork: false });
+    if (runtime.pi.models.getError()) throw new Error(runtime.pi.models.getError());
+    runtime.delegation.checkProvider(input.id);
     if (recent.provider === input.id && !(recent.id
-      ? runtime.models.getModel(recent.provider, recent.id)
-      : runtime.models.getModels(recent.provider).length)) {
+      ? runtime.pi.models.getModel(recent.provider, recent.id)
+      : runtime.pi.models.getModels(recent.provider).length)) {
       await runtime.updateSettings({ model: { provider: '', id: '' } });
       clearedRecent = true;
     }
-    if (remove && !runtime.models.getProvider(input.id)) await runtime.models.logout(input.id);
+    if (remove && !runtime.pi.models.getProvider(input.id)) await runtime.pi.models.logout(input.id);
     else if (!remove && input.key?.trim()) await saveProviderCredential(runtime, input.id, input.key.trim());
   } catch (error) {
     writeJson(path, previous);
-    await runtime.models.refresh({ allowNetwork: false });
+    await runtime.pi.models.refresh({ allowNetwork: false });
     if (clearedRecent) await runtime.updateSettings({ model: recent });
     throw error;
   }
-  runtime.invalidateProviderSessions(input.id);
+  runtime.pi.invalidateProviderSessions(input.id);
   return providerSettings(runtime);
 }
 
-export async function saveProviderCredential(runtime: MiniHarnessRuntime, provider: string, key: string) {
-  await runtime.models.login(provider, 'api_key', {
+export async function saveProviderCredential(runtime: ProviderHost, provider: string, key: string) {
+  await runtime.pi.models.login(provider, 'api_key', {
     prompt: async (prompt) => {
       if (prompt.type !== 'secret') throw new Error('This provider requires additional credential setup through Pi');
       return key;

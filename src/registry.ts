@@ -97,6 +97,12 @@ export class SessionRegistry {
     return structuredClone(updated);
   }
 
+  workspacePath(id: string) {
+    const item = this.get(id);
+    if (!item) throw new Error('Conversation not found');
+    return this.workspaces.resolveRoot(item.cwd, item.workspaceId);
+  }
+
   depth(id: string) {
     let record = this.get(id);
     if (!record) throw new Error('Conversation not found');

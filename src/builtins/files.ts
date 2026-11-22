@@ -3,7 +3,7 @@ import { relative, resolve, sep } from 'node:path';
 import type { Context } from 'cordis';
 import { Inspection } from '../inspection.js';
 import type { RouteRequest } from '../http.js';
-import type { BuiltinPlugin } from '../plugins.js';
+import type { BuiltinPlugin } from '../plugin-api.js';
 
 export const files: BuiltinPlugin = {
   id: 'files', title: 'Workspace files', description: 'Read, search and edit files within the workspace.',
@@ -19,8 +19,8 @@ export const files: BuiltinPlugin = {
       }
       return definitions;
     }
-    for (const [index, template] of tools(cwd).entries()) {
-      ctx.effect(() => ctx.harnessTools.register(template, (id) => {
+    for (const [index, { name }] of tools(cwd).entries()) {
+      ctx.effect(() => ctx.harnessTools.register(name, (id) => {
         const root = ctx.harnessWorkspace.resolve(id);
         const tool = tools(root)[index];
         if (tool.name !== 'edit' && tool.name !== 'write') return tool;

@@ -2,7 +2,7 @@ import type { FrontendApi, FrontendServices, FrontendSetup, Suggestion } from '.
 import type { TabAddress, TabScope } from '../right-tabs.js';
 import { icon } from '../icons.js';
 import { button as control, iconButton } from '../primitives.js';
-import { workspaceRoute } from '../api.js';
+import { workspaceRoute, wait } from '../api.js';
 import { renderMarkdown } from '../markdown.js';
 
 interface FileEntry { name: string; directory: boolean }
@@ -90,7 +90,7 @@ function fileEntry(api: FrontendApi, scope: TabScope, path: string, label: strin
   return row;
 }
 
-function fileTree(api: FrontendApi, services: FrontendServices, address: TabAddress, signal: AbortSignal) {
+function fileTree(api: FrontendApi, services: FrontendServices, address: TabAddress, signal: AbortSignal, expanded: Set<string>) {
   const path = address.path ?? '.';
   const root = document.createElement('section');
   const toolbar = document.createElement('div');
@@ -99,7 +99,6 @@ function fileTree(api: FrontendApi, services: FrontendServices, address: TabAddr
   toolbar.append(breadcrumbs(api, services, address, path), refresh);
   const content = document.createElement('div');
   root.append(toolbar, content);
-  const expanded = new Set<string>();
   let loading: AbortController;
   const groups = new Map<string, string>();
   async function tree(path: string, loadSignal: AbortSignal) {
@@ -276,11 +275,15 @@ function fileView(api: FrontendApi, services: FrontendServices, address: TabAddr
 }
 
 const setup: FrontendSetup = (api, services) => {
+  const expanded = new WeakMap<TabAddress, Set<string>>();
   api.rightTab('files', {
     title: ({ path }) => path ? base(path) : 'Files',
     default: true,
     launcher: 'Browse files',
-    create: (address, signal) => fileTree(api, services, address, signal)
+    create(address, signal) {
+      if (!expanded.has(address)) expanded.set(address, new Set());
+      return fileTree(api, services, address, signal, expanded.get(address));
+    }
   });
   api.rightTab('changes', {
     title: () => 'Git changes',
@@ -302,12 +305,7 @@ const setup: FrontendSetup = (api, services) => {
     if (query.startsWith('"')) return;
     const reference = (path: string) => replace('@' + JSON.stringify(path));
     if (query) {
-      await new Promise<void>((resolve) => {
-        if (signal.aborted) return resolve();
-        const finish = () => { clearTimeout(timer); signal.removeEventListener('abort', finish); resolve(); };
-        const timer = setTimeout(finish, 120);
-        signal.addEventListener('abort', finish, { once: true });
-      });
+      await wait(120, signal);
       if (signal.aborted) return;
       const paths = await api.request<string[]>(fileRoute(scope, 'search', { q: query }), { signal });
       show(paths.map((path) => ({ label: path, icon: 'file', run: () => reference(path) })), 'No matching files.');

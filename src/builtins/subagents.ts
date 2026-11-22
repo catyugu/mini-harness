@@ -1,8 +1,12 @@
 import { defineTool } from '@earendil-works/pi-coding-agent';
 import type { Context } from 'cordis';
 import { Type } from 'typebox';
-import type { BuiltinPlugin } from '../plugins.js';
-import { selectChildModel } from '../subagents.js';
+import type { BuiltinPlugin } from '../plugin-api.js';
+import type { Delegation } from './delegation.js';
+
+declare module 'cordis' {
+  interface Context { harnessDelegation: Delegation }
+}
 
 export const subagents: BuiltinPlugin = {
   id: 'subagents', title: 'Subagents', description: 'Delegate tasks to child conversations.',
@@ -15,7 +19,7 @@ export const subagents: BuiltinPlugin = {
     provider: Type.Optional(Type.String({ title: 'Child provider' })),
     model: Type.Optional(Type.String({ title: 'Child model' }))
   }) } },
-  icon: 'delegate', browser: '/builtins/subagents.js', inject: ['harnessTools', 'harnessChildPolicy', 'harnessDelegation'],
+  icon: 'delegate', browser: '/builtins/subagents.js', inject: ['harnessTools', 'harnessDelegation'],
   setup(ctx: Context) {
     const delegation = ctx.harnessDelegation;
     const tool = (id: string) => defineTool({
@@ -27,12 +31,10 @@ export const subagents: BuiltinPlugin = {
         model: Type.Optional(Type.String({ maxLength: 160 }))
       }),
       execute: async (_callId, args, signal) => {
-        const choice = selectChildModel(args, ctx.harnessChildPolicy.get(), delegation.parentModel(id));
-        const child = await delegation.run(id, args.task, choice, signal);
+        const child = await delegation.delegate(id, args, signal);
         return { content: [{ type: 'text', text: child.text }], details: { sessionId: child.id } };
       }
     });
-    ctx.effect(() => ctx.harnessTools.register(tool(''), tool,
-      (id) => delegation.depth(id) < ctx.harnessChildPolicy.get().maxDepth));
+    ctx.effect(() => ctx.harnessTools.register('delegate', tool, (id) => delegation.visible(id)));
   }
 };

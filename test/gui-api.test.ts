@@ -83,9 +83,9 @@ test('manual compaction uses Pi and preserves an idle conversation on failure', 
   const small = await compact();
   assert.equal(small.status, 400);
   assert.match(small.body.error, /Nothing to compact/);
-  const pi = await app.runtime.open(session.id);
+  const pi = await app.runtime.pi.open(session.id);
   pi.settingsManager.setCompactionEnabled(false);
-  for (let turn = 0; turn < 6; turn++) await app.runtime.send(session.id, 'Turn ' + turn + ' ' + 'more context '.repeat(1550));
+  for (let turn = 0; turn < 6; turn++) await app.runtime.runs.send(session.id, 'Turn ' + turn + ' ' + 'more context '.repeat(1550));
   const compacted = await compact();
   assert.equal(compacted.status, 200, JSON.stringify(compacted.body));
   assert.equal(mock.requests.length, 7);
@@ -261,4 +261,66 @@ test('successful file writes retain arguments and this-turn paths after reopenin
   const history = (await request('/sessions/' + session.id)).body;
   assert.deepEqual(history.run.changedFiles, ['result.txt']);
   assert.deepEqual(history.messages.find((m) => m.toolName === 'write').arguments, { path: 'result.txt', content: 'Result for inspection\n' });
+});
+
+test('an extension owns its authenticated routes and Pi branch records', async (t) => {
+  const { app, paths, request } = await fixture(t);
+  const folder = join(paths.plugins, 'records');
+  mkdirSync(folder);
+  writeFileSync(join(folder, 'plugin.js'), `export default (_ctx, api) => {
+    api.registerRoute('POST', '/entries', async ({ body }) => {
+      const { id, value } = await body();
+      return api.records.append(id, value);
+    });
+    api.registerRoute('GET', '/entries', ({ url }) => api.records.list(url.searchParams.get('id')));
+  };`);
+  const toggle = (enabled: boolean) => request('/settings', 'PATCH', { plugins: { records: enabled } });
+  assert.equal((await toggle(true)).status, 200);
+  const { body: session } = await request('/sessions', 'POST', {});
+  await app.runtime.runs.send(session.id, 'Persist this conversation');
+  const route = '/extensions/records/entries';
+  const value = { note: 'stored by the plugin' };
+  const added = await request(route, 'POST', { id: session.id, value });
+  assert.equal(added.status, 200);
+  assert.equal((await toggle(false)).status, 200);
+  assert.equal((await request(route + '?id=' + session.id)).status, 404);
+
+  app.runtime.pi.release(session.id);
+  assert.equal((await toggle(true)).status, 200);
+  const { body: entries } = await request(route + '?id=' + session.id);
+  assert.deepEqual(entries.map(({ id, data }) => ({ id, data })), [{ id: added.body, data: value }]);
+  const fetched = (await request('/sessions/' + session.id)).body;
+  assert.equal(fetched.messages.some((message) => JSON.stringify(message).includes(value.note)), false);
+});
+
+test('plugin file writes wait for an in-flight plugin configuration', async (t) => {
+  const { paths, request } = await fixture(t);
+  const folder = join(paths.plugins, 'slow-plugin');
+  const entered = join(folder, 'entered');
+  const release = join(folder, 'release');
+  mkdirSync(folder);
+  writeFileSync(join(folder, 'plugin.js'), `import { existsSync, writeFileSync } from 'node:fs';
+    export default async () => {
+      writeFileSync(${JSON.stringify(entered)}, 'ready');
+      while (!existsSync(${JSON.stringify(release)})) await new Promise((done) => setTimeout(done, 10));
+    };`);
+  const updating = request('/settings', 'PATCH', { plugins: { 'slow-plugin': true } });
+  try {
+    await waitUntil(() => existsSync(entered), Boolean);
+    const installation = await request('/plugins/install', 'POST', {
+      id: 'another-plugin', files: [{ name: 'plugin.js', content: 'export default () => {};' }]
+    });
+    assert.equal(installation.status, 400);
+    assert.match(installation.body.error, /Configuration is already changing/);
+    const removal = await request('/plugins/slow-plugin', 'DELETE');
+    assert.equal(removal.status, 400);
+    assert.match(removal.body.error, /Configuration is already changing/);
+    assert.equal(existsSync(folder), true);
+  } finally {
+    writeFileSync(release, 'done');
+    assert.equal((await updating).status, 200);
+  }
+  assert.equal((await request('/settings', 'PATCH', { plugins: { 'slow-plugin': false } })).status, 200);
+  assert.equal((await request('/plugins/slow-plugin', 'DELETE')).status, 200);
+  assert.equal(existsSync(folder), false);
 });

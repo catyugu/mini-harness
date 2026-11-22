@@ -65,6 +65,7 @@ The default export can also be a Cordis component with `apply` and `inject`. Dec
 | `api.defineConfig(defaults, validate?)` | Optional JavaScript defaults and validation, including plugins without a schema |
 | `api.registerTool(tool)` | Register a Pi tool and return an async unregister function |
 | `api.registerRoute(method, path, handler)` | Mount an authenticated JSON route under `/api/extensions/<id>` and return an async unregister function |
+| `api.records.list(sessionId)` / `append(sessionId, data)` | Read or append this plugin’s JSON records on the current Pi branch |
 | `api.onDispose(cleanup)` | Register synchronous or asynchronous resource cleanup |
 | Returned cleanup function | Alternative cleanup for the setup function |
 
@@ -72,7 +73,7 @@ Tool names must be unique, use letters, digits, underscores or hyphens, and be 1
 
 ## Services and lifecycle
 
-Public metadata services are `harnessModels.list()` (also available as `harnessAgent.availableModels()`) and `harnessSessions.get(id)` / `list()`. Read plugin settings through `api.config` and register tools and routes through the plugin API. Session metadata is returned as a snapshot.
+Public metadata services are `harnessModels.list()` and `harnessSessions.get(id)` / `list()`. Read plugin settings through `api.config` and register tools and routes through the plugin API. Session metadata is returned as a snapshot. Plugin records live in the Pi JSONL as namespaced Custom Entries. Pi starts the file on the first conversation message and leaves Custom Entries out of model context.
 
 Built-in and local setup functions run in Cordis scopes. Dependencies mount first and unload last. Disabling a required plugin also requires disabling its dependents. Reconfiguring a dependency restarts its enabled dependents. Unchanged plugin scopes stay mounted. A route handler receives `{ url, body(maxBytes?), signal }`. The signal aborts when its route unloads. Read JSON with `await body()` and return a JSON-serializable result.
 
@@ -133,11 +134,11 @@ export default function setup(api) {
 | `config` | Same validated configuration and schema defaults as the server plugin |
 | `onDispose(cleanup)` / returned cleanup | Release listeners, timers and other browser resources |
 
-The browser runs each plugin in a Cordis scope and disposes its slots, completions, settings pages, tool registrations and inspector content when the scope unloads. Pass `api.signal` to document or window listeners or release them with `onDispose`. Dependencies mount first and dispose last; configuration changes also rebuild dependent browser extensions. Setup failures remove partial contributions and leave ordinary chat available. The backend and UI share one plugin switch; attachments, file inspection and Skills use these same extension interfaces.
+The browser runs each plugin in a Cordis scope and disposes its slots, completions, settings pages, tool registrations and inspector content when the scope unloads. Pass `api.signal` to document or window listeners or release them with `onDispose`. Dependencies mount first and dispose last; configuration changes also rebuild dependent browser extensions. Setup failures remove partial contributions and leave ordinary chat available. The catalog reports which browser plugins failed after the server saved a change. The backend and UI share one plugin switch; attachments, file inspection and Skills use these same extension interfaces.
 
 The Plugins page can install a local bundle containing `plugin.js`, optional `plugin.json` and `web.js` (at most 1 MiB combined). New installations stay disabled. Disable the plugin before uninstalling; uninstall removes the local plugin directory permanently. Larger development plugins can still be placed in the local plugins directory manually.
 
-Register a right-panel tab with `api.rightTab(type, { title, create, launcher })`. Both callbacks receive an address with `workspaceId`, optional `sessionId`, and optional `path`. `create(address, signal)` returns the tab's element and receives an abort signal for any in-flight work. `launcher` optionally adds a button inside the panel. Call `api.openTab(type, path?)` to open or focus the tab in the current conversation or workspace. Disabling the plugin closes its tabs and aborts their outstanding work.
+Register a right-panel tab with `api.rightTab(type, { title, create, launcher })`. Both callbacks receive an address with `workspaceId`, optional `sessionId`, and optional `path`. `create(address, signal)` returns the tab's element and receives an abort signal for any in-flight work. `launcher` optionally adds a button inside the panel. Call `api.openTab(type, path?)` to open or focus the tab in the current conversation or workspace. Changing conversations aborts and releases the outgoing tab views. Registered tabs keep their address and selection, and recreate their views on return. Inspector content added with `inspect` lasts for the current scope. Disabling a plugin closes its tabs.
 
 ## GUI API additions
 

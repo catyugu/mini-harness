@@ -101,11 +101,11 @@ test('subagent tool is mounted in parent only, with an explicit concurrency limi
   t.after(() => app.close());
   const rootSession = app.runtime.registry.create();
   const child = app.runtime.registry.create({ parentId: rootSession.id });
-  const parent = await app.runtime.open(rootSession.id);
-  const worker = await app.runtime.open(child.id);
+  const parent = await app.runtime.pi.open(rootSession.id);
+  const worker = await app.runtime.pi.open(child.id);
   assert.ok(parent.getActiveToolNames().includes('delegate'));
   assert.ok(!worker.getActiveToolNames().includes('delegate'));
-  assert.equal(app.runtime.semaphore.limit, 4);
+  assert.equal(app.runtime.delegation.semaphore.limit, 4);
 });
 
 test('concurrent opening of one conversation shares a single Pi AgentSession', { timeout: 30000 }, async (t) => {
@@ -117,13 +117,13 @@ test('concurrent opening of one conversation shares a single Pi AgentSession', {
   t.after(() => app.close());
   const item = app.runtime.registry.create();
   const [first, second, third] = await Promise.all([
-    app.runtime.open(item.id),
-    app.runtime.open(item.id),
+    app.runtime.pi.open(item.id),
+    app.runtime.pi.open(item.id),
     app.runtime.getConversation(item.id)
   ]);
   assert.strictEqual(first, second);
   assert.equal(third.id, item.id);
-  assert.equal(app.runtime.openSessions.size, 1);
+  assert.equal(app.runtime.pi.size, 1);
 });
 
 test('Pi honors file policy and recursive delegates can finish with one slot', { timeout: 30000 }, async (t) => {
@@ -142,15 +142,15 @@ test('Pi honors file policy and recursive delegates can finish with one slot', {
   await app.runtime.updateSettings({ subagents: { maxDepth: 2, maxParallel: 1, provider: 'local-mock', model: 'mock-model' } });
   const parent = app.runtime.registry.create();
   const toolEvents = [];
-  await app.runtime.send(parent.id, 'root task', (event) => { if (event.type === 'tool') toolEvents.push(event); });
+  await app.runtime.runs.send(parent.id, 'root task', (event) => { if (event.type === 'tool') toolEvents.push(event); });
   const records = app.runtime.registry.descendants([parent.id]).map((id) => app.runtime.registry.get(id));
   assert.deepEqual(records.map(({ title }) => title), ['root task', 'child task', 'leaf task']);
   assert.deepEqual(app.runtime.registry.get(records[2].id).model, { provider: 'local-mock', id: 'mock-model' });
-  assert.equal((await app.runtime.open(records[2].id)).getActiveToolNames().includes('delegate'), false);
+  assert.equal((await app.runtime.pi.open(records[2].id)).getActiveToolNames().includes('delegate'), false);
   assert.ok(toolEvents.some((event) => event.state === 'finished' && event.sessionId === records[1].id));
   const check = app.runtime.registry.create();
-  await app.runtime.send(check.id, 'read policy');
-  const failure = app.runtime.sessionMessages(check.id).find((message) => message.role === 'toolResult');
+  await app.runtime.runs.send(check.id, 'read policy');
+  const failure = app.runtime.pi.messages(check.id).find((message) => message.role === 'toolResult');
   assert.equal(failure.isError, true);
   assert.match(JSON.stringify(failure.content), /permitted workspace/);
   assert.doesNotMatch(JSON.stringify(failure.content), /private fixture/);
@@ -178,14 +178,14 @@ test('cancelling a root aborts its active child and preserves indexed history', 
   const app = await createMiniHarnessServer(paths);
   t.after(async () => { release(); await app.close(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
   const parent = app.runtime.registry.create();
-  const pending = app.runtime.send(parent.id, 'start child');
+  const pending = app.runtime.runs.send(parent.id, 'start child');
   const aborted = assert.rejects(pending, /cancelled/);
   await waiting;
-  assert.equal(app.runtime.busy.size, 2);
-  assert.equal(app.runtime.cancel(parent.id), true);
+  assert.equal(app.runtime.runs.size, 2);
+  assert.equal(app.runtime.runs.cancel(parent.id), true);
   await aborted;
-  assert.equal(app.runtime.busy.size, 0);
-  assert.equal(app.runtime.semaphore.active, 0);
+  assert.equal(app.runtime.runs.size, 0);
+  assert.equal(app.runtime.delegation.semaphore.active, 0);
   const child = app.runtime.export([parent.id])[1];
   assert.equal(child.title, '[Cancelled] hold child');
   assert.ok(child.piSession?.includes('hold child'));

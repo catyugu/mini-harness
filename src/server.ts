@@ -12,7 +12,7 @@ import { installPlugin, uninstallPlugin, frontendSource } from './plugin-files.j
 import { supportsIsolation } from './sandbox.js';
 import { MiniHarnessRuntime } from './agent.js';
 import { sessionRoutes } from './session-routes.js';
-import { navigationSnapshot, streamNavigation } from './navigation-events.js';
+import { navigationSession, navigationSnapshot, streamNavigation } from './navigation-events.js';
 
 const WEB_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'web');
 const assets = new Map([
@@ -42,6 +42,12 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
   const catalog = runtime.registry.workspaces;
   const navigation = new AbortController();
   let configuring = false;
+  async function configure(update: () => Promise<unknown>) {
+    if (configuring) throw new Error('Configuration is already changing');
+    configuring = true;
+    try { return await update(); }
+    finally { configuring = false; }
+  }
   await runtime.start();
   const isolation = supportsIsolation();
   const token = options.token ?? randomBytes(32).toString('hex');
@@ -89,7 +95,7 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
           return json(res, 200, { removed: id });
         }
         if (resource === 'sessions') {
-          if (req.method === 'GET') return json(res, 200, runtime.registry.list(id).map((item) => runtime.navigationSession(item.id)));
+          if (req.method === 'GET') return json(res, 200, runtime.registry.list(id).map((item) => navigationSession(runtime, item.id)));
           if (req.method === 'POST') return json(res, 201, runtime.registry.create({ workspaceId: id }));
         } else if (resource && !configuring && req.method === 'GET') {
           const sessionId = url.searchParams.get('sessionId');
@@ -101,15 +107,13 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
         }
       }
       if (pathname === '/api/providers' && req.method === 'GET') return json(res, 200, providerSettings(runtime));
-      if (pathname === '/api/providers' && ['PUT', 'DELETE'].includes(req.method)) {
-        if (configuring) throw new Error('Configuration is already changing');
-        configuring = true;
-        try { return json(res, 200, await saveProvider(runtime, await requestBody(req), req.method === 'DELETE')); }
-        finally { configuring = false; }
-      }
-      if (pathname === '/api/plugins/install' && req.method === 'POST') return json(res, 201, installPlugin(runtime, await requestBody(req, 2 * 1024 * 1024)));
+      if (pathname === '/api/providers' && ['PUT', 'DELETE'].includes(req.method))
+        return json(res, 200, await configure(async () => saveProvider(runtime, await requestBody(req), req.method === 'DELETE')));
+      if (pathname === '/api/plugins/install' && req.method === 'POST')
+        return json(res, 201, await configure(async () => installPlugin(runtime, await requestBody(req, 2 * 1024 * 1024))));
       const plugin = /^\/api\/plugins\/([a-z][a-z0-9-]{0,63})(?:\/(web))?$/.exec(pathname);
-      if (plugin && req.method === 'DELETE') return json(res, 200, await uninstallPlugin(runtime, plugin[1]));
+      if (plugin && req.method === 'DELETE')
+        return json(res, 200, await configure(() => uninstallPlugin(runtime, plugin[1])));
       if (plugin?.[2] === 'web' && req.method === 'GET') return json(res, 200, { source: frontendSource(runtime, plugin[1]), config: runtime.plugins.configuration(plugin[1]) });
       if (!configuring) {
         const extension = runtime.plugins.ctx.harnessRoutes.dispatch(req, res, url);
@@ -121,36 +125,29 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
         return json(res, 202, { pid: process.pid });
       }
       if (pathname === '/api/bootstrap' && req.method === 'GET')
-        return json(res, 200, { settings: runtime.settings, ...navigationSnapshot(runtime), models: runtime.availableModels(), plugins: runtime.plugins.metadata(), isolation, providers: providerSettings(runtime) });
+        return json(res, 200, { settings: runtime.settings, ...navigationSnapshot(runtime), models: runtime.pi.availableModels(), plugins: runtime.plugins.metadata(), isolation, providers: providerSettings(runtime) });
       if (pathname === '/api/sessions' || pathname.startsWith('/api/sessions/'))
         return await sessionRoutes(runtime, req, res, url, () => configuring);
-      if (pathname === '/api/settings' && req.method === 'PATCH') {
-        if (configuring) throw new Error('Configuration is already changing');
-        configuring = true;
-        try { return json(res, 200, await runtime.updateSettings(await requestBody(req))); }
-        finally { configuring = false; }
-      }
-      if (pathname === '/api/credentials' && ['POST', 'DELETE'].includes(req.method)) {
-        if (configuring) throw new Error('Configuration is already changing');
-        configuring = true;
-        try {
+      if (pathname === '/api/settings' && req.method === 'PATCH')
+        return json(res, 200, await configure(async () => runtime.updateSettings(await requestBody(req))));
+      if (pathname === '/api/credentials' && ['POST', 'DELETE'].includes(req.method))
+        return json(res, 200, await configure(async () => {
           const input = await requestBody(req);
           if (typeof input?.provider !== 'string' || !/^[a-z0-9-]+$/.test(input.provider))
-            return json(res, 400, { error: 'Invalid provider' });
-          if (!runtime.models.getProvider(input.provider)) return json(res, 400, { error: 'Unknown provider' });
+            throw new Error('Invalid provider');
+          if (!runtime.pi.models.getProvider(input.provider)) throw new Error('Unknown provider');
           if (req.method === 'DELETE') {
             if (runtime.hasActiveWork) throw new Error('Stop active conversations before removing credentials');
-            await runtime.models.logout(input.provider);
+            await runtime.pi.models.logout(input.provider);
           } else {
-            if (typeof input.key !== 'string' || !input.key.trim()) return json(res, 400, { error: 'Invalid credential' });
+            if (typeof input.key !== 'string' || !input.key.trim()) throw new Error('Invalid credential');
             await saveProviderCredential(runtime, input.provider, input.key.trim());
           }
-          return json(res, 200, { ok: true, persisted: true, models: runtime.availableModels(), status: runtime.models.getProviderAuthStatus(input.provider) });
-        } finally { configuring = false; }
-      }
+          return { ok: true, persisted: true, models: runtime.pi.availableModels(), status: runtime.pi.models.getProviderAuthStatus(input.provider) };
+        }));
       if (pathname === '/api/models' && req.method === 'GET') {
-        await runtime.models.getAvailable();
-        return json(res, 200, { models: runtime.availableModels() });
+        await runtime.pi.models.getAvailable();
+        return json(res, 200, { models: runtime.pi.availableModels() });
       }
       return json(res, 404, { error: 'Not found' });
     } catch (error) {
