@@ -1,0 +1,38 @@
+import { defineTool } from '@earendil-works/pi-coding-agent';
+import type { Context } from 'cordis';
+import { Type } from 'typebox';
+import { Approvals } from '../approvals.js';
+import { runShell } from '../sandbox.js';
+import type { BuiltinPlugin } from '../plugins.js';
+
+export const shell: BuiltinPlugin = {
+  id: 'shell', title: 'Shell', description: 'Run commands using the configured execution policy.',
+  preferences: { key: 'sandbox', schema: { ...Type.Object({
+    mode: Type.String({ title: 'Shell policy', enum: ['isolated', 'host'] }),
+    timeoutSeconds: Type.Integer({ title: 'Timeout (seconds)', minimum: 1, maximum: 300 })
+  }) } },
+  icon: 'terminal', browser: '/builtins/shell.js', inject: ['harnessConfig', 'harnessTools', 'harnessRoutes'],
+  setup(ctx: Context) {
+    const approvals = new Approvals();
+    ctx.effect(() => () => approvals.close());
+    const { cwd, home } = ctx.harnessConfig.paths;
+    const tool = (sessionId: string) => defineTool({
+      name: 'sandbox_shell', label: 'Shell',
+      description: 'Run a shell command in the workspace after the user approves it in the Web interface.',
+      parameters: Type.Object({ command: Type.String({ minLength: 1, maxLength: 16000 }) }),
+      execute: async (_id, args, signal) => {
+        await approvals.request(sessionId, args.command, signal);
+        const output = await runShell(args.command, cwd, { ...ctx.harnessConfig.get().sandbox, signal, stateDir: home });
+        return { content: [{ type: 'text', text: JSON.stringify(output) }], details: output };
+      }
+    });
+    ctx.effect(() => ctx.harnessTools.register(tool(''), tool));
+    ctx.effect(() => ctx.harnessRoutes.register('GET', '/api/approvals', () => approvals.list()));
+    ctx.effect(() => ctx.harnessRoutes.register('POST', '/api/approvals', async ({ body }) => {
+      const input = await body() as { id?: string; allow?: boolean } | null;
+      if (typeof input?.id !== 'string' || typeof input.allow !== 'boolean') throw new Error('Choose allow or deny');
+      approvals.decide(input.id, input.allow);
+      return { ok: true };
+    }));
+  }
+};

@@ -1,28 +1,23 @@
-import { Approvals } from './approvals.js';
 import { prepareInput, type Attachment, type ImageInput } from './input.js';
-import { join, relative, resolve, sep }  from 'node:path';
+import { join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { randomUUID } from 'node:crypto';
 import {
-  createAgentSession, defineTool, ModelRuntime, SessionManager, SettingsManager, DefaultResourceLoader,
+  createAgentSession, ModelRuntime, SessionManager, SettingsManager, DefaultResourceLoader,
   type AgentSession
 } from '@earendil-works/pi-coding-agent';
 import { getSupportedThinkingLevels } from '@earendil-works/pi-ai/compat';
+import { RunEvents } from './run-events.js';
 import { PluginHost } from './plugins.js';
 import { SessionRegistry, type ModelChoice } from './registry.js';
 import { mergeSettings, readSettings, writeJson, type SettingsPatch } from './config.js';
-import { Type } from 'typebox';
 import { isRunning, type ViewMessage, type StreamEvent, type RunEvent, type RunInfo } from './protocol.js';
-import { requireChildDepth, selectChildModel, Semaphore, type ChildLease } from './subagents.js';
+import { requireChildDepth, Semaphore, type ChildLease } from './subagents.js';
 
 interface ActiveRun {
   info: RunInfo;
   controller: AbortController;
-  events: RunEvent[];
-  bytes: number;
-  partial: string;
-  tools: Map<string, Extract<StreamEvent, { type: 'tool' }>>;
-  listeners: Set<(event: RunEvent) => void>;
+  events: RunEvents;
   done?: Promise<string>;
   lease?: ChildLease;
 }
@@ -33,7 +28,6 @@ export class MiniHarnessRuntime {
   registry: SessionRegistry;
   openSessions: Map<string, AgentSession>;
   openingSessions: Map<string, Promise<AgentSession>>;
-  readonly approvals = new Approvals();
   readonly busy = new Map<string, ActiveRun>();
   readonly plugins: PluginHost;
   models!: ModelRuntime;
@@ -174,7 +168,7 @@ export class MiniHarnessRuntime {
     const session = await this.open(id);
     return { ...this.registry.get(id), messages: this.sessionMessages(id), model: this.modelInfo(session.model),
       selectedModel: { ...this.settings.model }, thinkingLevel: session.thinkingLevel,
-      run: this.runInfo(id), partial: this.busy.get(id)?.partial, tools: [...this.busy.get(id)?.tools.values() ?? []], busy: this.busy.has(id), queue: { steer: session.getSteeringMessages(), followUp: session.getFollowUpMessages() } };
+      run: this.runInfo(id), partial: this.busy.get(id)?.events.partial, tools: this.busy.get(id)?.events.activeTools ?? [], busy: this.busy.has(id), queue: { steer: session.getSteeringMessages(), followUp: session.getFollowUpMessages() } };
   }
 
   private launch(id: string, prompt: string, emit: (event: StreamEvent) => void, { signal, model, attachments, thinkingLevel }: { signal?: AbortSignal; model?: ModelChoice; attachments?: Attachment[]; thinkingLevel?: AgentSession['thinkingLevel'] } = {}) {
@@ -197,28 +191,13 @@ export class MiniHarnessRuntime {
       this.openSessions.get(id)?.dispose();
       this.openSessions.delete(id);
     }
-    const run: ActiveRun = {
-      info: { id: randomUUID(), sessionId: id, state: 'queued', startedAt: new Date().toISOString(), sequence: 0 },
-      controller: new AbortController(), events: [], bytes: 0, partial: '', tools: new Map(), listeners: new Set()
-    };
+    const info: RunInfo = { id: randomUUID(), sessionId: id, state: 'queued', startedAt: new Date().toISOString(), sequence: 0 };
+    const run: ActiveRun = { info, controller: new AbortController(), events: new RunEvents(info) };
     const cancellation = signal ? AbortSignal.any([run.controller.signal, signal]) : run.controller.signal;
     this.registry.update(id, { run: run.info });
     this.busy.set(id, run);
     const publish = (event: StreamEvent) => {
-      if (event.type === 'assistant-start' || event.type === 'assistant-end') run.partial = '';
-      if (event.type === 'delta') run.partial += event.text;
-      if (event.type === 'tool') {
-        if (event.state === 'running') run.tools.set(event.id, event);
-        else run.tools.delete(event.id);
-      }
-      const item = { ...event, sequence: ++run.info.sequence };
-      run.events.push(item);
-      run.bytes += JSON.stringify(item).length;
-      while (run.events.length > 2048 || (run.bytes > 1024 * 1024 && run.events.length > 1))
-        run.bytes -= JSON.stringify(run.events.shift()).length;
-      for (const listener of run.listeners) {
-        try { listener(structuredClone(item)); } catch { run.listeners.delete(listener); }
-      }
+      const item = run.events.publish(event);
       try { emit?.(item); } catch { /* An observer cannot terminate the run. */ }
     };
     const promptSession = async () => {
@@ -244,7 +223,7 @@ export class MiniHarnessRuntime {
       run.info.finishedAt = new Date().toISOString();
       publish({ type: 'run', run: { ...run.info } });
       try { this.registry.update(id, { run: run.info }); }
-      finally { this.busy.delete(id); run.listeners.clear(); }
+      finally { this.busy.delete(id); run.events.close(); }
     });
     // Server-owned runs may outlive every observer.
     void run.done.catch(() => {});
@@ -269,14 +248,9 @@ export class MiniHarnessRuntime {
     const info = this.runInfo(id);
     if (!info || info.id !== runId) throw new Error('Run not found');
     if (!Number.isSafeInteger(after) || after < 0 || after > info.sequence) throw new Error('Invalid event cursor');
-    if (!run || after < (run.events[0]?.sequence ?? 1) - 1) {
-      emit({ type: 'snapshot', messages: this.sessionMessages(id), partial: isRunning(info) ? run?.partial : undefined,
-        tools: [...run?.tools.values() ?? []], run: info, sequence: info.sequence });
-    } else {
-      for (const event of run.events) if (event.sequence > after) emit(structuredClone(event));
-    }
-    if (run && isRunning(run.info)) run.listeners.add(emit);
-    return () => { run?.listeners.delete(emit); };
+    if (run) return run.events.watch(after, emit, () => this.sessionMessages(id));
+    emit({ type: 'snapshot', messages: this.sessionMessages(id), tools: [], run: info, sequence: info.sequence });
+    return () => {};
   }
 
   cancel(id: string) {
@@ -334,12 +308,10 @@ export class MiniHarnessRuntime {
         case 'tool_execution_end': {
           const call = toolCalls.get(event.toolCallId);
           toolCalls.delete(event.toolCallId);
-          const args = call?.args as { path?: string };
           const run = this.busy.get(id);
-          if (!event.isError && ['write', 'edit'].includes(event.toolName) && typeof args?.path === 'string' && run) {
-            const path = relative(this.paths.cwd, resolve(this.paths.cwd, args.path)).split(sep).join('/');
-            run.info.changedFiles = [...new Set([...(run.info.changedFiles ?? []), path])];
-          }
+          const changedPath = event.result?.details?.changedPath;
+          if (!event.isError && typeof changedPath === 'string' && run)
+            run.info.changedFiles = [...new Set([...(run.info.changedFiles ?? []), changedPath])];
           emit({ type: 'tool', id: event.toolCallId, name: event.toolName, state: event.isError ? 'error' : 'finished',
             arguments: call?.args, content: event.result?.content, sessionId: event.result?.details?.sessionId,
             elapsedMs: call ? performance.now() - call.start : undefined });
@@ -393,41 +365,21 @@ export class MiniHarnessRuntime {
     return { steer: session.getSteeringMessages(), followUp: session.getFollowUpMessages() };
   }
 
-  async skills() {
-    if (!this.settings.plugins.skills) return [];
-    const loader = new DefaultResourceLoader({ cwd: this.paths.cwd, agentDir: this.paths.agent,
-      settingsManager: SettingsManager.inMemory(), additionalSkillPaths: this.plugins.ctx.harnessSkills?.paths ?? [], noExtensions: true });
-    await loader.reload();
-    return loader.getSkills().skills.map(({ name, description }) => ({ name, description }));
-  }
-
-  canDelegate(id: string) {
-    return this.registry.depth(id) < this.settings.subagents.maxDepth;
-  }
-
-  delegateTool(id?: string) {
-    return defineTool({
-      name: 'delegate',
-      label: 'Delegate',
-      description: 'Create a child agent for a specific task. Set provider/model to override the default.',
-      parameters: Type.Object({
-        task: Type.String({ minLength: 1, maxLength: 12000 }),
-        provider: Type.Optional(Type.String({ maxLength: 160 })),
-        model: Type.Optional(Type.String({ maxLength: 160 }))
-      }),
-      execute: async (_callId, args, signal) => {
-        const parent = this.openSessions.get(id);
-        if (!parent) throw new Error('Parent session not open');
-        const run = this.busy.get(id);
-        const cancellation = run && signal ? AbortSignal.any([run.controller.signal, signal]) : signal ?? run?.controller.signal;
-        const chosen = selectChildModel(args, this.settings.subagents, this.modelInfo(parent.model));
-        const delegate = () => this.runChild(id, args.task, chosen, cancellation);
-        // A child waiting for its own delegate yields its slot. This also works with maxParallel=1.
-        const result = run?.lease ? await run.lease.pause(delegate) : await delegate();
-        return { content: [{ type: 'text', text: result.text }], details: { sessionId: result.id } };
-      }
-    });
-  }
+  readonly delegation = {
+    depth: (id: string) => this.registry.depth(id),
+    parentModel: (id: string) => {
+      const parent = this.openSessions.get(id);
+      if (!parent) throw new Error('Parent session not open');
+      return this.modelInfo(parent.model);
+    },
+    run: (id: string, task: string, choice: ModelChoice, signal?: AbortSignal) => {
+      const run = this.busy.get(id);
+      const cancellation = run && signal ? AbortSignal.any([run.controller.signal, signal]) : signal ?? run?.controller.signal;
+      const delegate = () => this.runChild(id, task, choice, cancellation);
+      // A child waiting on its descendant yields its concurrency slot.
+      return run?.lease ? run.lease.pause(delegate) : delegate();
+    }
+  };
 
   async runChild(parentId: string, task: string, choice: ModelChoice, signal?: AbortSignal) {
     signal?.throwIfAborted();
@@ -516,7 +468,6 @@ export class MiniHarnessRuntime {
 
   async stop() {
     this.stopping = true;
-    this.approvals.close();
     for (const id of [...this.busy.keys(), ...this.compactions.keys()]) this.cancel(id);
     await Promise.allSettled([this.configuring, ...this.openingSessions.values(), ...[...this.compactions.values()].map(({ done }) => done), ...[...this.busy.values()].map(({ done }) => done)]);
     for (const session of this.openSessions.values()) session.dispose();

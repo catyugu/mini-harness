@@ -1,18 +1,18 @@
 import { createServer } from 'node:http';
-import { createReadStream, statSync, realpathSync } from 'node:fs';
-import { dirname, join, resolve, isAbsolute } from 'node:path';
+import { createReadStream, readdirSync, statSync, realpathSync } from 'node:fs';
+import { dirname, join, resolve, relative, sep, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, Server, ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { getPaths, ensurePaths, readJson, writeJson } from './config.js';
 import { containsPath } from './workspace.js';
-import { Inspection } from './inspection.js';
+import { json, requestBody } from './http.js';
 import { providerSettings, saveProvider } from './provider-settings.js';
 import { installPlugin, uninstallPlugin, frontendSource } from './plugin-files.js';
 import { supportsIsolation } from './sandbox.js';
 import { MiniHarnessRuntime } from './agent.js';
-import { isRunning } from './protocol.js';
+import { sessionRoutes } from './session-routes.js';
 
 declare module 'cordis' {
   interface Context {
@@ -22,12 +22,18 @@ declare module 'cordis' {
 
 const WEB_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'web');
 const assets = new Map([
-  ['index.html', 'text/html'], ['app.js', 'text/javascript'], ['markdown.js', 'text/javascript'],
-  ...['api', 'extensions', 'icons', 'settings-fields', 'messages', 'composer', 'model-picker', 'commands', 'files', 'provider-manager', 'plugin-manager', 'workspaces', 'sessions', 'settings', 'types'].map((name): [string, string] => [name + '.js', 'text/javascript']),
-  ['vendor/marked.js', 'text/javascript'], ['vendor/purify.js', 'text/javascript'],
+  ['index.html', 'text/html'],
   ['style.css', 'text/css'], ['logo.svg', 'image/svg+xml'], ['manifest.webmanifest', 'application/manifest+json'],
   ['icon-192.png', 'image/png'], ['icon-512.png', 'image/png'], ['favicon.ico', 'image/x-icon']
 ]);
+
+// Browser modules are built under dist/web. Local plugin source stays behind the authenticated API.
+for (const entry of readdirSync(WEB_DIR, { recursive: true, withFileTypes: true })) {
+  if (entry.isFile() && entry.name.endsWith('.js')) {
+    const path = relative(WEB_DIR, join(entry.parentPath, entry.name)).split(sep).join('/');
+    assets.set(path, 'text/javascript');
+  }
+}
 
 export function authorize(request: IncomingMessage, token: string) {
   const auth = request.headers.authorization;
@@ -37,28 +43,6 @@ export function authorize(request: IncomingMessage, token: string) {
   return supplied.length === expected.length && timingSafeEqual(supplied, expected);
 }
 
-export function requestBody(req: IncomingMessage, max: number = 1024 * 1024): Promise<any> {
-  return new Promise((resolve, reject) => {
-    const chunks = [];
-    let size = 0;
-    req.on('data', (data) => {
-      size += data.length;
-      if (size > max) { reject(new Error('Request too large')); req.destroy(); return; }
-      chunks.push(data);
-    });
-    req.on('end', () => {
-      try { resolve(chunks.length ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {}); }
-      catch { reject(new Error('Malformed JSON')); }
-    });
-    req.on('error', reject);
-  });
-}
-
-export function json(res: ServerResponse, code: number, data: unknown) {
-  res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
-  res.end(JSON.stringify(data));
-}
-
 export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>, options: { token?: string; shutdown?: () => void } = {}) {
   let runtime = new MiniHarnessRuntime(paths);
   let switching = false;
@@ -66,27 +50,6 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
   await runtime.start();
   const isolation = supportsIsolation();
   const token = options.token ?? randomBytes(32).toString('hex');
-  const streamRun = (res: ServerResponse, id: string, runId: string, after: number) => {
-    let detach = () => {};
-    const heartbeat = setInterval(() => { if (!res.destroyed) res.write('\n'); }, 15000);
-    heartbeat.unref();
-    const cleanup = () => { clearInterval(heartbeat); detach(); };
-    res.once('close', cleanup);
-    try {
-      detach = runtime.watchRun(id, runId, after, (event) => {
-        if (!res.headersSent) res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
-        if (res.destroyed || res.writableEnded) return;
-        // Slow or disconnected observers can reconnect from their cursor.
-        if (res.writableLength > 1024 * 1024) { res.destroy(); return; }
-        res.write(JSON.stringify(event) + '\n');
-        if ((event.type === 'run' || event.type === 'snapshot') && !isRunning(event.run)) res.end();
-      });
-      if (!res.headersSent) {
-        res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store' });
-        res.flushHeaders();
-      }
-    } catch (error) { cleanup(); throw error; }
-  };
   const route = async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url || '/', 'http://localhost');
     const pathname = url.pathname;
@@ -149,21 +112,9 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
       const plugin = /^\/api\/plugins\/([a-z][a-z0-9-]{0,63})(?:\/(web))?$/.exec(pathname);
       if (plugin && req.method === 'DELETE') return json(res, 200, await uninstallPlugin(runtime, plugin[1]));
       if (plugin?.[2] === 'web' && req.method === 'GET') return json(res, 200, { source: frontendSource(runtime, plugin[1]), config: runtime.plugins.configuration(plugin[1]) });
-      if (pathname === '/api/skills' && req.method === 'GET') return json(res, 200, await runtime.skills());
-      if (pathname === '/api/approvals' && req.method === 'GET') return json(res, 200, runtime.approvals.list());
-      if (pathname === '/api/approvals' && req.method === 'POST') {
-        const input = await requestBody(req);
-        if (typeof input.allow !== 'boolean') throw new Error('Choose allow or deny');
-        runtime.approvals.decide(input.id, input.allow); return json(res, 200, { ok: true });
-      }
-      if (pathname.startsWith('/api/files/') && req.method === 'GET') {
-        if (!runtime.settings.plugins.files) throw new Error('Workspace files plugin is disabled');
-        const inspection = new Inspection(runtime.paths.cwd, paths.home), path = url.searchParams.get('path') ?? '.';
-        if (pathname === '/api/files/tree') return json(res, 200, await inspection.tree(path));
-        if (pathname === '/api/files/search') return json(res, 200, await inspection.files.searchFiles(url.searchParams.get('q') ?? ''));
-        if (pathname === '/api/files/preview') return json(res, 200, await inspection.preview(path));
-        if (pathname === '/api/files/changes') return json(res, 200, await inspection.changes());
-        if (pathname === '/api/files/diff') return json(res, 200, await inspection.diff(path));
+      if (!configuring) {
+        const extension = runtime.plugins.ctx.harnessRoutes.dispatch(req, res, url);
+        if (extension) return await extension;
       }
       if (pathname === '/api/status' && req.method === 'GET') return json(res, 200, { pid: process.pid });
       if (pathname === '/api/shutdown' && req.method === 'POST' && options.shutdown) {
@@ -172,63 +123,9 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
       }
       if (pathname === '/api/bootstrap' && req.method === 'GET')
         return json(res, 200, { settings: runtime.settings, sessions: runtime.registry.list().map((item) => ({ ...item, run: runtime.runInfo(item.id) })), models: runtime.availableModels(), plugins: runtime.plugins.metadata(), workspace: runtime.paths.cwd, isolation, providers: providerSettings(runtime) });
-      if (pathname === '/api/sessions' && req.method === 'GET') return json(res, 200, runtime.registry.list().map((item) => ({ ...item, run: runtime.runInfo(item.id) })));
-      if (pathname === '/api/sessions' && req.method === 'POST') return json(res, 201, runtime.registry.create());
-      const match = /^\/api\/sessions\/([a-f0-9-]{36})(?:\/(messages|cancel|runs|events|queue|compact))?$/.exec(pathname);
-      if (match) {
-        const id = match[1];
-        if (!runtime.registry.get(id)) return json(res, 404, { error: 'Conversation not found' });
-        if (!match[2] && req.method === 'PATCH') {
-          const input = await requestBody(req);
-          if (typeof input.title !== 'string' || !input.title.trim() || input.title.length > 140) throw new Error('Title must contain 1–140 characters');
-          return json(res, 200, runtime.registry.update(id, { title: input.title.trim() }));
-        }
-        if (match[2] === 'compact' && req.method === 'POST') {
-          if (configuring) throw new Error('Configuration is changing');
-          await runtime.compact(id);
-          return json(res, 200, { ok: true });
-        }
-        if (match[2] === 'queue' && req.method === 'POST') {
-          const input = await requestBody(req, 20 * 1024 * 1024);
-          return json(res, 202, await runtime.queueInput(id, input.message, input.mode, input.attachments));
-        }
-        if (match[2] === 'queue' && req.method === 'GET') {
-          const session = await runtime.open(id);
-          return json(res, 200, { steer: session.getSteeringMessages(), followUp: session.getFollowUpMessages() });
-        }
-        if (!match[2] && req.method === 'GET') return json(res, 200, await runtime.getConversation(id));
-        if (match[2] === 'cancel' && req.method === 'POST') return json(res, 200, { cancelled: runtime.cancel(id) });
-        if (match[2] === 'runs' && req.method === 'GET') return json(res, 200, { run: runtime.runInfo(id) ?? null });
-        if (match[2] === 'runs' && req.method === 'POST') {
-          const input = await requestBody(req, 20 * 1024 * 1024);
-          if (configuring) throw new Error('Configuration is changing');
-          return json(res, 202, runtime.startRun(id, input.message, input.model, input.attachments, input.thinkingLevel));
-        }
-        if (match[2] === 'events' && req.method === 'GET') {
-          await runtime.open(id);
-          streamRun(res, id, url.searchParams.get('run'), Number(url.searchParams.get('after') ?? 0));
-          return;
-        }
-        if (match[2] === 'messages' && req.method === 'POST') {
-          const input = await requestBody(req, 20 * 1024 * 1024);
-          if (configuring) throw new Error('Configuration is changing');
-          const run = runtime.startRun(id, input.message, input.model, input.attachments, input.thinkingLevel);
-          streamRun(res, id, run.id, 0);
-          return;
-        }
-      }
-      if (pathname === '/api/sessions/delete' && req.method === 'POST') {
-        const input = await requestBody(req);
-        return json(res, 200, { deleted: await runtime.delete(input.ids) });
-      }
-      if (pathname === '/api/sessions/export' && req.method === 'POST') {
-        const input = await requestBody(req);
-        if (!Array.isArray(input.ids) || input.ids.length > 200) return json(res, 400, { error: 'Invalid selection' });
-        const records = runtime.export(input.ids);
-        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8',
-          'Content-Disposition': 'attachment; filename="mini-harness-sessions.json"', 'Cache-Control': 'no-store' });
-        return res.end(JSON.stringify({ version: 2, exportedAt: new Date().toISOString(), sessions: records }, null, 2));
-      }
+      if (pathname === '/api/sessions' || pathname.startsWith('/api/sessions/'))
+        return await sessionRoutes(runtime, req, res, url, () => configuring || switching || req.headers['x-workspace'] &&
+          decodeURIComponent(String(req.headers['x-workspace'])) !== runtime.paths.cwd);
       if (pathname === '/api/settings' && req.method === 'PATCH') {
         if (configuring) throw new Error('Configuration is already changing');
         configuring = true;
