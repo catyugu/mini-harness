@@ -233,11 +233,12 @@ function pluginCatalog(api: FrontendApi, snapshot: () => Bootstrap, refresh: () 
         open.onclick = () => detail(plugin);
         row.querySelector('.plugin-symbol').append(icon(plugin.icon ?? 'plugin'));
         row.querySelector('strong').textContent = plugin.title;
-        row.querySelector('small').textContent = plugin.description;
+        row.querySelector('small').textContent = plugin.error ?? plugin.description;
         const controls = row.querySelector('.catalog-controls');
         const checked = Boolean(settings.plugins[plugin.id]);
         const control = toggle(plugin.title, checked);
         control.dataset.pluginToggle = plugin.id;
+        if (plugin.error) control.disabled = true;
         const remove = plugin.trustedCode ? iconButton('Uninstall ' + plugin.title, 'trash', 'icon-button danger') : undefined;
         if (remove) {
           remove.hidden = checked;

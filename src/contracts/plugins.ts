@@ -18,6 +18,8 @@ export interface PluginMetadata {
   title: string;
   description: string;
   trustedCode?: boolean;
+  /** An installed but unusable plugin must never prevent the host from starting. */
+  error?: string;
   /** False for UI-only/route-only plugins that never mutate active Pi tools or Skills. */
   agentResources?: boolean;
   web?: boolean;

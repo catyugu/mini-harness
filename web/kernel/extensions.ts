@@ -85,6 +85,7 @@ export interface BrowserPlugin {
 export class FrontendHost {
   private readonly plugins = new Map<string, { fiber: Fiber; controller: AbortController }>();
   private disposed = false;
+  private draftOwner?: string;
   private readonly contributions = new WeakMap<HTMLElement, number>();
   private readonly renderers = new Map<string, (tool: ToolView) => HTMLElement | undefined>();
   private readonly actions = new Map<string, (tool: ToolView) => HTMLElement | undefined>();
@@ -131,6 +132,11 @@ export class FrontendHost {
           return () => { registry.delete(name); };
         });
 
+      // One draft lease per plugin scope. A replacement belongs to the newest owner;
+      // disposing an older plugin must not cancel somebody else's active draft.
+      own(() => () => {
+        if (this.draftOwner === id) { this.draftOwner = undefined; this.ui.cancelDraftMode(); }
+      });
       const cleanup = await setup(ctx, {
         signal: controller.signal,
         request: (path, options) => this.ui.request(path, { ...options, signal: options?.signal
@@ -138,10 +144,15 @@ export class FrontendHost {
         insert: (value) => { if (!controller.signal.aborted) this.ui.insert(value); },
         beginDraftMode: (mode) => {
           if (controller.signal.aborted) return;
+          this.draftOwner = id;
           this.ui.beginDraftMode(mode);
-          own(() => () => this.ui.cancelDraftMode());
         },
-        cancelDraftMode: () => { if (!controller.signal.aborted) this.ui.cancelDraftMode(); },
+        cancelDraftMode: () => {
+          if (!controller.signal.aborted && this.draftOwner === id) {
+            this.draftOwner = undefined;
+            this.ui.cancelDraftMode();
+          }
+        },
         messageAction: (action) => own(() => {
           if (this.messageContributions.has(action.id)) throw new Error('Duplicate message action: ' + action.id);
           this.messageContributions.set(action.id, action);

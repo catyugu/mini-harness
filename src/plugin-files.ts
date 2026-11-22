@@ -31,7 +31,12 @@ export function installPlugin(runtime: PluginFilesHost, input: any) {
     }
     renameSync(temp, join(runtime.paths.plugins, input.id));
   } finally { rmSync(temp, { recursive: true, force: true }); }
-  try { return runtime.plugins.metadata(); }
+  try {
+    const metadata = runtime.plugins.metadata();
+    const installed = metadata.find((plugin) => plugin.id === input.id);
+    if (installed?.error) throw new Error('Invalid plugin manifest: ' + installed.error);
+    return metadata;
+  }
   catch (error) { rmSync(join(runtime.paths.plugins, input.id), { recursive: true, force: true }); throw error; }
 }
 export async function uninstallPlugin(runtime: PluginFilesHost, id: string) {

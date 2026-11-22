@@ -165,6 +165,8 @@ test('malformed plugin manifests fail discovery instead of silently dropping the
   mkdirSync(folder);
   writeFileSync(join(folder, 'plugin.js'), 'export default () => {};');
   writeFileSync(join(folder, 'plugin.json'), '{"requires": [');
-  assert.throws(() => runtime.plugins.metadata(), SyntaxError);
-  await assert.rejects(runtime.start(), SyntaxError);
+  assert.match(runtime.plugins.metadata().find(({ id }) => id === 'broken-manifest')?.error ?? '', /JSON|Unexpected|parse/i);
+  await runtime.start();
+  await assert.rejects(runtime.updateSettings({ plugins: { 'broken-manifest': true } }), /Invalid plugin/);
+  assert.equal(runtime.settings.plugins['broken-manifest'], undefined);
 });

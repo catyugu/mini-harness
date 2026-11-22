@@ -47,7 +47,8 @@ export class PluginHost {
       const hasHost = existsSync(source) && lstatSync(source).isFile() && !lstatSync(source).isSymbolicLink();
       const hasWeb = existsSync(webSource) && lstatSync(webSource).isFile() && !lstatSync(webSource).isSymbolicLink();
       if (!hasHost && !hasWeb) return [];
-      const manifest = readJson<Partial<PluginMetadata> | null>(join(folder, 'plugin.json'), null);
+      try {
+        const manifest = readJson<Partial<PluginMetadata> | null>(join(folder, 'plugin.json'), null);
       const title = typeof manifest?.title === 'string' ? manifest.title.slice(0, 100) : id;
       const description = typeof manifest?.description === 'string' ? manifest.description.slice(0, 300) : 'Runs local JavaScript with your user permissions.';
       const requires = manifest?.requires ?? [];
@@ -56,7 +57,12 @@ export class PluginHost {
       const configSchema = manifest?.configSchema;
       if (configSchema && (configSchema.type !== 'object' || !configSchema.properties || typeof configSchema.properties !== 'object'))
         throw new Error('Expected an object configSchema for plugin: ' + id);
-      return [{ source: hasHost ? source : undefined, metadata: { id, title, description, requires, configSchema, web: hasWeb, trustedCode: true } }];
+        return [{ source: hasHost ? source : undefined, metadata: { id, title, description, requires, configSchema, web: hasWeb, trustedCode: true } }];
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return [{ metadata: { id, title: id, description: 'Plugin manifest cannot be loaded.', trustedCode: true,
+          error: message, web: false, requires: [] } }];
+      }
     });
   }
 
@@ -120,9 +126,11 @@ export class PluginHost {
       ...[...this.builtins.values()].map(({ id, requires = [], configSchema }): PluginPlan => ({
         id, requires, config: this.configValues(id, settings, configSchema)
       })),
-      ...this.discover().filter(({ metadata: { id } }) => settings.plugins[id]).map(({ source, metadata: { id, requires, configSchema } }): PluginPlan => ({
-        id, source, requires, config: this.configValues(id, settings, configSchema)
-      }))
+      ...this.discover().filter(({ metadata: { id } }) => settings.plugins[id]).map(({ source, metadata }): PluginPlan => {
+        if (metadata.error) throw new Error('Invalid plugin ' + metadata.id + ': ' + metadata.error);
+        return { id: metadata.id, source, requires: metadata.requires ?? [],
+          config: this.configValues(metadata.id, settings, metadata.configSchema) };
+      })
     ].filter(({ id }) => Object.hasOwn(settings.plugins, id) && settings.plugins[id]);
     const desired = new Map(next.map((plan) => [plan.id, plan]));
     const ordered: PluginPlan[] = [];
