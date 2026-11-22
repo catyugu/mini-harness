@@ -1,6 +1,6 @@
 import type { Settings } from '../src/config.js';
 import type { Bootstrap, ModelInfo } from './types.js';
-import { element, value, data, payload } from './api.js';
+import { scopedElements, data, payload } from './api.js';
 import { closeOnBackdrop, fromMarkup } from './primitives.js';
 import { icon } from './icons.js';
 import type { FrontendApi } from './extensions.js';
@@ -52,11 +52,11 @@ export function mountSettings(api: FrontendApi) {
   panel.querySelector('#settingsSections').prepend(modelSettingsPage());
   api.mount('dialogs', panel);
   closeOnBackdrop(panel);
-  return createSettingsNavigation(api);
+  return { panel, ...createSettingsNavigation(api, panel) };
 }
 
-function createSettingsNavigation(api: FrontendApi) {
-  const panel = element<'dialog'>('settingsPanel');
+function createSettingsNavigation(api: FrontendApi, panel: HTMLDialogElement) {
+  const { element } = scopedElements(panel);
   const body = element('settingsBody'), nav = element('settingsNav');
   const sections = element('settingsSections'), form = element<'form'>('settingsForm');
   const legacy = element('extensionSettings');
@@ -117,6 +117,7 @@ function createSettingsNavigation(api: FrontendApi) {
     if (page && page !== selected && !form.querySelector(':invalid')?.closest('section:not([hidden])')) show(page);
   }, true);
   return {
+    outlet: element('settingsExtensions'),
     open(detail = false) {
       show(sections.querySelector('section'), detail);
       panel.showModal();
@@ -131,13 +132,14 @@ function createSettingsNavigation(api: FrontendApi) {
   };
 }
 
-export function createSettings(getBootstrap: () => Bootstrap, applySettings: (settings: Settings) => void, refreshBootstrap: () => Promise<void>, closeDrawer: () => void, afterSave: () => Promise<void>, open: () => void, renderProviders: () => void) {
-const settingsPanel = element<'dialog'>('settingsPanel'), settingsStatus = element('settingsStatus');
+export function createSettings(settingsPanel: HTMLDialogElement, getBootstrap: () => Bootstrap, applySettings: (settings: Settings) => void, refreshBootstrap: () => Promise<void>, closeDrawer: () => void, afterSave: () => Promise<void>, bindOpen: (open: () => void) => void, open: () => void, renderProviders: () => void) {
+const { element, value } = scopedElements(settingsPanel);
+const settingsStatus = element('settingsStatus');
 function fillSettings() {
   const bootstrap = getBootstrap();
   const { settings, plugins, isolation } = bootstrap;
   element<'select'>('theme').value = settings.appearance;
-  populateProviders(bootstrap.providers, settings.model.provider, settings.model.id);
+  populateProviders(settingsPanel, bootstrap.providers, settings.model.provider, settings.model.id);
   element<'input'>('maxDepth').valueAsNumber = settings.subagents.maxDepth;
   element<'input'>('maxParallel').valueAsNumber = settings.subagents.maxParallel;
   element<'input'>('childProvider').value = settings.subagents.provider;
@@ -222,7 +224,7 @@ async function saveSettings() {
   const button = element<'button'>('saveSettings');
   button.disabled = true;
   try {
-    Object.assign(patch, { pluginConfig: readPluginValues(bootstrap.settings.pluginConfig) });
+    Object.assign(patch, { pluginConfig: readPluginValues(bootstrap.settings.pluginConfig, element('pluginSettings')) });
     applySettings(await data<Settings>('/settings', payload('PATCH', patch)));
     await afterSave();
     fillSettings(); settingsStatus.textContent = 'Saved.';
@@ -230,12 +232,12 @@ async function saveSettings() {
   finally { button.disabled = false; }
 }
 
-element('settingsOpen').onclick = () => {
+bindOpen(() => {
   if (!getBootstrap()) return;
   fillSettings();
   closeDrawer();
   open();
-};
+});
 element('settingsClose').onclick = () => settingsPanel.close();
 element<'form'>('settingsForm').onsubmit = (event) => { event.preventDefault(); void saveSettings(); };
 element('saveCredential').onclick = async () => {
@@ -246,13 +248,13 @@ element('saveCredential').onclick = async () => {
     bootstrap.models = result.models;
     applySettings(bootstrap.settings);
     await refreshBootstrap();
-    populateProviders(getBootstrap().providers, chosenProvider, chosenModel);
+    populateProviders(settingsPanel, getBootstrap().providers, chosenProvider, chosenModel);
     credentialStatus();
     element<'input'>('apiKey').value = '';
     settingsStatus.textContent = 'API key saved locally.';
   } catch (error) { settingsStatus.textContent = error.message; }
 };
-element('provider').onchange = () => { populateModels(getBootstrap().providers, value('provider')); credentialStatus(); };
+element('provider').onchange = () => { populateModels(settingsPanel, getBootstrap().providers, value('provider')); credentialStatus(); };
 element('refreshModels').onclick = async () => {
   const bootstrap = getBootstrap();
   try {

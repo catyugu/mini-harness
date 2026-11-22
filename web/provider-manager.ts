@@ -1,4 +1,4 @@
-import { element, value, data, payload } from './api.js';
+import { scopedElements, data, payload } from './api.js';
 import { fromMarkup } from './primitives.js';
 
 export interface ProviderInfo {
@@ -27,7 +27,8 @@ export function modelSettingsPage() {
   </section>`);
 }
 
-export function providerManager(providers: () => ProviderInfo[], refresh: () => Promise<void>) {
+export function providerManager(panel: HTMLElement, providers: () => ProviderInfo[], refresh: () => Promise<void>) {
+  const { element, value } = scopedElements(panel);
   const editor = fromMarkup<HTMLDetailsElement>(`<details class="endpoint-editor provider-editor">
     <summary>Custom API endpoint</summary>
     <div class="endpoint-fields">
@@ -173,7 +174,8 @@ export function providerManager(providers: () => ProviderInfo[], refresh: () => 
   return { render, dispose: () => editor.remove() };
 }
 
-export function populateProviders(providers: ProviderInfo[], provider: string, model: string) {
+export function populateProviders(panel: HTMLElement, providers: ProviderInfo[], provider: string, model: string) {
+  const { element } = scopedElements(panel);
   const select = element<'select'>('provider');
   select.replaceChildren(new Option('Auto provider', ''));
   const configured = document.createElement('optgroup'); configured.label = 'Configured';
@@ -182,9 +184,10 @@ export function populateProviders(providers: ProviderInfo[], provider: string, m
     (item.configured ? configured : catalog).append(new Option(item.name + (item.custom ? ' · Custom' : ''), item.id));
   }
   select.append(configured, catalog); select.value = provider;
-  populateModels(providers, provider, model);
+  populateModels(panel, providers, provider, model);
 }
-export function populateModels(providers: ProviderInfo[], provider: string, model = '') {
+export function populateModels(panel: HTMLElement, providers: ProviderInfo[], provider: string, model = '') {
+  const { element } = scopedElements(panel);
   const select = element<'select'>('model'); select.replaceChildren(new Option('Auto model', ''));
   for (const item of providers.find((p) => p.id === provider)?.models ?? []) select.add(new Option(item.name || item.id, item.id));
   select.value = model;

@@ -1,6 +1,6 @@
 import type { Conversation } from '../src/registry.js';
 import type { FrontendApi } from './extensions.js';
-import { api as request, data, element, payload, value } from './api.js';
+import { api as request, data, scopedElements, payload } from './api.js';
 import { createSessionList } from './sessions.js';
 import { closeOnBackdrop, fromMarkup } from './primitives.js';
 
@@ -10,6 +10,7 @@ interface NavigationServices {
   clearConversation(): void;
   report(error: Error): void;
   changed(): void;
+  setTitle(title: string): void;
 }
 
 export function sessionNavigation(api: FrontendApi, options: NavigationServices) {
@@ -38,6 +39,8 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
   </dialog>`);
   api.mount('dialogs', dialog);
   closeOnBackdrop(dialog);
+  const { element: dialogElement, value } = scopedElements(dialog);
+  const { element } = scopedElements(panel);
   async function exportSessions(ids: string[]) {
     const response = await request('/sessions/export', payload('POST', { ids }));
     const url = URL.createObjectURL(await response.blob());
@@ -58,14 +61,14 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
 
   let renaming: string;
   function renameSession(item: Conversation) {
-    renaming = item.id; element<'input'>('sessionTitle').value = item.title; element('renameStatus').textContent = '';
-    element<'dialog'>('renamePanel').showModal(); element<'input'>('sessionTitle').select();
+    renaming = item.id; dialogElement<'input'>('sessionTitle').value = item.title; dialogElement('renameStatus').textContent = '';
+    dialogElement<'dialog'>('renamePanel').showModal(); dialogElement<'input'>('sessionTitle').select();
   }
-  element('renameClose').onclick = () => element<'dialog'>('renamePanel').close();
-  element<'form'>('renameForm').onsubmit = async (event) => {
+  dialogElement('renameClose').onclick = () => dialogElement<'dialog'>('renamePanel').close();
+  dialogElement<'form'>('renameForm').onsubmit = async (event) => {
     event.preventDefault();
-    try { await data('/sessions/' + renaming, payload('PATCH', { title: value('sessionTitle') })); await sync(); element<'dialog'>('renamePanel').close(); }
-    catch (error) { element('renameStatus').textContent = error.message; }
+    try { await data('/sessions/' + renaming, payload('PATCH', { title: value('sessionTitle') })); await sync(); dialogElement<'dialog'>('renamePanel').close(); }
+    catch (error) { dialogElement('renameStatus').textContent = error.message; }
   };
   async function deleteSession(item: Conversation) {
     if (!confirm('Permanently delete "' + item.title + '" and all child conversations?')) return;
@@ -76,7 +79,7 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
     } catch (error) { options.report(error); }
   }
   let sessions: Conversation[] = [];
-  const { renderSessions, selection, expanded, toggleSelection } = createSessionList(
+  const { renderSessions, selection, expanded, toggleSelection } = createSessionList(panel,
     () => ({ sessions, active: options.active() }), options.activate, renameSession, deleteSession
   );
   async function sync() {
@@ -84,7 +87,7 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
     if (JSON.stringify(next) === JSON.stringify(sessions)) return;
     update(next);
     const active = options.active();
-    if (active) element('conversationTitle').textContent = sessions.find((item) => item.id === active)?.title ?? 'Conversation';
+    if (active) options.setTitle(sessions.find((item) => item.id === active)?.title ?? 'Conversation');
   }
   function update(next: Conversation[]) {
     sessions = next;

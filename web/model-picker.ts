@@ -1,9 +1,10 @@
 import type { ModelChoice } from '../src/registry.js';
-import { element } from './api.js';
+import { scopedElements } from './api.js';
 import { icon } from './icons.js';
 import type { ModelInfo } from './types.js';
 
-export function createModelPicker(onSelect: (model: ModelChoice) => void, signal: AbortSignal) {
+export function createModelPicker(root: HTMLElement, onSelect: (model: ModelChoice) => void, signal: AbortSignal) {
+  const { element } = scopedElements(root);
   const button = element<'button'>('modelSelect'), popup = element('modelPicker');
   const search = element<'input'>('modelSearch'), results = element('modelResults'), empty = element('modelEmpty');
   let models: ModelInfo[] = [];

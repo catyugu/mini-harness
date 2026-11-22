@@ -1,7 +1,8 @@
 import type { Conversation } from '../src/registry.js';
-import { element, value } from './api.js';
+import { scopedElements } from './api.js';
 import { icon } from './icons.js';
-export function createSessionList(state: () => { sessions: Conversation[]; active?: string }, activate: (id: string) => void, rename: (item: Conversation) => void, remove: (item: Conversation) => void) {
+export function createSessionList(root: HTMLElement, state: () => { sessions: Conversation[]; active?: string }, activate: (id: string) => void, rename: (item: Conversation) => void, remove: (item: Conversation) => void) {
+const { element, value } = scopedElements(root);
 let selecting = false, searchQuery = '';
 let visibleSessions: Conversation[] = [];
 const selection = new Set<string>(), expanded = new Set<string>();
@@ -37,7 +38,7 @@ function renderSessions() {
           if (open) expanded.delete(item.id);
           else expanded.add(item.id);
           renderSessions();
-          document.getElementById('tree-' + item.id)?.focus();
+          element('tree-' + item.id)?.focus();
         };
         toggle.id = 'tree-' + item.id;
         row.append(toggle);

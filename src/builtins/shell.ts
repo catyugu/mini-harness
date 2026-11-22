@@ -11,18 +11,18 @@ export const shell: BuiltinPlugin = {
     mode: Type.String({ title: 'Shell policy', enum: ['isolated', 'host'] }),
     timeoutSeconds: Type.Integer({ title: 'Timeout (seconds)', minimum: 1, maximum: 300 })
   }) } },
-  icon: 'terminal', browser: '/builtins/shell.js', inject: ['harnessConfig', 'harnessTools', 'harnessRoutes'],
+  icon: 'terminal', browser: '/builtins/shell.js', inject: ['harnessState', 'harnessShellPolicy', 'harnessTools', 'harnessRoutes'],
   setup(ctx: Context) {
     const approvals = new Approvals();
     ctx.effect(() => () => approvals.close());
-    const { cwd, home } = ctx.harnessConfig.paths;
+    const { cwd, home } = ctx.harnessState.paths;
     const tool = (sessionId: string) => defineTool({
       name: 'sandbox_shell', label: 'Shell',
       description: 'Run a shell command in the workspace after the user approves it in the Web interface.',
       parameters: Type.Object({ command: Type.String({ minLength: 1, maxLength: 16000 }) }),
       execute: async (_id, args, signal) => {
         await approvals.request(sessionId, args.command, signal);
-        const output = await runShell(args.command, cwd, { ...ctx.harnessConfig.get().sandbox, signal, stateDir: home });
+        const output = await runShell(args.command, cwd, { ...ctx.harnessShellPolicy.get(), signal, stateDir: home });
         return { content: [{ type: 'text', text: JSON.stringify(output) }], details: output };
       }
     });

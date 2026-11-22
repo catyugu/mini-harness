@@ -44,7 +44,14 @@ export class MiniHarnessRuntime {
     this.openSessions = new Map();
     this.openingSessions = new Map();
     this.semaphore = new Semaphore(this.settings.subagents.maxParallel);
-    this.plugins = new PluginHost(this);
+    this.plugins = new PluginHost({
+      paths, settings: () => this.settings, models: { list: () => this.availableModels() },
+      sessions: {
+        get: (id) => structuredClone(this.registry.get(id)),
+        list: () => structuredClone(this.registry.list())
+      },
+      delegation: this.delegation
+    });
   }
 
   async start() {

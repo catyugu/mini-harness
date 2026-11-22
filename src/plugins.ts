@@ -21,7 +21,7 @@ export interface PluginMetadata {
   web?: boolean;
   browser?: string;
   icon?: 'files' | 'skills' | 'delegate' | 'terminal';
-  preferences?: { key: 'subagents' | 'sandbox'; schema: Record<string, unknown> };
+  preferences?: { key: 'subagents' | 'sandbox'; schema: Record<string, unknown>; groups?: { title: string; fields: string[] }[] };
   requires?: string[];
   configSchema?: Record<string, any>;
 }
@@ -44,18 +44,30 @@ export interface PluginApi {
   onDispose(cleanup: () => void | Promise<void>): void;
 }
 
+type RuntimeServices = {
+  paths: MiniHarnessRuntime['paths'];
+  settings(): Settings;
+  models: { list(): ReturnType<MiniHarnessRuntime['availableModels']> };
+  sessions: Pick<MiniHarnessRuntime['registry'], 'get' | 'list'>;
+  delegation: MiniHarnessRuntime['delegation'];
+};
+
 declare module 'cordis' {
   interface Context {
-    harnessAgent: Pick<MiniHarnessRuntime, 'availableModels'>;
-    harnessSessions: Pick<MiniHarnessRuntime['registry'], 'get' | 'list'>;
+    harnessAgent: { availableModels: RuntimeServices['models']['list'] };
+    harnessModels: RuntimeServices['models'];
+    harnessSessions: RuntimeServices['sessions'];
     harnessTools: ToolRegistry;
-    harnessConfig: { get(): Settings; paths: MiniHarnessRuntime['paths'] };
-    harnessRuntime: MiniHarnessRuntime;
+    harnessState: { paths: RuntimeServices['paths'] };
+    harnessShellPolicy: { get(): Settings['sandbox'] };
+    harnessChildPolicy: { get(): Settings['subagents'] };
     harnessRoutes: RouteRegistry;
-    harnessDelegation: MiniHarnessRuntime['delegation'];
+    harnessDelegation: RuntimeServices['delegation'];
     harnessSkills: { paths: string[] };
   }
 }
+
+const publicServices = new Set(['harnessAgent', 'harnessModels', 'harnessSessions']);
 
 const reservedTools = new Set(['read', 'edit', 'write', 'grep', 'find', 'ls', 'bash', 'powershell', 'codemode', 'tool_search']);
 
@@ -99,25 +111,24 @@ export class PluginHost {
   readonly ctx = new Context();
   private readonly mounted = new Map<string, { plan: PluginPlan; fiber: Fiber }>();
 
-  constructor(private readonly runtime: MiniHarnessRuntime) {
-    this.ctx.provide('harnessConfig', { get: () => structuredClone(runtime.settings), paths: runtime.paths });
-    this.ctx.provide('harnessRuntime', runtime);
-    this.ctx.provide('harnessAgent', { availableModels: () => runtime.availableModels() });
-    this.ctx.provide('harnessSessions', {
-      get: (id) => runtime.registry.get(id),
-      list: () => runtime.registry.list()
-    });
+  constructor(private readonly services: RuntimeServices) {
+    this.ctx.provide('harnessState', { paths: services.paths });
+    this.ctx.provide('harnessShellPolicy', { get: () => ({ ...services.settings().sandbox }) });
+    this.ctx.provide('harnessChildPolicy', { get: () => ({ ...services.settings().subagents }) });
+    this.ctx.provide('harnessAgent', { availableModels: services.models.list });
+    this.ctx.provide('harnessModels', services.models);
+    this.ctx.provide('harnessSessions', services.sessions);
     this.ctx.provide('harnessTools', new ToolRegistry());
     this.ctx.provide('harnessRoutes', new RouteRegistry());
-    this.ctx.provide('harnessDelegation', runtime.delegation);
+    this.ctx.provide('harnessDelegation', services.delegation);
   }
 
   private discover() {
     const builtins = new Set(BUILTINS.map(({ id }) => id));
-    return readdirSync(this.runtime.paths.plugins, { withFileTypes: true }).flatMap((entry) => {
+    return readdirSync(this.services.paths.plugins, { withFileTypes: true }).flatMap((entry) => {
       const id = entry.name;
       if (!entry.isDirectory() || !/^[a-z][a-z0-9-]{0,63}$/.test(id) || builtins.has(id)) return [];
-      const folder = join(this.runtime.paths.plugins, id);
+      const folder = join(this.services.paths.plugins, id);
       const source = join(folder, 'plugin.js');
       if (!existsSync(source) || lstatSync(folder).isSymbolicLink() || !lstatSync(source).isFile() || lstatSync(source).isSymbolicLink()) return [];
       let manifest: Partial<PluginMetadata> | null = null;
@@ -147,7 +158,7 @@ export class PluginHost {
         const setup = builtin?.setup ?? (typeof component === 'function' ? component : component?.apply?.bind(component));
         if (typeof setup !== 'function') throw new Error('Expected a setup function or a Cordis component');
         const deps = [...new Set<string>(component.inject ?? mod.inject ?? [])];
-        if (!builtin && deps.some((dep) => !['harnessAgent', 'harnessSessions', 'harnessConfig', 'harnessTools', 'harnessRuntime'].includes(dep)))
+        if (!builtin && deps.some((dep) => !publicServices.has(dep)))
           throw new Error('Unknown harness service dependency');
         fiber = this.ctx.inject(deps, async (ctx) => {
           const values = Object.freeze(structuredClone(plan.config ?? {}));
