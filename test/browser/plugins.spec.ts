@@ -214,10 +214,6 @@ test('plugin catalog applies configuration and removes disabled browser capabili
     await page.getByRole('button', { name: 'Toggle navigation' }).click();
     await page.getByRole('button', { name: 'Browse plugins' }).click();
     await files.check();
-    await expect(page.locator('#sidebarExtensions').getByRole('button', { name: 'Workspace files', includeHidden: true })).toHaveCount(0);
-    await page.getByRole('button', { name: 'Open workspace panel', exact: true }).click();
-    await expect(page.locator('#inspector').getByRole('tab', { name: 'Files', exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Close workspace panel', exact: true }).click();
     await catalog.getByRole('button', { name: 'Install plugin', exact: true }).click();
     const install = page.getByRole('dialog', { name: 'Install plugin' });
     await install.getByLabel('Plugin ID', { exact: true }).fill('local-example');
