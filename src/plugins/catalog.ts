@@ -24,10 +24,15 @@ export interface PluginPlan {
 
 export class PluginCatalog {
   readonly builtins: Map<string, BuiltinPlugin>;
+  private readonly systemIds: Set<string>;
 
-  constructor(private readonly directory: string, builtins: BuiltinPlugin[]) {
-    this.builtins = new Map(builtins.map((plugin) => [plugin.id, plugin]));
+  constructor(private readonly directory: string, system: BuiltinPlugin[], builtins: BuiltinPlugin[]) {
+    this.systemIds = new Set(system.map(({ id }) => id));
+    this.builtins = new Map([...system, ...builtins].map((plugin) => [plugin.id, plugin]));
+    if (this.builtins.size !== system.length + builtins.length) throw new Error('Duplicate builtin plugin ID');
   }
+
+  reserved(id: string) { return this.builtins.has(id); }
 
   private discover(): { source?: string; metadata: PluginMetadata }[] {
     return readdirSync(this.directory, { withFileTypes: true }).flatMap((entry): { source?: string; metadata: PluginMetadata }[] => {
@@ -69,7 +74,7 @@ export class PluginCatalog {
   }
 
   metadata() {
-    return [...[...this.builtins.values()].map(({ inject, setup, ...metadata }) => metadata),
+    return [...[...this.builtins.values()].filter(({ id }) => !this.systemIds.has(id)).map(({ inject, setup, ...metadata }) => metadata),
       ...this.discover().map(({ metadata }) => metadata)];
   }
 
@@ -83,7 +88,7 @@ export class PluginCatalog {
         return { id: metadata.id, source, requires: metadata.requires ?? [],
           config: this.configValues(metadata.id, settings, metadata.configSchema) };
       })
-    ].filter(({ id }) => Object.hasOwn(settings.plugins, id) && settings.plugins[id]);
+    ].filter(({ id }) => this.systemIds.has(id) || Object.hasOwn(settings.plugins, id) && settings.plugins[id]);
     const desired = new Map(next.map((plan) => [plan.id, plan]));
     const ordered: PluginPlan[] = [];
     const visiting = new Set<string>();

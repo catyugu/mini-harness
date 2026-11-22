@@ -33,7 +33,7 @@ export interface PluginMetadata {
 
 export interface BuiltinPlugin extends PluginMetadata {
   inject: string[];
-  setup?(ctx: Context): void;
+  setup?(ctx: Context): void | Promise<void>;
 }
 
 export interface SessionRecords {
@@ -74,7 +74,7 @@ declare module 'cordis' {
       attachments?: import('./input.js').Attachment[]; model?: import('./conversation.js').ModelChoice;
       thinkingLevel?: AgentSession['thinkingLevel'];
     }): Promise<RunInfo> };
-    harnessDelegation: DelegationPort;
+    harnessDelegation?: DelegationPort;
     harnessApprovals?: { has(sessionId: string): boolean };
   }
 }

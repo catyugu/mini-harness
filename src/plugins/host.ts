@@ -13,13 +13,14 @@ export class PluginHost {
   private readonly catalog: PluginCatalog;
   private readonly mounts: PluginMounts;
 
-  constructor(readonly ctx: Context, directory: string, builtins: BuiltinPlugin[],
+  constructor(readonly ctx: Context, directory: string, system: BuiltinPlugin[], builtins: BuiltinPlugin[],
     private readonly sessionRecords: (sessionId: string, pluginId: string) => Promise<SessionRecords>) {
-    this.catalog = new PluginCatalog(directory, builtins);
+    this.catalog = new PluginCatalog(directory, system, builtins);
     this.mounts = new PluginMounts(ctx);
   }
 
   metadata() { return this.catalog.metadata(); }
+  reserved(id: string) { return this.catalog.reserved(id); }
 
   private async load(plan: PluginPlan): ReturnType<MountPlan['load']> {
     const builtin = this.catalog.builtins.get(plan.id);

@@ -13,5 +13,5 @@ export const manifest: Omit<BuiltinPlugin, 'setup'> = {
     provider: Type.Optional(Type.String({ title: 'Child provider' })),
     model: Type.Optional(Type.String({ title: 'Child model' }))
   }) } },
-  icon: 'delegate', browser: '/features/subagents/client.js', inject: ['harnessTools', 'harnessDelegation'],
+  icon: 'delegate', browser: '/features/subagents/client.js', inject: ['harnessTools', 'harnessRegistry', 'harnessPi', 'harnessRuns', 'harnessSettings', 'harnessSettingsStore', 'harnessOperations'],
 };
