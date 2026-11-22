@@ -174,3 +174,18 @@ test('malformed plugin manifests fail discovery instead of silently dropping the
   await assert.rejects(runtime.updateSettings({ plugins: { 'broken-manifest': true } }), /Invalid plugin/);
   assert.equal(runtime.settings.plugins['broken-manifest'], undefined);
 });
+
+test('disabled optional builtins cannot block boot or reload because their config is malformed', async (t) => {
+  const mock = await createMockProvider();
+  const { root, paths } = createFixturePaths(mock.url);
+  const runtime = new MiniHarnessRuntime(paths);
+  t.after(async () => { await runtime.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
+  await runtime.start();
+  await runtime.updateSettings({ plugins: { subagents: false } });
+  assert.equal(runtime.delegation, undefined, 'no delegation implementation survives disabling its plugin');
+  await runtime.updateSettings({ pluginConfig: { subagents: { maxDepth: 100 } } });
+  const conversation = runtime.registry.create();
+  assert.equal(await runtime.runs.send(conversation.id, 'Main agent still works'), 'Mock response');
+  await assert.rejects(runtime.updateSettings({ plugins: { subagents: true } }), /Invalid configuration for plugin: subagents/);
+  assert.equal(runtime.delegation, undefined);
+});

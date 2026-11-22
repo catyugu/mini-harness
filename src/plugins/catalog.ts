@@ -81,7 +81,8 @@ export class PluginCatalog {
 
   plans(settings: Settings) {
     const next = [
-      ...[...this.builtins.values()].map(({ id, requires = [], configSchema, liveConfig }): PluginPlan => ({
+      ...[...this.builtins.values()].filter(({ id }) => this.systemIds.has(id) || settings.plugins[id] === true)
+        .map(({ id, requires = [], configSchema, liveConfig }): PluginPlan => ({
         id, requires, liveConfig, config: this.configValues(id, settings, configSchema)
       })),
       ...this.discover().filter(({ metadata: { id } }) => settings.plugins[id]).map(({ source, metadata }): PluginPlan => {
