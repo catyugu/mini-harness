@@ -1,9 +1,9 @@
-import { scopedElements } from '../api.js';
-import { fromMarkup } from './components/primitives.js';
-import type { BrowserPlugin } from '../kernel/extensions.js';
-import { hydrateIcons } from './components/icons.js';
+import { scopedElements } from '../../api.js';
+import { fromMarkup } from '../components/primitives.js';
+import type { BrowserPlugin } from '../../kernel/extensions.js';
+import { hydrateIcons } from '../components/icons.js';
 import { createLayout } from './layout.js';
-import { createRightTabs } from './components/right-tabs.js';
+import { createRightTabs } from '../components/right-tabs.js';
 
 const slots = {
   sidebar: 'sidebarExtensions', inspector: 'inspectorExtensions',

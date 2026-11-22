@@ -1,5 +1,5 @@
 import { button, iconButton } from './primitives.js';
-import type { createLayout } from '../layout.js';
+import type { createLayout } from '../shell/layout.js';
 
 export interface TabScope { workspaceId: string; sessionId?: string }
 export interface TabAddress extends TabScope { type: string; path?: string }

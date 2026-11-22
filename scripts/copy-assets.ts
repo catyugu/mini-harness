@@ -4,9 +4,10 @@ import { dirname, join } from 'node:path';
 
 const require = createRequire(import.meta.url);
 mkdirSync('dist/web/vendor', { recursive: true });
-for (const asset of ['index.html', 'style.css', 'logo.svg', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'favicon.ico']) {
+for (const asset of ['index.html', 'logo.svg', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'favicon.ico']) {
   copyFileSync(join('web', asset), join('dist/web', asset));
 }
+copyFileSync('web/ui/styles/app.css', 'dist/web/style.css');
 copyFileSync(join(dirname(require.resolve('marked')), 'marked.esm.js'), 'dist/web/vendor/marked.js');
 copyFileSync(join(dirname(require.resolve('dompurify')), 'purify.es.mjs'), 'dist/web/vendor/purify.js');
 copyFileSync(join(dirname(require.resolve('marked')), '..', 'LICENSE'), 'dist/web/vendor/marked.LICENSE');
