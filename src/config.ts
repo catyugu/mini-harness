@@ -15,7 +15,7 @@ import { isAbsolute, join, resolve } from 'node:path';
 export const DEFAULTS = Object.freeze({
   port: 3837,
   model: { provider: '', id: '' },
-  plugins: { files: true, skills: true, subagents: true, shell: false, 'message-copy': true, 'edit-resend': true },
+  plugins: { files: true, skills: true, subagents: true, shell: false, 'session-helper': true },
   pluginConfig: {},
   subagents: { maxDepth: 1, maxParallel: 4, provider: '', model: '' },
   sandbox: { mode: 'isolated', timeoutSeconds: 60 },
@@ -87,18 +87,30 @@ export function validateSettings(input: any) {
   return true;
 }
 
+const legacySessionPlugins = ['message-copy', 'edit-resend'] as const;
+
 export function readSettings(paths: ReturnType<typeof getPaths>): Settings {
   const input = readJson<Record<string, any>>(paths.settings, {});
+  const plugins = { ...DEFAULTS.plugins, ...input.plugins } as Record<string, boolean>;
+  const pluginConfig = { ...input.pluginConfig };
+  const hasLegacy = legacySessionPlugins.some((id) => Object.hasOwn(plugins, id) || Object.hasOwn(pluginConfig, id));
+  if (!Object.hasOwn(input.plugins ?? {}, 'session-helper') &&
+      legacySessionPlugins.some((id) => Object.hasOwn(input.plugins ?? {}, id))) {
+    // Preserve at least one previously enabled operation. Both disabled stays disabled.
+    plugins['session-helper'] = (input.plugins?.['message-copy'] ?? true) || (input.plugins?.['edit-resend'] ?? true);
+  }
+  for (const id of legacySessionPlugins) { delete plugins[id]; delete pluginConfig[id]; }
   const settings = {
     port: input.port ?? DEFAULTS.port,
     model: { ...DEFAULTS.model, ...input.model },
-    plugins: { ...DEFAULTS.plugins, ...input.plugins },
-    pluginConfig: { ...input.pluginConfig },
+    plugins,
+    pluginConfig,
     subagents: { ...DEFAULTS.subagents, ...input.subagents },
     sandbox: { ...DEFAULTS.sandbox, ...input.sandbox },
     appearance: input.appearance ?? DEFAULTS.appearance
   };
   validateSettings(settings);
+  if (hasLegacy) writeJson(paths.settings, settings);
   return settings as Settings;
 }
 
@@ -108,6 +120,8 @@ export function mergeSettings(current: Settings, patch: SettingsPatch): Settings
   if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw new Error('Invalid settings patch');
   const allowed = Object.keys(DEFAULTS);
   if (Object.keys(patch).some((key) => !allowed.includes(key))) throw new Error('Unknown settings field');
+  if (legacySessionPlugins.some((id) => Object.hasOwn(patch.plugins ?? {}, id) || Object.hasOwn(patch.pluginConfig ?? {}, id)))
+    throw new Error('message-copy and edit-resend are now configured through session-helper');
   for (const group of ['model', 'plugins', 'pluginConfig', 'subagents', 'sandbox']) {
     if (group in patch && (!patch[group] || typeof patch[group] !== 'object' || Array.isArray(patch[group]))) throw new Error('Invalid settings section');
   }
