@@ -1,7 +1,7 @@
 import type { FrontendApi, FrontendServices, FrontendSetup, Suggestion } from '../kernel/extensions.js';
-import type { TabAddress, TabScope } from '../right-tabs.js';
-import { icon } from '../icons.js';
-import { button as control, iconButton } from '../primitives.js';
+import type { TabAddress, TabScope } from '../ui/right-tabs.js';
+import { icon } from '../ui/icons.js';
+import { button as control, iconButton } from '../ui/primitives.js';
 import { workspaceRoute, wait } from '../api.js';
 import { renderMarkdown } from '../ui/markdown.js';
 
