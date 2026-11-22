@@ -1,14 +1,14 @@
-import { element, data } from './api.js';
-import { readDirectory } from './files.js';
+import { element } from './api.js';
 import { icon } from './icons.js';
 import type { CommandRegistry, ComposerCommand } from './commands.js';
 import type { Attachment } from '../src/input.js';
-import type { FrontendApi } from './extensions.js';
-export function createComposer(report: (error: Error) => void, commands: CommandRegistry) {
+import type { Completer, FrontendApi, Suggestion } from './extensions.js';
+export function createComposer(report: (error: Error) => void, commands: CommandRegistry, signal: AbortSignal) {
   const prompt = element<'textarea'>('prompt'), form = element<'form'>('composer');
   const attachmentList = element('attachments'), suggestions = element('suggestions');
-  let files: Attachment[] = [], loading = 0, generation = 0, draftGeneration = 0, timer: ReturnType<typeof setTimeout>;
-  let fileReferences = false;
+  let files: Attachment[] = [], loading = 0, draftGeneration = 0;
+  const completions = new Map<string, Completer>();
+  let completion: AbortController;
   const render = () => {
     attachmentList.replaceChildren(...files.map((file, index) => {
       const card = document.createElement('div'); card.className = 'attachment';
@@ -52,30 +52,26 @@ export function createComposer(report: (error: Error) => void, commands: Command
   input.accept = 'image/png,image/jpeg,image/webp,image/gif,text/*,.json,.csv,.md,.ts,.js,.py,.cpp,.h,.xml,.yaml,.yml,.log,.sql';
   input.onchange = () => { void addFiles([...input.files]); input.value = ''; };
   form.append(input);
-  type Token = { start: number; end: number; query: string; kind: '/' | '@' };
+  type Token = { start: number; end: number; query: string; kind: string };
   let token: Token;
-  type Suggestion = {
-    label: string; description?: string; group?: string; icon?: 'file' | 'folder' | 'folder-open';
-    depth?: number; expanded?: boolean; run: (complete?: boolean) => void;
-  };
   let completeSelected: (() => void)[] = [];
   let buttons: HTMLButtonElement[] = [], selected = -1;
 
   function currentToken(): Token | undefined {
     if (prompt.selectionStart !== prompt.selectionEnd) return;
     const cursor = prompt.selectionStart;
-    const match = /(?:^|\s)([\/@])([^\s@]*)$/.exec(prompt.value.slice(0, cursor));
+    const match = /(?:^|\s)([^\s\p{L}\p{N}])([^\s]*)$/u.exec(prompt.value.slice(0, cursor));
     if (!match) return;
     const [, marker, query] = match;
+    if (marker !== '/' && !completions.has(marker)) return;
     const tail = /^\S*/.exec(prompt.value.slice(cursor))[0];
     if (marker === '/' && !/^[\w:-]*$/.test(query + tail)) return;
-    if (marker === '@' && query.startsWith('"')) return;
+
     return { start: cursor - query.length - 1, end: cursor + tail.length, query, kind: marker as Token['kind'] };
   }
 
   function hide() {
-    clearTimeout(timer);
-    ++generation;
+    completion?.abort();
     token = undefined;
     completeSelected = [];
     buttons = [];
@@ -191,57 +187,27 @@ export function createComposer(report: (error: Error) => void, commands: Command
         label: '/' + command.name, group: command.group ?? 'Plugin', description: command.description,
         run: (complete) => useCommand(command, match, complete)
       })));
-    } else if (fileReferences) {
-      const current = generation;
-      const reference = (path: string) => replace('@' + JSON.stringify(path) + (/^\s/.test(prompt.value.slice(match.end)) ? '' : ' '), match);
-      const fail = (error: Error) => { if (current === generation) renderOptions([], 0, error.message); };
-      if (match.query) {
-        timer = setTimeout(async () => {
-          try {
-            const paths = await data<string[]>('/files/search?q=' + encodeURIComponent(match.query));
-            if (current !== generation) return;
-            renderOptions(paths.map((path) => ({
-              label: path, icon: 'file', run: () => reference(path)
-            })), 0, 'No matching files.');
-          } catch (error) { fail(error); }
-        }, 120);
-      } else {
-        const listing = new Map<string, Awaited<ReturnType<typeof readDirectory>>>();
-        const open = new Set<string>(), loading = new Set<string>();
-        const treeOptions = (path: string, depth = 0): Suggestion[] => (listing.get(path) ?? []).flatMap<Suggestion>((entry) => {
-          if (!entry.directory) return [{ label: entry.name, icon: 'file', depth, run: () => reference(entry.path) }];
-          const expanded = open.has(entry.path);
-          const row: Suggestion = { label: entry.name, icon: expanded ? 'folder-open' : 'folder', expanded, depth, run: (complete) => {
-            if (complete) { reference(entry.path + '/'); return; }
-            if (loading.has(entry.path)) return;
-            if (expanded) { open.delete(entry.path); draw(); }
-            else void expand(entry.path);
-          } };
-          if (!expanded) return [row];
-          const pickFolder: Suggestion = {
-            label: 'Reference ' + entry.name + '/', icon: 'folder', depth: depth + 1, run: () => reference(entry.path + '/')
-          };
-          return [row, pickFolder, ...treeOptions(entry.path, depth + 1)];
-        });
-        const draw = () => renderOptions(treeOptions('.'), selected, 'This directory is empty.');
-        const expand = async (path: string) => {
-          loading.add(path);
-          try {
-            if (!listing.has(path)) listing.set(path, await readDirectory(path));
-            if (current !== generation) return;
-            open.add(path);
-            draw();
-          } catch (error) { if (current === generation) { if (path === '.') fail(error); else report(error); } }
-          finally { loading.delete(path); }
-        };
-        void expand('.');
-      }
+    } else {
+      const provider = completions.get(match.kind);
+      if (!provider) return;
+      const controller = new AbortController();
+      completion = controller;
+      void Promise.resolve().then(() => provider({
+        query: match.query,
+        signal: controller.signal,
+        show: (entries, emptyText) => {
+          if (!controller.signal.aborted) renderOptions(entries, Math.max(selected, 0), emptyText);
+        },
+        replace: (text) => {
+          if (!controller.signal.aborted) replace(text + (/^\s/.test(prompt.value.slice(match.end)) ? '' : ' '), match);
+        }
+      })).catch((error) => { if (!controller.signal.aborted) renderOptions([], 0, error.message); });
     }
   }
 
   prompt.addEventListener('input', () => { refresh(true); requestAnimationFrame(positionSuggestions); });
-  window.addEventListener('resize', positionSuggestions);
-  window.visualViewport?.addEventListener('resize', positionSuggestions);
+  window.addEventListener('resize', positionSuggestions, { signal });
+  window.visualViewport?.addEventListener('resize', positionSuggestions, { signal });
   prompt.addEventListener('click', () => refresh(true));
   prompt.addEventListener('keyup', (event) => {
     if (!suggestions.hidden && buttons.length && ['ArrowDown', 'ArrowUp'].includes(event.key)) return;
@@ -262,7 +228,8 @@ export function createComposer(report: (error: Error) => void, commands: Command
   });
   document.addEventListener('pointerdown', (event) => {
     if (event.target !== prompt && !suggestions.contains(event.target as Node)) hide();
-  });
+  }, { signal });
+  signal.addEventListener('abort', hide, { once: true });
   return {
     attachments: () => { if (loading) throw new Error('Files are still loading'); return structuredClone(files); },
     clear: () => { files = []; ++draftGeneration; render(); hide(); },
@@ -270,23 +237,12 @@ export function createComposer(report: (error: Error) => void, commands: Command
       const button = document.createElement('button'); button.type = 'button'; button.className = 'icon-button';
       button.setAttribute('aria-label', 'Attach files'); button.append(icon('attach')); button.onclick = () => input.click(); api.mount('composer', button);
     },
-    async skills(api: FrontendApi) {
-      const skills = await data<{ name: string; description: string }[]>('/skills');
-      for (const skill of skills) api.command({ name: 'skill:' + skill.name, description: skill.description, group: 'Skill' });
-      if (!skills.length) return;
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'icon-button';
-      button.setAttribute('aria-label', 'Choose skill');
-      button.append(icon('skills'));
-      button.onclick = () => {
-        const prefix = prompt.value.slice(0, prompt.selectionStart);
-        api.insert((prefix && !/\s$/.test(prefix) ? ' ' : '') + '/skill:');
-      };
-      api.mount('composer', button);
-      api.onDispose(hide);
-    },
     refresh,
-    references(api: FrontendApi) { fileReferences = true; api.onDispose(() => { fileReferences = false; hide(); }); }
+    completion(trigger: string, complete: Completer) {
+      if (trigger === '/' || !/^[!#$%&*?@^~]$/.test(trigger) || completions.has(trigger)) throw new Error('Invalid or duplicate completion trigger: ' + trigger);
+      completions.set(trigger, complete);
+      refresh(true);
+      return () => { completions.delete(trigger); refresh(true); };
+    }
   };
 }

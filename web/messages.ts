@@ -3,7 +3,7 @@ import type { FrontendHost } from './extensions.js';
 import { icon } from './icons.js';
 import { renderMarkdown, markdownSource } from './markdown.js';
 
-export function createMessageView(messages: HTMLElement, extensions: FrontendHost, activate: (id: string) => void, retryLast: () => void) {
+export function createMessageView(messages: HTMLElement, extensions: Pick<FrontendHost, 'render'>, retryLast: () => void) {
 const toolDurations = new Map<string, number>();
 
 function textOf(value?: MessageContent) {
@@ -83,14 +83,8 @@ function toolCard(data: { name: string; state: string; content?: MessageContent;
     img.src = 'data:' + block.mimeType + ';base64,' + block.data;
     body.append(img);
   }
-  if (data.sessionId && /^[a-f0-9-]{36}$/.test(data.sessionId)) {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'link-button';
-    button.textContent = 'Open child conversation';
-    button.onclick = () => void activate(data.sessionId);
-    body.append(button);
-  }
+  const action = extensions.render(data, true);
+  if (action) body.append(action);
   item.replaceChildren(summary, body);
   if (!card) messages.append(item);
   return item;

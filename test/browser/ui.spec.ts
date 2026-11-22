@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { spawn, type ChildProcess } from 'node:child_process';
+import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, readFileSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
@@ -245,6 +245,12 @@ test('plugin schema controls, recursive tree navigation, batch export and perman
     await page.getByRole('button', { name: 'Expand Child task', exact: true }).click();
     await page.getByRole('button', { name: 'Leaf task', exact: true }).click();
     await expect(page.locator('.message.assistant')).toHaveText('Leaf result');
+    const ancestors = page.getByRole('navigation', { name: 'Parent conversations' });
+    await expect(ancestors.getByRole('button')).toHaveText(['Parent task', 'Child task']);
+    await ancestors.getByRole('button', { name: 'Child task', exact: true }).click();
+    await expect(page.locator('#conversationTitle')).toHaveText('Child task');
+    await page.getByRole('button', { name: 'Leaf task', exact: true }).click();
+    await expect(page.locator('#conversationTitle')).toHaveText('Leaf task');
     await page.reload();
     await expect(page.locator('#conversationTitle')).toHaveText('Leaf task');
     await page.getByRole('button', { name: 'Select', exact: true }).click();
@@ -503,7 +509,12 @@ test('frontend plugins own all five slots and clean up on disable and reconfigur
 
 test('file inspection, responsive themes and reduced viewport height keep controls reachable', async ({ browser }) => {
   const mock = await createMockProvider(), { root, paths } = createFixturePaths(mock.url);
-  writeFileSync(join(paths.cwd, 'notes.md'), '# Visible file\nWorkspace content');
+  const note = join(paths.cwd, 'notes.md');
+  writeFileSync(note, '# Visible file\nBefore edits');
+  const git = (...args: string[]) => execFileSync('git', args, { cwd: paths.cwd });
+  git('init', '--quiet');
+  git('add', 'notes.md');
+  writeFileSync(note, '# Visible file\nWorkspace content');
   const service = await startIsolatedHost(paths);
   try {
     for (const width of [1366, 768, 390, 320]) {
@@ -512,8 +523,11 @@ test('file inspection, responsive themes and reduced viewport height keep contro
         await page.goto(service.url + '/#token=' + service.token);
         if (width <= 860) await page.getByRole('button', { name: 'Toggle navigation' }).click();
         await page.getByRole('button', { name: 'Workspace files', exact: true }).click();
-        await expect(page.getByText('Git is unavailable or this workspace is not a repository.')).toBeVisible();
-        await page.getByRole('button', { name: 'notes.md', exact: true }).click();
+        await expect(page.getByText('Git changes', { exact: true })).toBeVisible();
+        await page.getByRole('button', { name: 'AM notes.md', exact: true }).click();
+        await expect(page.locator('.diff .added')).toHaveText(['+# Visible file', '+Before edits', '+Workspace content']);
+        await page.getByRole('button', { name: 'Preview', exact: true }).click();
+        await expect(page.getByRole('button', { name: 'Preview', exact: true })).toBeFocused();
         await expect(page.locator('.file-preview')).toHaveText('# Visible file\nWorkspace content');
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
         await page.getByRole('button', { name: 'Close inspector' }).click();
@@ -543,11 +557,15 @@ test('custom provider onboarding and switching workspace work entirely in the GU
   try {
     await page.goto(service.url + '/#token=' + service.token);
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.getByText('Custom API endpoint', { exact: true }).click();
     await page.getByRole('textbox', { name: 'Provider ID', exact: true }).fill('gui-added');
     await page.getByRole('textbox', { name: 'API endpoint', exact: true }).fill(mock.url);
     await page.getByRole('textbox', { name: 'Model IDs (one per line)', exact: true }).fill('new-model');
+    await page.getByText('Per-model options', { exact: true }).click();
+    await page.getByRole('textbox', { name: 'Display name', exact: true }).fill('GUI Model');
     await page.getByRole('button', { name: 'Save endpoint', exact: true }).click();
     await expect(page.locator('#providerStatus')).toContainText('Endpoint saved.');
+    await expect(page.getByRole('option', { name: 'GUI Model', exact: true })).toHaveCount(1);
     await expect(page.getByRole('combobox', { name: 'Provider', exact: true })).toHaveValue('gui-added');
     await page.getByRole('textbox', { name: 'API key', exact: true }).fill('test-only-key');
     await page.getByRole('button', { name: 'Save API key', exact: true }).click();
@@ -607,6 +625,7 @@ test('running messages can queue follow-ups and approve shell commands from the 
     await expect(page.locator('.tool-arguments')).toContainText('echo approved');
     await expect(page.locator('.tool-content')).toContainText('Exit 0');
     await expect(page.locator('.tool-duration')).toHaveText(/\d+ (ms|s)/);
+    await expect(page.locator('#runSummary')).toContainText('Completed');
   } finally { release(); await page.close(); await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
@@ -629,4 +648,35 @@ test('retry retains image attachments after selecting an image-capable model', a
     expect(JSON.stringify(mock.requests.at(-1))).toContain('image_url');
     await expect(page.locator('.message-image')).toHaveCount(1);
   } finally { await page.close(); await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+
+test('plugin catalog applies configuration and removes disabled browser capabilities', async ({ page }) => {
+  const mock = await createMockProvider(), { root, paths } = createFixturePaths(mock.url);
+  const service = await startIsolatedHost(paths);
+  try {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(service.url + '/#token=' + service.token);
+    await page.getByRole('button', { name: 'Toggle navigation' }).click();
+    await page.getByRole('button', { name: 'Browse plugins' }).click();
+    const catalog = page.getByRole('region', { name: 'Plugin catalog' });
+    await expect(catalog.getByRole('heading', { name: 'Plugins', exact: true })).toBeVisible();
+    const files = catalog.getByRole('switch', { name: 'Workspace files', exact: true });
+    await expect(files).toBeChecked();
+    await files.uncheck();
+    await expect(files).not.toBeChecked();
+    await expect(page.locator('#sidebarExtensions').getByRole('button', { name: 'Workspace files', includeHidden: true })).toHaveCount(0);
+    await files.check();
+    await expect(page.locator('#sidebarExtensions').getByRole('button', { name: 'Workspace files', includeHidden: true })).toHaveCount(1);
+    await catalog.getByRole('button', { name: 'Configure Subagents' }).click();
+    await catalog.getByRole('spinbutton', { name: 'Maximum child depth · subagents' }).fill('2');
+    await catalog.getByRole('button', { name: 'Save configuration' }).click();
+    await expect(catalog.getByText('Saved.', { exact: true })).toBeVisible();
+    await catalog.getByRole('button', { name: /All plugins/ }).click();
+    await catalog.getByRole('button', { name: 'Configure Subagents' }).click();
+    await expect(catalog.getByRole('spinbutton', { name: 'Maximum child depth · subagents' })).toHaveValue('2');
+    await page.getByRole('button', { name: 'Toggle navigation' }).click();
+    await page.getByRole('button', { name: 'New conversation' }).click();
+    await expect(page.getByRole('textbox', { name: 'Message' })).toBeVisible();
+  } finally { await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
 });

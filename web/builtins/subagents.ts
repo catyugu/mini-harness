@@ -1,0 +1,42 @@
+import type { FrontendSetup } from '../extensions.js';
+import { icon } from '../icons.js';
+
+const setup: FrontendSetup = (api, services) => {
+  const trail = document.createElement('nav');
+  trail.className = 'parent-conversations';
+  trail.setAttribute('aria-label', 'Parent conversations');
+  const renderTrail = () => {
+    const parents = [];
+    for (let id = services.currentConversation()?.parentId; id;) {
+      const parent = services.session(id);
+      if (!parent) break;
+      parents.unshift(parent);
+      id = parent.parentId;
+    }
+    trail.hidden = !parents.length;
+    trail.replaceChildren(...parents.map(({ id, title }) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'link-button';
+      button.title = title;
+      button.textContent = title;
+      button.onclick = () => services.openConversation(id);
+      const step = document.createElement('span');
+      step.append(button, icon('chevron'));
+      return step;
+    }));
+  };
+  api.mount('conversation-header', trail);
+  services.onConversationChange(renderTrail, api.signal);
+  renderTrail();
+  api.toolAction('delegate', ({ sessionId }) => {
+    if (!sessionId || !/^[a-f0-9-]{36}$/.test(sessionId)) return;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'link-button';
+    button.append(icon('chevron'), document.createTextNode(' Open child conversation'));
+    button.onclick = () => services.openConversation(sessionId);
+    return button;
+  });
+};
+export default setup;

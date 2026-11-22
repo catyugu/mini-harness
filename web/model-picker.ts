@@ -3,7 +3,7 @@ import { element } from './api.js';
 import { icon } from './icons.js';
 import type { ModelInfo } from './types.js';
 
-export function createModelPicker(onSelect: (model: ModelChoice) => void) {
+export function createModelPicker(onSelect: (model: ModelChoice) => void, signal: AbortSignal) {
   const button = element<'button'>('modelSelect'), popup = element('modelPicker');
   const search = element<'input'>('modelSearch'), results = element('modelResults'), empty = element('modelEmpty');
   let models: ModelInfo[] = [];
@@ -128,8 +128,8 @@ export function createModelPicker(onSelect: (model: ModelChoice) => void) {
     }
   };
   popup.addEventListener('toggle', () => button.setAttribute('aria-expanded', String(popup.matches(':popover-open'))));
-  window.addEventListener('resize', position);
-  window.visualViewport?.addEventListener('resize', position);
+  window.addEventListener('resize', position, { signal });
+  window.visualViewport?.addEventListener('resize', position, { signal });
 
   return {
     open,

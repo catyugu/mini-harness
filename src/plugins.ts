@@ -3,13 +3,15 @@ import { readdirSync, existsSync, lstatSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
-import { Type } from 'typebox';
 import { Check } from 'typebox/value';
-import { defineTool, type ToolDefinition } from '@earendil-works/pi-coding-agent';
+import type { ToolDefinition } from '@earendil-works/pi-coding-agent';
 import type { MiniHarnessRuntime } from './agent.js';
 import { readJson, type Settings } from './config.js';
-import { runShell } from './sandbox.js';
-import { Workspace } from './workspace.js';
+import { RouteRegistry, type RouteHandler } from './http.js';
+import { files } from './builtins/files.js';
+import { skills } from './builtins/skills.js';
+import { shell } from './builtins/shell.js';
+import { subagents } from './builtins/subagents.js';
 
 export interface PluginMetadata {
   id: string;
@@ -17,22 +19,28 @@ export interface PluginMetadata {
   description: string;
   trustedCode?: boolean;
   web?: boolean;
+  browser?: string;
+  icon?: 'files' | 'skills' | 'delegate' | 'terminal';
+  preferences?: { key: 'subagents' | 'sandbox'; schema: Record<string, unknown> };
   requires?: string[];
   configSchema?: Record<string, any>;
 }
 
-export const BUILTINS: readonly PluginMetadata[] = Object.freeze([
-  { id: 'files', title: 'Workspace files', description: 'Read, search and edit files within the workspace.' },
-  { id: 'skills', title: 'Skills', description: 'Discover Agent Skills from home and the workspace.' },
-  { id: 'subagents', title: 'Subagents', description: 'Delegate tasks to child conversations.' },
-  { id: 'shell', title: 'Shell', description: 'Run commands using the configured execution policy.' }
-]);
+export interface BuiltinPlugin extends PluginMetadata {
+  inject: string[];
+  setup(ctx: Context): void;
+}
+
+const builtins = [files, skills, subagents, shell];
+export const BUILTINS: readonly PluginMetadata[] = builtins.map(({ inject, setup, ...metadata }) => metadata);
 
 export interface PluginApi {
   /** The value comes from settings.pluginConfig[pluginId]. */
   readonly config: Readonly<Record<string, unknown>>;
   defineConfig(defaults: Record<string, unknown>, validate?: (config: Readonly<Record<string, unknown>>) => void): Readonly<Record<string, unknown>>;
   registerTool(tool: ToolDefinition): () => Promise<void>;
+  /** Mount an authenticated route under /api/extensions/<plugin-id>/. */
+  registerRoute(method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string, handler: RouteHandler): () => Promise<void>;
   onDispose(cleanup: () => void | Promise<void>): void;
 }
 
@@ -43,6 +51,8 @@ declare module 'cordis' {
     harnessTools: ToolRegistry;
     harnessConfig: { get(): Settings; paths: MiniHarnessRuntime['paths'] };
     harnessRuntime: MiniHarnessRuntime;
+    harnessRoutes: RouteRegistry;
+    harnessDelegation: MiniHarnessRuntime['delegation'];
     harnessSkills: { paths: string[] };
   }
 }
@@ -98,6 +108,8 @@ export class PluginHost {
       list: () => runtime.registry.list()
     });
     this.ctx.provide('harnessTools', new ToolRegistry());
+    this.ctx.provide('harnessRoutes', new RouteRegistry());
+    this.ctx.provide('harnessDelegation', runtime.delegation);
   }
 
   private discover() {
@@ -125,48 +137,17 @@ export class PluginHost {
 
   metadata() { return [...BUILTINS, ...this.discover().map(({ metadata }) => metadata)]; }
 
-  private builtin(id: string) {
-    const runtime = this.runtime;
-    const setup = {
-      files: (ctx: Context) => {
-        for (const tool of new Workspace(runtime.paths.cwd, runtime.paths.home).tools())
-          ctx.effect(() => ctx.harnessTools.register(tool, undefined, undefined, true));
-      },
-      skills: (ctx: Context) => { ctx.provide('harnessSkills', { paths: [runtime.paths.skills, runtime.paths.projectSkills] }); },
-      subagents: (ctx: Context) => {
-        ctx.effect(() => ctx.harnessTools.register(runtime.delegateTool(), (sessionId) => runtime.delegateTool(sessionId),
-          (sessionId) => runtime.canDelegate(sessionId)));
-      },
-      shell: (ctx: Context) => {
-        const tool = (sessionId: string) => defineTool({
-          name: 'sandbox_shell', label: 'Shell',
-          description: 'Run a shell command in the workspace after the user approves it in the Web interface.',
-          parameters: Type.Object({ command: Type.String({ minLength: 1, maxLength: 16000 }) }),
-          execute: async (_id, args, signal) => {
-            await runtime.approvals.request(sessionId, args.command, signal);
-            const output = await runShell(args.command, runtime.paths.cwd, {
-              ...runtime.settings.sandbox, signal, stateDir: runtime.paths.home
-            });
-            return { content: [{ type: 'text', text: JSON.stringify(output) }], details: output };
-          }
-        });
-        ctx.effect(() => ctx.harnessTools.register(tool(''), tool));
-      }
-    }[id];
-    return setup && { inject: ['harnessTools'], setup };
-  }
-
   private async mount(plan: PluginPlan) {
     const { id, source } = plan;
     let fiber: Fiber | undefined;
     try {
-        const builtin = this.builtin(id);
+        const builtin = builtins.find((plugin) => plugin.id === id);
         const mod = builtin ? undefined : await import(pathToFileURL(source).href + '?v=' + lstatSync(source).mtimeMs);
         const component = builtin ?? mod.default ?? mod.apply;
         const setup = builtin?.setup ?? (typeof component === 'function' ? component : component?.apply?.bind(component));
         if (typeof setup !== 'function') throw new Error('Expected a setup function or a Cordis component');
         const deps = [...new Set<string>(component.inject ?? mod.inject ?? [])];
-        if (deps.some((dep) => !['harnessAgent', 'harnessSessions', 'harnessConfig', 'harnessTools', 'harnessRuntime'].includes(dep)))
+        if (!builtin && deps.some((dep) => !['harnessAgent', 'harnessSessions', 'harnessConfig', 'harnessTools', 'harnessRuntime'].includes(dep)))
           throw new Error('Unknown harness service dependency');
         fiber = this.ctx.inject(deps, async (ctx) => {
           const values = Object.freeze(structuredClone(plan.config ?? {}));
@@ -178,6 +159,11 @@ export class PluginHost {
               return config;
             },
             registerTool: (tool) => ctx.effect(() => this.ctx.harnessTools.register(tool)),
+            registerRoute: (method, path, handler) => {
+              if (!['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method) ||
+                  !/^\/(?:[a-zA-Z0-9_-]+\/)*[a-zA-Z0-9_-]+$/.test(path)) throw new Error('Invalid plugin route');
+              return ctx.effect(() => this.ctx.harnessRoutes.register(method, '/api/extensions/' + id + path, handler));
+            },
             onDispose: (dispose) => { ctx.effect(() => dispose); }
           } satisfies PluginApi);
           if (typeof cleanup === 'function') ctx.effect(() => cleanup);

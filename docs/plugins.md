@@ -1,6 +1,6 @@
 # Local plugins
 
-Install reviewed ESM code in `~/.mini-harness/plugins/<id>/plugin.js`. IDs start with a lowercase letter and contain lowercase letters, digits and hyphens (up to 64 characters). Plugins run with your user permissions. Enable them in Settings.
+Install reviewed ESM code in `~/.mini-harness/plugins/<id>/plugin.js`. IDs start with a lowercase letter and contain lowercase letters, digits and hyphens (up to 64 characters). Plugins run with your user permissions. Enable them in the Plugins page or in Settings.
 
 ## Manifest and configuration
 
@@ -39,6 +39,7 @@ export const inject = ['harnessSessions'];
 
 export default function setup(ctx, api) {
   const { prefix } = api.config;
+  api.registerRoute('GET', '/count', () => ({ count: ctx.harnessSessions.list().length }));
   api.registerTool({
     name: 'conversation_count',
     label: 'Conversation count',
@@ -62,7 +63,8 @@ The default export can also be a Cordis component with `apply` and `inject`. Dec
 | - | - |
 | `api.config` | Cloned, read-only top-level configuration with schema defaults applied |
 | `api.defineConfig(defaults, validate?)` | Optional JavaScript defaults and validation, including plugins without a schema |
-| `api.registerTool(tool)` | Register a Pi tool; returns an async unregister function |
+| `api.registerTool(tool)` | Register a Pi tool and return an async unregister function |
+| `api.registerRoute(method, path, handler)` | Mount an authenticated JSON route under `/api/extensions/<id>` and return an async unregister function |
 | `api.onDispose(cleanup)` | Register synchronous or asynchronous resource cleanup |
 | Returned cleanup function | Alternative cleanup for the setup function |
 
@@ -70,9 +72,9 @@ Tool names must be unique, use letters, digits, underscores or hyphens, and be 1
 
 ## Services and lifecycle
 
-Public metadata services are `harnessAgent.availableModels()`, `harnessSessions.get(id)` / `list()`, and `harnessConfig.get()` / `paths`. The host also provides `harnessRuntime`, `harnessTools`, `harnessSkills` and `harnessWeb` for core composition; these are internal interfaces. The web service becomes available after plugin startup.
+Public metadata services are `harnessAgent.availableModels()`, `harnessSessions.get(id)` / `list()`, and `harnessConfig.get()` / `paths`. The host uses internal Cordis services for routes, tool definitions, delegation and Skill directories.
 
-Built-in and local setup functions run in Cordis scopes. Dependencies mount first and unload last. Disabling a required plugin also requires disabling its dependents. Reconfiguring a dependency restarts its enabled dependents. Unchanged plugin scopes stay mounted.
+Built-in and local setup functions run in Cordis scopes. Dependencies mount first and unload last. Disabling a required plugin also requires disabling its dependents. Reconfiguring a dependency restarts its enabled dependents. Unchanged plugin scopes stay mounted. A route handler receives `{ url, body(maxBytes?), signal }`. The signal aborts when its route unloads. Read JSON with `await body()` and return a JSON-serializable result.
 
 Schema validation precedes setup. If setup or settings persistence fails, the host unloads new scopes and restores the previous plugin configuration. Cleanup handlers must release their resources and tolerate partial setup; failure to restore is reported explicitly. Changes affecting active tools or Skills require idle conversations, and invalidate Pi sessions so their next open gets the current tool definitions. Theme, scheduling, execution policy and model-selection changes preserve running sessions. Changes to child depth refresh tool availability when a session is next idle.
 
@@ -116,21 +118,24 @@ export default function setup(api) {
 
 | API | Behavior |
 | - | - |
-| `mount('sidebar', node)` | Add a sidebar entry |
+| `mount('sidebar', node, order?)` | Add a sidebar entry. Lower orders appear first. |
 | `command({name, description, group?, run?})` | Register a slash suggestion. Omit the leading slash from the name. With no callback the command is inserted into the draft. |
 | `mount('composer', node)` | Add an input toolbar control |
+| `completion(trigger, complete)` | Register a punctuation-triggered input completion. The callback receives `{query, signal, show, replace}`. |
+| `toolAction(name, render)` | Add a control to a tool result while keeping its normal output. |
 | `tool(name, render)` | Register one renderer for a tool name; returning `undefined` uses the generic result view |
 | `settingsPage(title, node)` | Register a settings category and its content |
 | `mount('settings', node)` | Add content to the shared Extensions category |
 | `mount('inspector', node)` | Add a right-panel entry; use `inspect(title, node)` to show its content |
 | `insert(text)` | Insert text at the input selection |
 | `request(path, options?)` | Request authenticated JSON from `/api` using a path such as `/sessions` |
+| `signal` | Aborts when the browser plugin scope unloads. Requests made through the API use it automatically. |
 | `config` | Same validated configuration and schema defaults as the server plugin |
 | `onDispose(cleanup)` / returned cleanup | Release listeners, timers and other browser resources |
 
-The host removes mounted nodes, inspected content and tool registrations when disabling or reconfiguring the plugin. Register document/window listeners with matching `onDispose` cleanup. Dependencies mount first and dispose last; configuration changes also rebuild dependent browser extensions. Setup failures remove partial contributions and leave ordinary chat available. The backend and UI share one plugin switch; attachments, file inspection and Skills use these same extension interfaces.
+The browser runs each plugin in a Cordis scope and disposes its slots, completions, settings pages, tool registrations and inspector content when the scope unloads. Pass `api.signal` to document or window listeners or release them with `onDispose`. Dependencies mount first and dispose last; configuration changes also rebuild dependent browser extensions. Setup failures remove partial contributions and leave ordinary chat available. The backend and UI share one plugin switch; attachments, file inspection and Skills use these same extension interfaces.
 
-Settings can install a single-file local bundle containing `plugin.js`, optional `plugin.json` and `web.js` (at most 1 MiB combined). New installations stay disabled. Disable and save before uninstalling; uninstall removes the local plugin directory permanently. Larger development plugins can still be placed in the local plugins directory manually.
+The Plugins page can install a local bundle containing `plugin.js`, optional `plugin.json` and `web.js` (at most 1 MiB combined). New installations stay disabled. Disable and save before uninstalling; uninstall removes the local plugin directory permanently. Larger development plugins can still be placed in the local plugins directory manually.
 
 ## GUI API additions
 
@@ -151,4 +156,4 @@ Settings can install a single-file local bundle containing `plugin.js`, optional
 
 Images (PNG/JPEG/GIF/WebP) go through Pi's image input and require an image-capable model. UTF-8 text attachments become message text. Limits: eight files, 6 MiB per image, 1 MiB per text file, 12 MiB total. Binary documents such as PDF/Office files are not parsed. Attachment content lives in the Pi conversation; there is no independent upload store. Git inspection requires the selected workspace to be the repository root and caps output at 512 KiB. “Files written this turn” lists successful built-in `write`/`edit` paths; Git changes show the entire working tree, including earlier edits and shell changes.
 
-Every enabled built-in Shell call requires approval. Requests expire after five minutes; stopping the run or server cancels pending approval. Approval permits the command under the existing shell policy. Reviewed local plugins remain trusted code; this is not a general-purpose containment mechanism.
+The file, Skill and approval endpoints return 404 when their corresponding plugin is disabled. Every enabled built-in Shell call requires approval. Requests expire after five minutes; stopping the run or server cancels pending approval. Approval permits the command under the existing shell policy. Reviewed local plugins remain trusted code; this is not a general-purpose containment mechanism.

@@ -45,7 +45,8 @@ test('GUI APIs configure providers, persist keys privately, discover Skills and 
   assert.equal((await request('/files/preview?path=' + encodeURIComponent(paths.settings))).status, 400);
   assert.equal((await request('/files/tree?path=..')).status, 400);
   assert.equal((await request('/settings', 'PATCH', { plugins: { files: false, skills: false } })).status, 200);
-  assert.equal((await request('/files/tree')).status, 400); assert.deepEqual((await request('/skills')).body, []);
+  assert.equal((await request('/files/tree')).status, 404);
+  assert.equal((await request('/skills')).status, 404);
   const save = await request('/providers', 'PUT', { id: 'gui-test', baseUrl: mock.url, api: 'openai-completions', models: [{ id: 'gui-model', input: ['text', 'image'] }] });
   assert.equal(save.status, 200, JSON.stringify(save.body));
   assert.equal((await request('/credentials', 'POST', { provider: 'gui-test', key: 'gui-private-key' })).status, 200);
@@ -140,13 +141,25 @@ test('queued follow-ups run within the existing Pi run and are consumed once', a
 
 test('local plugins install disabled, load UI only when enabled, and uninstall permanently', async (t) => {
   const { paths, request } = await fixture(t);
-  const bundle = { id: 'gui-plugin', files: [{ name: 'plugin.js', content: 'export default function() {}' }, { name: 'web.js', content: 'export default function(api) {}' }] };
+  const route = '/extensions/gui-plugin/echo';
+  const bundle = { id: 'gui-plugin', files: [
+    { name: 'plugin.js', content: `export default function(ctx, api) {
+      api.registerRoute('POST', '/echo', async ({ body }) => ({ echo: await body() }));
+      if (api.config.fail) throw new Error('Setup failed after registering a route');
+    }` },
+    { name: 'web.js', content: 'export default function(api) {}' }
+  ] };
   assert.equal((await request('/plugins/install', 'POST', bundle)).status, 201);
   assert.equal((await request('/plugins/gui-plugin/web')).status, 400);
+  assert.equal((await request(route, 'POST', { value: 1 })).status, 404);
   assert.equal((await request('/settings', 'PATCH', { plugins: { 'gui-plugin': true } })).status, 200);
   assert.match((await request('/plugins/gui-plugin/web')).body.source, /function/);
+  assert.deepEqual((await request(route, 'POST', { value: 1 })).body, { echo: { value: 1 } });
+  assert.equal((await request('/settings', 'PATCH', { pluginConfig: { 'gui-plugin': { fail: true } } })).status, 400);
+  assert.deepEqual((await request(route, 'POST', { value: 2 })).body, { echo: { value: 2 } });
   assert.equal((await request('/plugins/gui-plugin', 'DELETE')).status, 400);
   await request('/settings', 'PATCH', { plugins: { 'gui-plugin': false } });
+  assert.equal((await request(route, 'POST', { value: 2 })).status, 404);
   assert.equal((await request('/plugins/gui-plugin', 'DELETE')).status, 200);
   assert.equal(existsSync(join(paths.plugins, 'gui-plugin')), false);
   assert.equal((await request('/plugins/install', 'POST', { ...bundle, files: [{ name: '../escape.js', content: '' }] })).status, 400);
