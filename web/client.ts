@@ -30,6 +30,8 @@ export class BrowserState extends EventTarget {
   apply = (settings: Settings) => {
     this.snapshot.settings = settings;
     document.documentElement.dataset.theme = settings.appearance;
+    localStorage.setItem('mini-harness-theme', settings.appearance);
+    for (const [key, size] of Object.entries(settings.typography)) document.documentElement.style.setProperty('--font-' + key, size + 'px');
     this.dispatchEvent(new Event('settings'));
   };
 

@@ -6,6 +6,7 @@ export interface Settings {
   subagents: {maxDepth: number; maxParallel: number; provider: string; model: string};
   sandbox: {mode: 'isolated'|'host'; timeoutSeconds: number};
   appearance: 'system'|'light'|'dark';
+  typography: { body: number; code: number; terminal: number };
 }
 import { createHash, randomUUID } from 'node:crypto';
 import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
@@ -19,7 +20,8 @@ export const DEFAULTS = Object.freeze({
   pluginConfig: {},
   subagents: { maxDepth: 1, maxParallel: 4, provider: '', model: '' },
   sandbox: { mode: 'isolated', timeoutSeconds: 60 },
-  appearance: 'system'
+  appearance: 'system',
+  typography: { body: 14, code: 13, terminal: 12 }
 });
 
 export function getPaths(cwd: string = process.cwd(), env: NodeJS.ProcessEnv = process.env) {
@@ -80,6 +82,10 @@ export function validateSettings(input: any) {
   }
   if (!['isolated', 'host'].includes(sandbox.mode ?? 'isolated')) throw new Error('Invalid sandbox mode');
   if (!Number.isInteger(sandbox.timeoutSeconds ?? 60) || (sandbox.timeoutSeconds ?? 60) < 1 || (sandbox.timeoutSeconds ?? 60) > 300) throw new Error('Invalid shell timeout');
+  for (const size of Object.values(input.typography ?? {})) {
+    if (!Number.isInteger(size) || Number(size) < 10 || Number(size) > 22) throw new Error('Font size must be 10–22');
+  }
+  if (input.typography && Object.keys(input.typography).some((key) => !['body', 'code', 'terminal'].includes(key))) throw new Error('Unknown typography field');
   if (!['system', 'light', 'dark'].includes(input.appearance ?? 'system')) throw new Error('Invalid appearance');
   if (!Number.isInteger(input.port ?? 3837) || (input.port ?? 3837) < 1024 || (input.port ?? 3837) > 65535) throw new Error('Invalid port');
   return true;
@@ -94,7 +100,8 @@ export function readSettings(paths: ReturnType<typeof getPaths>): Settings {
     pluginConfig: { ...input.pluginConfig },
     subagents: { ...DEFAULTS.subagents, ...input.subagents },
     sandbox: { ...DEFAULTS.sandbox, ...input.sandbox },
-    appearance: input.appearance ?? DEFAULTS.appearance
+    appearance: input.appearance ?? DEFAULTS.appearance,
+    typography: { ...DEFAULTS.typography, ...input.typography }
   };
   validateSettings(settings);
   return settings as Settings;
@@ -106,7 +113,7 @@ export function mergeSettings(current: Settings, patch: SettingsPatch): Settings
   if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw new Error('Invalid settings patch');
   const allowed = Object.keys(DEFAULTS);
   if (Object.keys(patch).some((key) => !allowed.includes(key))) throw new Error('Unknown settings field');
-  for (const group of ['model', 'plugins', 'pluginConfig', 'subagents', 'sandbox']) {
+  for (const group of ['model', 'plugins', 'pluginConfig', 'subagents', 'sandbox', 'typography']) {
     if (group in patch && (!patch[group] || typeof patch[group] !== 'object' || Array.isArray(patch[group]))) throw new Error('Invalid settings section');
   }
   const next: Settings = {
@@ -116,7 +123,8 @@ export function mergeSettings(current: Settings, patch: SettingsPatch): Settings
     plugins: { ...current.plugins, ...patch.plugins },
     pluginConfig: { ...current.pluginConfig, ...patch.pluginConfig },
     subagents: { ...current.subagents, ...(patch.subagents || {}) },
-    sandbox: { ...current.sandbox, ...(patch.sandbox || {}) }
+    sandbox: { ...current.sandbox, ...(patch.sandbox || {}) },
+    typography: { ...current.typography, ...patch.typography }
   };
   validateSettings(next);
   return next;

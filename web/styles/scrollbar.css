@@ -1,0 +1,3 @@
+* { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--muted) 38%, transparent) transparent; }
+:is(.sidebar, .right-pane) { --scrollbar-surface: var(--panel); }
+:is(.settings-scroll, .tool-content, .messages):hover { scrollbar-color: var(--muted) transparent; }

@@ -1,0 +1,17 @@
+:root {
+  --dsw-elevation-stroke-color: light-dark(#00000024, #ffffff24);
+  --dsw-elevation-stroke: 0 0 0 .5px var(--dsw-elevation-stroke-color);
+  --dsw-shadow-lv1: 0 2px 8px #00000009; --dsw-shadow-lv2: 0 8px 30px #00000018;
+  --dsw-shadow-lv3: 0 18px 64px #00000028;
+  --dsw-elevation-soft: var(--dsw-elevation-stroke), var(--dsw-shadow-lv1);
+  --dsw-elevation-panel: var(--dsw-elevation-stroke), var(--dsw-shadow-lv2);
+  --dsw-elevation-prominent: var(--dsw-elevation-stroke), var(--dsw-shadow-lv3);
+  --dsw-menu-surface-fill: color-mix(in srgb, var(--surface) 88%, transparent);
+  --shadow: var(--dsw-elevation-soft);
+}
+body :is(.model-picker, .suggestions, .ui-dialog, .settings-panel) {
+  border: 0; box-shadow: var(--dsw-elevation-panel); background: var(--dsw-menu-surface-fill);
+  backdrop-filter: blur(24px) saturate(1.2);
+}
+body :is(.settings-panel, .ui-dialog) { box-shadow: var(--dsw-elevation-prominent); }
+body .composer { border: .5px solid var(--dsw-elevation-stroke-color); box-shadow: var(--dsw-shadow-lv1); }

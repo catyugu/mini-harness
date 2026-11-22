@@ -59,6 +59,8 @@ function createShell(signal: AbortSignal) {
   <div id="dialogSlot"></div>
 </div>`);
   document.body.append(root);
+  document.addEventListener('pointerdown', () => { document.documentElement.dataset.input = 'pointer'; }, { signal });
+  document.addEventListener('keydown', (event) => { if (!event.metaKey && !event.ctrlKey && !event.altKey) document.documentElement.dataset.input = 'keyboard'; }, { signal });
   signal.addEventListener('abort', () => root.remove(), { once: true });
   const { element } = scopedElements(root);
   const layout = createLayout({

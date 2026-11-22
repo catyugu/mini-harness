@@ -1,0 +1,4 @@
+@supports (corner-shape: squircle) {
+  :where(.composer, .settings-panel, .ui-dialog, .tool-card, .model-picker, .ui-button, .ui-input, .catalog-row) { corner-shape: squircle; }
+}
+:where(.toggle, .toggle::after, .tool-state) { corner-shape: round; }

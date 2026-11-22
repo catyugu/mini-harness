@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { cpSync, copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 const require = createRequire(import.meta.url);
@@ -19,3 +19,5 @@ writeFileSync('dist/web/vendor/cordis.js', readFileSync(cordis, 'utf8').replaceA
 const cosmokit = dirname(requireCordis.resolve('cosmokit'));
 copyFileSync(join(cosmokit, 'index.mjs'), 'dist/web/vendor/cosmokit.js');
 copyFileSync(join(cosmokit, '..', 'LICENSE'), 'dist/web/vendor/cosmokit.LICENSE');
+
+cpSync('web/styles', 'dist/web/styles', { recursive: true });
