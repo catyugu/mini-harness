@@ -343,7 +343,7 @@ export function conversationView(api: FrontendApi, services: FrontendServices, o
           case 'assistant-end':
             if (merged?.message) {
               answer?.closest('.message-row')?.remove();
-              appendHistory(merged.message);
+              appendHistory(merged.message, false);
               answer = undefined;
               answerText = '';
             } else if (answer) renderMarkdown(answer, answerText);

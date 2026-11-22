@@ -90,7 +90,7 @@ function fileEntry(api: FrontendApi, scope: TabScope, path: string, label: strin
   return row;
 }
 
-function fileTree(api: FrontendApi, services: FrontendServices, address: TabAddress, signal: AbortSignal) {
+function fileTree(api: FrontendApi, services: FrontendServices, address: TabAddress, signal: AbortSignal, expanded: Set<string>) {
   const path = address.path ?? '.';
   const root = document.createElement('section');
   const toolbar = document.createElement('div');
@@ -99,7 +99,6 @@ function fileTree(api: FrontendApi, services: FrontendServices, address: TabAddr
   toolbar.append(breadcrumbs(api, services, address, path), refresh);
   const content = document.createElement('div');
   root.append(toolbar, content);
-  const expanded = new Set<string>();
   let loading: AbortController;
   const groups = new Map<string, string>();
   async function tree(path: string, loadSignal: AbortSignal) {
@@ -173,6 +172,7 @@ function changesTab(api: FrontendApi, services: FrontendServices, address: TabAd
     body.replaceChildren(hint('Loading Git changes…'));
     try {
       const changes = await api.request<GitChanges>(fileRoute(address, 'changes'), { signal });
+      if (signal.aborted) return;
       const touched = address.sessionId ? services.session(address.sessionId)?.run?.changedFiles ?? [] : [];
       body.replaceChildren();
       const group = (title: string, nodes: HTMLElement[]) => {
@@ -290,11 +290,15 @@ function fileView(api: FrontendApi, services: FrontendServices, address: TabAddr
 }
 
 const setup: FrontendSetup = (api, services) => {
+  const expandedFolders = new WeakMap<TabAddress, Set<string>>();
   api.rightTab('files', {
     title: ({ path }) => path ? base(path) : 'Files',
     default: true,
     launcher: 'Browse files',
-    create: (address, signal) => fileTree(api, services, address, signal)
+    create(address, signal) {
+      if (!expandedFolders.has(address)) expandedFolders.set(address, new Set());
+      return fileTree(api, services, address, signal, expandedFolders.get(address));
+    }
   });
   api.rightTab('changes', {
     title: () => 'Git changes',

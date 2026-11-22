@@ -99,7 +99,7 @@ function toolCard(data: { name: string; state: string; content?: MessageContent;
   return item;
 }
 
-function appendHistory(message: ViewMessage) {
+function appendHistory(message: ViewMessage, showError = true) {
   const custom = extensions.chat(message);
   if (custom) { messages.append(custom); return; }
   if (message.role === 'toolResult') {
@@ -114,7 +114,7 @@ function appendHistory(message: ViewMessage) {
     const image = document.createElement('img'); image.className = 'message-image'; image.alt = 'Attached image';
     image.src = 'data:' + block.mimeType + ';base64,' + block.data; messages.append(image);
   }
-  if (message.error) addMessage('error', message.error);
+  if (showError && message.error) addMessage('error', message.error);
 }
 
 function renderHistory(history: ViewMessage[], runs: import('../src/protocol.js').RunInfo[] = [], mode = 'standard', collapse = 'completed') {

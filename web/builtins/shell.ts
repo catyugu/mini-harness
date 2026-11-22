@@ -21,7 +21,7 @@ const setup: FrontendSetup = (api, services) => {
     const button = document.createElement('button'); button.type = 'button'; button.className = 'link-button';
     button.textContent = 'Open terminal'; button.onclick = () => services.openResource({ path: '', kind: 'terminal' }); return button;
   });
-  api.rightTab('terminal', { title: () => 'Terminal', launcher: 'Shell output', keepMounted: true,
+  api.rightTab('terminal', { title: () => 'Terminal', launcher: 'Shell output',
     canOpen: (address) => Boolean(address.sessionId),
     create(address, signal) {
       const node = document.createElement('section');
