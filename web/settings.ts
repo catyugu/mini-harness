@@ -1,6 +1,6 @@
 import type { Settings } from '../src/config.js';
 import { payload, scopedElements } from './api.js';
-import type { BrowserPlugin, FrontendApi } from './extensions.js';
+import type { BrowserPlugin, FrontendApi } from './kernel/extensions.js';
 import { icon } from './icons.js';
 import { closeOnBackdrop, field, fromMarkup } from './primitives.js';
 

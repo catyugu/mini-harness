@@ -1,4 +1,4 @@
-import type { FrontendSetup } from '../extensions.js';
+import type { FrontendSetup } from '../kernel/extensions.js';
 import { payload } from '../api.js';
 
 const setup: FrontendSetup = (api) => {

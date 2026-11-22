@@ -1,5 +1,5 @@
 import { payload } from './api.js';
-import type { BrowserPlugin, FrontendApi } from './extensions.js';
+import type { BrowserPlugin, FrontendApi } from './kernel/extensions.js';
 import { icon } from './icons.js';
 import { button, field, fromMarkup } from './primitives.js';
 

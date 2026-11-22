@@ -1,4 +1,4 @@
-import type { FrontendSetup, ToolView } from '../extensions.js';
+import type { FrontendSetup, ToolView } from '../kernel/extensions.js';
 import { payload } from '../api.js';
 
 interface Approval { id: string; sessionId: string; command: string }

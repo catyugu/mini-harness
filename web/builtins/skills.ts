@@ -1,4 +1,4 @@
-import type { FrontendSetup } from '../extensions.js';
+import type { FrontendSetup } from '../kernel/extensions.js';
 import { workspaceRoute } from '../api.js';
 import { iconButton } from '../primitives.js';
 

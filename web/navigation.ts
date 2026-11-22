@@ -3,7 +3,7 @@ import type { WorkspaceRecord } from '../src/workspace-catalog.js';
 import type { NavigationEvent } from '../src/transport/navigation-events.js';
 import { exportSessions } from './transport/session-client.js';
 import type { BrowserState } from './models/browser-state.js';
-import type { FrontendApi } from './extensions.js';
+import type { FrontendApi } from './kernel/extensions.js';
 import { api as request, readEvents, scopedElements, payload, wait } from './api.js';
 import { workspaceTree } from './navigation-tree.js';
 import { sessionTree } from './sessions.js';
