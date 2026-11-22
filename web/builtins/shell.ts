@@ -33,7 +33,7 @@ const setup: FrontendSetup = (api, services) => {
         const card = document.createElement('section');
         card.className = 'approval-card';
         const title = document.createElement('strong');
-        title.textContent = 'Shell approval · ' + (services.sessionTitle(approval.sessionId) ?? 'Conversation');
+        title.textContent = 'Shell approval · ' + (services.session(approval.sessionId)?.title ?? 'Conversation');
         const command = document.createElement('pre');
         command.textContent = approval.command;
         card.append(title, command);

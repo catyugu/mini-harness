@@ -1,9 +1,9 @@
 import type { Attachment } from '../src/input.js';
 import type { Conversation, ModelChoice } from '../src/registry.js';
-import type { MessageContent, RunEvent, RunInfo } from '../src/protocol.js';
+import { isRunning, type MessageContent, type RunEvent, type RunInfo } from '../src/protocol.js';
 import type { ConversationView, ThinkingLevel } from './types.js';
 import { scopedElements, payload, workspaceRoute } from './api.js';
-import { exportSessions, isRunning, observeRun, readConversation, type BrowserState } from './client.js';
+import { exportSessions, observeRun, readConversation, type BrowserState } from './client.js';
 import { createMessageView } from './messages.js';
 import { CommandRegistry, type ComposerCommand } from './commands.js';
 import { createComposer } from './composer.js';
@@ -334,7 +334,7 @@ export function conversationView(api: FrontendApi, state: BrowserState, options:
   element('queueSend').onclick = () => void queueMessage();
   return {
     outlets, activate, showConversation, clear, updateModelControls, report,
-    refreshTools: messageView.refreshTools, changedFiles: () => runSummary?.changedFiles ?? [],
+    refreshTools: messageView.refreshTools,
     command(command: ComposerCommand) {
       const dispose = commands.register(command);
       composerUi.refresh(true);

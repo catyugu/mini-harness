@@ -43,13 +43,10 @@ export interface FrontendApi {
 
 export interface FrontendServices {
   bootstrap(): Bootstrap;
-  sessionTitle(id: string): string | undefined;
   openConversation(id: string): void;
   workspace(): TabScope | undefined;
-  currentConversation(): Conversation | undefined;
-  session(id: string): Conversation | undefined;
+  session(id?: string): Conversation | undefined;
   onConversationChange(listener: () => void, signal: AbortSignal): void;
-  changedFiles(): string[];
   report(error: Error): void;
 }
 export type FrontendSetup = (api: FrontendApi, services: FrontendServices) => void | (() => void) | Promise<void | (() => void)>;

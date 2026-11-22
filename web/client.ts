@@ -1,7 +1,7 @@
 import type { Settings } from '../src/config.js';
 import type { Conversation } from '../src/registry.js';
 import type { NavigationEvent } from '../src/navigation-events.js';
-import type { RunEvent, RunInfo } from '../src/protocol.js';
+import { isRunning, type RunEvent } from '../src/protocol.js';
 import { api, data, payload, readEvents, wait } from './api.js';
 import type { Bootstrap, ConversationView } from './types.js';
 
@@ -29,13 +29,11 @@ export class BrowserState extends EventTarget {
   }
 
   initialConversation() {
-    const current = this.workspace();
-    const key = 'mini-harness-active';
-    const remembered = sessionStorage.getItem(key) ?? sessionStorage.getItem(key + ':' + current?.path);
+    const remembered = sessionStorage.getItem('mini-harness-active');
     const { sessions, workspaces } = this.snapshot;
     const available = sessions.filter(({ workspaceId }) => workspaces.some(({ id }) => id === workspaceId));
     return available.find(({ id }) => id === remembered) ??
-      available.find(({ parentId, workspaceId }) => !parentId && workspaceId === current?.id);
+      available.find(({ parentId, workspaceId }) => !parentId && workspaceId === this.selectedWorkspace);
   }
 
   activeConversation: string | undefined;
@@ -91,7 +89,6 @@ export class BrowserState extends EventTarget {
   }
 }
 
-export const isRunning = (run?: RunInfo) => run?.state === 'queued' || run?.state === 'running';
 export const readConversation = (id: string, signal: AbortSignal) => data<ConversationView>('/sessions/' + id, { signal });
 
 export async function observeRun(item: ConversationView, signal: AbortSignal, accept: (event: RunEvent) => void, reconnect: () => void) {

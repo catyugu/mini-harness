@@ -91,12 +91,9 @@ export async function mountBrowser(ctx: Context, snapshot: Bootstrap) {
     {
       bootstrap: state.get,
       workspace: state.scope,
-      sessionTitle: (id) => state.session(id)?.title,
-      currentConversation: () => state.session(),
-      session: (id) => state.session(id),
+      session: state.session,
       onConversationChange: (listener, signal) => state.on('navigation', listener, signal),
       openConversation: (id) => { state.dispatchEvent(new CustomEvent('open', { detail: id })); },
-      changedFiles: () => ctx.miniConversation.changedFiles(),
       report
     },
     (title, node) => ctx.miniSettings.addPage(title, node),

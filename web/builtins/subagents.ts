@@ -7,7 +7,7 @@ const setup: FrontendSetup = (api, services) => {
   trail.setAttribute('aria-label', 'Parent conversations');
   const renderTrail = () => {
     const parents = [];
-    for (let id = services.currentConversation()?.parentId; id;) {
+    for (let id = services.session()?.parentId; id;) {
       const parent = services.session(id);
       if (!parent) break;
       parents.unshift(parent);
