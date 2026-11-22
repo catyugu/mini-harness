@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { fixture } from '../../../test/support/api-fixture.js';
+import { fixture } from '../support/api-fixture.js';
 test('an extension owns its authenticated routes and Pi branch records', async (t) => {
   const { app, paths, request } = await fixture(t);
   const folder = join(paths.plugins, 'records');

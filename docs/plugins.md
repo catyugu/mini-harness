@@ -189,6 +189,6 @@ Do not add new files to the retired `src/builtins` or `web/builtins` trees. A ne
 
 ## Architecture and tests
 
-See [the architecture contract](architecture.md). Tests live in the capability they exercise, under `features/<id>/tests/`, or beside reusable infrastructure in `src/plugins/tests/` and `web/ui/tests/`. Only real cross-capability journeys belong under `test/system/`. Shared fixtures live under `test/support/`.
+See [the architecture contract](architecture.md). Tests for user-facing capabilities live under `features/<id>/tests/`; generic plugin host and kernel infrastructure tests live under `test/plugins/`, settings tests under `test/settings/`, and reusable UI tests under `web/ui/tests/`. Cross-capability journeys and architecture checks belong under `test/system/`. Shared fixtures live under `test/support/`. Keep production `src/` free of test files and `tests/` folders.
 
 `npm test` recursively discovers Node `*.test.js` files. Playwright recursively discovers `*.spec.ts`. Published npm tarballs exclude all co-located test folders; `npm run pack:check` checks this exclusion. Never add domain-specific logic to `src/kernel` or `src/server.ts`, and never import another feature's concrete implementation.

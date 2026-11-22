@@ -32,6 +32,6 @@ Deleting a registered workspace cascades through all its conversations and desce
 
 ## Test ownership and packaging
 
-Unit and capability integration tests live under `features/<id>/tests/`; plugin infrastructure tests under `src/plugins/tests/`, and reusable browser UI tests under `web/ui/tests/`. Genuine system journeys and dependency-graph checks live under `test/system/`. Fixtures live in `test/support/`. Tests must exercise real composition when service injection or disposal is the contract.
+Feature-owned tests live under `features/<id>/tests/`. Kernel and infrastructure tests live exclusively under `test/` (`test/plugins/` for plugin host and lifecycle tests, `test/settings/` for configuration, and `test/system/` for cross-capability journeys and architecture checks). Reusable browser UI tests live under `web/ui/tests/`. Shared fixtures live under `test/support/`. Never place test files or `tests/` directories under production `src/`. Tests must exercise real composition when service injection or disposal is the contract.
 
 Run `npm run check` for compilation and co-located Node tests, `npm run test:browser` for all Playwright tests, and `npm run pack:check` for clean-package installation and launch. Build output is one package; the package allowlist excludes all `tests/` folders from the published tarball.

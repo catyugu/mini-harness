@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { fixture, waitUntil } from '../../../test/support/api-fixture.js';
+import { fixture, waitUntil } from '../support/api-fixture.js';
 
 test('plugin file writes wait for an in-flight plugin configuration', async (t) => {
   const { paths, request } = await fixture(t);

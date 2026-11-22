@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test';
 import { readFileSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.js';
-import { readJson, writeJson } from '../../config.js';
-import { startIsolatedHost, settingsSection, suggestions } from '../../../test/support/browser.js';
+import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
+import { readJson, writeJson } from '../../src/config.js';
+import { startIsolatedHost, settingsSection, suggestions } from '../support/browser.js';
 
 test('frontend plugins own all five slots and clean up on disable and reconfiguration', async ({ page }) => {
   const mock = await createMockProvider(({ messages }) => messages.at(-1).role === 'tool' ? 'Done' : { tool: 'ls', args: {} });

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { fixture } from '../../../test/support/api-fixture.js';
+import { fixture } from '../support/api-fixture.js';
 
 test('web-only plugins install and unload without a dummy backend entry', async (t) => {
   const { request } = await fixture(t);

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DEFAULTS, getPaths, mergeSettings, readSettings, validateSettings, writeJson } from '../../config.js';
+import { DEFAULTS, getPaths, mergeSettings, readSettings, validateSettings, writeJson } from '../../src/config.js';
 
 test('config directories are independent and default safe', () => {
   const folder = mkdtempSync(join(tmpdir(), 'mini-harness-config-'));
@@ -19,7 +19,7 @@ test('config directories are independent and default safe', () => {
 });
 
 test('settings merge preserves other sections and validates bounds', () => {
-  const before = structuredClone(DEFAULTS) as unknown as import('../../config.js').Settings;
+  const before = structuredClone(DEFAULTS) as unknown as import('../../src/config.js').Settings;
   const after = mergeSettings(before, { plugins: { shell: true }, pluginConfig: { subagents: { maxParallel: 4 } } });
   assert.equal(after.plugins.skills, true);
   assert.equal(after.plugins.shell, true);

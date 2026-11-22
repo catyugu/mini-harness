@@ -13,6 +13,8 @@
     "dist/features/",
     "dist/web/",
     "!dist/**/tests/**",
+    "!dist/**/*.test.js",
+    "!dist/**/*.spec.js",
     "README.md",
     "SECURITY.md",
     "LICENSE",

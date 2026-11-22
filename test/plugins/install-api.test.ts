@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { fixture } from '../../../test/support/api-fixture.js';
+import { fixture } from '../support/api-fixture.js';
 test('local plugins install disabled, load UI only when enabled, and uninstall permanently', async (t) => {
   const { paths, request } = await fixture(t);
   const route = '/extensions/gui-plugin/echo';

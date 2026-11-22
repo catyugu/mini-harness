@@ -56,6 +56,21 @@ test('each built-in capability owns one manifest and co-located host/client entr
   }
 });
 
+test('infrastructure and kernel tests are centralized under test/, never src/', () => {
+  const stray = files(source).filter((path) =>
+    /\\.(?:test|spec)\\.ts$/.test(path) || path.split(/[\\\\/]/).includes('tests'));
+  assert.deepEqual(stray, [], 'Production src/ must not contain test files or tests/ directories');
+  for (const path of [
+    'plugins/browser-only-api.test.ts',
+    'plugins/browser-plugin-manager.spec.ts',
+    'plugins/install-api.test.ts',
+    'plugins/install-race.test.ts',
+    'plugins/lifecycle.test.ts',
+    'plugins/records-api.test.ts',
+    'settings/config.test.ts'
+  ]) assert.ok(existsSync(join(root, 'test', path)), 'Expected infrastructure test under test/: ' + path);
+});
+
 test('only composition roots import feature implementations', () => {
   for (const file of files(source).filter(production)) {
     if (file === join(source, 'application.ts')) continue;
