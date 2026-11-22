@@ -47,7 +47,12 @@ export function schemaFields(plugin: string, schema: Record<string, any>, values
     input.dataset.plugin = plugin;
     input.dataset.path = JSON.stringify(fieldPath);
     input.setAttribute('aria-label', (property.title ?? key) + ' · ' + plugin);
-    if (schema.required?.includes(key) && input.dataset.kind !== 'boolean') input.required = true;
+    // JSON Schema 'required' means the property exists; an empty string remains
+    // valid unless minLength explicitly forbids it. HTML 'required' is stricter.
+    const schemaRequired = schema.required?.includes(key) ?? false;
+    if (schemaRequired) input.dataset.schemaRequired = 'true';
+    if (schemaRequired && input.dataset.kind !== 'boolean' &&
+        (input.dataset.kind !== 'string' || (property.minLength ?? 0) > 0)) input.required = true;
     label.append(input);
     if (property.description) {
       const hint = document.createElement('small');
@@ -68,7 +73,7 @@ export function readPluginValues(current: Record<string, Record<string, unknown>
     const kind = field.dataset.kind;
     let target = config[field.dataset.plugin] ??= {};
     for (const key of path.slice(0, -1)) target = (target[key] ??= {}) as Record<string, unknown>;
-    if (kind !== 'boolean' && !field.value && !field.required) { delete target[path.at(-1)]; continue; }
+    if (kind !== 'boolean' && !field.value && field.dataset.schemaRequired !== 'true') { delete target[path.at(-1)]; continue; }
     target[path.at(-1)] = kind === 'boolean' ? (field as HTMLInputElement).checked :
       kind === 'number' || kind === 'integer' ? Number(field.value) :
       kind === 'enum' || kind === 'json' ? JSON.parse(field.value) : field.value;

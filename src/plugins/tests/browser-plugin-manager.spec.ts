@@ -156,6 +156,10 @@ test('plugin catalog applies configuration and removes disabled browser capabili
     await catalog.getByRole('spinbutton', { name: 'Maximum child depth · subagents' }).fill('2');
     await catalog.getByRole('button', { name: 'Save configuration' }).click();
     await expect(catalog.getByText('Saved.', { exact: true })).toBeVisible();
+    // An empty but schema-required string must not block form submission or be omitted.
+    const childConfig = readJson<any>(paths.settings, {}).pluginConfig.subagents;
+    expect(childConfig.provider).toBe('');
+    expect(childConfig.model).toBe('');
     await catalog.getByRole('button', { name: /All plugins/ }).click();
     await catalog.getByRole('button', { name: 'Subagents settings' }).click();
     await expect(catalog.getByRole('spinbutton', { name: 'Maximum child depth · subagents' })).toHaveValue('2');
