@@ -3,6 +3,7 @@ import { system, builtins } from '../features/index.js';
 import { SettingsManager } from '../features/settings/manager.js';
 import { PluginHost } from './plugins/host.js';
 import { RouteRegistry } from './transport/http.js';
+import { MutationGate } from './transport/mutations.js';
 import type { Paths, SettingsPatch } from './config.js';
 
 /** Pure application composition. Concrete capability lifecycles are owned by Cordis plugins. */
@@ -17,6 +18,7 @@ export class MiniHarnessRuntime {
     ctx.provide('harnessSettings', () => this.configuration.settings);
     ctx.provide('harnessSettingsStore', this.configuration);
     ctx.provide('harnessRoutes', new RouteRegistry());
+    ctx.provide('harnessMutations', new MutationGate());
     this.plugins = new PluginHost(ctx, paths.plugins, system, builtins,
       (id, pluginId) => ctx.harnessPi.records(id, pluginId));
   }

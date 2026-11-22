@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { RouteRequest, RouteHandler, RoutePort } from '../contracts/routes.js';
+import { HttpReply, type RouteRequest, type RouteHandler, type RoutePort } from '../contracts/routes.js';
 
 export function requestBody(req: IncomingMessage, max = 1024 * 1024): Promise<any> {
   return new Promise((resolve, reject) => {
@@ -45,29 +45,57 @@ export function eventStream(res: ServerResponse) {
 }
 
 export class RouteRegistry implements RoutePort {
-  private routes = new Map<string, { handler: RouteHandler; signal: AbortSignal }>();
+  private readonly routes = new Map<string, { path: string; pattern: RegExp; names: string[]; literal: boolean;
+    handler: RouteHandler; signal: AbortSignal; controller: AbortController }>();
 
   register(method: string, path: string, handler: RouteHandler) {
+    if (!['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method) || !/^\/[a-zA-Z0-9_:/-]+$/.test(path))
+      throw new Error('Invalid route: ' + method + ' ' + path);
     const key = method + ' ' + path;
     if (this.routes.has(key)) throw new Error('Duplicate route: ' + key);
+    const names: string[] = [];
+    const parts = path.split('/').slice(1).map((segment) => {
+      if (segment.startsWith(':')) {
+        if (!/^:[a-zA-Z][a-zA-Z0-9_]*$/.test(segment)) throw new Error('Invalid route parameter');
+        names.push(segment.slice(1));
+        return '([^/]+)';
+      }
+      if (!/^[a-zA-Z0-9_-]+$/.test(segment)) throw new Error('Invalid route segment');
+      return segment;
+    });
     const controller = new AbortController();
-    this.routes.set(key, { handler, signal: controller.signal });
-    return () => { this.routes.delete(key); controller.abort(); };
+    const entry = { path, pattern: new RegExp('^/' + parts.join('/') + '$'), names, literal: names.length === 0,
+      handler, signal: controller.signal, controller };
+    this.routes.set(key, entry);
+    return () => { if (this.routes.get(key) === entry) this.routes.delete(key); controller.abort(); };
   }
 
-  dispatch(req: IncomingMessage, res: ServerResponse, url: URL, scope?: { path: string; workspace: RouteRequest['workspace'] }) {
-    const route = this.routes.get(req.method + ' ' + (scope?.path ?? url.pathname));
-    if (!route) return;
+  dispatch(req: IncomingMessage, res: ServerResponse, url: URL) {
+    const method = req.method;
+    const path = url.pathname;
+    const entries = [...this.routes.entries()].filter(([key]) => key.startsWith(method + ' '));
+    const matching = entries
+      .sort(([, a], [, b]) => Number(b.literal) - Number(a.literal))
+      .map(([, route]) => ({ route, match: route.pattern.exec(path) }))
+      .find(({ match }) => match !== null);
+    if (!matching) return;
+    const { route, match } = matching;
+    const params = Object.fromEntries(route.names.map((name, i) => [name, decodeURIComponent(match[i + 1])]));
     return Promise.resolve(route.handler({
-      url, workspace: scope?.workspace, signal: route.signal,
+      url, params, request: req, response: res, signal: route.signal,
       async body(max) {
-        const value = await requestBody(req, max);
+        const result = await requestBody(req, max);
         route.signal.throwIfAborted();
-        return value;
+        return result;
       }
     })).then((result) => {
+      if (res.destroyed || res.writableEnded || res.headersSent) return;
       route.signal.throwIfAborted();
-      json(res, 200, result ?? null);
+      if (result instanceof HttpReply) {
+        res.writeHead(result.status, { 'Content-Type': 'application/json; charset=utf-8',
+          'Cache-Control': 'no-store', ...result.headers });
+        res.end(JSON.stringify(result.body));
+      } else json(res, 200, result ?? null);
     });
   }
 }
