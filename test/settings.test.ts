@@ -26,7 +26,7 @@ test('recent main model survives navigation, child overrides and a restart throu
   assert.strictEqual(await runtime.pi.open(old.id), original);
   await runtime.runs.send(old.id, 'Switch with SDK');
   assert.equal(mock.requests.at(-1).model, 'second-model');
-  await runtime.runChild(old.id, 'Child override', { provider: 'local-mock', id: 'mock-model' });
+  await runtime.delegation.run(old.id, 'Child override', { provider: 'local-mock', id: 'mock-model' });
   assert.equal(runtime.settings.model.id, 'second-model');
   await runtime.runs.send(other.id, 'Other conversation');
   assert.equal(mock.requests.at(-1).model, 'second-model');
@@ -54,7 +54,7 @@ test('appearance, parallelism and child defaults update without interrupting a r
   const original = await runtime.pi.open(item.id);
   await runtime.updateSettings({ appearance: 'dark', subagents: { maxParallel: 2 } });
   assert.strictEqual(await runtime.pi.open(item.id), original);
-  assert.equal(runtime.semaphore.limit, 2);
+  assert.equal(runtime.delegation.semaphore.limit, 2);
   assert.equal(runtime.runs.active(item.id), true);
   await assert.rejects(runtime.updateSettings({ plugins: { files: false } }), /Stop active/);
   release();

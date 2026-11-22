@@ -72,7 +72,7 @@ test('independent roots run concurrently and deleting a running tree cancels all
   assert.equal(app.runtime.runs.active(other.id), true);
   held.release();
   assert.equal(await second, 'Done');
-  assert.equal(app.runtime.semaphore.active, 0);
+  assert.equal(app.runtime.delegation.semaphore.active, 0);
 });
 
 test('a crash leaves indexed runs interrupted while retaining the conversation tree', async (t) => {
@@ -104,10 +104,10 @@ test('child queues honor live limits, explicit cancellation, and depth restricti
   await app.runtime.updateSettings({ subagents: { maxParallel: 1 } });
   const parent = app.runtime.registry.create();
   const choice = { provider: 'local-mock', id: 'mock-model' };
-  const first = app.runtime.runChild(parent.id, 'First child', choice);
+  const first = app.runtime.delegation.run(parent.id, 'First child', choice);
   await entered[0].promise;
-  const second = app.runtime.runChild(parent.id, 'Second child', choice);
-  const third = app.runtime.runChild(parent.id, 'Cancelled queued child', choice);
+  const second = app.runtime.delegation.run(parent.id, 'Second child', choice);
+  const third = app.runtime.delegation.run(parent.id, 'Cancelled queued child', choice);
   const aborted = assert.rejects(third, /cancelled/);
   const records = app.runtime.registry.list();
   const queued = records.find(({ title }) => title === 'Cancelled queued child');
@@ -118,14 +118,14 @@ test('child queues honor live limits, explicit cancellation, and depth restricti
   assert.equal(requests, 1);
   await app.runtime.updateSettings({ subagents: { maxParallel: 2 } });
   await entered[1].promise;
-  assert.equal(app.runtime.semaphore.active, 2);
+  assert.equal(app.runtime.delegation.semaphore.active, 2);
   await app.runtime.updateSettings({ subagents: { maxParallel: 1 } });
   assert.equal(app.runtime.runs.size, 2, 'Lowering the limit preserves existing executions');
   const child = app.runtime.registry.list().find(({ title }) => title === 'First child');
-  await assert.rejects(app.runtime.runChild(child.id, 'Too deep', choice), /depth limit/);
+  await assert.rejects(app.runtime.delegation.run(child.id, 'Too deep', choice), /depth limit/);
   held[0].release(); held[1].release();
   await Promise.all([first, second]);
-  assert.equal(app.runtime.semaphore.active, 0);
+  assert.equal(app.runtime.delegation.semaphore.active, 0);
   assert.equal(requests, 2, 'Cancelled queued children never reach the provider');
 });
 

@@ -1,9 +1,13 @@
 import { defineTool } from '@earendil-works/pi-coding-agent';
 import type { Context } from 'cordis';
 import { Type } from 'typebox';
-import { Approvals } from '../approvals.js';
+import { Approvals } from './approvals.js';
 import { runShell } from '../sandbox.js';
-import type { BuiltinPlugin } from '../plugins.js';
+import type { BuiltinPlugin } from '../plugin-api.js';
+
+declare module 'cordis' {
+  interface Context { harnessApprovals?: Pick<Approvals, 'has'> }
+}
 
 export const shell: BuiltinPlugin = {
   id: 'shell', title: 'Shell', description: 'Run commands using the configured execution policy.',
@@ -11,9 +15,10 @@ export const shell: BuiltinPlugin = {
     mode: Type.String({ title: 'Shell policy', enum: ['isolated', 'host'] }),
     timeoutSeconds: Type.Integer({ title: 'Timeout (seconds)', minimum: 1, maximum: 300 })
   }) } },
-  icon: 'terminal', browser: '/builtins/shell.js', inject: ['harnessState', 'harnessWorkspace', 'harnessShellPolicy', 'harnessTools', 'harnessRoutes'],
+  icon: 'terminal', browser: '/builtins/shell.js', inject: ['harnessState', 'harnessWorkspace', 'harnessSettings', 'harnessSessionChanged', 'harnessTools', 'harnessRoutes'],
   setup(ctx: Context) {
-    const approvals = new Approvals();
+    const approvals = new Approvals(ctx.harnessSessionChanged);
+    ctx.provide('harnessApprovals', approvals);
     ctx.effect(() => () => approvals.close());
     const { home } = ctx.harnessState.paths;
     const tool = (sessionId: string) => defineTool({
@@ -21,15 +26,13 @@ export const shell: BuiltinPlugin = {
       description: 'Run a shell command in the workspace after the user approves it in the Web interface.',
       parameters: Type.Object({ command: Type.String({ minLength: 1, maxLength: 16000 }) }),
       execute: async (_id, args, signal) => {
-        ctx.harnessWorkspace.approval(sessionId, true);
-        try { await approvals.request(sessionId, args.command, signal); }
-        finally { ctx.harnessWorkspace.approval(sessionId, false); }
+        await approvals.request(sessionId, args.command, signal);
         const cwd = ctx.harnessWorkspace.resolve(sessionId);
-        const output = await runShell(args.command, cwd, { ...ctx.harnessShellPolicy.get(), signal, stateDir: home });
+        const output = await runShell(args.command, cwd, { ...ctx.harnessSettings().sandbox, signal, stateDir: home });
         return { content: [{ type: 'text', text: JSON.stringify(output) }], details: output };
       }
     });
-    ctx.effect(() => ctx.harnessTools.register(tool(''), tool));
+    ctx.effect(() => ctx.harnessTools.register('sandbox_shell', tool));
     ctx.effect(() => ctx.harnessRoutes.register('GET', '/api/approvals', () => approvals.list()));
     ctx.effect(() => ctx.harnessRoutes.register('POST', '/api/approvals', async ({ body }) => {
       const input = await body() as { id?: string; allow?: boolean } | null;

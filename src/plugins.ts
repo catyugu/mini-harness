@@ -1,77 +1,13 @@
-import { Context, type Fiber } from 'cordis';
+import type { Context, Fiber } from 'cordis';
 import { readdirSync, existsSync, lstatSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import { Check } from 'typebox/value';
-import type { ToolDefinition } from '@earendil-works/pi-coding-agent';
-import type { MiniHarnessRuntime } from './agent.js';
 import { readJson, type Settings } from './config.js';
-import { RouteRegistry, type RouteHandler } from './http.js';
-import { files } from './builtins/files.js';
-import { skills } from './builtins/skills.js';
-import { shell } from './builtins/shell.js';
-import { subagents } from './builtins/subagents.js';
-
-export interface PluginMetadata {
-  id: string;
-  title: string;
-  description: string;
-  trustedCode?: boolean;
-  web?: boolean;
-  browser?: string;
-  icon?: 'files' | 'skills' | 'delegate' | 'terminal';
-  preferences?: { key: 'subagents' | 'sandbox'; schema: Record<string, unknown>; groups?: { title: string; fields: string[] }[] };
-  requires?: string[];
-  configSchema?: Record<string, any>;
-}
-
-export interface BuiltinPlugin extends PluginMetadata {
-  inject: string[];
-  setup(ctx: Context): void;
-}
-
-const builtins = [files, skills, subagents, shell];
-export const BUILTINS: readonly PluginMetadata[] = builtins.map(({ inject, setup, ...metadata }) => metadata);
-
-export interface PluginApi {
-  /** The value comes from settings.pluginConfig[pluginId]. */
-  readonly config: Readonly<Record<string, unknown>>;
-  defineConfig(defaults: Record<string, unknown>, validate?: (config: Readonly<Record<string, unknown>>) => void): Readonly<Record<string, unknown>>;
-  registerTool(tool: ToolDefinition): () => Promise<void>;
-  /** Mount an authenticated route under /api/extensions/<plugin-id>/. */
-  registerRoute(method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string, handler: RouteHandler): () => Promise<void>;
-  onDispose(cleanup: () => void | Promise<void>): void;
-}
-
-type RuntimeServices = {
-  paths: MiniHarnessRuntime['paths'];
-  settings(): Settings;
-  models: { list(): ReturnType<MiniHarnessRuntime['pi']['availableModels']> };
-  sessions: Pick<MiniHarnessRuntime['registry'], 'get' | 'list'>;
-  workspaces: { resolve(id: string): string; approval(id: string, waiting: boolean): void };
-  delegation: MiniHarnessRuntime['delegation'];
-};
-
-declare module 'cordis' {
-  interface Context {
-    harnessAgent: { availableModels: RuntimeServices['models']['list'] };
-    harnessModels: RuntimeServices['models'];
-    harnessSessions: RuntimeServices['sessions'];
-    harnessTools: ToolRegistry;
-    harnessState: { paths: RuntimeServices['paths'] };
-    harnessShellPolicy: { get(): Settings['sandbox'] };
-    harnessChildPolicy: { get(): Settings['subagents'] };
-    harnessRoutes: RouteRegistry;
-    harnessDelegation: RuntimeServices['delegation'];
-    harnessSkills: { paths(cwd: string): string[] };
-    harnessWorkspace: RuntimeServices['workspaces'];
-  }
-}
+import type { BuiltinPlugin, PluginApi, PluginMetadata, SessionRecords } from './plugin-api.js';
 
 const publicServices = new Set(['harnessAgent', 'harnessModels', 'harnessSessions']);
-
-const reservedTools = new Set(['read', 'edit', 'write', 'grep', 'find', 'ls', 'bash', 'powershell', 'codemode', 'tool_search']);
 
 function configDefaults(schema: Record<string, any>, value: any): any {
   if (value === undefined && Object.hasOwn(schema, 'default')) value = structuredClone(schema.default);
@@ -84,24 +20,6 @@ function configDefaults(schema: Record<string, any>, value: any): any {
   return value;
 }
 
-export class ToolRegistry {
-  private tools = new Map<string, { bind: (id: string) => ToolDefinition; visible: (id: string) => boolean }>();
-
-  register(tool: ToolDefinition, bind = (_id: string) => tool, visible = (_id: string) => true, builtin = false) {
-    const { name } = tool;
-    if (!/^[a-zA-Z0-9_-]{1,64}$/.test(name)) throw new Error('Invalid tool name: ' + name);
-    if ((!builtin && reservedTools.has(name)) || this.tools.has(name)) throw new Error('Duplicate or reserved tool: ' + name);
-    this.tools.set(name, { bind, visible });
-    return () => { this.tools.delete(name); };
-  }
-
-  forSession(id: string) {
-    return this.resources(id).map((tool) => tool.bind(id));
-  }
-
-  resources(id: string) { return [...this.tools.values()].filter((tool) => tool.visible(id)); }
-}
-
 interface PluginPlan {
   id: string;
   source?: string;
@@ -110,28 +28,19 @@ interface PluginPlan {
 }
 
 export class PluginHost {
-  readonly ctx = new Context();
   private readonly mounted = new Map<string, { plan: PluginPlan; fiber: Fiber }>();
+  private readonly builtins: Map<string, BuiltinPlugin>;
 
-  constructor(private readonly services: RuntimeServices) {
-    this.ctx.provide('harnessState', { paths: services.paths });
-    this.ctx.provide('harnessShellPolicy', { get: () => ({ ...services.settings().sandbox }) });
-    this.ctx.provide('harnessChildPolicy', { get: () => ({ ...services.settings().subagents }) });
-    this.ctx.provide('harnessAgent', { availableModels: services.models.list });
-    this.ctx.provide('harnessModels', services.models);
-    this.ctx.provide('harnessSessions', services.sessions);
-    this.ctx.provide('harnessTools', new ToolRegistry());
-    this.ctx.provide('harnessRoutes', new RouteRegistry());
-    this.ctx.provide('harnessWorkspace', services.workspaces);
-    this.ctx.provide('harnessDelegation', services.delegation);
+  constructor(readonly ctx: Context, private readonly directory: string, builtins: BuiltinPlugin[],
+    private readonly sessionRecords: (sessionId: string, pluginId: string) => Promise<SessionRecords>) {
+    this.builtins = new Map(builtins.map((plugin) => [plugin.id, plugin]));
   }
 
   private discover() {
-    const builtins = new Set(BUILTINS.map(({ id }) => id));
-    return readdirSync(this.services.paths.plugins, { withFileTypes: true }).flatMap((entry) => {
+    return readdirSync(this.directory, { withFileTypes: true }).flatMap((entry) => {
       const id = entry.name;
-      if (!entry.isDirectory() || !/^[a-z][a-z0-9-]{0,63}$/.test(id) || builtins.has(id)) return [];
-      const folder = join(this.services.paths.plugins, id);
+      if (!entry.isDirectory() || !/^[a-z][a-z0-9-]{0,63}$/.test(id) || this.builtins.has(id)) return [];
+      const folder = join(this.directory, id);
       const source = join(folder, 'plugin.js');
       if (!existsSync(source) || lstatSync(folder).isSymbolicLink() || !lstatSync(source).isFile() || lstatSync(source).isSymbolicLink()) return [];
       let manifest: Partial<PluginMetadata> | null = null;
@@ -149,13 +58,16 @@ export class PluginHost {
     });
   }
 
-  metadata() { return [...BUILTINS, ...this.discover().map(({ metadata }) => metadata)]; }
+  metadata() {
+    return [...[...this.builtins.values()].map(({ inject, setup, ...metadata }) => metadata),
+      ...this.discover().map(({ metadata }) => metadata)];
+  }
 
   private async mount(plan: PluginPlan) {
     const { id, source } = plan;
     let fiber: Fiber | undefined;
     try {
-        const builtin = builtins.find((plugin) => plugin.id === id);
+        const builtin = this.builtins.get(id);
         const mod = builtin ? undefined : await import(pathToFileURL(source).href + '?v=' + lstatSync(source).mtimeMs);
         const component = builtin ?? mod.default ?? mod.apply;
         const setup = builtin?.setup ?? (typeof component === 'function' ? component : component?.apply?.bind(component));
@@ -172,11 +84,15 @@ export class PluginHost {
               validate?.(config);
               return config;
             },
-            registerTool: (tool) => ctx.effect(() => this.ctx.harnessTools.register(tool)),
+            registerTool: (tool) => ctx.effect(() => this.ctx.harnessTools.register(tool.name, () => tool)),
             registerRoute: (method, path, handler) => {
               if (!['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method) ||
                   !/^\/(?:[a-zA-Z0-9_-]+\/)*[a-zA-Z0-9_-]+$/.test(path)) throw new Error('Invalid plugin route');
               return ctx.effect(() => this.ctx.harnessRoutes.register(method, '/api/extensions/' + id + path, handler));
+            },
+            records: {
+              list: async (sessionId) => (await this.sessionRecords(sessionId, id)).list(),
+              append: async (sessionId, data) => (await this.sessionRecords(sessionId, id)).append(data)
             },
             onDispose: (dispose) => { ctx.effect(() => dispose); }
           } satisfies PluginApi);
@@ -199,7 +115,7 @@ export class PluginHost {
 
   private plans(settings: Settings) {
     const next = [
-      ...BUILTINS.map(({ id }): PluginPlan => ({ id, requires: [] })),
+      ...[...this.builtins.keys()].map((id): PluginPlan => ({ id, requires: [] })),
       ...this.discover().filter(({ metadata: { id } }) => settings.plugins[id]).map(({ source, metadata: { id, requires, configSchema } }): PluginPlan => ({
         id, source, requires, config: this.configValues(id, settings, configSchema)
       }))
@@ -261,10 +177,6 @@ export class PluginHost {
   }
 
   configuration(id: string) { return structuredClone(this.mounted.get(id)?.plan.config ?? {}); }
-
-  get skills() { return this.ctx.harnessSkills; }
-  getTools(id: string) { return this.ctx.harnessTools.forSession(id); }
-  resources(id: string) { return [this.ctx.harnessSkills, ...this.ctx.harnessTools.resources(id)]; }
 
   private configValues(id: string, settings: Settings, schema?: Record<string, any>) {
     const input = structuredClone(settings.pluginConfig[id] ?? {});

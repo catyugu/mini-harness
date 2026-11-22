@@ -9,10 +9,15 @@ export type NavigationEvent =
   | { type: 'session'; session: Conversation }
   | { type: 'delete'; id: string };
 
+export function navigationSession(runtime: MiniHarnessRuntime, id: string) {
+  const record = runtime.registry.get(id);
+  return record && { ...record, waitingApproval: runtime.plugins.ctx.harnessApprovals?.has(id) ?? false };
+}
+
 export function navigationSnapshot(runtime: MiniHarnessRuntime) {
   return {
     workspaces: runtime.registry.workspaces.list(),
-    sessions: runtime.registry.list().map(({ id }) => runtime.navigationSession(id))
+    sessions: runtime.registry.list().map(({ id }) => navigationSession(runtime, id))
   };
 }
 
@@ -41,7 +46,7 @@ export function streamNavigation(runtime: MiniHarnessRuntime, res: ServerRespons
     const { id, deleted } = event.detail;
     if (deleted) send({ type: 'delete', id });
     else {
-      const session = runtime.navigationSession(id);
+      const session = navigationSession(runtime, id);
       if (session) send({ type: 'session', session });
     }
   }, events);

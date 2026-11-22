@@ -23,7 +23,7 @@ export async function saveProvider(runtime: MiniHarnessRuntime, input: any, remo
   const next = structuredClone(previous); next.providers ??= {};
   if (remove) {
     if (!Object.hasOwn(next.providers, input.id)) throw new Error('Only custom provider configurations can be removed');
-    if (runtime.settings.subagents.provider === input.id) throw new Error('Change the Subagents provider before removing this endpoint');
+    runtime.delegation.checkProvider(input.id, true);
     delete next.providers[input.id];
   } else {
     if (input.create && (runtime.pi.models.getProvider(input.id) || Object.hasOwn(next.providers, input.id))) throw new Error('A provider with this ID already exists');
@@ -50,13 +50,12 @@ export async function saveProvider(runtime: MiniHarnessRuntime, input: any, remo
       models: models.map((model) => ({ ...next.providers[input.id]?.models?.find((old) => old.id === model.id), ...model })) };
   }
   const recent = runtime.settings.model;
-  const child = runtime.settings.subagents;
   writeJson(path, next);
   let clearedRecent = false;
   try {
     await runtime.pi.models.refresh({ allowNetwork: false });
     if (runtime.pi.models.getError()) throw new Error(runtime.pi.models.getError());
-    if (child.provider === input.id) runtime.pi.resolveModel({ provider: child.provider, id: child.model });
+    runtime.delegation.checkProvider(input.id);
     if (recent.provider === input.id && !(recent.id
       ? runtime.pi.models.getModel(recent.provider, recent.id)
       : runtime.pi.models.getModels(recent.provider).length)) {

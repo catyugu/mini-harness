@@ -39,7 +39,7 @@ test('an installed Cordis plugin can use services, configure a tool, and release
   await runtime.updateSettings({ plugins: { example: true }, pluginConfig: { example: { prefix: 'Total' } } });
   const originalSession = await runtime.pi.open(item.id);
   assert.ok(originalSession.getActiveToolNames().includes('example_count'));
-  const tool = runtime.plugins.getTools(item.id).find(({ name }) => name === 'example_count');
+  const tool = runtime.plugins.ctx.harnessTools.forSession(item.id).find(({ name }) => name === 'example_count');
   assert.equal((await tool.execute('test', {}, undefined, undefined, undefined)).content[0].type, 'text');
   assert.match(JSON.stringify(await tool.execute('test', {}, undefined, undefined, undefined)), /Total: 1/);
   await assert.rejects(runtime.updateSettings({ pluginConfig: { example: { prefix: 12 } } }), /Invalid prefix/);
@@ -79,7 +79,7 @@ test('file tools have a plugin lifecycle and required plugins cannot be disabled
   assert.equal(runtime.settings.plugins.files, true);
   assert.ok((await runtime.pi.open(item.id)).getActiveToolNames().includes('dependent_tool'));
   await runtime.updateSettings({ plugins: { files: false, dependent: false } });
-  assert.equal(runtime.plugins.getTools(item.id).some(({ name }) => name === 'read' || name === 'dependent_tool'), false);
+  assert.equal(runtime.plugins.ctx.harnessTools.forSession(item.id).some(({ name }) => name === 'read' || name === 'dependent_tool'), false);
 });
 
 test('plugin JSON Schema applies defaults and rejects invalid changes before setup', async (t) => {
@@ -100,10 +100,10 @@ test('plugin JSON Schema applies defaults and rejects invalid changes before set
   await runtime.start();
   await runtime.updateSettings({ plugins: { schema: true } });
   const item = runtime.registry.create();
-  const tool = runtime.plugins.getTools(item.id).find(({ name }) => name === 'schema_value');
+  const tool = runtime.plugins.ctx.harnessTools.forSession(item.id).find(({ name }) => name === 'schema_value');
   assert.match(JSON.stringify(await tool.execute('test', {}, undefined, undefined, undefined)), /3/);
   await assert.rejects(runtime.updateSettings({ pluginConfig: { schema: { count: 0 } } }), /Invalid configuration/);
-  assert.strictEqual(runtime.plugins.getTools(item.id).find(({ name }) => name === 'schema_value'), tool);
+  assert.strictEqual(runtime.plugins.ctx.harnessTools.forSession(item.id).find(({ name }) => name === 'schema_value'), tool);
 });
 
 test('dependent plugins restart in order and partial setup or persistence failures restore their resources', async (t) => {
@@ -131,12 +131,12 @@ test('dependent plugins restart in order and partial setup or persistence failur
   await assert.rejects(runtime.updateSettings({ pluginConfig: { base: { fail: true } } }), /Partial setup failed/);
   assert.match(readFileSync(log, 'utf8'), /stop dependent\nstop base\nstart base\nstop base\nstart base\nstart dependent/);
   const item = runtime.registry.create();
-  assert.equal(runtime.plugins.getTools(item.id).filter(({ name }) => name === 'base_tool').length, 1);
+  assert.equal(runtime.plugins.ctx.harnessTools.forSession(item.id).filter(({ name }) => name === 'base_tool').length, 1);
   const next = mergeSettings(runtime.settings, { pluginConfig: { base: { value: 'replacement' } } });
   await assert.rejects(runtime.plugins.configure(next, () => { throw new Error('Persistence failed'); }), /Persistence failed/);
-  const restored = runtime.plugins.getTools(item.id).find(({ name }) => name === 'base_tool');
+  const restored = runtime.plugins.ctx.harnessTools.forSession(item.id).find(({ name }) => name === 'base_tool');
   assert.match(JSON.stringify(await restored.execute('test', {}, undefined, undefined, undefined)), /original/);
-  assert.ok(runtime.plugins.getTools(item.id).some(({ name }) => name === 'dependent_tool'));
+  assert.ok(runtime.plugins.ctx.harnessTools.forSession(item.id).some(({ name }) => name === 'dependent_tool'));
 });
 
 test('cyclic dependencies reject a configuration before mounting either plugin', async (t) => {

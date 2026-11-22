@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { DefaultResourceLoader, SettingsManager } from '@earendil-works/pi-coding-agent';
 import type { Context } from 'cordis';
-import type { BuiltinPlugin } from '../plugins.js';
+import type { BuiltinPlugin } from '../plugin-api.js';
 
 export const skills: BuiltinPlugin = {
   id: 'skills', title: 'Skills', description: 'Discover Agent Skills from home and the workspace.',

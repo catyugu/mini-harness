@@ -12,7 +12,7 @@ import { installPlugin, uninstallPlugin, frontendSource } from './plugin-files.j
 import { supportsIsolation } from './sandbox.js';
 import { MiniHarnessRuntime } from './agent.js';
 import { sessionRoutes } from './session-routes.js';
-import { navigationSnapshot, streamNavigation } from './navigation-events.js';
+import { navigationSession, navigationSnapshot, streamNavigation } from './navigation-events.js';
 
 const WEB_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'web');
 const assets = new Map([
@@ -89,7 +89,7 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
           return json(res, 200, { removed: id });
         }
         if (resource === 'sessions') {
-          if (req.method === 'GET') return json(res, 200, runtime.registry.list(id).map((item) => runtime.navigationSession(item.id)));
+          if (req.method === 'GET') return json(res, 200, runtime.registry.list(id).map((item) => navigationSession(runtime, item.id)));
           if (req.method === 'POST') return json(res, 201, runtime.registry.create({ workspaceId: id }));
         } else if (resource && !configuring && req.method === 'GET') {
           const sessionId = url.searchParams.get('sessionId');

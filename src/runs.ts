@@ -2,9 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { prepareInput, type Attachment } from './input.js';
 import { RunEvents } from './run-events.js';
 import type { PiSessions, ThinkingLevel } from './pi-sessions.js';
-import type { SessionRegistry, ModelChoice } from './registry.js';
+import type { Conversation, SessionRegistry, ModelChoice } from './registry.js';
 import type { StreamEvent, RunEvent, RunInfo } from './protocol.js';
-import type { ChildLease } from './subagents.js';
 
 interface RunOptions {
   signal?: AbortSignal;
@@ -18,7 +17,6 @@ interface ActiveRun {
   controller: AbortController;
   events: RunEvents;
   done?: Promise<string>;
-  lease?: ChildLease;
 }
 
 export class Runs {
@@ -30,7 +28,7 @@ export class Runs {
     private readonly pi: PiSessions,
     private readonly defaultModel: () => ModelChoice,
     private readonly assertAvailable: (id: string) => void,
-    private readonly scheduleChild: (task: (lease: ChildLease) => Promise<string>, signal: AbortSignal) => Promise<string>
+    private readonly schedule: (record: Conversation, task: () => Promise<string>, signal: AbortSignal) => Promise<string>
   ) {}
 
   get size() { return this.busy.size; }
@@ -43,11 +41,9 @@ export class Runs {
     return { run: this.info(id), partial: run?.events.partial, tools: run?.events.activeTools ?? [], busy: Boolean(run) };
   }
 
-  delegate<T>(id: string, signal: AbortSignal | undefined, task: (signal?: AbortSignal) => Promise<T>) {
-    const run = this.busy.get(id);
-    const owner = run?.controller.signal;
-    const cancellation = owner && signal ? AbortSignal.any([owner, signal]) : owner ?? signal;
-    return run?.lease ? run.lease.pause(() => task(cancellation)) : task(cancellation);
+  signal(id: string, signal?: AbortSignal) {
+    const owner = this.busy.get(id)?.controller.signal;
+    return owner && signal ? AbortSignal.any([owner, signal]) : owner ?? signal;
   }
 
   private launch(id: string, prompt: string, emit: (event: StreamEvent) => void, { signal, model, attachments, thinkingLevel }: RunOptions) {
@@ -84,10 +80,7 @@ export class Runs {
         run.info.changedFiles = [...new Set([...(run.info.changedFiles ?? []), path])];
       });
     };
-    const work = record.parentId ? this.scheduleChild((lease) => {
-      run.lease = lease;
-      return promptSession();
-    }, cancellation) : promptSession();
+    const work = this.schedule(record, promptSession, cancellation);
     run.done = work.then((text) => {
       run.info.state = 'completed';
       return text;

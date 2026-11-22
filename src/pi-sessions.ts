@@ -2,18 +2,22 @@ import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   createAgentSession, ModelRuntime, SessionManager, SettingsManager, DefaultResourceLoader,
-  type AgentSession, type ToolDefinition
+  type AgentSession, type CustomEntry
 } from '@earendil-works/pi-coding-agent';
 import { getSupportedThinkingLevels } from '@earendil-works/pi-ai/compat';
 import { getPaths, type Paths } from './config.js';
 import { prepareInput, type Attachment, type ImageInput } from './input.js';
 import type { Conversation, SessionRegistry, ModelChoice } from './registry.js';
+import type { Context } from 'cordis';
+import type { SessionRecords, ToolRegistry } from './plugin-api.js';
 import type { StreamEvent, ViewMessage } from './protocol.js';
 
 export type ThinkingLevel = AgentSession['thinkingLevel'];
 
+type Resources = [Context['harnessSkills'], ...ReturnType<ToolRegistry['resources']>];
+
 export class PiSessions {
-  private readonly openSessions = new Map<string, AgentSession>();
+  private readonly openSessions = new Map<string, { session: AgentSession; resources: Resources }>();
   private readonly opening = new Map<string, Promise<AgentSession>>();
   private readonly staleSessions = new Set<string>();
   models!: ModelRuntime;
@@ -21,7 +25,7 @@ export class PiSessions {
   constructor(
     private readonly paths: Paths,
     private readonly registry: SessionRegistry,
-    private readonly plugins: { skills?: { paths(cwd: string): string[] }; getTools(id: string): ToolDefinition[] },
+    private readonly ctx: Pick<Context, 'harnessSkills' | 'harnessTools'>,
     private readonly defaultModel: () => ModelChoice,
     private readonly rememberModel: (model: ModelChoice) => void,
     private readonly assertAvailable: (id: string) => void,
@@ -38,23 +42,33 @@ export class PiSessions {
   }
 
   get size() { return this.openSessions.size; }
-  get ids() { return this.openSessions.keys(); }
   get hasPending() { return this.opening.size > 0; }
   get pending() { return this.opening.values(); }
   openingSession(id: string) { return this.opening.get(id); }
-  markStale(id: string) { this.staleSessions.add(id); }
-  reopenStale(id: string) { if (this.staleSessions.has(id)) this.release(id); }
+  private resources(id: string): Resources {
+    return [this.ctx.harnessSkills, ...this.ctx.harnessTools.resources(id)];
+  }
+
+  reopenStale(id: string) {
+    const entry = this.openSessions.get(id);
+    if (!entry || this.isRunning(id)) return;
+    const resources = this.resources(id);
+    if (this.staleSessions.has(id) || entry.resources.length !== resources.length ||
+        entry.resources.some((resource, i) => resource !== resources[i])) this.release(id);
+  }
+
+  reconcileResources() { for (const id of this.openSessions.keys()) this.reopenStale(id); }
 
   release(id: string) {
-    this.openSessions.get(id)?.dispose();
+    this.openSessions.get(id)?.session.dispose();
     this.openSessions.delete(id);
     this.staleSessions.delete(id);
   }
 
-  close() { for (const id of this.ids) this.release(id); }
+  close() { for (const id of this.openSessions.keys()) this.release(id); }
 
   activeModel(id: string) {
-    const session = this.openSessions.get(id);
+    const session = this.openSessions.get(id)?.session;
     if (!session) throw new Error('Parent session not open');
     return this.modelInfo(session.model);
   }
@@ -93,16 +107,16 @@ export class PiSessions {
   }
 
   invalidateProviderSessions(provider: string) {
-    for (const [id, session] of this.openSessions) {
+    for (const [id, { session }] of this.openSessions) {
       if (session.model?.provider === provider) this.staleSessions.add(id);
     }
   }
 
   async open(id: string): Promise<AgentSession> {
     this.assertAvailable(id);
+    this.reopenStale(id);
     const active = this.openSessions.get(id);
-    if (active && (!this.staleSessions.has(id) || this.isRunning(id))) return active;
-    if (active) this.release(id);
+    if (active) return active.session;
     const pending = this.opening.get(id);
     if (pending) return pending;
     const opening = this.openNewSession(id);
@@ -119,12 +133,14 @@ export class PiSessions {
     mkdirSync(storage, { recursive: true, mode: 0o700 });
     this.registry.checkSessionDirectory(storage);
     const settingsManager = SettingsManager.inMemory();
+    const resources = this.resources(id);
+    const [skills, ...tools] = resources;
     const loader = new DefaultResourceLoader({
       cwd,
       agentDir: this.paths.agent,
       settingsManager,
-      additionalSkillPaths: this.plugins.skills?.paths(cwd) ?? [],
-      noSkills: !this.plugins.skills,
+      additionalSkillPaths: skills?.paths(cwd) ?? [],
+      noSkills: !skills,
       noExtensions: true
     });
     await loader.reload();
@@ -132,7 +148,7 @@ export class PiSessions {
     const manager = file ? SessionManager.open(file, storage, cwd) :
       SessionManager.create(cwd, storage, { id: item.id });
     if (item.file !== manager.getSessionFile()) this.registry.update(id, { file: manager.getSessionFile() });
-    const customTools = this.plugins.getTools(id);
+    const customTools = tools.map((tool) => tool.bind(id));
     const recordedModel = item.model && this.resolveModel(item.model, true);
     const { session } = await createAgentSession({
       cwd,
@@ -149,12 +165,24 @@ export class PiSessions {
       try { await session.setModel(recordedModel); }
       catch (error) { session.dispose(); throw error; }
     }
-    this.openSessions.set(id, session);
+    this.openSessions.set(id, { session, resources });
     return session;
   }
 
+  async records(id: string, pluginId: string): Promise<SessionRecords> {
+    const { sessionManager } = await this.open(id);
+    this.assertAvailable(id);
+    const type = 'mini-harness:' + pluginId;
+    return {
+      list: () => sessionManager.getBranch()
+        .filter((entry): entry is CustomEntry => entry.type === 'custom' && entry.customType === type)
+        .map(({ id, timestamp, data }) => ({ id, timestamp, data: structuredClone(data) })),
+      append: (data: unknown) => sessionManager.appendCustomEntry(type, JSON.parse(JSON.stringify(data)))
+    };
+  }
+
   messages(id: string): ViewMessage[] {
-    const session = this.openSessions.get(id);
+    const session = this.openSessions.get(id)?.session;
     if (!session) return [];
     const argumentsById = new Map<string, unknown>();
     for (const message of session.messages) if (message.role === 'assistant') {
@@ -261,7 +289,7 @@ export class PiSessions {
 
   async queueInput(id: string, text: string, mode: 'steer' | 'followUp', attachments?: Attachment[]) {
     if (!['steer', 'followUp'].includes(mode)) throw new Error('Invalid queue mode');
-    const session = this.openSessions.get(id);
+    const session = this.openSessions.get(id)?.session;
     if (!session?.isStreaming) throw new Error('The agent is not streaming; send a new message');
     const input = prepareInput(text, attachments);
     if (session.getSteeringMessages().length + session.getFollowUpMessages().length >= 16) throw new Error('Queue is full');

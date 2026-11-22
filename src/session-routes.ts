@@ -1,3 +1,4 @@
+import { navigationSession } from './navigation-events.js';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { MiniHarnessRuntime } from './agent.js';
 import { json, requestBody } from './http.js';
@@ -28,7 +29,7 @@ function streamRun(runtime: MiniHarnessRuntime, res: ServerResponse, id: string,
 export async function sessionRoutes(runtime: MiniHarnessRuntime, req: IncomingMessage, res: ServerResponse, url: URL,
   configuring: () => unknown) {
   const { pathname } = url;
-  if (pathname === '/api/sessions' && req.method === 'GET') return json(res, 200, runtime.registry.list().map((item) => runtime.navigationSession(item.id)));
+  if (pathname === '/api/sessions' && req.method === 'GET') return json(res, 200, runtime.registry.list().map((item) => navigationSession(runtime, item.id)));
   if (pathname === '/api/sessions' && req.method === 'POST') {
     const input = await requestBody(req);
     if (input?.workspaceId !== undefined && typeof input.workspaceId !== 'string') throw new Error('Invalid workspace ID');
