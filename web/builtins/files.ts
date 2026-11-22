@@ -72,8 +72,9 @@ function breadcrumbs(api: FrontendApi, services: FrontendServices, address: TabA
 }
 
 function fileEntry(api: FrontendApi, scope: TabScope, path: string, label: string, status?: string, diff = false) {
-  const row = control('', 'quiet');
-  row.classList.add('file-entry');
+  const row = document.createElement('button');
+  row.type = 'button';
+  row.className = 'file-entry';
   row.title = path;
   row.onclick = () => api.openTab(diff ? 'diff' : 'preview', path, scope);
   row.append(icon(fileIcon(path)));
