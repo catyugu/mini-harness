@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync, existsSync, writeFileSync, mkdirSync, readFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getPaths } from '../src/config.js';
-import { SessionRegistry } from '../src/registry.js';
+import { SessionRegistry } from '../src/services/conversations.js';
 
 test('nested sessions and cascading permanent deletion', () => {
   const temp = mkdtempSync(join(tmpdir(), 'mini-harness-sessions-'));
