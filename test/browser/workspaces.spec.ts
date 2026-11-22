@@ -30,7 +30,10 @@ test('file inspection, responsive themes and reduced viewport height keep contro
           await expect(navigation).toBeFocused();
           await navigation.click();
         }
-        await page.getByRole('button', { name: 'Workspace files', exact: true }).click();
+        await expect(page.locator('#sidebarExtensions').getByRole('button', { name: 'Workspace files' })).toHaveCount(0);
+        await expect(page.locator('#settingsOpen svg')).toHaveAttribute('viewBox', '.5 .5 15 15');
+        await expect(page.locator('.workspace-button svg').first()).toHaveAttribute('viewBox', '0 0 16 16');
+        await page.getByRole('button', { name: 'Open workspace panel', exact: true }).click();
         const panel = page.locator('#inspector');
         await expect(panel.getByRole('tab', { name: 'Files', exact: true })).toBeVisible();
         await expect(panel.getByRole('button', { name: 'Browse files', exact: true })).toHaveCount(0);

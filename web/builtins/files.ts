@@ -251,13 +251,6 @@ const setup: FrontendSetup = (api, services) => {
   });
   api.rightTab('preview', { title: ({ path }) => base(path), create: (address, signal) => fileView(api, services, address, signal, false) });
   api.rightTab('diff', { title: ({ path }) => 'Diff · ' + base(path), create: (address, signal) => fileView(api, services, address, signal, true) });
-  const browse = iconButton('Workspace files', 'files', 'nav-action');
-  const label = document.createElement('span');
-  label.className = 'nav-label';
-  label.textContent = 'Workspace files';
-  browse.append(label);
-  browse.onclick = () => api.openTab('files');
-  api.mount('sidebar', browse);
   api.completion('@', async ({ query, signal, show, replace }) => {
     const scope = services.workspace();
     if (!scope) return;
