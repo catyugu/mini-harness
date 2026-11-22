@@ -21,6 +21,12 @@ export class MiniHarnessRuntime {
     ctx.provide('harnessMutations', new MutationGate());
     this.plugins = new PluginHost(ctx, paths.plugins, system, builtins,
       (id, pluginId) => ctx.harnessPi.records(id, pluginId));
+    ctx.provide('harnessUpdateSettings', (patch) => this.updateSettings(patch));
+    ctx.provide('harnessPluginCatalog', {
+      metadata: () => this.plugins.metadata(),
+      configuration: (id) => this.plugins.configuration(id),
+      reserved: (id) => this.plugins.reserved(id)
+    });
   }
 
   get settings() { return this.configuration.settings; }

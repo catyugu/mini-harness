@@ -1,11 +1,11 @@
 import { join } from 'node:path';
-import { readJson, writeJson, type Settings, type SettingsPatch } from './config.js';
-import type { PiSessions } from './adapters/pi/sessions.js';
+import { readJson, writeJson, type Settings, type SettingsPatch } from '../../src/config.js';
+import type { AgentPort } from '../../src/contracts/services.js';
 
 type ProviderHost = {
   paths: { home: string };
   settings: Pick<Settings, 'model'>;
-  pi: Pick<PiSessions, 'models' | 'invalidateProviderSessions'>;
+  pi: Pick<AgentPort, 'models' | 'invalidateProviderSessions'>;
   delegation?: { checkProvider(id: string, removing?: boolean): void };
   hasActiveWork: boolean;
   updateSettings(patch: SettingsPatch): Promise<Settings>;

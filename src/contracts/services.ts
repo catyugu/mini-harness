@@ -5,8 +5,8 @@ import type { RunAgentPort } from './agent.js';
 import type { RunEvent, RunInfo, StreamEvent } from './transport.js';
 import type { ViewMessage } from './message.js';
 import type { Attachment } from './input.js';
-import type { SessionRecords } from './plugins.js';
-import type { Settings } from '../config.js';
+import type { PluginMetadata, SessionRecords } from './plugins.js';
+import type { Settings, SettingsPatch } from '../config.js';
 
 /** Stable, implementation-free ports for the independently mounted product capabilities. */
 export interface WorkspacePort {
@@ -114,5 +114,12 @@ declare module 'cordis' {
     harnessRuns: RunPort;
     harnessOperations: ConversationPort;
     harnessSettingsStore: SettingsPort;
+    harnessUpdateSettings: (patch: SettingsPatch) => Promise<Settings>;
+    harnessPluginCatalog: {
+      metadata(): PluginMetadata[];
+      configuration(id: string): Record<string, unknown>;
+      reserved(id: string): boolean;
+    };
+    harnessProviderCatalog: () => unknown[];
   }
 }

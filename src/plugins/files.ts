@@ -1,17 +1,17 @@
 import { mkdirSync, renameSync, rmSync, lstatSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { writeJson } from './config.js';
-import type { PluginMetadata } from './contracts/plugins.js';
+import { writeJson } from '../config.js';
+import type { PluginMetadata } from '../contracts/plugins.js';
 
 type PluginFilesHost = {
   paths: { plugins: string };
   settings: { plugins: Record<string, boolean> };
-  plugins: { metadata(): PluginMetadata[] };
+  plugins: { metadata(): PluginMetadata[]; reserved(id: string): boolean };
 };
 const idPattern = /^[a-z][a-z0-9-]{0,63}$/;
 export function installPlugin(runtime: PluginFilesHost, input: any) {
-  if (!input || !idPattern.test(input.id) || runtime.plugins.metadata().some(({ id }) => id === input.id)) throw new Error('Invalid or existing plugin ID');
+  if (!input || !idPattern.test(input.id) || (runtime.plugins.reserved(input.id) || runtime.plugins.metadata().some(({ id }) => id === input.id))) throw new Error('Invalid or existing plugin ID');
   if (!Array.isArray(input.files) || input.files.length > 3 || !input.files.some((f) => f.name === 'plugin.js' || f.name === 'web.js')) throw new Error('Provide plugin.js, web.js or both, optionally with plugin.json');
   const seen = new Set(); let size = 0;
   for (const file of input.files) {
