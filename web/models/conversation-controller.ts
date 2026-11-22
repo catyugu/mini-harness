@@ -1,5 +1,5 @@
 import type { Attachment } from '../../src/input.js';
-import type { Conversation, ModelChoice } from '../../src/registry.js';
+import type { Conversation, ModelChoice } from '../../src/services/conversations.js';
 import type { RunEvent, RunInfo } from '../../src/protocol.js';
 import type { ConversationView } from '../types.js';
 import { payload, workspaceRoute } from '../api.js';

@@ -1,5 +1,5 @@
 import type { Attachment } from '../../../src/input.js';
-import type { Conversation, ModelChoice } from '../../../src/registry.js';
+import type { Conversation, ModelChoice } from '../../../src/services/conversations.js';
 import type { MessageContent, RunEvent, RunInfo } from '../../../src/protocol.js';
 import type { ConversationView, ThinkingLevel } from '../../types.js';
 import { scopedElements } from '../../api.js';

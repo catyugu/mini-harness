@@ -2,8 +2,8 @@ import { Context, type Fiber } from '../vendor/cordis.js';
 import type { ComposerCommand } from '../ui/conversation/commands.js';
 import type { MessageContent, ViewMessage } from '../../src/protocol.js';
 import type { Attachment } from '../../src/input.js';
-import type { ModelChoice } from '../../src/registry.js';
-import type { Conversation } from '../../src/registry.js';
+import type { ModelChoice } from '../../src/services/conversations.js';
+import type { Conversation } from '../../src/services/conversations.js';
 import type { RightTabType, TabScope, createRightTabs } from '../ui/components/right-tabs.js';
 import type { Bootstrap } from '../types.js';
 

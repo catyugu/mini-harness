@@ -1,4 +1,4 @@
-import type { Conversation } from '../../src/registry.js';
+import type { Conversation } from '../../src/services/conversations.js';
 import { sessionHierarchy } from './navigation-tree.js';
 import { button, iconButton } from './components/primitives.js';
 

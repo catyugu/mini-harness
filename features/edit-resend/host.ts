@@ -10,7 +10,7 @@ export function setup(ctx: Context) {
       return ctx.harnessRevision.reviseAndStart(input.sessionId, {
         sourceEntryId: input.sourceEntryId, expectedLeafId: input.expectedLeafId as string | null,
         message: input.message, attachments: input.attachments as import('../../src/input.js').Attachment[],
-        model: input.model as import('../../src/registry.js').ModelChoice,
+        model: input.model as import('../../src/services/conversations.js').ModelChoice,
         thinkingLevel: input.thinkingLevel as import('../../src/adapters/pi/sessions.js').ThinkingLevel
       });
     }));
