@@ -14,7 +14,7 @@ import { fileInspector } from './files.js';
 import { providerManager } from './provider-manager.js';
 import { pluginInstaller } from './plugin-manager.js';
 import { workspacePicker } from './workspaces.js';
-import { createSettings } from './settings.js';
+import { createSettings, createSettingsNavigation } from './settings.js';
 
 const messages = element('messages');
 const welcome = element('welcome');
@@ -49,10 +49,11 @@ function inspect(title: string, content: HTMLElement) {
   element('inspector').hidden = false;
   element('inspectorOpen').setAttribute('aria-expanded', 'true');
 }
+const settingsNavigation = createSettingsNavigation();
 const extensions = new FrontendHost({ sidebar: element('sidebarExtensions'), composer: element('composerExtensions'),
   settings: element('settingsExtensions'), inspector: element('inspectorExtensions') }, {
   request: data, insert: (text) => { prompt.setRangeText(text, prompt.selectionStart, prompt.selectionEnd, 'end'); prompt.focus(); adjustPrompt(); }, inspect
-}, report);
+}, report, settingsNavigation.addPage);
 const composerUi = createComposer(report);
 const frontendState = new Map<string, string>();
 let frontendWork = Promise.resolve();
@@ -66,7 +67,7 @@ function reconcileFrontend() {
   frontendWork = frontendWork.then(async () => {
     const desired = new Map<string, { key: string; setup?: (api: FrontendApi) => any; source?: boolean; requires?: string[] }>([
       ['core:attachments', { key: 'core', setup: (api) => composerUi.attach(api) }],
-      ['core:providers', { key: 'core', setup: (api) => providerManager(api, () => bootstrap.providers, refreshBootstrap, report) }],
+      ['core:providers', { key: 'core', setup: () => providerManager(() => bootstrap.providers, refreshBootstrap) }],
       ['core:plugins', { key: 'core', setup: (api) => pluginInstaller(api, refreshBootstrap) }]
     ]);
     for (const plugin of snapshot.plugins) {
@@ -124,17 +125,9 @@ element('inspectorOpen').onclick = () => {
   element('inspectorOpen').setAttribute('aria-expanded', String(!element('inspector').hidden));
 };
 element('inspectorClose').onclick = () => { element('inspector').hidden = true; element('inspectorOpen').setAttribute('aria-expanded', 'false'); };
-for (const [index, section] of [...document.querySelectorAll<HTMLElement>('#settingsForm > section')].entries()) {
-  section.id = 'settings-section-' + index;
-  const button = document.createElement('button'); button.type = 'button'; button.className = 'link-button';
-  button.textContent = section.querySelector('h3').textContent;
-  button.onclick = () => section.scrollIntoView({ block: 'start' });
-  element('settingsNav').append(button);
-}
-
 const { renderSessions, selection, expanded, toggleSelection } = createSessionList(() => ({ sessions, active }), (id) => void activate(id), renameSession, (item) => void deleteSession(item));
 
-const { fillSettings } = createSettings(() => bootstrap, applySettings, refreshBootstrap, closeDrawer, async () => { await frontendWork; if (active && !sending) await activate(active); });
+const { fillSettings } = createSettings(() => bootstrap, applySettings, refreshBootstrap, closeDrawer, async () => { await frontendWork; if (active && !sending) await activate(active); }, settingsNavigation.open);
 
 function setSidebar(open: boolean) {
   element('sidebar').classList.toggle('open', open && narrow.matches);
@@ -546,6 +539,6 @@ void data<Bootstrap>('/bootstrap').then((result) => {
   setInterval(() => { if (!document.hidden) { void syncSessions().catch(() => {}); void pollApprovals(); if (sending && active) void refreshQueue(); } }, 1500);
   void pollApprovals();
   if (!result.models.some((m) => m.configured)) {
-    fillSettings(); settingsPanel.showModal(); element('settingsStatus').textContent = 'Choose a provider and model, then save an API key to start.';
+    fillSettings(); settingsNavigation.open(true); element('settingsStatus').textContent = 'Choose a provider and model, then save an API key to start.';
   }
 }).catch(report);

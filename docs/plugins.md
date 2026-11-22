@@ -118,7 +118,8 @@ export default function setup(api) {
 | `mount('sidebar', node)` | Add a sidebar entry |
 | `mount('composer', node)` | Add an input toolbar control |
 | `tool(name, render)` | Register one renderer for a tool name; returning `undefined` uses the generic result view |
-| `mount('settings', node)` | Add a settings section |
+| `settingsPage(title, node)` | Register a settings category and its content |
+| `mount('settings', node)` | Add content to the shared Extensions category |
 | `mount('inspector', node)` | Add a right-panel entry; use `inspect(title, node)` to show its content |
 | `insert(text)` | Insert text at the input selection |
 | `request(path, options?)` | Request authenticated JSON from `/api` using a path such as `/sessions` |

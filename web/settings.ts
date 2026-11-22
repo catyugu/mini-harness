@@ -3,7 +3,89 @@ import type { Bootstrap, ModelInfo } from './types.js';
 import { element, value, data, payload } from './api.js';
 import { schemaFields, readPluginValues } from './settings-fields.js';
 import { populateProviders, populateModels } from './provider-manager.js';
-export function createSettings(getBootstrap: () => Bootstrap, applySettings: (settings: Settings) => void, refreshBootstrap: () => Promise<void>, closeDrawer: () => void, afterSave: () => Promise<void>) {
+export function createSettingsNavigation() {
+  const panel = element<'dialog'>('settingsPanel');
+  const body = element('settingsBody'), nav = element('settingsNav');
+  const sections = element('settingsSections'), form = element<'form'>('settingsForm');
+  const legacy = element('extensionSettings');
+  const navButtons = new Map<HTMLElement, HTMLButtonElement>();
+  let selected: HTMLElement;
+  let pointerOnBackdrop = false;
+
+  function show(section: HTMLElement, enter = true) {
+    selected = section;
+    for (const [page, button] of navButtons) {
+      page.hidden = page !== selected;
+      button.setAttribute('aria-current', page === selected ? 'page' : 'false');
+    }
+    body.classList.toggle('settings-detail', enter);
+    sections.scrollTop = 0;
+  }
+
+  function add(section: HTMLElement, title: string) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'link-button';
+    button.textContent = title;
+    button.onclick = () => {
+      show(section);
+      if (matchMedia('(max-width: 560px)').matches) element('settingsBack').focus();
+    };
+    nav.append(button);
+    navButtons.set(section, button);
+    section.hidden = true;
+    return () => {
+      if (selected === section) show(sections.querySelector('section'), false);
+      navButtons.delete(section);
+      button.remove();
+      section.remove();
+    };
+  }
+
+  for (const section of sections.querySelectorAll<HTMLElement>(':scope > section')) {
+    add(section, section.querySelector('h3').textContent);
+  }
+  const legacyButton = navButtons.get(legacy);
+  const updateLegacy = () => {
+    legacyButton.hidden = !element('settingsExtensions').childElementCount;
+    if (legacyButton.hidden && selected === legacy) show(sections.querySelector('section'), false);
+  };
+  new MutationObserver(updateLegacy).observe(element('settingsExtensions'), { childList: true });
+  updateLegacy();
+  show(sections.querySelector('section'), false);
+
+  element('settingsBack').onclick = () => {
+    body.classList.remove('settings-detail');
+    navButtons.get(selected)?.focus();
+  };
+  form.addEventListener('invalid', (event) => {
+    const page = [...navButtons.keys()].find((section) => section.contains(event.target as Node));
+    if (page && page !== selected && !form.querySelector(':invalid')?.closest('section:not([hidden])')) show(page);
+  }, true);
+  const outside = (event: MouseEvent) => {
+    const bounds = panel.getBoundingClientRect();
+    return event.target === panel && (event.clientX < bounds.left || event.clientX >= bounds.right ||
+      event.clientY < bounds.top || event.clientY >= bounds.bottom);
+  };
+  panel.addEventListener('pointerdown', (event) => { pointerOnBackdrop = outside(event); });
+  panel.addEventListener('click', (event) => { if (pointerOnBackdrop && outside(event)) panel.close(); });
+
+  return {
+    open(detail = false) {
+      show(sections.querySelector('section'), detail);
+      panel.showModal();
+    },
+    addPage(title: string, content: HTMLElement) {
+      const section = document.createElement('section'), heading = document.createElement('h3');
+      heading.textContent = title;
+      section.append(heading, content);
+      sections.append(section);
+      return add(section, title);
+    }
+  };
+}
+
+export function createSettings(getBootstrap: () => Bootstrap, applySettings: (settings: Settings) => void, refreshBootstrap: () => Promise<void>, closeDrawer: () => void, afterSave: () => Promise<void>, open: () => void) {
 const settingsPanel = element<'dialog'>('settingsPanel'), settingsStatus = element('settingsStatus');
 function fillSettings() {
   const bootstrap = getBootstrap();
@@ -105,7 +187,7 @@ element('settingsOpen').onclick = () => {
   if (!getBootstrap()) return;
   fillSettings();
   closeDrawer();
-  settingsPanel.showModal();
+  open();
 };
 element('settingsClose').onclick = () => settingsPanel.close();
 element<'form'>('settingsForm').onsubmit = (event) => { event.preventDefault(); void saveSettings(); };
