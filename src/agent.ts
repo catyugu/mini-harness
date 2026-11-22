@@ -129,7 +129,7 @@ export class MiniHarnessRuntime {
 
   navigationSession(id: string) {
     const record = this.registry.get(id);
-    return record && { ...record, waitingApproval: this.waitingApprovals.has(id) };
+    return record && { ...record, permission: this.permission(id), waitingApproval: this.waitingApprovals.has(id) };
   }
 
   async start() {
@@ -292,7 +292,7 @@ export class MiniHarnessRuntime {
   async getConversation(id: string) {
     if (!this.registry.get(id)) throw new Error('Conversation not found');
     const session = await this.open(id);
-    return { ...this.registry.get(id), facts: session.sessionManager.getBranch().flatMap((entry) => entry.type === 'custom' && entry.customType === 'mini-harness.approval' ? [{ id: entry.id, kind: 'approval', timestamp: entry.timestamp, data: entry.data }] : []), runs: this.sessionRuns(id), messages: this.sessionMessages(id), model: this.modelInfo(session.model),
+    return { ...this.registry.get(id), permission: this.permission(id), facts: session.sessionManager.getBranch().flatMap((entry) => entry.type === 'custom' && entry.customType === 'mini-harness.approval' ? [{ id: entry.id, kind: 'approval', timestamp: entry.timestamp, data: entry.data }] : []), runs: this.sessionRuns(id), messages: this.sessionMessages(id), model: this.modelInfo(session.model),
       selectedModel: { ...this.settings.model }, thinkingLevel: session.thinkingLevel,
       run: this.runInfo(id), partial: this.busy.get(id)?.events.partial, tools: this.busy.get(id)?.events.activeTools ?? [], busy: this.busy.has(id), queue: { steer: session.getSteeringMessages(), followUp: session.getFollowUpMessages() } };
   }

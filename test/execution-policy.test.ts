@@ -73,9 +73,12 @@ test('restricted Shell uses read-only mounts and never falls back to host mode',
 test('default permission only affects future sessions and todo state survives reopening without crossing sessions', async (t) => {
   const { runtime } = await fixture(t);
   const first = runtime.createConversation();
+  runtime.registry.update(first.id, { permission: undefined }); // Existing records predate explicit session permissions.
   await runtime.updateSettings({ defaultPermission: 'read-only' });
   const second = runtime.createConversation();
   assert.equal(runtime.permission(first.id), 'workspace-write');
+  assert.equal(runtime.navigationSession(first.id).permission, 'workspace-write');
+  assert.equal((await runtime.getConversation(first.id)).permission, 'workspace-write');
   assert.equal(runtime.permission(second.id), 'read-only');
   await assert.rejects(runtime.updateSettings({ defaultPermission: 'full' }), /confirmation/);
   await runtime.send(first.id, 'Track tasks');
