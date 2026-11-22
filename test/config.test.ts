@@ -32,19 +32,6 @@ test('settings merge preserves other sections and validates bounds', () => {
 });
 
 
-
-
-    writeJson(paths.settings, { plugins: { 'message-copy': false, 'edit-resend': true } });
-    const enabled = readSettings(paths);
-    assert.equal(enabled.plugins['session-helper'], true);
-    assert.throws(() => mergeSettings(enabled, { plugins: { 'edit-resend': false } }),
-      /configured through session-helper/);
-    assert.throws(() => mergeSettings(enabled, { pluginConfig: { 'message-copy': {} } }),
-      /configured through session-helper/);
-    assert.equal(mergeSettings(enabled, { plugins: { 'session-helper': false } }).plugins['session-helper'], false);
-  } finally { rmSync(root, { recursive: true, force: true }); }
-});
-
 test('plugin names are not reserved for removed built-ins and never trigger rewrites', () => {
   const root = mkdtempSync(join(tmpdir(), 'mini-harness-config-names-'));
   try {
