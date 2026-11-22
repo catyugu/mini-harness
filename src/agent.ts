@@ -290,6 +290,7 @@ export class MiniHarnessRuntime {
     if (model && (session.model?.provider !== model.provider || session.model?.id !== model.id))
       await session.setModel(model);
     signal.throwIfAborted();
+    if (images.length && !session.model?.input.includes('image')) throw new Error('The selected model does not support image input. Choose an image-capable model and retry.');
     const actual = this.modelInfo(session.model);
     if (!record.parentId && !isDeepStrictEqual(this.settings.model, actual)) {
       const next = mergeSettings(this.settings, { model: actual });
@@ -302,7 +303,7 @@ export class MiniHarnessRuntime {
     const off = session.subscribe((event) => {
       switch (event.type) {
         case 'message_start':
-          if (event.message.role === 'user') emit({ type: 'user', text: typeof event.message.content === 'string' ? event.message.content : event.message.content.filter((block) => block.type === 'text').map((block) => block.text).join('\n') });
+          if (event.message.role === 'user') emit({ type: 'user', content: event.message.content, text: typeof event.message.content === 'string' ? event.message.content : event.message.content.filter((block) => block.type === 'text').map((block) => block.text).join('\n') });
           if (event.message.role === 'assistant') emit({ type: 'assistant-start' });
           break;
         case 'message_update':

@@ -25,7 +25,9 @@ export class FrontendHost {
     const cleanup: (() => void)[] = [];
     this.mounted.set(plugin.id, cleanup);
     try {
-      const dispose = await plugin.setup({ ...this.services, config: Object.freeze(structuredClone(config)),
+      const dispose = await plugin.setup({ ...this.services,
+        inspect: (title, content) => { this.services.inspect(title, content); cleanup.push(() => content.remove()); },
+        config: Object.freeze(structuredClone(config)),
         mount: (slot, node) => { this.slots[slot].append(node); cleanup.push(() => node.remove()); },
         tool: (name, render) => {
           if (this.renderers.has(name)) throw new Error('Duplicate tool renderer: ' + name);
@@ -35,7 +37,7 @@ export class FrontendHost {
         onDispose: (fn) => cleanup.push(fn)
       });
       if (dispose) cleanup.push(dispose);
-    } catch (error) { this.disable(plugin.id); this.report(error); }
+    } catch (error) { this.disable(plugin.id); throw error; }
   }
   disable(id: string) {
     const cleanup = this.mounted.get(id);

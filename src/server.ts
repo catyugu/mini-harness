@@ -23,7 +23,7 @@ declare module 'cordis' {
 const WEB_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'web');
 const assets = new Map([
   ['index.html', 'text/html'], ['app.js', 'text/javascript'], ['markdown.js', 'text/javascript'],
-  ...['api', 'extensions', 'icons', 'settings-fields', 'messages', 'composer', 'files', 'provider-manager', 'plugin-manager', 'workspaces'].map((name): [string, string] => [name + '.js', 'text/javascript']),
+  ...['api', 'extensions', 'icons', 'settings-fields', 'messages', 'composer', 'files', 'provider-manager', 'plugin-manager', 'workspaces', 'sessions', 'settings', 'types'].map((name): [string, string] => [name + '.js', 'text/javascript']),
   ['vendor/marked.js', 'text/javascript'], ['vendor/purify.js', 'text/javascript'],
   ['style.css', 'text/css'], ['logo.svg', 'image/svg+xml'], ['manifest.webmanifest', 'application/manifest+json'],
   ['icon-192.png', 'image/png'], ['icon-512.png', 'image/png'], ['favicon.ico', 'image/x-icon']
@@ -121,6 +121,7 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
         const target = realpathSync(input.path);
         if (!statSync(target).isDirectory() || containsPath(paths.home, target)) throw new Error('Select a workspace directory outside mini-harness configuration');
         const known = [...new Set([target, ...workspaces()])].slice(0, 30);
+        if (switching || configuring || runtime.busy.size || runtime.openingSessions.size) throw new Error('Stop active conversations before switching workspace');
         const previous = runtime.paths;
         switching = true;
         try {
@@ -147,7 +148,7 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
       if (pathname === '/api/plugins/install' && req.method === 'POST') return json(res, 201, installPlugin(runtime, await requestBody(req, 2 * 1024 * 1024)));
       const plugin = /^\/api\/plugins\/([a-z][a-z0-9-]{0,63})(?:\/(web))?$/.exec(pathname);
       if (plugin && req.method === 'DELETE') return json(res, 200, await uninstallPlugin(runtime, plugin[1]));
-      if (plugin?.[2] === 'web' && req.method === 'GET') return json(res, 200, { source: frontendSource(runtime, plugin[1]) });
+      if (plugin?.[2] === 'web' && req.method === 'GET') return json(res, 200, { source: frontendSource(runtime, plugin[1]), config: runtime.plugins.configuration(plugin[1]) });
       if (pathname === '/api/skills' && req.method === 'GET') return json(res, 200, await runtime.skills());
       if (pathname === '/api/approvals' && req.method === 'GET') return json(res, 200, runtime.approvals.list());
       if (pathname === '/api/approvals' && req.method === 'POST') {

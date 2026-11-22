@@ -41,7 +41,7 @@
   <main class="main">
     <header class="topbar">
       <button id="sidebarOpen" class="icon-button" type="button" aria-label="Toggle navigation" aria-controls="sidebar" data-icon="menu"></button>
-      <div class="title-block"><strong id="conversationTitle">New conversation</strong><small id="workspaceLabel"></small></div>
+      <div class="title-block"><strong id="conversationTitle">New conversation</strong><button id="workspaceOpen" class="workspace-button" type="button" aria-label="Choose workspace"><small id="workspaceLabel"></small></button></div>
       <button id="inspectorOpen" class="icon-button" type="button" aria-label="Open inspector" data-icon="files"></button>
     </header>
     <section id="welcome" class="welcome">
@@ -50,11 +50,17 @@
     </section>
     <section id="messages" class="messages" aria-label="Messages" hidden></section>
     <div class="composer-wrap">
+      <div id="approvalRequests" class="approval-requests"></div>
+      <div id="queuedMessages" class="queued-messages" hidden></div>
       <div id="status" class="status" role="status"></div>
       <form id="composer" class="composer">
+        <div id="attachments" class="attachments" hidden></div>
+        <div id="suggestions" class="suggestions" aria-label="Input suggestions" hidden></div>
         <textarea id="prompt" rows="2" placeholder="Ask anything…" aria-label="Message" required></textarea>
         <div class="composer-footer">
           <div id="composerExtensions" class="composer-tools"></div><select id="modelSelect" class="model-select" aria-label="Model"><option value="">Auto model</option></select><span class="composer-hint">Shift+Enter for a new line</span>
+          <select id="queueMode" aria-label="While running" hidden><option value="steer">Add instruction</option><option value="followUp">Follow up</option></select>
+          <button id="queueSend" class="small-button" type="button" hidden>Queue</button>
           <button id="stop" type="button" aria-label="Stop response" hidden data-icon="stop"></button>
           <button id="send" type="submit" aria-label="Send" data-icon="send"></button>
         </div>
@@ -65,6 +71,19 @@
     <header><strong id="inspectorTitle">Workspace</strong><button id="inspectorClose" class="icon-button" type="button" aria-label="Close inspector" data-icon="close"></button></header>
     <div id="inspectorExtensions"></div><div id="inspectorContent" class="inspector-content"></div>
   </aside>
+  <dialog id="renamePanel" class="workspace-panel" aria-labelledby="renameTitle">
+    <header class="settings-header"><h2 id="renameTitle">Rename conversation</h2><button id="renameClose" class="icon-button" type="button" aria-label="Cancel rename" data-icon="close"></button></header>
+    <form id="renameForm" class="settings-scroll"><label for="sessionTitle">Title</label><input id="sessionTitle" maxlength="140" required>
+      <p id="renameStatus" class="hint" role="status"></p><button class="primary" type="submit">Rename</button>
+    </form>
+  </dialog>
+  <dialog id="workspacePanel" class="workspace-panel" aria-labelledby="workspaceTitle">
+    <header class="settings-header"><h2 id="workspaceTitle">Workspace</h2><button id="workspaceClose" type="button" class="icon-button" aria-label="Close workspace picker" data-icon="close"></button></header>
+    <form id="workspaceForm" class="settings-scroll"><p class="hint">Switch the local server to a directory. Stop running tasks first. Other tabs will need to reload.</p>
+      <div id="workspaceList"></div><label for="workspacePath">Absolute directory path</label><input id="workspacePath" required>
+      <p id="workspaceStatus" class="hint" role="status"></p><button id="switchWorkspace" class="primary" type="submit">Open workspace</button>
+    </form>
+  </dialog>
   <dialog id="settingsPanel" class="settings-panel" aria-labelledby="settingsTitle">
     <div class="settings-header">
       <h2 id="settingsTitle">Settings</h2>
@@ -74,8 +93,8 @@
     <form id="settingsForm" class="settings-scroll">
       <section>
         <h3>Model</h3>
-        <label for="provider">Provider</label><input id="provider" placeholder="Auto provider">
-        <label for="model">Model ID</label><input id="model" placeholder="Auto model">
+        <label for="provider">Provider</label><select id="provider"><option value="">Auto provider</option></select>
+        <label for="model">Model ID</label><select id="model"><option value="">Auto model</option></select>
         <label for="apiKey">API key</label><input id="apiKey" type="password" autocomplete="off">
         <button id="saveCredential" class="small-button" type="button">Save API key</button>
         <button id="refreshModels" class="small-button" type="button">Refresh models</button>

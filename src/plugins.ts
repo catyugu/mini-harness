@@ -260,6 +260,8 @@ export class PluginHost {
     }
   }
 
+  configuration(id: string) { return structuredClone(this.mounted.get(id)?.plan.config ?? {}); }
+
   getTools(id: string) { return this.ctx.harnessTools.forSession(id); }
   resources(id: string) { return [this.ctx.harnessSkills, ...this.ctx.harnessTools.resources(id)]; }
 

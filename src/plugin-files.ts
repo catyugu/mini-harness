@@ -25,7 +25,8 @@ export function installPlugin(runtime: MiniHarnessRuntime, input: any) {
     }
     renameSync(temp, join(runtime.paths.plugins, input.id));
   } finally { rmSync(temp, { recursive: true, force: true }); }
-  return runtime.plugins.metadata();
+  try { return runtime.plugins.metadata(); }
+  catch (error) { rmSync(join(runtime.paths.plugins, input.id), { recursive: true, force: true }); throw error; }
 }
 export async function uninstallPlugin(runtime: MiniHarnessRuntime, id: string) {
   const plugin = runtime.plugins.metadata().find((item) => item.id === id && item.trustedCode);

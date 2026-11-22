@@ -1,6 +1,6 @@
 import type { MessageContent, ViewMessage } from '../src/protocol.js';
 import type { FrontendHost } from './extensions.js';
-import { renderMarkdown } from './markdown.js';
+import { renderMarkdown, markdownSource } from './markdown.js';
 
 export function createMessageView(messages: HTMLElement, extensions: FrontendHost, activate: (id: string) => void, retryLast: () => void) {
 function textOf(value?: MessageContent) {
@@ -20,7 +20,7 @@ function addMessage(role: 'user' | 'assistant' | 'error', text: string) {
   actions.className = 'message-actions';
   const copy = document.createElement('button');
   copy.type = 'button'; copy.className = 'link-button'; copy.textContent = 'Copy';
-  copy.onclick = async () => { try { await navigator.clipboard.writeText(item.innerText); copy.textContent = 'Copied'; } catch { copy.textContent = 'Copy failed'; } };
+  copy.onclick = async () => { try { await navigator.clipboard.writeText(markdownSource.get(item) ?? item.textContent); copy.textContent = 'Copied'; } catch { copy.textContent = 'Copy failed'; } };
   actions.append(copy);
   if (role === 'error') {
     const retry = document.createElement('button'); retry.type = 'button'; retry.className = 'link-button'; retry.textContent = 'Retry';
