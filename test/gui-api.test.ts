@@ -172,7 +172,15 @@ test('shell approval gates execution, handles rejection and cancellation', async
     const history = (await request('/sessions/' + session.id)).body.messages;
     const tool = history.filter((m) => m.role === 'toolResult').at(-1);
     assert.equal(tool.isError, !allow); assert.deepEqual(tool.arguments, { command: 'echo approved' });
-    if (allow) assert.match(JSON.stringify(tool.content), /approved/);
+    if (allow) {
+      assert.match(JSON.stringify(tool.content), /approved/);
+      assert.equal(tool.exitCode, 0);
+      assert.ok(Number.isFinite(tool.elapsedMs) && tool.elapsedMs >= 0);
+      app.runtime.pi.release(session.id);
+      const restored = (await request('/sessions/' + session.id)).body.messages.filter((m) => m.role === 'toolResult').at(-1);
+      assert.equal(restored.exitCode, 0);
+      assert.ok(Number.isFinite(restored.elapsedMs) && restored.elapsedMs >= 0);
+    }
   }
   await request('/sessions/' + session.id + '/runs', 'POST', { message: 'Cancel pending approval' });
   await waitUntil(() => request('/approvals'), (r) => r.body.length > 0);
