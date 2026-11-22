@@ -1,13 +1,7 @@
 import { button, iconButton } from './primitives.js';
 import type { createLayout } from '../shell/layout.js';
 
-export interface TabScope { workspaceId: string; sessionId?: string }
-export interface TabAddress extends TabScope { type: string; path?: string }
-export interface RightTabType {
-  title(address: TabAddress): string;
-  create(address: TabAddress, signal: AbortSignal): HTMLElement;
-  default?: boolean;
-}
+import type { TabScope, TabAddress, RightTabType } from '../../contracts/tabs.js';
 
 type Tab = {
   key: string;

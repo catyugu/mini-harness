@@ -3,26 +3,7 @@ import type { BrowserPlugin, FrontendApi } from '../kernel/extensions.js';
 import { icon } from './components/icons.js';
 import { button, field, fromMarkup } from './components/primitives.js';
 
-export interface ProviderInfo {
-  id: string;
-  name: string;
-  configured: boolean;
-  storedCredential: boolean;
-  canSetKey: boolean;
-  custom: boolean;
-  baseUrl: string;
-  api: string;
-  models: ProviderModel[];
-}
-
-interface ProviderModel {
-  id: string;
-  name: string;
-  input: string[];
-  contextWindow: number;
-  maxTokens: number;
-  reasoning: boolean;
-}
+import type { ProviderInfo, ProviderModel } from '../contracts/providers.js';
 
 export const modelPlugin: BrowserPlugin = {
   id: 'core:models', inject: ['miniSettings', 'miniState'],

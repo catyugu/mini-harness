@@ -1,6 +1,6 @@
 import type { Conversation } from '../../src/services/conversations.js';
 import type { WorkspaceRecord } from '../../src/services/workspaces.js';
-import type { NavigationEvent } from '../../src/transport/navigation-events.js';
+import type { NavigationEvent } from '../../src/contracts/navigation.js';
 import { exportSessions } from '../transport/session-client.js';
 import type { BrowserState } from '../models/browser-state.js';
 import type { FrontendApi } from '../kernel/extensions.js';

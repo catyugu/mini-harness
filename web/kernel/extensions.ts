@@ -1,10 +1,10 @@
 import { Context, type Fiber } from '../vendor/cordis.js';
-import type { ComposerCommand } from '../ui/conversation/commands.js';
+import type { ComposerCommand } from '../contracts/commands.js';
 import type { MessageContent, ViewMessage } from '../../src/protocol.js';
 import type { Attachment } from '../../src/input.js';
 import type { ModelChoice } from '../../src/services/conversations.js';
 import type { Conversation } from '../../src/services/conversations.js';
-import type { RightTabType, TabScope, createRightTabs } from '../ui/components/right-tabs.js';
+import type { RightTabType, TabScope, RightTabsPort } from '../contracts/tabs.js';
 import type { Bootstrap } from '../types.js';
 
 export type Slot = 'sidebar' | 'composer' | 'settings' | 'inspector' | 'approvals' | 'session-navigation' | 'conversation' | 'dialogs' | 'main' | 'conversation-header';
@@ -101,7 +101,7 @@ export class FrontendHost {
   constructor(
     private readonly ctx: Context,
     private slot: (name: Slot) => HTMLElement,
-    private ui: Pick<FrontendApi, 'request' | 'insert' | 'beginDraftMode' | 'cancelDraftMode'> & { tabs(): ReturnType<typeof createRightTabs> },
+    private ui: Pick<FrontendApi, 'request' | 'insert' | 'beginDraftMode' | 'cancelDraftMode'> & { tabs(): RightTabsPort },
     private services: FrontendServices,
     private addSettingsPage: (title: string, node: HTMLElement) => () => void,
     private registerCommand: (command: ComposerCommand) => () => void,

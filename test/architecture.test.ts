@@ -72,3 +72,20 @@ test('Web modules and feature clients do not import Node runtime implementations
     }
   }
 });
+
+test('host and browser kernel only depend on contracts, never feature/UI implementations', () => {
+  for (const path of files(join(source, 'kernel'))) {
+    for (const dep of dependencies(path))
+      assert.equal(dep.target.startsWith(features + '/'), false, path + ' depends on a feature');
+  }
+  for (const path of files(join(web, 'kernel'))) {
+    for (const dep of dependencies(path))
+      assert.equal(dep.target.startsWith(join(web, 'ui') + '/'), false, path + ' depends on a UI component');
+  }
+  for (const path of files(join(source, 'contracts'))) {
+    for (const dep of dependencies(path))
+      assert.equal(dep.target.startsWith(join(source, 'kernel') + '/') || dep.target.startsWith(join(source, 'services') + '/')
+        || dep.target.startsWith(join(source, 'adapters') + '/') || dep.target.startsWith(features + '/'), false,
+      path + ' has a reverse implementation dependency');
+  }
+});
