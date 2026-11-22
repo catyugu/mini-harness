@@ -121,7 +121,7 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
         return json(res, 202, { pid: process.pid });
       }
       if (pathname === '/api/bootstrap' && req.method === 'GET')
-        return json(res, 200, { settings: runtime.settings, ...navigationSnapshot(runtime), models: runtime.availableModels(), plugins: runtime.plugins.metadata(), isolation, providers: providerSettings(runtime) });
+        return json(res, 200, { settings: runtime.settings, ...navigationSnapshot(runtime), models: runtime.pi.availableModels(), plugins: runtime.plugins.metadata(), isolation, providers: providerSettings(runtime) });
       if (pathname === '/api/sessions' || pathname.startsWith('/api/sessions/'))
         return await sessionRoutes(runtime, req, res, url, () => configuring);
       if (pathname === '/api/settings' && req.method === 'PATCH') {
@@ -137,20 +137,20 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
           const input = await requestBody(req);
           if (typeof input?.provider !== 'string' || !/^[a-z0-9-]+$/.test(input.provider))
             return json(res, 400, { error: 'Invalid provider' });
-          if (!runtime.models.getProvider(input.provider)) return json(res, 400, { error: 'Unknown provider' });
+          if (!runtime.pi.models.getProvider(input.provider)) return json(res, 400, { error: 'Unknown provider' });
           if (req.method === 'DELETE') {
             if (runtime.hasActiveWork) throw new Error('Stop active conversations before removing credentials');
-            await runtime.models.logout(input.provider);
+            await runtime.pi.models.logout(input.provider);
           } else {
             if (typeof input.key !== 'string' || !input.key.trim()) return json(res, 400, { error: 'Invalid credential' });
             await saveProviderCredential(runtime, input.provider, input.key.trim());
           }
-          return json(res, 200, { ok: true, persisted: true, models: runtime.availableModels(), status: runtime.models.getProviderAuthStatus(input.provider) });
+          return json(res, 200, { ok: true, persisted: true, models: runtime.pi.availableModels(), status: runtime.pi.models.getProviderAuthStatus(input.provider) });
         } finally { configuring = false; }
       }
       if (pathname === '/api/models' && req.method === 'GET') {
-        await runtime.models.getAvailable();
-        return json(res, 200, { models: runtime.availableModels() });
+        await runtime.pi.models.getAvailable();
+        return json(res, 200, { models: runtime.pi.availableModels() });
       }
       return json(res, 404, { error: 'Not found' });
     } catch (error) {

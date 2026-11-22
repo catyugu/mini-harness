@@ -47,7 +47,7 @@ export interface PluginApi {
 type RuntimeServices = {
   paths: MiniHarnessRuntime['paths'];
   settings(): Settings;
-  models: { list(): ReturnType<MiniHarnessRuntime['availableModels']> };
+  models: { list(): ReturnType<MiniHarnessRuntime['pi']['availableModels']> };
   sessions: Pick<MiniHarnessRuntime['registry'], 'get' | 'list'>;
   workspaces: { resolve(id: string): string; approval(id: string, waiting: boolean): void };
   delegation: MiniHarnessRuntime['delegation'];
@@ -262,6 +262,7 @@ export class PluginHost {
 
   configuration(id: string) { return structuredClone(this.mounted.get(id)?.plan.config ?? {}); }
 
+  get skills() { return this.ctx.harnessSkills; }
   getTools(id: string) { return this.ctx.harnessTools.forSession(id); }
   resources(id: string) { return [this.ctx.harnessSkills, ...this.ctx.harnessTools.resources(id)]; }
 

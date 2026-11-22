@@ -10,7 +10,7 @@ function streamRun(runtime: MiniHarnessRuntime, res: ServerResponse, id: string,
   const cleanup = () => { clearInterval(heartbeat); detach(); };
   res.once('close', cleanup);
   try {
-    detach = runtime.watchRun(id, runId, after, (event) => {
+    detach = runtime.runs.watch(id, runId, after, (event) => {
       if (!res.headersSent) res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
       if (res.destroyed || res.writableEnded) return;
       // Slow or disconnected observers can reconnect from their cursor.
@@ -45,34 +45,34 @@ export async function sessionRoutes(runtime: MiniHarnessRuntime, req: IncomingMe
     }
     if (match[2] === 'compact' && req.method === 'POST') {
       if (configuring()) throw new Error('Configuration is changing');
-      await runtime.compact(id);
+      await runtime.runs.compact(id);
       return json(res, 200, { ok: true });
     }
     if (match[2] === 'queue' && req.method === 'POST') {
       const input = await requestBody(req, 20 * 1024 * 1024);
-      return json(res, 202, await runtime.queueInput(id, input.message, input.mode, input.attachments));
+      return json(res, 202, await runtime.runs.queueInput(id, input.message, input.mode, input.attachments));
     }
     if (match[2] === 'queue' && req.method === 'GET') {
-      const session = await runtime.open(id);
+      const session = await runtime.pi.open(id);
       return json(res, 200, { steer: session.getSteeringMessages(), followUp: session.getFollowUpMessages() });
     }
     if (!match[2] && req.method === 'GET') return json(res, 200, await runtime.getConversation(id));
-    if (match[2] === 'cancel' && req.method === 'POST') return json(res, 200, { cancelled: runtime.cancel(id) });
-    if (match[2] === 'runs' && req.method === 'GET') return json(res, 200, { run: runtime.runInfo(id) ?? null });
+    if (match[2] === 'cancel' && req.method === 'POST') return json(res, 200, { cancelled: runtime.runs.cancel(id) });
+    if (match[2] === 'runs' && req.method === 'GET') return json(res, 200, { run: runtime.runs.info(id) ?? null });
     if (match[2] === 'runs' && req.method === 'POST') {
       const input = await requestBody(req, 20 * 1024 * 1024);
       if (configuring()) throw new Error('Configuration is changing');
-      return json(res, 202, runtime.startRun(id, input.message, input.model, input.attachments, input.thinkingLevel));
+      return json(res, 202, runtime.runs.startRun(id, input.message, input.model, input.attachments, input.thinkingLevel));
     }
     if (match[2] === 'events' && req.method === 'GET') {
-      await runtime.open(id);
+      await runtime.pi.open(id);
       streamRun(runtime, res, id, url.searchParams.get('run'), Number(url.searchParams.get('after') ?? 0));
       return;
     }
     if (match[2] === 'messages' && req.method === 'POST') {
       const input = await requestBody(req, 20 * 1024 * 1024);
       if (configuring()) throw new Error('Configuration is changing');
-      const run = runtime.startRun(id, input.message, input.model, input.attachments, input.thinkingLevel);
+      const run = runtime.runs.startRun(id, input.message, input.model, input.attachments, input.thinkingLevel);
       streamRun(runtime, res, id, run.id, 0);
       return;
     }

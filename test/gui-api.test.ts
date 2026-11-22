@@ -83,9 +83,9 @@ test('manual compaction uses Pi and preserves an idle conversation on failure', 
   const small = await compact();
   assert.equal(small.status, 400);
   assert.match(small.body.error, /Nothing to compact/);
-  const pi = await app.runtime.open(session.id);
+  const pi = await app.runtime.pi.open(session.id);
   pi.settingsManager.setCompactionEnabled(false);
-  for (let turn = 0; turn < 6; turn++) await app.runtime.send(session.id, 'Turn ' + turn + ' ' + 'more context '.repeat(1550));
+  for (let turn = 0; turn < 6; turn++) await app.runtime.runs.send(session.id, 'Turn ' + turn + ' ' + 'more context '.repeat(1550));
   const compacted = await compact();
   assert.equal(compacted.status, 200, JSON.stringify(compacted.body));
   assert.equal(mock.requests.length, 7);

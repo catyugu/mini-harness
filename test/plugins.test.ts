@@ -37,14 +37,14 @@ test('an installed Cordis plugin can use services, configure a tool, and release
   const item = runtime.registry.create();
   assert.equal(runtime.plugins.metadata().find(({ id }) => id === 'example')?.title, 'Example plugin');
   await runtime.updateSettings({ plugins: { example: true }, pluginConfig: { example: { prefix: 'Total' } } });
-  const originalSession = await runtime.open(item.id);
+  const originalSession = await runtime.pi.open(item.id);
   assert.ok(originalSession.getActiveToolNames().includes('example_count'));
   const tool = runtime.plugins.getTools(item.id).find(({ name }) => name === 'example_count');
   assert.equal((await tool.execute('test', {}, undefined, undefined, undefined)).content[0].type, 'text');
   assert.match(JSON.stringify(await tool.execute('test', {}, undefined, undefined, undefined)), /Total: 1/);
   await assert.rejects(runtime.updateSettings({ pluginConfig: { example: { prefix: 12 } } }), /Invalid prefix/);
   assert.equal(runtime.settings.pluginConfig.example.prefix, 'Total');
-  const restoredSession = await runtime.open(item.id);
+  const restoredSession = await runtime.pi.open(item.id);
   assert.notStrictEqual(restoredSession, originalSession);
   assert.ok(restoredSession.getActiveToolNames().includes('example_count'));
   assert.equal(readFileSync(log, 'utf8'), 'dispose\n');
@@ -52,9 +52,9 @@ test('an installed Cordis plugin can use services, configure a tool, and release
   assert.equal(readFileSync(log, 'utf8'), 'dispose\n', 'Unrelated switches should preserve an active plugin');
   await runtime.updateSettings({ plugins: { example: false } });
   assert.equal(readFileSync(log, 'utf8'), 'dispose\ndispose\n');
-  assert.ok(!(await runtime.open(item.id)).getActiveToolNames().includes('example_count'));
+  assert.ok(!(await runtime.pi.open(item.id)).getActiveToolNames().includes('example_count'));
   await runtime.updateSettings({ plugins: { example: true } });
-  assert.ok((await runtime.open(item.id)).getActiveToolNames().includes('example_count'));
+  assert.ok((await runtime.pi.open(item.id)).getActiveToolNames().includes('example_count'));
 });
 
 test('file tools have a plugin lifecycle and required plugins cannot be disabled independently', async (t) => {
@@ -71,13 +71,13 @@ test('file tools have a plugin lifecycle and required plugins cannot be disabled
   };`);
   await runtime.start();
   const item = runtime.registry.create();
-  assert.ok((await runtime.open(item.id)).getActiveToolNames().includes('read'));
+  assert.ok((await runtime.pi.open(item.id)).getActiveToolNames().includes('read'));
   await runtime.updateSettings({ plugins: { files: false } });
-  assert.ok(!(await runtime.open(item.id)).getActiveToolNames().includes('read'));
+  assert.ok(!(await runtime.pi.open(item.id)).getActiveToolNames().includes('read'));
   await runtime.updateSettings({ plugins: { files: true, dependent: true } });
   await assert.rejects(runtime.updateSettings({ plugins: { files: false } }), /Required plugin/);
   assert.equal(runtime.settings.plugins.files, true);
-  assert.ok((await runtime.open(item.id)).getActiveToolNames().includes('dependent_tool'));
+  assert.ok((await runtime.pi.open(item.id)).getActiveToolNames().includes('dependent_tool'));
   await runtime.updateSettings({ plugins: { files: false, dependent: false } });
   assert.equal(runtime.plugins.getTools(item.id).some(({ name }) => name === 'read' || name === 'dependent_tool'), false);
 });

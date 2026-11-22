@@ -35,6 +35,8 @@ export function getPaths(cwd: string = process.cwd(), env: NodeJS.ProcessEnv = p
   };
 }
 
+export type Paths = ReturnType<typeof getPaths>;
+
 export function ensurePaths(paths: ReturnType<typeof getPaths>) {
   for (const path of [paths.home, paths.agent, paths.sessions, paths.skills, paths.plugins]) {
     mkdirSync(path, { recursive: true, mode: 0o700 });
