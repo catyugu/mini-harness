@@ -1,17 +1,17 @@
-import type { Attachment } from '../../src/input.js';
-import type { Conversation, ModelChoice } from '../../src/registry.js';
-import type { MessageContent, RunEvent, RunInfo } from '../../src/protocol.js';
-import type { ConversationView, ThinkingLevel } from '../types.js';
-import { scopedElements } from '../api.js';
-import { exportSessions, isRunning } from '../transport/session-client.js';
-import { createConversationController } from '../models/conversation-controller.js';
-import type { BrowserState } from '../models/browser-state.js';
+import type { Attachment } from '../../../src/input.js';
+import type { Conversation, ModelChoice } from '../../../src/registry.js';
+import type { MessageContent, RunEvent, RunInfo } from '../../../src/protocol.js';
+import type { ConversationView, ThinkingLevel } from '../../types.js';
+import { scopedElements } from '../../api.js';
+import { exportSessions, isRunning } from '../../transport/session-client.js';
+import { createConversationController } from '../../models/conversation-controller.js';
+import type { BrowserState } from '../../models/browser-state.js';
 import { createMessageView } from './messages.js';
 import { CommandRegistry, type ComposerCommand } from './commands.js';
 import { createComposer } from './composer.js';
 import { createModelPicker } from './model-picker.js';
-import type { FrontendApi, FrontendHost, DraftMode } from '../kernel/extensions.js';
-import { fromMarkup } from './primitives.js';
+import type { FrontendApi, FrontendHost, DraftMode } from '../../kernel/extensions.js';
+import { fromMarkup } from '../primitives.js';
 
 type Queue = ConversationView['queue'];
 

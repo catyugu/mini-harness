@@ -4,7 +4,7 @@ import { BrowserState } from '../models/browser-state.js';
 import { FrontendHost, type BrowserPlugin } from './extensions.js';
 import { createPluginLoader, type BrowserPluginFailures } from './plugin-loader.js';
 import { shellPlugin } from '../ui/shell.js';
-import { conversationView } from '../ui/conversation.js';
+import { conversationView } from '../ui/conversation/view.js';
 import { sessionNavigation } from '../ui/navigation.js';
 import { settingsPlugin } from '../ui/settings.js';
 import { workspacePlugin } from '../ui/workspaces.js';
