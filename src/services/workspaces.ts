@@ -6,7 +6,6 @@ import { readJson, writeJson, type getPaths } from '../config.js';
 import { containsPath } from '../platform/paths.js';
 
 import type { WorkspaceRecord } from '../contracts/workspace.js';
-export type { WorkspaceRecord } from '../contracts/workspace.js';
 interface CatalogState { records: WorkspaceRecord[] }
 
 // Use the same native resolver as fs/promises.realpath, including Windows long path names.

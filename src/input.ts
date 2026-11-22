@@ -1,6 +1,5 @@
 import { TextDecoder } from 'node:util';
-export interface Attachment { name: string; mimeType: string; data: string }
-export interface ImageInput { type: 'image'; mimeType: string; data: string }
+import type { Attachment, ImageInput } from './contracts/input.js';
 export function prepareInput(text: unknown, attachments: Attachment[] = []) {
   if (typeof text !== 'string' || text.length > 200000 || (!text.trim() && !attachments?.length)) throw new Error('Invalid message');
   if (!Array.isArray(attachments) || attachments.length > 8) throw new Error('Attach at most eight files');

@@ -1,6 +1,7 @@
 import type { ServerResponse } from 'node:http';
 import { eventStream } from './http.js';
-import type { Conversation, SessionRegistry } from '../services/conversations.js';
+import type { SessionRegistry } from '../services/conversations.js';
+import type { Conversation } from '../contracts/conversation.js';
 import type { NavigationEvent } from '../contracts/navigation.js';
 
 export interface NavigationHost {

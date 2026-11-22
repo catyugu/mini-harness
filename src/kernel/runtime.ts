@@ -1,7 +1,8 @@
 import { Context } from 'cordis';
 import { isDeepStrictEqual } from 'node:util';
 import { PluginHost } from './plugins.js';
-import { SessionRegistry, type ModelChoice } from '../services/conversations.js';
+import { SessionRegistry } from '../services/conversations.js';
+import type { ModelChoice } from '../contracts/conversation.js';
 import { mergeSettings, readSettings, writeJson, type Paths, type Settings, type SettingsPatch } from '../config.js';
 import type { BuiltinPlugin } from '../contracts/plugins.js';
 import type { DelegationPort } from '../contracts/delegation.js';
@@ -119,7 +120,7 @@ export class MiniHarnessRuntime {
   }
 
   async reviseAndStart(id: string, input: { sourceEntryId: string; expectedLeafId: string | null; message: string;
-    attachments?: import('../input.js').Attachment[]; model?: ModelChoice; thinkingLevel?: import('../adapters/pi/sessions.js').ThinkingLevel }) {
+    attachments?: import('../contracts/input.js').Attachment[]; model?: ModelChoice; thinkingLevel?: import('@earendil-works/pi-coding-agent').AgentSession['thinkingLevel'] }) {
     this.assertAvailable(id);
     return this.runs.reviseAndStart(id, input);
   }

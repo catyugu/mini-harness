@@ -6,11 +6,14 @@ import {
 } from '@earendil-works/pi-coding-agent';
 import { getSupportedThinkingLevels } from '@earendil-works/pi-ai/compat';
 import { getPaths, type Paths } from '../../config.js';
-import { prepareInput, type Attachment, type ImageInput } from '../../input.js';
-import type { Conversation, SessionRegistry, ModelChoice } from '../../services/conversations.js';
+import { prepareInput } from '../../input.js';
+import type { Attachment, ImageInput } from '../../contracts/input.js';
+import type { SessionRegistry } from '../../services/conversations.js';
+import type { Conversation, ModelChoice } from '../../contracts/conversation.js';
 import type { Context } from 'cordis';
 import type { SessionRecords, ToolPort } from '../../contracts/plugins.js';
-import type { StreamEvent, ViewMessage } from '../../protocol.js';
+import type { StreamEvent } from '../../contracts/transport.js';
+import type { ViewMessage } from '../../contracts/message.js';
 
 export type ThinkingLevel = AgentSession['thinkingLevel'];
 

@@ -1,9 +1,14 @@
 import { randomUUID } from 'node:crypto';
-import { prepareInput, type Attachment } from '../input.js';
+import { prepareInput } from '../input.js';
+import type { Attachment } from '../contracts/input.js';
+import type { RunAgentPort } from '../contracts/agent.js';
+import type { AgentSession } from '@earendil-works/pi-coding-agent';
+import type { Conversation, ModelChoice } from '../contracts/conversation.js';
+import type { StreamEvent, RunEvent, RunInfo } from '../contracts/transport.js';
 import { RunEvents } from './run-events.js';
-import type { PiSessions, ThinkingLevel } from '../adapters/pi/sessions.js';
-import type { Conversation, SessionRegistry, ModelChoice } from './conversations.js';
-import type { StreamEvent, RunEvent, RunInfo } from '../protocol.js';
+type ThinkingLevel = AgentSession['thinkingLevel'];
+import type { SessionRegistry } from './conversations.js';
+
 
 interface RunOptions {
   signal?: AbortSignal;
@@ -24,7 +29,7 @@ export class Runs {
 
   constructor(
     private readonly registry: SessionRegistry,
-    private readonly pi: PiSessions,
+    private readonly pi: RunAgentPort,
     private readonly defaultModel: () => ModelChoice,
     private readonly assertAvailable: (id: string) => void,
     private readonly schedule: (record: Conversation, task: () => Promise<string>, signal: AbortSignal) => Promise<string>

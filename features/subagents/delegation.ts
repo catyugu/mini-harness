@@ -2,7 +2,8 @@ import type { Settings } from '../../src/config.js';
 import type { DelegationPort } from '../../src/contracts/delegation.js';
 import type { PiSessions } from '../../src/adapters/pi/sessions.js';
 import type { Runs } from '../../src/services/runs.js';
-import type { Conversation, SessionRegistry, ModelChoice } from '../../src/services/conversations.js';
+import type { SessionRegistry } from '../../src/services/conversations.js';
+import type { Conversation, ModelChoice } from '../../src/contracts/conversation.js';
 
 interface Waiter {
   cancel(): void;

@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { navigationSession, type NavigationHost } from './navigation-events.js';
 import { eventStream, json, requestBody } from './http.js';
-import { isRunning } from '../protocol.js';
+import { isRunning } from '../contracts/transport.js';
 import type { PiSessions } from '../adapters/pi/sessions.js';
 import type { Runs } from '../services/runs.js';
 import type { SessionRegistry } from '../services/conversations.js';
