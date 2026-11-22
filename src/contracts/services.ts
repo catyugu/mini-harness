@@ -1,3 +1,4 @@
+import type { Context } from 'cordis';
 import type { AgentSession, ModelRuntime } from '@earendil-works/pi-coding-agent';
 import type { Conversation, ModelChoice } from './conversation.js';
 import type { WorkspaceRecord } from './workspace.js';
