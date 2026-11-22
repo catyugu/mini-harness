@@ -8,7 +8,7 @@ import { conversationView } from './conversation.js';
 import { sessionNavigation } from './navigation.js';
 import { mountSettings, createSettings } from './settings.js';
 import { workspacePlugin } from './workspaces.js';
-import { providerManager } from './provider-manager.js';
+import { modelPlugin } from './provider-manager.js';
 import { installForm, pluginCatalog } from './plugin-manager.js';
 import { hydrateIcons } from './icons.js';
 import type { Bootstrap } from './types.js';
@@ -98,22 +98,9 @@ const settingsPlugin: BrowserPlugin = {
       await ctx.miniSwitch(state.get());
       const active = conversation.active();
       if (active && !conversation.sending()) await conversation.activate(active);
-    }, (open) => shell.bindSettings(open, api.signal), settings.open, () => state.dispatchEvent(new Event('providers')));
+    }, (open) => shell.bindSettings(open, api.signal), settings.open);
     state.on('bootstrap', form.fillSettings, api.signal);
-    if (!state.get().models.some((model) => model.configured)) {
-      form.fillSettings();
-      settings.open(true);
-      scopedElements(settings.panel).element('settingsStatus').textContent = 'Add a model provider to start.';
-    }
-  }
-};
-
-const modelPlugin: BrowserPlugin = {
-  id: 'core:models', inject: ['miniSettings', 'miniState'],
-  setup(ctx, api) {
-    const editor = providerManager(ctx.miniSettings.panel, () => ctx.miniState.get().providers, ctx.miniState.refresh);
-    ctx.miniState.addEventListener('providers', editor.render, { signal: api.signal });
-    return editor.dispose;
+    form.fillSettings();
   }
 };
 

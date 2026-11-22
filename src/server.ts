@@ -8,7 +8,7 @@ import type { AddressInfo } from 'node:net';
 import { getPaths, ensurePaths, readJson, writeJson } from './config.js';
 import { containsPath } from './workspace.js';
 import { json, requestBody } from './http.js';
-import { providerSettings, saveProvider } from './provider-settings.js';
+import { providerSettings, saveProvider, saveProviderCredential } from './provider-settings.js';
 import { installPlugin, uninstallPlugin, frontendSource } from './plugin-files.js';
 import { supportsIsolation } from './sandbox.js';
 import { MiniHarnessRuntime } from './agent.js';
@@ -132,19 +132,23 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
         try { return json(res, 200, await runtime.updateSettings(await requestBody(req))); }
         finally { configuring = false; }
       }
-      if (pathname === '/api/credentials' && req.method === 'POST') {
-        const input = await requestBody(req);
-        if (typeof input.provider !== 'string' || !/^[a-z0-9-]+$/.test(input.provider) ||
-            typeof input.key !== 'string' || !input.key.trim()) return json(res, 400, { error: 'Invalid credential' });
-        if (!runtime.models.getProvider(input.provider)) return json(res, 400, { error: 'Unknown provider' });
-        await runtime.models.login(input.provider, 'api_key', {
-          prompt: async (prompt) => {
-            if (prompt.type !== 'secret') throw new Error('This provider requires additional credential setup through Pi');
-            return input.key.trim();
-          },
-          notify: () => {}
-        });
-        return json(res, 200, { ok: true, persisted: true, models: runtime.availableModels(), status: runtime.models.getProviderAuthStatus(input.provider) });
+      if (pathname === '/api/credentials' && ['POST', 'DELETE'].includes(req.method)) {
+        if (configuring) throw new Error('Configuration is already changing');
+        configuring = true;
+        try {
+          const input = await requestBody(req);
+          if (typeof input?.provider !== 'string' || !/^[a-z0-9-]+$/.test(input.provider))
+            return json(res, 400, { error: 'Invalid provider' });
+          if (!runtime.models.getProvider(input.provider)) return json(res, 400, { error: 'Unknown provider' });
+          if (req.method === 'DELETE') {
+            if (runtime.hasActiveWork) throw new Error('Stop active conversations before removing credentials');
+            await runtime.models.logout(input.provider);
+          } else {
+            if (typeof input.key !== 'string' || !input.key.trim()) return json(res, 400, { error: 'Invalid credential' });
+            await saveProviderCredential(runtime, input.provider, input.key.trim());
+          }
+          return json(res, 200, { ok: true, persisted: true, models: runtime.availableModels(), status: runtime.models.getProviderAuthStatus(input.provider) });
+        } finally { configuring = false; }
       }
       if (pathname === '/api/models' && req.method === 'GET') {
         await runtime.models.getAvailable();
