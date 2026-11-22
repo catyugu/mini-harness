@@ -6,13 +6,8 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { getPaths } from './config.js';
-import { json, requestBody } from './transport/http.js';
-import { providerSettings, saveProvider, saveProviderCredential } from './provider-settings.js';
-import { installPlugin, uninstallPlugin, frontendSource } from './plugin-files.js';
-import { supportsIsolation } from './platform/isolation.js';
+import { json } from './transport/http.js';
 import { MiniHarnessRuntime } from './application.js';
-import { sessionRoutes } from './transport/session-routes.js';
-import { navigationSession, navigationSnapshot, streamNavigation } from './transport/navigation-events.js';
 
 const WEB_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'web');
 const FEATURE_DIR = resolve(WEB_DIR, '..', 'features');
@@ -49,16 +44,8 @@ export function authorize(request: IncomingMessage, token: string) {
 export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>, options: { token?: string; shutdown?: () => void } = {}) {
   const runtime = new MiniHarnessRuntime(paths);
   const navigation = new AbortController();
-  let configuring = false;
-  async function configure(update: () => Promise<unknown>) {
-    if (configuring) throw new Error('Configuration is already changing');
-    configuring = true;
-    try { return await update(); }
-    finally { configuring = false; }
-  }
+  runtime.plugins.ctx.provide('harnessTransportSignal', navigation.signal);
   await runtime.start();
-  const catalog = runtime.registry.workspaces;
-  const isolation = supportsIsolation();
   const token = options.token ?? randomBytes(32).toString('hex');
   const route = async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url || '/', 'http://localhost');
@@ -87,82 +74,14 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
       if (req.method !== 'GET' && req.headers.origin && new URL(req.headers.origin).origin !== 'http://' + req.headers.host) {
         return json(res, 403, { error: 'Origin not allowed' });
       }
-      if (pathname === '/api/navigation/events' && req.method === 'GET')
-        return streamNavigation(runtime, res, navigation.signal);
-      if (pathname === '/api/workspaces/directories' && req.method === 'GET')
-        return json(res, 200, catalog.browse(url.searchParams.get('path')));
-      if (pathname === '/api/workspaces') {
-        if (req.method === 'GET') return json(res, 200, catalog.list());
-        if (req.method === 'PUT') return json(res, 200, catalog.reorder((await requestBody(req))?.ids));
-        if (req.method === 'POST') {
-          const input = await requestBody(req);
-          return json(res, 201, catalog.register(input?.path, input?.name));
-        }
-      }
-      const scope = /^\/api\/workspaces\/([a-f0-9]{32})(?:\/(sessions|skills|files\/[a-z]+))?$/.exec(pathname);
-      if (scope) {
-        const [, id, resource] = scope;
-        const record = catalog.get(id);
-        if (!resource && req.method === 'PATCH')
-          return json(res, 200, catalog.rename(id, (await requestBody(req))?.name));
-        if (!resource && req.method === 'DELETE') {
-          return json(res, 200, await runtime.deleteWorkspace(id));
-        }
-        if (resource === 'sessions') {
-          if (req.method === 'GET') return json(res, 200, runtime.registry.list(id).map((item) => navigationSession(runtime, item.id)));
-          if (req.method === 'POST') return json(res, 201, runtime.createConversation({ workspaceId: id }));
-        } else if (resource && !configuring && req.method === 'GET') {
-          const sessionId = url.searchParams.get('sessionId');
-          if (sessionId && runtime.registry.get(sessionId)?.workspaceId !== id)
-            throw new Error('Conversation not found');
-          const workspace = { id, path: catalog.resolveRoot(record.path, id) };
-          const extension = runtime.plugins.ctx.harnessRoutes.dispatch(req, res, url, { path: '/workspace/' + resource, workspace });
-          if (extension) return await extension;
-        }
-      }
-      if (pathname === '/api/providers' && req.method === 'GET') return json(res, 200, providerSettings(runtime));
-      if (pathname === '/api/providers' && ['PUT', 'DELETE'].includes(req.method))
-        return json(res, 200, await configure(async () => saveProvider(runtime, await requestBody(req), req.method === 'DELETE')));
-      if (pathname === '/api/plugins/install' && req.method === 'POST')
-        return json(res, 201, await configure(async () => installPlugin(runtime, await requestBody(req, 2 * 1024 * 1024))));
-      const plugin = /^\/api\/plugins\/([a-z][a-z0-9-]{0,63})(?:\/(web))?$/.exec(pathname);
-      if (plugin && req.method === 'DELETE')
-        return json(res, 200, await configure(() => uninstallPlugin(runtime, plugin[1])));
-      if (plugin?.[2] === 'web' && req.method === 'GET') return json(res, 200, { source: frontendSource(runtime, plugin[1]), config: runtime.plugins.configuration(plugin[1]) });
-      if (!configuring) {
-        const extension = runtime.plugins.ctx.harnessRoutes.dispatch(req, res, url);
-        if (extension) return await extension;
-      }
-      if (pathname === '/api/status' && req.method === 'GET') return json(res, 200, { pid: process.pid });
+      if (pathname === '/api/status' && req.method === 'GET')
+        return json(res, 200, { pid: process.pid });
       if (pathname === '/api/shutdown' && req.method === 'POST' && options.shutdown) {
         res.once('finish', options.shutdown);
         return json(res, 202, { pid: process.pid });
       }
-      if (pathname === '/api/bootstrap' && req.method === 'GET')
-        return json(res, 200, { settings: runtime.settings, ...navigationSnapshot(runtime), models: runtime.pi.availableModels(), plugins: runtime.plugins.metadata(), isolation, providers: providerSettings(runtime) });
-      if (pathname === '/api/sessions' || pathname.startsWith('/api/sessions/'))
-        return await sessionRoutes(runtime, req, res, url, () => configuring);
-      if (pathname === '/api/settings' && req.method === 'PATCH')
-        return json(res, 200, await configure(async () => runtime.updateSettings(await requestBody(req))));
-      if (pathname === '/api/credentials' && ['POST', 'DELETE'].includes(req.method))
-        return json(res, 200, await configure(async () => {
-          const input = await requestBody(req);
-          if (typeof input?.provider !== 'string' || !/^[a-z0-9-]+$/.test(input.provider))
-            throw new Error('Invalid provider');
-          if (!runtime.pi.models.getProvider(input.provider)) throw new Error('Unknown provider');
-          if (req.method === 'DELETE') {
-            if (runtime.hasActiveWork) throw new Error('Stop active conversations before removing credentials');
-            await runtime.pi.models.logout(input.provider);
-          } else {
-            if (typeof input.key !== 'string' || !input.key.trim()) throw new Error('Invalid credential');
-            await saveProviderCredential(runtime, input.provider, input.key.trim());
-          }
-          return { ok: true, persisted: true, models: runtime.pi.availableModels(), status: runtime.pi.models.getProviderAuthStatus(input.provider) };
-        }));
-      if (pathname === '/api/models' && req.method === 'GET') {
-        await runtime.pi.models.getAvailable();
-        return json(res, 200, { models: runtime.pi.availableModels() });
-      }
+      const result = runtime.plugins.ctx.harnessRoutes.dispatch(req, res, url);
+      if (result) return await result;
       return json(res, 404, { error: 'Not found' });
     } catch (error) {
       if (res.headersSent) { res.end(); return; }
