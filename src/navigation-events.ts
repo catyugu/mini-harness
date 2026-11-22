@@ -1,6 +1,6 @@
 import type { ServerResponse } from 'node:http';
 import { eventStream } from './http.js';
-import type { MiniHarnessRuntime } from './agent.js';
+import type { SessionRegistry } from './registry.js';
 import type { Conversation } from './registry.js';
 import type { WorkspaceRecord } from './workspace-catalog.js';
 
@@ -10,19 +10,24 @@ export type NavigationEvent =
   | { type: 'session'; session: Conversation }
   | { type: 'delete'; id: string };
 
-export function navigationSession(runtime: MiniHarnessRuntime, id: string) {
+export interface NavigationHost {
+  registry: SessionRegistry;
+  plugins: { ctx: { harnessApprovals?: { has(sessionId: string): boolean } } };
+}
+
+export function navigationSession(runtime: NavigationHost, id: string) {
   const record = runtime.registry.get(id);
   return record && { ...record, waitingApproval: runtime.plugins.ctx.harnessApprovals?.has(id) ?? false };
 }
 
-export function navigationSnapshot(runtime: MiniHarnessRuntime) {
+export function navigationSnapshot(runtime: NavigationHost) {
   return {
     workspaces: runtime.registry.workspaces.list(),
     sessions: runtime.registry.list().map(({ id }) => navigationSession(runtime, id))
   };
 }
 
-export function streamNavigation(runtime: MiniHarnessRuntime, res: ServerResponse, signal: AbortSignal) {
+export function streamNavigation(runtime: NavigationHost, res: ServerResponse, signal: AbortSignal) {
   signal.throwIfAborted();
   const { send } = eventStream(res);
   const controller = new AbortController();

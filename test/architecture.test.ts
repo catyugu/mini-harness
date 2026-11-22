@@ -24,3 +24,10 @@ test('only the composition root imports built-in capabilities into core', () => 
       assert.doesNotMatch(dependency, /(?:^|\/)builtins\//, path + ' imports ' + dependency);
   }
 });
+
+test('only the HTTP composition root imports the concrete runtime', () => {
+  for (const path of readdirSync(source).filter((file) => file.endsWith('.ts') && !['agent.ts', 'server.ts'].includes(file))) {
+    for (const dependency of imports(path))
+      assert.doesNotMatch(dependency, /(?:^|\/)agent\.js$/, path + ' imports ' + dependency);
+  }
+});

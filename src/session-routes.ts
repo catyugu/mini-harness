@@ -1,10 +1,19 @@
-import { navigationSession } from './navigation-events.js';
+import { navigationSession, type NavigationHost } from './navigation-events.js';
+import type { PiSessions } from './pi-sessions.js';
+import type { Runs } from './runs.js';
+import type { SessionRegistry } from './registry.js';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { MiniHarnessRuntime } from './agent.js';
+type SessionRouteHost = NavigationHost & {
+  pi: Pick<PiSessions, 'open' | 'queue' | 'queueInput'>;
+  runs: Pick<Runs, 'watch' | 'compact' | 'cancel' | 'info' | 'startRun'>;
+  getConversation(id: string): Promise<unknown>;
+  delete(ids: string[]): Promise<string[]>;
+  export(ids: string[]): ReturnType<SessionRegistry['export']>;
+};
 import { eventStream, json, requestBody } from './http.js';
 import { isRunning } from './protocol.js';
 
-function streamRun(runtime: MiniHarnessRuntime, res: ServerResponse, id: string, runId: string, after: number) {
+function streamRun(runtime: SessionRouteHost, res: ServerResponse, id: string, runId: string, after: number) {
   const stream = eventStream(res);
   const detach = runtime.runs.watch(id, runId, after, (event) => {
     stream.send(event);
@@ -14,7 +23,7 @@ function streamRun(runtime: MiniHarnessRuntime, res: ServerResponse, id: string,
   stream.start();
 }
 
-export async function sessionRoutes(runtime: MiniHarnessRuntime, req: IncomingMessage, res: ServerResponse, url: URL,
+export async function sessionRoutes(runtime: SessionRouteHost, req: IncomingMessage, res: ServerResponse, url: URL,
   configuring: () => boolean) {
   const { pathname } = url;
   if (pathname === '/api/sessions' && req.method === 'GET') return json(res, 200, runtime.registry.list().map((item) => navigationSession(runtime, item.id)));

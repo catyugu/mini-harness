@@ -2,9 +2,15 @@ import { mkdirSync, renameSync, rmSync, lstatSync, readFileSync, writeFileSync }
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { writeJson } from './config.js';
-import type { MiniHarnessRuntime } from './agent.js';
+import type { PluginMetadata } from './plugin-api.js';
+
+type PluginFilesHost = {
+  paths: { plugins: string };
+  settings: { plugins: Record<string, boolean> };
+  plugins: { metadata(): PluginMetadata[] };
+};
 const idPattern = /^[a-z][a-z0-9-]{0,63}$/;
-export function installPlugin(runtime: MiniHarnessRuntime, input: any) {
+export function installPlugin(runtime: PluginFilesHost, input: any) {
   if (!input || !idPattern.test(input.id) || runtime.plugins.metadata().some(({ id }) => id === input.id)) throw new Error('Invalid or existing plugin ID');
   if (!Array.isArray(input.files) || input.files.length > 3 || !input.files.some((f) => f.name === 'plugin.js')) throw new Error('Provide plugin.js and optionally plugin.json and web.js');
   const seen = new Set(); let size = 0;
@@ -28,7 +34,7 @@ export function installPlugin(runtime: MiniHarnessRuntime, input: any) {
   try { return runtime.plugins.metadata(); }
   catch (error) { rmSync(join(runtime.paths.plugins, input.id), { recursive: true, force: true }); throw error; }
 }
-export async function uninstallPlugin(runtime: MiniHarnessRuntime, id: string) {
+export async function uninstallPlugin(runtime: PluginFilesHost, id: string) {
   const plugin = runtime.plugins.metadata().find((item) => item.id === id && item.trustedCode);
   if (!plugin || !idPattern.test(id)) throw new Error('Unknown local plugin');
   if (runtime.settings.plugins[id]) throw new Error('Disable and save this plugin before uninstalling');
@@ -37,7 +43,7 @@ export async function uninstallPlugin(runtime: MiniHarnessRuntime, id: string) {
   rmSync(folder, { recursive: true });
   return runtime.plugins.metadata();
 }
-export function frontendSource(runtime: MiniHarnessRuntime, id: string) {
+export function frontendSource(runtime: PluginFilesHost, id: string) {
   if (!idPattern.test(id) || !runtime.settings.plugins[id] || !runtime.plugins.metadata().some((p) => p.id === id && p.web)) throw new Error('Plugin UI is unavailable');
   const folder = join(runtime.paths.plugins, id), file = join(folder, 'web.js');
   if (lstatSync(folder).isSymbolicLink() || !lstatSync(file).isFile() || lstatSync(file).isSymbolicLink() || lstatSync(file).size > 1024 * 1024)

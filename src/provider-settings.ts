@@ -1,7 +1,16 @@
 import { join } from 'node:path';
-import { readJson, writeJson } from './config.js';
-import type { MiniHarnessRuntime } from './agent.js';
-export function providerSettings(runtime: MiniHarnessRuntime) {
+import { readJson, writeJson, type Settings, type SettingsPatch } from './config.js';
+import type { PiSessions } from './pi-sessions.js';
+
+type ProviderHost = {
+  paths: { home: string };
+  settings: Pick<Settings, 'model'>;
+  pi: Pick<PiSessions, 'models' | 'invalidateProviderSessions'>;
+  delegation: { checkProvider(id: string, removing?: boolean): void };
+  hasActiveWork: boolean;
+  updateSettings(patch: SettingsPatch): Promise<Settings>;
+};
+export function providerSettings(runtime: ProviderHost) {
   const config = readJson<any>(join(runtime.paths.home, 'models.json'), { providers: {} });
   return runtime.pi.models.getProviders().map((provider) => {
     const auth = runtime.pi.models.getProviderAuthStatus(provider.id);
@@ -15,7 +24,7 @@ export function providerSettings(runtime: MiniHarnessRuntime) {
     };
   });
 }
-export async function saveProvider(runtime: MiniHarnessRuntime, input: any, remove = false) {
+export async function saveProvider(runtime: ProviderHost, input: any, remove = false) {
   if (runtime.hasActiveWork) throw new Error('Stop active conversations before changing providers');
   if (!input || typeof input.id !== 'string' || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(input.id)) throw new Error('Invalid provider ID');
   const path = join(runtime.paths.home, 'models.json');
@@ -74,7 +83,7 @@ export async function saveProvider(runtime: MiniHarnessRuntime, input: any, remo
   return providerSettings(runtime);
 }
 
-export async function saveProviderCredential(runtime: MiniHarnessRuntime, provider: string, key: string) {
+export async function saveProviderCredential(runtime: ProviderHost, provider: string, key: string) {
   await runtime.pi.models.login(provider, 'api_key', {
     prompt: async (prompt) => {
       if (prompt.type !== 'secret') throw new Error('This provider requires additional credential setup through Pi');
