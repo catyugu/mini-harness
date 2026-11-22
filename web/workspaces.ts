@@ -104,8 +104,13 @@ function workspacePicker(api: FrontendApi, records: () => WorkspaceRecord[]) {
   rename.type = 'submit';
   const earlier = button('Move up');
   const later = button('Move down');
+  const relocate = button('Change directory');
+  relocate.onclick = () => {
+    const path = prompt('New absolute workspace directory', editing.path);
+    if (path && path !== editing.path) void change(() => api.request(workspaceRoute(editing.id), payload('PATCH', { path })));
+  };
   const remove = button('Remove workspace', 'danger');
-  actions.append(earlier, later, remove, rename);
+  actions.append(earlier, later, relocate, remove, rename);
   editForm.append(location, field('Workspace name', name), actions, editStatus);
   const editor = dialog('Manage workspace', editForm);
   api.mount('dialogs', editor);
@@ -129,8 +134,8 @@ function workspacePicker(api: FrontendApi, records: () => WorkspaceRecord[]) {
   earlier.onclick = () => move(-1);
   later.onclick = () => move(1);
   remove.onclick = () => {
-    if (confirm('Remove “' + editing.name + '” from the workspace list? Its directory and conversations are kept.'))
-      void change(() => api.request(workspaceRoute(editing.id), { method: 'DELETE' }));
+    if (confirm('Remove “' + editing.name + '” from the workspace list? All its conversations and child conversations will be permanently deleted. Project files on disk are kept.'))
+      void change(() => api.request(workspaceRoute(editing.id), payload('DELETE', { deleteSessions: true })));
   };
   editForm.onsubmit = (event) => {
     event.preventDefault();

@@ -8,10 +8,13 @@ export interface RightTabType {
   create(address: TabAddress, signal: AbortSignal): HTMLElement;
   launcher?: string;
   default?: boolean;
+  canOpen?(address: TabAddress): boolean;
+  keepMounted?: boolean;
+  closed?(address: TabAddress): void;
 }
 
-type Tab = { key: string; title: string; path?: string; node: HTMLElement; type: string; controller: AbortController };
-type ScopeTabs = { scope?: TabScope; open: boolean; active?: string; tabs: Map<string, Tab> };
+type Tab = { address?: TabAddress; key: string; title: string; path?: string; node: HTMLElement; type: string; controller: AbortController };
+type ScopeTabs = { saved?: { entries: TabAddress[]; active?: string }; scope?: TabScope; open: boolean; active?: string; tabs: Map<string, Tab> };
 const scopeKey = (scope?: TabScope) => JSON.stringify([scope?.workspaceId, scope?.sessionId]);
 
 export function createRightTabs(view: {
@@ -24,10 +27,39 @@ export function createRightTabs(view: {
 
   function state(scope?: TabScope) {
     const key = scopeKey(scope);
-    if (!states.has(key)) states.set(key, { scope, open: false, tabs: new Map() });
+    if (!states.has(key)) {
+      let saved: { open?: boolean; entries: TabAddress[]; active?: string };
+      try { saved = JSON.parse(sessionStorage.getItem('mini-harness-tabs:' + key)); } catch { /* Discard invalid browser state. */ }
+      if (saved && (!Array.isArray(saved.entries) || saved.entries.some((item) => typeof item?.type !== 'string' || item.workspaceId !== scope?.workspaceId || item.sessionId !== scope?.sessionId))) saved = undefined;
+      states.set(key, { scope, open: saved?.open ?? false, tabs: new Map(), saved });
+    }
     return states.get(key);
   }
 
+  function persist(target = current) {
+    if (!target.scope) return;
+    const entries = [...target.tabs.entries()].filter(([, tab]) => tab.address);
+    sessionStorage.setItem('mini-harness-tabs:' + scopeKey(target.scope), JSON.stringify({
+      open: target.open, entries: [...entries.map(([, tab]) => tab.address), ...(target.saved?.entries ?? [])],
+      active: target.saved?.active ?? entries.find(([, tab]) => tab.key === target.active)?.[0]
+    }));
+  }
+  function restore(target: ScopeTabs) {
+    const saved = target.saved;
+    if (!saved) return;
+    const pending: TabAddress[] = [];
+    for (const address of saved.entries) {
+      const definition = types.get(address.type);
+      if (!definition) { pending.push(address); continue; }
+      const identity = JSON.stringify([address.type, address.path ?? '']);
+      const tab = add(target, identity, address.type, definition.title(address), (signal) => definition.create(address, signal), false, address.path);
+      tab.address = address;
+      if (identity === saved.active) target.active = tab.key;
+    }
+    const selected = target.tabs.get(saved.active);
+    if (selected) target.active = selected.key;
+    target.saved = pending.length ? { ...saved, entries: pending } : undefined;
+  }
   function render(focus = false) {
     const active = [...current.tabs.values()].find(({ key }) => key === current.active);
     const entries = [...current.tabs.values()];
@@ -59,13 +91,16 @@ export function createRightTabs(view: {
       control.onclick = () => open(id);
       return [control];
     }));
+    persist();
     if (focus) (active ? document.getElementById(active.key + '-select') : view.root.querySelector<HTMLElement>('#inspectorClose'))?.focus();
   }
 
   function selectScope(scope?: TabScope) {
     if (scopeKey(scope) === scopeKey(current.scope)) return;
     current.open = layout.panelOpen();
+    persist();
     current = state(scope);
+    restore(current);
     render();
     layout.setPanel(current.open);
   }
@@ -96,9 +131,14 @@ export function createRightTabs(view: {
     const definition = types.get(type);
     if (!definition || !scope) return;
     const address = { ...scope, type, path };
+    if (definition.canOpen && !definition.canOpen(address)) return;
     const target = state(scope);
     const identity = JSON.stringify([type, path ?? '']);
-    add(target, identity, type, definition.title(address), (signal) => definition.create(address, signal), target === current, path);
+    const tab = add(target, identity, type, definition.title(address), (signal) => definition.create(address, signal), false, path);
+    tab.address = address;
+    target.open = true;
+    if (target === current) { layout.setPanel(true, true); render(true); }
+    else persist(target);
   }
 
   function remove(target: ScopeTabs, tab: Tab) {
@@ -107,6 +147,7 @@ export function createRightTabs(view: {
     if (index < 0) return;
     target.tabs.delete(entries[index][0]);
     tab.controller.abort();
+    if (tab.address) types.get(tab.type)?.closed?.(tab.address);
     tab.node.remove();
     if (target.active === tab.key) target.active = (entries[index + 1] ?? entries[index - 1])?.[1].key;
   }
@@ -118,11 +159,15 @@ export function createRightTabs(view: {
       if (!scope || (workspaces.has(scope.workspaceId) && (!scope.sessionId || sessions.has(scope.sessionId)))) continue;
       for (const tab of target.tabs.values()) remove(target, tab);
       states.delete(key);
+      sessionStorage.removeItem('mini-harness-tabs:' + key);
       changed = true;
     }
     if (changed) render();
   }
 
+  view.root.addEventListener('panel-change', (event: CustomEvent<boolean>) => {
+    current.open = event.detail; persist();
+  }, { signal });
   view.toggle.onclick = () => {
     if (!layout.panelOpen() && !current.tabs.size && current.scope) {
       const entry = [...types].find(([, type]) => type.default);
@@ -151,12 +196,13 @@ export function createRightTabs(view: {
     register(type: string, definition: RightTabType) {
       if (types.has(type)) throw new Error('Duplicate right panel tab type: ' + type);
       types.set(type, definition);
+      for (const target of states.values()) restore(target);
       render();
       return () => {
-        types.delete(type);
         for (const target of states.values()) for (const tab of target.tabs.values()) {
           if (tab.type === type) remove(target, tab);
         }
+        types.delete(type);
         render();
       };
     },

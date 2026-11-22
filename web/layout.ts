@@ -72,6 +72,7 @@ export function createLayout(view: LayoutElements, signal: AbortSignal) {
     if (!open && panel.contains(document.activeElement)) focus = true;
     panelOpen = open;
     render();
+    panel.dispatchEvent(new CustomEvent('panel-change', { detail: open }));
     if (open && (focus || narrow.matches)) panelClose.focus();
     if (!open && focus) (panelTrigger?.isConnected && !panelTrigger.closest('[inert]') ? panelTrigger : panelButton).focus();
   }

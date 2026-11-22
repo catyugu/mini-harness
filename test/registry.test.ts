@@ -89,6 +89,23 @@ test('legacy workspace and session indexes migrate without moving Pi history or 
     const restored = new SessionRegistry(first);
     assert.ok(!restored.workspaces.list().some(({ id }) => id === migrated.workspaceId));
     assert.equal(restored.get('legacy').file, file);
-    assert.equal(restored.workspaces.register(second.cwd).id, migrated.workspaceId);
+    assert.notEqual(restored.workspaces.register(second.cwd).id, migrated.workspaceId);
   } finally { rmSync(temp, { recursive: true, force: true }); }
+});
+
+test('ambiguous workspace records are rejected without rewriting either index', () => {
+  const root = mkdtempSync(join(tmpdir(), 'mini-harness-ambiguous-'));
+  try {
+    const paths = getPaths(root, { MINI_HARNESS_HOME: join(root, 'home') });
+    const registry = new SessionRegistry(paths);
+    registry.create();
+    const file = join(paths.home, 'workspaces.json');
+    const records = registry.workspaces.list();
+    const invalid = JSON.stringify({ records: [...records, { ...records[0], id: 'f'.repeat(32) }] });
+    writeFileSync(file, invalid);
+    const sessions = readFileSync(paths.registry, 'utf8');
+    assert.throws(() => new SessionRegistry(paths), /ambiguous/);
+    assert.equal(readFileSync(file, 'utf8'), invalid);
+    assert.equal(readFileSync(paths.registry, 'utf8'), sessions);
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });

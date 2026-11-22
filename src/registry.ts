@@ -28,6 +28,7 @@ export class SessionRegistry {
   private state: RegistryState;
 
   readonly events = new EventTarget();
+  readonly deletingWorkspaces = new Set<string>();
 
   constructor(private readonly paths: ReturnType<typeof getPaths>, readonly workspaces = new WorkspaceCatalog(paths)) {
     this.state = readJson<RegistryState>(paths.registry, { sessions: [] });
@@ -41,7 +42,7 @@ export class SessionRegistry {
         if (item.workspaceId) return item;
         let path = resolve(item.cwd);
         try { path = canonicalWorkspacePath(path); } catch { /* Keep the session addressable for export or deletion. */ }
-        return { ...item, workspaceId: workspaceId(path) };
+        return { ...item, workspaceId: workspaces.list().find((record) => record.path === path)?.id ?? workspaceId(path) };
       }) });
     }
     if (this.state.sessions.some(({ run }) => isRunning(run))) this.commit({ ...this.state,
@@ -78,7 +79,9 @@ export class SessionRegistry {
     if (parent && workspaceId !== undefined && workspaceId !== parent.workspaceId)
       throw new Error('Conversation workspace does not match its parent');
     const workspace = parent ? undefined : this.workspaces.get(workspaceId ?? this.workspaces.defaultId);
-    const cwd = parent ? parent.cwd : this.workspaces.resolveRoot(workspace.path, workspace.id);
+    const selectedWorkspace = parent ? this.workspaces.get(parent.workspaceId) : workspace;
+    if (this.deletingWorkspaces.has(selectedWorkspace.id)) throw new Error('Workspace is being deleted');
+    const cwd = this.workspaces.resolveRoot(selectedWorkspace.path, selectedWorkspace.id);
     const now = new Date().toISOString();
     const session: Conversation = { id: randomUUID(), title: String(title).slice(0, 140), cwd,
       workspaceId: parent ? parent.workspaceId : workspace.id, parentId,

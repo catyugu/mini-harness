@@ -147,14 +147,15 @@ test('workspace registration, session navigation and scoped tools leave an activ
       assert.equal((await request('/sessions/' + session.id + '/runs')).body.run.state, 'running');
       assert.equal((await request(second, 'PATCH', { name: 'Second project' })).body.name, 'Second project');
       assert.deepEqual((await request('/workspaces', 'PUT', { ids: [workspace.id, session.workspaceId] })).body.map(({ id }) => id), [workspace.id, session.workspaceId]);
-      assert.equal((await request(first, 'DELETE')).status, 200);
-      assert.equal((await request(first + '/files/tree')).status, 404);
+      assert.equal((await request(first, 'DELETE')).status, 400);
+      assert.equal((await request(first + '/files/tree')).status, 200);
       assert.ok(existsSync(paths.cwd));
       assert.equal((await request('/sessions/' + session.id + '/runs')).body.run.state, 'running');
       release();
       assert.equal((await finish(session.id)).body.run.state, 'completed');
-      assert.equal((await request('/workspaces', 'POST', { path: cwd })).body.id, session.workspaceId);
-      assert.equal((await request(first + '/sessions')).body[0].id, session.id);
+      assert.equal((await request(first, 'DELETE', { deleteSessions: true })).status, 200);
+      assert.equal((await request('/sessions/' + session.id)).status, 404);
+      assert.notEqual((await request('/workspaces', 'POST', { path: cwd })).body.id, session.workspaceId);
     } finally { await events.cancel(); }
   } finally { release(); }
 });
@@ -261,4 +262,26 @@ test('successful file writes retain arguments and this-turn paths after reopenin
   const history = (await request('/sessions/' + session.id)).body;
   assert.deepEqual(history.run.changedFiles, ['result.txt']);
   assert.deepEqual(history.messages.find((m) => m.toolName === 'write').arguments, { path: 'result.txt', content: 'Result for inspection\n' });
+});
+
+test('workspace relocation keeps identity and Pi history; confirmed removal cascades without touching project files', async (t) => {
+  const { app, paths, root, request } = await fixture(t);
+  const session = app.runtime.registry.create();
+  await app.runtime.send(session.id, 'Before moving');
+  const child = app.runtime.registry.create({ parentId: session.id });
+  const before = app.runtime.export([session.id])[0].piSession;
+  const next = join(root, 'moved');
+  mkdirSync(next);
+  writeFileSync(join(next, 'code.txt'), 'project code');
+  const route = '/workspaces/' + session.workspaceId;
+  assert.equal((await request(route, 'PATCH', { path: next })).body.id, session.workspaceId);
+  assert.equal(app.runtime.workspacePath(session.id), realpathSync.native(next));
+  assert.equal(app.runtime.export([session.id])[0].piSession, before);
+  assert.ok((await app.runtime.getConversation(session.id)).messages.some(({ role }) => role === 'assistant'));
+  assert.equal((await request(route, 'DELETE')).status, 400);
+  assert.equal((await request(route, 'DELETE', { deleteSessions: true })).status, 200);
+  assert.equal(app.runtime.registry.get(child.id), undefined);
+  assert.equal(app.runtime.registry.get(session.id), undefined);
+  assert.equal(readFileSync(join(next, 'code.txt'), 'utf8'), 'project code');
+  assert.ok(existsSync(paths.cwd));
 });

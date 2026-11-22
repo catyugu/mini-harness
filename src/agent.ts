@@ -70,7 +70,8 @@ export class MiniHarnessRuntime {
   workspacePath(id: string) {
     const item = this.registry.get(id);
     if (!item) throw new Error('Conversation not found');
-    return this.registry.workspaces.resolveRoot(item.cwd, item.workspaceId);
+    const workspace = this.registry.workspaces.get(item.workspaceId);
+    return this.registry.workspaces.resolveRoot(workspace.path, workspace.id);
   }
 
   navigationSession(id: string) {
@@ -468,6 +469,26 @@ export class MiniHarnessRuntime {
       }
       return this.registry.delete(ids);
     } finally { for (const id of all) this.deleting.delete(id); }
+  }
+
+  async removeWorkspace(id: string, deleteSessions: boolean) {
+    this.registry.workspaces.get(id);
+    const sessions = this.registry.list(id);
+    if (sessions.length && !deleteSessions) throw new Error('Confirm deletion of this workspace and all its conversations');
+    this.registry.deletingWorkspaces.add(id);
+    try {
+      await this.delete(sessions.filter(({ parentId }) => !parentId).map(({ id }) => id));
+      this.registry.workspaces.remove(id);
+    } finally { this.registry.deletingWorkspaces.delete(id); }
+  }
+
+  relocateWorkspace(id: string, path: string) {
+    const sessions = this.registry.list(id);
+    if (sessions.some(({ id }) => this.busy.has(id) || this.openingSessions.has(id) || this.compactions.has(id)))
+      throw new Error('Stop workspace conversations before changing the directory');
+    const record = this.registry.workspaces.relocate(id, path);
+    for (const { id } of sessions) { this.openSessions.get(id)?.dispose(); this.openSessions.delete(id); }
+    return record;
   }
 
   async updateSettings(patch: SettingsPatch) {

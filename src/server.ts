@@ -23,9 +23,9 @@ const assets = new Map([
 
 // Browser modules are built under dist/web. Local plugin source stays behind the authenticated API.
 for (const entry of readdirSync(WEB_DIR, { recursive: true, withFileTypes: true })) {
-  if (entry.isFile() && entry.name.endsWith('.js')) {
+  if (entry.isFile() && /\.(?:js|css)$/.test(entry.name)) {
     const path = relative(WEB_DIR, join(entry.parentPath, entry.name)).split(sep).join('/');
-    assets.set(path, 'text/javascript');
+    assets.set(path, entry.name.endsWith('.css') ? 'text/css' : 'text/javascript');
   }
 }
 
@@ -82,10 +82,13 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
       if (scope) {
         const [, id, resource] = scope;
         const record = catalog.get(id);
-        if (!resource && req.method === 'PATCH')
-          return json(res, 200, catalog.rename(id, (await requestBody(req))?.name));
+        if (!resource && req.method === 'PATCH') {
+          const input = await requestBody(req);
+          if (input.path !== undefined) return json(res, 200, runtime.relocateWorkspace(id, input.path));
+          return json(res, 200, catalog.rename(id, input?.name));
+        }
         if (!resource && req.method === 'DELETE') {
-          catalog.remove(id);
+          await runtime.removeWorkspace(id, (await requestBody(req))?.deleteSessions === true);
           return json(res, 200, { removed: id });
         }
         if (resource === 'sessions') {
