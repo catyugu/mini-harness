@@ -1,14 +1,14 @@
 import { randomUUID } from 'node:crypto';
-export interface Approval { id: string; sessionId: string; command: string; createdAt: string }
+export interface Approval { id: string; sessionId: string; command: string; toolCallId?: string; createdAt: string }
 export interface ApprovalEvent extends Approval { state: 'pending' | 'allowed' | 'denied' | 'expired' | 'cancelled' }
 export class Approvals {
   private pending = new Map<string, { info: Approval; settle: (state: ApprovalEvent['state']) => void }>();
   constructor(private changed: (event: ApprovalEvent) => void = () => {}) {}
   list() { return [...this.pending.values()].map(({ info }) => ({ ...info })); }
-  request(sessionId: string, command: string, signal?: AbortSignal): Promise<void> {
+  request(sessionId: string, command: string, signal?: AbortSignal, toolCallId?: string): Promise<void> {
     signal?.throwIfAborted();
     return new Promise<void>((resolve, reject) => {
-      const info = { id: randomUUID(), sessionId, command, createdAt: new Date().toISOString() };
+      const info = { id: randomUUID(), sessionId, command, toolCallId, createdAt: new Date().toISOString() };
       let finished = false;
       const finish = (state: ApprovalEvent['state']) => {
         if (finished) return;

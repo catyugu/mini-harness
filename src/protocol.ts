@@ -51,7 +51,7 @@ export type StreamEvent =
   | { type: 'delta' | 'complete'; text: string }
   | { type: 'tool'; id: string; name: string; state: 'running' | 'finished' | 'error'; arguments?: unknown; content?: MessageContent; sessionId?: string; elapsedMs?: number; details?: unknown }
   | { type: 'todos'; items: TodoItem[] }
-  | { type: 'approval'; approval: { id: string; sessionId: string; command: string; state: 'pending' | 'allowed' | 'denied' | 'expired' | 'cancelled'; createdAt: string } }
+  | { type: 'approval'; approval: { id: string; sessionId: string; command: string; toolCallId?: string; state: 'pending' | 'allowed' | 'denied' | 'expired' | 'cancelled'; createdAt: string } }
   | { type: 'error'; error: string }
   | { type: 'run'; run: RunInfo }
   | { type: 'snapshot'; messages: ViewMessage[]; partial?: string; tools?: Extract<StreamEvent, { type: 'tool' }>[]; run: RunInfo };

@@ -1,5 +1,5 @@
 import { containsPath } from '../workspace.js';
-import { loadHarnessSkills, skillSources } from '../skill-sources.js';
+import { harnessSkillOptions, loadHarnessSkills, skillSources } from '../skill-sources.js';
 import type { Context } from 'cordis';
 import type { BuiltinPlugin } from '../plugins.js';
 
@@ -8,7 +8,7 @@ export const skills: BuiltinPlugin = {
   icon: 'skills', browser: '/builtins/skills.js', inject: ['harnessState', 'harnessRoutes'],
   setup(ctx: Context) {
     const paths = ctx.harnessState.paths;
-    ctx.provide('harnessSkills', { paths: (cwd) => skillSources(paths, cwd).map(({ path }) => path) });
+    ctx.provide('harnessSkills', { options: (cwd) => harnessSkillOptions(paths, cwd) });
     ctx.effect(() => ctx.harnessRoutes.register('GET', '/workspace/skills', async ({ workspace }) => {
       if (!workspace) throw new Error('Workspace not found');
       const cwd = workspace.path;

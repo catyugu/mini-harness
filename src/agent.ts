@@ -9,7 +9,6 @@ import {
 } from '@earendil-works/pi-coding-agent';
 import { getSupportedThinkingLevels } from '@earendil-works/pi-ai/compat';
 import { requirePermission, permissionRank, type Permission } from './execution-policy.js';
-import { harnessSkillOptions } from './skill-sources.js';
 import { RunEvents } from './run-events.js';
 import { PluginHost } from './plugins.js';
 import { SessionRegistry, type ModelChoice } from './registry.js';
@@ -206,7 +205,7 @@ export class MiniHarnessRuntime {
       cwd,
       agentDir: this.paths.agent,
       settingsManager,
-      ...(this.plugins.ctx.harnessSkills ? harnessSkillOptions(this.paths, cwd) : {}),
+      ...(this.plugins.ctx.harnessSkills?.options(cwd) ?? {}),
       noSkills: !this.plugins.ctx.harnessSkills,
       noExtensions: true
     });

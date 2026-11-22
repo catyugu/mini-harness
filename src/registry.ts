@@ -49,7 +49,7 @@ export class SessionRegistry {
     workspaces.restoreReferences(this.state.sessions);
     if (this.state.sessions.some(({ run }) => isRunning(run))) this.commit({ ...this.state,
       sessions: this.state.sessions.map((item) => isRunning(item.run) ? { ...item,
-        run: { ...item.run, state: 'interrupted', error: 'Server stopped before the run finished', finishedAt: new Date().toISOString() }
+        run: { ...item.run, state: 'interrupted', error: 'Server stopped before the run finished', finishedAt: undefined }
       } : item)
     });
   }

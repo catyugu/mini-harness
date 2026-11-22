@@ -70,8 +70,8 @@ export class FrontendHost {
   private readonly fibers = new Map<string, Fiber>();
   readonly registry = new ContributionRegistry();
   private readonly mountedNodes = new Map<string, HTMLElement[]>();
-  private readonly pages = new Map<unknown, () => void>();
-  private readonly tabs = new Map<unknown, () => void>();
+  private readonly pages = new Map<string, { value: unknown; dispose(): void }>();
+  private readonly tabs = new Map<string, { value: unknown; dispose(): void }>();
   private readonly lifetime = new AbortController();
   private nextId = 0;
 
@@ -175,10 +175,10 @@ export class FrontendHost {
       this.mountedNodes.set(region, nodes);
     } else if (region === 'settings.section' || region === 'sidebar.right.pane.tab') {
       const installed = region === 'settings.section' ? this.pages : this.tabs;
-      const values = new Set(entries.map(({ value }) => value));
-      for (const [value, dispose] of installed) if (!values.has(value)) { dispose(); installed.delete(value); }
-      for (const { key, value } of entries) if (!installed.has(value)) {
-        installed.set(value, region === 'settings.section' ? this.addSettingsPage(value.title, value.node) : this.ui.tabs().register(key, value));
+      const values = new Map(entries.map(({ id, key, value }) => [key ?? id, value]));
+      for (const [identity, current] of installed) if (values.get(identity) !== current.value) { current.dispose(); installed.delete(identity); }
+      for (const { id, key, value } of entries) if (!installed.has(key ?? id)) {
+        installed.set(key ?? id, { value, dispose: region === 'settings.section' ? this.addSettingsPage(value.title, value.node) : this.ui.tabs().register(key, value) });
       }
     }
   }

@@ -92,6 +92,7 @@ export function conversationView(api: FrontendApi, options: ConversationServices
   let runSummary: RunInfo;
   function renderElapsed() {
     if (!runSummary) return;
+    if (runSummary.state === 'interrupted') { elapsed.textContent = ''; return; }
     const end = runSummary.finishedAt ? Date.parse(runSummary.finishedAt) : Date.now();
     const seconds = Math.max(0, Math.floor((end - Date.parse(runSummary.startedAt)) / 1000));
     elapsed.textContent = seconds < 60 ? seconds + ' s' : Math.floor(seconds / 60) + ' min ' + seconds % 60 + ' s';

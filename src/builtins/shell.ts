@@ -22,7 +22,7 @@ export const shell: BuiltinPlugin = {
       parameters: Type.Object({ command: Type.String({ minLength: 1, maxLength: 16000 }) }),
       execute: async (_id, args, signal) => {
         ctx.harnessWorkspace.approval(sessionId, true);
-        try { await approvals.request(sessionId, args.command, signal); }
+        try { await approvals.request(sessionId, args.command, signal, _id); }
         finally { ctx.harnessWorkspace.approval(sessionId, false); }
         const cwd = ctx.harnessWorkspace.resolve(sessionId);
         const permission = ctx.harnessExecutionPolicy.get(sessionId);

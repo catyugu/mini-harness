@@ -84,6 +84,7 @@ test('a crash leaves indexed runs interrupted while retaining the conversation t
   registry.update(child.id, { run: { id: 'fixture-run', sessionId: child.id, state: 'running', startedAt: new Date().toISOString(), sequence: 1 } });
   const restored = new SessionRegistry(paths);
   assert.equal(restored.get(child.id).run.state, 'interrupted');
+  assert.equal(restored.get(child.id).run.finishedAt, undefined, 'A restart cannot establish the actual execution end time');
   assert.deepEqual(restored.descendants([parent.id]), [parent.id, child.id]);
   assert.equal(existsSync(paths.registry), true);
 });

@@ -69,7 +69,7 @@ declare module 'cordis' {
     harnessChildPolicy: { get(): Settings['subagents'] };
     harnessRoutes: RouteRegistry;
     harnessDelegation: RuntimeServices['delegation'];
-    harnessSkills: { paths(cwd: string): string[] };
+    harnessSkills: { options(cwd: string): ReturnType<typeof import('./skill-sources.js').harnessSkillOptions> };
     harnessWorkspace: RuntimeServices['workspaces'];
     harnessExecutionPolicy: { get(id: string): Permission };
     harnessTodos: RuntimeServices['todos'];
