@@ -1,6 +1,6 @@
 import type { Settings } from '../../src/config.js';
 import type { Conversation } from '../../src/registry.js';
-import type { NavigationEvent } from '../../src/navigation-events.js';
+import type { NavigationEvent } from '../../src/transport/navigation-events.js';
 import { data } from '../api.js';
 import type { Bootstrap } from '../types.js';
 

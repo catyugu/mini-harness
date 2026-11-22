@@ -6,13 +6,13 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { getPaths } from './config.js';
-import { json, requestBody } from './http.js';
+import { json, requestBody } from './transport/http.js';
 import { providerSettings, saveProvider, saveProviderCredential } from './provider-settings.js';
 import { installPlugin, uninstallPlugin, frontendSource } from './plugin-files.js';
 import { supportsIsolation } from './sandbox.js';
 import { MiniHarnessRuntime } from './kernel/runtime.js';
-import { sessionRoutes } from './session-routes.js';
-import { navigationSession, navigationSnapshot, streamNavigation } from './navigation-events.js';
+import { sessionRoutes } from './transport/session-routes.js';
+import { navigationSession, navigationSnapshot, streamNavigation } from './transport/navigation-events.js';
 
 const WEB_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'web');
 const assets = new Map([

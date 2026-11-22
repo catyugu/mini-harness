@@ -2,7 +2,7 @@ import type { ToolDefinition } from '@earendil-works/pi-coding-agent';
 import { relative, resolve, sep } from 'node:path';
 import type { Context } from 'cordis';
 import { Inspection } from '../inspection.js';
-import type { RouteRequest } from '../http.js';
+import type { RouteRequest } from '../transport/http.js';
 import type { BuiltinPlugin } from '../kernel/plugin-api.js';
 
 export const files: BuiltinPlugin = {

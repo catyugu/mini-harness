@@ -5,7 +5,7 @@ import { SessionRegistry, type ModelChoice } from '../registry.js';
 import { mergeSettings, readSettings, writeJson, type Paths, type SettingsPatch } from '../config.js';
 import { builtins, Delegation } from '../builtins/index.js';
 import { ToolRegistry } from './plugin-api.js';
-import { RouteRegistry } from '../http.js';
+import { RouteRegistry } from '../transport/http.js';
 import { PiSessions } from '../adapters/pi/sessions.js';
 import { Runs } from '../services/runs.js';
 

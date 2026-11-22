@@ -1,7 +1,7 @@
 import type { ToolDefinition } from '@earendil-works/pi-coding-agent';
 import type { Context } from 'cordis';
 import type { Paths, Settings } from '../config.js';
-import type { RouteHandler, RouteRegistry } from '../http.js';
+import type { RouteHandler, RouteRegistry } from '../transport/http.js';
 import type { SessionRegistry } from '../registry.js';
 
 export interface PluginMetadata {

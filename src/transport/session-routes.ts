@@ -1,10 +1,10 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { navigationSession, type NavigationHost } from './navigation-events.js';
 import { eventStream, json, requestBody } from './http.js';
-import { isRunning } from './protocol.js';
-import type { PiSessions } from './adapters/pi/sessions.js';
-import type { Runs } from './services/runs.js';
-import type { SessionRegistry } from './registry.js';
+import { isRunning } from '../protocol.js';
+import type { PiSessions } from '../adapters/pi/sessions.js';
+import type { Runs } from '../services/runs.js';
+import type { SessionRegistry } from '../registry.js';
 
 type SessionRouteHost = NavigationHost & {
   pi: Pick<PiSessions, 'open' | 'queue' | 'queueInput'>;
