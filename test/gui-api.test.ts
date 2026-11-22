@@ -331,3 +331,54 @@ test('plugin file writes wait for an in-flight plugin configuration', async (t) 
   assert.equal((await request('/plugins/slow-plugin', 'DELETE')).status, 200);
   assert.equal(existsSync(folder), false);
 });
+
+
+test('edit-resend branches the Pi session instead of appending and enforces the active leaf', async (t) => {
+  const { request, finish, app } = await fixture(t, ({ messages }) => 'Reply to ' + messages.filter((item) => item.role === 'user').at(-1)?.content);
+  const session = (await request('/sessions', 'POST', {})).body;
+  const send = async (message: string) => {
+    const started = await request('/sessions/' + session.id + '/runs', 'POST', { message });
+    assert.equal(started.status, 202);
+    const done = await finish(session.id);
+    assert.equal(done.body.run.state, 'completed');
+  };
+  await send('Original first');
+  await send('Original second');
+  const before = (await request('/sessions/' + session.id)).body;
+  const first = before.messages.find((message) => message.role === 'user' && message.content === 'Original first');
+  assert.ok(first?.id, 'Pi entry identity must be present on persisted user messages');
+  assert.ok(before.leafId, 'API must expose current branch leaf');
+  const revision = await request('/extensions/edit-resend/revise', 'POST', {
+    sessionId: session.id, sourceEntryId: first.id, expectedLeafId: before.leafId, message: 'Revised first'
+  });
+  assert.equal(revision.status, 200, JSON.stringify(revision.body));
+  const finished = await finish(session.id);
+  assert.equal(finished.body.run.state, 'completed');
+  const after = (await request('/sessions/' + session.id)).body;
+  assert.ok(after.messages.some((message) => message.role === 'user' && message.content === 'Revised first'));
+  assert.equal(after.messages.some((message) => message.role === 'user' && message.content === 'Original first'), false);
+  assert.equal(after.messages.some((message) => message.role === 'user' && message.content === 'Original second'), false);
+  assert.notEqual(after.leafId, before.leafId);
+  const exportFile = app.runtime.export([session.id])[0].piSession;
+  for (const message of ['Original first', 'Original second', 'Revised first']) assert.ok(exportFile.includes(message));
+  assert.equal((await request('/extensions/edit-resend/revise', 'POST', {
+    sessionId: session.id, sourceEntryId: first.id, expectedLeafId: before.leafId, message: 'Stale overwrite'
+  })).status, 409);
+  assert.equal((await request('/settings', 'PATCH', { plugins: { 'edit-resend': false } })).status, 200);
+  assert.equal((await request('/extensions/edit-resend/revise', 'POST', {
+    sessionId: session.id, sourceEntryId: first.id, expectedLeafId: after.leafId, message: 'Disabled'
+  })).status, 404);
+});
+
+test('web-only plugins install and unload without a dummy backend entry', async (t) => {
+  const { request } = await fixture(t);
+  assert.equal((await request('/plugins/install', 'POST', {
+    id: 'browser-only', files: [{ name: 'web.js', content: 'export default api => api.command({name:"browser-only",description:"Test"});' }]
+  })).status, 201);
+  assert.equal((await request('/plugins/browser-only/web')).status, 400);
+  assert.equal((await request('/settings', 'PATCH', { plugins: { 'browser-only': true } })).status, 200);
+  assert.match((await request('/plugins/browser-only/web')).body.source, /browser-only/);
+  assert.equal((await request('/settings', 'PATCH', { plugins: { 'browser-only': false } })).status, 200);
+  assert.equal((await request('/plugins/browser-only/web')).status, 400);
+  assert.equal((await request('/plugins/browser-only', 'DELETE')).status, 200);
+});
