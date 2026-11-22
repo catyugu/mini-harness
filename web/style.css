@@ -265,6 +265,7 @@ button { border-radius: var(--radius); }
 .welcome .workspace-button { padding: 6px 9px; border: 1px solid var(--border); border-radius: var(--control-radius); background: var(--panel); }
 .file-entry, .file-tree summary { display: flex; justify-content: flex-start; align-items: center; gap: 7px; width: 100%; min-width: 0; border: 0; background: transparent; padding: 4px 6px; text-align: left; font: 12px/1.5 ui-monospace, monospace; border-radius: 6px; }
 .file-entry:hover, .file-tree summary:hover { background: var(--hover); }
+.file-tree > .file-entry::before { content: ''; flex: 0 0 15px; }
 .file-entry span, .file-tree summary span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .file-entry svg, .file-tree svg, .reference-option svg { flex: 0 0 15px; height: 15px; color: var(--muted); }
 .file-tree .file-tree { margin-left: 11px; padding-left: 7px; border-left: 1px solid var(--border); }
