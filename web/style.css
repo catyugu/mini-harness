@@ -267,11 +267,15 @@ button { border-radius: var(--radius); }
 .workspace-panel { color: var(--ink); background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-lg); width: min(520px, calc(100% - 24px)); padding: 0; max-height: calc(var(--app-height, 100dvh) - 24px); overflow: auto; }
 .workspace-panel::backdrop { background: #1119; }
 .workspace-panel .settings-scroll { padding-bottom: 20px; }
-.workspace-panel .file-entry { white-space: normal; overflow-wrap: anywhere; }
-.file-entry { display: block; width: 100%; min-width: 0; border: 0; background: transparent; padding: 6px; text-align: left; font: 12px/1.5 ui-monospace, monospace; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.file-entry:hover { background: var(--hover); }
-.file-tree { padding-left: 9px; border-left: 1px solid var(--border); }
-.file-tree summary { font-size: 13px; padding: 5px; cursor: pointer; }
+.workspace-panel .file-entry, .file-tree summary { display: flex; align-items: center; gap: 7px; width: 100%; min-width: 0; border: 0; background: transparent; padding: 6px; text-align: left; font: 12px/1.5 ui-monospace, monospace; border-radius: 6px; }
+.file-entry:hover, .file-tree summary:hover { background: var(--hover); }
+.file-entry span, .file-tree summary span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.workspace-panel .file-entry span { white-space: normal; }
+.file-entry svg, .file-tree svg, .reference-option svg { flex: 0 0 15px; height: 15px; color: var(--muted); }
+.file-tree .file-tree { margin-left: 11px; padding-left: 7px; border-left: 1px solid var(--border); }
+.file-tree summary { cursor: pointer; list-style: none; }
+.file-tree summary::-webkit-details-marker { display: none; }
+.file-tree details[open] > summary svg:first-child, .folder-chevron.expanded { transform: rotate(90deg); }
 .inspector-content h3 { font-size: 13px; margin-top: 20px; }
 .inspector-content .diff { white-space: pre; }
 .diff .added { color: #16834b; background: #16834b0d; }
@@ -298,6 +302,9 @@ button { border-radius: var(--radius); }
 .suggestion small { font-size: 12px; color: var(--muted); }
 .suggestion-group { margin-left: 9px; }
 .suggestion-description { display: block; overflow: hidden; text-overflow: ellipsis; }
+.reference-option { display: flex; align-items: center; gap: 7px; padding-left: calc(10px + var(--file-depth) * 13px); }
+.reference-option strong { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 13px; }
+.suggestions-empty { padding: 0 10px; }
 .queued-messages { max-height: 84px; overflow: auto; white-space: pre-wrap; font-size: 12px; color: var(--muted); padding: 6px 10px; }
 .approval-requests { max-height: 30vh; overflow: auto; }
 .approval-card { padding: 10px; border: 1px solid var(--focus); border-radius: var(--radius); background: var(--surface); margin-bottom: 8px; font-size: 12px; }

@@ -1,4 +1,5 @@
 import { element, data } from './api.js';
+import { readDirectory } from './files.js';
 import { icon } from './icons.js';
 import type { CommandRegistry, ComposerCommand } from './commands.js';
 import type { Attachment } from '../src/input.js';
@@ -53,17 +54,22 @@ export function createComposer(report: (error: Error) => void, commands: Command
   form.append(input);
   type Token = { start: number; end: number; query: string; kind: '/' | '@' };
   let token: Token;
+  type Suggestion = {
+    label: string; description?: string; group?: string; icon?: 'file' | 'folder' | 'folder-open';
+    depth?: number; expanded?: boolean; run: (complete?: boolean) => void;
+  };
   let completeSelected: (() => void)[] = [];
   let buttons: HTMLButtonElement[] = [], selected = -1;
 
   function currentToken(): Token | undefined {
     if (prompt.selectionStart !== prompt.selectionEnd) return;
     const cursor = prompt.selectionStart;
-    const match = /(?:^|\s)([\/@])([^\s\/@]*)$/.exec(prompt.value.slice(0, cursor));
+    const match = /(?:^|\s)([\/@])([^\s@]*)$/.exec(prompt.value.slice(0, cursor));
     if (!match) return;
     const [, marker, query] = match;
     const tail = /^\S*/.exec(prompt.value.slice(cursor))[0];
     if (marker === '/' && !/^[\w:-]*$/.test(query + tail)) return;
+    if (marker === '@' && query.startsWith('"')) return;
     return { start: cursor - query.length - 1, end: cursor + tail.length, query, kind: marker as Token['kind'] };
   }
 
@@ -106,17 +112,30 @@ export function createComposer(report: (error: Error) => void, commands: Command
     if (scroll) item.scrollIntoView({ block: 'nearest' });
   }
 
-  function renderOptions(entries: { label: string; description?: string; group?: string; run: (complete?: boolean) => void }[]) {
-    buttons = entries.map((entry, index) => {
+  function renderOptions(entries: Suggestion[], index = 0, emptyText = '') {
+    const scroll = suggestions.scrollTop;
+    buttons = entries.map((entry, position) => {
       const button = document.createElement('button');
       button.type = 'button';
       button.tabIndex = -1;
       button.className = 'suggestion';
-      button.id = 'input-option-' + index;
+      button.id = 'input-option-' + position;
       button.setAttribute('role', 'option');
       button.setAttribute('aria-selected', 'false');
       const name = document.createElement('strong');
       name.textContent = entry.label;
+      if (entry.icon) {
+        button.classList.add('reference-option');
+        button.style.setProperty('--file-depth', String(Math.min(entry.depth ?? 0, 8)));
+        if (entry.expanded !== undefined) {
+          const arrow = icon('chevron');
+          arrow.classList.add('folder-chevron');
+          if (entry.expanded) arrow.classList.add('expanded');
+          button.setAttribute('aria-label', name.textContent + (entry.expanded ? ', collapse folder' : ', expand folder'));
+          button.append(arrow);
+        }
+        button.append(icon(entry.icon));
+      }
       button.append(name);
       if (entry.group) {
         const group = document.createElement('small');
@@ -131,15 +150,23 @@ export function createComposer(report: (error: Error) => void, commands: Command
         button.append(detail);
       }
       button.onmousedown = (event) => event.preventDefault();
-      button.onpointermove = () => highlight(index, false);
+      button.onpointermove = () => highlight(position, false);
       button.onclick = () => entry.run();
       return button;
     });
     suggestions.replaceChildren(...buttons);
-    suggestions.hidden = !buttons.length;
+    if (!buttons.length && emptyText) {
+      const hint = document.createElement('p');
+      hint.className = 'suggestions-empty hint';
+      hint.setAttribute('role', 'status');
+      hint.textContent = emptyText;
+      suggestions.append(hint);
+    }
+    suggestions.hidden = !buttons.length && !emptyText;
     completeSelected = entries.map((entry) => () => entry.run(true));
     selected = -1;
-    highlight(buttons.length ? 0 : -1, false);
+    highlight(buttons.length ? Math.min(index, buttons.length - 1) : -1, false);
+    suggestions.scrollTop = scroll;
   }
 
   function refresh(force = false) {
@@ -155,15 +182,49 @@ export function createComposer(report: (error: Error) => void, commands: Command
       })));
     } else if (fileReferences) {
       const current = generation;
-      timer = setTimeout(async () => {
-        try {
-          const paths = await data<string[]>('/files/search?q=' + encodeURIComponent(match.query));
-          if (current !== generation) return;
-          renderOptions(paths.slice(0, 12).map((path) => ({
-            label: path, run: () => replace('@' + JSON.stringify(path) + ' ', match)
-          })));
-        } catch (error) { if (current === generation) { hide(); report(error); } }
-      }, 150);
+      const reference = (path: string) => replace('@' + JSON.stringify(path) + (/^\s/.test(prompt.value.slice(match.end)) ? '' : ' '), match);
+      const fail = (error: Error) => { if (current === generation) renderOptions([], 0, error.message); };
+      if (match.query) {
+        timer = setTimeout(async () => {
+          try {
+            const paths = await data<string[]>('/files/search?q=' + encodeURIComponent(match.query));
+            if (current !== generation) return;
+            renderOptions(paths.map((path) => ({
+              label: path, icon: 'file', run: () => reference(path)
+            })), 0, 'No matching files.');
+          } catch (error) { fail(error); }
+        }, 120);
+      } else {
+        const listing = new Map<string, Awaited<ReturnType<typeof readDirectory>>>();
+        const open = new Set<string>(), loading = new Set<string>();
+        const treeOptions = (path: string, depth = 0): Suggestion[] => (listing.get(path) ?? []).flatMap<Suggestion>((entry) => {
+          if (!entry.directory) return [{ label: entry.name, icon: 'file', depth, run: () => reference(entry.path) }];
+          const expanded = open.has(entry.path);
+          const row: Suggestion = { label: entry.name, icon: expanded ? 'folder-open' : 'folder', expanded, depth, run: (complete) => {
+            if (complete) { reference(entry.path + '/'); return; }
+            if (loading.has(entry.path)) return;
+            if (expanded) { open.delete(entry.path); draw(); }
+            else void expand(entry.path);
+          } };
+          if (!expanded) return [row];
+          const pickFolder: Suggestion = {
+            label: 'Reference ' + entry.name + '/', icon: 'folder', depth: depth + 1, run: () => reference(entry.path + '/')
+          };
+          return [row, pickFolder, ...treeOptions(entry.path, depth + 1)];
+        });
+        const draw = () => renderOptions(treeOptions('.'), selected, 'This directory is empty.');
+        const expand = async (path: string) => {
+          loading.add(path);
+          try {
+            if (!listing.has(path)) listing.set(path, await readDirectory(path));
+            if (current !== generation) return;
+            open.add(path);
+            draw();
+          } catch (error) { if (current === generation) { if (path === '.') fail(error); else report(error); } }
+          finally { loading.delete(path); }
+        };
+        void expand('.');
+      }
     }
   }
 
