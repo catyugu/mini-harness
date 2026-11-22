@@ -12,7 +12,7 @@ function imports(path: string) {
 
 test('the plugin host and built-ins use service contracts without importing the runtime or server', () => {
   const builtins = readdirSync(new URL('builtins/', source)).filter((file) => file.endsWith('.ts'));
-  for (const path of ['plugins.ts', 'plugin-api.ts', ...builtins.map((file) => 'builtins/' + file)]) {
+  for (const path of ['plugins.ts', 'kernel/plugin-api.ts', ...builtins.map((file) => 'builtins/' + file)]) {
     for (const dependency of imports(path))
       assert.doesNotMatch(dependency, /(?:^|\/)(agent|server|session-routes)\.js$/, path + ' imports ' + dependency);
   }

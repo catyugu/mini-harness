@@ -3,7 +3,7 @@ import type { Context } from 'cordis';
 import { Type } from 'typebox';
 import { Approvals } from './approvals.js';
 import { runShell } from '../sandbox.js';
-import type { BuiltinPlugin } from '../plugin-api.js';
+import type { BuiltinPlugin } from '../kernel/plugin-api.js';
 
 declare module 'cordis' {
   interface Context { harnessApprovals?: Pick<Approvals, 'has'> }

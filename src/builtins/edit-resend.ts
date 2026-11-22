@@ -1,4 +1,4 @@
-import type { BuiltinPlugin } from '../plugin-api.js';
+import type { BuiltinPlugin } from '../kernel/plugin-api.js';
 
 export const editResend: BuiltinPlugin = {
   id: 'edit-resend', title: 'Edit and resend', description: 'Revise a user message and create a Pi conversation branch.',

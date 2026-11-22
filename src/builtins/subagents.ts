@@ -1,7 +1,7 @@
 import { defineTool } from '@earendil-works/pi-coding-agent';
 import type { Context } from 'cordis';
 import { Type } from 'typebox';
-import type { BuiltinPlugin } from '../plugin-api.js';
+import type { BuiltinPlugin } from '../kernel/plugin-api.js';
 import type { Delegation } from './delegation.js';
 
 declare module 'cordis' {

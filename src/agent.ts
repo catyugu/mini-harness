@@ -4,7 +4,7 @@ import { PluginHost } from './plugins.js';
 import { SessionRegistry, type ModelChoice } from './registry.js';
 import { mergeSettings, readSettings, writeJson, type Paths, type SettingsPatch } from './config.js';
 import { builtins, Delegation } from './builtins/index.js';
-import { ToolRegistry } from './plugin-api.js';
+import { ToolRegistry } from './kernel/plugin-api.js';
 import { RouteRegistry } from './http.js';
 import { PiSessions } from './pi-sessions.js';
 import { Runs } from './runs.js';

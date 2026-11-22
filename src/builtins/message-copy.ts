@@ -1,4 +1,4 @@
-import type { BuiltinPlugin } from '../plugin-api.js';
+import type { BuiltinPlugin } from '../kernel/plugin-api.js';
 
 /** Pure browser contribution: no backend routes and no backend tools. */
 export const messageCopy: BuiltinPlugin = {

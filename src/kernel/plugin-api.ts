@@ -1,8 +1,8 @@
 import type { ToolDefinition } from '@earendil-works/pi-coding-agent';
 import type { Context } from 'cordis';
-import type { Paths, Settings } from './config.js';
-import type { RouteHandler, RouteRegistry } from './http.js';
-import type { SessionRegistry } from './registry.js';
+import type { Paths, Settings } from '../config.js';
+import type { RouteHandler, RouteRegistry } from '../http.js';
+import type { SessionRegistry } from '../registry.js';
 
 export interface PluginMetadata {
   id: string;
@@ -57,9 +57,9 @@ declare module 'cordis' {
     harnessSessionChanged: (id: string) => void;
     harnessRevision: { reviseAndStart(id: string, input: {
       sourceEntryId: string; expectedLeafId: string | null; message: string;
-      attachments?: import('./input.js').Attachment[]; model?: import('./registry.js').ModelChoice;
-      thinkingLevel?: import('./pi-sessions.js').ThinkingLevel;
-    }): Promise<import('./protocol.js').RunInfo> };
+      attachments?: import('../input.js').Attachment[]; model?: import('../registry.js').ModelChoice;
+      thinkingLevel?: import('../pi-sessions.js').ThinkingLevel;
+    }): Promise<import('../protocol.js').RunInfo> };
   }
 }
 
