@@ -1,6 +1,6 @@
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { realpath } from 'node:fs/promises';
-import { containsPath } from './workspace.js';
+import { containsPath } from '../../src/platform/paths.js';
 
 type ShellMode = 'isolated' | 'host';
 interface ShellResult {
@@ -12,14 +12,7 @@ interface ShellResult {
   truncated: boolean;
 }
 
-export function supportsIsolation(platform: NodeJS.Platform = process.platform, probe: typeof spawnSync = spawnSync) {
-  if (platform !== 'linux') return false;
-  try {
-    return probe('bwrap', ['--unshare-all', '--ro-bind', '/', '/', '--', '/usr/bin/prlimit', '--', '/bin/true'], {
-      stdio: 'ignore', timeout: 1500, env: { PATH: '/usr/bin:/bin' }
-    }).status === 0;
-  } catch { return false; }
-}
+import { supportsIsolation } from '../../src/platform/isolation.js';
 
 export function sandboxCommand(command: string, cwd: string, mode: ShellMode, platform: NodeJS.Platform = process.platform, timeout = 60) {
   if (typeof command !== 'string' || !command.trim() || command.length > 16000) throw new Error('Invalid command');

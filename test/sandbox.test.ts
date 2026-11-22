@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { sandboxCommand, supportsIsolation } from '../src/sandbox.js';
+import { sandboxCommand } from '../features/shell/sandbox.js';
+import { supportsIsolation } from '../src/platform/isolation.js';
 
 test('isolation refuses unsupported hosts', () => {
   assert.equal(supportsIsolation('win32'), false);
@@ -22,8 +23,8 @@ test('isolation never silently selects a host shell', () => {
 import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { runShell } from '../src/sandbox.js';
-import { Workspace } from '../src/workspace.js';
+import { runShell } from '../features/shell/sandbox.js';
+import { Workspace } from '../features/files/workspace.js';
 
 test('workspace tools share one policy for reads, searches and writes', async (t) => {
   const root = mkdtempSync(join(tmpdir(), 'mini-harness-policy-'));

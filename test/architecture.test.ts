@@ -89,3 +89,12 @@ test('host and browser kernel only depend on contracts, never feature/UI impleme
       path + ' has a reverse implementation dependency');
   }
 });
+
+test('feature implementations are owned by their plugin, while host services use only platform seams', () => {
+  for (const path of ['workspace.ts', 'inspection.ts', 'sandbox.ts'])
+    assert.equal(existsSync(join(source, path)), false, path + ' must live with its owning capability');
+  for (const path of files(join(source, 'services'))) {
+    for (const dep of dependencies(path))
+      assert.equal(dep.target.startsWith(features + '/'), false, path + ' must not import feature internals');
+  }
+});

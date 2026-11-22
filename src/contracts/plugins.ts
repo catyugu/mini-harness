@@ -68,7 +68,7 @@ declare module 'cordis' {
     harnessSessionChanged: (id: string) => void;
     harnessRevision: { reviseAndStart(id: string, input: {
       sourceEntryId: string; expectedLeafId: string | null; message: string;
-      attachments?: import('../input.js').Attachment[]; model?: import('../services/conversations.js').ModelChoice;
+      attachments?: import('../input.js').Attachment[]; model?: import('./conversation.js').ModelChoice;
       thinkingLevel?: AgentSession['thinkingLevel'];
     }): Promise<RunInfo> };
     harnessDelegation: DelegationPort;

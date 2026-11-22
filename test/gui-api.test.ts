@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createMiniHarnessServer } from '../src/server.js';
 import { prepareInput } from '../src/input.js';
-import { Inspection } from '../src/inspection.js';
+import { Inspection } from '../features/files/inspection.js';
 import { createFixturePaths, createMockProvider } from './helpers/mock-provider.js';
 
 const waitUntil = async <T>(read: () => T | Promise<T>, accept: (value: T) => boolean) => {

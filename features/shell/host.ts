@@ -2,7 +2,7 @@ import { defineTool } from '@earendil-works/pi-coding-agent';
 import type { Context } from 'cordis';
 import { Type } from 'typebox';
 import { Approvals } from './approvals.js';
-import { runShell } from '../../src/sandbox.js';
+import { runShell } from './sandbox.js';
 
 
 export function setup(ctx: Context) {

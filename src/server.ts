@@ -9,7 +9,7 @@ import type { getPaths } from './config.js';
 import { json, requestBody } from './transport/http.js';
 import { providerSettings, saveProvider, saveProviderCredential } from './provider-settings.js';
 import { installPlugin, uninstallPlugin, frontendSource } from './plugin-files.js';
-import { supportsIsolation } from './sandbox.js';
+import { supportsIsolation } from './platform/isolation.js';
 import { MiniHarnessRuntime } from './application.js';
 import { sessionRoutes } from './transport/session-routes.js';
 import { navigationSession, navigationSnapshot, streamNavigation } from './transport/navigation-events.js';

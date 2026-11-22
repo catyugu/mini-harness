@@ -15,10 +15,7 @@ const noFollow = linux ? constants.O_NOFOLLOW | constants.O_NONBLOCK : 0;
 const directories = linux ? noFollow | constants.O_DIRECTORY : 0;
 const descriptor = (handle: FileHandle) => '/proc/self/fd/' + handle.fd;
 
-export function containsPath(root: string, candidate: string) {
-  const name = relative(root, candidate);
-  return !isAbsolute(name) && name !== '..' && !name.startsWith('..' + sep);
-}
+import { containsPath } from '../../src/platform/paths.js';
 
 function checkName(name: string) {
   if (windows && (/[<>:"|?*\x00-\x1f]/.test(name) || /[ .]$/.test(name) ||

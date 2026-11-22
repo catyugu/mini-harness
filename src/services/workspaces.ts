@@ -3,7 +3,7 @@ import { lstatSync, mkdirSync, readdirSync, realpathSync, statSync } from 'node:
 import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { readJson, writeJson, type getPaths } from '../config.js';
-import { containsPath } from '../workspace.js';
+import { containsPath } from '../platform/paths.js';
 
 import type { WorkspaceRecord } from '../contracts/workspace.js';
 export type { WorkspaceRecord } from '../contracts/workspace.js';
