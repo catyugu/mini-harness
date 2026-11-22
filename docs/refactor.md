@@ -62,7 +62,7 @@ Shell always asks for one-command approval. Decisions, expiry and cancellation p
 
 Pi's native user/project discovery remains enabled. Same-name precedence is **workspace > application configuration directory > user-level**. Workspace sources include `.mini-harness/skills` and Pi-discovered project sources; application sources include `$MINI_HARNESS_HOME/skills` and its Pi agent skills. Native user sources, including `~/.agents/skills`, remain available. Losing definitions are included when resolving precedence so native discovery cannot hide a higher-priority application/workspace definition. The same loader options feed agent sessions and the Skills UI. The UI displays source and conflict information.
 
-Tests preload a fresh temporary HOME and USERPROFILE before SDK imports. This isolates fixtures without changing product discovery. Skill tests verify all three levels and fallback after deleting higher-priority definitions.
+Unit tests preload a fresh temporary HOME and USERPROFILE before SDK imports. Browser fixtures isolate the application server’s HOME while Playwright retains its installed browser cache. This isolates fixtures without changing product discovery. Skill tests verify all three levels and fallback after deleting higher-priority definitions.
 
 ## Validation
 

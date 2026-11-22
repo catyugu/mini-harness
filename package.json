@@ -29,7 +29,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "check": "npm run typecheck && npm test",
     "pack:check": "npm run build && node dist/scripts/check-package.js",
-    "test:browser": "npm run build && node --import ./dist/test/helpers/isolate-home.js node_modules/@playwright/test/cli.js test -c playwright.config.ts"
+    "test:browser": "npm run build && playwright test -c playwright.config.ts"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "1.6.0",

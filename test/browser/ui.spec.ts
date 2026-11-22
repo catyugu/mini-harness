@@ -16,11 +16,14 @@ async function availablePort(): Promise<number> {
 }
 
 async function startIsolatedHost(paths: ReturnType<typeof createFixturePaths>['paths']) {
+  // Isolate the application, while Playwright keeps the installed browser cache.
+  const userHome = resolve(paths.home, '..', 'user');
+  mkdirSync(userHome, { recursive: true });
   const port = await availablePort();
   const child: ChildProcess = spawn(process.execPath, [
     resolve('dist/bin/mini-harness.js'), '--no-open', '--cwd', paths.cwd, '--port', String(port)
   ], {
-    env: { ...process.env, MINI_HARNESS_HOME: paths.home },
+    env: { ...process.env, HOME: userHome, USERPROFILE: userHome, XDG_CONFIG_HOME: join(userHome, '.config'), MINI_HARNESS_HOME: paths.home },
     stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true
   });
   let output = '';
@@ -551,7 +554,7 @@ test('file inspection, responsive themes and reduced viewport height keep contro
   const mock = await createMockProvider(), { root, paths } = createFixturePaths(mock.url);
   const note = join(paths.cwd, 'notes.md');
   writeFileSync(note, '# Visible file\nBefore edits');
-  const git = (...args: string[]) => execFileSync('git', args, { cwd: paths.cwd });
+  const git = (...args: string[]) => execFileSync('git', args, { cwd: paths.cwd, env: { ...process.env, HOME: resolve(paths.home, '..', 'user'), USERPROFILE: resolve(paths.home, '..', 'user') } });
   git('init', '--quiet');
   git('add', 'notes.md');
   writeFileSync(note, '# Visible file\nWorkspace content');
