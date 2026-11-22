@@ -200,6 +200,7 @@ test('refresh and navigation preserve a run while another conversation completes
       await page.getByRole('textbox', { name: 'Message' }).fill('Keep working');
       await page.getByRole('button', { name: 'Send', exact: true }).click();
       await waiting;
+      await page.route(/\/events\?run=/, (route) => route.abort(), { times: 1 });
       await page.reload();
       await expect(page.getByRole('button', { name: 'Stop response' })).toBeVisible();
       await openSidebar();
@@ -220,8 +221,24 @@ test('refresh and navigation preserve a run while another conversation completes
       await page.getByRole('button', { name: 'Send', exact: true }).click();
       await expect(page.locator('.message.assistant')).toHaveText('Independent reply');
       await openSidebar();
-      await expect(page.getByRole('button', { name: 'Keep working', exact: true })).toBeVisible();
-      await page.getByRole('button', { name: 'Keep working', exact: true }).click();
+      const first = page.getByRole('button', { name: 'Keep working', exact: true });
+      const id = (await first.getAttribute('id')).slice('session-'.length);
+      let resume: () => void, intercept: () => void;
+      const reached = new Promise<void>((done) => { intercept = done; });
+      const delayed = new Promise<void>((done) => { resume = done; });
+      await page.route('**/api/sessions/' + id, async (route) => {
+        intercept();
+        await delayed;
+        await route.continue().catch(() => { /* A later selection aborts this request. */ });
+      }, { times: 1 });
+      try {
+        await first.click();
+        await reached;
+        await page.getByRole('button', { name: 'Second conversation', exact: true }).click();
+        await expect(page.locator('.message.assistant')).toHaveText('Independent reply');
+      } finally { resume(); }
+      await openSidebar();
+      await first.click();
       await expect(page.getByRole('button', { name: 'Stop response' })).toBeVisible();
       release();
       await expect(page.locator('.message.assistant')).toHaveText('Continued after refresh');

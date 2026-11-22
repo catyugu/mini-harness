@@ -1,4 +1,5 @@
 import type { Conversation } from '../src/registry.js';
+import { sessionHierarchy } from './navigation-tree.js';
 import { button, iconButton } from './primitives.js';
 
 export function sessionTree(sessions: Conversation[], options: {
@@ -7,18 +8,7 @@ export function sessionTree(sessions: Conversation[], options: {
   activate(id: string): void; rename(item: Conversation): void; remove(item: Conversation): void;
 }) {
   const { active, expanded, selection, selecting, query } = options;
-  const byId = new Map(sessions.map((item) => [item.id, item]));
-  const included = new Set<string>();
-  for (const item of sessions) if (!query || item.title.toLowerCase().includes(query)) {
-    for (let id: string | null = item.id; id && !included.has(id); id = byId.get(id)?.parentId) included.add(id);
-  }
-  const visible = sessions.filter((item) => included.has(item.id));
-  const children = new Map<string | null, Conversation[]>();
-  for (const item of visible) {
-    const parent = byId.has(item.parentId) ? item.parentId : null;
-    if (!children.has(parent)) children.set(parent, []);
-    children.get(parent).push(item);
-  }
+  const { children, visible } = sessionHierarchy(sessions, query);
 
   function branch(parent: string | null) {
     const list = document.createElement('ul');

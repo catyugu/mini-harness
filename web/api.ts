@@ -40,3 +40,12 @@ export async function readEvents<T>(response: Response, accept: (event: T) => vo
     }
   } finally { await reader.cancel().catch(() => {}); }
 }
+
+export function wait(ms: number, signal: AbortSignal) {
+  if (signal.aborted) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    const finish = () => { clearTimeout(timer); signal.removeEventListener('abort', finish); resolve(); };
+    const timer = setTimeout(finish, ms);
+    signal.addEventListener('abort', finish, { once: true });
+  });
+}

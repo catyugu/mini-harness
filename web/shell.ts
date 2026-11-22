@@ -11,11 +11,17 @@ const slots = {
 };
 
 export const shellPlugin: BrowserPlugin = {
-  id: 'core:shell',
+  id: 'core:shell', inject: ['miniState'],
   setup(ctx, api) {
     const { shell, tabs } = createShell(api.signal);
     ctx.provide('miniShell', shell);
     ctx.provide('rightTabs', tabs);
+    const { miniState: state } = ctx;
+    state.on('navigation', () => {
+      const { sessions, workspaces } = state.get();
+      tabs.selectScope(state.scope());
+      tabs.prune(new Set(sessions.map(({ id }) => id)), new Set(workspaces.map(({ id }) => id)));
+    }, api.signal);
   }
 };
 

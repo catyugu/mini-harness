@@ -2,7 +2,7 @@ import type { FrontendApi, FrontendServices, FrontendSetup, Suggestion } from '.
 import type { TabAddress, TabScope } from '../right-tabs.js';
 import { icon } from '../icons.js';
 import { button as control, iconButton } from '../primitives.js';
-import { workspaceRoute } from '../api.js';
+import { workspaceRoute, wait } from '../api.js';
 import { renderMarkdown } from '../markdown.js';
 
 interface FileEntry { name: string; directory: boolean }
@@ -305,12 +305,7 @@ const setup: FrontendSetup = (api, services) => {
     if (query.startsWith('"')) return;
     const reference = (path: string) => replace('@' + JSON.stringify(path));
     if (query) {
-      await new Promise<void>((resolve) => {
-        if (signal.aborted) return resolve();
-        const finish = () => { clearTimeout(timer); signal.removeEventListener('abort', finish); resolve(); };
-        const timer = setTimeout(finish, 120);
-        signal.addEventListener('abort', finish, { once: true });
-      });
+      await wait(120, signal);
       if (signal.aborted) return;
       const paths = await api.request<string[]>(fileRoute(scope, 'search', { q: query }), { signal });
       show(paths.map((path) => ({ label: path, icon: 'file', run: () => reference(path) })), 'No matching files.');

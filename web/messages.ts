@@ -1,4 +1,5 @@
-import type { MessageContent, ViewMessage } from '../src/protocol.js';
+import type { MessageContent, RunEvent, ViewMessage } from '../src/protocol.js';
+import type { ConversationView } from './types.js';
 import type { FrontendHost } from './extensions.js';
 import { icon } from './icons.js';
 import { renderMarkdown, markdownSource } from './markdown.js';
@@ -114,5 +115,67 @@ function refreshTools() {
   }
 }
 
-return { addMessage, appendHistory, toolCard, refreshTools };
+function history(entries: ViewMessage[], error?: string) {
+  messages.replaceChildren();
+  for (const message of entries) appendHistory(message);
+  if (error) {
+    const node = [...messages.querySelectorAll<HTMLElement>('.message.error')].at(-1) ?? addMessage('error', '');
+    node.textContent = error;
+  }
+  messages.scrollTop = messages.scrollHeight;
+}
+
+function stream(initial: ConversationView) {
+  const cards = new Map<string, HTMLDetailsElement>();
+  let answer: HTMLElement;
+  let text: string;
+  function live({ partial, tools }: Pick<ConversationView, 'partial' | 'tools'>) {
+    text = partial ?? '';
+    answer = text ? addMessage('assistant', text) : undefined;
+    cards.clear();
+    for (const tool of tools ?? []) cards.set(tool.id, toolCard(tool));
+  }
+  function finish(output = text) {
+    if (!output && !answer) return;
+    answer ??= addMessage('assistant', '');
+    renderMarkdown(answer, output);
+  }
+  live(initial);
+  return (event: RunEvent) => {
+    const pinned = messages.scrollHeight - messages.clientHeight - messages.scrollTop < 96;
+    switch (event.type) {
+      case 'user':
+        appendHistory({ role: 'user', content: event.content ?? event.text, timestamp: Date.now() });
+        break;
+      case 'assistant-start':
+        finish();
+        answer = undefined;
+        text = '';
+        break;
+      case 'delta':
+        answer ??= addMessage('assistant', '');
+        text += event.text;
+        answer.textContent = text;
+        markdownSource.set(answer, text);
+        break;
+      case 'assistant-end': finish(); break;
+      case 'complete': finish(event.text || text); break;
+      case 'tool':
+        finish();
+        cards.set(event.id, toolCard(event, cards.get(event.id)));
+        break;
+      case 'error':
+        finish();
+        addMessage('error', event.error);
+        break;
+      case 'snapshot':
+        history(event.messages, event.run.error);
+        live(event);
+        break;
+    }
+    if (pinned) messages.scrollTop = messages.scrollHeight;
+  };
+}
+
+return { textOf, history, stream, refreshTools };
 }
