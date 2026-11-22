@@ -8,18 +8,15 @@ import { button, dialog, field, fromMarkup, iconButton, saveToggle, toggle } fro
 import { readPluginValues, schemaFields } from './settings-fields.js';
 
 export const catalogPlugin: BrowserPlugin = {
-  id: 'core:plugins', inject: ['miniSettings', 'miniState', 'miniShell', 'miniSwitch'],
+  id: 'core:plugins', inject: ['miniState', 'miniShell', 'miniSwitch'],
   setup(ctx, api) {
-    const { miniSettings: settings, miniState: state, miniShell: shell, miniSwitch: syncPlugins } = ctx;
+    const { miniState: state, miniShell: shell, miniSwitch: syncPlugins } = ctx;
     const refresh = async () => {
       await state.refresh();
       const failures = await syncPlugins(state.get());
       if (failures.size) throw new Error('Browser plugins failed: ' + [...failures.keys()].join(', '));
     };
     const catalog = pluginCatalog(api, state.get, refresh, shell.showPage);
-    const manage = button('Manage plugins');
-    manage.onclick = () => { settings.close(); catalog.open(); };
-    api.onDispose(settings.addPage('Plugins', manage));
     state.on('bootstrap', catalog.refresh, api.signal);
   }
 };

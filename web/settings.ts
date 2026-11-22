@@ -4,7 +4,7 @@ import type { BrowserPlugin, FrontendApi } from './extensions.js';
 import { icon } from './icons.js';
 import { closeOnBackdrop, field, fromMarkup } from './primitives.js';
 
-const pageIcons = { Model: 'model', Plugins: 'plugin', Appearance: 'theme' } as const;
+const pageIcons = { Model: 'model', Appearance: 'theme' } as const;
 
 export const settingsPlugin: BrowserPlugin = {
   id: 'core:settings', inject: ['miniState', 'miniShell'],

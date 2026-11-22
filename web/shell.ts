@@ -57,7 +57,6 @@ function createShell(signal: AbortSignal) {
       <div id="rightTabList" class="right-tab-list" role="tablist" aria-label="Workspace tabs"></div>
       <button id="inspectorClose" class="icon-button" type="button" aria-label="Close workspace panel" data-icon="close"></button>
     </header>
-    <div id="rightTabLaunchers" class="right-tab-launchers"></div>
     <div id="inspectorExtensions"></div>
     <div id="inspectorContent" class="right-content"></div>
   </aside>
@@ -72,7 +71,7 @@ function createShell(signal: AbortSignal) {
     panelButton: element('inspectorOpen'), panelClose: element('inspectorClose'), resizeHandle: element('panelResize')
   }, signal);
   const tabs = createRightTabs({
-    root: element('inspector'), bar: element('rightTabList'), launchers: element('rightTabLaunchers'),
+    root: element('inspector'), bar: element('rightTabList'),
     body: element('inspectorContent'), toggle: element<'button'>('inspectorOpen')
   }, layout, signal);
   hydrateIcons();

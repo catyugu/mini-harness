@@ -159,41 +159,6 @@ function fileTree(api: FrontendApi, services: FrontendServices, address: TabAddr
   return root;
 }
 
-function changesTab(api: FrontendApi, services: FrontendServices, address: TabAddress, signal: AbortSignal) {
-  const root = document.createElement('section');
-  const toolbar = document.createElement('div');
-  toolbar.className = 'file-toolbar';
-  const refresh = iconButton('Refresh Git changes', 'refresh');
-  toolbar.append(breadcrumbs(api, services, address, '.'), refresh);
-  const body = document.createElement('div');
-  root.append(toolbar, body);
-  async function load() {
-    refresh.disabled = true;
-    body.replaceChildren(hint('Loading Git changes…'));
-    try {
-      const changes = await api.request<GitChanges>(fileRoute(address, 'changes'), { signal });
-      const touched = address.sessionId ? services.session(address.sessionId)?.run?.changedFiles ?? [] : [];
-      body.replaceChildren();
-      const group = (title: string, nodes: HTMLElement[]) => {
-        const heading = document.createElement('h3');
-        heading.textContent = title;
-        body.append(heading, ...nodes);
-      };
-      if (touched.length) group('Files written this turn', touched.map((path) => {
-        const status = changes.files.find((item) => item.path === path)?.status;
-        return fileEntry(api, address, path, path, status, Boolean(status));
-      }));
-      group('Git changes', changes.files.length
-        ? changes.files.map(({ path, status }) => fileEntry(api, address, path, path, status, true))
-        : [hint(changes.available ? 'Working tree is clean.' : changes.reason)]);
-    } catch (error) { if (!signal.aborted) body.replaceChildren(hint(error.message)); }
-    finally { refresh.disabled = false; }
-  }
-  refresh.onclick = () => void load();
-  void load();
-  return root;
-}
-
 const tokens = /("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|(\/\/.*$|#.*$)|(\b(?:const|let|var|function|return|export|import|async|await|class|interface|def|fn|if|else|for|while|true|false|null|None|void|public|private)\b)|(\b\d+(?:\.\d+)?\b)/g;
 function source(content: string, highlight: boolean) {
   const node = document.createElement('pre');
@@ -279,16 +244,10 @@ const setup: FrontendSetup = (api, services) => {
   api.rightTab('files', {
     title: ({ path }) => path ? base(path) : 'Files',
     default: true,
-    launcher: 'Browse files',
     create(address, signal) {
       if (!expanded.has(address)) expanded.set(address, new Set());
       return fileTree(api, services, address, signal, expanded.get(address));
     }
-  });
-  api.rightTab('changes', {
-    title: () => 'Git changes',
-    launcher: 'Git changes',
-    create: (address, signal) => changesTab(api, services, address, signal)
   });
   api.rightTab('preview', { title: ({ path }) => base(path), create: (address, signal) => fileView(api, services, address, signal, false) });
   api.rightTab('diff', { title: ({ path }) => 'Diff · ' + base(path), create: (address, signal) => fileView(api, services, address, signal, true) });

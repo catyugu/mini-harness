@@ -130,8 +130,9 @@ test('frontend plugins own all five slots and clean up on disable and reconfigur
     await expect(page.getByText('Plugin preferences')).toBeVisible();
     await settingsSection(page, 'Extensions').click();
     await expect(page.getByText('Plugin settings', { exact: true })).toBeVisible();
-    await settingsSection(page, 'Plugins').click();
-    await page.getByRole('button', { name: 'Manage plugins', exact: true }).click();
+    await expect(settingsSection(page, 'Plugins')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Close settings', exact: true }).click();
+    await page.getByRole('button', { name: 'Browse plugins', exact: true }).click();
     await page.getByRole('button', { name: 'UI example settings', exact: true }).click();
     await page.getByLabel('Button label · ui-example', { exact: true }).fill('Updated plugin');
     await page.getByRole('button', { name: 'Save configuration', exact: true }).click();

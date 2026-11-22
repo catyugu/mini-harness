@@ -18,6 +18,7 @@ test('settings layout stays consistent across viewport sizes and themes', async 
         await page.getByRole('button', { name: 'Settings', exact: true }).click();
         const dialog = page.getByRole('dialog', { name: 'Settings' });
         await expect(dialog).toBeVisible();
+        await expect(settingsSection(page, 'Plugins')).toHaveCount(0);
         await expect(dialog.getByRole('button', { name: 'Close settings' })).toBeFocused();
         await settingsSection(page, 'Appearance').click();
         await dialog.getByRole('combobox', { name: 'Theme', exact: true }).selectOption('system');

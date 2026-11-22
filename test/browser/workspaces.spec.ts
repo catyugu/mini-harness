@@ -33,9 +33,15 @@ test('file inspection, responsive themes and reduced viewport height keep contro
         await page.getByRole('button', { name: 'Workspace files', exact: true }).click();
         const panel = page.locator('#inspector');
         await expect(panel.getByRole('tab', { name: 'Files', exact: true })).toBeVisible();
-        await expect(panel.getByRole('button', { name: 'notes.md AM', exact: true })).toBeVisible();
-        await panel.getByRole('button', { name: 'Git changes', exact: true }).click();
-        await panel.getByRole('button', { name: 'notes.md AM', exact: true }).click();
+        await expect(panel.getByRole('button', { name: 'Browse files', exact: true })).toHaveCount(0);
+        await expect(panel.getByRole('button', { name: 'Git changes', exact: true })).toHaveCount(0);
+        const file = panel.getByRole('button', { name: 'notes.md AM', exact: true });
+        await expect(file).toBeVisible();
+        expect(await file.evaluate((node) => getComputedStyle(node).justifyContent)).toBe('flex-start');
+        expect(await file.evaluate((node) => node.querySelector('svg').getBoundingClientRect().left -
+          node.getBoundingClientRect().left)).toBeLessThan(20);
+        await file.click();
+        await panel.getByRole('button', { name: 'Diff', exact: true }).click();
         await expect(panel.locator('.diff .added')).toHaveText(['+# Visible file', '+Before edits', '+Workspace content']);
         await panel.getByRole('button', { name: 'Preview', exact: true }).click();
         await expect(panel.getByRole('tab', { name: 'notes.md', exact: true })).toBeFocused();
