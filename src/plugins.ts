@@ -4,19 +4,24 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import { Type } from 'typebox';
+import { Check } from 'typebox/value';
 import { defineTool, type ToolDefinition } from '@earendil-works/pi-coding-agent';
 import type { MiniHarnessRuntime } from './agent.js';
 import { readJson, type Settings } from './config.js';
 import { runShell } from './sandbox.js';
+import { Workspace } from './workspace.js';
 
-interface PluginMetadata {
+export interface PluginMetadata {
   id: string;
   title: string;
   description: string;
   trustedCode?: boolean;
+  requires?: string[];
+  configSchema?: Record<string, any>;
 }
 
 export const BUILTINS: readonly PluginMetadata[] = Object.freeze([
+  { id: 'files', title: 'Workspace files', description: 'Read, search and edit files within the workspace.' },
   { id: 'skills', title: 'Skills', description: 'Discover Agent Skills from home and the workspace.' },
   { id: 'subagents', title: 'Subagents', description: 'Delegate tasks to child conversations.' },
   { id: 'shell', title: 'Shell', description: 'Run commands using the configured execution policy.' }
@@ -35,31 +40,48 @@ declare module 'cordis' {
     harnessAgent: Pick<MiniHarnessRuntime, 'availableModels'>;
     harnessSessions: Pick<MiniHarnessRuntime['registry'], 'get' | 'list'>;
     harnessTools: ToolRegistry;
+    harnessConfig: { get(): Settings; paths: MiniHarnessRuntime['paths'] };
+    harnessRuntime: MiniHarnessRuntime;
+    harnessSkills: { paths: string[] };
   }
 }
 
 const reservedTools = new Set(['read', 'edit', 'write', 'grep', 'find', 'ls', 'bash', 'powershell', 'codemode', 'tool_search']);
 
+function configDefaults(schema: Record<string, any>, value: any): any {
+  if (value === undefined && Object.hasOwn(schema, 'default')) value = structuredClone(schema.default);
+  if (schema.type === 'object' && value && typeof value === 'object' && !Array.isArray(value)) {
+    for (const [key, property] of Object.entries(schema.properties ?? {})) {
+      const item = configDefaults(property, value[key]);
+      if (item !== undefined) value[key] = item;
+    }
+  }
+  return value;
+}
+
 export class ToolRegistry {
   private tools = new Map<string, { bind: (id: string) => ToolDefinition; visible: (id: string) => boolean }>();
 
-  register(tool: ToolDefinition, bind = (_id: string) => tool, visible = (_id: string) => true) {
+  register(tool: ToolDefinition, bind = (_id: string) => tool, visible = (_id: string) => true, builtin = false) {
     const { name } = tool;
     if (!/^[a-zA-Z0-9_-]{1,64}$/.test(name)) throw new Error('Invalid tool name: ' + name);
-    if (reservedTools.has(name) || this.tools.has(name)) throw new Error('Duplicate or reserved tool: ' + name);
+    if ((!builtin && reservedTools.has(name)) || this.tools.has(name)) throw new Error('Duplicate or reserved tool: ' + name);
     this.tools.set(name, { bind, visible });
     return () => { this.tools.delete(name); };
   }
 
   forSession(id: string) {
-    return [...this.tools.values()].filter((tool) => tool.visible(id)).map((tool) => tool.bind(id));
+    return this.resources(id).map((tool) => tool.bind(id));
   }
+
+  resources(id: string) { return [...this.tools.values()].filter((tool) => tool.visible(id)); }
 }
 
 interface PluginPlan {
   id: string;
   source?: string;
   config?: Record<string, unknown>;
+  requires: string[];
 }
 
 export class PluginHost {
@@ -67,6 +89,8 @@ export class PluginHost {
   private readonly mounted = new Map<string, { plan: PluginPlan; fiber: Fiber }>();
 
   constructor(private readonly runtime: MiniHarnessRuntime) {
+    this.ctx.provide('harnessConfig', { get: () => structuredClone(runtime.settings), paths: runtime.paths });
+    this.ctx.provide('harnessRuntime', runtime);
     this.ctx.provide('harnessAgent', { availableModels: () => runtime.availableModels() });
     this.ctx.provide('harnessSessions', {
       get: (id) => runtime.registry.get(id),
@@ -88,44 +112,58 @@ export class PluginHost {
       catch (error) { if (!(error instanceof SyntaxError)) throw error; }
       const title = typeof manifest?.title === 'string' ? manifest.title.slice(0, 100) : id;
       const description = typeof manifest?.description === 'string' ? manifest.description.slice(0, 300) : 'Runs local JavaScript with your user permissions.';
-      return [{ source, metadata: { id, title, description, trustedCode: true } }];
+      const requires = manifest?.requires ?? [];
+      if (!Array.isArray(requires) || requires.some((id) => typeof id !== 'string' || !/^[a-z][a-z0-9-]{0,63}$/.test(id)))
+        throw new Error('Invalid plugin dependencies: ' + id);
+      const configSchema = manifest?.configSchema;
+      if (configSchema && (configSchema.type !== 'object' || !configSchema.properties || typeof configSchema.properties !== 'object'))
+        throw new Error('Expected an object configSchema for plugin: ' + id);
+      return [{ source, metadata: { id, title, description, requires, configSchema, trustedCode: true } }];
     });
   }
 
   metadata() { return [...BUILTINS, ...this.discover().map(({ metadata }) => metadata)]; }
 
+  private builtin(id: string) {
+    const runtime = this.runtime;
+    const setup = {
+      files: (ctx: Context) => {
+        for (const tool of new Workspace(runtime.paths.cwd, runtime.paths.home).tools())
+          ctx.effect(() => ctx.harnessTools.register(tool, undefined, undefined, true));
+      },
+      skills: (ctx: Context) => { ctx.provide('harnessSkills', { paths: [runtime.paths.skills, runtime.paths.projectSkills] }); },
+      subagents: (ctx: Context) => {
+        ctx.effect(() => ctx.harnessTools.register(runtime.delegateTool(), (sessionId) => runtime.delegateTool(sessionId),
+          (sessionId) => runtime.canDelegate(sessionId)));
+      },
+      shell: (ctx: Context) => {
+        ctx.effect(() => ctx.harnessTools.register(defineTool({
+          name: 'sandbox_shell', label: 'Shell',
+          description: 'Run a shell command in the workspace using the configured execution policy.',
+          parameters: Type.Object({ command: Type.String({ minLength: 1, maxLength: 16000 }) }),
+          execute: async (_id, args, signal) => {
+            const output = await runShell(args.command, runtime.paths.cwd, {
+              ...runtime.settings.sandbox, signal, stateDir: runtime.paths.home
+            });
+            return { content: [{ type: 'text', text: JSON.stringify(output) }], details: output };
+          }
+        })));
+      }
+    }[id];
+    return setup && { inject: ['harnessTools'], setup };
+  }
+
   private async mount(plan: PluginPlan) {
     const { id, source } = plan;
     let fiber: Fiber | undefined;
     try {
-      if (id === 'subagents') {
-        fiber = this.ctx.inject(['harnessTools'], (ctx) => {
-          const tool = this.runtime.delegateTool();
-          ctx.effect(() => ctx.harnessTools.register(tool, (sessionId) => this.runtime.delegateTool(sessionId),
-            (sessionId) => this.runtime.canDelegate(sessionId)));
-        });
-      } else if (id === 'shell') {
-        fiber = this.ctx.inject(['harnessTools'], (ctx) => {
-          ctx.effect(() => ctx.harnessTools.register(defineTool({
-            name: 'sandbox_shell',
-            label: 'Shell',
-            description: 'Run a shell command in the workspace using the configured execution policy.',
-            parameters: Type.Object({ command: Type.String({ minLength: 1, maxLength: 16000 }) }),
-            execute: async (_id, args, signal) => {
-              const output = await runShell(args.command, this.runtime.paths.cwd, {
-                ...this.runtime.settings.sandbox, signal, stateDir: this.runtime.paths.home
-              });
-              return { content: [{ type: 'text', text: JSON.stringify(output) }], details: output };
-            }
-          })));
-        });
-      } else {
-        const mod = await import(pathToFileURL(source).href);
-        const component = mod.default ?? mod.apply;
-        const setup = typeof component === 'function' ? component : component?.apply?.bind(component);
+        const builtin = this.builtin(id);
+        const mod = builtin ? undefined : await import(pathToFileURL(source).href);
+        const component = builtin ?? mod.default ?? mod.apply;
+        const setup = builtin?.setup ?? (typeof component === 'function' ? component : component?.apply?.bind(component));
         if (typeof setup !== 'function') throw new Error('Expected a setup function or a Cordis component');
         const deps = [...new Set<string>(component.inject ?? mod.inject ?? [])];
-        if (deps.some((dep) => !['harnessAgent', 'harnessSessions'].includes(dep)))
+        if (deps.some((dep) => !['harnessAgent', 'harnessSessions', 'harnessConfig', 'harnessTools', 'harnessRuntime'].includes(dep)))
           throw new Error('Unknown harness service dependency');
         fiber = this.ctx.inject(deps, async (ctx) => {
           const values = Object.freeze(structuredClone(plan.config ?? {}));
@@ -141,7 +179,6 @@ export class PluginHost {
           } satisfies PluginApi);
           if (typeof cleanup === 'function') ctx.effect(() => cleanup);
         });
-      }
       await fiber.await();
       this.mounted.set(id, { plan, fiber });
     } catch (error) {
@@ -157,16 +194,44 @@ export class PluginHost {
     await installed.fiber.dispose();
   }
 
-  async configure(settings: Settings, commit = () => {}) {
+  private plans(settings: Settings) {
     const next = [
-      ...['subagents', 'shell'].map((id): PluginPlan => ({ id })),
-      ...this.discover().map(({ source, metadata: { id } }): PluginPlan => ({
-        id, source, config: Object.hasOwn(settings.pluginConfig, id) ? settings.pluginConfig[id] : undefined
+      ...BUILTINS.map(({ id }): PluginPlan => ({ id, requires: [] })),
+      ...this.discover().filter(({ metadata: { id } }) => settings.plugins[id]).map(({ source, metadata: { id, requires, configSchema } }): PluginPlan => ({
+        id, source, requires, config: this.configValues(id, settings, configSchema)
       }))
     ].filter(({ id }) => Object.hasOwn(settings.plugins, id) && settings.plugins[id]);
     const desired = new Map(next.map((plan) => [plan.id, plan]));
-    const obsolete = [...this.mounted.values()].map(({ plan }) => plan).filter((plan) => !isDeepStrictEqual(plan, desired.get(plan.id)));
-    const additions = next.filter((plan) => !isDeepStrictEqual(plan, this.mounted.get(plan.id)?.plan));
+    const ordered: PluginPlan[] = [];
+    const visiting = new Set<string>();
+    const visited = new Set<string>();
+    const visit = (id: string) => {
+      if (visited.has(id)) return;
+      if (visiting.has(id)) throw new Error('Cyclic plugin dependency: ' + id);
+      const plan = desired.get(id);
+      if (!plan) throw new Error('Required plugin is not enabled: ' + id);
+      visiting.add(id);
+      for (const dependency of plan.requires) visit(dependency);
+      visiting.delete(id);
+      visited.add(id);
+      ordered.push(plan);
+    };
+    for (const plan of next) visit(plan.id);
+    return ordered;
+  }
+
+  needsUpdate(settings: Settings) {
+    const next = this.plans(settings);
+    return next.length !== this.mounted.size || next.some((plan) => !isDeepStrictEqual(plan, this.mounted.get(plan.id)?.plan));
+  }
+
+  async configure(settings: Settings, commit = () => {}) {
+    const ordered = this.plans(settings);
+    const desired = new Map(ordered.map((plan) => [plan.id, plan]));
+    const affected = new Set([...this.mounted.values()].filter(({ plan }) => !isDeepStrictEqual(plan, desired.get(plan.id))).map(({ plan }) => plan.id));
+    for (const plan of ordered) if (plan.requires.some((id) => affected.has(id))) affected.add(plan.id);
+    const obsolete = [...this.mounted.values()].map(({ plan }) => plan).filter((plan) => affected.has(plan.id));
+    const additions = ordered.filter((plan) => affected.has(plan.id) || !this.mounted.has(plan.id));
     const unloaded: PluginPlan[] = [];
     const loaded: string[] = [];
     try {
@@ -193,8 +258,21 @@ export class PluginHost {
   }
 
   getTools(id: string) { return this.ctx.harnessTools.forSession(id); }
+  resources(id: string) { return [this.ctx.harnessSkills, ...this.ctx.harnessTools.resources(id)]; }
+
+  private configValues(id: string, settings: Settings, schema?: Record<string, any>) {
+    const input = structuredClone(settings.pluginConfig[id] ?? {});
+    if (!schema) return input;
+    const config = configDefaults(schema, input) as Record<string, unknown>;
+    if (!Check(schema, config)) throw new Error('Invalid configuration for plugin: ' + id);
+    return config;
+  }
 
   async close() {
-    for (const id of [...this.mounted.keys()].reverse()) await this.unmount(id);
+    const failures = [];
+    for (const id of [...this.mounted.keys()].reverse()) {
+      try { await this.unmount(id); } catch (error) { failures.push(error); }
+    }
+    if (failures.length) throw new AggregateError(failures, 'Plugin cleanup failed');
   }
 }

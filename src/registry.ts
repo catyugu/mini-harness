@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { lstatSync, readFileSync, realpathSync, unlinkSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { getPaths, readJson, writeJson } from './config.js';
+import { isRunning, type RunInfo } from './protocol.js';
 
 export interface ModelChoice { provider: string; id: string }
 export interface Conversation {
@@ -11,6 +12,7 @@ export interface Conversation {
   parentId: string | null;
   file: string | null;
   model?: ModelChoice;
+  run?: RunInfo;
   createdAt: string;
   updatedAt: string;
 }
@@ -27,6 +29,11 @@ export class SessionRegistry {
     if (!Array.isArray(this.state.sessions) || (this.state.pendingDelete && !Array.isArray(this.state.pendingDelete)))
       throw new Error('Invalid conversation index');
     this.finishDeletion();
+    if (this.state.sessions.some(({ run }) => isRunning(run))) this.commit({ ...this.state,
+      sessions: this.state.sessions.map((item) => isRunning(item.run) ? { ...item,
+        run: { ...item.run, state: 'interrupted', error: 'Server stopped before the run finished', finishedAt: new Date().toISOString() }
+      } : item)
+    });
   }
 
   private commit(state: RegistryState) {
@@ -56,7 +63,7 @@ export class SessionRegistry {
     return structuredClone(session);
   }
 
-  update(id: string, patch: Partial<Pick<Conversation, 'title' | 'file' | 'model'>>) {
+  update(id: string, patch: Partial<Pick<Conversation, 'title' | 'file' | 'model' | 'run'>>) {
     const item = this.get(id);
     if (!item) throw new Error('Conversation not found');
     const updated = { ...item, ...patch, updatedAt: new Date().toISOString() };

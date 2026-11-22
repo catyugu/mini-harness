@@ -52,3 +52,9 @@ jobs:
           key: playwright-chromium-1.56.0-ubuntu-24.04
       - run: npx playwright install --with-deps chromium --only-shell
       - run: npm run test:browser
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: browser-failure-details
+          path: test-results/
+          retention-days: 7

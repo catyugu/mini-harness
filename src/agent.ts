@@ -1,4 +1,6 @@
 import { join } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
+import { randomUUID } from 'node:crypto';
 import {
   createAgentSession, defineTool, ModelRuntime, SessionManager, SettingsManager, DefaultResourceLoader,
   type AgentSession
@@ -7,12 +9,17 @@ import { PluginHost } from './plugins.js';
 import { SessionRegistry, type ModelChoice } from './registry.js';
 import { mergeSettings, readSettings, writeJson, type SettingsPatch } from './config.js';
 import { Type } from 'typebox';
-import { Workspace } from './workspace.js';
-import type { ViewMessage, StreamEvent } from './protocol.js';
+import { isRunning, type ViewMessage, type StreamEvent, type RunEvent, type RunInfo } from './protocol.js';
 import { requireChildDepth, selectChildModel, Semaphore, type ChildLease } from './subagents.js';
 
 interface ActiveRun {
+  info: RunInfo;
   controller: AbortController;
+  events: RunEvent[];
+  bytes: number;
+  partial: string;
+  tools: Map<string, Extract<StreamEvent, { type: 'tool' }>>;
+  listeners: Set<(event: RunEvent) => void>;
   done?: Promise<string>;
   lease?: ChildLease;
 }
@@ -28,6 +35,8 @@ export class MiniHarnessRuntime {
   models!: ModelRuntime;
   readonly semaphore: Semaphore;
   private configuring?: Promise<void>;
+  private readonly staleSessions = new Set<string>();
+  private readonly deleting = new Set<string>();
   private stopping = false;
   constructor(paths: ReturnType<typeof import('./config.js').getPaths>) {
     this.paths = paths;
@@ -75,8 +84,10 @@ export class MiniHarnessRuntime {
 
   async open(id: string): Promise<AgentSession> {
     if (this.configuring || this.stopping) throw new Error('Agent service is unavailable during reconfiguration or shutdown');
+    if (this.deleting.has(id)) throw new Error('Conversation is being deleted');
     const active = this.openSessions.get(id);
-    if (active) return active;
+    if (active && (!this.staleSessions.has(id) || this.busy.has(id))) return active;
+    if (active) { active.dispose(); this.openSessions.delete(id); this.staleSessions.delete(id); }
     const pending = this.openingSessions.get(id);
     if (pending) return pending;
     const opening = this.openNewSession(id);
@@ -93,8 +104,8 @@ export class MiniHarnessRuntime {
       cwd: item.cwd,
       agentDir: this.paths.agent,
       settingsManager,
-      additionalSkillPaths: this.settings.plugins.skills ? [this.paths.skills, this.paths.projectSkills] : [],
-      noSkills: !this.settings.plugins.skills,
+      additionalSkillPaths: this.plugins.ctx.harnessSkills?.paths ?? [],
+      noSkills: !this.plugins.ctx.harnessSkills,
       noExtensions: true
     });
     await loader.reload();
@@ -102,7 +113,7 @@ export class MiniHarnessRuntime {
     const manager = file ? SessionManager.open(file, this.paths.sessions, item.cwd) :
       SessionManager.create(item.cwd, this.paths.sessions, { id: item.id });
     if (item.file !== manager.getSessionFile()) this.registry.update(id, { file: manager.getSessionFile() });
-    const customTools = [...new Workspace(item.cwd, this.paths.home).tools(), ...this.plugins.getTools(id)];
+    const customTools = this.plugins.getTools(id);
     const { session } = await createAgentSession({
       cwd: item.cwd,
       agentDir: this.paths.agent,
@@ -148,39 +159,136 @@ export class MiniHarnessRuntime {
   async getConversation(id: string) {
     if (!this.registry.get(id)) throw new Error('Conversation not found');
     const session = await this.open(id);
-    return { ...this.registry.get(id), messages: this.sessionMessages(id), model: this.modelInfo(session.model), busy: this.busy.has(id) };
+    return { ...this.registry.get(id), messages: this.sessionMessages(id), model: this.modelInfo(session.model),
+      selectedModel: { ...this.settings.model },
+      run: this.runInfo(id), partial: this.busy.get(id)?.partial, tools: [...this.busy.get(id)?.tools.values() ?? []], busy: this.busy.has(id) };
   }
 
-  async send(id: string, prompt: string, emit: (event: StreamEvent) => void = () => {}, { signal }: { signal?: AbortSignal } = {}) {
+  private launch(id: string, prompt: string, emit: (event: StreamEvent) => void, { signal, model }: { signal?: AbortSignal; model?: ModelChoice } = {}) {
     if (this.configuring || this.stopping) throw new Error('Agent service is unavailable during reconfiguration or shutdown');
     if (this.busy.has(id)) throw new Error('Conversation is already running');
+    if (this.deleting.has(id)) throw new Error('Conversation is being deleted');
     if (typeof prompt !== 'string' || !prompt.trim() || prompt.length > 200000) throw new Error('Invalid message');
     const record = this.registry.get(id);
     if (!record) throw new Error('Conversation not found');
-    const run: ActiveRun = { controller: new AbortController() };
+    if (model !== undefined) {
+      if (!model || typeof model.provider !== 'string' || typeof model.id !== 'string' ||
+          model.provider.length > 160 || model.id.length > 160) throw new Error('Invalid model choice');
+      this.resolveModel(model);
+    }
+    const choice = model ?? (record.parentId ? record.model : this.settings.model);
+    if (this.staleSessions.delete(id)) {
+      this.openSessions.get(id)?.dispose();
+      this.openSessions.delete(id);
+    }
+    const run: ActiveRun = {
+      info: { id: randomUUID(), sessionId: id, state: 'queued', startedAt: new Date().toISOString(), sequence: 0 },
+      controller: new AbortController(), events: [], bytes: 0, partial: '', tools: new Map(), listeners: new Set()
+    };
     const cancellation = signal ? AbortSignal.any([run.controller.signal, signal]) : run.controller.signal;
+    this.registry.update(id, { run: run.info });
     this.busy.set(id, run);
-    const promptSession = () => this.runPrompt(record, prompt, emit, cancellation);
-    run.done = record.parentId ? this.semaphore.run((lease) => {
+    const publish = (event: StreamEvent) => {
+      if (event.type === 'assistant-start' || event.type === 'assistant-end') run.partial = '';
+      if (event.type === 'delta') run.partial += event.text;
+      if (event.type === 'tool') {
+        if (event.state === 'running') run.tools.set(event.id, event);
+        else run.tools.delete(event.id);
+      }
+      const item = { ...event, sequence: ++run.info.sequence };
+      run.events.push(item);
+      run.bytes += JSON.stringify(item).length;
+      while (run.events.length > 2048 || (run.bytes > 1024 * 1024 && run.events.length > 1))
+        run.bytes -= JSON.stringify(run.events.shift()).length;
+      for (const listener of run.listeners) {
+        try { listener(structuredClone(item)); } catch { run.listeners.delete(listener); }
+      }
+      try { emit?.(item); } catch { /* An observer cannot terminate the run. */ }
+    };
+    const promptSession = async () => {
+      cancellation.throwIfAborted();
+      run.info.state = 'running';
+      this.registry.update(id, { run: run.info });
+      publish({ type: 'run', run: { ...run.info } });
+      return this.runPrompt(record, prompt, publish, cancellation, choice);
+    };
+    const work = record.parentId ? this.semaphore.run((lease) => {
       run.lease = lease;
       return promptSession();
     }, cancellation) : promptSession();
-    try { return await run.done; }
-    finally { this.busy.delete(id); }
+    run.done = work.then((text) => {
+      run.info.state = 'completed';
+      return text;
+    }, (error) => {
+      run.info.state = cancellation.aborted ? 'cancelled' : 'failed';
+      run.info.error = cancellation.aborted ? 'Agent run cancelled' : error instanceof Error ? error.message : String(error);
+      publish({ type: 'error', error: run.info.error });
+      throw new Error(run.info.error, { cause: error });
+    }).finally(() => {
+      run.info.finishedAt = new Date().toISOString();
+      publish({ type: 'run', run: { ...run.info } });
+      try { this.registry.update(id, { run: run.info }); }
+      finally { this.busy.delete(id); run.listeners.clear(); }
+    });
+    // Server-owned runs may outlive every observer.
+    void run.done.catch(() => {});
+    return run;
+  }
+
+  async send(id: string, prompt: string, emit: (event: StreamEvent) => void = () => {}, options: { signal?: AbortSignal; model?: ModelChoice } = {}) {
+    return this.launch(id, prompt, emit, options).done;
+  }
+
+  startRun(id: string, prompt: string, model?: ModelChoice) {
+    return { ...this.launch(id, prompt, undefined, { model }).info };
+  }
+
+  runInfo(id: string): RunInfo | undefined {
+    const info = this.busy.get(id)?.info ?? this.registry.get(id)?.run;
+    return info && { ...info };
+  }
+
+  watchRun(id: string, runId: string, after: number, emit: (event: RunEvent) => void) {
+    const run = this.busy.get(id);
+    const info = this.runInfo(id);
+    if (!info || info.id !== runId) throw new Error('Run not found');
+    if (!Number.isSafeInteger(after) || after < 0 || after > info.sequence) throw new Error('Invalid event cursor');
+    if (!run || after < (run.events[0]?.sequence ?? 1) - 1) {
+      emit({ type: 'snapshot', messages: this.sessionMessages(id), partial: isRunning(info) ? run?.partial : undefined,
+        tools: [...run?.tools.values() ?? []], run: info, sequence: info.sequence });
+    } else {
+      for (const event of run.events) if (event.sequence > after) emit(structuredClone(event));
+    }
+    if (run && isRunning(run.info)) run.listeners.add(emit);
+    return () => { run?.listeners.delete(emit); };
   }
 
   cancel(id: string) {
-    const run = this.busy.get(id);
-    run?.controller.abort(new Error('Agent run cancelled'));
-    return Boolean(run);
+    let cancelled = false;
+    for (const child of this.registry.descendants([id])) {
+      const run = this.busy.get(child);
+      if (run) { cancelled = true; run.controller.abort(new Error('Agent run cancelled')); }
+    }
+    return cancelled;
   }
 
   private async runPrompt(record: NonNullable<ReturnType<SessionRegistry['get']>>, prompt: string,
-      emit: (event: StreamEvent) => void, signal: AbortSignal) {
+      emit: (event: StreamEvent) => void, signal: AbortSignal, choice?: ModelChoice) {
     const { id } = record;
     signal.throwIfAborted();
     const session = await this.open(id);
     signal.throwIfAborted();
+    const model = this.resolveModel(choice);
+    if (model && (session.model?.provider !== model.provider || session.model?.id !== model.id))
+      await session.setModel(model);
+    signal.throwIfAborted();
+    const actual = this.modelInfo(session.model);
+    if (!record.parentId && !isDeepStrictEqual(this.settings.model, actual)) {
+      const next = mergeSettings(this.settings, { model: actual });
+      writeJson(this.paths.settings, next);
+      this.settings = next;
+    }
+    this.registry.update(id, { model: actual });
     if (record.title === 'New conversation') this.registry.update(id, { title: prompt.trim().slice(0, 72) });
     const off = session.subscribe((event) => {
       switch (event.type) {
@@ -190,6 +298,9 @@ export class MiniHarnessRuntime {
         case 'message_update':
           if (event.assistantMessageEvent?.type === 'text_delta')
             emit({ type: 'delta', text: event.assistantMessageEvent.delta });
+          break;
+        case 'message_end':
+          if (event.message.role === 'assistant') emit({ type: 'assistant-end' });
           break;
         case 'tool_execution_start':
           emit({ type: 'tool', id: event.toolCallId, name: event.toolName, state: 'running' });
@@ -206,6 +317,7 @@ export class MiniHarnessRuntime {
     const cancel = () => { void session.abort().catch(() => {}); };
     signal.addEventListener('abort', cancel, { once: true });
     try {
+      emit({ type: 'user', text: prompt });
       await session.prompt(prompt);
       signal.throwIfAborted();
       const last = session.messages.at(-1);
@@ -255,6 +367,7 @@ export class MiniHarnessRuntime {
     signal?.throwIfAborted();
     const parent = this.registry.get(parentId);
     if (!parent) throw new Error('Parent conversation not found');
+    if (this.deleting.has(parentId)) throw new Error('Conversation is being deleted');
     requireChildDepth(this.registry.depth(parentId), this.settings.subagents.maxDepth);
     const model = this.resolveModel(choice);
     const record = this.registry.create({
@@ -264,7 +377,9 @@ export class MiniHarnessRuntime {
       const text = await this.send(record.id, task, undefined, { signal });
       return { id: record.id, text };
     } catch (error) {
-      this.registry.update(record.id, { title: (signal?.aborted ? '[Cancelled] ' : '[Failed] ') + task.slice(0, 60) });
+      if (this.registry.get(record.id)) this.registry.update(record.id, {
+        title: (signal?.aborted || this.runInfo(record.id)?.state === 'cancelled' ? '[Cancelled] ' : '[Failed] ') + task.slice(0, 60)
+      });
       throw error;
     }
   }
@@ -278,31 +393,59 @@ export class MiniHarnessRuntime {
 
   async delete(ids: string[]) {
     const all = this.registry.descendants(ids);
-    if (all.some((id) => this.busy.has(id) || this.openingSessions.has(id)))
-      throw new Error('Stop active conversations before deleting them');
-    for (const id of all) {
-      const session = this.openSessions.get(id);
-      if (session) { session.dispose(); this.openSessions.delete(id); }
-    }
-    return this.registry.delete(ids);
+    if (all.some((id) => this.deleting.has(id))) throw new Error('Conversation is being deleted');
+    for (const id of all) this.deleting.add(id);
+    try {
+      for (const id of ids) this.cancel(id);
+      await Promise.allSettled(all.flatMap((id) => [this.busy.get(id)?.done, this.openingSessions.get(id)]));
+      for (const id of all) {
+        this.openSessions.get(id)?.dispose();
+        this.openSessions.delete(id);
+        this.staleSessions.delete(id);
+      }
+      return this.registry.delete(ids);
+    } finally { for (const id of all) this.deleting.delete(id); }
   }
 
   async updateSettings(patch: SettingsPatch) {
-    if (this.configuring || this.stopping || this.busy.size || this.openingSessions.size)
-      throw new Error('Cannot change settings while the agent service is busy');
+    if (this.configuring || this.stopping) throw new Error('Agent service is unavailable during reconfiguration or shutdown');
     const next = mergeSettings(this.settings, patch);
     this.resolveModel(next.model);
     if (next.subagents.provider) this.resolveModel({ provider: next.subagents.provider, id: next.subagents.model });
-    // Even a rolled-back change replaces the affected plugin's setup and tool closures.
-    for (const session of this.openSessions.values()) session.dispose();
-    this.openSessions.clear();
+    const toolsChanged = this.plugins.needsUpdate(next);
+    const previousDepth = this.settings.subagents.maxDepth;
+    const depthChanged = next.subagents.maxDepth !== previousDepth;
+    if (!toolsChanged) {
+      writeJson(this.paths.settings, next);
+      this.settings = next;
+      this.semaphore.setLimit(next.subagents.maxParallel);
+      if (depthChanged) for (const id of this.openSessions.keys()) {
+        const depth = this.registry.depth(id);
+        if ((depth < previousDepth) !== (depth < next.subagents.maxDepth)) this.staleSessions.add(id);
+      }
+      return next;
+    }
+    if (this.busy.size || this.openingSessions.size)
+      throw new Error('Stop active conversations before changing tools or Skills');
+    const resources = new Map([...this.openSessions.keys()].map((id) => [id, this.plugins.resources(id)]));
     this.configuring = this.plugins.configure(next, () => writeJson(this.paths.settings, next));
     try {
       await this.configuring;
       this.settings = next;
       this.semaphore.setLimit(next.subagents.maxParallel);
       return next;
-    } finally { this.configuring = undefined; }
+    } finally {
+      // A rollback can replace closures too. Keep sessions whose actual resources survived.
+      for (const [id, before] of resources) {
+        const after = this.plugins.resources(id);
+        if (before.length !== after.length || before.some((resource, i) => resource !== after[i])) {
+          this.openSessions.get(id)?.dispose();
+          this.openSessions.delete(id);
+          this.staleSessions.delete(id);
+        }
+      }
+      this.configuring = undefined;
+    }
   }
 
   async stop() {
@@ -312,5 +455,6 @@ export class MiniHarnessRuntime {
     for (const session of this.openSessions.values()) session.dispose();
     this.openSessions.clear();
     await this.plugins.close();
+    await this.models?.settleCredentialWrites();
   }
 }

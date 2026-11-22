@@ -65,7 +65,7 @@ button:disabled { cursor: default; opacity: .55; }
 a, .link-button { color: var(--focus); }
 input[type="checkbox"] { accent-color: var(--accent); }
 
-.app { display: flex; height: 100vh; height: 100dvh; min-width: 0; }
+.app { display: flex; height: 100vh; height: var(--app-height, 100dvh); min-width: 0; }
 .sidebar {
   display: flex;
   flex: 0 0 270px;
@@ -94,6 +94,10 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .sessions { overflow: auto; flex: 1; }
 .sessions ul { padding: 0; margin: 0; list-style: none; }
 .sessions li ul { margin: 1px 0 2px 10px; padding-left: 4px; border-left: 1px solid var(--border); }
+.sessions li ul ul ul ul { margin-left: 3px; padding-left: 2px; }
+.run-state { flex-shrink: 0; max-width: 75px; overflow: hidden; text-overflow: ellipsis; font-size: 10px; padding: 2px 5px; color: var(--muted); }
+.run-state:is([data-state="running"], [data-state="queued"]) { color: var(--focus); font-weight: 600; }
+.run-state:is([data-state="failed"], [data-state="cancelled"], [data-state="interrupted"]) { color: var(--danger); }
 .session-row { display: flex; align-items: center; min-height: 35px; min-width: 0; padding: 1px 3px; border-radius: 7px; }
 .session-row:hover { background: var(--hover); }
 .session-row.active { background: var(--selected); }
@@ -185,6 +189,12 @@ input[type="checkbox"] { accent-color: var(--accent); }
 }
 .settings-header h2 { margin: 0; font-size: 17px; }
 .settings-scroll { overflow: auto; padding: 8px 18px max(18px, env(safe-area-inset-bottom)); }
+.settings-scroll { min-height: 0; overscroll-behavior: contain; }
+.settings-header { flex-shrink: 0; padding-top: max(11px, env(safe-area-inset-top)); }
+.plugin-group { padding-bottom: 8px; }
+.plugin-config { border: 0; margin: 0; padding: 0; min-width: 0; }
+.plugin-fields { padding-left: 10px; border-left: 1px solid var(--border); }
+.plugin-fields textarea { display: block; width: 100%; min-height: 80px; color: var(--ink); background: var(--surface); border: 1px solid var(--border); border-radius: 7px; }
 .settings-scroll section { padding: 12px 0 15px; border-bottom: 1px solid var(--border); }
 .settings-scroll h3 { font-size: 14px; margin: 0 0 5px; }
 .settings-scroll label { display: block; margin: 8px 0 4px; font-size: 13px; }
@@ -202,11 +212,17 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .mobile-only { display: none; }
 
 @media (max-width: 860px) {
-  .sidebar { position: fixed; z-index: 3; inset: 0 auto 0 0; width: min(300px, 88vw); transform: translateX(-100%); transition: transform .18s ease; }
+  .sidebar { position: fixed; z-index: 3; inset: 0 auto auto 0; height: var(--app-height, 100dvh); width: min(300px, 88vw); padding-top: max(14px, env(safe-area-inset-top)); padding-bottom: max(10px, env(safe-area-inset-bottom)); transform: translateX(-100%); transition: transform .18s ease; }
   .sidebar.open { transform: translateX(0); }
   .mobile-only { display: block; }
   .topbar { padding: 0 10px; gap: 7px; }
   .settings-panel { border-left: 0; }
+  .settings-panel { height: var(--app-height, 100dvh); }
+  .icon-button, .tree-button, .link-button, .session-row, .small-button, .bulk-actions button { min-height: 44px; }
+  .tree-button { flex-basis: 30px; }
+  .session-row input[type="checkbox"] { width: 22px; height: 22px; }
+  .topbar { padding-top: env(safe-area-inset-top); flex-basis: calc(60px + env(safe-area-inset-top)); }
+  .settings-scroll :is(input:not([type="checkbox"]), select, textarea) { font-size: 16px; min-height: 44px; }
 }
 @media (max-width: 560px) {
   .messages { padding-inline: 12px; }

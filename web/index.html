@@ -2,11 +2,14 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="theme-color" content="#203349">
   <meta name="color-scheme" content="light dark">
   <meta name="description" content="mini-harness — a minimal Pi harness">
   <link rel="icon" type="image/svg+xml" href="/logo.svg">
+  <link rel="alternate icon" href="/favicon.ico">
   <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/icon-192.png">
   <link rel="stylesheet" href="/style.css">
   <title>mini-harness</title>
 </head>
@@ -25,6 +28,7 @@
     <nav id="sessions" class="sessions" aria-label="Conversation tree"></nav>
     <div id="bulkActions" class="bulk-actions" hidden>
       <span id="selectedCount" aria-live="polite"></span>
+      <button id="selectAll" type="button">Select all</button>
       <button id="exportSessions" type="button">Export</button>
       <button id="deleteSessions" class="danger" type="button">Delete</button>
       <button id="cancelSelection" type="button">Cancel</button>
@@ -67,6 +71,8 @@
         <label for="model">Model ID</label><input id="model" placeholder="Auto model">
         <label for="apiKey">API key</label><input id="apiKey" type="password" autocomplete="off">
         <button id="saveCredential" class="small-button" type="button">Save API key</button>
+        <button id="refreshModels" class="small-button" type="button">Refresh models</button>
+        <p id="credentialStatus" class="hint" role="status"></p>
       </section>
       <section>
         <h3>Agent</h3>
@@ -84,7 +90,7 @@
         <select id="theme"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select>
       </section>
       <section>
-        <h3>Security</h3>
+        <h3>Execution policy</h3>
         <p id="isolationStatus" class="hint"></p>
         <label for="sandboxMode">Shell policy</label>
         <select id="sandboxMode"><option value="isolated">Isolated (Linux)</option><option value="host">Trusted host</option></select>

@@ -15,7 +15,7 @@ import { isAbsolute, join, resolve } from 'node:path';
 export const DEFAULTS = Object.freeze({
   port: 3837,
   model: { provider: '', id: '' },
-  plugins: { skills: true, subagents: true, shell: false },
+  plugins: { files: true, skills: true, subagents: true, shell: false },
   pluginConfig: {},
   subagents: { maxDepth: 1, maxParallel: 4, provider: '', model: '' },
   sandbox: { mode: 'isolated', timeoutSeconds: 60 },
