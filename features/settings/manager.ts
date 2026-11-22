@@ -38,6 +38,17 @@ export class SettingsManager implements SettingsPort {
     this.publish();
   }
 
+  forgetPlugin(id: string) {
+    const plugins = { ...this.settings.plugins };
+    const pluginConfig = { ...this.settings.pluginConfig };
+    delete plugins[id];
+    delete pluginConfig[id];
+    const next = { ...this.settings, plugins, pluginConfig };
+    writeJson(this.paths.settings, next);
+    this.settings = next;
+    this.publish();
+  }
+
   async update(patch: SettingsPatch, host: PluginHost, operations: ConversationPort, pi: AgentPort) {
     operations.assertAvailable();
     const next = mergeSettings(this.settings, patch);

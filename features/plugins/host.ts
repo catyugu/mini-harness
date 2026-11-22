@@ -14,7 +14,11 @@ export function setup(ctx: Context) {
   add('POST', '/api/plugins/install', async ({ body }) => ctx.harnessMutations.run(async () =>
     new HttpReply(201, installPlugin(host(), await body(2 * 1024 * 1024)))));
   add('DELETE', '/api/plugins/:id', ({ params }) =>
-    ctx.harnessMutations.run(() => uninstallPlugin(host(), params.id)));
+    ctx.harnessMutations.run(async () => {
+      const metadata = await uninstallPlugin(host(), params.id);
+      ctx.harnessSettingsStore.forgetPlugin(params.id);
+      return metadata;
+    }));
   add('GET', '/api/plugins/:id/web', ({ params }) => ({
     source: frontendSource(host(), params.id),
     config: ctx.harnessPluginCatalog.configuration(params.id)

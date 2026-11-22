@@ -86,6 +86,7 @@ export interface SettingsPort {
   readonly settings: Settings;
   readonly changing: boolean;
   rememberModel(model: ModelChoice): void;
+  forgetPlugin(id: string): void;
   subscribe(listener: () => void): () => void;
   validate(listener: (settings: Settings) => void): () => void;
 }

@@ -21,4 +21,7 @@ test('web-only plugins install and unload without a dummy backend entry', async 
   assert.equal((await request('/settings', 'PATCH', { plugins: { 'browser-only': false } })).status, 200);
   assert.equal((await request('/plugins/browser-only/web')).status, 400);
   assert.equal((await request('/plugins/browser-only', 'DELETE')).status, 200);
+  const settings = (await request('/bootstrap')).body.settings;
+  assert.equal(settings.plugins['browser-only'], undefined);
+  assert.equal(settings.pluginConfig['browser-only'], undefined);
 });
