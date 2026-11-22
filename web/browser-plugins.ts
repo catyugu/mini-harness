@@ -1,6 +1,6 @@
 import { Context } from './vendor/cordis.js';
 import { data } from './api.js';
-import { BrowserState } from './client.js';
+import { BrowserState } from './models/browser-state.js';
 import { FrontendHost, type BrowserPlugin } from './extensions.js';
 import { createPluginLoader, type BrowserPluginFailures } from './plugin-loader.js';
 import { shellPlugin } from './shell.js';
