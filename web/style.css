@@ -293,7 +293,11 @@ button { border-radius: var(--radius); }
 .composer.dragging { border: 2px dashed var(--focus); }
 .suggestions { position: absolute; bottom: calc(100% + 6px); left: 0; width: min(520px, 100%); max-height: 280px; overflow: auto; padding: 5px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); z-index: 1; }
 .suggestion { display: block; width: 100%; text-align: left; padding: 8px 10px; border: 0; background: transparent; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.suggestion:hover { background: var(--hover); }
+.suggestion:hover, .suggestion[aria-selected="true"] { background: var(--hover); }
+.suggestion strong { font-weight: 600; }
+.suggestion small { font-size: 12px; color: var(--muted); }
+.suggestion-group { margin-left: 9px; }
+.suggestion-description { display: block; overflow: hidden; text-overflow: ellipsis; }
 .queued-messages { max-height: 84px; overflow: auto; white-space: pre-wrap; font-size: 12px; color: var(--muted); padding: 6px 10px; }
 .approval-requests { max-height: 30vh; overflow: auto; }
 .approval-card { padding: 10px; border: 1px solid var(--focus); border-radius: var(--radius); background: var(--surface); margin-bottom: 8px; font-size: 12px; }

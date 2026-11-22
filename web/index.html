@@ -55,8 +55,8 @@
       <div id="status" class="status" role="status"></div>
       <form id="composer" class="composer">
         <div id="attachments" class="attachments" hidden></div>
-        <div id="suggestions" class="suggestions" aria-label="Input suggestions" hidden></div>
-        <textarea id="prompt" rows="2" placeholder="Ask anything…" aria-label="Message" required></textarea>
+        <div id="suggestions" class="suggestions" role="listbox" aria-label="Input suggestions" hidden></div>
+        <textarea id="prompt" rows="2" placeholder="Ask anything…" aria-label="Message" aria-controls="suggestions" aria-autocomplete="list" required></textarea>
         <div class="composer-footer">
           <div id="composerExtensions" class="composer-tools"></div><button id="modelSelect" class="model-select" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="modelResults">Choose model</button>
           <div id="modelPicker" class="model-picker" popover="auto">

@@ -9,6 +9,7 @@ import { FrontendHost, type FrontendApi } from './extensions.js';
 import { createMessageView } from './messages.js';
 import { hydrateIcons, icon } from './icons.js';
 import { createSessionList } from './sessions.js';
+import { CommandRegistry } from './commands.js';
 import { createComposer } from './composer.js';
 import { fileInspector } from './files.js';
 import { providerManager } from './provider-manager.js';
@@ -53,12 +54,17 @@ function inspect(title: string, content: HTMLElement) {
   element('inspector').hidden = false;
   element('inspectorOpen').setAttribute('aria-expanded', 'true');
 }
+const commands = new CommandRegistry();
 const settingsNavigation = createSettingsNavigation();
 const extensions = new FrontendHost({ sidebar: element('sidebarExtensions'), composer: element('composerExtensions'),
   settings: element('settingsExtensions'), inspector: element('inspectorExtensions') }, {
-  request: data, insert: (text) => { prompt.setRangeText(text, prompt.selectionStart, prompt.selectionEnd, 'end'); prompt.focus(); adjustPrompt(); }, inspect
-}, report, settingsNavigation.addPage);
-const composerUi = createComposer(report);
+  request: data, insert: (text) => { prompt.setRangeText(text, prompt.selectionStart, prompt.selectionEnd, 'end'); prompt.focus(); prompt.dispatchEvent(new Event('input')); }, inspect
+}, report, settingsNavigation.addPage, (command) => {
+  const dispose = commands.register(command);
+  composerUi.refresh(true);
+  return () => { dispose(); composerUi.refresh(true); };
+});
+const composerUi = createComposer(report, commands);
 const frontendState = new Map<string, string>();
 let frontendWork = Promise.resolve();
 async function refreshBootstrap() {
@@ -70,6 +76,14 @@ function reconcileFrontend() {
   const snapshot = bootstrap;
   frontendWork = frontendWork.then(async () => {
     const desired = new Map<string, { key: string; setup?: (api: FrontendApi) => any; source?: boolean; requires?: string[] }>([
+      ['core:commands', { key: 'core', setup: (api) => {
+        api.command({ name: 'model', group: 'Conversation', description: 'Choose a configured model', run: () => modelPicker.open() });
+        api.command({ name: 'export', group: 'Conversation', description: 'Export the current conversation', run: () => {
+          if (!active) throw new Error('Open a conversation to export it.');
+          return exportSessions([active]);
+        } });
+        api.command({ name: 'compact', group: 'Conversation', description: 'Summarize earlier messages to free context', run: compactConversation });
+      } }],
       ['core:attachments', { key: 'core', setup: (api) => composerUi.attach(api) }],
       ['core:providers', { key: 'core', setup: () => providerManager(() => bootstrap.providers, refreshBootstrap) }],
       ['core:plugins', { key: 'core', setup: (api) => pluginInstaller(api, refreshBootstrap) }]
@@ -266,7 +280,7 @@ async function send(text: string, attached?: import('../src/input.js').Attachmen
     if (!active) { showConversation(await createConversation()); setSending(true); }
     const id = active;
     lastInputs.set(id, { message: text, attachments });
-    await data<RunInfo>('/sessions/' + id + '/runs', payload('POST', { message: text, attachments, model: choice, thinkingLevel }));
+    await data<RunInfo>('/sessions/' + id + '/runs', payload('POST', { message: commands.prepare(text), attachments, model: choice, thinkingLevel }));
     modelDraft = undefined;
     prompt.value = '';
     composerUi.clear();
@@ -409,14 +423,27 @@ function applySettings(settings: Settings) {
   updateModelControls();
 }
 
-async function exportSelected() {
-  const response = await api('/sessions/export', payload('POST', { ids: [...selection] }));
+async function exportSessions(ids: string[]) {
+  const response = await api('/sessions/export', payload('POST', { ids }));
   const url = URL.createObjectURL(await response.blob());
   const anchor = document.createElement('a');
   anchor.href = url;
   anchor.download = 'mini-harness-sessions.json';
   anchor.click();
   setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+async function compactConversation() {
+  const id = active;
+  if (!id) throw new Error('Open a conversation to compact it.');
+  if (sending || pendingNavigation) throw new Error('Wait for the current operation to finish.');
+  const request = navigation;
+  pendingNavigation = true;
+  showStatus('Compacting conversation…');
+  try {
+    await data('/sessions/' + id + '/compact', payload('POST', {}));
+    if (request === navigation) { await activate(id); showStatus('Conversation compacted.'); }
+  } finally { if (request === navigation) pendingNavigation = false; }
 }
 
 async function deleteSelected() {
@@ -452,7 +479,7 @@ async function queueMessage() {
   const button = element<'button'>('queueSend'); button.disabled = true;
   try {
     const queued = await data<{ steer: string[]; followUp: string[] }>('/sessions/' + id + '/queue', payload('POST', {
-      message: prompt.value, mode: value('queueMode'), attachments: composerUi.attachments()
+      message: commands.prepare(prompt.value), mode: value('queueMode'), attachments: composerUi.attachments()
     }));
     if (active !== id) return;
     prompt.value = ''; composerUi.clear(); adjustPrompt(); showQueue(queued);
@@ -501,7 +528,7 @@ document.addEventListener('keydown', (event) => {
   }
 });
 element('newSession').onclick = () => void newSession();
-element('exportSessions').onclick = () => void exportSelected().catch(report);
+element('exportSessions').onclick = () => void exportSessions([...selection]).catch(report);
 element('deleteSessions').onclick = () => void deleteSelected().catch(report);
 element<'button'>('stop').onclick = async () => {
   if (!active) return;
@@ -512,7 +539,7 @@ element<'button'>('stop').onclick = async () => {
 };
 composer.onsubmit = (event) => { event.preventDefault(); void send(prompt.value); };
 prompt.onkeydown = (event) => {
-  if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+  if (!event.defaultPrevented && event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
     event.preventDefault();
     if (sending) void queueMessage(); else composer.requestSubmit();
   }

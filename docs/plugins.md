@@ -82,9 +82,10 @@ All API requests require `Authorization: Bearer <token>`.
 
 | Request | Result |
 | - | - |
-| `POST /api/sessions/:id/runs` with `{ "message": "...", "model": { "provider": "...", "id": "..." } }` | Starts a server-owned run; responds `202` with run ID and status. Model is optional. |
+| `POST /api/sessions/:id/runs` with `{ "message": "...", "model": { "provider": "...", "id": "..." } }` | Starts a server-owned run; responds `202` with run ID and status. Both model and `thinkingLevel` are optional. |
 | `GET /api/sessions/:id/runs` | Latest run status, including terminal errors |
 | `GET /api/sessions/:id/events?run=<run-id>&after=<sequence>` | NDJSON events after the cursor; disconnecting removes only this observer |
+| `POST /api/sessions/:id/compact` | Ask Pi to summarize earlier context while the conversation is idle |
 | `POST /api/sessions/:id/cancel` | Explicitly cancel that conversation and running descendants |
 
 Run states are queued, running, completed, failed, cancelled and interrupted. Event replay is bounded to 2,048 events and approximately 1 MiB per active conversation. An older cursor receives a snapshot of Pi history and current output, then follows live events. Completed runs use saved history snapshots. The server persists latest status and Pi JSONL, rather than a separate execution context or an event archive.
@@ -116,6 +117,7 @@ export default function setup(api) {
 | API | Behavior |
 | - | - |
 | `mount('sidebar', node)` | Add a sidebar entry |
+| `command({name, description, group?, run?})` | Register a slash suggestion. Omit the leading slash from the name. With no callback the command is inserted into the draft. |
 | `mount('composer', node)` | Add an input toolbar control |
 | `tool(name, render)` | Register one renderer for a tool name; returning `undefined` uses the generic result view |
 | `settingsPage(title, node)` | Register a settings category and its content |

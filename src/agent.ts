@@ -40,6 +40,7 @@ export class MiniHarnessRuntime {
   readonly semaphore: Semaphore;
   private configuring?: Promise<void>;
   private readonly staleSessions = new Set<string>();
+  private readonly compactions = new Map<string, { done: Promise<void>; controller: AbortController }>();
   private readonly deleting = new Set<string>();
   private stopping = false;
   constructor(paths: ReturnType<typeof import('./config.js').getPaths>) {
@@ -88,11 +89,13 @@ export class MiniHarnessRuntime {
     return model;
   }
 
+  get hasActiveWork() { return Boolean(this.busy.size || this.openingSessions.size || this.compactions.size); }
+
   async open(id: string): Promise<AgentSession> {
     if (this.configuring || this.stopping) throw new Error('Agent service is unavailable during reconfiguration or shutdown');
     if (this.deleting.has(id)) throw new Error('Conversation is being deleted');
     const active = this.openSessions.get(id);
-    if (active && (!this.staleSessions.has(id) || this.busy.has(id))) return active;
+    if (active && (!this.staleSessions.has(id) || this.busy.has(id) || this.compactions.has(id))) return active;
     if (active) { active.dispose(); this.openSessions.delete(id); this.staleSessions.delete(id); }
     const pending = this.openingSessions.get(id);
     if (pending) return pending;
@@ -176,7 +179,7 @@ export class MiniHarnessRuntime {
 
   private launch(id: string, prompt: string, emit: (event: StreamEvent) => void, { signal, model, attachments, thinkingLevel }: { signal?: AbortSignal; model?: ModelChoice; attachments?: Attachment[]; thinkingLevel?: AgentSession['thinkingLevel'] } = {}) {
     if (this.configuring || this.stopping) throw new Error('Agent service is unavailable during reconfiguration or shutdown');
-    if (this.busy.has(id)) throw new Error('Conversation is already running');
+    if (this.busy.has(id) || this.compactions.has(id)) throw new Error('Conversation is already running');
     if (this.deleting.has(id)) throw new Error('Conversation is being deleted');
     if (thinkingLevel !== undefined && !['off', 'minimal', 'low', 'medium', 'high', 'xhigh'].includes(thinkingLevel))
       throw new Error('Invalid thinking level');
@@ -281,6 +284,8 @@ export class MiniHarnessRuntime {
     for (const child of this.registry.descendants([id])) {
       const run = this.busy.get(child);
       if (run) { cancelled = true; run.controller.abort(new Error('Agent run cancelled')); }
+      const compaction = this.compactions.get(child);
+      if (compaction) { cancelled = true; compaction.controller.abort(new Error('Compaction cancelled')); }
     }
     return cancelled;
   }
@@ -360,6 +365,21 @@ export class MiniHarnessRuntime {
     }
   }
 
+  async compact(id: string) {
+    if (this.busy.has(id) || this.compactions.has(id)) throw new Error('Stop the open conversation before compacting it');
+    const controller = new AbortController();
+    const done = this.open(id).then(async (session) => {
+      controller.signal.throwIfAborted();
+      const abort = () => session.abortCompaction();
+      controller.signal.addEventListener('abort', abort, { once: true });
+      try { await session.compact(); }
+      finally { controller.signal.removeEventListener('abort', abort); }
+    });
+    this.compactions.set(id, { done, controller });
+    try { await done; }
+    finally { this.compactions.delete(id); }
+  }
+
   async queueInput(id: string, text: string, mode: 'steer' | 'followUp', attachments?: Attachment[]) {
     if (!['steer', 'followUp'].includes(mode)) throw new Error('Invalid queue mode');
     const session = this.openSessions.get(id);
@@ -429,7 +449,7 @@ export class MiniHarnessRuntime {
 
   export(ids: string[]) {
     const all = this.registry.descendants(ids);
-    if (all.some((id) => this.busy.has(id) || this.openingSessions.has(id)))
+    if (all.some((id) => this.busy.has(id) || this.openingSessions.has(id) || this.compactions.has(id)))
       throw new Error('Stop active conversations before exporting them');
     return this.registry.export(ids);
   }
@@ -440,7 +460,7 @@ export class MiniHarnessRuntime {
     for (const id of all) this.deleting.add(id);
     try {
       for (const id of ids) this.cancel(id);
-      await Promise.allSettled(all.flatMap((id) => [this.busy.get(id)?.done, this.openingSessions.get(id)]));
+      await Promise.allSettled(all.flatMap((id) => [this.busy.get(id)?.done, this.openingSessions.get(id), this.compactions.get(id)?.done]));
       for (const id of all) {
         this.openSessions.get(id)?.dispose();
         this.openSessions.delete(id);
@@ -468,7 +488,7 @@ export class MiniHarnessRuntime {
       }
       return next;
     }
-    if (this.busy.size || this.openingSessions.size)
+    if (this.hasActiveWork)
       throw new Error('Stop active conversations before changing tools or Skills');
     const resources = new Map([...this.openSessions.keys()].map((id) => [id, this.plugins.resources(id)]));
     this.configuring = this.plugins.configure(next, () => writeJson(this.paths.settings, next));
@@ -494,8 +514,8 @@ export class MiniHarnessRuntime {
   async stop() {
     this.stopping = true;
     this.approvals.close();
-    for (const id of this.busy.keys()) this.cancel(id);
-    await Promise.allSettled([this.configuring, ...this.openingSessions.values(), ...[...this.busy.values()].map(({ done }) => done)]);
+    for (const id of [...this.busy.keys(), ...this.compactions.keys()]) this.cancel(id);
+    await Promise.allSettled([this.configuring, ...this.openingSessions.values(), ...[...this.compactions.values()].map(({ done }) => done), ...[...this.busy.values()].map(({ done }) => done)]);
     for (const session of this.openSessions.values()) session.dispose();
     this.openSessions.clear();
     await this.plugins.close();

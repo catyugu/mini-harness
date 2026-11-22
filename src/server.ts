@@ -23,7 +23,7 @@ declare module 'cordis' {
 const WEB_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'web');
 const assets = new Map([
   ['index.html', 'text/html'], ['app.js', 'text/javascript'], ['markdown.js', 'text/javascript'],
-  ...['api', 'extensions', 'icons', 'settings-fields', 'messages', 'composer', 'model-picker', 'files', 'provider-manager', 'plugin-manager', 'workspaces', 'sessions', 'settings', 'types'].map((name): [string, string] => [name + '.js', 'text/javascript']),
+  ...['api', 'extensions', 'icons', 'settings-fields', 'messages', 'composer', 'model-picker', 'commands', 'files', 'provider-manager', 'plugin-manager', 'workspaces', 'sessions', 'settings', 'types'].map((name): [string, string] => [name + '.js', 'text/javascript']),
   ['vendor/marked.js', 'text/javascript'], ['vendor/purify.js', 'text/javascript'],
   ['style.css', 'text/css'], ['logo.svg', 'image/svg+xml'], ['manifest.webmanifest', 'application/manifest+json'],
   ['icon-192.png', 'image/png'], ['icon-512.png', 'image/png'], ['favicon.ico', 'image/x-icon']
@@ -115,13 +115,13 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
       const workspaces = () => [...new Set([runtime.paths.cwd, ...readJson<string[]>(workspacesFile, [])])].slice(0, 30);
       if (pathname === '/api/workspaces' && req.method === 'GET') return json(res, 200, { current: runtime.paths.cwd, paths: workspaces() });
       if (pathname === '/api/workspaces' && req.method === 'POST') {
-        if (configuring || runtime.busy.size || runtime.openingSessions.size) throw new Error('Stop active conversations before switching workspace');
+        if (configuring || runtime.hasActiveWork) throw new Error('Stop active conversations before switching workspace');
         const input = await requestBody(req);
         if (typeof input.path !== 'string' || !isAbsolute(input.path)) throw new Error('Enter an absolute workspace path');
         const target = realpathSync(input.path);
         if (!statSync(target).isDirectory() || containsPath(paths.home, target)) throw new Error('Select a workspace directory outside mini-harness configuration');
         const known = [...new Set([target, ...workspaces()])].slice(0, 30);
-        if (switching || configuring || runtime.busy.size || runtime.openingSessions.size) throw new Error('Stop active conversations before switching workspace');
+        if (switching || configuring || runtime.hasActiveWork) throw new Error('Stop active conversations before switching workspace');
         const previous = runtime.paths;
         switching = true;
         try {
@@ -174,7 +174,7 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
         return json(res, 200, { settings: runtime.settings, sessions: runtime.registry.list().map((item) => ({ ...item, run: runtime.runInfo(item.id) })), models: runtime.availableModels(), plugins: runtime.plugins.metadata(), workspace: runtime.paths.cwd, isolation, providers: providerSettings(runtime) });
       if (pathname === '/api/sessions' && req.method === 'GET') return json(res, 200, runtime.registry.list().map((item) => ({ ...item, run: runtime.runInfo(item.id) })));
       if (pathname === '/api/sessions' && req.method === 'POST') return json(res, 201, runtime.registry.create());
-      const match = /^\/api\/sessions\/([a-f0-9-]{36})(?:\/(messages|cancel|runs|events|queue))?$/.exec(pathname);
+      const match = /^\/api\/sessions\/([a-f0-9-]{36})(?:\/(messages|cancel|runs|events|queue|compact))?$/.exec(pathname);
       if (match) {
         const id = match[1];
         if (!runtime.registry.get(id)) return json(res, 404, { error: 'Conversation not found' });
@@ -182,6 +182,11 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
           const input = await requestBody(req);
           if (typeof input.title !== 'string' || !input.title.trim() || input.title.length > 140) throw new Error('Title must contain 1–140 characters');
           return json(res, 200, runtime.registry.update(id, { title: input.title.trim() }));
+        }
+        if (match[2] === 'compact' && req.method === 'POST') {
+          if (configuring) throw new Error('Configuration is changing');
+          await runtime.compact(id);
+          return json(res, 200, { ok: true });
         }
         if (match[2] === 'queue' && req.method === 'POST') {
           const input = await requestBody(req, 20 * 1024 * 1024);
