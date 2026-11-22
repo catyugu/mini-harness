@@ -1,5 +1,5 @@
 import { Context, type Fiber } from '../vendor/cordis.js';
-import type { ComposerCommand } from '../commands.js';
+import type { ComposerCommand } from '../ui/commands.js';
 import type { MessageContent, ViewMessage } from '../../src/protocol.js';
 import type { Attachment } from '../../src/input.js';
 import type { ModelChoice } from '../../src/registry.js';
