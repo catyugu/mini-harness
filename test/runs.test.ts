@@ -23,8 +23,13 @@ test('HTTP disconnect keeps the Pi run alive and reconnect replays from a cursor
   const headers = { Authorization: 'Bearer ' + app.token, 'Content-Type': 'application/json' };
   const item = app.runtime.registry.create();
   const controller = new AbortController();
-  const response = await fetch(base + '/api/sessions/' + item.id + '/messages', {
-    method: 'POST', headers, signal: controller.signal, body: JSON.stringify({ message: 'Keep working' })
+  const start = await fetch(base + '/api/sessions/' + item.id + '/runs', {
+    method: 'POST', headers, body: JSON.stringify({ message: 'Keep working' })
+  });
+  assert.equal(start.status, 202);
+  const { id: runId } = await start.json();
+  const response = await fetch(base + '/api/sessions/' + item.id + '/events?run=' + runId, {
+    headers, signal: controller.signal
   });
   assert.equal(response.status, 200);
   await entered.promise;

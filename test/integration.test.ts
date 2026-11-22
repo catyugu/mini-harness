@@ -41,7 +41,10 @@ test('real Pi SDK through HTTP: streaming, persistence, Skills, export and perma
   const created = await post('/api/sessions', {});
   assert.equal(created.status, 201);
   const session = await created.json();
-  const stream = await post('/api/sessions/' + session.id + '/messages', { message: 'Test SDK integration' });
+  const started = await post('/api/sessions/' + session.id + '/runs', { message: 'Test SDK integration' });
+  assert.equal(started.status, 202);
+  const { id: runId } = await started.json();
+  const stream = await get('/api/sessions/' + session.id + '/events?run=' + runId);
   assert.equal(stream.status, 200);
   const raw = await stream.text();
   const events = raw.trim().split('\n').map((line) => JSON.parse(line));
@@ -56,8 +59,9 @@ test('real Pi SDK through HTTP: streaming, persistence, Skills, export and perma
   assert.ok(stored.messages.some((m: {role: string}) => m.role === 'assistant'));
 
   // Native skill command is resolved by Pi, using the configured .mini-harness skill directory.
-  const skillRequest = await post('/api/sessions/' + session.id + '/messages',
-    { message: '/skill:verification' });
+  const skillRun = await post('/api/sessions/' + session.id + '/runs', { message: '/skill:verification' });
+  assert.equal(skillRun.status, 202);
+  const skillRequest = await get('/api/sessions/' + session.id + '/events?run=' + (await skillRun.json()).id);
   assert.equal(skillRequest.status, 200);
   assert.equal((await skillRequest.text()).includes('"type":"error"'), false);
   assert.ok(JSON.stringify(mock.requests.at(-1)).includes('Mention the verification skill'),
