@@ -101,7 +101,7 @@ export function createTrajectory(target: HTMLElement) {
       return item.node;
     }
 
-    const live = (tool: ToolView) => useStep('tool:' + tool.id, tool.id, tool.name + ' · Running', tool, () => [
+    const live = (tool: ToolView, turnId: string) => useStep('tool:' + turnId + ':' + tool.id, tool.id, tool.name + ' · Running', tool, () => [
       pre(tool.arguments === undefined ? 'Input unavailable' : JSON.stringify(tool.arguments, null, 2)),
       pre(tool.content ? textContent({ content: tool.content }) : 'Waiting for output')
     ]);
@@ -118,9 +118,10 @@ export function createTrajectory(target: HTMLElement) {
       const nodes = [...turn.process, ...(turn.final ? [turn.final] : [])].map((message, index) => {
         const id = message.toolCallId ?? message.id ?? key + ':' + index;
         const label = 'Step ' + (index + 1) + ' · ' + (message.toolName ?? message.role) + (message.isError || message.error ? ' · Failed' : '');
-        return useStep((message.toolCallId ? 'tool:' : 'message:') + id, id, label, message, () => messageBody(message));
+        const stepKey = message.toolCallId ? 'tool:' + key + ':' + id : 'message:' + id;
+        return useStep(stepKey, id, label, message, () => messageBody(message));
       });
-      if (index === entries.length - 1) nodes.push(...[...history.tools.values()].map(live));
+      if (index === entries.length - 1) nodes.push(...[...history.tools.values()].map((tool) => live(tool, key)));
       const facts = approvals.get(run?.id);
       if (facts?.length) {
         updateStep(ui.approval, 'Approval events', facts.map(({ id }) => id).join(','), () => facts.map((fact) =>
@@ -130,7 +131,7 @@ export function createTrajectory(target: HTMLElement) {
       orderChildren(ui.steps, nodes);
       return ui.node;
     });
-    if (!entries.length) nodes.push(...[...history.tools.values()].map(live));
+    if (!entries.length) nodes.push(...[...history.tools.values()].map((tool) => live(tool, '')));
     orderChildren(target, nodes);
     for (const key of turns.keys()) if (!currentTurns.has(key)) turns.delete(key);
     for (const key of steps.keys()) if (!currentSteps.has(key)) steps.delete(key);

@@ -15,7 +15,7 @@
 - Attach images and UTF-8 text, find files with `@`, invoke native Skills, copy messages, retry failed image submissions, and queue Pi steering/follow-up messages during runs.
 - Inspect tool arguments/results, workspace files, staged/unstaged Git diff and successful file edits. Request one-time approval for built-in Shell commands and include approval events in Trajectory.
 - Keep empty drafts out of persistent history; search, rename and delete conversation trees. Install disabled local plugin bundles and permanently uninstall them from Plugins.
-- Add behavior tests for the GUI and API, including narrow viewports and reduced viewport height, plus image baselines for core surfaces.
+- Add behavior tests for the GUI and API, including narrow viewports, reduced viewport height and both color schemes.
 
 ## 0.3.0
 

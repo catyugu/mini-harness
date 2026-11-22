@@ -45,7 +45,7 @@ Shell is disabled by default and requests approval for each command when enabled
 
 ## Develop
 
-See [UI and execution architecture](docs/refactor.md), [plugin development](docs/plugins.md) and [changes](CHANGELOG.md).
+See [plugin development](docs/plugins.md) and [changes](CHANGELOG.md).
 
 ```sh
 npm ci

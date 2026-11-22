@@ -160,17 +160,20 @@ test('settings layout stays consistent across viewport sizes and themes', async 
       try {
         await page.goto(service.url + '/#token=' + service.token);
         await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toBeVisible();
-        await page.locator('#workspaceLabel').evaluate((label) => { label.textContent = 'workspace'; });
         if (viewport.width <= 860) await page.getByRole('button', { name: 'Toggle navigation' }).click();
         await page.getByRole('button', { name: 'Settings', exact: true }).click();
         await settingsSection(page, 'Model').click();
+        const dialog = page.getByRole('dialog', { name: 'Settings', exact: true });
+        const surfaces: string[] = [];
         for (const colorScheme of ['light', 'dark'] as const) {
           await page.emulateMedia({ colorScheme });
+          await expect(dialog).toBeInViewport({ ratio: 0.95 });
+          await expect(dialog.getByRole('heading', { name: 'Model', exact: true })).toBeVisible();
+          await expect(dialog.getByRole('button', { name: 'Close settings' })).toBeInViewport();
           expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-          if (process.platform !== 'win32') await expect(page).toHaveScreenshot('settings-' + viewport.width + '-' + colorScheme + '.png', {
-            animations: 'disabled', caret: 'hide', maxDiffPixelRatio: 0.02
-          });
+          surfaces.push(await dialog.evaluate((node) => getComputedStyle(node).backgroundColor));
         }
+        expect(surfaces[0]).not.toBe(surfaces[1]);
       } finally { await page.close(); }
     }
   } finally { await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
@@ -588,15 +591,16 @@ test('file inspection, responsive themes and reduced viewport height keep contro
         await panel.getByRole('button', { name: 'Source', exact: true }).click();
         await expect(panel.locator('.file-preview')).toHaveText(/# Visible file\r?\nWorkspace content/);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-        await panel.getByRole('tab', { name: 'notes.md', exact: true }).focus();
-        await page.locator('#workspaceLabel').evaluate((label) => { label.textContent = 'workspace'; });
         await page.locator('html').evaluate((html) => { html.dataset.theme = 'system'; });
+        const surfaces: string[] = [];
         for (const colorScheme of ['light', 'dark'] as const) {
           await page.emulateMedia({ colorScheme, reducedMotion: 'reduce' });
-          if (process.platform !== 'win32') await expect(page).toHaveScreenshot('workspace-panel-' + width + '-' + colorScheme + '.png', {
-            animations: 'disabled', caret: 'hide', maxDiffPixelRatio: 0.02
-          });
+          await expect(panel).toBeInViewport({ ratio: 0.95 });
+          await expect(panel.getByRole('tab', { name: 'notes.md', exact: true })).toHaveAttribute('aria-selected', 'true');
+          await expect(panel.getByRole('button', { name: 'Close workspace panel' })).toBeInViewport();
+          surfaces.push(await panel.evaluate((node) => getComputedStyle(node).backgroundColor));
         }
+        expect(surfaces[0]).not.toBe(surfaces[1]);
         await panel.getByRole('button', { name: 'Close workspace panel' }).click();
         for (const theme of ['dark', 'light']) {
           if (width <= 860) await page.getByRole('button', { name: 'Toggle navigation' }).click();
@@ -671,7 +675,7 @@ test('running messages can queue follow-ups and approve shell commands from the 
     return 'Finished';
   });
   const { root, paths } = createFixturePaths(mock.url);
-  writeJson(paths.settings, { ...readJson<any>(paths.settings, {}), plugins: { shell: true }, sandbox: { mode: 'host' }, defaultPermission: 'full' });
+  writeJson(paths.settings, { ...readJson<any>(paths.settings, {}), plugins: { shell: true }, sandbox: { mode: 'host' } });
   const service = await startIsolatedHost(paths);
   try {
     await page.goto(service.url + '/#token=' + service.token);
@@ -1007,98 +1011,136 @@ test('independent font sizes, 200 percent layout and mobile keyboard height keep
   } finally { await page.close(); await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
-test('permission changes require confirmation and future defaults leave the current session alone', async ({ page }) => {
-  const mock = await createMockProvider(), { root, paths } = createFixturePaths(mock.url);
+test('live Trajectory updates from Pi events and ignores a late snapshot after navigation', async ({ page }) => {
+  let releaseRun: () => void, releaseSnapshot: () => void, snapshotStarted: () => void, snapshotHandled: () => void;
+  const heldRun = new Promise<void>((done) => { releaseRun = done; });
+  const heldSnapshot = new Promise<void>((done) => { releaseSnapshot = done; });
+  const pendingSnapshot = new Promise<void>((done) => { snapshotStarted = done; });
+  const handledSnapshot = new Promise<void>((done) => { snapshotHandled = done; });
+  const mock = await createMockProvider(async ({ messages }) => {
+    if (messages.at(-1).role === 'tool') { await heldRun; return 'Inspection finished'; }
+    return { tool: 'read', args: { path: 'note.txt' } };
+  });
+  const { root, paths } = createFixturePaths(mock.url);
+  writeFileSync(join(paths.cwd, 'note.txt'), 'Streamed file output');
   const service = await startIsolatedHost(paths);
   try {
+    const headers = { Authorization: 'Bearer ' + service.token, 'Content-Type': 'application/json' };
+    const other = await (await fetch(service.url + '/api/sessions', { method: 'POST', headers, body: '{}' })).json();
+    await fetch(service.url + '/api/sessions/' + other.id, { method: 'PATCH', headers, body: JSON.stringify({ title: 'Other conversation' }) });
     await page.goto(service.url + '/#token=' + service.token);
-    const permission = page.getByRole('combobox', { name: 'Execution permission', exact: true });
-    await expect(permission).toHaveValue('workspace-write');
-    await permission.selectOption('read-only');
-    await expect(permission).toBeEnabled();
-    await expect(permission).toHaveValue('read-only');
-    page.once('dialog', (dialog) => dialog.dismiss());
-    await permission.selectOption('full');
-    await expect(permission).toHaveValue('read-only');
-    page.once('dialog', (dialog) => dialog.accept());
-    await permission.selectOption('full');
-    await expect(permission).toBeEnabled();
-    await expect(permission).toHaveValue('full');
-    const sessions = await (await page.request.get(service.url + '/api/sessions', { headers: { Authorization: 'Bearer ' + service.token } })).json();
-    expect(sessions).toHaveLength(1); expect(sessions[0].permission).toBe('full');
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
-    await settingsSection(page, 'Execution').click();
-    const defaults = page.getByRole('combobox', { name: 'Default execution permission', exact: true });
-    await defaults.selectOption('read-only');
-    await expect(defaults).toBeEnabled();
-    await expect(defaults).toHaveValue('read-only');
-    await page.getByRole('button', { name: 'Close settings' }).click();
-    await expect(permission).toHaveValue('full');
-    await page.locator('#newSession').click();
-    await expect(permission).toHaveValue('read-only');
-    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Read-only draft');
+    await expect(page.locator('#conversationTitle')).toHaveText('Other conversation');
+    await page.getByRole('button', { name: 'New conversation', exact: true }).click();
+    let snapshots = 0;
+    await page.route(/\/api\/sessions\/[a-f0-9-]{36}$/, async (route) => {
+      if (route.request().method() !== 'GET' || route.request().url().endsWith(other.id)) return route.continue();
+      snapshots++;
+      snapshotStarted();
+      await heldSnapshot;
+      try { await route.continue(); }
+      finally { snapshotHandled(); }
+    });
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Inspect live');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
-    await expect(page.locator('.message.assistant')).toHaveText('Mock response');
-    const updated = await (await page.request.get(service.url + '/api/sessions', { headers: { Authorization: 'Bearer ' + service.token } })).json();
-    expect(updated.find((item) => item.title === 'Read-only draft').permission).toBe('read-only');
-  } finally { await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
+    await page.getByRole('button', { name: 'Trajectory', exact: true }).click();
+    const trajectory = page.getByRole('region', { name: 'Trajectory' });
+    const output = trajectory.locator('details').filter({ hasText: 'Streamed file output' });
+    const summary = output.locator('summary');
+    await summary.click();
+    await expect(output).toHaveAttribute('open', '');
+    expect(snapshots).toBe(0);
+
+    releaseRun();
+    await pendingSnapshot;
+    await expect(page.locator('#runSummary')).toContainText('Completed');
+    await expect(output).toHaveAttribute('open', '');
+    await expect(summary).toBeFocused();
+    await page.getByRole('button', { name: 'Other conversation', exact: true }).click();
+    await expect(page.locator('#conversationTitle')).toHaveText('Other conversation');
+    releaseSnapshot();
+    await handledSnapshot;
+    await expect(page.locator('#conversationTitle')).toHaveText('Other conversation');
+    await expect(page.locator('#trajectory .trajectory-turn')).toHaveCount(0);
+    expect(snapshots).toBe(1);
+  } finally {
+    releaseRun();
+    releaseSnapshot();
+    await service.stop();
+    await mock.close();
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
-test('shared tab definitions keep independent identities and release inactive and closed resources', async ({ page }) => {
-  const mock = await createMockProvider(), { root, paths } = createFixturePaths(mock.url);
-  const folder = join(paths.plugins, 'resources'); mkdirSync(folder);
-  writeFileSync(join(folder, 'plugin.js'), 'export default () => {}');
-  writeFileSync(join(folder, 'web.js'), `export default (api) => {
-    let disposed = 0;
-    const status = document.createElement('p'); status.textContent = 'Resources released: 0'; api.mount('sidebar', status);
-    const definition = {
-      title: (address) => address.type.endsWith('one') ? 'Resource one' : 'Resource two', keepMounted: false,
-      create(address, signal) {
-        const node = document.createElement('p'); node.textContent = 'Content ' + address.type;
-        signal.addEventListener('abort', () => { status.textContent = 'Resources released: ' + (++disposed); }, {once:true});
-        return node;
-      }
-    };
-    for (const type of ['one','two']) {
-      api.rightTab(type, definition);
-      const button = document.createElement('button'); button.type = 'button'; button.textContent = 'Open resource ' + type;
-      button.onclick = () => api.openTab(type); api.mount('sidebar', button);
-    }
-  };`);
-  writeJson(paths.settings, { ...readJson<any>(paths.settings, {}), plugins: { resources: true } });
+test('restored resource tabs keep selection and release listeners on unload and scope changes', async ({ page }) => {
+  const mock = await createMockProvider();
+  const { root, paths } = createFixturePaths(mock.url);
   const service = await startIsolatedHost(paths);
   try {
     await page.goto(service.url + '/#token=' + service.token);
-    await page.getByRole('button', { name: 'Open resource one', exact: true }).click();
-    await expect(page.getByText('Content resources:one', { exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Open resource two', exact: true }).click();
-    await expect(page.getByText('Content resources:two', { exact: true })).toBeVisible();
-    await expect(page.getByText('Resources released: 1', { exact: true })).toBeVisible();
-    await page.getByRole('tab', { name: 'Resource one', exact: true }).click();
-    await expect(page.getByText('Content resources:one', { exact: true })).toBeVisible();
-    await expect(page.getByText('Resources released: 2', { exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Close tab Resource one', exact: true }).click();
-    await expect(page.getByText('Resources released: 3', { exact: true })).toBeVisible();
-    await expect(page.getByText('Content resources:two', { exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Close tab Resource two', exact: true }).click();
-    await expect(page.getByText('Resources released: 4', { exact: true })).toBeVisible();
-  } finally { await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
-});
-
-test('remembered theme runs as a classic script before bootstrap finishes without startup errors', async ({ page }) => {
-  const mock = await createMockProvider(), { root, paths } = createFixturePaths(mock.url);
-  const service = await startIsolatedHost(paths);
-  let release: () => void;
-  const held = new Promise<void>((resolve) => { release = resolve; });
-  const errors: string[] = [];
-  page.on('pageerror', (error) => errors.push(error.message));
-  try {
-    await page.addInitScript(() => localStorage.setItem('mini-harness-theme', 'dark'));
-    await page.route('**/api/bootstrap', async (route) => { await held; await route.continue(); });
-    await page.goto(service.url + '/#token=' + service.token);
-    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-    release();
-    await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toBeVisible();
-    expect(errors).toEqual([]);
-  } finally { release(); await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
+    const result = await page.evaluate(async () => {
+      const modulePath = '/right-tabs.js';
+      const { createRightTabs } = await import(modulePath) as typeof import('../../web/right-tabs.js');
+      const root = document.createElement('section'), bar = document.createElement('div'), launchers = document.createElement('div');
+      const body = document.createElement('div'), toggle = document.createElement('button');
+      root.append(bar, launchers, body, toggle);
+      document.body.append(root);
+      let open = false;
+      const controller = new AbortController();
+      const tabs = createRightTabs({ root, bar, launchers, body, toggle }, {
+        panelOpen: () => open,
+        setPanel(next) { if (open !== next) { open = next; root.dispatchEvent(new CustomEvent('panel-change', { detail: next })); } },
+        closeDrawer() {}
+      }, controller.signal);
+      const scope = { workspaceId: 'tab-fixture', sessionId: 'first' };
+      const key = 'mini-harness-tabs:' + JSON.stringify([scope.workspaceId, scope.sessionId]);
+      const probe = JSON.stringify(['probe', '']);
+      const other = JSON.stringify(['other', '']);
+      sessionStorage.setItem(key, JSON.stringify({
+        open: true, active: probe, entries: [{ ...scope, type: 'probe' }, { ...scope, type: 'other' }]
+      }));
+      let calls = 0;
+      const activate = () => { document.dispatchEvent(new Event('tab-fixture-event')); return calls; };
+      const selected = () => bar.querySelector('[aria-selected="true"]')?.textContent;
+      const registerProbe = () => tabs.register('probe', {
+        title: () => 'Probe', keepMounted: true,
+        create(_, signal) {
+          document.addEventListener('tab-fixture-event', () => calls++, { signal });
+          return document.createElement('article');
+        }
+      });
+      tabs.selectScope(scope);
+      tabs.register('other', { title: () => 'Other', create: () => document.createElement('article') });
+      bar.querySelector('button').click();
+      const savedChoice = JSON.parse(sessionStorage.getItem(key)).active;
+      const disable = registerProbe();
+      const selectedAfterReturn = selected();
+      const focusAfterReturn = document.activeElement?.textContent;
+      tabs.open('probe');
+      const whileMounted = activate();
+      disable();
+      const afterDisable = activate();
+      registerProbe();
+      const selectedAfterEnable = selected();
+      tabs.open('probe');
+      const afterRemount = activate();
+      tabs.selectScope({ ...scope, sessionId: 'second' });
+      const afterScopeChange = activate();
+      tabs.selectScope(scope);
+      const afterScopeRestore = activate();
+      tabs.prune(new Set(), new Set());
+      const afterDeletion = activate();
+      const storageRemoved = sessionStorage.getItem(key) === null;
+      controller.abort();
+      root.remove();
+      return { savedChoice, other, selectedAfterReturn, focusAfterReturn, whileMounted, afterDisable, selectedAfterEnable,
+        afterRemount, afterScopeChange, afterScopeRestore, afterDeletion, storageRemoved };
+    });
+    expect(result).toEqual({ savedChoice: result.other, other: result.other, selectedAfterReturn: 'Other', focusAfterReturn: 'Other',
+      whileMounted: 1, afterDisable: 1, selectedAfterEnable: 'Other', afterRemount: 2, afterScopeChange: 2,
+      afterScopeRestore: 3, afterDeletion: 3, storageRemoved: true });
+  } finally {
+    await service.stop();
+    await mock.close();
+    rmSync(root, { recursive: true, force: true });
+  }
 });

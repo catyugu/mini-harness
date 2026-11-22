@@ -165,4 +165,4 @@ Images (PNG/JPEG/GIF/WebP) go through Pi's image input and require an image-capa
 
 The file, Skill and approval endpoints return 404 when their corresponding plugin is disabled. Every enabled built-in Shell call requires approval. Requests expire after five minutes; stopping the run or server cancels pending approval. Approval permits the command under the existing shell policy. Reviewed local plugins remain trusted code; this is not a general-purpose containment mechanism.
 
-The contribution registry, scope rules, service contracts and session projections are documented in [Harness UI and session architecture](refactor.md). Browser plugins can use `api.contribute(region, {id, key?, priority?, order?, scope?, accepts?, value})`, `api.contributions(region, key?, context?)` and `api.watchContributions(listener)`. Use `services.openResource({path, kind, line})` for files, Diff or Shell output.
+Browser plugins can use `api.contribute(region, {id, key?, priority?, order?, scope?, accepts?, value})`, `api.contributions(region, key?, context?)` and `api.watchContributions(listener)`. Use `services.openResource({path, kind, line})` for files, Diff or Shell output.
