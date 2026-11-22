@@ -57,6 +57,8 @@ test('appearance, parallelism and child defaults update without interrupting a r
   assert.equal(runtime.delegation.parallelLimit, 2);
   assert.equal(runtime.runs.active(item.id), true);
   await assert.rejects(runtime.updateSettings({ plugins: { files: false } }), /Stop active/);
+  await assert.rejects(runtime.updateSettings({ plugins: { 'session-helper': false } }), /Stop active/);
+  assert.equal(runtime.settings.plugins['session-helper'], true);
   release();
   assert.equal(await pending, 'Done');
 });

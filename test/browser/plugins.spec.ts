@@ -86,7 +86,9 @@ test('frontend plugins own all five slots and clean up on disable and reconfigur
   const mock = await createMockProvider(({ messages }) => messages.at(-1).role === 'tool' ? 'Done' : { tool: 'ls', args: {} });
   const { root, paths } = createFixturePaths(mock.url), folder = join(paths.plugins, 'ui-example'); mkdirSync(folder);
   writeFileSync(join(folder, 'plugin.js'), 'export default function() {}');
-  writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ title: 'UI example', configSchema: { type: 'object', properties: { label: { type: 'string', title: 'Button label', default: 'Plugin entry' } } } }));
+  writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ title: 'UI example', icon: {
+    path: 'M2 2h20v20H2z', viewBox: '0 0 24 24'
+  }, configSchema: { type: 'object', properties: { label: { type: 'string', title: 'Button label', default: 'Plugin entry' } } } }));
   writeFileSync(join(folder, 'web.js'), `export default function(api) {
     for (const slot of ['sidebar','composer','settings','inspector']) {
       const node = document.createElement(slot === 'settings' ? 'section' : 'button');
@@ -133,6 +135,8 @@ test('frontend plugins own all five slots and clean up on disable and reconfigur
     await expect(settingsSection(page, 'Plugins')).toHaveCount(0);
     await page.getByRole('button', { name: 'Close settings', exact: true }).click();
     await page.getByRole('button', { name: 'Browse plugins', exact: true }).click();
+    await expect(page.locator('[data-plugin-row="ui-example"] .plugin-symbol svg path'))
+      .toHaveAttribute('d', 'M2 2h20v20H2z');
     await page.getByRole('button', { name: 'UI example settings', exact: true }).click();
     await page.getByLabel('Button label · ui-example', { exact: true }).fill('Updated plugin');
     await page.getByRole('button', { name: 'Save configuration', exact: true }).click();

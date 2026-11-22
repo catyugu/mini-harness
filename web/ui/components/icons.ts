@@ -1,3 +1,5 @@
+import type { PluginIcon } from '../../../src/contracts/plugins.js';
+
 const paths = {
   ellipsis: 'M3 9C3.55228 9 4 8.55228 4 8C4 7.44772 3.55228 7 3 7C2.44772 7 2 7.44772 2 8C2 8.55228 2.44772 9 3 9Z M8 9C8.55228 9 9 8.55228 9 8C9 7.44772 8.55228 7 8 7C7.44772 7 7 7.44772 7 8C7 8.55228 7.44772 9 8 9Z M13 9C13.5523 9 14 8.55228 14 8C14 7.44772 13.5523 7 13 7C12.4477 7 12 7.44772 12 8C12 8.55228 12.4477 9 13 9Z',
   'new-chat': 'M2.37091 11.2501C1.58745 9.89288 1.32067 8.29835 1.61969 6.76006C1.91872 5.22177 2.76342 3.8433 3.99826 2.87846C5.2331 1.91362 6.77494 1.42737 8.33988 1.50925C9.90482 1.59113 11.3875 2.23562 12.5149 3.32406C13.6425 4.41269 14.3387 5.87206 14.4754 7.4334C14.612 8.99474 14.18 10.5529 13.2587 11.8209C12.3375 13.0888 10.9891 13.9813 9.46194 14.3337C8.18691 14.628 6.85895 14.5294 5.64989 14.0605C5.1712 13.8748 4.76962 13.4932 4.26534 13.3967C3.67413 13.2835 2.95257 13.5598 2.03794 14.3337 M8 5V11 M5 8H11',
@@ -23,10 +25,13 @@ const paths = {
   copy: 'M8 8h12v12H8zM16 8V4H4v12h4', chevron: 'm9 5 7 7-7 7', skills: 'm12 3 3 6 6 3-6 3-3 6-3-6-6-3 6-3z'
 };
 // Folder and settings contours follow DeepSeek Harness's MIT-licensed icon artwork.
-export function icon(name: keyof typeof paths) {
+export function icon(spec: PluginIcon = 'plugin') {
+  const name = typeof spec === 'string' ? spec : '';
+  const custom = typeof spec === 'object' && spec !== null ? spec : undefined;
+  const iconPath = custom?.path ?? (Object.hasOwn(paths, name) ? paths[name as keyof typeof paths] : paths.plugin);
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   const dsh = name === 'settings' || name === 'folder' || name === 'folder-open' || name === 'ellipsis' || name === 'new-chat' || name === 'triangle';
-  svg.setAttribute('viewBox', name === 'settings' ? '.5 .5 15 15' : dsh ? '0 0 16 16' : '0 0 24 24');
+  svg.setAttribute('viewBox', custom?.viewBox ?? (name === 'settings' ? '.5 .5 15 15' : dsh ? '0 0 16 16' : '0 0 24 24'));
   svg.setAttribute('width', '18'); svg.setAttribute('height', '18');
   svg.setAttribute('fill', 'none'); svg.setAttribute('stroke', 'currentColor');
   svg.setAttribute('stroke-width', dsh ? (name === 'settings' ? '1.3' : '1') : '1.7');
@@ -34,14 +39,14 @@ export function icon(name: keyof typeof paths) {
   svg.setAttribute('stroke-linejoin', dsh ? 'miter' : 'round');
   svg.setAttribute('aria-hidden', 'true');
   const path = document.createElementNS(svg.namespaceURI, 'path');
-  path.setAttribute('d', paths[name]);
+  path.setAttribute('d', iconPath);
   if (dsh) path.setAttribute('vector-effect', 'non-scaling-stroke');
   if (name === 'ellipsis' || name === 'triangle') { path.setAttribute('fill', 'currentColor'); path.setAttribute('stroke', 'none'); }
   svg.append(path);
   return svg;
 }
 export function hydrateIcons() {
-  for (const node of document.querySelectorAll<HTMLElement>('[data-icon]')) node.replaceChildren(icon(node.dataset.icon as keyof typeof paths));
+  for (const node of document.querySelectorAll<HTMLElement>('[data-icon]')) node.replaceChildren(icon(node.dataset.icon ?? 'plugin'));
 }
 
 export function fileLabel(node: HTMLElement, name: string, kind: 'file' | 'folder' | 'folder-open') {

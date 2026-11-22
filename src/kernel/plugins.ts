@@ -36,8 +36,8 @@ export class PluginHost {
     this.builtins = new Map(builtins.map((plugin) => [plugin.id, plugin]));
   }
 
-  private discover() {
-    return readdirSync(this.directory, { withFileTypes: true }).flatMap((entry) => {
+  private discover(): { source?: string; metadata: PluginMetadata }[] {
+    return readdirSync(this.directory, { withFileTypes: true }).flatMap((entry): { source?: string; metadata: PluginMetadata }[] => {
       const id = entry.name;
       if (!entry.isDirectory() || !/^[a-z][a-z0-9-]{0,63}$/.test(id) || this.builtins.has(id)) return [];
       const folder = join(this.directory, id);
@@ -49,15 +49,24 @@ export class PluginHost {
       if (!hasHost && !hasWeb) return [];
       try {
         const manifest = readJson<Partial<PluginMetadata> | null>(join(folder, 'plugin.json'), null);
-      const title = typeof manifest?.title === 'string' ? manifest.title.slice(0, 100) : id;
-      const description = typeof manifest?.description === 'string' ? manifest.description.slice(0, 300) : 'Runs local JavaScript with your user permissions.';
-      const requires = manifest?.requires ?? [];
-      if (!Array.isArray(requires) || requires.some((id) => typeof id !== 'string' || !/^[a-z][a-z0-9-]{0,63}$/.test(id)))
-        throw new Error('Invalid plugin dependencies: ' + id);
-      const configSchema = manifest?.configSchema;
-      if (configSchema && (configSchema.type !== 'object' || !configSchema.properties || typeof configSchema.properties !== 'object'))
-        throw new Error('Expected an object configSchema for plugin: ' + id);
-        return [{ source: hasHost ? source : undefined, metadata: { id, title, description, requires, configSchema, web: hasWeb, trustedCode: true } }];
+        const title = typeof manifest?.title === 'string' ? manifest.title.slice(0, 100) : id;
+        const description = typeof manifest?.description === 'string' ? manifest.description.slice(0, 300) : 'Runs local JavaScript with your user permissions.';
+        const requires = manifest?.requires ?? [];
+        if (!Array.isArray(requires) || requires.some((name) => typeof name !== 'string' || !/^[a-z][a-z0-9-]{0,63}$/.test(name)))
+          throw new Error('Invalid plugin dependencies: ' + id);
+        const configSchema = manifest?.configSchema;
+        if (configSchema && (configSchema.type !== 'object' || !configSchema.properties || typeof configSchema.properties !== 'object'))
+          throw new Error('Expected an object configSchema for plugin: ' + id);
+        const icon = manifest?.icon;
+        if (icon !== undefined && !(
+          typeof icon === 'string' && icon.length > 0 && icon.length <= 128 ||
+          icon !== null && typeof icon === 'object' && !Array.isArray(icon) &&
+          typeof icon.path === 'string' && icon.path.length > 0 && icon.path.length <= 8192 &&
+          (icon.viewBox === undefined || typeof icon.viewBox === 'string' && icon.viewBox.length <= 100)
+        )) throw new Error('Invalid plugin icon: ' + id);
+        return [{ source: hasHost ? source : undefined, metadata: {
+          id, title, description, requires, configSchema, icon, web: hasWeb, trustedCode: true
+        } }];
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         return [{ metadata: { id, title: id, description: 'Plugin manifest cannot be loaded.', trustedCode: true,
@@ -159,10 +168,8 @@ export class PluginHost {
     const obsolete = [...this.mounted.values()].map(({ plan }) => plan).filter((plan) => affected.has(plan.id));
     const additions = ordered.filter((plan) => affected.has(plan.id) || !this.mounted.has(plan.id));
     if (!obsolete.length && !additions.length) { commit(); return; }
-    // A browser-only contribution or a route-only command must not interrupt
-    // active Pi conversations. Only tool/Skill-changing scopes require idle runs.
-    const changesAgent = (plan: PluginPlan) => this.builtins.get(plan.id)?.agentResources ?? Boolean(plan.source);
-    if ([...obsolete, ...additions].some(changesAgent)) beforeChange();
+    // Every plugin shares one lifecycle. Do not unload scopes while a run is active.
+    beforeChange();
     return this.apply(obsolete, additions, commit);
   }
 

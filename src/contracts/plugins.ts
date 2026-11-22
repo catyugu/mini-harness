@@ -13,6 +13,9 @@ export interface ToolPort {
   resources(id: string): { bind: (id: string) => ToolDefinition; visible: (id: string) => boolean }[];
 }
 
+/** A symbolic icon name or an inline SVG path for plugin-defined artwork. */
+export type PluginIcon = string | { path: string; viewBox?: string };
+
 export interface PluginMetadata {
   id: string;
   title: string;
@@ -20,11 +23,9 @@ export interface PluginMetadata {
   trustedCode?: boolean;
   /** An installed but unusable plugin must never prevent the host from starting. */
   error?: string;
-  /** False for UI-only/route-only plugins that never mutate active Pi tools or Skills. */
-  agentResources?: boolean;
   web?: boolean;
   browser?: string;
-  icon?: 'files' | 'skills' | 'delegate' | 'terminal' | 'copy' | 'edit';
+  icon?: PluginIcon;
   preferences?: { key: 'subagents' | 'sandbox'; schema: Record<string, unknown>; groups?: { title: string; fields: string[] }[] };
   requires?: string[];
   configSchema?: Record<string, any>;

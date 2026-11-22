@@ -15,7 +15,9 @@ test('an installed Cordis plugin can use services, configure a tool, and release
   const folder = join(paths.plugins, 'example');
   const log = join(folder, 'effects.log');
   mkdirSync(folder);
-  writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ title: 'Example plugin' }));
+  writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ title: 'Example plugin', icon: {
+    path: 'M2 2h20v20H2z', viewBox: '0 0 24 24'
+  } }));
   writeFileSync(join(folder, 'plugin.js'), `
     import { appendFileSync } from 'node:fs';
     export const inject = ['harnessSessions'];
@@ -36,6 +38,8 @@ test('an installed Cordis plugin can use services, configure a tool, and release
   await runtime.start();
   const item = runtime.registry.create();
   assert.equal(runtime.plugins.metadata().find(({ id }) => id === 'example')?.title, 'Example plugin');
+  assert.deepEqual(runtime.plugins.metadata().find(({ id }) => id === 'example')?.icon,
+    { path: 'M2 2h20v20H2z', viewBox: '0 0 24 24' });
   await runtime.updateSettings({ plugins: { example: true }, pluginConfig: { example: { prefix: 'Total' } } });
   const originalSession = await runtime.pi.open(item.id);
   assert.ok(originalSession.getActiveToolNames().includes('example_count'));

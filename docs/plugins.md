@@ -28,6 +28,8 @@ Install reviewed ESM code in `~/.mini-harness/plugins/<id>/plugin.js`. IDs start
 }
 ```
 
+The optional `icon` field accepts a symbolic icon name or an inline SVG path object such as `{"path":"M2 2h20v20H2z","viewBox":"0 0 24 24"}`. Custom vector data is rendered as an SVG `<path>` without interpreting HTML; unknown symbolic names fall back to the generic plugin icon. No fixed list of icon names is imposed by the plugin contract.
+
 Dependencies must be enabled; cycles and missing dependencies reject the configuration before unloading anything. Built-in IDs are `files`, `skills`, `subagents`, `shell` and `session-helper`.
 
 The GUI renders strings, booleans, numbers, integers, enums and nested objects from the schema. Other values use JSON input. Use `title`, `description`, `default`, `required`, bounds and `additionalProperties` to describe the accepted configuration. Keep schemas self-contained; external references are unsupported. Defaults apply recursively to object properties, then TypeBox validates the resulting value. Store configuration in `settings.json` under `pluginConfig.<id>`; it is ordinary local configuration, so use Pi credential storage for model secrets.
@@ -77,7 +79,7 @@ Public metadata services are `harnessModels.list()` and `harnessSessions.get(id)
 
 Built-in and local setup functions run in Cordis scopes. Dependencies mount first and unload last. Disabling a required plugin also requires disabling its dependents. Reconfiguring a dependency restarts its enabled dependents. Unchanged plugin scopes stay mounted. A route handler receives `{ url, body(maxBytes?), signal }`. The signal aborts when its route unloads. Read JSON with `await body()` and return a JSON-serializable result.
 
-Schema validation precedes setup. If setup or settings persistence fails, the host unloads new scopes and restores the previous plugin configuration. Cleanup handlers must release their resources and tolerate partial setup; failure to restore is reported explicitly. Changes affecting active tools or Skills require idle conversations, and invalidate Pi sessions so their next open gets the current tool definitions. Theme, scheduling, execution policy and model-selection changes preserve running sessions. Changes to child depth refresh tool availability when a session is next idle.
+Schema validation precedes setup. If setup or settings persistence fails, the host unloads new scopes and restores the previous plugin configuration. Cleanup handlers must release their resources and tolerate partial setup; failure to restore is reported explicitly. All plugin lifecycle changes (enable, disable, or reconfigure) require idle conversations; Pi reconciles tool and Skill resources after successful changes. Theme, scheduling, execution policy and model-selection changes preserve running sessions. Changes to child depth refresh tool availability when a session is next idle.
 
 ## Run API
 

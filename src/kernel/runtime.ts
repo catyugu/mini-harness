@@ -136,7 +136,7 @@ export class MiniHarnessRuntime {
       this.delegation.configure();
     };
     this.configuring = this.plugins.configure(next, commit, () => {
-      if (this.hasActiveWork) throw new Error('Stop active conversations before changing tools or Skills');
+      if (this.hasActiveWork) throw new Error('Stop active conversations before reconfiguring plugins');
     });
     try { if (this.configuring) await this.configuring; }
     finally {
