@@ -21,6 +21,7 @@ interface ConversationServices {
   exportSessions(ids: string[]): Promise<void>;
   closeDrawer(): void;
   placeWorkspace(parent: HTMLElement): void;
+  changed(): void;
   renderTool: FrontendHost['render'];
 }
 
@@ -31,6 +32,7 @@ export function conversationView(api: FrontendApi, options: ConversationServices
         <img src="/logo.svg" width="52" height="52" alt="">
         <h1>What are we working on?</h1>
       </section>
+      <div id="runSummary" class="run-summary" aria-label="Latest run" hidden><span></span><time></time></div>
       <section id="messages" class="messages" aria-label="Messages" hidden></section>
       <div class="composer-wrap">
         <div id="approvalRequests" class="approval-requests"></div>
@@ -59,6 +61,26 @@ export function conversationView(api: FrontendApi, options: ConversationServices
 
   const messages = element('messages');
   const welcome = element('welcome');
+  const summary = element('runSummary'), summaryStatus = summary.querySelector('span'), elapsed = summary.querySelector('time');
+  const states = { queued: 'Queued', running: 'Running', completed: 'Completed', failed: 'Failed',
+    cancelled: 'Cancelled', interrupted: 'Interrupted' };
+  let runSummary: RunInfo;
+  function renderElapsed() {
+    if (!runSummary) return;
+    const end = runSummary.finishedAt ? Date.parse(runSummary.finishedAt) : Date.now();
+    const seconds = Math.max(0, Math.floor((end - Date.parse(runSummary.startedAt)) / 1000));
+    elapsed.textContent = seconds < 60 ? seconds + ' s' : Math.floor(seconds / 60) + ' min ' + seconds % 60 + ' s';
+  }
+  function showRunSummary(run?: RunInfo) {
+    runSummary = run;
+    summary.hidden = !run;
+    if (!run) return;
+    summary.dataset.state = run.state;
+    summaryStatus.textContent = states[run.state];
+    renderElapsed();
+  }
+  const elapsedTimer = setInterval(() => { if (isRunning(runSummary)) renderElapsed(); }, 1000);
+  api.onDispose(() => clearInterval(elapsedTimer));
   const composer = element<'form'>('composer');
   const prompt = element<'textarea'>('prompt');
   const thinkingSelect = element<'select'>('thinkingLevel');
@@ -100,6 +122,7 @@ export function conversationView(api: FrontendApi, options: ConversationServices
   function showConversation(item?: ConversationView | Conversation, history: ViewMessage[] = []) {
     observing?.abort();
     setSending(isRunning(item?.run));
+    showRunSummary(item?.run);
     active = item?.id;
     conversationModel = item?.model;
     conversationThinking = (item as ConversationView)?.thinkingLevel;
@@ -126,6 +149,7 @@ export function conversationView(api: FrontendApi, options: ConversationServices
     showWelcome(!messages.childElementCount && !isRunning(item?.run));
     messages.scrollTop = messages.scrollHeight;
     options.renderSessions();
+    options.changed();
   }
 
   async function activate(id: string) {
@@ -284,6 +308,7 @@ export function conversationView(api: FrontendApi, options: ConversationServices
             for (const tool of event.tools ?? []) cards.set(tool.id, toolCard(tool));
             // Fall through to apply the snapshot's run state.
           case 'run':
+            showRunSummary(event.run);
             changedFiles = event.run.changedFiles ?? changedFiles;
             ended = !isRunning(event.run);
             if (ended) showStatus(event.run.error ?? '', Boolean(event.run.error));

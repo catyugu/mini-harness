@@ -24,12 +24,17 @@ async function start() {
   let providerEditor: ReturnType<typeof providerManager>;
   let catalog: ReturnType<typeof pluginCatalog>;
   let placeWorkspace: ReturnType<typeof workspacePicker>;
+  const viewChanges = new EventTarget();
+  const changed = () => viewChanges.dispatchEvent(new Event('change'));
   let frontendWork = Promise.resolve();
   const report = (error: Error) => conversation?.report(error);
   const host = new FrontendHost(shell.slot, { request: data, insert: (text) => conversation.insert(text), inspect: shell.inspect },
     {
       bootstrap: () => bootstrap,
-      sessionTitle: (id) => navigation.title(id),
+      sessionTitle: (id) => navigation.session(id)?.title,
+      currentConversation: () => navigation.session(conversation.active()),
+      session: (id) => navigation.session(id),
+      onConversationChange: (listener, signal) => viewChanges.addEventListener('change', listener, { signal }),
       openConversation: (id) => { shell.showPage(); void conversation.activate(id); },
       changedFiles: () => conversation.changedFiles(),
       report
@@ -60,14 +65,14 @@ async function start() {
       active: () => conversation?.active(),
       activate: (id) => { shell.showPage(); void conversation.activate(id); },
       clearConversation: () => conversation.clear(),
-      report
+      changed, report
     });
   });
   await host.enable('core:conversation', (api) => {
     conversation = conversationView(api, {
       bootstrap: () => bootstrap, applySettings, closeDrawer: shell.closeDrawer,
       renderSessions: navigation.render, syncSessions: navigation.sync, reveal: navigation.reveal,
-      addSession: navigation.add, exportSessions: navigation.export, placeWorkspace,
+      addSession: navigation.add, exportSessions: navigation.export, placeWorkspace, changed,
       renderTool: (tool, action) => host.render(tool, action)
     });
     conversation.registerCoreCommands(api.command);

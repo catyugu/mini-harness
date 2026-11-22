@@ -435,3 +435,21 @@ button { border-radius: var(--radius); }
   .workspace-nav { padding-top: 0; margin-top: 2px; }
   .workspace-shortcuts { display: none; }
 }
+
+#conversationExtensions:empty, .parent-conversations[hidden] { display: none; }
+.parent-conversations { display: flex; min-width: 0; overflow: auto; gap: 2px; align-items: center; }
+.parent-conversations span { display: inline-flex; align-items: center; min-width: 0; }
+.parent-conversations .link-button { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding: 0 4px; font-size: 11px; }
+.parent-conversations svg { flex: 0 0 11px; height: 11px; color: var(--muted); }
+.run-summary { display: flex; justify-content: flex-end; gap: 8px; width: min(796px, 100%); margin-inline: auto; padding: 3px 18px; color: var(--muted); font-size: 11px; }
+.run-summary time { font-variant-numeric: tabular-nums; }
+.run-summary:is([data-state="running"], [data-state="queued"]) span { color: var(--focus); }
+.run-summary:is([data-state="failed"], [data-state="interrupted"]) span { color: var(--danger); }
+.file-view-actions { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.file-view-actions button:first-child { margin-right: auto; }
+.file-view-actions [aria-pressed="true"] { background: var(--selected); }
+.diff :is(.diff-hunk, .diff-header) { color: var(--muted); }
+@media (max-width: 860px) {
+  .topbar:has(.parent-conversations:not([hidden])) { flex-basis: calc(88px + env(safe-area-inset-top)); }
+  .parent-conversations .link-button { min-height: 32px; }
+}

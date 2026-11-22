@@ -17,24 +17,65 @@ function fileInspector(api: FrontendApi, changed: () => string[]) {
   let disposed = false, request = 0;
   api.onDispose(() => { disposed = true; });
   const fail = (error: Error) => { if (!disposed) { const hint = document.createElement('p'); hint.className = 'hint'; hint.textContent = error.message; root.append(hint); } };
-  const showFile = async (path: string, diff = false) => {
-    const current = ++request;
-    try {
-      const result = await api.request<{ content: string }>('/files/' + (diff ? 'diff' : 'preview') + '?path=' + encodeURIComponent(path));
-      if (disposed || current !== request) return;
-      const container = document.createElement('div'), back = document.createElement('button'), pre = document.createElement('pre');
-      back.type = 'button'; back.className = 'link-button'; back.textContent = 'Back to files'; back.onclick = () => void show();
-      pre.className = diff ? 'diff' : 'file-preview';
-      if (diff) {
-        for (const line of result.content.split('\n')) { const span = document.createElement('span'); span.className = line.startsWith('+') ? 'added' : line.startsWith('-') ? 'removed' : ''; span.textContent = line + '\n'; pre.append(span); }
-      } else pre.textContent = result.content;
-      container.append(back, pre); api.inspect(path, container);
-    } catch (error) {
-      if (current === request && !disposed) { api.inspect(path, root); fail(error); }
+  const showFile = (path: string, canDiff: boolean) => {
+    const container = document.createElement('div'), toolbar = document.createElement('div');
+    const content = document.createElement('div'), back = document.createElement('button');
+    const modes = new Map<boolean, HTMLButtonElement>();
+    toolbar.className = 'file-view-actions';
+    back.type = 'button';
+    back.className = 'link-button';
+    back.textContent = 'Back to files';
+    back.onclick = () => void show();
+    toolbar.append(back);
+    if (canDiff) for (const diff of [false, true]) {
+      const toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.className = 'link-button';
+      toggle.textContent = diff ? 'Diff' : 'Preview';
+      toggle.onclick = () => void load(diff);
+      modes.set(diff, toggle);
+      toolbar.append(toggle);
     }
+    container.append(toolbar, content);
+    api.inspect(path, container);
+    async function load(diff: boolean) {
+      const current = ++request;
+      const pre = document.createElement('pre');
+      pre.className = diff ? 'diff' : 'file-preview';
+      content.setAttribute('aria-busy', 'true');
+      content.replaceChildren(pre);
+      for (const [mode, button] of modes) button.setAttribute('aria-pressed', String(mode === diff));
+      try {
+        const result = await api.request<{ content: string }>('/files/' + (diff ? 'diff' : 'preview') + '?path=' + encodeURIComponent(path));
+        if (disposed || current !== request) return;
+        if (diff) {
+          const fragment = document.createDocumentFragment();
+          for (const line of result.content.trimEnd().split('\n')) {
+            const span = document.createElement('span');
+            span.className = line.startsWith('@@') ? 'diff-hunk' :
+              /^(?:diff |index |--- |\+\+\+ )/.test(line) ? 'diff-header' :
+                line.startsWith('+') ? 'added' : line.startsWith('-') ? 'removed' : '';
+            span.textContent = line + '\n';
+            fragment.append(span);
+          }
+          pre.append(fragment);
+        } else pre.textContent = result.content;
+      } catch (error) {
+        if (current === request && !disposed) {
+          const warning = document.createElement('p');
+          warning.className = 'hint';
+          warning.setAttribute('role', 'status');
+          warning.textContent = error.message;
+          content.replaceChildren(warning);
+        }
+      } finally {
+        if (current === request) content.removeAttribute('aria-busy');
+      }
+    }
+    void load(canDiff);
   };
   const entryButton = (path: string, label: string, diff = false) => {
-    const button = document.createElement('button'); button.type = 'button'; button.className = 'file-entry'; fileLabel(button, label, 'file'); button.title = path; button.onclick = () => void showFile(path, diff); return button;
+    const button = document.createElement('button'); button.type = 'button'; button.className = 'file-entry'; fileLabel(button, label, 'file'); button.title = path; button.onclick = () => showFile(path, diff); return button;
   };
   const tree = async (path = '.') => {
     const list = document.createElement('div'); list.className = 'file-tree';

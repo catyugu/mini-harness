@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { spawn, type ChildProcess } from 'node:child_process';
+import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, readFileSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
@@ -245,6 +245,11 @@ test('plugin schema controls, recursive tree navigation, batch export and perman
     await page.getByRole('button', { name: 'Expand Child task', exact: true }).click();
     await page.getByRole('button', { name: 'Leaf task', exact: true }).click();
     await expect(page.locator('.message.assistant')).toHaveText('Leaf result');
+    const ancestors = page.getByRole('navigation', { name: 'Parent conversations' });
+    await expect(ancestors.getByRole('button')).toHaveText(['Parent task', 'Child task']);
+    await ancestors.getByRole('button', { name: 'Child task', exact: true }).click();
+    await expect(page.locator('#conversationTitle')).toHaveText('Child task');
+    await page.getByRole('button', { name: 'Leaf task', exact: true }).click();
     await page.reload();
     await expect(page.locator('#conversationTitle')).toHaveText('Leaf task');
     await page.getByRole('button', { name: 'Select', exact: true }).click();
@@ -503,7 +508,12 @@ test('frontend plugins own all five slots and clean up on disable and reconfigur
 
 test('file inspection, responsive themes and reduced viewport height keep controls reachable', async ({ browser }) => {
   const mock = await createMockProvider(), { root, paths } = createFixturePaths(mock.url);
-  writeFileSync(join(paths.cwd, 'notes.md'), '# Visible file\nWorkspace content');
+  const note = join(paths.cwd, 'notes.md');
+  writeFileSync(note, '# Visible file\nBefore edits');
+  const git = (...args: string[]) => execFileSync('git', args, { cwd: paths.cwd });
+  git('init', '--quiet');
+  git('add', 'notes.md');
+  writeFileSync(note, '# Visible file\nWorkspace content');
   const service = await startIsolatedHost(paths);
   try {
     for (const width of [1366, 768, 390, 320]) {
@@ -512,8 +522,11 @@ test('file inspection, responsive themes and reduced viewport height keep contro
         await page.goto(service.url + '/#token=' + service.token);
         if (width <= 860) await page.getByRole('button', { name: 'Toggle navigation' }).click();
         await page.getByRole('button', { name: 'Workspace files', exact: true }).click();
-        await expect(page.getByText('Git is unavailable or this workspace is not a repository.')).toBeVisible();
-        await page.getByRole('button', { name: 'notes.md', exact: true }).click();
+        await expect(page.getByText('Git changes', { exact: true })).toBeVisible();
+        await page.getByRole('button', { name: 'AM notes.md', exact: true }).click();
+        await expect(page.locator('.diff .added')).toHaveText(['+# Visible file', '+Before edits', '+Workspace content']);
+        await page.getByRole('button', { name: 'Preview', exact: true }).click();
+        await expect(page.getByRole('button', { name: 'Preview', exact: true })).toBeFocused();
         await expect(page.locator('.file-preview')).toHaveText('# Visible file\nWorkspace content');
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
         await page.getByRole('button', { name: 'Close inspector' }).click();
@@ -611,6 +624,7 @@ test('running messages can queue follow-ups and approve shell commands from the 
     await expect(page.locator('.tool-arguments')).toContainText('echo approved');
     await expect(page.locator('.tool-content')).toContainText('Exit 0');
     await expect(page.locator('.tool-duration')).toHaveText(/\d+ (ms|s)/);
+    await expect(page.locator('#runSummary')).toContainText('Completed');
   } finally { release(); await page.close(); await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
 });
 

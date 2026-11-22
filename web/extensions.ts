@@ -1,9 +1,10 @@
 import { Context, type Fiber } from './vendor/cordis.js';
 import type { ComposerCommand } from './commands.js';
 import type { MessageContent } from '../src/protocol.js';
+import type { Conversation } from '../src/registry.js';
 import type { Bootstrap } from './types.js';
 
-export type Slot = 'sidebar' | 'composer' | 'settings' | 'inspector' | 'approvals' | 'session-navigation' | 'conversation' | 'dialogs' | 'main';
+export type Slot = 'sidebar' | 'composer' | 'settings' | 'inspector' | 'approvals' | 'session-navigation' | 'conversation' | 'dialogs' | 'main' | 'conversation-header';
 export interface ToolView { name: string; state: string; content?: MessageContent; arguments?: unknown; sessionId?: string }
 export interface Suggestion {
   label: string;
@@ -41,6 +42,9 @@ export interface FrontendServices {
   bootstrap(): Bootstrap;
   sessionTitle(id: string): string | undefined;
   openConversation(id: string): void;
+  currentConversation(): Conversation | undefined;
+  session(id: string): Conversation | undefined;
+  onConversationChange(listener: () => void, signal: AbortSignal): void;
   changedFiles(): string[];
   report(error: Error): void;
 }

@@ -9,6 +9,7 @@ interface NavigationServices {
   activate(id: string): void;
   clearConversation(): void;
   report(error: Error): void;
+  changed(): void;
 }
 
 export function sessionNavigation(api: FrontendApi, options: NavigationServices) {
@@ -89,6 +90,7 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
     sessions = next;
     for (const id of selection) if (!sessions.some((item) => item.id === id)) selection.delete(id);
     renderSessions();
+    options.changed();
   }
   element('exportSessions').onclick = () => void exportSessions([...selection]).catch(options.report);
   element('deleteSessions').onclick = () => void deleteSelected().catch(options.report);
@@ -97,7 +99,7 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
   return {
     render: renderSessions, sync, update, export: exportSessions,
     add(item: Conversation) { sessions.unshift(item); },
-    title(id: string) { return sessions.find((item) => item.id === id)?.title; },
+    session(id: string) { return sessions.find((item) => item.id === id); },
     reveal(id: string | null) {
       for (let parent = id; parent && !expanded.has(parent); parent = sessions.find((entry) => entry.id === parent)?.parentId) expanded.add(parent);
     }

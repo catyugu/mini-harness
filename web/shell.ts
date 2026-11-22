@@ -5,7 +5,7 @@ import { hydrateIcons } from './icons.js';
 const slots: Record<Slot, string> = {
   sidebar: 'sidebarExtensions', composer: 'composerExtensions', settings: 'settingsExtensions',
   inspector: 'inspectorExtensions', approvals: 'approvalRequests',
-  'session-navigation': 'navigationSlot', conversation: 'conversationSlot', dialogs: 'dialogSlot', main: 'mainSlot'
+  'session-navigation': 'navigationSlot', conversation: 'conversationSlot', dialogs: 'dialogSlot', main: 'mainSlot', 'conversation-header': 'conversationExtensions'
 };
 
 export function createShell() {
