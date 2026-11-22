@@ -104,7 +104,9 @@ function pluginCatalog(api: FrontendApi, snapshot: () => Bootstrap, refresh: () 
   const entry = fromMarkup<HTMLButtonElement>('<button type="button" class="nav-action" aria-label="Browse plugins" aria-controls="pluginCatalog"><span class="nav-label">Plugins</span></button>');
   entry.prepend(icon('plugin'));
   const page = fromMarkup(`<section id="pluginCatalog" class="catalog-page" tabindex="-1" aria-label="Plugin catalog">
-    <header class="catalog-header"><h1>Plugins</h1></header>
+    <header class="catalog-header">
+      <div class="catalog-heading"><h1>Plugins</h1><p class="hint">Install, enable, and configure plugins.</p></div>
+    </header>
     <p class="hint catalog-status" role="status"></p>
     <div class="catalog-content"></div>
   </section>`);
