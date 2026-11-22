@@ -1,7 +1,7 @@
 import type { Settings } from '../src/config.js';
 import type { Conversation } from '../src/registry.js';
 import type { NavigationEvent } from '../src/navigation-events.js';
-import { isRunning, type RunEvent } from '../src/protocol.js';
+import type { RunEvent, RunInfo } from '../src/protocol.js';
 import { api, data, payload, readEvents, wait } from './api.js';
 import type { Bootstrap, ConversationView } from './types.js';
 
@@ -89,6 +89,7 @@ export class BrowserState extends EventTarget {
   }
 }
 
+export const isRunning = (run?: RunInfo) => run?.state === 'queued' || run?.state === 'running';
 export const readConversation = (id: string, signal: AbortSignal) => data<ConversationView>('/sessions/' + id, { signal });
 
 export async function observeRun(item: ConversationView, signal: AbortSignal, accept: (event: RunEvent) => void, reconnect: () => void) {
