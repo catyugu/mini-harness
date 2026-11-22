@@ -34,13 +34,10 @@ const navigationPlugin: BrowserPlugin = {
       select(id, draft) {
         const changed = state.selectedWorkspace !== id;
         state.selectWorkspace(id);
-        if (draft || changed) {
-          shell.showPage();
-          events.dispatchEvent(new Event(draft ? 'draft' : 'clear'));
-          if (!draft) shell.closeDrawer();
-        }
-        navigation.render();
-        events.dispatchEvent(new Event('change'));
+        shell.showPage();
+        if (draft || changed) events.dispatchEvent(new Event(draft ? 'draft' : 'clear'));
+        else navigation.render();
+        if (!draft) shell.closeDrawer();
       },
       chooseWorkspace: (onAdd) => ctx.miniWorkspace.open(state.get().workspaces.find(({ id }) => id === state.selectedWorkspace), onAdd),
       manageWorkspace: (record) => ctx.miniWorkspace.manage(record),

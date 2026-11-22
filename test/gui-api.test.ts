@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, symlinkSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, symlinkSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createMiniHarnessServer } from '../src/server.js';
@@ -104,6 +104,10 @@ test('workspace registration, session navigation and scoped tools leave an activ
   const next = join(root, 'second');
   mkdirSync(next);
   writeFileSync(join(next, 'note.txt'), 'only in second');
+  const projectSkill = join(next, '.mini-harness', 'skills', 'second-project');
+  mkdirSync(projectSkill, { recursive: true });
+  writeFileSync(join(projectSkill, 'SKILL.md'), '---\nname: second-project\ndescription: A workspace Skill\n---\n\nUse this workspace.');
+  const cwd = realpathSync(paths.cwd);
   const { body: session } = await request(first + '/sessions', 'POST');
   await request('/sessions/' + session.id + '/runs', 'POST', { message: 'Keep working' });
   try {
@@ -112,8 +116,10 @@ test('workspace registration, session navigation and scoped tools leave an activ
     assert.equal(status, 201);
     const second = '/workspaces/' + workspace.id;
     const directories = await request('/workspaces/directories?path=' + encodeURIComponent(root));
-    assert.ok(directories.body.directories.some(({ path }) => path === next));
-    assert.ok(!directories.body.directories.some(({ path }) => path === paths.home));
+    assert.ok(directories.body.directories.some(({ path }) => path === realpathSync(next)));
+    assert.ok(!directories.body.directories.some(({ path }) => path === realpathSync(paths.home)));
+    assert.deepEqual((await request(second + '/skills')).body.map(({ name }) => name), ['second-project']);
+    assert.ok(!(await request(first + '/skills')).body.some(({ name }) => name === 'second-project'));
     const stream = await fetch(base + '/api/navigation/events', { headers: { Authorization: 'Bearer ' + app.token } });
     const events = stream.body.pipeThrough(new TextDecoderStream()).getReader();
     try {
@@ -143,7 +149,7 @@ test('workspace registration, session navigation and scoped tools leave an activ
       assert.equal((await request('/sessions/' + session.id + '/runs')).body.run.state, 'running');
       release();
       assert.equal((await finish(session.id)).body.run.state, 'completed');
-      assert.equal((await request('/workspaces', 'POST', { path: paths.cwd })).body.id, session.workspaceId);
+      assert.equal((await request('/workspaces', 'POST', { path: cwd })).body.id, session.workspaceId);
       assert.equal((await request(first + '/sessions')).body[0].id, session.id);
     } finally { await events.cancel(); }
   } finally { release(); }

@@ -262,7 +262,7 @@ button { border-radius: var(--radius); }
 .workspace-button small { min-width: 0; overflow: hidden; text-overflow: ellipsis; font: 11px/1.4 ui-monospace, monospace; }
 .workspace-button span { display: inline-flex; flex: 0 0 auto; }
 .workspace-button svg { width: 14px; height: 14px; }
-.welcome .workspace-button { padding: 6px 9px; border: 1px solid var(--border); background: var(--panel); }
+.welcome .workspace-button { padding: 6px 9px; border: 1px solid var(--border); border-radius: var(--control-radius); background: var(--panel); }
 .file-entry, .file-tree summary { display: flex; justify-content: flex-start; align-items: center; gap: 7px; width: 100%; min-width: 0; border: 0; background: transparent; padding: 4px 6px; text-align: left; font: 12px/1.5 ui-monospace, monospace; border-radius: 6px; }
 .file-entry:hover, .file-tree summary:hover { background: var(--hover); }
 .file-entry span, .file-tree summary span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
@@ -496,6 +496,7 @@ button { border-radius: var(--radius); }
 .workspace-name.ui-button, .session-name.ui-button { flex: 1; justify-content: flex-start; min-width: 0; padding: 4px; }
 .workspace-name span, .workspace-name small, .session-name.ui-button { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-name { font-weight: 600; }
+.session-name.ui-button { display: block; }
 .workspace-name small { margin-inline-start: auto; color: var(--muted); font-weight: normal; }
 .workspace-name svg { flex: 0 0 16px; height: 16px; color: var(--muted); }
 .workspace-actions { display: flex; }
@@ -527,8 +528,8 @@ button { border-radius: var(--radius); }
 .right-tab-list { display: flex; flex: 1; min-width: 0; overflow: auto; gap: 2px; padding: 4px 2px; }
 .right-tab { display: flex; align-items: center; flex-shrink: 0; max-width: min(190px, 100%); border-radius: 7px; }
 .right-tab:has([aria-selected="true"]) { background: var(--selected); }
-.right-tab .ui-button { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-inline: 8px; }
-.right-tab .icon-button { min-width: 25px; padding: 3px; }
+.right-tab .ui-button { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-height: 34px; padding-inline: 6px; font-size: 12px; }
+.right-tab .icon-button { width: 22px; min-width: 22px; min-height: 34px; padding: 3px; }
 .right-tab .icon-button svg { width: 14px; height: 14px; }
 .right-tab-launchers { display: flex; gap: 2px; padding-inline: 9px; border-bottom: 1px solid var(--border); }
 .right-tab-launchers:empty { display: none; }

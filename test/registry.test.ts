@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, existsSync, writeFileSync, mkdirSync, readFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync, writeFileSync, mkdirSync, readFileSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getPaths } from '../src/config.js';
@@ -82,7 +82,7 @@ test('legacy workspace and session indexes migrate without moving Pi history or 
     }] }));
     const registry = new SessionRegistry(first);
     const migrated = registry.get('legacy');
-    assert.equal(migrated.workspaceId, registry.workspaces.list().find(({ path }) => path === second.cwd).id);
+    assert.equal(migrated.workspaceId, registry.workspaces.list().find(({ path }) => path === realpathSync(second.cwd)).id);
     assert.equal(JSON.parse(readFileSync(first.registry, 'utf8')).sessions[0].workspaceId, migrated.workspaceId);
     assert.equal(registry.export(['legacy'])[0].piSession, 'old Pi history');
     registry.workspaces.remove(migrated.workspaceId);

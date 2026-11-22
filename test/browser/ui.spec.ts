@@ -450,9 +450,9 @@ test('drafts, search, rename, single deletion, attachment and input discovery', 
     await page.getByRole('textbox', { name: 'Title', exact: true }).fill('Project review');
     await page.getByRole('button', { name: 'Rename', exact: true }).click();
     await expect(page.locator('#conversationTitle')).toHaveText('Project review');
-    await page.getByRole('searchbox', { name: 'Search conversations' }).fill('absent');
+    await page.getByRole('searchbox', { name: 'Search workspaces and conversations' }).fill('absent');
     await expect(page.locator('#sessions .session-row')).toHaveCount(0);
-    await page.getByRole('searchbox', { name: 'Search conversations' }).fill('review');
+    await page.getByRole('searchbox', { name: 'Search workspaces and conversations' }).fill('review');
     await expect(page.locator('#sessions .session-row')).toHaveCount(1);
     page.once('dialog', (dialog) => dialog.accept());
     await page.getByRole('button', { name: 'Delete Project review', exact: true }).click();
@@ -501,7 +501,7 @@ test('frontend plugins own all five slots and clean up on disable and reconfigur
     await expect(page.getByText('Custom listing result')).toBeHidden();
     await expect(page.locator('.message.assistant')).toHaveText('Done');
     await page.locator('.tool-card summary').click(); await expect(page.getByText('Custom listing result')).toBeVisible();
-    await page.getByRole('button', { name: 'Open inspector', exact: true }).click();
+    await page.getByRole('button', { name: 'Open workspace panel', exact: true }).click();
     await page.getByRole('button', { name: 'Plugin inspector', exact: true }).click();
     await expect(page.getByText('Plugin preview', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
@@ -552,17 +552,40 @@ test('file inspection, responsive themes and reduced viewport height keep contro
       const page = await browser.newPage({ viewport: { width, height: 700 } });
       try {
         await page.goto(service.url + '/#token=' + service.token);
-        if (width <= 860) await page.getByRole('button', { name: 'Toggle navigation' }).click();
+        if (width <= 860) {
+          const navigation = page.getByRole('button', { name: 'Toggle navigation' });
+          const close = page.getByRole('dialog', { name: 'Conversations' }).getByRole('button', { name: 'Close navigation' });
+          await navigation.click();
+          await expect(close).toBeFocused();
+          await close.press('Shift+Tab');
+          await expect(page.getByRole('button', { name: 'Settings', exact: true })).toBeFocused();
+          await page.keyboard.press('Escape');
+          await expect(navigation).toBeFocused();
+          await navigation.click();
+        }
         await page.getByRole('button', { name: 'Workspace files', exact: true }).click();
-        await expect(page.getByText('Git changes', { exact: true })).toBeVisible();
-        await page.getByRole('button', { name: 'AM notes.md', exact: true }).click();
-        await expect(page.locator('.diff .added')).toHaveText(['+# Visible file', '+Before edits', '+Workspace content']);
-        await page.getByRole('button', { name: 'Preview', exact: true }).click();
-        await expect(page.getByRole('button', { name: 'Preview', exact: true })).toBeFocused();
-        await expect(page.locator('.file-preview')).toHaveText('# Visible file\nWorkspace content');
+        const panel = page.locator('#inspector');
+        await expect(panel.getByRole('tab', { name: 'Files', exact: true })).toBeVisible();
+        await expect(panel.getByRole('button', { name: 'notes.md AM', exact: true })).toBeVisible();
+        await panel.getByRole('button', { name: 'Git changes', exact: true }).click();
+        await panel.getByRole('button', { name: 'notes.md AM', exact: true }).click();
+        await expect(panel.locator('.diff .added')).toHaveText(['+# Visible file', '+Before edits', '+Workspace content']);
+        await panel.getByRole('button', { name: 'Preview', exact: true }).click();
+        await expect(panel.getByRole('tab', { name: 'notes.md', exact: true })).toBeFocused();
+        await expect(panel.getByRole('heading', { name: 'Visible file' })).toBeVisible();
+        await panel.getByRole('button', { name: 'Source', exact: true }).click();
+        await expect(panel.locator('.file-preview')).toHaveText('# Visible file\nWorkspace content');
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-        await page.getByRole('button', { name: 'Close inspector' }).click();
-        if (width <= 860) await page.getByRole('button', { name: 'Close navigation' }).first().click();
+        await panel.getByRole('tab', { name: 'notes.md', exact: true }).focus();
+        await page.locator('#workspaceLabel').evaluate((label) => { label.textContent = 'workspace'; });
+        await page.locator('html').evaluate((html) => { html.dataset.theme = 'system'; });
+        for (const colorScheme of ['light', 'dark'] as const) {
+          await page.emulateMedia({ colorScheme, reducedMotion: 'reduce' });
+          await expect(page).toHaveScreenshot('workspace-panel-' + width + '-' + colorScheme + '.png', {
+            animations: 'disabled', caret: 'hide', maxDiffPixelRatio: 0.02
+          });
+        }
+        await panel.getByRole('button', { name: 'Close workspace panel' }).click();
         for (const theme of ['dark', 'light']) {
           if (width <= 860) await page.getByRole('button', { name: 'Toggle navigation' }).click();
           await page.getByRole('button', { name: 'Settings', exact: true }).click();
@@ -581,7 +604,7 @@ test('file inspection, responsive themes and reduced viewport height keep contro
   } finally { await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
-test('custom provider onboarding and switching workspace work entirely in the GUI', async ({ page }) => {
+test('custom provider onboarding and registering a workspace work entirely in the GUI', async ({ page }) => {
   const mock = await createMockProvider(), { root, paths } = createFixturePaths(mock.url);
   const second = join(root, 'another-workspace'); mkdirSync(second);
   const service = await startIsolatedHost(paths);
@@ -612,14 +635,16 @@ test('custom provider onboarding and switching workspace work entirely in the GU
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.locator('.message.assistant')).toHaveText('Mock response');
     expect(mock.requests.at(-1).model).toBe('new-model');
-    await page.getByRole('button', { name: 'Choose workspace', exact: true }).click();
-    await page.getByRole('textbox', { name: 'Absolute directory path', exact: true }).fill(second);
-    await page.getByRole('button', { name: 'Open workspace', exact: true }).click();
+    await page.getByRole('button', { name: 'Add workspace', exact: true }).click();
+    const picker = page.getByRole('dialog', { name: 'Add workspace' });
+    await expect(picker.getByLabel('Absolute directory path')).toHaveValue(paths.cwd);
+    await picker.getByRole('button', { name: 'Up', exact: true }).click();
+    await picker.getByRole('button', { name: 'another-workspace', exact: true }).click();
+    await expect(picker.getByLabel('Absolute directory path')).toHaveValue(second);
+    await picker.getByRole('button', { name: 'Add workspace', exact: true }).click();
     await expect(page.locator('#workspaceLabel')).toHaveText(second);
-    await expect(page.locator('#sessions .session-row')).toHaveCount(0);
-    await page.getByRole('button', { name: 'Choose workspace', exact: true }).click();
-    await page.getByRole('textbox', { name: 'Absolute directory path', exact: true }).fill(paths.cwd);
-    await page.getByRole('button', { name: 'Open workspace', exact: true }).click();
+    await expect(page.locator('#sessions .session-row')).toHaveCount(1);
+    await page.getByRole('button', { name: 'Configured from GUI', exact: true }).click();
     await expect(page.locator('#workspaceLabel')).toHaveText(paths.cwd);
     await expect(page.locator('.message.assistant')).toHaveText('Mock response');
   } finally { await page.close(); await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
@@ -699,6 +724,12 @@ test('plugin catalog applies configuration and removes disabled browser capabili
     await files.uncheck();
     await expect(files).not.toBeChecked();
     await expect(page.locator('#sidebarExtensions').getByRole('button', { name: 'Workspace files', includeHidden: true })).toHaveCount(0);
+    await expect(files).toBeEnabled();
+    await page.getByRole('button', { name: 'Toggle navigation' }).click();
+    await page.getByRole('button', { name: 'workspace', exact: true }).click();
+    await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Toggle navigation' }).click();
+    await page.getByRole('button', { name: 'Browse plugins' }).click();
     await files.check();
     await expect(page.locator('#sidebarExtensions').getByRole('button', { name: 'Workspace files', includeHidden: true })).toHaveCount(1);
     await catalog.getByRole('button', { name: 'Install plugin', exact: true }).click();
@@ -723,4 +754,114 @@ test('plugin catalog applies configuration and removes disabled browser capabili
     await page.getByRole('button', { name: 'New conversation' }).click();
     await expect(page.getByRole('textbox', { name: 'Message' })).toBeVisible();
   } finally { await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+test('switching workspaces preserves running conversations and each conversation’s file tabs', async ({ page }) => {
+  let entered: () => void, release: () => void;
+  const waiting = new Promise<void>((done) => { entered = done; });
+  const held = new Promise<void>((done) => { release = done; });
+  const mock = await createMockProvider(async ({ messages }) => {
+    if (messages.at(-1).content === 'Keep working here') { entered(); await held; return 'First workspace finished'; }
+    return 'Second workspace finished';
+  });
+  const { root, paths } = createFixturePaths(mock.url);
+  const second = join(paths.cwd, 'nested');
+  mkdirSync(second);
+  for (const [directory, text] of [[paths.cwd, 'first'], [second, 'second']]) {
+    mkdirSync(join(directory, 'src'));
+    writeFileSync(join(directory, 'src', 'common.ts'), 'const workspace = "' + text + '";');
+  }
+  const service = await startIsolatedHost(paths);
+  try {
+    await page.setViewportSize({ width: 1366, height: 900 });
+    await page.goto(service.url + '/#token=' + service.token);
+    const nav = page.getByRole('navigation', { name: 'Conversation tree' });
+    const prompt = page.getByRole('textbox', { name: 'Message', exact: true });
+    const panel = page.getByRole('complementary', { name: 'Workspace panel' });
+    const open = page.getByRole('button', { name: 'Open workspace panel', exact: true });
+    const close = () => panel.getByRole('button', { name: 'Close workspace panel' }).click();
+    await prompt.fill('Keep working here');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await waiting;
+    await expect(nav.getByRole('button', { name: 'Keep working here', exact: true })).toBeVisible();
+    await open.click();
+    await panel.locator('summary').filter({ hasText: /^src$/ }).click();
+    await panel.getByRole('button', { name: 'common.ts', exact: true }).click();
+    await expect(panel.locator('.syntax-string')).toHaveText('"first"');
+    await expect(panel.locator('.source-line')).toHaveAttribute('data-line', '1');
+    const separator = panel.getByRole('separator');
+    await expect(separator).toHaveAttribute('aria-valuenow', '380');
+    await separator.press('ArrowLeft');
+    await expect(separator).toHaveAttribute('aria-valuenow', '400');
+    await expect.poll(() => panel.evaluate((node) => Math.round(node.getBoundingClientRect().width))).toBe(400);
+    const handle = await separator.boundingBox();
+    await page.mouse.move(handle.x + 3, handle.y + 60);
+    await page.mouse.down();
+    await page.mouse.move(handle.x - 37, handle.y + 60);
+    await expect(separator).toHaveAttribute('aria-valuenow', '440');
+    await expect(panel).toHaveCSS('transition-property', 'none');
+    await page.mouse.up();
+    await close();
+    await page.getByRole('button', { name: 'Add workspace', exact: true }).click();
+    const picker = page.getByRole('dialog', { name: 'Add workspace' });
+    await picker.getByLabel('Absolute directory path').fill(second);
+    await picker.getByRole('button', { name: 'Add workspace', exact: true }).click();
+    await nav.getByRole('button', { name: 'New in nested', exact: true }).click();
+    await prompt.fill('Start in the child workspace');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.locator('.message.assistant')).toHaveText('Second workspace finished');
+    await open.click();
+    await panel.locator('summary').filter({ hasText: /^src$/ }).click();
+    await panel.getByRole('button', { name: 'common.ts', exact: true }).click();
+    await expect(panel.locator('.syntax-string')).toHaveText('"second"');
+    await close();
+    await nav.getByRole('button', { name: 'Keep working here', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Stop response' })).toBeVisible();
+    await open.click();
+    await expect(panel.getByRole('tab', { name: 'common.ts', exact: true })).toHaveAttribute('aria-selected', 'true');
+    await expect(panel.locator('.syntax-string')).toHaveText('"first"');
+    await panel.getByRole('tab', { name: 'Files', exact: true }).click();
+    await expect(panel.getByRole('button', { name: 'common.ts', exact: true })).toBeVisible();
+    await close();
+    release();
+    await expect(page.locator('.message.assistant')).toHaveText('First workspace finished');
+    await nav.getByRole('button', { name: 'Collapse workspace workspace', exact: true }).click();
+    await expect(nav.getByRole('button', { name: 'nested', exact: true })).toBeHidden();
+    const search = page.getByRole('searchbox', { name: 'Search workspaces and conversations' });
+    await search.fill('child workspace');
+    await expect(nav.getByRole('button', { name: 'Start in the child workspace', exact: true })).toBeVisible();
+    await search.clear();
+    await page.reload();
+    await expect(nav.getByRole('button', { name: 'nested', exact: true })).toBeHidden();
+  } finally { release(); await page.close(); await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+test('switch transitions respect reduced motion and roll back a failed setting once', async ({ page }) => {
+  const mock = await createMockProvider(), { root, paths } = createFixturePaths(mock.url);
+  const service = await startIsolatedHost(paths);
+  try {
+    let requests = 0, release: () => void;
+    const held = new Promise<void>((done) => { release = done; });
+    await page.route('**/api/settings', async (route) => {
+      requests++;
+      await held;
+      await route.fulfill({ status: 400, json: { error: 'The switch could not be saved' } });
+    });
+    await page.goto(service.url + '/#token=' + service.token);
+    await page.getByRole('button', { name: 'Browse plugins' }).click();
+    const files = page.getByRole('switch', { name: 'Workspace files', exact: true });
+    const duration = () => files.evaluate((node) => getComputedStyle(node, '::after').transitionDuration);
+    expect(await duration()).toBe('0.16s, 0.16s');
+    await files.uncheck();
+    await expect(files).toHaveAttribute('aria-busy', 'true');
+    await expect(files).toBeDisabled();
+    await files.evaluate((node: HTMLInputElement) => node.click());
+    release();
+    await expect(page.getByRole('status').filter({ hasText: 'The switch could not be saved' })).toBeVisible();
+    await expect(files).toBeChecked();
+    await expect(files).toBeEnabled();
+    expect(requests).toBe(1);
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    expect(await duration()).toBe('0s, 0s');
+  } finally { await page.close(); await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
 });

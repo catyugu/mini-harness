@@ -31,7 +31,7 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
       <span>Workspaces</span>
       <div id="workspaceActions"><button id="selectMode" class="link-button" type="button" aria-pressed="false">Select</button></div>
     </div>
-    <input id="sessionSearch" class="ui-input" type="search" placeholder="Search workspaces and conversations" aria-label="Search workspaces and conversations">
+    <input id="sessionSearch" class="ui-input" type="search" placeholder="Search workspaces and chats" aria-label="Search workspaces and conversations">
     <nav id="sessions" class="sessions" aria-label="Conversation tree"></nav>
     <div id="bulkActions" class="bulk-actions" hidden>
       <span id="selectedCount" aria-live="polite"></span>
