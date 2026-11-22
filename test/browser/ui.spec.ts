@@ -932,6 +932,9 @@ test('contribution overrides restore tool cards and dock positions without dupli
     writeFileSync(join(folder, 'web.js'), `export default (api) => {
       const dock = document.createElement('span'); dock.textContent = '${label} usage'; dock.dataset.testDock = '${id}';
       api.contribute('conversation.composer.dock', {id: 'usage', priority: ${priority}, value: dock});
+      api.contribute('plugins.detail.section', {id: 'details', priority: ${priority}, value: (plugin) => {
+        const node = document.createElement('p'); node.textContent = '${label} details for ' + plugin.title; return node;
+      }});
       api.contribute('tool.call.toolview', {id: 'read', key: 'read', priority: ${priority}, value: () => {
         const node = document.createElement('p'); node.textContent = '${label} reader'; return node;
       }});
@@ -950,6 +953,9 @@ test('contribution overrides restore tool cards and dock positions without dupli
     await expandProcess(page); await page.locator('.tool-card summary').click();
     await expect(page.getByText('Override reader', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Browse plugins' }).click();
+    await page.getByRole('button', { name: 'Base view settings', exact: true }).click();
+    await expect(page.getByText('Override details for Base view', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'All plugins', exact: true }).click();
     const toggle = page.getByRole('switch', { name: 'Override view', exact: true });
     for (let index = 0; index < 3; index++) {
       await toggle.uncheck(); await expect(toggle).toBeEnabled();
@@ -958,6 +964,9 @@ test('contribution overrides restore tool cards and dock positions without dupli
       await toggle.check(); await expect(toggle).toBeEnabled();
     }
     await toggle.uncheck(); await expect(toggle).toBeEnabled();
+    await page.getByRole('button', { name: 'Base view settings', exact: true }).click();
+    await expect(page.getByText('Base details for Base view', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'All plugins', exact: true }).click();
     await page.getByRole('button', { name: 'Read with a view', exact: true }).click();
     await expandProcess(page); await page.locator('.tool-card summary').click();
     await expect(page.getByText('Base reader', { exact: true })).toBeVisible();

@@ -136,8 +136,9 @@ function pluginCatalog(api: FrontendApi, snapshot: () => Bootstrap, refresh: () 
   let editing: string | undefined;
   let detailExtras: HTMLElement;
   function renderExtras() {
-    if (!detailExtras) return;
+    if (!detailExtras || !editing) return;
     const plugin = snapshot().plugins.find(({ id }) => id === editing);
+    if (!plugin) { detailExtras.replaceChildren(); return; }
     detailExtras.replaceChildren(...api.contributions<(plugin: PluginMetadata) => HTMLElement | undefined>('plugins.detail.section').flatMap(({ value }) => {
       const node = value(plugin); return node ? [node] : [];
     }));
