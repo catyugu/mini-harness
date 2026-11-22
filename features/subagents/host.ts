@@ -1,11 +1,6 @@
 import { defineTool } from '@earendil-works/pi-coding-agent';
 import type { Context } from 'cordis';
 import { Type } from 'typebox';
-import type { DelegationPort } from '../../src/contracts/delegation.js';
-
-declare module 'cordis' {
-  interface Context { harnessDelegation: DelegationPort }
-}
 
 
 export function setup(ctx: Context) {

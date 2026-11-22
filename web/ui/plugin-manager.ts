@@ -1,5 +1,5 @@
 import type { SettingsPatch } from '../../src/config.js';
-import type { PluginMetadata } from '../../src/kernel/plugin-api.js';
+import type { PluginMetadata } from '../../src/contracts/plugins.js';
 import type { BrowserPlugin, FrontendApi } from '../kernel/extensions.js';
 import type { Bootstrap } from '../types.js';
 import { payload } from '../api.js';

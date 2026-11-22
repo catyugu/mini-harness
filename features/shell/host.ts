@@ -4,10 +4,6 @@ import { Type } from 'typebox';
 import { Approvals } from './approvals.js';
 import { runShell } from '../../src/sandbox.js';
 
-declare module 'cordis' {
-  interface Context { harnessApprovals?: Pick<Approvals, 'has'> }
-}
-
 
 export function setup(ctx: Context) {
     const approvals = new Approvals(ctx.harnessSessionChanged);

@@ -9,12 +9,12 @@ import { getPaths, type Paths } from '../../config.js';
 import { prepareInput, type Attachment, type ImageInput } from '../../input.js';
 import type { Conversation, SessionRegistry, ModelChoice } from '../../services/conversations.js';
 import type { Context } from 'cordis';
-import type { SessionRecords, ToolRegistry } from '../../kernel/plugin-api.js';
+import type { SessionRecords, ToolPort } from '../../contracts/plugins.js';
 import type { StreamEvent, ViewMessage } from '../../protocol.js';
 
 export type ThinkingLevel = AgentSession['thinkingLevel'];
 
-type Resources = [Context['harnessSkills'], ...ReturnType<ToolRegistry['resources']>];
+type Resources = [Context['harnessSkills'], ...ReturnType<ToolPort['resources']>];
 
 export class PiSessions {
   private readonly openSessions = new Map<string, { session: AgentSession; resources: Resources }>();

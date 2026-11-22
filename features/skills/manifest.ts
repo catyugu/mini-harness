@@ -1,4 +1,4 @@
-import type { BuiltinPlugin } from '../../src/kernel/plugin-api.js';
+import type { BuiltinPlugin } from '../../src/contracts/plugins.js';
 
 /** One metadata definition for the host, settings, and browser loader. */
 export const manifest: Omit<BuiltinPlugin, 'setup'> = {

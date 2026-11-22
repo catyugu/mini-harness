@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { RouteRequest, RouteHandler, RoutePort } from '../contracts/routes.js';
 
 export function requestBody(req: IncomingMessage, max = 1024 * 1024): Promise<any> {
   return new Promise((resolve, reject) => {
@@ -43,15 +44,7 @@ export function eventStream(res: ServerResponse) {
   };
 }
 
-export interface RouteRequest {
-  url: URL;
-  workspace?: { id: string; path: string };
-  signal: AbortSignal;
-  body(max?: number): Promise<unknown>;
-}
-export type RouteHandler = (request: RouteRequest) => unknown | Promise<unknown>;
-
-export class RouteRegistry {
+export class RouteRegistry implements RoutePort {
   private routes = new Map<string, { handler: RouteHandler; signal: AbortSignal }>();
 
   register(method: string, path: string, handler: RouteHandler) {

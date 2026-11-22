@@ -1,8 +1,17 @@
-import type { ToolDefinition } from '@earendil-works/pi-coding-agent';
+import type { ToolDefinition, AgentSession } from '@earendil-works/pi-coding-agent';
 import type { Context } from 'cordis';
 import type { Paths, Settings } from '../config.js';
-import type { RouteHandler, RouteRegistry } from '../transport/http.js';
-import type { SessionRegistry } from '../services/conversations.js';
+import type { RouteHandler, RoutePort } from './routes.js';
+import type { Conversation } from './conversation.js';
+import type { RunInfo } from './transport.js';
+import type { DelegationPort } from './delegation.js';
+
+/** Host-owned capability; features consume this interface without importing a concrete registry. */
+export interface ToolPort {
+  register(name: string, bind: (id: string) => ToolDefinition, visible?: (id: string) => boolean, builtin?: boolean): () => void;
+  forSession(id: string): ToolDefinition[];
+  resources(id: string): { bind: (id: string) => ToolDefinition; visible: (id: string) => boolean }[];
+}
 
 export interface PluginMetadata {
   id: string;
@@ -49,37 +58,21 @@ type ListModels = () => { provider: string; id: string; name: string; configured
 declare module 'cordis' {
   interface Context {
     harnessModels: { list: ListModels };
-    harnessSessions: Pick<SessionRegistry, 'get' | 'list'>;
+    harnessSessions: { get(id: string): Conversation | undefined; list(workspaceId?: string): Conversation[] };
     harnessSettings: () => Settings;
-    harnessTools: ToolRegistry;
+    harnessTools: ToolPort;
     harnessState: { paths: Paths };
-    harnessRoutes: RouteRegistry;
+    harnessRoutes: RoutePort;
     harnessSkills?: { paths(cwd: string): string[] };
     harnessWorkspace: { resolve(id: string): string };
     harnessSessionChanged: (id: string) => void;
     harnessRevision: { reviseAndStart(id: string, input: {
       sourceEntryId: string; expectedLeafId: string | null; message: string;
       attachments?: import('../input.js').Attachment[]; model?: import('../services/conversations.js').ModelChoice;
-      thinkingLevel?: import('../adapters/pi/sessions.js').ThinkingLevel;
-    }): Promise<import('../protocol.js').RunInfo> };
+      thinkingLevel?: AgentSession['thinkingLevel'];
+    }): Promise<RunInfo> };
+    harnessDelegation: DelegationPort;
+    harnessApprovals?: { has(sessionId: string): boolean };
   }
 }
 
-const reservedTools = new Set(['read', 'edit', 'write', 'grep', 'find', 'ls', 'bash', 'powershell', 'codemode', 'tool_search']);
-
-export class ToolRegistry {
-  private tools = new Map<string, { bind: (id: string) => ToolDefinition; visible: (id: string) => boolean }>();
-
-  register(name: string, bind: (id: string) => ToolDefinition, visible = (_id: string) => true, builtin = false) {
-    if (!/^[a-zA-Z0-9_-]{1,64}$/.test(name)) throw new Error('Invalid tool name: ' + name);
-    if ((!builtin && reservedTools.has(name)) || this.tools.has(name)) throw new Error('Duplicate or reserved tool: ' + name);
-    this.tools.set(name, { bind, visible });
-    return () => { this.tools.delete(name); };
-  }
-
-  forSession(id: string) {
-    return this.resources(id).map((tool) => tool.bind(id));
-  }
-
-  resources(id: string) { return [...this.tools.values()].filter((tool) => tool.visible(id)); }
-}

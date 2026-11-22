@@ -1,4 +1,4 @@
-import type { BuiltinPlugin } from '../src/kernel/plugin-api.js';
+import type { BuiltinPlugin } from '../src/contracts/plugins.js';
 import { manifest as files } from './files/manifest.js';
 import { manifest as skills } from './skills/manifest.js';
 import { manifest as shell } from './shell/manifest.js';
