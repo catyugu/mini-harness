@@ -1,3 +1,4 @@
+import { containsPath } from '../workspace.js';
 import { loadHarnessSkills, skillSources } from '../skill-sources.js';
 import type { Context } from 'cordis';
 import type { BuiltinPlugin } from '../plugins.js';
@@ -13,8 +14,8 @@ export const skills: BuiltinPlugin = {
       const cwd = workspace.path;
       const loaded = await loadHarnessSkills(paths, cwd);
       return loaded.skills.map(({ name, description, filePath, sourceInfo }) => ({ name, description, filePath,
-        source: skillSources(paths, cwd).find(({ path }) => filePath.startsWith(path))?.scope ?? sourceInfo.scope,
-        conflicts: loaded.diagnostics.filter(({ message }) => message.includes(name)).map(({ message }) => message) }));
+        source: skillSources(paths, cwd).find(({ path }) => containsPath(path, filePath))?.scope ?? (sourceInfo.scope === 'project' ? 'workspace' : 'user'),
+        conflicts: loaded.diagnostics.filter((entry) => entry.type === 'collision' && entry.collision?.name === name).map(({ message }) => message) }));
     }));
   }
 };

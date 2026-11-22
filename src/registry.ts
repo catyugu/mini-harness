@@ -12,6 +12,7 @@ export interface Conversation {
   cwd: string;
   workspaceId: string;
   waitingApproval?: boolean;
+  permission?: import('./execution-policy.js').Permission;
   parentId: string | null;
   file: string | null;
   model?: ModelChoice;
@@ -45,6 +46,7 @@ export class SessionRegistry {
         return { ...item, workspaceId: workspaces.list().find((record) => record.path === path)?.id ?? workspaceId(path) };
       }) });
     }
+    workspaces.restoreReferences(this.state.sessions);
     if (this.state.sessions.some(({ run }) => isRunning(run))) this.commit({ ...this.state,
       sessions: this.state.sessions.map((item) => isRunning(item.run) ? { ...item,
         run: { ...item.run, state: 'interrupted', error: 'Server stopped before the run finished', finishedAt: new Date().toISOString() }
@@ -71,8 +73,8 @@ export class SessionRegistry {
     return entry && structuredClone(entry);
   }
 
-  create({ parentId = null, title = 'New conversation', workspaceId, model }: {
-    parentId?: string | null; title?: string; workspaceId?: string; model?: ModelChoice;
+  create({ parentId = null, title = 'New conversation', workspaceId, model, permission = 'workspace-write' }: {
+    parentId?: string | null; title?: string; workspaceId?: string; model?: ModelChoice; permission?: import('./execution-policy.js').Permission;
   } = {}): Conversation {
     const parent = parentId && this.get(parentId);
     if (parentId && !parent) throw new Error('Parent conversation not found');
@@ -85,13 +87,13 @@ export class SessionRegistry {
     const now = new Date().toISOString();
     const session: Conversation = { id: randomUUID(), title: String(title).slice(0, 140), cwd,
       workspaceId: parent ? parent.workspaceId : workspace.id, parentId,
-      file: null, model, createdAt: now, updatedAt: now };
+      file: null, model, permission: parent ? parent.permission ?? 'workspace-write' : permission, createdAt: now, updatedAt: now };
     this.commit({ ...this.state, sessions: [...this.state.sessions, session] });
     this.notify(session.id);
     return structuredClone(session);
   }
 
-  update(id: string, patch: Partial<Pick<Conversation, 'title' | 'file' | 'model' | 'run'>>) {
+  update(id: string, patch: Partial<Pick<Conversation, 'title' | 'file' | 'model' | 'run' | 'permission'>>) {
     const item = this.get(id);
     if (!item) throw new Error('Conversation not found');
     const updated = { ...item, ...patch, updatedAt: new Date().toISOString() };

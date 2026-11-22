@@ -93,7 +93,7 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
         }
         if (resource === 'sessions') {
           if (req.method === 'GET') return json(res, 200, runtime.registry.list(id).map((item) => runtime.navigationSession(item.id)));
-          if (req.method === 'POST') return json(res, 201, runtime.registry.create({ workspaceId: id }));
+          if (req.method === 'POST') return json(res, 201, runtime.createConversation({ workspaceId: id }));
         } else if (resource && !configuring && req.method === 'GET') {
           const sessionId = url.searchParams.get('sessionId');
           if (sessionId && runtime.registry.get(sessionId)?.workspaceId !== id)
@@ -130,7 +130,7 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
       if (pathname === '/api/settings' && req.method === 'PATCH') {
         if (configuring) throw new Error('Configuration is already changing');
         configuring = true;
-        try { return json(res, 200, await runtime.updateSettings(await requestBody(req))); }
+        try { return json(res, 200, await (async () => { const { confirmed, ...patch } = await requestBody(req); return runtime.updateSettings(patch, confirmed === true); })()); }
         finally { configuring = false; }
       }
       if (pathname === '/api/credentials' && ['POST', 'DELETE'].includes(req.method)) {

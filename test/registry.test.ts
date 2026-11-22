@@ -65,7 +65,7 @@ test('restarts finish a journaled deletion after partial cleanup', () => {
   } finally { rmSync(temp, { recursive: true, force: true }); }
 });
 
-test('legacy workspace and session indexes migrate without moving Pi history or re-registering a removed workspace', () => {
+test('legacy workspace indexes restore hidden sessions without moving Pi history', () => {
   const temp = mkdtempSync(join(tmpdir(), 'mini-harness-migrate-'));
   try {
     const first = getPaths(temp, { MINI_HARNESS_HOME: join(temp, 'home') });
@@ -87,9 +87,9 @@ test('legacy workspace and session indexes migrate without moving Pi history or 
     assert.equal(registry.export(['legacy'])[0].piSession, 'old Pi history');
     registry.workspaces.remove(migrated.workspaceId);
     const restored = new SessionRegistry(first);
-    assert.ok(!restored.workspaces.list().some(({ id }) => id === migrated.workspaceId));
+    assert.ok(restored.workspaces.list().some(({ id }) => id === migrated.workspaceId));
     assert.equal(restored.get('legacy').file, file);
-    assert.notEqual(restored.workspaces.register(second.cwd).id, migrated.workspaceId);
+    assert.equal(restored.workspaces.register(second.cwd).id, migrated.workspaceId);
   } finally { rmSync(temp, { recursive: true, force: true }); }
 });
 

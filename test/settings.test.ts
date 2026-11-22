@@ -24,7 +24,8 @@ test('recent main model survives navigation, child overrides and a restart throu
   await runtime.getConversation(old.id);
   assert.equal(runtime.settings.model.id, 'second-model');
   assert.strictEqual(await runtime.open(old.id), original);
-  await runtime.send(old.id, 'Switch with SDK');
+  assert.equal((await runtime.getConversation(old.id)).model.id, 'mock-model');
+  await runtime.send(old.id, 'Switch with SDK', undefined, { model: { provider: 'local-mock', id: 'second-model' } });
   assert.equal(mock.requests.at(-1).model, 'second-model');
   await runtime.runChild(old.id, 'Child override', { provider: 'local-mock', id: 'mock-model' });
   assert.equal(runtime.settings.model.id, 'second-model');

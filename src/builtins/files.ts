@@ -35,7 +35,7 @@ export const files: BuiltinPlugin = {
             return { ...result, details: { ...details, changedPath } };
           }
         };
-      }, undefined, true));
+      }, undefined, true, [template.name === 'edit' || template.name === 'write' ? 'workspace-write' : 'read']));
     }
     const { harnessRoutes: routes } = ctx;
     const inspection = ({ workspace }: RouteRequest) => {

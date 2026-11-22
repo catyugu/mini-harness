@@ -8,6 +8,7 @@ import {
   type AgentSession
 } from '@earendil-works/pi-coding-agent';
 import { getSupportedThinkingLevels } from '@earendil-works/pi-ai/compat';
+import { requirePermission, permissionRank, type Permission } from './execution-policy.js';
 import { harnessSkillOptions } from './skill-sources.js';
 import { RunEvents } from './run-events.js';
 import { PluginHost } from './plugins.js';
@@ -22,6 +23,7 @@ interface ActiveRun {
   events: RunEvents;
   done?: Promise<string>;
   lease?: ChildLease;
+  publish?(event: StreamEvent): void;
 }
 
 export class MiniHarnessRuntime {
@@ -63,8 +65,60 @@ export class MiniHarnessRuntime {
           if (Boolean(count) !== (next > 0)) this.registry.notify(id);
         }
       },
-      delegation: this.delegation
+      delegation: this.delegation,
+      todos: { get: (id) => this.getTodos(id), set: (id, items) => this.setTodos(id, items) },
+      permission: (id) => this.permission(id),
+      publish: (id, event) => this.publishSessionEvent(id, event)
     });
+  }
+
+  async getTodos(id: string): Promise<import('./protocol.js').TodoItem[]> {
+    const session = await this.open(id);
+    const entry = session.sessionManager.getBranch().filter((entry) => entry.type === 'custom' && entry.customType === 'mini-harness.todos').at(-1);
+    return entry?.type === 'custom' ? structuredClone(entry.data as import('./protocol.js').TodoItem[]) : [];
+  }
+
+  async setTodos(id: string, items: import('./protocol.js').TodoItem[]) {
+    if (!Array.isArray(items) || items.length > 40 || new Set(items.map((item) => item?.id)).size !== items.length || items.some((item) =>
+      !item || typeof item.id !== 'string' || !item.id || item.id.length > 80 || typeof item.text !== 'string' || !item.text.trim() || item.text.length > 240 ||
+      !['pending', 'in-progress', 'completed'].includes(item.state))) throw new Error('Invalid task list');
+    const session = await this.open(id);
+    if (!session.sessionManager.getBranch().some((entry) => entry.type === 'message' && entry.message.role === 'user'))
+      throw new Error('Start a conversation before updating its tasks');
+    session.sessionManager.appendCustomEntry('mini-harness.todos', items);
+    this.publishSessionEvent(id, { type: 'todos', items });
+  }
+
+  permission(id: string): Permission {
+    let item = this.registry.get(id);
+    if (!item) throw new Error('Conversation not found');
+    let permission = requirePermission(item.permission ?? 'workspace-write');
+    const seen = new Set<string>();
+    while (item.parentId) {
+      if (seen.has(item.id)) throw new Error('Invalid conversation ancestry');
+      seen.add(item.id);
+      item = this.registry.get(item.parentId);
+      if (!item) throw new Error('Parent conversation not found');
+      const parent = requirePermission(item.permission ?? 'workspace-write');
+      if (permissionRank(parent) < permissionRank(permission)) permission = parent;
+    }
+    return permission;
+  }
+
+  createConversation(options: { workspaceId?: string } = {}) {
+    return this.registry.create({ ...options, permission: this.settings.defaultPermission });
+  }
+
+  setPermission(id: string, value: unknown, confirmed: boolean) {
+    const permission = requirePermission(value);
+    const item = this.registry.get(id);
+    if (!item) throw new Error('Conversation not found');
+    if (this.registry.descendants([id]).some((id) => this.busy.has(id) || this.compactions.has(id) || this.openingSessions.has(id)))
+      throw new Error('Stop this conversation and its children before changing permission');
+    if (permission === 'full' && !confirmed) throw new Error('Full permission requires explicit confirmation');
+    if (item.parentId && permissionRank(permission) > permissionRank(this.permission(item.parentId)))
+      throw new Error('Child permission cannot exceed its parent');
+    return this.registry.update(id, { permission });
   }
 
   workspacePath(id: string) {
@@ -186,20 +240,28 @@ export class MiniHarnessRuntime {
     const session = this.openSessions.get(id);
     if (!session) return [];
     const argumentsById = new Map<string, unknown>();
-    for (const message of session.messages) if (message.role === 'assistant') {
+    const entries = session.sessionManager.getBranch();
+    let runId: string;
+    const messages = entries.flatMap((entry) => {
+      if (entry.type === 'custom' && entry.customType === 'mini-harness.run') runId = (entry.data as RunInfo).id;
+      return entry.type === 'message' ? [{ message: entry.message, entryId: entry.id, runId }] : [];
+    });
+    for (const { message } of messages) if (message.role === 'assistant') {
       for (const block of message.content) if (block.type === 'toolCall') argumentsById.set(block.id, block.arguments);
     }
-    return session.messages.flatMap<ViewMessage>((message) => {
+    return messages.flatMap<ViewMessage>(({ message, entryId, runId }) => {
       switch (message.role) {
         case 'user':
         case 'assistant':
           return [{
-            role: message.role, content: message.content, timestamp: message.timestamp,
+            id: entryId, runId, role: message.role, content: message.content, timestamp: message.timestamp,
+            usage: message.role === 'assistant' && message.usage?.totalTokens > 0 ? message.usage : undefined,
             error: message.role === 'assistant' ? message.errorMessage : undefined
           }];
         case 'toolResult':
           return [{
-            role: message.role, content: message.content, timestamp: message.timestamp,
+            id: entryId, runId, role: message.role, content: message.content, timestamp: message.timestamp,
+            elapsedMs: message.durationMs, details: message.details,
             arguments: argumentsById.get(message.toolCallId), toolName: message.toolName, toolCallId: message.toolCallId, isError: message.isError,
             sessionId: message.details && typeof message.details === 'object' && 'sessionId' in message.details &&
               typeof message.details.sessionId === 'string' ? message.details.sessionId : undefined
@@ -209,10 +271,29 @@ export class MiniHarnessRuntime {
     });
   }
 
+  sessionRuns(id: string): RunInfo[] {
+    const runs = new Map<string, RunInfo>();
+    for (const entry of this.openSessions.get(id)?.sessionManager.getBranch() ?? []) {
+      if (entry.type === 'custom' && entry.customType === 'mini-harness.run') {
+        const run = entry.data as RunInfo;
+        runs.set(run.id, { ...run });
+      }
+    }
+    const latest = this.runInfo(id);
+    if (latest) runs.set(latest.id, latest);
+    return [...runs.values()];
+  }
+
+  publishSessionEvent(id: string, event: StreamEvent) {
+    const session = this.openSessions.get(id);
+    if (event.type === 'approval') session?.sessionManager.appendCustomEntry('mini-harness.approval', { ...event.approval, runId: this.busy.get(id)?.info.id });
+    this.busy.get(id)?.publish?.(event);
+  }
+
   async getConversation(id: string) {
     if (!this.registry.get(id)) throw new Error('Conversation not found');
     const session = await this.open(id);
-    return { ...this.registry.get(id), messages: this.sessionMessages(id), model: this.modelInfo(session.model),
+    return { ...this.registry.get(id), facts: session.sessionManager.getBranch().flatMap((entry) => entry.type === 'custom' && entry.customType === 'mini-harness.approval' ? [{ id: entry.id, kind: 'approval', timestamp: entry.timestamp, data: entry.data }] : []), runs: this.sessionRuns(id), messages: this.sessionMessages(id), model: this.modelInfo(session.model),
       selectedModel: { ...this.settings.model }, thinkingLevel: session.thinkingLevel,
       run: this.runInfo(id), partial: this.busy.get(id)?.events.partial, tools: this.busy.get(id)?.events.activeTools ?? [], busy: this.busy.has(id), queue: { steer: session.getSteeringMessages(), followUp: session.getFollowUpMessages() } };
   }
@@ -232,7 +313,7 @@ export class MiniHarnessRuntime {
           model.provider.length > 160 || model.id.length > 160) throw new Error('Invalid model choice');
       this.resolveModel(model);
     }
-    const choice = model ?? (record.parentId ? record.model : this.settings.model);
+    const choice = model ?? record.model ?? this.settings.model;
     if (this.staleSessions.delete(id)) {
       this.openSessions.get(id)?.dispose();
       this.openSessions.delete(id);
@@ -243,9 +324,11 @@ export class MiniHarnessRuntime {
     this.registry.update(id, { run: run.info });
     this.busy.set(id, run);
     const publish = (event: StreamEvent) => {
+      if (event.type === 'run') this.openSessions.get(id)?.sessionManager.appendCustomEntry('mini-harness.run', event.run);
       const item = run.events.publish(event);
       try { emit?.(item); } catch { /* An observer cannot terminate the run. */ }
     };
+    run.publish = publish;
     const promptSession = async () => {
       cancellation.throwIfAborted();
       run.info.state = 'running';
@@ -315,6 +398,7 @@ export class MiniHarnessRuntime {
     const { id } = record;
     signal.throwIfAborted();
     const session = await this.open(id);
+    session.sessionManager.appendCustomEntry('mini-harness.run', this.runInfo(id));
     signal.throwIfAborted();
     const model = this.resolveModel(choice);
     if (model && (session.model?.provider !== model.provider || session.model?.id !== model.id))
@@ -359,8 +443,8 @@ export class MiniHarnessRuntime {
           if (!event.isError && typeof changedPath === 'string' && run)
             run.info.changedFiles = [...new Set([...(run.info.changedFiles ?? []), changedPath])];
           emit({ type: 'tool', id: event.toolCallId, name: event.toolName, state: event.isError ? 'error' : 'finished',
-            arguments: call?.args, content: event.result?.content, sessionId: event.result?.details?.sessionId,
-            elapsedMs: call ? performance.now() - call.start : undefined });
+            arguments: call?.args, content: event.result?.content, details: event.result?.details, sessionId: event.result?.details?.sessionId,
+            elapsedMs: event.durationMs ?? (call ? performance.now() - call.start : undefined) });
           break;
         }
       }
@@ -466,6 +550,7 @@ export class MiniHarnessRuntime {
         this.openSessions.get(id)?.dispose();
         this.openSessions.delete(id);
         this.staleSessions.delete(id);
+        this.plugins.ctx.harnessTools.release(id);
       }
       return this.registry.delete(ids);
     } finally { for (const id of all) this.deleting.delete(id); }
@@ -487,11 +572,13 @@ export class MiniHarnessRuntime {
     if (sessions.some(({ id }) => this.busy.has(id) || this.openingSessions.has(id) || this.compactions.has(id)))
       throw new Error('Stop workspace conversations before changing the directory');
     const record = this.registry.workspaces.relocate(id, path);
-    for (const { id } of sessions) { this.openSessions.get(id)?.dispose(); this.openSessions.delete(id); }
+    for (const { id } of sessions) { this.openSessions.get(id)?.dispose(); this.openSessions.delete(id); this.plugins.ctx.harnessTools.release(id); }
     return record;
   }
 
-  async updateSettings(patch: SettingsPatch) {
+  async updateSettings(patch: SettingsPatch, confirmed = false) {
+    if (patch.defaultPermission === 'full' && this.settings.defaultPermission !== 'full' && !confirmed)
+      throw new Error('Full default permission requires explicit confirmation');
     if (this.configuring || this.stopping) throw new Error('Agent service is unavailable during reconfiguration or shutdown');
     const next = mergeSettings(this.settings, patch);
     this.resolveModel(next.model);

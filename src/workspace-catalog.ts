@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { lstatSync, mkdirSync, readdirSync, realpathSync, statSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { readJson, writeJson, type getPaths } from './config.js';
@@ -22,10 +22,12 @@ export class WorkspaceCatalog {
   private records: WorkspaceRecord[];
   private readonly startupId: string;
   private readonly startupPath: string;
+  private readonly legacyIdentity: boolean;
   readonly events = new EventTarget();
 
   constructor(paths: ReturnType<typeof getPaths>) {
     this.file = join(paths.home, 'workspaces.json');
+    this.legacyIdentity = existsSync(this.file) || existsSync(paths.registry);
     mkdirSync(paths.home, { recursive: true, mode: 0o700 });
     this.stateRoot = canonicalWorkspacePath(paths.home);
     const saved = readJson<CatalogState | string[]>(this.file, []);
@@ -37,7 +39,7 @@ export class WorkspaceCatalog {
       throw new Error('Invalid or ambiguous workspace catalog; original data was preserved');
     const cwd = this.directory(paths.cwd);
     this.startupPath = cwd;
-    this.startupId = this.records.find((item) => item.path === cwd)?.id;
+    this.startupId = this.records.find((item) => relative(item.path, cwd) === '')?.id;
     if (Array.isArray(saved)) {
       this.importLegacy([cwd, ...saved]);
       if (!this.records.length) this.save([]);
@@ -64,15 +66,29 @@ export class WorkspaceCatalog {
       let target: string;
       try { target = this.directory(path); }
       catch { continue; }
-      const id = workspaceId(target);
-      if (!records.some((record) => record.path === target))
+      const id = this.legacyIdentity ? workspaceId(target) : randomUUID().replaceAll('-', '');
+      if (!records.some((record) => relative(record.path, target) === ''))
         records.push({ id, path: target, name: basename(target) || target });
     }
     if (records.length !== this.records.length) this.save(records);
   }
 
+  restoreReferences(references: { workspaceId: string; cwd: string }[]) {
+    const records = [...this.records];
+    for (const id of new Set(references.map(({ workspaceId }) => workspaceId))) {
+      if (records.some((record) => record.id === id)) continue;
+      const paths = [...new Set(references.filter(({ workspaceId }) => workspaceId === id).map(({ cwd }) => {
+        try { return canonicalWorkspacePath(cwd); } catch { return resolve(cwd); }
+      }))];
+      if (!/^[a-f0-9]{32}$/.test(id) || paths.length !== 1 || records.some((record) => record.path === paths[0]))
+        throw new Error('Ambiguous workspace references; original indexes were preserved');
+      records.push({ id, path: paths[0], name: basename(paths[0]) || paths[0] });
+    }
+    if (records.length !== this.records.length) this.save(records);
+  }
+
   get defaultId() {
-    return this.records.find(({ id }) => id === this.startupId)?.id ?? this.records.find(({ path }) => path === this.startupPath)?.id ?? this.records[0]?.id;
+    return this.records.find(({ id }) => id === this.startupId)?.id ?? this.records.find(({ path }) => relative(path, this.startupPath) === '')?.id ?? this.records[0]?.id;
   }
 
   list() { return this.records.map((record) => ({ ...record })); }
@@ -85,14 +101,14 @@ export class WorkspaceCatalog {
 
   resolveRoot(root: string, id: string) {
     const target = this.directory(root);
-    if (target !== this.directory(this.get(id).path)) throw new Error('Workspace directory has changed');
+    if (relative(target, this.directory(this.get(id).path)) !== '') throw new Error('Workspace directory has changed');
     return target;
   }
 
   register(path: string, name?: string) {
     const target = this.directory(path);
     const id = randomUUID().replaceAll('-', '');
-    const existing = this.records.find((item) => item.path === target);
+    const existing = this.records.find((item) => relative(item.path, target) === '');
     if (existing) return { ...existing };
     const record = { id, path: target, name: name === undefined ? basename(target) || target : this.name(name) };
     this.save([...this.records, record]);
@@ -113,7 +129,7 @@ export class WorkspaceCatalog {
 
   relocate(id: string, path: string) {
     const target = this.directory(path);
-    if (this.records.some((item) => item.id !== id && item.path === target)) throw new Error('Directory belongs to another workspace');
+    if (this.records.some((item) => item.id !== id && relative(item.path, target) === '')) throw new Error('Directory belongs to another workspace');
     const record = { ...this.get(id), path: target };
     this.save(this.records.map((item) => item.id === id ? record : item));
     return { ...record };

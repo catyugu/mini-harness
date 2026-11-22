@@ -21,7 +21,7 @@ export function supportsIsolation(platform: NodeJS.Platform = process.platform, 
   } catch { return false; }
 }
 
-export function sandboxCommand(command: string, cwd: string, mode: ShellMode, platform: NodeJS.Platform = process.platform, timeout = 60) {
+export function sandboxCommand(command: string, cwd: string, mode: ShellMode, platform: NodeJS.Platform = process.platform, timeout = 60, writable = true) {
   if (typeof command !== 'string' || !command.trim() || command.length > 16000) throw new Error('Invalid command');
   if (mode === 'isolated') {
     if (platform !== 'linux') throw new Error('Isolated shell requires Linux and bubblewrap; host execution needs explicit opt-in');
@@ -32,7 +32,7 @@ export function sandboxCommand(command: string, cwd: string, mode: ShellMode, pl
       '--ro-bind-try', '/etc/ld.so.cache', '/etc/ld.so.cache',
       '--ro-bind-try', '/etc/alternatives', '/etc/alternatives',
       '--proc', '/proc', '--dev', '/dev', '--tmpfs', '/tmp',
-      '--bind', cwd, '/workspace', '--chdir', '/workspace',
+      writable ? '--bind' : '--ro-bind', cwd, '/workspace', '--chdir', '/workspace',
       '--setenv', 'PATH', '/usr/local/bin:/usr/bin:/bin', '--setenv', 'HOME', '/tmp',
       '--', '/usr/bin/prlimit', '--nofile=1024', '--fsize=268435456', '--cpu=' + timeout,
       '--core=0', '--', '/bin/sh', '-c', command
@@ -45,8 +45,8 @@ export function sandboxCommand(command: string, cwd: string, mode: ShellMode, pl
 }
 
 export async function runShell(command: string, cwd: string, {
-  mode = 'isolated', timeoutSeconds = 60, signal, stateDir
-}: { mode?: ShellMode; timeoutSeconds?: number; signal?: AbortSignal; stateDir?: string } = {}) {
+  mode = 'isolated', timeoutSeconds = 60, signal, stateDir, writable = true
+}: { mode?: ShellMode; timeoutSeconds?: number; signal?: AbortSignal; stateDir?: string; writable?: boolean } = {}) {
   signal?.throwIfAborted();
   if (!Number.isInteger(timeoutSeconds) || timeoutSeconds < 1 || timeoutSeconds > 300) throw new Error('Invalid shell timeout');
   const root = await realpath(cwd);
@@ -58,7 +58,7 @@ export async function runShell(command: string, cwd: string, {
     if (!supportsIsolation()) throw new Error('Isolation unavailable: Linux bubblewrap namespaces and prlimit are required');
   }
   signal?.throwIfAborted();
-  const { file, args } = sandboxCommand(command, root, mode, process.platform, timeoutSeconds);
+  const { file, args } = sandboxCommand(command, root, mode, process.platform, timeoutSeconds, writable);
   const windows = process.platform === 'win32';
 
   return await new Promise<ShellResult>((resolve, reject) => {

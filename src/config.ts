@@ -1,5 +1,6 @@
 export interface Settings {
   port: number;
+  defaultPermission: import('./execution-policy.js').Permission;
   model: {provider: string; id: string};
   plugins: Record<string, boolean>;
   pluginConfig: Record<string, Record<string, unknown>>;
@@ -15,8 +16,9 @@ import { isAbsolute, join, resolve } from 'node:path';
 
 export const DEFAULTS = Object.freeze({
   port: 3837,
+  defaultPermission: 'workspace-write',
   model: { provider: '', id: '' },
-  plugins: { files: true, skills: true, subagents: true, shell: false },
+  plugins: { files: true, skills: true, subagents: true, shell: false, todos: true },
   pluginConfig: {},
   subagents: { maxDepth: 1, maxParallel: 4, provider: '', model: '' },
   sandbox: { mode: 'isolated', timeoutSeconds: 60 },
@@ -63,6 +65,7 @@ export function writeJson(file: string, value: unknown) {
 
 export function validateSettings(input: any) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Invalid settings object');
+  if (!['read-only', 'workspace-write', 'full'].includes(input.defaultPermission ?? 'workspace-write')) throw new Error('Invalid execution permission');
   const p = input.plugins || {};
   const s = input.subagents || {};
   const model = input.model || {};
@@ -95,6 +98,7 @@ export function readSettings(paths: ReturnType<typeof getPaths>): Settings {
   const input = readJson<Record<string, any>>(paths.settings, {});
   const settings = {
     port: input.port ?? DEFAULTS.port,
+    defaultPermission: input.defaultPermission ?? DEFAULTS.defaultPermission,
     model: { ...DEFAULTS.model, ...input.model },
     plugins: { ...DEFAULTS.plugins, ...input.plugins },
     pluginConfig: { ...input.pluginConfig },
