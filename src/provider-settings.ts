@@ -12,7 +12,7 @@ export function providerSettings(runtime: MiniHarnessRuntime) {
   }));
 }
 export async function saveProvider(runtime: MiniHarnessRuntime, input: any, remove = false) {
-  if (runtime.busy.size || runtime.openingSessions.size) throw new Error('Stop active conversations before changing providers');
+  if (runtime.hasActiveWork) throw new Error('Stop active conversations before changing providers');
   if (!input || typeof input.id !== 'string' || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(input.id)) throw new Error('Invalid provider ID');
   const path = join(runtime.paths.home, 'models.json');
   const previous = readJson<any>(path, { providers: {} });

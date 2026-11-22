@@ -1,7 +1,7 @@
 import type { Settings } from '../src/config.js';
 import type { Conversation, ModelChoice } from '../src/registry.js';
 import type { MessageContent, StreamEvent, RunEvent, RunInfo, ViewMessage } from '../src/protocol.js';
-import type { ModelInfo, Bootstrap, ConversationView } from './types.js';
+import type { Bootstrap, ConversationView, ThinkingLevel } from './types.js';
 import { renderMarkdown, markdownSource } from './markdown.js';
 
 import { element, value, api, data, payload, setWorkspace } from './api.js';
@@ -9,18 +9,20 @@ import { FrontendHost, type FrontendApi } from './extensions.js';
 import { createMessageView } from './messages.js';
 import { hydrateIcons, icon } from './icons.js';
 import { createSessionList } from './sessions.js';
+import { CommandRegistry } from './commands.js';
 import { createComposer } from './composer.js';
 import { fileInspector } from './files.js';
 import { providerManager } from './provider-manager.js';
 import { pluginInstaller } from './plugin-manager.js';
 import { workspacePicker } from './workspaces.js';
-import { createSettings } from './settings.js';
+import { createModelPicker } from './model-picker.js';
+import { createSettings, createSettingsNavigation } from './settings.js';
 
 const messages = element('messages');
 const welcome = element('welcome');
 const composer = element<'form'>('composer');
 const prompt = element<'textarea'>('prompt');
-const modelSelect = element<'select'>('modelSelect');
+const thinkingSelect = element<'select'>('thinkingLevel');
 const settingsPanel = element<'dialog'>('settingsPanel');
 const narrow = matchMedia('(max-width: 860px)');
 
@@ -31,13 +33,19 @@ let sending = false;
 let navigation = 0;
 let pendingNavigation = false;
 let observing: AbortController;
-let modelChange: Promise<Settings>;
+let modelDraft: ModelChoice;
+let conversationModel: ModelChoice;
+let conversationThinking: ThinkingLevel;
+const modelPicker = createModelPicker((choice) => { modelDraft = choice; updateModelControls(); });
 let changedFiles: string[] = [];
 const lastInputs = new Map<string, { message: string; attachments: import('../src/input.js').Attachment[] }>();
 const isRunning = (run?: RunInfo) => run?.state === 'queued' || run?.state === 'running';
 
-const showStatus = (text: string) => { element('status').textContent = text; };
-const report = (error: Error) => showStatus(error.message);
+const showStatus = (text: string, error = false) => {
+  element('status').textContent = text;
+  element('status').classList.toggle('error', error);
+};
+const report = (error: Error) => showStatus(error.message, true);
 const adjustPrompt = () => {
   prompt.style.height = 'auto';
   prompt.style.height = Math.min(prompt.scrollHeight, 210) + 'px';
@@ -49,11 +57,17 @@ function inspect(title: string, content: HTMLElement) {
   element('inspector').hidden = false;
   element('inspectorOpen').setAttribute('aria-expanded', 'true');
 }
+const commands = new CommandRegistry();
+const settingsNavigation = createSettingsNavigation();
 const extensions = new FrontendHost({ sidebar: element('sidebarExtensions'), composer: element('composerExtensions'),
   settings: element('settingsExtensions'), inspector: element('inspectorExtensions') }, {
-  request: data, insert: (text) => { prompt.setRangeText(text, prompt.selectionStart, prompt.selectionEnd, 'end'); prompt.focus(); adjustPrompt(); }, inspect
-}, report);
-const composerUi = createComposer(report);
+  request: data, insert: (text) => { prompt.setRangeText(text, prompt.selectionStart, prompt.selectionEnd, 'end'); prompt.focus(); prompt.dispatchEvent(new Event('input')); }, inspect
+}, report, settingsNavigation.addPage, (command) => {
+  const dispose = commands.register(command);
+  composerUi.refresh(true);
+  return () => { dispose(); composerUi.refresh(true); };
+});
+const composerUi = createComposer(report, commands);
 const frontendState = new Map<string, string>();
 let frontendWork = Promise.resolve();
 async function refreshBootstrap() {
@@ -65,8 +79,16 @@ function reconcileFrontend() {
   const snapshot = bootstrap;
   frontendWork = frontendWork.then(async () => {
     const desired = new Map<string, { key: string; setup?: (api: FrontendApi) => any; source?: boolean; requires?: string[] }>([
+      ['core:commands', { key: 'core', setup: (api) => {
+        api.command({ name: 'model', group: 'Conversation', description: 'Choose a configured model', run: () => modelPicker.open() });
+        api.command({ name: 'export', group: 'Conversation', description: 'Export the current conversation', run: () => {
+          if (!active) throw new Error('Open a conversation to export it.');
+          return exportSessions([active]);
+        } });
+        api.command({ name: 'compact', group: 'Conversation', description: 'Summarize earlier messages to free context', run: compactConversation });
+      } }],
       ['core:attachments', { key: 'core', setup: (api) => composerUi.attach(api) }],
-      ['core:providers', { key: 'core', setup: (api) => providerManager(api, () => bootstrap.providers, refreshBootstrap, report) }],
+      ['core:providers', { key: 'core', setup: () => providerManager(() => bootstrap.providers, refreshBootstrap) }],
       ['core:plugins', { key: 'core', setup: (api) => pluginInstaller(api, refreshBootstrap) }]
     ]);
     for (const plugin of snapshot.plugins) {
@@ -124,17 +146,9 @@ element('inspectorOpen').onclick = () => {
   element('inspectorOpen').setAttribute('aria-expanded', String(!element('inspector').hidden));
 };
 element('inspectorClose').onclick = () => { element('inspector').hidden = true; element('inspectorOpen').setAttribute('aria-expanded', 'false'); };
-for (const [index, section] of [...document.querySelectorAll<HTMLElement>('#settingsForm > section')].entries()) {
-  section.id = 'settings-section-' + index;
-  const button = document.createElement('button'); button.type = 'button'; button.className = 'link-button';
-  button.textContent = section.querySelector('h3').textContent;
-  button.onclick = () => section.scrollIntoView({ block: 'start' });
-  element('settingsNav').append(button);
-}
-
 const { renderSessions, selection, expanded, toggleSelection } = createSessionList(() => ({ sessions, active }), (id) => void activate(id), renameSession, (item) => void deleteSession(item));
 
-const { fillSettings } = createSettings(() => bootstrap, applySettings, refreshBootstrap, closeDrawer, async () => { await frontendWork; if (active && !sending) await activate(active); });
+const { fillSettings } = createSettings(() => bootstrap, applySettings, refreshBootstrap, closeDrawer, async () => { await frontendWork; if (active && !sending) await activate(active); }, settingsNavigation.open);
 
 function setSidebar(open: boolean) {
   element('sidebar').classList.toggle('open', open && narrow.matches);
@@ -148,10 +162,20 @@ function closeDrawer() {
   if (narrow.matches) setSidebar(false);
 }
 
-function showConversation(item?: Conversation, history: ViewMessage[] = []) {
+function showWelcome(show: boolean) {
+  welcome.hidden = !show;
+  messages.hidden = show;
+  const destination = show ? welcome : element('titleBlock');
+  const workspace = element('workspaceOpen');
+  if (workspace.parentElement !== destination) destination.append(workspace);
+}
+
+function showConversation(item?: ConversationView | Conversation, history: ViewMessage[] = []) {
   observing?.abort();
   setSending(isRunning(item?.run));
   active = item?.id;
+  conversationModel = item?.model;
+  conversationThinking = (item as ConversationView)?.thinkingLevel;
   changedFiles = item?.run?.changedFiles ?? [];
   const previous = history.filter((message) => message.role === 'user').at(-1);
   if (active && previous && !lastInputs.has(active)) {
@@ -164,6 +188,7 @@ function showConversation(item?: Conversation, history: ViewMessage[] = []) {
     if (active) sessionStorage.setItem('mini-harness-active:' + bootstrap.workspace, active);
     else sessionStorage.removeItem('mini-harness-active:' + bootstrap.workspace);
   }
+  updateModelControls();
   element('conversationTitle').textContent = item?.title ?? 'New conversation';
   messages.replaceChildren();
   for (const message of history) appendHistory(message);
@@ -171,8 +196,7 @@ function showConversation(item?: Conversation, history: ViewMessage[] = []) {
     const error = [...messages.querySelectorAll<HTMLElement>('.message.error')].at(-1) ?? addMessage('error', '');
     error.textContent = item.run.error;
   }
-  messages.hidden = !messages.childElementCount;
-  welcome.hidden = !messages.hidden;
+  showWelcome(!messages.childElementCount && !isRunning(item?.run));
   messages.scrollTop = messages.scrollHeight;
   renderSessions();
 }
@@ -181,7 +205,6 @@ async function activate(id: string) {
   const request = ++navigation;
   pendingNavigation = true;
   try {
-    await modelChange?.catch(() => {});
     const item = await data<ConversationView>('/sessions/' + id);
     if (request !== navigation) return;
     for (let parent = item.parentId; parent && !expanded.has(parent); parent = sessions.find((entry) => entry.id === parent)?.parentId) {
@@ -190,7 +213,7 @@ async function activate(id: string) {
     showConversation(item, item.messages);
     applySettings({ ...bootstrap.settings, model: item.selectedModel });
     if (isRunning(item.run)) void observe(item);
-    else showStatus(item.run?.error ?? '');
+    else showStatus(item.run?.error ?? '', Boolean(item.run?.error));
     closeDrawer();
   } catch (error) { if (request === navigation) report(error); }
   finally { if (request === navigation) pendingNavigation = false; }
@@ -242,7 +265,8 @@ function setSending(value: boolean) {
   element('queueSend').hidden = !value;
   element<'button'>('stop').hidden = !value;
   element<'button'>('stop').disabled = false;
-  modelSelect.disabled = value;
+  modelPicker.setDisabled(value);
+  thinkingSelect.disabled = value;
 }
 
 async function syncSessions() {
@@ -257,15 +281,17 @@ async function syncSessions() {
 async function send(text: string, attached?: import('../src/input.js').Attachment[]) {
   const attachments = attached ?? composerUi.attachments();
   if (sending || pendingNavigation || (!text.trim() && !attachments.length)) return;
+  const choice = modelDraft;
+  const thinkingLevel = thinkingSelect.value || undefined;
   const request = ++navigation;
   pendingNavigation = true;
   setSending(true);
   try {
-    if (!active) showConversation(await createConversation());
+    if (!active) { showConversation(await createConversation()); setSending(true); }
     const id = active;
-    await modelChange;
     lastInputs.set(id, { message: text, attachments });
-    await data<RunInfo>('/sessions/' + id + '/runs', payload('POST', { message: text, attachments }));
+    await data<RunInfo>('/sessions/' + id + '/runs', payload('POST', { message: commands.prepare(text), attachments, model: choice, thinkingLevel }));
+    modelDraft = undefined;
     prompt.value = '';
     composerUi.clear();
     adjustPrompt();
@@ -291,8 +317,7 @@ async function observe(item: ConversationView) {
   if (answerText) answer = addMessage('assistant', answerText);
   for (const tool of item.tools ?? []) cards.set(tool.id, toolCard(tool));
   setSending(true);
-  welcome.hidden = true;
-  messages.hidden = false;
+  showWelcome(false);
   showStatus(item.run.state === 'queued' ? 'Queued…' : 'Thinking…');
   const accept = (event: RunEvent) => {
       if (controller.signal.aborted || active !== id) return;
@@ -328,7 +353,7 @@ async function observe(item: ConversationView) {
         case 'tool':
           if (answer) renderMarkdown(answer, answerText);
           cards.set(event.id, toolCard(event, cards.get(event.id)));
-          showStatus(event.state === 'running' ? 'Using ' + event.name + '…' : 'Thinking…');
+          showStatus(event.state === 'running' ? 'Running ' + event.name + '…' : 'Thinking…');
           break;
         case 'error':
           if (answer) renderMarkdown(answer, answerText);
@@ -346,7 +371,7 @@ async function observe(item: ConversationView) {
         case 'run':
           changedFiles = event.run.changedFiles ?? changedFiles;
           ended = !isRunning(event.run);
-          if (ended) showStatus(event.run.error ?? '');
+          if (ended) showStatus(event.run.error ?? '', Boolean(event.run.error));
           break;
       }
       if (pinned) messages.scrollTop = messages.scrollHeight;
@@ -380,43 +405,54 @@ async function observe(item: ConversationView) {
     const latest = await data<ConversationView>('/sessions/' + id, { signal: controller.signal });
     if (controller.signal.aborted || active !== id) return;
     showConversation(latest, latest.messages);
-    showStatus(latest.run?.error ?? '');
+    showStatus(latest.run?.error ?? '', Boolean(latest.run?.error));
     await syncSessions();
     const current = await data<{ settings: Settings }>('/bootstrap');
     applySettings(current.settings);
   } catch (error) { if (!controller.signal.aborted) report(error); }
 }
 
-function selectedModel() {
-  const selected = modelSelect.value;
-  const slash = selected.indexOf('/');
-  return slash === -1 ? { provider: '', id: '' } : { provider: selected.slice(0, slash), id: selected.slice(slash + 1) };
+function updateModelControls() {
+  if (!bootstrap) return;
+  if (modelDraft && !bootstrap.models.some((model) => model.configured && model.provider === modelDraft.provider && model.id === modelDraft.id))
+    modelDraft = undefined;
+  const selected = modelPicker.update(bootstrap.models, bootstrap.providers, modelDraft ?? bootstrap.settings.model);
+  const levels = selected?.thinkingLevels ?? [];
+  const sameModel = selected && selected.provider === conversationModel?.provider && selected.id === conversationModel.id;
+  thinkingSelect.replaceChildren(new Option('Default', ''), ...levels.map((level) =>
+    new Option(level === 'xhigh' ? 'Extra high' : level[0].toUpperCase() + level.slice(1), level)));
+  thinkingSelect.value = sameModel && levels.includes(conversationThinking) ? conversationThinking : '';
+  thinkingSelect.hidden = levels.length < 2;
 }
 
 function applySettings(settings: Settings) {
   bootstrap.settings = settings;
   reconcileFrontend();
   document.documentElement.dataset.theme = settings.appearance;
-  modelSelect.replaceChildren(new Option('Auto model', ''));
-  for (const model of bootstrap.models) {
-    modelSelect.append(new Option(model.name + ' · ' + model.provider, model.provider + '/' + model.id));
-  }
-  const selected = settings.model;
-  const modelKey = selected.provider + '/' + selected.id;
-  if (selected.provider && ![...modelSelect.options].some((option) => option.value === modelKey)) {
-    modelSelect.add(new Option(selected.id || selected.provider + ' · Auto', modelKey));
-  }
-  modelSelect.value = selected.provider ? modelKey : '';
+  updateModelControls();
 }
 
-async function exportSelected() {
-  const response = await api('/sessions/export', payload('POST', { ids: [...selection] }));
+async function exportSessions(ids: string[]) {
+  const response = await api('/sessions/export', payload('POST', { ids }));
   const url = URL.createObjectURL(await response.blob());
   const anchor = document.createElement('a');
   anchor.href = url;
   anchor.download = 'mini-harness-sessions.json';
   anchor.click();
   setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+async function compactConversation() {
+  const id = active;
+  if (!id) throw new Error('Open a conversation to compact it.');
+  if (sending || pendingNavigation) throw new Error('Wait for the current operation to finish.');
+  const request = navigation;
+  pendingNavigation = true;
+  showStatus('Compacting conversation…');
+  try {
+    await data('/sessions/' + id + '/compact', payload('POST', {}));
+    if (request === navigation) { await activate(id); showStatus('Conversation compacted.'); }
+  } finally { if (request === navigation) pendingNavigation = false; }
 }
 
 async function deleteSelected() {
@@ -452,7 +488,7 @@ async function queueMessage() {
   const button = element<'button'>('queueSend'); button.disabled = true;
   try {
     const queued = await data<{ steer: string[]; followUp: string[] }>('/sessions/' + id + '/queue', payload('POST', {
-      message: prompt.value, mode: value('queueMode'), attachments: composerUi.attachments()
+      message: commands.prepare(prompt.value), mode: value('queueMode'), attachments: composerUi.attachments()
     }));
     if (active !== id) return;
     prompt.value = ''; composerUi.clear(); adjustPrompt(); showQueue(queued);
@@ -501,15 +537,8 @@ document.addEventListener('keydown', (event) => {
   }
 });
 element('newSession').onclick = () => void newSession();
-element('exportSessions').onclick = () => void exportSelected().catch(report);
+element('exportSessions').onclick = () => void exportSessions([...selection]).catch(report);
 element('deleteSessions').onclick = () => void deleteSelected().catch(report);
-modelSelect.onchange = async () => {
-  const update = data<Settings>('/settings', payload('PATCH', { model: selectedModel() }));
-  modelChange = update;
-  try { applySettings(await update); }
-  catch (error) { applySettings(bootstrap.settings); report(error); }
-  finally { if (modelChange === update) modelChange = undefined; }
-};
 element<'button'>('stop').onclick = async () => {
   if (!active) return;
   element<'button'>('stop').disabled = true;
@@ -519,7 +548,7 @@ element<'button'>('stop').onclick = async () => {
 };
 composer.onsubmit = (event) => { event.preventDefault(); void send(prompt.value); };
 prompt.onkeydown = (event) => {
-  if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+  if (!event.defaultPrevented && event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
     event.preventDefault();
     if (sending) void queueMessage(); else composer.requestSubmit();
   }
@@ -531,6 +560,7 @@ viewport?.addEventListener('resize', resize);
 resize();
 
 hydrateIcons();
+showWelcome(true);
 setSidebar(!narrow.matches);
 void data<Bootstrap>('/bootstrap').then((result) => {
   bootstrap = result;
@@ -539,6 +569,8 @@ void data<Bootstrap>('/bootstrap').then((result) => {
   applySettings(result.settings);
   element('workspaceLabel').textContent = result.workspace;
   element('workspaceLabel').title = result.workspace;
+  element('workspaceGroup').textContent = result.workspace.split(/[/\\]/).filter(Boolean).at(-1) || result.workspace;
+  element('workspaceGroup').title = result.workspace;
   renderSessions();
   const remembered = sessionStorage.getItem('mini-harness-active:' + result.workspace);
   if (sessions.length) void activate(sessions.find((item) => item.id === remembered)?.id ?? sessions.find((item) => !item.parentId)?.id ?? sessions[0].id);
@@ -546,6 +578,6 @@ void data<Bootstrap>('/bootstrap').then((result) => {
   setInterval(() => { if (!document.hidden) { void syncSessions().catch(() => {}); void pollApprovals(); if (sending && active) void refreshQueue(); } }, 1500);
   void pollApprovals();
   if (!result.models.some((m) => m.configured)) {
-    fillSettings(); settingsPanel.showModal(); element('settingsStatus').textContent = 'Choose a provider and model, then save an API key to start.';
+    fillSettings(); settingsNavigation.open(true); element('settingsStatus').textContent = 'Choose a provider and model, then save an API key to start.';
   }
 }).catch(report);

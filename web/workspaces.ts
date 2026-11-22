@@ -1,4 +1,5 @@
 import { element, data, payload } from './api.js';
+import { fileLabel } from './files.js';
 export function workspacePicker() {
   const dialog = element<'dialog'>('workspacePanel'), status = element('workspaceStatus');
   element('workspaceOpen').onclick = async () => {
@@ -6,7 +7,7 @@ export function workspacePicker() {
       const result = await data<{ current: string; paths: string[] }>('/workspaces');
       element<'input'>('workspacePath').value = result.current; status.textContent = '';
       element('workspaceList').replaceChildren(...result.paths.map((path) => {
-        const button = document.createElement('button'); button.type = 'button'; button.className = 'file-entry'; button.textContent = path; button.title = path;
+        const button = document.createElement('button'); button.type = 'button'; button.className = 'file-entry'; fileLabel(button, path, 'folder'); button.title = path;
         button.onclick = () => { element<'input'>('workspacePath').value = path; }; return button;
       }));
       dialog.showModal();

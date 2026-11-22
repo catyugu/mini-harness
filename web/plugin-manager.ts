@@ -1,5 +1,5 @@
 import type { FrontendApi } from './extensions.js';
-import { payload } from './api.js';
+import { element, payload } from './api.js';
 export function pluginInstaller(api: FrontendApi, refresh: () => Promise<void>) {
   const section = document.createElement('section'), title = document.createElement('h3'), hint = document.createElement('p');
   title.textContent = 'Install local plugin'; hint.className = 'hint';
@@ -17,5 +17,6 @@ export function pluginInstaller(api: FrontendApi, refresh: () => Promise<void>) 
       await refresh(); status.textContent = 'Installed. Enable the plugin in settings to load it.'; files.value = ''; id.value = '';
     } catch (error) { status.textContent = error.message; } finally { button.disabled = false; }
   };
-  section.append(title, hint, label, files, button, status); api.mount('settings', section);
+  section.append(title, hint, label, files, button, status); element('installPluginSettings').append(section);
+  return () => section.remove();
 }

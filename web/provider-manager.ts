@@ -1,8 +1,7 @@
 import { element, value, data, payload } from './api.js';
-import type { FrontendApi } from './extensions.js';
 export interface ProviderInfo { id: string; name: string; configured: boolean; custom: boolean; baseUrl: string; api: string;
   models: { id: string; name: string; input: string[]; contextWindow: number; maxTokens: number; reasoning: boolean }[] }
-export function providerManager(api: FrontendApi, providers: () => ProviderInfo[], refresh: () => Promise<void>, report: (error: Error) => void) {
+export function providerManager(providers: () => ProviderInfo[], refresh: () => Promise<void>) {
   const section = document.createElement('section'); section.innerHTML = `
     <h3>Custom API endpoint</h3><p class="hint">Add an OpenAI compatible or native API. Credentials stay in your local configuration.</p>
     <label for="customProvider">Provider ID</label><input id="customProvider" placeholder="my-provider" pattern="[a-z0-9][a-z0-9-]{0,63}">
@@ -16,7 +15,7 @@ export function providerManager(api: FrontendApi, providers: () => ProviderInfo[
     <button id="saveProvider" type="button" class="small-button">Save endpoint</button>
     <button id="removeProvider" type="button" class="small-button danger">Remove selected endpoint</button>
     <p id="providerStatus" class="hint" role="status"></p>`;
-  api.mount('settings', section);
+  element('providerSettings').append(section);
   const status = (text: string) => { element('providerStatus').textContent = text; };
   element('editProvider').onclick = () => {
     const provider = providers().find((p) => p.id === value('provider'));
@@ -51,6 +50,7 @@ export function providerManager(api: FrontendApi, providers: () => ProviderInfo[
     try { await data('/providers', payload('DELETE', { id })); await refresh(); status('Endpoint removed.'); }
     catch (error) { status(error.message); }
   };
+  return () => section.remove();
 }
 export function populateProviders(providers: ProviderInfo[], provider: string, model: string) {
   const select = element<'select'>('provider');

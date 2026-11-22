@@ -1,3 +1,4 @@
+import type { ComposerCommand } from './commands.js';
 import type { MessageContent } from '../src/protocol.js';
 
 export type Slot = 'sidebar' | 'composer' | 'settings' | 'inspector';
@@ -5,6 +6,8 @@ export interface ToolView { name: string; state: string; content?: MessageConten
 export interface FrontendApi {
   /** The host removes mounted nodes and listeners on disable/reconfigure. */
   mount(slot: Slot, node: HTMLElement): void;
+  command(command: ComposerCommand): void;
+  settingsPage(title: string, node: HTMLElement): void;
   tool(name: string, render: (tool: ToolView) => HTMLElement | undefined): void;
   onDispose(cleanup: () => void): void;
   readonly config: Readonly<Record<string, unknown>>;
@@ -14,12 +17,13 @@ export interface FrontendApi {
 }
 export interface FrontendPlugin { id: string; setup(api: FrontendApi): void | (() => void) | Promise<void | (() => void)> }
 
-/** Five slots, owned contributions and deterministic disposal; no browser framework required. */
+/** Owned contributions and deterministic disposal; no browser framework required. */
 export class FrontendHost {
   private mounted = new Map<string, (() => void)[]>();
   private renderers = new Map<string, { owner: string; render: (tool: ToolView) => HTMLElement | undefined }>();
   constructor(private slots: Record<Slot, HTMLElement>, private services: Pick<FrontendApi, 'request' | 'insert' | 'inspect'>,
-    private report: (error: Error) => void) {}
+    private report: (error: Error) => void, private addSettingsPage: (title: string, node: HTMLElement) => () => void,
+    private registerCommand: (command: ComposerCommand) => () => void) {}
   async enable(plugin: FrontendPlugin, config: Record<string, unknown> = {}) {
     this.disable(plugin.id);
     const cleanup: (() => void)[] = [];
@@ -29,6 +33,8 @@ export class FrontendHost {
         inspect: (title, content) => { this.services.inspect(title, content); cleanup.push(() => content.remove()); },
         config: Object.freeze(structuredClone(config)),
         mount: (slot, node) => { this.slots[slot].append(node); cleanup.push(() => node.remove()); },
+        command: (command) => cleanup.push(this.registerCommand(command)),
+        settingsPage: (title, node) => cleanup.push(this.addSettingsPage(title, node)),
         tool: (name, render) => {
           if (this.renderers.has(name)) throw new Error('Duplicate tool renderer: ' + name);
           this.renderers.set(name, { owner: plugin.id, render });

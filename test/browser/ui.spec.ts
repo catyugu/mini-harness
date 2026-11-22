@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, readFileSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
@@ -52,6 +52,19 @@ async function startIsolatedHost(paths: ReturnType<typeof createFixturePaths>['p
   throw new Error('mini-harness did not start: ' + output);
 }
 
+const settingsSection = (page: Page, name: string) =>
+  page.getByRole('navigation', { name: 'Settings sections' }).getByRole('button', { name, exact: true });
+const modelButton = (page: Page) => page.locator('#modelSelect');
+const modelSearch = (page: Page) => page.getByRole('combobox', { name: 'Search models' });
+const suggestions = (page: Page) => page.getByRole('listbox', { name: 'Input suggestions' });
+
+async function chooseModel(page: Page, query: string) {
+  await modelButton(page).click();
+  await modelSearch(page).fill(query);
+  await expect(page.getByRole('listbox', { name: 'Configured models' }).getByRole('option')).toHaveCount(1);
+  await modelSearch(page).press('Enter');
+}
+
 test('desktop and mobile: send, navigate, settings and bulk select', async ({ browser }) => {
   const mock = await createMockProvider();
   try {
@@ -64,7 +77,17 @@ test('desktop and mobile: send, navigate, settings and bulk select', async ({ br
       page.on('requestfailed', (req) => events.push(req.url() + ': ' + req.failure()?.errorText));
       try {
         await page.goto(service.url + '/#token=' + service.token);
-        await expect(page.getByRole('heading', { name: 'What are we working on?' })).toBeVisible();
+        const welcome = page.getByRole('heading', { name: 'What are we working on?' });
+        await expect(welcome).toBeVisible();
+        const title = await welcome.boundingBox(), composer = await page.locator('#composer').boundingBox();
+        expect(composer.y - title.y).toBeLessThan(145);
+        await expect(modelButton(page)).toHaveText('Mock Model');
+        await modelButton(page).click();
+        await expect(modelSearch(page)).toBeFocused();
+        const modelPop = await page.locator('#modelPicker').boundingBox();
+        expect(modelPop.x).toBeGreaterThanOrEqual(0);
+        expect(modelPop.x + modelPop.width).toBeLessThanOrEqual(viewport.width);
+        await modelSearch(page).press('Escape');
         await page.getByRole('textbox', { name: 'Message' }).fill('Hello from the browser');
         await page.getByRole('button', { name: 'Send' }).click();
         try {
@@ -86,12 +109,26 @@ test('desktop and mobile: send, navigate, settings and bulk select', async ({ br
         await page.getByRole('button', { name: 'Cancel' }).click();
         await page.getByRole('button', { name: 'Settings' }).click();
         await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+        await settingsSection(page, 'Plugins').click();
         await expect(page.getByRole('checkbox', { name: /Shell/ })).not.toBeChecked();
+        await expect(page.getByRole('combobox', { name: 'Provider', exact: true })).toBeHidden();
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
         const dialog = await page.locator('#settingsPanel').boundingBox();
         expect(dialog.x).toBeGreaterThanOrEqual(0);
         expect(dialog.x + dialog.width).toBeLessThanOrEqual(viewport.width);
-        await page.getByRole('button', { name: 'Close settings' }).click();
+        if (viewport.width > 560) {
+          expect(Math.abs(dialog.x - (viewport.width - dialog.width) / 2)).toBeLessThan(2);
+          await page.getByRole('heading', { name: 'Plugins', exact: true }).click();
+          await expect(page.getByRole('dialog', { name: 'Settings' })).toBeVisible();
+          await page.mouse.click(4, 4);
+          await expect(page.getByRole('dialog', { name: 'Settings' })).toBeHidden();
+        } else {
+          await expect(settingsSection(page, 'Plugins')).toBeHidden();
+          await page.getByRole('button', { name: /All settings/ }).click();
+          await expect(settingsSection(page, 'Plugins')).toBeFocused();
+          await page.keyboard.press('Escape');
+          await expect(page.getByRole('dialog', { name: 'Settings' })).toBeHidden();
+        }
       } finally {
         await page.close();
         await service.stop();
@@ -125,8 +162,11 @@ test('refresh and navigation preserve a run while another conversation completes
       await expect(page.getByRole('button', { name: 'Stop response' })).toBeVisible();
       await openSidebar();
       await page.getByRole('button', { name: 'Settings', exact: true }).click();
+      await settingsSection(page, 'Appearance').click();
       await page.getByLabel('Theme', { exact: true }).selectOption('dark');
       await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+      if (viewport.width <= 560) await page.getByRole('button', { name: /All settings/ }).click();
+      await settingsSection(page, 'Agent').click();
       await page.getByLabel('Parallel children', { exact: true }).fill('2');
       await page.getByRole('button', { name: 'Save settings' }).click();
       await expect(page.locator('#settingsStatus')).toHaveText('Saved.');
@@ -181,6 +221,7 @@ test('plugin schema controls, recursive tree navigation, batch export and perman
   try {
     await page.goto(service.url + '/#token=' + service.token);
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await settingsSection(page, 'Plugins').click();
     await page.getByRole('checkbox', { name: 'Example', exact: true }).check();
     await page.getByLabel('Prefix · example', { exact: true }).fill('Total');
     await page.getByLabel('Count · example', { exact: true }).fill('5');
@@ -273,7 +314,10 @@ test('the global recent model survives history navigation and page reload', asyn
   const mock = await createMockProvider();
   const { root, paths } = createFixturePaths(mock.url);
   const models = readJson<any>(join(paths.home, 'models.json'), {});
-  models.providers['local-mock'].models.push({ ...models.providers['local-mock'].models[0], id: 'second-model', name: 'Second Model' });
+  const first = models.providers['local-mock'].models[0];
+  models.providers['local-mock'].models.push({ ...first, id: 'second-model', name: 'Second Model', reasoning: true });
+  models.providers['unconfigured-fixture'] = { baseUrl: mock.url, api: 'openai-completions',
+    models: [{ ...first, id: 'private-only', name: 'Private Only' }] };
   writeJson(join(paths.home, 'models.json'), models);
   const service = await startIsolatedHost(paths);
   try {
@@ -282,17 +326,27 @@ test('the global recent model survives history navigation and page reload', asyn
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.locator('.message.assistant')).toHaveText('Mock response');
     await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeVisible();
-    await page.getByRole('combobox', { name: 'Model', exact: true }).selectOption('local-mock/second-model');
+    await modelButton(page).click();
+    await modelSearch(page).fill('private-only');
+    await expect(page.getByText('No matching models.')).toBeVisible();
+    await modelSearch(page).press('Escape');
+    await chooseModel(page, 'local-mock second-model');
+    await expect(modelButton(page)).toHaveText('Second Model');
+    await page.reload();
+    await expect(modelButton(page)).toHaveText('Mock Model');
+    await chooseModel(page, 'second-model');
     await page.getByRole('button', { name: /New conversation/ }).click();
+    await page.getByLabel('Thinking level').selectOption('high');
     await page.getByRole('textbox', { name: 'Message' }).fill('New model conversation');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.locator('.message.assistant')).toHaveText('Mock response');
     await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeVisible();
     expect(mock.requests.at(-1).model).toBe('second-model');
+    await expect(page.getByLabel('Thinking level')).toHaveValue('high');
     await page.getByRole('button', { name: 'Old model conversation', exact: true }).click();
-    await expect(page.getByRole('combobox', { name: 'Model', exact: true })).toHaveValue('local-mock/second-model');
+    await expect(modelButton(page)).toHaveText('Second Model');
     await page.reload();
-    await expect(page.getByRole('combobox', { name: 'Model', exact: true })).toHaveValue('local-mock/second-model');
+    await expect(modelButton(page)).toHaveText('Second Model');
     await page.getByRole('textbox', { name: 'Message' }).fill('Use the recent model');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.locator('.message.assistant')).toHaveCount(2);
@@ -305,6 +359,8 @@ test('the global recent model survives history navigation and page reload', asyn
 test('drafts, search, rename, single deletion, attachment and input discovery', async ({ page }) => {
   const mock = await createMockProvider(), { root, paths } = createFixturePaths(mock.url);
   writeFileSync(join(paths.cwd, 'notes.md'), '# Notes\nTask details');
+  mkdirSync(join(paths.cwd, 'task files'));
+  writeFileSync(join(paths.cwd, 'task files', 'draft.md'), '# Draft');
   const skill = join(paths.skills, 'review'); mkdirSync(skill); writeFileSync(join(skill, 'SKILL.md'), '---\nname: review\ndescription: Review the work\n---\n\nReview carefully.');
   const service = await startIsolatedHost(paths);
   try {
@@ -312,21 +368,52 @@ test('drafts, search, rename, single deletion, attachment and input discovery', 
     for (let i = 0; i < 3; i++) await page.getByRole('button', { name: 'New conversation', exact: true }).click();
     await expect(page.locator('#sessions .session-row')).toHaveCount(0);
     const index = readJson<any>(paths.registry, { sessions: [] }); expect(index.sessions).toHaveLength(0);
-    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('@notes');
-    await page.getByRole('button', { name: 'notes.md', exact: true }).click();
-    await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toHaveValue('@"notes.md" ');
-    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('/rev');
-    await page.getByRole('button', { name: 'review', exact: true }).click();
-    await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toHaveValue('/skill:review ');
-    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Read this attachment');
+    const draft = page.getByRole('textbox', { name: 'Message', exact: true });
+    await draft.fill('@');
+    await suggestions(page).getByRole('option', { name: 'task files, expand folder' }).click();
+    await suggestions(page).getByRole('option', { name: 'draft.md', exact: true }).click();
+    await expect(draft).toHaveValue('@"task files/draft.md" ');
+    await draft.fill('@');
+    await suggestions(page).getByRole('option', { name: 'task files, expand folder' }).click();
+    await suggestions(page).getByRole('option', { name: 'Reference task files/', exact: true }).click();
+    await expect(draft).toHaveValue('@"task files/" ');
+    await draft.fill('@notes');
+    await suggestions(page).getByRole('option', { name: 'notes.md', exact: true }).click();
+    await expect(draft).toHaveValue('@"notes.md" ');
+
+    await draft.fill('Read this attachment  and keep this text');
+    await draft.evaluate((input: HTMLTextAreaElement) => input.setSelectionRange(21, 21));
+    await draft.press('/'); await draft.press('m'); await draft.press('o');
+    await expect(suggestions(page).getByRole('option', { name: /Choose a configured model/ })).toBeVisible();
+    await draft.press('Tab');
+    await expect(draft).toHaveValue('Read this attachment /model and keep this text');
+    await draft.press('Enter');
+    await expect(modelSearch(page)).toBeFocused();
+    await modelSearch(page).press('Escape');
+    await expect(draft).toHaveValue('Read this attachment  and keep this text');
+
+    await draft.fill('Open https://example.test/model and /home/model');
+    await expect(suggestions(page)).toBeHidden();
+    await draft.fill('Read this attachment  and keep this text');
+    await draft.evaluate((input: HTMLTextAreaElement) => input.setSelectionRange(21, 21));
+    await draft.press('/'); await draft.press('r'); await draft.press('e'); await draft.press('v');
+    await expect(suggestions(page).getByRole('option', { name: /Review the work/ })).toBeVisible();
+    await draft.press('Enter');
+    await expect(draft).toHaveValue('Read this attachment /skill:review and keep this text');
     await page.locator('#composer input[type=file]').setInputFiles({ name: 'task.txt', mimeType: 'text/plain', buffer: Buffer.from('ATTACHED TASK') });
     await expect(page.getByRole('button', { name: 'Remove task.txt' })).toBeVisible();
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.locator('.message.assistant')).toHaveText('Mock response');
     expect(JSON.stringify(mock.requests[0])).toContain('ATTACHED TASK');
+    expect(JSON.stringify(mock.requests[0])).toContain('Review carefully.');
+    expect(JSON.stringify(mock.requests[0])).toContain('Read this attachment and keep this text');
+    await draft.fill('/export');
+    const exported = page.waitForEvent('download');
+    await draft.press('Enter');
+    expect((await exported).suggestedFilename()).toBe('mini-harness-sessions.json');
     await expect(page.locator('.attachment')).toHaveCount(0);
     await page.locator('.session-row').hover();
-    await page.getByRole('button', { name: /^Rename Read this attachment/ }).click();
+    await page.getByRole('button', { name: /^Rename .*Read this attachment|^Rename \/skill:review/ }).click();
     await page.getByRole('textbox', { name: 'Title', exact: true }).fill('Project review');
     await page.getByRole('button', { name: 'Rename', exact: true }).click();
     await expect(page.locator('#conversationTitle')).toHaveText('Project review');
@@ -355,6 +442,9 @@ test('frontend plugins own all five slots and clean up on disable and reconfigur
       if (slot === 'inspector') node.onclick = () => {const p = document.createElement('p');p.textContent='Plugin preview';api.inspect('Example',p);};
       api.mount(slot,node);
     }
+    const settingsPage = document.createElement('p'); settingsPage.textContent = 'Plugin preferences';
+    api.settingsPage('Example settings', settingsPage);
+    api.command({ name: 'example', description: 'Add a plugin note', run: () => api.insert('Plugin note') });
     api.tool('ls', () => { const node = document.createElement('p'); node.textContent = 'Custom listing result'; return node; });
   }`);
   const dependent = join(paths.plugins, 'a-dependent'); mkdirSync(dependent);
@@ -382,6 +472,11 @@ test('frontend plugins own all five slots and clean up on disable and reconfigur
     await page.getByRole('button', { name: 'Plugin inspector', exact: true }).click();
     await expect(page.getByText('Plugin preview', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await settingsSection(page, 'Example settings').click();
+    await expect(page.getByText('Plugin preferences')).toBeVisible();
+    await settingsSection(page, 'Extensions').click();
+    await expect(page.getByText('Plugin settings', { exact: true })).toBeVisible();
+    await settingsSection(page, 'Plugins').click();
     await page.getByLabel('Button label · ui-example', { exact: true }).fill('Updated plugin');
     await page.getByRole('button', { name: 'Save settings', exact: true }).click();
     await expect(page.locator('#settingsStatus')).toHaveText('Saved.');
@@ -395,7 +490,11 @@ test('frontend plugins own all five slots and clean up on disable and reconfigur
     await expect(page.locator('[data-example-slot]')).toHaveCount(0);
     await expect(page.locator('html')).toHaveAttribute('data-dependency-disposal', 'ordered');
     await expect(page.getByText('Plugin preview', { exact: true })).toHaveCount(0);
+    await expect(settingsSection(page, 'Example settings')).toHaveCount(0);
+    await expect(settingsSection(page, 'Extensions')).toBeHidden();
     await page.getByRole('button', { name: 'Close settings' }).click();
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('/ex');
+    await expect(suggestions(page).getByRole('option', { name: /Add a plugin note/ })).toHaveCount(0);
     await page.locator('.tool-card summary').click();
     await expect(page.getByText('Custom listing result')).toHaveCount(0);
     await expect(page.locator('.tool-content pre').first()).toBeVisible();
@@ -422,6 +521,7 @@ test('file inspection, responsive themes and reduced viewport height keep contro
         for (const theme of ['dark', 'light']) {
           if (width <= 860) await page.getByRole('button', { name: 'Toggle navigation' }).click();
           await page.getByRole('button', { name: 'Settings', exact: true }).click();
+          await settingsSection(page, 'Appearance').click();
           await page.getByRole('combobox', { name: 'Theme', exact: true }).selectOption(theme);
           await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
           await page.getByRole('button', { name: 'Close settings' }).click();
@@ -506,6 +606,7 @@ test('running messages can queue follow-ups and approve shell commands from the 
     await page.locator('.tool-card summary').click();
     await expect(page.locator('.tool-arguments')).toContainText('echo approved');
     await expect(page.locator('.tool-content')).toContainText('Exit 0');
+    await expect(page.locator('.tool-duration')).toHaveText(/\d+ (ms|s)/);
   } finally { release(); await page.close(); await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
@@ -522,7 +623,7 @@ test('retry retains image attachments after selecting an image-capable model', a
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Read the picture');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.locator('.message.error')).toContainText('does not support image input');
-    await page.getByRole('combobox', { name: 'Model', exact: true }).selectOption('local-mock/vision-model');
+    await chooseModel(page, 'vision-model');
     await page.getByRole('button', { name: 'Retry', exact: true }).click();
     await expect(page.locator('.message.assistant')).toHaveText('Mock response');
     expect(JSON.stringify(mock.requests.at(-1))).toContain('image_url');

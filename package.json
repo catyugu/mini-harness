@@ -32,6 +32,7 @@
     "test:browser": "npm run build && playwright test -c playwright.config.ts"
   },
   "dependencies": {
+    "@earendil-works/pi-ai": "1.6.0",
     "@earendil-works/pi-coding-agent": "1.6.0",
     "cordis": "4.0.0-rc.13",
     "ignore": "7.0.8",

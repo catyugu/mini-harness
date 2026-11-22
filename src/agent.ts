@@ -7,6 +7,7 @@ import {
   createAgentSession, defineTool, ModelRuntime, SessionManager, SettingsManager, DefaultResourceLoader,
   type AgentSession
 } from '@earendil-works/pi-coding-agent';
+import { getSupportedThinkingLevels } from '@earendil-works/pi-ai/compat';
 import { PluginHost } from './plugins.js';
 import { SessionRegistry, type ModelChoice } from './registry.js';
 import { mergeSettings, readSettings, writeJson, type SettingsPatch } from './config.js';
@@ -39,6 +40,7 @@ export class MiniHarnessRuntime {
   readonly semaphore: Semaphore;
   private configuring?: Promise<void>;
   private readonly staleSessions = new Set<string>();
+  private readonly compactions = new Map<string, { done: Promise<void>; controller: AbortController }>();
   private readonly deleting = new Set<string>();
   private stopping = false;
   constructor(paths: ReturnType<typeof import('./config.js').getPaths>) {
@@ -57,6 +59,7 @@ export class MiniHarnessRuntime {
       modelsPath: join(this.paths.home, 'models.json'),
       refreshOnCreate: false
     });
+    await this.models.getAvailable();
     await this.plugins.configure(this.settings);
   }
 
@@ -65,9 +68,10 @@ export class MiniHarnessRuntime {
   }
 
   availableModels() {
-    return this.models.getModels().map((m) => ({
-      provider: m.provider, id: m.id, name: m.name || m.id,
-      configured: this.models.getProviderAuthStatus(m.provider).configured
+    const available = new Set(this.models.getAvailableSnapshot().map(({ provider, id }) => JSON.stringify([provider, id])));
+    return this.models.getModels().map((model) => ({
+      provider: model.provider, id: model.id, name: model.name || model.id,
+      configured: available.has(JSON.stringify([model.provider, model.id])), thinkingLevels: getSupportedThinkingLevels(model)
     }));
   }
 
@@ -85,11 +89,13 @@ export class MiniHarnessRuntime {
     return model;
   }
 
+  get hasActiveWork() { return Boolean(this.busy.size || this.openingSessions.size || this.compactions.size); }
+
   async open(id: string): Promise<AgentSession> {
     if (this.configuring || this.stopping) throw new Error('Agent service is unavailable during reconfiguration or shutdown');
     if (this.deleting.has(id)) throw new Error('Conversation is being deleted');
     const active = this.openSessions.get(id);
-    if (active && (!this.staleSessions.has(id) || this.busy.has(id))) return active;
+    if (active && (!this.staleSessions.has(id) || this.busy.has(id) || this.compactions.has(id))) return active;
     if (active) { active.dispose(); this.openSessions.delete(id); this.staleSessions.delete(id); }
     const pending = this.openingSessions.get(id);
     if (pending) return pending;
@@ -167,14 +173,16 @@ export class MiniHarnessRuntime {
     if (!this.registry.get(id)) throw new Error('Conversation not found');
     const session = await this.open(id);
     return { ...this.registry.get(id), messages: this.sessionMessages(id), model: this.modelInfo(session.model),
-      selectedModel: { ...this.settings.model },
+      selectedModel: { ...this.settings.model }, thinkingLevel: session.thinkingLevel,
       run: this.runInfo(id), partial: this.busy.get(id)?.partial, tools: [...this.busy.get(id)?.tools.values() ?? []], busy: this.busy.has(id), queue: { steer: session.getSteeringMessages(), followUp: session.getFollowUpMessages() } };
   }
 
-  private launch(id: string, prompt: string, emit: (event: StreamEvent) => void, { signal, model, attachments }: { signal?: AbortSignal; model?: ModelChoice; attachments?: Attachment[] } = {}) {
+  private launch(id: string, prompt: string, emit: (event: StreamEvent) => void, { signal, model, attachments, thinkingLevel }: { signal?: AbortSignal; model?: ModelChoice; attachments?: Attachment[]; thinkingLevel?: AgentSession['thinkingLevel'] } = {}) {
     if (this.configuring || this.stopping) throw new Error('Agent service is unavailable during reconfiguration or shutdown');
-    if (this.busy.has(id)) throw new Error('Conversation is already running');
+    if (this.busy.has(id) || this.compactions.has(id)) throw new Error('Conversation is already running');
     if (this.deleting.has(id)) throw new Error('Conversation is being deleted');
+    if (thinkingLevel !== undefined && !['off', 'minimal', 'low', 'medium', 'high', 'xhigh'].includes(thinkingLevel))
+      throw new Error('Invalid thinking level');
     const prepared = prepareInput(prompt, attachments);
     prompt = prepared.text;
     const record = this.registry.get(id);
@@ -218,7 +226,7 @@ export class MiniHarnessRuntime {
       run.info.state = 'running';
       this.registry.update(id, { run: run.info });
       publish({ type: 'run', run: { ...run.info } });
-      return this.runPrompt(record, prompt, publish, cancellation, choice, prepared.images);
+      return this.runPrompt(record, prompt, publish, cancellation, choice, prepared.images, thinkingLevel);
     };
     const work = record.parentId ? this.semaphore.run((lease) => {
       run.lease = lease;
@@ -247,8 +255,8 @@ export class MiniHarnessRuntime {
     return this.launch(id, prompt, emit, options).done;
   }
 
-  startRun(id: string, prompt: string, model?: ModelChoice, attachments?: Attachment[]) {
-    return { ...this.launch(id, prompt, undefined, { model, attachments }).info };
+  startRun(id: string, prompt: string, model?: ModelChoice, attachments?: Attachment[], thinkingLevel?: AgentSession['thinkingLevel']) {
+    return { ...this.launch(id, prompt, undefined, { model, attachments, thinkingLevel }).info };
   }
 
   runInfo(id: string): RunInfo | undefined {
@@ -276,12 +284,14 @@ export class MiniHarnessRuntime {
     for (const child of this.registry.descendants([id])) {
       const run = this.busy.get(child);
       if (run) { cancelled = true; run.controller.abort(new Error('Agent run cancelled')); }
+      const compaction = this.compactions.get(child);
+      if (compaction) { cancelled = true; compaction.controller.abort(new Error('Compaction cancelled')); }
     }
     return cancelled;
   }
 
   private async runPrompt(record: NonNullable<ReturnType<SessionRegistry['get']>>, prompt: string,
-      emit: (event: StreamEvent) => void, signal: AbortSignal, choice?: ModelChoice, images: ImageInput[] = []) {
+      emit: (event: StreamEvent) => void, signal: AbortSignal, choice?: ModelChoice, images: ImageInput[] = [], thinkingLevel?: AgentSession['thinkingLevel']) {
     const { id } = record;
     signal.throwIfAborted();
     const session = await this.open(id);
@@ -291,6 +301,7 @@ export class MiniHarnessRuntime {
       await session.setModel(model);
     signal.throwIfAborted();
     if (images.length && !session.model?.input.includes('image')) throw new Error('The selected model does not support image input. Choose an image-capable model and retry.');
+    if (thinkingLevel !== undefined) session.setThinkingLevel(thinkingLevel);
     const actual = this.modelInfo(session.model);
     if (!record.parentId && !isDeepStrictEqual(this.settings.model, actual)) {
       const next = mergeSettings(this.settings, { model: actual });
@@ -299,7 +310,7 @@ export class MiniHarnessRuntime {
     }
     this.registry.update(id, { model: actual });
     if (record.title === 'New conversation') this.registry.update(id, { title: prompt.trim().slice(0, 72) });
-    const toolArguments = new Map<string, unknown>();
+    const toolCalls = new Map<string, { args: unknown; start: number }>();
     const off = session.subscribe((event) => {
       switch (event.type) {
         case 'message_start':
@@ -314,21 +325,24 @@ export class MiniHarnessRuntime {
           if (event.message.role === 'assistant') emit({ type: 'assistant-end' });
           break;
         case 'tool_execution_start':
-          toolArguments.set(event.toolCallId, event.args);
+          toolCalls.set(event.toolCallId, { args: event.args, start: performance.now() });
           emit({ type: 'tool', id: event.toolCallId, name: event.toolName, state: 'running', arguments: event.args });
           break;
         case 'tool_execution_update':
-          emit({ type: 'tool', id: event.toolCallId, name: event.toolName, state: 'running', arguments: toolArguments.get(event.toolCallId), content: event.partialResult?.content });
+          emit({ type: 'tool', id: event.toolCallId, name: event.toolName, state: 'running', arguments: toolCalls.get(event.toolCallId)?.args, content: event.partialResult?.content });
           break;
         case 'tool_execution_end': {
-          const args = toolArguments.get(event.toolCallId) as { path?: string };
+          const call = toolCalls.get(event.toolCallId);
+          toolCalls.delete(event.toolCallId);
+          const args = call?.args as { path?: string };
           const run = this.busy.get(id);
           if (!event.isError && ['write', 'edit'].includes(event.toolName) && typeof args?.path === 'string' && run) {
             const path = relative(this.paths.cwd, resolve(this.paths.cwd, args.path)).split(sep).join('/');
             run.info.changedFiles = [...new Set([...(run.info.changedFiles ?? []), path])];
           }
           emit({ type: 'tool', id: event.toolCallId, name: event.toolName, state: event.isError ? 'error' : 'finished',
-            arguments: toolArguments.get(event.toolCallId), content: event.result?.content, sessionId: event.result?.details?.sessionId });
+            arguments: call?.args, content: event.result?.content, sessionId: event.result?.details?.sessionId,
+            elapsedMs: call ? performance.now() - call.start : undefined });
           break;
         }
       }
@@ -352,6 +366,21 @@ export class MiniHarnessRuntime {
         this.registry.update(id, { file: session.sessionFile });
       }
     }
+  }
+
+  async compact(id: string) {
+    if (this.busy.has(id) || this.compactions.has(id)) throw new Error('Stop the open conversation before compacting it');
+    const controller = new AbortController();
+    const done = this.open(id).then(async (session) => {
+      controller.signal.throwIfAborted();
+      const abort = () => session.abortCompaction();
+      controller.signal.addEventListener('abort', abort, { once: true });
+      try { await session.compact(); }
+      finally { controller.signal.removeEventListener('abort', abort); }
+    });
+    this.compactions.set(id, { done, controller });
+    try { await done; }
+    finally { this.compactions.delete(id); }
   }
 
   async queueInput(id: string, text: string, mode: 'steer' | 'followUp', attachments?: Attachment[]) {
@@ -423,7 +452,7 @@ export class MiniHarnessRuntime {
 
   export(ids: string[]) {
     const all = this.registry.descendants(ids);
-    if (all.some((id) => this.busy.has(id) || this.openingSessions.has(id)))
+    if (all.some((id) => this.busy.has(id) || this.openingSessions.has(id) || this.compactions.has(id)))
       throw new Error('Stop active conversations before exporting them');
     return this.registry.export(ids);
   }
@@ -434,7 +463,7 @@ export class MiniHarnessRuntime {
     for (const id of all) this.deleting.add(id);
     try {
       for (const id of ids) this.cancel(id);
-      await Promise.allSettled(all.flatMap((id) => [this.busy.get(id)?.done, this.openingSessions.get(id)]));
+      await Promise.allSettled(all.flatMap((id) => [this.busy.get(id)?.done, this.openingSessions.get(id), this.compactions.get(id)?.done]));
       for (const id of all) {
         this.openSessions.get(id)?.dispose();
         this.openSessions.delete(id);
@@ -462,7 +491,7 @@ export class MiniHarnessRuntime {
       }
       return next;
     }
-    if (this.busy.size || this.openingSessions.size)
+    if (this.hasActiveWork)
       throw new Error('Stop active conversations before changing tools or Skills');
     const resources = new Map([...this.openSessions.keys()].map((id) => [id, this.plugins.resources(id)]));
     this.configuring = this.plugins.configure(next, () => writeJson(this.paths.settings, next));
@@ -488,8 +517,8 @@ export class MiniHarnessRuntime {
   async stop() {
     this.stopping = true;
     this.approvals.close();
-    for (const id of this.busy.keys()) this.cancel(id);
-    await Promise.allSettled([this.configuring, ...this.openingSessions.values(), ...[...this.busy.values()].map(({ done }) => done)]);
+    for (const id of [...this.busy.keys(), ...this.compactions.keys()]) this.cancel(id);
+    await Promise.allSettled([this.configuring, ...this.openingSessions.values(), ...[...this.compactions.values()].map(({ done }) => done), ...[...this.busy.values()].map(({ done }) => done)]);
     for (const session of this.openSessions.values()) session.dispose();
     this.openSessions.clear();
     await this.plugins.close();

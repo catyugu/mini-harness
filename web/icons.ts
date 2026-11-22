@@ -2,7 +2,10 @@ const paths = {
   menu: 'M4 6h16M4 12h16M4 18h16', close: 'm6 6 12 12M6 18 18 6', plus: 'M12 5v14M5 12h14',
   send: 'm6 12 6-6 6 6M12 6v14', stop: 'M6 6h12v12H6z',
   settings: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2',
-  files: 'M3 7h7l2-3h9v16H3z', attach: 'm8 12 6-6a3 3 0 0 1 4 4l-8 8a5 5 0 0 1-7-7l9-9',
+  files: 'M3 7h7l2-3h9v16H3z',
+  file: 'M6 3h8l4 4v14H6zM14 3v5h4',
+  folder: 'M3 6h7l2 2h9v12H3z',
+  'folder-open': 'M4 19V5h6l2 2h8v4M4 19l3-8h15l-3 8z', attach: 'm8 12 6-6a3 3 0 0 1 4 4l-8 8a5 5 0 0 1-7-7l9-9',
   edit: 'm4 16 12-12 4 4L8 20H4z', trash: 'M3 6h18M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7M14 10v7',
   copy: 'M8 8h12v12H8zM16 8V4H4v12h4', chevron: 'm9 5 7 7-7 7', skills: 'm12 3 3 6 6 3-6 3-3 6-3-6-6-3 6-3z'
 };
