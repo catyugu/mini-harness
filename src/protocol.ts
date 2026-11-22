@@ -17,6 +17,7 @@ export interface ViewMessage {
   toolName?: string;
   toolCallId?: string;
   sessionId?: string;
+  arguments?: unknown;
   isError?: boolean;
 }
 

@@ -235,3 +235,59 @@ input[type="checkbox"] { accent-color: var(--accent); }
 @media (prefers-reduced-motion: reduce) {
   .sidebar { transition: none; }
 }
+
+/* Shared dimensions and surfaces used by core and extension contributions. */
+:root { --radius: 10px; --radius-lg: 16px; --control: 36px; --shadow: 0 6px 24px #00000009;
+  --bg: #fff; --panel: #f7f7f8; --surface: #fff; --ink: #252525; --muted: #737373;
+  --border: #e9e9ec; --hover: #ededf0; --selected: #e8e8ec; --bubble: #f3f3f5;
+  --accent: #363638; --focus: #557a8a; --code: #202023; --code-text: #f3f3f5;
+}
+:root[data-theme="dark"] { --bg: #1b1b1d; --panel: #151517; --surface: #232326; --ink: #ededee;
+  --muted: #a0a0a6; --border: #333337; --hover: #2c2c30; --selected: #34343a;
+  --bubble: #2a2a2e; --accent: #e3e3e8; --code: #111113; --focus: #8db9cc;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"], :root:not([data-theme]) { --bg: #1b1b1d; --panel: #151517; --surface: #232326; --ink: #ededee;
+    --muted: #a0a0a6; --border: #333337; --hover: #2c2c30; --selected: #34343a;
+    --bubble: #2a2a2e; --accent: #e3e3e8; --code: #111113; --focus: #8db9cc; }
+}
+button { border-radius: var(--radius); }
+.icon-button { display: inline-flex; align-items: center; justify-content: center; }
+.sidebar { flex-basis: 256px; width: 256px; border: 0; }
+#sessionSearch { width: 100%; min-width: 0; margin: 6px 0 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); font-size: 13px; }
+.sidebar-collapsed .sidebar { display: flex; width: 64px; flex-basis: 64px; padding-inline: 10px; }
+.sidebar-collapsed .sidebar :is(.brand span, .nav-label, .sidebar-caption, #sessionSearch, .sessions, .bulk-actions, #sidebarExtensions) { display: none; }
+.sidebar-collapsed .sidebar-bottom { margin-top: auto; }
+.sidebar-collapsed .new-session, .sidebar-collapsed .sidebar-bottom button { justify-content: center; padding: 10px 0; }
+.sidebar-collapsed .sidebar-top { padding-inline: 7px; }
+.topbar { border-bottom: 0; }
+.composer { box-shadow: var(--shadow); border-radius: var(--radius-lg); }
+.composer-tools { display: flex; align-items: center; gap: 2px; }
+.composer-footer { gap: 6px; }
+.composer-footer .model-select { margin-right: auto; max-width: min(38vw, 230px); border-color: transparent; background: transparent; }
+#send, #stop, .primary { color: var(--bg); display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.message-row { min-width: 0; }
+.message-row.user { align-self: flex-end; max-width: 85%; }
+.message-row .message.user { max-width: 100%; border-radius: var(--radius-lg); }
+.message-actions { display: flex; gap: 5px; padding-top: 2px; }
+.message-actions button { font-size: 11px; color: var(--muted); }
+.message-row.user .message-actions { justify-content: flex-end; }
+.message-image { max-width: min(100%, 380px); max-height: 360px; object-fit: contain; border-radius: var(--radius); }
+.settings-panel { width: min(720px, 100%); }
+.settings-nav { display: flex; flex-wrap: wrap; padding: 6px 16px; gap: 3px; border-bottom: 1px solid var(--border); }
+.settings-nav button { color: var(--muted); }
+.settings-scroll section { scroll-margin-top: 10px; padding-block: 20px; }
+.inspector { display: flex; flex-direction: column; flex: 0 0 min(380px, 38vw); width: min(380px, 38vw); min-width: 0; border-left: 1px solid var(--border); background: var(--panel); }
+.inspector > header { display: flex; justify-content: space-between; align-items: center; min-height: 60px; padding: 8px 14px; }
+.inspector-content { min-height: 0; overflow: auto; padding: 10px 14px; flex: 1; }
+.inspector-content pre { font: 12px/1.6 ui-monospace, monospace; overflow: auto; padding: 12px; background: var(--surface); border-radius: var(--radius); }
+.tool-arguments { border-bottom: 1px solid var(--border); color: var(--muted); }
+@media (min-width: 861px) { .mobile-only { display: none; } }
+@media (max-width: 1100px) { .composer-hint { display: none; } }
+@media (max-width: 860px) {
+  .inspector { position: fixed; inset: 0 0 0 auto; z-index: 4; width: min(450px, 100%); height: var(--app-height, 100dvh); box-shadow: -10px 0 40px #0002; }
+  .sidebar { width: min(300px, 88vw); }
+  #sessionSearch { font-size: 16px; min-height: 44px; }
+  .composer-footer .model-select { max-width: 45vw; }
+  .composer-footer { justify-content: initial; }
+}

@@ -4,16 +4,12 @@ import type { MessageContent, StreamEvent, RunEvent, RunInfo, ViewMessage } from
 import type { PluginMetadata } from '../src/plugins.js';
 import { renderMarkdown } from './markdown.js';
 
-function element<K extends keyof HTMLElementTagNameMap>(id: string): HTMLElementTagNameMap[K] {
-  return document.getElementById(id) as HTMLElementTagNameMap[K];
-}
-const value = (id: string) => element<'input'>(id).value.trim();
-const tokenFromUrl = new URLSearchParams(location.hash.slice(1)).get('token');
-if (tokenFromUrl) {
-  sessionStorage.setItem('mini-harness-token', tokenFromUrl);
-  history.replaceState(null, '', location.pathname + location.search);
-}
-const token = sessionStorage.getItem('mini-harness-token');
+import { element, value, api, data, payload, setWorkspace } from './api.js';
+import { FrontendHost } from './extensions.js';
+import { createMessageView } from './messages.js';
+import { hydrateIcons, icon } from './icons.js';
+import { schemaFields, readPluginValues } from './settings-fields.js';
+
 const messages = element('messages');
 const welcome = element('welcome');
 const composer = element<'form'>('composer');
@@ -39,28 +35,39 @@ let observing: AbortController;
 let modelChange: Promise<Settings>;
 const isRunning = (run?: RunInfo) => run?.state === 'queued' || run?.state === 'running';
 
-async function api(path: string, options: RequestInit = {}) {
-  if (!token) throw new Error('Open mini-harness using the URL printed by the CLI.');
-  const headers = { Authorization: 'Bearer ' + token, ...(options.body ? { 'Content-Type': 'application/json' } : {}) };
-  const response = await fetch('/api' + path, { ...options, headers });
-  if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    throw new Error(body?.error || 'Request failed (' + response.status + ')');
-  }
-  return response;
-}
-
-async function data<T>(path: string, options?: RequestInit): Promise<T> {
-  return (await api(path, options)).json();
-}
-
-const payload = (method: string, body: unknown) => ({ method, body: JSON.stringify(body) });
 const showStatus = (text: string) => { element('status').textContent = text; };
 const report = (error: Error) => showStatus(error.message);
 const adjustPrompt = () => {
   prompt.style.height = 'auto';
   prompt.style.height = Math.min(prompt.scrollHeight, 210) + 'px';
 };
+
+function inspect(title: string, content: HTMLElement) {
+  element('inspectorTitle').textContent = title;
+  element('inspectorContent').replaceChildren(content);
+  element('inspector').hidden = false;
+  element('inspectorOpen').setAttribute('aria-expanded', 'true');
+}
+const extensions = new FrontendHost({ sidebar: element('sidebarExtensions'), composer: element('composerExtensions'),
+  settings: element('settingsExtensions'), inspector: element('inspectorExtensions') }, {
+  request: data, insert: (text) => { prompt.setRangeText(text, prompt.selectionStart, prompt.selectionEnd, 'end'); prompt.focus(); adjustPrompt(); }, inspect
+}, report);
+const { addMessage, appendHistory, toolCard } = createMessageView(messages, extensions, (id) => void activate(id), () => {
+  const last = [...messages.querySelectorAll<HTMLElement>('.message.user')].at(-1);
+  if (last && !sending) void send(last.innerText);
+});
+element('inspectorOpen').onclick = () => {
+  element('inspector').hidden = !element('inspector').hidden;
+  element('inspectorOpen').setAttribute('aria-expanded', String(!element('inspector').hidden));
+};
+element('inspectorClose').onclick = () => { element('inspector').hidden = true; element('inspectorOpen').setAttribute('aria-expanded', 'false'); };
+for (const [index, section] of [...document.querySelectorAll<HTMLElement>('#settingsForm > section')].entries()) {
+  section.id = 'settings-section-' + index;
+  const button = document.createElement('button'); button.type = 'button'; button.className = 'link-button';
+  button.textContent = section.querySelector('h3').textContent;
+  button.onclick = () => section.scrollIntoView({ block: 'start' });
+  element('settingsNav').append(button);
+}
 
 function setSidebar(open: boolean) {
   element('sidebar').classList.toggle('open', open && narrow.matches);
@@ -122,16 +129,13 @@ async function createConversation() {
 
 async function newSession() {
   if (pendingNavigation) return;
-  const request = ++navigation;
-  pendingNavigation = true;
-  try {
-    const item = await createConversation();
-    if (request !== navigation) return;
-    showConversation(item);
-    closeDrawer();
-    prompt.focus();
-  } catch (error) { report(error); }
-  finally { if (request === navigation) pendingNavigation = false; }
+  ++navigation;
+  showConversation();
+  prompt.value = '';
+  adjustPrompt();
+  showStatus('');
+  closeDrawer();
+  prompt.focus();
 }
 
 function renderSessions() {
@@ -217,71 +221,6 @@ function updateSelection() {
 
 function scrollIfPinned() {
   return messages.scrollHeight - messages.clientHeight - messages.scrollTop < 96;
-}
-
-function textOf(value?: MessageContent) {
-  if (typeof value === 'string') return value;
-  return value?.filter((block) => block.type === 'text').map((block) => block.text ?? '').join('\n') ?? '';
-}
-
-function addMessage(role: 'user' | 'assistant' | 'error', text: string) {
-  const item = document.createElement('article');
-  item.className = 'message ' + role;
-  if (role === 'assistant') renderMarkdown(item, text);
-  else item.textContent = text;
-  messages.append(item);
-  return item;
-}
-
-function toolCard(data: { name: string; state: string; content?: MessageContent; sessionId?: string }, card?: HTMLDetailsElement) {
-  const item = card ?? document.createElement('details');
-  item.className = 'tool-card';
-  item.dataset.state = data.state;
-  const summary = document.createElement('summary');
-  const name = document.createElement('strong');
-  name.textContent = data.name;
-  const status = document.createElement('span');
-  status.textContent = data.state === 'finished' ? 'Done' : data.state === 'running' ? 'Running' : 'Failed';
-  if (data.state === 'error') item.open = true;
-  summary.append(name, status);
-  const body = document.createElement('div');
-  body.className = 'tool-content';
-  const output = textOf(data.content);
-  if (output) {
-    const result = document.createElement('pre');
-    result.textContent = output;
-    body.append(result);
-  }
-  for (const block of typeof data.content === 'string' ? [] : data.content ?? []) {
-    if (block.type !== 'image' || !/^image\/(?:png|jpeg|gif|webp)$/.test(block.mimeType ?? '') || !block.data) continue;
-    const img = document.createElement('img');
-    img.alt = 'Tool output';
-    img.loading = 'lazy';
-    img.src = 'data:' + block.mimeType + ';base64,' + block.data;
-    body.append(img);
-  }
-  if (data.sessionId && /^[a-f0-9-]{36}$/.test(data.sessionId)) {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'link-button';
-    button.textContent = 'Open child conversation';
-    button.onclick = () => void activate(data.sessionId);
-    body.append(button);
-  }
-  item.replaceChildren(summary, body);
-  if (!card) messages.append(item);
-  return item;
-}
-
-function appendHistory(message: ViewMessage) {
-  if (message.role === 'toolResult') {
-    toolCard({ name: message.toolName ?? 'Tool', state: message.isError ? 'error' : 'finished',
-      content: message.content, sessionId: message.sessionId });
-    return;
-  }
-  const text = textOf(message.content);
-  if (text) addMessage(message.role, text);
-  if (message.error) addMessage('error', message.error);
 }
 
 async function readEvents(response: Response, accept: (event: RunEvent) => void) {
@@ -519,84 +458,6 @@ function fillSettings() {
   settingsStatus.textContent = '';
 }
 
-function schemaFields(plugin: string, schema: Record<string, any>, values: any, path: string[] = []) {
-  const group = document.createElement('div');
-  group.className = 'plugin-fields';
-  for (const [key, property] of Object.entries<Record<string, any>>(schema.properties ?? {})) {
-    const current = values?.[key] ?? property.default;
-    const fieldPath = [...path, key];
-    const label = document.createElement('label');
-    const title = document.createElement('span');
-    title.textContent = property.title ?? key;
-    label.append(title);
-    if (property.type === 'object' && property.properties) {
-      const section = document.createElement('fieldset');
-      section.className = 'plugin-config';
-      const legend = document.createElement('legend');
-      legend.textContent = title.textContent;
-      section.append(legend, schemaFields(plugin, property, current ?? {}, fieldPath));
-      group.append(section);
-      continue;
-    }
-    let input: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
-    if (property.enum) {
-      const select = document.createElement('select');
-      if (!schema.required?.includes(key)) select.add(new Option('Default', ''));
-      for (const option of property.enum) select.add(new Option(String(option), JSON.stringify(option)));
-      if (current !== undefined) select.value = JSON.stringify(current);
-      input = select;
-      input.dataset.kind = 'enum';
-    } else if (['string', 'number', 'integer', 'boolean'].includes(property.type)) {
-      const field = document.createElement('input');
-      field.type = property.type === 'boolean' ? 'checkbox' : property.type === 'string' ? (property.format === 'password' ? 'password' : 'text') : 'number';
-      if (field.type === 'checkbox') field.checked = Boolean(current);
-      else field.value = current === undefined ? '' : String(current);
-      if (field.type === 'number') {
-        field.step = property.type === 'integer' ? '1' : 'any';
-        if (property.minimum !== undefined) field.min = String(property.minimum);
-        if (property.maximum !== undefined) field.max = String(property.maximum);
-      }
-      if (property.minLength !== undefined) field.minLength = property.minLength;
-      if (property.maxLength !== undefined) field.maxLength = property.maxLength;
-      input = field;
-      input.dataset.kind = property.type;
-    } else {
-      input = document.createElement('textarea');
-      input.value = current === undefined ? '' : JSON.stringify(current, null, 2);
-      input.dataset.kind = 'json';
-    }
-    input.dataset.plugin = plugin;
-    input.dataset.path = JSON.stringify(fieldPath);
-    input.setAttribute('aria-label', (property.title ?? key) + ' · ' + plugin);
-    if (schema.required?.includes(key) && input.dataset.kind !== 'boolean') input.required = true;
-    label.append(input);
-    if (property.description) {
-      const hint = document.createElement('small');
-      hint.className = 'hint';
-      hint.textContent = property.description;
-      label.append(hint);
-    }
-    group.append(label);
-  }
-  return group;
-}
-
-function pluginValues() {
-  const config = structuredClone(bootstrap.settings.pluginConfig);
-  for (const field of element('pluginSettings').querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('[data-plugin]')) {
-    if (field.matches(':disabled')) continue;
-    const path: string[] = JSON.parse(field.dataset.path);
-    const kind = field.dataset.kind;
-    let target = config[field.dataset.plugin] ??= {};
-    for (const key of path.slice(0, -1)) target = (target[key] ??= {}) as Record<string, unknown>;
-    if (kind !== 'boolean' && !field.value && !field.required) { delete target[path.at(-1)]; continue; }
-    target[path.at(-1)] = kind === 'boolean' ? (field as HTMLInputElement).checked :
-      kind === 'number' || kind === 'integer' ? Number(field.value) :
-      kind === 'enum' || kind === 'json' ? JSON.parse(field.value) : field.value;
-  }
-  return config;
-}
-
 function credentialStatus() {
   const provider = value('provider');
   element('credentialStatus').textContent = !provider ? 'Select a provider to configure credentials.' :
@@ -617,7 +478,7 @@ async function saveSettings() {
   const button = element<'button'>('saveSettings');
   button.disabled = true;
   try {
-    Object.assign(patch, { pluginConfig: pluginValues() });
+    Object.assign(patch, { pluginConfig: readPluginValues(bootstrap.settings.pluginConfig) });
     applySettings(await data<Settings>('/settings', payload('PATCH', patch)));
     settingsStatus.textContent = 'Saved.';
   } catch (error) { settingsStatus.textContent = error.message; }
@@ -717,6 +578,7 @@ const resize = () => document.documentElement.style.setProperty('--app-height', 
 viewport?.addEventListener('resize', resize);
 resize();
 
+hydrateIcons();
 setSidebar(!narrow.matches);
 void data<Bootstrap>('/bootstrap').then((result) => {
   bootstrap = result;

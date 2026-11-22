@@ -19,6 +19,7 @@ declare module 'cordis' {
 const WEB_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'web');
 const assets = new Map([
   ['index.html', 'text/html'], ['app.js', 'text/javascript'], ['markdown.js', 'text/javascript'],
+  ...['api', 'extensions', 'icons', 'settings-fields', 'messages'].map((name): [string, string] => [name + '.js', 'text/javascript']),
   ['vendor/marked.js', 'text/javascript'], ['vendor/purify.js', 'text/javascript'],
   ['style.css', 'text/css'], ['logo.svg', 'image/svg+xml'], ['manifest.webmanifest', 'application/manifest+json'],
   ['icon-192.png', 'image/png'], ['icon-512.png', 'image/png'], ['favicon.ico', 'image/x-icon']
