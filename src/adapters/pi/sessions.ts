@@ -213,8 +213,8 @@ export class PiSessions {
             error: message.role === 'assistant' ? message.errorMessage : undefined
           }];
         case 'toolResult': {
-          const code = message.toolName === 'sandbox_shell' && message.details && typeof message.details === 'object' &&
-            'code' in message.details ? message.details.code : undefined;
+          const code = message.details && typeof message.details === 'object' &&
+            'exitCode' in message.details ? message.details.exitCode : undefined;
           return [{
             ...identity, role: message.role, content: message.content, timestamp: message.timestamp,
             arguments: argumentsById.get(message.toolCallId), toolName: message.toolName, toolCallId: message.toolCallId, isError: message.isError,
@@ -299,7 +299,7 @@ export class PiSessions {
           if (!event.isError && typeof changedPath === 'string') changed?.(changedPath);
           const elapsedMs = call ? performance.now() - call.start : undefined;
           if (elapsedMs !== undefined) toolTimings.push({ toolCallId: event.toolCallId, elapsedMs });
-          const code = event.toolName === 'sandbox_shell' ? event.result?.details?.code : undefined;
+          const code = event.result?.details?.exitCode;
           emit({ type: 'tool', id: event.toolCallId, name: event.toolName, state: event.isError ? 'error' : 'finished',
             arguments: call?.args, content: event.result?.content, sessionId: event.result?.details?.sessionId,
             elapsedMs, exitCode: typeof code === 'number' && Number.isInteger(code) ? code : undefined });

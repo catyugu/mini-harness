@@ -41,6 +41,7 @@ export interface SessionStore {
 
 export interface AgentPort extends RunAgentPort {
   readonly models: ModelRuntime;
+  readonly size: number;
   readonly hasPending: boolean;
   readonly pending: Iterable<Promise<AgentSession>>;
   start(): Promise<void>;

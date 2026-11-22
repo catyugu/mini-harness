@@ -18,7 +18,7 @@ export function setup(ctx: Context) {
         await approvals.request(sessionId, args.command, signal);
         const cwd = ctx.harnessWorkspace.resolve(sessionId);
         const output = await runShell(args.command, cwd, { ...(ctx.harnessSettings().pluginConfig.shell as { mode: 'isolated' | 'host'; timeoutSeconds: number }), signal, stateDir: home });
-        return { content: [{ type: 'text', text: JSON.stringify(output) }], details: output };
+        return { content: [{ type: 'text', text: JSON.stringify(output) }], details: { ...output, exitCode: output.code } };
       }
     });
     ctx.effect(() => ctx.harnessTools.register('sandbox_shell', tool));

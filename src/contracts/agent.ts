@@ -7,7 +7,7 @@ import type { ViewMessage } from './message.js';
 /** Pi session capabilities consumed by scheduling services; the adapter implements this port. */
 export interface RunAgentPort {
   reopenStale(id: string): void;
-  resolveModel(choice: ModelChoice): unknown;
+  resolveModel(choice: ModelChoice): AgentSession['model'] | undefined;
   revisionTarget(id: string, sourceEntryId: string, expectedLeafId: string | null): Promise<unknown>;
   prompt(record: Conversation, prompt: string, emit: (event: StreamEvent) => void, options: {
     signal: AbortSignal; choice?: ModelChoice; images?: ImageInput[];
