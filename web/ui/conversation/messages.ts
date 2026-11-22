@@ -28,6 +28,7 @@ function addMessage(role: 'user' | 'assistant' | 'error', text: string, timestam
   actions.className = 'message-actions';
   actions.setAttribute('role', 'group');
   actions.setAttribute('aria-label', 'Message actions');
+  wrapper.append(actions);
 
   function action(label: string, symbol: Parameters<typeof icon>[0], run: () => void) {
     const button = document.createElement('button');
@@ -59,7 +60,6 @@ function addMessage(role: 'user' | 'assistant' | 'error', text: string, timestam
       actions.append(time);
     }
   }
-  wrapper.append(actions);
   messages.append(wrapper);
   return item;
 }
