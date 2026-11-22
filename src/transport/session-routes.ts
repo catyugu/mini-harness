@@ -33,7 +33,7 @@ export async function sessionRoutes(runtime: SessionRouteHost, req: IncomingMess
     if (input?.workspaceId !== undefined && typeof input.workspaceId !== 'string') throw new Error('Invalid workspace ID');
     return json(res, 201, runtime.registry.create({ workspaceId: input?.workspaceId }));
   }
-  const match = /^\/api\/sessions\/([a-f0-9-]{36})(?:\/(messages|cancel|runs|events|queue|compact))?$/.exec(pathname);
+  const match = /^\/api\/sessions\/([a-f0-9-]{36})(?:\/(cancel|runs|events|queue|compact))?$/.exec(pathname);
   if (match) {
     const id = match[1];
     if (!runtime.registry.get(id)) return json(res, 404, { error: 'Conversation not found' });
@@ -42,7 +42,7 @@ export async function sessionRoutes(runtime: SessionRouteHost, req: IncomingMess
       if (typeof input.title !== 'string' || !input.title.trim() || input.title.length > 140) throw new Error('Title must contain 1–140 characters');
       return json(res, 200, runtime.registry.update(id, { title: input.title.trim() }));
     }
-    if (req.method === 'POST' && ['compact', 'runs', 'messages'].includes(match[2]) && configuring())
+    if (req.method === 'POST' && ['compact', 'runs'].includes(match[2]) && configuring())
       throw new Error('Configuration is changing');
     if (match[2] === 'compact' && req.method === 'POST') {
       await runtime.runs.compact(id);
@@ -64,12 +64,6 @@ export async function sessionRoutes(runtime: SessionRouteHost, req: IncomingMess
     if (match[2] === 'events' && req.method === 'GET') {
       await runtime.pi.open(id);
       streamRun(runtime, res, id, url.searchParams.get('run'), Number(url.searchParams.get('after') ?? 0));
-      return;
-    }
-    if (match[2] === 'messages' && req.method === 'POST') {
-      const input = await requestBody(req, 20 * 1024 * 1024);
-      const run = runtime.runs.startRun(id, input.message, input);
-      streamRun(runtime, res, id, run.id, 0);
       return;
     }
   }

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DEFAULTS, getPaths, mergeSettings, readJson, readSettings, validateSettings, writeJson } from '../src/config.js';
+import { DEFAULTS, getPaths, mergeSettings, readSettings, validateSettings, writeJson } from '../src/config.js';
 
 test('config directories are independent and default safe', () => {
   const folder = mkdtempSync(join(tmpdir(), 'mini-harness-config-'));
@@ -32,23 +32,7 @@ test('settings merge preserves other sections and validates bounds', () => {
 });
 
 
-test('legacy message-copy and edit-resend settings migrate to one session-helper switch', () => {
-  const root = mkdtempSync(join(tmpdir(), 'mini-harness-session-helper-'));
-  try {
-    const paths = getPaths(root, { MINI_HARNESS_HOME: join(root, 'home') });
-    assert.equal(readSettings(paths).plugins['session-helper'], true);
-    writeJson(paths.settings, {
-      plugins: { 'message-copy': false, 'edit-resend': false },
-      pluginConfig: { 'message-copy': { unused: 1 }, 'edit-resend': { unused: 2 } }
-    });
-    const disabled = readSettings(paths);
-    assert.equal(disabled.plugins['session-helper'], false);
-    for (const legacy of ['message-copy', 'edit-resend']) {
-      assert.equal(Object.hasOwn(disabled.plugins, legacy), false);
-      assert.equal(Object.hasOwn(disabled.pluginConfig, legacy), false);
-    }
-    assert.deepEqual(readJson<any>(paths.settings, {}).plugins, disabled.plugins,
-      'migration is persisted and the old switches cannot return after restart');
+
 
     writeJson(paths.settings, { plugins: { 'message-copy': false, 'edit-resend': true } });
     const enabled = readSettings(paths);
@@ -58,5 +42,20 @@ test('legacy message-copy and edit-resend settings migrate to one session-helper
     assert.throws(() => mergeSettings(enabled, { pluginConfig: { 'message-copy': {} } }),
       /configured through session-helper/);
     assert.equal(mergeSettings(enabled, { plugins: { 'session-helper': false } }).plugins['session-helper'], false);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('plugin names are not reserved for removed built-ins and never trigger rewrites', () => {
+  const root = mkdtempSync(join(tmpdir(), 'mini-harness-config-names-'));
+  try {
+    const paths = getPaths(root, { MINI_HARNESS_HOME: join(root, 'home') });
+    writeJson(paths.settings, { plugins: { 'message-copy': true, 'edit-resend': false },
+      pluginConfig: { 'message-copy': { label: 'local' } } });
+    const settings = readSettings(paths);
+    assert.equal(settings.plugins['message-copy'], true);
+    assert.equal(settings.plugins['edit-resend'], false);
+    assert.equal(settings.plugins['session-helper'], true);
+    assert.deepEqual(settings.pluginConfig['message-copy'], { label: 'local' });
+    assert.equal(mergeSettings(settings, { plugins: { 'edit-resend': true } }).plugins['edit-resend'], true);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

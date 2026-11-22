@@ -28,14 +28,12 @@ export class WorkspaceCatalog {
     this.file = join(paths.home, 'workspaces.json');
     mkdirSync(paths.home, { recursive: true, mode: 0o700 });
     this.stateRoot = canonicalWorkspacePath(paths.home);
-    const saved = readJson<CatalogState | string[]>(this.file, []);
-    this.records = Array.isArray(saved) ? [] : saved.records;
     const cwd = this.directory(paths.cwd);
     this.startupId = workspaceId(cwd);
-    if (Array.isArray(saved)) {
-      this.importLegacy([cwd, ...saved]);
-      if (!this.records.length) this.save([]);
-    }
+    const saved = readJson<CatalogState | null>(this.file, null);
+    if (saved !== null && !Array.isArray(saved?.records)) throw new Error('Invalid workspace index');
+    this.records = saved?.records ?? [];
+    if (saved === null) this.save([{ id: this.startupId, path: cwd, name: basename(cwd) || cwd }]);
   }
 
   private save(records: WorkspaceRecord[]) {
@@ -50,19 +48,6 @@ export class WorkspaceCatalog {
     if (!statSync(target).isDirectory() || containsPath(this.stateRoot, target))
       throw new Error('Select a directory outside mini-harness configuration');
     return target;
-  }
-
-  importLegacy(paths: string[]) {
-    const records = [...this.records];
-    for (const path of paths) {
-      let target: string;
-      try { target = this.directory(path); }
-      catch { continue; }
-      const id = workspaceId(target);
-      if (!records.some((record) => record.id === id))
-        records.push({ id, path: target, name: basename(target) || target });
-    }
-    if (records.length !== this.records.length) this.save(records);
   }
 
   get defaultId() {

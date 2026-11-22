@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { lstatSync, readFileSync, realpathSync, unlinkSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { getPaths, readJson, writeJson } from '../config.js';
-import { canonicalWorkspacePath, WorkspaceCatalog, workspaceId } from './workspaces.js';
+import { WorkspaceCatalog } from './workspaces.js';
 import { isRunning, type RunInfo } from '../protocol.js';
 
 import type { ModelChoice, Conversation } from '../contracts/conversation.js';
@@ -22,16 +22,7 @@ export class SessionRegistry {
     if (!Array.isArray(this.state.sessions) || (this.state.pendingDelete && !Array.isArray(this.state.pendingDelete)))
       throw new Error('Invalid conversation index');
     this.finishDeletion();
-    const legacy = this.state.sessions.filter((item) => !item.workspaceId);
-    if (legacy.length) {
-      workspaces.importLegacy(legacy.map(({ cwd }) => cwd));
-      this.commit({ ...this.state, sessions: this.state.sessions.map((item) => {
-        if (item.workspaceId) return item;
-        let path = resolve(item.cwd);
-        try { path = canonicalWorkspacePath(path); } catch { /* Keep the session addressable for export or deletion. */ }
-        return { ...item, workspaceId: workspaceId(path) };
-      }) });
-    }
+    if (this.state.sessions.some((item) => typeof item.workspaceId !== 'string')) throw new Error('Conversation index requires a workspaceId');
     if (this.state.sessions.some(({ run }) => isRunning(run))) this.commit({ ...this.state,
       sessions: this.state.sessions.map((item) => isRunning(item.run) ? { ...item,
         run: { ...item.run, state: 'interrupted', error: 'Server stopped before the run finished', finishedAt: new Date().toISOString() }
