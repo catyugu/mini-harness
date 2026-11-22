@@ -1,16 +1,67 @@
 import type { Settings } from '../src/config.js';
 import type { Bootstrap, ModelInfo } from './types.js';
 import { element, value, data, payload } from './api.js';
+import { closeOnBackdrop, fromMarkup } from './primitives.js';
+import { icon } from './icons.js';
+import type { FrontendApi } from './extensions.js';
 import { schemaFields, readPluginValues } from './settings-fields.js';
-import { populateProviders, populateModels } from './provider-manager.js';
-export function createSettingsNavigation() {
+import { modelSettingsPage, populateProviders, populateModels } from './provider-manager.js';
+export function mountSettings(api: FrontendApi) {
+  const panel = fromMarkup<HTMLDialogElement>(`
+  <dialog id="settingsPanel" class="settings-panel" aria-labelledby="settingsTitle">
+    <div class="settings-header">
+      <h2 id="settingsTitle">Settings</h2>
+      <button id="settingsClose" class="icon-button" type="button" aria-label="Close settings" data-icon="close"></button>
+    </div>
+    <div id="settingsBody" class="settings-body">
+      <nav id="settingsNav" class="settings-nav" aria-label="Settings sections"></nav>
+      <form id="settingsForm">
+        <button id="settingsBack" class="link-button settings-back" type="button">← All settings</button>
+        <div id="settingsSections" class="settings-scroll">
+          <section>
+            <h3>Agent</h3>
+            <div class="setting-columns">
+              <div><label for="maxDepth">Maximum child depth</label><input id="maxDepth" type="number" min="0" max="8" required></div>
+              <div><label for="maxParallel">Parallel children</label><input id="maxParallel" type="number" min="1" max="16" required></div>
+            </div>
+            <label for="childProvider">Child provider</label><input id="childProvider" placeholder="Inherit parent">
+            <label for="childModel">Child model</label><input id="childModel" placeholder="Inherit parent">
+          </section>
+          <section><h3>Plugins</h3><div id="pluginSettings"></div><div id="installPluginSettings"></div></section>
+          <section>
+            <h3>Appearance</h3>
+            <label for="theme">Theme</label>
+            <select id="theme"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select>
+          </section>
+          <section>
+            <h3>Execution policy</h3>
+            <p id="isolationStatus" class="hint"></p>
+            <label for="sandboxMode">Shell policy</label>
+            <select id="sandboxMode"><option value="isolated">Isolated (Linux)</option><option value="host">Trusted host</option></select>
+            <label for="timeout">Timeout (seconds)</label><input id="timeout" type="number" min="1" max="300" required>
+          </section>
+          <section id="extensionSettings" hidden><h3>Extensions</h3><div id="settingsExtensions"></div></section>
+        </div>
+        <footer class="settings-footer">
+          <p id="settingsStatus" class="hint" role="status"></p>
+          <button id="saveSettings" class="primary" type="submit">Save settings</button>
+        </footer>
+      </form>
+    </div>
+  </dialog>`);
+  panel.querySelector('#settingsSections').prepend(modelSettingsPage());
+  api.mount('dialogs', panel);
+  closeOnBackdrop(panel);
+  return createSettingsNavigation(api);
+}
+
+function createSettingsNavigation(api: FrontendApi) {
   const panel = element<'dialog'>('settingsPanel');
   const body = element('settingsBody'), nav = element('settingsNav');
   const sections = element('settingsSections'), form = element<'form'>('settingsForm');
   const legacy = element('extensionSettings');
   const navButtons = new Map<HTMLElement, HTMLButtonElement>();
   let selected: HTMLElement;
-  let pointerOnBackdrop = false;
 
   function show(section: HTMLElement, enter = true) {
     selected = section;
@@ -22,11 +73,12 @@ export function createSettingsNavigation() {
     sections.scrollTop = 0;
   }
 
+  const pageIcons = { Model: 'model', Agent: 'skills', Plugins: 'plugin', Appearance: 'theme', 'Execution policy': 'terminal' } as const;
   function add(section: HTMLElement, title: string) {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'link-button';
-    button.textContent = title;
+    button.append(icon(pageIcons[title] ?? 'plugin'), document.createTextNode(title));
     button.onclick = () => {
       show(section);
       if (matchMedia('(max-width: 560px)').matches) element('settingsBack').focus();
@@ -50,7 +102,9 @@ export function createSettingsNavigation() {
     legacyButton.hidden = !element('settingsExtensions').childElementCount;
     if (legacyButton.hidden && selected === legacy) show(sections.querySelector('section'), false);
   };
-  new MutationObserver(updateLegacy).observe(element('settingsExtensions'), { childList: true });
+  const observer = new MutationObserver(updateLegacy);
+  observer.observe(element('settingsExtensions'), { childList: true });
+  api.onDispose(() => observer.disconnect());
   updateLegacy();
   show(sections.querySelector('section'), false);
 
@@ -62,14 +116,6 @@ export function createSettingsNavigation() {
     const page = [...navButtons.keys()].find((section) => section.contains(event.target as Node));
     if (page && page !== selected && !form.querySelector(':invalid')?.closest('section:not([hidden])')) show(page);
   }, true);
-  const outside = (event: MouseEvent) => {
-    const bounds = panel.getBoundingClientRect();
-    return event.target === panel && (event.clientX < bounds.left || event.clientX >= bounds.right ||
-      event.clientY < bounds.top || event.clientY >= bounds.bottom);
-  };
-  panel.addEventListener('pointerdown', (event) => { pointerOnBackdrop = outside(event); });
-  panel.addEventListener('click', (event) => { if (pointerOnBackdrop && outside(event)) panel.close(); });
-
   return {
     open(detail = false) {
       show(sections.querySelector('section'), detail);
@@ -85,7 +131,7 @@ export function createSettingsNavigation() {
   };
 }
 
-export function createSettings(getBootstrap: () => Bootstrap, applySettings: (settings: Settings) => void, refreshBootstrap: () => Promise<void>, closeDrawer: () => void, afterSave: () => Promise<void>, open: () => void) {
+export function createSettings(getBootstrap: () => Bootstrap, applySettings: (settings: Settings) => void, refreshBootstrap: () => Promise<void>, closeDrawer: () => void, afterSave: () => Promise<void>, open: () => void, renderProviders: () => void) {
 const settingsPanel = element<'dialog'>('settingsPanel'), settingsStatus = element('settingsStatus');
 function fillSettings() {
   const bootstrap = getBootstrap();
@@ -150,6 +196,7 @@ function fillSettings() {
     return group;
   }));
   credentialStatus();
+  renderProviders();
   settingsStatus.textContent = '';
 }
 

@@ -61,9 +61,9 @@ export function schemaFields(plugin: string, schema: Record<string, any>, values
   return group;
 }
 
-export function readPluginValues(current: Record<string, Record<string, unknown>>) {
+export function readPluginValues(current: Record<string, Record<string, unknown>>, container: HTMLElement = element('pluginSettings')) {
   const config = structuredClone(current);
-  for (const field of element('pluginSettings').querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('[data-plugin]')) {
+  for (const field of container.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('[data-plugin]')) {
     if (field.matches(':disabled')) continue;
     const path: string[] = JSON.parse(field.dataset.path);
     const kind = field.dataset.kind;

@@ -1,23 +1,18 @@
-import type { FrontendApi } from './extensions.js';
-import { icon } from './icons.js';
-import { data } from './api.js';
+import type { FrontendApi, FrontendSetup, Suggestion } from '../extensions.js';
+import { icon, fileLabel } from '../icons.js';
 
 interface FileEntry { name: string; directory: boolean }
-export async function readDirectory(path: string) {
-  const entries = await data<FileEntry[]>('/files/tree?path=' + encodeURIComponent(path));
+async function readDirectory(api: FrontendApi, path: string, signal?: AbortSignal) {
+  const entries = await api.request<FileEntry[]>('/files/tree?path=' + encodeURIComponent(path), { signal });
   return entries.sort((a, b) => Number(b.directory) - Number(a.directory)).map(({ name, directory }) => ({
     name, directory, path: path === '.' ? name : path + '/' + name
   }));
 }
 
-export function fileLabel(node: HTMLElement, name: string, kind: 'file' | 'folder' | 'folder-open') {
-  const label = document.createElement('span');
-  label.textContent = name;
-  node.append(icon(kind), label);
-}
-
-export function fileInspector(api: FrontendApi, changed: () => string[]) {
-  const button = document.createElement('button'); button.type = 'button'; button.className = 'small-button'; button.append(icon('files'), document.createTextNode(' Workspace files'));
+function fileInspector(api: FrontendApi, changed: () => string[]) {
+  const button = document.createElement('button'); button.type = 'button'; button.className = 'nav-action'; button.setAttribute('aria-label', 'Workspace files');
+  const label = document.createElement('span'); label.className = 'nav-label'; label.textContent = 'Workspace files';
+  button.append(icon('files'), label);
   const root = document.createElement('section');
   let disposed = false, request = 0;
   api.onDispose(() => { disposed = true; });
@@ -43,7 +38,7 @@ export function fileInspector(api: FrontendApi, changed: () => string[]) {
   };
   const tree = async (path = '.') => {
     const list = document.createElement('div'); list.className = 'file-tree';
-    for (const entry of await readDirectory(path)) {
+    for (const entry of await readDirectory(api, path)) {
       if (entry.directory) {
         const details = document.createElement('details'), summary = document.createElement('summary');
         const label = document.createElement('span');
@@ -89,3 +84,50 @@ export function fileInspector(api: FrontendApi, changed: () => string[]) {
   const tab = document.createElement('button'); tab.type = 'button'; tab.className = 'link-button'; tab.textContent = 'Files'; tab.onclick = () => void show(); api.mount('inspector', tab);
   api.onDispose(() => root.remove());
 }
+
+const setup: FrontendSetup = (api, services) => {
+  fileInspector(api, services.changedFiles);
+  api.completion('@', async ({ query, signal, show, replace }) => {
+    if (query.startsWith('"')) return;
+    const reference = (path: string) => replace('@' + JSON.stringify(path));
+    if (query) {
+      await new Promise<void>((resolve) => {
+        if (signal.aborted) return resolve();
+        const finish = () => { clearTimeout(timer); signal.removeEventListener('abort', finish); resolve(); };
+        const timer = setTimeout(finish, 120);
+        signal.addEventListener('abort', finish, { once: true });
+      });
+      if (signal.aborted) return;
+      const paths = await api.request<string[]>('/files/search?q=' + encodeURIComponent(query), { signal });
+      show(paths.map((path) => ({ label: path, icon: 'file', run: () => reference(path) })), 'No matching files.');
+      return;
+    }
+    const listing = new Map<string, Awaited<ReturnType<typeof readDirectory>>>();
+    const open = new Set<string>();
+    const loading = new Set<string>();
+    const options = (path: string, depth = 0): Suggestion[] => (listing.get(path) ?? []).flatMap<Suggestion>((entry) => {
+      if (!entry.directory) return [{ label: entry.name, icon: 'file', depth, run: () => reference(entry.path) }];
+      const expanded = open.has(entry.path);
+      const row: Suggestion = { label: entry.name, icon: expanded ? 'folder-open' : 'folder', expanded, depth, run: (complete) => {
+        if (complete) { reference(entry.path + '/'); return; }
+        if (loading.has(entry.path)) return;
+        if (expanded) { open.delete(entry.path); draw(); }
+        else void expand(entry.path).catch((error) => { if (!signal.aborted) services.report(error); });
+      } };
+      return expanded ? [row, {
+        label: 'Reference ' + entry.name + '/', icon: 'folder', depth: depth + 1, run: () => reference(entry.path + '/')
+      }, ...options(entry.path, depth + 1)] : [row];
+    });
+    const draw = () => show(options('.'), 'This directory is empty.');
+    const expand = async (path: string) => {
+      loading.add(path);
+      try {
+        if (!listing.has(path)) listing.set(path, await readDirectory(api, path, signal));
+        open.add(path);
+        draw();
+      } finally { loading.delete(path); }
+    };
+    await expand('.');
+  });
+};
+export default setup;

@@ -2,6 +2,12 @@ const paths = {
   menu: 'M4 6h16M4 12h16M4 18h16', close: 'm6 6 12 12M6 18 18 6', plus: 'M12 5v14M5 12h14',
   send: 'm6 12 6-6 6 6M12 6v14', stop: 'M6 6h12v12H6z',
   settings: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2',
+  plugin: 'M5 8H8V5a2 2 0 1 1 4 0v3h5v4h2a2 2 0 0 1 0 4h-2v4h-5v-2a2 2 0 0 0-4 0v2H5z',
+  model: 'M6 6h12v12H6zM9 9h6v6H9zM9 3v3m6-3v3M9 18v3m6-3v3M3 9h3m-3 6h3m12-6h3m-3 6h3',
+  theme: 'M12 3a9 9 0 1 0 9 9A7 7 0 0 1 12 3z',
+  delegate: 'M12 3v6M5 14v-2h14v2M5 14a3 3 0 1 0 0 6 3 3 0 0 0 0-6Zm14 0a3 3 0 1 0 0 6 3 3 0 0 0 0-6ZM10 2h4v5h-4z',
+  terminal: 'M3 5h18v14H3zM7 9l3 3-3 3m6 0h4',
+  search: 'M16 10a6 6 0 1 0-12 0 6 6 0 0 0 12 0m-2 5 5 5',
   files: 'M3 7h7l2-3h9v16H3z',
   file: 'M6 3h8l4 4v14H6zM14 3v5h4',
   folder: 'M3 6h7l2 2h9v12H3z',
@@ -19,4 +25,10 @@ export function icon(name: keyof typeof paths) {
 }
 export function hydrateIcons() {
   for (const node of document.querySelectorAll<HTMLElement>('[data-icon]')) node.replaceChildren(icon(node.dataset.icon as keyof typeof paths));
+}
+
+export function fileLabel(node: HTMLElement, name: string, kind: 'file' | 'folder' | 'folder-open') {
+  const label = document.createElement('span');
+  label.textContent = name;
+  node.append(icon(kind), label);
 }
