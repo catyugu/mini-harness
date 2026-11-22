@@ -10,7 +10,7 @@ import { settingsPlugin } from '../ui/settings.js';
 import { workspacePlugin } from '../ui/workspaces.js';
 import { modelPlugin } from '../ui/provider-manager.js';
 import { catalogPlugin } from '../ui/plugin-manager.js';
-import { hydrateIcons } from '../ui/icons.js';
+import { hydrateIcons } from '../ui/components/icons.js';
 import type { Bootstrap } from '../types.js';
 
 declare module 'cordis' {
