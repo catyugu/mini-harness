@@ -27,7 +27,9 @@ async function checkPackage() {
   const mock = await createMockProvider();
   const { root, paths } = createFixturePaths(mock.url);
   const installed = join(work, 'install');
-  const env = { ...process.env, MINI_HARNESS_HOME: paths.home };
+  const userHome = join(work, 'user');
+  await mkdir(userHome);
+  const env = { ...process.env, HOME: userHome, USERPROFILE: userHome, MINI_HARNESS_HOME: paths.home };
   let started = false;
   const cli = (...args: string[]) => npm(['exec', '--offline', '--', 'mini-harness', ...args], { cwd: installed, env });
   try {
@@ -63,13 +65,13 @@ async function checkPackage() {
     assert.ok(info);
     const headers = { Authorization: 'Bearer ' + info.token, 'Content-Type': 'application/json' };
     const get = (path: string) => fetch(info.url + path, { headers });
-    for (const asset of ['/', '/app.js', '/markdown.js', '/vendor/marked.js', '/vendor/purify.js', '/logo.svg', '/manifest.webmanifest', '/style.css', '/icon-192.png', '/icon-512.png', '/favicon.ico']) {
+    for (const asset of ['/', '/app.js', '/markdown.js', '/vendor/marked.js', '/vendor/purify.js', '/logo.svg', '/manifest.webmanifest', '/style.css', '/styles/tokens.css', '/styles/components.css', '/session-projection.js', '/contributions.js', '/theme.js', '/icon-192.png', '/icon-512.png', '/favicon.ico']) {
       const response = await get(asset);
       assert.equal(response.status, 200, asset);
       await response.arrayBuffer();
     }
     const bootstrap = await (await get('/api/bootstrap')).json();
-    assert.deepEqual(bootstrap.plugins.map(({ id }) => id), ['files', 'skills', 'subagents', 'shell']);
+    assert.deepEqual(bootstrap.plugins.map(({ id }) => id), ['files', 'skills', 'subagents', 'shell', 'todos']);
     const item = await (await fetch(info.url + '/api/sessions', { method: 'POST', headers, body: '{}' })).json();
     const url = info.url + '/api/sessions/' + item.id;
     const startedRun = await fetch(url + '/runs', { method: 'POST', headers, body: JSON.stringify({ message: 'Pack smoke test' }) });

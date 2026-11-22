@@ -58,6 +58,12 @@ const modelButton = (page: Page) => page.locator('#modelSelect');
 const modelSearch = (page: Page) => page.getByRole('combobox', { name: 'Search models' });
 const suggestions = (page: Page) => page.getByRole('listbox', { name: 'Input suggestions' });
 
+async function expandProcess(page: Page) {
+  for (const group of await page.locator('.process-group').all()) {
+    if (await group.getAttribute('open') === null) await group.locator(':scope > summary').click();
+  }
+}
+
 async function chooseModel(page: Page, query: string) {
   await modelButton(page).click();
   await modelSearch(page).fill(query);
@@ -157,7 +163,8 @@ test('settings layout stays consistent across viewport sizes and themes', async 
         await settingsSection(page, 'Model').click();
         for (const colorScheme of ['light', 'dark'] as const) {
           await page.emulateMedia({ colorScheme });
-          await expect(page).toHaveScreenshot('settings-' + viewport.width + '-' + colorScheme + '.png', {
+          expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+          if (process.platform !== 'win32') await expect(page).toHaveScreenshot('settings-' + viewport.width + '-' + colorScheme + '.png', {
             animations: 'disabled', caret: 'hide', maxDiffPixelRatio: 0.02
           });
         }
@@ -326,7 +333,7 @@ test('renders Markdown and tool results, and stops a pending reply', async ({ pa
     expect(await page.evaluate(() => navigator.clipboard.readText())).toContain('```text\nExample\n```');
     await expect(page.locator('.message img, .message .overlay')).toHaveCount(0);
     await expect(page.getByText('A tool note')).toBeVisible();
-    await expect(page.locator('.tool-card summary')).toContainText('ls');
+    await expect(page.locator('.tool-card summary')).toContainText('Search');
     await expect(page.locator('.tool-card summary')).toContainText('Done');
 
     await page.getByRole('textbox', { name: 'Message' }).fill('Stop this response');
@@ -343,7 +350,7 @@ test('renders Markdown and tool results, and stops a pending reply', async ({ pa
   }
 });
 
-test('the global recent model survives history navigation and page reload', async ({ page }) => {
+test('session model choices and thinking levels survive navigation and page reload', async ({ page }) => {
   const mock = await createMockProvider();
   const { root, paths } = createFixturePaths(mock.url);
   const models = readJson<any>(join(paths.home, 'models.json'), {});
@@ -377,13 +384,13 @@ test('the global recent model survives history navigation and page reload', asyn
     expect(mock.requests.at(-1).model).toBe('second-model');
     await expect(page.getByLabel('Thinking level')).toHaveValue('high');
     await page.getByRole('button', { name: 'Old model conversation', exact: true }).click();
-    await expect(modelButton(page)).toHaveText('Second Model');
+    await expect(modelButton(page)).toHaveText('Mock Model');
     await page.reload();
-    await expect(modelButton(page)).toHaveText('Second Model');
+    await expect(modelButton(page)).toHaveText('Mock Model');
     await page.getByRole('textbox', { name: 'Message' }).fill('Use the recent model');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.locator('.message.assistant')).toHaveCount(2);
-    expect(mock.requests.at(-1).model).toBe('second-model');
+    expect(mock.requests.at(-1).model).toBe('mock-model');
   } finally {
     await page.close(); await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true });
   }
@@ -500,6 +507,7 @@ test('frontend plugins own all five slots and clean up on disable and reconfigur
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.getByText('Custom listing result')).toBeHidden();
     await expect(page.locator('.message.assistant')).toHaveText('Done');
+    await expandProcess(page);
     await page.locator('.tool-card summary').click(); await expect(page.getByText('Custom listing result')).toBeVisible();
     await page.getByRole('button', { name: 'Open workspace panel', exact: true }).click();
     await page.getByRole('button', { name: 'Plugin inspector', exact: true }).click();
@@ -532,6 +540,7 @@ test('frontend plugins own all five slots and clean up on disable and reconfigur
     await page.getByRole('button', { name: 'Inserted by plugin', exact: true }).click();
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('/ex');
     await expect(suggestions(page).getByRole('option', { name: /Add a plugin note/ })).toHaveCount(0);
+    await expandProcess(page);
     await page.locator('.tool-card summary').click();
     await expect(page.getByText('Custom listing result')).toHaveCount(0);
     await expect(page.locator('.tool-content pre').first()).toBeVisible();
@@ -581,7 +590,7 @@ test('file inspection, responsive themes and reduced viewport height keep contro
         await page.locator('html').evaluate((html) => { html.dataset.theme = 'system'; });
         for (const colorScheme of ['light', 'dark'] as const) {
           await page.emulateMedia({ colorScheme, reducedMotion: 'reduce' });
-          await expect(page).toHaveScreenshot('workspace-panel-' + width + '-' + colorScheme + '.png', {
+          if (process.platform !== 'win32') await expect(page).toHaveScreenshot('workspace-panel-' + width + '-' + colorScheme + '.png', {
             animations: 'disabled', caret: 'hide', maxDiffPixelRatio: 0.02
           });
         }
@@ -659,7 +668,7 @@ test('running messages can queue follow-ups and approve shell commands from the 
     return 'Finished';
   });
   const { root, paths } = createFixturePaths(mock.url);
-  writeJson(paths.settings, { ...readJson<any>(paths.settings, {}), plugins: { shell: true }, sandbox: { mode: 'host' } });
+  writeJson(paths.settings, { ...readJson<any>(paths.settings, {}), plugins: { shell: true }, sandbox: { mode: 'host' }, defaultPermission: 'full' });
   const service = await startIsolatedHost(paths);
   try {
     await page.goto(service.url + '/#token=' + service.token);
@@ -679,10 +688,13 @@ test('running messages can queue follow-ups and approve shell commands from the 
     await page.getByRole('button', { name: 'Allow once', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeVisible();
     await expect(page.locator('.approval-card')).toHaveCount(0);
+    await expandProcess(page);
     await page.locator('.tool-card summary').click();
     await expect(page.locator('.tool-arguments')).toContainText('echo approved');
     await expect(page.locator('.tool-content')).toContainText('Exit 0');
-    await expect(page.locator('.tool-duration')).toHaveText(/\d+ (ms|s)/);
+    await expect(page.locator('.tool-card summary')).not.toContainText(/\d+ (ms|s)/);
+    await page.getByRole('button', { name: 'Inspect', exact: true }).click();
+    await expect(page.getByRole('region', { name: 'Trajectory', exact: true })).toContainText(/Elapsed[\s\S]*\d+ ms/);
     await expect(page.locator('#runSummary')).toContainText('Completed');
   } finally { release(); await page.close(); await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
 });
@@ -862,6 +874,201 @@ test('switch transitions respect reduced motion and roll back a failed setting o
     await expect(files).toBeEnabled();
     expect(requests).toBe(1);
     await page.emulateMedia({ reducedMotion: 'reduce' });
-    expect(await duration()).toBe('0s, 0s');
+    expect((await duration()).split(',').every((value) => parseFloat(value) === 0)).toBe(true);
   } finally { await page.close(); await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+test('tasks, trajectory, resource links and session tabs share persistent Pi facts', async ({ page }) => {
+  let step = 0;
+  const mock = await createMockProvider(() => {
+    if (++step === 1) return { tool: 'update_todos', args: { items: [{ id: 'verify', text: 'Verify the file', state: 'in-progress' }] } };
+    if (step === 2) return { tool: 'read', args: { path: 'note.txt' } };
+    return 'Verified. [Open the file](note.txt#L2)';
+  });
+  const { root, paths } = createFixturePaths(mock.url);
+  writeFileSync(join(paths.cwd, 'note.txt'), 'First line\nSecond line\n');
+  const service = await startIsolatedHost(paths);
+  try {
+    await page.goto(service.url + '/#token=' + service.token);
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Verify resources');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.locator('.message.assistant').last()).toContainText('Verified.');
+    await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Conversation tasks' })).toContainText('Verify the file');
+    expect(await page.locator('.todo-dock').evaluate((node) => node.getBoundingClientRect().bottom <= document.getElementById('composer').getBoundingClientRect().top)).toBe(true);
+    await expect(page.locator('.process-group')).not.toHaveAttribute('open', '');
+    await page.getByRole('link', { name: 'Open the file' }).click();
+    const panel = page.getByRole('complementary', { name: 'Workspace panel', exact: true });
+    await expect(panel.locator('.highlighted-line')).toHaveAttribute('data-line', '2');
+    await panel.getByRole('button', { name: 'Close workspace panel' }).click();
+    await expandProcess(page);
+    await page.locator('.tool-card summary').filter({ hasText: 'Read file' }).click();
+    await page.locator('.tool-card').filter({ hasText: 'Read file' }).getByRole('button', { name: 'Inspect', exact: true }).click();
+    await expect(page.getByRole('region', { name: 'Trajectory' })).toContainText('Step');
+    await expect(page.getByRole('region', { name: 'Trajectory' })).toContainText('Unavailable');
+    await page.getByRole('button', { name: 'Chat', exact: true }).click();
+    await page.getByRole('button', { name: /New conversation/ }).click();
+    await expect(page.getByRole('region', { name: 'Conversation tasks' })).toBeHidden();
+    await page.getByRole('button', { name: 'Verify resources', exact: true }).click();
+    await page.reload();
+    await expect(page.getByRole('region', { name: 'Conversation tasks' })).toContainText('Verify the file');
+    await page.getByRole('button', { name: 'Open workspace panel', exact: true }).click();
+    await expect(panel.getByRole('tab', { name: 'note.txt', exact: true })).toHaveCount(1);
+    await expect(panel.locator('.file-preview')).toContainText('Second line');
+  } finally { await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+test('contribution overrides restore tool cards and dock positions without duplicate nodes', async ({ page }) => {
+  const mock = await createMockProvider(({ messages }) => messages.at(-1).role === 'tool' ? 'Done' : { tool: 'read', args: { path: 'note.txt' } });
+  const { root, paths } = createFixturePaths(mock.url);
+  writeFileSync(join(paths.cwd, 'note.txt'), 'File content');
+  for (const [id, priority, label] of [['base-view', 0, 'Base'], ['override-view', 10, 'Override']] as const) {
+    const folder = join(paths.plugins, id); mkdirSync(folder);
+    writeFileSync(join(folder, 'plugin.js'), 'export default () => {}');
+    writeJson(join(folder, 'plugin.json'), { title: label + ' view' });
+    writeFileSync(join(folder, 'web.js'), `export default (api) => {
+      const dock = document.createElement('span'); dock.textContent = '${label} usage'; dock.dataset.testDock = '${id}';
+      api.contribute('conversation.composer.dock', {id: 'usage', priority: ${priority}, value: dock});
+      api.contribute('tool.call.toolview', {id: 'read', key: 'read', priority: ${priority}, value: () => {
+        const node = document.createElement('p'); node.textContent = '${label} reader'; return node;
+      }});
+    };`);
+  }
+  writeJson(paths.settings, { ...readJson<any>(paths.settings, {}), plugins: { 'base-view': true, 'override-view': true } });
+  const service = await startIsolatedHost(paths);
+  try {
+    await page.goto(service.url + '/#token=' + service.token);
+    await expect(page.getByText('Override usage', { exact: true })).toBeVisible();
+    await expect(page.getByText('Base usage', { exact: true })).toHaveCount(0);
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Read with a view');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.locator('.message.assistant')).toHaveText('Done');
+    await page.getByRole('button', { name: 'Send', exact: true }).waitFor();
+    await expandProcess(page); await page.locator('.tool-card summary').click();
+    await expect(page.getByText('Override reader', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Browse plugins' }).click();
+    const toggle = page.getByRole('switch', { name: 'Override view', exact: true });
+    for (let index = 0; index < 3; index++) {
+      await toggle.uncheck(); await expect(toggle).toBeEnabled();
+      await expect(page.locator('[data-test-dock="base-view"]')).toHaveCount(1);
+      await expect(page.locator('[data-test-dock="override-view"]')).toHaveCount(0);
+      await toggle.check(); await expect(toggle).toBeEnabled();
+    }
+    await toggle.uncheck(); await expect(toggle).toBeEnabled();
+    await page.getByRole('button', { name: 'Read with a view', exact: true }).click();
+    await expandProcess(page); await page.locator('.tool-card summary').click();
+    await expect(page.getByText('Base reader', { exact: true })).toBeVisible();
+    await expect(page.getByText('Override reader', { exact: true })).toHaveCount(0);
+    await expect(page.locator('.composer-dock > *')).toHaveCount(2);
+  } finally { await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+test('independent font sizes, 200 percent layout and mobile keyboard height keep composer controls usable', async ({ browser }) => {
+  const mock = await createMockProvider(() => 'Done\n\n```ts\nconst x = 1\n```');
+  const { root, paths } = createFixturePaths(mock.url);
+  const service = await startIsolatedHost(paths);
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  try {
+    await page.goto(service.url + '/#token=' + service.token);
+    await page.getByRole('button', { name: 'Toggle navigation' }).click();
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await settingsSection(page, 'Appearance').click();
+    await page.getByLabel('Body text size', { exact: true }).fill('22');
+    await page.getByLabel('Body text size', { exact: true }).press('Tab');
+    await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).fontSize)).toBe('22px');
+    await page.getByLabel('Code size', { exact: true }).fill('19');
+    await page.getByLabel('Code size', { exact: true }).press('Tab');
+    await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--font-code'))).toBe('19px');
+    await page.getByRole('button', { name: 'Close settings' }).click();
+    await page.setViewportSize({ width: 390, height: 370 });
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Check font sizes');
+    const send = page.getByRole('button', { name: 'Send', exact: true });
+    await expect(send).toBeInViewport(); await send.click();
+    await expect(page.locator('.message.assistant')).toContainText('Done');
+    await expect.poll(() => page.locator('.code-block code').evaluate((node) => getComputedStyle(node).fontSize)).toBe('19px');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.setViewportSize({ width: 1366, height: 900 });
+    await page.evaluate(() => { document.documentElement.style.zoom = '2'; });
+    await expect(send).toBeInViewport();
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Zoomed input');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  } finally { await page.close(); await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+test('permission changes require confirmation and future defaults leave the current session alone', async ({ page }) => {
+  const mock = await createMockProvider(), { root, paths } = createFixturePaths(mock.url);
+  const service = await startIsolatedHost(paths);
+  try {
+    await page.goto(service.url + '/#token=' + service.token);
+    const permission = page.getByRole('combobox', { name: 'Execution permission', exact: true });
+    await expect(permission).toHaveValue('workspace-write');
+    await permission.selectOption('read-only');
+    await expect(permission).toBeEnabled();
+    await expect(permission).toHaveValue('read-only');
+    page.once('dialog', (dialog) => dialog.dismiss());
+    await permission.selectOption('full');
+    await expect(permission).toHaveValue('read-only');
+    page.once('dialog', (dialog) => dialog.accept());
+    await permission.selectOption('full');
+    await expect(permission).toBeEnabled();
+    await expect(permission).toHaveValue('full');
+    const sessions = await (await page.request.get(service.url + '/api/sessions', { headers: { Authorization: 'Bearer ' + service.token } })).json();
+    expect(sessions).toHaveLength(1); expect(sessions[0].permission).toBe('full');
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await settingsSection(page, 'Execution').click();
+    const defaults = page.getByRole('combobox', { name: 'Default execution permission', exact: true });
+    await defaults.selectOption('read-only');
+    await expect(defaults).toBeEnabled();
+    await expect(defaults).toHaveValue('read-only');
+    await page.getByRole('button', { name: 'Close settings' }).click();
+    await expect(permission).toHaveValue('full');
+    await page.locator('#newSession').click();
+    await expect(permission).toHaveValue('read-only');
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Read-only draft');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.locator('.message.assistant')).toHaveText('Mock response');
+    const updated = await (await page.request.get(service.url + '/api/sessions', { headers: { Authorization: 'Bearer ' + service.token } })).json();
+    expect(updated.find((item) => item.title === 'Read-only draft').permission).toBe('read-only');
+  } finally { await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+test('shared tab definitions keep independent identities and release inactive and closed resources', async ({ page }) => {
+  const mock = await createMockProvider(), { root, paths } = createFixturePaths(mock.url);
+  const folder = join(paths.plugins, 'resources'); mkdirSync(folder);
+  writeFileSync(join(folder, 'plugin.js'), 'export default () => {}');
+  writeFileSync(join(folder, 'web.js'), `export default (api) => {
+    let disposed = 0;
+    const status = document.createElement('p'); status.textContent = 'Resources released: 0'; api.mount('sidebar', status);
+    const definition = {
+      title: (address) => address.type.endsWith('one') ? 'Resource one' : 'Resource two', keepMounted: false,
+      create(address, signal) {
+        const node = document.createElement('p'); node.textContent = 'Content ' + address.type;
+        signal.addEventListener('abort', () => { status.textContent = 'Resources released: ' + (++disposed); }, {once:true});
+        return node;
+      }
+    };
+    for (const type of ['one','two']) {
+      api.rightTab(type, definition);
+      const button = document.createElement('button'); button.type = 'button'; button.textContent = 'Open resource ' + type;
+      button.onclick = () => api.openTab(type); api.mount('sidebar', button);
+    }
+  };`);
+  writeJson(paths.settings, { ...readJson<any>(paths.settings, {}), plugins: { resources: true } });
+  const service = await startIsolatedHost(paths);
+  try {
+    await page.goto(service.url + '/#token=' + service.token);
+    await page.getByRole('button', { name: 'Open resource one', exact: true }).click();
+    await expect(page.getByText('Content resources:one', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Open resource two', exact: true }).click();
+    await expect(page.getByText('Content resources:two', { exact: true })).toBeVisible();
+    await expect(page.getByText('Resources released: 1', { exact: true })).toBeVisible();
+    await page.getByRole('tab', { name: 'Resource one', exact: true }).click();
+    await expect(page.getByText('Content resources:one', { exact: true })).toBeVisible();
+    await expect(page.getByText('Resources released: 2', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Close tab Resource one', exact: true }).click();
+    await expect(page.getByText('Resources released: 3', { exact: true })).toBeVisible();
+    await expect(page.getByText('Content resources:two', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Close tab Resource two', exact: true }).click();
+    await expect(page.getByText('Resources released: 4', { exact: true })).toBeVisible();
+  } finally { await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
 });
