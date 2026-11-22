@@ -3,7 +3,7 @@ import type { TabAddress, TabScope } from '../right-tabs.js';
 import { icon } from '../icons.js';
 import { button as control, iconButton } from '../primitives.js';
 import { workspaceRoute, wait } from '../api.js';
-import { renderMarkdown } from '../markdown.js';
+import { renderMarkdown } from '../ui/markdown.js';
 
 interface FileEntry { name: string; directory: boolean }
 interface FileChange { path: string; status: string }

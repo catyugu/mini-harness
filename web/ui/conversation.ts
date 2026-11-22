@@ -1,15 +1,15 @@
-import type { Attachment } from '../src/input.js';
-import type { Conversation, ModelChoice } from '../src/registry.js';
-import type { MessageContent, RunEvent, RunInfo } from '../src/protocol.js';
-import type { ConversationView, ThinkingLevel } from './types.js';
-import { scopedElements, payload, workspaceRoute } from './api.js';
-import { exportSessions, isRunning, observeRun, readConversation, type BrowserState } from './client.js';
+import type { Attachment } from '../../src/input.js';
+import type { Conversation, ModelChoice } from '../../src/registry.js';
+import type { MessageContent, RunEvent, RunInfo } from '../../src/protocol.js';
+import type { ConversationView, ThinkingLevel } from '../types.js';
+import { scopedElements, payload, workspaceRoute } from '../api.js';
+import { exportSessions, isRunning, observeRun, readConversation, type BrowserState } from '../client.js';
 import { createMessageView } from './messages.js';
 import { CommandRegistry, type ComposerCommand } from './commands.js';
 import { createComposer } from './composer.js';
 import { createModelPicker } from './model-picker.js';
-import type { FrontendApi, FrontendHost, DraftMode } from './extensions.js';
-import { fromMarkup } from './primitives.js';
+import type { FrontendApi, FrontendHost, DraftMode } from '../extensions.js';
+import { fromMarkup } from '../primitives.js';
 
 type Queue = ConversationView['queue'];
 
