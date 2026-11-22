@@ -73,8 +73,9 @@ export class Runs {
       const running = { ...info, sequence: info.sequence + 1 };
       this.registry.update(id, { run: running });
       publish({ type: 'run', run: running });
-      return this.pi.prompt(record, prepared.text, publish, cancellation, choice, prepared.images, thinkingLevel, (path) => {
-        info.changedFiles = [...new Set([...(info.changedFiles ?? []), path])];
+      return this.pi.prompt(record, prepared.text, publish, {
+        signal: cancellation, choice, images: prepared.images, thinkingLevel,
+        changed: (path) => { info.changedFiles = [...new Set([...(info.changedFiles ?? []), path])]; }
       });
     };
     const activity: Activity = { controller, events };
@@ -103,7 +104,7 @@ export class Runs {
     return this.launch(id, prompt, emit, options).done;
   }
 
-  startRun(id: string, prompt: string, model?: ModelChoice, attachments?: Attachment[], thinkingLevel?: ThinkingLevel) {
+  startRun(id: string, prompt: string, { model, attachments, thinkingLevel }: Pick<RunOptions, 'model' | 'attachments' | 'thinkingLevel'> = {}) {
     return { ...this.launch(id, prompt, undefined, { model, attachments, thinkingLevel }).info };
   }
 

@@ -58,7 +58,7 @@ export async function sessionRoutes(runtime: SessionRouteHost, req: IncomingMess
     if (match[2] === 'runs' && req.method === 'GET') return json(res, 200, { run: runtime.runs.info(id) ?? null });
     if (match[2] === 'runs' && req.method === 'POST') {
       const input = await requestBody(req, 20 * 1024 * 1024);
-      return json(res, 202, runtime.runs.startRun(id, input.message, input.model, input.attachments, input.thinkingLevel));
+      return json(res, 202, runtime.runs.startRun(id, input.message, input));
     }
     if (match[2] === 'events' && req.method === 'GET') {
       await runtime.pi.open(id);
@@ -67,7 +67,7 @@ export async function sessionRoutes(runtime: SessionRouteHost, req: IncomingMess
     }
     if (match[2] === 'messages' && req.method === 'POST') {
       const input = await requestBody(req, 20 * 1024 * 1024);
-      const run = runtime.runs.startRun(id, input.message, input.model, input.attachments, input.thinkingLevel);
+      const run = runtime.runs.startRun(id, input.message, input);
       streamRun(runtime, res, id, run.id, 0);
       return;
     }

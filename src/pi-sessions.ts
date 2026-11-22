@@ -208,8 +208,9 @@ export class PiSessions {
     });
   }
 
-  async prompt(record: Conversation, prompt: string,
-      emit: (event: StreamEvent) => void, signal: AbortSignal, choice?: ModelChoice, images: ImageInput[] = [], thinkingLevel?: ThinkingLevel, changed?: (path: string) => void) {
+  async prompt(record: Conversation, prompt: string, emit: (event: StreamEvent) => void, {
+    signal, choice, images = [], thinkingLevel, changed
+  }: { signal: AbortSignal; choice?: ModelChoice; images?: ImageInput[]; thinkingLevel?: ThinkingLevel; changed?: (path: string) => void }) {
     const { id } = record;
     signal.throwIfAborted();
     const session = await this.open(id);
