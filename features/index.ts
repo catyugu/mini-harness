@@ -38,5 +38,5 @@ export const system: BuiltinPlugin[] = [
   { id: 'core-models', title: 'Models', description: 'Pi model endpoints and credential management', requires: ['core-operations'], inject: ['harnessPi', 'harnessOperations', 'harnessUpdateSettings'], setup: modelServices },
   { id: 'core-settings-api', title: 'Settings', description: 'Configuration API', requires: ['core-operations'], inject: ['harnessUpdateSettings'], setup: settingsRoutes },
   { id: 'core-plugins-api', title: 'Plugins', description: 'Installed plugin API', requires: ['core-operations'], inject: ['harnessPluginCatalog'], setup: pluginRoutes },
-  { id: 'core-ui-api', title: 'Web UI', description: 'Bootstrap composition', requires: ['core-models', 'core-plugins-api'], inject: ['harnessProviderCatalog', 'harnessPluginCatalog', 'harnessRegistry', 'harnessPi', 'harnessSettings'], setup: uiRoutes }
+  { id: 'core-ui-api', title: 'Web UI', description: 'Bootstrap composition', requires: ['core-models', 'core-plugins-api'], inject: ['harnessProviderCatalog', 'harnessPluginCatalog', 'harnessNavigation', 'harnessPi', 'harnessSettings'], setup: uiRoutes }
 ];

@@ -112,6 +112,7 @@ declare module 'cordis' {
   interface Context {
     harnessWorkspaces: WorkspacePort;
     harnessRegistry: SessionStore;
+    harnessNavigation: () => { workspaces: WorkspaceRecord[]; sessions: (Conversation & { waitingApproval: boolean })[] };
     harnessPi: AgentPort;
     harnessRuns: RunPort;
     harnessOperations: ConversationPort;

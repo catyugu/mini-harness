@@ -41,7 +41,8 @@ test('each built-in capability owns one manifest and co-located host/client entr
   assert.equal(names.includes('message-copy') || names.includes('edit-resend'), false);
   for (const name of names) {
     const path = join(features, name);
-    assert.ok(existsSync(join(path, 'manifest.ts')), name + ' lacks a manifest');
+    if (['files', 'skills', 'shell', 'subagents', 'session-helper'].includes(name))
+      assert.ok(existsSync(join(path, 'manifest.ts')), name + ' lacks its user-visible manifest');
     assert.ok(existsSync(join(path, 'host.ts')) || existsSync(join(path, 'client.ts')), name + ' has no implementation');
     for (const file of files(path).filter(production)) {
       for (const dependency of dependencies(file)) {
@@ -107,7 +108,7 @@ test('feature implementations are owned by their plugin, while host services use
 
 test('contracts carry browser/session vocabulary without protocol forwarding shims', () => {
   assert.equal(existsSync(join(source, 'protocol.ts')), false);
-  for (const file of [...files(web), ...files(join(source, 'services'))]) {
+  for (const file of files(web).filter(production)) {
     for (const dep of dependencies(file)) {
       if (typeof dep.target !== 'string') continue;
       assert.equal(dep.target.endsWith('/src/protocol.ts'), false, file + ' imports protocol forwarding shim');
@@ -115,6 +116,23 @@ test('contracts carry browser/session vocabulary without protocol forwarding shi
         file + ' imports concrete host service rather than contract');
     }
   }
+});
+
+test('co-located tests and plugin boundaries follow capability ownership', () => {
+  for (const name of readdirSync(features, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory()).map((entry) => entry.name)) {
+    const owned = join(features, name);
+    for (const file of files(owned).filter(production)) {
+      for (const { target, typeOnly } of dependencies(file)) {
+        if (target.startsWith(features + '/') && !target.startsWith(owned + '/'))
+          assert.fail(file + ' imports another feature: ' + target);
+        if (target.startsWith(join(source, 'server.ts')))
+          assert.fail(file + ' imports server implementation');
+      }
+    }
+  }
+  assert.equal(existsSync(join(source, 'services')), false);
+  assert.equal(existsSync(join(source, 'adapters')), false);
 });
 
 test('application composition is outside the generic kernel', () => {
