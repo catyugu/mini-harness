@@ -28,7 +28,7 @@ Install reviewed ESM code in `~/.mini-harness/plugins/<id>/plugin.js`. IDs start
 }
 ```
 
-Dependencies must be enabled; cycles and missing dependencies reject the configuration before unloading anything. Built-in IDs are `files`, `skills`, `subagents` and `shell`.
+Dependencies must be enabled; cycles and missing dependencies reject the configuration before unloading anything. Built-in IDs are `files`, `skills`, `subagents`, `shell` and `session-helper`.
 
 The GUI renders strings, booleans, numbers, integers, enums and nested objects from the schema. Other values use JSON input. Use `title`, `description`, `default`, `required`, bounds and `additionalProperties` to describe the accepted configuration. Keep schemas self-contained; external references are unsupported. Defaults apply recursively to object properties, then TypeBox validates the resulting value. Store configuration in `settings.json` under `pluginConfig.<id>`; it is ordinary local configuration, so use Pi credential storage for model secrets.
 
@@ -168,13 +168,13 @@ The file, Skill and approval endpoints return 404 when their corresponding plugi
 
 ## Message action and composer extensions
 
-Browser-only plugins may contain only `web.js` (optionally `plugin.json`). They have no server tools or routes. The built-in `message-copy` and `edit-resend` capabilities demonstrate this extension boundary; both can be switched off separately.
+Browser-only local plugins may contain only `web.js` (optionally `plugin.json`). The built-in `session-helper` feature demonstrates a shared capability boundary: one manifest, one on/off switch and one Cordis lifecycle provide both Copy message and Edit & resend. Its backend registers the edit route, while both message actions are browser contributions.
 
 The browser API exposes `messageAction({ id, label, icon, order?, visible(context), run(context) })`. `context.message` contains the Pi entry ID and the unmodified message content; `context.rawText` contains the original text. `context.leafId` identifies the active Pi branch. The host owns button styling, placement, ordering, error rendering and cleanup. A plugin must not mutate message DOM or inspect private conversation components. Actions are removed automatically when its Cordis scope is disposed.
 
 Use `beginDraftMode({ title, text, submit(input) })` for a custom composer operation and `cancelDraftMode()` to leave it. The input contains text, attachments, chosen model and thinking level. An active mode intercepts the normal submit only while enabled. Disabling a plugin cancels its outstanding mode. The host owns the editor, cancel control and responsive layout.
 
-The `edit-resend` plugin submits to its authenticated route `POST /api/extensions/edit-resend/revise`, passing `sessionId`, `sourceEntryId`, `expectedLeafId`, `message` and optional send parameters. The host checks an optimistic Pi leaf token, navigates the AgentSession tree and starts a run. Earlier branches remain in Pi JSONL. This does **not** roll back files written to the workspace. Existing branch selection/navigation UX is a separate concern.
+The `session-helper` plugin submits to its authenticated route `POST /api/extensions/session-helper/revise`, passing `sessionId`, `sourceEntryId`, `expectedLeafId`, `message` and optional send parameters. The host checks an optimistic Pi leaf token, navigates the AgentSession tree and starts a run. Earlier branches remain in Pi JSONL. This does **not** roll back files written to the workspace. Existing branch selection/navigation UX is a separate concern.
 
 ## Co-located built-in capabilities
 

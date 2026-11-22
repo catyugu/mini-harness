@@ -35,6 +35,8 @@ test('each built-in capability owns one manifest and co-located host/client entr
   assert.equal(existsSync(join(source, 'builtins')), false);
   assert.equal(existsSync(join(web, 'builtins')), false);
   const names = readdirSync(features, { withFileTypes: true }).filter((dir) => dir.isDirectory()).map((dir) => dir.name);
+  assert.ok(names.includes('session-helper'));
+  assert.equal(names.includes('message-copy') || names.includes('edit-resend'), false);
   for (const name of names) {
     const path = join(features, name);
     assert.ok(existsSync(join(path, 'manifest.ts')), name + ' lacks a manifest');
