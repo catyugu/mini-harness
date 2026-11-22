@@ -3,7 +3,7 @@ import type { Conversation, ModelChoice } from '../src/registry.js';
 import type { RunEvent, RunInfo, ViewMessage } from '../src/protocol.js';
 import type { Bootstrap, ConversationView, ThinkingLevel } from './types.js';
 import { renderMarkdown, markdownSource } from './markdown.js';
-import { scopedElements, api as request, data, payload } from './api.js';
+import { scopedElements, api as request, data, payload, readEvents, workspaceRoute } from './api.js';
 import { createMessageView } from './messages.js';
 import { CommandRegistry, type ComposerCommand } from './commands.js';
 import { createComposer } from './composer.js';
@@ -15,9 +15,9 @@ interface ConversationServices {
   bootstrap(): Bootstrap;
   applySettings(settings: Settings): void;
   renderSessions(): void;
-  setActive(id: string | undefined): void;
-  syncSessions(): Promise<void>;
-  reveal(id: string | null): void;
+  setActive(item?: Conversation): void;
+  workspace(): string | undefined;
+  reveal(item: Conversation, workspace: boolean): void;
   addSession(item: Conversation): void;
   exportSessions(ids: string[]): Promise<void>;
   closeDrawer(): void;
@@ -131,7 +131,7 @@ export function conversationView(api: FrontendApi, options: ConversationServices
     setSending(isRunning(item?.run));
     showRunSummary(item?.run);
     active = item?.id;
-    options.setActive(active);
+    options.setActive(item);
     conversationModel = item?.model;
     conversationThinking = (item as ConversationView)?.thinkingLevel;
     changedFiles = item?.run?.changedFiles ?? [];
@@ -142,10 +142,8 @@ export function conversationView(api: FrontendApi, options: ConversationServices
         attachments: blocks.filter((b) => b.type === 'image').map((b) => ({ name: 'image', mimeType: b.mimeType, data: b.data })) });
     }
     element('queuedMessages').hidden = true;
-    if (options.bootstrap()) {
-      if (active) sessionStorage.setItem('mini-harness-active:' + options.bootstrap().workspace, active);
-      else sessionStorage.removeItem('mini-harness-active:' + options.bootstrap().workspace);
-    }
+    if (active) sessionStorage.setItem('mini-harness-active', active);
+    else sessionStorage.removeItem('mini-harness-active');
     updateModelControls();
     options.setTitle(item?.title ?? 'New conversation');
     messages.replaceChildren();
@@ -160,13 +158,13 @@ export function conversationView(api: FrontendApi, options: ConversationServices
     options.changed();
   }
 
-  async function activate(id: string) {
+  async function activate(id: string, revealWorkspace = true) {
     const request = ++navigation;
     pendingNavigation = true;
     try {
       const item = await data<ConversationView>('/sessions/' + id);
       if (request !== navigation) return;
-      options.reveal(item.parentId);
+      options.reveal(item, revealWorkspace);
       showConversation(item, item.messages);
       options.applySettings({ ...options.bootstrap().settings, model: item.selectedModel });
       if (isRunning(item.run)) void observe(item);
@@ -177,14 +175,16 @@ export function conversationView(api: FrontendApi, options: ConversationServices
   }
 
   async function createConversation() {
-    const item = await data<Conversation>('/sessions', payload('POST', {}));
+    const workspace = options.workspace();
+    if (!workspace) throw new Error('Add a workspace before starting a conversation.');
+    const item = await data<Conversation>(workspaceRoute(workspace, '/sessions'), payload('POST', {}));
     options.addSession(item);
     return item;
   }
 
   async function newSession() {
-    if (pendingNavigation) return;
     ++navigation;
+    pendingNavigation = false;
     showConversation();
     prompt.value = '';
     composerUi.clear();
@@ -198,22 +198,6 @@ export function conversationView(api: FrontendApi, options: ConversationServices
     return messages.scrollHeight - messages.clientHeight - messages.scrollTop < 96;
   }
 
-  async function readEvents(response: Response, accept: (event: RunEvent) => void) {
-    if (!response.body) throw new Error('No response stream');
-    const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
-    let buffer = '';
-    try {
-      for (;;) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += value;
-        const lines = buffer.split('\n');
-        buffer = lines.pop();
-        for (const line of lines) if (line) accept(JSON.parse(line));
-      }
-      if (buffer.trim()) accept(JSON.parse(buffer));
-    } finally { await reader.cancel().catch(() => {}); }
-  }
 
   function setSending(value: boolean) {
     sending = value;
@@ -225,6 +209,7 @@ export function conversationView(api: FrontendApi, options: ConversationServices
     modelPicker.setDisabled(value);
     thinkingSelect.disabled = value;
   }
+
   async function send(text: string, attached?: import('../src/input.js').Attachment[]) {
     const attachments = attached ?? composerUi.attachments();
     if (sending || pendingNavigation || (!text.trim() && !attachments.length)) return;
@@ -235,23 +220,27 @@ export function conversationView(api: FrontendApi, options: ConversationServices
     }
     const choice = modelDraft;
     const thinkingLevel = thinkingSelect.value || undefined;
+    const message = commands.prepare(text);
     const request = ++navigation;
     pendingNavigation = true;
     setSending(true);
     try {
-      if (!active) { showConversation(await createConversation()); setSending(true); }
-      const id = active;
+      let id = active;
+      if (!id) {
+        const item = await createConversation();
+        id = item.id;
+        if (request === navigation) { showConversation(item); setSending(true); }
+      }
       lastInputs.set(id, { message: text, attachments });
-      await data<RunInfo>('/sessions/' + id + '/runs', payload('POST', { message: commands.prepare(text), attachments, model: choice, thinkingLevel }));
-      modelDraft = undefined;
-      prompt.value = '';
-      composerUi.clear();
-      adjustPrompt();
+      await data<RunInfo>('/sessions/' + id + '/runs', payload('POST', { message, attachments, model: choice, thinkingLevel }));
       if (request === navigation) {
+        modelDraft = undefined;
+        prompt.value = '';
+        composerUi.clear();
+        adjustPrompt();
         pendingNavigation = false;
         await activate(id);
       }
-      await options.syncSessions();
     } catch (error) {
       if (request === navigation) { report(error); setSending(false); }
     } finally { if (request === navigation) pendingNavigation = false; }
@@ -333,7 +322,7 @@ export function conversationView(api: FrontendApi, options: ConversationServices
     while (!ended && !controller.signal.aborted) {
       try {
         const response = await request('/sessions/' + id + '/events?run=' + item.run.id + '&after=' + cursor, { signal: controller.signal });
-        await readEvents(response, accept);
+        await readEvents<RunEvent>(response, accept);
         if (!ended && !controller.signal.aborted) throw new Error('Connection closed');
       } catch (error) {
         if (controller.signal.aborted) return;
@@ -359,7 +348,6 @@ export function conversationView(api: FrontendApi, options: ConversationServices
       if (controller.signal.aborted || active !== id) return;
       showConversation(latest, latest.messages);
       showStatus(latest.run?.error ?? '', Boolean(latest.run?.error));
-      await options.syncSessions();
       const current = await data<{ settings: Settings }>('/bootstrap');
       options.applySettings(current.settings);
     } catch (error) { if (!controller.signal.aborted) report(error); }
@@ -432,7 +420,13 @@ export function conversationView(api: FrontendApi, options: ConversationServices
   api.onDispose(() => observing?.abort());
   return {
     newSession, activate, showConversation, updateModelControls,
-    clear() { ++navigation; pendingNavigation = false; showConversation(); },
+    clear() {
+      ++navigation;
+      pendingNavigation = false;
+      composerUi.clear();
+      showConversation();
+      showStatus('');
+    },
     active: () => active, changedFiles: () => changedFiles, sending: () => sending,
     refreshQueue, report,
     command(command: ComposerCommand) {

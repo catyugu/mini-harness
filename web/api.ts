@@ -9,13 +9,10 @@ if (tokenFromUrl) {
   sessionStorage.setItem('mini-harness-token', tokenFromUrl);
   history.replaceState(null, '', location.pathname + location.search);
 }
-let workspace: string;
-export function setWorkspace(path: string) { workspace = path; }
 export async function api(path: string, options: RequestInit = {}) {
   const token = sessionStorage.getItem('mini-harness-token');
   if (!token) throw new Error('Open mini-harness using the URL printed by the CLI.');
-  const headers = { Authorization: 'Bearer ' + token, ...(options.body ? { 'Content-Type': 'application/json' } : {}),
-    ...(workspace ? { 'X-Workspace': encodeURIComponent(workspace) } : {}) };
+  const headers = { Authorization: 'Bearer ' + token, ...(options.body ? { 'Content-Type': 'application/json' } : {}) };
   const response = await fetch('/api' + path, { ...options, headers });
   if (!response.ok) {
     const body = await response.json().catch(() => null);
@@ -25,3 +22,21 @@ export async function api(path: string, options: RequestInit = {}) {
 }
 export async function data<T>(path: string, options?: RequestInit): Promise<T> { return (await api(path, options)).json(); }
 export const payload = (method: string, body: unknown) => ({ method, body: JSON.stringify(body) });
+
+export const workspaceRoute = (id: string, resource = '') => '/workspaces/' + encodeURIComponent(id) + resource;
+
+export async function readEvents<T>(response: Response, accept: (event: T) => void) {
+  if (!response.body) throw new Error('No response stream');
+  const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = '';
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += value;
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+      for (const line of lines) if (line.trim()) accept(JSON.parse(line));
+    }
+  } finally { await reader.cancel().catch(() => {}); }
+}

@@ -26,19 +26,30 @@ declare module 'cordis' {
 }
 
 const navigationPlugin: BrowserPlugin = {
-  id: 'core:navigation', inject: ['miniState', 'miniShell', 'miniEvents'],
+  id: 'core:navigation', inject: ['miniState', 'miniShell', 'miniEvents', 'miniWorkspace'],
   setup(ctx, api) {
     const { miniShell: shell, miniState: state, miniEvents: events } = ctx;
     const navigation = sessionNavigation(api, {
-      active: () => state.activeConversation,
+      state,
+      select(id, draft) {
+        const changed = state.selectedWorkspace !== id;
+        state.selectWorkspace(id);
+        if (draft || changed) {
+          shell.showPage();
+          events.dispatchEvent(new Event(draft ? 'draft' : 'clear'));
+          if (!draft) shell.closeDrawer();
+        }
+        navigation.render();
+        events.dispatchEvent(new Event('change'));
+      },
+      chooseWorkspace: (onAdd) => ctx.miniWorkspace.open(state.get().workspaces.find(({ id }) => id === state.selectedWorkspace), onAdd),
+      manageWorkspace: (record) => ctx.miniWorkspace.manage(record),
       activate: (id) => events.dispatchEvent(new CustomEvent('open', { detail: id })),
       clearConversation: () => events.dispatchEvent(new Event('clear')),
       changed: () => events.dispatchEvent(new Event('change')),
       setTitle: shell.setTitle,
       report: (error) => events.dispatchEvent(new CustomEvent('error', { detail: error }))
     });
-    state.on('bootstrap', () => navigation.update(state.get().sessions), api.signal);
-    navigation.update(state.get().sessions);
     ctx.provide('miniNavigation', navigation);
   }
 };
@@ -48,13 +59,18 @@ const conversationPlugin: BrowserPlugin = {
   setup(ctx, api) {
     const { miniState: state, miniNavigation: navigation, miniShell: shell, miniEvents: events, miniWorkspace: workspace } = ctx;
     const conversation = conversationView(api, {
-      bootstrap: state.get, applySettings: state.apply, closeDrawer: shell.closeDrawer,
-      setActive: (id) => { state.activeConversation = id; },
-      renderSessions: navigation.render, syncSessions: navigation.sync, reveal: navigation.reveal,
+      bootstrap: state.get,
+      applySettings: state.apply, closeDrawer: shell.closeDrawer,
+      setActive(item) {
+        state.activeConversation = item?.id;
+        if (item) state.selectWorkspace(item.workspaceId);
+      },
+      workspace: () => state.selectedWorkspace,
+      renderSessions: navigation.render, reveal: navigation.reveal,
       addSession: navigation.add, exportSessions: navigation.export,
       placeWorkspace(welcome) {
-        if (welcome) welcome.append(workspace);
-        else shell.placeWorkspace(workspace);
+        if (welcome) welcome.append(workspace.current);
+        else shell.placeWorkspace(workspace.current);
       },
       changed: () => events.dispatchEvent(new Event('change')),
       setTitle: shell.setTitle, renderTool: (tool, action) => ctx.miniHost.render(tool, action),
@@ -71,15 +87,19 @@ const conversationPlugin: BrowserPlugin = {
       shell.showPage(); void conversation.activate(event.detail);
     }, { signal: api.signal });
     events.addEventListener('clear', conversation.clear, { signal: api.signal });
+    events.addEventListener('draft', () => void conversation.newSession(), { signal: api.signal });
     events.addEventListener('error', (event: CustomEvent<Error>) => conversation.report(event.detail), { signal: api.signal });
     const timer = setInterval(() => {
       if (!document.hidden && conversation.sending() && conversation.active()) void conversation.refreshQueue();
     }, 1500);
     api.onDispose(() => clearInterval(timer));
-    const { workspace: path, sessions } = state.get();
-    const remembered = sessionStorage.getItem('mini-harness-active:' + path);
-    const initial = sessions.find(({ id }) => id === remembered) ?? sessions.find(({ parentId }) => !parentId) ?? sessions[0];
-    if (initial) void conversation.activate(initial.id);
+    const { sessions, workspaces } = state.get();
+    const current = workspaces.find(({ id }) => id === state.selectedWorkspace);
+    const remembered = sessionStorage.getItem('mini-harness-active') ?? sessionStorage.getItem('mini-harness-active:' + current?.path);
+    const available = sessions.filter(({ workspaceId }) => workspaces.some(({ id }) => id === workspaceId));
+    const initial = available.find(({ id }) => id === remembered) ??
+      available.find(({ parentId, workspaceId }) => !parentId && workspaceId === current?.id);
+    if (initial) void conversation.activate(initial.id, false);
     else conversation.showConversation();
   }
 };
@@ -91,10 +111,21 @@ export async function mountBrowser(ctx: Context, snapshot: Bootstrap) {
   const events = new EventTarget();
   const slots = new Map<Slot, HTMLElement>();
   const report = (error: Error) => ctx.miniConversation?.report(error);
+  function scope() {
+    const workspaceId = state.selectedWorkspace;
+    return workspaceId && { workspaceId, sessionId: state.activeConversation };
+  }
+  events.addEventListener('change', () => {
+    const { workspaces, sessions } = state.get();
+    ctx.miniWorkspace.label(workspaces.find(({ id }) => id === state.selectedWorkspace));
+    ctx.rightTabs.selectScope(scope());
+    ctx.rightTabs.prune(new Set(sessions.map(({ id }) => id)), new Set(workspaces.map(({ id }) => id)));
+  });
   const host = new FrontendHost(ctx, (name) => slots.get(name) ?? ctx.miniShell.slot(name),
-    { request: data, insert: (text) => ctx.miniConversation.insert(text), inspect: (title, node) => ctx.miniShell.inspect(title, node) },
+    { request: data, insert: (text) => ctx.miniConversation.insert(text), tabs: () => ctx.rightTabs },
     {
       bootstrap: state.get,
+      workspace: scope,
       sessionTitle: (id) => ctx.miniNavigation.session(id)?.title,
       currentConversation: () => ctx.miniNavigation.session(ctx.miniConversation.active()),
       session: (id) => ctx.miniNavigation.session(id),
