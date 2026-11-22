@@ -1,114 +1,207 @@
-import type { Settings } from '../src/config.js';
+import type { SettingsPatch } from '../src/config.js';
 import type { PluginMetadata } from '../src/plugins.js';
-import type { FrontendApi } from './extensions.js';
+import type { BrowserPlugin, FrontendApi } from './extensions.js';
 import type { Bootstrap } from './types.js';
 import { payload } from './api.js';
 import { icon } from './icons.js';
-import { closeOnBackdrop, fromMarkup } from './primitives.js';
+import { button, dialog, field, fromMarkup, toggle } from './primitives.js';
 import { readPluginValues, schemaFields } from './settings-fields.js';
 
-export function installForm(api: FrontendApi, refresh: () => Promise<void>) {
-  const section = fromMarkup(`<section class="install-plugin">
-    <p class="hint">Choose plugin.js and optional plugin.json or web.js. Local plugins run with your user permissions.</p>
-    <label>Plugin ID<input aria-label="Install plugin ID" placeholder="my-plugin"></label>
-    <input type="file" multiple accept=".js,.json" aria-label="Plugin bundle files">
-    <button type="button" class="small-button">Install trusted plugin</button>
-    <p class="hint" role="status"></p>
-  </section>`);
-  const [id, files] = section.querySelectorAll('input');
-  const button = section.querySelector('button'), status = section.querySelector<HTMLElement>('[role="status"]');
-  button.onclick = async () => {
-    button.disabled = true;
-    try {
-      const bundle = await Promise.all([...files.files].map(async (file) => ({ name: file.name, content: await file.text() })));
-      await api.request('/plugins/install', payload('POST', { id: id.value.trim(), files: bundle }));
-      await refresh();
-      status.textContent = 'Installed. Enable the plugin to load it.';
-      files.value = id.value = '';
-    } catch (error) { status.textContent = error.message; }
-    finally { button.disabled = false; }
+export const catalogPlugin: BrowserPlugin = {
+  id: 'core:plugins', inject: ['miniSettings', 'miniState', 'miniShell', 'miniSwitch'],
+  setup(ctx, api) {
+    const { miniSettings: settings, miniState: state, miniShell: shell, miniSwitch: syncPlugins } = ctx;
+    const refresh = async () => { await state.refresh(); await syncPlugins(state.get()); };
+    const catalog = pluginCatalog(api, state.get, refresh, shell.showPage);
+    const manage = button('Manage plugins');
+    manage.onclick = () => { settings.close(); catalog.open(); };
+    api.onDispose(settings.addPage('Plugins', manage));
+    state.on('bootstrap', catalog.refresh, api.signal);
+  }
+};
+
+const bundleNames = ['plugin.js', 'plugin.json', 'web.js'];
+
+function installer(api: FrontendApi, installed: () => Promise<void>) {
+  const form = fromMarkup<HTMLFormElement>(`<form class="install-plugin">
+    <input class="bundle-input" type="file" multiple accept=".js,.json" aria-label="Plugin bundle files" tabindex="-1">
+    <div class="bundle-drop">
+      <span>Drop plugin files here or</span>
+      <ul class="bundle-files" aria-label="Selected files"></ul>
+    </div>
+    <p class="bundle-trust">Local plugins run with your user permissions. Install code you trust.</p>
+    <p class="hint form-error" role="alert"></p>
+    <div class="ui-actions"></div>
+  </form>`);
+  const modal = dialog('Install plugin', form);
+  const id = fromMarkup<HTMLInputElement>('<input pattern="[a-z][a-z0-9-]{0,63}" placeholder="my-plugin" required>');
+  form.prepend(field('Plugin ID', id));
+  const input = form.querySelector<HTMLInputElement>('.bundle-input');
+  const drop = form.querySelector<HTMLElement>('.bundle-drop');
+  const list = form.querySelector('.bundle-files');
+  const outcome = form.querySelector<HTMLElement>('[role="alert"]');
+  const choose = button('Choose files');
+  choose.onclick = () => input.click();
+  drop.insertBefore(choose, list);
+  const cancel = button('Cancel', 'quiet');
+  cancel.onclick = () => modal.close();
+  const submit = button('Install plugin', 'primary');
+  submit.type = 'submit';
+  form.querySelector('.ui-actions').append(cancel, submit);
+  let files: File[] = [];
+  let installing = false;
+
+  function setFiles(selection: File[]) {
+    files = selection;
+    const names = selection.map((file) => file.name);
+    let error = '';
+    if (names.some((name) => !bundleNames.includes(name)) || new Set(names).size !== names.length)
+      error = 'Choose one copy each of plugin.js, plugin.json and web.js.';
+    else if (!names.includes('plugin.js')) error = 'Include plugin.js. plugin.json and web.js are optional.';
+    else if (selection.reduce((total, file) => total + file.size, 0) > 1024 * 1024) error = 'Plugin bundle exceeds 1 MiB.';
+    outcome.textContent = error;
+    submit.disabled = installing || Boolean(error);
+    list.replaceChildren(...selection.map((file) => {
+      const item = document.createElement('li');
+      item.textContent = file.name;
+      return item;
+    }));
+  }
+
+  input.onchange = () => setFiles([...input.files]);
+  drop.ondragover = (event) => { event.preventDefault(); if (!installing) drop.dataset.dragging = 'true'; };
+  drop.ondragleave = (event) => { if (!drop.contains(event.relatedTarget as Node)) delete drop.dataset.dragging; };
+  drop.ondrop = (event) => {
+    event.preventDefault();
+    delete drop.dataset.dragging;
+    if (!installing) setFiles([...event.dataTransfer.files]);
   };
-  return section;
+  modal.addEventListener('close', () => {
+    form.reset();
+    setFiles([]);
+    outcome.textContent = '';
+  });
+  modal.addEventListener('cancel', (event) => { if (installing) event.preventDefault(); });
+  form.onsubmit = async (event) => {
+    event.preventDefault();
+    if (submit.disabled) return;
+    installing = submit.disabled = choose.disabled = cancel.disabled = true;
+    try {
+      const bundle = await Promise.all(files.map(async (file) => ({ name: file.name, content: await file.text() })));
+      await api.request('/plugins/install', payload('POST', { id: id.value.trim(), files: bundle }));
+      await installed();
+      modal.close();
+    } catch (error) { outcome.textContent = error.message; }
+    finally { installing = submit.disabled = choose.disabled = cancel.disabled = false; }
+  };
+  submit.disabled = true;
+  api.mount('dialogs', modal);
+  return modal;
 }
 
-export function pluginCatalog(api: FrontendApi, snapshot: () => Bootstrap, refresh: () => Promise<void>, showPage: (page?: HTMLElement) => void) {
-  const entry = fromMarkup<HTMLButtonElement>('<button type="button" class="nav-action"> <span class="nav-label">Plugins</span></button>');
+function pluginCatalog(api: FrontendApi, snapshot: () => Bootstrap, refresh: () => Promise<void>, showPage: (page?: HTMLElement) => void) {
+  const entry = fromMarkup<HTMLButtonElement>('<button type="button" class="nav-action" aria-label="Browse plugins" aria-controls="pluginCatalog"><span class="nav-label">Plugins</span></button>');
   entry.prepend(icon('plugin'));
-  entry.setAttribute('aria-label', 'Browse plugins');
-  entry.setAttribute('aria-controls', 'pluginCatalog');
   const page = fromMarkup(`<section id="pluginCatalog" class="catalog-page" tabindex="-1" aria-label="Plugin catalog">
-    <header class="catalog-header">
-      <h1>Plugins</h1>
-      <button type="button" class="primary">Install plugin</button>
-    </header>
+    <header class="catalog-header"><h1>Plugins</h1></header>
     <p class="hint catalog-status" role="status"></p>
     <div class="catalog-content"></div>
   </section>`);
-  const dialog = fromMarkup<HTMLDialogElement>(`<dialog class="workspace-panel" aria-label="Install plugin">
-    <header class="settings-header"><h2>Install plugin</h2><button type="button" class="icon-button" aria-label="Close installation"></button></header>
-    <div class="settings-scroll"></div>
-  </dialog>`);
-  dialog.querySelector('button').append(icon('close'));
-  dialog.querySelector('button').onclick = () => dialog.close();
-  dialog.querySelector('.settings-scroll').append(installForm(api, refresh));
-  closeOnBackdrop(dialog);
-  const header = page.querySelector('header'), content = page.querySelector('.catalog-content');
+  const openInstall = button('Install plugin', 'primary');
+  openInstall.prepend(icon('plus'));
+  const header = page.querySelector('header');
+  const content = page.querySelector('.catalog-content');
   const status = page.querySelector<HTMLElement>('.catalog-status');
-  header.querySelector('button').onclick = () => dialog.showModal();
-  entry.onclick = () => { render(); showPage(page); };
+  header.append(openInstall);
+  const modal = installer(api, async () => {
+    await refresh();
+    status.textContent = 'Plugin installed. Enable it to load it.';
+  });
+  openInstall.onclick = () => modal.showModal();
   api.mount('sidebar', entry, -10);
   api.mount('main', page);
-  api.mount('dialogs', dialog);
 
-  let mutating = false;
-  async function update(patch: Partial<Settings>, onError: (error: Error) => void) {
-    if (mutating) return false;
-    mutating = true;
-    try {
-      await api.request('/settings', payload('PATCH', patch));
-      await refresh();
-      return true;
-    } catch (error) { onError(error); return false; }
-    finally { mutating = false; }
+  let editing: string | undefined;
+  let busy = false;
+  async function mutate(operation: () => Promise<unknown>, failed: (error: Error) => void) {
+    if (busy) return false;
+    busy = true;
+    try { await operation(); await refresh(); return true; }
+    catch (error) { failed(error); return false; }
+    finally { busy = false; }
   }
 
   function detail(plugin: PluginMetadata) {
     status.textContent = '';
     header.hidden = true;
+    editing = plugin.id;
     const section = fromMarkup(`<section class="catalog-detail settings-scroll">
-      <button type="button" class="link-button">← All plugins</button>
-      <h1></h1><p class="hint"></p>
-      <form><div class="detail-fields"></div><p class="hint" role="status"></p><button class="primary">Save configuration</button></form>
+      <header class="catalog-detail-header"><div class="plugin-symbol"></div><h1></h1><p class="hint"></p></header>
     </section>`);
+    const back = button('All plugins', 'quiet');
+    back.classList.add('catalog-back');
+    back.prepend(icon('chevron'));
+    back.onclick = () => { render(); rowButton(plugin.id)?.focus(); };
+    section.prepend(back);
+    section.querySelector('.plugin-symbol').append(icon(plugin.icon ?? 'plugin'));
     section.querySelector('h1').textContent = plugin.title;
     section.querySelector('p').textContent = plugin.description;
-    section.querySelector('button').onclick = () => render();
-    const form = section.querySelector('form'), fields = section.querySelector<HTMLElement>('.detail-fields');
-    const outcome = form.querySelector<HTMLElement>('[role="status"]');
-    const key = plugin.preferences?.key;
-    const settings = snapshot().settings;
-    const values = key ? settings[key] : settings.pluginConfig[plugin.id] ?? {};
-    fields.append(schemaFields(plugin.id, plugin.preferences?.schema ?? plugin.configSchema, values));
-    form.onsubmit = async (event) => {
-      event.preventDefault();
-      const button = form.querySelector('button');
-      try {
-        button.disabled = true;
-        const config = readPluginValues({ [plugin.id]: values }, fields)[plugin.id];
-        if (key) for (const [field, value] of Object.entries(values)) {
-          if (typeof value === 'string' && !Object.hasOwn(config, field)) config[field] = '';
+    const schema = plugin.preferences?.schema ?? plugin.configSchema;
+    if (schema) {
+      const form = fromMarkup<HTMLFormElement>('<form><div class="detail-fields"></div><p class="hint" role="status"></p></form>');
+      const save = button('Save configuration', 'primary');
+      save.type = 'submit';
+      form.append(save);
+      const fields = form.querySelector<HTMLElement>('.detail-fields');
+      const outcome = form.querySelector<HTMLElement>('[role="status"]');
+      const key = plugin.preferences?.key;
+      const values = () => key ? snapshot().settings[key] : snapshot().settings.pluginConfig[plugin.id] ?? {};
+      if (key === 'sandbox') {
+        const note = document.createElement('p');
+        note.className = 'hint';
+        note.textContent = snapshot().isolation ? 'Linux shell isolation is available. Trusted host mode uses your user permissions.'
+          : 'Shell isolation is unavailable on this host. Trusted host mode uses your user permissions.';
+        fields.append(note);
+      }
+      if (plugin.preferences?.groups) {
+        for (const group of plugin.preferences.groups) {
+          const block = fromMarkup('<section class="ui-section"><h3></h3></section>');
+          block.querySelector('h3').textContent = group.title;
+          const properties = Object.fromEntries(group.fields.map((id) => [id, schema.properties[id]]));
+          block.append(schemaFields(plugin.id, { ...schema, properties }, values()));
+          fields.append(block);
         }
-        const saved = await update(key ? { [key]: config } : { pluginConfig: { [plugin.id]: config } },
-          (error) => { outcome.textContent = error.message; });
-        if (saved) outcome.textContent = 'Saved.';
-      } catch (error) { outcome.textContent = error.message; }
-      finally { button.disabled = false; }
-    };
+      } else fields.append(schemaFields(plugin.id, schema, values()));
+      form.onsubmit = async (event) => {
+        event.preventDefault();
+        save.disabled = true;
+        outcome.textContent = '';
+        try {
+          const current = values();
+          const config = readPluginValues({ [plugin.id]: current }, fields)[plugin.id];
+          if (key) for (const [name, value] of Object.entries(current)) {
+            if (typeof value === 'string' && !Object.hasOwn(config, name)) config[name] = '';
+          }
+          const patch: SettingsPatch = key ? { [key]: config } : { pluginConfig: { [plugin.id]: config } };
+          const saved = await mutate(() => api.request('/settings', payload('PATCH', patch)),
+            (error) => { outcome.textContent = error.message; });
+          if (saved) outcome.textContent = 'Saved.';
+        } catch (error) { outcome.textContent = error.message; }
+        finally { save.disabled = false; }
+      };
+      section.append(form);
+    }
     content.replaceChildren(section);
-    section.querySelector('button').focus();
+    back.focus();
   }
 
+  const rowButton = (id: string) => content.querySelector<HTMLButtonElement>('[data-plugin-row="' + id + '"]');
+
   function render() {
+    const focused = document.activeElement as HTMLElement;
+    const focusId = focused?.dataset.pluginRow ?? focused?.dataset.pluginToggle;
+    const isToggle = focused?.dataset.pluginToggle !== undefined;
+    editing = undefined;
     header.hidden = false;
     const { settings, plugins } = snapshot();
     const groups = [
@@ -121,47 +214,55 @@ export function pluginCatalog(api: FrontendApi, snapshot: () => Bootstrap, refre
       if (!group.plugins.length) list.append(fromMarkup('<p class="hint">No local plugins installed.</p>'));
       for (const plugin of group.plugins) {
         const row = fromMarkup(`<article class="catalog-row">
-          <div class="plugin-symbol"></div><div class="catalog-description"><h3></h3><p></p></div>
+          <button class="catalog-description ui-list-item" type="button">
+            <span class="plugin-symbol"></span><span><strong></strong><small></small></span>
+          </button>
           <div class="catalog-controls"></div>
         </article>`);
+        const open = row.querySelector('button');
+        open.dataset.pluginRow = plugin.id;
+        open.setAttribute('aria-label', plugin.title + ' settings');
+        open.onclick = () => detail(plugin);
         row.querySelector('.plugin-symbol').append(icon(plugin.icon ?? 'plugin'));
-        row.querySelector('h3').textContent = plugin.title;
-        row.querySelector('p').textContent = plugin.description;
+        row.querySelector('strong').textContent = plugin.title;
+        row.querySelector('small').textContent = plugin.description;
         const controls = row.querySelector('.catalog-controls');
-        if (plugin.preferences || plugin.configSchema) {
-          const configure = fromMarkup<HTMLButtonElement>('<button type="button" class="link-button">Configure</button>');
-          configure.setAttribute('aria-label', 'Configure ' + plugin.title);
-          configure.onclick = () => detail(plugin);
-          controls.append(configure);
-        }
-        const toggle = fromMarkup<HTMLInputElement>('<input class="toggle" type="checkbox" role="switch">');
-        toggle.setAttribute('aria-label', plugin.title);
-        toggle.checked = Boolean(settings.plugins[plugin.id]);
-        toggle.onchange = async () => {
-          if (mutating) { toggle.checked = !toggle.checked; return; }
-          const enabled = toggle.checked;
-          toggle.disabled = true;
-          const saved = await update({ plugins: { [plugin.id]: enabled } }, (error) => { status.textContent = error.message; });
-          toggle.checked = saved ? enabled : !enabled;
-          toggle.disabled = false;
-          if (saved) status.textContent = '';
+        const checked = Boolean(settings.plugins[plugin.id]);
+        const control = toggle(plugin.title, checked);
+        control.dataset.pluginToggle = plugin.id;
+        control.onchange = async () => {
+          control.disabled = true;
+          status.textContent = '';
+          const saved = await mutate(() => api.request('/settings', payload('PATCH', { plugins: { [plugin.id]: control.checked } })),
+            (error) => { status.textContent = error.message; });
+          if (!saved) control.checked = checked;
+          control.disabled = false;
         };
-        if (plugin.trustedCode && !toggle.checked) {
+        if (plugin.trustedCode && !checked) {
           const remove = fromMarkup<HTMLButtonElement>('<button type="button" class="icon-button danger" title="Uninstall"></button>');
           remove.append(icon('trash'));
           remove.setAttribute('aria-label', 'Uninstall ' + plugin.title);
           remove.onclick = async () => {
             if (!confirm('Permanently uninstall ' + plugin.title + '?')) return;
-            try { await api.request('/plugins/' + plugin.id, { method: 'DELETE' }); await refresh(); render(); }
-            catch (error) { status.textContent = error.message; }
+            remove.disabled = true;
+            const deleted = await mutate(() => api.request('/plugins/' + plugin.id, { method: 'DELETE' }),
+              (error) => { status.textContent = error.message; });
+            if (deleted) { status.textContent = 'Plugin uninstalled.'; openInstall.focus(); }
+            remove.disabled = false;
           };
           controls.append(remove);
         }
-        controls.append(toggle);
+        controls.append(control);
         list.append(row);
       }
       return list;
     }));
+    if (focusId) {
+      const next = isToggle ? content.querySelector<HTMLElement>('[data-plugin-toggle="' + focusId + '"]') : rowButton(focusId);
+      next?.focus();
+    }
   }
-  return { refresh: () => { if (!header.hidden) render(); } };
+  function open() { status.textContent = ''; render(); showPage(page); }
+  entry.onclick = open;
+  return { open, refresh: () => { if (!editing) render(); } };
 }

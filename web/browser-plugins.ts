@@ -1,15 +1,15 @@
 import { Context } from './vendor/cordis.js';
-import { data, scopedElements } from './api.js';
+import { data } from './api.js';
 import { BrowserState } from './client.js';
 import { FrontendHost, type BrowserPlugin, type Slot } from './extensions.js';
 import { createPluginLoader } from './plugin-loader.js';
 import { shellPlugin } from './shell.js';
 import { conversationView } from './conversation.js';
 import { sessionNavigation } from './navigation.js';
-import { mountSettings, createSettings } from './settings.js';
+import { settingsPlugin } from './settings.js';
 import { workspacePlugin } from './workspaces.js';
 import { modelPlugin } from './provider-manager.js';
-import { installForm, pluginCatalog } from './plugin-manager.js';
+import { catalogPlugin } from './plugin-manager.js';
 import { hydrateIcons } from './icons.js';
 import type { Bootstrap } from './types.js';
 
@@ -19,7 +19,6 @@ declare module 'cordis' {
     miniHost: FrontendHost;
     miniNavigation: ReturnType<typeof sessionNavigation>;
     miniConversation: ReturnType<typeof conversationView>;
-    miniSettings: ReturnType<typeof mountSettings>;
     miniEvents: EventTarget;
     miniOutlets: Map<Slot, HTMLElement>;
     miniSwitch: (snapshot: Bootstrap) => Promise<void>;
@@ -85,42 +84,9 @@ const conversationPlugin: BrowserPlugin = {
   }
 };
 
-const settingsPlugin: BrowserPlugin = {
-  id: 'core:settings', inject: ['miniState', 'miniShell', 'miniConversation', 'miniOutlets', 'miniSwitch'],
-  setup(ctx, api) {
-    const { miniShell: shell, miniState: state, miniConversation: conversation } = ctx;
-    const settings = mountSettings(api);
-    ctx.miniOutlets.set('settings', settings.outlet);
-    api.onDispose(() => { ctx.miniOutlets.delete('settings'); });
-    ctx.provide('miniSettings', settings);
-    const refresh = async () => { await state.refresh(); await ctx.miniSwitch(state.get()); };
-    const form = createSettings(settings.panel, state.get, state.apply, refresh, shell.closeDrawer, async () => {
-      await ctx.miniSwitch(state.get());
-      const active = conversation.active();
-      if (active && !conversation.sending()) await conversation.activate(active);
-    }, (open) => shell.bindSettings(open, api.signal), settings.open);
-    state.on('bootstrap', form.fillSettings, api.signal);
-    form.fillSettings();
-  }
-};
-
-const catalogPlugin: BrowserPlugin = {
-  id: 'core:plugins', inject: ['miniSettings', 'miniState', 'miniShell', 'miniSwitch'],
-  setup(ctx, api) {
-    const { miniSettings: settings, miniState: state, miniShell: shell } = ctx;
-    const refresh = async () => { await state.refresh(); await ctx.miniSwitch(state.get()); };
-    const installer = installForm(api, refresh);
-    scopedElements(settings.panel).element('installPluginSettings').append(installer);
-    api.onDispose(() => installer.remove());
-    const catalog = pluginCatalog(api, state.get, refresh, shell.showPage);
-    state.on('bootstrap', catalog.refresh, api.signal);
-  }
-};
-
 const plugins = [shellPlugin, workspacePlugin, navigationPlugin, conversationPlugin, settingsPlugin, modelPlugin, catalogPlugin];
 
 export async function mountBrowser(ctx: Context, snapshot: Bootstrap) {
-  const lifetime = new AbortController();
   const state = new BrowserState(snapshot);
   const events = new EventTarget();
   const slots = new Map<Slot, HTMLElement>();
@@ -149,12 +115,10 @@ export async function mountBrowser(ctx: Context, snapshot: Bootstrap) {
   try {
     for (const plugin of plugins) await host.mountPlugin(plugin);
     await load(state.get());
-    state.on('settings', () => { void load(state.get()); }, lifetime.signal);
     hydrateIcons();
   } catch (error) {
-    lifetime.abort();
     await host.dispose();
     throw error;
   }
-  return async () => { lifetime.abort(); await host.dispose(); };
+  return () => host.dispose();
 }

@@ -29,7 +29,7 @@ export const modelPlugin: BrowserPlugin = {
     const { miniSettings: settings, miniState: state } = ctx;
     const manager = providerManager(api, () => state.get().providers, state.refresh);
     api.onDispose(settings.addPage('Model', manager.content, true));
-    settings.panel.addEventListener('close', manager.reset, { signal: api.signal });
+    settings.onClose(manager.reset, api.signal);
     state.on('bootstrap', manager.render, api.signal);
     if (!state.get().models.some((model) => model.configured)) settings.open(true);
   }
