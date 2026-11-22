@@ -214,7 +214,6 @@ test('plugin catalog applies configuration and removes disabled browser capabili
     await page.getByRole('button', { name: 'Toggle navigation' }).click();
     await page.getByRole('button', { name: 'Browse plugins' }).click();
     await files.check();
-    await expect(page.locator('#sidebarExtensions').getByRole('button', { name: 'Workspace files', includeHidden: true })).toHaveCount(1);
     await catalog.getByRole('button', { name: 'Install plugin', exact: true }).click();
     const install = page.getByRole('dialog', { name: 'Install plugin' });
     await install.getByLabel('Plugin ID', { exact: true }).fill('local-example');

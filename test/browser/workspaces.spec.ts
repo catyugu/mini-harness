@@ -30,7 +30,8 @@ test('file inspection, responsive themes and reduced viewport height keep contro
           await expect(navigation).toBeFocused();
           await navigation.click();
         }
-        await page.getByRole('button', { name: 'Workspace files', exact: true }).click();
+        if (width <= 860) await page.keyboard.press('Escape');
+        await page.getByRole('button', { name: 'Open workspace panel', exact: true }).click();
         const panel = page.locator('#inspector');
         await expect(panel.getByRole('tab', { name: 'Files', exact: true })).toBeVisible();
         await expect(panel.getByRole('button', { name: 'Browse files', exact: true })).toHaveCount(0);
