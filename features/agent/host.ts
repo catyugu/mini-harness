@@ -8,8 +8,8 @@ export async function setup(ctx: Context) {
   const pi = new PiSessions(ctx.harnessState.paths, ctx.harnessRegistry, ctx,
     () => ctx.harnessSettings().model,
     (model) => ctx.harnessSettingsStore.rememberModel(model),
-    (id) => ctx.harnessOperations.assertAvailable(id),
-    (id) => ctx.harnessRuns?.active(id) ?? false);
+    (id) => ctx.get('harnessOperations')!.assertAvailable(id),
+    (id) => ctx.get('harnessRuns')?.active(id) ?? false);
   await pi.start();
   ctx.provide('harnessPi', pi);
   ctx.provide('harnessModels', { list: () => pi.availableModels() });

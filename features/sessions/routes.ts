@@ -12,7 +12,7 @@ const validWorkspace = /^[a-f0-9]{32}$/;
 export function registerSessionRoutes(ctx: Context) {
   const add = (method: string, path: string, handler: Parameters<typeof ctx.harnessRoutes.register>[2]) =>
     ctx.effect(() => ctx.harnessRoutes.register(method, path, handler));
-  const host = () => ({ registry: ctx.harnessRegistry, plugins: { ctx } });
+  const host = () => ({ registry: ctx.harnessRegistry, approvals: () => ctx.get('harnessApprovals') });
   const session = (id: string) => {
     if (!validSession.test(id) || !ctx.harnessRegistry.get(id)) throw new Error('Conversation not found');
     return id;
@@ -33,7 +33,7 @@ export function registerSessionRoutes(ctx: Context) {
   }
 
   add('GET', '/api/navigation/events', ({ response }) =>
-    streamNavigation(host(), response, ctx.harnessTransportSignal ?? new AbortController().signal));
+    streamNavigation(host(), response, ctx.get('harnessTransportSignal') ?? new AbortController().signal));
   add('GET', '/api/sessions', () => ctx.harnessRegistry.list().map(({ id }) => navigationSession(host(), id)));
   add('POST', '/api/sessions', async ({ body }) => {
     const input = await body();

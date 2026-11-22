@@ -6,12 +6,12 @@ import type { NavigationEvent } from '../../src/contracts/navigation.js';
 
 export interface NavigationHost {
   registry: SessionStore;
-  plugins: { ctx: { harnessApprovals?: { has(sessionId: string): boolean } } };
+  approvals?: () => { has(sessionId: string): boolean } | undefined;
 }
 
 export function navigationSession(runtime: NavigationHost, id: string) {
   const record = runtime.registry.get(id);
-  return record && { ...record, waitingApproval: runtime.plugins.ctx.harnessApprovals?.has(id) ?? false };
+  return record && { ...record, waitingApproval: runtime.approvals?.()?.has(id) ?? false };
 }
 
 export function navigationSnapshot(runtime: NavigationHost) {

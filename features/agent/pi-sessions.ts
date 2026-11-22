@@ -28,7 +28,7 @@ export class PiSessions {
   constructor(
     private readonly paths: Paths,
     private readonly registry: SessionStore,
-    private readonly ctx: Pick<Context, 'harnessSkills' | 'harnessTools'>,
+    private readonly ctx: Pick<Context, 'get' | 'harnessTools'>,
     private readonly defaultModel: () => ModelChoice,
     private readonly rememberModel: (model: ModelChoice) => void,
     private readonly assertAvailable: (id: string) => void,
@@ -49,7 +49,7 @@ export class PiSessions {
   get pending() { return this.opening.values(); }
   openingSession(id: string) { return this.opening.get(id); }
   private resources(id: string): Resources {
-    return [this.ctx.harnessSkills, ...this.ctx.harnessTools.resources(id)];
+    return [this.ctx.get('harnessSkills'), ...this.ctx.harnessTools.resources(id)];
   }
 
   reopenStale(id: string) {

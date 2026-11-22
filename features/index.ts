@@ -30,13 +30,13 @@ export const builtins: BuiltinPlugin[] = [
 
 /** Essential service providers mount before opt-in plugins; they are not UI extensions. */
 export const system: BuiltinPlugin[] = [
-  { id: 'core-workspaces', title: 'Workspaces', description: 'Workspace identity and registry', inject: ['harnessState'], setup: workspaceServices },
+  { id: 'core-workspaces', title: 'Workspaces', description: 'Workspace identity and registry', inject: ['harnessState', 'harnessRoutes'], setup: workspaceServices },
   { id: 'core-sessions', title: 'Sessions', description: 'Session persistence and navigation', requires: ['core-workspaces'], inject: ['harnessState', 'harnessWorkspaces'], setup: sessionServices },
   { id: 'core-agent', title: 'Agent', description: 'Official Pi SDK adapter', requires: ['core-sessions'], inject: ['harnessState', 'harnessRegistry', 'harnessSettings', 'harnessSettingsStore'], setup: agentServices },
   { id: 'core-runs', title: 'Runs', description: 'Run lifecycle and transport', requires: ['core-agent'], inject: ['harnessRegistry', 'harnessPi', 'harnessSettings'], setup: runServices },
-  { id: 'core-operations', title: 'Conversations', description: 'Conversation operations', requires: ['core-runs'], inject: ['harnessRegistry', 'harnessPi', 'harnessRuns', 'harnessSettingsStore'], setup: operationsServices },
-  { id: 'core-models', title: 'Models', description: 'Pi model endpoints and credential management', requires: ['core-operations'], inject: ['harnessPi', 'harnessOperations', 'harnessUpdateSettings'], setup: modelServices },
-  { id: 'core-settings-api', title: 'Settings', description: 'Configuration API', requires: ['core-operations'], inject: ['harnessUpdateSettings'], setup: settingsRoutes },
-  { id: 'core-plugins-api', title: 'Plugins', description: 'Installed plugin API', requires: ['core-operations'], inject: ['harnessPluginCatalog'], setup: pluginRoutes },
-  { id: 'core-ui-api', title: 'Web UI', description: 'Bootstrap composition', requires: ['core-models', 'core-plugins-api'], inject: ['harnessProviderCatalog', 'harnessPluginCatalog', 'harnessNavigation', 'harnessPi', 'harnessSettings'], setup: uiRoutes }
+  { id: 'core-operations', title: 'Conversations', description: 'Conversation operations', requires: ['core-runs'], inject: ['harnessRegistry', 'harnessPi', 'harnessRuns', 'harnessSettingsStore', 'harnessWorkspaces', 'harnessRoutes', 'harnessMutations'], setup: operationsServices },
+  { id: 'core-models', title: 'Models', description: 'Pi model endpoints and credential management', requires: ['core-operations'], inject: ['harnessPi', 'harnessOperations', 'harnessUpdateSettings', 'harnessSettings', 'harnessState', 'harnessRoutes', 'harnessMutations'], setup: modelServices },
+  { id: 'core-settings-api', title: 'Settings', description: 'Configuration API', requires: ['core-operations'], inject: ['harnessUpdateSettings', 'harnessRoutes', 'harnessMutations'], setup: settingsRoutes },
+  { id: 'core-plugins-api', title: 'Plugins', description: 'Installed plugin API', requires: ['core-operations'], inject: ['harnessPluginCatalog', 'harnessSettingsStore', 'harnessState', 'harnessSettings', 'harnessRoutes', 'harnessMutations'], setup: pluginRoutes },
+  { id: 'core-ui-api', title: 'Web UI', description: 'Bootstrap composition', requires: ['core-models', 'core-plugins-api'], inject: ['harnessProviderCatalog', 'harnessPluginCatalog', 'harnessNavigation', 'harnessPi', 'harnessSettings', 'harnessRoutes'], setup: uiRoutes }
 ];

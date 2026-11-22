@@ -7,7 +7,7 @@ export function setup(ctx: Context) {
     paths: ctx.harnessState.paths,
     get settings() { return ctx.harnessSettings(); },
     pi: ctx.harnessPi,
-    get delegation() { return ctx.harnessDelegation; },
+    get delegation() { return ctx.get('harnessDelegation'); },
     get hasActiveWork() { return ctx.harnessOperations.hasActiveWork; },
     updateSettings: (patch: Parameters<typeof ctx.harnessUpdateSettings>[0]) => ctx.harnessUpdateSettings(patch)
   };
