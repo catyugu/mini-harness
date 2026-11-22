@@ -42,10 +42,8 @@ export async function sessionRoutes(runtime: MiniHarnessRuntime, req: IncomingMe
       const input = await requestBody(req, 20 * 1024 * 1024);
       return json(res, 202, await runtime.pi.queueInput(id, input.message, input.mode, input.attachments));
     }
-    if (match[2] === 'queue' && req.method === 'GET') {
-      const session = await runtime.pi.open(id);
-      return json(res, 200, { steer: session.getSteeringMessages(), followUp: session.getFollowUpMessages() });
-    }
+    if (match[2] === 'queue' && req.method === 'GET')
+      return json(res, 200, runtime.pi.queue(await runtime.pi.open(id)));
     if (!match[2] && req.method === 'GET') return json(res, 200, await runtime.getConversation(id));
     if (match[2] === 'cancel' && req.method === 'POST') return json(res, 200, { cancelled: runtime.runs.cancel(id) });
     if (match[2] === 'runs' && req.method === 'GET') return json(res, 200, { run: runtime.runs.info(id) ?? null });

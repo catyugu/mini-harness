@@ -73,7 +73,7 @@ Tool names must be unique, use letters, digits, underscores or hyphens, and be 1
 
 ## Services and lifecycle
 
-Public metadata services are `harnessModels.list()` (also available as `harnessAgent.availableModels()`) and `harnessSessions.get(id)` / `list()`. Read plugin settings through `api.config` and register tools and routes through the plugin API. Session metadata is returned as a snapshot. Plugin records live in the Pi JSONL as namespaced Custom Entries. Pi starts the file on the first conversation message and leaves Custom Entries out of model context.
+Public metadata services are `harnessModels.list()` and `harnessSessions.get(id)` / `list()`. Read plugin settings through `api.config` and register tools and routes through the plugin API. Session metadata is returned as a snapshot. Plugin records live in the Pi JSONL as namespaced Custom Entries. Pi starts the file on the first conversation message and leaves Custom Entries out of model context.
 
 Built-in and local setup functions run in Cordis scopes. Dependencies mount first and unload last. Disabling a required plugin also requires disabling its dependents. Reconfiguring a dependency restarts its enabled dependents. Unchanged plugin scopes stay mounted. A route handler receives `{ url, body(maxBytes?), signal }`. The signal aborts when its route unloads. Read JSON with `await body()` and return a JSON-serializable result.
 

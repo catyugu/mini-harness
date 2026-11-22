@@ -35,7 +35,7 @@ export class Runs {
 
   view(id: string) {
     const events = this.work.get(id)?.events;
-    return { run: this.info(id), partial: events?.partial, tools: events?.activeTools ?? [], busy: Boolean(events) };
+    return { run: this.info(id), partial: events?.partial, tools: events?.activeTools ?? [] };
   }
 
   signal(id: string, signal?: AbortSignal) {

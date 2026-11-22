@@ -7,7 +7,7 @@ import { Check } from 'typebox/value';
 import { readJson, type Settings } from './config.js';
 import type { BuiltinPlugin, PluginApi, PluginMetadata, SessionRecords } from './plugin-api.js';
 
-const publicServices = new Set(['harnessAgent', 'harnessModels', 'harnessSessions']);
+const publicServices = new Set(['harnessModels', 'harnessSessions']);
 
 function configDefaults(schema: Record<string, any>, value: any): any {
   if (value === undefined && Object.hasOwn(schema, 'default')) value = structuredClone(schema.default);

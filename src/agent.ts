@@ -31,9 +31,7 @@ export class MiniHarnessRuntime {
     this.runs = new Runs(this.registry, this.pi, () => this.settings.model, assertAvailable,
       (record, task, signal) => this.delegation.schedule(record, task, signal));
     this.plugins = new PluginHost(ctx, paths.plugins, builtins, (id, pluginId) => this.pi.records(id, pluginId));
-    const listModels = () => this.pi.availableModels();
-    ctx.provide('harnessAgent', { availableModels: listModels });
-    ctx.provide('harnessModels', { list: listModels });
+    ctx.provide('harnessModels', { list: () => this.pi.availableModels() });
     ctx.provide('harnessSessions', { get: (id) => this.registry.get(id), list: () => this.registry.list() });
     ctx.provide('harnessState', { paths });
     ctx.provide('harnessSettings', () => this.settings);

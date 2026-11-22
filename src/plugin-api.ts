@@ -46,7 +46,6 @@ type ListModels = () => { provider: string; id: string; name: string; configured
 
 declare module 'cordis' {
   interface Context {
-    harnessAgent: { availableModels: ListModels };
     harnessModels: { list: ListModels };
     harnessSessions: Pick<SessionRegistry, 'get' | 'list'>;
     harnessSettings: () => Settings;
