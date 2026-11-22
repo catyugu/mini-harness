@@ -1,52 +1,72 @@
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 
-const source = new URL('../../src/', import.meta.url);
+const root = fileURLToPath(new URL('../../', import.meta.url));
+const source = join(root, 'src');
+const web = join(root, 'web');
+const features = join(root, 'features');
 
-function imports(path: string) {
-  return ts.preProcessFile(readFileSync(new URL(path, source), 'utf8')).importedFiles
-    .map(({ fileName }) => fileName);
+function files(directory: string): string[] {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(directory, entry.name);
+    return entry.isDirectory() ? files(path) : entry.name.endsWith('.ts') ? [path] : [];
+  });
 }
 
-test('the plugin host and built-ins use service contracts without importing the runtime or server', () => {
-  const features = ['files', 'skills', 'shell', 'subagents', 'message-copy', 'edit-resend'];
-  for (const path of ['kernel/plugins.ts', 'kernel/plugin-api.ts', ...[]]) {
-    for (const dependency of imports(path))
-      assert.doesNotMatch(dependency, /(?:^|\/)(agent|server|session-routes)\.js$/, path + ' imports ' + dependency);
-  }
-});
+function dependencies(file: string) {
+  const sourceFile = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);
+  return sourceFile.statements.flatMap((statement) => {
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) return [];
+    const clause = statement.importClause;
+    const typeOnly = Boolean(clause?.isTypeOnly ||
+      (clause?.namedBindings && ts.isNamedImports(clause.namedBindings) &&
+        clause.namedBindings.elements.every((item) => item.isTypeOnly)));
+    const specifier = statement.moduleSpecifier.text;
+    const target = specifier.startsWith('.') ? resolve(file, '..', specifier).replace(/\.js$/, '.ts') : specifier;
+    return [{ specifier, target, typeOnly }];
+  });
+}
 
-test('only runtime composition imports the assembled feature graph', () => {
-  for (const path of readdirSync(source).filter((file) => file.endsWith('.ts') && file !== 'kernel/runtime.ts')) {
-    for (const dependency of imports(path))
-      assert.doesNotMatch(dependency, /(?:^|\/)features\//, path + ' imports ' + dependency);
-  }
-});
-
-test('only the HTTP composition root imports the concrete runtime', () => {
-  for (const path of readdirSync(source).filter((file) => file.endsWith('.ts') && !['server.ts'].includes(file))) {
-    for (const dependency of imports(path))
-      assert.doesNotMatch(dependency, /(?:^|\/)agent\.js$/, path + ' imports ' + dependency);
-  }
-});
-
-test('browser modules import server-side types only, never Node runtime values', () => {
-  const web = new URL('../../web/', import.meta.url);
-  for (const directory of ['', 'builtins/']) {
-    for (const file of readdirSync(new URL(directory, web)).filter((name) => name.endsWith('.ts'))) {
-      const sourceFile = ts.createSourceFile(file, readFileSync(new URL(directory + file, web), 'utf8'),
-        ts.ScriptTarget.Latest, true);
-      for (const statement of sourceFile.statements) {
-        if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier) ||
-            !/(?:^|\/)src\//.test(statement.moduleSpecifier.text)) continue;
-        const clause = statement.importClause;
-        assert.ok(clause?.isTypeOnly ||
-          (clause?.namedBindings && ts.isNamedImports(clause.namedBindings) &&
-            clause.namedBindings.elements.every((item) => item.isTypeOnly)),
-          directory + file + ' imports a server runtime value from ' + statement.moduleSpecifier.text);
+test('each built-in capability owns one manifest and co-located host/client entries', () => {
+  assert.equal(existsSync(join(source, 'builtins')), false);
+  assert.equal(existsSync(join(web, 'builtins')), false);
+  const names = readdirSync(features, { withFileTypes: true }).filter((dir) => dir.isDirectory()).map((dir) => dir.name);
+  for (const name of names) {
+    const path = join(features, name);
+    assert.ok(existsSync(join(path, 'manifest.ts')), name + ' lacks a manifest');
+    assert.ok(existsSync(join(path, 'host.ts')) || existsSync(join(path, 'client.ts')), name + ' has no implementation');
+    for (const file of files(path)) {
+      for (const dependency of dependencies(file)) {
+        assert.notEqual(dependency.target, join(source, 'kernel', 'runtime.ts'), file + ' imports the concrete runtime');
+        assert.notEqual(dependency.target, join(source, 'server.ts'), file + ' imports the HTTP server');
+        if (typeof dependency.target === 'string' && dependency.target.startsWith(features + '/')) {
+          assert.ok(dependency.target.startsWith(path + '/'), file + ' imports another feature: ' + dependency.target);
+        }
       }
+    }
+  }
+});
+
+test('only composition roots import feature implementations', () => {
+  for (const file of files(source)) {
+    if (file === join(source, 'kernel', 'runtime.ts')) continue;
+    for (const dependency of dependencies(file))
+      assert.equal(dependency.target.startsWith(features + '/'), false, file + ' imports a feature: ' + dependency.specifier);
+  }
+});
+
+test('Web modules and feature clients do not import Node runtime implementations', () => {
+  const browserSources = [...files(web), ...readdirSync(features, { withFileTypes: true })
+    .filter((dir) => dir.isDirectory() && existsSync(join(features, dir.name, 'client.ts')))
+    .map((dir) => join(features, dir.name, 'client.ts'))];
+  for (const file of browserSources) {
+    for (const dep of dependencies(file)) {
+      if (typeof dep.target === 'string' && dep.target.startsWith(source + '/'))
+        assert.ok(dep.typeOnly, file + ' imports a server runtime value from ' + dep.specifier);
     }
   }
 });
