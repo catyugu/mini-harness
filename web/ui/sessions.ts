@@ -1,6 +1,6 @@
 import type { Conversation } from '../../src/registry.js';
 import { sessionHierarchy } from './navigation-tree.js';
-import { button, iconButton } from '../primitives.js';
+import { button, iconButton } from './primitives.js';
 
 export function sessionTree(sessions: Conversation[], options: {
   active?: string; expanded: Set<string>; selection: Set<string>; selecting: boolean;

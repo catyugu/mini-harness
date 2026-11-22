@@ -1,5 +1,5 @@
 import { scopedElements } from '../api.js';
-import { icon } from '../icons.js';
+import { icon } from './icons.js';
 import type { CommandRegistry, ComposerCommand } from './commands.js';
 import type { Attachment } from '../../src/input.js';
 import type { Completer, FrontendApi, Suggestion } from '../kernel/extensions.js';

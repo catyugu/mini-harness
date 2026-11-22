@@ -1,6 +1,6 @@
 import type { ModelChoice } from '../../src/registry.js';
 import { scopedElements } from '../api.js';
-import { icon } from '../icons.js';
+import { icon } from './icons.js';
 import type { ModelInfo } from '../types.js';
 
 export function createModelPicker(root: HTMLElement, onSelect: (model: ModelChoice) => void, signal: AbortSignal) {

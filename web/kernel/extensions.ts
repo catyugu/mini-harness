@@ -4,7 +4,7 @@ import type { MessageContent, ViewMessage } from '../../src/protocol.js';
 import type { Attachment } from '../../src/input.js';
 import type { ModelChoice } from '../../src/registry.js';
 import type { Conversation } from '../../src/registry.js';
-import type { RightTabType, TabScope, createRightTabs } from '../right-tabs.js';
+import type { RightTabType, TabScope, createRightTabs } from '../ui/right-tabs.js';
 import type { Bootstrap } from '../types.js';
 
 export type Slot = 'sidebar' | 'composer' | 'settings' | 'inspector' | 'approvals' | 'session-navigation' | 'conversation' | 'dialogs' | 'main' | 'conversation-header';

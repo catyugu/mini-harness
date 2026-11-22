@@ -3,8 +3,8 @@ import type { PluginMetadata } from '../../src/kernel/plugin-api.js';
 import type { BrowserPlugin, FrontendApi } from '../kernel/extensions.js';
 import type { Bootstrap } from '../types.js';
 import { payload } from '../api.js';
-import { icon } from '../icons.js';
-import { button, dialog, field, fromMarkup, iconButton, saveToggle, toggle } from '../primitives.js';
+import { icon } from './icons.js';
+import { button, dialog, field, fromMarkup, iconButton, saveToggle, toggle } from './primitives.js';
 import { readPluginValues, schemaFields } from './settings-fields.js';
 
 export const catalogPlugin: BrowserPlugin = {

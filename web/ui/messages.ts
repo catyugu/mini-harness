@@ -1,7 +1,7 @@
 import type { MessageContent, RunEvent, ViewMessage } from '../../src/protocol.js';
 import type { ConversationView } from '../types.js';
 import type { FrontendHost } from '../kernel/extensions.js';
-import { icon } from '../icons.js';
+import { icon } from './icons.js';
 import { renderMarkdown, markdownSource } from './markdown.js';
 import type { MessageAction, MessageActionContext } from '../kernel/extensions.js';
 
