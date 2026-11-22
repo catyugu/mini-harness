@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Consolidate message copy and Pi branch-aware edit/resend into the single `session-helper` Cordis feature, with one frontend lifecycle, one switch, and a migration for the two former plugin settings.
+
 - Add five frontend extension points with owned mount/disposal, shared plugin configuration, dependency ordering and custom tool renderers. Split requests, settings, conversations, message rendering, attachments and file inspection into browser modules.
 - Add neutral light/dark surfaces, consistent icons, a collapsed navigation rail, grouped settings, an input-level model selector and a single file inspector.
 - Configure provider catalogs, credentials and custom API endpoints from Settings; switch local workspaces while idle. Foreground startup opens a browser unless `--no-open` is supplied.
