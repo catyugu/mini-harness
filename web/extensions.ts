@@ -2,6 +2,7 @@ import { Context, type Fiber } from './vendor/cordis.js';
 import type { ComposerCommand } from './commands.js';
 import type { MessageContent } from '../src/protocol.js';
 import type { Conversation } from '../src/registry.js';
+import type { RightTabType, TabScope, createRightTabs } from './right-tabs.js';
 import type { Bootstrap } from './types.js';
 
 export type Slot = 'sidebar' | 'composer' | 'settings' | 'inspector' | 'approvals' | 'session-navigation' | 'conversation' | 'dialogs' | 'main' | 'conversation-header';
@@ -25,7 +26,7 @@ export type Completer = (request: Completion) => void | Promise<void>;
 
 export interface FrontendApi {
   mount(slot: Slot, node: HTMLElement, order?: number): void;
-  command(command: ComposerCommand): void;
+  command(command: ComposerCommand): () => void;
   completion(trigger: string, complete: Completer): void;
   settingsPage(title: string, node: HTMLElement): void;
   tool(name: string, render: (tool: ToolView) => HTMLElement | undefined): void;
@@ -35,6 +36,8 @@ export interface FrontendApi {
   readonly signal: AbortSignal;
   request<T>(path: string, options?: RequestInit): Promise<T>;
   insert(text: string): void;
+  rightTab(type: string, definition: RightTabType): void;
+  openTab(type: string, path?: string, scope?: TabScope): void;
   inspect(title: string, content: HTMLElement): void;
 }
 
@@ -42,6 +45,7 @@ export interface FrontendServices {
   bootstrap(): Bootstrap;
   sessionTitle(id: string): string | undefined;
   openConversation(id: string): void;
+  workspace(): TabScope | undefined;
   currentConversation(): Conversation | undefined;
   session(id: string): Conversation | undefined;
   onConversationChange(listener: () => void, signal: AbortSignal): void;
@@ -65,7 +69,7 @@ export class FrontendHost {
   constructor(
     private readonly ctx: Context,
     private slot: (name: Slot) => HTMLElement,
-    private ui: Pick<FrontendApi, 'request' | 'insert'> & { inspect(title: string, content: HTMLElement): () => void },
+    private ui: Pick<FrontendApi, 'request' | 'insert'> & { tabs(): ReturnType<typeof createRightTabs> },
     private services: FrontendServices,
     private addSettingsPage: (title: string, node: HTMLElement) => () => void,
     private registerCommand: (command: ComposerCommand) => () => void,
@@ -83,7 +87,8 @@ export class FrontendHost {
     const controller = new AbortController();
     const fiber = this.ctx.inject(inject, async (ctx) => {
       const own = (install: () => (() => void | Promise<void>)) => {
-        if (!controller.signal.aborted) ctx.effect(install);
+        if (controller.signal.aborted) return () => {};
+        return ctx.effect(install);
       };
       const registerRenderer = (registry: typeof this.renderers, name: string, render: (tool: ToolView) => HTMLElement | undefined) =>
         own(() => {
@@ -91,16 +96,17 @@ export class FrontendHost {
           registry.set(name, render);
           return () => { registry.delete(name); };
         });
-      let closeInspector: (() => void) | undefined;
-      own(() => () => closeInspector?.());
+
       const cleanup = await setup(ctx, {
         signal: controller.signal,
         request: (path, options) => this.ui.request(path, { ...options, signal: options?.signal
           ? AbortSignal.any([controller.signal, options.signal]) : controller.signal }),
         insert: (value) => { if (!controller.signal.aborted) this.ui.insert(value); },
-        inspect: (title, content) => {
-          if (!controller.signal.aborted) closeInspector = this.ui.inspect(title, content);
+        rightTab: (type, definition) => own(() => this.ui.tabs().register(id + ':' + type, definition)),
+        openTab: (type, path, scope) => {
+          if (!controller.signal.aborted) this.ui.tabs().open(id + ':' + type, path, scope);
         },
+        inspect: (title, content) => own(() => this.ui.tabs().inspect(id, title, content)),
         config: Object.freeze(structuredClone(config)),
         mount: (slot, node, order = 0) => own(() => {
           const container = this.slot(slot);

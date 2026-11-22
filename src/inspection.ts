@@ -6,18 +6,20 @@ import { Workspace, containsPath } from './workspace.js';
 const exec = promisify(execFile);
 export class Inspection {
   readonly files: Workspace;
-  constructor(private cwd: string, home: string) { this.files = new Workspace(cwd, home); }
+  constructor(private cwd: string, home: string, canonicalRoot = false) { this.files = new Workspace(cwd, home, canonicalRoot); }
   async tree(path = '.') {
     return (await this.files.entries(resolve(this.cwd, path))).filter(({ name }) => name !== '.git');
   }
   async preview(path: string) {
     const bytes = await this.files.readFile(path);
     if (bytes.length > 512 * 1024) throw new Error('Preview is limited to 512 KiB');
+    const image = await this.files.imageType(path);
+    if (image) return { path, content: bytes.toString('base64'), image };
     if (bytes.includes(0)) throw new Error('Binary file: attach or open it in a local application');
     return { path, content: bytes.toString('utf8') };
   }
   private async git(args: string[]) {
-    return (await exec('git', ['--no-optional-locks', '--literal-pathspecs', ...args], {
+    return (await exec('git', ['--no-optional-locks', '--literal-pathspecs', '-c', 'core.fsmonitor=false', ...args], {
       cwd: this.cwd, timeout: 5000, maxBuffer: 512 * 1024, windowsHide: true,
       env: { ...process.env, GIT_PAGER: 'cat', GIT_TERMINAL_PROMPT: '0' }
     })).stdout;

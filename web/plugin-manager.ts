@@ -4,7 +4,7 @@ import type { BrowserPlugin, FrontendApi } from './extensions.js';
 import type { Bootstrap } from './types.js';
 import { payload } from './api.js';
 import { icon } from './icons.js';
-import { button, dialog, field, fromMarkup, toggle } from './primitives.js';
+import { button, dialog, field, fromMarkup, iconButton, saveToggle, toggle } from './primitives.js';
 import { readPluginValues, schemaFields } from './settings-fields.js';
 
 export const catalogPlugin: BrowserPlugin = {
@@ -123,6 +123,7 @@ function pluginCatalog(api: FrontendApi, snapshot: () => Bootstrap, refresh: () 
 
   let editing: string | undefined;
   let busy = false;
+  let savingSwitch = false;
   async function mutate(operation: () => Promise<unknown>, failed: (error: Error) => void) {
     if (busy) return false;
     busy = true;
@@ -230,18 +231,9 @@ function pluginCatalog(api: FrontendApi, snapshot: () => Bootstrap, refresh: () 
         const checked = Boolean(settings.plugins[plugin.id]);
         const control = toggle(plugin.title, checked);
         control.dataset.pluginToggle = plugin.id;
-        control.onchange = async () => {
-          control.disabled = true;
-          status.textContent = '';
-          const saved = await mutate(() => api.request('/settings', payload('PATCH', { plugins: { [plugin.id]: control.checked } })),
-            (error) => { status.textContent = error.message; });
-          if (!saved) control.checked = checked;
-          control.disabled = false;
-        };
-        if (plugin.trustedCode && !checked) {
-          const remove = fromMarkup<HTMLButtonElement>('<button type="button" class="icon-button danger" title="Uninstall"></button>');
-          remove.append(icon('trash'));
-          remove.setAttribute('aria-label', 'Uninstall ' + plugin.title);
+        const remove = plugin.trustedCode ? iconButton('Uninstall ' + plugin.title, 'trash', 'icon-button danger') : undefined;
+        if (remove) {
+          remove.hidden = checked;
           remove.onclick = async () => {
             if (!confirm('Permanently uninstall ' + plugin.title + '?')) return;
             remove.disabled = true;
@@ -252,6 +244,22 @@ function pluginCatalog(api: FrontendApi, snapshot: () => Bootstrap, refresh: () 
           };
           controls.append(remove);
         }
+        saveToggle(control, async (next) => {
+          if (busy) return false;
+          savingSwitch = true;
+          status.textContent = '';
+          const peers = [...content.querySelectorAll<HTMLInputElement>('input.toggle')].filter((toggle) => toggle !== control && !toggle.disabled);
+          for (const peer of peers) peer.disabled = true;
+          try {
+            const saved = await mutate(() => api.request('/settings', payload('PATCH', { plugins: { [plugin.id]: next } })),
+              (error) => { status.textContent = error.message; });
+            if (saved && remove) remove.hidden = next;
+            return saved;
+          } finally {
+            savingSwitch = false;
+            for (const peer of peers) peer.disabled = false;
+          }
+        });
         controls.append(control);
         list.append(row);
       }
@@ -264,5 +272,5 @@ function pluginCatalog(api: FrontendApi, snapshot: () => Bootstrap, refresh: () 
   }
   function open() { status.textContent = ''; render(); showPage(page); }
   entry.onclick = open;
-  return { open, refresh: () => { if (!editing) render(); } };
+  return { open, refresh: () => { if (!editing && !savingSwitch) render(); } };
 }

@@ -1,46 +1,42 @@
 import type { Conversation } from '../src/registry.js';
-import { scopedElements } from './api.js';
-import { icon } from './icons.js';
-export function createSessionList(root: HTMLElement, state: () => { sessions: Conversation[]; active?: string }, activate: (id: string) => void, rename: (item: Conversation) => void, remove: (item: Conversation) => void) {
-const { element, value } = scopedElements(root);
-let selecting = false, searchQuery = '';
-let visibleSessions: Conversation[] = [];
-const selection = new Set<string>(), expanded = new Set<string>();
-function renderSessions() {
-  const { sessions, active } = state();
+import { button, iconButton } from './primitives.js';
+
+export function sessionTree(sessions: Conversation[], options: {
+  active?: string; expanded: Set<string>; selection: Set<string>; selecting: boolean;
+  query: string; render(): void; selectionChanged(): void;
+  activate(id: string): void; rename(item: Conversation): void; remove(item: Conversation): void;
+}) {
+  const { active, expanded, selection, selecting, query } = options;
+  const byId = new Map(sessions.map((item) => [item.id, item]));
   const included = new Set<string>();
-  for (const item of sessions) if (item.title.toLowerCase().includes(searchQuery)) {
-    included.add(item.id);
-    for (let parent = item.parentId; parent; parent = sessions.find((s) => s.id === parent)?.parentId) included.add(parent);
+  for (const item of sessions) if (!query || item.title.toLowerCase().includes(query)) {
+    for (let id: string | null = item.id; id && !included.has(id); id = byId.get(id)?.parentId) included.add(id);
   }
-  visibleSessions = searchQuery ? sessions.filter((s) => included.has(s.id)) : sessions;
-  const roots = new Map<string | null, Conversation[]>();
-  for (const item of visibleSessions) {
-    if (!roots.has(item.parentId)) roots.set(item.parentId, []);
-    roots.get(item.parentId).push(item);
+  const visible = sessions.filter((item) => included.has(item.id));
+  const children = new Map<string | null, Conversation[]>();
+  for (const item of visible) {
+    const parent = byId.has(item.parentId) ? item.parentId : null;
+    if (!children.has(parent)) children.set(parent, []);
+    children.get(parent).push(item);
   }
 
   function branch(parent: string | null) {
     const list = document.createElement('ul');
-    for (const item of roots.get(parent) ?? []) {
+    list.className = 'session-branch';
+    for (const item of children.get(parent) ?? []) {
       const entry = document.createElement('li');
       const row = document.createElement('div');
       row.className = 'session-row' + (item.id === active ? ' active' : '');
-      if (roots.has(item.id)) {
-        const toggle = document.createElement('button');
-        const open = expanded.has(item.id);
-        toggle.type = 'button';
-        toggle.className = 'tree-button';
-        toggle.append(icon('chevron')); 
+      const open = expanded.has(item.id) || Boolean(query);
+      if (children.has(item.id)) {
+        const toggle = iconButton((open ? 'Collapse ' : 'Expand ') + item.title, 'chevron', 'tree-button');
+        toggle.id = 'tree-' + item.id;
         toggle.setAttribute('aria-expanded', String(open));
-        toggle.setAttribute('aria-label', (open ? 'Collapse ' : 'Expand ') + item.title);
         toggle.onclick = () => {
           if (open) expanded.delete(item.id);
           else expanded.add(item.id);
-          renderSessions();
-          element('tree-' + item.id)?.focus();
+          options.render();
         };
-        toggle.id = 'tree-' + item.id;
         row.append(toggle);
       }
       if (selecting) {
@@ -52,61 +48,47 @@ function renderSessions() {
         checkbox.onchange = () => {
           if (checkbox.checked) selection.add(item.id);
           else selection.delete(item.id);
-          updateSelection();
+          options.selectionChanged();
         };
         const label = document.createElement('label');
         label.htmlFor = checkbox.id;
         label.textContent = item.title;
         row.append(checkbox, label);
       } else {
-        const title = document.createElement('button');
-        title.type = 'button';
-        title.className = 'session-name';
-        title.textContent = item.title;
+        const title = button(item.title, 'quiet');
+        title.id = 'session-' + item.id;
+        title.classList.add('session-name');
         title.title = item.title;
         if (item.id === active) title.setAttribute('aria-current', 'page');
-        title.onclick = () => activate(item.id);
+        title.onclick = () => options.activate(item.id);
         row.append(title);
-        const actions = document.createElement('div'); actions.className = 'session-actions';
+        const actions = document.createElement('div');
+        actions.className = 'session-actions';
         for (const [name, image, action] of [
-          ['Rename', 'edit', () => rename(item)],
-          ['Delete', 'trash', () => remove(item)]
+          ['Rename', 'edit', () => options.rename(item)],
+          ['Delete', 'trash', () => options.remove(item)]
         ] as const) {
-          const button = document.createElement('button'); button.type = 'button'; button.className = 'icon-button';
-          button.setAttribute('aria-label', name + ' ' + item.title); button.title = name; button.append(icon(image)); button.onclick = action; actions.append(button);
+          const control = iconButton(name + ' ' + item.title, image);
+          control.id = name.toLowerCase() + '-' + item.id;
+          control.onclick = action;
+          actions.append(control);
         }
         row.append(actions);
       }
-      entry.append(row);
-      if (item.run && item.run.state !== 'completed') {
-        const state = document.createElement('span');
-        state.className = 'run-state';
-        state.dataset.state = item.run.state;
-        state.textContent = item.run.state;
-        state.title = item.run.error ?? item.run.state;
-        row.append(state);
+      const status = item.waitingApproval ? 'approval' : item.run?.state;
+      if (status && status !== 'completed') {
+        const marker = document.createElement('span');
+        marker.className = 'run-state';
+        marker.dataset.state = status;
+        marker.textContent = item.waitingApproval ? 'Approval' : status;
+        marker.title = item.waitingApproval ? 'Waiting for approval' : item.run.error ?? status;
+        row.append(marker);
       }
-      if ((expanded.has(item.id) || searchQuery) && roots.has(item.id)) entry.append(branch(item.id));
+      entry.append(row);
+      if (open && children.has(item.id)) entry.append(branch(item.id));
       list.append(entry);
     }
     return list;
   }
-  element('sessions').replaceChildren(branch(null));
-  updateSelection();
-}
-
-function updateSelection() {
-  element('selectMode').setAttribute('aria-pressed', String(selecting));
-  element('bulkActions').hidden = !selecting;
-  element('selectedCount').textContent = selection.size + ' selected';
-  element<'button'>('exportSessions').disabled = !selection.size;
-  element<'button'>('deleteSessions').disabled = !selection.size;
-}
-
-function toggleSelection(value: boolean) { selecting = value; selection.clear(); renderSessions(); }
-element('selectMode').onclick = () => toggleSelection(!selecting);
-element('cancelSelection').onclick = () => toggleSelection(false);
-element('selectAll').onclick = () => { for (const item of visibleSessions) selection.add(item.id); renderSessions(); };
-element<'input'>('sessionSearch').oninput = () => { searchQuery = value('sessionSearch').toLowerCase(); renderSessions(); };
-return { renderSessions, selection, expanded, toggleSelection };
+  return { list: branch(null), visible };
 }

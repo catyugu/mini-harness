@@ -26,6 +26,16 @@ export function button(label: string, variant: 'primary' | 'secondary' | 'quiet'
   return node;
 }
 
+export function iconButton(label: string, name: Parameters<typeof icon>[0], className = 'icon-button') {
+  const node = document.createElement('button');
+  node.type = 'button';
+  node.className = className;
+  node.setAttribute('aria-label', label);
+  node.title = label;
+  node.append(icon(name));
+  return node;
+}
+
 export function field(label: string, control: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement) {
   const node = document.createElement('label');
   node.className = 'ui-field';
@@ -43,6 +53,25 @@ export function toggle(label: string, checked: boolean) {
   node.setAttribute('aria-label', label);
   node.checked = checked;
   return node;
+}
+
+export function saveToggle(node: HTMLInputElement, save: (checked: boolean) => Promise<boolean>) {
+  let checked = node.checked;
+  node.addEventListener('change', async () => {
+    if (node.disabled) return;
+    const next = node.checked;
+    const focused = document.activeElement === node;
+    node.setAttribute('aria-busy', 'true');
+    node.disabled = true;
+    try {
+      if (await save(next)) checked = next;
+    } finally {
+      node.checked = checked;
+      node.disabled = false;
+      node.removeAttribute('aria-busy');
+      if (focused && document.activeElement === document.body) node.focus({ preventScroll: true });
+    }
+  });
 }
 
 export function dialog(title: string, content: HTMLElement) {

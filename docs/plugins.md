@@ -9,7 +9,7 @@ Install reviewed ESM code in `~/.mini-harness/plugins/<id>/plugin.js`. IDs start
 ```json
 {
   "title": "Conversation count",
-  "description": "Count conversations in the current workspace.",
+  "description": "Count registered conversations.",
   "requires": ["files"],
   "configSchema": {
     "type": "object",
@@ -43,7 +43,7 @@ export default function setup(ctx, api) {
   api.registerTool({
     name: 'conversation_count',
     label: 'Conversation count',
-    description: 'Count conversations in this workspace.',
+    description: 'Count registered conversations.',
     parameters: { type: 'object', properties: {} },
     async execute(_callId, _args, signal) {
       signal?.throwIfAborted();
@@ -137,21 +137,28 @@ The browser runs each plugin in a Cordis scope and disposes its slots, completio
 
 The Plugins page can install a local bundle containing `plugin.js`, optional `plugin.json` and `web.js` (at most 1 MiB combined). New installations stay disabled. Disable the plugin before uninstalling; uninstall removes the local plugin directory permanently. Larger development plugins can still be placed in the local plugins directory manually.
 
+Register a right-panel tab with `api.rightTab(type, { title, create, launcher })`. Both callbacks receive an address with `workspaceId`, optional `sessionId`, and optional `path`. `create(address, signal)` returns the tab's element and receives an abort signal for any in-flight work. `launcher` optionally adds a button inside the panel. Call `api.openTab(type, path?)` to open or focus the tab in the current conversation or workspace. Disabling the plugin closes its tabs and aborts their outstanding work.
+
 ## GUI API additions
 
-`X-Workspace: <encodeURIComponent(absolute path)>` rejects requests from tabs opened before another tab switched workspace. The browser sends this automatically. Switching waits for idle tasks, reloads the runtime and preserves each workspace's indexed conversations. One workspace is active per server; this does not create additional server processes.
+The server runs one Runtime for all registered workspaces. Each conversation has a stable Workspace ID. A request can address a conversation by ID or scope file and Skills requests to a registered Workspace ID.
 
 | Request | Result |
 | - | - |
-| `GET /api/workspaces`, `POST /api/workspaces` with `{path}` | Current/recent directories; switch to an existing absolute directory |
+| `GET /api/workspaces`, `POST /api/workspaces` with `{path, name?}` | List or register local directories |
+| `GET /api/workspaces/directories?path=...` | Browse local subdirectories for registration |
+| `PATCH /api/workspaces/:id` with `{name}`, `DELETE /api/workspaces/:id` | Rename or remove a workspace entry |
+| `PUT /api/workspaces` with `{ids}` | Reorder registered workspaces |
+| `GET /api/navigation/events` | NDJSON snapshot followed by workspace and conversation updates |
+| `GET /api/workspaces/:id/sessions`, `POST /api/workspaces/:id/sessions` | List or create conversations in a workspace |
 | `GET /api/providers`, `PUT /api/providers`, `DELETE /api/providers` | List credential status and model catalogs; save/remove custom endpoint definitions in Pi `models.json` |
 | `PATCH /api/sessions/:id` with `{title}` | Rename a conversation |
 | `POST /api/sessions/:id/runs` with `{message, attachments?}` | Attachments are `{name, mimeType, data}` where `data` is base64 |
 | `POST /api/sessions/:id/queue` with `{message, mode, attachments?}` | Pi `steer` (after the current tool batch) or `followUp` (after the current task); maximum 16 queued messages |
 | `GET /api/sessions/:id/queue` | Undelivered instructions and follow-ups |
-| `GET /api/skills` | Names/descriptions discovered by Pi; invoke with `/skill:name` |
-| `GET /api/files/tree?path=...`, `/files/search?q=...` | Workspace-scoped listing/search; search follows `.gitignore` |
-| `GET /api/files/preview?path=...`, `/files/changes`, `/files/diff?path=...` | Bounded text preview, repository status, staged and working-tree differences |
+| `GET /api/workspaces/:id/skills` | Names/descriptions discovered by Pi; invoke with `/skill:name` |
+| `GET /api/workspaces/:id/files/tree?path=...`, `/files/search?q=...` in the same workspace | Workspace-scoped listing/search; search follows `.gitignore` |
+| `GET /api/workspaces/:id/files/preview?path=...`, `/files/changes`, `/files/diff?path=...` in the same workspace | Bounded text and image preview, repository status, staged and working-tree differences |
 | `GET /api/approvals`, `POST /api/approvals` with `{id, allow}` | Pending Shell requests; allow once or deny |
 
 Images (PNG/JPEG/GIF/WebP) go through Pi's image input and require an image-capable model. UTF-8 text attachments become message text. Limits: eight files, 6 MiB per image, 1 MiB per text file, 12 MiB total. Binary documents such as PDF/Office files are not parsed. Attachment content lives in the Pi conversation; there is no independent upload store. Git inspection requires the selected workspace to be the repository root and caps output at 512 KiB. “Files written this turn” lists successful built-in `write`/`edit` paths; Git changes show the entire working tree, including earlier edits and shell changes.

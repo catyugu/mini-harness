@@ -1,15 +1,29 @@
 import type { Settings } from '../src/config.js';
-import { data, setWorkspace } from './api.js';
+import { data } from './api.js';
 import type { Bootstrap } from './types.js';
 
 export class BrowserState extends EventTarget {
   constructor(private snapshot: Bootstrap) {
     super();
-    setWorkspace(snapshot.workspace);
+    this.selectedWorkspace = localStorage.getItem('mini-harness-workspace');
+    this.reconcileWorkspace();
     this.apply(snapshot.settings);
   }
 
   get = () => this.snapshot;
+
+  selectedWorkspace: string | undefined;
+
+  selectWorkspace(id: string) {
+    this.selectedWorkspace = id;
+    if (id) localStorage.setItem('mini-harness-workspace', id);
+    else localStorage.removeItem('mini-harness-workspace');
+  }
+
+  reconcileWorkspace() {
+    if (!this.snapshot.workspaces.some(({ id }) => id === this.selectedWorkspace))
+      this.selectWorkspace(this.snapshot.workspaces[0]?.id);
+  }
 
   activeConversation: string | undefined;
 
@@ -20,7 +34,8 @@ export class BrowserState extends EventTarget {
   };
 
   refresh = async () => {
-    this.snapshot = await data<Bootstrap>('/bootstrap');
+    const next = await data<Bootstrap>('/bootstrap');
+    this.snapshot = { ...next, sessions: this.snapshot.sessions, workspaces: this.snapshot.workspaces };
     this.apply(this.snapshot.settings);
     this.dispatchEvent(new Event('bootstrap'));
   };

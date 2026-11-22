@@ -1,4 +1,5 @@
 import { prepareInput, type Attachment, type ImageInput } from './input.js';
+import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { randomUUID } from 'node:crypto';
@@ -10,7 +11,7 @@ import { getSupportedThinkingLevels } from '@earendil-works/pi-ai/compat';
 import { RunEvents } from './run-events.js';
 import { PluginHost } from './plugins.js';
 import { SessionRegistry, type ModelChoice } from './registry.js';
-import { mergeSettings, readSettings, writeJson, type SettingsPatch } from './config.js';
+import { getPaths, mergeSettings, readSettings, writeJson, type SettingsPatch } from './config.js';
 import { isRunning, type ViewMessage, type StreamEvent, type RunEvent, type RunInfo } from './protocol.js';
 import { requireChildDepth, Semaphore, type ChildLease } from './subagents.js';
 
@@ -28,6 +29,7 @@ export class MiniHarnessRuntime {
   registry: SessionRegistry;
   openSessions: Map<string, AgentSession>;
   openingSessions: Map<string, Promise<AgentSession>>;
+  private readonly waitingApprovals = new Map<string, number>();
   readonly busy = new Map<string, ActiveRun>();
   readonly plugins: PluginHost;
   models!: ModelRuntime;
@@ -50,8 +52,29 @@ export class MiniHarnessRuntime {
         get: (id) => structuredClone(this.registry.get(id)),
         list: () => structuredClone(this.registry.list())
       },
+      workspaces: {
+        resolve: (id) => this.workspacePath(id),
+        approval: (id, waiting) => {
+          const count = this.waitingApprovals.get(id) ?? 0;
+          const next = count + (waiting ? 1 : -1);
+          if (next > 0) this.waitingApprovals.set(id, next);
+          else this.waitingApprovals.delete(id);
+          if (Boolean(count) !== (next > 0)) this.registry.notify(id);
+        }
+      },
       delegation: this.delegation
     });
+  }
+
+  workspacePath(id: string) {
+    const item = this.registry.get(id);
+    if (!item) throw new Error('Conversation not found');
+    return this.registry.workspaces.resolveRoot(item.cwd, item.workspaceId);
+  }
+
+  navigationSession(id: string) {
+    const record = this.registry.get(id);
+    return record && { ...record, waitingApproval: this.waitingApprovals.has(id) };
   }
 
   async start() {
@@ -118,24 +141,28 @@ export class MiniHarnessRuntime {
   private async openNewSession(id: string): Promise<AgentSession> {
     const item = this.registry.get(id);
     if (!item) throw new Error('Conversation not found');
+    const cwd = this.workspacePath(id);
+    const storage = getPaths(item.cwd, { MINI_HARNESS_HOME: this.paths.home }).sessions;
+    mkdirSync(storage, { recursive: true, mode: 0o700 });
+    this.registry.checkSessionDirectory(storage);
     const settingsManager = SettingsManager.inMemory();
     const loader = new DefaultResourceLoader({
-      cwd: item.cwd,
+      cwd,
       agentDir: this.paths.agent,
       settingsManager,
-      additionalSkillPaths: this.plugins.ctx.harnessSkills?.paths ?? [],
+      additionalSkillPaths: this.plugins.ctx.harnessSkills?.paths(cwd) ?? [],
       noSkills: !this.plugins.ctx.harnessSkills,
       noExtensions: true
     });
     await loader.reload();
     const file = this.registry.checkedFile(item);
-    const manager = file ? SessionManager.open(file, this.paths.sessions, item.cwd) :
-      SessionManager.create(item.cwd, this.paths.sessions, { id: item.id });
+    const manager = file ? SessionManager.open(file, storage, cwd) :
+      SessionManager.create(cwd, storage, { id: item.id });
     if (item.file !== manager.getSessionFile()) this.registry.update(id, { file: manager.getSessionFile() });
     const customTools = this.plugins.getTools(id);
     const recordedModel = item.model && this.resolveModel(item.model, true);
     const { session } = await createAgentSession({
-      cwd: item.cwd,
+      cwd,
       agentDir: this.paths.agent,
       modelRuntime: this.models,
       model: recordedModel,
@@ -406,7 +433,7 @@ export class MiniHarnessRuntime {
     requireChildDepth(this.registry.depth(parentId), this.settings.subagents.maxDepth);
     const model = this.resolveModel(choice);
     const record = this.registry.create({
-      parentId, cwd: parent.cwd, title: task.slice(0, 72), model: model && this.modelInfo(model)
+      parentId, workspaceId: parent.workspaceId, title: task.slice(0, 72), model: model && this.modelInfo(model)
     });
     try {
       const text = await this.send(record.id, task, undefined, { signal });

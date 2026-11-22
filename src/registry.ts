@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { lstatSync, readFileSync, realpathSync, unlinkSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { getPaths, readJson, writeJson } from './config.js';
+import { canonicalWorkspacePath, WorkspaceCatalog, workspaceId } from './workspace-catalog.js';
 import { isRunning, type RunInfo } from './protocol.js';
 
 export interface ModelChoice { provider: string; id: string }
@@ -9,6 +10,8 @@ export interface Conversation {
   id: string;
   title: string;
   cwd: string;
+  workspaceId: string;
+  waitingApproval?: boolean;
   parentId: string | null;
   file: string | null;
   model?: ModelChoice;
@@ -24,11 +27,23 @@ const missing = (error: unknown) => (error as NodeJS.ErrnoException).code === 'E
 export class SessionRegistry {
   private state: RegistryState;
 
-  constructor(private readonly paths: ReturnType<typeof getPaths>) {
+  readonly events = new EventTarget();
+
+  constructor(private readonly paths: ReturnType<typeof getPaths>, readonly workspaces = new WorkspaceCatalog(paths)) {
     this.state = readJson<RegistryState>(paths.registry, { sessions: [] });
     if (!Array.isArray(this.state.sessions) || (this.state.pendingDelete && !Array.isArray(this.state.pendingDelete)))
       throw new Error('Invalid conversation index');
     this.finishDeletion();
+    const legacy = this.state.sessions.filter((item) => !item.workspaceId);
+    if (legacy.length) {
+      workspaces.importLegacy(legacy.map(({ cwd }) => cwd));
+      this.commit({ ...this.state, sessions: this.state.sessions.map((item) => {
+        if (item.workspaceId) return item;
+        let path = resolve(item.cwd);
+        try { path = canonicalWorkspacePath(path); } catch { /* Keep the session addressable for export or deletion. */ }
+        return { ...item, workspaceId: workspaceId(path) };
+      }) });
+    }
     if (this.state.sessions.some(({ run }) => isRunning(run))) this.commit({ ...this.state,
       sessions: this.state.sessions.map((item) => isRunning(item.run) ? { ...item,
         run: { ...item.run, state: 'interrupted', error: 'Server stopped before the run finished', finishedAt: new Date().toISOString() }
@@ -41,25 +56,35 @@ export class SessionRegistry {
     this.state = state;
   }
 
-  list() {
-    return this.state.sessions.filter((entry) => relative(this.paths.cwd, entry.cwd) === '')
+  notify(id: string, deleted = false) {
+    this.events.dispatchEvent(new CustomEvent('change', { detail: { id, deleted } }));
+  }
+
+  list(workspaceId?: string) {
+    return this.state.sessions.filter((entry) => !workspaceId || entry.workspaceId === workspaceId)
       .map((entry) => structuredClone(entry)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
 
   get(id: string) {
-    const entry = this.state.sessions.find((entry) => entry.id === id && relative(this.paths.cwd, entry.cwd) === '');
+    const entry = this.state.sessions.find((entry) => entry.id === id);
     return entry && structuredClone(entry);
   }
 
-  create({ parentId = null, title = 'New conversation', cwd = this.paths.cwd, model }: {
-    parentId?: string | null; title?: string; cwd?: string; model?: ModelChoice;
+  create({ parentId = null, title = 'New conversation', workspaceId, model }: {
+    parentId?: string | null; title?: string; workspaceId?: string; model?: ModelChoice;
   } = {}): Conversation {
-    if (relative(this.paths.cwd, cwd)) throw new Error('Conversation workspace does not match the server');
-    if (parentId && !this.get(parentId)) throw new Error('Parent conversation not found');
+    const parent = parentId && this.get(parentId);
+    if (parentId && !parent) throw new Error('Parent conversation not found');
+    if (parent && workspaceId !== undefined && workspaceId !== parent.workspaceId)
+      throw new Error('Conversation workspace does not match its parent');
+    const workspace = parent ? undefined : this.workspaces.get(workspaceId ?? this.workspaces.defaultId);
+    const cwd = parent ? parent.cwd : this.workspaces.resolveRoot(workspace.path, workspace.id);
     const now = new Date().toISOString();
-    const session: Conversation = { id: randomUUID(), title: String(title).slice(0, 140), cwd, parentId,
+    const session: Conversation = { id: randomUUID(), title: String(title).slice(0, 140), cwd,
+      workspaceId: parent ? parent.workspaceId : workspace.id, parentId,
       file: null, model, createdAt: now, updatedAt: now };
     this.commit({ ...this.state, sessions: [...this.state.sessions, session] });
+    this.notify(session.id);
     return structuredClone(session);
   }
 
@@ -68,6 +93,7 @@ export class SessionRegistry {
     if (!item) throw new Error('Conversation not found');
     const updated = { ...item, ...patch, updatedAt: new Date().toISOString() };
     this.commit({ ...this.state, sessions: this.state.sessions.map((entry) => entry.id === id ? updated : entry) });
+    this.notify(id);
     return structuredClone(updated);
   }
 
@@ -96,6 +122,15 @@ export class SessionRegistry {
     return [...selected];
   }
 
+  checkSessionDirectory(expected: string) {
+    const physicalDir = join(realpathSync(this.paths.home), 'sessions', basename(expected));
+    if (relative(physicalDir, realpathSync(expected)) ||
+        lstatSync(dirname(expected)).isSymbolicLink() || lstatSync(expected).isSymbolicLink()) {
+      throw new Error('Session directory outside managed storage');
+    }
+    return physicalDir;
+  }
+
   checkedFile(record: Pick<Conversation, 'file' | 'cwd'>): string | undefined {
     if (!record.file) return undefined;
     const expected = getPaths(record.cwd, { MINI_HARNESS_HOME: this.paths.home }).sessions;
@@ -103,12 +138,7 @@ export class SessionRegistry {
     if (!isAbsolute(record.file) || relative(expected, dirname(file)) !== '' ||
         !/^[a-z0-9_.-]+\.jsonl$/i.test(basename(file))) throw new Error('Session file outside managed storage');
     try {
-      const physicalHome = realpathSync(this.paths.home);
-      const physicalDir = join(physicalHome, 'sessions', basename(expected));
-      if (relative(physicalDir, realpathSync(expected)) ||
-          lstatSync(dirname(expected)).isSymbolicLink() || lstatSync(expected).isSymbolicLink()) {
-        throw new Error('Session directory outside managed storage');
-      }
+      const physicalDir = this.checkSessionDirectory(expected);
       const info = lstatSync(file);
       if (!info.isFile() || info.nlink !== 1 || relative(join(physicalDir, basename(file)), realpathSync(file))) {
         throw new Error('Session file outside managed storage');
@@ -141,6 +171,7 @@ export class SessionRegistry {
     });
     if (all.length) {
       this.commit({ sessions: this.state.sessions.filter((entry) => !chosen.has(entry.id)), pendingDelete });
+      for (const id of all) this.notify(id, true);
       this.finishDeletion();
     }
     return all;
