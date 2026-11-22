@@ -134,6 +134,7 @@ export function createModelPicker(root: HTMLElement, onSelect: (model: ModelChoi
 
   return {
     open,
+    selected: () => selected,
     setDisabled(disabled: boolean) {
       button.disabled = disabled;
       if (disabled && popup.matches(':popover-open')) popup.hidePopover();

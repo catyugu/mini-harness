@@ -8,6 +8,7 @@ export interface ProviderInfo {
   name: string;
   configured: boolean;
   storedCredential: boolean;
+  canSetKey: boolean;
   custom: boolean;
   baseUrl: string;
   api: string;
@@ -63,7 +64,7 @@ function providerManager(api: FrontendApi, providers: () => ProviderInfo[], refr
       <label><input type="radio" name="provider-type" value="catalog" checked> Pi provider</label>
       <label><input type="radio" name="provider-type" value="custom"> Custom API</label>
     </fieldset>`);
-    const available = providers().filter(({ configured, custom }) => !configured && !custom)
+    const available = providers().filter(({ configured, custom, canSetKey }) => canSetKey && !configured && !custom)
       .sort((a, b) => a.name.localeCompare(b.name));
     const picker = document.createElement('select');
     picker.required = true;
@@ -130,20 +131,20 @@ function providerManager(api: FrontendApi, providers: () => ProviderInfo[], refr
       </article>`);
       card.querySelector('strong').textContent = provider.name;
       const summary = card.querySelector<HTMLElement>('.provider-state');
-      summary.textContent = provider.configured ? 'Configured · ' + provider.models.length + ' models' : 'API key needed';
+      summary.textContent = provider.configured ? 'Configured · ' + provider.models.length + (provider.models.length === 1 ? ' model' : ' models') : 'API key needed';
       summary.dataset.connected = String(provider.configured);
       const actions = card.querySelector('.ui-actions');
       const editButton = button('Edit', 'quiet');
       editButton.dataset.provider = provider.id;
       editButton.setAttribute('aria-label', 'Edit ' + provider.name);
       editButton.onclick = () => edit(card.querySelector('.provider-inline'), provider);
-      actions.append(editButton);
+      if (provider.custom || provider.canSetKey) actions.append(editButton);
       if (provider.custom || provider.storedCredential) {
         const remove = button('Remove', 'quiet');
         remove.classList.add('danger');
         remove.setAttribute('aria-label', 'Remove ' + provider.name);
         remove.onclick = async () => {
-          if (!confirm(provider.custom ? 'Remove endpoint ' + provider.name + '?' : 'Remove the saved API key for ' + provider.name + '?')) return;
+          if (!confirm(provider.custom ? 'Remove endpoint ' + provider.name + '?' : 'Remove the saved credentials for ' + provider.name + '?')) return;
           remove.disabled = true;
           try {
             await api.request(provider.custom ? '/providers' : '/credentials', payload('DELETE',
@@ -169,7 +170,7 @@ function providerManager(api: FrontendApi, providers: () => ProviderInfo[], refr
 function customEndpoint(provider?: ProviderInfo) {
   const element = fromMarkup<HTMLFieldSetElement>(`<fieldset class="endpoint-fields" aria-label="Custom API">
     <div class="setting-columns">
-      <label>Provider ID<input name="id" placeholder="my-provider" pattern="[a-z0-9][a-z0-9-]{0,63}" required></label>
+      <label>Provider ID<input name="id" placeholder="my-provider" pattern="[a-z0-9](?:[a-z0-9]|-){0,63}" required></label>
       <label>API format<select name="api"><option value="openai-completions">OpenAI Chat Completions</option><option value="openai-responses">OpenAI Responses</option><option value="anthropic-messages">Anthropic Messages</option><option value="google-generative-ai">Google Generative AI</option></select></label>
     </div>
     <label>API endpoint<input name="url" type="url" placeholder="https://api.example.com/v1" required></label>

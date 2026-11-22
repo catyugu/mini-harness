@@ -3,7 +3,7 @@ import { createReadStream, readdirSync, statSync, realpathSync } from 'node:fs';
 import { dirname, join, resolve, relative, sep, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
-import type { IncomingMessage, Server, ServerResponse } from 'node:http';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { getPaths, ensurePaths, readJson, writeJson } from './config.js';
 import { containsPath } from './workspace.js';
@@ -13,12 +13,6 @@ import { installPlugin, uninstallPlugin, frontendSource } from './plugin-files.j
 import { supportsIsolation } from './sandbox.js';
 import { MiniHarnessRuntime } from './agent.js';
 import { sessionRoutes } from './session-routes.js';
-
-declare module 'cordis' {
-  interface Context {
-    harnessWeb: Server;
-  }
-}
 
 const WEB_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'web');
 const assets = new Map([
@@ -92,11 +86,10 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
           const nextPaths = getPaths(target, { MINI_HARNESS_HOME: paths.home }); ensurePaths(nextPaths);
           runtime = new MiniHarnessRuntime(nextPaths);
           await runtime.start();
-          runtime.plugins.ctx.provide('harnessWeb', server);
           writeJson(workspacesFile, known);
         } catch (error) {
           await runtime.stop().catch(() => {});
-          runtime = new MiniHarnessRuntime(previous); await runtime.start(); runtime.plugins.ctx.provide('harnessWeb', server);
+          runtime = new MiniHarnessRuntime(previous); await runtime.start();
           throw error;
         } finally { switching = false; }
         return json(res, 200, { current: runtime.paths.cwd, paths: known });
@@ -161,7 +154,6 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
     }
   };
   const server = createServer((req, res) => { void route(req, res); });
-  runtime.plugins.ctx.provide('harnessWeb', server);
   let closing: Promise<void>;
   return {
     server, get runtime() { return runtime; }, token,

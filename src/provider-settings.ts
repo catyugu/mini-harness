@@ -8,6 +8,7 @@ export function providerSettings(runtime: MiniHarnessRuntime) {
     return {
       id: provider.id, name: provider.name ?? provider.id,
       configured: auth.configured, storedCredential: auth.source === 'stored',
+      canSetKey: Boolean(provider.auth.apiKey?.login),
       custom: Boolean(config.providers?.[provider.id]),
       baseUrl: config.providers?.[provider.id]?.baseUrl ?? '', api: config.providers?.[provider.id]?.api ?? 'openai-completions',
       models: runtime.models.getModels(provider.id).map(({ id, name, input, contextWindow, maxTokens, reasoning }) => ({ id, name, input, contextWindow, maxTokens, reasoning }))
@@ -70,6 +71,7 @@ export async function saveProvider(runtime: MiniHarnessRuntime, input: any, remo
     if (clearedRecent) await runtime.updateSettings({ model: recent });
     throw error;
   }
+  runtime.invalidateProviderSessions(input.id);
   return providerSettings(runtime);
 }
 

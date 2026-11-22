@@ -68,6 +68,9 @@ test('GUI APIs configure providers, persist keys privately, discover Skills and 
   assert.deepEqual(afterRemoval.settings.model, { provider: '', id: '' });
   assert.equal(afterRemoval.providers.some((provider) => provider.id === 'gui-test'), false);
   assert.equal(readFileSync(join(paths.home, 'auth.json'), 'utf8').includes('gui-private-key'), false);
+  const afterHistory = await request('/sessions/' + session.id);
+  assert.equal(afterHistory.status, 200);
+  assert.deepEqual(afterHistory.body.messages, history.messages);
 });
 
 test('manual compaction uses Pi and preserves an idle conversation on failure', async (t) => {

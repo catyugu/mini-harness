@@ -55,6 +55,7 @@ function createShell(signal: AbortSignal) {
   const sidebar = element('sidebar'), sidebarButton = element('sidebarOpen');
   const inspector = element('inspector'), inspectorButton = element('inspectorOpen');
   const inspectorContent = element('inspectorContent');
+  let inspectorTrigger: HTMLElement;
   const viewport = window.visualViewport;
 
   function setSidebar(open: boolean) {
@@ -69,16 +70,17 @@ function createShell(signal: AbortSignal) {
   function setInspector(open: boolean) {
     inspector.hidden = !open;
     inspectorButton.setAttribute('aria-expanded', String(open));
+    if (!open && inspectorTrigger?.isConnected && !inspectorTrigger.closest('[inert]')) inspectorTrigger.focus();
   }
 
   sidebarButton.onclick = () => setSidebar(sidebarButton.getAttribute('aria-expanded') !== 'true');
   element('sidebarClose').onclick = element('overlay').onclick = () => { closeDrawer(); sidebarButton.focus(); };
   narrow.addEventListener('change', () => setSidebar(!narrow.matches), { signal });
-  inspectorButton.onclick = () => setInspector(inspector.hidden);
+  inspectorButton.onclick = () => { inspectorTrigger = inspectorButton; setInspector(inspector.hidden); };
   element('inspectorClose').onclick = () => setInspector(false);
   document.addEventListener('keydown', (event) => {
     if (event.defaultPrevented || event.key !== 'Escape' || document.querySelector('dialog[open]')) return;
-    if (!inspector.hidden) { setInspector(false); inspectorButton.focus(); }
+    if (!inspector.hidden) setInspector(false);
     else closeDrawer();
   }, { signal });
   function resize() {
@@ -87,6 +89,8 @@ function createShell(signal: AbortSignal) {
   viewport?.addEventListener('resize', resize, { signal });
   resize();
   setSidebar(!narrow.matches);
+  inspectorButton.setAttribute('aria-expanded', 'false');
+  inspectorButton.setAttribute('aria-controls', inspector.id);
   hydrateIcons();
 
   return {
@@ -108,6 +112,7 @@ function createShell(signal: AbortSignal) {
       if (page) { setInspector(false); closeDrawer(); page.focus(); }
     },
     inspect(title: string, content: HTMLElement) {
+      if (inspector.hidden || !inspector.contains(document.activeElement)) inspectorTrigger = document.activeElement as HTMLElement;
       element('inspectorTitle').textContent = title;
       inspectorContent.replaceChildren(content);
       setInspector(true);

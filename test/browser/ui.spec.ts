@@ -141,6 +141,31 @@ test('desktop and mobile: send, navigate, settings and bulk select', async ({ br
   }
 });
 
+test('settings layout stays consistent across viewport sizes and themes', async ({ browser }) => {
+  const mock = await createMockProvider();
+  const { root, paths } = createFixturePaths(mock.url);
+  const service = await startIsolatedHost(paths);
+  try {
+    for (const viewport of [{ width: 1366, height: 900 }, { width: 768, height: 1024 }, { width: 390, height: 844 }, { width: 320, height: 568 }]) {
+      const page = await browser.newPage({ viewport, reducedMotion: 'reduce' });
+      try {
+        await page.goto(service.url + '/#token=' + service.token);
+        await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toBeVisible();
+        await page.locator('#workspaceLabel').evaluate((label) => { label.textContent = 'workspace'; });
+        if (viewport.width <= 860) await page.getByRole('button', { name: 'Toggle navigation' }).click();
+        await page.getByRole('button', { name: 'Settings', exact: true }).click();
+        await settingsSection(page, 'Model').click();
+        for (const colorScheme of ['light', 'dark'] as const) {
+          await page.emulateMedia({ colorScheme });
+          await expect(page).toHaveScreenshot('settings-' + viewport.width + '-' + colorScheme + '.png', {
+            animations: 'disabled', caret: 'hide', maxDiffPixelRatio: 0.02
+          });
+        }
+      } finally { await page.close(); }
+    }
+  } finally { await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
 test('refresh and navigation preserve a run while another conversation completes', async ({ browser }) => {
   for (const viewport of [{ width: 1366, height: 900 }, { width: 390, height: 844 }]) {
     let entered: () => void, release: () => void;

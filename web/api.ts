@@ -4,10 +4,6 @@ export function scopedElements(root: HTMLElement) {
   }
   return { element, value: (id: string) => element<'input'>(id).value.trim() };
 }
-export function element<K extends keyof HTMLElementTagNameMap = 'div'>(id: string): HTMLElementTagNameMap[K] {
-  return document.getElementById(id) as HTMLElementTagNameMap[K];
-}
-export const value = (id: string) => element<'input'>(id).value.trim();
 const tokenFromUrl = new URLSearchParams(location.hash.slice(1)).get('token');
 if (tokenFromUrl) {
   sessionStorage.setItem('mini-harness-token', tokenFromUrl);

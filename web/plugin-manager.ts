@@ -34,7 +34,7 @@ function installer(api: FrontendApi, installed: () => Promise<void>) {
     <div class="ui-actions"></div>
   </form>`);
   const modal = dialog('Install plugin', form);
-  const id = fromMarkup<HTMLInputElement>('<input pattern="[a-z][a-z0-9-]{0,63}" placeholder="my-plugin" required>');
+  const id = fromMarkup<HTMLInputElement>('<input pattern="[a-z](?:[a-z0-9]|-){0,63}" placeholder="my-plugin" required>');
   form.prepend(field('Plugin ID', id));
   const input = form.querySelector<HTMLInputElement>('.bundle-input');
   const drop = form.querySelector<HTMLElement>('.bundle-drop');

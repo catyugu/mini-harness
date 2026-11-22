@@ -228,6 +228,11 @@ export function conversationView(api: FrontendApi, options: ConversationServices
   async function send(text: string, attached?: import('../src/input.js').Attachment[]) {
     const attachments = attached ?? composerUi.attachments();
     if (sending || pendingNavigation || (!text.trim() && !attachments.length)) return;
+    if (!modelPicker.selected()) {
+      showStatus('Choose a configured model before sending.');
+      modelPicker.open();
+      return;
+    }
     const choice = modelDraft;
     const thinkingLevel = thinkingSelect.value || undefined;
     const request = ++navigation;
