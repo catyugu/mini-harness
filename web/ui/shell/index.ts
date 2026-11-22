@@ -15,7 +15,9 @@ export const shellPlugin: BrowserPlugin = {
   setup(ctx, api) {
     const { shell, tabs } = createShell(api.signal);
     ctx.provide('miniShell', shell);
-    ctx.provide('rightTabs', tabs);
+    ctx.provide('miniTabs', tabs);
+    for (const slot of Object.keys(slots) as Array<keyof typeof slots>)
+      api.outlet(slot, shell.outlet(slot));
     const { miniState: state } = ctx;
     state.on('navigation', () => {
       const { sessions, workspaces } = state.get();
@@ -26,7 +28,7 @@ export const shellPlugin: BrowserPlugin = {
 };
 
 declare module 'cordis' {
-  interface Context { miniShell: ReturnType<typeof createShell>['shell']; rightTabs: ReturnType<typeof createRightTabs> }
+  interface Context { miniShell: ReturnType<typeof createShell>['shell'] }
 }
 
 function createShell(signal: AbortSignal) {

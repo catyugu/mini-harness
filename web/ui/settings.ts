@@ -12,6 +12,8 @@ export const settingsPlugin: BrowserPlugin = {
     const { miniShell: shell, miniState: state } = ctx;
     const settings = mountSettings(api);
     ctx.provide('miniSettings', settings);
+    ctx.provide('miniSettingsPages', { addPage: settings.addPage });
+    api.outlet('settings', settings.outlet);
     shell.bindSettings(() => { shell.closeDrawer(); settings.open(); }, api.signal);
     const theme = fromMarkup<HTMLSelectElement>(`<select><option value="system">System</option>
       <option value="light">Light</option><option value="dark">Dark</option></select>`);
