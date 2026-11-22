@@ -19,6 +19,8 @@ export interface ViewMessage {
   sessionId?: string;
   arguments?: unknown;
   isError?: boolean;
+  elapsedMs?: number;
+  exitCode?: number;
 }
 
 export interface RunInfo {
@@ -38,7 +40,7 @@ export type StreamEvent =
   | { type: 'assistant-start' | 'assistant-end' }
   | { type: 'user'; text: string; content?: MessageContent }
   | { type: 'delta' | 'complete'; text: string }
-  | { type: 'tool'; id: string; name: string; state: 'running' | 'finished' | 'error'; arguments?: unknown; content?: MessageContent; sessionId?: string; elapsedMs?: number }
+  | { type: 'tool'; id: string; name: string; state: 'running' | 'finished' | 'error'; arguments?: unknown; content?: MessageContent; sessionId?: string; elapsedMs?: number; exitCode?: number }
   | { type: 'error'; error: string }
   | { type: 'run'; run: RunInfo }
   | { type: 'snapshot'; messages: ViewMessage[]; partial?: string; tools?: Extract<StreamEvent, { type: 'tool' }>[]; run: RunInfo };
