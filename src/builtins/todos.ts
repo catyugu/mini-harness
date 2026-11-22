@@ -19,7 +19,7 @@ export const todos: BuiltinPlugin = {
         return { content: [{ type: 'text', text: 'Task list updated' }], details: { items } };
       }
     });
-    ctx.effect(() => ctx.harnessTools.register(bind(''), bind, undefined, true, ['read']));
+    ctx.effect(() => ctx.harnessTools.register(bind(''), bind));
     ctx.effect(() => ctx.harnessRoutes.register('GET', '/api/todos', ({ url }) => ctx.harnessTodos.get(url.searchParams.get('sessionId'))));
   }
 };

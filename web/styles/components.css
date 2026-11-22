@@ -582,14 +582,12 @@ button { border-radius: var(--radius); }
 .diff-peek { flex-basis: 100%; max-height: 15em; margin: 0; padding: 6px 10px; font: var(--font-code)/1.5 var(--font-mono); overflow: hidden; white-space: pre-wrap; }
 .tool-card[open] .diff-peek { display: none; }
 .composer-footer { flex-wrap: wrap; }
-.permission-select { max-width: 110px; border: 0; background: transparent; font-size: var(--text-secondary); padding: 6px 3px; }
 .composer-dock { display: flex; flex-wrap: wrap; min-height: 0; align-items: center; gap: 8px; padding-inline: 5px; }
 .composer-dock .run-summary { width: auto; margin: 0; padding: 6px 0 0; }
 .todo-dock { padding: 8px 12px; margin-bottom: 6px; border-radius: var(--radius); background: var(--panel); font-size: var(--text-secondary); }
 .todo-dock ul { margin: 4px 0 0; padding: 0; list-style: none; max-height: 110px; overflow: auto; }
 .todo-dock [data-state="completed"] { color: var(--muted); text-decoration: line-through; }
 @media (max-width: 560px) {
-  .permission-select { max-width: 88px; }
   .composer-footer { gap: 2px; }
   .composer-footer .model-select { max-width: 32vw; }
 }

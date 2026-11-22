@@ -1,7 +1,7 @@
 import { Context } from './vendor/cordis.js';
 import { data } from './api.js';
 import { BrowserState } from './client.js';
-import { FrontendHost, type BrowserPlugin, type Slot } from './extensions.js';
+import { FrontendHost, type BrowserPlugin } from './extensions.js';
 import { createPluginLoader } from './plugin-loader.js';
 import { shellPlugin } from './shell.js';
 import { conversationView } from './conversation.js';
@@ -20,7 +20,6 @@ declare module 'cordis' {
     miniNavigation: ReturnType<typeof sessionNavigation>;
     miniConversation: ReturnType<typeof conversationView>;
     miniEvents: EventTarget;
-    miniOutlets: Map<Slot, HTMLElement>;
     miniSwitch: (snapshot: Bootstrap) => Promise<void>;
   }
 }
@@ -52,10 +51,10 @@ const navigationPlugin: BrowserPlugin = {
 };
 
 const conversationPlugin: BrowserPlugin = {
-  id: 'core:conversation', inject: ['miniState', 'miniShell', 'miniEvents', 'miniWorkspace', 'miniNavigation', 'miniHost', 'miniOutlets', 'harnessBrowser'],
+  id: 'core:conversation', inject: ['miniState', 'miniShell', 'miniEvents', 'miniWorkspace', 'miniNavigation', 'miniHost', 'harnessBrowser'],
   setup(ctx, api) {
     const { miniState: state, miniNavigation: navigation, miniShell: shell, miniEvents: events, miniWorkspace: workspace } = ctx;
-    const conversation = conversationView(api, {
+    const conversation = conversationView(api, ctx.harnessBrowser, {
       bootstrap: state.get,
       applySettings: state.apply, closeDrawer: shell.closeDrawer,
       setActive(item) {
@@ -72,11 +71,7 @@ const conversationPlugin: BrowserPlugin = {
       changed: () => events.dispatchEvent(new Event('change')),
       event: (event) => events.dispatchEvent(new CustomEvent('run-event', { detail: event })),
       openResource: (path, diff, line) => ctx.harnessBrowser.openResource({ path, kind: diff ? 'diff' : 'file', line }),
-      setTitle: shell.setTitle, renderNode: (message) => ctx.miniHost.chat(message), renderTool: (tool, action) => ctx.miniHost.render(tool, action),
-      provideSlot(name, node) {
-        ctx.miniOutlets.set(name, node);
-        api.onDispose(() => { ctx.miniOutlets.delete(name); });
-      }
+      setTitle: shell.setTitle, renderNode: (message) => ctx.miniHost.chat(message), renderTool: (tool, action) => ctx.miniHost.render(tool, action)
     });
     ctx.provide('miniConversation', conversation);
     conversation.registerCoreCommands(api.command);
@@ -108,7 +103,6 @@ const plugins = [shellPlugin, workspacePlugin, navigationPlugin, conversationPlu
 export async function mountBrowser(ctx: Context, snapshot: Bootstrap) {
   const state = new BrowserState(snapshot);
   const events = new EventTarget();
-  const slots = new Map<Slot, HTMLElement>();
   const report = (error: Error) => ctx.miniConversation?.report(error);
   function scope() {
     const workspaceId = state.selectedWorkspace;
@@ -120,7 +114,7 @@ export async function mountBrowser(ctx: Context, snapshot: Bootstrap) {
     ctx.rightTabs.selectScope(scope());
     ctx.rightTabs.prune(new Set(sessions.map(({ id }) => id)), new Set(workspaces.map(({ id }) => id)));
   });
-  const host = new FrontendHost(ctx, (name) => slots.get(name) ?? ctx.miniShell.slot(name),
+  const host = new FrontendHost(ctx,
     { request: data, insert: (text) => ctx.miniConversation.insert(text), tabs: () => ctx.rightTabs },
     {
       bootstrap: state.get,
@@ -140,14 +134,12 @@ export async function mountBrowser(ctx: Context, snapshot: Bootstrap) {
       changedFiles: () => ctx.miniConversation.changedFiles(),
       report
     },
-    (title, node) => ctx.miniSettings.addPage(title, node),
     (command) => ctx.miniConversation.command(command),
     (trigger, complete) => ctx.miniConversation.completion(trigger, complete));
   const load = createPluginLoader(host, report);
   ctx.provide('miniState', state);
   ctx.provide('miniHost', host);
   ctx.provide('miniEvents', events);
-  ctx.provide('miniOutlets', slots);
   ctx.provide('miniSwitch', load);
   try {
     for (const plugin of plugins) await host.mountPlugin(plugin);

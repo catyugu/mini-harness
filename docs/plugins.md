@@ -63,7 +63,7 @@ The default export can also be a Cordis component with `apply` and `inject`. Dec
 | - | - |
 | `api.config` | Cloned, read-only top-level configuration with schema defaults applied |
 | `api.defineConfig(defaults, validate?)` | Optional JavaScript defaults and validation, including plugins without a schema |
-| `api.registerTool(tool, {capabilities}?)` | Declare capabilities (`read`, `workspace-write`, `shell`, `delegate`); local tools always additionally require confirmed full permission. Register a Pi tool and return an async unregister function |
+| `api.registerTool(tool)` | Register a Pi tool and return an async unregister function |
 | `api.registerRoute(method, path, handler)` | Mount an authenticated JSON route under `/api/extensions/<id>` and return an async unregister function |
 | `api.onDispose(cleanup)` | Register synchronous or asynchronous resource cleanup |
 | Returned cleanup function | Alternative cleanup for the setup function |
@@ -76,7 +76,7 @@ Public metadata services are `harnessModels.list()` (also available as `harnessA
 
 Built-in and local setup functions run in Cordis scopes. Dependencies mount first and unload last. Disabling a required plugin also requires disabling its dependents. Reconfiguring a dependency restarts its enabled dependents. Unchanged plugin scopes stay mounted. A route handler receives `{ url, body(maxBytes?), signal }`. The signal aborts when its route unloads. Read JSON with `await body()` and return a JSON-serializable result.
 
-Schema validation precedes setup. If setup or settings persistence fails, the host unloads new scopes and restores the previous plugin configuration. Cleanup handlers must release their resources and tolerate partial setup; failure to restore is reported explicitly. Changes affecting active tools or Skills require idle conversations, and invalidate Pi sessions so their next open gets the current tool definitions. Theme, scheduling and default-policy changes preserve running sessions. Current-session permission changes require idle descendants. Changes to child depth refresh tool availability when a session is next idle.
+Schema validation precedes setup. If setup or settings persistence fails, the host unloads new scopes and restores the previous plugin configuration. Cleanup handlers must release their resources and tolerate partial setup; failure to restore is reported explicitly. Changes affecting active tools or Skills require idle conversations, and invalidate Pi sessions so their next open gets the current tool definitions. Theme and scheduling changes preserve running sessions. Changes to child depth refresh tool availability when a session is next idle.
 
 ## Run API
 
@@ -165,4 +165,4 @@ Images (PNG/JPEG/GIF/WebP) go through Pi's image input and require an image-capa
 
 The file, Skill and approval endpoints return 404 when their corresponding plugin is disabled. Every enabled built-in Shell call requires approval. Requests expire after five minutes; stopping the run or server cancels pending approval. Approval permits the command under the existing shell policy. Reviewed local plugins remain trusted code; this is not a general-purpose containment mechanism.
 
-The contribution registry, scope rules, service contracts, session projections and permission boundaries are documented in [Harness UI and execution boundaries](refactor.md). Browser plugins can use `api.contribute(region, {id, key?, priority?, order?, scope?, accepts?, value})`, `api.contributions(region, key?, context?)` and `api.watchContributions(listener)`. Use `services.openResource({path, kind, line})` for files, Diff or Shell output. `POST /api/sessions/:id/permission` accepts `{permission, confirmed}`; confirmed full access is required before local plugin tool execution.
+The contribution registry, scope rules, service contracts and session projections are documented in [Harness UI and session architecture](refactor.md). Browser plugins can use `api.contribute(region, {id, key?, priority?, order?, scope?, accepts?, value})`, `api.contributions(region, key?, context?)` and `api.watchContributions(listener)`. Use `services.openResource({path, kind, line})` for files, Diff or Shell output.

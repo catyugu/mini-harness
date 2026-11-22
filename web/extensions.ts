@@ -6,7 +6,9 @@ import type { Conversation } from '../src/registry.js';
 import type { RightTabType, TabScope, createRightTabs } from './right-tabs.js';
 import type { Bootstrap } from './types.js';
 
-export type Slot = 'conversation.input.permission' | 'conversation.input.dock' | 'conversation.composer.dock' | 'sidebar' | 'composer' | 'settings' | 'inspector' | 'approvals' | 'session-navigation' | 'conversation' | 'dialogs' | 'main' | 'conversation-header';
+const mountSlots = ['sidebar', 'composer', 'settings', 'inspector', 'approvals', 'session-navigation', 'conversation', 'dialogs', 'main', 'conversation-header'] as const;
+export type Slot = typeof mountSlots[number] | 'conversation.input.dock' | 'conversation.composer.dock';
+type OutletRegion = `mount:${typeof mountSlots[number]}`;
 export interface ToolView { details?: unknown; id?: string; name: string; state: string; content?: MessageContent; arguments?: unknown; sessionId?: string }
 export interface Suggestion {
   label: string;
@@ -27,7 +29,7 @@ export type Completer = (request: Completion) => void | Promise<void>;
 
 export interface FrontendApi {
   contribute<T>(region: Region, contribution: Omit<Contribution<T>, 'owner'>): () => void;
-  contributions<T>(region: Region, key?: string, context?: unknown): Contribution<T>[];
+  contributions<T>(region: Region | OutletRegion, key?: string, context?: unknown): Contribution<T>[];
   watchContributions(listener: (region: string) => void): void;
   mount(slot: Slot, node: HTMLElement, order?: number): void;
   command(command: ComposerCommand): () => void;
@@ -67,31 +69,19 @@ export interface BrowserPlugin {
 }
 
 export class FrontendHost {
-  private readonly fibers = new Map<string, Fiber>();
-  readonly registry = new ContributionRegistry();
-  private readonly mountedNodes = new Map<string, HTMLElement[]>();
-  private readonly pages = new Map<string, { value: unknown; dispose(): void }>();
-  private readonly tabs = new Map<string, { value: unknown; dispose(): void }>();
-  private readonly lifetime = new AbortController();
+  private readonly plugins = new Map<string, { fiber: Fiber; controller: AbortController }>();
+  private readonly registry = new ContributionRegistry();
   private nextId = 0;
 
   constructor(
     private readonly ctx: Context,
-    private slot: (name: Slot) => HTMLElement,
     private ui: Pick<FrontendApi, 'request' | 'insert'> & { tabs(): ReturnType<typeof createRightTabs> },
     private services: FrontendServices,
-    private addSettingsPage: (title: string, node: HTMLElement) => () => void,
     private registerCommand: (command: ComposerCommand) => () => void,
     private registerCompletion: (trigger: string, complete: Completer) => () => void
   ) {
     this.ctx.provide('harnessBrowser', services);
-    for (const name of ['sidebar', 'composer', 'settings', 'inspector', 'approvals', 'session-navigation', 'conversation', 'dialogs', 'main', 'conversation-header'])
-      this.registry.define('mount:' + name, 'list');
-    this.registry.watch((region) => this.refreshRegion(region));
-    services.onConversationChange(() => {
-      for (const region of this.mountedNodes.keys()) this.refreshRegion(region);
-      this.refreshRegion('settings.section');
-    }, this.lifetime.signal);
+    for (const name of mountSlots) this.registry.define('mount:' + name, 'list');
   }
 
   enable(id: string, setup: FrontendSetup, config: Record<string, unknown> = {}) {
@@ -112,6 +102,10 @@ export class FrontendHost {
       const registerRenderer = (region: Region, name: string, render: (tool: ToolView) => HTMLElement | undefined) =>
         contribute(region, { id: name, key: name, value: render });
 
+      const onDispose = (dispose: () => void | Promise<void>) => {
+        if (controller.signal.aborted) void Promise.resolve().then(dispose).catch(this.services.report);
+        else own(() => dispose);
+      };
       const cleanup = await setup(ctx, {
         contribute,
         contributions: (region, key, context) => this.registry.resolve(region, this.services.workspace(), key, context),
@@ -133,54 +127,27 @@ export class FrontendHost {
         settingsPage: (title, node) => contribute('settings.section', { id: title, value: { title, node } }),
         tool: (name, render) => registerRenderer('tool.call.toolview', name, render),
         toolAction: (name, render) => registerRenderer('tool.call.action', name, render),
-        onDispose: (dispose) => {
-          if (controller.signal.aborted) void Promise.resolve().then(dispose).catch(this.services.report);
-          else own(() => dispose);
-        }
+        onDispose
       });
-      if (cleanup) own(() => cleanup);
+      if (cleanup) onDispose(cleanup);
     });
-    this.fibers.set(id, fiber);
-    this.controllers.set(id, controller);
+    const plugin = { fiber, controller };
+    this.plugins.set(id, plugin);
     try { await fiber.await(); }
-    catch (error) { await this.disable(id); throw error; }
+    catch (error) { if (this.plugins.get(id) === plugin) await this.disable(id); throw error; }
   }
 
-  private readonly controllers = new Map<string, AbortController>();
-
   async disable(id: string) {
-    const fiber = this.fibers.get(id);
-    this.fibers.delete(id);
-    this.controllers.get(id)?.abort();
-    this.controllers.delete(id);
-    try { await fiber?.dispose(); }
+    const plugin = this.plugins.get(id);
+    if (!plugin) return;
+    this.plugins.delete(id);
+    plugin.controller.abort();
+    try { await plugin.fiber.dispose(); }
     catch (error) { this.services.report(error); }
   }
 
   async dispose() {
-    this.lifetime.abort();
-    for (const id of [...this.fibers.keys()].reverse()) await this.disable(id);
-  }
-
-  private refreshRegion(region: string) {
-    const entries = this.registry.resolve<any>(region, this.services.workspace());
-    if (region.startsWith('mount:') || ['sidebar.panellist', 'conversation.input.permission', 'conversation.input.dock', 'conversation.composer.dock'].includes(region)) {
-      const slot = region === 'sidebar.panellist' ? 'sidebar' : region.replace('mount:', '') as Slot;
-      const nodes = entries.map(({ value }) => value as HTMLElement);
-      for (const previous of this.mountedNodes.get(region) ?? []) if (!nodes.includes(previous)) previous.remove();
-      const container = this.slot(slot);
-      if (nodes.length && !container) throw new Error('Unavailable UI outlet: ' + slot);
-      const existing = container ? [...container.children].filter((node) => nodes.includes(node as HTMLElement)) : [];
-      if (existing.length !== nodes.length || existing.some((node, index) => node !== nodes[index])) container.append(...nodes);
-      this.mountedNodes.set(region, nodes);
-    } else if (region === 'settings.section' || region === 'sidebar.right.pane.tab') {
-      const installed = region === 'settings.section' ? this.pages : this.tabs;
-      const values = new Map(entries.map(({ id, key, value }) => [key ?? id, value]));
-      for (const [identity, current] of installed) if (values.get(identity) !== current.value) { current.dispose(); installed.delete(identity); }
-      for (const { id, key, value } of entries) if (!installed.has(key ?? id)) {
-        installed.set(key ?? id, { value, dispose: region === 'settings.section' ? this.addSettingsPage(value.title, value.node) : this.ui.tabs().register(key, value) });
-      }
-    }
+    for (const id of [...this.plugins.keys()].reverse()) await this.disable(id);
   }
 
   chat(message: ViewMessage) {

@@ -1,18 +1,20 @@
 import type { Settings } from '../src/config.js';
 import { payload, scopedElements } from './api.js';
 import type { BrowserPlugin, FrontendApi } from './extensions.js';
+import { mountOutlet, mountResources } from './outlets.js';
 import { icon } from './icons.js';
 import { closeOnBackdrop, field, fromMarkup } from './primitives.js';
 
 const pageIcons = { Model: 'model', Plugins: 'plugin', Appearance: 'theme' } as const;
 
 export const settingsPlugin: BrowserPlugin = {
-  id: 'core:settings', inject: ['miniState', 'miniShell', 'miniOutlets'],
+  id: 'core:settings', inject: ['miniState', 'miniShell', 'harnessBrowser'],
   setup(ctx, api) {
     const { miniShell: shell, miniState: state } = ctx;
     const settings = mountSettings(api);
-    ctx.miniOutlets.set('settings', settings.outlet);
-    api.onDispose(() => { ctx.miniOutlets.delete('settings'); });
+    mountOutlet(api, ctx.harnessBrowser, 'mount:settings', settings.outlet);
+    mountResources<{ title: string; node: HTMLElement }>(api, ctx.harnessBrowser, 'settings.section',
+      ({ value }) => settings.addPage(value.title, value.node));
     ctx.provide('miniSettings', settings);
     shell.bindSettings(() => { shell.closeDrawer(); settings.open(); }, api.signal);
     const theme = fromMarkup<HTMLSelectElement>(`<select><option value="system">System</option>
@@ -44,21 +46,6 @@ export const settingsPlugin: BrowserPlugin = {
       select.onchange = () => { localStorage.setItem(key, select.value); document.dispatchEvent(new Event('mini-harness-presentation')); };
       content.append(field(label, select));
     }
-    const execution = fromMarkup('<div><p class="hint">Default permission applies to future conversations. Change the active conversation in its composer.</p><p role="status" class="hint"></p></div>');
-    const permission = document.createElement('select');
-    permission.append(new Option('View only', 'read-only'), new Option('Workspace modifications', 'workspace-write'), new Option('Full access', 'full'));
-    const syncPermission = () => { permission.value = state.get().settings.defaultPermission; };
-    syncPermission(); state.on('settings', syncPermission, api.signal);
-    execution.prepend(field('Default execution permission', permission));
-    api.settingsPage('Execution', execution);
-    permission.onchange = async () => {
-      const next = permission.value; syncPermission();
-      if (next === 'full' && !confirm('Use full user permissions for future conversations?')) return;
-      permission.disabled = true;
-      try { state.apply(await api.request<Settings>('/settings', payload('PATCH', { defaultPermission: next, confirmed: next === 'full' }))); }
-      catch (error) { execution.querySelector('[role="status"]').textContent = error.message; }
-      finally { syncPermission(); permission.disabled = false; }
-    };
     sync();
     state.on('settings', sync, api.signal);
     api.onDispose(settings.addPage('Appearance', content));

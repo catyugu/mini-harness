@@ -1,20 +1,23 @@
 import { scopedElements } from './api.js';
 import { fromMarkup } from './primitives.js';
 import type { BrowserPlugin } from './extensions.js';
-import type { Slot } from './extensions.js';
 import { hydrateIcons } from './icons.js';
 import { createLayout } from './layout.js';
-import { createRightTabs } from './right-tabs.js';
-
-const slots: Partial<Record<Slot, string>> = {
-  sidebar: 'sidebarExtensions', inspector: 'inspectorExtensions',
-  'session-navigation': 'navigationSlot', conversation: 'conversationSlot', dialogs: 'dialogSlot', main: 'mainSlot', 'conversation-header': 'conversationExtensions'
-};
+import { mountOutlet, mountResources } from './outlets.js';
+import { createRightTabs, type RightTabType } from './right-tabs.js';
 
 export const shellPlugin: BrowserPlugin = {
-  id: 'core:shell',
+  id: 'core:shell', inject: ['harnessBrowser'],
   setup(ctx, api) {
-    const { shell, tabs } = createShell(api.signal);
+    const { shell, tabs, element } = createShell(api.signal);
+    const services = ctx.harnessBrowser;
+    for (const [region, id] of [
+      ['mount:sidebar', 'sidebarExtensions'], ['sidebar.panellist', 'sidebarExtensions'],
+      ['mount:inspector', 'inspectorExtensions'], ['mount:session-navigation', 'navigationSlot'],
+      ['mount:conversation', 'conversationSlot'], ['mount:dialogs', 'dialogSlot'],
+      ['mount:main', 'mainSlot'], ['mount:conversation-header', 'conversationExtensions']
+    ] as const) mountOutlet(api, services, region, element(id));
+    mountResources<RightTabType>(api, services, 'sidebar.right.pane.tab', ({ key, value }) => tabs.register(key, value));
     ctx.provide('miniShell', shell);
     ctx.provide('rightTabs', tabs);
   }
@@ -75,7 +78,6 @@ function createShell(signal: AbortSignal) {
   hydrateIcons();
 
   const shell = {
-    slot: (name: Slot) => slots[name] ? element(slots[name]) : null,
     bindNew: (action: () => void, signal: AbortSignal) => element('newSession').addEventListener('click', action, { signal }),
     bindSettings: (action: () => void, signal: AbortSignal) => element('settingsOpen').addEventListener('click', action, { signal }),
     setTitle: (title: string) => { element('conversationTitle').textContent = title; },
@@ -93,5 +95,5 @@ function createShell(signal: AbortSignal) {
       if (page) { layout.setPanel(false); layout.closeDrawer(false); page.focus(); }
     }
   };
-  return { shell, tabs };
+  return { shell, tabs, element };
 }

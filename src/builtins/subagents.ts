@@ -33,6 +33,6 @@ export const subagents: BuiltinPlugin = {
       }
     });
     ctx.effect(() => ctx.harnessTools.register(tool(''), tool,
-      (id) => delegation.depth(id) < ctx.harnessChildPolicy.get().maxDepth, true, ['delegate']));
+      (id) => delegation.depth(id) < ctx.harnessChildPolicy.get().maxDepth));
   }
 };

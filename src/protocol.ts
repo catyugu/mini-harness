@@ -45,15 +45,18 @@ export interface RunInfo {
 
 export const isRunning = (run?: RunInfo) => run?.state === 'queued' || run?.state === 'running';
 
+type MessageIdentity = Pick<ViewMessage, 'id' | 'runId' | 'timestamp'>;
+
 export type StreamEvent =
-  | { type: 'assistant-start' | 'assistant-end' }
-  | { type: 'user'; text: string; content?: MessageContent }
+  | { type: 'assistant-start' }
+  | { type: 'assistant-end'; message?: ViewMessage }
+  | { type: 'user'; text: string; content?: MessageContent; entry?: MessageIdentity }
   | { type: 'delta' | 'complete'; text: string }
-  | { type: 'tool'; id: string; name: string; state: 'running' | 'finished' | 'error'; arguments?: unknown; content?: MessageContent; sessionId?: string; elapsedMs?: number; details?: unknown }
+  | { type: 'tool'; id: string; name: string; state: 'running' | 'finished' | 'error'; arguments?: unknown; content?: MessageContent; sessionId?: string; elapsedMs?: number; details?: unknown; entry?: MessageIdentity }
   | { type: 'todos'; items: TodoItem[] }
-  | { type: 'approval'; approval: { id: string; sessionId: string; command: string; toolCallId?: string; state: 'pending' | 'allowed' | 'denied' | 'expired' | 'cancelled'; createdAt: string } }
+  | { type: 'approval'; fact?: { id: string; timestamp: string; runId?: string }; approval: { id: string; sessionId: string; command: string; toolCallId?: string; state: 'pending' | 'allowed' | 'denied' | 'expired' | 'cancelled'; createdAt: string } }
   | { type: 'error'; error: string }
   | { type: 'run'; run: RunInfo }
-  | { type: 'snapshot'; messages: ViewMessage[]; partial?: string; tools?: Extract<StreamEvent, { type: 'tool' }>[]; run: RunInfo };
+  | { type: 'snapshot'; messages: ViewMessage[]; facts?: SessionFact[]; runs?: RunInfo[]; partial?: string; tools?: Extract<StreamEvent, { type: 'tool' }>[]; run: RunInfo };
 
 export type RunEvent = StreamEvent & { sequence: number };

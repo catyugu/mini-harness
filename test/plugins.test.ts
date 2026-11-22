@@ -34,7 +34,7 @@ test('an installed Cordis plugin can use services, configure a tool, and release
     };
   `);
   await runtime.start();
-  const item = runtime.registry.create({ permission: 'full' });
+  const item = runtime.registry.create();
   assert.equal(runtime.plugins.metadata().find(({ id }) => id === 'example')?.title, 'Example plugin');
   await runtime.updateSettings({ plugins: { example: true }, pluginConfig: { example: { prefix: 'Total' } } });
   const originalSession = await runtime.open(item.id);
@@ -70,7 +70,7 @@ test('file tools have a plugin lifecycle and required plugins cannot be disabled
       execute: async () => ({ content: [{ type: 'text', text: 'ok' }] }) });
   };`);
   await runtime.start();
-  const item = runtime.registry.create({ permission: 'full' });
+  const item = runtime.registry.create();
   assert.ok((await runtime.open(item.id)).getActiveToolNames().includes('read'));
   await runtime.updateSettings({ plugins: { files: false } });
   assert.ok(!(await runtime.open(item.id)).getActiveToolNames().includes('read'));
@@ -99,7 +99,7 @@ test('plugin JSON Schema applies defaults and rejects invalid changes before set
   };`);
   await runtime.start();
   await runtime.updateSettings({ plugins: { schema: true } });
-  const item = runtime.registry.create({ permission: 'full' });
+  const item = runtime.registry.create();
   const tool = runtime.plugins.getTools(item.id).find(({ name }) => name === 'schema_value');
   assert.match(JSON.stringify(await tool.execute('test', {}, undefined, undefined, undefined)), /3/);
   await assert.rejects(runtime.updateSettings({ pluginConfig: { schema: { count: 0 } } }), /Invalid configuration/);
@@ -130,7 +130,7 @@ test('dependent plugins restart in order and partial setup or persistence failur
   await runtime.updateSettings({ plugins: { base: true, dependent: true } });
   await assert.rejects(runtime.updateSettings({ pluginConfig: { base: { fail: true } } }), /Partial setup failed/);
   assert.match(readFileSync(log, 'utf8'), /stop dependent\nstop base\nstart base\nstop base\nstart base\nstart dependent/);
-  const item = runtime.registry.create({ permission: 'full' });
+  const item = runtime.registry.create();
   assert.equal(runtime.plugins.getTools(item.id).filter(({ name }) => name === 'base_tool').length, 1);
   const next = mergeSettings(runtime.settings, { pluginConfig: { base: { value: 'replacement' } } });
   await assert.rejects(runtime.plugins.configure(next, () => { throw new Error('Persistence failed'); }), /Persistence failed/);

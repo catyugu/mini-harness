@@ -32,9 +32,9 @@ export async function sessionRoutes(runtime: MiniHarnessRuntime, req: IncomingMe
   if (pathname === '/api/sessions' && req.method === 'POST') {
     const input = await requestBody(req);
     if (input?.workspaceId !== undefined && typeof input.workspaceId !== 'string') throw new Error('Invalid workspace ID');
-    return json(res, 201, runtime.createConversation({ workspaceId: input?.workspaceId }));
+    return json(res, 201, runtime.registry.create({ workspaceId: input?.workspaceId }));
   }
-  const match = /^\/api\/sessions\/([a-f0-9-]{36})(?:\/(messages|cancel|runs|events|queue|compact|permission))?$/.exec(pathname);
+  const match = /^\/api\/sessions\/([a-f0-9-]{36})(?:\/(messages|cancel|runs|events|queue|compact))?$/.exec(pathname);
   if (match) {
     const id = match[1];
     if (!runtime.registry.get(id)) return json(res, 404, { error: 'Conversation not found' });
@@ -42,10 +42,6 @@ export async function sessionRoutes(runtime: MiniHarnessRuntime, req: IncomingMe
       const input = await requestBody(req);
       if (typeof input.title !== 'string' || !input.title.trim() || input.title.length > 140) throw new Error('Title must contain 1–140 characters');
       return json(res, 200, runtime.registry.update(id, { title: input.title.trim() }));
-    }
-    if (match[2] === 'permission' && req.method === 'POST') {
-      const input = await requestBody(req);
-      return json(res, 200, runtime.setPermission(id, input?.permission, input?.confirmed === true));
     }
     if (match[2] === 'compact' && req.method === 'POST') {
       if (configuring()) throw new Error('Configuration is changing');
@@ -91,7 +87,7 @@ export async function sessionRoutes(runtime: MiniHarnessRuntime, req: IncomingMe
     const records = runtime.export(input.ids);
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8',
       'Content-Disposition': 'attachment; filename="mini-harness-sessions.json"', 'Cache-Control': 'no-store' });
-    return res.end(JSON.stringify({ exportedAt: new Date().toISOString(), sessions: records }, null, 2));
+    return res.end(JSON.stringify({ version: 2, exportedAt: new Date().toISOString(), sessions: records }, null, 2));
   }
   return json(res, 404, { error: 'Not found' });
 }

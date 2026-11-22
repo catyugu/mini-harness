@@ -6,16 +6,15 @@
 - Add scoped single/list/keyed/chain contribution regions with priority replacement, original-position retention and lifecycle restoration.
 - Give workspaces persisted identities, safe relocation and confirmed cascading deletion; restore formerly hidden legacy sessions and persist per-session resource tabs.
 - Project Chat and Trajectory from Pi entry identities, arguments, results and measured tool durations; preserve final answers outside process folding and omit incomplete round usage.
-- Enforce per-session permissions at every tool call, constrain descendants, gate trusted plugin tools, record approval events and keep unsupported isolation closed.
-- Add a session Todo plugin, permission controls and replaceable composer docks; retain user-level Skills with workspace > application > user conflict precedence.
+- Add a session Todo plugin and replaceable composer docks; retain user-level Skills with workspace > application > user conflict precedence.
 - Isolate test HOME/USERPROFILE, expand Linux/Windows browser coverage, and test tasks, trajectory, resource links, plugin replacement and large-font/mobile layouts.
 
 - Add five frontend extension points with owned mount/disposal, shared plugin configuration, dependency ordering and custom tool renderers. Split requests, settings, conversations, message rendering, attachments and file inspection into browser modules.
 - Add neutral light/dark surfaces, consistent icons, a collapsed navigation rail, grouped settings, an input-level model selector and a single file inspector.
 - Configure provider catalogs, credentials and custom API endpoints from Settings; switch local workspaces while idle. Foreground startup opens a browser unless `--no-open` is supplied.
 - Attach images and UTF-8 text, find files with `@`, invoke native Skills, copy messages, retry failed image submissions, and queue Pi steering/follow-up messages during runs.
-- Inspect tool arguments/results, workspace files, staged/unstaged Git diff and successful file edits. Request one-time approval for built-in Shell commands under the session execution policy.
-- Keep empty drafts out of persistent history until an explicit permission selection; search, rename and delete conversation trees. Install disabled local plugin bundles and permanently uninstall them from Plugins.
+- Inspect tool arguments/results, workspace files, staged/unstaged Git diff and successful file edits. Request one-time approval for built-in Shell commands and include approval events in Trajectory.
+- Keep empty drafts out of persistent history; search, rename and delete conversation trees. Install disabled local plugin bundles and permanently uninstall them from Plugins.
 - Add behavior tests for the GUI and API, including narrow viewports and reduced viewport height, plus image baselines for core surfaces.
 
 ## 0.3.0

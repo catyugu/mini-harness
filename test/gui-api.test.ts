@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createMiniHarnessServer } from '../src/server.js';
 import { prepareInput } from '../src/input.js';
+import { SessionRegistry } from '../src/registry.js';
 import { Inspection } from '../src/inspection.js';
 import { createFixturePaths, createMockProvider } from './helpers/mock-provider.js';
 
@@ -165,7 +166,6 @@ test('shell approval gates execution, handles rejection and cancellation', async
     { tool: 'sandbox_shell', args: { command: 'echo approved' } });
   await app.runtime.updateSettings({ plugins: { shell: true }, sandbox: { mode: 'host' } });
   const { body: session } = await request('/sessions', 'POST', {});
-  assert.equal((await request('/sessions/' + session.id + '/permission', 'POST', { permission: 'full', confirmed: true })).status, 200);
   for (const allow of [false, true]) {
     await request('/sessions/' + session.id + '/runs', 'POST', { message: 'Run a shell command' });
     const pending = await waitUntil(() => request('/approvals'), (r) => r.body.length > 0);
@@ -270,7 +270,9 @@ test('workspace relocation keeps identity and Pi history; confirmed removal casc
   const session = app.runtime.registry.create();
   await app.runtime.send(session.id, 'Before moving');
   const child = app.runtime.registry.create({ parentId: session.id });
-  const before = app.runtime.export([session.id])[0].piSession;
+  const exported = await request('/sessions/export', 'POST', { ids: [session.id] });
+  assert.equal(exported.body.version, 2);
+  const before = exported.body.sessions[0].piSession;
   const next = join(root, 'moved');
   mkdirSync(next);
   writeFileSync(join(next, 'code.txt'), 'project code');
@@ -285,4 +287,35 @@ test('workspace relocation keeps identity and Pi history; confirmed removal casc
   assert.equal(app.runtime.registry.get(session.id), undefined);
   assert.equal(readFileSync(join(next, 'code.txt'), 'utf8'), 'project code');
   assert.ok(existsSync(paths.cwd));
+});
+
+
+test('workspace deletion includes orphaned sessions and rejects cross-workspace descendants', async (t) => {
+  const { app, paths, root, request } = await fixture(t);
+  const runtime = app.runtime;
+  const parent = runtime.registry.create();
+  const orphan = runtime.registry.create({ parentId: parent.id });
+  await runtime.send(orphan.id, 'Keep this Pi history until deletion');
+  const saved = runtime.registry.get(orphan.id);
+  const otherFolder = join(root, 'other');
+  mkdirSync(otherFolder);
+  const other = runtime.registry.workspaces.register(otherFolder);
+  const foreign = runtime.registry.create({ workspaceId: other.id });
+  const installLegacy = (crossWorkspace: boolean) => {
+    const sessions = [saved, { ...foreign, parentId: crossWorkspace ? saved.id : null }];
+    writeFileSync(paths.registry, JSON.stringify({ sessions }));
+    runtime.registry = new SessionRegistry(paths);
+  };
+  installLegacy(true);
+  const route = '/workspaces/' + orphan.workspaceId;
+  const refused = await request(route, 'DELETE', { deleteSessions: true });
+  assert.match(refused.body.error, /cross workspace/);
+  assert.equal(existsSync(saved.file), true);
+  installLegacy(false);
+  assert.equal((await request('/bootstrap')).status, 200);
+  assert.equal((await request(route, 'DELETE', { deleteSessions: true })).status, 200);
+  assert.equal(existsSync(saved.file), false);
+  const restored = new SessionRegistry(paths);
+  assert.deepEqual(restored.workspaces.list().map(({ id }) => id), [other.id]);
+  assert.deepEqual(restored.list().map(({ id }) => id), [foreign.id]);
 });

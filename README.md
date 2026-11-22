@@ -35,13 +35,13 @@ One process owns each configuration directory. Detached processes write to `serv
 - Open Workspace files for a file tree, bounded preview, Git diff and paths written by the current turn.
 - Switch Chat to Trajectory to inspect Pi steps, tool input/output, recorded timing and errors. Todo lists stay above the input. Missing or unverified token accounting is not summed into a round total.
 - While a task runs, choose Add instruction or Follow up and Queue the next message. Pi delivers it after the current tool batch or task.
-- New conversation stays a draft until the first send or an explicit permission selection. Search and rename conversations; copy messages, retry errors, and delete individual conversation trees.
+- New conversation stays a draft until the first send. Search and rename conversations; copy messages, retry errors, and delete individual conversation trees.
 - Refreshing, disconnecting or changing conversations leaves tasks running. Reopen a conversation to reconnect, or use Stop to cancel it and its descendants. Server shutdown cancels runs; a restart marks unfinished runs interrupted and restores their saved history.
 - Child agents default to one level and four concurrent executions. In Plugins → Subagents, set depth 0–8 and concurrency 1–16. Explicit delegate models override child defaults, which override the parent model. A child awaiting descendants yields its slot. Lowering concurrency lets existing work finish before admitting more children.
 - Expand conversation trees to view children. Selecting a parent for export includes descendants and original Pi JSONL. Permanent deletion cancels the selected trees, waits for their runs, and removes their files.
 - Toggle workspace files, native Skills, subagents, Shell, Todos and local plugins in Plugins. Pi retains native user Skill discovery; same-name priority is workspace, then `.mini-harness` global, then user-level. Theme and scheduling settings apply during runs; changing active tools or Skills requires idle conversations.
 
-Use the composer to choose View only, Workspace modifications or confirmed Full access. Children cannot exceed parent permissions. Shell is disabled by default and requests approval for each command when enabled. Restricted Shell requires Linux isolation and never falls back to host execution. Trusted host Shell and reviewed JavaScript plugins run with your user permissions. See [SECURITY.md](SECURITY.md).
+Shell is disabled by default and requests approval for each command when enabled. File tools retain workspace access checks; existing Linux shell isolation is unchanged. Trusted host Shell and reviewed JavaScript plugins run with your user permissions. See [SECURITY.md](SECURITY.md).
 
 ## Develop
 

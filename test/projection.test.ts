@@ -2,10 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { rmSync } from 'node:fs';
 import { MiniHarnessRuntime } from '../src/agent.js';
-import { projectTurns } from '../web/session-projection.js';
+import { mergeSessionEvent, projectTurns, sessionProjection } from '../web/session-projection.js';
 import { toolPresentation } from '../web/tool-presentation.js';
 import { createFixturePaths, createMockProvider } from './helpers/mock-provider.js';
-import type { RunInfo, ViewMessage } from '../src/protocol.js';
+import type { RunEvent, RunInfo, ViewMessage } from '../src/protocol.js';
 
 test('turn projection keeps the final answer separate and preserves errors and missing usage', () => {
   const messages: ViewMessage[] = [
@@ -37,16 +37,22 @@ test('Pi entry identities, tool durations and supplementary run facts survive re
   t.after(async () => { await runtime.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
   await runtime.start();
   const item = runtime.registry.create();
-  await runtime.send(item.id, 'Inspect this workspace');
+  await runtime.open(item.id); // Reusing an open Pi session must not append the starting transition twice.
+  const live = sessionProjection();
+  await runtime.send(item.id, 'Inspect this workspace', (event) => mergeSessionEvent(live, event as RunEvent));
   const before = await runtime.getConversation(item.id);
+  assert.deepEqual(live.messages, before.messages, 'The stream projects the same Pi entry IDs and content as the snapshot');
+  assert.deepEqual(live.runs, before.runs);
+  assert.equal(live.tools.size, 0);
   assert.ok(before.messages.every(({ id }) => id));
   assert.equal(before.runs.length, 1);
   assert.equal(before.runs[0].state, 'completed');
   assert.ok(before.messages.find(({ role }) => role === 'toolResult').elapsedMs >= 0);
   assert.ok(before.messages.every(({ usage }) => usage === undefined), 'Mock provider omitted usage; SDK zero defaults are not reported');
-  for (const entry of (await runtime.open(item.id)).sessionManager.getEntries()) {
-    if (entry.type === 'custom' && entry.customType === 'mini-harness.run') assert.doesNotMatch(JSON.stringify(entry.data), /Final answer|Inspect this workspace/);
-  }
+  const entries = (await runtime.open(item.id)).sessionManager.getEntries().flatMap((entry) =>
+    entry.type === 'custom' && entry.customType === 'mini-harness.run' ? [entry.data as RunInfo] : []);
+  assert.deepEqual(entries.map(({ state }) => state), ['running', 'completed']);
+  assert.doesNotMatch(JSON.stringify(entries), /Final answer|Inspect this workspace/);
   await runtime.stop(); runtime = new MiniHarnessRuntime(paths); await runtime.start();
   const after = await runtime.getConversation(item.id);
   assert.deepEqual(after.messages, before.messages);

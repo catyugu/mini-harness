@@ -14,7 +14,6 @@ export const regions = {
   'conversation.chat.node': 'chain',
   'tool.call.toolview': 'keyed',
   'tool.call.action': 'keyed',
-  'conversation.input.permission': 'single',
   'conversation.input.dock': 'list',
   'conversation.composer.dock': 'list',
   'sidebar.panellist': 'list',

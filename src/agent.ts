@@ -8,12 +8,12 @@ import {
   type AgentSession
 } from '@earendil-works/pi-coding-agent';
 import { getSupportedThinkingLevels } from '@earendil-works/pi-ai/compat';
-import { requirePermission, permissionRank, type Permission } from './execution-policy.js';
+import { projectMessage, projectSession } from './session-projection.js';
 import { RunEvents } from './run-events.js';
 import { PluginHost } from './plugins.js';
 import { SessionRegistry, type ModelChoice } from './registry.js';
 import { getPaths, mergeSettings, readSettings, writeJson, type SettingsPatch } from './config.js';
-import { isRunning, type ViewMessage, type StreamEvent, type RunEvent, type RunInfo } from './protocol.js';
+import { isRunning, type StreamEvent, type RunEvent, type RunInfo } from './protocol.js';
 import { requireChildDepth, Semaphore, type ChildLease } from './subagents.js';
 
 interface ActiveRun {
@@ -66,7 +66,6 @@ export class MiniHarnessRuntime {
       },
       delegation: this.delegation,
       todos: { get: (id) => this.getTodos(id), set: (id, items) => this.setTodos(id, items) },
-      permission: (id) => this.permission(id),
       publish: (id, event) => this.publishSessionEvent(id, event)
     });
   }
@@ -88,38 +87,6 @@ export class MiniHarnessRuntime {
     this.publishSessionEvent(id, { type: 'todos', items });
   }
 
-  permission(id: string): Permission {
-    let item = this.registry.get(id);
-    if (!item) throw new Error('Conversation not found');
-    let permission = requirePermission(item.permission ?? 'workspace-write');
-    const seen = new Set<string>();
-    while (item.parentId) {
-      if (seen.has(item.id)) throw new Error('Invalid conversation ancestry');
-      seen.add(item.id);
-      item = this.registry.get(item.parentId);
-      if (!item) throw new Error('Parent conversation not found');
-      const parent = requirePermission(item.permission ?? 'workspace-write');
-      if (permissionRank(parent) < permissionRank(permission)) permission = parent;
-    }
-    return permission;
-  }
-
-  createConversation(options: { workspaceId?: string } = {}) {
-    return this.registry.create({ ...options, permission: this.settings.defaultPermission });
-  }
-
-  setPermission(id: string, value: unknown, confirmed: boolean) {
-    const permission = requirePermission(value);
-    const item = this.registry.get(id);
-    if (!item) throw new Error('Conversation not found');
-    if (this.registry.descendants([id]).some((id) => this.busy.has(id) || this.compactions.has(id) || this.openingSessions.has(id)))
-      throw new Error('Stop this conversation and its children before changing permission');
-    if (permission === 'full' && !confirmed) throw new Error('Full permission requires explicit confirmation');
-    if (item.parentId && permissionRank(permission) > permissionRank(this.permission(item.parentId)))
-      throw new Error('Child permission cannot exceed its parent');
-    return this.registry.update(id, { permission });
-  }
-
   workspacePath(id: string) {
     const item = this.registry.get(id);
     if (!item) throw new Error('Conversation not found');
@@ -129,7 +96,7 @@ export class MiniHarnessRuntime {
 
   navigationSession(id: string) {
     const record = this.registry.get(id);
-    return record && { ...record, permission: this.permission(id), waitingApproval: this.waitingApprovals.has(id) };
+    return record && { ...record, waitingApproval: this.waitingApprovals.has(id) };
   }
 
   async start() {
@@ -179,17 +146,25 @@ export class MiniHarnessRuntime {
 
   get hasActiveWork() { return Boolean(this.busy.size || this.openingSessions.size || this.compactions.size); }
 
+  private closeSession(id: string) {
+    const session = this.openSessions.get(id);
+    this.openSessions.delete(id);
+    this.staleSessions.delete(id);
+    session?.dispose();
+  }
+
   async open(id: string): Promise<AgentSession> {
     if (this.configuring || this.stopping) throw new Error('Agent service is unavailable during reconfiguration or shutdown');
     if (this.deleting.has(id)) throw new Error('Conversation is being deleted');
     const active = this.openSessions.get(id);
     if (active && (!this.staleSessions.has(id) || this.busy.has(id) || this.compactions.has(id))) return active;
-    if (active) { active.dispose(); this.openSessions.delete(id); this.staleSessions.delete(id); }
+    if (active) this.closeSession(id);
     const pending = this.openingSessions.get(id);
     if (pending) return pending;
     const opening = this.openNewSession(id);
     this.openingSessions.set(id, opening);
     try { return await opening; }
+    catch (error) { this.closeSession(id); throw error; }
     finally { this.openingSessions.delete(id); }
   }
 
@@ -235,64 +210,27 @@ export class MiniHarnessRuntime {
     return session;
   }
 
-  sessionMessages(id: string): ViewMessage[] {
-    const session = this.openSessions.get(id);
-    if (!session) return [];
-    const argumentsById = new Map<string, unknown>();
-    const entries = session.sessionManager.getBranch();
-    let runId: string;
-    const messages = entries.flatMap((entry) => {
-      if (entry.type === 'custom' && entry.customType === 'mini-harness.run') runId = (entry.data as RunInfo).id;
-      return entry.type === 'message' ? [{ message: entry.message, entryId: entry.id, runId }] : [];
-    });
-    for (const { message } of messages) if (message.role === 'assistant') {
-      for (const block of message.content) if (block.type === 'toolCall') argumentsById.set(block.id, block.arguments);
-    }
-    return messages.flatMap<ViewMessage>(({ message, entryId, runId }) => {
-      switch (message.role) {
-        case 'user':
-        case 'assistant':
-          return [{
-            id: entryId, runId, role: message.role, content: message.content, timestamp: message.timestamp,
-            usage: message.role === 'assistant' && message.usage?.totalTokens > 0 ? message.usage : undefined,
-            error: message.role === 'assistant' ? message.errorMessage : undefined
-          }];
-        case 'toolResult':
-          return [{
-            id: entryId, runId, role: message.role, content: message.content, timestamp: message.timestamp,
-            elapsedMs: message.durationMs, details: message.details,
-            arguments: argumentsById.get(message.toolCallId), toolName: message.toolName, toolCallId: message.toolCallId, isError: message.isError,
-            sessionId: message.details && typeof message.details === 'object' && 'sessionId' in message.details &&
-              typeof message.details.sessionId === 'string' ? message.details.sessionId : undefined
-          }];
-        default: return [];
-      }
-    });
+  private sessionHistory(id: string) {
+    return projectSession(this.openSessions.get(id)?.sessionManager.getBranch() ?? [], this.runInfo(id));
   }
 
-  sessionRuns(id: string): RunInfo[] {
-    const runs = new Map<string, RunInfo>();
-    for (const entry of this.openSessions.get(id)?.sessionManager.getBranch() ?? []) {
-      if (entry.type === 'custom' && entry.customType === 'mini-harness.run') {
-        const run = entry.data as RunInfo;
-        runs.set(run.id, { ...run });
-      }
-    }
-    const latest = this.runInfo(id);
-    if (latest) runs.set(latest.id, latest);
-    return [...runs.values()];
-  }
+  sessionMessages(id: string) { return this.sessionHistory(id).messages; }
 
   publishSessionEvent(id: string, event: StreamEvent) {
-    const session = this.openSessions.get(id);
-    if (event.type === 'approval') session?.sessionManager.appendCustomEntry('mini-harness.approval', { ...event.approval, runId: this.busy.get(id)?.info.id });
-    this.busy.get(id)?.publish?.(event);
+    const manager = this.openSessions.get(id)?.sessionManager;
+    const run = this.busy.get(id);
+    if (event.type === 'approval' && manager) {
+      const entryId = manager.appendCustomEntry('mini-harness.approval', { ...event.approval, runId: run?.info.id });
+      const { id, timestamp } = manager.getEntry(entryId);
+      event = { ...event, fact: { id, timestamp, runId: run?.info.id } };
+    }
+    run?.publish?.(event);
   }
 
   async getConversation(id: string) {
     if (!this.registry.get(id)) throw new Error('Conversation not found');
     const session = await this.open(id);
-    return { ...this.registry.get(id), permission: this.permission(id), facts: session.sessionManager.getBranch().flatMap((entry) => entry.type === 'custom' && entry.customType === 'mini-harness.approval' ? [{ id: entry.id, kind: 'approval', timestamp: entry.timestamp, data: entry.data }] : []), runs: this.sessionRuns(id), messages: this.sessionMessages(id), model: this.modelInfo(session.model),
+    return { ...this.registry.get(id), ...this.sessionHistory(id), model: this.modelInfo(session.model),
       selectedModel: { ...this.settings.model }, thinkingLevel: session.thinkingLevel,
       run: this.runInfo(id), partial: this.busy.get(id)?.events.partial, tools: this.busy.get(id)?.events.activeTools ?? [], busy: this.busy.has(id), queue: { steer: session.getSteeringMessages(), followUp: session.getFollowUpMessages() } };
   }
@@ -313,17 +251,13 @@ export class MiniHarnessRuntime {
       this.resolveModel(model);
     }
     const choice = model ?? record.model ?? this.settings.model;
-    if (this.staleSessions.delete(id)) {
-      this.openSessions.get(id)?.dispose();
-      this.openSessions.delete(id);
-    }
+    if (this.staleSessions.has(id)) this.closeSession(id);
     const info: RunInfo = { id: randomUUID(), sessionId: id, state: 'queued', startedAt: new Date().toISOString(), sequence: 0 };
     const run: ActiveRun = { info, controller: new AbortController(), events: new RunEvents(info) };
     const cancellation = signal ? AbortSignal.any([run.controller.signal, signal]) : run.controller.signal;
     this.registry.update(id, { run: run.info });
     this.busy.set(id, run);
     const publish = (event: StreamEvent) => {
-      if (event.type === 'run') this.openSessions.get(id)?.sessionManager.appendCustomEntry('mini-harness.run', event.run);
       const item = run.events.publish(event);
       try { emit?.(item); } catch { /* An observer cannot terminate the run. */ }
     };
@@ -349,9 +283,15 @@ export class MiniHarnessRuntime {
       throw new Error(run.info.error, { cause: error });
     }).finally(() => {
       run.info.finishedAt = new Date().toISOString();
-      publish({ type: 'run', run: { ...run.info } });
-      try { this.registry.update(id, { run: run.info }); }
-      finally { this.busy.delete(id); run.events.close(); }
+      const terminal = { ...run.info, sequence: run.info.sequence + 1 };
+      try {
+        this.registry.update(id, { run: terminal });
+        this.openSessions.get(id)?.sessionManager.appendCustomEntry('mini-harness.run', terminal);
+      } finally {
+        publish({ type: 'run', run: terminal });
+        this.busy.delete(id);
+        run.events.close();
+      }
     });
     // Server-owned runs may outlive every observer.
     void run.done.catch(() => {});
@@ -376,14 +316,16 @@ export class MiniHarnessRuntime {
     const info = this.runInfo(id);
     if (!info || info.id !== runId) throw new Error('Run not found');
     if (!Number.isSafeInteger(after) || after < 0 || after > info.sequence) throw new Error('Invalid event cursor');
-    if (run) return run.events.watch(after, emit, () => this.sessionMessages(id));
-    emit({ type: 'snapshot', messages: this.sessionMessages(id), tools: [], run: info, sequence: info.sequence });
+    if (run) return run.events.watch(after, emit, () => this.sessionHistory(id));
+    emit({ type: 'snapshot', ...this.sessionHistory(id), tools: [], run: info, sequence: info.sequence });
     return () => {};
   }
 
-  cancel(id: string) {
+  cancel(id: string) { return this.cancelWork(this.registry.descendants([id])); }
+
+  private cancelWork(ids: string[]) {
     let cancelled = false;
-    for (const child of this.registry.descendants([id])) {
+    for (const child of ids) {
       const run = this.busy.get(child);
       if (run) { cancelled = true; run.controller.abort(new Error('Agent run cancelled')); }
       const compaction = this.compactions.get(child);
@@ -413,11 +355,11 @@ export class MiniHarnessRuntime {
     }
     this.registry.update(id, { model: actual });
     if (record.title === 'New conversation') this.registry.update(id, { title: prompt.trim().slice(0, 72) });
-    const toolCalls = new Map<string, { args: unknown; start: number }>();
+    const runId = this.runInfo(id).id;
+    const toolCalls = new Map<string, { args: unknown; start: number; elapsed?: number }>();
     const off = session.subscribe((event) => {
       switch (event.type) {
         case 'message_start':
-          if (event.message.role === 'user') emit({ type: 'user', content: event.message.content, text: typeof event.message.content === 'string' ? event.message.content : event.message.content.filter((block) => block.type === 'text').map((block) => block.text).join('\n') });
           if (event.message.role === 'assistant') emit({ type: 'assistant-start' });
           break;
         case 'message_update':
@@ -425,7 +367,27 @@ export class MiniHarnessRuntime {
             emit({ type: 'delta', text: event.assistantMessageEvent.delta });
           break;
         case 'message_end':
-          if (event.message.role === 'assistant') emit({ type: 'assistant-end' });
+          // Pi appends the message synchronously after notifying subscribers.
+          queueMicrotask(() => {
+            const entry = session.sessionManager.getLeafEntry();
+            if (entry?.type !== 'message' || entry.message !== event.message) return;
+            const call = entry.message.role === 'toolResult' ? toolCalls.get(entry.message.toolCallId) : undefined;
+            const message = projectMessage(entry, runId, call?.args);
+            if (!message) return;
+            const { id, runId: messageRun, timestamp } = message;
+            const identity = { id, runId: messageRun, timestamp };
+            if (message.role === 'user') {
+              const { content } = message;
+              const text = typeof content === 'string' ? content : content.filter((block) => block.type === 'text').map((block) => block.text).join('\n');
+              emit({ type: 'user', content, text, entry: identity });
+            } else if (message.role === 'assistant') emit({ type: 'assistant-end', message });
+            else {
+              toolCalls.delete(message.toolCallId);
+              emit({ type: 'tool', id: message.toolCallId, name: message.toolName, state: message.isError ? 'error' : 'finished',
+                arguments: message.arguments, content: message.content, details: message.details, sessionId: message.sessionId,
+                elapsedMs: message.elapsedMs ?? call?.elapsed, entry: identity });
+            }
+          });
           break;
         case 'tool_execution_start':
           toolCalls.set(event.toolCallId, { args: event.args, start: performance.now() });
@@ -436,14 +398,11 @@ export class MiniHarnessRuntime {
           break;
         case 'tool_execution_end': {
           const call = toolCalls.get(event.toolCallId);
-          toolCalls.delete(event.toolCallId);
+          if (call) call.elapsed = event.durationMs ?? performance.now() - call.start;
           const run = this.busy.get(id);
           const changedPath = event.result?.details?.changedPath;
           if (!event.isError && typeof changedPath === 'string' && run)
             run.info.changedFiles = [...new Set([...(run.info.changedFiles ?? []), changedPath])];
-          emit({ type: 'tool', id: event.toolCallId, name: event.toolName, state: event.isError ? 'error' : 'finished',
-            arguments: call?.args, content: event.result?.content, details: event.result?.details, sessionId: event.result?.details?.sessionId,
-            elapsedMs: event.durationMs ?? (call ? performance.now() - call.start : undefined) });
           break;
         }
       }
@@ -543,41 +502,40 @@ export class MiniHarnessRuntime {
     if (all.some((id) => this.deleting.has(id))) throw new Error('Conversation is being deleted');
     for (const id of all) this.deleting.add(id);
     try {
-      for (const id of ids) this.cancel(id);
+      this.cancelWork(all);
       await Promise.allSettled(all.flatMap((id) => [this.busy.get(id)?.done, this.openingSessions.get(id), this.compactions.get(id)?.done]));
-      for (const id of all) {
-        this.openSessions.get(id)?.dispose();
-        this.openSessions.delete(id);
-        this.staleSessions.delete(id);
-        this.plugins.ctx.harnessTools.release(id);
-      }
+      for (const id of all) this.closeSession(id);
       return this.registry.delete(ids);
     } finally { for (const id of all) this.deleting.delete(id); }
   }
 
   async removeWorkspace(id: string, deleteSessions: boolean) {
     this.registry.workspaces.get(id);
+    if (this.registry.deletingWorkspaces.has(id)) throw new Error('Workspace is being deleted');
     const sessions = this.registry.list(id);
     if (sessions.length && !deleteSessions) throw new Error('Confirm deletion of this workspace and all its conversations');
+    const ids = sessions.map(({ id }) => id);
+    if (this.registry.descendants(ids).some((sessionId) => this.registry.get(sessionId).workspaceId !== id))
+      throw new Error('Conversation descendants cross workspace boundaries');
     this.registry.deletingWorkspaces.add(id);
     try {
-      await this.delete(sessions.filter(({ parentId }) => !parentId).map(({ id }) => id));
+      await this.delete(ids);
+      if (this.registry.list(id).length) throw new Error('Workspace still has conversations');
       this.registry.workspaces.remove(id);
     } finally { this.registry.deletingWorkspaces.delete(id); }
   }
 
   relocateWorkspace(id: string, path: string) {
+    if (this.registry.deletingWorkspaces.has(id)) throw new Error('Workspace is being deleted');
     const sessions = this.registry.list(id);
     if (sessions.some(({ id }) => this.busy.has(id) || this.openingSessions.has(id) || this.compactions.has(id)))
       throw new Error('Stop workspace conversations before changing the directory');
     const record = this.registry.workspaces.relocate(id, path);
-    for (const { id } of sessions) { this.openSessions.get(id)?.dispose(); this.openSessions.delete(id); this.plugins.ctx.harnessTools.release(id); }
+    for (const { id } of sessions) this.closeSession(id);
     return record;
   }
 
-  async updateSettings(patch: SettingsPatch, confirmed = false) {
-    if (patch.defaultPermission === 'full' && this.settings.defaultPermission !== 'full' && !confirmed)
-      throw new Error('Full default permission requires explicit confirmation');
+  async updateSettings(patch: SettingsPatch) {
     if (this.configuring || this.stopping) throw new Error('Agent service is unavailable during reconfiguration or shutdown');
     const next = mergeSettings(this.settings, patch);
     this.resolveModel(next.model);
@@ -609,9 +567,7 @@ export class MiniHarnessRuntime {
       for (const [id, before] of resources) {
         const after = this.plugins.resources(id);
         if (before.length !== after.length || before.some((resource, i) => resource !== after[i])) {
-          this.openSessions.get(id)?.dispose();
-          this.openSessions.delete(id);
-          this.staleSessions.delete(id);
+          this.closeSession(id);
         }
       }
       this.configuring = undefined;
@@ -622,8 +578,7 @@ export class MiniHarnessRuntime {
     this.stopping = true;
     for (const id of [...this.busy.keys(), ...this.compactions.keys()]) this.cancel(id);
     await Promise.allSettled([this.configuring, ...this.openingSessions.values(), ...[...this.compactions.values()].map(({ done }) => done), ...[...this.busy.values()].map(({ done }) => done)]);
-    for (const session of this.openSessions.values()) session.dispose();
-    this.openSessions.clear();
+    for (const id of this.openSessions.keys()) this.closeSession(id);
     await this.plugins.close();
     await this.models?.settleCredentialWrites();
   }

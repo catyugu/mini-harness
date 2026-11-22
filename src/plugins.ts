@@ -1,4 +1,3 @@
-import { authorizeTool, type Permission, type ToolCapability } from './execution-policy.js';
 import { Context, type Fiber } from 'cordis';
 import { readdirSync, existsSync, lstatSync } from 'node:fs';
 import { join } from 'node:path';
@@ -40,7 +39,7 @@ export interface PluginApi {
   /** The value comes from settings.pluginConfig[pluginId]. */
   readonly config: Readonly<Record<string, unknown>>;
   defineConfig(defaults: Record<string, unknown>, validate?: (config: Readonly<Record<string, unknown>>) => void): Readonly<Record<string, unknown>>;
-  registerTool(tool: ToolDefinition, options?: { capabilities: ToolCapability[] }): () => Promise<void>;
+  registerTool(tool: ToolDefinition): () => Promise<void>;
   /** Mount an authenticated route under /api/extensions/<plugin-id>/. */
   registerRoute(method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string, handler: RouteHandler): () => Promise<void>;
   onDispose(cleanup: () => void | Promise<void>): void;
@@ -54,7 +53,6 @@ type RuntimeServices = {
   workspaces: { resolve(id: string): string; approval(id: string, waiting: boolean): void };
   delegation: MiniHarnessRuntime['delegation'];
   todos: { get(id: string): Promise<import('./protocol.js').TodoItem[]>; set(id: string, items: import('./protocol.js').TodoItem[]): Promise<void> };
-  permission(id: string): Permission;
   publish(id: string, event: import('./protocol.js').StreamEvent): void;
 };
 
@@ -71,7 +69,6 @@ declare module 'cordis' {
     harnessDelegation: RuntimeServices['delegation'];
     harnessSkills: { options(cwd: string): ReturnType<typeof import('./skill-sources.js').harnessSkillOptions> };
     harnessWorkspace: RuntimeServices['workspaces'];
-    harnessExecutionPolicy: { get(id: string): Permission };
     harnessTodos: RuntimeServices['todos'];
     harnessSessionEvents: { publish: RuntimeServices['publish'] };
   }
@@ -93,35 +90,19 @@ function configDefaults(schema: Record<string, any>, value: any): any {
 }
 
 export class ToolRegistry {
-  private tools = new Map<string, { bind: (id: string) => ToolDefinition; visible: (id: string) => boolean; capabilities: ToolCapability[]; bindings: Map<string, ToolDefinition> }>();
+  private tools = new Map<string, { bind: (id: string) => ToolDefinition; visible: (id: string) => boolean }>();
 
-  constructor(private permission: (id: string) => Permission = () => 'workspace-write') {}
-
-  register(tool: ToolDefinition, bind = (_id: string) => tool, visible = (_id: string) => true, builtin = false, capabilities: ToolCapability[] = ['trusted-code']) {
+  register(tool: ToolDefinition, bind = (_id: string) => tool, visible = (_id: string) => true, builtin = false) {
     const { name } = tool;
     if (!/^[a-zA-Z0-9_-]{1,64}$/.test(name)) throw new Error('Invalid tool name: ' + name);
     if ((!builtin && reservedTools.has(name)) || this.tools.has(name)) throw new Error('Duplicate or reserved tool: ' + name);
-    if (!capabilities.length || capabilities.some((value) => !['read', 'workspace-write', 'shell', 'delegate', 'trusted-code'].includes(value))) throw new Error('Declare valid tool capabilities');
-    this.tools.set(name, { bind, visible, capabilities: [...capabilities], bindings: new Map() });
+    this.tools.set(name, { bind, visible });
     return () => { this.tools.delete(name); };
   }
 
   forSession(id: string) {
-    return this.resources(id).map((entry) => {
-      if (entry.bindings.has(id)) return entry.bindings.get(id);
-      const tool = entry.bind(id);
-      const wrapped: ToolDefinition = { ...tool, execute: async (...args: Parameters<typeof tool.execute>) => {
-        args[2]?.throwIfAborted();
-        if (this.tools.get(tool.name) !== entry) throw new Error('Tool is no longer enabled: ' + tool.name);
-        authorizeTool(this.permission(id), entry.capabilities);
-        return tool.execute(...args);
-      } };
-      entry.bindings.set(id, wrapped);
-      return wrapped;
-    });
+    return this.resources(id).map((tool) => tool.bind(id));
   }
-
-  release(id: string) { for (const entry of this.tools.values()) entry.bindings.delete(id); }
 
   resources(id: string) { return [...this.tools.values()].filter((tool) => tool.visible(id)); }
 }
@@ -144,8 +125,7 @@ export class PluginHost {
     this.ctx.provide('harnessAgent', { availableModels: services.models.list });
     this.ctx.provide('harnessModels', services.models);
     this.ctx.provide('harnessSessions', services.sessions);
-    this.ctx.provide('harnessTools', new ToolRegistry(services.permission));
-    this.ctx.provide('harnessExecutionPolicy', { get: services.permission });
+    this.ctx.provide('harnessTools', new ToolRegistry());
     this.ctx.provide('harnessTodos', services.todos);
     this.ctx.provide('harnessSessionEvents', { publish: services.publish });
     this.ctx.provide('harnessRoutes', new RouteRegistry());
@@ -199,8 +179,7 @@ export class PluginHost {
               validate?.(config);
               return config;
             },
-            registerTool: (tool, options) => ctx.effect(() => this.ctx.harnessTools.register(tool, undefined, undefined, false,
-              [...new Set<ToolCapability>(['trusted-code', ...(options?.capabilities ?? [])])])),
+            registerTool: (tool) => ctx.effect(() => this.ctx.harnessTools.register(tool)),
             registerRoute: (method, path, handler) => {
               if (!['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method) ||
                   !/^\/(?:[a-zA-Z0-9_-]+\/)*[a-zA-Z0-9_-]+$/.test(path)) throw new Error('Invalid plugin route');
