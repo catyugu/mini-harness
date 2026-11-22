@@ -63,7 +63,7 @@ async function checkPackage() {
     assert.ok(info);
     const headers = { Authorization: 'Bearer ' + info.token, 'Content-Type': 'application/json' };
     const get = (path: string) => fetch(info.url + path, { headers });
-    for (const asset of ['/', '/app.js', '/ui/markdown.js', '/vendor/marked.js', '/vendor/purify.js', '/logo.svg', '/manifest.webmanifest', '/style.css', '/icon-192.png', '/icon-512.png', '/favicon.ico']) {
+    for (const asset of ['/', '/app.js', '/ui/markdown.js', '/features/message-copy/client.js', '/features/edit-resend/client.js', '/web/ui/primitives.js', '/vendor/marked.js', '/vendor/purify.js', '/logo.svg', '/manifest.webmanifest', '/style.css', '/icon-192.png', '/icon-512.png', '/favicon.ico']) {
       const response = await get(asset);
       assert.equal(response.status, 200, asset);
       await response.arrayBuffer();

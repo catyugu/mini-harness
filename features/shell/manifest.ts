@@ -8,5 +8,5 @@ export const manifest: Omit<BuiltinPlugin, 'setup'> = {
     mode: Type.String({ title: 'Shell policy', enum: ['isolated', 'host'] }),
     timeoutSeconds: Type.Integer({ title: 'Timeout (seconds)', minimum: 1, maximum: 300 })
   }) } },
-  icon: 'terminal', browser: '/builtins/shell.js', inject: ['harnessState', 'harnessWorkspace', 'harnessSettings', 'harnessSessionChanged', 'harnessTools', 'harnessRoutes'],
+  icon: 'terminal', browser: '/features/shell/client.js', inject: ['harnessState', 'harnessWorkspace', 'harnessSettings', 'harnessSessionChanged', 'harnessTools', 'harnessRoutes'],
 };

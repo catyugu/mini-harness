@@ -1,5 +1,5 @@
-import type { FrontendSetup } from '../kernel/extensions.js';
-import { payload } from '../api.js';
+import type { FrontendSetup } from '../../web/kernel/extensions.js';
+import { payload } from '../../web/api.js';
 
 const setup: FrontendSetup = (api) => {
   api.messageAction({

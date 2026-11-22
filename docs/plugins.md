@@ -175,3 +175,11 @@ The browser API exposes `messageAction({ id, label, icon, order?, visible(contex
 Use `beginDraftMode({ title, text, submit(input) })` for a custom composer operation and `cancelDraftMode()` to leave it. The input contains text, attachments, chosen model and thinking level. An active mode intercepts the normal submit only while enabled. Disabling a plugin cancels its outstanding mode. The host owns the editor, cancel control and responsive layout.
 
 The `edit-resend` plugin submits to its authenticated route `POST /api/extensions/edit-resend/revise`, passing `sessionId`, `sourceEntryId`, `expectedLeafId`, `message` and optional send parameters. The host checks an optimistic Pi leaf token, navigates the AgentSession tree and starts a run. Earlier branches remain in Pi JSONL. This does **not** roll back files written to the workspace. Existing branch selection/navigation UX is a separate concern.
+
+## Co-located built-in capabilities
+
+Each built-in feature owns its manifest, backend setup (if any), and browser setup (if any) under `features/<id>/`. `features/index.ts` is the sole built-in composition registry; it assembles a Cordis plugin from its manifest and host, while the browser loads the same manifest's `browser` URL. The TypeScript build includes `features/**/*.ts`, and npm ships `dist/features/` inside the single package.
+
+Browser entries are served from `/features/<id>/client.js`. These are the **only** public JavaScript files in `dist/features`. Node-only host implementations and manifests are never exposed by the web server. Feature client imports targeting `../../web/...` resolve through a redirect to canonical application module paths. The loader owns frontend activation/disposal, and Cordis owns backend injection/disposal.
+
+Do not add new files to the retired `src/builtins` or `web/builtins` trees. A new feature should be added to `features/<id>/` and registered once in `features/index.ts`.

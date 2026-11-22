@@ -15,6 +15,7 @@ import { sessionRoutes } from './transport/session-routes.js';
 import { navigationSession, navigationSnapshot, streamNavigation } from './transport/navigation-events.js';
 
 const WEB_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'web');
+const FEATURE_DIR = resolve(WEB_DIR, '..', 'features');
 const assets = new Map([
   ['index.html', 'text/html'],
   ['style.css', 'text/css'], ['logo.svg', 'image/svg+xml'], ['manifest.webmanifest', 'application/manifest+json'],
@@ -27,6 +28,14 @@ for (const entry of readdirSync(WEB_DIR, { recursive: true, withFileTypes: true 
     const path = relative(WEB_DIR, join(entry.parentPath, entry.name)).split(sep).join('/');
     assets.set(path, 'text/javascript');
   }
+}
+
+// Expose only browser entrypoints. Feature host and manifest JS never become public assets.
+for (const entry of readdirSync(FEATURE_DIR, { withFileTypes: true })) {
+  if (!entry.isDirectory() || !/^[a-z][a-z0-9-]{0,63}$/.test(entry.name)) continue;
+  const client = join(FEATURE_DIR, entry.name, 'client.js');
+  try { if (statSync(client).isFile()) assets.set('features/' + entry.name + '/client.js', 'text/javascript'); }
+  catch { /* Server-only capability. */ }
 }
 
 export function authorize(request: IncomingMessage, token: string) {
@@ -58,9 +67,15 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
       if (!pathname.startsWith('/api/')) {
         if (req.method !== 'GET' && req.method !== 'HEAD') return json(res, 405, { error: 'Method not allowed' });
         const requested = pathname === '/' ? 'index.html' : decodeURIComponent(pathname.slice(1));
+        // Browser imports in root-level feature sources use ../web/ paths. Redirect to
+        // canonical app-module URLs so modules have one identity across UI and plugins.
+        if (requested.startsWith('web/') && assets.has(requested.slice(4))) {
+          res.writeHead(307, { Location: '/' + requested.slice(4), 'Cache-Control': 'no-store' });
+          return res.end();
+        }
         const mime = assets.get(requested);
         if (!mime) return json(res, 404, { error: 'Not found' });
-        const path = join(WEB_DIR, requested);
+        const path = requested.startsWith('features/') ? join(FEATURE_DIR, requested.slice('features/'.length)) : join(WEB_DIR, requested);
         const size = statSync(path).size;
         res.writeHead(200, { 'Content-Type': mime + '; charset=utf-8',
           'Content-Length': size, 'X-Content-Type-Options': 'nosniff',
