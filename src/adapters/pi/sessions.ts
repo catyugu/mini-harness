@@ -5,12 +5,12 @@ import {
   type AgentSession, type CustomEntry
 } from '@earendil-works/pi-coding-agent';
 import { getSupportedThinkingLevels } from '@earendil-works/pi-ai/compat';
-import { getPaths, type Paths } from './config.js';
-import { prepareInput, type Attachment, type ImageInput } from './input.js';
-import type { Conversation, SessionRegistry, ModelChoice } from './registry.js';
+import { getPaths, type Paths } from '../../config.js';
+import { prepareInput, type Attachment, type ImageInput } from '../../input.js';
+import type { Conversation, SessionRegistry, ModelChoice } from '../../registry.js';
 import type { Context } from 'cordis';
-import type { SessionRecords, ToolRegistry } from './kernel/plugin-api.js';
-import type { StreamEvent, ViewMessage } from './protocol.js';
+import type { SessionRecords, ToolRegistry } from '../../kernel/plugin-api.js';
+import type { StreamEvent, ViewMessage } from '../../protocol.js';
 
 export type ThinkingLevel = AgentSession['thinkingLevel'];
 

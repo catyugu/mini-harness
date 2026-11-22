@@ -1,6 +1,6 @@
 import type { Settings } from '../config.js';
-import type { PiSessions } from '../pi-sessions.js';
-import type { Runs } from '../runs.js';
+import type { PiSessions } from '../adapters/pi/sessions.js';
+import type { Runs } from '../services/runs.js';
 import type { Conversation, SessionRegistry, ModelChoice } from '../registry.js';
 
 interface Waiter {

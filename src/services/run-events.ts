@@ -1,4 +1,4 @@
-import { isRunning, type RunEvent, type RunInfo, type StreamEvent, type ViewMessage } from './protocol.js';
+import { isRunning, type RunEvent, type RunInfo, type StreamEvent, type ViewMessage } from '../protocol.js';
 
 export class RunEvents {
   private events: RunEvent[] = [];

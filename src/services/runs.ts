@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import { prepareInput, type Attachment } from './input.js';
+import { prepareInput, type Attachment } from '../input.js';
 import { RunEvents } from './run-events.js';
-import type { PiSessions, ThinkingLevel } from './pi-sessions.js';
-import type { Conversation, SessionRegistry, ModelChoice } from './registry.js';
-import type { StreamEvent, RunEvent, RunInfo } from './protocol.js';
+import type { PiSessions, ThinkingLevel } from '../adapters/pi/sessions.js';
+import type { Conversation, SessionRegistry, ModelChoice } from '../registry.js';
+import type { StreamEvent, RunEvent, RunInfo } from '../protocol.js';
 
 interface RunOptions {
   signal?: AbortSignal;

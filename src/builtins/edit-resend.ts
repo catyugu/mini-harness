@@ -13,7 +13,7 @@ export const editResend: BuiltinPlugin = {
         sourceEntryId: input.sourceEntryId, expectedLeafId: input.expectedLeafId as string | null,
         message: input.message, attachments: input.attachments as import('../input.js').Attachment[],
         model: input.model as import('../registry.js').ModelChoice,
-        thinkingLevel: input.thinkingLevel as import('../pi-sessions.js').ThinkingLevel
+        thinkingLevel: input.thinkingLevel as import('../adapters/pi/sessions.js').ThinkingLevel
       });
     }));
   }

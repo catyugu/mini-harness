@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { readJson, writeJson, type Settings, type SettingsPatch } from './config.js';
-import type { PiSessions } from './pi-sessions.js';
+import type { PiSessions } from './adapters/pi/sessions.js';
 
 type ProviderHost = {
   paths: { home: string };

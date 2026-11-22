@@ -58,7 +58,7 @@ declare module 'cordis' {
     harnessRevision: { reviseAndStart(id: string, input: {
       sourceEntryId: string; expectedLeafId: string | null; message: string;
       attachments?: import('../input.js').Attachment[]; model?: import('../registry.js').ModelChoice;
-      thinkingLevel?: import('../pi-sessions.js').ThinkingLevel;
+      thinkingLevel?: import('../adapters/pi/sessions.js').ThinkingLevel;
     }): Promise<import('../protocol.js').RunInfo> };
   }
 }
