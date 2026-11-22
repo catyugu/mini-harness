@@ -38,13 +38,13 @@ One process owns each configuration directory. Detached processes write to `serv
 - Refreshing, disconnecting or changing conversations leaves tasks running. Reopen a conversation to reconnect, or use Stop to cancel it and its descendants. Server shutdown cancels runs; a restart marks unfinished runs interrupted and restores their saved history.
 - Child agents default to one level and four concurrent executions. In Plugins → Subagents, set depth 0–8 and concurrency 1–16. Explicit delegate models override child defaults, which override the parent model. A child awaiting descendants yields its slot. Lowering concurrency lets existing work finish before admitting more children.
 - Expand conversation trees to view children. Selecting a parent for export includes descendants and original Pi JSONL. Permanent deletion cancels the selected trees, waits for their runs, and removes their files.
-- Toggle workspace files, native Skills, subagents, Shell, Session helper and local plugins in Plugins. Session helper provides message copy and edit/resend together under one switch. Pi loads Skills from global `skills/` and project `.mini-harness/skills/` folders. Theme and scheduling settings apply during runs; changing active tools or Skills requires idle conversations.
+- Toggle workspace files, native Skills, subagents, Shell, Session helper and local plugins in Plugins. Session helper provides message copy and edit/resend together under one switch. Pi loads Skills from global `skills/` and project `.mini-harness/skills/` folders. Appearance, model choice and child-agent limits can change during runs; changing active tools, Skills or Shell requires idle conversations.
 
 Shell is disabled by default and requests approval for each command when enabled. File tools retain workspace access checks; existing Linux shell isolation is unchanged. Trusted host Shell and reviewed JavaScript plugins run with your user permissions. See [SECURITY.md](SECURITY.md).
 
 ## Develop
 
-See [plugin development](docs/plugins.md) and [changes](CHANGELOG.md).
+See [architecture](docs/architecture.md), [plugin development](docs/plugins.md) and [changes](CHANGELOG.md).
 
 ```sh
 npm ci
@@ -58,4 +58,3 @@ CI covers native Windows/Linux and Node.js 22/24, Chromium desktop/tablet/mobile
 
 MIT. See [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-Deleting a workspace from the sidebar permanently deletes its conversations and subagent histories, but never deletes the workspace's project directory or files.

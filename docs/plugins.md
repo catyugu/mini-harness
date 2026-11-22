@@ -79,7 +79,7 @@ Public metadata services are `harnessModels.list()` and `harnessSessions.get(id)
 
 Built-in and local setup functions run in Cordis scopes. Dependencies mount first and unload last. Disabling a required plugin also requires disabling its dependents. Reconfiguring a dependency restarts its enabled dependents. Unchanged plugin scopes stay mounted. A route handler receives `{ url, body(maxBytes?), signal }`. The signal aborts when its route unloads. Read JSON with `await body()` and return a JSON-serializable result.
 
-Schema validation precedes setup. If setup or settings persistence fails, the host unloads new scopes and restores the previous plugin configuration. Cleanup handlers must release their resources and tolerate partial setup; failure to restore is reported explicitly. All plugin lifecycle changes (enable, disable, or reconfigure) require idle conversations; Pi reconciles tool and Skill resources after successful changes. Theme, scheduling, execution policy and model-selection changes preserve running sessions. Changes to child depth refresh tool availability when a session is next idle.
+Schema validation precedes setup. If setup or settings persistence fails, the host unloads new scopes and restores the previous plugin configuration. Cleanup handlers must release their resources and tolerate partial setup; failure to restore is reported explicitly. Plugin enable/disable and tool, Skill or Shell reconfiguration require idle conversations. Subagent depth, concurrency and child-model defaults use a live configuration service and may change without interrupting runs; newly eligible tools become available when the session is next idle. Appearance and model selection updates also preserve active runs. Pi reconciles tool and Skill resources after lifecycle changes.
 
 ## Run API
 
@@ -138,7 +138,7 @@ export default function setup(api) {
 
 The browser runs each plugin in a Cordis scope and disposes its slots, completions, settings pages, tool registrations and inspector content when the scope unloads. Pass `api.signal` to document or window listeners or release them with `onDispose`. Dependencies mount first and dispose last; configuration changes also rebuild dependent browser extensions. Setup failures remove partial contributions and leave ordinary chat available. The catalog reports which browser plugins failed after the server saved a change. The backend and UI share one plugin switch; attachments, file inspection and Skills use these same extension interfaces.
 
-The Plugins page can install a local bundle containing `plugin.js`, `web.js` or both, with optional `plugin.json` (at most 1 MiB combined). New installations stay disabled. Disable the plugin before uninstalling; uninstall removes the local plugin directory permanently. Larger development plugins can still be placed in the local plugins directory manually.
+The Plugins page can install a local bundle containing `plugin.js`, `web.js` or both, with optional `plugin.json` (at most 1 MiB combined). New installations stay disabled. Disable the plugin before uninstalling; uninstall permanently removes its directory and its entries in the plugin switch/configuration maps. Larger development plugins can still be placed in the local plugins directory manually.
 
 Register a right-panel tab with `api.rightTab(type, { title, create })`. Both callbacks receive an address with `workspaceId`, optional `sessionId`, and optional `path`. `create(address, signal)` returns the tab's element and receives an abort signal for any in-flight work. Call `api.openTab(type, path?)` to open or focus the tab in the current conversation or workspace. Changing conversations aborts and releases the outgoing tab views. Registered tabs keep their address and selection, and recreate their views on return. Inspector content added with `inspect` lasts for the current scope. Disabling a plugin closes its tabs.
 
@@ -180,8 +180,15 @@ The `session-helper` plugin submits to its authenticated route `POST /api/extens
 
 ## Co-located built-in capabilities
 
-Each built-in feature owns its manifest, backend setup (if any), and browser setup (if any) under `features/<id>/`. `features/index.ts` is the sole built-in composition registry; it assembles a Cordis plugin from its manifest and host, while the browser loads the same manifest's `browser` URL. The TypeScript build includes `features/**/*.ts`, and npm ships `dist/features/` inside the single package.
+User-toggleable features own their manifests and host/client entries under `features/<id>/`. Essential capabilities such as Agent, Sessions, Runs, Models, Workspaces and UI also live under `features/`, but mount invisibly through `features/index.ts` as non-toggleable Cordis providers. The application root assembles these providers without implementing their behavior. Browser UI primitives and core browser plugins live under `web/` and are composed by `web/application.ts`. The TypeScript build includes `features/**/*.ts`, but npm ships only production output in the single package.
 
 Browser entries are served from `/features/<id>/client.js`. These are the **only** public JavaScript files in `dist/features`. Node-only host implementations and manifests are never exposed by the web server. Feature client imports targeting `../../web/...` resolve through a redirect to canonical application module paths. The loader owns frontend activation/disposal, and Cordis owns backend injection/disposal.
 
 Do not add new files to the retired `src/builtins` or `web/builtins` trees. A new feature should be added to `features/<id>/` and registered once in `features/index.ts`.
+
+
+## Architecture and tests
+
+See [the architecture contract](architecture.md). Tests live in the capability they exercise, under `features/<id>/tests/`, or beside reusable infrastructure in `src/plugins/tests/` and `web/ui/tests/`. Only real cross-capability journeys belong under `test/system/`. Shared fixtures live under `test/support/`.
+
+`npm test` recursively discovers Node `*.test.js` files. Playwright recursively discovers `*.spec.ts`. Published npm tarballs exclude all co-located test folders; `npm run pack:check` checks this exclusion. Never add domain-specific logic to `src/kernel` or `src/server.ts`, and never import another feature's concrete implementation.

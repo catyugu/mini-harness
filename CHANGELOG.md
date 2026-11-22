@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Reduce the generic kernel to Cordis lifecycle orchestration. Mount Pi Agent, Runs, Sessions, Workspaces, Models, Settings, Plugins and UI endpoints as individually owned capabilities; keep HTTP server as authentication, static assets and dispatch.
+- Replace fixed Subagents/Shell settings routes with schema-validated `pluginConfig.<id>` and live child-agent configuration. Allow a disabled optional capability to remain unmounted even when its configuration is invalid, and remove stale configuration when uninstalling local plugins.
+- Compose browser outlets, commands, tabs and settings pages from browser-owned Cordis services rather than fixed host callbacks. Keep capability tests beside their implementations, validate import boundaries and exclude test suites from the npm tarball.
+
 - Consolidate message copy and Pi branch-aware edit/resend into the single `session-helper` Cordis feature, with one frontend lifecycle and one switch. Remove obsolete settings migration paths and duplicate message-submit routes.
 - Isolate host/browser composition roots from capability contracts and implementations, co-locate file and Shell logic with their feature plugins, and permanently cascade workspace deletion to associated conversations without deleting project files.
 - Allow plugin-specific SVG icon paths and arbitrary symbolic icon identifiers. Remove `agentResources` metadata and use one consistent plugin reconfiguration lifecycle.
