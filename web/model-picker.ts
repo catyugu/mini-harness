@@ -18,13 +18,13 @@ export function createModelPicker(root: HTMLElement, onSelect: (model: ModelChoi
   function position() {
     if (!popup.matches(':popover-open')) return;
     const anchor = button.getBoundingClientRect(), viewport = window.visualViewport;
-    const width = Math.min(360, (viewport?.width ?? innerWidth) - 16);
+    const width = Math.min(300, (viewport?.width ?? innerWidth) - 16);
     const top = viewport?.offsetTop ?? 0, left = viewport?.offsetLeft ?? 0;
     const right = left + (viewport?.width ?? innerWidth), bottom = top + (viewport?.height ?? innerHeight);
     const above = anchor.top - top - 14, below = bottom - anchor.bottom - 14;
     popup.style.width = width + 'px';
-    popup.style.left = Math.max(left + 8, Math.min(anchor.left, right - width - 8)) + 'px';
-    popup.style.maxHeight = Math.min(bottom - top - 16, Math.max(above, below)) + 'px';
+    popup.style.left = Math.max(left + 8, Math.min(anchor.right - width, right - width - 8)) + 'px';
+    popup.style.maxHeight = Math.min(420, bottom - top - 16, Math.max(above, below)) + 'px';
     popup.style.top = below > above ? Math.max(top + 8, anchor.bottom + 6) + 'px' : 'auto';
     popup.style.bottom = below > above ? 'auto' : innerHeight - Math.min(bottom - 8, anchor.top - 6) + 'px';
   }
@@ -74,18 +74,21 @@ export function createModelPicker(root: HTMLElement, onSelect: (model: ModelChoi
       const option = document.createElement('button');
       option.type = 'button';
       option.tabIndex = -1;
-      option.className = 'suggestion';
+      option.className = 'suggestion model-option';
       option.id = 'model-option-' + options.length;
       option.setAttribute('role', 'option');
       option.setAttribute('aria-selected', String(model === selected));
+      const label = document.createElement('span');
+      label.className = 'model-option-label';
       const name = document.createElement('strong');
       name.textContent = model.name;
-      option.append(name);
+      label.append(name);
       if (model.id !== model.name) {
         const id = document.createElement('small');
         id.textContent = model.id;
-        option.append(id);
+        label.append(id);
       }
+      option.append(label);
       option.onpointermove = () => highlight(options.indexOf(option), false);
       option.onclick = () => {
         popup.hidePopover();
@@ -98,7 +101,8 @@ export function createModelPicker(root: HTMLElement, onSelect: (model: ModelChoi
     empty.textContent = models.length ? 'No matching models.' : 'Configure a provider in Settings to use a model.';
     empty.hidden = options.length > 0;
     cursor = -1;
-    highlight(options.length ? 0 : -1, false);
+    const selectedIndex = search.value.trim() ? -1 : options.findIndex((option) => option.getAttribute('aria-selected') === 'true');
+    highlight(options.length ? Math.max(0, selectedIndex) : -1, false);
   }
 
   function open() {
@@ -109,6 +113,7 @@ export function createModelPicker(root: HTMLElement, onSelect: (model: ModelChoi
     position();
     button.setAttribute('aria-expanded', 'true');
     search.focus();
+    options[cursor]?.scrollIntoView({ block: 'nearest' });
   }
 
   button.onclick = () => { if (popup.matches(':popover-open')) popup.hidePopover(); else open(); };
