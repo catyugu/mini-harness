@@ -63,7 +63,7 @@ export class MiniHarnessRuntime {
 
   async getConversation(id: string) {
     const session = await this.pi.open(id);
-    return { ...this.registry.get(id), messages: this.pi.messages(id), model: this.pi.modelInfo(session.model),
+    return { ...this.registry.get(id), messages: this.pi.messages(id), leafId: session.sessionManager.getLeafId(), model: this.pi.modelInfo(session.model),
       selectedModel: { ...this.settings.model }, thinkingLevel: session.thinkingLevel, ...this.runs.view(id),
       queue: this.pi.queue(session) };
   }

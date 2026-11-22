@@ -10,6 +10,9 @@ export interface ContentBlock {
 export type MessageContent = string | ContentBlock[];
 
 export interface ViewMessage {
+  /** Stable Pi JSONL entry identity for persisted messages (absent for stream previews). */
+  id?: string;
+  parentId?: string | null;
   role: 'user' | 'assistant' | 'toolResult';
   content: MessageContent;
   timestamp: number;

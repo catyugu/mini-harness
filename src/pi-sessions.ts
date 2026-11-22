@@ -192,22 +192,28 @@ export class PiSessions {
       if (typeof data?.toolCallId === 'string' && typeof data.elapsedMs === 'number' && Number.isFinite(data.elapsedMs))
         toolTimings.set(data.toolCallId, data.elapsedMs);
     }
-    for (const message of session.messages) if (message.role === 'assistant') {
-      for (const block of message.content) if (block.type === 'toolCall') argumentsById.set(block.id, block.arguments);
+    const branch = session.sessionManager.getBranch();
+    for (const entry of branch) if (entry.type === 'message' && entry.message.role === 'assistant') {
+      for (const block of entry.message.content) if (block.type === 'toolCall') argumentsById.set(block.id, block.arguments);
     }
-    return session.messages.flatMap<ViewMessage>((message) => {
+    // Render the selected Pi branch, not a flattened model-context projection. In particular,
+    // compaction must not erase the identity of earlier messages or their editing targets.
+    return branch.flatMap<ViewMessage>((entry) => {
+      if (entry.type !== 'message') return [];
+      const message = entry.message;
+      const identity = { id: entry.id, parentId: entry.parentId };
       switch (message.role) {
         case 'user':
         case 'assistant':
           return [{
-            role: message.role, content: message.content, timestamp: message.timestamp,
+            ...identity, role: message.role, content: message.content, timestamp: message.timestamp,
             error: message.role === 'assistant' ? message.errorMessage : undefined
           }];
         case 'toolResult': {
           const code = message.toolName === 'sandbox_shell' && message.details && typeof message.details === 'object' &&
             'code' in message.details ? message.details.code : undefined;
           return [{
-            role: message.role, content: message.content, timestamp: message.timestamp,
+            ...identity, role: message.role, content: message.content, timestamp: message.timestamp,
             arguments: argumentsById.get(message.toolCallId), toolName: message.toolName, toolCallId: message.toolCallId, isError: message.isError,
             sessionId: message.details && typeof message.details === 'object' && 'sessionId' in message.details &&
               typeof message.details.sessionId === 'string' ? message.details.sessionId : undefined,
