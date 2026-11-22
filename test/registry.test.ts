@@ -82,7 +82,7 @@ test('legacy workspace and session indexes migrate without moving Pi history or 
     }] }));
     const registry = new SessionRegistry(first);
     const migrated = registry.get('legacy');
-    assert.equal(migrated.workspaceId, registry.workspaces.list().find(({ path }) => path === realpathSync(second.cwd)).id);
+    assert.equal(migrated.workspaceId, registry.workspaces.list().find(({ path }) => path === realpathSync.native(second.cwd)).id);
     assert.equal(JSON.parse(readFileSync(first.registry, 'utf8')).sessions[0].workspaceId, migrated.workspaceId);
     assert.equal(registry.export(['legacy'])[0].piSession, 'old Pi history');
     registry.workspaces.remove(migrated.workspaceId);

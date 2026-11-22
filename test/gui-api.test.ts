@@ -41,7 +41,9 @@ test('GUI APIs configure providers, persist keys privately, discover Skills and 
   mkdirSync(join(paths.skills, 'verify'));
   writeFileSync(join(paths.skills, 'verify', 'SKILL.md'), '---\nname: verify\ndescription: Verify a task\n---\n\nRead the task.');
   assert.ok((await request(scope + '/skills')).body.some((s) => s.name === 'verify'));
-  assert.ok((await request(scope + '/files/search?q=note')).body.includes('note.md'));
+  const search = await request(scope + '/files/search?q=note');
+  assert.equal(search.status, 200, JSON.stringify(search.body));
+  assert.ok(search.body.includes('note.md'));
   assert.equal((await request(scope + '/files/preview?path=note.md')).body.content, 'workspace note');
   assert.equal((await request(scope + '/files/preview?path=' + encodeURIComponent(paths.settings))).status, 400);
   assert.equal((await request(scope + '/files/tree?path=..')).status, 400);
@@ -107,7 +109,7 @@ test('workspace registration, session navigation and scoped tools leave an activ
   const projectSkill = join(next, '.mini-harness', 'skills', 'second-project');
   mkdirSync(projectSkill, { recursive: true });
   writeFileSync(join(projectSkill, 'SKILL.md'), '---\nname: second-project\ndescription: A workspace Skill\n---\n\nUse this workspace.');
-  const cwd = realpathSync(paths.cwd);
+  const cwd = realpathSync.native(paths.cwd);
   const { body: session } = await request(first + '/sessions', 'POST');
   await request('/sessions/' + session.id + '/runs', 'POST', { message: 'Keep working' });
   try {
@@ -116,8 +118,8 @@ test('workspace registration, session navigation and scoped tools leave an activ
     assert.equal(status, 201);
     const second = '/workspaces/' + workspace.id;
     const directories = await request('/workspaces/directories?path=' + encodeURIComponent(root));
-    assert.ok(directories.body.directories.some(({ path }) => path === realpathSync(next)));
-    assert.ok(!directories.body.directories.some(({ path }) => path === realpathSync(paths.home)));
+    assert.ok(directories.body.directories.some(({ path }) => path === realpathSync.native(next)));
+    assert.ok(!directories.body.directories.some(({ path }) => path === realpathSync.native(paths.home)));
     assert.deepEqual((await request(second + '/skills')).body.map(({ name }) => name), ['second-project']);
     assert.ok(!(await request(first + '/skills')).body.some(({ name }) => name === 'second-project'));
     const stream = await fetch(base + '/api/navigation/events', { headers: { Authorization: 'Bearer ' + app.token } });
@@ -135,7 +137,9 @@ test('workspace registration, session navigation and scoped tools leave an activ
       assert.throws(() => app.runtime.registry.create({ parentId: other.id, workspaceId: session.workspaceId }), /parent/);
       assert.deepEqual((await request(first + '/sessions')).body.map(({ id }) => id), [session.id]);
       assert.equal((await request(second + '/files/preview?path=note.txt&sessionId=' + session.id)).status, 404);
-      assert.equal((await request(second + '/files/preview?path=note.txt&sessionId=' + other.id)).body.content, 'only in second');
+      const preview = await request(second + '/files/preview?path=note.txt&sessionId=' + other.id);
+      assert.equal(preview.status, 200, JSON.stringify(preview.body));
+      assert.equal(preview.body.content, 'only in second');
       await request('/sessions/' + other.id + '/runs', 'POST', { message: 'Write a file' });
       assert.equal((await finish(other.id)).body.run.state, 'completed');
       assert.equal(readFileSync(join(next, 'isolated.txt'), 'utf8'), 'second workspace');

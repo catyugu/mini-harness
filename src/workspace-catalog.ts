@@ -8,6 +8,9 @@ import { containsPath } from './workspace.js';
 export interface WorkspaceRecord { id: string; path: string; name: string }
 interface CatalogState { records: WorkspaceRecord[] }
 
+// Use the same native resolver as fs/promises.realpath, including Windows long path names.
+export const canonicalWorkspacePath = realpathSync.native;
+
 export function workspaceId(path: string) {
   const key = process.platform === 'win32' ? path.toLowerCase() : path;
   return createHash('sha256').update(key).digest('hex').slice(0, 32);
@@ -23,7 +26,7 @@ export class WorkspaceCatalog {
   constructor(paths: ReturnType<typeof getPaths>) {
     this.file = join(paths.home, 'workspaces.json');
     mkdirSync(paths.home, { recursive: true, mode: 0o700 });
-    this.stateRoot = realpathSync(paths.home);
+    this.stateRoot = canonicalWorkspacePath(paths.home);
     const saved = readJson<CatalogState | string[]>(this.file, []);
     this.records = Array.isArray(saved) ? [] : saved.records;
     const cwd = this.directory(paths.cwd);
@@ -42,7 +45,7 @@ export class WorkspaceCatalog {
 
   private directory(path: string) {
     if (typeof path !== 'string' || !isAbsolute(path)) throw new Error('Enter an absolute directory path');
-    const target = realpathSync(path);
+    const target = canonicalWorkspacePath(path);
     if (!statSync(target).isDirectory() || containsPath(this.stateRoot, target))
       throw new Error('Select a directory outside mini-harness configuration');
     return target;
@@ -120,7 +123,7 @@ export class WorkspaceCatalog {
       const child = resolve(target, entry.name);
       if (!entry.isDirectory() || containsPath(this.stateRoot, child)) return [];
       try {
-        if (lstatSync(child).isSymbolicLink() || relative(child, realpathSync(child))) return [];
+        if (lstatSync(child).isSymbolicLink() || relative(child, canonicalWorkspacePath(child))) return [];
         return [{ name: entry.name, path: child }];
       } catch { return []; }
     }).sort((a, b) => a.name.localeCompare(b.name));

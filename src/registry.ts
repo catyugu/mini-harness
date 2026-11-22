@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { lstatSync, readFileSync, realpathSync, unlinkSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { getPaths, readJson, writeJson } from './config.js';
-import { WorkspaceCatalog, workspaceId } from './workspace-catalog.js';
+import { canonicalWorkspacePath, WorkspaceCatalog, workspaceId } from './workspace-catalog.js';
 import { isRunning, type RunInfo } from './protocol.js';
 
 export interface ModelChoice { provider: string; id: string }
@@ -40,7 +40,7 @@ export class SessionRegistry {
       this.commit({ ...this.state, sessions: this.state.sessions.map((item) => {
         if (item.workspaceId) return item;
         let path = resolve(item.cwd);
-        try { path = realpathSync(path); } catch { /* Keep the session addressable for export or deletion. */ }
+        try { path = canonicalWorkspacePath(path); } catch { /* Keep the session addressable for export or deletion. */ }
         return { ...item, workspaceId: workspaceId(path) };
       }) });
     }
