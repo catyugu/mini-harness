@@ -31,3 +31,22 @@ test('only the HTTP composition root imports the concrete runtime', () => {
       assert.doesNotMatch(dependency, /(?:^|\/)agent\.js$/, path + ' imports ' + dependency);
   }
 });
+
+test('browser modules import server-side types only, never Node runtime values', () => {
+  const web = new URL('../../web/', import.meta.url);
+  for (const directory of ['', 'builtins/']) {
+    for (const file of readdirSync(new URL(directory, web)).filter((name) => name.endsWith('.ts'))) {
+      const sourceFile = ts.createSourceFile(file, readFileSync(new URL(directory + file, web), 'utf8'),
+        ts.ScriptTarget.Latest, true);
+      for (const statement of sourceFile.statements) {
+        if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier) ||
+            !/(?:^|\/)src\//.test(statement.moduleSpecifier.text)) continue;
+        const clause = statement.importClause;
+        assert.ok(clause?.isTypeOnly ||
+          (clause?.namedBindings && ts.isNamedImports(clause.namedBindings) &&
+            clause.namedBindings.elements.every((item) => item.isTypeOnly)),
+          directory + file + ' imports a server runtime value from ' + statement.moduleSpecifier.text);
+      }
+    }
+  }
+});

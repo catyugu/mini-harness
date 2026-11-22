@@ -1,8 +1,11 @@
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import { navigationSession, type NavigationHost } from './navigation-events.js';
+import { eventStream, json, requestBody } from './http.js';
+import { isRunning } from './protocol.js';
 import type { PiSessions } from './pi-sessions.js';
 import type { Runs } from './runs.js';
 import type { SessionRegistry } from './registry.js';
-import type { IncomingMessage, ServerResponse } from 'node:http';
+
 type SessionRouteHost = NavigationHost & {
   pi: Pick<PiSessions, 'open' | 'queue' | 'queueInput'>;
   runs: Pick<Runs, 'watch' | 'compact' | 'cancel' | 'info' | 'startRun'>;
@@ -10,8 +13,6 @@ type SessionRouteHost = NavigationHost & {
   delete(ids: string[]): Promise<string[]>;
   export(ids: string[]): ReturnType<SessionRegistry['export']>;
 };
-import { eventStream, json, requestBody } from './http.js';
-import { isRunning } from './protocol.js';
 
 function streamRun(runtime: SessionRouteHost, res: ServerResponse, id: string, runId: string, after: number) {
   const stream = eventStream(res);

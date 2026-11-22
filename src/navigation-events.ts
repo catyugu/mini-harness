@@ -1,7 +1,6 @@
 import type { ServerResponse } from 'node:http';
 import { eventStream } from './http.js';
-import type { SessionRegistry } from './registry.js';
-import type { Conversation } from './registry.js';
+import type { Conversation, SessionRegistry } from './registry.js';
 import type { WorkspaceRecord } from './workspace-catalog.js';
 
 export type NavigationEvent =
