@@ -418,8 +418,8 @@ button { border-radius: var(--radius); }
 .catalog-detail .detail-fields > .ui-section h3 { margin: 0; font-size: 14px; }
 .catalog-detail .detail-fields > .ui-section:last-child { border: 0; }
 .catalog-detail .plugin-fields {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(min(275px, 100%), 1fr));
-  gap: 18px 24px; padding: 0; border: 0;
+  display: grid; grid-template-columns: minmax(0, 1fr);
+  gap: 18px; padding: 0; border: 0;
 }
 .catalog-detail .plugin-fields > label { display: grid; align-content: start; gap: 7px; min-width: 0; margin: 0; }
 .catalog-detail .plugin-fields > label > span { font-size: 13px; font-weight: 600; }
@@ -473,7 +473,6 @@ button { border-radius: var(--radius); }
   .catalog-controls { padding-right: 4px; }
   .plugin-symbol { width: 40px; height: 40px; }
   .catalog-detail-header .plugin-symbol { width: 48px; height: 48px; }
-  .catalog-detail .plugin-fields { grid-template-columns: minmax(0, 1fr); }
   .catalog-detail .plugin-fields > label > :is(input:not([type="checkbox"]), select, textarea) { min-height: 44px; }
   .setting-columns { grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr)); }
 }
