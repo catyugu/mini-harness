@@ -30,6 +30,7 @@ test('file inspection, responsive themes and reduced viewport height keep contro
           await expect(navigation).toBeFocused();
           await navigation.click();
         }
+        if (width <= 860) await page.keyboard.press('Escape');
         await expect(page.locator('#sidebarExtensions').getByRole('button', { name: 'Workspace files' })).toHaveCount(0);
         await expect(page.locator('#settingsOpen svg')).toHaveAttribute('viewBox', '.5 .5 15 15');
         await expect(page.locator('.workspace-button svg').first()).toHaveAttribute('viewBox', '0 0 16 16');
