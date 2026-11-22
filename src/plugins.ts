@@ -3,11 +3,22 @@ import { readdirSync, existsSync, lstatSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
-import { Check, Default } from 'typebox/value';
+import { Check } from 'typebox/value';
 import { readJson, type Settings } from './config.js';
 import type { BuiltinPlugin, PluginApi, PluginMetadata, SessionRecords } from './plugin-api.js';
 
 const publicServices = new Set(['harnessModels', 'harnessSessions']);
+
+function configDefaults(schema: Record<string, any>, value: any): any {
+  if (value === undefined && Object.hasOwn(schema, 'default')) value = structuredClone(schema.default);
+  if (schema.type === 'object' && value && typeof value === 'object' && !Array.isArray(value)) {
+    for (const [key, property] of Object.entries(schema.properties ?? {})) {
+      const item = configDefaults(property, value[key]);
+      if (item !== undefined) value[key] = item;
+    }
+  }
+  return value;
+}
 
 interface PluginPlan {
   id: string;
@@ -169,7 +180,7 @@ export class PluginHost {
   private configValues(id: string, settings: Settings, schema?: Record<string, any>) {
     const input = structuredClone(settings.pluginConfig[id] ?? {});
     if (!schema) return input;
-    const config = Default(schema, input) as Record<string, unknown>;
+    const config = configDefaults(schema, input) as Record<string, unknown>;
     if (!Check(schema, config)) throw new Error('Invalid configuration for plugin: ' + id);
     return config;
   }
