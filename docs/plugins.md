@@ -28,7 +28,7 @@ Install reviewed ESM code in `~/.mini-harness/plugins/<id>/plugin.js`. IDs start
 }
 ```
 
-Dependencies must be enabled; cycles and missing dependencies reject the configuration before unloading anything. Built-in IDs are `files`, `skills`, `subagents` and `shell`.
+Dependencies must be enabled; cycles and missing dependencies reject the configuration before unloading anything. Built-in IDs are `files`, `skills`, `subagents`, `shell` and `todos`.
 
 The GUI renders strings, booleans, numbers, integers, enums and nested objects from the schema. Other values use JSON input. Use `title`, `description`, `default`, `required`, bounds and `additionalProperties` to describe the accepted configuration. Keep schemas self-contained; external references are unsupported. Defaults apply recursively to object properties, then TypeBox validates the resulting value. Store configuration in `settings.json` under `pluginConfig.<id>`; it is ordinary local configuration, so use Pi credential storage for model secrets.
 
@@ -63,7 +63,7 @@ The default export can also be a Cordis component with `apply` and `inject`. Dec
 | - | - |
 | `api.config` | Cloned, read-only top-level configuration with schema defaults applied |
 | `api.defineConfig(defaults, validate?)` | Optional JavaScript defaults and validation, including plugins without a schema |
-| `api.registerTool(tool)` | Register a Pi tool and return an async unregister function |
+| `api.registerTool(tool, {capabilities}?)` | Declare capabilities (`read`, `workspace-write`, `shell`, `delegate`); local tools always additionally require confirmed full permission. Register a Pi tool and return an async unregister function |
 | `api.registerRoute(method, path, handler)` | Mount an authenticated JSON route under `/api/extensions/<id>` and return an async unregister function |
 | `api.onDispose(cleanup)` | Register synchronous or asynchronous resource cleanup |
 | Returned cleanup function | Alternative cleanup for the setup function |
@@ -76,7 +76,7 @@ Public metadata services are `harnessModels.list()` (also available as `harnessA
 
 Built-in and local setup functions run in Cordis scopes. Dependencies mount first and unload last. Disabling a required plugin also requires disabling its dependents. Reconfiguring a dependency restarts its enabled dependents. Unchanged plugin scopes stay mounted. A route handler receives `{ url, body(maxBytes?), signal }`. The signal aborts when its route unloads. Read JSON with `await body()` and return a JSON-serializable result.
 
-Schema validation precedes setup. If setup or settings persistence fails, the host unloads new scopes and restores the previous plugin configuration. Cleanup handlers must release their resources and tolerate partial setup; failure to restore is reported explicitly. Changes affecting active tools or Skills require idle conversations, and invalidate Pi sessions so their next open gets the current tool definitions. Theme, scheduling, execution policy and model-selection changes preserve running sessions. Changes to child depth refresh tool availability when a session is next idle.
+Schema validation precedes setup. If setup or settings persistence fails, the host unloads new scopes and restores the previous plugin configuration. Cleanup handlers must release their resources and tolerate partial setup; failure to restore is reported explicitly. Changes affecting active tools or Skills require idle conversations, and invalidate Pi sessions so their next open gets the current tool definitions. Theme, scheduling and default-policy changes preserve running sessions. Current-session permission changes require idle descendants. Changes to child depth refresh tool availability when a session is next idle.
 
 ## Run API
 
@@ -123,7 +123,7 @@ export default function setup(api) {
 | `mount('composer', node)` | Add an input toolbar control |
 | `completion(trigger, complete)` | Register a punctuation-triggered input completion. The callback receives `{query, signal, show, replace}`. |
 | `toolAction(name, render)` | Add a control to a tool result while keeping its normal output. |
-| `tool(name, render)` | Register one renderer for a tool name; returning `undefined` uses the generic result view |
+| `tool(name, render)` | Register a keyed renderer for a tool name; higher-priority contributions can replace it and unloading restores it; returning `undefined` uses the generic result view |
 | `settingsPage(title, node)` | Register a settings category and its content |
 | `mount('settings', node)` | Add content to the shared Extensions category |
 | `mount('inspector', node)` | Add a right-panel entry; use `inspect(title, node)` to show its content |
@@ -147,7 +147,7 @@ The server runs one Runtime for all registered workspaces. Each conversation has
 | - | - |
 | `GET /api/workspaces`, `POST /api/workspaces` with `{path, name?}` | List or register local directories |
 | `GET /api/workspaces/directories?path=...` | Browse local subdirectories for registration |
-| `PATCH /api/workspaces/:id` with `{name}`, `DELETE /api/workspaces/:id` | Rename or remove a workspace entry |
+| `PATCH /api/workspaces/:id` with `{name}` or `{path}`, `DELETE /api/workspaces/:id` with `{deleteSessions:true}` | Rename, relocate, or permanently remove a workspace with its conversations (project files remain) |
 | `PUT /api/workspaces` with `{ids}` | Reorder registered workspaces |
 | `GET /api/navigation/events` | NDJSON snapshot followed by workspace and conversation updates |
 | `GET /api/workspaces/:id/sessions`, `POST /api/workspaces/:id/sessions` | List or create conversations in a workspace |
@@ -164,3 +164,5 @@ The server runs one Runtime for all registered workspaces. Each conversation has
 Images (PNG/JPEG/GIF/WebP) go through Pi's image input and require an image-capable model. UTF-8 text attachments become message text. Limits: eight files, 6 MiB per image, 1 MiB per text file, 12 MiB total. Binary documents such as PDF/Office files are not parsed. Attachment content lives in the Pi conversation; there is no independent upload store. Git inspection requires the selected workspace to be the repository root and caps output at 512 KiB. “Files written this turn” lists successful built-in `write`/`edit` paths; Git changes show the entire working tree, including earlier edits and shell changes.
 
 The file, Skill and approval endpoints return 404 when their corresponding plugin is disabled. Every enabled built-in Shell call requires approval. Requests expire after five minutes; stopping the run or server cancels pending approval. Approval permits the command under the existing shell policy. Reviewed local plugins remain trusted code; this is not a general-purpose containment mechanism.
+
+The contribution registry, scope rules, service contracts, session projections and permission boundaries are documented in [Harness UI and execution boundaries](refactor.md). Browser plugins can use `api.contribute(region, {id, key?, priority?, order?, scope?, accepts?, value})`, `api.contributions(region, key?, context?)` and `api.watchContributions(listener)`. Use `services.openResource({path, kind, line})` for files, Diff or Shell output. `POST /api/sessions/:id/permission` accepts `{permission, confirmed}`; confirmed full access is required before local plugin tool execution.
