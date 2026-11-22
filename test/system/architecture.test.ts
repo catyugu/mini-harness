@@ -58,7 +58,7 @@ test('each built-in capability owns one manifest and co-located host/client entr
 
 test('infrastructure and kernel tests are centralized under test/, never src/', () => {
   const stray = files(source).filter((path) =>
-    /\\.(?:test|spec)\\.ts$/.test(path) || path.split(/[\\\\/]/).includes('tests'));
+    /\.(?:test|spec)\.ts$/.test(path) || path.split(/[\\/]/).includes('tests'));
   assert.deepEqual(stray, [], 'Production src/ must not contain test files or tests/ directories');
   for (const path of [
     'plugins/browser-only-api.test.ts',
