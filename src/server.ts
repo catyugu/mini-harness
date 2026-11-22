@@ -109,9 +109,11 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
       if (pathname === '/api/providers' && req.method === 'GET') return json(res, 200, providerSettings(runtime));
       if (pathname === '/api/providers' && ['PUT', 'DELETE'].includes(req.method))
         return json(res, 200, await configure(async () => saveProvider(runtime, await requestBody(req), req.method === 'DELETE')));
-      if (pathname === '/api/plugins/install' && req.method === 'POST') return json(res, 201, installPlugin(runtime, await requestBody(req, 2 * 1024 * 1024)));
+      if (pathname === '/api/plugins/install' && req.method === 'POST')
+        return json(res, 201, await configure(async () => installPlugin(runtime, await requestBody(req, 2 * 1024 * 1024))));
       const plugin = /^\/api\/plugins\/([a-z][a-z0-9-]{0,63})(?:\/(web))?$/.exec(pathname);
-      if (plugin && req.method === 'DELETE') return json(res, 200, await uninstallPlugin(runtime, plugin[1]));
+      if (plugin && req.method === 'DELETE')
+        return json(res, 200, await configure(() => uninstallPlugin(runtime, plugin[1])));
       if (plugin?.[2] === 'web' && req.method === 'GET') return json(res, 200, { source: frontendSource(runtime, plugin[1]), config: runtime.plugins.configuration(plugin[1]) });
       if (!configuring) {
         const extension = runtime.plugins.ctx.harnessRoutes.dispatch(req, res, url);
