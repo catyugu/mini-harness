@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, rmSync } from 'node:fs';
 import { createMiniHarnessServer } from '../../../src/server.js';
-import { SessionRegistry } from '../../../src/services/conversations.js';
-import { WorkspaceCatalog } from '../../../src/services/workspaces.js';
+import { SessionRegistry } from '../../sessions/registry.js';
+import { WorkspaceCatalog } from '../../workspaces/catalog.js';
 import type { RunEvent } from '../../../src/contracts/transport.js';
 import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.js';
 

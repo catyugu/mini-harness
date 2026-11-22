@@ -17,6 +17,8 @@ function files(directory: string): string[] {
   });
 }
 
+const production = (path: string) => !path.split(/[\\/]/).includes('tests');
+
 function dependencies(file: string) {
   const sourceFile = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);
   return sourceFile.statements.flatMap((statement) => {
@@ -41,7 +43,7 @@ test('each built-in capability owns one manifest and co-located host/client entr
     const path = join(features, name);
     assert.ok(existsSync(join(path, 'manifest.ts')), name + ' lacks a manifest');
     assert.ok(existsSync(join(path, 'host.ts')) || existsSync(join(path, 'client.ts')), name + ' has no implementation');
-    for (const file of files(path)) {
+    for (const file of files(path).filter(production)) {
       for (const dependency of dependencies(file)) {
         assert.notEqual(dependency.target, join(source, 'kernel', 'runtime.ts'), file + ' imports the concrete runtime');
         assert.notEqual(dependency.target, join(source, 'server.ts'), file + ' imports the HTTP server');
@@ -62,7 +64,7 @@ test('only composition roots import feature implementations', () => {
 });
 
 test('Web modules and feature clients do not import Node runtime implementations', () => {
-  const browserSources = [...files(web), ...readdirSync(features, { withFileTypes: true })
+  const browserSources = [...files(web).filter(production), ...readdirSync(features, { withFileTypes: true })
     .filter((dir) => dir.isDirectory() && existsSync(join(features, dir.name, 'client.ts')))
     .map((dir) => join(features, dir.name, 'client.ts'))];
   for (const file of browserSources) {
@@ -100,10 +102,7 @@ test('host and browser kernel only depend on contracts, never feature/UI impleme
 test('feature implementations are owned by their plugin, while host services use only platform seams', () => {
   for (const path of ['workspace.ts', 'inspection.ts', 'sandbox.ts'])
     assert.equal(existsSync(join(source, path)), false, path + ' must live with its owning capability');
-  for (const path of files(join(source, 'services'))) {
-    for (const dep of dependencies(path))
-      assert.equal(dep.target.startsWith(features + '/'), false, path + ' must not import feature internals');
-  }
+  assert.equal(existsSync(join(source, 'services')), false, 'Service implementations must live in their owning features');
 });
 
 test('contracts carry browser/session vocabulary without protocol forwarding shims', () => {

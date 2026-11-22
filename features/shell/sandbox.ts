@@ -12,7 +12,7 @@ interface ShellResult {
   truncated: boolean;
 }
 
-import { supportsIsolation } from '../../src/platform/isolation.js';
+import { supportsIsolation } from './isolation.js';
 
 export function sandboxCommand(command: string, cwd: string, mode: ShellMode, platform: NodeJS.Platform = process.platform, timeout = 60) {
   if (typeof command !== 'string' || !command.trim() || command.length > 16000) throw new Error('Invalid command');

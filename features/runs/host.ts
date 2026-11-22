@@ -1,5 +1,5 @@
 import type { Context } from 'cordis';
-import { Runs } from '../../src/services/runs.js';
+import { Runs } from './runs.js';
 
 /** Active work, streaming and cancellation are owned by Runs. */
 export function setup(ctx: Context) {

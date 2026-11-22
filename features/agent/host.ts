@@ -1,6 +1,6 @@
 import type { Context } from 'cordis';
-import { ToolRegistry } from '../../src/kernel/tool-registry.js';
-import { PiSessions } from '../../src/adapters/pi/sessions.js';
+import { ToolRegistry } from './tool-registry.js';
+import { PiSessions } from './pi-sessions.js';
 
 /** The Pi SDK and model runtime belong to Agent, never the Cordis kernel. */
 export async function setup(ctx: Context) {

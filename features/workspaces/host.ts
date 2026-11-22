@@ -1,5 +1,5 @@
 import type { Context } from 'cordis';
-import { WorkspaceCatalog } from '../../src/services/workspaces.js';
+import { WorkspaceCatalog } from './catalog.js';
 import { HttpReply } from '../../src/contracts/routes.js';
 const validId = /^[a-f0-9]{32}$/;
 

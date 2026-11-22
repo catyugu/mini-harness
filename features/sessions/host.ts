@@ -1,5 +1,5 @@
 import type { Context } from 'cordis';
-import { SessionRegistry } from '../../src/services/conversations.js';
+import { SessionRegistry } from './registry.js';
 
 export function setup(ctx: Context) {
   const registry = new SessionRegistry(ctx.harnessState.paths, ctx.harnessWorkspaces);

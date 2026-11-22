@@ -3,7 +3,7 @@ import type { ServerResponse } from 'node:http';
 import { HttpReply } from '../../src/contracts/routes.js';
 import { isRunning } from '../../src/contracts/transport.js';
 import { eventStream } from '../../src/transport/http.js';
-import { navigationSession, streamNavigation } from '../../src/transport/navigation-events.js';
+import { navigationSession, streamNavigation } from './navigation.js';
 
 const validSession = /^[a-f0-9-]{36}$/;
 const validWorkspace = /^[a-f0-9]{32}$/;
