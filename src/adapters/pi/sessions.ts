@@ -8,7 +8,7 @@ import { getSupportedThinkingLevels } from '@earendil-works/pi-ai/compat';
 import { getPaths, type Paths } from '../../config.js';
 import { prepareInput } from '../../input.js';
 import type { Attachment, ImageInput } from '../../contracts/input.js';
-import type { SessionRegistry } from '../../services/conversations.js';
+import type { SessionStore } from '../../contracts/services.js';
 import type { Conversation, ModelChoice } from '../../contracts/conversation.js';
 import type { Context } from 'cordis';
 import type { SessionRecords, ToolPort } from '../../contracts/plugins.js';
@@ -27,7 +27,7 @@ export class PiSessions {
 
   constructor(
     private readonly paths: Paths,
-    private readonly registry: SessionRegistry,
+    private readonly registry: SessionStore,
     private readonly ctx: Pick<Context, 'harnessSkills' | 'harnessTools'>,
     private readonly defaultModel: () => ModelChoice,
     private readonly rememberModel: (model: ModelChoice) => void,

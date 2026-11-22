@@ -48,7 +48,6 @@ export function authorize(request: IncomingMessage, token: string) {
 
 export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>, options: { token?: string; shutdown?: () => void } = {}) {
   const runtime = new MiniHarnessRuntime(paths);
-  const catalog = runtime.registry.workspaces;
   const navigation = new AbortController();
   let configuring = false;
   async function configure(update: () => Promise<unknown>) {
@@ -58,6 +57,7 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
     finally { configuring = false; }
   }
   await runtime.start();
+  const catalog = runtime.registry.workspaces;
   const isolation = supportsIsolation();
   const token = options.token ?? randomBytes(32).toString('hex');
   const route = async (req: IncomingMessage, res: ServerResponse) => {

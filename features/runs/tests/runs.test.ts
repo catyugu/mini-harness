@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { existsSync, rmSync } from 'node:fs';
 import { createMiniHarnessServer } from '../../../src/server.js';
 import { SessionRegistry } from '../../../src/services/conversations.js';
+import { WorkspaceCatalog } from '../../../src/services/workspaces.js';
 import type { RunEvent } from '../../../src/contracts/transport.js';
 import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.js';
 
@@ -49,7 +50,7 @@ test('HTTP disconnect keeps the Pi run alive and reconnect replays from a cursor
   assert.ok(events.every((event) => event.sequence > cursor));
   assert.ok(events.some((event) => event.type === 'complete' || event.type === 'snapshot'));
   assert.equal(app.runtime.runs.info(item.id).state, 'completed');
-  const restored = new SessionRegistry(paths);
+  const restored = new SessionRegistry(paths, new WorkspaceCatalog(paths));
   assert.equal(restored.get(item.id).run.state, 'completed');
 });
 
@@ -84,10 +85,10 @@ test('a crash leaves indexed runs interrupted while retaining the conversation t
   const mock = await createMockProvider();
   const { root, paths } = createFixturePaths(mock.url);
   t.after(async () => { await mock.close(); rmSync(root, { recursive: true, force: true }); });
-  const registry = new SessionRegistry(paths);
+  const registry = new SessionRegistry(paths, new WorkspaceCatalog(paths));
   const parent = registry.create(), child = registry.create({ parentId: parent.id });
   registry.update(child.id, { run: { id: 'fixture-run', sessionId: child.id, state: 'running', startedAt: new Date().toISOString(), sequence: 1 } });
-  const restored = new SessionRegistry(paths);
+  const restored = new SessionRegistry(paths, new WorkspaceCatalog(paths));
   assert.equal(restored.get(child.id).run.state, 'interrupted');
   assert.deepEqual(restored.descendants([parent.id]), [parent.id, child.id]);
   assert.equal(existsSync(paths.registry), true);

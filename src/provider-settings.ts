@@ -6,7 +6,7 @@ type ProviderHost = {
   paths: { home: string };
   settings: Pick<Settings, 'model'>;
   pi: Pick<PiSessions, 'models' | 'invalidateProviderSessions'>;
-  delegation: { checkProvider(id: string, removing?: boolean): void };
+  delegation?: { checkProvider(id: string, removing?: boolean): void };
   hasActiveWork: boolean;
   updateSettings(patch: SettingsPatch): Promise<Settings>;
 };
@@ -32,7 +32,7 @@ export async function saveProvider(runtime: ProviderHost, input: any, remove = f
   const next = structuredClone(previous); next.providers ??= {};
   if (remove) {
     if (!Object.hasOwn(next.providers, input.id)) throw new Error('Only custom provider configurations can be removed');
-    runtime.delegation.checkProvider(input.id, true);
+    runtime.delegation?.checkProvider(input.id, true);
     delete next.providers[input.id];
   } else {
     if (input.create && (runtime.pi.models.getProvider(input.id) || Object.hasOwn(next.providers, input.id))) throw new Error('A provider with this ID already exists');
@@ -64,7 +64,7 @@ export async function saveProvider(runtime: ProviderHost, input: any, remove = f
   try {
     await runtime.pi.models.refresh({ allowNetwork: false });
     if (runtime.pi.models.getError()) throw new Error(runtime.pi.models.getError());
-    runtime.delegation.checkProvider(input.id);
+    runtime.delegation?.checkProvider(input.id);
     if (recent.provider === input.id && !(recent.id
       ? runtime.pi.models.getModel(recent.provider, recent.id)
       : runtime.pi.models.getModels(recent.provider).length)) {

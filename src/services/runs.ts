@@ -7,7 +7,7 @@ import type { Conversation, ModelChoice } from '../contracts/conversation.js';
 import type { StreamEvent, RunEvent, RunInfo } from '../contracts/transport.js';
 import { RunEvents } from './run-events.js';
 type ThinkingLevel = AgentSession['thinkingLevel'];
-import type { SessionRegistry } from './conversations.js';
+import type { SessionStore } from '../contracts/services.js';
 
 
 interface RunOptions {
@@ -28,7 +28,7 @@ export class Runs {
   private readonly work = new Map<string, Activity>();
 
   constructor(
-    private readonly registry: SessionRegistry,
+    private readonly registry: SessionStore,
     private readonly pi: RunAgentPort,
     private readonly defaultModel: () => ModelChoice,
     private readonly assertAvailable: (id: string) => void,

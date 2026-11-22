@@ -2,17 +2,15 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { navigationSession, type NavigationHost } from './navigation-events.js';
 import { eventStream, json, requestBody } from './http.js';
 import { isRunning } from '../contracts/transport.js';
-import type { PiSessions } from '../adapters/pi/sessions.js';
-import type { Runs } from '../services/runs.js';
-import type { SessionRegistry } from '../services/conversations.js';
+import type { AgentPort, RunPort, SessionStore } from '../contracts/services.js';
 
 type SessionRouteHost = NavigationHost & {
-  pi: Pick<PiSessions, 'open' | 'queue' | 'queueInput'>;
-  runs: Pick<Runs, 'watch' | 'compact' | 'cancel' | 'info' | 'startRun'>;
+  pi: Pick<AgentPort, 'open' | 'queue' | 'queueInput'>;
+  runs: Pick<RunPort, 'watch' | 'compact' | 'cancel' | 'info' | 'startRun'>;
   getConversation(id: string): Promise<unknown>;
-  createConversation(input: { workspaceId?: string }): ReturnType<SessionRegistry['create']>;
+  createConversation(input: { workspaceId?: string }): ReturnType<SessionStore['create']>;
   delete(ids: string[]): Promise<string[]>;
-  export(ids: string[]): ReturnType<SessionRegistry['export']>;
+  export(ids: string[]): ReturnType<SessionStore['export']>;
 };
 
 function streamRun(runtime: SessionRouteHost, res: ServerResponse, id: string, runId: string, after: number) {

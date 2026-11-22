@@ -5,13 +5,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getPaths } from '../../../src/config.js';
 import { SessionRegistry } from '../../../src/services/conversations.js';
+import { WorkspaceCatalog } from '../../../src/services/workspaces.js';
 
 test('nested sessions and cascading permanent deletion', () => {
   const temp = mkdtempSync(join(tmpdir(), 'mini-harness-sessions-'));
   try {
     const paths = getPaths(realpathSync.native(temp), { MINI_HARNESS_HOME: join(temp, 'home') });
     mkdirSync(paths.sessions, { recursive: true });
-    const registry = new SessionRegistry(paths);
+    const registry = new SessionRegistry(paths, new WorkspaceCatalog(paths));
     const parent = registry.create({ title: 'root' });
     const child = registry.create({ title: 'worker', parentId: parent.id });
     const second = registry.create({ title: 'unrelated' });
@@ -33,7 +34,7 @@ test('refuses deletion of files outside managed session directory', () => {
   const temp = mkdtempSync(join(tmpdir(), 'mini-harness-safe-'));
   try {
     const paths = getPaths(temp, { MINI_HARNESS_HOME: join(temp, 'home') });
-    const registry = new SessionRegistry(paths);
+    const registry = new SessionRegistry(paths, new WorkspaceCatalog(paths));
     const item = registry.create();
     const foreign = join(temp, 'other.jsonl');
     writeFileSync(foreign, 'keep');
@@ -48,7 +49,7 @@ test('restarts finish a journaled deletion after partial cleanup', () => {
   try {
     const paths = getPaths(realpathSync.native(temp), { MINI_HARNESS_HOME: join(temp, 'home') });
     mkdirSync(paths.sessions, { recursive: true });
-    const registry = new SessionRegistry(paths);
+    const registry = new SessionRegistry(paths, new WorkspaceCatalog(paths));
     const parent = registry.create();
     const child = registry.create({ parentId: parent.id });
     const unrelated = registry.create();
@@ -59,7 +60,7 @@ test('restarts finish a journaled deletion after partial cleanup', () => {
       sessions: [unrelated],
       pendingDelete: [{ ...parent, file: parentFile }, { ...child, file: childFile }]
     }));
-    const restored = new SessionRegistry(paths);
+    const restored = new SessionRegistry(paths, new WorkspaceCatalog(paths));
     assert.deepEqual(restored.list().map(({ id }) => id), [unrelated.id]);
     assert.equal(existsSync(childFile), false);
   } finally { rmSync(temp, { recursive: true, force: true }); }

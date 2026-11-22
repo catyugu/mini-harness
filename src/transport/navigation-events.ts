@@ -1,11 +1,11 @@
 import type { ServerResponse } from 'node:http';
 import { eventStream } from './http.js';
-import type { SessionRegistry } from '../services/conversations.js';
+import type { SessionStore } from '../contracts/services.js';
 import type { Conversation } from '../contracts/conversation.js';
 import type { NavigationEvent } from '../contracts/navigation.js';
 
 export interface NavigationHost {
-  registry: SessionRegistry;
+  registry: SessionStore;
   plugins: { ctx: { harnessApprovals?: { has(sessionId: string): boolean } } };
 }
 

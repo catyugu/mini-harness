@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { lstatSync, readFileSync, realpathSync, unlinkSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { getPaths, readJson, writeJson } from '../config.js';
-import { WorkspaceCatalog } from './workspaces.js';
+import type { WorkspacePort } from '../contracts/services.js';
 import { isRunning, type RunInfo } from '../contracts/transport.js';
 
 import type { ModelChoice, Conversation } from '../contracts/conversation.js';
@@ -16,7 +16,7 @@ export class SessionRegistry {
 
   readonly events = new EventTarget();
 
-  constructor(private readonly paths: ReturnType<typeof getPaths>, readonly workspaces = new WorkspaceCatalog(paths)) {
+  constructor(private readonly paths: ReturnType<typeof getPaths>, readonly workspaces: WorkspacePort) {
     this.state = readJson<RegistryState>(paths.registry, { sessions: [] });
     if (!Array.isArray(this.state.sessions) || (this.state.pendingDelete && !Array.isArray(this.state.pendingDelete)))
       throw new Error('Invalid conversation index');
