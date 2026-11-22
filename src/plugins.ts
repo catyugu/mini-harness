@@ -71,7 +71,7 @@ export class PluginHost {
     try {
         const builtin = this.builtins.get(id);
         const mod = builtin || !source ? undefined : await import(pathToFileURL(source).href + '?v=' + lstatSync(source).mtimeMs);
-        const component = builtin ?? mod.default ?? mod.apply;
+        const component = builtin ?? mod?.default ?? mod?.apply;
         const setup = builtin || !source ? (builtin?.setup ?? (() => {})) : (typeof component === 'function' ? component : component?.apply?.bind(component));
         if (typeof setup !== 'function') throw new Error('Expected a setup function or a Cordis component');
         const deps = [...new Set<string>(component?.inject ?? mod?.inject ?? [])];

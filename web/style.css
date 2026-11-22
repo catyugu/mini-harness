@@ -13,6 +13,9 @@
     --bubble: #2a2a2e; --accent: #d7d9e6; --on-accent: #21222a; --code: #111113; --focus: #d7d9e6; }
 }
 *, *::before, *::after { box-sizing: border-box; }
+.draft-mode { display:flex; gap:10px; justify-content:space-between; align-items:center; padding:6px 10px; margin-bottom:4px; border-left:2px solid var(--accent); border-radius:5px; background:var(--bubble); font-size:12px; }
+.draft-mode button { border:0; background:transparent; text-decoration:underline; padding:4px 6px; color:var(--muted); }
+.draft-mode button:hover { color:var(--ink); }
 [hidden] { display: none !important; }
 body { margin: 0; color: var(--ink); background: var(--bg); }
 button, input, textarea, select { font: inherit; color: inherit; }

@@ -165,3 +165,13 @@ The server runs one Runtime for all registered workspaces. Each conversation has
 Images (PNG/JPEG/GIF/WebP) go through Pi's image input and require an image-capable model. UTF-8 text attachments become message text. Limits: eight files, 6 MiB per image, 1 MiB per text file, 12 MiB total. Binary documents such as PDF/Office files are not parsed. Attachment content lives in the Pi conversation; there is no independent upload store. Git inspection requires the selected workspace to be the repository root and caps output at 512 KiB. “Files written this turn” lists successful built-in `write`/`edit` paths; Git changes show the entire working tree, including earlier edits and shell changes.
 
 The file, Skill and approval endpoints return 404 when their corresponding plugin is disabled. Every enabled built-in Shell call requires approval. Requests expire after five minutes; stopping the run or server cancels pending approval. Approval permits the command under the existing shell policy. Reviewed local plugins remain trusted code; this is not a general-purpose containment mechanism.
+
+## Message action and composer extensions
+
+Browser-only plugins may contain only `web.js` (optionally `plugin.json`). They have no server tools or routes. The built-in `message-copy` and `edit-resend` capabilities demonstrate this extension boundary; both can be switched off separately.
+
+The browser API exposes `messageAction({ id, label, icon, order?, visible(context), run(context) })`. `context.message` contains the Pi entry ID and the unmodified message content; `context.rawText` contains the original text. `context.leafId` identifies the active Pi branch. The host owns button styling, placement, ordering, error rendering and cleanup. A plugin must not mutate message DOM or inspect private conversation components. Actions are removed automatically when its Cordis scope is disposed.
+
+Use `beginDraftMode({ title, text, submit(input) })` for a custom composer operation and `cancelDraftMode()` to leave it. The input contains text, attachments, chosen model and thinking level. An active mode intercepts the normal submit only while enabled. Disabling a plugin cancels its outstanding mode. The host owns the editor, cancel control and responsive layout.
+
+The `edit-resend` plugin submits to its authenticated route `POST /api/extensions/edit-resend/revise`, passing `sessionId`, `sourceEntryId`, `expectedLeafId`, `message` and optional send parameters. The host checks an optimistic Pi leaf token, navigates the AgentSession tree and starts a run. Earlier branches remain in Pi JSONL. This does **not** roll back files written to the workspace. Existing branch selection/navigation UX is a separate concern.

@@ -91,7 +91,8 @@ export async function mountBrowser(ctx: Context, snapshot: Bootstrap) {
     }
   },
     { request: data, insert: (text) => ctx.miniConversation.insert(text),
-      beginDraftMode: (mode) => ctx.miniConversation.beginDraftMode(mode), tabs: () => ctx.rightTabs },
+      beginDraftMode: (mode) => ctx.miniConversation.beginDraftMode(mode),
+      cancelDraftMode: () => ctx.miniConversation.cancelDraftMode(), tabs: () => ctx.rightTabs },
     {
       bootstrap: state.get,
       workspace: state.scope,

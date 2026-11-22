@@ -365,6 +365,7 @@ export function conversationView(api: FrontendApi, state: BrowserState, options:
       if (sending || pending || !active()) return;
       setDraftMode(mode);
     },
+    cancelDraftMode: () => setDraftMode(),
     command(command: ComposerCommand) {
       const dispose = commands.register(command);
       composerUi.refresh(true);

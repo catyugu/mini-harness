@@ -49,6 +49,7 @@ export interface FrontendApi {
   mount(slot: Slot, node: HTMLElement, order?: number): void;
   messageAction(action: MessageAction): void;
   beginDraftMode(mode: DraftMode): void;
+  cancelDraftMode(): void;
   command(command: ComposerCommand): () => void;
   completion(trigger: string, complete: Completer): void;
   settingsPage(title: string, node: HTMLElement): void;
@@ -99,7 +100,7 @@ export class FrontendHost {
   constructor(
     private readonly ctx: Context,
     private slot: (name: Slot) => HTMLElement,
-    private ui: Pick<FrontendApi, 'request' | 'insert' | 'beginDraftMode'> & { tabs(): ReturnType<typeof createRightTabs> },
+    private ui: Pick<FrontendApi, 'request' | 'insert' | 'beginDraftMode' | 'cancelDraftMode'> & { tabs(): ReturnType<typeof createRightTabs> },
     private services: FrontendServices,
     private addSettingsPage: (title: string, node: HTMLElement) => () => void,
     private registerCommand: (command: ComposerCommand) => () => void,
@@ -135,8 +136,11 @@ export class FrontendHost {
           ? AbortSignal.any([controller.signal, options.signal]) : controller.signal }),
         insert: (value) => { if (!controller.signal.aborted) this.ui.insert(value); },
         beginDraftMode: (mode) => {
-          if (!controller.signal.aborted) this.ui.beginDraftMode(mode);
+          if (controller.signal.aborted) return;
+          this.ui.beginDraftMode(mode);
+          own(() => () => this.ui.cancelDraftMode());
         },
+        cancelDraftMode: () => { if (!controller.signal.aborted) this.ui.cancelDraftMode(); },
         messageAction: (action) => own(() => {
           if (this.messageContributions.has(action.id)) throw new Error('Duplicate message action: ' + action.id);
           this.messageContributions.set(action.id, action);
