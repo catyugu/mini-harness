@@ -12,7 +12,7 @@ type PluginFilesHost = {
 const idPattern = /^[a-z][a-z0-9-]{0,63}$/;
 export function installPlugin(runtime: PluginFilesHost, input: any) {
   if (!input || !idPattern.test(input.id) || runtime.plugins.metadata().some(({ id }) => id === input.id)) throw new Error('Invalid or existing plugin ID');
-  if (!Array.isArray(input.files) || input.files.length > 3 || !input.files.some((f) => f.name === 'plugin.js')) throw new Error('Provide plugin.js and optionally plugin.json and web.js');
+  if (!Array.isArray(input.files) || input.files.length > 3 || !input.files.some((f) => f.name === 'plugin.js' || f.name === 'web.js')) throw new Error('Provide plugin.js, web.js or both, optionally with plugin.json');
   const seen = new Set(); let size = 0;
   for (const file of input.files) {
     if (!['plugin.js', 'plugin.json', 'web.js'].includes(file.name) || seen.has(file.name) || typeof file.content !== 'string') throw new Error('Invalid plugin file');

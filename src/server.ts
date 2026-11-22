@@ -152,7 +152,9 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
       return json(res, 404, { error: 'Not found' });
     } catch (error) {
       if (res.headersSent) { res.end(); return; }
-      json(res, ['Conversation not found', 'Workspace not found'].includes(error.message) ? 404 : 400, { error: error.message });
+      json(res, ['Conversation not found', 'Workspace not found'].includes(error.message) ? 404 :
+        error.message === 'Conversation changed; refresh before editing' || error.message === 'Conversation is already running' ? 409 : 400,
+        { error: error.message });
     }
   };
   const server = createServer((req, res) => { void route(req, res); });

@@ -42,7 +42,11 @@ export class PluginHost {
       if (!entry.isDirectory() || !/^[a-z][a-z0-9-]{0,63}$/.test(id) || this.builtins.has(id)) return [];
       const folder = join(this.directory, id);
       const source = join(folder, 'plugin.js');
-      if (!existsSync(source) || lstatSync(folder).isSymbolicLink() || !lstatSync(source).isFile() || lstatSync(source).isSymbolicLink()) return [];
+      const webSource = join(folder, 'web.js');
+      if (lstatSync(folder).isSymbolicLink()) return [];
+      const hasHost = existsSync(source) && lstatSync(source).isFile() && !lstatSync(source).isSymbolicLink();
+      const hasWeb = existsSync(webSource) && lstatSync(webSource).isFile() && !lstatSync(webSource).isSymbolicLink();
+      if (!hasHost && !hasWeb) return [];
       const manifest = readJson<Partial<PluginMetadata> | null>(join(folder, 'plugin.json'), null);
       const title = typeof manifest?.title === 'string' ? manifest.title.slice(0, 100) : id;
       const description = typeof manifest?.description === 'string' ? manifest.description.slice(0, 300) : 'Runs local JavaScript with your user permissions.';
@@ -52,7 +56,7 @@ export class PluginHost {
       const configSchema = manifest?.configSchema;
       if (configSchema && (configSchema.type !== 'object' || !configSchema.properties || typeof configSchema.properties !== 'object'))
         throw new Error('Expected an object configSchema for plugin: ' + id);
-      return [{ source, metadata: { id, title, description, requires, configSchema, web: existsSync(join(folder, 'web.js')), trustedCode: true } }];
+      return [{ source: hasHost ? source : undefined, metadata: { id, title, description, requires, configSchema, web: hasWeb, trustedCode: true } }];
     });
   }
 
@@ -66,11 +70,11 @@ export class PluginHost {
     let fiber: Fiber | undefined;
     try {
         const builtin = this.builtins.get(id);
-        const mod = builtin ? undefined : await import(pathToFileURL(source).href + '?v=' + lstatSync(source).mtimeMs);
+        const mod = builtin || !source ? undefined : await import(pathToFileURL(source).href + '?v=' + lstatSync(source).mtimeMs);
         const component = builtin ?? mod.default ?? mod.apply;
-        const setup = builtin?.setup ?? (typeof component === 'function' ? component : component?.apply?.bind(component));
+        const setup = builtin || !source ? (builtin?.setup ?? (() => {})) : (typeof component === 'function' ? component : component?.apply?.bind(component));
         if (typeof setup !== 'function') throw new Error('Expected a setup function or a Cordis component');
-        const deps = [...new Set<string>(component.inject ?? mod.inject ?? [])];
+        const deps = [...new Set<string>(component?.inject ?? mod?.inject ?? [])];
         if (!builtin && deps.some((dep) => !publicServices.has(dep)))
           throw new Error('Unknown harness service dependency');
         fiber = this.ctx.inject(deps, async (ctx) => {
