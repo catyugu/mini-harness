@@ -1072,3 +1072,21 @@ test('shared tab definitions keep independent identities and release inactive an
     await expect(page.getByText('Resources released: 4', { exact: true })).toBeVisible();
   } finally { await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
 });
+
+test('remembered theme runs as a classic script before bootstrap finishes without startup errors', async ({ page }) => {
+  const mock = await createMockProvider(), { root, paths } = createFixturePaths(mock.url);
+  const service = await startIsolatedHost(paths);
+  let release: () => void;
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  try {
+    await page.addInitScript(() => localStorage.setItem('mini-harness-theme', 'dark'));
+    await page.route('**/api/bootstrap', async (route) => { await held; await route.continue(); });
+    await page.goto(service.url + '/#token=' + service.token);
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    release();
+    await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toBeVisible();
+    expect(errors).toEqual([]);
+  } finally { release(); await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
+});
