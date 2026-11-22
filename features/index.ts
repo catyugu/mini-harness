@@ -14,8 +14,8 @@ import { setup as session_helper_setup } from './session-helper/host.js';
 export const builtins: BuiltinPlugin[] = [
   { ...files, setup: files_setup },
   { ...skills, setup: skills_setup },
-  { ...shell, setup: shell_setup },
   { ...subagents, setup: subagents_setup },
+  { ...shell, setup: shell_setup },
   { ...session_helper, setup: session_helper_setup },
 ];
 export { Delegation } from './subagents/delegation.js';
