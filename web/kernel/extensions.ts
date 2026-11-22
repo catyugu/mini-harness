@@ -47,6 +47,7 @@ export interface DraftMode {
   submit(input: { text: string; attachments: Attachment[]; model?: ModelChoice; thinkingLevel?: string }): Promise<unknown>;
 }
 export interface FrontendApi {
+  outlet(slot: Slot, container: HTMLElement): void;
   mount(slot: Slot, node: HTMLElement, order?: number): void;
   messageAction(action: MessageAction): void;
   beginDraftMode(mode: DraftMode): void;
@@ -99,16 +100,20 @@ export class FrontendHost {
   }
   private changedMessages() { for (const listener of this.messageListeners) listener(); }
 
+  private readonly outlets = new Map<Slot, HTMLElement>();
+
   constructor(
     private readonly ctx: Context,
-    private slot: (name: Slot) => HTMLElement,
-    private ui: Pick<FrontendApi, 'request' | 'insert' | 'beginDraftMode' | 'cancelDraftMode'> & { tabs(): RightTabsPort },
-    private services: FrontendServices,
-    private addSettingsPage: (title: string, node: HTMLElement) => () => void,
-    private registerCommand: (command: ComposerCommand) => () => void,
-    private registerCompletion: (trigger: string, complete: Completer) => () => void
+    private readonly request: <T>(path: string, options?: RequestInit) => Promise<T>,
+    private readonly services: FrontendServices
   ) {
     this.ctx.provide('harnessBrowser', services);
+  }
+
+  private outlet(slot: Slot, node: HTMLElement) {
+    if (this.outlets.has(slot)) throw new Error('Duplicate browser outlet: ' + slot);
+    this.outlets.set(slot, node);
+    return () => { if (this.outlets.get(slot) === node) this.outlets.delete(slot); };
   }
 
   enable(id: string, setup: FrontendSetup, config: Record<string, unknown> = {}) {
@@ -135,22 +140,23 @@ export class FrontendHost {
       // One draft lease per plugin scope. A replacement belongs to the newest owner;
       // disposing an older plugin must not cancel somebody else's active draft.
       own(() => () => {
-        if (this.draftOwner === id) { this.draftOwner = undefined; this.ui.cancelDraftMode(); }
+        if (this.draftOwner === id) { this.draftOwner = undefined; this.ctx.miniComposer.cancelDraftMode(); }
       });
       const cleanup = await setup(ctx, {
         signal: controller.signal,
-        request: (path, options) => this.ui.request(path, { ...options, signal: options?.signal
+        outlet: (slot, container) => own(() => this.outlet(slot, container)),
+        request: (path, options) => this.request(path, { ...options, signal: options?.signal
           ? AbortSignal.any([controller.signal, options.signal]) : controller.signal }),
-        insert: (value) => { if (!controller.signal.aborted) this.ui.insert(value); },
+        insert: (value) => { if (!controller.signal.aborted) this.ctx.miniComposer.insert(value); },
         beginDraftMode: (mode) => {
           if (controller.signal.aborted) return;
           this.draftOwner = id;
-          this.ui.beginDraftMode(mode);
+          this.ctx.miniComposer.beginDraftMode(mode);
         },
         cancelDraftMode: () => {
           if (!controller.signal.aborted && this.draftOwner === id) {
             this.draftOwner = undefined;
-            this.ui.cancelDraftMode();
+            this.ctx.miniComposer.cancelDraftMode();
           }
         },
         messageAction: (action) => own(() => {
@@ -159,24 +165,25 @@ export class FrontendHost {
           this.changedMessages();
           return () => { this.messageContributions.delete(action.id); this.changedMessages(); };
         }),
-        rightTab: (type, definition) => own(() => this.ui.tabs().register(id + ':' + type, definition)),
+        rightTab: (type, definition) => own(() => this.ctx.miniTabs.register(id + ':' + type, definition)),
         openTab: (type, path, scope) => {
-          if (!controller.signal.aborted) this.ui.tabs().open(id + ':' + type, path, scope);
+          if (!controller.signal.aborted) this.ctx.miniTabs.open(id + ':' + type, path, scope);
         },
         inspect: (title, content) => {
-          if (!controller.signal.aborted) this.ui.tabs().inspect(id, title, content, controller.signal);
+          if (!controller.signal.aborted) this.ctx.miniTabs.inspect(id, title, content, controller.signal);
         },
         config: Object.freeze(structuredClone(config)),
         mount: (slot, node, order = 0) => own(() => {
-          const container = this.slot(slot);
+          const container = this.outlets.get(slot);
+          if (!container) throw new Error('Browser outlet unavailable: ' + slot);
           const before = [...container.children].find((child) => (this.contributions.get(child as HTMLElement) ?? 0) > order);
           this.contributions.set(node, order);
           container.insertBefore(node, before ?? null);
           return () => node.remove();
         }),
-        command: (command) => own(() => this.registerCommand(command)),
-        completion: (trigger, complete) => own(() => this.registerCompletion(trigger, complete)),
-        settingsPage: (title, node) => own(() => this.addSettingsPage(title, node)),
+        command: (command) => own(() => this.ctx.miniComposer.command(command)),
+        completion: (trigger, complete) => own(() => this.ctx.miniComposer.completion(trigger, complete)),
+        settingsPage: (title, node) => own(() => this.ctx.miniSettingsPages.addPage(title, node)),
         tool: (name, render) => registerRenderer(this.renderers, name, render),
         toolAction: (name, render) => registerRenderer(this.actions, name, render),
         onDispose: (dispose) => {
@@ -220,5 +227,17 @@ export class FrontendHost {
 }
 
 declare module 'cordis' {
-  interface Context { harnessBrowser: FrontendServices }
+  interface Context {
+    harnessBrowser: FrontendServices;
+    miniComposer: {
+      insert(text: string): void;
+      beginDraftMode(mode: DraftMode): void;
+      cancelDraftMode(): void;
+      command(command: ComposerCommand): () => void;
+      completion(trigger: string, complete: Completer): () => void;
+      refreshTools(): void;
+    };
+    miniSettingsPages: { addPage(title: string, node: HTMLElement): () => void };
+    miniTabs: RightTabsPort;
+  }
 }
