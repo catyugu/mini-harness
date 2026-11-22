@@ -32,13 +32,14 @@ const denied = () => new Error('Path is outside the permitted workspace or is a 
 const missing = (error: unknown) => (error as NodeJS.ErrnoException).code === 'ENOENT';
 
 export class Workspace {
-  constructor(private readonly cwd: string, private readonly state: string) {}
+  constructor(private readonly cwd: string, private readonly state: string, private readonly canonicalRoot = false) {}
 
   private async location(path: string) {
     const from = resolve(this.cwd);
     const requested = resolve(from, path);
     if (!containsPath(from, requested)) throw denied();
     const root = await realpath(from);
+    if (this.canonicalRoot && !samePath(root, from)) throw denied();
     const state = await realpath(this.state);
     const parts = relative(from, requested).split(sep).filter(Boolean);
     parts.forEach(checkName);
@@ -249,7 +250,7 @@ export class Workspace {
     return files;
   }
 
-  private imageType(path: string) {
+  imageType(path: string) {
     return this.file(path, false, false, async (handle) => {
       const buffer = Buffer.alloc(12);
       const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, existsSync, writeFileSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync, writeFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getPaths } from '../src/config.js';
@@ -62,5 +62,33 @@ test('restarts finish a journaled deletion after partial cleanup', () => {
     const restored = new SessionRegistry(paths);
     assert.deepEqual(restored.list().map(({ id }) => id), [unrelated.id]);
     assert.equal(existsSync(childFile), false);
+  } finally { rmSync(temp, { recursive: true, force: true }); }
+});
+
+test('legacy workspace and session indexes migrate without moving Pi history or re-registering a removed workspace', () => {
+  const temp = mkdtempSync(join(tmpdir(), 'mini-harness-migrate-'));
+  try {
+    const first = getPaths(temp, { MINI_HARNESS_HOME: join(temp, 'home') });
+    const second = getPaths(join(temp, 'second'), { MINI_HARNESS_HOME: first.home });
+    mkdirSync(first.sessions, { recursive: true });
+    mkdirSync(second.sessions, { recursive: true });
+    mkdirSync(second.cwd);
+    const file = join(second.sessions, 'old.jsonl');
+    writeFileSync(file, 'old Pi history');
+    writeFileSync(join(first.home, 'workspaces.json'), JSON.stringify([second.cwd]));
+    writeFileSync(first.registry, JSON.stringify({ sessions: [{
+      id: 'legacy', parentId: null, cwd: second.cwd, title: 'Old session', file,
+      createdAt: '2026-01-01', updatedAt: '2026-01-01'
+    }] }));
+    const registry = new SessionRegistry(first);
+    const migrated = registry.get('legacy');
+    assert.equal(migrated.workspaceId, registry.workspaces.list().find(({ path }) => path === second.cwd).id);
+    assert.equal(JSON.parse(readFileSync(first.registry, 'utf8')).sessions[0].workspaceId, migrated.workspaceId);
+    assert.equal(registry.export(['legacy'])[0].piSession, 'old Pi history');
+    registry.workspaces.remove(migrated.workspaceId);
+    const restored = new SessionRegistry(first);
+    assert.ok(!restored.workspaces.list().some(({ id }) => id === migrated.workspaceId));
+    assert.equal(restored.get('legacy').file, file);
+    assert.equal(restored.workspaces.register(second.cwd).id, migrated.workspaceId);
   } finally { rmSync(temp, { recursive: true, force: true }); }
 });

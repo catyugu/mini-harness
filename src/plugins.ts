@@ -49,6 +49,7 @@ type RuntimeServices = {
   settings(): Settings;
   models: { list(): ReturnType<MiniHarnessRuntime['availableModels']> };
   sessions: Pick<MiniHarnessRuntime['registry'], 'get' | 'list'>;
+  workspaces: { resolve(id: string): string; approval(id: string, waiting: boolean): void };
   delegation: MiniHarnessRuntime['delegation'];
 };
 
@@ -63,7 +64,8 @@ declare module 'cordis' {
     harnessChildPolicy: { get(): Settings['subagents'] };
     harnessRoutes: RouteRegistry;
     harnessDelegation: RuntimeServices['delegation'];
-    harnessSkills: { paths: string[] };
+    harnessSkills: { paths(cwd: string): string[] };
+    harnessWorkspace: RuntimeServices['workspaces'];
   }
 }
 
@@ -120,6 +122,7 @@ export class PluginHost {
     this.ctx.provide('harnessSessions', services.sessions);
     this.ctx.provide('harnessTools', new ToolRegistry());
     this.ctx.provide('harnessRoutes', new RouteRegistry());
+    this.ctx.provide('harnessWorkspace', services.workspaces);
     this.ctx.provide('harnessDelegation', services.delegation);
   }
 

@@ -28,8 +28,12 @@ function streamRun(runtime: MiniHarnessRuntime, res: ServerResponse, id: string,
 export async function sessionRoutes(runtime: MiniHarnessRuntime, req: IncomingMessage, res: ServerResponse, url: URL,
   configuring: () => unknown) {
   const { pathname } = url;
-  if (pathname === '/api/sessions' && req.method === 'GET') return json(res, 200, runtime.registry.list().map((item) => ({ ...item, run: runtime.runInfo(item.id) })));
-  if (pathname === '/api/sessions' && req.method === 'POST') return json(res, 201, runtime.registry.create());
+  if (pathname === '/api/sessions' && req.method === 'GET') return json(res, 200, runtime.registry.list().map((item) => runtime.navigationSession(item.id)));
+  if (pathname === '/api/sessions' && req.method === 'POST') {
+    const input = await requestBody(req);
+    if (input?.workspaceId !== undefined && typeof input.workspaceId !== 'string') throw new Error('Invalid workspace ID');
+    return json(res, 201, runtime.registry.create({ workspaceId: input?.workspaceId }));
+  }
   const match = /^\/api\/sessions\/([a-f0-9-]{36})(?:\/(messages|cancel|runs|events|queue|compact))?$/.exec(pathname);
   if (match) {
     const id = match[1];

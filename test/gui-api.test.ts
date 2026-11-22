@@ -21,7 +21,7 @@ async function fixture(t: any, reply?: Parameters<typeof createMockProvider>[0])
     return { status: response.status, body: await response.json() };
   };
   const finish = (id: string) => waitUntil(() => request('/sessions/' + id + '/runs'), (r) => ['completed', 'failed', 'cancelled'].includes(r.body.run?.state));
-  return { mock, paths, root, app, request, finish };
+  return { mock, paths, root, app, request, finish, base };
 }
 
 test('attachments enforce encoding, format and byte limits without creating files', () => {
@@ -36,17 +36,18 @@ test('attachments enforce encoding, format and byte limits without creating file
 
 test('GUI APIs configure providers, persist keys privately, discover Skills and scope files', async (t) => {
   const { app, paths, request, mock, finish } = await fixture(t);
+  const scope = '/workspaces/' + app.runtime.registry.workspaces.defaultId;
   writeFileSync(join(paths.cwd, 'note.md'), 'workspace note');
   mkdirSync(join(paths.skills, 'verify'));
   writeFileSync(join(paths.skills, 'verify', 'SKILL.md'), '---\nname: verify\ndescription: Verify a task\n---\n\nRead the task.');
-  assert.ok((await request('/skills')).body.some((s) => s.name === 'verify'));
-  assert.ok((await request('/files/search?q=note')).body.includes('note.md'));
-  assert.equal((await request('/files/preview?path=note.md')).body.content, 'workspace note');
-  assert.equal((await request('/files/preview?path=' + encodeURIComponent(paths.settings))).status, 400);
-  assert.equal((await request('/files/tree?path=..')).status, 400);
+  assert.ok((await request(scope + '/skills')).body.some((s) => s.name === 'verify'));
+  assert.ok((await request(scope + '/files/search?q=note')).body.includes('note.md'));
+  assert.equal((await request(scope + '/files/preview?path=note.md')).body.content, 'workspace note');
+  assert.equal((await request(scope + '/files/preview?path=' + encodeURIComponent(paths.settings))).status, 400);
+  assert.equal((await request(scope + '/files/tree?path=..')).status, 400);
   assert.equal((await request('/settings', 'PATCH', { plugins: { files: false, skills: false } })).status, 200);
-  assert.equal((await request('/files/tree')).status, 404);
-  assert.equal((await request('/skills')).status, 404);
+  assert.equal((await request(scope + '/files/tree')).status, 404);
+  assert.equal((await request(scope + '/skills')).status, 404);
   const save = await request('/providers', 'PUT', { id: 'gui-test', baseUrl: mock.url, api: 'openai-completions', models: [{ id: 'gui-model', input: ['text', 'image'] }] });
   assert.equal(save.status, 200, JSON.stringify(save.body));
   assert.equal((await request('/credentials', 'POST', { provider: 'gui-test', key: 'gui-private-key' })).status, 200);
@@ -90,21 +91,62 @@ test('manual compaction uses Pi and preserves an idle conversation on failure', 
   assert.equal(app.runtime.hasActiveWork, false);
 });
 
-test('workspace switching isolates conversations and rejects stale tabs and busy runs', async (t) => {
-  let release: () => void;
+test('workspace registration, session navigation and scoped tools leave an active run executing', async (t) => {
+  let release: () => void, entered: () => void;
   const held = new Promise<void>((done) => { release = done; });
-  t.after(() => release());
-  const { root, paths, app, request, finish } = await fixture(t, async () => { await held; return 'Done'; });
-  const next = join(root, 'second'); mkdirSync(next);
-  const { body: session } = await request('/sessions', 'POST', {});
-  await request('/sessions/' + session.id + '/runs', 'POST', { message: 'Wait for switch' });
-  assert.equal((await request('/workspaces', 'POST', { path: next })).status, 400);
-  release(); await finish(session.id);
-  assert.equal((await request('/workspaces', 'POST', { path: next })).status, 200);
-  assert.equal(app.runtime.paths.cwd, next); assert.deepEqual((await request('/sessions')).body, []);
-  assert.equal((await request('/sessions', 'POST', {}, { 'X-Workspace': encodeURIComponent(paths.cwd) })).status, 409);
-  assert.equal((await request('/workspaces', 'POST', { path: paths.cwd })).status, 200);
-  assert.ok((await request('/sessions')).body.some((s) => s.id === session.id));
+  const waiting = new Promise<void>((done) => { entered = done; });
+  const { root, paths, app, request, finish, base } = await fixture(t, async ({ messages }) => {
+    const last = messages.at(-1);
+    if (last.content === 'Keep working') { entered(); await held; return 'Done'; }
+    return last.role === 'tool' ? 'Written' : { tool: 'write', args: { path: 'isolated.txt', content: 'second workspace' } };
+  });
+  const first = '/workspaces/' + app.runtime.registry.workspaces.defaultId;
+  const next = join(root, 'second');
+  mkdirSync(next);
+  writeFileSync(join(next, 'note.txt'), 'only in second');
+  const { body: session } = await request(first + '/sessions', 'POST');
+  await request('/sessions/' + session.id + '/runs', 'POST', { message: 'Keep working' });
+  try {
+    await waiting;
+    const { body: workspace, status } = await request('/workspaces', 'POST', { path: next });
+    assert.equal(status, 201);
+    const second = '/workspaces/' + workspace.id;
+    const directories = await request('/workspaces/directories?path=' + encodeURIComponent(root));
+    assert.ok(directories.body.directories.some(({ path }) => path === next));
+    assert.ok(!directories.body.directories.some(({ path }) => path === paths.home));
+    const stream = await fetch(base + '/api/navigation/events', { headers: { Authorization: 'Bearer ' + app.token } });
+    const events = stream.body.pipeThrough(new TextDecoderStream()).getReader();
+    try {
+      const snapshot = JSON.parse((await events.read()).value.trim());
+      assert.equal(snapshot.type, 'snapshot');
+      assert.equal(snapshot.sessions[0].id, session.id);
+      const { body: other } = await request(second + '/sessions', 'POST');
+      const event = JSON.parse((await events.read()).value.trim());
+      assert.equal(event.type, 'session');
+      assert.equal(event.session.id, other.id);
+      assert.equal(other.workspaceId, workspace.id);
+      assert.equal(app.runtime.registry.create({ parentId: other.id }).workspaceId, workspace.id);
+      assert.throws(() => app.runtime.registry.create({ parentId: other.id, workspaceId: session.workspaceId }), /parent/);
+      assert.deepEqual((await request(first + '/sessions')).body.map(({ id }) => id), [session.id]);
+      assert.equal((await request(second + '/files/preview?path=note.txt&sessionId=' + session.id)).status, 404);
+      assert.equal((await request(second + '/files/preview?path=note.txt&sessionId=' + other.id)).body.content, 'only in second');
+      await request('/sessions/' + other.id + '/runs', 'POST', { message: 'Write a file' });
+      assert.equal((await finish(other.id)).body.run.state, 'completed');
+      assert.equal(readFileSync(join(next, 'isolated.txt'), 'utf8'), 'second workspace');
+      assert.equal(existsSync(join(paths.cwd, 'isolated.txt')), false);
+      assert.equal((await request('/sessions/' + session.id + '/runs')).body.run.state, 'running');
+      assert.equal((await request(second, 'PATCH', { name: 'Second project' })).body.name, 'Second project');
+      assert.deepEqual((await request('/workspaces', 'PUT', { ids: [workspace.id, session.workspaceId] })).body.map(({ id }) => id), [workspace.id, session.workspaceId]);
+      assert.equal((await request(first, 'DELETE')).status, 200);
+      assert.equal((await request(first + '/files/tree')).status, 404);
+      assert.ok(existsSync(paths.cwd));
+      assert.equal((await request('/sessions/' + session.id + '/runs')).body.run.state, 'running');
+      release();
+      assert.equal((await finish(session.id)).body.run.state, 'completed');
+      assert.equal((await request('/workspaces', 'POST', { path: paths.cwd })).body.id, session.workspaceId);
+      assert.equal((await request(first + '/sessions')).body[0].id, session.id);
+    } finally { await events.cancel(); }
+  } finally { release(); }
 });
 
 test('shell approval gates execution, handles rejection and cancellation', async (t) => {

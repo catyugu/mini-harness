@@ -24,6 +24,7 @@ export function json(res: ServerResponse, code: number, data: unknown) {
 
 export interface RouteRequest {
   url: URL;
+  workspace?: { id: string; path: string };
   signal: AbortSignal;
   body(max?: number): Promise<unknown>;
 }
@@ -40,11 +41,11 @@ export class RouteRegistry {
     return () => { this.routes.delete(key); controller.abort(); };
   }
 
-  dispatch(req: IncomingMessage, res: ServerResponse, url: URL) {
-    const route = this.routes.get(req.method + ' ' + url.pathname);
+  dispatch(req: IncomingMessage, res: ServerResponse, url: URL, scope?: { path: string; workspace: RouteRequest['workspace'] }) {
+    const route = this.routes.get(req.method + ' ' + (scope?.path ?? url.pathname));
     if (!route) return;
     return Promise.resolve(route.handler({
-      url, signal: route.signal,
+      url, workspace: scope?.workspace, signal: route.signal,
       async body(max) {
         const value = await requestBody(req, max);
         route.signal.throwIfAborted();

@@ -1,18 +1,18 @@
 import { createServer } from 'node:http';
-import { createReadStream, readdirSync, statSync, realpathSync } from 'node:fs';
-import { dirname, join, resolve, relative, sep, isAbsolute } from 'node:path';
+import { createReadStream, readdirSync, statSync } from 'node:fs';
+import { dirname, join, resolve, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { getPaths, ensurePaths, readJson, writeJson } from './config.js';
-import { containsPath } from './workspace.js';
+import type { getPaths } from './config.js';
 import { json, requestBody } from './http.js';
 import { providerSettings, saveProvider, saveProviderCredential } from './provider-settings.js';
 import { installPlugin, uninstallPlugin, frontendSource } from './plugin-files.js';
 import { supportsIsolation } from './sandbox.js';
 import { MiniHarnessRuntime } from './agent.js';
 import { sessionRoutes } from './session-routes.js';
+import { navigationSnapshot, streamNavigation } from './navigation-events.js';
 
 const WEB_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'web');
 const assets = new Map([
@@ -38,8 +38,9 @@ export function authorize(request: IncomingMessage, token: string) {
 }
 
 export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>, options: { token?: string; shutdown?: () => void } = {}) {
-  let runtime = new MiniHarnessRuntime(paths);
-  let switching = false;
+  const runtime = new MiniHarnessRuntime(paths);
+  const catalog = runtime.registry.workspaces;
+  const navigation = new AbortController();
   let configuring = false;
   await runtime.start();
   const isolation = supportsIsolation();
@@ -65,34 +66,39 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
       if (req.method !== 'GET' && req.headers.origin && new URL(req.headers.origin).origin !== 'http://' + req.headers.host) {
         return json(res, 403, { error: 'Origin not allowed' });
       }
-      if (switching) return json(res, 409, { error: 'Workspace is switching; reload when it finishes' });
-      if (req.headers['x-workspace'] && decodeURIComponent(String(req.headers['x-workspace'])) !== runtime.paths.cwd)
-        return json(res, 409, { error: 'Workspace changed in another tab. Reload this page to continue.' });
-      const workspacesFile = join(paths.home, 'workspaces.json');
-      const workspaces = () => [...new Set([runtime.paths.cwd, ...readJson<string[]>(workspacesFile, [])])].slice(0, 30);
-      if (pathname === '/api/workspaces' && req.method === 'GET') return json(res, 200, { current: runtime.paths.cwd, paths: workspaces() });
-      if (pathname === '/api/workspaces' && req.method === 'POST') {
-        if (configuring || runtime.hasActiveWork) throw new Error('Stop active conversations before switching workspace');
-        const input = await requestBody(req);
-        if (typeof input.path !== 'string' || !isAbsolute(input.path)) throw new Error('Enter an absolute workspace path');
-        const target = realpathSync(input.path);
-        if (!statSync(target).isDirectory() || containsPath(paths.home, target)) throw new Error('Select a workspace directory outside mini-harness configuration');
-        const known = [...new Set([target, ...workspaces()])].slice(0, 30);
-        if (switching || configuring || runtime.hasActiveWork) throw new Error('Stop active conversations before switching workspace');
-        const previous = runtime.paths;
-        switching = true;
-        try {
-          await runtime.stop();
-          const nextPaths = getPaths(target, { MINI_HARNESS_HOME: paths.home }); ensurePaths(nextPaths);
-          runtime = new MiniHarnessRuntime(nextPaths);
-          await runtime.start();
-          writeJson(workspacesFile, known);
-        } catch (error) {
-          await runtime.stop().catch(() => {});
-          runtime = new MiniHarnessRuntime(previous); await runtime.start();
-          throw error;
-        } finally { switching = false; }
-        return json(res, 200, { current: runtime.paths.cwd, paths: known });
+      if (pathname === '/api/navigation/events' && req.method === 'GET')
+        return streamNavigation(runtime, res, navigation.signal);
+      if (pathname === '/api/workspaces/directories' && req.method === 'GET')
+        return json(res, 200, catalog.browse(url.searchParams.get('path')));
+      if (pathname === '/api/workspaces') {
+        if (req.method === 'GET') return json(res, 200, catalog.list());
+        if (req.method === 'PUT') return json(res, 200, catalog.reorder((await requestBody(req))?.ids));
+        if (req.method === 'POST') {
+          const input = await requestBody(req);
+          return json(res, 201, catalog.register(input?.path, input?.name));
+        }
+      }
+      const scope = /^\/api\/workspaces\/([a-f0-9]{32})(?:\/(sessions|skills|files\/[a-z]+))?$/.exec(pathname);
+      if (scope) {
+        const [, id, resource] = scope;
+        const record = catalog.get(id);
+        if (!resource && req.method === 'PATCH')
+          return json(res, 200, catalog.rename(id, (await requestBody(req))?.name));
+        if (!resource && req.method === 'DELETE') {
+          catalog.remove(id);
+          return json(res, 200, { removed: id });
+        }
+        if (resource === 'sessions') {
+          if (req.method === 'GET') return json(res, 200, runtime.registry.list(id).map((item) => runtime.navigationSession(item.id)));
+          if (req.method === 'POST') return json(res, 201, runtime.registry.create({ workspaceId: id }));
+        } else if (resource && !configuring && req.method === 'GET') {
+          const sessionId = url.searchParams.get('sessionId');
+          if (sessionId && runtime.registry.get(sessionId)?.workspaceId !== id)
+            throw new Error('Conversation not found');
+          const workspace = { id, path: catalog.resolveRoot(record.path, id) };
+          const extension = runtime.plugins.ctx.harnessRoutes.dispatch(req, res, url, { path: '/workspace/' + resource, workspace });
+          if (extension) return await extension;
+        }
       }
       if (pathname === '/api/providers' && req.method === 'GET') return json(res, 200, providerSettings(runtime));
       if (pathname === '/api/providers' && ['PUT', 'DELETE'].includes(req.method)) {
@@ -115,10 +121,9 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
         return json(res, 202, { pid: process.pid });
       }
       if (pathname === '/api/bootstrap' && req.method === 'GET')
-        return json(res, 200, { settings: runtime.settings, sessions: runtime.registry.list().map((item) => ({ ...item, run: runtime.runInfo(item.id) })), models: runtime.availableModels(), plugins: runtime.plugins.metadata(), workspace: runtime.paths.cwd, isolation, providers: providerSettings(runtime) });
+        return json(res, 200, { settings: runtime.settings, ...navigationSnapshot(runtime), models: runtime.availableModels(), plugins: runtime.plugins.metadata(), isolation, providers: providerSettings(runtime) });
       if (pathname === '/api/sessions' || pathname.startsWith('/api/sessions/'))
-        return await sessionRoutes(runtime, req, res, url, () => configuring || switching || req.headers['x-workspace'] &&
-          decodeURIComponent(String(req.headers['x-workspace'])) !== runtime.paths.cwd);
+        return await sessionRoutes(runtime, req, res, url, () => configuring);
       if (pathname === '/api/settings' && req.method === 'PATCH') {
         if (configuring) throw new Error('Configuration is already changing');
         configuring = true;
@@ -150,7 +155,7 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
       return json(res, 404, { error: 'Not found' });
     } catch (error) {
       if (res.headersSent) { res.end(); return; }
-      json(res, error.message === 'Conversation not found' ? 404 : 400, { error: error.message });
+      json(res, ['Conversation not found', 'Workspace not found'].includes(error.message) ? 404 : 400, { error: error.message });
     }
   };
   const server = createServer((req, res) => { void route(req, res); });
@@ -165,6 +170,7 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
       return (server.address() as AddressInfo).port;
     },
     close() {
+      navigation.abort();
       closing ??= Promise.all([
         new Promise<void>((done) => server.close(() => done())), runtime.stop()
       ]).then(() => {});
