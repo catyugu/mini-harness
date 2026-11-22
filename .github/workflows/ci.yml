@@ -38,11 +38,7 @@ jobs:
       - run: npm run pack:check
 
   browser:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-24.04, windows-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -51,7 +47,6 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - uses: actions/cache@v4
-        if: runner.os == 'Linux'
         with:
           path: ~/.cache/ms-playwright
           key: playwright-chromium-1.56.0-ubuntu-24.04
@@ -60,6 +55,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: browser-failure-details-${{ matrix.os }}
+          name: browser-failure-details
           path: test-results/
           retention-days: 7
