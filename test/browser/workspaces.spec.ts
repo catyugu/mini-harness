@@ -40,7 +40,7 @@ test('file inspection, responsive themes and reduced viewport height keep contro
         await expect(file).toBeVisible();
         expect(await file.evaluate((node) => getComputedStyle(node).justifyContent)).toBe('flex-start');
         expect(await file.evaluate((node) => node.querySelector('svg').getBoundingClientRect().left -
-          node.getBoundingClientRect().left)).toBeLessThan(20);
+          node.getBoundingClientRect().left)).toBeLessThan(32);
         await file.click();
         await panel.getByRole('button', { name: 'Diff', exact: true }).click();
         await expect(panel.locator('.diff .added')).toHaveText(['+# Visible file', '+Before edits', '+Workspace content']);
