@@ -345,7 +345,9 @@ test('edit-resend branches the Pi session instead of appending and enforces the 
   await send('Original first');
   await send('Original second');
   const before = (await request('/sessions/' + session.id)).body;
-  const first = before.messages.find((message) => message.role === 'user' && message.content === 'Original first');
+  const textOf = (message: any) => typeof message.content === 'string' ? message.content :
+    message.content.filter((block: any) => block.type === 'text').map((block: any) => block.text).join('\n');
+  const first = before.messages.find((message) => message.role === 'user' && textOf(message) === 'Original first');
   assert.ok(first?.id, 'Pi entry identity must be present on persisted user messages');
   assert.ok(before.leafId, 'API must expose current branch leaf');
   const revision = await request('/extensions/edit-resend/revise', 'POST', {
@@ -355,9 +357,9 @@ test('edit-resend branches the Pi session instead of appending and enforces the 
   const finished = await finish(session.id);
   assert.equal(finished.body.run.state, 'completed');
   const after = (await request('/sessions/' + session.id)).body;
-  assert.ok(after.messages.some((message) => message.role === 'user' && message.content === 'Revised first'));
-  assert.equal(after.messages.some((message) => message.role === 'user' && message.content === 'Original first'), false);
-  assert.equal(after.messages.some((message) => message.role === 'user' && message.content === 'Original second'), false);
+  assert.ok(after.messages.some((message) => message.role === 'user' && textOf(message) === 'Revised first'));
+  assert.equal(after.messages.some((message) => message.role === 'user' && textOf(message) === 'Original first'), false);
+  assert.equal(after.messages.some((message) => message.role === 'user' && textOf(message) === 'Original second'), false);
   assert.notEqual(after.leafId, before.leafId);
   const exportFile = app.runtime.export([session.id])[0].piSession;
   for (const message of ['Original first', 'Original second', 'Revised first']) assert.ok(exportFile.includes(message));
