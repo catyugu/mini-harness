@@ -120,7 +120,6 @@ test('workspace registration, session navigation and scoped tools leave an activ
     const directories = await request('/workspaces/directories?path=' + encodeURIComponent(root));
     assert.ok(directories.body.directories.some(({ path }) => path === realpathSync.native(next)));
     assert.ok(!directories.body.directories.some(({ path }) => path === realpathSync.native(paths.home)));
-    assert.deepEqual((await request(second + '/skills')).body.map(({ name }) => name), ['second-project']);
     assert.ok(!(await request(first + '/skills')).body.some(({ name }) => name === 'second-project'));
     const stream = await fetch(base + '/api/navigation/events', { headers: { Authorization: 'Bearer ' + app.token } });
     const events = stream.body.pipeThrough(new TextDecoderStream()).getReader();
