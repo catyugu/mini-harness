@@ -1,14 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, symlinkSync, realpathSync } from 'node:fs';
-import { join } from 'node:path';
-import { execFileSync } from 'node:child_process';
-import { createMiniHarnessServer } from '../../server.js';
-import { prepareInput } from '../../input.js';
-import { Inspection } from '../../../features/files/inspection.js';
-import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.js';
-
-import { fixture, waitUntil } from '../../../test/support/api-fixture.js';
+import { fixture } from '../../../test/support/api-fixture.js';
 
 test('web-only plugins install and unload without a dummy backend entry', async (t) => {
   const { request } = await fixture(t);

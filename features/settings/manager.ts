@@ -53,19 +53,23 @@ export class SettingsManager implements SettingsPort {
     operations.assertAvailable();
     const next = mergeSettings(this.settings, patch);
     for (const validate of this.validators) validate(next);
-    this.changing = true;
+    let committed = false;
     try {
       await host.configure(next, () => {
         writeJson(this.paths.settings, next);
         this.settings = next;
-        this.publish();
+        committed = true;
       }, () => {
         if (operations.hasActiveWork) throw new Error('Stop active conversations before reconfiguring plugins');
+        // Live settings never block an in-progress run. Only actual plugin lifecycle
+        // transitions reserve the agent service.
+        this.changing = true;
       });
       return next;
     } finally {
       this.changing = false;
-      pi.reconcileResources();
+      try { pi.reconcileResources(); }
+      finally { if (committed) this.publish(); }
     }
   }
 }
