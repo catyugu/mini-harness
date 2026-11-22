@@ -5,7 +5,7 @@ import type { ModelInfo, Bootstrap, ConversationView } from './types.js';
 import { renderMarkdown, markdownSource } from './markdown.js';
 
 import { element, value, api, data, payload, setWorkspace } from './api.js';
-import { FrontendHost } from './extensions.js';
+import { FrontendHost, type FrontendApi } from './extensions.js';
 import { createMessageView } from './messages.js';
 import { hydrateIcons, icon } from './icons.js';
 import { createSessionList } from './sessions.js';
@@ -64,14 +64,18 @@ async function refreshBootstrap() {
 function reconcileFrontend() {
   const snapshot = bootstrap;
   frontendWork = frontendWork.then(async () => {
-    const desired = new Map<string, { key: string; setup?: (api: any) => any; source?: boolean }>([
+    const desired = new Map<string, { key: string; setup?: (api: FrontendApi) => any; source?: boolean; requires?: string[] }>([
       ['core:attachments', { key: 'core', setup: (api) => composerUi.attach(api) }],
       ['core:providers', { key: 'core', setup: (api) => providerManager(api, () => bootstrap.providers, refreshBootstrap, report) }],
       ['core:plugins', { key: 'core', setup: (api) => pluginInstaller(api, refreshBootstrap) }]
     ]);
     for (const plugin of snapshot.plugins) {
       if (!snapshot.settings.plugins[plugin.id]) continue;
-      const key = JSON.stringify(snapshot.settings.pluginConfig[plugin.id] ?? {});
+      const signature = (id: string): unknown => {
+        const item = snapshot.plugins.find((p) => p.id === id);
+        return [snapshot.settings.pluginConfig[id] ?? {}, ...(item?.requires ?? []).map(signature)];
+      };
+      const key = JSON.stringify(signature(plugin.id));
       if (plugin.id === 'files') desired.set(plugin.id, { key, setup: (api) => { fileInspector(api, () => changedFiles); composerUi.references(api); } });
       else if (plugin.id === 'skills') desired.set(plugin.id, { key, setup: (api) => composerUi.skills(api) });
       else if (plugin.id === 'shell') desired.set(plugin.id, { key, setup: (api) => {
@@ -83,10 +87,17 @@ function reconcileFrontend() {
           catch { pre.textContent = result; } return pre;
         });
       } });
-      else if (plugin.web) desired.set(plugin.id, { key, source: true });
+      else if (plugin.web) desired.set(plugin.id, { key, source: true, requires: plugin.requires });
     }
-    for (const id of frontendState.keys()) if (!desired.has(id)) { extensions.disable(id); frontendState.delete(id); }
-    for (const [id, entry] of desired) {
+    for (const id of [...frontendState.keys()].reverse()) if (!desired.has(id) || desired.get(id).key !== frontendState.get(id)) { extensions.disable(id); frontendState.delete(id); }
+    const ordered: string[] = [], visited = new Set<string>();
+    const visit = (id: string) => {
+      if (visited.has(id) || !desired.has(id)) return; visited.add(id);
+      for (const dependency of desired.get(id).requires ?? []) visit(dependency); ordered.push(id);
+    };
+    for (const id of desired.keys()) visit(id);
+    for (const id of ordered) {
+      const entry = desired.get(id);
       if (frontendState.get(id) === entry.key) continue;
       try {
         let setup = entry.setup;
