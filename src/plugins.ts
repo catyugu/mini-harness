@@ -1,5 +1,5 @@
 import { Context, type Fiber } from 'cordis';
-import { readdirSync, existsSync } from 'node:fs';
+import { readdirSync, existsSync, lstatSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
@@ -16,6 +16,7 @@ export interface PluginMetadata {
   title: string;
   description: string;
   trustedCode?: boolean;
+  web?: boolean;
   requires?: string[];
   configSchema?: Record<string, any>;
 }
@@ -106,7 +107,7 @@ export class PluginHost {
       if (!entry.isDirectory() || !/^[a-z][a-z0-9-]{0,63}$/.test(id) || builtins.has(id)) return [];
       const folder = join(this.runtime.paths.plugins, id);
       const source = join(folder, 'plugin.js');
-      if (!existsSync(source)) return [];
+      if (!existsSync(source) || lstatSync(folder).isSymbolicLink() || !lstatSync(source).isFile() || lstatSync(source).isSymbolicLink()) return [];
       let manifest: Partial<PluginMetadata> | null = null;
       try { manifest = readJson(join(folder, 'plugin.json'), null); }
       catch (error) { if (!(error instanceof SyntaxError)) throw error; }
@@ -118,7 +119,7 @@ export class PluginHost {
       const configSchema = manifest?.configSchema;
       if (configSchema && (configSchema.type !== 'object' || !configSchema.properties || typeof configSchema.properties !== 'object'))
         throw new Error('Expected an object configSchema for plugin: ' + id);
-      return [{ source, metadata: { id, title, description, requires, configSchema, trustedCode: true } }];
+      return [{ source, metadata: { id, title, description, requires, configSchema, web: existsSync(join(folder, 'web.js')), trustedCode: true } }];
     });
   }
 
@@ -137,17 +138,19 @@ export class PluginHost {
           (sessionId) => runtime.canDelegate(sessionId)));
       },
       shell: (ctx: Context) => {
-        ctx.effect(() => ctx.harnessTools.register(defineTool({
+        const tool = (sessionId: string) => defineTool({
           name: 'sandbox_shell', label: 'Shell',
-          description: 'Run a shell command in the workspace using the configured execution policy.',
+          description: 'Run a shell command in the workspace after the user approves it in the Web interface.',
           parameters: Type.Object({ command: Type.String({ minLength: 1, maxLength: 16000 }) }),
           execute: async (_id, args, signal) => {
+            await runtime.approvals.request(sessionId, args.command, signal);
             const output = await runShell(args.command, runtime.paths.cwd, {
               ...runtime.settings.sandbox, signal, stateDir: runtime.paths.home
             });
             return { content: [{ type: 'text', text: JSON.stringify(output) }], details: output };
           }
-        })));
+        });
+        ctx.effect(() => ctx.harnessTools.register(tool(''), tool));
       }
     }[id];
     return setup && { inject: ['harnessTools'], setup };
@@ -158,7 +161,7 @@ export class PluginHost {
     let fiber: Fiber | undefined;
     try {
         const builtin = this.builtin(id);
-        const mod = builtin ? undefined : await import(pathToFileURL(source).href);
+        const mod = builtin ? undefined : await import(pathToFileURL(source).href + '?v=' + lstatSync(source).mtimeMs);
         const component = builtin ?? mod.default ?? mod.apply;
         const setup = builtin?.setup ?? (typeof component === 'function' ? component : component?.apply?.bind(component));
         if (typeof setup !== 'function') throw new Error('Expected a setup function or a Cordis component');
@@ -256,6 +259,8 @@ export class PluginHost {
       throw error;
     }
   }
+
+  configuration(id: string) { return structuredClone(this.mounted.get(id)?.plan.config ?? {}); }
 
   getTools(id: string) { return this.ctx.harnessTools.forSession(id); }
   resources(id: string) { return [this.ctx.harnessSkills, ...this.ctx.harnessTools.resources(id)]; }

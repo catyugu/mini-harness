@@ -1,5 +1,15 @@
 # Changes
 
+## Unreleased
+
+- Add five frontend extension points with owned mount/disposal, shared plugin configuration, dependency ordering and custom tool renderers. Split requests, settings, conversations, message rendering, attachments and file inspection into browser modules.
+- Add neutral light/dark surfaces, consistent icons, a collapsed navigation rail, grouped settings, an input-level model selector and a single file inspector.
+- Configure provider catalogs, credentials and custom API endpoints from Settings; switch local workspaces while idle. Foreground startup opens a browser unless `--no-open` is supplied.
+- Attach images and UTF-8 text, find files with `@`, invoke native Skills, copy messages, retry failed image submissions, and queue Pi steering/follow-up messages during runs.
+- Inspect tool arguments/results, workspace files, staged/unstaged Git diff and successful file edits. Request one-time approval for built-in Shell commands without changing sandbox execution.
+- Keep empty drafts out of persistent history; search, rename and delete conversation trees. Install disabled local plugin bundles and permanently uninstall them from Settings.
+- Add behavior tests for the GUI and API, including narrow viewports and reduced viewport height; no image snapshot baselines.
+
 ## 0.3.0
 
 - Compose core runtime, configuration, sessions, tools and Web services through Cordis. Manage workspace files as a plugin, preserve unchanged scopes, and roll back failed plugin changes with dependency-aware cleanup.

@@ -1,7 +1,10 @@
 import { marked } from './vendor/marked.js';
 import purify from './vendor/purify.js';
 
+export const markdownSource = new WeakMap<HTMLElement, string>();
+
 export function renderMarkdown(target: HTMLElement, text: string, interactive = true) {
+  markdownSource.set(target, text);
   const fragment = purify.sanitize(marked.parse(text, { async: false, gfm: true }), {
     RETURN_DOM_FRAGMENT: true,
     ALLOWED_TAGS: ['a', 'blockquote', 'br', 'code', 'del', 'em', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'hr',

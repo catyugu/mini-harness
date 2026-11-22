@@ -1,4 +1,6 @@
-import { join } from 'node:path';
+import { Approvals } from './approvals.js';
+import { prepareInput, type Attachment, type ImageInput } from './input.js';
+import { join, relative, resolve, sep }  from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { randomUUID } from 'node:crypto';
 import {
@@ -30,6 +32,7 @@ export class MiniHarnessRuntime {
   registry: SessionRegistry;
   openSessions: Map<string, AgentSession>;
   openingSessions: Map<string, Promise<AgentSession>>;
+  readonly approvals = new Approvals();
   readonly busy = new Map<string, ActiveRun>();
   readonly plugins: PluginHost;
   models!: ModelRuntime;
@@ -136,6 +139,10 @@ export class MiniHarnessRuntime {
   sessionMessages(id: string): ViewMessage[] {
     const session = this.openSessions.get(id);
     if (!session) return [];
+    const argumentsById = new Map<string, unknown>();
+    for (const message of session.messages) if (message.role === 'assistant') {
+      for (const block of message.content) if (block.type === 'toolCall') argumentsById.set(block.id, block.arguments);
+    }
     return session.messages.flatMap<ViewMessage>((message) => {
       switch (message.role) {
         case 'user':
@@ -147,7 +154,7 @@ export class MiniHarnessRuntime {
         case 'toolResult':
           return [{
             role: message.role, content: message.content, timestamp: message.timestamp,
-            toolName: message.toolName, toolCallId: message.toolCallId, isError: message.isError,
+            arguments: argumentsById.get(message.toolCallId), toolName: message.toolName, toolCallId: message.toolCallId, isError: message.isError,
             sessionId: message.details && typeof message.details === 'object' && 'sessionId' in message.details &&
               typeof message.details.sessionId === 'string' ? message.details.sessionId : undefined
           }];
@@ -161,14 +168,15 @@ export class MiniHarnessRuntime {
     const session = await this.open(id);
     return { ...this.registry.get(id), messages: this.sessionMessages(id), model: this.modelInfo(session.model),
       selectedModel: { ...this.settings.model },
-      run: this.runInfo(id), partial: this.busy.get(id)?.partial, tools: [...this.busy.get(id)?.tools.values() ?? []], busy: this.busy.has(id) };
+      run: this.runInfo(id), partial: this.busy.get(id)?.partial, tools: [...this.busy.get(id)?.tools.values() ?? []], busy: this.busy.has(id), queue: { steer: session.getSteeringMessages(), followUp: session.getFollowUpMessages() } };
   }
 
-  private launch(id: string, prompt: string, emit: (event: StreamEvent) => void, { signal, model }: { signal?: AbortSignal; model?: ModelChoice } = {}) {
+  private launch(id: string, prompt: string, emit: (event: StreamEvent) => void, { signal, model, attachments }: { signal?: AbortSignal; model?: ModelChoice; attachments?: Attachment[] } = {}) {
     if (this.configuring || this.stopping) throw new Error('Agent service is unavailable during reconfiguration or shutdown');
     if (this.busy.has(id)) throw new Error('Conversation is already running');
     if (this.deleting.has(id)) throw new Error('Conversation is being deleted');
-    if (typeof prompt !== 'string' || !prompt.trim() || prompt.length > 200000) throw new Error('Invalid message');
+    const prepared = prepareInput(prompt, attachments);
+    prompt = prepared.text;
     const record = this.registry.get(id);
     if (!record) throw new Error('Conversation not found');
     if (model !== undefined) {
@@ -210,7 +218,7 @@ export class MiniHarnessRuntime {
       run.info.state = 'running';
       this.registry.update(id, { run: run.info });
       publish({ type: 'run', run: { ...run.info } });
-      return this.runPrompt(record, prompt, publish, cancellation, choice);
+      return this.runPrompt(record, prompt, publish, cancellation, choice, prepared.images);
     };
     const work = record.parentId ? this.semaphore.run((lease) => {
       run.lease = lease;
@@ -235,12 +243,12 @@ export class MiniHarnessRuntime {
     return run;
   }
 
-  async send(id: string, prompt: string, emit: (event: StreamEvent) => void = () => {}, options: { signal?: AbortSignal; model?: ModelChoice } = {}) {
+  async send(id: string, prompt: string, emit: (event: StreamEvent) => void = () => {}, options: { signal?: AbortSignal; model?: ModelChoice; attachments?: Attachment[] } = {}) {
     return this.launch(id, prompt, emit, options).done;
   }
 
-  startRun(id: string, prompt: string, model?: ModelChoice) {
-    return { ...this.launch(id, prompt, undefined, { model }).info };
+  startRun(id: string, prompt: string, model?: ModelChoice, attachments?: Attachment[]) {
+    return { ...this.launch(id, prompt, undefined, { model, attachments }).info };
   }
 
   runInfo(id: string): RunInfo | undefined {
@@ -273,7 +281,7 @@ export class MiniHarnessRuntime {
   }
 
   private async runPrompt(record: NonNullable<ReturnType<SessionRegistry['get']>>, prompt: string,
-      emit: (event: StreamEvent) => void, signal: AbortSignal, choice?: ModelChoice) {
+      emit: (event: StreamEvent) => void, signal: AbortSignal, choice?: ModelChoice, images: ImageInput[] = []) {
     const { id } = record;
     signal.throwIfAborted();
     const session = await this.open(id);
@@ -282,6 +290,7 @@ export class MiniHarnessRuntime {
     if (model && (session.model?.provider !== model.provider || session.model?.id !== model.id))
       await session.setModel(model);
     signal.throwIfAborted();
+    if (images.length && !session.model?.input.includes('image')) throw new Error('The selected model does not support image input. Choose an image-capable model and retry.');
     const actual = this.modelInfo(session.model);
     if (!record.parentId && !isDeepStrictEqual(this.settings.model, actual)) {
       const next = mergeSettings(this.settings, { model: actual });
@@ -290,9 +299,11 @@ export class MiniHarnessRuntime {
     }
     this.registry.update(id, { model: actual });
     if (record.title === 'New conversation') this.registry.update(id, { title: prompt.trim().slice(0, 72) });
+    const toolArguments = new Map<string, unknown>();
     const off = session.subscribe((event) => {
       switch (event.type) {
         case 'message_start':
+          if (event.message.role === 'user') emit({ type: 'user', content: event.message.content, text: typeof event.message.content === 'string' ? event.message.content : event.message.content.filter((block) => block.type === 'text').map((block) => block.text).join('\n') });
           if (event.message.role === 'assistant') emit({ type: 'assistant-start' });
           break;
         case 'message_update':
@@ -303,22 +314,29 @@ export class MiniHarnessRuntime {
           if (event.message.role === 'assistant') emit({ type: 'assistant-end' });
           break;
         case 'tool_execution_start':
-          emit({ type: 'tool', id: event.toolCallId, name: event.toolName, state: 'running' });
+          toolArguments.set(event.toolCallId, event.args);
+          emit({ type: 'tool', id: event.toolCallId, name: event.toolName, state: 'running', arguments: event.args });
           break;
         case 'tool_execution_update':
-          emit({ type: 'tool', id: event.toolCallId, name: event.toolName, state: 'running', content: event.partialResult?.content });
+          emit({ type: 'tool', id: event.toolCallId, name: event.toolName, state: 'running', arguments: toolArguments.get(event.toolCallId), content: event.partialResult?.content });
           break;
-        case 'tool_execution_end':
+        case 'tool_execution_end': {
+          const args = toolArguments.get(event.toolCallId) as { path?: string };
+          const run = this.busy.get(id);
+          if (!event.isError && ['write', 'edit'].includes(event.toolName) && typeof args?.path === 'string' && run) {
+            const path = relative(this.paths.cwd, resolve(this.paths.cwd, args.path)).split(sep).join('/');
+            run.info.changedFiles = [...new Set([...(run.info.changedFiles ?? []), path])];
+          }
           emit({ type: 'tool', id: event.toolCallId, name: event.toolName, state: event.isError ? 'error' : 'finished',
-            content: event.result?.content, sessionId: event.result?.details?.sessionId });
+            arguments: toolArguments.get(event.toolCallId), content: event.result?.content, sessionId: event.result?.details?.sessionId });
           break;
+        }
       }
     });
     const cancel = () => { void session.abort().catch(() => {}); };
     signal.addEventListener('abort', cancel, { once: true });
     try {
-      emit({ type: 'user', text: prompt });
-      await session.prompt(prompt);
+      await session.prompt(prompt, { images });
       signal.throwIfAborted();
       const last = session.messages.at(-1);
       if (last?.role === 'assistant' && last.errorMessage) throw new Error(last.errorMessage);
@@ -328,11 +346,30 @@ export class MiniHarnessRuntime {
     } finally {
       signal.removeEventListener('abort', cancel);
       off();
+      session.clearQueue();
       if (session.sessionFile && session.sessionFile !== this.registry.get(id)?.file) {
         this.registry.checkedFile({ cwd: record.cwd, file: session.sessionFile });
         this.registry.update(id, { file: session.sessionFile });
       }
     }
+  }
+
+  async queueInput(id: string, text: string, mode: 'steer' | 'followUp', attachments?: Attachment[]) {
+    if (!['steer', 'followUp'].includes(mode)) throw new Error('Invalid queue mode');
+    const session = this.openSessions.get(id);
+    if (!this.busy.has(id) || !session?.isStreaming) throw new Error('The agent is not streaming; send a new message');
+    const input = prepareInput(text, attachments);
+    if (session.getSteeringMessages().length + session.getFollowUpMessages().length >= 16) throw new Error('Queue is full');
+    await session[mode](input.text, input.images);
+    return { steer: session.getSteeringMessages(), followUp: session.getFollowUpMessages() };
+  }
+
+  async skills() {
+    if (!this.settings.plugins.skills) return [];
+    const loader = new DefaultResourceLoader({ cwd: this.paths.cwd, agentDir: this.paths.agent,
+      settingsManager: SettingsManager.inMemory(), additionalSkillPaths: this.plugins.ctx.harnessSkills?.paths ?? [], noExtensions: true });
+    await loader.reload();
+    return loader.getSkills().skills.map(({ name, description }) => ({ name, description }));
   }
 
   canDelegate(id: string) {
@@ -450,6 +487,7 @@ export class MiniHarnessRuntime {
 
   async stop() {
     this.stopping = true;
+    this.approvals.close();
     for (const id of this.busy.keys()) this.cancel(id);
     await Promise.allSettled([this.configuring, ...this.openingSessions.values(), ...[...this.busy.values()].map(({ done }) => done)]);
     for (const session of this.openSessions.values()) session.dispose();

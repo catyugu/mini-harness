@@ -15,6 +15,7 @@ function help() {
 Usage:
   mini-harness [--port 3837]              Start the local web interface
   mini-harness --detached [--port 3837]   Run independently of this terminal
+  mini-harness --no-open                 Start without opening a browser
   mini-harness status                    Show server status
   mini-harness stop                      Stop the running server
   mini-harness --help                    Show help
@@ -26,11 +27,12 @@ Access: localhost only; bearer token required for all API endpoints.
 }
 
 function parse(argv: string[]) {
-  const args: { help?: boolean; detached: boolean; serve: boolean; cwd: string; port?: number; command?: 'status' | 'stop' } =
+  const args: { help?: boolean; noOpen?: boolean; detached: boolean; serve: boolean; cwd: string; port?: number; command?: 'status' | 'stop' } =
     { detached: false, serve: false, cwd: process.cwd() };
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i];
     if (flag === '--help' || flag === '-h') args.help = true;
+    else if (flag === '--no-open') args.noOpen = true;
     else if (flag === '--detached') args.detached = true;
     else if (flag === '--serve') args.serve = true;
     else if (flag === '--cwd') {
@@ -77,7 +79,7 @@ async function detached(paths: ReturnType<typeof getPaths>, port?: number) {
   throw new Error('Detached server failed to become ready. See ' + paths.log);
 }
 
-async function serve(paths: ReturnType<typeof getPaths>, port?: number) {
+async function serve(paths: ReturnType<typeof getPaths>, port?: number, open = false) {
   const unlock = await lockInstance(paths.home);
   let app: Awaited<ReturnType<typeof import('../src/server.js').createMiniHarnessServer>>;
   let ready: Promise<void>;
@@ -106,7 +108,13 @@ async function serve(paths: ReturnType<typeof getPaths>, port?: number) {
     if (stopping) return;
     const url = 'http://127.0.0.1:' + listening;
     writeJson(paths.pid, { pid: process.pid, url, token: app.token, startedAt: new Date().toISOString() });
-    console.log('mini-harness listening at ' + url + '/#token=' + app.token);
+    const address = url + '/#token=' + app.token;
+    console.log('mini-harness listening at ' + address);
+    if (open) {
+      const command = process.platform === 'win32' ? 'rundll32' : process.platform === 'darwin' ? 'open' : 'xdg-open';
+      const child = spawn(command, process.platform === 'win32' ? ['url.dll,FileProtocolHandler', address] : [address], { stdio: 'ignore', detached: true, windowsHide: true });
+      child.on('error', () => {}); child.unref();
+    }
   })();
   try {
     await ready;
@@ -145,7 +153,7 @@ async function main() {
     throw new Error('mini-harness is still shutting down');
   }
   if (args.detached && !args.serve) await detached(paths, args.port);
-  else await serve(paths, args.port);
+  else await serve(paths, args.port, !args.noOpen && !args.serve);
 }
 
 main().catch((error) => { console.error('mini-harness:', error.message); process.exitCode = 1; });

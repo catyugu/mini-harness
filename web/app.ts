@@ -1,66 +1,140 @@
 import type { Settings } from '../src/config.js';
 import type { Conversation, ModelChoice } from '../src/registry.js';
 import type { MessageContent, StreamEvent, RunEvent, RunInfo, ViewMessage } from '../src/protocol.js';
-import type { PluginMetadata } from '../src/plugins.js';
-import { renderMarkdown } from './markdown.js';
+import type { ModelInfo, Bootstrap, ConversationView } from './types.js';
+import { renderMarkdown, markdownSource } from './markdown.js';
 
-function element<K extends keyof HTMLElementTagNameMap>(id: string): HTMLElementTagNameMap[K] {
-  return document.getElementById(id) as HTMLElementTagNameMap[K];
-}
-const value = (id: string) => element<'input'>(id).value.trim();
-const tokenFromUrl = new URLSearchParams(location.hash.slice(1)).get('token');
-if (tokenFromUrl) {
-  sessionStorage.setItem('mini-harness-token', tokenFromUrl);
-  history.replaceState(null, '', location.pathname + location.search);
-}
-const token = sessionStorage.getItem('mini-harness-token');
+import { element, value, api, data, payload, setWorkspace } from './api.js';
+import { FrontendHost, type FrontendApi } from './extensions.js';
+import { createMessageView } from './messages.js';
+import { hydrateIcons, icon } from './icons.js';
+import { createSessionList } from './sessions.js';
+import { createComposer } from './composer.js';
+import { fileInspector } from './files.js';
+import { providerManager } from './provider-manager.js';
+import { pluginInstaller } from './plugin-manager.js';
+import { workspacePicker } from './workspaces.js';
+import { createSettings } from './settings.js';
+
 const messages = element('messages');
 const welcome = element('welcome');
 const composer = element<'form'>('composer');
 const prompt = element<'textarea'>('prompt');
 const modelSelect = element<'select'>('modelSelect');
 const settingsPanel = element<'dialog'>('settingsPanel');
-const settingsStatus = element('settingsStatus');
 const narrow = matchMedia('(max-width: 860px)');
 
-interface ModelInfo { provider: string; id: string; name: string; configured: boolean }
-interface Bootstrap { settings: Settings; sessions: Conversation[]; models: ModelInfo[]; plugins: PluginMetadata[]; workspace: string; isolation: boolean }
-interface ConversationView extends Conversation { selectedModel: ModelChoice; messages: ViewMessage[]; partial?: string; tools?: Extract<StreamEvent, { type: 'tool' }>[] }
 let bootstrap: Bootstrap;
 let sessions: Conversation[] = [];
 let active: string | undefined;
 let sending = false;
-let selecting = false;
 let navigation = 0;
 let pendingNavigation = false;
-const selection = new Set<string>();
-const expanded = new Set<string>();
 let observing: AbortController;
 let modelChange: Promise<Settings>;
+let changedFiles: string[] = [];
+const lastInputs = new Map<string, { message: string; attachments: import('../src/input.js').Attachment[] }>();
 const isRunning = (run?: RunInfo) => run?.state === 'queued' || run?.state === 'running';
 
-async function api(path: string, options: RequestInit = {}) {
-  if (!token) throw new Error('Open mini-harness using the URL printed by the CLI.');
-  const headers = { Authorization: 'Bearer ' + token, ...(options.body ? { 'Content-Type': 'application/json' } : {}) };
-  const response = await fetch('/api' + path, { ...options, headers });
-  if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    throw new Error(body?.error || 'Request failed (' + response.status + ')');
-  }
-  return response;
-}
-
-async function data<T>(path: string, options?: RequestInit): Promise<T> {
-  return (await api(path, options)).json();
-}
-
-const payload = (method: string, body: unknown) => ({ method, body: JSON.stringify(body) });
 const showStatus = (text: string) => { element('status').textContent = text; };
 const report = (error: Error) => showStatus(error.message);
 const adjustPrompt = () => {
   prompt.style.height = 'auto';
   prompt.style.height = Math.min(prompt.scrollHeight, 210) + 'px';
 };
+
+function inspect(title: string, content: HTMLElement) {
+  element('inspectorTitle').textContent = title;
+  element('inspectorContent').replaceChildren(content);
+  element('inspector').hidden = false;
+  element('inspectorOpen').setAttribute('aria-expanded', 'true');
+}
+const extensions = new FrontendHost({ sidebar: element('sidebarExtensions'), composer: element('composerExtensions'),
+  settings: element('settingsExtensions'), inspector: element('inspectorExtensions') }, {
+  request: data, insert: (text) => { prompt.setRangeText(text, prompt.selectionStart, prompt.selectionEnd, 'end'); prompt.focus(); adjustPrompt(); }, inspect
+}, report);
+const composerUi = createComposer(report);
+const frontendState = new Map<string, string>();
+let frontendWork = Promise.resolve();
+async function refreshBootstrap() {
+  const latest = await data<Bootstrap>('/bootstrap');
+  bootstrap = latest; sessions = latest.sessions;
+  applySettings(latest.settings); fillSettings(); renderSessions();
+}
+function reconcileFrontend() {
+  const snapshot = bootstrap;
+  frontendWork = frontendWork.then(async () => {
+    const desired = new Map<string, { key: string; setup?: (api: FrontendApi) => any; source?: boolean; requires?: string[] }>([
+      ['core:attachments', { key: 'core', setup: (api) => composerUi.attach(api) }],
+      ['core:providers', { key: 'core', setup: (api) => providerManager(api, () => bootstrap.providers, refreshBootstrap, report) }],
+      ['core:plugins', { key: 'core', setup: (api) => pluginInstaller(api, refreshBootstrap) }]
+    ]);
+    for (const plugin of snapshot.plugins) {
+      if (!snapshot.settings.plugins[plugin.id]) continue;
+      const signature = (id: string): unknown => {
+        const item = snapshot.plugins.find((p) => p.id === id);
+        return [snapshot.settings.pluginConfig[id] ?? {}, ...(item?.requires ?? []).map(signature)];
+      };
+      const key = JSON.stringify(signature(plugin.id));
+      if (plugin.id === 'files') desired.set(plugin.id, { key, setup: (api) => { fileInspector(api, () => changedFiles); composerUi.references(api); } });
+      else if (plugin.id === 'skills') desired.set(plugin.id, { key, setup: (api) => composerUi.skills(api) });
+      else if (plugin.id === 'shell') desired.set(plugin.id, { key, setup: (api) => {
+        api.tool('sandbox_shell', (tool) => {
+          const result = typeof tool.content === 'string' ? tool.content : tool.content?.filter((b) => b.type === 'text').map((b) => b.text).join('\n');
+          if (!result) return;
+          const pre = document.createElement('pre');
+          try { const output = JSON.parse(result); pre.textContent = 'Exit ' + output.code + '\n' + (output.stdout ?? '') + (output.stderr ? '\n' + output.stderr : ''); }
+          catch { pre.textContent = result; } return pre;
+        });
+      } });
+      else if (plugin.web) desired.set(plugin.id, { key, source: true, requires: plugin.requires });
+    }
+    for (const id of [...frontendState.keys()].reverse()) if (!desired.has(id) || desired.get(id).key !== frontendState.get(id)) { extensions.disable(id); frontendState.delete(id); }
+    const ordered: string[] = [], visited = new Set<string>();
+    const visit = (id: string) => {
+      if (visited.has(id) || !desired.has(id)) return; visited.add(id);
+      for (const dependency of desired.get(id).requires ?? []) visit(dependency); ordered.push(id);
+    };
+    for (const id of desired.keys()) visit(id);
+    for (const id of ordered) {
+      const entry = desired.get(id);
+      if (frontendState.get(id) === entry.key) continue;
+      try {
+        let setup = entry.setup;
+        let config = snapshot.settings.pluginConfig[id];
+        if (entry.source) {
+          const sourceData = await data<{ source: string; config: Record<string, unknown> }>('/plugins/' + id + '/web');
+          config = sourceData.config;
+          const url = URL.createObjectURL(new Blob([sourceData.source], { type: 'text/javascript' }));
+          try { setup = (await import(url)).default; } finally { URL.revokeObjectURL(url); }
+          if (typeof setup !== 'function') throw new Error('Plugin UI must export a default setup function: ' + id);
+        }
+        await extensions.enable({ id, setup }, config);
+        frontendState.set(id, entry.key);
+      } catch (error) { report(error); }
+    }
+  }).catch(report);
+}
+const { addMessage, appendHistory, toolCard } = createMessageView(messages, extensions, (id) => void activate(id), () => {
+  const last = lastInputs.get(active);
+  if (last && !sending) void send(last.message, last.attachments);
+});
+element('inspectorOpen').onclick = () => {
+  element('inspector').hidden = !element('inspector').hidden;
+  element('inspectorOpen').setAttribute('aria-expanded', String(!element('inspector').hidden));
+};
+element('inspectorClose').onclick = () => { element('inspector').hidden = true; element('inspectorOpen').setAttribute('aria-expanded', 'false'); };
+for (const [index, section] of [...document.querySelectorAll<HTMLElement>('#settingsForm > section')].entries()) {
+  section.id = 'settings-section-' + index;
+  const button = document.createElement('button'); button.type = 'button'; button.className = 'link-button';
+  button.textContent = section.querySelector('h3').textContent;
+  button.onclick = () => section.scrollIntoView({ block: 'start' });
+  element('settingsNav').append(button);
+}
+
+const { renderSessions, selection, expanded, toggleSelection } = createSessionList(() => ({ sessions, active }), (id) => void activate(id), renameSession, (item) => void deleteSession(item));
+
+const { fillSettings } = createSettings(() => bootstrap, applySettings, refreshBootstrap, closeDrawer, async () => { await frontendWork; if (active && !sending) await activate(active); });
 
 function setSidebar(open: boolean) {
   element('sidebar').classList.toggle('open', open && narrow.matches);
@@ -78,6 +152,14 @@ function showConversation(item?: Conversation, history: ViewMessage[] = []) {
   observing?.abort();
   setSending(isRunning(item?.run));
   active = item?.id;
+  changedFiles = item?.run?.changedFiles ?? [];
+  const previous = history.filter((message) => message.role === 'user').at(-1);
+  if (active && previous && !lastInputs.has(active)) {
+    const blocks = typeof previous.content === 'string' ? [{ type: 'text', text: previous.content }] : previous.content;
+    lastInputs.set(active, { message: blocks.filter((b) => b.type === 'text').map((b) => b.text).join('\n'),
+      attachments: blocks.filter((b) => b.type === 'image').map((b) => ({ name: 'image', mimeType: b.mimeType, data: b.data })) });
+  }
+  element('queuedMessages').hidden = true;
   if (bootstrap) {
     if (active) sessionStorage.setItem('mini-harness-active:' + bootstrap.workspace, active);
     else sessionStorage.removeItem('mini-harness-active:' + bootstrap.workspace);
@@ -122,166 +204,18 @@ async function createConversation() {
 
 async function newSession() {
   if (pendingNavigation) return;
-  const request = ++navigation;
-  pendingNavigation = true;
-  try {
-    const item = await createConversation();
-    if (request !== navigation) return;
-    showConversation(item);
-    closeDrawer();
-    prompt.focus();
-  } catch (error) { report(error); }
-  finally { if (request === navigation) pendingNavigation = false; }
-}
-
-function renderSessions() {
-  const roots = new Map<string | null, Conversation[]>();
-  for (const item of sessions) {
-    if (!roots.has(item.parentId)) roots.set(item.parentId, []);
-    roots.get(item.parentId).push(item);
-  }
-
-  function branch(parent: string | null) {
-    const list = document.createElement('ul');
-    for (const item of roots.get(parent) ?? []) {
-      const entry = document.createElement('li');
-      const row = document.createElement('div');
-      row.className = 'session-row' + (item.id === active ? ' active' : '');
-      if (roots.has(item.id)) {
-        const toggle = document.createElement('button');
-        const open = expanded.has(item.id);
-        toggle.type = 'button';
-        toggle.className = 'tree-button';
-        toggle.textContent = open ? '▾' : '▸';
-        toggle.setAttribute('aria-expanded', String(open));
-        toggle.setAttribute('aria-label', (open ? 'Collapse ' : 'Expand ') + item.title);
-        toggle.onclick = () => {
-          if (open) expanded.delete(item.id);
-          else expanded.add(item.id);
-          renderSessions();
-          document.getElementById('tree-' + item.id)?.focus();
-        };
-        toggle.id = 'tree-' + item.id;
-        row.append(toggle);
-      }
-      if (selecting) {
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.id = 'select-' + item.id;
-        checkbox.checked = selection.has(item.id);
-        checkbox.setAttribute('aria-label', 'Select ' + item.title);
-        checkbox.onchange = () => {
-          if (checkbox.checked) selection.add(item.id);
-          else selection.delete(item.id);
-          updateSelection();
-        };
-        const label = document.createElement('label');
-        label.htmlFor = checkbox.id;
-        label.textContent = item.title;
-        row.append(checkbox, label);
-      } else {
-        const title = document.createElement('button');
-        title.type = 'button';
-        title.className = 'session-name';
-        title.textContent = item.title;
-        title.title = item.title;
-        if (item.id === active) title.setAttribute('aria-current', 'page');
-        title.onclick = () => void activate(item.id);
-        row.append(title);
-      }
-      entry.append(row);
-      if (item.run) {
-        const state = document.createElement('span');
-        state.className = 'run-state';
-        state.dataset.state = item.run.state;
-        state.textContent = item.run.state;
-        state.title = item.run.error ?? item.run.state;
-        row.append(state);
-      }
-      if (expanded.has(item.id) && roots.has(item.id)) entry.append(branch(item.id));
-      list.append(entry);
-    }
-    return list;
-  }
-  element('sessions').replaceChildren(branch(null));
-  updateSelection();
-}
-
-function updateSelection() {
-  element('selectMode').setAttribute('aria-pressed', String(selecting));
-  element('bulkActions').hidden = !selecting;
-  element('selectedCount').textContent = selection.size + ' selected';
-  element<'button'>('exportSessions').disabled = !selection.size;
-  element<'button'>('deleteSessions').disabled = !selection.size;
+  ++navigation;
+  showConversation();
+  prompt.value = '';
+  composerUi.clear();
+  adjustPrompt();
+  showStatus('');
+  closeDrawer();
+  prompt.focus();
 }
 
 function scrollIfPinned() {
   return messages.scrollHeight - messages.clientHeight - messages.scrollTop < 96;
-}
-
-function textOf(value?: MessageContent) {
-  if (typeof value === 'string') return value;
-  return value?.filter((block) => block.type === 'text').map((block) => block.text ?? '').join('\n') ?? '';
-}
-
-function addMessage(role: 'user' | 'assistant' | 'error', text: string) {
-  const item = document.createElement('article');
-  item.className = 'message ' + role;
-  if (role === 'assistant') renderMarkdown(item, text);
-  else item.textContent = text;
-  messages.append(item);
-  return item;
-}
-
-function toolCard(data: { name: string; state: string; content?: MessageContent; sessionId?: string }, card?: HTMLDetailsElement) {
-  const item = card ?? document.createElement('details');
-  item.className = 'tool-card';
-  item.dataset.state = data.state;
-  const summary = document.createElement('summary');
-  const name = document.createElement('strong');
-  name.textContent = data.name;
-  const status = document.createElement('span');
-  status.textContent = data.state === 'finished' ? 'Done' : data.state === 'running' ? 'Running' : 'Failed';
-  if (data.state === 'error') item.open = true;
-  summary.append(name, status);
-  const body = document.createElement('div');
-  body.className = 'tool-content';
-  const output = textOf(data.content);
-  if (output) {
-    const result = document.createElement('pre');
-    result.textContent = output;
-    body.append(result);
-  }
-  for (const block of typeof data.content === 'string' ? [] : data.content ?? []) {
-    if (block.type !== 'image' || !/^image\/(?:png|jpeg|gif|webp)$/.test(block.mimeType ?? '') || !block.data) continue;
-    const img = document.createElement('img');
-    img.alt = 'Tool output';
-    img.loading = 'lazy';
-    img.src = 'data:' + block.mimeType + ';base64,' + block.data;
-    body.append(img);
-  }
-  if (data.sessionId && /^[a-f0-9-]{36}$/.test(data.sessionId)) {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'link-button';
-    button.textContent = 'Open child conversation';
-    button.onclick = () => void activate(data.sessionId);
-    body.append(button);
-  }
-  item.replaceChildren(summary, body);
-  if (!card) messages.append(item);
-  return item;
-}
-
-function appendHistory(message: ViewMessage) {
-  if (message.role === 'toolResult') {
-    toolCard({ name: message.toolName ?? 'Tool', state: message.isError ? 'error' : 'finished',
-      content: message.content, sessionId: message.sessionId });
-    return;
-  }
-  const text = textOf(message.content);
-  if (text) addMessage(message.role, text);
-  if (message.error) addMessage('error', message.error);
 }
 
 async function readEvents(response: Response, accept: (event: RunEvent) => void) {
@@ -304,6 +238,8 @@ async function readEvents(response: Response, accept: (event: RunEvent) => void)
 function setSending(value: boolean) {
   sending = value;
   element<'button'>('send').hidden = value;
+  element('queueMode').hidden = !value;
+  element('queueSend').hidden = !value;
   element<'button'>('stop').hidden = !value;
   element<'button'>('stop').disabled = false;
   modelSelect.disabled = value;
@@ -318,8 +254,9 @@ async function syncSessions() {
   renderSessions();
 }
 
-async function send(text: string) {
-  if (sending || pendingNavigation || !text.trim()) return;
+async function send(text: string, attached?: import('../src/input.js').Attachment[]) {
+  const attachments = attached ?? composerUi.attachments();
+  if (sending || pendingNavigation || (!text.trim() && !attachments.length)) return;
   const request = ++navigation;
   pendingNavigation = true;
   setSending(true);
@@ -327,8 +264,10 @@ async function send(text: string) {
     if (!active) showConversation(await createConversation());
     const id = active;
     await modelChange;
-    await data<RunInfo>('/sessions/' + id + '/runs', payload('POST', { message: text }));
+    lastInputs.set(id, { message: text, attachments });
+    await data<RunInfo>('/sessions/' + id + '/runs', payload('POST', { message: text, attachments }));
     prompt.value = '';
+    composerUi.clear();
     adjustPrompt();
     if (request === navigation) {
       pendingNavigation = false;
@@ -361,7 +300,8 @@ async function observe(item: ConversationView) {
       const pinned = scrollIfPinned();
       switch (event.type) {
         case 'user':
-          addMessage('user', event.text);
+          lastInputs.set(id, { message: event.text, attachments: (typeof event.content === 'string' ? [] : event.content ?? []).filter((b) => b.type === 'image').map((b) => ({ name: 'image', mimeType: b.mimeType, data: b.data })) });
+          appendHistory({ role: 'user', content: event.content ?? event.text, timestamp: Date.now() });
           break;
         case 'assistant-start':
           if (answer) renderMarkdown(answer, answerText);
@@ -373,6 +313,7 @@ async function observe(item: ConversationView) {
           answerText += event.text;
           // Plain text during streaming keeps selection stable. Format at turn boundaries.
           answer.textContent = answerText;
+          markdownSource.set(answer, answerText);
           break;
         case 'assistant-end':
           if (answer) renderMarkdown(answer, answerText);
@@ -403,6 +344,7 @@ async function observe(item: ConversationView) {
           for (const tool of event.tools ?? []) cards.set(tool.id, toolCard(tool));
           // Fall through to apply the snapshot's run state.
         case 'run':
+          changedFiles = event.run.changedFiles ?? changedFiles;
           ended = !isRunning(event.run);
           if (ended) showStatus(event.run.error ?? '');
           break;
@@ -453,6 +395,7 @@ function selectedModel() {
 
 function applySettings(settings: Settings) {
   bootstrap.settings = settings;
+  reconcileFrontend();
   document.documentElement.dataset.theme = settings.appearance;
   modelSelect.replaceChildren(new Option('Auto model', ''));
   for (const model of bootstrap.models) {
@@ -464,164 +407,6 @@ function applySettings(settings: Settings) {
     modelSelect.add(new Option(selected.id || selected.provider + ' · Auto', modelKey));
   }
   modelSelect.value = selected.provider ? modelKey : '';
-}
-
-function fillSettings() {
-  const { settings, plugins, isolation } = bootstrap;
-  element<'select'>('theme').value = settings.appearance;
-  element<'input'>('provider').value = settings.model.provider;
-  element<'input'>('model').value = settings.model.id;
-  element<'input'>('maxDepth').valueAsNumber = settings.subagents.maxDepth;
-  element<'input'>('maxParallel').valueAsNumber = settings.subagents.maxParallel;
-  element<'input'>('childProvider').value = settings.subagents.provider;
-  element<'input'>('childModel').value = settings.subagents.model;
-  element<'select'>('sandboxMode').value = settings.sandbox.mode;
-  element<'input'>('timeout').valueAsNumber = settings.sandbox.timeoutSeconds;
-  element('isolationStatus').textContent = isolation
-    ? 'File tools are workspace-scoped. Linux shell isolation is available. Trusted host mode uses your user permissions.'
-    : 'File tools are workspace-scoped. Shell isolation is unavailable on this host. Trusted host mode uses your user permissions.';
-  element('pluginSettings').replaceChildren(...plugins.map((plugin) => {
-    const group = document.createElement('div');
-    group.className = 'plugin-group';
-    const label = document.createElement('label');
-    label.className = 'switch-line';
-    const description = document.createElement('span');
-    const title = document.createElement('strong');
-    title.textContent = plugin.title;
-    const hint = document.createElement('small');
-    hint.textContent = plugin.description;
-    description.append(title, hint);
-    const input = document.createElement('input');
-    input.type = 'checkbox';
-    input.name = plugin.id;
-    input.dataset.pluginSwitch = plugin.id;
-    input.setAttribute('aria-label', plugin.title);
-    input.checked = Boolean(settings.plugins[plugin.id]);
-    label.append(description, input);
-    group.append(label);
-    if (plugin.requires?.length) {
-      const hint = document.createElement('small');
-      hint.className = 'hint';
-      hint.textContent = 'Requires: ' + plugin.requires.join(', ');
-      group.append(hint);
-    }
-    if (plugin.configSchema) {
-      const fields = document.createElement('fieldset');
-      fields.disabled = !input.checked;
-      fields.className = 'plugin-config';
-      fields.append(schemaFields(plugin.id, plugin.configSchema, settings.pluginConfig[plugin.id] ?? {}));
-      input.onchange = () => { fields.disabled = !input.checked; };
-      group.append(fields);
-    }
-    return group;
-  }));
-  credentialStatus();
-  settingsStatus.textContent = '';
-}
-
-function schemaFields(plugin: string, schema: Record<string, any>, values: any, path: string[] = []) {
-  const group = document.createElement('div');
-  group.className = 'plugin-fields';
-  for (const [key, property] of Object.entries<Record<string, any>>(schema.properties ?? {})) {
-    const current = values?.[key] ?? property.default;
-    const fieldPath = [...path, key];
-    const label = document.createElement('label');
-    const title = document.createElement('span');
-    title.textContent = property.title ?? key;
-    label.append(title);
-    if (property.type === 'object' && property.properties) {
-      const section = document.createElement('fieldset');
-      section.className = 'plugin-config';
-      const legend = document.createElement('legend');
-      legend.textContent = title.textContent;
-      section.append(legend, schemaFields(plugin, property, current ?? {}, fieldPath));
-      group.append(section);
-      continue;
-    }
-    let input: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
-    if (property.enum) {
-      const select = document.createElement('select');
-      if (!schema.required?.includes(key)) select.add(new Option('Default', ''));
-      for (const option of property.enum) select.add(new Option(String(option), JSON.stringify(option)));
-      if (current !== undefined) select.value = JSON.stringify(current);
-      input = select;
-      input.dataset.kind = 'enum';
-    } else if (['string', 'number', 'integer', 'boolean'].includes(property.type)) {
-      const field = document.createElement('input');
-      field.type = property.type === 'boolean' ? 'checkbox' : property.type === 'string' ? (property.format === 'password' ? 'password' : 'text') : 'number';
-      if (field.type === 'checkbox') field.checked = Boolean(current);
-      else field.value = current === undefined ? '' : String(current);
-      if (field.type === 'number') {
-        field.step = property.type === 'integer' ? '1' : 'any';
-        if (property.minimum !== undefined) field.min = String(property.minimum);
-        if (property.maximum !== undefined) field.max = String(property.maximum);
-      }
-      if (property.minLength !== undefined) field.minLength = property.minLength;
-      if (property.maxLength !== undefined) field.maxLength = property.maxLength;
-      input = field;
-      input.dataset.kind = property.type;
-    } else {
-      input = document.createElement('textarea');
-      input.value = current === undefined ? '' : JSON.stringify(current, null, 2);
-      input.dataset.kind = 'json';
-    }
-    input.dataset.plugin = plugin;
-    input.dataset.path = JSON.stringify(fieldPath);
-    input.setAttribute('aria-label', (property.title ?? key) + ' · ' + plugin);
-    if (schema.required?.includes(key) && input.dataset.kind !== 'boolean') input.required = true;
-    label.append(input);
-    if (property.description) {
-      const hint = document.createElement('small');
-      hint.className = 'hint';
-      hint.textContent = property.description;
-      label.append(hint);
-    }
-    group.append(label);
-  }
-  return group;
-}
-
-function pluginValues() {
-  const config = structuredClone(bootstrap.settings.pluginConfig);
-  for (const field of element('pluginSettings').querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('[data-plugin]')) {
-    if (field.matches(':disabled')) continue;
-    const path: string[] = JSON.parse(field.dataset.path);
-    const kind = field.dataset.kind;
-    let target = config[field.dataset.plugin] ??= {};
-    for (const key of path.slice(0, -1)) target = (target[key] ??= {}) as Record<string, unknown>;
-    if (kind !== 'boolean' && !field.value && !field.required) { delete target[path.at(-1)]; continue; }
-    target[path.at(-1)] = kind === 'boolean' ? (field as HTMLInputElement).checked :
-      kind === 'number' || kind === 'integer' ? Number(field.value) :
-      kind === 'enum' || kind === 'json' ? JSON.parse(field.value) : field.value;
-  }
-  return config;
-}
-
-function credentialStatus() {
-  const provider = value('provider');
-  element('credentialStatus').textContent = !provider ? 'Select a provider to configure credentials.' :
-    bootstrap.models.some((model) => model.provider === provider && model.configured) ? 'Credentials configured.' : 'Credentials needed.';
-}
-
-async function saveSettings() {
-  const patch = {
-    appearance: value('theme'),
-    model: { provider: value('provider'), id: value('model') },
-    plugins: Object.fromEntries([...element('pluginSettings').querySelectorAll<HTMLInputElement>('[data-plugin-switch]')].map((input) => [input.name, input.checked])),
-    subagents: {
-      maxDepth: element<'input'>('maxDepth').valueAsNumber, maxParallel: element<'input'>('maxParallel').valueAsNumber,
-      provider: value('childProvider'), model: value('childModel')
-    },
-    sandbox: { mode: value('sandboxMode'), timeoutSeconds: element<'input'>('timeout').valueAsNumber }
-  };
-  const button = element<'button'>('saveSettings');
-  button.disabled = true;
-  try {
-    Object.assign(patch, { pluginConfig: pluginValues() });
-    applySettings(await data<Settings>('/settings', payload('PATCH', patch)));
-    settingsStatus.textContent = 'Saved.';
-  } catch (error) { settingsStatus.textContent = error.message; }
-  finally { button.disabled = false; }
 }
 
 async function exportSelected() {
@@ -639,44 +424,85 @@ async function deleteSelected() {
   const result = await data<{ deleted: string[] }>('/sessions/delete', payload('POST', { ids: [...selection] }));
   if (result.deleted.includes(active)) showConversation();
   selection.clear();
-  selecting = false;
+  toggleSelection(false);
   await syncSessions();
 }
 
-function toggleSelection(value: boolean) {
-  selecting = value;
-  selection.clear();
-  renderSessions();
+let renaming: string;
+function renameSession(item: Conversation) {
+  renaming = item.id; element<'input'>('sessionTitle').value = item.title; element('renameStatus').textContent = '';
+  element<'dialog'>('renamePanel').showModal(); element<'input'>('sessionTitle').select();
 }
+element('renameClose').onclick = () => element<'dialog'>('renamePanel').close();
+element<'form'>('renameForm').onsubmit = async (event) => {
+  event.preventDefault();
+  try { await data('/sessions/' + renaming, payload('PATCH', { title: value('sessionTitle') })); await syncSessions(); element<'dialog'>('renamePanel').close(); }
+  catch (error) { element('renameStatus').textContent = error.message; }
+};
+async function deleteSession(item: Conversation) {
+  if (!confirm('Permanently delete "' + item.title + '" and all child conversations?')) return;
+  try {
+    const result = await data<{ deleted: string[] }>('/sessions/delete', payload('POST', { ids: [item.id] }));
+    if (result.deleted.includes(active)) { ++navigation; showConversation(); }
+    await syncSessions();
+  } catch (error) { report(error); }
+}
+async function queueMessage() {
+  const id = active; if (!id || !sending || pendingNavigation) return;
+  const button = element<'button'>('queueSend'); button.disabled = true;
+  try {
+    const queued = await data<{ steer: string[]; followUp: string[] }>('/sessions/' + id + '/queue', payload('POST', {
+      message: prompt.value, mode: value('queueMode'), attachments: composerUi.attachments()
+    }));
+    if (active !== id) return;
+    prompt.value = ''; composerUi.clear(); adjustPrompt(); showQueue(queued);
+  } catch (error) { report(error); } finally { button.disabled = false; }
+}
+function showQueue(queue: { steer: string[]; followUp: string[] }) {
+  const items = [...queue.steer.map((text) => 'Instruction: ' + text), ...queue.followUp.map((text) => 'Follow up: ' + text)];
+  element('queuedMessages').textContent = items.map((text) => text.slice(0, 180)).join('\n');
+  element('queuedMessages').hidden = !items.length;
+}
+async function refreshQueue() {
+  const id = active;
+  try { const queue = await data<{ steer: string[]; followUp: string[] }>('/sessions/' + id + '/queue'); if (active === id && sending) showQueue(queue); }
+  catch { /* Navigation or run completion can remove the queue. */ }
+}
+let approvalKey = '', polling = false;
+async function pollApprovals() {
+  if (polling) return; polling = true;
+  try {
+    const approvals = await data<{ id: string; sessionId: string; command: string }[]>('/approvals');
+    const key = JSON.stringify(approvals); if (key === approvalKey) return; approvalKey = key;
+    element('approvalRequests').replaceChildren(...approvals.map((approval) => {
+      const card = document.createElement('section'); card.className = 'approval-card';
+      const title = document.createElement('strong'); title.textContent = 'Shell approval · ' + (sessions.find((s) => s.id === approval.sessionId)?.title ?? 'Conversation');
+      const command = document.createElement('pre'); command.textContent = approval.command; card.append(title, command);
+      for (const allow of [false, true]) {
+        const button = document.createElement('button'); button.type = 'button'; button.className = 'small-button'; button.textContent = allow ? 'Allow once' : 'Deny';
+        button.onclick = async () => {
+          try { await data('/approvals', payload('POST', { id: approval.id, allow })); card.remove(); approvalKey = ''; void pollApprovals(); }
+          catch (error) { report(error); }
+        }; card.append(button);
+      }
+      return card;
+    }));
+  } catch (error) { if (sending) report(error); } finally { polling = false; }
+}
+element('queueSend').onclick = () => void queueMessage();
 
 element('sidebarOpen').onclick = () => setSidebar(element('sidebarOpen').getAttribute('aria-expanded') !== 'true');
 element('sidebarClose').onclick = element('overlay').onclick = () => { closeDrawer(); element('sidebarOpen').focus(); };
 narrow.onchange = () => setSidebar(!narrow.matches);
-document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !settingsPanel.open) closeDrawer(); });
-element('settingsOpen').onclick = () => {
-  if (!bootstrap) return;
-  fillSettings();
-  closeDrawer();
-  settingsPanel.showModal();
-};
-element('settingsClose').onclick = () => settingsPanel.close();
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !settingsPanel.open) {
+    if (!element('inspector').hidden) { element('inspectorClose').click(); element('inspectorOpen').focus(); }
+    else closeDrawer();
+  }
+});
 element('newSession').onclick = () => void newSession();
-element('selectMode').onclick = () => toggleSelection(!selecting);
-element('cancelSelection').onclick = () => toggleSelection(false);
-element('selectAll').onclick = () => { for (const item of sessions) selection.add(item.id); renderSessions(); };
 element('exportSessions').onclick = () => void exportSelected().catch(report);
 element('deleteSessions').onclick = () => void deleteSelected().catch(report);
-element<'form'>('settingsForm').onsubmit = (event) => { event.preventDefault(); void saveSettings(); };
-element('saveCredential').onclick = async () => {
-  try {
-    const result = await data<{ models: ModelInfo[] }>('/credentials', payload('POST', { provider: value('provider'), key: value('apiKey') }));
-    bootstrap.models = result.models;
-    applySettings(bootstrap.settings);
-    credentialStatus();
-    element<'input'>('apiKey').value = '';
-    settingsStatus.textContent = 'API key saved locally.';
-  } catch (error) { settingsStatus.textContent = error.message; }
-};
 modelSelect.onchange = async () => {
   const update = data<Settings>('/settings', payload('PATCH', { model: selectedModel() }));
   modelChange = update;
@@ -695,31 +521,20 @@ composer.onsubmit = (event) => { event.preventDefault(); void send(prompt.value)
 prompt.onkeydown = (event) => {
   if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
     event.preventDefault();
-    composer.requestSubmit();
+    if (sending) void queueMessage(); else composer.requestSubmit();
   }
 };
 prompt.oninput = adjustPrompt;
-element('provider').oninput = credentialStatus;
-element('refreshModels').onclick = async () => {
-  try {
-    bootstrap.models = (await data<{ models: ModelInfo[] }>('/models')).models;
-    applySettings(bootstrap.settings);
-    credentialStatus();
-    settingsStatus.textContent = 'Model status refreshed.';
-  } catch (error) { settingsStatus.textContent = error.message; }
-};
-element('theme').onchange = async () => {
-  try { applySettings(await data<Settings>('/settings', payload('PATCH', { appearance: value('theme') }))); }
-  catch (error) { settingsStatus.textContent = error.message; }
-};
 const viewport = window.visualViewport;
 const resize = () => document.documentElement.style.setProperty('--app-height', (viewport?.height ?? innerHeight) + 'px');
 viewport?.addEventListener('resize', resize);
 resize();
 
+hydrateIcons();
 setSidebar(!narrow.matches);
 void data<Bootstrap>('/bootstrap').then((result) => {
   bootstrap = result;
+  setWorkspace(result.workspace);
   sessions = result.sessions;
   applySettings(result.settings);
   element('workspaceLabel').textContent = result.workspace;
@@ -727,5 +542,10 @@ void data<Bootstrap>('/bootstrap').then((result) => {
   renderSessions();
   const remembered = sessionStorage.getItem('mini-harness-active:' + result.workspace);
   if (sessions.length) void activate(sessions.find((item) => item.id === remembered)?.id ?? sessions.find((item) => !item.parentId)?.id ?? sessions[0].id);
-  setInterval(() => { if (!document.hidden) void syncSessions().catch(() => {}); }, 2000);
+  workspacePicker();
+  setInterval(() => { if (!document.hidden) { void syncSessions().catch(() => {}); void pollApprovals(); if (sending && active) void refreshQueue(); } }, 1500);
+  void pollApprovals();
+  if (!result.models.some((m) => m.configured)) {
+    fillSettings(); settingsPanel.showModal(); element('settingsStatus').textContent = 'Choose a provider and model, then save an API key to start.';
+  }
 }).catch(report);

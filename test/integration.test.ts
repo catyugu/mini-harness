@@ -30,7 +30,7 @@ test('real Pi SDK through HTTP: streaming, persistence, Skills, export and perma
   const home = await fetch(base + '/');
   assert.equal(home.status, 200);
   assert.match(await home.text(), /mini-harness/);
-  const bundle = await fetch(base + '/app.js');
+  const bundle = await fetch(base + '/api.js');
   assert.equal(bundle.status, 200);
   assert.match(await bundle.text(), /mini-harness-token/);
 
