@@ -1,5 +1,5 @@
 import { createServer, type Server } from 'node:http';
-import { mkdtempSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getPaths, ensurePaths, writeJson } from '../../src/config.js';
@@ -65,7 +65,7 @@ export async function createMockProvider(reply?: (request: { messages: { role: s
 }
 
 export function createFixturePaths(mockUrl: string) {
-  const root = mkdtempSync(join(tmpdir(), 'mini-harness-e2e-'));
+  const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'mini-harness-e2e-')));
   const cwd = join(root, 'workspace');
   mkdirSync(cwd);
   const paths = getPaths(cwd, { MINI_HARNESS_HOME: join(root, 'home') });
