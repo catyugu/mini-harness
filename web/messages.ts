@@ -38,14 +38,15 @@ function addMessage(role: 'user' | 'assistant' | 'error', text: string, timestam
     return button;
   }
 
-  const copy = action('Copy message', 'copy', () => {
-    void navigator.clipboard.writeText(markdownSource.get(item) ?? item.textContent ?? '').then(() => {
+  const copy = action('Copy message', 'copy', async () => {
+    try {
+      await navigator.clipboard.writeText(markdownSource.get(item) ?? item.textContent ?? '');
       copy.setAttribute('aria-label', 'Copied');
       copy.title = 'Copied';
-    }).catch(() => {
+    } catch {
       copy.setAttribute('aria-label', 'Copy failed');
       copy.title = 'Copy failed';
-    });
+    }
   });
   actions.append(copy);
   if (role === 'user') actions.append(action('Edit message', 'edit', () => editMessage(text)));
