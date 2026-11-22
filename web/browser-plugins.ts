@@ -57,10 +57,12 @@ const conversationPlugin: BrowserPlugin = {
         if (welcome) welcome.append(workspace.current);
         else shell.placeWorkspace(workspace.current);
       },
-      setTitle: shell.setTitle, renderTool: (tool, action) => host.render(tool, action)
+      setTitle: shell.setTitle, renderTool: (tool, action) => host.render(tool, action),
+      messageActions: () => host.messageActions()
     });
     ctx.provide('miniConversation', conversation);
     conversation.attach();
+    api.onDispose(host.onMessageActionsChanged(conversation.refreshActions));
     state.on('settings', conversation.updateModelControls, api.signal);
     shell.bindNew(() => { shell.showPage(); conversation.clear(true); }, api.signal);
     state.addEventListener('open', (event: CustomEvent<string>) => {
@@ -88,7 +90,8 @@ export async function mountBrowser(ctx: Context, snapshot: Bootstrap) {
       default: return ctx.miniShell.outlet(name);
     }
   },
-    { request: data, insert: (text) => ctx.miniConversation.insert(text), tabs: () => ctx.rightTabs },
+    { request: data, insert: (text) => ctx.miniConversation.insert(text),
+      beginDraftMode: (mode) => ctx.miniConversation.beginDraftMode(mode), tabs: () => ctx.rightTabs },
     {
       bootstrap: state.get,
       workspace: state.scope,

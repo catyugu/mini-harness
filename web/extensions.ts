@@ -1,6 +1,8 @@
 import { Context, type Fiber } from './vendor/cordis.js';
 import type { ComposerCommand } from './commands.js';
-import type { MessageContent } from '../src/protocol.js';
+import type { MessageContent, ViewMessage } from '../src/protocol.js';
+import type { Attachment } from '../src/input.js';
+import type { ModelChoice } from '../src/registry.js';
 import type { Conversation } from '../src/registry.js';
 import type { RightTabType, TabScope, createRightTabs } from './right-tabs.js';
 import type { Bootstrap } from './types.js';
@@ -24,8 +26,29 @@ export interface Completion {
 }
 export type Completer = (request: Completion) => void | Promise<void>;
 
+export interface MessageActionContext {
+  readonly sessionId?: string;
+  readonly leafId?: string | null;
+  readonly message: ViewMessage;
+  readonly rawText: string;
+}
+export interface MessageAction {
+  id: string;
+  label: string;
+  icon: 'copy' | 'edit' | 'refresh';
+  order?: number;
+  visible(context: MessageActionContext): boolean;
+  run(context: MessageActionContext): void | Promise<void>;
+}
+export interface DraftMode {
+  title: string;
+  text: string;
+  submit(input: { text: string; attachments: Attachment[]; model?: ModelChoice; thinkingLevel?: string }): Promise<unknown>;
+}
 export interface FrontendApi {
   mount(slot: Slot, node: HTMLElement, order?: number): void;
+  messageAction(action: MessageAction): void;
+  beginDraftMode(mode: DraftMode): void;
   command(command: ComposerCommand): () => void;
   completion(trigger: string, complete: Completer): void;
   settingsPage(title: string, node: HTMLElement): void;
@@ -63,11 +86,20 @@ export class FrontendHost {
   private readonly contributions = new WeakMap<HTMLElement, number>();
   private readonly renderers = new Map<string, (tool: ToolView) => HTMLElement | undefined>();
   private readonly actions = new Map<string, (tool: ToolView) => HTMLElement | undefined>();
+  private readonly messageContributions = new Map<string, MessageAction>();
+  private readonly messageListeners = new Set<() => void>();
+
+  messageActions() { return [...this.messageContributions.values()].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)); }
+  onMessageActionsChanged(listener: () => void) {
+    this.messageListeners.add(listener);
+    return () => { this.messageListeners.delete(listener); };
+  }
+  private changedMessages() { for (const listener of this.messageListeners) listener(); }
 
   constructor(
     private readonly ctx: Context,
     private slot: (name: Slot) => HTMLElement,
-    private ui: Pick<FrontendApi, 'request' | 'insert'> & { tabs(): ReturnType<typeof createRightTabs> },
+    private ui: Pick<FrontendApi, 'request' | 'insert' | 'beginDraftMode'> & { tabs(): ReturnType<typeof createRightTabs> },
     private services: FrontendServices,
     private addSettingsPage: (title: string, node: HTMLElement) => () => void,
     private registerCommand: (command: ComposerCommand) => () => void,
@@ -102,6 +134,15 @@ export class FrontendHost {
         request: (path, options) => this.ui.request(path, { ...options, signal: options?.signal
           ? AbortSignal.any([controller.signal, options.signal]) : controller.signal }),
         insert: (value) => { if (!controller.signal.aborted) this.ui.insert(value); },
+        beginDraftMode: (mode) => {
+          if (!controller.signal.aborted) this.ui.beginDraftMode(mode);
+        },
+        messageAction: (action) => own(() => {
+          if (this.messageContributions.has(action.id)) throw new Error('Duplicate message action: ' + action.id);
+          this.messageContributions.set(action.id, action);
+          this.changedMessages();
+          return () => { this.messageContributions.delete(action.id); this.changedMessages(); };
+        }),
         rightTab: (type, definition) => own(() => this.ui.tabs().register(id + ':' + type, definition)),
         openTab: (type, path, scope) => {
           if (!controller.signal.aborted) this.ui.tabs().open(id + ':' + type, path, scope);

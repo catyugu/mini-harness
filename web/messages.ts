@@ -3,18 +3,20 @@ import type { ConversationView } from './types.js';
 import type { FrontendHost } from './extensions.js';
 import { icon } from './icons.js';
 import { renderMarkdown, markdownSource } from './markdown.js';
+import type { MessageAction, MessageActionContext } from './extensions.js';
 
-export function createMessageView(messages: HTMLElement, extensions: Pick<FrontendHost, 'render'>,
-  retryLast: () => void, editMessage: (text: string) => void) {
+export function createMessageView(messages: HTMLElement, extensions: Pick<FrontendHost, 'render' | 'messageActions'>,
+  current: () => { sessionId?: string; leafId?: string | null }, retryLast: () => void) {
 const toolItems = new WeakMap<HTMLDetailsElement, Parameters<typeof toolCard>[0]>();
 const toolDurations = new Map<string, number>();
+const actionContext = new Map<HTMLElement, MessageActionContext>();
 
 function textOf(value?: MessageContent) {
   if (typeof value === 'string') return value;
   return value?.filter((block) => block.type === 'text').map((block) => block.text ?? '').join('\n') ?? '';
 }
 
-function addMessage(role: 'user' | 'assistant' | 'error', text: string, timestamp = Date.now()) {
+function addMessage(role: 'user' | 'assistant' | 'error', text: string, timestamp = Date.now(), source?: ViewMessage) {
   const item = document.createElement('article');
   item.className = 'message ' + role;
   if (role === 'assistant') renderMarkdown(item, text);
@@ -38,19 +40,15 @@ function addMessage(role: 'user' | 'assistant' | 'error', text: string, timestam
     return button;
   }
 
-  const copy = action('Copy message', 'copy', async () => {
-    try {
-      await navigator.clipboard.writeText(markdownSource.get(item) ?? item.textContent ?? '');
-      copy.setAttribute('aria-label', 'Copied');
-      copy.title = 'Copied';
-    } catch {
-      copy.setAttribute('aria-label', 'Copy failed');
-      copy.title = 'Copy failed';
-    }
-  });
-  actions.append(copy);
-  if (role === 'user') actions.append(action('Edit message', 'edit', () => editMessage(text)));
   if (role === 'error') actions.append(action('Retry', 'refresh', retryLast));
+  if (role !== 'error') {
+    const snapshot = current();
+    const message = source ?? { role, content: text, timestamp };
+    actionContext.set(wrapper, {
+      sessionId: snapshot.sessionId, leafId: snapshot.leafId, message: message as ViewMessage, rawText: text
+    });
+    renderMessageActions(wrapper);
+  }
   if (role !== 'error' && Number.isFinite(timestamp)) {
     const date = new Date(timestamp);
     if (!Number.isNaN(date.getTime())) {
@@ -64,6 +62,34 @@ function addMessage(role: 'user' | 'assistant' | 'error', text: string, timestam
   wrapper.append(actions);
   messages.append(wrapper);
   return item;
+}
+
+function renderMessageActions(wrapper: HTMLElement) {
+  const group = wrapper.querySelector<HTMLElement>('.message-actions');
+  const context = actionContext.get(wrapper);
+  if (!group || !context) return;
+  // Only replace contributed buttons; preserve the timestamp and other host controls.
+  group.querySelectorAll('[data-message-action]').forEach((node) => node.remove());
+  for (const extension of extensions.messageActions()) {
+    if (!extension.visible(context)) continue;
+    const button = document.createElement('button');
+    button.type = 'button'; button.className = 'message-action';
+    button.dataset.messageAction = extension.id;
+    button.title = extension.label; button.setAttribute('aria-label', extension.label);
+    button.append(icon(extension.icon));
+    button.onclick = () => {
+      button.disabled = true;
+      void Promise.resolve().then(() => extension.run(context)).catch((error) => {
+        button.title = error instanceof Error ? error.message : String(error);
+        button.setAttribute('aria-label', 'Action failed: ' + button.title);
+      }).finally(() => { button.disabled = false; });
+    };
+    group.append(button);
+  }
+}
+
+function refreshActions() {
+  for (const wrapper of messages.querySelectorAll<HTMLElement>('.message-row')) renderMessageActions(wrapper);
 }
 
 function toolCard(data: { name: string; state: string; content?: MessageContent; arguments?: unknown; sessionId?: string; id?: string; elapsedMs?: number; exitCode?: number }, card?: HTMLDetailsElement) {
@@ -139,7 +165,7 @@ function appendHistory(message: ViewMessage) {
     return;
   }
   const text = textOf(message.content);
-  if (text) addMessage(message.role, text, message.timestamp);
+  if (text) addMessage(message.role, text, message.timestamp, message);
   for (const block of typeof message.content === 'string' ? [] : message.content ?? []) {
     if (block.type !== 'image' || !/^image\/(png|jpeg|gif|webp)$/.test(block.mimeType ?? '')) continue;
     const image = document.createElement('img'); image.className = 'message-image'; image.alt = 'Attached image';
@@ -156,6 +182,7 @@ function refreshTools() {
 
 function history(entries: ViewMessage[], error?: string) {
   messages.replaceChildren();
+  actionContext.clear();
   for (const message of entries) appendHistory(message);
   if (error) {
     const node = [...messages.querySelectorAll<HTMLElement>('.message.error')].at(-1) ?? addMessage('error', '');
@@ -216,5 +243,5 @@ function stream(initial: ConversationView) {
   };
 }
 
-return { textOf, history, stream, refreshTools };
+return { textOf, history, stream, refreshTools, refreshActions };
 }

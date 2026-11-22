@@ -8,7 +8,7 @@ import { createMessageView } from './messages.js';
 import { CommandRegistry, type ComposerCommand } from './commands.js';
 import { createComposer } from './composer.js';
 import { createModelPicker } from './model-picker.js';
-import type { FrontendApi, FrontendHost } from './extensions.js';
+import type { FrontendApi, FrontendHost, DraftMode } from './extensions.js';
 import { fromMarkup } from './primitives.js';
 
 type Queue = ConversationView['queue'];
@@ -18,6 +18,7 @@ interface ConversationServices {
   placeWorkspace(welcome?: HTMLElement): void;
   setTitle(title: string): void;
   renderTool: FrontendHost['render'];
+  messageActions: FrontendHost['messageActions'];
 }
 
 export function conversationView(api: FrontendApi, state: BrowserState, options: ConversationServices) {
@@ -36,6 +37,7 @@ export function conversationView(api: FrontendApi, state: BrowserState, options:
         <form id="composer" class="composer">
           <div id="attachments" class="attachments" hidden></div>
           <div id="suggestions" class="suggestions" role="listbox" aria-label="Input suggestions" hidden></div>
+          <div id="draftMode" class="draft-mode" hidden><span></span><button type="button" aria-label="Cancel editing">Cancel</button></div>
           <textarea id="prompt" rows="2" placeholder="Ask anything…" aria-label="Message" aria-controls="suggestions" aria-autocomplete="list" required></textarea>
           <div class="composer-footer">
             <div id="composerExtensions" class="composer-tools"></div><button id="modelSelect" class="model-select" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="modelResults">Choose model</button>
@@ -89,6 +91,20 @@ export function conversationView(api: FrontendApi, state: BrowserState, options:
   let modelDraft: ModelChoice;
   let conversationModel: ModelChoice;
   let conversationThinking: ThinkingLevel;
+  let activeLeaf: string | null | undefined;
+  let draftMode: DraftMode | undefined;
+  function setDraftMode(mode?: DraftMode) {
+    draftMode = mode;
+    const banner = element('draftMode');
+    banner.hidden = !mode;
+    banner.querySelector('span').textContent = mode?.title ?? '';
+    if (mode) {
+      prompt.value = mode.text;
+      adjustPrompt();
+      prompt.focus();
+    }
+  }
+  element('draftMode').querySelector('button').addEventListener('click', () => setDraftMode());
   const modelPicker = createModelPicker(view, (choice) => { modelDraft = choice; updateModelControls(); }, api.signal);
   const lastInputs = new Map<string, { message: string; attachments: Attachment[] }>();
   const active = () => state.activeConversation;
@@ -108,14 +124,11 @@ export function conversationView(api: FrontendApi, state: BrowserState, options:
   };
   const commands = new CommandRegistry();
   const composerUi = createComposer(view, report, commands, api.signal);
-  const messageView = createMessageView(messages, { render: options.renderTool }, () => {
+  const messageView = createMessageView(messages, {
+    render: options.renderTool, messageActions: options.messageActions
+  }, () => ({ sessionId: active(), leafId: activeLeaf }), () => {
     const last = lastInputs.get(active());
     if (last && !sending) void send(last.message, last.attachments);
-  }, (text) => {
-    if (sending || pending) return;
-    prompt.value = text;
-    adjustPrompt();
-    prompt.focus();
   });
 
   function rememberInput(id: string, content: MessageContent, message = messageView.textOf(content)) {
@@ -139,6 +152,8 @@ export function conversationView(api: FrontendApi, state: BrowserState, options:
     showQueue(view?.queue);
     conversationModel = item?.model;
     conversationThinking = view?.thinkingLevel;
+    activeLeaf = view?.leafId;
+    setDraftMode();
     if (item && !lastInputs.has(item.id)) {
       const previous = history.filter((message) => message.role === 'user').at(-1);
       if (previous) rememberInput(item.id, previous.content);
@@ -225,7 +240,12 @@ export function conversationView(api: FrontendApi, state: BrowserState, options:
         if (!signal.aborted) { showConversation(item); setSending(true); }
       }
       lastInputs.set(id, { message: text, attachments });
-      await api.request<RunInfo>('/sessions/' + id + '/runs', payload('POST', { message, attachments, model: choice, thinkingLevel }));
+      if (draftMode) {
+        await draftMode.submit({ text, attachments, model: choice, thinkingLevel });
+      } else {
+        await api.request<RunInfo>('/sessions/' + id + '/runs', payload('POST', { message, attachments, model: choice, thinkingLevel }));
+      }
+      setDraftMode();
       if (!signal.aborted) {
         modelDraft = undefined;
         prompt.value = '';
@@ -340,6 +360,11 @@ export function conversationView(api: FrontendApi, state: BrowserState, options:
   return {
     outlets, activate, showConversation, clear, updateModelControls, report,
     refreshTools: messageView.refreshTools,
+    refreshActions: messageView.refreshActions,
+    beginDraftMode(mode: DraftMode) {
+      if (sending || pending || !active()) return;
+      setDraftMode(mode);
+    },
     command(command: ComposerCommand) {
       const dispose = commands.register(command);
       composerUi.refresh(true);
