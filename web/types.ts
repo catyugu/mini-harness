@@ -7,4 +7,4 @@ import type { ProviderInfo } from './provider-manager.js';
 export type ThinkingLevel = import('@earendil-works/pi-coding-agent').AgentSession['thinkingLevel'];
 export interface ModelInfo { provider: string; id: string; name: string; configured: boolean; thinkingLevels: ThinkingLevel[] }
 export interface Bootstrap { settings: Settings; sessions: Conversation[]; models: ModelInfo[]; plugins: PluginMetadata[]; workspaces: WorkspaceRecord[]; isolation: boolean; providers: ProviderInfo[] }
-export interface ConversationView extends Conversation { selectedModel: ModelChoice; thinkingLevel: ThinkingLevel; messages: ViewMessage[]; partial?: string; tools?: Extract<StreamEvent, { type: 'tool' }>[] }
+export interface ConversationView extends Conversation { facts?: import('../src/protocol.js').SessionFact[]; runs?: import('../src/protocol.js').RunInfo[]; selectedModel: ModelChoice; thinkingLevel: ThinkingLevel; messages: ViewMessage[]; partial?: string; tools?: Extract<StreamEvent, { type: 'tool' }>[] }

@@ -9,6 +9,7 @@ import { CommandRegistry, type ComposerCommand } from './commands.js';
 import { createComposer } from './composer.js';
 import { createModelPicker } from './model-picker.js';
 import type { FrontendApi, FrontendHost } from './extensions.js';
+import { renderTrajectory } from './trajectory.js';
 import { fromMarkup } from './primitives.js';
 
 interface ConversationServices {
@@ -23,9 +24,12 @@ interface ConversationServices {
   closeDrawer(): void;
   placeWorkspace(welcome?: HTMLElement): void;
   setTitle(title: string): void;
-  provideSlot(name: 'composer' | 'approvals', node: HTMLElement): void;
+  provideSlot(name: 'composer' | 'approvals' | 'conversation.input.permission' | 'conversation.input.dock' | 'conversation.composer.dock', node: HTMLElement): void;
   changed(): void;
   renderTool: FrontendHost['render'];
+  renderNode: FrontendHost['chat'];
+  openResource(path: string, diff?: boolean, line?: number): void;
+  event(event: RunEvent): void;
 }
 
 export function conversationView(api: FrontendApi, options: ConversationServices) {
@@ -36,8 +40,14 @@ export function conversationView(api: FrontendApi, options: ConversationServices
         <h1>What are we working on?</h1>
       </section>
       <div id="runSummary" class="run-summary" aria-label="Latest run" hidden><span></span><time></time></div>
+      <nav class="conversation-views" aria-label="Conversation view" hidden>
+        <button type="button" id="chatView" class="link-button" aria-pressed="true">Chat</button>
+        <button type="button" id="trajectoryView" class="link-button" aria-pressed="false">Trajectory</button>
+      </nav>
+      <section id="trajectory" class="messages trajectory" aria-label="Trajectory" hidden></section>
       <section id="messages" class="messages" aria-label="Messages" hidden></section>
       <div class="composer-wrap">
+        <div id="inputDock"></div>
         <div id="approvalRequests" class="approval-requests"></div>
         <div id="queuedMessages" class="queued-messages" hidden></div>
         <div id="status" class="status" role="status"></div>
@@ -46,7 +56,7 @@ export function conversationView(api: FrontendApi, options: ConversationServices
           <div id="suggestions" class="suggestions" role="listbox" aria-label="Input suggestions" hidden></div>
           <textarea id="prompt" rows="2" placeholder="Ask anything…" aria-label="Message" aria-controls="suggestions" aria-autocomplete="list" required></textarea>
           <div class="composer-footer">
-            <div id="composerExtensions" class="composer-tools"></div><button id="modelSelect" class="model-select" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="modelResults">Choose model</button>
+            <div id="permissionOutlet"></div><div id="composerExtensions" class="composer-tools"></div><button id="modelSelect" class="model-select" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="modelResults">Choose model</button>
             <div id="modelPicker" class="model-picker" popover="auto">
               <input id="modelSearch" type="search" role="combobox" aria-label="Search models" aria-controls="modelResults" aria-autocomplete="list" aria-expanded="true" placeholder="Search models">
               <div id="modelResults" role="listbox" aria-label="Configured models"></div>
@@ -59,12 +69,20 @@ export function conversationView(api: FrontendApi, options: ConversationServices
             <button id="send" type="submit" aria-label="Send" data-icon="send"></button>
           </div>
         </form>
+        <div id="composerDock" class="composer-dock"></div>
       </div>
     </div>`);
   api.mount('conversation', view);
   const { element, value } = scopedElements(view);
   options.provideSlot('composer', element('composerExtensions'));
   options.provideSlot('approvals', element('approvalRequests'));
+  options.provideSlot('conversation.input.permission', element('permissionOutlet'));
+  options.provideSlot('conversation.input.dock', element('inputDock'));
+  options.provideSlot('conversation.composer.dock', element('composerDock'));
+  api.contribute('conversation.composer.dock', { id: 'activity', order: 0, value: element('runSummary') });
+  const usageDock = document.createElement('div');
+  usageDock.className = 'usage-dock'; usageDock.hidden = true;
+  api.contribute('conversation.composer.dock', { id: 'usage', order: 10, value: usageDock });
 
   const messages = element('messages');
   const welcome = element('welcome');
@@ -90,6 +108,28 @@ export function conversationView(api: FrontendApi, options: ConversationServices
   api.onDispose(() => clearInterval(elapsedTimer));
   const composer = element<'form'>('composer');
   const prompt = element<'textarea'>('prompt');
+  const permissionSelect = document.createElement('select');
+  permissionSelect.setAttribute('aria-label', 'Execution permission');
+  permissionSelect.className = 'permission-select';
+  permissionSelect.append(new Option('View only', 'read-only'), new Option('Workspace', 'workspace-write'), new Option('Full access', 'full'));
+  api.contribute('conversation.input.permission', { id: 'permission', value: permissionSelect });
+  let conversationPermission = options.bootstrap().settings.defaultPermission;
+  permissionSelect.onchange = async () => {
+    const next = permissionSelect.value;
+    permissionSelect.value = conversationPermission;
+    if (next === 'full' && !confirm('Allow this conversation to run trusted tools with your user permissions?')) return;
+    const generation = navigation;
+    permissionSelect.disabled = true;
+    try {
+      if (!active) { const item = await createConversation(); if (generation !== navigation) return; showConversation(item); }
+      const id = active;
+      const item = await data<Conversation>('/sessions/' + id + '/permission', payload('POST', { permission: next, confirmed: next === 'full' }));
+      if (active !== id || generation !== navigation) return;
+      conversationPermission = item.permission; permissionSelect.value = conversationPermission;
+      options.addSession(item);
+    } catch (error) { report(error); }
+    finally { permissionSelect.disabled = sending; }
+  };
   const thinkingSelect = element<'select'>('thinkingLevel');
 
   let active: string | undefined;
@@ -100,8 +140,12 @@ export function conversationView(api: FrontendApi, options: ConversationServices
   let modelDraft: ModelChoice;
   let conversationModel: ModelChoice;
   let conversationThinking: ThinkingLevel;
-  const modelPicker = createModelPicker(view, (choice) => { modelDraft = choice; updateModelControls(); }, api.signal);
+  let thinkingDraft: string;
+  thinkingSelect.onchange = () => { thinkingDraft = thinkingSelect.value; };
+  const modelPicker = createModelPicker(view, (choice) => { modelDraft = choice; thinkingDraft = undefined; updateModelControls(); }, api.signal);
   let changedFiles: string[] = [];
+  const scrollPositions = new Map<string, number>();
+  const liveTools = new Map<string, import('./extensions.js').ToolView>();
   const lastInputs = new Map<string, { message: string; attachments: import('../src/input.js').Attachment[] }>();
   const isRunning = (run?: RunInfo) => run?.state === 'queued' || run?.state === 'running';
   const showStatus = (text: string, error = false) => {
@@ -115,25 +159,59 @@ export function conversationView(api: FrontendApi, options: ConversationServices
   };
   const commands = new CommandRegistry();
   const composerUi = createComposer(view, report, commands, api.signal);
-  const { addMessage, appendHistory, toolCard } = createMessageView(messages, { render: options.renderTool }, () => {
+  let history: ViewMessage[] = [];
+  let historyRuns: RunInfo[] = [];
+  let historyFacts: import('../src/protocol.js').SessionFact[] = [];
+  let trajectory = false;
+  function switchView(show: boolean, target?: string) {
+    trajectory = show;
+    element('messages').hidden = show; element('trajectory').hidden = !show;
+    element('chatView').setAttribute('aria-pressed', String(!show));
+    element('trajectoryView').setAttribute('aria-pressed', String(show));
+    if (show) {
+      renderTrajectory(element('trajectory'), history, historyRuns, historyFacts, [...liveTools.values()]);
+      if (target) {
+        const node = document.getElementById('trajectory-' + target) as HTMLDetailsElement;
+        if (node) { node.open = true; node.scrollIntoView({ block: 'center' }); node.tabIndex = -1; node.focus(); }
+      }
+    }
+  }
+  element('chatView').onclick = () => switchView(false);
+  element('trajectoryView').onclick = () => switchView(true);
+  const { addMessage, appendHistory, toolCard, renderHistory } = createMessageView(messages, { render: options.renderTool, chat: options.renderNode }, () => {
     const last = lastInputs.get(active);
     if (last && !sending) void send(last.message, last.attachments);
-  });
+  }, (id) => switchView(true, id), options.openResource);
 
   function showWelcome(show: boolean) {
     welcome.hidden = !show;
-    messages.hidden = show;
+    messages.hidden = show || trajectory;
+    element('trajectory').hidden = show || !trajectory;
+    view.querySelector<HTMLElement>('.conversation-views').hidden = show;
     options.placeWorkspace(show ? welcome : undefined);
   }
 
-  function showConversation(item?: ConversationView | Conversation, history: ViewMessage[] = []) {
+  function showConversation(item?: ConversationView | Conversation, incoming: ViewMessage[] = []) {
+    const previousPosition = messages.scrollTop;
+    const sameConversation = active === item?.id;
+    const pinned = scrollIfPinned();
+    if (active) scrollPositions.set(active, previousPosition);
     observing?.abort();
+    liveTools.clear();
+    for (const tool of (item as ConversationView)?.tools ?? []) liveTools.set(tool.id, tool);
+    history = incoming;
+    historyFacts = (item as ConversationView)?.facts ?? [];
+    historyRuns = (item as ConversationView)?.runs ?? (item?.run ? [item.run] : []);
     setSending(isRunning(item?.run));
     showRunSummary(item?.run);
     active = item?.id;
     options.setActive(item);
+    conversationPermission = item?.permission ?? options.bootstrap().settings.defaultPermission;
+    permissionSelect.value = conversationPermission;
     conversationModel = item?.model;
     conversationThinking = (item as ConversationView)?.thinkingLevel;
+    thinkingDraft = undefined;
+    modelDraft = undefined;
     changedFiles = item?.run?.changedFiles ?? [];
     const previous = history.filter((message) => message.role === 'user').at(-1);
     if (active && previous && !lastInputs.has(active)) {
@@ -146,14 +224,14 @@ export function conversationView(api: FrontendApi, options: ConversationServices
     else sessionStorage.removeItem('mini-harness-active');
     updateModelControls();
     options.setTitle(item?.title ?? 'New conversation');
-    messages.replaceChildren();
-    for (const message of history) appendHistory(message);
+    renderHistory(history, historyRuns, localStorage.getItem('mini-harness-chat-mode') ?? 'standard', localStorage.getItem('mini-harness-collapse') ?? 'completed');
+    if (trajectory) switchView(true);
     if (item?.run?.error) {
       const error = [...messages.querySelectorAll<HTMLElement>('.message.error')].at(-1) ?? addMessage('error', '');
       error.textContent = item.run.error;
     }
     showWelcome(!messages.childElementCount && !isRunning(item?.run));
-    messages.scrollTop = messages.scrollHeight;
+    messages.scrollTop = sameConversation && !pinned ? previousPosition : !sameConversation && scrollPositions.has(active) ? scrollPositions.get(active) : messages.scrollHeight;
     options.renderSessions();
     options.changed();
   }
@@ -185,7 +263,9 @@ export function conversationView(api: FrontendApi, options: ConversationServices
   async function newSession() {
     ++navigation;
     pendingNavigation = false;
+    const nextModel = modelDraft;
     showConversation();
+    if (nextModel) { modelDraft = nextModel; updateModelControls(); }
     prompt.value = '';
     composerUi.clear();
     adjustPrompt();
@@ -201,6 +281,7 @@ export function conversationView(api: FrontendApi, options: ConversationServices
 
   function setSending(value: boolean) {
     sending = value;
+    permissionSelect.disabled = value;
     element<'button'>('send').hidden = value;
     element('queueMode').hidden = !value;
     element('queueSend').hidden = !value;
@@ -263,6 +344,7 @@ export function conversationView(api: FrontendApi, options: ConversationServices
     const accept = (event: RunEvent) => {
         if (controller.signal.aborted || active !== id) return;
         cursor = event.sequence;
+        options.event(event);
         const pinned = scrollIfPinned();
         switch (event.type) {
           case 'user':
@@ -292,6 +374,7 @@ export function conversationView(api: FrontendApi, options: ConversationServices
             showStatus('');
             break;
           case 'tool':
+            if (event.state === 'running') liveTools.set(event.id, event); else liveTools.delete(event.id);
             if (answer) renderMarkdown(answer, answerText);
             cards.set(event.id, toolCard(event, cards.get(event.id)));
             showStatus(event.state === 'running' ? 'Running ' + event.name + '…' : 'Thinking…');
@@ -302,6 +385,9 @@ export function conversationView(api: FrontendApi, options: ConversationServices
             showStatus('');
             break;
           case 'snapshot':
+            history = event.messages;
+            liveTools.clear();
+            for (const tool of event.tools ?? []) liveTools.set(tool.id, tool);
             messages.replaceChildren();
             cards.clear();
             for (const message of event.messages) appendHistory(message);
@@ -315,6 +401,11 @@ export function conversationView(api: FrontendApi, options: ConversationServices
             ended = !isRunning(event.run);
             if (ended) showStatus(event.run.error ?? '', Boolean(event.run.error));
             break;
+        }
+        if (trajectory && ['tool', 'assistant-end', 'approval', 'run'].includes(event.type)) {
+          void data<ConversationView>('/sessions/' + id, { signal: controller.signal }).then((latest) => {
+            if (!controller.signal.aborted && active === id && trajectory) { history = latest.messages; historyRuns = latest.runs ?? []; historyFacts = latest.facts ?? []; renderTrajectory(element('trajectory'), history, historyRuns, historyFacts, [...liveTools.values()]); }
+          }).catch(() => {});
         }
         if (pinned) messages.scrollTop = messages.scrollHeight;
     };
@@ -358,12 +449,12 @@ export function conversationView(api: FrontendApi, options: ConversationServices
     if (!bootstrap) return;
     if (modelDraft && !bootstrap.models.some((model) => model.configured && model.provider === modelDraft.provider && model.id === modelDraft.id))
       modelDraft = undefined;
-    const selected = modelPicker.update(bootstrap.models, bootstrap.providers, modelDraft ?? options.bootstrap().settings.model);
+    const selected = modelPicker.update(bootstrap.models, bootstrap.providers, modelDraft ?? conversationModel ?? options.bootstrap().settings.model);
     const levels = selected?.thinkingLevels ?? [];
     const sameModel = selected && selected.provider === conversationModel?.provider && selected.id === conversationModel.id;
     thinkingSelect.replaceChildren(new Option('Default', ''), ...levels.map((level) =>
       new Option(level === 'xhigh' ? 'Extra high' : level[0].toUpperCase() + level.slice(1), level)));
-    thinkingSelect.value = sameModel && levels.includes(conversationThinking) ? conversationThinking : '';
+    thinkingSelect.value = thinkingDraft !== undefined && levels.includes(thinkingDraft as ThinkingLevel) ? thinkingDraft : sameModel && levels.includes(conversationThinking) ? conversationThinking : '';
     thinkingSelect.hidden = levels.length < 2;
   }
   async function compactConversation() {
@@ -415,6 +506,28 @@ export function conversationView(api: FrontendApi, options: ConversationServices
   };
   prompt.oninput = adjustPrompt;
 
+  api.watchContributions((region) => {
+    if (!sending && ['conversation.chat.node', 'tool.call.toolview', 'tool.call.action'].includes(region)) {
+      const position = messages.scrollTop;
+      renderHistory(history, historyRuns, localStorage.getItem('mini-harness-chat-mode') ?? 'standard', localStorage.getItem('mini-harness-collapse') ?? 'completed');
+      messages.scrollTop = position;
+    }
+  });
+  document.addEventListener('mini-harness-presentation', () => {
+    if (sending) return;
+    const position = messages.scrollTop;
+    renderHistory(history, historyRuns, localStorage.getItem('mini-harness-chat-mode') ?? 'standard', localStorage.getItem('mini-harness-collapse') ?? 'completed');
+    messages.scrollTop = position;
+  }, { signal: api.signal });
+  messages.addEventListener('click', (event) => {
+    const link = (event.target as Element).closest('a');
+    if (!link) return;
+    const path = link.getAttribute('href');
+    if (!path || /^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i.test(path)) return;
+    event.preventDefault();
+    const match = /^(.*?)(?:#L(\d+))?$/.exec(path);
+    options.openResource(decodeURIComponent(match[1]), false, match[2] ? Number(match[2]) : undefined);
+  }, { signal: api.signal });
   element('queueSend').onclick = () => void queueMessage();
   composerUi.attach(api);
   api.onDispose(() => observing?.abort());

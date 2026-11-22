@@ -2,7 +2,7 @@ import { button, iconButton } from './primitives.js';
 import type { createLayout } from './layout.js';
 
 export interface TabScope { workspaceId: string; sessionId?: string }
-export interface TabAddress extends TabScope { type: string; path?: string }
+export interface TabAddress extends TabScope { type: string; path?: string; line?: number }
 export interface RightTabType {
   title(address: TabAddress): string;
   create(address: TabAddress, signal: AbortSignal): HTMLElement;
@@ -13,7 +13,7 @@ export interface RightTabType {
   closed?(address: TabAddress): void;
 }
 
-type Tab = { address?: TabAddress; key: string; title: string; path?: string; node: HTMLElement; type: string; controller: AbortController };
+type Tab = { suspended?: boolean; address?: TabAddress; key: string; title: string; path?: string; node: HTMLElement; type: string; controller: AbortController };
 type ScopeTabs = { saved?: { entries: TabAddress[]; active?: string }; scope?: TabScope; open: boolean; active?: string; tabs: Map<string, Tab> };
 const scopeKey = (scope?: TabScope) => JSON.stringify([scope?.workspaceId, scope?.sessionId]);
 
@@ -51,14 +51,20 @@ export function createRightTabs(view: {
     for (const address of saved.entries) {
       const definition = types.get(address.type);
       if (!definition) { pending.push(address); continue; }
+      if (definition.canOpen && !definition.canOpen(address)) continue;
       const identity = JSON.stringify([address.type, address.path ?? '']);
       const tab = add(target, identity, address.type, definition.title(address), (signal) => definition.create(address, signal), false, address.path);
       tab.address = address;
+      if (target !== current || !target.open) suspend(tab);
       if (identity === saved.active) target.active = tab.key;
     }
     const selected = target.tabs.get(saved.active);
     if (selected) target.active = selected.key;
     target.saved = pending.length ? { ...saved, entries: pending } : undefined;
+  }
+  function suspend(tab: Tab) {
+    if (types.get(tab.type)?.keepMounted !== false || tab.suspended) return;
+    tab.controller.abort(); tab.node.remove(); tab.suspended = true;
   }
   function render(focus = false) {
     const active = [...current.tabs.values()].find(({ key }) => key === current.active);
@@ -79,14 +85,25 @@ export function createRightTabs(view: {
       item.append(select, close);
       return item;
     }));
-    const nodes = new Set(entries.map(({ node }) => node));
+    for (const tab of entries) {
+      if (tab !== active || !current.open) suspend(tab);
+      else if (tab.suspended && tab.address) {
+        tab.controller = new AbortController();
+        tab.node = types.get(tab.type).create(tab.address, tab.controller.signal);
+        tab.node.id = tab.key; tab.node.setAttribute('role', 'tabpanel');
+        tab.node.setAttribute('aria-labelledby', tab.key + '-select'); tab.node.classList.add('right-tab-content');
+        tab.suspended = false;
+      }
+    }
+    const nodes = new Set(entries.filter(({ suspended }) => !suspended).map(({ node }) => node));
     for (const child of [...view.body.children]) if (!nodes.has(child as HTMLElement)) child.remove();
     for (const tab of entries) {
+      if (tab.suspended) continue;
       tab.node.hidden = tab !== active;
       if (tab.node.parentElement !== view.body) view.body.append(tab.node);
     }
     view.launchers.replaceChildren(...[...types].flatMap(([id, type]) => {
-      if (!current.scope || !type.launcher) return [];
+      if (!current.scope || !type.launcher || (type.canOpen && !type.canOpen({ ...current.scope, type: id }))) return [];
       const control = button(type.launcher, 'quiet');
       control.onclick = () => open(id);
       return [control];
@@ -98,6 +115,7 @@ export function createRightTabs(view: {
   function selectScope(scope?: TabScope) {
     if (scopeKey(scope) === scopeKey(current.scope)) return;
     current.open = layout.panelOpen();
+    for (const tab of current.tabs.values()) suspend(tab);
     persist();
     current = state(scope);
     restore(current);
@@ -127,15 +145,16 @@ export function createRightTabs(view: {
     return tab;
   }
 
-  function open(type: string, path?: string, scope = current.scope) {
+  function open(type: string, path?: string, scope = current.scope, line?: number) {
     const definition = types.get(type);
     if (!definition || !scope) return;
-    const address = { ...scope, type, path };
+    const address = { ...scope, type, path, line };
     if (definition.canOpen && !definition.canOpen(address)) return;
     const target = state(scope);
     const identity = JSON.stringify([type, path ?? '']);
     const tab = add(target, identity, type, definition.title(address), (signal) => definition.create(address, signal), false, path);
     tab.address = address;
+    tab.node.dispatchEvent(new CustomEvent('navigate-resource', { detail: address }));
     target.open = true;
     if (target === current) { layout.setPanel(true, true); render(true); }
     else persist(target);
@@ -166,7 +185,10 @@ export function createRightTabs(view: {
   }
 
   view.root.addEventListener('panel-change', (event: CustomEvent<boolean>) => {
-    current.open = event.detail; persist();
+    current.open = event.detail;
+    if (!event.detail) for (const tab of current.tabs.values()) suspend(tab);
+    else render();
+    persist();
   }, { signal });
   view.toggle.onclick = () => {
     if (!layout.panelOpen() && !current.tabs.size && current.scope) {
@@ -193,7 +215,12 @@ export function createRightTabs(view: {
 
   return {
     selectScope, open, prune,
+    navigate(resource: { path: string; kind?: 'file' | 'diff' | 'terminal'; line?: number }, scope = current.scope) {
+      const path = resource.path.replaceAll('\\', '/').replace(/^\.\//, '');
+      open(resource.kind === 'terminal' ? 'shell:terminal' : resource.kind === 'diff' ? 'files:diff' : 'files:preview', path, scope, resource.line);
+    },
     register(type: string, definition: RightTabType) {
+      if (typeof definition?.create !== 'function' || typeof definition.title !== 'function') throw new Error('Tab types require title and create functions');
       if (types.has(type)) throw new Error('Duplicate right panel tab type: ' + type);
       types.set(type, definition);
       for (const target of states.values()) restore(target);

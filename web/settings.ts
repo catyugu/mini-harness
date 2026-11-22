@@ -21,6 +21,44 @@ export const settingsPlugin: BrowserPlugin = {
     const status = content.querySelector('[role="alert"]');
     content.prepend(field('Theme', theme));
     function sync() { theme.value = state.get().settings.appearance; }
+    for (const [key, label] of [['body', 'Body text size'], ['code', 'Code size'], ['terminal', 'Terminal size']]) {
+      const input = document.createElement('input');
+      input.type = 'number'; input.min = '10'; input.max = '22'; input.step = '1';
+      input.value = String(state.get().settings.typography[key]);
+      input.onchange = async () => {
+        input.disabled = true; status.textContent = '';
+        try { state.apply(await api.request<Settings>('/settings', payload('PATCH', { typography: { [key]: Number(input.value) } }))); }
+        catch (error) { status.textContent = error.message; }
+        finally { input.value = String(state.get().settings.typography[key]); input.disabled = false; }
+      };
+      state.on('settings', () => { input.value = String(state.get().settings.typography[key]); }, api.signal);
+      content.append(field(label, input));
+    }
+    for (const [key, label, choices] of [
+      ['mini-harness-chat-mode', 'Chat detail', [['standard', 'Standard'], ['detailed', 'Detailed']]],
+      ['mini-harness-collapse', 'Collapse process', [['completed', 'When completed'], ['next-turn', 'When the next turn starts'], ['never', 'Never']]]
+    ] as const) {
+      const select = document.createElement('select');
+      select.append(...choices.map(([value, title]) => new Option(title, value)));
+      select.value = localStorage.getItem(key) ?? choices[0][0];
+      select.onchange = () => { localStorage.setItem(key, select.value); document.dispatchEvent(new Event('mini-harness-presentation')); };
+      content.append(field(label, select));
+    }
+    const execution = fromMarkup('<div><p class="hint">Default permission applies to future conversations. Change the active conversation in its composer.</p><p role="status" class="hint"></p></div>');
+    const permission = document.createElement('select');
+    permission.append(new Option('View only', 'read-only'), new Option('Workspace modifications', 'workspace-write'), new Option('Full access', 'full'));
+    const syncPermission = () => { permission.value = state.get().settings.defaultPermission; };
+    syncPermission(); state.on('settings', syncPermission, api.signal);
+    execution.prepend(field('Default execution permission', permission));
+    api.settingsPage('Execution', execution);
+    permission.onchange = async () => {
+      const next = permission.value; syncPermission();
+      if (next === 'full' && !confirm('Use full user permissions for future conversations?')) return;
+      permission.disabled = true;
+      try { state.apply(await api.request<Settings>('/settings', payload('PATCH', { defaultPermission: next, confirmed: next === 'full' }))); }
+      catch (error) { execution.querySelector('[role="status"]').textContent = error.message; }
+      finally { syncPermission(); permission.disabled = false; }
+    };
     sync();
     state.on('settings', sync, api.signal);
     api.onDispose(settings.addPage('Appearance', content));

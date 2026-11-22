@@ -142,9 +142,13 @@ export function createLayout(view: LayoutElements, signal: AbortSignal) {
   }, { signal });
 
   function resize() {
-    document.documentElement.style.setProperty('--app-height', (viewport?.height ?? innerHeight) + 'px');
+    const zoom = parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
+    document.documentElement.style.setProperty('--app-height', ((viewport?.height ?? innerHeight) / zoom) + 'px');
     measure();
   }
+  const rootSize = new ResizeObserver(resize);
+  rootSize.observe(document.documentElement);
+  signal.addEventListener('abort', () => rootSize.disconnect(), { once: true });
   viewport?.addEventListener('resize', resize, { signal });
   window.addEventListener('resize', resize, { signal });
   resize();

@@ -23,9 +23,9 @@ const setup: FrontendSetup = (api, services) => {
     if (!next || workspaceId !== next) return;
     const controller = request = new AbortController();
     try {
-      const skills = await api.request<{ name: string; description: string }[]>(workspaceRoute(next, '/skills'), { signal: controller.signal });
+      const skills = await api.request<{ name: string; description: string; source?: string; conflicts?: string[] }[]>(workspaceRoute(next, '/skills'), { signal: controller.signal });
       if (controller.signal.aborted || api.signal.aborted) return;
-      for (const skill of skills) commands.push(api.command({ name: 'skill:' + skill.name, description: skill.description, group: 'Skill' }));
+      for (const skill of skills) commands.push(api.command({ name: 'skill:' + skill.name, description: skill.description + (skill.conflicts?.length ? ' · ' + skill.conflicts.length + ' name conflict(s)' : ''), group: 'Skill · ' + (skill.source ?? 'user') }));
       button.hidden = !skills.length;
     } catch (error) {
       if (!controller.signal.aborted && !api.signal.aborted) services.report(error);

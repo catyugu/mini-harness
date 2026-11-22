@@ -1,13 +1,13 @@
 import { ContributionRegistry, type Contribution, type Region } from './contributions.js';
 import { Context, type Fiber } from './vendor/cordis.js';
 import type { ComposerCommand } from './commands.js';
-import type { MessageContent } from '../src/protocol.js';
+import type { MessageContent, RunEvent, ViewMessage } from '../src/protocol.js';
 import type { Conversation } from '../src/registry.js';
 import type { RightTabType, TabScope, createRightTabs } from './right-tabs.js';
 import type { Bootstrap } from './types.js';
 
 export type Slot = 'conversation.input.permission' | 'conversation.input.dock' | 'conversation.composer.dock' | 'sidebar' | 'composer' | 'settings' | 'inspector' | 'approvals' | 'session-navigation' | 'conversation' | 'dialogs' | 'main' | 'conversation-header';
-export interface ToolView { id?: string; name: string; state: string; content?: MessageContent; arguments?: unknown; sessionId?: string }
+export interface ToolView { details?: unknown; id?: string; name: string; state: string; content?: MessageContent; arguments?: unknown; sessionId?: string }
 export interface Suggestion {
   label: string;
   description?: string;
@@ -54,6 +54,8 @@ export interface FrontendServices {
   session(id: string): Conversation | undefined;
   onConversationChange(listener: () => void, signal: AbortSignal): void;
   changedFiles(): string[];
+  openResource(resource: { path: string; kind?: 'file' | 'diff' | 'terminal'; line?: number }): void;
+  onRunEvent(listener: (event: RunEvent) => void, signal: AbortSignal): void;
   report(error: Error): void;
 }
 export type FrontendSetup = (api: FrontendApi, services: FrontendServices) => void | (() => void) | Promise<void | (() => void)>;
@@ -179,6 +181,12 @@ export class FrontendHost {
         installed.set(value, region === 'settings.section' ? this.addSettingsPage(value.title, value.node) : this.ui.tabs().register(key, value));
       }
     }
+  }
+
+  chat(message: ViewMessage) {
+    try {
+      return this.registry.resolve<(message: ViewMessage) => HTMLElement>('conversation.chat.node', this.services.workspace(), undefined, message)[0]?.value(message);
+    } catch (error) { this.services.report(error); }
   }
 
   render(tool: ToolView, action = false) {

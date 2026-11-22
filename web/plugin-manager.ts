@@ -15,7 +15,18 @@ export const catalogPlugin: BrowserPlugin = {
     const catalog = pluginCatalog(api, state.get, refresh, shell.showPage);
     const manage = button('Manage plugins');
     manage.onclick = () => { settings.close(); catalog.open(); };
-    api.onDispose(settings.addPage('Plugins', manage));
+    const builtins = document.createElement('div');
+    const list = document.createElement('ul'); list.className = 'builtin-inventory'; list.setAttribute('aria-label', 'Built-in plugins');
+    builtins.append(list, manage);
+    const inventory = () => {
+      list.replaceChildren(...state.get().plugins.filter(({ trustedCode }) => !trustedCode).map((plugin) => {
+        const row = document.createElement('li');
+        row.textContent = plugin.title + ' · ' + (state.get().settings.plugins[plugin.id] ? 'Enabled' : 'Disabled');
+        return row;
+      }));
+    };
+    inventory(); state.on('bootstrap', inventory, api.signal);
+    api.onDispose(settings.addPage('Plugins', builtins));
     state.on('bootstrap', catalog.refresh, api.signal);
   }
 };
@@ -86,13 +97,14 @@ function installer(api: FrontendApi, installed: () => Promise<void>) {
     event.preventDefault();
     if (submit.disabled) return;
     installing = submit.disabled = choose.disabled = cancel.disabled = true;
+    form.setAttribute('aria-busy', 'true'); submit.textContent = 'Installing…'; outcome.textContent = 'Installing plugin…';
     try {
       const bundle = await Promise.all(files.map(async (file) => ({ name: file.name, content: await file.text() })));
       await api.request('/plugins/install', payload('POST', { id: id.value.trim(), files: bundle }));
       await installed();
       modal.close();
     } catch (error) { outcome.textContent = error.message; }
-    finally { installing = submit.disabled = choose.disabled = cancel.disabled = false; }
+    finally { installing = submit.disabled = choose.disabled = cancel.disabled = false; form.removeAttribute('aria-busy'); submit.textContent = 'Install plugin'; }
   };
   submit.disabled = true;
   api.mount('dialogs', modal);
@@ -122,6 +134,15 @@ function pluginCatalog(api: FrontendApi, snapshot: () => Bootstrap, refresh: () 
   api.mount('main', page);
 
   let editing: string | undefined;
+  let detailExtras: HTMLElement;
+  function renderExtras() {
+    if (!detailExtras) return;
+    const plugin = snapshot().plugins.find(({ id }) => id === editing);
+    detailExtras.replaceChildren(...api.contributions<(plugin: PluginMetadata) => HTMLElement | undefined>('plugins.detail.section').flatMap(({ value }) => {
+      const node = value(plugin); return node ? [node] : [];
+    }));
+  }
+  api.watchContributions((region) => { if (region === 'plugins.detail.section') renderExtras(); });
   let busy = false;
   let savingSwitch = false;
   async function mutate(operation: () => Promise<unknown>, failed: (error: Error) => void) {
@@ -192,6 +213,9 @@ function pluginCatalog(api: FrontendApi, snapshot: () => Bootstrap, refresh: () 
       };
       section.append(form);
     }
+    detailExtras = document.createElement('div');
+    section.append(detailExtras);
+    renderExtras();
     content.replaceChildren(section);
     back.focus();
   }

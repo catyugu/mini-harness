@@ -231,6 +231,19 @@ function fileView(api: FrontendApi, services: FrontendServices, address: TabAddr
   alternate.onclick = () => api.openTab(diff ? 'preview' : 'diff', path, address);
   toolbar.append(breadcrumbs(api, services, address, path, true), alternate);
   root.append(toolbar, hint('Loading file…'));
+  function revealLine(line?: number) {
+    if (!Number.isSafeInteger(line) || line < 1) return;
+    const target = root.querySelector<HTMLElement>('[data-line="' + line + '"]');
+    if (!target) return;
+    const source = target.closest<HTMLElement>('.file-preview');
+    if (source) source.hidden = false;
+    const markdown = root.querySelector<HTMLElement>('.file-markdown');
+    if (markdown) markdown.hidden = true;
+    for (const previous of root.querySelectorAll('.highlighted-line')) previous.classList.remove('highlighted-line');
+    target.classList.add('highlighted-line');
+    target.scrollIntoView({ block: 'center' });
+  }
+  root.addEventListener('navigate-resource', (event: CustomEvent<TabAddress>) => { address.line = event.detail.line; revealLine(address.line); }, { signal });
   void api.request<Preview>(fileRoute(address, diff ? 'diff' : 'preview', { path }), { signal }).then(({ content, image }) => {
     if (signal.aborted) return;
     let view: HTMLElement;
@@ -271,6 +284,7 @@ function fileView(api: FrontendApi, services: FrontendServices, address: TabAddr
       toolbar.append(raw);
     } else view = source(content, code.has(extension(path)));
     root.replaceChildren(toolbar, view);
+    revealLine(address.line);
   }).catch((error) => { if (!signal.aborted) root.replaceChildren(toolbar, hint(error.message)); });
   return root;
 }
@@ -287,8 +301,8 @@ const setup: FrontendSetup = (api, services) => {
     launcher: 'Git changes',
     create: (address, signal) => changesTab(api, services, address, signal)
   });
-  api.rightTab('preview', { title: ({ path }) => base(path), create: (address, signal) => fileView(api, services, address, signal, false) });
-  api.rightTab('diff', { title: ({ path }) => 'Diff · ' + base(path), create: (address, signal) => fileView(api, services, address, signal, true) });
+  api.rightTab('preview', { canOpen: ({ path }) => Boolean(path), title: ({ path }) => base(path), create: (address, signal) => fileView(api, services, address, signal, false) });
+  api.rightTab('diff', { canOpen: ({ path }) => Boolean(path), title: ({ path }) => 'Diff · ' + base(path), create: (address, signal) => fileView(api, services, address, signal, true) });
   const browse = iconButton('Workspace files', 'files', 'nav-action');
   const label = document.createElement('span');
   label.className = 'nav-label';

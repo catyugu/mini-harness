@@ -52,7 +52,7 @@ const navigationPlugin: BrowserPlugin = {
 };
 
 const conversationPlugin: BrowserPlugin = {
-  id: 'core:conversation', inject: ['miniState', 'miniShell', 'miniEvents', 'miniWorkspace', 'miniNavigation', 'miniHost', 'miniOutlets'],
+  id: 'core:conversation', inject: ['miniState', 'miniShell', 'miniEvents', 'miniWorkspace', 'miniNavigation', 'miniHost', 'miniOutlets', 'harnessBrowser'],
   setup(ctx, api) {
     const { miniState: state, miniNavigation: navigation, miniShell: shell, miniEvents: events, miniWorkspace: workspace } = ctx;
     const conversation = conversationView(api, {
@@ -70,7 +70,9 @@ const conversationPlugin: BrowserPlugin = {
         else shell.placeWorkspace(workspace.current);
       },
       changed: () => events.dispatchEvent(new Event('change')),
-      setTitle: shell.setTitle, renderTool: (tool, action) => ctx.miniHost.render(tool, action),
+      event: (event) => events.dispatchEvent(new CustomEvent('run-event', { detail: event })),
+      openResource: (path, diff, line) => ctx.harnessBrowser.openResource({ path, kind: diff ? 'diff' : 'file', line }),
+      setTitle: shell.setTitle, renderNode: (message) => ctx.miniHost.chat(message), renderTool: (tool, action) => ctx.miniHost.render(tool, action),
       provideSlot(name, node) {
         ctx.miniOutlets.set(name, node);
         api.onDispose(() => { ctx.miniOutlets.delete(name); });
@@ -122,12 +124,19 @@ export async function mountBrowser(ctx: Context, snapshot: Bootstrap) {
     { request: data, insert: (text) => ctx.miniConversation.insert(text), tabs: () => ctx.rightTabs },
     {
       bootstrap: state.get,
+      openResource: (resource) => {
+        const root = state.get().workspaces.find(({ id }) => id === state.selectedWorkspace)?.path.replaceAll('\\', '/');
+        let path = resource.path.replaceAll('\\', '/');
+        if (root && path.toLowerCase().startsWith(root.toLowerCase() + '/')) path = path.slice(root.length + 1);
+        ctx.rightTabs.navigate({ ...resource, path });
+      },
       workspace: scope,
       sessionTitle: (id) => ctx.miniNavigation.session(id)?.title,
       currentConversation: () => ctx.miniNavigation.session(ctx.miniConversation.active()),
       session: (id) => ctx.miniNavigation.session(id),
       onConversationChange: (listener, signal) => events.addEventListener('change', listener, { signal }),
       openConversation: (id) => { events.dispatchEvent(new CustomEvent('open', { detail: id })); },
+      onRunEvent: (listener, signal) => events.addEventListener('run-event', (event: CustomEvent) => listener(event.detail), { signal }),
       changedFiles: () => ctx.miniConversation.changedFiles(),
       report
     },

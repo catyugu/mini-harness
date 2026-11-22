@@ -8,3 +8,4 @@
 .message.assistant { font-size: var(--text-body); line-height: 1.7; }
 .message :is(pre, code), .tool-content pre { font-size: var(--font-code); font-family: var(--font-mono); }
 .terminal-output { font: var(--font-terminal)/1.6 var(--font-mono); }
+.tool-content pre.terminal-output, .right-tab-content pre.terminal-output { font-size: var(--font-terminal); font-family: var(--font-mono); }

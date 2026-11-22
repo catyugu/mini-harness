@@ -93,8 +93,9 @@ function workspacePicker(api: FrontendApi, records: () => WorkspaceRecord[]) {
   const name = document.createElement('input');
   name.required = true;
   name.maxLength = 140;
-  const location = document.createElement('p');
-  location.className = 'workspace-location hint';
+  const directory = document.createElement('input');
+  directory.required = true;
+  const location = field('Workspace directory', directory);
   const editStatus = document.createElement('p');
   editStatus.className = 'form-error';
   editStatus.setAttribute('role', 'status');
@@ -106,7 +107,7 @@ function workspacePicker(api: FrontendApi, records: () => WorkspaceRecord[]) {
   const later = button('Move down');
   const relocate = button('Change directory');
   relocate.onclick = () => {
-    const path = prompt('New absolute workspace directory', editing.path);
+    const path = directory.value.trim();
     if (path && path !== editing.path) void change(() => api.request(workspaceRoute(editing.id), payload('PATCH', { path })));
   };
   const remove = button('Remove workspace', 'danger');
@@ -165,7 +166,7 @@ function workspacePicker(api: FrontendApi, records: () => WorkspaceRecord[]) {
     manage(record: WorkspaceRecord) {
       editing = record;
       name.value = record.name;
-      location.textContent = record.path;
+      directory.value = record.path;
       editStatus.textContent = '';
       const items = records();
       const index = items.findIndex(({ id }) => id === record.id);
