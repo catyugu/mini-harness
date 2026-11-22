@@ -184,7 +184,7 @@ test('renders Markdown and tool results, and stops a pending reply', async ({ pa
     await expect(page.locator('.code-block').getByRole('button', { name: 'Copy', exact: true })).toBeVisible();
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
     await page.locator('.message-row.assistant .message-actions button').click();
-    await expect(page.locator('.message-row.assistant .message-actions button')).toHaveText('Copied');
+    await expect(page.locator('.message-row.assistant .message-actions button')).toHaveAttribute('aria-label', 'Copied');
     expect(await page.evaluate(() => navigator.clipboard.readText())).toContain('```text\nExample\n```');
     await expect(page.locator('.message img, .message .overlay')).toHaveCount(0);
     await expect(page.getByText('A tool note')).toBeVisible();
@@ -356,8 +356,42 @@ test('running messages can queue follow-ups and approve shell commands from the 
     await expect(page.locator('.tool-arguments')).toContainText('echo approved');
     await expect(page.locator('.tool-content')).toContainText('Exit 0');
     await expect(page.locator('.tool-duration')).toHaveText(/\d+ (ms|s)/);
+    await expect(page.locator('.tool-exit-code')).toHaveText('Exit 0');
     await expect(page.locator('#runSummary')).toContainText('Completed');
+    await page.reload();
+    await expect(page.locator('.tool-exit-code')).toHaveText('Exit 0');
+    await expect(page.locator('.tool-duration')).toHaveText(/\d+ (ms|s)/);
   } finally { release(); await page.close(); await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+test('message actions use icons and allow copying or editing the text', async ({ page }) => {
+  const mock = await createMockProvider(), { root, paths } = createFixturePaths(mock.url);
+  const service = await startIsolatedHost(paths);
+  try {
+    await page.goto(service.url + '/#token=' + service.token);
+    const prompt = page.getByRole('textbox', { name: 'Message', exact: true });
+    await prompt.fill('Edit me');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.locator('.message-row.assistant .message')).toHaveText('Mock response');
+    await expect(page.locator('.message-row.user .message-action')).toHaveCount(2);
+    await expect(page.locator('.message-row.assistant .message-action')).toHaveCount(1);
+    await expect(page.locator('.message-time')).toHaveCount(2);
+
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true, value: {
+          writeText: async (text: string) => { (window as Window & { copiedMessage?: string }).copiedMessage = text; }
+        }
+      });
+    });
+    await page.locator('.message-row.assistant').getByRole('button', { name: 'Copy message' }).click();
+    await expect(page.locator('.message-row.assistant').getByRole('button', { name: 'Copied' })).toBeVisible();
+    expect(await page.evaluate(() => (window as Window & { copiedMessage?: string }).copiedMessage)).toBe('Mock response');
+
+    await page.locator('.message-row.user').getByRole('button', { name: 'Edit message' }).click();
+    await expect(prompt).toHaveValue('Edit me');
+    await expect(prompt).toBeFocused();
+  } finally { await page.close(); await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
 test('retry retains image attachments after selecting an image-capable model', async ({ page }) => {

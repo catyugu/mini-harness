@@ -4,7 +4,8 @@ import type { FrontendHost } from './extensions.js';
 import { icon } from './icons.js';
 import { renderMarkdown, markdownSource } from './markdown.js';
 
-export function createMessageView(messages: HTMLElement, extensions: Pick<FrontendHost, 'render'>, retryLast: () => void) {
+export function createMessageView(messages: HTMLElement, extensions: Pick<FrontendHost, 'render'>,
+  retryLast: () => void, editMessage: (text: string) => void) {
 const toolItems = new WeakMap<HTMLDetailsElement, Parameters<typeof toolCard>[0]>();
 const toolDurations = new Map<string, number>();
 
@@ -13,7 +14,7 @@ function textOf(value?: MessageContent) {
   return value?.filter((block) => block.type === 'text').map((block) => block.text ?? '').join('\n') ?? '';
 }
 
-function addMessage(role: 'user' | 'assistant' | 'error', text: string) {
+function addMessage(role: 'user' | 'assistant' | 'error', text: string, timestamp = Date.now()) {
   const item = document.createElement('article');
   item.className = 'message ' + role;
   if (role === 'assistant') renderMarkdown(item, text);
@@ -23,19 +24,49 @@ function addMessage(role: 'user' | 'assistant' | 'error', text: string) {
   wrapper.append(item);
   const actions = document.createElement('div');
   actions.className = 'message-actions';
-  const copy = document.createElement('button');
-  copy.type = 'button'; copy.className = 'link-button'; copy.textContent = 'Copy';
-  copy.onclick = async () => { try { await navigator.clipboard.writeText(markdownSource.get(item) ?? item.textContent); copy.textContent = 'Copied'; } catch { copy.textContent = 'Copy failed'; } };
-  actions.append(copy);
-  if (role === 'error') {
-    const retry = document.createElement('button'); retry.type = 'button'; retry.className = 'link-button'; retry.textContent = 'Retry';
-    retry.onclick = () => retryLast(); actions.append(retry);
+  actions.setAttribute('role', 'group');
+  actions.setAttribute('aria-label', 'Message actions');
+
+  function action(label: string, symbol: Parameters<typeof icon>[0], run: () => void) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'message-action';
+    button.setAttribute('aria-label', label);
+    button.title = label;
+    button.append(icon(symbol));
+    button.onclick = run;
+    return button;
   }
-  wrapper.append(actions); messages.append(wrapper);
+
+  const copy = action('Copy message', 'copy', async () => {
+    try {
+      await navigator.clipboard.writeText(markdownSource.get(item) ?? item.textContent ?? '');
+      copy.setAttribute('aria-label', 'Copied');
+      copy.title = 'Copied';
+    } catch {
+      copy.setAttribute('aria-label', 'Copy failed');
+      copy.title = 'Copy failed';
+    }
+  });
+  actions.append(copy);
+  if (role === 'user') actions.append(action('Edit message', 'edit', () => editMessage(text)));
+  if (role === 'error') actions.append(action('Retry', 'refresh', retryLast));
+  if (role !== 'error' && Number.isFinite(timestamp)) {
+    const date = new Date(timestamp);
+    if (!Number.isNaN(date.getTime())) {
+      const time = document.createElement('time');
+      time.className = 'message-time';
+      time.dateTime = date.toISOString();
+      time.textContent = date.toLocaleString(undefined, { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      actions.append(time);
+    }
+  }
+  wrapper.append(actions);
+  messages.append(wrapper);
   return item;
 }
 
-function toolCard(data: { name: string; state: string; content?: MessageContent; arguments?: unknown; sessionId?: string; id?: string; elapsedMs?: number }, card?: HTMLDetailsElement) {
+function toolCard(data: { name: string; state: string; content?: MessageContent; arguments?: unknown; sessionId?: string; id?: string; elapsedMs?: number; exitCode?: number }, card?: HTMLDetailsElement) {
   const item = card ?? document.createElement('details');
   toolItems.set(item, data);
   item.className = 'tool-card';
@@ -54,12 +85,19 @@ function toolCard(data: { name: string; state: string; content?: MessageContent;
     toolDurations.set(data.id, data.elapsedMs);
     if (toolDurations.size > 256) toolDurations.delete(toolDurations.keys().next().value);
   }
-  const elapsed = toolDurations.get(data.id);
-  if (elapsed !== undefined) {
+  const elapsed = data.elapsedMs ?? toolDurations.get(data.id);
+  if (elapsed !== undefined && Number.isFinite(elapsed)) {
     const duration = document.createElement('span');
     duration.className = 'tool-duration';
     duration.textContent = elapsed < 1000 ? Math.round(elapsed) + ' ms' : (elapsed / 1000).toFixed(1) + ' s';
     summary.append(duration);
+  }
+  if (data.exitCode !== undefined && Number.isInteger(data.exitCode)) {
+    const code = document.createElement('span');
+    code.className = 'tool-exit-code';
+    code.textContent = 'Exit ' + data.exitCode;
+    if (data.exitCode !== 0) code.dataset.failed = 'true';
+    summary.append(code);
   }
   summary.append(status);
   const body = document.createElement('div');
@@ -96,11 +134,12 @@ function toolCard(data: { name: string; state: string; content?: MessageContent;
 function appendHistory(message: ViewMessage) {
   if (message.role === 'toolResult') {
     toolCard({ name: message.toolName ?? 'Tool', state: message.isError ? 'error' : 'finished',
-      id: message.toolCallId, content: message.content, arguments: message.arguments, sessionId: message.sessionId });
+      id: message.toolCallId, content: message.content, arguments: message.arguments, sessionId: message.sessionId,
+      elapsedMs: message.elapsedMs, exitCode: message.exitCode });
     return;
   }
   const text = textOf(message.content);
-  if (text) addMessage(message.role, text);
+  if (text) addMessage(message.role, text, message.timestamp);
   for (const block of typeof message.content === 'string' ? [] : message.content ?? []) {
     if (block.type !== 'image' || !/^image\/(png|jpeg|gif|webp)$/.test(block.mimeType ?? '')) continue;
     const image = document.createElement('img'); image.className = 'message-image'; image.alt = 'Attached image';
