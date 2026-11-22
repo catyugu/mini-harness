@@ -41,8 +41,11 @@ let changedFiles: string[] = [];
 const lastInputs = new Map<string, { message: string; attachments: import('../src/input.js').Attachment[] }>();
 const isRunning = (run?: RunInfo) => run?.state === 'queued' || run?.state === 'running';
 
-const showStatus = (text: string) => { element('status').textContent = text; };
-const report = (error: Error) => showStatus(error.message);
+const showStatus = (text: string, error = false) => {
+  element('status').textContent = text;
+  element('status').classList.toggle('error', error);
+};
+const report = (error: Error) => showStatus(error.message, true);
 const adjustPrompt = () => {
   prompt.style.height = 'auto';
   prompt.style.height = Math.min(prompt.scrollHeight, 210) + 'px';
@@ -159,7 +162,15 @@ function closeDrawer() {
   if (narrow.matches) setSidebar(false);
 }
 
-function showConversation(item?: Conversation, history: ViewMessage[] = []) {
+function showWelcome(show: boolean) {
+  welcome.hidden = !show;
+  messages.hidden = show;
+  const destination = show ? welcome : element('titleBlock');
+  const workspace = element('workspaceOpen');
+  if (workspace.parentElement !== destination) destination.append(workspace);
+}
+
+function showConversation(item?: ConversationView | Conversation, history: ViewMessage[] = []) {
   observing?.abort();
   setSending(isRunning(item?.run));
   active = item?.id;
@@ -185,8 +196,7 @@ function showConversation(item?: Conversation, history: ViewMessage[] = []) {
     const error = [...messages.querySelectorAll<HTMLElement>('.message.error')].at(-1) ?? addMessage('error', '');
     error.textContent = item.run.error;
   }
-  messages.hidden = !messages.childElementCount;
-  welcome.hidden = !messages.hidden;
+  showWelcome(!messages.childElementCount && !isRunning(item?.run));
   messages.scrollTop = messages.scrollHeight;
   renderSessions();
 }
@@ -203,7 +213,7 @@ async function activate(id: string) {
     showConversation(item, item.messages);
     applySettings({ ...bootstrap.settings, model: item.selectedModel });
     if (isRunning(item.run)) void observe(item);
-    else showStatus(item.run?.error ?? '');
+    else showStatus(item.run?.error ?? '', Boolean(item.run?.error));
     closeDrawer();
   } catch (error) { if (request === navigation) report(error); }
   finally { if (request === navigation) pendingNavigation = false; }
@@ -307,8 +317,7 @@ async function observe(item: ConversationView) {
   if (answerText) answer = addMessage('assistant', answerText);
   for (const tool of item.tools ?? []) cards.set(tool.id, toolCard(tool));
   setSending(true);
-  welcome.hidden = true;
-  messages.hidden = false;
+  showWelcome(false);
   showStatus(item.run.state === 'queued' ? 'Queued…' : 'Thinking…');
   const accept = (event: RunEvent) => {
       if (controller.signal.aborted || active !== id) return;
@@ -344,7 +353,7 @@ async function observe(item: ConversationView) {
         case 'tool':
           if (answer) renderMarkdown(answer, answerText);
           cards.set(event.id, toolCard(event, cards.get(event.id)));
-          showStatus(event.state === 'running' ? 'Using ' + event.name + '…' : 'Thinking…');
+          showStatus(event.state === 'running' ? 'Running ' + event.name + '…' : 'Thinking…');
           break;
         case 'error':
           if (answer) renderMarkdown(answer, answerText);
@@ -362,7 +371,7 @@ async function observe(item: ConversationView) {
         case 'run':
           changedFiles = event.run.changedFiles ?? changedFiles;
           ended = !isRunning(event.run);
-          if (ended) showStatus(event.run.error ?? '');
+          if (ended) showStatus(event.run.error ?? '', Boolean(event.run.error));
           break;
       }
       if (pinned) messages.scrollTop = messages.scrollHeight;
@@ -396,7 +405,7 @@ async function observe(item: ConversationView) {
     const latest = await data<ConversationView>('/sessions/' + id, { signal: controller.signal });
     if (controller.signal.aborted || active !== id) return;
     showConversation(latest, latest.messages);
-    showStatus(latest.run?.error ?? '');
+    showStatus(latest.run?.error ?? '', Boolean(latest.run?.error));
     await syncSessions();
     const current = await data<{ settings: Settings }>('/bootstrap');
     applySettings(current.settings);
@@ -551,6 +560,7 @@ viewport?.addEventListener('resize', resize);
 resize();
 
 hydrateIcons();
+showWelcome(true);
 setSidebar(!narrow.matches);
 void data<Bootstrap>('/bootstrap').then((result) => {
   bootstrap = result;
@@ -559,6 +569,8 @@ void data<Bootstrap>('/bootstrap').then((result) => {
   applySettings(result.settings);
   element('workspaceLabel').textContent = result.workspace;
   element('workspaceLabel').title = result.workspace;
+  element('workspaceGroup').textContent = result.workspace.split(/[/\\]/).filter(Boolean).at(-1) || result.workspace;
+  element('workspaceGroup').title = result.workspace;
   renderSessions();
   const remembered = sessionStorage.getItem('mini-harness-active:' + result.workspace);
   if (sessions.length) void activate(sessions.find((item) => item.id === remembered)?.id ?? sessions.find((item) => !item.parentId)?.id ?? sessions[0].id);

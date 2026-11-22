@@ -1,8 +1,11 @@
 import type { MessageContent, ViewMessage } from '../src/protocol.js';
 import type { FrontendHost } from './extensions.js';
+import { icon } from './icons.js';
 import { renderMarkdown, markdownSource } from './markdown.js';
 
 export function createMessageView(messages: HTMLElement, extensions: FrontendHost, activate: (id: string) => void, retryLast: () => void) {
+const toolDurations = new Map<string, number>();
+
 function textOf(value?: MessageContent) {
   if (typeof value === 'string') return value;
   return value?.filter((block) => block.type === 'text').map((block) => block.text ?? '').join('\n') ?? '';
@@ -30,17 +33,32 @@ function addMessage(role: 'user' | 'assistant' | 'error', text: string) {
   return item;
 }
 
-function toolCard(data: { name: string; state: string; content?: MessageContent; arguments?: unknown; sessionId?: string }, card?: HTMLDetailsElement) {
+function toolCard(data: { name: string; state: string; content?: MessageContent; arguments?: unknown; sessionId?: string; id?: string; elapsedMs?: number }, card?: HTMLDetailsElement) {
   const item = card ?? document.createElement('details');
   item.className = 'tool-card';
   item.dataset.state = data.state;
   const summary = document.createElement('summary');
   const name = document.createElement('strong');
-  name.textContent = data.name;
+  name.textContent = data.name.replaceAll('_', ' ');
+  name.title = data.name;
   const status = document.createElement('span');
+  status.className = 'tool-state';
   status.textContent = data.state === 'finished' ? 'Done' : data.state === 'running' ? 'Running' : 'Failed';
-  if (data.state === 'error') item.open = true;
-  summary.append(name, status);
+  if (data.state === 'error' && item.dataset.renderedState !== 'error') item.open = true;
+  item.dataset.renderedState = data.state;
+  summary.append(icon('chevron'), name);
+  if (data.elapsedMs !== undefined && data.id) {
+    toolDurations.set(data.id, data.elapsedMs);
+    if (toolDurations.size > 256) toolDurations.delete(toolDurations.keys().next().value);
+  }
+  const elapsed = toolDurations.get(data.id);
+  if (elapsed !== undefined) {
+    const duration = document.createElement('span');
+    duration.className = 'tool-duration';
+    duration.textContent = elapsed < 1000 ? Math.round(elapsed) + ' ms' : (elapsed / 1000).toFixed(1) + ' s';
+    summary.append(duration);
+  }
+  summary.append(status);
   const body = document.createElement('div');
   body.className = 'tool-content';
   const custom = extensions.render(data);
@@ -81,7 +99,7 @@ function toolCard(data: { name: string; state: string; content?: MessageContent;
 function appendHistory(message: ViewMessage) {
   if (message.role === 'toolResult') {
     toolCard({ name: message.toolName ?? 'Tool', state: message.isError ? 'error' : 'finished',
-      content: message.content, arguments: message.arguments, sessionId: message.sessionId });
+      id: message.toolCallId, content: message.content, arguments: message.arguments, sessionId: message.sessionId });
     return;
   }
   const text = textOf(message.content);

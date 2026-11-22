@@ -310,7 +310,7 @@ export class MiniHarnessRuntime {
     }
     this.registry.update(id, { model: actual });
     if (record.title === 'New conversation') this.registry.update(id, { title: prompt.trim().slice(0, 72) });
-    const toolArguments = new Map<string, unknown>();
+    const toolCalls = new Map<string, { args: unknown; start: number }>();
     const off = session.subscribe((event) => {
       switch (event.type) {
         case 'message_start':
@@ -325,21 +325,24 @@ export class MiniHarnessRuntime {
           if (event.message.role === 'assistant') emit({ type: 'assistant-end' });
           break;
         case 'tool_execution_start':
-          toolArguments.set(event.toolCallId, event.args);
+          toolCalls.set(event.toolCallId, { args: event.args, start: performance.now() });
           emit({ type: 'tool', id: event.toolCallId, name: event.toolName, state: 'running', arguments: event.args });
           break;
         case 'tool_execution_update':
-          emit({ type: 'tool', id: event.toolCallId, name: event.toolName, state: 'running', arguments: toolArguments.get(event.toolCallId), content: event.partialResult?.content });
+          emit({ type: 'tool', id: event.toolCallId, name: event.toolName, state: 'running', arguments: toolCalls.get(event.toolCallId)?.args, content: event.partialResult?.content });
           break;
         case 'tool_execution_end': {
-          const args = toolArguments.get(event.toolCallId) as { path?: string };
+          const call = toolCalls.get(event.toolCallId);
+          toolCalls.delete(event.toolCallId);
+          const args = call?.args as { path?: string };
           const run = this.busy.get(id);
           if (!event.isError && ['write', 'edit'].includes(event.toolName) && typeof args?.path === 'string' && run) {
             const path = relative(this.paths.cwd, resolve(this.paths.cwd, args.path)).split(sep).join('/');
             run.info.changedFiles = [...new Set([...(run.info.changedFiles ?? []), path])];
           }
           emit({ type: 'tool', id: event.toolCallId, name: event.toolName, state: event.isError ? 'error' : 'finished',
-            arguments: toolArguments.get(event.toolCallId), content: event.result?.content, sessionId: event.result?.details?.sessionId });
+            arguments: call?.args, content: event.result?.content, sessionId: event.result?.details?.sessionId,
+            elapsedMs: call ? performance.now() - call.start : undefined });
           break;
         }
       }

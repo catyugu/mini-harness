@@ -102,6 +102,16 @@ export function createComposer(report: (error: Error) => void, commands: Command
     }
   }
 
+  function positionSuggestions() {
+    if (suggestions.hidden) return;
+    const bounds = form.getBoundingClientRect();
+    const above = Math.max(0, bounds.top - 14);
+    const below = Math.max(0, (window.visualViewport?.height ?? innerHeight) - bounds.bottom - 14);
+    const openBelow = below > above && above < 230;
+    suggestions.classList.toggle('suggestions-below', openBelow);
+    suggestions.style.maxHeight = Math.min(285, openBelow ? below : above) + 'px';
+  }
+
   function highlight(index: number, scroll = true) {
     buttons[selected]?.setAttribute('aria-selected', 'false');
     selected = index;
@@ -167,6 +177,7 @@ export function createComposer(report: (error: Error) => void, commands: Command
     selected = -1;
     highlight(buttons.length ? Math.min(index, buttons.length - 1) : -1, false);
     suggestions.scrollTop = scroll;
+    positionSuggestions();
   }
 
   function refresh(force = false) {
@@ -228,7 +239,9 @@ export function createComposer(report: (error: Error) => void, commands: Command
     }
   }
 
-  prompt.addEventListener('input', () => refresh(true));
+  prompt.addEventListener('input', () => { refresh(true); requestAnimationFrame(positionSuggestions); });
+  window.addEventListener('resize', positionSuggestions);
+  window.visualViewport?.addEventListener('resize', positionSuggestions);
   prompt.addEventListener('click', () => refresh(true));
   prompt.addEventListener('keyup', (event) => {
     if (!suggestions.hidden && buttons.length && ['ArrowDown', 'ArrowUp'].includes(event.key)) return;
