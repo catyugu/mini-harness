@@ -2,7 +2,7 @@ import type { ToolDefinition } from '@earendil-works/pi-coding-agent';
 import type { Context } from 'cordis';
 import type { Paths, Settings } from '../config.js';
 import type { RouteHandler, RouteRegistry } from '../transport/http.js';
-import type { SessionRegistry } from '../registry.js';
+import type { SessionRegistry } from '../services/conversations.js';
 
 export interface PluginMetadata {
   id: string;
@@ -59,7 +59,7 @@ declare module 'cordis' {
     harnessSessionChanged: (id: string) => void;
     harnessRevision: { reviseAndStart(id: string, input: {
       sourceEntryId: string; expectedLeafId: string | null; message: string;
-      attachments?: import('../input.js').Attachment[]; model?: import('../registry.js').ModelChoice;
+      attachments?: import('../input.js').Attachment[]; model?: import('../services/conversations.js').ModelChoice;
       thinkingLevel?: import('../adapters/pi/sessions.js').ThinkingLevel;
     }): Promise<import('../protocol.js').RunInfo> };
   }

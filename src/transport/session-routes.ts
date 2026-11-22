@@ -4,7 +4,7 @@ import { eventStream, json, requestBody } from './http.js';
 import { isRunning } from '../protocol.js';
 import type { PiSessions } from '../adapters/pi/sessions.js';
 import type { Runs } from '../services/runs.js';
-import type { SessionRegistry } from '../registry.js';
+import type { SessionRegistry } from '../services/conversations.js';
 
 type SessionRouteHost = NavigationHost & {
   pi: Pick<PiSessions, 'open' | 'queue' | 'queueInput'>;

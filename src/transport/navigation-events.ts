@@ -1,7 +1,7 @@
 import type { ServerResponse } from 'node:http';
 import { eventStream } from './http.js';
-import type { Conversation, SessionRegistry } from '../registry.js';
-import type { WorkspaceRecord } from '../workspace-catalog.js';
+import type { Conversation, SessionRegistry } from '../services/conversations.js';
+import type { WorkspaceRecord } from '../services/workspaces.js';
 
 export type NavigationEvent =
   | { type: 'snapshot'; workspaces: WorkspaceRecord[]; sessions: Conversation[] }

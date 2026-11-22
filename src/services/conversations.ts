@@ -1,12 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { lstatSync, readFileSync, realpathSync, unlinkSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
-import { getPaths, readJson, writeJson } from './config.js';
-import { canonicalWorkspacePath, WorkspaceCatalog, workspaceId } from './workspace-catalog.js';
-import { isRunning, type RunInfo } from './protocol.js';
+import { getPaths, readJson, writeJson } from '../config.js';
+import { canonicalWorkspacePath, WorkspaceCatalog, workspaceId } from './workspaces.js';
+import { isRunning, type RunInfo } from '../protocol.js';
 
-import type { ModelChoice, Conversation } from './contracts/conversation.js';
-export type { ModelChoice, Conversation } from './contracts/conversation.js';
+import type { ModelChoice, Conversation } from '../contracts/conversation.js';
+export type { ModelChoice, Conversation } from '../contracts/conversation.js';
 
 type PendingDeletion = Pick<Conversation, 'id' | 'cwd' | 'file'>;
 interface RegistryState { sessions: Conversation[]; pendingDelete?: PendingDeletion[] }
