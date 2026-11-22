@@ -17,7 +17,7 @@ export function setup(ctx: Context) {
       execute: async (_id, args, signal) => {
         await approvals.request(sessionId, args.command, signal);
         const cwd = ctx.harnessWorkspace.resolve(sessionId);
-        const output = await runShell(args.command, cwd, { ...ctx.harnessSettings().sandbox, signal, stateDir: home });
+        const output = await runShell(args.command, cwd, { ...(ctx.harnessSettings().pluginConfig.shell as { mode: 'isolated' | 'host'; timeoutSeconds: number }), signal, stateDir: home });
         return { content: [{ type: 'text', text: JSON.stringify(output) }], details: output };
       }
     });

@@ -26,7 +26,10 @@ export interface PluginMetadata {
   web?: boolean;
   browser?: string;
   icon?: PluginIcon;
-  preferences?: { key: 'subagents' | 'sandbox'; schema: Record<string, unknown>; groups?: { title: string; fields: string[] }[] };
+  configGroups?: { title: string; fields: string[] }[];
+  configHint?: string;
+  /** Update active configuration without unmounting the plugin. */
+  liveConfig?: boolean;
   requires?: string[];
   configSchema?: Record<string, any>;
 }

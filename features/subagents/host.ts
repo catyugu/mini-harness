@@ -2,14 +2,15 @@ import { defineTool } from '@earendil-works/pi-coding-agent';
 import type { Context } from 'cordis';
 import { Type } from 'typebox';
 import { Delegation } from './delegation.js';
+import type { SubagentPolicy } from '../../src/contracts/delegation.js';
 
 /** Optional plugin: delegation, scheduling and child-model rules exist only while mounted. */
 export function setup(ctx: Context) {
   const delegation = new Delegation(ctx.harnessRegistry, ctx.harnessPi, () => ctx.harnessRuns,
-    () => ctx.harnessSettings().subagents, (id) => ctx.harnessOperations.assertAvailable(id));
-  delegation.validate(ctx.harnessSettings().subagents);
+    () => ctx.harnessSettings().pluginConfig.subagents as unknown as SubagentPolicy, (id) => ctx.harnessOperations.assertAvailable(id));
+  delegation.validate(ctx.harnessSettings().pluginConfig.subagents as unknown as SubagentPolicy);
   ctx.provide('harnessDelegation', delegation);
-  ctx.effect(() => ctx.harnessSettingsStore.validate((next) => delegation.validate(next.subagents)));
+  ctx.effect(() => ctx.harnessSettingsStore.validate((next) => delegation.validate(next.pluginConfig.subagents as unknown as SubagentPolicy)));
   ctx.effect(() => ctx.harnessSettingsStore.subscribe(() => delegation.configure()));
   const tool = (id: string) => defineTool({
     name: 'delegate', label: 'Delegate',

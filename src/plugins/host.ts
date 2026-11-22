@@ -62,7 +62,7 @@ export class PluginHost {
   configure(settings: Settings, commit = () => {}, beforeChange = () => {}) {
     const plans: MountPlan[] = this.catalog.plans(settings).map((plan) => ({
       id: plan.id, requires: plan.requires,
-      signature: { id: plan.id, source: plan.source, requires: plan.requires, config: plan.config },
+      signature: { id: plan.id, source: plan.source, requires: plan.requires, config: plan.liveConfig ? undefined : plan.config },
       load: () => this.load(plan)
     }));
     return this.mounts.configure(plans, commit, beforeChange);

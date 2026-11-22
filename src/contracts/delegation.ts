@@ -1,9 +1,11 @@
-import type { Settings } from '../config.js';
 import type { Conversation, ModelChoice } from './conversation.js';
+
+/** Configuration belongs to the Subagents plugin, not global Settings. */
+export interface SubagentPolicy { maxDepth: number; maxParallel: number; provider: string; model: string }
 
 /** The host-facing seam for child-agent scheduling. The kernel never imports its implementation. */
 export interface DelegationPort {
-  validate(policy: Settings['subagents']): void;
+  validate(policy: SubagentPolicy): void;
   configure(): void;
   checkProvider(id: string, removing?: boolean): void;
   visible(id: string): boolean;

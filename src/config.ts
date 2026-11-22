@@ -3,8 +3,6 @@ export interface Settings {
   model: {provider: string; id: string};
   plugins: Record<string, boolean>;
   pluginConfig: Record<string, Record<string, unknown>>;
-  subagents: {maxDepth: number; maxParallel: number; provider: string; model: string};
-  sandbox: {mode: 'isolated'|'host'; timeoutSeconds: number};
   appearance: 'system'|'light'|'dark';
 }
 import { createHash, randomUUID } from 'node:crypto';
@@ -16,9 +14,10 @@ export const DEFAULTS = Object.freeze({
   port: 3837,
   model: { provider: '', id: '' },
   plugins: { files: true, skills: true, subagents: true, shell: false, 'session-helper': true },
-  pluginConfig: {},
-  subagents: { maxDepth: 1, maxParallel: 4, provider: '', model: '' },
-  sandbox: { mode: 'isolated', timeoutSeconds: 60 },
+  pluginConfig: {
+    subagents: { maxDepth: 1, maxParallel: 4, provider: '', model: '' },
+    shell: { mode: 'isolated', timeoutSeconds: 60 }
+  },
   appearance: 'system'
 });
 
@@ -64,9 +63,7 @@ export function writeJson(file: string, value: unknown) {
 export function validateSettings(input: any) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Invalid settings object');
   const p = input.plugins || {};
-  const s = input.subagents || {};
   const model = input.model || {};
-  const sandbox = input.sandbox || {};
   for (const [key, value] of Object.entries(p)) {
     if (!/^[a-z][a-z0-9-]{0,63}$/.test(key)) throw new Error('Invalid plugin name');
     if (typeof value !== 'boolean') throw new Error('Plugin switches must be boolean');
@@ -75,13 +72,6 @@ export function validateSettings(input: any) {
     if (!/^[a-z][a-z0-9-]{0,63}$/.test(id) || !config || typeof config !== 'object' || Array.isArray(config))
       throw new Error('Invalid plugin configuration for ' + id);
   }
-  if (!Number.isInteger(s.maxDepth ?? 1) || (s.maxDepth ?? 1) < 0 || (s.maxDepth ?? 1) > 8) throw new Error('maxDepth must be 0..8');
-  if (!Number.isInteger(s.maxParallel ?? 4) || (s.maxParallel ?? 4) < 1 || (s.maxParallel ?? 4) > 16) throw new Error('maxParallel must be 1..16');
-  for (const value of [s.provider ?? '', s.model ?? '', model.provider ?? '', model.id ?? '']) {
-    if (typeof value !== 'string' || value.length > 160) throw new Error('Invalid provider or model');
-  }
-  if (!['isolated', 'host'].includes(sandbox.mode ?? 'isolated')) throw new Error('Invalid sandbox mode');
-  if (!Number.isInteger(sandbox.timeoutSeconds ?? 60) || (sandbox.timeoutSeconds ?? 60) < 1 || (sandbox.timeoutSeconds ?? 60) > 300) throw new Error('Invalid shell timeout');
   if (!['system', 'light', 'dark'].includes(input.appearance ?? 'system')) throw new Error('Invalid appearance');
   if (!Number.isInteger(input.port ?? 3837) || (input.port ?? 3837) < 1024 || (input.port ?? 3837) > 65535) throw new Error('Invalid port');
   return true;
@@ -93,9 +83,8 @@ export function readSettings(paths: ReturnType<typeof getPaths>): Settings {
     port: input.port ?? DEFAULTS.port,
     model: { ...DEFAULTS.model, ...input.model },
     plugins: { ...DEFAULTS.plugins, ...input.plugins },
-    pluginConfig: { ...input.pluginConfig },
-    subagents: { ...DEFAULTS.subagents, ...input.subagents },
-    sandbox: { ...DEFAULTS.sandbox, ...input.sandbox },
+    pluginConfig: Object.fromEntries([...new Set([...Object.keys(DEFAULTS.pluginConfig), ...Object.keys(input.pluginConfig ?? {})])]
+      .map((id) => [id, { ...(DEFAULTS.pluginConfig[id] ?? {}), ...(input.pluginConfig?.[id] ?? {}) }])),
     appearance: input.appearance ?? DEFAULTS.appearance
   };
   validateSettings(settings);
@@ -108,7 +97,7 @@ export function mergeSettings(current: Settings, patch: SettingsPatch): Settings
   if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw new Error('Invalid settings patch');
   const allowed = Object.keys(DEFAULTS);
   if (Object.keys(patch).some((key) => !allowed.includes(key))) throw new Error('Unknown settings field');
-  for (const group of ['model', 'plugins', 'pluginConfig', 'subagents', 'sandbox']) {
+  for (const group of ['model', 'plugins', 'pluginConfig']) {
     if (group in patch && (!patch[group] || typeof patch[group] !== 'object' || Array.isArray(patch[group]))) throw new Error('Invalid settings section');
   }
   const next: Settings = {
@@ -116,9 +105,8 @@ export function mergeSettings(current: Settings, patch: SettingsPatch): Settings
     ...patch,
     model: { ...current.model, ...(patch.model || {}) },
     plugins: { ...current.plugins, ...patch.plugins },
-    pluginConfig: { ...current.pluginConfig, ...patch.pluginConfig },
-    subagents: { ...current.subagents, ...(patch.subagents || {}) },
-    sandbox: { ...current.sandbox, ...(patch.sandbox || {}) }
+    pluginConfig: Object.fromEntries([...new Set([...Object.keys(current.pluginConfig), ...Object.keys(patch.pluginConfig ?? {})])]
+      .map((id) => [id, { ...(current.pluginConfig[id] ?? {}), ...(patch.pluginConfig?.[id] ?? {}) }]))
   };
   validateSettings(next);
   return next;

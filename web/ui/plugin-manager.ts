@@ -154,7 +154,7 @@ function pluginCatalog(api: FrontendApi, snapshot: () => Bootstrap, refresh: () 
     section.querySelector('.plugin-symbol').append(icon(plugin.icon ?? 'plugin'));
     section.querySelector('h1').textContent = plugin.title;
     section.querySelector('p').textContent = plugin.description;
-    const schema = plugin.preferences?.schema ?? plugin.configSchema;
+    const schema = plugin.configSchema;
     if (schema) {
       const form = fromMarkup<HTMLFormElement>('<form><div class="detail-fields"></div><p class="hint" role="status"></p></form>');
       const save = button('Save configuration', 'primary');
@@ -162,17 +162,15 @@ function pluginCatalog(api: FrontendApi, snapshot: () => Bootstrap, refresh: () 
       form.append(save);
       const fields = form.querySelector<HTMLElement>('.detail-fields');
       const outcome = form.querySelector<HTMLElement>('[role="status"]');
-      const key = plugin.preferences?.key;
-      const values = () => key ? snapshot().settings[key] : snapshot().settings.pluginConfig[plugin.id] ?? {};
-      if (key === 'sandbox') {
+      const values = () => snapshot().settings.pluginConfig[plugin.id] ?? {};
+      if (plugin.configHint) {
         const note = document.createElement('p');
         note.className = 'hint';
-        note.textContent = snapshot().isolation ? 'Linux shell isolation is available. Trusted host mode uses your user permissions.'
-          : 'Shell isolation is unavailable on this host. Trusted host mode uses your user permissions.';
+        note.textContent = plugin.configHint;
         fields.append(note);
       }
-      if (plugin.preferences?.groups) {
-        for (const group of plugin.preferences.groups) {
+      if (plugin.configGroups) {
+        for (const group of plugin.configGroups) {
           const block = fromMarkup('<section class="ui-section"><h3></h3></section>');
           block.querySelector('h3').textContent = group.title;
           const properties = Object.fromEntries(group.fields.map((id) => [id, schema.properties[id]]));
@@ -187,10 +185,7 @@ function pluginCatalog(api: FrontendApi, snapshot: () => Bootstrap, refresh: () 
         try {
           const current = values();
           const config = readPluginValues({ [plugin.id]: current }, fields)[plugin.id];
-          if (key) for (const [name, value] of Object.entries(current)) {
-            if (typeof value === 'string' && !Object.hasOwn(config, name)) config[name] = '';
-          }
-          const patch: SettingsPatch = key ? { [key]: config } : { pluginConfig: { [plugin.id]: config } };
+          const patch: SettingsPatch = { pluginConfig: { [plugin.id]: config } };
           const saved = await mutate(() => api.request('/settings', payload('PATCH', patch)),
             (error) => { outcome.textContent = error.message; });
           if (saved && !outcome.textContent) outcome.textContent = 'Saved.';

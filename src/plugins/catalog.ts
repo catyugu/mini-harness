@@ -20,6 +20,7 @@ export interface PluginPlan {
   source?: string;
   config?: Record<string, unknown>;
   requires: string[];
+  liveConfig?: boolean;
 }
 
 export class PluginCatalog {
@@ -80,8 +81,8 @@ export class PluginCatalog {
 
   plans(settings: Settings) {
     const next = [
-      ...[...this.builtins.values()].map(({ id, requires = [], configSchema }): PluginPlan => ({
-        id, requires, config: this.configValues(id, settings, configSchema)
+      ...[...this.builtins.values()].map(({ id, requires = [], configSchema, liveConfig }): PluginPlan => ({
+        id, requires, liveConfig, config: this.configValues(id, settings, configSchema)
       })),
       ...this.discover().filter(({ metadata: { id } }) => settings.plugins[id]).map(({ source, metadata }): PluginPlan => {
         if (metadata.error) throw new Error('Invalid plugin ' + metadata.id + ': ' + metadata.error);

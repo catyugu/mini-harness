@@ -1,5 +1,4 @@
-import type { Settings } from '../../src/config.js';
-import type { DelegationPort } from '../../src/contracts/delegation.js';
+import type { DelegationPort, SubagentPolicy } from '../../src/contracts/delegation.js';
 import type { AgentPort, RunPort, SessionStore } from '../../src/contracts/services.js';
 import type { Conversation, ModelChoice } from '../../src/contracts/conversation.js';
 
@@ -99,12 +98,12 @@ export class Delegation implements DelegationPort {
   private readonly leases = new Map<string, ChildLease>();
 
   constructor(private readonly registry: SessionStore, private readonly pi: AgentPort,
-    private readonly runs: () => RunPort, private readonly settings: () => Settings['subagents'],
+    private readonly runs: () => RunPort, private readonly settings: () => SubagentPolicy,
     private readonly assertAvailable: (id: string) => void) {
     this.semaphore = new Semaphore(settings().maxParallel);
   }
 
-  validate(settings: Settings['subagents']) {
+  validate(settings: SubagentPolicy) {
     if (settings.provider) this.pi.resolveModel({ provider: settings.provider, id: settings.model });
   }
 
