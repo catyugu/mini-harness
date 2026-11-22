@@ -493,7 +493,7 @@ button { border-radius: var(--radius); }
 
 .sessions { overscroll-behavior: contain; }
 #workspaceActions { display: flex; align-items: center; gap: 2px; }
-.workspace-row { display: flex; align-items: center; border-radius: 7px; min-height: 34px; }
+.workspace-row { position: relative; display: flex; align-items: center; border-radius: 7px; min-height: 34px; }
 .workspace-row:is(:hover, :focus-within), .workspace-row:has([aria-current]) { background: var(--hover); }
 .workspace-name.ui-button, .session-name.ui-button { flex: 1; justify-content: flex-start; min-width: 0; padding: 4px; }
 .workspace-name span, .workspace-name small, .session-name.ui-button { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -507,6 +507,39 @@ button { border-radius: var(--radius); }
 @media (hover: hover) {
   .workspace-row:not(:hover, :focus-within) .workspace-actions { opacity: 0; }
 }
+
+.workspace-row[draggable="true"] .workspace-name { cursor: grab; }
+.workspace-row.workspace-dragging .workspace-name { cursor: grabbing; }
+.workspace-row.workspace-dragging { opacity: .5; }
+.workspace-row[data-drop-side]::after {
+  content: ''; position: absolute; left: 8px; right: 0; height: 2px;
+  border-radius: 2px; background: var(--focus); pointer-events: none;
+}
+.workspace-row[data-drop-side="before"]::after { top: 0; }
+.workspace-row[data-drop-side="after"]::after { bottom: 0; }
+.workspace-row:has(.workspace-more[aria-expanded="true"]) .workspace-actions { opacity: 1; }
+.workspace-menu {
+  position: fixed; z-index: 15; inset: auto; min-width: 180px; width: max-content; max-width: calc(100vw - 16px);
+  margin: 0; padding: 6px; border: 1px solid var(--border); border-radius: 12px;
+  background: var(--surface); color: var(--ink); box-shadow: 0 12px 36px #00000026;
+}
+.workspace-menu .ui-button {
+  display: flex; justify-content: flex-start; gap: 9px; width: 100%; min-height: 34px;
+  padding: 7px 9px; border: 0; border-radius: 7px; text-align: left; font-size: 13px;
+}
+.workspace-menu .ui-button svg { flex: 0 0 15px; width: 15px; height: 15px; }
+.workspace-menu .ui-button[data-danger="true"] { color: var(--danger); }
+.workspace-menu .ui-button:is(:hover, :focus-visible) { background: var(--hover); }
+.workspace-rename-dialog { width: min(380px, calc(100% - 32px)); }
+.workspace-rename-form { display: grid; gap: 14px; }
+.workspace-rename-form > input {
+  box-sizing: border-box; width: 100%; min-height: 42px; padding: 8px 11px;
+  border: 1px solid var(--border); border-radius: var(--control-radius);
+  background: var(--surface);
+}
+.workspace-rename-form .form-error:empty { display: none; }
+.workspace-rename-form .ui-actions { gap: 8px; }
+.workspace-rename-form .ui-actions .ui-button { min-width: 70px; }
 .workspace-empty { padding-inline: 6px; }
 .workspace-form { display: grid; gap: 10px; }
 .workspace-location { overflow-wrap: anywhere; }

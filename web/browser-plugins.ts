@@ -37,7 +37,8 @@ const navigationPlugin: BrowserPlugin = {
         if (!draft) shell.closeDrawer();
       },
       chooseWorkspace: (onAdd) => workspace.open(state.workspace(), onAdd),
-      manageWorkspace: workspace.manage,
+      renameWorkspace: workspace.rename,
+      removeWorkspace: workspace.remove,
       activate: (id) => state.dispatchEvent(new CustomEvent('open', { detail: id })),
       clearConversation: () => state.dispatchEvent(new Event('clear')),
       setTitle: shell.setTitle,

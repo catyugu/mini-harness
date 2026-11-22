@@ -8,7 +8,7 @@ export const workspacePlugin: BrowserPlugin = {
   id: 'core:workspace', inject: ['miniState'],
   setup(ctx, api) {
     const { miniState: state } = ctx;
-    const picker = workspacePicker(api, () => state.get().workspaces);
+    const picker = workspacePicker(api);
     ctx.provide('miniWorkspace', picker);
     state.on('navigation', () => picker.label(state.workspace()), api.signal);
   }
@@ -24,7 +24,7 @@ interface DirectoryListing {
   directories: { name: string; path: string }[];
 }
 
-function workspacePicker(api: FrontendApi, records: () => WorkspaceRecord[]) {
+function workspacePicker(api: FrontendApi) {
   const form = document.createElement('form');
   form.className = 'workspace-form';
   const path = document.createElement('input');
@@ -91,52 +91,40 @@ function workspacePicker(api: FrontendApi, records: () => WorkspaceRecord[]) {
   };
 
   const editForm = document.createElement('form');
-  editForm.className = 'workspace-form';
+  editForm.className = 'workspace-rename-form';
   const name = document.createElement('input');
   name.required = true;
   name.maxLength = 140;
-  const location = document.createElement('p');
-  location.className = 'workspace-location hint';
+  name.autocomplete = 'off';
+  name.setAttribute('aria-label', 'Workspace name');
   const editStatus = document.createElement('p');
   editStatus.className = 'form-error';
   editStatus.setAttribute('role', 'status');
   const actions = document.createElement('div');
   actions.className = 'ui-actions';
-  const rename = button('Save name', 'primary');
+  const cancel = button('Cancel', 'quiet');
+  const rename = button('Rename', 'primary');
   rename.type = 'submit';
-  const earlier = button('Move up');
-  const later = button('Move down');
-  const remove = button('Remove workspace', 'danger');
-  actions.append(earlier, later, remove, rename);
-  editForm.append(location, field('Workspace name', name), actions, editStatus);
-  const editor = dialog('Manage workspace', editForm);
+  actions.append(cancel, rename);
+  editForm.append(name, editStatus, actions);
+  const editor = dialog('Rename workspace', editForm);
+  editor.classList.add('workspace-rename-dialog');
   api.mount('dialogs', editor);
   let editing: WorkspaceRecord;
-
-  async function change(operation: () => Promise<unknown>) {
-    if (rename.disabled) return;
-    for (const action of actions.querySelectorAll('button')) action.disabled = true;
-    try { await operation(); editor.close(); }
-    catch (error) { editStatus.textContent = error.message; }
-    finally { for (const action of actions.querySelectorAll('button')) action.disabled = false; }
-  }
-  function move(offset: number) {
-    const ids = records().map(({ id }) => id);
-    const index = ids.indexOf(editing.id);
-    const target = index + offset;
-    if (index < 0 || target < 0 || target >= ids.length) return;
-    [ids[index], ids[target]] = [ids[target], ids[index]];
-    void change(() => api.request('/workspaces', payload('PUT', { ids })));
-  }
-  earlier.onclick = () => move(-1);
-  later.onclick = () => move(1);
-  remove.onclick = () => {
-    if (confirm('Remove “' + editing.name + '” from the workspace list? Its directory and conversations are kept.'))
-      void change(() => api.request(workspaceRoute(editing.id), { method: 'DELETE' }));
+  cancel.onclick = () => editor.close();
+  name.oninput = () => {
+    editStatus.textContent = '';
+    rename.disabled = !name.value.trim() || name.value.trim() === editing?.name;
   };
-  editForm.onsubmit = (event) => {
+  editForm.onsubmit = async (event) => {
     event.preventDefault();
-    void change(() => api.request(workspaceRoute(editing.id), payload('PATCH', { name: name.value })));
+    if (rename.disabled) return;
+    rename.disabled = true;
+    try {
+      await api.request(workspaceRoute(editing.id), payload('PATCH', { name: name.value.trim() }));
+      editor.close();
+    } catch (error) { editStatus.textContent = error.message; }
+    finally { rename.disabled = false; }
   };
 
   const current = document.createElement('div');
@@ -159,17 +147,17 @@ function workspacePicker(api: FrontendApi, records: () => WorkspaceRecord[]) {
       picker.showModal();
       void browse(path.value);
     },
-    manage(record: WorkspaceRecord) {
+    rename(record: WorkspaceRecord) {
       editing = record;
       name.value = record.name;
-      location.textContent = record.path;
       editStatus.textContent = '';
-      const items = records();
-      const index = items.findIndex(({ id }) => id === record.id);
-      earlier.disabled = index <= 0;
-      later.disabled = index >= items.length - 1;
+      rename.disabled = true;
       editor.showModal();
       name.select();
+    },
+    async remove(record: WorkspaceRecord) {
+      if (!confirm('Remove workspace "' + record.name + '" from the list? Its directory and conversations will be kept.')) return;
+      await api.request(workspaceRoute(record.id), { method: 'DELETE' });
     }
   };
 }

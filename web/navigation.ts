@@ -7,14 +7,15 @@ import { api as request, readEvents, scopedElements, payload, wait } from './api
 import { workspaceTree } from './navigation-tree.js';
 import { sessionTree } from './sessions.js';
 import { button, dialog, field, fromMarkup, iconButton } from './primitives.js';
-import { fileLabel } from './icons.js';
+import { fileLabel, icon } from './icons.js';
 
 interface NavigationServices {
   state: BrowserState;
   activate(id: string): void;
   select(id: string, draft?: boolean): void;
   chooseWorkspace(onAdd: (record: WorkspaceRecord) => void): void;
-  manageWorkspace(record: WorkspaceRecord): void;
+  renameWorkspace(record: WorkspaceRecord): void;
+  removeWorkspace(record: WorkspaceRecord): Promise<void>;
   clearConversation(): void;
   report(error: Error): void;
   setTitle(title: string): void;
@@ -52,6 +53,67 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
   const selection = new Set<string>(), expanded = new Set<string>();
   const storageKey = 'mini-harness-collapsed-workspaces';
   const collapsed = new Set<string>(JSON.parse(localStorage.getItem(storageKey) ?? '[]'));
+
+  const menu = document.createElement('div');
+  menu.className = 'workspace-menu';
+  menu.setAttribute('role', 'menu');
+  menu.setAttribute('aria-label', 'Workspace actions');
+  menu.hidden = true;
+  const renameAction = button('Rename', 'quiet');
+  renameAction.setAttribute('role', 'menuitem');
+  renameAction.prepend(icon('edit'));
+  const removeAction = button('Delete workspace', 'quiet');
+  removeAction.setAttribute('role', 'menuitem');
+  removeAction.dataset.danger = 'true';
+  removeAction.prepend(icon('trash'));
+  menu.append(renameAction, removeAction);
+  api.mount('dialogs', menu);
+  let menuTrigger: HTMLElement | undefined;
+
+  function closeMenu(restoreFocus = false) {
+    if (menu.hidden) return;
+    menu.hidden = true;
+    menuTrigger?.setAttribute('aria-expanded', 'false');
+    if (restoreFocus && menuTrigger?.isConnected) menuTrigger.focus({ preventScroll: true });
+    menuTrigger = undefined;
+  }
+  function openMenu(record: WorkspaceRecord, trigger: HTMLElement) {
+    closeMenu();
+    menuTrigger = trigger;
+    trigger.setAttribute('aria-expanded', 'true');
+    renameAction.onclick = () => { closeMenu(); options.renameWorkspace(record); };
+    removeAction.onclick = () => {
+      closeMenu();
+      void options.removeWorkspace(record).catch(options.report);
+    };
+    menu.hidden = false;
+    const anchor = trigger.getBoundingClientRect();
+    const bounds = menu.getBoundingClientRect();
+    menu.style.left = Math.max(8, Math.min(anchor.left, innerWidth - bounds.width - 8)) + 'px';
+    const below = anchor.bottom + 4;
+    menu.style.top = (below + bounds.height > innerHeight - 8
+      ? Math.max(8, anchor.top - bounds.height - 4) : below) + 'px';
+    renameAction.focus({ preventScroll: true });
+  }
+  document.addEventListener('pointerdown', (event) => {
+    if (!menu.hidden && event.target instanceof Node && !menu.contains(event.target) && !menuTrigger?.contains(event.target))
+      closeMenu();
+  }, { signal: api.signal });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !menu.hidden) { event.preventDefault(); closeMenu(true); }
+  }, { signal: api.signal });
+  window.addEventListener('resize', () => closeMenu(), { signal: api.signal });
+  element('sessions').addEventListener('scroll', () => closeMenu(), { signal: api.signal });
+
+  let draggingWorkspace: string | undefined;
+  function clearDrag() {
+    for (const row of element('sessions').querySelectorAll<HTMLElement>('.workspace-row')) {
+      row.classList.remove('workspace-dragging');
+      delete row.dataset.dropSide;
+    }
+    draggingWorkspace = undefined;
+  }
+
   let selecting = false;
   let visible: Conversation[] = [];
   const selectAll = button('Select all');
@@ -117,8 +179,26 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
     const container = element('sessions');
     const focus = container.contains(document.activeElement) ? document.activeElement.id : '';
     const scroll = container.scrollTop;
-    const { children, grouped, labels } = workspaceTree(workspaces, sessions);
+    const { children, grouped, labels, parents } = workspaceTree(workspaces, sessions);
     visible = [];
+    closeMenu();
+    clearDrag();
+
+    async function reorderWorkspace(sourceId: string, targetId: string, side: 'before' | 'after') {
+      if (sourceId === targetId || parents.get(sourceId) !== parents.get(targetId)) return;
+      const siblings = (children.get(parents.get(sourceId)) ?? []).map(({ id }) => id);
+      if (!siblings.includes(sourceId) || !siblings.includes(targetId)) return;
+      const moved = siblings.filter((id) => id !== sourceId);
+      moved.splice(moved.indexOf(targetId) + (side === 'after' ? 1 : 0), 0, sourceId);
+      if (moved.every((id, index) => id === siblings[index])) return;
+      const siblingSet = new Set(siblings);
+      let next = 0;
+      const ids = workspaces.map(({ id }) => siblingSet.has(id) ? moved[next++] : id);
+      try {
+        const saved = await api.request<WorkspaceRecord[]>('/workspaces', payload('PUT', { ids }));
+        state.applyNavigation({ type: 'workspaces', workspaces: saved });
+      } catch (error) { options.report(error); }
+    }
     function workspaceBranch(parent?: string) {
       const list = document.createElement('ul');
       list.className = 'workspace-branch';
@@ -140,7 +220,40 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
         const open = !collapsed.has(id) || Boolean(query);
         const row = document.createElement('div');
         row.className = 'workspace-row';
-        const toggle = iconButton((open ? 'Collapse workspace ' : 'Expand workspace ') + name, 'chevron', 'tree-button');
+        row.dataset.workspaceId = id;
+        row.draggable = !selecting && !query;
+        row.ondragstart = (event) => {
+          if (!row.draggable || event.target instanceof Element && event.target.closest('.workspace-actions, .tree-button')) {
+            event.preventDefault();
+            return;
+          }
+          closeMenu();
+          draggingWorkspace = id;
+          row.classList.add('workspace-dragging');
+          event.dataTransfer.effectAllowed = 'move';
+          event.dataTransfer.setData('text/plain', id);
+        };
+        row.ondragover = (event) => {
+          if (!draggingWorkspace || draggingWorkspace === id || parents.get(draggingWorkspace) !== parents.get(id)) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = 'move';
+          const bounds = row.getBoundingClientRect();
+          row.dataset.dropSide = event.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after';
+        };
+        row.ondragleave = (event) => {
+          if (!(event.relatedTarget instanceof Node) || !row.contains(event.relatedTarget))
+            delete row.dataset.dropSide;
+        };
+        row.ondrop = (event) => {
+          const source = draggingWorkspace;
+          const side = row.dataset.dropSide as 'before' | 'after' | undefined;
+          if (!source || !side) return;
+          event.preventDefault();
+          clearDrag();
+          void reorderWorkspace(source, id, side);
+        };
+        row.ondragend = clearDrag;
+        const toggle = iconButton((open ? 'Collapse workspace ' : 'Expand workspace ') + name, 'triangle', 'tree-button');
         toggle.id = 'workspace-toggle-' + id;
         toggle.setAttribute('aria-expanded', String(open));
         toggle.onclick = () => {
@@ -163,13 +276,19 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
         chooser.onclick = () => { revealWorkspace(id); options.select(id); };
         const actions = document.createElement('div');
         actions.className = 'workspace-actions';
-        const create = iconButton('New in ' + name, 'plus');
+        const more = iconButton('Actions for ' + name, 'ellipsis');
+        more.id = 'workspace-more-' + id;
+        more.classList.add('workspace-more');
+        more.setAttribute('aria-haspopup', 'menu');
+        more.setAttribute('aria-expanded', 'false');
+        more.onclick = () => {
+          if (menuTrigger === more && !menu.hidden) closeMenu(true);
+          else openMenu(record, more);
+        };
+        const create = iconButton('New in ' + name, 'new-chat');
         create.id = 'workspace-new-' + id;
-        create.onclick = () => { revealWorkspace(id); options.select(id, true); };
-        const manage = iconButton('Manage ' + name, 'settings');
-        manage.id = 'workspace-manage-' + id;
-        manage.onclick = () => options.manageWorkspace(record);
-        actions.append(create, manage);
+        create.onclick = () => { closeMenu(); revealWorkspace(id); options.select(id, true); };
+        actions.append(more, create);
         row.append(toggle, chooser, actions);
         const entry = document.createElement('li');
         entry.append(row);
