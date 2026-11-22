@@ -35,14 +35,17 @@ export function setup(ctx: Context) {
       }, undefined, true));
     }
     const { harnessRoutes: routes } = ctx;
-    const inspection = ({ workspace }: RouteRequest) => {
-      if (!workspace) throw new Error('Workspace not found');
-      return new Inspection(workspace.path, home, true);
+    const inspection = ({ params, url }: RouteRequest) => {
+      const workspace = ctx.harnessWorkspaces.get(params.id);
+      const sessionId = url.searchParams.get('sessionId');
+      if (sessionId && ctx.harnessRegistry.get(sessionId)?.workspaceId !== workspace.id)
+        throw new Error('Conversation not found');
+      return new Inspection(ctx.harnessWorkspaces.resolveRoot(workspace.path, workspace.id), home, true);
     };
     const path = ({ url }: RouteRequest) => url.searchParams.get('path') ?? '.';
-    ctx.effect(() => routes.register('GET', '/workspace/files/tree', (req) => inspection(req).tree(path(req))));
-    ctx.effect(() => routes.register('GET', '/workspace/files/search', (req) => inspection(req).files.searchFiles(req.url.searchParams.get('q') ?? '')));
-    ctx.effect(() => routes.register('GET', '/workspace/files/preview', (req) => inspection(req).preview(path(req))));
-    ctx.effect(() => routes.register('GET', '/workspace/files/changes', (req) => inspection(req).changes()));
-    ctx.effect(() => routes.register('GET', '/workspace/files/diff', (req) => inspection(req).diff(path(req))));
+    ctx.effect(() => routes.register('GET', '/api/workspaces/:id/files/tree', (req) => inspection(req).tree(path(req))));
+    ctx.effect(() => routes.register('GET', '/api/workspaces/:id/files/search', (req) => inspection(req).files.searchFiles(req.url.searchParams.get('q') ?? '')));
+    ctx.effect(() => routes.register('GET', '/api/workspaces/:id/files/preview', (req) => inspection(req).preview(path(req))));
+    ctx.effect(() => routes.register('GET', '/api/workspaces/:id/files/changes', (req) => inspection(req).changes()));
+    ctx.effect(() => routes.register('GET', '/api/workspaces/:id/files/diff', (req) => inspection(req).diff(path(req))));
 }
