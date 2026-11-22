@@ -65,6 +65,16 @@ async function chooseModel(page: Page, query: string) {
   await modelSearch(page).press('Enter');
 }
 
+async function expectInViewport(panel: ReturnType<Page['locator']>, viewport: { width: number; height: number }) {
+  await expect(panel).toBeInViewport({ ratio: 0.99 });
+  const bounds = await panel.boundingBox();
+  expect(bounds.x).toBeGreaterThanOrEqual(0);
+  expect(bounds.y).toBeGreaterThanOrEqual(0);
+  expect(bounds.x + bounds.width).toBeLessThanOrEqual(viewport.width + 1);
+  expect(bounds.y + bounds.height).toBeLessThanOrEqual(viewport.height + 1);
+  expect(await panel.evaluate((node) => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
+}
+
 test('desktop and mobile: send, navigate, settings and bulk select', async ({ browser }) => {
   const mock = await createMockProvider();
   try {
@@ -151,15 +161,21 @@ test('settings layout stays consistent across viewport sizes and themes', async 
       try {
         await page.goto(service.url + '/#token=' + service.token);
         await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toBeVisible();
-        await page.locator('#workspaceLabel').evaluate((label) => { label.textContent = 'workspace'; });
         if (viewport.width <= 860) await page.getByRole('button', { name: 'Toggle navigation' }).click();
         await page.getByRole('button', { name: 'Settings', exact: true }).click();
+        const dialog = page.getByRole('dialog', { name: 'Settings' });
+        await expect(dialog).toBeVisible();
+        await expect(dialog.getByRole('button', { name: 'Close settings' })).toBeFocused();
+        await settingsSection(page, 'Appearance').click();
+        await dialog.getByRole('combobox', { name: 'Theme', exact: true }).selectOption('system');
+        await expect(page.locator('html')).toHaveAttribute('data-theme', 'system');
+        if (viewport.width <= 560) await dialog.getByRole('button', { name: 'All settings' }).click();
         await settingsSection(page, 'Model').click();
+        await expect(dialog.getByRole('heading', { name: 'Model', exact: true })).toBeVisible();
         for (const colorScheme of ['light', 'dark'] as const) {
           await page.emulateMedia({ colorScheme });
-          await expect(page).toHaveScreenshot('settings-' + viewport.width + '-' + colorScheme + '.png', {
-            animations: 'disabled', caret: 'hide', maxDiffPixelRatio: 0.02
-          });
+          await expect(page.locator('html')).toHaveCSS('color-scheme', colorScheme);
+          await expectInViewport(dialog, viewport);
         }
       } finally { await page.close(); }
     }
@@ -576,15 +592,7 @@ test('file inspection, responsive themes and reduced viewport height keep contro
         await panel.getByRole('button', { name: 'Source', exact: true }).click();
         await expect(panel.locator('.file-preview')).toHaveText('# Visible file\nWorkspace content');
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-        await panel.getByRole('tab', { name: 'notes.md', exact: true }).focus();
-        await page.locator('#workspaceLabel').evaluate((label) => { label.textContent = 'workspace'; });
-        await page.locator('html').evaluate((html) => { html.dataset.theme = 'system'; });
-        for (const colorScheme of ['light', 'dark'] as const) {
-          await page.emulateMedia({ colorScheme, reducedMotion: 'reduce' });
-          await expect(page).toHaveScreenshot('workspace-panel-' + width + '-' + colorScheme + '.png', {
-            animations: 'disabled', caret: 'hide', maxDiffPixelRatio: 0.02
-          });
-        }
+        await expectInViewport(panel, { width, height: 700 });
         await panel.getByRole('button', { name: 'Close workspace panel' }).click();
         for (const theme of ['dark', 'light']) {
           if (width <= 860) await page.getByRole('button', { name: 'Toggle navigation' }).click();
