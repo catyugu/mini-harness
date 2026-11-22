@@ -21,6 +21,8 @@ const assets = new Map([
 for (const entry of readdirSync(WEB_DIR, { recursive: true, withFileTypes: true })) {
   if (entry.isFile() && entry.name.endsWith('.js')) {
     const path = relative(WEB_DIR, join(entry.parentPath, entry.name)).split(sep).join('/');
+    // Co-located browser tests are compiled for Playwright but must never be web assets.
+    if (path.split('/').includes('tests') || /\.(?:spec|test)\.js$/.test(path)) continue;
     assets.set(path, 'text/javascript');
   }
 }
