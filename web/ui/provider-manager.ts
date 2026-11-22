@@ -1,7 +1,7 @@
 import { payload } from '../api.js';
 import type { BrowserPlugin, FrontendApi } from '../kernel/extensions.js';
-import { icon } from './icons.js';
-import { button, field, fromMarkup } from './primitives.js';
+import { icon } from './components/icons.js';
+import { button, field, fromMarkup } from './components/primitives.js';
 
 export interface ProviderInfo {
   id: string;

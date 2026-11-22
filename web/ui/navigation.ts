@@ -7,8 +7,8 @@ import type { FrontendApi } from '../kernel/extensions.js';
 import { api as request, readEvents, scopedElements, payload, wait } from '../api.js';
 import { workspaceTree } from './navigation-tree.js';
 import { sessionTree } from './sessions.js';
-import { button, dialog, field, fromMarkup, iconButton } from './primitives.js';
-import { fileLabel, icon } from './icons.js';
+import { button, dialog, field, fromMarkup, iconButton } from './components/primitives.js';
+import { fileLabel, icon } from './components/icons.js';
 
 interface NavigationServices {
   state: BrowserState;

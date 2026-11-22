@@ -1,5 +1,5 @@
 import type { FrontendSetup } from '../../web/kernel/extensions.js';
-import { icon } from '../../web/ui/icons.js';
+import { icon } from '../../web/ui/components/icons.js';
 
 const setup: FrontendSetup = (api, services) => {
   const trail = document.createElement('nav');
