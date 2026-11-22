@@ -6,6 +6,8 @@ import type { Settings } from '../config.js';
 import { PluginMounts, type MountPlan } from '../kernel/mounts.js';
 import { PluginCatalog, type PluginPlan } from './catalog.js';
 
+const publicServices = new Set(['harnessModels', 'harnessSessions']);
+
 /** Product plugin adapter. The generic Cordis kernel never sees manifests or user settings. */
 export class PluginHost {
   private readonly catalog: PluginCatalog;
@@ -29,6 +31,8 @@ export class PluginHost {
       : (typeof component === 'function' ? component : component?.apply?.bind(component));
     if (typeof setup !== 'function') throw new Error('Expected a setup function or a Cordis component');
     const inject = [...new Set<string>(component?.inject ?? mod?.inject ?? [])];
+    if (!builtin && inject.some((service) => !publicServices.has(service)))
+      throw new Error('Unknown harness service dependency');
     return { inject, setup: async (ctx: Context) => {
       const values = Object.freeze(structuredClone(plan.config ?? {}));
       const cleanup = await setup(ctx, {
@@ -57,7 +61,7 @@ export class PluginHost {
   configure(settings: Settings, commit = () => {}, beforeChange = () => {}) {
     const plans: MountPlan[] = this.catalog.plans(settings).map((plan) => ({
       id: plan.id, requires: plan.requires,
-      signature: { id: plan.id, source: plan.source, config: plan.config },
+      signature: { id: plan.id, source: plan.source, requires: plan.requires, config: plan.config },
       load: () => this.load(plan)
     }));
     return this.mounts.configure(plans, commit, beforeChange);
