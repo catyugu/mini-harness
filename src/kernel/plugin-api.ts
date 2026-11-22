@@ -9,6 +9,8 @@ export interface PluginMetadata {
   title: string;
   description: string;
   trustedCode?: boolean;
+  /** False for UI-only/route-only plugins that never mutate active Pi tools or Skills. */
+  agentResources?: boolean;
   web?: boolean;
   browser?: string;
   icon?: 'files' | 'skills' | 'delegate' | 'terminal' | 'copy' | 'edit';

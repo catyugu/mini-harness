@@ -2,7 +2,7 @@ import type { BuiltinPlugin } from '../kernel/plugin-api.js';
 
 export const editResend: BuiltinPlugin = {
   id: 'edit-resend', title: 'Edit and resend', description: 'Revise a user message and create a Pi conversation branch.',
-  icon: 'edit', browser: '/builtins/edit-resend.js', inject: ['harnessRevision', 'harnessRoutes'],
+  icon: 'edit', browser: '/builtins/edit-resend.js', agentResources: false, inject: ['harnessRevision', 'harnessRoutes'],
   setup(ctx) {
     ctx.effect(() => ctx.harnessRoutes.register('POST', '/api/extensions/edit-resend/revise', async ({ body }) => {
       const input = await body(20 * 1024 * 1024) as Record<string, unknown>;

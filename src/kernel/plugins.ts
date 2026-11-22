@@ -149,7 +149,10 @@ export class PluginHost {
     const obsolete = [...this.mounted.values()].map(({ plan }) => plan).filter((plan) => affected.has(plan.id));
     const additions = ordered.filter((plan) => affected.has(plan.id) || !this.mounted.has(plan.id));
     if (!obsolete.length && !additions.length) { commit(); return; }
-    beforeChange();
+    // A browser-only contribution or a route-only command must not interrupt
+    // active Pi conversations. Only tool/Skill-changing scopes require idle runs.
+    const changesAgent = (plan: PluginPlan) => plan.source !== undefined || this.builtins.get(plan.id)?.agentResources !== false;
+    if ([...obsolete, ...additions].some(changesAgent)) beforeChange();
     return this.apply(obsolete, additions, commit);
   }
 
