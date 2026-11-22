@@ -1,5 +1,5 @@
 import type { ToolDefinition } from '@earendil-works/pi-coding-agent';
-import type { ToolPort } from '../contracts/plugins.js';
+import type { ToolPort } from '../../src/contracts/plugins.js';
 
 const reservedTools = new Set(['read', 'edit', 'write', 'grep', 'find', 'ls', 'bash', 'powershell', 'codemode', 'tool_search']);
 

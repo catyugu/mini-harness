@@ -1,8 +1,8 @@
 import type { ServerResponse } from 'node:http';
-import { eventStream } from './http.js';
-import type { SessionStore } from '../contracts/services.js';
-import type { Conversation } from '../contracts/conversation.js';
-import type { NavigationEvent } from '../contracts/navigation.js';
+import { eventStream } from '../../src/transport/http.js';
+import type { SessionStore } from '../../src/contracts/services.js';
+import type { Conversation } from '../../src/contracts/conversation.js';
+import type { NavigationEvent } from '../../src/contracts/navigation.js';
 
 export interface NavigationHost {
   registry: SessionStore;
