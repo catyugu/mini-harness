@@ -117,7 +117,9 @@ export class PluginHost {
 
   private plans(settings: Settings) {
     const next = [
-      ...[...this.builtins.keys()].map((id): PluginPlan => ({ id, requires: [] })),
+      ...[...this.builtins.values()].map(({ id, requires = [], configSchema }): PluginPlan => ({
+        id, requires, config: this.configValues(id, settings, configSchema)
+      })),
       ...this.discover().filter(({ metadata: { id } }) => settings.plugins[id]).map(({ source, metadata: { id, requires, configSchema } }): PluginPlan => ({
         id, source, requires, config: this.configValues(id, settings, configSchema)
       }))
@@ -151,7 +153,7 @@ export class PluginHost {
     if (!obsolete.length && !additions.length) { commit(); return; }
     // A browser-only contribution or a route-only command must not interrupt
     // active Pi conversations. Only tool/Skill-changing scopes require idle runs.
-    const changesAgent = (plan: PluginPlan) => plan.source !== undefined || this.builtins.get(plan.id)?.agentResources !== false;
+    const changesAgent = (plan: PluginPlan) => this.builtins.get(plan.id)?.agentResources ?? Boolean(plan.source);
     if ([...obsolete, ...additions].some(changesAgent)) beforeChange();
     return this.apply(obsolete, additions, commit);
   }

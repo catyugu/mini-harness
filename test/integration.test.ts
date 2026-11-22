@@ -105,7 +105,7 @@ test('subagent tool is mounted in parent only, with an explicit concurrency limi
   const worker = await app.runtime.pi.open(child.id);
   assert.ok(parent.getActiveToolNames().includes('delegate'));
   assert.ok(!worker.getActiveToolNames().includes('delegate'));
-  assert.equal(app.runtime.delegation.semaphore.limit, 4);
+  assert.equal(app.runtime.delegation.parallelLimit, 4);
 });
 
 test('concurrent opening of one conversation shares a single Pi AgentSession', { timeout: 30000 }, async (t) => {
@@ -185,7 +185,7 @@ test('cancelling a root aborts its active child and preserves indexed history', 
   assert.equal(app.runtime.runs.cancel(parent.id), true);
   await aborted;
   assert.equal(app.runtime.runs.size, 0);
-  assert.equal(app.runtime.delegation.semaphore.active, 0);
+  assert.equal(app.runtime.delegation.activeChildren, 0);
   const child = app.runtime.export([parent.id])[1];
   assert.equal(child.title, '[Cancelled] hold child');
   assert.ok(child.piSession?.includes('hold child'));

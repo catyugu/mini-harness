@@ -96,6 +96,7 @@ export function requireChildDepth(parentDepth: number, maxDepth = 1): void {
 export class Delegation implements DelegationPort {
   readonly semaphore: Semaphore;
   get parallelLimit() { return this.semaphore.limit; }
+  get activeChildren() { return this.semaphore.active; }
   private readonly leases = new Map<string, ChildLease>();
 
   constructor(private readonly registry: SessionRegistry, private readonly pi: PiSessions,

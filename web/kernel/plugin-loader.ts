@@ -11,6 +11,7 @@ export function createPluginLoader(host: FrontendHost) {
   async function sync(snapshot: Bootstrap): Promise<BrowserPluginFailures> {
     const enabled = new Map(snapshot.plugins.filter(({ id }) => snapshot.settings.plugins[id]).map((plugin) => [plugin.id, plugin]));
     const signatures = new Map<string, string>();
+    const ordered: string[] = [];
     const signature = (id: string, visiting = new Set<string>()): string => {
       if (signatures.has(id)) return signatures.get(id);
       if (visiting.has(id) || !enabled.has(id)) throw new Error('Invalid browser plugin dependency: ' + id);
@@ -19,6 +20,7 @@ export function createPluginLoader(host: FrontendHost) {
       const key = JSON.stringify([snapshot.settings.pluginConfig[id] ?? {}, ...(requires ?? []).map((parent) => signature(parent, visiting))]);
       visiting.delete(id);
       signatures.set(id, key);
+      ordered.push(id);
       return key;
     };
     for (const id of enabled.keys()) signature(id);
@@ -29,7 +31,8 @@ export function createPluginLoader(host: FrontendHost) {
       try { await host.disable(id); }
       catch (error) { failed.set(id, error); }
     }
-    for (const [id, key] of signatures) {
+    for (const id of ordered) {
+      const key = signatures.get(id);
       const plugin = enabled.get(id);
       if ((!plugin.browser && !plugin.web) || mounted.has(id)) continue;
       try {
