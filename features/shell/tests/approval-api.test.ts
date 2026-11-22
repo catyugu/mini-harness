@@ -13,7 +13,7 @@ import { fixture, waitUntil } from '../../../test/support/api-fixture.js';
 test('shell approval gates execution, handles rejection and cancellation', async (t) => {
   const { app, paths, request, finish } = await fixture(t, ({ messages }) => messages.at(-1).role === 'tool' ? 'Tool completed' :
     { tool: 'sandbox_shell', args: { command: 'echo approved' } });
-  await app.runtime.updateSettings({ plugins: { shell: true }, sandbox: { mode: 'host' } });
+  await app.runtime.updateSettings({ plugins: { shell: true }, pluginConfig: { shell: { mode: 'host' } } });
   const { body: session } = await request('/sessions', 'POST', {});
   for (const allow of [false, true]) {
     await request('/sessions/' + session.id + '/runs', 'POST', { message: 'Run a shell command' });

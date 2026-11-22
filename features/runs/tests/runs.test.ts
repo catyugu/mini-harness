@@ -107,7 +107,7 @@ test('child queues honor live limits, explicit cancellation, and depth restricti
   const { root, paths } = createFixturePaths(mock.url);
   const app = await createMiniHarnessServer(paths);
   t.after(async () => { for (const gate of held) gate.release(); await app.close(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
-  await app.runtime.updateSettings({ subagents: { maxParallel: 1 } });
+  await app.runtime.updateSettings({ pluginConfig: { subagents: { maxParallel: 1 } } });
   const parent = app.runtime.registry.create();
   const choice = { provider: 'local-mock', id: 'mock-model' };
   const first = app.runtime.delegation.run(parent.id, 'First child', choice);
@@ -122,10 +122,10 @@ test('child queues honor live limits, explicit cancellation, and depth restricti
   await aborted;
   assert.equal(app.runtime.runs.info(queued.id).state, 'cancelled');
   assert.equal(requests, 1);
-  await app.runtime.updateSettings({ subagents: { maxParallel: 2 } });
+  await app.runtime.updateSettings({ pluginConfig: { subagents: { maxParallel: 2 } } });
   await entered[1].promise;
   assert.equal(app.runtime.delegation.activeChildren, 2);
-  await app.runtime.updateSettings({ subagents: { maxParallel: 1 } });
+  await app.runtime.updateSettings({ pluginConfig: { subagents: { maxParallel: 1 } } });
   assert.equal(app.runtime.runs.size, 2, 'Lowering the limit preserves existing executions');
   const child = app.runtime.registry.list().find(({ title }) => title === 'First child');
   await assert.rejects(app.runtime.delegation.run(child.id, 'Too deep', choice), /depth limit/);

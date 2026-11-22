@@ -12,7 +12,7 @@ test('config directories are independent and default safe', () => {
     assert.ok(paths.sessions.startsWith(paths.home));
     assert.ok(paths.projectSkills.endsWith(join('.mini-harness', 'skills')));
     assert.equal(readSettings(paths).plugins.shell, false);
-    assert.equal(readSettings(paths).sandbox.mode, 'isolated');
+    assert.equal(readSettings(paths).pluginConfig.shell.mode, 'isolated');
     writeJson(paths.settings, { appearance: 'dark' });
     assert.equal(readSettings(paths).appearance, 'dark');
   } finally { rmSync(folder, { recursive: true, force: true }); }
@@ -20,13 +20,13 @@ test('config directories are independent and default safe', () => {
 
 test('settings merge preserves other sections and validates bounds', () => {
   const before = structuredClone(DEFAULTS) as unknown as import('../../config.js').Settings;
-  const after = mergeSettings(before, { plugins: { shell: true }, subagents: { maxParallel: 4 } });
+  const after = mergeSettings(before, { plugins: { shell: true }, pluginConfig: { subagents: { maxParallel: 4 } } });
   assert.equal(after.plugins.skills, true);
   assert.equal(after.plugins.shell, true);
-  assert.equal(after.subagents.maxParallel, 4);
+  assert.equal(after.pluginConfig.subagents.maxParallel, 4);
   assert.equal(before.plugins.shell, false);
-  assert.throws(() => mergeSettings(before, { subagents: { maxParallel: 0 } }), /maxParallel/);
-  assert.throws(() => mergeSettings(before, { sandbox: { mode: 'unknown' as any } }), /sandbox/);
+  assert.throws(() => validateSettings({ ...before, pluginConfig: { shell: null } }), /Invalid plugin configuration/);
+  assert.throws(() => mergeSettings(before, { sandbox: { mode: 'host' } } as any), /Unknown settings field/);
   assert.throws(() => mergeSettings(before, { bogus: true } as any), /Unknown/);
   assert.throws(() => validateSettings({ ...before, plugins: { shell: 'true' } }), /boolean/);
 });

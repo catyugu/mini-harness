@@ -19,7 +19,7 @@ test('tool availability changes rebuild affected sessions and preserve unrelated
   const originalParent = await runtime.pi.open(parent.id);
   const originalChild = await runtime.pi.open(child.id);
   const originalLeaf = await runtime.pi.open(leaf.id);
-  await runtime.updateSettings({ subagents: { maxDepth: 2 } });
+  await runtime.updateSettings({ pluginConfig: { subagents: { maxDepth: 2 } } });
   assert.strictEqual(await runtime.pi.open(parent.id), originalParent);
   assert.notStrictEqual(await runtime.pi.open(child.id), originalChild);
   assert.ok((await runtime.pi.open(child.id)).getActiveToolNames().includes('delegate'));

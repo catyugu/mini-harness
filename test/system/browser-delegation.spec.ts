@@ -15,7 +15,7 @@ test('plugin schema controls, recursive tree navigation, batch export and perman
   });
   const { root, paths } = createFixturePaths(mock.url);
   const settings = readJson<any>(paths.settings, {});
-  writeJson(paths.settings, { ...settings, subagents: { maxDepth: 2, maxParallel: 1 } });
+  writeJson(paths.settings, { ...settings, pluginConfig: { subagents: { maxDepth: 2, maxParallel: 1, provider: '', model: '' } } });
   const folder = join(paths.plugins, 'example');
   mkdirSync(folder);
   writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ title: 'Example', configSchema: {

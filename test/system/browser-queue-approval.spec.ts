@@ -14,7 +14,7 @@ test('running messages can queue follow-ups and approve shell commands from the 
     return 'Finished';
   });
   const { root, paths } = createFixturePaths(mock.url);
-  writeJson(paths.settings, { ...readJson<any>(paths.settings, {}), plugins: { shell: true }, sandbox: { mode: 'host' } });
+  writeJson(paths.settings, { ...readJson<any>(paths.settings, {}), plugins: { shell: true }, pluginConfig: { shell: { mode: 'host', timeoutSeconds: 60 } } });
   const service = await startIsolatedHost(paths);
   try {
     await page.goto(service.url + '/#token=' + service.token);

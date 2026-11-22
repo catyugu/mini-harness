@@ -21,7 +21,7 @@ test('appearance, parallelism and child defaults update without interrupting a r
   const pending = runtime.runs.send(item.id, 'Hold');
   await waiting;
   const original = await runtime.pi.open(item.id);
-  await runtime.updateSettings({ appearance: 'dark', subagents: { maxParallel: 2 } });
+  await runtime.updateSettings({ appearance: 'dark', pluginConfig: { subagents: { maxParallel: 2 } } });
   assert.strictEqual(await runtime.pi.open(item.id), original);
   assert.equal(runtime.delegation.parallelLimit, 2);
   assert.equal(runtime.runs.active(item.id), true);
