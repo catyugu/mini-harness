@@ -75,8 +75,15 @@ test('Web modules and feature clients do not import Node runtime implementations
 
 test('host and browser kernel only depend on contracts, never feature/UI implementations', () => {
   for (const path of files(join(source, 'kernel'))) {
-    for (const dep of dependencies(path))
+    for (const dep of dependencies(path)) {
       assert.equal(dep.target.startsWith(features + '/'), false, path + ' depends on a feature');
+      for (const owner of ['services', 'adapters', 'transport', 'plugins']) {
+        assert.equal(dep.target.startsWith(join(source, owner) + '/'), false,
+          path + ' depends on a product adapter: ' + dep.specifier);
+      }
+      assert.equal(dep.target, join(source, 'config.ts'), false,
+        path + ' depends on application settings');
+    }
   }
   for (const path of files(join(web, 'kernel'))) {
     for (const dep of dependencies(path))
@@ -109,4 +116,11 @@ test('contracts carry browser/session vocabulary without protocol forwarding shi
         file + ' imports concrete host service rather than contract');
     }
   }
+});
+
+test('application composition is outside the generic kernel', () => {
+  assert.equal(existsSync(join(source, 'kernel', 'runtime.ts')), false);
+  assert.equal(existsSync(join(source, 'kernel', 'plugins.ts')), false);
+  assert.ok(existsSync(join(source, 'plugins', 'catalog.ts')));
+  assert.ok(existsSync(join(source, 'plugins', 'host.ts')));
 });
