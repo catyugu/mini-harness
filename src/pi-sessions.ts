@@ -185,6 +185,13 @@ export class PiSessions {
     const session = this.openSessions.get(id)?.session;
     if (!session) return [];
     const argumentsById = new Map<string, unknown>();
+    const toolTimings = new Map<string, number>();
+    for (const entry of session.sessionManager.getBranch()) {
+      if (entry.type !== 'custom' || entry.customType !== 'mini-harness:tool-timing') continue;
+      const data = entry.data as { toolCallId?: unknown; elapsedMs?: unknown } | null;
+      if (typeof data?.toolCallId === 'string' && typeof data.elapsedMs === 'number' && Number.isFinite(data.elapsedMs))
+        toolTimings.set(data.toolCallId, data.elapsedMs);
+    }
     for (const message of session.messages) if (message.role === 'assistant') {
       for (const block of message.content) if (block.type === 'toolCall') argumentsById.set(block.id, block.arguments);
     }
@@ -196,13 +203,18 @@ export class PiSessions {
             role: message.role, content: message.content, timestamp: message.timestamp,
             error: message.role === 'assistant' ? message.errorMessage : undefined
           }];
-        case 'toolResult':
+        case 'toolResult': {
+          const code = message.toolName === 'sandbox_shell' && message.details && typeof message.details === 'object' &&
+            'code' in message.details ? message.details.code : undefined;
           return [{
             role: message.role, content: message.content, timestamp: message.timestamp,
             arguments: argumentsById.get(message.toolCallId), toolName: message.toolName, toolCallId: message.toolCallId, isError: message.isError,
             sessionId: message.details && typeof message.details === 'object' && 'sessionId' in message.details &&
-              typeof message.details.sessionId === 'string' ? message.details.sessionId : undefined
+              typeof message.details.sessionId === 'string' ? message.details.sessionId : undefined,
+            elapsedMs: toolTimings.get(message.toolCallId),
+            exitCode: typeof code === 'number' && Number.isInteger(code) ? code : undefined
           }];
+        }
         default: return [];
       }
     });
@@ -226,6 +238,7 @@ export class PiSessions {
     this.registry.update(id, { model: actual });
     if (record.title === 'New conversation') this.registry.update(id, { title: prompt.trim().slice(0, 72) });
     const toolCalls = new Map<string, { args: unknown; start: number }>();
+    const toolTimings: { toolCallId: string; elapsedMs: number }[] = [];
     const off = session.subscribe((event) => {
       switch (event.type) {
         case 'message_start':
@@ -251,9 +264,12 @@ export class PiSessions {
           toolCalls.delete(event.toolCallId);
           const changedPath = event.result?.details?.changedPath;
           if (!event.isError && typeof changedPath === 'string') changed?.(changedPath);
+          const elapsedMs = call ? performance.now() - call.start : undefined;
+          if (elapsedMs !== undefined) toolTimings.push({ toolCallId: event.toolCallId, elapsedMs });
+          const code = event.toolName === 'sandbox_shell' ? event.result?.details?.code : undefined;
           emit({ type: 'tool', id: event.toolCallId, name: event.toolName, state: event.isError ? 'error' : 'finished',
             arguments: call?.args, content: event.result?.content, sessionId: event.result?.details?.sessionId,
-            elapsedMs: call ? performance.now() - call.start : undefined });
+            elapsedMs, exitCode: typeof code === 'number' && Number.isInteger(code) ? code : undefined });
           break;
         }
       }
@@ -271,6 +287,7 @@ export class PiSessions {
     } finally {
       signal.removeEventListener('abort', cancel);
       off();
+      for (const entry of toolTimings) session.sessionManager.appendCustomEntry('mini-harness:tool-timing', entry);
       session.clearQueue();
       if (session.sessionFile && session.sessionFile !== this.registry.get(id)?.file) {
         this.registry.checkedFile({ cwd: record.cwd, file: session.sessionFile });
