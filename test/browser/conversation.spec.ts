@@ -49,8 +49,10 @@ test('desktop and mobile: send, navigate, settings and bulk select', async ({ br
         await page.getByRole('button', { name: 'Cancel' }).click();
         await page.getByRole('button', { name: 'Settings' }).click();
         await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
-        await settingsSection(page, 'Plugins').click();
-        await expect(page.getByRole('button', { name: 'Manage plugins', exact: true })).toBeVisible();
+        await expect(settingsSection(page, 'Plugins')).toHaveCount(0);
+        await expect(page.getByRole('button', { name: 'Manage plugins', exact: true })).toHaveCount(0);
+        await settingsSection(page, 'Appearance').click();
+        await expect(page.getByRole('combobox', { name: 'Theme', exact: true })).toBeVisible();
         await expect(page.getByRole('button', { name: 'Install plugin', exact: true })).toBeHidden();
         await expect(page.getByRole('combobox', { name: 'Provider', exact: true })).toBeHidden();
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -59,14 +61,14 @@ test('desktop and mobile: send, navigate, settings and bulk select', async ({ br
         expect(dialog.x + dialog.width).toBeLessThanOrEqual(viewport.width);
         if (viewport.width > 560) {
           expect(Math.abs(dialog.x - (viewport.width - dialog.width) / 2)).toBeLessThan(2);
-          await page.getByRole('heading', { name: 'Plugins', exact: true }).click();
+          await page.getByRole('heading', { name: 'Appearance', exact: true }).click();
           await expect(page.getByRole('dialog', { name: 'Settings' })).toBeVisible();
           await page.mouse.click(4, 4);
           await expect(page.getByRole('dialog', { name: 'Settings' })).toBeHidden();
         } else {
-          await expect(settingsSection(page, 'Plugins')).toBeHidden();
+          await expect(settingsSection(page, 'Appearance')).toBeHidden();
           await page.getByRole('button', { name: /All settings/ }).click();
-          await expect(settingsSection(page, 'Plugins')).toBeFocused();
+          await expect(settingsSection(page, 'Appearance')).toBeFocused();
           await page.keyboard.press('Escape');
           await expect(page.getByRole('dialog', { name: 'Settings' })).toBeHidden();
         }
