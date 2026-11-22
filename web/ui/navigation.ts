@@ -1,5 +1,5 @@
-import type { Conversation } from '../../src/services/conversations.js';
-import type { WorkspaceRecord } from '../../src/services/workspaces.js';
+import type { Conversation } from '../../src/contracts/conversation.js';
+import type { WorkspaceRecord } from '../../src/contracts/workspace.js';
 import type { NavigationEvent } from '../../src/contracts/navigation.js';
 import { exportSessions } from '../transport/session-client.js';
 import type { BrowserState } from '../models/browser-state.js';

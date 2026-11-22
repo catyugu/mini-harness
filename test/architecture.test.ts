@@ -98,3 +98,15 @@ test('feature implementations are owned by their plugin, while host services use
       assert.equal(dep.target.startsWith(features + '/'), false, path + ' must not import feature internals');
   }
 });
+
+test('contracts carry browser/session vocabulary without protocol forwarding shims', () => {
+  assert.equal(existsSync(join(source, 'protocol.ts')), false);
+  for (const file of [...files(web), ...files(join(source, 'services'))]) {
+    for (const dep of dependencies(file)) {
+      if (typeof dep.target !== 'string') continue;
+      assert.equal(dep.target.endsWith('/src/protocol.ts'), false, file + ' imports protocol forwarding shim');
+      assert.equal(dep.target.startsWith(join(source, 'services') + '/') && file.startsWith(web), false,
+        file + ' imports concrete host service rather than contract');
+    }
+  }
+});

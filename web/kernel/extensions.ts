@@ -1,9 +1,9 @@
 import { Context, type Fiber } from '../vendor/cordis.js';
 import type { ComposerCommand } from '../contracts/commands.js';
-import type { MessageContent, ViewMessage } from '../../src/protocol.js';
-import type { Attachment } from '../../src/input.js';
-import type { ModelChoice } from '../../src/services/conversations.js';
-import type { Conversation } from '../../src/services/conversations.js';
+import type { MessageContent, ViewMessage } from '../../src/contracts/message.js';
+import type { Attachment } from '../../src/contracts/input.js';
+import type { ModelChoice } from '../../src/contracts/conversation.js';
+import type { Conversation } from '../../src/contracts/conversation.js';
 import type { RightTabType, TabScope, RightTabsPort } from '../contracts/tabs.js';
 import type { Bootstrap } from '../types.js';
 

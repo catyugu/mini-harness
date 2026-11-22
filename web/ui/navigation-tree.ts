@@ -1,5 +1,5 @@
-import type { Conversation } from '../../src/services/conversations.js';
-import type { WorkspaceRecord } from '../../src/services/workspaces.js';
+import type { Conversation } from '../../src/contracts/conversation.js';
+import type { WorkspaceRecord } from '../../src/contracts/workspace.js';
 
 function workspacePath(path: string) {
   return /^(?:[a-z]:|\\\\)/i.test(path) ? path.replaceAll('\\', '/').toLowerCase() : path;

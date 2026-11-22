@@ -1,6 +1,6 @@
-import type { Attachment } from '../../src/input.js';
-import type { Conversation, ModelChoice } from '../../src/services/conversations.js';
-import type { RunEvent, RunInfo } from '../../src/protocol.js';
+import type { Attachment } from '../../src/contracts/input.js';
+import type { Conversation, ModelChoice } from '../../src/contracts/conversation.js';
+import type { RunEvent, RunInfo } from '../../src/contracts/transport.js';
 import type { ConversationView } from '../types.js';
 import { payload, workspaceRoute } from '../api.js';
 import { readConversation, observeRun } from '../transport/session-client.js';

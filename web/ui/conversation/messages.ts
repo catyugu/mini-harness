@@ -1,4 +1,5 @@
-import type { MessageContent, RunEvent, ViewMessage } from '../../../src/protocol.js';
+import type { MessageContent, ViewMessage } from '../../../src/contracts/message.js';
+import type { RunEvent } from '../../../src/contracts/transport.js';
 import type { ConversationView } from '../../types.js';
 import type { FrontendHost } from '../../kernel/extensions.js';
 import { icon } from '../components/icons.js';

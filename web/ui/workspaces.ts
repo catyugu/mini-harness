@@ -1,4 +1,4 @@
-import type { WorkspaceRecord } from '../../src/services/workspaces.js';
+import type { WorkspaceRecord } from '../../src/contracts/workspace.js';
 import type { BrowserPlugin, FrontendApi } from '../kernel/extensions.js';
 import { button, dialog, field } from './components/primitives.js';
 import { payload, workspaceRoute } from '../api.js';
