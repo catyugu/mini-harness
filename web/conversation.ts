@@ -111,6 +111,11 @@ export function conversationView(api: FrontendApi, state: BrowserState, options:
   const messageView = createMessageView(messages, { render: options.renderTool }, () => {
     const last = lastInputs.get(active());
     if (last && !sending) void send(last.message, last.attachments);
+  }, (text) => {
+    if (sending || pending) return;
+    prompt.value = text;
+    adjustPrompt();
+    prompt.focus();
   });
 
   function rememberInput(id: string, content: MessageContent, message = messageView.textOf(content)) {
