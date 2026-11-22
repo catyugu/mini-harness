@@ -153,6 +153,11 @@ export class Workspace {
     });
   }
 
+  async validatePath(path: string) {
+    await this.location(path);
+    await this.directory(dirname(resolve(this.cwd, path)), false, async () => {});
+  }
+
   access(path: string) { return this.file(path, false, false, async () => {}); }
 
   writeFile(path: string, content: string, create = true) {

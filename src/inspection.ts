@@ -37,6 +37,7 @@ export class Inspection {
   }
   async diff(path: string) {
     if (!containsPath(this.cwd, resolve(this.cwd, path))) throw new Error('Path outside workspace');
+    await this.files.validatePath(path);
     const changes = await this.changes();
     const file = changes.files.find((item) => item.path === path);
     if (!file) return { path, content: 'No Git changes for this file.' };

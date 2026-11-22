@@ -77,7 +77,7 @@ function renderSessions() {
         row.append(actions);
       }
       entry.append(row);
-      if (item.run) {
+      if (item.run && item.run.state !== 'completed') {
         const state = document.createElement('span');
         state.className = 'run-state';
         state.dataset.state = item.run.state;
