@@ -1,8 +1,8 @@
 import { Context } from './vendor/cordis.js';
 import { data } from './api.js';
 import { BrowserState } from './client.js';
-import { FrontendHost, type BrowserPlugin, type Slot } from './extensions.js';
-import { createPluginLoader } from './plugin-loader.js';
+import { FrontendHost, type BrowserPlugin } from './extensions.js';
+import { createPluginLoader, type BrowserPluginFailures } from './plugin-loader.js';
 import { shellPlugin } from './shell.js';
 import { conversationView } from './conversation.js';
 import { sessionNavigation } from './navigation.js';
@@ -20,8 +20,7 @@ declare module 'cordis' {
     miniNavigation: ReturnType<typeof sessionNavigation>;
     miniConversation: ReturnType<typeof conversationView>;
     miniEvents: EventTarget;
-    miniOutlets: Map<Slot, HTMLElement>;
-    miniSwitch: (snapshot: Bootstrap) => Promise<void>;
+    miniSwitch: (snapshot: Bootstrap) => Promise<BrowserPluginFailures>;
   }
 }
 
@@ -52,7 +51,7 @@ const navigationPlugin: BrowserPlugin = {
 };
 
 const conversationPlugin: BrowserPlugin = {
-  id: 'core:conversation', inject: ['miniState', 'miniShell', 'miniEvents', 'miniWorkspace', 'miniNavigation', 'miniHost', 'miniOutlets'],
+  id: 'core:conversation', inject: ['miniState', 'miniShell', 'miniEvents', 'miniWorkspace', 'miniNavigation', 'miniHost'],
   setup(ctx, api) {
     const { miniState: state, miniNavigation: navigation, miniShell: shell, miniEvents: events, miniWorkspace: workspace } = ctx;
     const conversation = conversationView(api, {
@@ -70,13 +69,10 @@ const conversationPlugin: BrowserPlugin = {
         else shell.placeWorkspace(workspace.current);
       },
       changed: () => events.dispatchEvent(new Event('change')),
-      setTitle: shell.setTitle, renderTool: (tool, action) => ctx.miniHost.render(tool, action),
-      provideSlot(name, node) {
-        ctx.miniOutlets.set(name, node);
-        api.onDispose(() => { ctx.miniOutlets.delete(name); });
-      }
+      setTitle: shell.setTitle, renderTool: (tool, action) => ctx.miniHost.render(tool, action)
     });
     ctx.provide('miniConversation', conversation);
+    conversation.attach();
     conversation.registerCoreCommands(api.command);
     state.on('settings', conversation.updateModelControls, api.signal);
     shell.bindNew(() => { shell.showPage(); void conversation.newSession(); }, api.signal);
@@ -106,7 +102,6 @@ const plugins = [shellPlugin, workspacePlugin, navigationPlugin, conversationPlu
 export async function mountBrowser(ctx: Context, snapshot: Bootstrap) {
   const state = new BrowserState(snapshot);
   const events = new EventTarget();
-  const slots = new Map<Slot, HTMLElement>();
   const report = (error: Error) => ctx.miniConversation?.report(error);
   function scope() {
     const workspaceId = state.selectedWorkspace;
@@ -118,7 +113,14 @@ export async function mountBrowser(ctx: Context, snapshot: Bootstrap) {
     ctx.rightTabs.selectScope(scope());
     ctx.rightTabs.prune(new Set(sessions.map(({ id }) => id)), new Set(workspaces.map(({ id }) => id)));
   });
-  const host = new FrontendHost(ctx, (name) => slots.get(name) ?? ctx.miniShell.slot(name),
+  const host = new FrontendHost(ctx, (name) => {
+    switch (name) {
+      case 'settings': return ctx.miniSettings.outlet;
+      case 'composer':
+      case 'approvals': return ctx.miniConversation.outlets[name];
+      default: return ctx.miniShell.outlet(name);
+    }
+  },
     { request: data, insert: (text) => ctx.miniConversation.insert(text), tabs: () => ctx.rightTabs },
     {
       bootstrap: state.get,
@@ -134,15 +136,20 @@ export async function mountBrowser(ctx: Context, snapshot: Bootstrap) {
     (title, node) => ctx.miniSettings.addPage(title, node),
     (command) => ctx.miniConversation.command(command),
     (trigger, complete) => ctx.miniConversation.completion(trigger, complete));
-  const load = createPluginLoader(host, report);
+  const sync = createPluginLoader(host);
+  const load = async (snapshot: Bootstrap) => {
+    const failures = await sync(snapshot);
+    ctx.miniConversation.refreshTools();
+    return failures;
+  };
   ctx.provide('miniState', state);
   ctx.provide('miniHost', host);
   ctx.provide('miniEvents', events);
-  ctx.provide('miniOutlets', slots);
   ctx.provide('miniSwitch', load);
   try {
     for (const plugin of plugins) await host.mountPlugin(plugin);
-    await load(state.get());
+    const failures = await load(state.get());
+    if (failures.size) report(new Error('Browser plugins failed: ' + [...failures.keys()].join(', ')));
     hydrateIcons();
   } catch (error) {
     await host.dispose();

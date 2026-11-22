@@ -7,12 +7,10 @@ import { closeOnBackdrop, field, fromMarkup } from './primitives.js';
 const pageIcons = { Model: 'model', Plugins: 'plugin', Appearance: 'theme' } as const;
 
 export const settingsPlugin: BrowserPlugin = {
-  id: 'core:settings', inject: ['miniState', 'miniShell', 'miniOutlets'],
+  id: 'core:settings', inject: ['miniState', 'miniShell'],
   setup(ctx, api) {
     const { miniShell: shell, miniState: state } = ctx;
     const settings = mountSettings(api);
-    ctx.miniOutlets.set('settings', settings.outlet);
-    api.onDispose(() => { ctx.miniOutlets.delete('settings'); });
     ctx.provide('miniSettings', settings);
     shell.bindSettings(() => { shell.closeDrawer(); settings.open(); }, api.signal);
     const theme = fromMarkup<HTMLSelectElement>(`<select><option value="system">System</option>

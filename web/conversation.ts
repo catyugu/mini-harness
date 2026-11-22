@@ -23,7 +23,6 @@ interface ConversationServices {
   closeDrawer(): void;
   placeWorkspace(welcome?: HTMLElement): void;
   setTitle(title: string): void;
-  provideSlot(name: 'composer' | 'approvals', node: HTMLElement): void;
   changed(): void;
   renderTool: FrontendHost['render'];
 }
@@ -63,8 +62,7 @@ export function conversationView(api: FrontendApi, options: ConversationServices
     </div>`);
   api.mount('conversation', view);
   const { element, value } = scopedElements(view);
-  options.provideSlot('composer', element('composerExtensions'));
-  options.provideSlot('approvals', element('approvalRequests'));
+  const outlets = { composer: element('composerExtensions'), approvals: element('approvalRequests') };
 
   const messages = element('messages');
   const welcome = element('welcome');
@@ -115,7 +113,7 @@ export function conversationView(api: FrontendApi, options: ConversationServices
   };
   const commands = new CommandRegistry();
   const composerUi = createComposer(view, report, commands, api.signal);
-  const { addMessage, appendHistory, toolCard } = createMessageView(messages, { render: options.renderTool }, () => {
+  const { addMessage, appendHistory, toolCard, refreshTools } = createMessageView(messages, { render: options.renderTool }, () => {
     const last = lastInputs.get(active);
     if (last && !sending) void send(last.message, last.attachments);
   });
@@ -416,10 +414,9 @@ export function conversationView(api: FrontendApi, options: ConversationServices
   prompt.oninput = adjustPrompt;
 
   element('queueSend').onclick = () => void queueMessage();
-  composerUi.attach(api);
   api.onDispose(() => observing?.abort());
   return {
-    newSession, activate, showConversation, updateModelControls,
+    outlets, attach: () => composerUi.attach(api), newSession, activate, showConversation, updateModelControls,
     clear() {
       ++navigation;
       pendingNavigation = false;
@@ -428,7 +425,7 @@ export function conversationView(api: FrontendApi, options: ConversationServices
       showStatus('');
     },
     active: () => active, changedFiles: () => changedFiles, sending: () => sending,
-    refreshQueue, report,
+    refreshQueue, refreshTools, report,
     command(command: ComposerCommand) {
       const dispose = commands.register(command);
       composerUi.refresh(true);

@@ -11,7 +11,11 @@ export const catalogPlugin: BrowserPlugin = {
   id: 'core:plugins', inject: ['miniSettings', 'miniState', 'miniShell', 'miniSwitch'],
   setup(ctx, api) {
     const { miniSettings: settings, miniState: state, miniShell: shell, miniSwitch: syncPlugins } = ctx;
-    const refresh = async () => { await state.refresh(); await syncPlugins(state.get()); };
+    const refresh = async () => {
+      await state.refresh();
+      const failures = await syncPlugins(state.get());
+      if (failures.size) throw new Error('Browser plugins failed: ' + [...failures.keys()].join(', '));
+    };
     const catalog = pluginCatalog(api, state.get, refresh, shell.showPage);
     const manage = button('Manage plugins');
     manage.onclick = () => { settings.close(); catalog.open(); };
@@ -127,8 +131,12 @@ function pluginCatalog(api: FrontendApi, snapshot: () => Bootstrap, refresh: () 
   async function mutate(operation: () => Promise<unknown>, failed: (error: Error) => void) {
     if (busy) return false;
     busy = true;
-    try { await operation(); await refresh(); return true; }
-    catch (error) { failed(error); return false; }
+    try {
+      await operation();
+      try { await refresh(); }
+      catch (error) { failed(new Error('Saved on the server. ' + error.message)); }
+      return true;
+    } catch (error) { failed(error); return false; }
     finally { busy = false; }
   }
 
@@ -186,7 +194,7 @@ function pluginCatalog(api: FrontendApi, snapshot: () => Bootstrap, refresh: () 
           const patch: SettingsPatch = key ? { [key]: config } : { pluginConfig: { [plugin.id]: config } };
           const saved = await mutate(() => api.request('/settings', payload('PATCH', patch)),
             (error) => { outcome.textContent = error.message; });
-          if (saved) outcome.textContent = 'Saved.';
+          if (saved && !outcome.textContent) outcome.textContent = 'Saved.';
         } catch (error) { outcome.textContent = error.message; }
         finally { save.disabled = false; }
       };
@@ -237,9 +245,10 @@ function pluginCatalog(api: FrontendApi, snapshot: () => Bootstrap, refresh: () 
           remove.onclick = async () => {
             if (!confirm('Permanently uninstall ' + plugin.title + '?')) return;
             remove.disabled = true;
+            status.textContent = '';
             const deleted = await mutate(() => api.request('/plugins/' + plugin.id, { method: 'DELETE' }),
               (error) => { status.textContent = error.message; });
-            if (deleted) { status.textContent = 'Plugin uninstalled.'; openInstall.focus(); }
+            if (deleted) { status.textContent ||= 'Plugin uninstalled.'; openInstall.focus(); }
             remove.disabled = false;
           };
           controls.append(remove);

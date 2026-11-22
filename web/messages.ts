@@ -4,6 +4,7 @@ import { icon } from './icons.js';
 import { renderMarkdown, markdownSource } from './markdown.js';
 
 export function createMessageView(messages: HTMLElement, extensions: Pick<FrontendHost, 'render'>, retryLast: () => void) {
+const toolItems = new WeakMap<HTMLDetailsElement, Parameters<typeof toolCard>[0]>();
 const toolDurations = new Map<string, number>();
 
 function textOf(value?: MessageContent) {
@@ -35,6 +36,7 @@ function addMessage(role: 'user' | 'assistant' | 'error', text: string) {
 
 function toolCard(data: { name: string; state: string; content?: MessageContent; arguments?: unknown; sessionId?: string; id?: string; elapsedMs?: number }, card?: HTMLDetailsElement) {
   const item = card ?? document.createElement('details');
+  toolItems.set(item, data);
   item.className = 'tool-card';
   item.dataset.state = data.state;
   const summary = document.createElement('summary');
@@ -106,5 +108,11 @@ function appendHistory(message: ViewMessage) {
   if (message.error) addMessage('error', message.error);
 }
 
-return { addMessage, appendHistory, toolCard };
+function refreshTools() {
+  for (const card of messages.querySelectorAll<HTMLDetailsElement>('details.tool-card')) {
+    toolCard(toolItems.get(card), card);
+  }
+}
+
+return { addMessage, appendHistory, toolCard, refreshTools };
 }

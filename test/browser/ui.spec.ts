@@ -554,6 +554,38 @@ test('frontend plugins own all five slots and clean up on disable and reconfigur
   } finally { await page.close(); await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
+test('a failed browser plugin reports the saved state and can be retried', async ({ page }) => {
+  const mock = await createMockProvider(), { root, paths } = createFixturePaths(mock.url);
+  const folder = join(paths.plugins, 'retry-ui');
+  mkdirSync(folder);
+  writeFileSync(join(folder, 'plugin.js'), 'export default () => {}');
+  writeJson(join(folder, 'plugin.json'), { title: 'Retry UI', configSchema: {
+    type: 'object', properties: { ready: { type: 'boolean', title: 'Ready', default: false } }
+  } });
+  writeFileSync(join(folder, 'web.js'), `export default (api) => {
+    const node = document.createElement('button');
+    node.textContent = 'Recovered UI';
+    api.mount('composer', node);
+    if (!api.config.ready) throw new Error('Not ready');
+  };`);
+  const service = await startIsolatedHost(paths);
+  try {
+    await page.goto(service.url + '/#token=' + service.token);
+    await page.getByRole('button', { name: 'Browse plugins' }).click();
+    const control = page.getByRole('switch', { name: 'Retry UI' });
+    await control.check();
+    await expect(page.getByText('Saved on the server. Browser plugins failed: retry-ui')).toBeVisible();
+    await expect(control).toBeChecked();
+    await expect(page.getByRole('button', { name: 'Recovered UI', includeHidden: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Retry UI settings' }).click();
+    await page.getByLabel('Ready · retry-ui').check();
+    await page.getByRole('button', { name: 'Save configuration' }).click();
+    await expect(page.getByText('Saved.', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'New conversation' }).click();
+    await expect(page.getByRole('button', { name: 'Recovered UI' })).toHaveCount(1);
+  } finally { await page.close(); await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
 test('file inspection, responsive themes and reduced viewport height keep controls reachable', async ({ browser }) => {
   const mock = await createMockProvider(), { root, paths } = createFixturePaths(mock.url);
   const note = join(paths.cwd, 'notes.md');

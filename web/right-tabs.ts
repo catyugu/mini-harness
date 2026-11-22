@@ -10,7 +10,7 @@ export interface RightTabType {
   default?: boolean;
 }
 
-type Tab = { key: string; title: string; path?: string; node: HTMLElement; type: string; controller: AbortController };
+type Tab = { key: string; title: string; address?: TabAddress };
 type ScopeTabs = { scope?: TabScope; open: boolean; active?: string; tabs: Map<string, Tab> };
 const scopeKey = (scope?: TabScope) => JSON.stringify([scope?.workspaceId, scope?.sessionId]);
 
@@ -19,6 +19,7 @@ export function createRightTabs(view: {
 }, layout: ReturnType<typeof createLayout>, signal: AbortSignal) {
   const types = new Map<string, RightTabType>();
   const states = new Map<string, ScopeTabs>();
+  const mounted = new Map<Tab, { node: HTMLElement; controller: AbortController }>();
   let current = state();
   let nextId = 0;
 
@@ -36,22 +37,21 @@ export function createRightTabs(view: {
       item.className = 'right-tab';
       const select = button(tab.title, 'quiet');
       select.id = tab.key + '-select';
-      select.title = tab.path ?? tab.title;
+      select.title = tab.address?.path ?? tab.title;
       select.setAttribute('role', 'tab');
       select.setAttribute('aria-selected', String(tab === active));
       select.setAttribute('aria-controls', tab.key);
       select.tabIndex = tab === active ? 0 : -1;
       select.onclick = () => { current.active = tab.key; render(true); };
       const close = iconButton('Close tab ' + tab.title, 'close');
-      close.onclick = () => { remove(current, tab); render(true); };
+      close.onclick = () => { remove(current, tab.key); render(true); };
       item.append(select, close);
       return item;
     }));
-    const nodes = new Set(entries.map(({ node }) => node));
-    for (const child of [...view.body.children]) if (!nodes.has(child as HTMLElement)) child.remove();
     for (const tab of entries) {
-      tab.node.hidden = tab !== active;
-      if (tab.node.parentElement !== view.body) view.body.append(tab.node);
+      const node = mounted.get(tab)?.node ?? mount(tab, (signal) => types.get(tab.address.type).create(tab.address, signal));
+      node.hidden = tab !== active;
+      if (node.parentElement !== view.body) view.body.append(node);
     }
     view.launchers.replaceChildren(...[...types].flatMap(([id, type]) => {
       if (!current.scope || !type.launcher) return [];
@@ -65,62 +65,80 @@ export function createRightTabs(view: {
   function selectScope(scope?: TabScope) {
     if (scopeKey(scope) === scopeKey(current.scope)) return;
     current.open = layout.panelOpen();
+    for (const tab of current.tabs.values()) {
+      if (tab.address) unmount(tab);
+      else remove(current, tab.key);
+    }
     current = state(scope);
     render();
     layout.setPanel(current.open);
   }
 
-  function add(target: ScopeTabs, identity: string, type: string, title: string, create: (signal: AbortSignal) => HTMLElement, reveal: boolean, path?: string) {
-    let tab = target.tabs.get(identity);
-    if (!tab) {
-      const controller = new AbortController();
-      const node = create(controller.signal);
-      const key = 'right-tab-' + ++nextId;
-      node.id = key;
-      node.setAttribute('role', 'tabpanel');
-      node.setAttribute('aria-labelledby', key + '-select');
-      node.classList.add('right-tab-content');
-      tab = { key, title, path, type, node, controller };
-      target.tabs.set(identity, tab);
+  function mount(tab: Tab, create: (signal: AbortSignal) => HTMLElement) {
+    const controller = new AbortController();
+    let node: HTMLElement;
+    try { node = create(controller.signal); }
+    catch (error) {
+      controller.abort();
+      node = document.createElement('p');
+      node.textContent = error instanceof Error ? error.message : String(error);
     }
-    target.active = tab.key;
-    if (target === current && reveal) {
-      layout.closeDrawer(false);
-      layout.setPanel(true, true);
-      render(true);
-    }
-    return tab;
+    node.id = tab.key;
+    node.setAttribute('role', 'tabpanel');
+    node.setAttribute('aria-labelledby', tab.key + '-select');
+    node.classList.add('right-tab-content');
+    mounted.set(tab, { node, controller });
+    return node;
+  }
+
+  function unmount(tab: Tab) {
+    const view = mounted.get(tab);
+    mounted.delete(tab);
+    view?.controller.abort();
+    view?.node.remove();
+  }
+
+  function reveal(tab: Tab) {
+    current.active = tab.key;
+    layout.closeDrawer(false);
+    layout.setPanel(true, true);
+    render(true);
   }
 
   function open(type: string, path?: string, scope = current.scope) {
     const definition = types.get(type);
     if (!definition || !scope) return;
-    const address = { ...scope, type, path };
     const target = state(scope);
-    const identity = JSON.stringify([type, path ?? '']);
-    add(target, identity, type, definition.title(address), (signal) => definition.create(address, signal), target === current, path);
+    let tab = [...target.tabs.values()].find(({ address }) => address?.type === type && address.path === path);
+    if (!tab) {
+      const address = { ...scope, type, path };
+      tab = { key: 'right-tab-' + ++nextId, title: definition.title(address), address };
+      target.tabs.set(tab.key, tab);
+    }
+    target.active = tab.key;
+    if (target === current) reveal(tab);
   }
 
-  function remove(target: ScopeTabs, tab: Tab) {
-    const entries = [...target.tabs.entries()];
-    const index = entries.findIndex(([, item]) => item === tab);
-    if (index < 0) return;
-    target.tabs.delete(entries[index][0]);
-    tab.controller.abort();
-    tab.node.remove();
-    if (target.active === tab.key) target.active = (entries[index + 1] ?? entries[index - 1])?.[1].key;
+  function remove(target: ScopeTabs, key: string) {
+    const tab = target.tabs.get(key);
+    if (!tab) return;
+    const keys = [...target.tabs.keys()];
+    target.tabs.delete(key);
+    if (target.active === key) {
+      const index = keys.indexOf(key);
+      target.active = keys[index + 1] ?? keys[index - 1];
+    }
+    unmount(tab);
   }
 
   function prune(sessions: ReadonlySet<string>, workspaces: ReadonlySet<string>) {
-    let changed = false;
     for (const [key, target] of states) {
       const scope = target.scope;
       if (!scope || (workspaces.has(scope.workspaceId) && (!scope.sessionId || sessions.has(scope.sessionId)))) continue;
-      for (const tab of target.tabs.values()) remove(target, tab);
+      for (const id of target.tabs.keys()) remove(target, id);
       states.delete(key);
-      changed = true;
+      if (target === current) selectScope();
     }
-    if (changed) render();
   }
 
   view.toggle.onclick = () => {
@@ -143,7 +161,8 @@ export function createRightTabs(view: {
     render(true);
   }, { signal });
   signal.addEventListener('abort', () => {
-    for (const target of states.values()) for (const tab of target.tabs.values()) remove(target, tab);
+    for (const tab of mounted.keys()) unmount(tab);
+    states.clear();
   }, { once: true });
 
   return {
@@ -155,18 +174,23 @@ export function createRightTabs(view: {
       return () => {
         types.delete(type);
         for (const target of states.values()) for (const tab of target.tabs.values()) {
-          if (tab.type === type) remove(target, tab);
+          if (tab.address?.type === type) remove(target, tab.key);
         }
         render();
       };
     },
-    inspect(owner: string, title: string, node: HTMLElement) {
+    inspect(owner: string, title: string, node: HTMLElement, signal: AbortSignal) {
       const target = current;
-      const identity = 'inspect:' + owner;
-      const previous = target.tabs.get(identity);
-      if (previous) remove(target, previous);
-      const tab = add(target, identity, identity, title, () => node, true);
-      return () => { remove(target, tab); if (target === current) render(); };
+      const key = 'inspect-' + owner;
+      remove(target, key);
+      const tab = { key, title };
+      target.tabs.set(key, tab);
+      mount(tab, () => node);
+      signal.addEventListener('abort', () => {
+        remove(target, key);
+        if (target === current) render();
+      }, { once: true, signal: mounted.get(tab).controller.signal });
+      reveal(tab);
     }
   };
 }
