@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { loadSkills } from '@earendil-works/pi-coding-agent';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { createFixturePaths } from './helpers/mock-provider.js';
-import { loadHarnessSkills } from '../src/skill-sources.js';
+import { harnessSkillOptions, loadHarnessSkills } from '../src/skill-sources.js';
 
 const skill = (base: string, name: string, description: string) => {
   const dir = join(base, name);
@@ -38,4 +39,24 @@ test('Skills retain native user discovery and report deterministic source confli
   assert.equal((await loadHarnessSkills(paths, second)).skills.find(({ name }) => name === 'shared').description, 'Global instructions');
   rmSync(join(paths.skills, 'shared'), { recursive: true });
   assert.equal((await loadHarnessSkills(paths, second)).skills.find(({ name }) => name === 'shared').description, 'User shared instructions');
+});
+
+
+test('skill precedence survives collision diagnostics without structured metadata', (t) => {
+  const { root, paths } = createFixturePaths('http://127.0.0.1');
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const project = join(paths.cwd, '.mini-harness', 'skills');
+  skill(paths.skills, 'duplicate', 'Global instructions');
+  skill(project, 'duplicate', 'Project instructions');
+  const native = loadSkills({ cwd: paths.cwd, agentDir: paths.agent, includeDefaults: false, skillPaths: [paths.skills, project] });
+  assert.equal(native.skills[0].description, 'Global instructions');
+  const options = harnessSkillOptions(paths, paths.cwd);
+  const overridden = options.skillsOverride({
+    ...native, diagnostics: native.diagnostics.map(({ type, path, message }) => ({ type, path, message }))
+  });
+  assert.equal(overridden.skills[0].description, 'Project instructions');
+  assert.deepEqual(overridden.diagnostics.find(({ type }) => type === 'collision')?.collision, {
+    resourceType: 'skill', name: 'duplicate', winnerPath: join(project, 'duplicate', 'SKILL.md'),
+    loserPath: join(paths.skills, 'duplicate', 'SKILL.md')
+  });
 });

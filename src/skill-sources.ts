@@ -15,27 +15,63 @@ export function skillSources(paths: ReturnType<typeof getPaths>, cwd: string) {
 
 /** Keep Pi's native discovery, then resolve names with the application's precedence. */
 export function harnessSkillOptions(paths: ReturnType<typeof getPaths>, cwd: string) {
+  const [project, global, agent] = skillSources(paths, cwd).map(({ path }) => path);
+  const ancestors: string[] = [];
+  for (let path = cwd; ; path = dirname(path)) {
+    ancestors.push(path);
+    if (dirname(path) === path) break;
+  }
+  const userSkills = join(homedir(), '.agents', 'skills');
+  const priority = (path: string, scope?: string) => {
+    if (containsPath(project, path) && !containsPath(paths.home, path)) return 0;
+    if (containsPath(global, path)) return 2;
+    if (containsPath(agent, path)) return 3;
+    if (!containsPath(paths.home, path) && !containsPath(userSkills, path) &&
+      (scope === 'project' || containsPath(cwd, path) || ancestors.some((root) => containsPath(join(root, '.agents', 'skills'), path)))) return 1;
+    return 4;
+  };
   return {
-    additionalSkillPaths: skillSources(paths, cwd).map(({ path }) => path).filter(existsSync),
+    additionalSkillPaths: [project, global, agent].filter(existsSync),
     skillsOverride(base: LoadSkillsResult): LoadSkillsResult {
-      // Include losing native definitions too, so a global definition cannot hide a workspace one.
-      const candidates = [...base.skills.map(({ filePath }) => filePath),
-        ...base.diagnostics.filter(({ type }) => type === 'collision').map(({ path }) => path)];
-      const native = new Map(base.skills.map((skill) => [skill.filePath, skill.sourceInfo]));
-      const ancestors: string[] = [];
-      for (let path = cwd; ; path = dirname(path)) { ancestors.push(path); if (dirname(path) === path) break; }
-      const isWorkspace = (path: string) => {
-        if (containsPath(paths.home, path) || containsPath(join(homedir(), '.agents', 'skills'), path)) return false;
-        return native.get(path)?.scope === 'project' || containsPath(cwd, path) ||
-          ancestors.some((root) => containsPath(join(root, '.agents', 'skills'), path));
+      const winners = new Map(base.skills.map((skill) => [skill.name, skill]));
+      const rank = (skill: LoadSkillsResult['skills'][number]) => priority(skill.filePath, skill.sourceInfo.scope);
+      const candidates = new Set<string>();
+      for (const diagnostic of base.diagnostics) {
+        if (diagnostic.type !== 'collision') continue;
+        const loser = diagnostic.collision?.loserPath ?? diagnostic.path;
+        const winner = winners.get(diagnostic.collision?.name);
+        if (loser && (!winner || priority(loser) < rank(winner))) candidates.add(loser);
+      }
+      // Pi has already scanned all roots. Reopen only shadowed files that could win.
+      const loaded = candidates.size ? loadSkills({ cwd, agentDir: paths.agent, includeDefaults: false,
+        skillPaths: [...candidates].sort((a, b) => priority(a) - priority(b)) }) : { skills: [], diagnostics: [] };
+      const promoted = new Map<string, string>();
+      for (const skill of loaded.skills) {
+        const previous = winners.get(skill.name);
+        if (!previous || rank(skill) < rank(previous)) {
+          if (previous) promoted.set(skill.name, previous.filePath);
+          winners.set(skill.name, skill);
+        }
+      }
+      const namesByPath = new Map(loaded.skills.map(({ name, filePath }) => [filePath, name]));
+      for (const { collision } of loaded.diagnostics)
+        if (collision) namesByPath.set(collision.loserPath, collision.name);
+      const diagnostics = base.diagnostics.map((item) => {
+        if (item.type !== 'collision') return item;
+        const path = item.collision?.loserPath ?? item.path;
+        const name = item.collision?.name ?? namesByPath.get(path);
+        const winnerPath = winners.get(name)?.filePath;
+        if (!path || !winnerPath) return item;
+        const loserPath = path === winnerPath ? promoted.get(name) : path;
+        if (!loserPath) return item;
+        return { ...item, path: loserPath, collision: { ...item.collision, resourceType: 'skill' as const, name, winnerPath, loserPath } };
+      });
+      return {
+        diagnostics: [...diagnostics, ...loaded.diagnostics.filter(({ type }) => type !== 'collision')],
+        skills: [...winners.values()].map((skill) => ({ ...skill, sourceInfo: {
+          ...skill.sourceInfo, scope: rank(skill) < 2 ? 'project' : 'user'
+        } }))
       };
-      const workspace = candidates.filter(isWorkspace);
-      const user = candidates.filter((path) => !isWorkspace(path) && !containsPath(paths.home, path));
-      const result = loadSkills({ cwd, agentDir: paths.agent, includeDefaults: false, skillPaths: [
-        join(cwd, '.mini-harness', 'skills'), ...workspace, paths.skills, join(paths.agent, 'skills'), ...user
-      ].filter(existsSync) });
-      return { ...result, diagnostics: [...result.diagnostics, ...base.diagnostics.filter(({ type }) => type !== 'collision')].filter((item, index, all) => all.findIndex((other) => other.path === item.path && other.message === item.message) === index), skills: result.skills.map((skill) => ({ ...skill,
-        sourceInfo: { ...(native.get(skill.filePath) ?? skill.sourceInfo), scope: isWorkspace(skill.filePath) ? 'project' : 'user' } })) };
     }
   };
 }
