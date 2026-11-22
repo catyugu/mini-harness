@@ -1,7 +1,9 @@
-export function element<K extends keyof HTMLElementTagNameMap = 'div'>(id: string): HTMLElementTagNameMap[K] {
-  return document.getElementById(id) as HTMLElementTagNameMap[K];
+export function scopedElements(root: HTMLElement) {
+  function element<K extends keyof HTMLElementTagNameMap = 'div'>(id: string): HTMLElementTagNameMap[K] {
+    return (root.id === id ? root : root.querySelector('#' + id)) as HTMLElementTagNameMap[K];
+  }
+  return { element, value: (id: string) => element<'input'>(id).value.trim() };
 }
-export const value = (id: string) => element<'input'>(id).value.trim();
 const tokenFromUrl = new URLSearchParams(location.hash.slice(1)).get('token');
 if (tokenFromUrl) {
   sessionStorage.setItem('mini-harness-token', tokenFromUrl);

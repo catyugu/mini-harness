@@ -4,9 +4,9 @@ import type { BuiltinPlugin } from '../plugins.js';
 
 export const skills: BuiltinPlugin = {
   id: 'skills', title: 'Skills', description: 'Discover Agent Skills from home and the workspace.',
-  icon: 'skills', browser: '/builtins/skills.js', inject: ['harnessConfig', 'harnessRoutes'],
+  icon: 'skills', browser: '/builtins/skills.js', inject: ['harnessState', 'harnessRoutes'],
   setup(ctx: Context) {
-    const { cwd, agent, skills, projectSkills } = ctx.harnessConfig.paths;
+    const { cwd, agent, skills, projectSkills } = ctx.harnessState.paths;
     const paths = [skills, projectSkills];
     ctx.provide('harnessSkills', { paths });
     ctx.effect(() => ctx.harnessRoutes.register('GET', '/api/skills', async () => {

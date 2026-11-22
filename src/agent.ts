@@ -44,7 +44,14 @@ export class MiniHarnessRuntime {
     this.openSessions = new Map();
     this.openingSessions = new Map();
     this.semaphore = new Semaphore(this.settings.subagents.maxParallel);
-    this.plugins = new PluginHost(this);
+    this.plugins = new PluginHost({
+      paths, settings: () => this.settings, models: { list: () => this.availableModels() },
+      sessions: {
+        get: (id) => structuredClone(this.registry.get(id)),
+        list: () => structuredClone(this.registry.list())
+      },
+      delegation: this.delegation
+    });
   }
 
   async start() {
@@ -69,7 +76,7 @@ export class MiniHarnessRuntime {
     }));
   }
 
-  resolveModel(choice: ModelChoice = this.settings.model) {
+  resolveModel(choice: ModelChoice = this.settings.model, missingOk = false) {
     if (!choice?.provider) {
       if (choice?.id) throw new Error('A model ID requires a provider');
       return undefined;
@@ -77,10 +84,19 @@ export class MiniHarnessRuntime {
     // A provider-only override selects one of its available models.
     const id = choice.id || this.models.getAvailableSnapshot().find((m) => m.provider === choice.provider)?.id ||
       this.models.getModels(choice.provider)[0]?.id;
-    if (!id) throw new Error('No model is available for provider: ' + choice.provider);
+    if (!id) {
+      if (!missingOk) throw new Error('No model is available for provider: ' + choice.provider);
+      return undefined;
+    }
     const model = this.models.getModel(choice.provider, id);
-    if (!model) throw new Error('Unknown model: ' + choice.provider + '/' + id);
+    if (!model && !missingOk) throw new Error('Unknown model: ' + choice.provider + '/' + id);
     return model;
+  }
+
+  invalidateProviderSessions(provider: string) {
+    for (const [id, session] of this.openSessions) {
+      if (session.model?.provider === provider) this.staleSessions.add(id);
+    }
   }
 
   get hasActiveWork() { return Boolean(this.busy.size || this.openingSessions.size || this.compactions.size); }
@@ -117,19 +133,20 @@ export class MiniHarnessRuntime {
       SessionManager.create(item.cwd, this.paths.sessions, { id: item.id });
     if (item.file !== manager.getSessionFile()) this.registry.update(id, { file: manager.getSessionFile() });
     const customTools = this.plugins.getTools(id);
+    const recordedModel = item.model && this.resolveModel(item.model, true);
     const { session } = await createAgentSession({
       cwd: item.cwd,
       agentDir: this.paths.agent,
       modelRuntime: this.models,
-      model: this.resolveModel(item.model),
+      model: recordedModel,
       resourceLoader: loader,
       settingsManager,
       sessionManager: manager,
       tools: customTools.map((tool) => tool.name),
       customTools
     });
-    if (item.model && (session.model?.provider !== item.model.provider || session.model?.id !== item.model.id)) {
-      try { await session.setModel(this.resolveModel(item.model)); }
+    if (recordedModel && (session.model?.provider !== recordedModel.provider || session.model?.id !== recordedModel.id)) {
+      try { await session.setModel(recordedModel); }
       catch (error) { session.dispose(); throw error; }
     }
     this.openSessions.set(id, session);

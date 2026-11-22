@@ -110,7 +110,8 @@ test('desktop and mobile: send, navigate, settings and bulk select', async ({ br
         await page.getByRole('button', { name: 'Settings' }).click();
         await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
         await settingsSection(page, 'Plugins').click();
-        await expect(page.getByRole('checkbox', { name: /Shell/ })).not.toBeChecked();
+        await expect(page.getByRole('button', { name: 'Manage plugins', exact: true })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Install plugin', exact: true })).toBeHidden();
         await expect(page.getByRole('combobox', { name: 'Provider', exact: true })).toBeHidden();
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
         const dialog = await page.locator('#settingsPanel').boundingBox();
@@ -140,6 +141,31 @@ test('desktop and mobile: send, navigate, settings and bulk select', async ({ br
   }
 });
 
+test('settings layout stays consistent across viewport sizes and themes', async ({ browser }) => {
+  const mock = await createMockProvider();
+  const { root, paths } = createFixturePaths(mock.url);
+  const service = await startIsolatedHost(paths);
+  try {
+    for (const viewport of [{ width: 1366, height: 900 }, { width: 768, height: 1024 }, { width: 390, height: 844 }, { width: 320, height: 568 }]) {
+      const page = await browser.newPage({ viewport, reducedMotion: 'reduce' });
+      try {
+        await page.goto(service.url + '/#token=' + service.token);
+        await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toBeVisible();
+        await page.locator('#workspaceLabel').evaluate((label) => { label.textContent = 'workspace'; });
+        if (viewport.width <= 860) await page.getByRole('button', { name: 'Toggle navigation' }).click();
+        await page.getByRole('button', { name: 'Settings', exact: true }).click();
+        await settingsSection(page, 'Model').click();
+        for (const colorScheme of ['light', 'dark'] as const) {
+          await page.emulateMedia({ colorScheme });
+          await expect(page).toHaveScreenshot('settings-' + viewport.width + '-' + colorScheme + '.png', {
+            animations: 'disabled', caret: 'hide', maxDiffPixelRatio: 0.02
+          });
+        }
+      } finally { await page.close(); }
+    }
+  } finally { await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
 test('refresh and navigation preserve a run while another conversation completes', async ({ browser }) => {
   for (const viewport of [{ width: 1366, height: 900 }, { width: 390, height: 844 }]) {
     let entered: () => void, release: () => void;
@@ -163,14 +189,15 @@ test('refresh and navigation preserve a run while another conversation completes
       await openSidebar();
       await page.getByRole('button', { name: 'Settings', exact: true }).click();
       await settingsSection(page, 'Appearance').click();
-      await page.getByLabel('Theme', { exact: true }).selectOption('dark');
+      await page.getByRole('combobox', { name: 'Theme', exact: true }).selectOption('dark');
       await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-      if (viewport.width <= 560) await page.getByRole('button', { name: /All settings/ }).click();
-      await settingsSection(page, 'Agent').click();
-      await page.getByLabel('Parallel children', { exact: true }).fill('2');
-      await page.getByRole('button', { name: 'Save settings' }).click();
-      await expect(page.locator('#settingsStatus')).toHaveText('Saved.');
       await page.getByRole('button', { name: 'Close settings' }).click();
+      await openSidebar();
+      await page.getByRole('button', { name: 'Browse plugins' }).click();
+      await page.getByRole('button', { name: 'Subagents settings', exact: true }).click();
+      await page.getByLabel('Parallel children · subagents', { exact: true }).fill('2');
+      await page.getByRole('button', { name: 'Save configuration' }).click();
+      await expect(page.getByText('Saved.', { exact: true })).toBeVisible();
       await openSidebar();
       await page.getByRole('button', { name: /New conversation/ }).click();
       await page.getByRole('textbox', { name: 'Message' }).fill('Second conversation');
@@ -220,24 +247,24 @@ test('plugin schema controls, recursive tree navigation, batch export and perman
   const service = await startIsolatedHost(paths);
   try {
     await page.goto(service.url + '/#token=' + service.token);
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
-    await settingsSection(page, 'Plugins').click();
-    await page.getByRole('checkbox', { name: 'Example', exact: true }).check();
+    await page.getByRole('button', { name: 'Browse plugins' }).click();
+    await page.getByRole('switch', { name: 'Example', exact: true }).check();
+    await page.getByRole('button', { name: 'Example settings', exact: true }).click();
     await page.getByLabel('Prefix · example', { exact: true }).fill('Total');
     await page.getByLabel('Count · example', { exact: true }).fill('5');
     await page.getByLabel('Mode · example', { exact: true }).selectOption('"full"');
     await page.getByLabel('Enabled · example', { exact: true }).uncheck();
     await page.getByLabel('Threshold · example', { exact: true }).fill('0.75');
     await page.getByLabel('Tags · example', { exact: true }).fill('["custom"]');
-    await page.getByRole('button', { name: 'Save settings' }).click();
-    await expect(page.locator('#settingsStatus')).toHaveText('Saved.');
+    await page.getByRole('button', { name: 'Save configuration' }).click();
+    await expect(page.getByRole('region', { name: 'Plugin catalog' }).getByRole('status').filter({ hasText: /Saved|Bad prefix/ })).toHaveText('Saved.');
     expect(readJson<any>(paths.settings, {}).pluginConfig.example).toEqual({ prefix: 'Total', count: 5, mode: 'full', enabled: false,
       limits: { threshold: 0.75 }, tags: ['custom'] });
     await page.getByLabel('Prefix · example', { exact: true }).fill('bad');
-    await page.getByRole('button', { name: 'Save settings' }).click();
-    await expect(page.locator('#settingsStatus')).toContainText('Bad prefix');
+    await page.getByRole('button', { name: 'Save configuration' }).click();
+    await expect(page.getByRole('region', { name: 'Plugin catalog' }).getByRole('status').filter({ hasText: /Saved|Bad prefix/ })).toContainText('Bad prefix');
     expect(readJson<any>(paths.settings, {}).pluginConfig.example.prefix).toBe('Total');
-    await page.getByRole('button', { name: 'Close settings' }).click();
+    await page.getByRole('button', { name: 'New conversation', exact: true }).click();
     await page.getByRole('textbox', { name: 'Message' }).fill('Parent task');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.locator('.message.assistant')).toHaveText('Delegation complete');
@@ -483,22 +510,26 @@ test('frontend plugins own all five slots and clean up on disable and reconfigur
     await settingsSection(page, 'Extensions').click();
     await expect(page.getByText('Plugin settings', { exact: true })).toBeVisible();
     await settingsSection(page, 'Plugins').click();
+    await page.getByRole('button', { name: 'Manage plugins', exact: true }).click();
+    await page.getByRole('button', { name: 'UI example settings', exact: true }).click();
     await page.getByLabel('Button label · ui-example', { exact: true }).fill('Updated plugin');
-    await page.getByRole('button', { name: 'Save settings', exact: true }).click();
-    await expect(page.locator('#settingsStatus')).toHaveText('Saved.');
+    await page.getByRole('button', { name: 'Save configuration', exact: true }).click();
+    await expect(page.getByText('Saved.', { exact: true })).toBeVisible();
     await expect(page.locator('[data-example-slot=sidebar]')).toHaveCount(1);
     await expect(page.locator('[data-example-slot=sidebar]')).toHaveText('Updated plugin');
     await expect(page.getByRole('button', { name: 'Dependent Updated plugin', exact: true })).toBeAttached();
-    await page.getByRole('checkbox', { name: 'UI example', exact: true }).uncheck();
-    await page.getByRole('checkbox', { name: 'Dependent UI', exact: true }).uncheck();
-    await page.getByRole('button', { name: 'Save settings', exact: true }).click();
-    await expect(page.locator('#settingsStatus')).toHaveText('Saved.');
+    await page.getByRole('button', { name: 'All plugins', exact: true }).click();
+    await page.getByRole('switch', { name: 'Dependent UI', exact: true }).uncheck();
+    await expect(page.getByRole('button', { name: 'Dependent Updated plugin', exact: true })).toHaveCount(0);
+    await page.getByRole('switch', { name: 'UI example', exact: true }).uncheck();
     await expect(page.locator('[data-example-slot]')).toHaveCount(0);
     await expect(page.locator('html')).toHaveAttribute('data-dependency-disposal', 'ordered');
     await expect(page.getByText('Plugin preview', { exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
     await expect(settingsSection(page, 'Example settings')).toHaveCount(0);
     await expect(settingsSection(page, 'Extensions')).toBeHidden();
     await page.getByRole('button', { name: 'Close settings' }).click();
+    await page.getByRole('button', { name: 'Inserted by plugin', exact: true }).click();
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('/ex');
     await expect(suggestions(page).getByRole('option', { name: /Add a plugin note/ })).toHaveCount(0);
     await page.locator('.tool-card summary').click();
@@ -557,24 +588,26 @@ test('custom provider onboarding and switching workspace work entirely in the GU
   try {
     await page.goto(service.url + '/#token=' + service.token);
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
-    await page.getByText('Custom API endpoint', { exact: true }).click();
-    await page.getByRole('textbox', { name: 'Provider ID', exact: true }).fill('gui-added');
-    await page.getByRole('textbox', { name: 'API endpoint', exact: true }).fill(mock.url);
-    await page.getByRole('textbox', { name: 'Model IDs (one per line)', exact: true }).fill('new-model');
-    await page.getByText('Per-model options', { exact: true }).click();
-    await page.getByRole('textbox', { name: 'Display name', exact: true }).fill('GUI Model');
-    await page.getByRole('button', { name: 'Save endpoint', exact: true }).click();
-    await expect(page.locator('#providerStatus')).toContainText('Endpoint saved.');
-    await expect(page.getByRole('option', { name: 'GUI Model', exact: true })).toHaveCount(1);
-    await expect(page.getByRole('combobox', { name: 'Provider', exact: true })).toHaveValue('gui-added');
-    await page.getByRole('textbox', { name: 'API key', exact: true }).fill('test-only-key');
-    await page.getByRole('button', { name: 'Save API key', exact: true }).click();
-    await expect(page.locator('#settingsStatus')).toHaveText('API key saved locally.');
-    await expect(page.getByRole('combobox', { name: 'Provider', exact: true })).toHaveValue('gui-added');
-    await page.getByRole('combobox', { name: 'Model ID', exact: true }).selectOption('new-model');
-    await page.getByRole('button', { name: 'Save settings', exact: true }).click();
-    await expect(page.locator('#settingsStatus')).toHaveText('Saved.');
+    const settings = page.getByRole('dialog', { name: 'Settings' });
+    await expect(settings.getByRole('combobox', { name: 'Provider', exact: true })).toHaveCount(0);
+    await settings.getByRole('button', { name: 'Add provider' }).click();
+    await expect(settings.getByRole('combobox', { name: 'Provider', exact: true })).toBeVisible();
+    await settings.getByRole('radio', { name: 'Custom API' }).check();
+    await settings.getByRole('textbox', { name: 'Provider ID', exact: true }).fill('gui-added');
+    await settings.getByRole('textbox', { name: 'API endpoint', exact: true }).fill(mock.url);
+    await settings.getByRole('textbox', { name: 'Model ID', exact: true }).fill('new-model');
+    await settings.getByRole('textbox', { name: 'Display name', exact: true }).fill('GUI Model');
+    await settings.getByLabel('API key', { exact: true }).fill('test-only-key');
+    await settings.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(settings.getByText('Provider saved.', { exact: true })).toBeVisible();
+    await settings.getByRole('button', { name: 'Edit gui-added', exact: true }).click();
+    await expect(settings.getByLabel('API key', { exact: true })).toHaveValue('');
+    await settings.getByRole('textbox', { name: 'Display name', exact: true }).fill('GUI Model edited');
+    await settings.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(settings.getByText('Provider saved.', { exact: true })).toBeVisible();
+    await expect(settings.getByRole('button', { name: 'Edit gui-added', exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Close settings' }).click();
+    await chooseModel(page, 'GUI Model edited');
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Configured from GUI');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.locator('.message.assistant')).toHaveText('Mock response');
@@ -668,12 +701,23 @@ test('plugin catalog applies configuration and removes disabled browser capabili
     await expect(page.locator('#sidebarExtensions').getByRole('button', { name: 'Workspace files', includeHidden: true })).toHaveCount(0);
     await files.check();
     await expect(page.locator('#sidebarExtensions').getByRole('button', { name: 'Workspace files', includeHidden: true })).toHaveCount(1);
-    await catalog.getByRole('button', { name: 'Configure Subagents' }).click();
+    await catalog.getByRole('button', { name: 'Install plugin', exact: true }).click();
+    const install = page.getByRole('dialog', { name: 'Install plugin' });
+    await install.getByLabel('Plugin ID', { exact: true }).fill('local-example');
+    await expect(install.getByRole('button', { name: 'Install plugin', exact: true })).toBeDisabled();
+    await install.getByLabel('Plugin bundle files').setInputFiles({
+      name: 'plugin.js', mimeType: 'text/javascript', buffer: Buffer.from('export default function setup() {}')
+    });
+    await expect(install.getByRole('list', { name: 'Selected files' })).toHaveText('plugin.js');
+    await install.getByRole('button', { name: 'Install plugin', exact: true }).click();
+    await expect(install).toBeHidden();
+    await expect(catalog.getByRole('switch', { name: 'local-example', exact: true })).not.toBeChecked();
+    await catalog.getByRole('button', { name: 'Subagents settings' }).click();
     await catalog.getByRole('spinbutton', { name: 'Maximum child depth · subagents' }).fill('2');
     await catalog.getByRole('button', { name: 'Save configuration' }).click();
     await expect(catalog.getByText('Saved.', { exact: true })).toBeVisible();
     await catalog.getByRole('button', { name: /All plugins/ }).click();
-    await catalog.getByRole('button', { name: 'Configure Subagents' }).click();
+    await catalog.getByRole('button', { name: 'Subagents settings' }).click();
     await expect(catalog.getByRole('spinbutton', { name: 'Maximum child depth · subagents' })).toHaveValue('2');
     await page.getByRole('button', { name: 'Toggle navigation' }).click();
     await page.getByRole('button', { name: 'New conversation' }).click();

@@ -13,6 +13,7 @@ const paths = {
   folder: 'M3 6h7l2 2h9v12H3z',
   'folder-open': 'M4 19V5h6l2 2h8v4M4 19l3-8h15l-3 8z', attach: 'm8 12 6-6a3 3 0 0 1 4 4l-8 8a5 5 0 0 1-7-7l9-9',
   edit: 'm4 16 12-12 4 4L8 20H4z', trash: 'M3 6h18M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7M14 10v7',
+  refresh: 'M20 7v5h-5M19 12a7 7 0 1 0-2 5',
   copy: 'M8 8h12v12H8zM16 8V4H4v12h4', chevron: 'm9 5 7 7-7 7', skills: 'm12 3 3 6 6 3-6 3-3 6-3-6-6-3 6-3z'
 };
 export function icon(name: keyof typeof paths) {

@@ -1,4 +1,3 @@
-import { element } from './api.js';
 export function schemaFields(plugin: string, schema: Record<string, any>, values: any, path: string[] = []) {
   const group = document.createElement('div');
   group.className = 'plugin-fields';
@@ -61,7 +60,7 @@ export function schemaFields(plugin: string, schema: Record<string, any>, values
   return group;
 }
 
-export function readPluginValues(current: Record<string, Record<string, unknown>>, container: HTMLElement = element('pluginSettings')) {
+export function readPluginValues(current: Record<string, Record<string, unknown>>, container: HTMLElement) {
   const config = structuredClone(current);
   for (const field of container.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('[data-plugin]')) {
     if (field.matches(':disabled')) continue;

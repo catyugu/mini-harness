@@ -1,8 +1,17 @@
-import type { FrontendApi } from './extensions.js';
+import type { BrowserPlugin, FrontendApi } from './extensions.js';
 import { closeOnBackdrop, fromMarkup } from './primitives.js';
-import { element, payload } from './api.js';
+import { scopedElements, payload } from './api.js';
 import { fileLabel, icon } from './icons.js';
-export function workspacePicker(api: FrontendApi, path: string) {
+export const workspacePlugin: BrowserPlugin = {
+  id: 'core:workspace', inject: ['miniState'],
+  setup(ctx, api) { ctx.provide('miniWorkspace', workspacePicker(api, ctx.miniState.get().workspace)); }
+};
+
+declare module 'cordis' {
+  interface Context { miniWorkspace: ReturnType<typeof workspacePicker> }
+}
+
+function workspacePicker(api: FrontendApi, path: string) {
   const button = fromMarkup<HTMLButtonElement>(`
     <button id="workspaceOpen" class="workspace-button" type="button" aria-label="Choose workspace"><span data-icon="folder"></span><small id="workspaceLabel"></small><span class="workspace-chevron" data-icon="chevron"></span></button>`);
   const label = button.querySelector('small');
@@ -17,6 +26,7 @@ export function workspacePicker(api: FrontendApi, path: string) {
     </form>
   </dialog>`);
   api.mount('dialogs', dialog);
+  const { element } = scopedElements(dialog);
   closeOnBackdrop(dialog);
   const status = element('workspaceStatus');
   const sidebar = fromMarkup(`<section class="workspace-nav" aria-label="Recent workspaces">
@@ -62,5 +72,5 @@ export function workspacePicker(api: FrontendApi, path: string) {
     catch (error) { status.textContent = error.message; button.disabled = false; }
   };
   api.onDispose(() => button.remove());
-  return (parent: HTMLElement) => { if (button.parentElement !== parent) parent.append(button); };
+  return button;
 }

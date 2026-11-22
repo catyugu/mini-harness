@@ -63,7 +63,14 @@ test('GUI APIs configure providers, persist keys privately, discover Skills and 
   const history = (await request('/sessions/' + session.id)).body;
   assert.ok(history.messages.some((m) => m.role === 'user' && m.content.some((b) => b.type === 'image')));
   assert.equal((await request('/sessions/' + session.id, 'PATCH', { title: 'Renamed task' })).body.title, 'Renamed task');
-  assert.equal((await request('/providers', 'DELETE', { id: 'gui-test' })).status, 400);
+  assert.equal((await request('/providers', 'DELETE', { id: 'gui-test' })).status, 200);
+  const afterRemoval = (await request('/bootstrap')).body;
+  assert.deepEqual(afterRemoval.settings.model, { provider: '', id: '' });
+  assert.equal(afterRemoval.providers.some((provider) => provider.id === 'gui-test'), false);
+  assert.equal(readFileSync(join(paths.home, 'auth.json'), 'utf8').includes('gui-private-key'), false);
+  const afterHistory = await request('/sessions/' + session.id);
+  assert.equal(afterHistory.status, 200);
+  assert.deepEqual(afterHistory.body.messages, history.messages);
 });
 
 test('manual compaction uses Pi and preserves an idle conversation on failure', async (t) => {

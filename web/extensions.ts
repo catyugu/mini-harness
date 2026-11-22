@@ -50,14 +50,20 @@ export interface FrontendServices {
 }
 export type FrontendSetup = (api: FrontendApi, services: FrontendServices) => void | (() => void) | Promise<void | (() => void)>;
 
+export interface BrowserPlugin {
+  id: string;
+  inject?: string[];
+  setup(ctx: Context, api: FrontendApi): ReturnType<FrontendSetup>;
+}
+
 export class FrontendHost {
-  private readonly ctx = new Context();
   private readonly fibers = new Map<string, Fiber>();
   private readonly contributions = new WeakMap<HTMLElement, number>();
   private readonly renderers = new Map<string, (tool: ToolView) => HTMLElement | undefined>();
   private readonly actions = new Map<string, (tool: ToolView) => HTMLElement | undefined>();
 
   constructor(
+    private readonly ctx: Context,
     private slot: (name: Slot) => HTMLElement,
     private ui: Pick<FrontendApi, 'request' | 'insert'> & { inspect(title: string, content: HTMLElement): () => void },
     private services: FrontendServices,
@@ -68,10 +74,14 @@ export class FrontendHost {
     this.ctx.provide('harnessBrowser', services);
   }
 
-  async enable(id: string, setup: FrontendSetup, config: Record<string, unknown> = {}) {
+  enable(id: string, setup: FrontendSetup, config: Record<string, unknown> = {}) {
+    return this.mountPlugin({ id, inject: ['harnessBrowser'], setup: (ctx, api) => setup(api, ctx.harnessBrowser) }, config);
+  }
+
+  async mountPlugin({ id, inject = [], setup }: BrowserPlugin, config: Record<string, unknown> = {}) {
     await this.disable(id);
     const controller = new AbortController();
-    const fiber = this.ctx.inject(['harnessBrowser'], async (ctx) => {
+    const fiber = this.ctx.inject(inject, async (ctx) => {
       const own = (install: () => (() => void | Promise<void>)) => {
         if (!controller.signal.aborted) ctx.effect(install);
       };
@@ -83,7 +93,7 @@ export class FrontendHost {
         });
       let closeInspector: (() => void) | undefined;
       own(() => () => closeInspector?.());
-      const cleanup = await setup({
+      const cleanup = await setup(ctx, {
         signal: controller.signal,
         request: (path, options) => this.ui.request(path, { ...options, signal: options?.signal
           ? AbortSignal.any([controller.signal, options.signal]) : controller.signal }),
@@ -108,7 +118,7 @@ export class FrontendHost {
           if (controller.signal.aborted) void Promise.resolve().then(dispose).catch(this.services.report);
           else own(() => dispose);
         }
-      }, ctx.harnessBrowser);
+      });
       if (cleanup) own(() => cleanup);
     });
     this.fibers.set(id, fiber);
@@ -126,6 +136,10 @@ export class FrontendHost {
     this.controllers.delete(id);
     try { await fiber?.dispose(); }
     catch (error) { this.services.report(error); }
+  }
+
+  async dispose() {
+    for (const id of [...this.fibers.keys()].reverse()) await this.disable(id);
   }
 
   render(tool: ToolView, action = false) {

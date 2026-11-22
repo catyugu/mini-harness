@@ -6,9 +6,9 @@ import type { BuiltinPlugin } from '../plugins.js';
 
 export const files: BuiltinPlugin = {
   id: 'files', title: 'Workspace files', description: 'Read, search and edit files within the workspace.',
-  icon: 'files', browser: '/builtins/files.js', inject: ['harnessConfig', 'harnessTools', 'harnessRoutes'],
+  icon: 'files', browser: '/builtins/files.js', inject: ['harnessState', 'harnessTools', 'harnessRoutes'],
   setup(ctx: Context) {
-    const { cwd, home } = ctx.harnessConfig.paths;
+    const { cwd, home } = ctx.harnessState.paths;
     const inspection = new Inspection(cwd, home);
     const definitions: ToolDefinition[] = inspection.files.tools();
     for (const tool of definitions) {

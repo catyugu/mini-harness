@@ -1,6 +1,6 @@
 # Local plugins
 
-Install reviewed ESM code in `~/.mini-harness/plugins/<id>/plugin.js`. IDs start with a lowercase letter and contain lowercase letters, digits and hyphens (up to 64 characters). Plugins run with your user permissions. Enable them in the Plugins page or in Settings.
+Install reviewed ESM code in `~/.mini-harness/plugins/<id>/plugin.js`. IDs start with a lowercase letter and contain lowercase letters, digits and hyphens (up to 64 characters). Plugins run with your user permissions. Enable them in the Plugins page. Settings also links to this page.
 
 ## Manifest and configuration
 
@@ -72,7 +72,7 @@ Tool names must be unique, use letters, digits, underscores or hyphens, and be 1
 
 ## Services and lifecycle
 
-Public metadata services are `harnessAgent.availableModels()`, `harnessSessions.get(id)` / `list()`, and `harnessConfig.get()` / `paths`. The host uses internal Cordis services for routes, tool definitions, delegation and Skill directories.
+Public metadata services are `harnessModels.list()` (also available as `harnessAgent.availableModels()`) and `harnessSessions.get(id)` / `list()`. Read plugin settings through `api.config` and register tools and routes through the plugin API. Session metadata is returned as a snapshot.
 
 Built-in and local setup functions run in Cordis scopes. Dependencies mount first and unload last. Disabling a required plugin also requires disabling its dependents. Reconfiguring a dependency restarts its enabled dependents. Unchanged plugin scopes stay mounted. A route handler receives `{ url, body(maxBytes?), signal }`. The signal aborts when its route unloads. Read JSON with `await body()` and return a JSON-serializable result.
 
@@ -135,7 +135,7 @@ export default function setup(api) {
 
 The browser runs each plugin in a Cordis scope and disposes its slots, completions, settings pages, tool registrations and inspector content when the scope unloads. Pass `api.signal` to document or window listeners or release them with `onDispose`. Dependencies mount first and dispose last; configuration changes also rebuild dependent browser extensions. Setup failures remove partial contributions and leave ordinary chat available. The backend and UI share one plugin switch; attachments, file inspection and Skills use these same extension interfaces.
 
-The Plugins page can install a local bundle containing `plugin.js`, optional `plugin.json` and `web.js` (at most 1 MiB combined). New installations stay disabled. Disable and save before uninstalling; uninstall removes the local plugin directory permanently. Larger development plugins can still be placed in the local plugins directory manually.
+The Plugins page can install a local bundle containing `plugin.js`, optional `plugin.json` and `web.js` (at most 1 MiB combined). New installations stay disabled. Disable the plugin before uninstalling; uninstall removes the local plugin directory permanently. Larger development plugins can still be placed in the local plugins directory manually.
 
 ## GUI API additions
 

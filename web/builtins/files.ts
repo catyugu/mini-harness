@@ -1,5 +1,6 @@
 import type { FrontendApi, FrontendSetup, Suggestion } from '../extensions.js';
 import { icon, fileLabel } from '../icons.js';
+import { button as control } from '../primitives.js';
 
 interface FileEntry { name: string; directory: boolean }
 async function readDirectory(api: FrontendApi, path: string, signal?: AbortSignal) {
@@ -19,19 +20,15 @@ function fileInspector(api: FrontendApi, changed: () => string[]) {
   const fail = (error: Error) => { if (!disposed) { const hint = document.createElement('p'); hint.className = 'hint'; hint.textContent = error.message; root.append(hint); } };
   const showFile = (path: string, canDiff: boolean) => {
     const container = document.createElement('div'), toolbar = document.createElement('div');
-    const content = document.createElement('div'), back = document.createElement('button');
+    const content = document.createElement('div'), back = control('Back to files', 'quiet');
     const modes = new Map<boolean, HTMLButtonElement>();
     toolbar.className = 'file-view-actions';
-    back.type = 'button';
-    back.className = 'link-button';
-    back.textContent = 'Back to files';
+    back.classList.add('file-back');
+    back.prepend(icon('chevron'));
     back.onclick = () => void show();
     toolbar.append(back);
     if (canDiff) for (const diff of [false, true]) {
-      const toggle = document.createElement('button');
-      toggle.type = 'button';
-      toggle.className = 'link-button';
-      toggle.textContent = diff ? 'Diff' : 'Preview';
+      const toggle = control(diff ? 'Diff' : 'Preview', 'quiet');
       toggle.onclick = () => void load(diff);
       modes.set(diff, toggle);
       toolbar.append(toggle);
@@ -104,7 +101,10 @@ function fileInspector(api: FrontendApi, changed: () => string[]) {
   const show = async () => {
     const current = ++request;
     root.replaceChildren(); api.inspect('Workspace', root);
-    const refresh = document.createElement('button'); refresh.type = 'button'; refresh.className = 'small-button'; refresh.textContent = 'Refresh files'; refresh.onclick = () => void show(); root.append(refresh);
+    const refresh = control('Refresh files', 'quiet');
+    refresh.prepend(icon('refresh'));
+    refresh.onclick = () => void show();
+    root.append(refresh);
     try {
       const changes = await api.request<{ available: boolean; files: { path: string; status: string }[]; reason?: string }>('/files/changes');
       if (disposed || current !== request) return;

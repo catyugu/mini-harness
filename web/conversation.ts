@@ -3,7 +3,7 @@ import type { Conversation, ModelChoice } from '../src/registry.js';
 import type { RunEvent, RunInfo, ViewMessage } from '../src/protocol.js';
 import type { Bootstrap, ConversationView, ThinkingLevel } from './types.js';
 import { renderMarkdown, markdownSource } from './markdown.js';
-import { element, value, api as request, data, payload } from './api.js';
+import { scopedElements, api as request, data, payload } from './api.js';
 import { createMessageView } from './messages.js';
 import { CommandRegistry, type ComposerCommand } from './commands.js';
 import { createComposer } from './composer.js';
@@ -15,18 +15,21 @@ interface ConversationServices {
   bootstrap(): Bootstrap;
   applySettings(settings: Settings): void;
   renderSessions(): void;
+  setActive(id: string | undefined): void;
   syncSessions(): Promise<void>;
   reveal(id: string | null): void;
   addSession(item: Conversation): void;
   exportSessions(ids: string[]): Promise<void>;
   closeDrawer(): void;
-  placeWorkspace(parent: HTMLElement): void;
+  placeWorkspace(welcome?: HTMLElement): void;
+  setTitle(title: string): void;
+  provideSlot(name: 'composer' | 'approvals', node: HTMLElement): void;
   changed(): void;
   renderTool: FrontendHost['render'];
 }
 
 export function conversationView(api: FrontendApi, options: ConversationServices) {
-  api.mount('conversation', fromMarkup(`
+  const view = fromMarkup(`
     <div class="conversation">
       <section id="welcome" class="welcome">
         <img src="/logo.svg" width="52" height="52" alt="">
@@ -57,7 +60,11 @@ export function conversationView(api: FrontendApi, options: ConversationServices
           </div>
         </form>
       </div>
-    </div>`));
+    </div>`);
+  api.mount('conversation', view);
+  const { element, value } = scopedElements(view);
+  options.provideSlot('composer', element('composerExtensions'));
+  options.provideSlot('approvals', element('approvalRequests'));
 
   const messages = element('messages');
   const welcome = element('welcome');
@@ -93,7 +100,7 @@ export function conversationView(api: FrontendApi, options: ConversationServices
   let modelDraft: ModelChoice;
   let conversationModel: ModelChoice;
   let conversationThinking: ThinkingLevel;
-  const modelPicker = createModelPicker((choice) => { modelDraft = choice; updateModelControls(); }, api.signal);
+  const modelPicker = createModelPicker(view, (choice) => { modelDraft = choice; updateModelControls(); }, api.signal);
   let changedFiles: string[] = [];
   const lastInputs = new Map<string, { message: string; attachments: import('../src/input.js').Attachment[] }>();
   const isRunning = (run?: RunInfo) => run?.state === 'queued' || run?.state === 'running';
@@ -107,7 +114,7 @@ export function conversationView(api: FrontendApi, options: ConversationServices
     prompt.style.height = Math.min(prompt.scrollHeight, 210) + 'px';
   };
   const commands = new CommandRegistry();
-  const composerUi = createComposer(report, commands, api.signal);
+  const composerUi = createComposer(view, report, commands, api.signal);
   const { addMessage, appendHistory, toolCard } = createMessageView(messages, { render: options.renderTool }, () => {
     const last = lastInputs.get(active);
     if (last && !sending) void send(last.message, last.attachments);
@@ -116,7 +123,7 @@ export function conversationView(api: FrontendApi, options: ConversationServices
   function showWelcome(show: boolean) {
     welcome.hidden = !show;
     messages.hidden = show;
-    options.placeWorkspace(show ? welcome : element('titleBlock'));
+    options.placeWorkspace(show ? welcome : undefined);
   }
 
   function showConversation(item?: ConversationView | Conversation, history: ViewMessage[] = []) {
@@ -124,6 +131,7 @@ export function conversationView(api: FrontendApi, options: ConversationServices
     setSending(isRunning(item?.run));
     showRunSummary(item?.run);
     active = item?.id;
+    options.setActive(active);
     conversationModel = item?.model;
     conversationThinking = (item as ConversationView)?.thinkingLevel;
     changedFiles = item?.run?.changedFiles ?? [];
@@ -139,7 +147,7 @@ export function conversationView(api: FrontendApi, options: ConversationServices
       else sessionStorage.removeItem('mini-harness-active:' + options.bootstrap().workspace);
     }
     updateModelControls();
-    element('conversationTitle').textContent = item?.title ?? 'New conversation';
+    options.setTitle(item?.title ?? 'New conversation');
     messages.replaceChildren();
     for (const message of history) appendHistory(message);
     if (item?.run?.error) {
@@ -220,6 +228,11 @@ export function conversationView(api: FrontendApi, options: ConversationServices
   async function send(text: string, attached?: import('../src/input.js').Attachment[]) {
     const attachments = attached ?? composerUi.attachments();
     if (sending || pendingNavigation || (!text.trim() && !attachments.length)) return;
+    if (!modelPicker.selected()) {
+      showStatus('Choose a configured model before sending.');
+      modelPicker.open();
+      return;
+    }
     const choice = modelDraft;
     const thinkingLevel = thinkingSelect.value || undefined;
     const request = ++navigation;
