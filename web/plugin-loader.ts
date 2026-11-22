@@ -2,9 +2,9 @@ import type { FrontendHost, FrontendSetup } from './extensions.js';
 import type { Bootstrap } from './types.js';
 import { data } from './api.js';
 
-export function createPluginLoader(host: FrontendHost, report: (error: Error) => void) {
+export function createPluginLoader(host: FrontendHost) {
   const mounted = new Map<string, string>();
-  let work = Promise.resolve();
+  let work = Promise.resolve<Error[]>([]);
 
   return (snapshot: Bootstrap) => (work = work.then(async () => {
     const enabled = new Map(snapshot.plugins.filter(({ id }) => snapshot.settings.plugins[id]).map((plugin) => [plugin.id, plugin]));
@@ -25,12 +25,12 @@ export function createPluginLoader(host: FrontendHost, report: (error: Error) =>
       await host.disable(id);
       mounted.delete(id);
     }
-    const failed = new Set<string>();
+    const failures = new Map<string, Error>();
     for (const [id, key] of signatures) {
       const plugin = enabled.get(id);
       if ((!plugin.browser && !plugin.web) || mounted.has(id)) continue;
       try {
-        if (plugin.requires?.some((parent) => failed.has(parent))) throw new Error('Browser dependency failed: ' + id);
+        if (plugin.requires?.some((parent) => failures.has(parent))) throw new Error('Browser dependency failed: ' + id);
         let setup: FrontendSetup;
         let config = snapshot.settings.pluginConfig[id];
         if (plugin.browser) setup = (await import(plugin.browser)).default;
@@ -45,9 +45,10 @@ export function createPluginLoader(host: FrontendHost, report: (error: Error) =>
         await host.enable(id, setup, config);
         mounted.set(id, key);
       } catch (error) {
-        failed.add(id);
-        report(error);
+        const message = error instanceof Error ? error.message : String(error);
+        failures.set(id, new Error('Unable to load browser plugin ' + id + ': ' + message, { cause: error }));
       }
     }
-  }).catch(report));
+    return [...failures.values()];
+  }).catch((error) => [error instanceof Error ? error : new Error(String(error))]));
 }

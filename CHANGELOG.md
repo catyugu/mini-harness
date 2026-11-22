@@ -3,7 +3,7 @@
 ## Unreleased
 
 - Unify palette, semantic tokens, surface elevation, independent text/code/terminal sizes, focus and reduced-motion behavior.
-- Add scoped single/list/keyed/chain contribution regions with priority replacement, original-position retention and lifecycle restoration.
+- Add scoped list and keyed contribution regions with deterministic priority, Chat matching and lifecycle restoration.
 - Give workspaces persisted identities, safe relocation and confirmed cascading deletion; restore formerly hidden legacy sessions and persist per-session resource tabs.
 - Project Chat and Trajectory from Pi entry identities, arguments, results and measured tool durations; preserve final answers outside process folding and omit incomplete round usage.
 - Add a session Todo plugin and replaceable composer docks; retain user-level Skills with workspace > application > user conflict precedence.
@@ -13,7 +13,7 @@
 - Add neutral light/dark surfaces, consistent icons, a collapsed navigation rail, grouped settings, an input-level model selector and a single file inspector.
 - Configure provider catalogs, credentials and custom API endpoints from Settings; switch local workspaces while idle. Foreground startup opens a browser unless `--no-open` is supplied.
 - Attach images and UTF-8 text, find files with `@`, invoke native Skills, copy messages, retry failed image submissions, and queue Pi steering/follow-up messages during runs.
-- Inspect tool arguments/results, workspace files, staged/unstaged Git diff and successful file edits. Request one-time approval for built-in Shell commands and include approval events in Trajectory.
+- Inspect tool arguments/results, workspace files, staged/unstaged Git diff and successful file edits. Request one-time approval for built-in Shell commands.
 - Keep empty drafts out of persistent history; search, rename and delete conversation trees. Install disabled local plugin bundles and permanently uninstall them from Plugins.
 - Add behavior tests for the GUI and API, including narrow viewports, reduced viewport height and both color schemes.
 

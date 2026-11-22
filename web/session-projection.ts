@@ -1,4 +1,6 @@
-import type { RunEvent, RunInfo, SessionFact, StreamEvent, ViewMessage } from '../src/protocol.js';
+import type { RunEvent, RunInfo, StreamEvent, ViewMessage } from '../src/protocol.js';
+
+export const isRunning = (run?: RunInfo) => run?.state === 'queued' || run?.state === 'running';
 
 export interface TurnProjection {
   id: string;
@@ -38,11 +40,10 @@ export function textContent(message: Pick<ViewMessage, 'content'>) {
   return typeof message.content === 'string' ? message.content : message.content.filter(({ type }) => type === 'text').map(({ text }) => text ?? '').join('\n');
 }
 
-
 type LiveTool = Extract<StreamEvent, { type: 'tool' }>;
 
-export function sessionProjection(messages: ViewMessage[] = [], runs: RunInfo[] = [], facts: SessionFact[] = [], tools: LiveTool[] = []) {
-  return { messages, runs, facts, tools: new Map(tools.map((tool) => [tool.id, tool])) };
+export function sessionProjection(messages: ViewMessage[] = [], runs: RunInfo[] = [], tools: LiveTool[] = []) {
+  return { messages, runs, tools: new Map(tools.map((tool) => [tool.id, tool])) };
 }
 
 export function mergeSessionEvent(history: ReturnType<typeof sessionProjection>, event: RunEvent): { message?: ViewMessage } | undefined {
@@ -65,12 +66,8 @@ export function mergeSessionEvent(history: ReturnType<typeof sessionProjection>,
         isError: event.state === 'error', content: event.content ?? [], details: event.details, arguments: event.arguments,
         elapsedMs: event.elapsedMs, sessionId: event.sessionId };
       break;
-    case 'approval':
-      if (!event.fact || history.facts.some(({ id }) => id === event.fact.id)) return;
-      history.facts.push({ id: event.fact.id, timestamp: event.fact.timestamp, kind: 'approval', data: { ...event.approval, runId: event.fact.runId } });
-      return {};
     case 'snapshot':
-      Object.assign(history, sessionProjection(event.messages, event.runs ?? history.runs, event.facts ?? history.facts, event.tools));
+      Object.assign(history, sessionProjection(event.messages, event.runs ?? history.runs, event.tools));
       // Apply the snapshot's latest run after replacing the history.
     case 'run': {
       const index = history.runs.findIndex(({ id }) => id === event.run.id);

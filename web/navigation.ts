@@ -297,7 +297,6 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
     add(item: Conversation) {
       if (!state.get().sessions.some(({ id }) => id === item.id)) apply({ type: 'session', session: item });
     },
-    session(id: string) { return state.get().sessions.find((item) => item.id === id); },
     reveal(item: Conversation, workspace: boolean) {
       if (workspace) revealWorkspace(item.workspaceId);
       for (let parent = item.parentId; parent && !expanded.has(parent); parent = state.get().sessions.find(({ id }) => id === parent)?.parentId) expanded.add(parent);

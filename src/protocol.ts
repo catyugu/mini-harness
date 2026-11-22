@@ -1,5 +1,3 @@
-export interface SessionFact { id: string; kind: string; timestamp: string; data: unknown }
-
 export interface TodoItem { id: string; text: string; state: 'pending' | 'in-progress' | 'completed' }
 
 export interface ContentBlock {
@@ -54,9 +52,8 @@ export type StreamEvent =
   | { type: 'delta' | 'complete'; text: string }
   | { type: 'tool'; id: string; name: string; state: 'running' | 'finished' | 'error'; arguments?: unknown; content?: MessageContent; sessionId?: string; elapsedMs?: number; details?: unknown; entry?: MessageIdentity }
   | { type: 'todos'; items: TodoItem[] }
-  | { type: 'approval'; fact?: { id: string; timestamp: string; runId?: string }; approval: { id: string; sessionId: string; command: string; toolCallId?: string; state: 'pending' | 'allowed' | 'denied' | 'expired' | 'cancelled'; createdAt: string } }
   | { type: 'error'; error: string }
   | { type: 'run'; run: RunInfo }
-  | { type: 'snapshot'; messages: ViewMessage[]; facts?: SessionFact[]; runs?: RunInfo[]; partial?: string; tools?: Extract<StreamEvent, { type: 'tool' }>[]; run: RunInfo };
+  | { type: 'snapshot'; messages: ViewMessage[]; runs?: RunInfo[]; partial?: string; tools?: Extract<StreamEvent, { type: 'tool' }>[]; run: RunInfo };
 
 export type RunEvent = StreamEvent & { sequence: number };

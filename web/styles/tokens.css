@@ -1,4 +1,13 @@
 :root {
+  --dsw-white: #fff; --dsw-gray-25: #fafafa; --dsw-gray-50: #f5f5f5;
+  --dsw-gray-100: #eeeeef; --dsw-gray-200: #e3e3e5; --dsw-gray-300: #cdcdcf;
+  --dsw-gray-400: #a5a5ab; --dsw-gray-500: #717178; --dsw-gray-600: #55555e;
+  --dsw-gray-700: #37373d; --dsw-gray-800: #29292e; --dsw-gray-850: #222226;
+  --dsw-gray-900: #1b1b1f; --dsw-gray-950: #141417;
+  --dsw-red-600: #a12c39; --dsw-red-300: #fca5ae;
+}
+
+:root {
   color-scheme: light;
   --dsw-alias-background: var(--dsw-white); --dsw-alias-sidebar: var(--dsw-gray-50);
   --dsw-alias-surface: var(--dsw-white); --dsw-alias-text: var(--dsw-gray-800);
@@ -33,3 +42,34 @@
     --dsw-alias-danger: var(--dsw-red-300);
   }
 }
+
+:root {
+  --dsw-elevation-stroke-color: light-dark(#00000024, #ffffff24);
+  --dsw-elevation-stroke: 0 0 0 .5px var(--dsw-elevation-stroke-color);
+  --dsw-shadow-lv1: 0 2px 8px #00000009; --dsw-shadow-lv2: 0 8px 30px #00000018;
+  --dsw-shadow-lv3: 0 18px 64px #00000028;
+  --dsw-elevation-soft: var(--dsw-elevation-stroke), var(--dsw-shadow-lv1);
+  --dsw-elevation-panel: var(--dsw-elevation-stroke), var(--dsw-shadow-lv2);
+  --dsw-elevation-prominent: var(--dsw-elevation-stroke), var(--dsw-shadow-lv3);
+  --dsw-menu-surface-fill: color-mix(in srgb, var(--surface) 88%, transparent);
+  --shadow: var(--dsw-elevation-soft);
+}
+body :is(.model-picker, .suggestions, .ui-dialog, .settings-panel) {
+  border: 0; box-shadow: var(--dsw-elevation-panel); background: var(--dsw-menu-surface-fill);
+  backdrop-filter: blur(24px) saturate(1.2);
+}
+body :is(.settings-panel, .ui-dialog) { box-shadow: var(--dsw-elevation-prominent); }
+body .composer { border: .5px solid var(--dsw-elevation-stroke-color); box-shadow: var(--dsw-shadow-lv1); }
+
+@supports (corner-shape: squircle) {
+  :where(.composer, .settings-panel, .ui-dialog, .tool-card, .model-picker, .ui-button, .ui-input, .catalog-row) { corner-shape: squircle; }
+}
+:where(.toggle, .toggle::after, .tool-state) { corner-shape: round; }
+
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+:root[data-input="pointer"] :focus:not(:focus-visible) { outline: none; }
+:root[data-input="keyboard"] :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+* { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--muted) 38%, transparent) transparent; }
+:is(.sidebar, .right-pane) { --scrollbar-surface: var(--panel); }
+:is(.settings-scroll, .tool-content, .messages):hover { scrollbar-color: var(--muted) transparent; }

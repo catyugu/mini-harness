@@ -53,7 +53,6 @@ type RuntimeServices = {
   workspaces: { resolve(id: string): string; approval(id: string, waiting: boolean): void };
   delegation: MiniHarnessRuntime['delegation'];
   todos: { get(id: string): Promise<import('./protocol.js').TodoItem[]>; set(id: string, items: import('./protocol.js').TodoItem[]): Promise<void> };
-  publish(id: string, event: import('./protocol.js').StreamEvent): void;
 };
 
 declare module 'cordis' {
@@ -70,7 +69,6 @@ declare module 'cordis' {
     harnessSkills: { options(cwd: string): ReturnType<typeof import('./skill-sources.js').harnessSkillOptions> };
     harnessWorkspace: RuntimeServices['workspaces'];
     harnessTodos: RuntimeServices['todos'];
-    harnessSessionEvents: { publish: RuntimeServices['publish'] };
   }
 }
 
@@ -127,7 +125,6 @@ export class PluginHost {
     this.ctx.provide('harnessSessions', services.sessions);
     this.ctx.provide('harnessTools', new ToolRegistry());
     this.ctx.provide('harnessTodos', services.todos);
-    this.ctx.provide('harnessSessionEvents', { publish: services.publish });
     this.ctx.provide('harnessRoutes', new RouteRegistry());
     this.ctx.provide('harnessWorkspace', services.workspaces);
     this.ctx.provide('harnessDelegation', services.delegation);

@@ -1,9 +1,9 @@
-import type { SessionFact, ViewMessage } from '../src/protocol.js';
+import type { ViewMessage } from '../src/protocol.js';
 import type { ToolView } from './extensions.js';
 import { projectTurns, textContent, type sessionProjection } from './session-projection.js';
 
 type Step = { node: HTMLDetailsElement; summary: HTMLElement; source?: unknown };
-type Turn = { node: HTMLElement; heading: HTMLElement; prompt: HTMLElement; timing: HTMLElement; steps: HTMLElement; approval: Step };
+type Turn = { node: HTMLElement; heading: HTMLElement; prompt: HTMLElement; timing: HTMLElement; steps: HTMLElement };
 
 function step(id?: string): Step {
   const node = document.createElement('details');
@@ -62,7 +62,7 @@ function turnNode(): Turn {
   const heading = document.createElement('h3'), prompt = document.createElement('p'), timing = document.createElement('small');
   const steps = document.createElement('div');
   node.append(heading, prompt, timing, steps);
-  return { node, heading, prompt, timing, steps, approval: step() };
+  return { node, heading, prompt, timing, steps };
 }
 
 function orderChildren(parent: HTMLElement, nodes: HTMLElement[]) {
@@ -83,14 +83,6 @@ export function createTrajectory(target: HTMLElement) {
   const steps = new Map<string, Step>();
   return (history: ReturnType<typeof sessionProjection>) => {
     const entries = projectTurns(history.messages, history.runs);
-    const approvals = new Map<string, SessionFact[]>();
-    for (const fact of history.facts) {
-      const run = (fact.data as { runId?: string })?.runId;
-      const list = approvals.get(run) ?? [];
-      list.push(fact);
-      approvals.set(run, list);
-    }
-
     const currentTurns = new Set<string>();
     const currentSteps = new Set<string>();
     function useStep(key: string, id: string, label: string, source: unknown, body: () => HTMLElement[]) {
@@ -122,12 +114,6 @@ export function createTrajectory(target: HTMLElement) {
         return useStep(stepKey, id, label, message, () => messageBody(message));
       });
       if (index === entries.length - 1) nodes.push(...[...history.tools.values()].map((tool) => live(tool, key)));
-      const facts = approvals.get(run?.id);
-      if (facts?.length) {
-        updateStep(ui.approval, 'Approval events', facts.map(({ id }) => id).join(','), () => facts.map((fact) =>
-          pre(fact.timestamp + '\n' + JSON.stringify(fact.data, null, 2))));
-        nodes.push(ui.approval.node);
-      }
       orderChildren(ui.steps, nodes);
       return ui.node;
     });

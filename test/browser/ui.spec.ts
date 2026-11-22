@@ -1102,7 +1102,7 @@ test('restored resource tabs keep selection and release listeners on unload and 
       const activate = () => { document.dispatchEvent(new Event('tab-fixture-event')); return calls; };
       const selected = () => bar.querySelector('[aria-selected="true"]')?.textContent;
       const registerProbe = () => tabs.register('probe', {
-        title: () => 'Probe', keepMounted: true,
+        title: () => 'Probe',
         create(_, signal) {
           document.addEventListener('tab-fixture-event', () => calls++, { signal });
           return document.createElement('article');
@@ -1117,6 +1117,9 @@ test('restored resource tabs keep selection and release listeners on unload and 
       const focusAfterReturn = document.activeElement?.textContent;
       tabs.open('probe');
       const whileMounted = activate();
+      [...bar.querySelectorAll<HTMLButtonElement>('button[role=tab]')].find((tab) => tab.textContent === 'Other').click();
+      const afterSwitch = activate();
+      tabs.open('probe');
       disable();
       const afterDisable = activate();
       registerProbe();
@@ -1132,11 +1135,11 @@ test('restored resource tabs keep selection and release listeners on unload and 
       const storageRemoved = sessionStorage.getItem(key) === null;
       controller.abort();
       root.remove();
-      return { savedChoice, other, selectedAfterReturn, focusAfterReturn, whileMounted, afterDisable, selectedAfterEnable,
+      return { savedChoice, other, selectedAfterReturn, focusAfterReturn, whileMounted, afterSwitch, afterDisable, selectedAfterEnable,
         afterRemount, afterScopeChange, afterScopeRestore, afterDeletion, storageRemoved };
     });
     expect(result).toEqual({ savedChoice: result.other, other: result.other, selectedAfterReturn: 'Other', focusAfterReturn: 'Other',
-      whileMounted: 1, afterDisable: 1, selectedAfterEnable: 'Other', afterRemount: 2, afterScopeChange: 2,
+      whileMounted: 1, afterSwitch: 1, afterDisable: 1, selectedAfterEnable: 'Probe', afterRemount: 2, afterScopeChange: 2,
       afterScopeRestore: 3, afterDeletion: 3, storageRemoved: true });
   } finally {
     await service.stop();

@@ -42,7 +42,7 @@ test('Skills retain native user discovery and report deterministic source confli
 });
 
 
-test('skill precedence survives collision diagnostics without structured metadata', (t) => {
+test('skill precedence updates Pi collision diagnostics when a shadowed file wins', (t) => {
   const { root, paths } = createFixturePaths('http://127.0.0.1');
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const project = join(paths.cwd, '.mini-harness', 'skills');
@@ -51,9 +51,7 @@ test('skill precedence survives collision diagnostics without structured metadat
   const native = loadSkills({ cwd: paths.cwd, agentDir: paths.agent, includeDefaults: false, skillPaths: [paths.skills, project] });
   assert.equal(native.skills[0].description, 'Global instructions');
   const options = harnessSkillOptions(paths, paths.cwd);
-  const overridden = options.skillsOverride({
-    ...native, diagnostics: native.diagnostics.map(({ type, path, message }) => ({ type, path, message }))
-  });
+  const overridden = options.skillsOverride(native);
   assert.equal(overridden.skills[0].description, 'Project instructions');
   assert.deepEqual(overridden.diagnostics.find(({ type }) => type === 'collision')?.collision, {
     resourceType: 'skill', name: 'duplicate', winnerPath: join(project, 'duplicate', 'SKILL.md'),

@@ -9,15 +9,12 @@ export interface RightTabType {
   launcher?: string;
   default?: boolean;
   canOpen?(address: TabAddress): boolean;
-  keepMounted?: boolean;
-  closed?(address: TabAddress): void;
 }
 
 type Tab = {
   key: string;
   address?: TabAddress;
   inspector?: { title: string; node: HTMLElement };
-  mounted?: { node: HTMLElement; controller: AbortController };
 };
 type ScopeTabs = { scope?: TabScope; open: boolean; active?: string; tabs: Map<string, Tab> };
 const scopeKey = (scope?: TabScope) => JSON.stringify([scope?.workspaceId, scope?.sessionId]);
@@ -31,6 +28,7 @@ export function createRightTabs(view: {
   const states = new Map<string, ScopeTabs>();
   let nextId = 0;
   let current = state();
+  let mounted: { tab: Tab; node: HTMLElement; controller: AbortController } | undefined;
 
   function state(scope?: TabScope): ScopeTabs {
     const key = scopeKey(scope);
@@ -68,15 +66,14 @@ export function createRightTabs(view: {
     });
   }
 
-  function unmount(tab: Tab) {
-    tab.mounted?.controller.abort();
-    tab.mounted?.node.remove();
-    tab.mounted = undefined;
-    tab.inspector?.node.remove();
+  function unmount() {
+    const previous = mounted;
+    mounted = undefined;
+    previous?.controller.abort();
+    previous?.node.remove();
   }
 
   function mount(tab: Tab) {
-    if (tab.mounted) return tab.mounted.node;
     const controller = new AbortController();
     try {
       const node = tab.inspector?.node ?? types.get(tab.address.type).create(tab.address, controller.signal);
@@ -84,8 +81,8 @@ export function createRightTabs(view: {
       node.setAttribute('role', 'tabpanel');
       node.setAttribute('aria-labelledby', tab.key + '-select');
       node.classList.add('right-tab-content');
-      tab.mounted = { node, controller };
-      return node;
+      view.body.append(node);
+      mounted = { tab, node, controller };
     } catch (error) {
       controller.abort();
       throw error;
@@ -114,16 +111,10 @@ export function createRightTabs(view: {
       item.append(select, close);
       return item;
     }));
-    for (const tab of current.tabs.values()) {
-      if (tab === active && current.open) {
-        const node = mount(tab);
-        node.hidden = false;
-        if (node.parentElement !== view.body) view.body.append(node);
-      } else if (tab.mounted && tab.address && types.get(tab.address.type)?.keepMounted && entries.some(([, available]) => available === tab)) {
-        tab.mounted.node.hidden = true;
-      } else {
-        unmount(tab);
-      }
+    const visible = current.open ? active : undefined;
+    if (mounted?.tab !== visible) {
+      unmount();
+      if (visible) mount(visible);
     }
     view.launchers.replaceChildren(...[...types].flatMap(([id, type]) => {
       if (!current.scope || !type.launcher || (type.canOpen && !type.canOpen({ ...current.scope, type: id }))) return [];
@@ -138,7 +129,7 @@ export function createRightTabs(view: {
 
   function selectScope(scope?: TabScope) {
     if (scopeKey(scope) === scopeKey(current.scope)) return;
-    for (const tab of current.tabs.values()) unmount(tab);
+    unmount();
     current = state(scope);
     if (layout.panelOpen() === current.open) render();
     else layout.setPanel(current.open);
@@ -154,7 +145,7 @@ export function createRightTabs(view: {
     const tab = target.tabs.get(id);
     if (tab) {
       tab.address.line = line;
-      tab.mounted?.node.dispatchEvent(new CustomEvent('navigate-resource', { detail: tab.address }));
+      if (mounted?.tab === tab) mounted.node.dispatchEvent(new CustomEvent('navigate-resource', { detail: tab.address }));
     } else target.tabs.set(id, { key: 'right-tab-' + ++nextId, address });
     target.active = id;
     target.open = true;
@@ -169,8 +160,7 @@ export function createRightTabs(view: {
     const entries = available(target);
     const index = entries.findIndex(([key]) => key === id);
     target.tabs.delete(id);
-    unmount(tab);
-    if (tab.address) types.get(tab.address.type)?.closed?.(tab.address);
+    if (mounted?.tab === tab) unmount();
     if (target.active === id) target.active = (entries[index + 1] ?? entries[index - 1])?.[0];
   }
 
@@ -178,7 +168,6 @@ export function createRightTabs(view: {
     for (const [key, target] of states) {
       const scope = target.scope;
       if (!scope || (workspaces.has(scope.workspaceId) && (!scope.sessionId || sessions.has(scope.sessionId)))) continue;
-      for (const [id, tab] of target.tabs) remove(target, id, tab);
       states.delete(key);
       sessionStorage.removeItem(storageKey(scope));
       if (target === current) selectScope();
@@ -199,7 +188,7 @@ export function createRightTabs(view: {
   view.bar.addEventListener('keydown', (event) => {
     if (!(event.target as HTMLElement).matches('[role=tab]')) return;
     const tabs = available(current);
-    const index = tabs.findIndex(([id]) => id === current.active);
+    const index = tabs.findIndex(([, tab]) => tab.key + '-select' === (event.target as HTMLElement).id);
     const target = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 :
       event.key === 'ArrowLeft' ? (Math.max(0, index) + tabs.length - 1) % tabs.length :
         event.key === 'ArrowRight' ? (Math.max(0, index) + 1) % tabs.length : undefined;
@@ -209,15 +198,15 @@ export function createRightTabs(view: {
     render(true);
   }, { signal });
   signal.addEventListener('abort', () => {
-    for (const target of states.values()) for (const [id, tab] of target.tabs) remove(target, id, tab);
+    unmount();
     states.clear();
   }, { once: true });
 
   return {
     selectScope, open, prune,
-    navigate(resource: { path: string; kind?: 'file' | 'diff' | 'terminal'; line?: number }, scope = current.scope) {
+    navigate(resource: { path: string; kind?: 'file' | 'diff'; line?: number }, scope = current.scope) {
       const path = resource.path.replaceAll('\\', '/').replace(/^\.\//, '');
-      open(resource.kind === 'terminal' ? 'shell:terminal' : resource.kind === 'diff' ? 'files:diff' : 'files:preview', path, scope, resource.line);
+      open(resource.kind === 'diff' ? 'files:diff' : 'files:preview', path, scope, resource.line);
     },
     register(type: string, definition: RightTabType) {
       if (typeof definition?.create !== 'function' || typeof definition.title !== 'function') throw new Error('Tab types require title and create functions');
@@ -227,16 +216,6 @@ export function createRightTabs(view: {
       return () => {
         if (types.get(type) !== definition) return;
         types.delete(type);
-        for (const target of states.values()) {
-          for (const tab of target.tabs.values()) {
-            if (tab.address?.type !== type) continue;
-            unmount(tab);
-            definition.closed?.(tab.address);
-          }
-          if (target.tabs.get(target.active)?.address?.type === type)
-            target.active = available(target)[0]?.[0] ?? target.active;
-          persist(target);
-        }
         render();
       };
     },

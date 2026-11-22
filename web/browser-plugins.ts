@@ -18,9 +18,9 @@ declare module 'cordis' {
     miniState: BrowserState;
     miniHost: FrontendHost;
     miniNavigation: ReturnType<typeof sessionNavigation>;
-    miniConversation: ReturnType<typeof conversationView>;
+    miniConversation: Pick<ReturnType<typeof conversationView>, 'report' | 'insert' | 'command' | 'completion' | 'changedFiles'>;
     miniEvents: EventTarget;
-    miniSwitch: (snapshot: Bootstrap) => Promise<void>;
+    miniSwitch: (snapshot: Bootstrap) => Promise<Error[]>;
   }
 }
 
@@ -57,6 +57,7 @@ const conversationPlugin: BrowserPlugin = {
     const conversation = conversationView(api, ctx.harnessBrowser, {
       bootstrap: state.get,
       applySettings: state.apply, closeDrawer: shell.closeDrawer,
+      active: () => state.activeConversation,
       setActive(item) {
         state.activeConversation = item?.id;
         if (item) state.selectWorkspace(item.workspaceId);
@@ -104,6 +105,7 @@ export async function mountBrowser(ctx: Context, snapshot: Bootstrap) {
   const state = new BrowserState(snapshot);
   const events = new EventTarget();
   const report = (error: Error) => ctx.miniConversation?.report(error);
+  const session = (id: string) => state.get().sessions.find((item) => item.id === id);
   function scope() {
     const workspaceId = state.selectedWorkspace;
     return workspaceId && { workspaceId, sessionId: state.activeConversation };
@@ -125,9 +127,9 @@ export async function mountBrowser(ctx: Context, snapshot: Bootstrap) {
         ctx.rightTabs.navigate({ ...resource, path });
       },
       workspace: scope,
-      sessionTitle: (id) => ctx.miniNavigation.session(id)?.title,
-      currentConversation: () => ctx.miniNavigation.session(ctx.miniConversation.active()),
-      session: (id) => ctx.miniNavigation.session(id),
+      sessionTitle: (id) => session(id)?.title,
+      currentConversation: () => session(state.activeConversation),
+      session,
       onConversationChange: (listener, signal) => events.addEventListener('change', listener, { signal }),
       openConversation: (id) => { events.dispatchEvent(new CustomEvent('open', { detail: id })); },
       onRunEvent: (listener, signal) => events.addEventListener('run-event', (event: CustomEvent) => listener(event.detail), { signal }),
@@ -136,14 +138,14 @@ export async function mountBrowser(ctx: Context, snapshot: Bootstrap) {
     },
     (command) => ctx.miniConversation.command(command),
     (trigger, complete) => ctx.miniConversation.completion(trigger, complete));
-  const load = createPluginLoader(host, report);
+  const load = createPluginLoader(host);
   ctx.provide('miniState', state);
   ctx.provide('miniHost', host);
   ctx.provide('miniEvents', events);
   ctx.provide('miniSwitch', load);
   try {
     for (const plugin of plugins) await host.mountPlugin(plugin);
-    await load(state.get());
+    for (const error of await load(state.get())) report(error);
     hydrateIcons();
   } catch (error) {
     await host.dispose();

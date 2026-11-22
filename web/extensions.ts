@@ -1,4 +1,4 @@
-import { ContributionRegistry, type Contribution, type Region } from './contributions.js';
+import { ContributionRegistry, type Contribution, type MountSlot, type PluginRegion, type Region } from './contributions.js';
 import { Context, type Fiber } from './vendor/cordis.js';
 import type { ComposerCommand } from './commands.js';
 import type { MessageContent, RunEvent, ViewMessage } from '../src/protocol.js';
@@ -6,9 +6,6 @@ import type { Conversation } from '../src/registry.js';
 import type { RightTabType, TabScope, createRightTabs } from './right-tabs.js';
 import type { Bootstrap } from './types.js';
 
-const mountSlots = ['sidebar', 'composer', 'settings', 'inspector', 'approvals', 'session-navigation', 'conversation', 'dialogs', 'main', 'conversation-header'] as const;
-export type Slot = typeof mountSlots[number] | 'conversation.input.dock' | 'conversation.composer.dock';
-type OutletRegion = `mount:${typeof mountSlots[number]}`;
 export interface ToolView { details?: unknown; id?: string; name: string; state: string; content?: MessageContent; arguments?: unknown; sessionId?: string }
 export interface Suggestion {
   label: string;
@@ -28,10 +25,10 @@ export interface Completion {
 export type Completer = (request: Completion) => void | Promise<void>;
 
 export interface FrontendApi {
-  contribute<T>(region: Region, contribution: Omit<Contribution<T>, 'owner'>): () => void;
-  contributions<T>(region: Region | OutletRegion, key?: string, context?: unknown): Contribution<T>[];
+  contribute<T>(region: PluginRegion, contribution: Omit<Contribution<T>, 'owner'>): () => void;
+  contributions<T>(region: Region, key?: string, context?: unknown): Contribution<T>[];
   watchContributions(listener: (region: string) => void): void;
-  mount(slot: Slot, node: HTMLElement, order?: number): void;
+  mount(slot: MountSlot, node: HTMLElement, order?: number): void;
   command(command: ComposerCommand): () => void;
   completion(trigger: string, complete: Completer): void;
   settingsPage(title: string, node: HTMLElement): void;
@@ -56,7 +53,7 @@ export interface FrontendServices {
   session(id: string): Conversation | undefined;
   onConversationChange(listener: () => void, signal: AbortSignal): void;
   changedFiles(): string[];
-  openResource(resource: { path: string; kind?: 'file' | 'diff' | 'terminal'; line?: number }): void;
+  openResource(resource: { path: string; kind?: 'file' | 'diff'; line?: number }): void;
   onRunEvent(listener: (event: RunEvent) => void, signal: AbortSignal): void;
   report(error: Error): void;
 }
@@ -70,7 +67,7 @@ export interface BrowserPlugin {
 
 export class FrontendHost {
   private readonly plugins = new Map<string, { fiber: Fiber; controller: AbortController }>();
-  private readonly registry = new ContributionRegistry();
+  private readonly registry: ContributionRegistry;
   private nextId = 0;
 
   constructor(
@@ -81,7 +78,7 @@ export class FrontendHost {
     private registerCompletion: (trigger: string, complete: Completer) => () => void
   ) {
     this.ctx.provide('harnessBrowser', services);
-    for (const name of mountSlots) this.registry.define('mount:' + name, 'list');
+    this.registry = new ContributionRegistry(services.report);
   }
 
   enable(id: string, setup: FrontendSetup, config: Record<string, unknown> = {}) {
@@ -97,7 +94,7 @@ export class FrontendHost {
         if (controller.signal.aborted) return () => {};
         return ctx.effect(install);
       };
-      const contribute = <T>(region: string, item: Omit<Contribution<T>, 'owner'>) =>
+      const contribute = <T>(region: Region, item: Omit<Contribution<T>, 'owner'>) =>
         own(() => this.registry.register(region, { ...item, owner: id }));
       const registerRenderer = (region: Region, name: string, render: (tool: ToolView) => HTMLElement | undefined) =>
         contribute(region, { id: name, key: name, value: render });
@@ -120,7 +117,7 @@ export class FrontendHost {
         },
         inspect: (title, content) => own(() => this.ui.tabs().inspect(id, title, content)),
         config: Object.freeze(structuredClone(config)),
-        mount: (slot, node, order = 0) => contribute(slot.includes('.') ? slot : 'mount:' + slot,
+        mount: (slot, node, order = 0) => contribute(`mount:${slot}`,
           { id: id + ':node:' + ++this.nextId, value: node, order }),
         command: (command) => own(() => this.registerCommand(command)),
         completion: (trigger, complete) => own(() => this.registerCompletion(trigger, complete)),

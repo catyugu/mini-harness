@@ -1,23 +1,25 @@
 import type { Settings } from '../src/config.js';
 import type { Conversation, ModelChoice } from '../src/registry.js';
-import type { RunEvent, RunInfo, ViewMessage } from '../src/protocol.js';
+import type { RunEvent, RunInfo } from '../src/protocol.js';
 import type { Bootstrap, ConversationView, ThinkingLevel } from './types.js';
 import { renderMarkdown, markdownSource } from './markdown.js';
-import { scopedElements, api as request, data, payload, readEvents, workspaceRoute } from './api.js';
+import { scopedElements, api as request, data, payload, workspaceRoute } from './api.js';
 import { createMessageView } from './messages.js';
 import { CommandRegistry, type ComposerCommand } from './commands.js';
 import { createComposer } from './composer.js';
 import { createModelPicker } from './model-picker.js';
 import type { FrontendApi, FrontendHost, FrontendServices } from './extensions.js';
 import { createTrajectory } from './trajectory.js';
-import { mergeSessionEvent, sessionProjection } from './session-projection.js';
+import { isRunning, mergeSessionEvent, sessionProjection } from './session-projection.js';
 import { mountOutlet } from './outlets.js';
 import { fromMarkup } from './primitives.js';
+import { subscribeRun } from './run-subscription.js';
 
 interface ConversationServices {
   bootstrap(): Bootstrap;
   applySettings(settings: Settings): void;
   renderSessions(): void;
+  active(): string | undefined;
   setActive(item?: Conversation): void;
   workspace(): string | undefined;
   reveal(item: Conversation, workspace: boolean): void;
@@ -81,10 +83,6 @@ export function conversationView(api: FrontendApi, services: FrontendServices, o
     ['conversation.composer.dock', 'composerDock']
   ] as const) mountOutlet(api, services, region, element(id));
   api.contribute('conversation.composer.dock', { id: 'activity', order: 0, value: element('runSummary') });
-  const usageDock = document.createElement('div');
-  usageDock.className = 'usage-dock'; usageDock.hidden = true;
-  api.contribute('conversation.composer.dock', { id: 'usage', order: 10, value: usageDock });
-
   const messages = element('messages');
   const welcome = element('welcome');
   const summary = element('runSummary'), summaryStatus = summary.querySelector('span'), elapsed = summary.querySelector('time');
@@ -100,6 +98,8 @@ export function conversationView(api: FrontendApi, services: FrontendServices, o
   }
   function showRunSummary(run?: RunInfo) {
     runSummary = run;
+    element<'button'>('stop').disabled = false;
+    renderRunControls();
     summary.hidden = !run;
     if (!run) return;
     summary.dataset.state = run.state;
@@ -112,10 +112,9 @@ export function conversationView(api: FrontendApi, services: FrontendServices, o
   const prompt = element<'textarea'>('prompt');
   const thinkingSelect = element<'select'>('thinkingLevel');
 
-  let active: string | undefined;
-  let sending = false;
-  let navigation = 0;
-  let pendingNavigation = false;
+  const active = options.active;
+  let pending: { controller: AbortController; submitting: boolean } | undefined;
+  const sending = () => Boolean(pending?.submitting || isRunning(runSummary));
   let observing: AbortController;
   let modelDraft: ModelChoice;
   let conversationModel: ModelChoice;
@@ -123,10 +122,8 @@ export function conversationView(api: FrontendApi, services: FrontendServices, o
   let thinkingDraft: string;
   thinkingSelect.onchange = () => { thinkingDraft = thinkingSelect.value; };
   const modelPicker = createModelPicker(view, (choice) => { modelDraft = choice; thinkingDraft = undefined; updateModelControls(); }, api.signal);
-  let changedFiles: string[] = [];
   const scrollPositions = new Map<string, number>();
   const lastInputs = new Map<string, { message: string; attachments: import('../src/input.js').Attachment[] }>();
-  const isRunning = (run?: RunInfo) => run?.state === 'queued' || run?.state === 'running';
   const showStatus = (text: string, error = false) => {
     element('status').textContent = text;
     element('status').classList.toggle('error', error);
@@ -157,8 +154,8 @@ export function conversationView(api: FrontendApi, services: FrontendServices, o
   element('chatView').onclick = () => switchView(false);
   element('trajectoryView').onclick = () => switchView(true);
   const { addMessage, appendHistory, toolCard, renderHistory } = createMessageView(messages, { render: options.renderTool, chat: options.renderNode }, () => {
-    const last = lastInputs.get(active);
-    if (last && !sending) void send(last.message, last.attachments);
+    const last = lastInputs.get(active());
+    if (last && !sending()) void send(last.message, last.attachments);
   }, (id) => switchView(true, id), options.openResource);
 
   function showWelcome(show: boolean) {
@@ -169,73 +166,92 @@ export function conversationView(api: FrontendApi, services: FrontendServices, o
     options.placeWorkspace(show ? welcome : undefined);
   }
 
-  function showConversation(item?: ConversationView | Conversation, incoming: ViewMessage[] = []) {
-    const previousPosition = messages.scrollTop;
-    const sameConversation = active === item?.id;
+  function renderHistoryView() {
+    renderHistory(history.messages, history.runs, localStorage.getItem('mini-harness-chat-mode') ?? 'standard',
+      localStorage.getItem('mini-harness-collapse') ?? 'completed');
+  }
+
+  function showConversation(item?: ConversationView | Conversation) {
+    const previous = active();
+    const position = messages.scrollTop;
     const pinned = scrollIfPinned();
-    if (active) scrollPositions.set(active, previousPosition);
+    if (previous) scrollPositions.set(previous, position);
     observing?.abort();
-    const snapshot = item as ConversationView;
-    history = sessionProjection(incoming, snapshot?.runs ?? (item?.run ? [item.run] : []), snapshot?.facts, snapshot?.tools);
-    setSending(isRunning(item?.run));
-    showRunSummary(item?.run);
-    active = item?.id;
+    const snapshot = item && 'messages' in item ? item : undefined;
+    history = sessionProjection(snapshot?.messages, snapshot?.runs ?? (item?.run ? [item.run] : []), snapshot?.tools);
     options.setActive(item);
     conversationModel = item?.model;
-    conversationThinking = (item as ConversationView)?.thinkingLevel;
+    conversationThinking = snapshot?.thinkingLevel;
     thinkingDraft = undefined;
     modelDraft = undefined;
-    changedFiles = item?.run?.changedFiles ?? [];
-    const previous = history.messages.filter((message) => message.role === 'user').at(-1);
-    if (active && previous && !lastInputs.has(active)) {
-      const blocks = typeof previous.content === 'string' ? [{ type: 'text', text: previous.content }] : previous.content;
-      lastInputs.set(active, { message: blocks.filter((b) => b.type === 'text').map((b) => b.text).join('\n'),
+    const lastUser = history.messages.filter((message) => message.role === 'user').at(-1);
+    if (item && lastUser && !lastInputs.has(item.id)) {
+      const blocks = typeof lastUser.content === 'string' ? [{ type: 'text', text: lastUser.content }] : lastUser.content;
+      lastInputs.set(item.id, { message: blocks.filter((b) => b.type === 'text').map((b) => b.text).join('\n'),
         attachments: blocks.filter((b) => b.type === 'image').map((b) => ({ name: 'image', mimeType: b.mimeType, data: b.data })) });
     }
-    element('queuedMessages').hidden = true;
-    if (active) sessionStorage.setItem('mini-harness-active', active);
+    showRunSummary(item?.run);
+    showQueue(snapshot?.queue ?? { steer: [], followUp: [] });
+    if (item) sessionStorage.setItem('mini-harness-active', item.id);
     else sessionStorage.removeItem('mini-harness-active');
     updateModelControls();
     options.setTitle(item?.title ?? 'New conversation');
-    renderHistory(history.messages, history.runs, localStorage.getItem('mini-harness-chat-mode') ?? 'standard', localStorage.getItem('mini-harness-collapse') ?? 'completed');
+    renderHistoryView();
     if (trajectory) switchView(true);
     if (item?.run?.error) {
       const error = [...messages.querySelectorAll<HTMLElement>('.message.error')].at(-1) ?? addMessage('error', '');
       error.textContent = item.run.error;
     }
     showWelcome(!messages.childElementCount && !isRunning(item?.run));
-    messages.scrollTop = sameConversation && !pinned ? previousPosition : !sameConversation && scrollPositions.has(active) ? scrollPositions.get(active) : messages.scrollHeight;
+    messages.scrollTop = previous === item?.id && pinned ? messages.scrollHeight : scrollPositions.get(item?.id) ?? messages.scrollHeight;
     options.renderSessions();
     options.changed();
   }
 
-  async function activate(id: string, revealWorkspace = true) {
-    const request = ++navigation;
-    pendingNavigation = true;
-    try {
-      const item = await data<ConversationView>('/sessions/' + id, { signal: api.signal });
-      if (request !== navigation) return;
-      options.reveal(item, revealWorkspace);
-      showConversation(item, item.messages);
-      options.applySettings({ ...options.bootstrap().settings, model: item.selectedModel });
-      if (isRunning(item.run)) void observe(item);
-      else showStatus(item.run?.error ?? '', Boolean(item.run?.error));
-      options.closeDrawer();
-    } catch (error) { if (request === navigation) report(error); }
-    finally { if (request === navigation) pendingNavigation = false; }
+  function displaySnapshot(item: ConversationView) {
+    showConversation(item);
+    options.applySettings({ ...options.bootstrap().settings, model: item.selectedModel });
+    if (isRunning(item.run)) void observe(item);
+    else showStatus(item.run?.error ?? '', Boolean(item.run?.error));
   }
 
-  async function createConversation() {
+  function begin(submitting = false) {
+    pending?.controller.abort();
+    const controller = new AbortController();
+    pending = { controller, submitting };
+    renderRunControls();
+    return AbortSignal.any([api.signal, controller.signal]);
+  }
+
+  function finish(signal: AbortSignal) {
+    if (signal.aborted) return;
+    pending = undefined;
+    renderRunControls();
+  }
+
+  async function activate(id: string, revealWorkspace = true) {
+    const signal = begin();
+    try {
+      const item = await data<ConversationView>('/sessions/' + id, { signal });
+      if (signal.aborted) return;
+      options.reveal(item, revealWorkspace);
+      displaySnapshot(item);
+      options.closeDrawer();
+    } catch (error) { if (!signal.aborted) report(error); }
+    finally { finish(signal); }
+  }
+
+  async function createConversation(signal: AbortSignal) {
     const workspace = options.workspace();
     if (!workspace) throw new Error('Add a workspace before starting a conversation.');
-    const item = await data<Conversation>(workspaceRoute(workspace, '/sessions'), payload('POST', {}));
+    const item = await data<Conversation>(workspaceRoute(workspace, '/sessions'), { ...payload('POST', {}), signal });
     options.addSession(item);
     return item;
   }
 
   async function newSession() {
-    ++navigation;
-    pendingNavigation = false;
+    pending?.controller.abort();
+    pending = undefined;
     const nextModel = modelDraft;
     showConversation();
     if (nextModel) { modelDraft = nextModel; updateModelControls(); }
@@ -252,20 +268,19 @@ export function conversationView(api: FrontendApi, services: FrontendServices, o
   }
 
 
-  function setSending(value: boolean) {
-    sending = value;
+  function renderRunControls() {
+    const value = sending();
     element<'button'>('send').hidden = value;
     element('queueMode').hidden = !value;
     element('queueSend').hidden = !value;
     element<'button'>('stop').hidden = !value;
-    element<'button'>('stop').disabled = false;
     modelPicker.setDisabled(value);
     thinkingSelect.disabled = value;
   }
 
   async function send(text: string, attached?: import('../src/input.js').Attachment[]) {
     const attachments = attached ?? composerUi.attachments();
-    if (sending || pendingNavigation || (!text.trim() && !attachments.length)) return;
+    if (sending() || pending || (!text.trim() && !attachments.length)) return;
     if (!modelPicker.selected()) {
       showStatus('Choose a configured model before sending.');
       modelPicker.open();
@@ -274,148 +289,103 @@ export function conversationView(api: FrontendApi, services: FrontendServices, o
     const choice = modelDraft;
     const thinkingLevel = thinkingSelect.value || undefined;
     const message = commands.prepare(text);
-    const request = ++navigation;
-    pendingNavigation = true;
-    setSending(true);
+    const signal = begin(true);
+    observing?.abort();
     try {
-      let id = active;
+      let id = active();
       if (!id) {
-        const item = await createConversation();
+        const item = await createConversation(signal);
+        if (signal.aborted) return;
         id = item.id;
-        if (request === navigation) { showConversation(item); setSending(true); }
+        showConversation(item);
       }
       lastInputs.set(id, { message: text, attachments });
-      const run = await data<RunInfo>('/sessions/' + id + '/runs', payload('POST', { message, attachments, model: choice, thinkingLevel }));
-      if (request === navigation) {
-        modelDraft = undefined;
-        prompt.value = '';
-        composerUi.clear();
-        adjustPrompt();
-        pendingNavigation = false;
-        showRunSummary(run);
-        void observe({ id, run: { ...run, sequence: 0 } });
-      }
-    } catch (error) {
-      if (request === navigation) { report(error); setSending(false); }
-    } finally { if (request === navigation) pendingNavigation = false; }
+      const run = await data<RunInfo>('/sessions/' + id + '/runs', { ...payload('POST', { message, attachments, model: choice, thinkingLevel }), signal });
+      if (signal.aborted) return;
+      modelDraft = undefined;
+      prompt.value = '';
+      composerUi.clear();
+      adjustPrompt();
+      showRunSummary(run);
+      void observe({ run: { ...run, sequence: 0 } });
+    } catch (error) { if (!signal.aborted) report(error); }
+    finally { finish(signal); }
   }
 
-  async function observe(item: Pick<ConversationView, 'id' | 'run' | 'partial' | 'tools'>) {
-    const id = item.id;
-    const requestId = navigation;
+  async function observe(item: Pick<ConversationView, 'run' | 'partial' | 'tools'>) {
+    const id = item.run.sessionId;
     observing?.abort();
-    const controller = new AbortController();
-    observing = controller;
-    let cursor = item.run.sequence;
-    let ended = false;
+    observing = new AbortController();
+    const signal = AbortSignal.any([api.signal, observing.signal]);
     const cards = new Map<string, HTMLDetailsElement>();
     let answer: HTMLElement;
     let answerText = item.partial ?? '';
     if (answerText) answer = addMessage('assistant', answerText);
     for (const tool of item.tools ?? []) cards.set(tool.id, toolCard(tool));
-    setSending(true);
     showWelcome(false);
     showStatus(item.run.state === 'queued' ? 'Queued…' : 'Thinking…');
-    const accept = (event: RunEvent) => {
-        if (controller.signal.aborted || active !== id || event.sequence < cursor ||
-          (event.sequence === cursor && event.type !== 'snapshot')) return;
-        cursor = event.sequence;
-        const merged = mergeSessionEvent(history, event);
-        options.event(event);
-        const pinned = scrollIfPinned();
-        switch (event.type) {
-          case 'user':
-            lastInputs.set(id, { message: event.text, attachments: (typeof event.content === 'string' ? [] : event.content ?? []).filter((b) => b.type === 'image').map((b) => ({ name: 'image', mimeType: b.mimeType, data: b.data })) });
-            if (merged?.message) appendHistory(merged.message);
-            break;
-          case 'assistant-start':
-            if (answer) renderMarkdown(answer, answerText);
+    await subscribeRun(item.run, signal, (event) => {
+      const merged = mergeSessionEvent(history, event);
+      options.event(event);
+      const pinned = scrollIfPinned();
+      switch (event.type) {
+        case 'user':
+          lastInputs.set(id, { message: event.text, attachments: (typeof event.content === 'string' ? [] : event.content ?? []).filter((b) => b.type === 'image').map((b) => ({ name: 'image', mimeType: b.mimeType, data: b.data })) });
+          if (merged?.message) appendHistory(merged.message);
+          break;
+        case 'assistant-start':
+          if (answer) renderMarkdown(answer, answerText);
+          answer = undefined;
+          answerText = '';
+          break;
+        case 'delta':
+          answer ??= addMessage('assistant', '');
+          answerText += event.text;
+          // Plain text during streaming keeps selection stable. Format at turn boundaries.
+          answer.textContent = answerText;
+          markdownSource.set(answer, answerText);
+          break;
+        case 'assistant-end':
+          if (merged?.message) {
+            answer?.closest('.message-row')?.remove();
+            appendHistory(merged.message, false);
             answer = undefined;
             answerText = '';
-            break;
-          case 'delta':
-            answer ??= addMessage('assistant', '');
-            answerText += event.text;
-            // Plain text during streaming keeps selection stable. Format at turn boundaries.
-            answer.textContent = answerText;
-            markdownSource.set(answer, answerText);
-            break;
-          case 'assistant-end':
-            if (merged?.message) {
-              answer?.closest('.message-row')?.remove();
-              appendHistory(merged.message, false);
-              answer = undefined;
-              answerText = '';
-            } else if (answer) renderMarkdown(answer, answerText);
-            break;
-          case 'complete':
-            showStatus('');
-            break;
-          case 'tool':
-            if (answer) renderMarkdown(answer, answerText);
-            cards.set(event.id, toolCard(event, cards.get(event.id)));
-            showStatus(event.state === 'running' ? 'Running ' + event.name + '…' : 'Thinking…');
-            break;
-          case 'error':
-            if (answer) renderMarkdown(answer, answerText);
-            addMessage('error', event.error);
-            showStatus('');
-            break;
-          case 'snapshot':
-            cards.clear();
-            renderHistory(history.messages, history.runs, localStorage.getItem('mini-harness-chat-mode') ?? 'standard', localStorage.getItem('mini-harness-collapse') ?? 'completed');
-            answerText = event.partial ?? '';
-            answer = answerText ? addMessage('assistant', answerText) : undefined;
-            for (const tool of event.tools ?? []) cards.set(tool.id, toolCard(tool));
-            // Fall through to apply the snapshot's run state.
-          case 'run':
-            showRunSummary(event.run);
-            changedFiles = event.run.changedFiles ?? changedFiles;
-            ended = !isRunning(event.run);
-            if (ended) showStatus(event.run.error ?? '', Boolean(event.run.error));
-            break;
-        }
-        if (trajectory && merged) renderTrajectory(history);
-        if (pinned) messages.scrollTop = messages.scrollHeight;
-    };
-    let retries = 0;
-    while (!ended && !controller.signal.aborted) {
-      try {
-        const response = await request('/sessions/' + id + '/events?run=' + item.run.id + '&after=' + cursor, { signal: controller.signal });
-        await readEvents<RunEvent>(response, accept);
-        if (!ended && !controller.signal.aborted) throw new Error('Connection closed');
-      } catch (error) {
-        if (controller.signal.aborted) return;
-        showStatus('Reconnecting…');
-        await new Promise<void>((done) => {
-          const finish = () => { clearTimeout(timer); controller.signal.removeEventListener('abort', finish); done(); };
-          const timer = setTimeout(finish, Math.min(5000, 500 * ++retries));
-          controller.signal.addEventListener('abort', finish, { once: true });
-        });
-        if (controller.signal.aborted) return;
-        try {
-          const latest = await data<{ run?: RunInfo }>('/sessions/' + id + '/runs', { signal: controller.signal });
-          if (latest.run?.id !== item.run.id) {
-            if (!controller.signal.aborted && active === id && requestId === navigation) await activate(id);
-            return;
-          }
-        } catch { /* Retry while this conversation remains selected. */ }
+          } else if (answer) renderMarkdown(answer, answerText);
+          break;
+        case 'complete':
+          showStatus('');
+          break;
+        case 'tool':
+          if (answer) renderMarkdown(answer, answerText);
+          cards.set(event.id, toolCard(event, cards.get(event.id)));
+          showStatus(event.state === 'running' ? 'Running ' + event.name + '…' : 'Thinking…');
+          break;
+        case 'error':
+          if (answer) renderMarkdown(answer, answerText);
+          addMessage('error', event.error);
+          showStatus('');
+          break;
+        case 'snapshot':
+          cards.clear();
+          renderHistoryView();
+          answerText = event.partial ?? '';
+          answer = answerText ? addMessage('assistant', answerText) : undefined;
+          for (const tool of event.tools ?? []) cards.set(tool.id, toolCard(tool));
+          // Fall through to apply the snapshot's run state.
+        case 'run':
+          showRunSummary(event.run);
+          if (!isRunning(event.run)) showStatus(event.run.error ?? '', Boolean(event.run.error));
+          break;
       }
-    }
-    if (controller.signal.aborted || active !== id || requestId !== navigation) return;
+      if (trajectory && merged) renderTrajectory(history);
+      if (pinned) messages.scrollTop = messages.scrollHeight;
+    }, () => showStatus('Reconnecting…'));
+    if (signal.aborted) return;
     try {
-      const latest = await data<ConversationView>('/sessions/' + id, { signal: controller.signal });
-      if (controller.signal.aborted || active !== id || requestId !== navigation) return;
-      showConversation(latest, latest.messages);
-      options.applySettings({ ...options.bootstrap().settings, model: latest.selectedModel });
-      if (isRunning(latest.run)) void observe(latest);
-      else showStatus(latest.run?.error ?? '', Boolean(latest.run?.error));
-    } catch (error) {
-      if (!controller.signal.aborted && requestId === navigation) {
-        setSending(false);
-        report(error);
-      }
-    }
+      const latest = await data<ConversationView>('/sessions/' + id, { signal });
+      if (!signal.aborted) displaySnapshot(latest);
+    } catch (error) { if (!signal.aborted) report(error); }
   }
 
   function updateModelControls() {
@@ -432,25 +402,27 @@ export function conversationView(api: FrontendApi, services: FrontendServices, o
     thinkingSelect.hidden = levels.length < 2;
   }
   async function compactConversation() {
-    const id = active;
+    const id = active();
     if (!id) throw new Error('Open a conversation to compact it.');
-    if (sending || pendingNavigation) throw new Error('Wait for the current operation to finish.');
-    const request = navigation;
-    pendingNavigation = true;
+    if (sending() || pending) throw new Error('Wait for the current operation to finish.');
+    const signal = begin();
     showStatus('Compacting conversation…');
     try {
-      await data('/sessions/' + id + '/compact', payload('POST', {}));
-      if (request === navigation) { await activate(id); showStatus('Conversation compacted.'); }
-    } finally { if (request === navigation) pendingNavigation = false; }
+      await data('/sessions/' + id + '/compact', { ...payload('POST', {}), signal });
+      if (!signal.aborted) {
+        const item = await data<ConversationView>('/sessions/' + id, { signal });
+        if (!signal.aborted) { displaySnapshot(item); showStatus('Conversation compacted.'); }
+      }
+    } finally { finish(signal); }
   }
   async function queueMessage() {
-    const id = active; if (!id || !sending || pendingNavigation) return;
+    const id = active(); if (!id || !sending() || pending) return;
     const button = element<'button'>('queueSend'); button.disabled = true;
     try {
       const queued = await data<{ steer: string[]; followUp: string[] }>('/sessions/' + id + '/queue', payload('POST', {
         message: commands.prepare(prompt.value), mode: value('queueMode'), attachments: composerUi.attachments()
       }));
-      if (active !== id) return;
+      if (active() !== id) return;
       prompt.value = ''; composerUi.clear(); adjustPrompt(); showQueue(queued);
     } catch (error) { report(error); } finally { button.disabled = false; }
   }
@@ -460,37 +432,37 @@ export function conversationView(api: FrontendApi, services: FrontendServices, o
     element('queuedMessages').hidden = !items.length;
   }
   async function refreshQueue() {
-    const id = active;
-    try { const queue = await data<{ steer: string[]; followUp: string[] }>('/sessions/' + id + '/queue'); if (active === id && sending) showQueue(queue); }
+    const id = active();
+    try { const queue = await data<{ steer: string[]; followUp: string[] }>('/sessions/' + id + '/queue'); if (active() === id && sending()) showQueue(queue); }
     catch { /* Navigation or run completion can remove the queue. */ }
   }
   element<'button'>('stop').onclick = async () => {
-    if (!active) return;
+    if (!active()) return;
     element<'button'>('stop').disabled = true;
     showStatus('Cancelling…');
-    try { await request('/sessions/' + active + '/cancel', payload('POST', {})); }
+    try { await request('/sessions/' + active() + '/cancel', payload('POST', {})); }
     catch (error) { report(error); element<'button'>('stop').disabled = false; }
   };
   composer.onsubmit = (event) => { event.preventDefault(); void send(prompt.value); };
   prompt.onkeydown = (event) => {
     if (!event.defaultPrevented && event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
       event.preventDefault();
-      if (sending) void queueMessage(); else composer.requestSubmit();
+      if (sending()) void queueMessage(); else composer.requestSubmit();
     }
   };
   prompt.oninput = adjustPrompt;
 
   api.watchContributions((region) => {
-    if (!sending && ['conversation.chat.node', 'tool.call.toolview', 'tool.call.action'].includes(region)) {
+    if (!sending() && ['conversation.chat.node', 'tool.call.toolview', 'tool.call.action'].includes(region)) {
       const position = messages.scrollTop;
-      renderHistory(history.messages, history.runs, localStorage.getItem('mini-harness-chat-mode') ?? 'standard', localStorage.getItem('mini-harness-collapse') ?? 'completed');
+      renderHistoryView();
       messages.scrollTop = position;
     }
   });
   document.addEventListener('mini-harness-presentation', () => {
-    if (sending) return;
+    if (sending()) return;
     const position = messages.scrollTop;
-    renderHistory(history.messages, history.runs, localStorage.getItem('mini-harness-chat-mode') ?? 'standard', localStorage.getItem('mini-harness-collapse') ?? 'completed');
+    renderHistoryView();
     messages.scrollTop = position;
   }, { signal: api.signal });
   messages.addEventListener('click', (event) => {
@@ -508,13 +480,13 @@ export function conversationView(api: FrontendApi, services: FrontendServices, o
   return {
     newSession, activate, showConversation, updateModelControls,
     clear() {
-      ++navigation;
-      pendingNavigation = false;
+      pending?.controller.abort();
+      pending = undefined;
       composerUi.clear();
       showConversation();
       showStatus('');
     },
-    active: () => active, changedFiles: () => changedFiles, sending: () => sending,
+    active, changedFiles: () => runSummary?.changedFiles ?? [], sending,
     refreshQueue, report,
     command(command: ComposerCommand) {
       const dispose = commands.register(command);
@@ -524,8 +496,8 @@ export function conversationView(api: FrontendApi, services: FrontendServices, o
     registerCoreCommands(register: (command: ComposerCommand) => void) {
       register({ name: 'model', group: 'Conversation', description: 'Choose a configured model', run: () => modelPicker.open() });
       register({ name: 'export', group: 'Conversation', description: 'Export the current conversation', run: () => {
-        if (!active) throw new Error('Open a conversation to export it.');
-        return options.exportSessions([active]);
+        if (!active()) throw new Error('Open a conversation to export it.');
+        return options.exportSessions([active()]);
       } });
       register({ name: 'compact', group: 'Conversation', description: 'Summarize earlier messages to free context', run: compactConversation });
     },

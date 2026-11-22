@@ -11,9 +11,9 @@ export const shell: BuiltinPlugin = {
     mode: Type.String({ title: 'Shell policy', enum: ['isolated', 'host'] }),
     timeoutSeconds: Type.Integer({ title: 'Timeout (seconds)', minimum: 1, maximum: 300 })
   }) } },
-  icon: 'terminal', browser: '/builtins/shell.js', inject: ['harnessState', 'harnessWorkspace', 'harnessShellPolicy', 'harnessTools', 'harnessRoutes', 'harnessSessionEvents'],
+  icon: 'terminal', browser: '/builtins/shell.js', inject: ['harnessState', 'harnessWorkspace', 'harnessShellPolicy', 'harnessTools', 'harnessRoutes'],
   setup(ctx: Context) {
-    const approvals = new Approvals((approval) => ctx.harnessSessionEvents.publish(approval.sessionId, { type: 'approval', approval }));
+    const approvals = new Approvals();
     ctx.effect(() => () => approvals.close());
     const { home } = ctx.harnessState.paths;
     const tool = (sessionId: string) => defineTool({
@@ -22,7 +22,7 @@ export const shell: BuiltinPlugin = {
       parameters: Type.Object({ command: Type.String({ minLength: 1, maxLength: 16000 }) }),
       execute: async (_id, args, signal) => {
         ctx.harnessWorkspace.approval(sessionId, true);
-        try { await approvals.request(sessionId, args.command, signal, _id); }
+        try { await approvals.request(sessionId, args.command, signal); }
         finally { ctx.harnessWorkspace.approval(sessionId, false); }
         const cwd = ctx.harnessWorkspace.resolve(sessionId);
         const output = await runShell(args.command, cwd, { ...ctx.harnessShellPolicy.get(), signal, stateDir: home });

@@ -65,8 +65,7 @@ export class MiniHarnessRuntime {
         }
       },
       delegation: this.delegation,
-      todos: { get: (id) => this.getTodos(id), set: (id, items) => this.setTodos(id, items) },
-      publish: (id, event) => this.publishSessionEvent(id, event)
+      todos: { get: (id) => this.getTodos(id), set: (id, items) => this.setTodos(id, items) }
     });
   }
 
@@ -84,7 +83,7 @@ export class MiniHarnessRuntime {
     if (!session.sessionManager.getBranch().some((entry) => entry.type === 'message' && entry.message.role === 'user'))
       throw new Error('Start a conversation before updating its tasks');
     session.sessionManager.appendCustomEntry('mini-harness.todos', items);
-    this.publishSessionEvent(id, { type: 'todos', items });
+    this.busy.get(id)?.publish({ type: 'todos', items });
   }
 
   workspacePath(id: string) {
@@ -216,17 +215,6 @@ export class MiniHarnessRuntime {
 
   sessionMessages(id: string) { return this.sessionHistory(id).messages; }
 
-  publishSessionEvent(id: string, event: StreamEvent) {
-    const manager = this.openSessions.get(id)?.sessionManager;
-    const run = this.busy.get(id);
-    if (event.type === 'approval' && manager) {
-      const entryId = manager.appendCustomEntry('mini-harness.approval', { ...event.approval, runId: run?.info.id });
-      const { id, timestamp } = manager.getEntry(entryId);
-      event = { ...event, fact: { id, timestamp, runId: run?.info.id } };
-    }
-    run?.publish?.(event);
-  }
-
   async getConversation(id: string) {
     if (!this.registry.get(id)) throw new Error('Conversation not found');
     const session = await this.open(id);
@@ -262,36 +250,41 @@ export class MiniHarnessRuntime {
       try { emit?.(item); } catch { /* An observer cannot terminate the run. */ }
     };
     run.publish = publish;
+    const transition = (state: RunInfo['state'], error?: string) => {
+      info.state = state;
+      if (state !== 'running') info.finishedAt = new Date().toISOString();
+      if (error !== undefined) info.error = error;
+      const snapshot = { ...info, sequence: info.sequence + 1 };
+      try {
+        this.registry.update(id, { run: snapshot });
+        this.openSessions.get(id)?.sessionManager.appendCustomEntry('mini-harness.run', snapshot);
+      } finally {
+        publish({ type: 'run', run: snapshot });
+      }
+    };
     const promptSession = async () => {
       cancellation.throwIfAborted();
-      run.info.state = 'running';
-      this.registry.update(id, { run: run.info });
-      publish({ type: 'run', run: { ...run.info } });
-      return this.runPrompt(record, prompt, publish, cancellation, choice, prepared.images, thinkingLevel);
+      const session = await this.open(id);
+      cancellation.throwIfAborted();
+      transition('running');
+      return this.runPrompt(session, record, prompt, publish, cancellation, choice, prepared.images, thinkingLevel);
     };
     const work = record.parentId ? this.semaphore.run((lease) => {
       run.lease = lease;
       return promptSession();
     }, cancellation) : promptSession();
     run.done = work.then((text) => {
-      run.info.state = 'completed';
+      transition('completed');
       return text;
     }, (error) => {
-      run.info.state = cancellation.aborted ? 'cancelled' : 'failed';
-      run.info.error = cancellation.aborted ? 'Agent run cancelled' : error instanceof Error ? error.message : String(error);
-      publish({ type: 'error', error: run.info.error });
-      throw new Error(run.info.error, { cause: error });
+      const state = cancellation.aborted ? 'cancelled' : 'failed';
+      const message = cancellation.aborted ? 'Agent run cancelled' : error instanceof Error ? error.message : String(error);
+      publish({ type: 'error', error: message });
+      transition(state, message);
+      throw new Error(message, { cause: error });
     }).finally(() => {
-      run.info.finishedAt = new Date().toISOString();
-      const terminal = { ...run.info, sequence: run.info.sequence + 1 };
-      try {
-        this.registry.update(id, { run: terminal });
-        this.openSessions.get(id)?.sessionManager.appendCustomEntry('mini-harness.run', terminal);
-      } finally {
-        publish({ type: 'run', run: terminal });
-        this.busy.delete(id);
-        run.events.close();
-      }
+      this.busy.delete(id);
+      run.events.close();
     });
     // Server-owned runs may outlive every observer.
     void run.done.catch(() => {});
@@ -334,12 +327,9 @@ export class MiniHarnessRuntime {
     return cancelled;
   }
 
-  private async runPrompt(record: NonNullable<ReturnType<SessionRegistry['get']>>, prompt: string,
+  private async runPrompt(session: AgentSession, record: NonNullable<ReturnType<SessionRegistry['get']>>, prompt: string,
       emit: (event: StreamEvent) => void, signal: AbortSignal, choice?: ModelChoice, images: ImageInput[] = [], thinkingLevel?: AgentSession['thinkingLevel']) {
     const { id } = record;
-    signal.throwIfAborted();
-    const session = await this.open(id);
-    session.sessionManager.appendCustomEntry('mini-harness.run', this.runInfo(id));
     signal.throwIfAborted();
     const model = this.resolveModel(choice);
     if (model && (session.model?.provider !== model.provider || session.model?.id !== model.id))
@@ -353,10 +343,10 @@ export class MiniHarnessRuntime {
       writeJson(this.paths.settings, next);
       this.settings = next;
     }
-    this.registry.update(id, { model: actual });
-    if (record.title === 'New conversation') this.registry.update(id, { title: prompt.trim().slice(0, 72) });
+    const title = record.title === 'New conversation' ? { title: prompt.trim().slice(0, 72) } : {};
+    this.registry.update(id, { ...title, model: actual });
     const runId = this.runInfo(id).id;
-    const toolCalls = new Map<string, { args: unknown; start: number; elapsed?: number }>();
+    const toolArgs = new Map<string, unknown>();
     const off = session.subscribe((event) => {
       switch (event.type) {
         case 'message_start':
@@ -371,8 +361,7 @@ export class MiniHarnessRuntime {
           queueMicrotask(() => {
             const entry = session.sessionManager.getLeafEntry();
             if (entry?.type !== 'message' || entry.message !== event.message) return;
-            const call = entry.message.role === 'toolResult' ? toolCalls.get(entry.message.toolCallId) : undefined;
-            const message = projectMessage(entry, runId, call?.args);
+            const message = projectMessage(entry, runId, toolArgs);
             if (!message) return;
             const { id, runId: messageRun, timestamp } = message;
             const identity = { id, runId: messageRun, timestamp };
@@ -382,23 +371,19 @@ export class MiniHarnessRuntime {
               emit({ type: 'user', content, text, entry: identity });
             } else if (message.role === 'assistant') emit({ type: 'assistant-end', message });
             else {
-              toolCalls.delete(message.toolCallId);
               emit({ type: 'tool', id: message.toolCallId, name: message.toolName, state: message.isError ? 'error' : 'finished',
                 arguments: message.arguments, content: message.content, details: message.details, sessionId: message.sessionId,
-                elapsedMs: message.elapsedMs ?? call?.elapsed, entry: identity });
+                elapsedMs: message.elapsedMs, entry: identity });
             }
           });
           break;
         case 'tool_execution_start':
-          toolCalls.set(event.toolCallId, { args: event.args, start: performance.now() });
           emit({ type: 'tool', id: event.toolCallId, name: event.toolName, state: 'running', arguments: event.args });
           break;
         case 'tool_execution_update':
-          emit({ type: 'tool', id: event.toolCallId, name: event.toolName, state: 'running', arguments: toolCalls.get(event.toolCallId)?.args, content: event.partialResult?.content });
+          emit({ type: 'tool', id: event.toolCallId, name: event.toolName, state: 'running', arguments: event.args, content: event.partialResult?.content });
           break;
         case 'tool_execution_end': {
-          const call = toolCalls.get(event.toolCallId);
-          if (call) call.elapsed = event.durationMs ?? performance.now() - call.start;
           const run = this.busy.get(id);
           const changedPath = event.result?.details?.changedPath;
           if (!event.isError && typeof changedPath === 'string' && run)

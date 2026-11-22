@@ -109,3 +109,25 @@ test('ambiguous workspace records are rejected without rewriting either index', 
     assert.equal(readFileSync(paths.registry, 'utf8'), sessions);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+test('migration keeps an offline workspace with no conversations and reports its path', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'mini-harness-offline-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const paths = getPaths(realpathSync.native(root), { MINI_HARNESS_HOME: join(root, 'home') });
+  const offline = join(paths.cwd, 'offline');
+  const file = join(paths.home, 'workspaces.json');
+  mkdirSync(paths.home);
+  writeFileSync(file, JSON.stringify([offline]));
+  const warn = t.mock.method(console, 'warn', () => {});
+  const registry = new SessionRegistry(paths);
+  const record = registry.workspaces.list().find(({ path }) => path === offline);
+  assert.ok(record);
+  assert.match(String(warn.mock.calls[0].arguments[0]), /offline/);
+  assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')).records.find(({ id }) => id === record.id), record);
+
+  mkdirSync(offline);
+  const restored = new SessionRegistry(paths);
+  assert.equal(restored.workspaces.register(offline).id, record.id);
+  assert.equal(restored.create({ workspaceId: record.id }).cwd, offline);
+  assert.equal(warn.mock.callCount(), 1);
+});

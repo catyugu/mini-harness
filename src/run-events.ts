@@ -1,4 +1,4 @@
-import { isRunning, type RunEvent, type RunInfo, type SessionFact, type StreamEvent, type ViewMessage } from './protocol.js';
+import { isRunning, type RunEvent, type RunInfo, type StreamEvent, type ViewMessage } from './protocol.js';
 
 export class RunEvents {
   private events: RunEvent[] = [];
@@ -29,7 +29,7 @@ export class RunEvents {
     return item;
   }
 
-  watch(after: number, emit: (event: RunEvent) => void, history: () => { messages: ViewMessage[]; runs: RunInfo[]; facts: SessionFact[] }) {
+  watch(after: number, emit: (event: RunEvent) => void, history: () => { messages: ViewMessage[]; runs: RunInfo[] }) {
     if (after < (this.events[0]?.sequence ?? 1) - 1) {
       emit({ type: 'snapshot', ...history(), partial: this.partial, tools: this.activeTools,
         run: { ...this.info }, sequence: this.info.sequence });

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { lstatSync, readFileSync, realpathSync, unlinkSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { getPaths, readJson, writeJson } from './config.js';
-import { canonicalWorkspacePath, WorkspaceCatalog, workspaceId } from './workspace-catalog.js';
+import { openWorkspaceCatalog, type WorkspaceCatalog } from './workspace-catalog.js';
 import { isRunning, type RunInfo } from './protocol.js';
 
 export interface ModelChoice { provider: string; id: string }
@@ -30,22 +30,16 @@ export class SessionRegistry {
   readonly events = new EventTarget();
   readonly deletingWorkspaces = new Set<string>();
 
-  constructor(private readonly paths: ReturnType<typeof getPaths>, readonly workspaces = new WorkspaceCatalog(paths)) {
+  readonly workspaces: WorkspaceCatalog;
+
+  constructor(private readonly paths: ReturnType<typeof getPaths>) {
     this.state = readJson<RegistryState>(paths.registry, { sessions: [] });
     if (!Array.isArray(this.state.sessions) || (this.state.pendingDelete && !Array.isArray(this.state.pendingDelete)))
       throw new Error('Invalid conversation index');
+    const { catalog, sessions } = openWorkspaceCatalog(paths, this.state.sessions);
+    this.workspaces = catalog;
+    if (sessions !== this.state.sessions) this.commit({ ...this.state, sessions });
     this.finishDeletion();
-    const legacy = this.state.sessions.filter((item) => !item.workspaceId);
-    if (legacy.length) {
-      workspaces.importLegacy(legacy.map(({ cwd }) => cwd));
-      this.commit({ ...this.state, sessions: this.state.sessions.map((item) => {
-        if (item.workspaceId) return item;
-        let path = resolve(item.cwd);
-        try { path = canonicalWorkspacePath(path); } catch { /* Keep the session addressable for export or deletion. */ }
-        return { ...item, workspaceId: workspaces.list().find((record) => record.path === path)?.id ?? workspaceId(path) };
-      }) });
-    }
-    workspaces.restoreReferences(this.state.sessions);
     if (this.state.sessions.some(({ run }) => isRunning(run))) this.commit({ ...this.state,
       sessions: this.state.sessions.map((item) => isRunning(item.run) ? { ...item,
         run: { ...item.run, state: 'interrupted', error: 'Server stopped before the run finished', finishedAt: undefined }

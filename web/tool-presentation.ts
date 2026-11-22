@@ -18,7 +18,8 @@ export function toolPresentation(tool: ToolView) {
   if (kind === 'terminal') try {
     const result = JSON.parse(output);
     if (typeof result.code === 'number' && Number.isInteger(result.code)) exitCode = result.code;
-    terminalText = [result.reason, result.stdout, result.stderr].filter((part) => typeof part === 'string' && part).join('\n');
+    const exit = exitCode === undefined ? undefined : 'Exit ' + exitCode;
+    terminalText = [exit, result.reason, result.stdout, result.stderr].filter((part) => typeof part === 'string' && part).join('\n');
   } catch { /* Unstructured plugin output uses the generic output. */ }
   const details = tool.details as { diff?: unknown } | undefined;
   const diff = typeof details?.diff === 'string' ? details.diff : undefined;

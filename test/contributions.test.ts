@@ -15,19 +15,39 @@ test('keyed overrides restore the original and list replacements retain their do
   assert.deepEqual(registry.resolve('conversation.composer.dock').map(({ value }) => value), ['activity', 'replacement']);
 });
 
-test('scope, single, and conditional chain selection reject invalid registrations', () => {
+test('scoped priority matching reject invalid registrations', () => {
   const registry = new ContributionRegistry();
-  registry.define('fixture.single', 'single');
   const scope = { workspaceId: 'workspace', sessionId: 'one' };
-  registry.register('fixture.single', { owner: 'core', id: 'control', value: 'global' });
-  registry.register('fixture.single', { owner: 'custom', id: 'control', scope, priority: 5, value: 'session' });
-  assert.equal(registry.resolve('fixture.single', scope)[0].value, 'session');
-  assert.equal(registry.resolve('fixture.single', { ...scope, sessionId: 'two' })[0].value, 'global');
-  registry.register('conversation.chat.node', { owner: 'core', id: 'fallback', value: 'fallback' });
-  registry.register('conversation.chat.node', { owner: 'custom', id: 'special', value: 'special', priority: 1, accepts: (input) => input === 'match' });
+  registry.register('conversation.chat.node', { owner: 'core', id: 'control', value: 'global' });
+  registry.register('conversation.chat.node', { owner: 'custom', id: 'control', scope, priority: 5, value: 'session' });
+  assert.equal(registry.resolve('conversation.chat.node', scope)[0].value, 'session');
+  assert.equal(registry.resolve('conversation.chat.node', { ...scope, sessionId: 'two' })[0].value, 'global');
+  registry.register('conversation.chat.node', { owner: 'core', id: 'fallback', value: 'fallback', priority: 1 });
+  registry.register('conversation.chat.node', { owner: 'custom', id: 'special', value: 'special', priority: 2, accepts: (input) => input === 'match' });
   assert.equal(registry.resolve('conversation.chat.node', undefined, undefined, 'other')[0].value, 'fallback');
   assert.equal(registry.resolve('conversation.chat.node', undefined, undefined, 'match')[0].value, 'special');
   assert.throws(() => registry.register('tool.call.toolview', { owner: 'bad', id: 'bad', value: null }), /requires a key/);
-  assert.throws(() => registry.register('fixture.single', { owner: 'core', id: 'control', value: null }), /Duplicate/);
-  assert.throws(() => registry.register('fixture.single', { owner: 'bad', id: 'bad', scope: { workspaceId: '' }, value: null }), /scope/);
+  assert.throws(() => registry.register('conversation.chat.node', { owner: 'core', id: 'control', value: null }), /Duplicate/);
+  assert.throws(() => registry.register('conversation.chat.node', { owner: 'bad', id: 'bad', scope: { workspaceId: '' }, value: null }), /scope/);
+});
+
+test('a failing observer leaves registration committed and other observers in sync', () => {
+  const errors: Error[] = [];
+  const registry = new ContributionRegistry((error) => errors.push(error));
+  const region = 'conversation.input.dock';
+  const before: unknown[] = [], after: unknown[] = [];
+  const read = () => registry.resolve(region).map(({ value }) => value);
+  registry.watch(() => before.push(read()));
+  const failure = new Error('render failed');
+  registry.watch(() => { throw failure; });
+  registry.watch(() => after.push(read()));
+
+  const dispose = registry.register(region, { owner: 'plugin', id: 'widget', value: 'active' });
+  assert.deepEqual(read(), ['active']);
+  dispose();
+  dispose();
+  assert.deepEqual(before, [['active'], []]);
+  assert.deepEqual(after, before);
+  assert.deepEqual(read(), []);
+  assert.deepEqual(errors, [failure, failure]);
 });

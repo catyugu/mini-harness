@@ -137,7 +137,7 @@ The browser runs each plugin in a Cordis scope and disposes its slots, completio
 
 The Plugins page can install a local bundle containing `plugin.js`, optional `plugin.json` and `web.js` (at most 1 MiB combined). New installations stay disabled. Disable the plugin before uninstalling; uninstall removes the local plugin directory permanently. Larger development plugins can still be placed in the local plugins directory manually.
 
-Register a right-panel tab with `api.rightTab(type, { title, create, launcher })`. Both callbacks receive an address with `workspaceId`, optional `sessionId`, and optional `path`. `create(address, signal)` returns the tab's element and receives an abort signal for any in-flight work. `launcher` optionally adds a button inside the panel. Call `api.openTab(type, path?)` to open or focus the tab in the current conversation or workspace. Disabling the plugin closes its tabs and aborts their outstanding work.
+Register a right-panel tab with `api.rightTab(type, { title, create, launcher })`. Both callbacks receive an address with `workspaceId`, optional `sessionId`, and optional `path`. `create(address, signal)` returns the tab's element and receives an abort signal for any in-flight work. `launcher` optionally adds a button inside the panel. Call `api.openTab(type, path?)` to open or focus the tab in the current conversation or workspace. Only the active tab mounts while the panel is open. Changing tabs or disabling the plugin aborts outstanding work. Disabling a plugin keeps its tab addresses so they can be restored on re-enable.
 
 ## GUI API additions
 
@@ -165,4 +165,4 @@ Images (PNG/JPEG/GIF/WebP) go through Pi's image input and require an image-capa
 
 The file, Skill and approval endpoints return 404 when their corresponding plugin is disabled. Every enabled built-in Shell call requires approval. Requests expire after five minutes; stopping the run or server cancels pending approval. Approval permits the command under the existing shell policy. Reviewed local plugins remain trusted code; this is not a general-purpose containment mechanism.
 
-Browser plugins can use `api.contribute(region, {id, key?, priority?, order?, scope?, accepts?, value})`, `api.contributions(region, key?, context?)` and `api.watchContributions(listener)`. Use `services.openResource({path, kind, line})` for files, Diff or Shell output.
+Browser plugins can use `api.contribute(region, {id, key?, priority?, order?, scope?, accepts?, value})`, `api.contributions(region, key?, context?)` and `api.watchContributions(listener)`. `accepts` applies to Chat renderers, where the highest-priority match wins. Use `services.openResource({path, kind, line})` for files and Diff.

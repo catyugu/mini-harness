@@ -34,44 +34,26 @@ export function harnessSkillOptions(paths: ReturnType<typeof getPaths>, cwd: str
     additionalSkillPaths: [project, global, agent].filter(existsSync),
     skillsOverride(base: LoadSkillsResult): LoadSkillsResult {
       const winners = new Map(base.skills.map((skill) => [skill.name, skill]));
-      const rank = (skill: LoadSkillsResult['skills'][number]) => priority(skill.filePath, skill.sourceInfo.scope);
-      const candidates = new Set<string>();
-      for (const diagnostic of base.diagnostics) {
-        if (diagnostic.type !== 'collision') continue;
-        const loser = diagnostic.collision?.loserPath ?? diagnostic.path;
-        const winner = winners.get(diagnostic.collision?.name);
-        if (loser && (!winner || priority(loser) < rank(winner))) candidates.add(loser);
-      }
-      // Pi has already scanned all roots. Reopen only shadowed files that could win.
-      const loaded = candidates.size ? loadSkills({ cwd, agentDir: paths.agent, includeDefaults: false,
-        skillPaths: [...candidates].sort((a, b) => priority(a) - priority(b)) }) : { skills: [], diagnostics: [] };
-      const promoted = new Map<string, string>();
-      for (const skill of loaded.skills) {
-        const previous = winners.get(skill.name);
-        if (!previous || rank(skill) < rank(previous)) {
-          if (previous) promoted.set(skill.name, previous.filePath);
-          winners.set(skill.name, skill);
-        }
-      }
-      const namesByPath = new Map(loaded.skills.map(({ name, filePath }) => [filePath, name]));
-      for (const { collision } of loaded.diagnostics)
-        if (collision) namesByPath.set(collision.loserPath, collision.name);
-      const diagnostics = base.diagnostics.map((item) => {
-        if (item.type !== 'collision') return item;
-        const path = item.collision?.loserPath ?? item.path;
-        const name = item.collision?.name ?? namesByPath.get(path);
-        const winnerPath = winners.get(name)?.filePath;
-        if (!path || !winnerPath) return item;
-        const loserPath = path === winnerPath ? promoted.get(name) : path;
-        if (!loserPath) return item;
-        return { ...item, path: loserPath, collision: { ...item.collision, resourceType: 'skill' as const, name, winnerPath, loserPath } };
+      const candidates = base.diagnostics.flatMap(({ collision }) => {
+        if (collision?.resourceType !== 'skill') return [];
+        const winner = winners.get(collision.name);
+        return priority(collision.loserPath) < priority(winner.filePath, winner.sourceInfo.scope) ? [collision.loserPath] : [];
       });
-      return {
-        diagnostics: [...diagnostics, ...loaded.diagnostics.filter(({ type }) => type !== 'collision')],
-        skills: [...winners.values()].map((skill) => ({ ...skill, sourceInfo: {
-          ...skill.sourceInfo, scope: rank(skill) < 2 ? 'project' : 'user'
-        } }))
-      };
+      if (!candidates.length) return base;
+
+      // Pi 1.6 reports the original winner and each shadowed file by name.
+      const loaded = loadSkills({ cwd, agentDir: paths.agent, includeDefaults: false,
+        skillPaths: [...new Set(candidates)].sort((a, b) => priority(a) - priority(b)) });
+      for (const skill of loaded.skills) winners.set(skill.name, skill);
+
+      const diagnostics = base.diagnostics.map((item) => {
+        const { collision } = item;
+        if (collision?.resourceType !== 'skill') return item;
+        const winnerPath = winners.get(collision.name).filePath;
+        const loserPath = winnerPath === collision.loserPath ? collision.winnerPath : collision.loserPath;
+        return { ...item, path: loserPath, collision: { ...collision, winnerPath, loserPath } };
+      });
+      return { skills: [...winners.values()], diagnostics: [...diagnostics, ...loaded.diagnostics.filter(({ type }) => type !== 'collision')] };
     }
   };
 }

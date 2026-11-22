@@ -11,7 +11,7 @@ export const catalogPlugin: BrowserPlugin = {
   id: 'core:plugins', inject: ['miniSettings', 'miniState', 'miniShell', 'miniSwitch'],
   setup(ctx, api) {
     const { miniSettings: settings, miniState: state, miniShell: shell, miniSwitch: syncPlugins } = ctx;
-    const refresh = async () => { await state.refresh(); await syncPlugins(state.get()); };
+    const refresh = async () => { await state.refresh(); return syncPlugins(state.get()); };
     const catalog = pluginCatalog(api, state.get, refresh, shell.showPage);
     const manage = button('Manage plugins');
     manage.onclick = () => { settings.close(); catalog.open(); };
@@ -111,7 +111,7 @@ function installer(api: FrontendApi, installed: () => Promise<void>) {
   return modal;
 }
 
-function pluginCatalog(api: FrontendApi, snapshot: () => Bootstrap, refresh: () => Promise<void>, showPage: (page?: HTMLElement) => void) {
+function pluginCatalog(api: FrontendApi, snapshot: () => Bootstrap, refresh: () => Promise<Error[]>, showPage: (page?: HTMLElement) => void) {
   const entry = fromMarkup<HTMLButtonElement>('<button type="button" class="nav-action" aria-label="Browse plugins" aria-controls="pluginCatalog"><span class="nav-label">Plugins</span></button>');
   entry.prepend(icon('plugin'));
   const page = fromMarkup(`<section id="pluginCatalog" class="catalog-page" tabindex="-1" aria-label="Plugin catalog">
@@ -126,8 +126,8 @@ function pluginCatalog(api: FrontendApi, snapshot: () => Bootstrap, refresh: () 
   const status = page.querySelector<HTMLElement>('.catalog-status');
   header.append(openInstall);
   const modal = installer(api, async () => {
-    await refresh();
-    status.textContent = 'Plugin installed. Enable it to load it.';
+    const errors = await refresh();
+    status.textContent = errors.length ? errors.map(({ message }) => message).join('\n') : 'Plugin installed. Enable it to load it.';
   });
   openInstall.onclick = () => modal.showModal();
   api.mount('sidebar', entry, -10);
@@ -149,7 +149,12 @@ function pluginCatalog(api: FrontendApi, snapshot: () => Bootstrap, refresh: () 
   async function mutate(operation: () => Promise<unknown>, failed: (error: Error) => void) {
     if (busy) return false;
     busy = true;
-    try { await operation(); await refresh(); return true; }
+    try {
+      await operation();
+      const errors = await refresh();
+      if (errors.length) failed(new Error(errors.map(({ message }) => message).join('\n')));
+      return true;
+    }
     catch (error) { failed(error); return false; }
     finally { busy = false; }
   }
@@ -208,7 +213,7 @@ function pluginCatalog(api: FrontendApi, snapshot: () => Bootstrap, refresh: () 
           const patch: SettingsPatch = key ? { [key]: config } : { pluginConfig: { [plugin.id]: config } };
           const saved = await mutate(() => api.request('/settings', payload('PATCH', patch)),
             (error) => { outcome.textContent = error.message; });
-          if (saved) outcome.textContent = 'Saved.';
+          if (saved && !outcome.textContent) outcome.textContent = 'Saved.';
         } catch (error) { outcome.textContent = error.message; }
         finally { save.disabled = false; }
       };
@@ -264,7 +269,7 @@ function pluginCatalog(api: FrontendApi, snapshot: () => Bootstrap, refresh: () 
             remove.disabled = true;
             const deleted = await mutate(() => api.request('/plugins/' + plugin.id, { method: 'DELETE' }),
               (error) => { status.textContent = error.message; });
-            if (deleted) { status.textContent = 'Plugin uninstalled.'; openInstall.focus(); }
+            if (deleted) { status.textContent ||= 'Plugin uninstalled.'; openInstall.focus(); }
             remove.disabled = false;
           };
           controls.append(remove);
