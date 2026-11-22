@@ -35,6 +35,7 @@ export interface MessageActionContext {
 export interface MessageAction {
   id: string;
   label: string;
+  successLabel?: string;
   icon: 'copy' | 'edit' | 'refresh';
   order?: number;
   visible(context: MessageActionContext): boolean;

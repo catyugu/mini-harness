@@ -79,7 +79,9 @@ function renderMessageActions(wrapper: HTMLElement) {
     button.append(icon(extension.icon));
     button.onclick = () => {
       button.disabled = true;
-      void Promise.resolve().then(() => extension.run(context)).catch((error) => {
+      void Promise.resolve().then(() => extension.run(context)).then(() => {
+        if (extension.successLabel) { button.title = extension.successLabel; button.setAttribute('aria-label', extension.successLabel); }
+      }).catch((error) => {
         button.title = error instanceof Error ? error.message : String(error);
         button.setAttribute('aria-label', 'Action failed: ' + button.title);
       }).finally(() => { button.disabled = false; });
