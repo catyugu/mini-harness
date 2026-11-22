@@ -58,7 +58,13 @@
         <div id="suggestions" class="suggestions" aria-label="Input suggestions" hidden></div>
         <textarea id="prompt" rows="2" placeholder="Ask anything…" aria-label="Message" required></textarea>
         <div class="composer-footer">
-          <div id="composerExtensions" class="composer-tools"></div><select id="modelSelect" class="model-select" aria-label="Model"><option value="">Auto model</option></select><span class="composer-hint">Shift+Enter for a new line</span>
+          <div id="composerExtensions" class="composer-tools"></div><button id="modelSelect" class="model-select" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="modelResults">Choose model</button>
+          <div id="modelPicker" class="model-picker" popover="auto">
+            <input id="modelSearch" type="search" role="combobox" aria-label="Search models" aria-controls="modelResults" aria-autocomplete="list" aria-expanded="true" placeholder="Search models">
+            <div id="modelResults" role="listbox" aria-label="Configured models"></div>
+            <p id="modelEmpty" class="hint" role="status" hidden></p>
+          </div>
+          <select id="thinkingLevel" aria-label="Thinking level" hidden></select><span class="composer-hint">Shift+Enter for a new line</span>
           <select id="queueMode" aria-label="While running" hidden><option value="steer">Add instruction</option><option value="followUp">Follow up</option></select>
           <button id="queueSend" class="small-button" type="button" hidden>Queue</button>
           <button id="stop" type="button" aria-label="Stop response" hidden data-icon="stop"></button>

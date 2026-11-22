@@ -1,7 +1,7 @@
 import type { Settings } from '../src/config.js';
 import type { Conversation, ModelChoice } from '../src/registry.js';
 import type { MessageContent, StreamEvent, RunEvent, RunInfo, ViewMessage } from '../src/protocol.js';
-import type { ModelInfo, Bootstrap, ConversationView } from './types.js';
+import type { Bootstrap, ConversationView, ThinkingLevel } from './types.js';
 import { renderMarkdown, markdownSource } from './markdown.js';
 
 import { element, value, api, data, payload, setWorkspace } from './api.js';
@@ -14,13 +14,14 @@ import { fileInspector } from './files.js';
 import { providerManager } from './provider-manager.js';
 import { pluginInstaller } from './plugin-manager.js';
 import { workspacePicker } from './workspaces.js';
+import { createModelPicker } from './model-picker.js';
 import { createSettings, createSettingsNavigation } from './settings.js';
 
 const messages = element('messages');
 const welcome = element('welcome');
 const composer = element<'form'>('composer');
 const prompt = element<'textarea'>('prompt');
-const modelSelect = element<'select'>('modelSelect');
+const thinkingSelect = element<'select'>('thinkingLevel');
 const settingsPanel = element<'dialog'>('settingsPanel');
 const narrow = matchMedia('(max-width: 860px)');
 
@@ -31,7 +32,10 @@ let sending = false;
 let navigation = 0;
 let pendingNavigation = false;
 let observing: AbortController;
-let modelChange: Promise<Settings>;
+let modelDraft: ModelChoice;
+let conversationModel: ModelChoice;
+let conversationThinking: ThinkingLevel;
+const modelPicker = createModelPicker((choice) => { modelDraft = choice; updateModelControls(); });
 let changedFiles: string[] = [];
 const lastInputs = new Map<string, { message: string; attachments: import('../src/input.js').Attachment[] }>();
 const isRunning = (run?: RunInfo) => run?.state === 'queued' || run?.state === 'running';
@@ -145,6 +149,8 @@ function showConversation(item?: Conversation, history: ViewMessage[] = []) {
   observing?.abort();
   setSending(isRunning(item?.run));
   active = item?.id;
+  conversationModel = item?.model;
+  conversationThinking = (item as ConversationView)?.thinkingLevel;
   changedFiles = item?.run?.changedFiles ?? [];
   const previous = history.filter((message) => message.role === 'user').at(-1);
   if (active && previous && !lastInputs.has(active)) {
@@ -157,6 +163,7 @@ function showConversation(item?: Conversation, history: ViewMessage[] = []) {
     if (active) sessionStorage.setItem('mini-harness-active:' + bootstrap.workspace, active);
     else sessionStorage.removeItem('mini-harness-active:' + bootstrap.workspace);
   }
+  updateModelControls();
   element('conversationTitle').textContent = item?.title ?? 'New conversation';
   messages.replaceChildren();
   for (const message of history) appendHistory(message);
@@ -174,7 +181,6 @@ async function activate(id: string) {
   const request = ++navigation;
   pendingNavigation = true;
   try {
-    await modelChange?.catch(() => {});
     const item = await data<ConversationView>('/sessions/' + id);
     if (request !== navigation) return;
     for (let parent = item.parentId; parent && !expanded.has(parent); parent = sessions.find((entry) => entry.id === parent)?.parentId) {
@@ -235,7 +241,8 @@ function setSending(value: boolean) {
   element('queueSend').hidden = !value;
   element<'button'>('stop').hidden = !value;
   element<'button'>('stop').disabled = false;
-  modelSelect.disabled = value;
+  modelPicker.setDisabled(value);
+  thinkingSelect.disabled = value;
 }
 
 async function syncSessions() {
@@ -250,15 +257,17 @@ async function syncSessions() {
 async function send(text: string, attached?: import('../src/input.js').Attachment[]) {
   const attachments = attached ?? composerUi.attachments();
   if (sending || pendingNavigation || (!text.trim() && !attachments.length)) return;
+  const choice = modelDraft;
+  const thinkingLevel = thinkingSelect.value || undefined;
   const request = ++navigation;
   pendingNavigation = true;
   setSending(true);
   try {
-    if (!active) showConversation(await createConversation());
+    if (!active) { showConversation(await createConversation()); setSending(true); }
     const id = active;
-    await modelChange;
     lastInputs.set(id, { message: text, attachments });
-    await data<RunInfo>('/sessions/' + id + '/runs', payload('POST', { message: text, attachments }));
+    await data<RunInfo>('/sessions/' + id + '/runs', payload('POST', { message: text, attachments, model: choice, thinkingLevel }));
+    modelDraft = undefined;
     prompt.value = '';
     composerUi.clear();
     adjustPrompt();
@@ -380,26 +389,24 @@ async function observe(item: ConversationView) {
   } catch (error) { if (!controller.signal.aborted) report(error); }
 }
 
-function selectedModel() {
-  const selected = modelSelect.value;
-  const slash = selected.indexOf('/');
-  return slash === -1 ? { provider: '', id: '' } : { provider: selected.slice(0, slash), id: selected.slice(slash + 1) };
+function updateModelControls() {
+  if (!bootstrap) return;
+  if (modelDraft && !bootstrap.models.some((model) => model.configured && model.provider === modelDraft.provider && model.id === modelDraft.id))
+    modelDraft = undefined;
+  const selected = modelPicker.update(bootstrap.models, bootstrap.providers, modelDraft ?? bootstrap.settings.model);
+  const levels = selected?.thinkingLevels ?? [];
+  const sameModel = selected && selected.provider === conversationModel?.provider && selected.id === conversationModel.id;
+  thinkingSelect.replaceChildren(new Option('Default', ''), ...levels.map((level) =>
+    new Option(level === 'xhigh' ? 'Extra high' : level[0].toUpperCase() + level.slice(1), level)));
+  thinkingSelect.value = sameModel && levels.includes(conversationThinking) ? conversationThinking : '';
+  thinkingSelect.hidden = levels.length < 2;
 }
 
 function applySettings(settings: Settings) {
   bootstrap.settings = settings;
   reconcileFrontend();
   document.documentElement.dataset.theme = settings.appearance;
-  modelSelect.replaceChildren(new Option('Auto model', ''));
-  for (const model of bootstrap.models) {
-    modelSelect.append(new Option(model.name + ' · ' + model.provider, model.provider + '/' + model.id));
-  }
-  const selected = settings.model;
-  const modelKey = selected.provider + '/' + selected.id;
-  if (selected.provider && ![...modelSelect.options].some((option) => option.value === modelKey)) {
-    modelSelect.add(new Option(selected.id || selected.provider + ' · Auto', modelKey));
-  }
-  modelSelect.value = selected.provider ? modelKey : '';
+  updateModelControls();
 }
 
 async function exportSelected() {
@@ -496,13 +503,6 @@ document.addEventListener('keydown', (event) => {
 element('newSession').onclick = () => void newSession();
 element('exportSessions').onclick = () => void exportSelected().catch(report);
 element('deleteSessions').onclick = () => void deleteSelected().catch(report);
-modelSelect.onchange = async () => {
-  const update = data<Settings>('/settings', payload('PATCH', { model: selectedModel() }));
-  modelChange = update;
-  try { applySettings(await update); }
-  catch (error) { applySettings(bootstrap.settings); report(error); }
-  finally { if (modelChange === update) modelChange = undefined; }
-};
 element<'button'>('stop').onclick = async () => {
   if (!active) return;
   element<'button'>('stop').disabled = true;

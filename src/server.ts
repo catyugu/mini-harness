@@ -23,7 +23,7 @@ declare module 'cordis' {
 const WEB_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'web');
 const assets = new Map([
   ['index.html', 'text/html'], ['app.js', 'text/javascript'], ['markdown.js', 'text/javascript'],
-  ...['api', 'extensions', 'icons', 'settings-fields', 'messages', 'composer', 'files', 'provider-manager', 'plugin-manager', 'workspaces', 'sessions', 'settings', 'types'].map((name): [string, string] => [name + '.js', 'text/javascript']),
+  ...['api', 'extensions', 'icons', 'settings-fields', 'messages', 'composer', 'model-picker', 'files', 'provider-manager', 'plugin-manager', 'workspaces', 'sessions', 'settings', 'types'].map((name): [string, string] => [name + '.js', 'text/javascript']),
   ['vendor/marked.js', 'text/javascript'], ['vendor/purify.js', 'text/javascript'],
   ['style.css', 'text/css'], ['logo.svg', 'image/svg+xml'], ['manifest.webmanifest', 'application/manifest+json'],
   ['icon-192.png', 'image/png'], ['icon-512.png', 'image/png'], ['favicon.ico', 'image/x-icon']
@@ -197,7 +197,7 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
         if (match[2] === 'runs' && req.method === 'POST') {
           const input = await requestBody(req, 20 * 1024 * 1024);
           if (configuring) throw new Error('Configuration is changing');
-          return json(res, 202, runtime.startRun(id, input.message, input.model, input.attachments));
+          return json(res, 202, runtime.startRun(id, input.message, input.model, input.attachments, input.thinkingLevel));
         }
         if (match[2] === 'events' && req.method === 'GET') {
           await runtime.open(id);
@@ -207,7 +207,7 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
         if (match[2] === 'messages' && req.method === 'POST') {
           const input = await requestBody(req, 20 * 1024 * 1024);
           if (configuring) throw new Error('Configuration is changing');
-          const run = runtime.startRun(id, input.message, input.model, input.attachments);
+          const run = runtime.startRun(id, input.message, input.model, input.attachments, input.thinkingLevel);
           streamRun(res, id, run.id, 0);
           return;
         }

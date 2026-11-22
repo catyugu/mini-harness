@@ -7,6 +7,7 @@ import {
   createAgentSession, defineTool, ModelRuntime, SessionManager, SettingsManager, DefaultResourceLoader,
   type AgentSession
 } from '@earendil-works/pi-coding-agent';
+import { getSupportedThinkingLevels } from '@earendil-works/pi-ai/compat';
 import { PluginHost } from './plugins.js';
 import { SessionRegistry, type ModelChoice } from './registry.js';
 import { mergeSettings, readSettings, writeJson, type SettingsPatch } from './config.js';
@@ -57,6 +58,7 @@ export class MiniHarnessRuntime {
       modelsPath: join(this.paths.home, 'models.json'),
       refreshOnCreate: false
     });
+    await this.models.getAvailable();
     await this.plugins.configure(this.settings);
   }
 
@@ -65,9 +67,10 @@ export class MiniHarnessRuntime {
   }
 
   availableModels() {
-    return this.models.getModels().map((m) => ({
-      provider: m.provider, id: m.id, name: m.name || m.id,
-      configured: this.models.getProviderAuthStatus(m.provider).configured
+    const available = new Set(this.models.getAvailableSnapshot().map(({ provider, id }) => JSON.stringify([provider, id])));
+    return this.models.getModels().map((model) => ({
+      provider: model.provider, id: model.id, name: model.name || model.id,
+      configured: available.has(JSON.stringify([model.provider, model.id])), thinkingLevels: getSupportedThinkingLevels(model)
     }));
   }
 
@@ -167,14 +170,16 @@ export class MiniHarnessRuntime {
     if (!this.registry.get(id)) throw new Error('Conversation not found');
     const session = await this.open(id);
     return { ...this.registry.get(id), messages: this.sessionMessages(id), model: this.modelInfo(session.model),
-      selectedModel: { ...this.settings.model },
+      selectedModel: { ...this.settings.model }, thinkingLevel: session.thinkingLevel,
       run: this.runInfo(id), partial: this.busy.get(id)?.partial, tools: [...this.busy.get(id)?.tools.values() ?? []], busy: this.busy.has(id), queue: { steer: session.getSteeringMessages(), followUp: session.getFollowUpMessages() } };
   }
 
-  private launch(id: string, prompt: string, emit: (event: StreamEvent) => void, { signal, model, attachments }: { signal?: AbortSignal; model?: ModelChoice; attachments?: Attachment[] } = {}) {
+  private launch(id: string, prompt: string, emit: (event: StreamEvent) => void, { signal, model, attachments, thinkingLevel }: { signal?: AbortSignal; model?: ModelChoice; attachments?: Attachment[]; thinkingLevel?: AgentSession['thinkingLevel'] } = {}) {
     if (this.configuring || this.stopping) throw new Error('Agent service is unavailable during reconfiguration or shutdown');
     if (this.busy.has(id)) throw new Error('Conversation is already running');
     if (this.deleting.has(id)) throw new Error('Conversation is being deleted');
+    if (thinkingLevel !== undefined && !['off', 'minimal', 'low', 'medium', 'high', 'xhigh'].includes(thinkingLevel))
+      throw new Error('Invalid thinking level');
     const prepared = prepareInput(prompt, attachments);
     prompt = prepared.text;
     const record = this.registry.get(id);
@@ -218,7 +223,7 @@ export class MiniHarnessRuntime {
       run.info.state = 'running';
       this.registry.update(id, { run: run.info });
       publish({ type: 'run', run: { ...run.info } });
-      return this.runPrompt(record, prompt, publish, cancellation, choice, prepared.images);
+      return this.runPrompt(record, prompt, publish, cancellation, choice, prepared.images, thinkingLevel);
     };
     const work = record.parentId ? this.semaphore.run((lease) => {
       run.lease = lease;
@@ -247,8 +252,8 @@ export class MiniHarnessRuntime {
     return this.launch(id, prompt, emit, options).done;
   }
 
-  startRun(id: string, prompt: string, model?: ModelChoice, attachments?: Attachment[]) {
-    return { ...this.launch(id, prompt, undefined, { model, attachments }).info };
+  startRun(id: string, prompt: string, model?: ModelChoice, attachments?: Attachment[], thinkingLevel?: AgentSession['thinkingLevel']) {
+    return { ...this.launch(id, prompt, undefined, { model, attachments, thinkingLevel }).info };
   }
 
   runInfo(id: string): RunInfo | undefined {
@@ -281,7 +286,7 @@ export class MiniHarnessRuntime {
   }
 
   private async runPrompt(record: NonNullable<ReturnType<SessionRegistry['get']>>, prompt: string,
-      emit: (event: StreamEvent) => void, signal: AbortSignal, choice?: ModelChoice, images: ImageInput[] = []) {
+      emit: (event: StreamEvent) => void, signal: AbortSignal, choice?: ModelChoice, images: ImageInput[] = [], thinkingLevel?: AgentSession['thinkingLevel']) {
     const { id } = record;
     signal.throwIfAborted();
     const session = await this.open(id);
@@ -291,6 +296,7 @@ export class MiniHarnessRuntime {
       await session.setModel(model);
     signal.throwIfAborted();
     if (images.length && !session.model?.input.includes('image')) throw new Error('The selected model does not support image input. Choose an image-capable model and retry.');
+    if (thinkingLevel !== undefined) session.setThinkingLevel(thinkingLevel);
     const actual = this.modelInfo(session.model);
     if (!record.parentId && !isDeepStrictEqual(this.settings.model, actual)) {
       const next = mergeSettings(this.settings, { model: actual });
