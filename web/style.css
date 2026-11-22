@@ -152,6 +152,8 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .tool-card summary svg { flex: 0 0 14px; height: 14px; }
 .tool-card[open] summary svg { transform: rotate(90deg); }
 .tool-card summary strong { color: var(--ink); font: 600 13px ui-monospace, monospace; min-width: 0; overflow-wrap: anywhere; margin-right: auto; }
+.tool-duration, .tool-exit-code { flex-shrink: 0; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.tool-exit-code[data-failed="true"] { color: var(--danger); }
 .tool-state { padding: 1px 3px; color: var(--muted); font-size: 11px; }
 .tool-card[data-state="running"] .tool-state { color: var(--focus); }
 .tool-card[data-state="error"] .tool-state { color: var(--danger); }
@@ -241,9 +243,20 @@ button { border-radius: var(--radius); }
 .message-row { min-width: 0; }
 .message-row.user { align-self: flex-end; max-width: 85%; }
 .message-row .message.user { max-width: 100%; border-radius: var(--radius-lg); }
-.message-actions { display: flex; gap: 5px; padding-top: 0; }
-.message-actions button { font-size: 11px; color: var(--muted); }
+.message-actions { display: flex; align-items: center; gap: 2px; padding-top: 3px; min-height: 28px; }
+.message-actions .message-action {
+  display: inline-flex; align-items: center; justify-content: center; flex: 0 0 28px;
+  width: 28px; height: 28px; padding: 5px; border: 0; border-radius: 7px;
+  background: transparent; color: var(--muted);
+}
+.message-actions .message-action:is(:hover, :focus-visible) { background: var(--hover); color: var(--ink); }
+.message-action svg { width: 16px; height: 16px; }
+.message-time { margin-left: 8px; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
 .message-row.user .message-actions { justify-content: flex-end; }
+.message-row.user .message-time { order: -1; margin: 0 8px 0 0; }
+@media (max-width: 860px) {
+  .message-actions .message-action { flex-basis: 36px; min-width: 36px; min-height: 36px; }
+}
 .message-image { max-width: min(100%, 380px); max-height: 360px; object-fit: contain; border-radius: var(--radius); }
 .settings-body { display: grid; grid-template-columns: 168px minmax(0, 1fr); flex: 1; min-height: 0; }
 .settings-nav { display: flex; flex-direction: column; gap: 4px; overflow: auto; padding: 12px; background: var(--panel); border-right: 1px solid var(--border); }
