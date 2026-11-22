@@ -2,8 +2,9 @@ import type { Attachment } from '../../src/input.js';
 import type { Conversation, ModelChoice } from '../../src/registry.js';
 import type { MessageContent, RunEvent, RunInfo } from '../../src/protocol.js';
 import type { ConversationView, ThinkingLevel } from '../types.js';
-import { scopedElements, payload, workspaceRoute } from '../api.js';
-import { exportSessions, isRunning, observeRun, readConversation } from '../transport/session-client.js';
+import { scopedElements } from '../api.js';
+import { exportSessions, isRunning } from '../transport/session-client.js';
+import { createConversationController } from '../models/conversation-controller.js';
 import type { BrowserState } from '../models/browser-state.js';
 import { createMessageView } from './messages.js';
 import { CommandRegistry, type ComposerCommand } from './commands.js';
@@ -23,6 +24,7 @@ interface ConversationServices {
 }
 
 export function conversationView(api: FrontendApi, state: BrowserState, options: ConversationServices) {
+  const controller = createConversationController(api.request);
   const view = fromMarkup(`
     <div class="conversation">
       <section id="welcome" class="welcome">
@@ -183,7 +185,7 @@ export function conversationView(api: FrontendApi, state: BrowserState, options:
       showStatus('Loading conversation…');
     }
     try {
-      const item = await readConversation(id, signal);
+      const item = await controller.read(id, signal);
       if (signal.aborted) return;
       display(item, signal, revealWorkspace);
       options.closeDrawer();
@@ -235,7 +237,7 @@ export function conversationView(api: FrontendApi, state: BrowserState, options:
       let id = active();
       if (!id) {
         if (!workspace) throw new Error('Add a workspace before starting a conversation.');
-        const item = await api.request<Conversation>(workspaceRoute(workspace, '/sessions'), payload('POST', {}));
+        const item = await controller.create(workspace);
         if (!state.session(item.id)) state.applyNavigation({ type: 'session', session: item });
         id = item.id;
         if (!signal.aborted) { showConversation(item); setSending(true); }
@@ -244,7 +246,7 @@ export function conversationView(api: FrontendApi, state: BrowserState, options:
       if (draftMode) {
         await draftMode.submit({ text, attachments, model: choice, thinkingLevel });
       } else {
-        await api.request<RunInfo>('/sessions/' + id + '/runs', payload('POST', { message, attachments, model: choice, thinkingLevel }));
+        await controller.start(id, { message, attachments, model: choice, thinkingLevel });
       }
       setDraftMode();
       if (!signal.aborted) {
@@ -282,7 +284,7 @@ export function conversationView(api: FrontendApi, state: BrowserState, options:
       }
     }
     try {
-      const latest = await observeRun(item, signal, accept, () => showStatus('Reconnecting…'));
+      const latest = await controller.follow(item, signal, accept, () => showStatus('Reconnecting…'));
       if (latest && !signal.aborted) display(latest, signal, false);
     } catch (error) { if (!signal.aborted) report(error); }
   }
@@ -307,9 +309,9 @@ export function conversationView(api: FrontendApi, state: BrowserState, options:
     pending = true;
     showStatus('Compacting conversation…');
     try {
-      await api.request('/sessions/' + id + '/compact', payload('POST', {}));
+      await controller.compact(id);
       if (!signal.aborted) {
-        const item = await readConversation(id, signal);
+        const item = await controller.read(id, signal);
         if (!signal.aborted) { display(item, signal, false); showStatus('Conversation compacted.'); }
       }
     } finally { if (!signal.aborted) pending = false; }
@@ -319,9 +321,9 @@ export function conversationView(api: FrontendApi, state: BrowserState, options:
     const signal = visit.signal;
     const button = element<'button'>('queueSend'); button.disabled = true;
     try {
-      const queued = await api.request<Queue>('/sessions/' + id + '/queue', payload('POST', {
-        message: commands.prepare(prompt.value), mode: value('queueMode'), attachments: composerUi.attachments()
-      }));
+      const queued = await controller.queue(id, {
+        message: commands.prepare(prompt.value), mode: value('queueMode') as 'steer' | 'followUp', attachments: composerUi.attachments()
+      });
       if (signal.aborted) return;
       prompt.value = ''; composerUi.clear(); adjustPrompt(); showQueue(queued);
     } catch (error) { if (!signal.aborted) report(error); } finally { button.disabled = false; }
@@ -335,7 +337,7 @@ export function conversationView(api: FrontendApi, state: BrowserState, options:
     const id = active(), signal = visit.signal;
     if (document.hidden || !sending || !id || pending) return;
     try {
-      const queue = await api.request<Queue>('/sessions/' + id + '/queue', { signal });
+      const queue = await controller.getQueue(id, signal);
       if (!signal.aborted && sending) showQueue(queue);
     } catch { /* A completed or deleted conversation can remove the queue. */ }
   }, 1500);
@@ -345,7 +347,7 @@ export function conversationView(api: FrontendApi, state: BrowserState, options:
     if (!id) return;
     element<'button'>('stop').disabled = true;
     showStatus('Cancelling…');
-    try { await api.request('/sessions/' + id + '/cancel', payload('POST', {})); }
+    try { await controller.cancel(id); }
     catch (error) { if (!signal.aborted) { report(error); element<'button'>('stop').disabled = false; } }
   };
   composer.onsubmit = (event) => { event.preventDefault(); void send(prompt.value); };
