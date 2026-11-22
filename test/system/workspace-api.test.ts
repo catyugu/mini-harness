@@ -8,7 +8,7 @@ import { prepareInput } from '../../src/input.js';
 import { Inspection } from '../../features/files/inspection.js';
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
 
-import { fixture, waitUntil } from '../../support/api-fixture.js';
+import { fixture, waitUntil } from '../support/api-fixture.js';
 
 test('workspace registration, session navigation and scoped tools leave an active run executing', async (t) => {
   let release: () => void, entered: () => void;
