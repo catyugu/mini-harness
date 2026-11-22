@@ -226,13 +226,37 @@ export class PiSessions {
     });
   }
 
+  /** Validate an editable entry on the selected Pi branch and reject stale browser views. */
+  async revisionTarget(id: string, sourceEntryId: string, expectedLeafId: string | null) {
+    if (typeof sourceEntryId !== 'string' || !/^[a-f0-9]{8,64}$/i.test(sourceEntryId) ||
+        (expectedLeafId !== null && (typeof expectedLeafId !== 'string' || !/^[a-f0-9]{8,64}$/i.test(expectedLeafId))))
+      throw new Error('Invalid revision target');
+    const { sessionManager } = await this.open(id);
+    if (sessionManager.getLeafId() !== expectedLeafId) throw new Error('Conversation changed; refresh before editing');
+    const source = sessionManager.getBranch().find((entry) => entry.id === sourceEntryId);
+    if (source?.type !== 'message' || source.message.role !== 'user') throw new Error('User message not found on active branch');
+    return source;
+  }
+
+  async navigateForRevision(id: string, sourceEntryId: string, expectedLeafId: string | null) {
+    await this.revisionTarget(id, sourceEntryId, expectedLeafId);
+    const session = await this.open(id);
+    const result = await session.navigateTree(sourceEntryId);
+    if (result.cancelled) throw new Error('Revision navigation cancelled');
+  }
+
   async prompt(record: Conversation, prompt: string, emit: (event: StreamEvent) => void, {
-    signal, choice, images = [], thinkingLevel, changed
-  }: { signal: AbortSignal; choice?: ModelChoice; images?: ImageInput[]; thinkingLevel?: ThinkingLevel; changed?: (path: string) => void }) {
+    signal, choice, images = [], thinkingLevel, changed, revision
+  }: { signal: AbortSignal; choice?: ModelChoice; images?: ImageInput[]; thinkingLevel?: ThinkingLevel;
+       changed?: (path: string) => void; revision?: { sourceEntryId: string; expectedLeafId: string | null } }) {
     const { id } = record;
     signal.throwIfAborted();
     const session = await this.open(id);
     signal.throwIfAborted();
+    if (revision) {
+      await this.navigateForRevision(id, revision.sourceEntryId, revision.expectedLeafId);
+      signal.throwIfAborted();
+    }
     const model = this.resolveModel(choice);
     if (model && (session.model?.provider !== model.provider || session.model?.id !== model.id))
       await session.setModel(model);

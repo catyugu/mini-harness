@@ -40,6 +40,7 @@ export class MiniHarnessRuntime {
     ctx.provide('harnessWorkspace', { resolve: (id) => this.registry.workspacePath(id) });
     ctx.provide('harnessSessionChanged', (id) => this.registry.notify(id));
     ctx.provide('harnessDelegation', this.delegation);
+    ctx.provide('harnessRevision', { reviseAndStart: (id, input) => this.reviseAndStart(id, input) });
   }
 
   async start() {
@@ -85,6 +86,12 @@ export class MiniHarnessRuntime {
       for (const id of all) this.pi.release(id);
       return this.registry.delete(ids);
     } finally { for (const id of all) this.deleting.delete(id); }
+  }
+
+  async reviseAndStart(id: string, input: { sourceEntryId: string; expectedLeafId: string | null; message: string;
+    attachments?: import('./input.js').Attachment[]; model?: ModelChoice; thinkingLevel?: import('./pi-sessions.js').ThinkingLevel }) {
+    this.assertAvailable(id);
+    return this.runs.reviseAndStart(id, input);
   }
 
   async updateSettings(patch: SettingsPatch) {

@@ -10,6 +10,7 @@ interface RunOptions {
   model?: ModelChoice;
   attachments?: Attachment[];
   thinkingLevel?: ThinkingLevel;
+  revision?: { sourceEntryId: string; expectedLeafId: string | null };
 }
 
 interface Activity {
@@ -43,7 +44,7 @@ export class Runs {
     return owner && signal ? AbortSignal.any([owner, signal]) : owner ?? signal;
   }
 
-  private launch(id: string, prompt: string, emit: (event: StreamEvent) => void, { signal, model, attachments, thinkingLevel }: RunOptions) {
+  private launch(id: string, prompt: string, emit: (event: StreamEvent) => void, { signal, model, attachments, thinkingLevel, revision }: RunOptions) {
     this.assertAvailable(id);
     if (this.active(id)) throw new Error('Conversation is already running');
     if (thinkingLevel !== undefined && !['off', 'minimal', 'low', 'medium', 'high', 'xhigh'].includes(thinkingLevel))
@@ -74,7 +75,7 @@ export class Runs {
       this.registry.update(id, { run: running });
       publish({ type: 'run', run: running });
       return this.pi.prompt(record, prepared.text, publish, {
-        signal: cancellation, choice, images: prepared.images, thinkingLevel,
+        signal: cancellation, choice, images: prepared.images, thinkingLevel, revision,
         changed: (path) => { info.changedFiles = [...new Set([...(info.changedFiles ?? []), path])]; }
       });
     };
@@ -106,6 +107,17 @@ export class Runs {
 
   startRun(id: string, prompt: string, { model, attachments, thinkingLevel }: Pick<RunOptions, 'model' | 'attachments' | 'thinkingLevel'> = {}) {
     return { ...this.launch(id, prompt, undefined, { model, attachments, thinkingLevel }).info };
+  }
+
+  /** A run reservation protects Pi branch navigation from concurrent submissions. */
+  async reviseAndStart(id: string, input: { sourceEntryId: string; expectedLeafId: string | null; message: string;
+    attachments?: Attachment[]; model?: ModelChoice; thinkingLevel?: ThinkingLevel }) {
+    if (this.active(id)) throw new Error('Conversation is already running');
+    await this.pi.revisionTarget(id, input.sourceEntryId, input.expectedLeafId);
+    return this.launch(id, input.message, undefined, {
+      attachments: input.attachments, model: input.model, thinkingLevel: input.thinkingLevel,
+      revision: { sourceEntryId: input.sourceEntryId, expectedLeafId: input.expectedLeafId }
+    }).info;
   }
 
   info(id: string): RunInfo | undefined {

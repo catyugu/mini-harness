@@ -11,7 +11,7 @@ export interface PluginMetadata {
   trustedCode?: boolean;
   web?: boolean;
   browser?: string;
-  icon?: 'files' | 'skills' | 'delegate' | 'terminal';
+  icon?: 'files' | 'skills' | 'delegate' | 'terminal' | 'copy' | 'edit';
   preferences?: { key: 'subagents' | 'sandbox'; schema: Record<string, unknown>; groups?: { title: string; fields: string[] }[] };
   requires?: string[];
   configSchema?: Record<string, any>;
@@ -19,7 +19,7 @@ export interface PluginMetadata {
 
 export interface BuiltinPlugin extends PluginMetadata {
   inject: string[];
-  setup(ctx: Context): void;
+  setup?(ctx: Context): void;
 }
 
 export interface SessionRecords {
@@ -55,6 +55,11 @@ declare module 'cordis' {
     harnessSkills?: { paths(cwd: string): string[] };
     harnessWorkspace: { resolve(id: string): string };
     harnessSessionChanged: (id: string) => void;
+    harnessRevision: { reviseAndStart(id: string, input: {
+      sourceEntryId: string; expectedLeafId: string | null; message: string;
+      attachments?: import('./input.js').Attachment[]; model?: import('./registry.js').ModelChoice;
+      thinkingLevel?: import('./pi-sessions.js').ThinkingLevel;
+    }): Promise<import('./protocol.js').RunInfo> };
   }
 }
 
