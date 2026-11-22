@@ -359,6 +359,7 @@ button { border-radius: var(--radius); }
   font-weight: 660; letter-spacing: -.025em;
 }
 .catalog-content { margin-top: 32px; }
+.catalog-content:has(> .catalog-detail) { margin-top: 0; }
 .catalog-group { margin-top: 40px; }
 .catalog-group:first-child { margin-top: 0; }
 .catalog-group h2 { margin: 0 0 14px; font-size: 13px; font-weight: 650; color: var(--ink); }
