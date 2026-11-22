@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Semaphore, requireChildDepth, selectChildModel } from '../features/subagents/delegation.js';
+import { Semaphore, requireChildDepth, selectChildModel } from '../delegation.js';
 
 test('model-chosen provider overrides registered defaults', () => {
   const defaults = { provider: 'openai', model: 'gpt-x' };

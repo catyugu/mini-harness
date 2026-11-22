@@ -26,7 +26,7 @@
     "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
     "build": "npm run clean && tsc -p tsconfig.json && node dist/scripts/copy-assets.js",
     "start": "npm run build && node dist/bin/mini-harness.js",
-    "test": "npm run build && node --test dist/test/*.test.js",
+    "test": "npm run build && node dist/scripts/run-node-tests.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "check": "npm run typecheck && npm test",
     "pack:check": "npm run build && node dist/scripts/check-package.js",

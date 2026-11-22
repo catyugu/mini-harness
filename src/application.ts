@@ -115,7 +115,7 @@ export class MiniHarnessRuntime {
   }
 
   async reviseAndStart(id: string, input: { sourceEntryId: string; expectedLeafId: string | null; message: string;
-    attachments?: import('../contracts/input.js').Attachment[]; model?: ModelChoice; thinkingLevel?: import('@earendil-works/pi-coding-agent').AgentSession['thinkingLevel'] }) {
+    attachments?: import('./contracts/input.js').Attachment[]; model?: ModelChoice; thinkingLevel?: import('@earendil-works/pi-coding-agent').AgentSession['thinkingLevel'] }) {
     this.assertAvailable(id);
     return this.runs.reviseAndStart(id, input);
   }

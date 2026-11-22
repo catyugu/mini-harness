@@ -81,7 +81,7 @@ test('host and browser kernel only depend on contracts, never feature/UI impleme
         assert.equal(dep.target.startsWith(join(source, owner) + '/'), false,
           path + ' depends on a product adapter: ' + dep.specifier);
       }
-      assert.equal(dep.target, join(source, 'config.ts'), false,
+      assert.notEqual(dep.target, join(source, 'config.ts'),
         path + ' depends on application settings');
     }
   }

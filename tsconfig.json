@@ -26,7 +26,8 @@
     "features/**/*.ts",
     "web/**/*.ts",
     "test/**/*.ts",
-    "scripts/**/*.ts"
+    "scripts/**/*.ts",
+    "test/**/*.ts"
   ],
   "exclude": [
     "dist",
