@@ -29,7 +29,8 @@ One process owns each configuration directory. Detached processes write to `serv
 
 - Choose a configured model under the message input. The next main conversation message uses the global selection; sending remembers the actual model across navigation and restarts. Child agents have their own inherited or explicit model and do not change that selection. Pi manages model switching and conversation context.
 - Add or edit a provider in Settings → Model. Pi stores API keys in `auth.json` and custom endpoints and model definitions in `models.json`. Credential status reports local configuration. The provider validates access when a request is made.
-- Click the workspace path to switch between local directories while tasks are idle. Conversation indexes stay separate; other open tabs must reload after a switch.
+- Add local directories from Workspaces in the sidebar. Browse or start conversations in any registered directory while other conversations keep running. Removing a workspace entry preserves its directory and conversations.
+- Open the workspace panel to browse folders, preview files and inspect Git changes in separate tabs. Each conversation keeps its own open tabs.
 - Paste images, drop files or use the attachment button. Image-capable models receive native image input; UTF-8 files become message text. Use `@` to find workspace files and `/` to discover Skills.
 - Open Workspace files for a file tree, bounded preview, Git diff and paths written by the current turn.
 - While a task runs, choose Add instruction or Follow up and Queue the next message. Pi delivers it after the current tool batch or task.
