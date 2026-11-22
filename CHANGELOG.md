@@ -2,7 +2,9 @@
 
 ## Unreleased
 
-- Consolidate message copy and Pi branch-aware edit/resend into the single `session-helper` Cordis feature, with one frontend lifecycle, one switch, and a migration for the two former plugin settings.
+- Consolidate message copy and Pi branch-aware edit/resend into the single `session-helper` Cordis feature, with one frontend lifecycle and one switch. Remove obsolete settings migration paths and duplicate message-submit routes.
+- Isolate host/browser composition roots from capability contracts and implementations, co-locate file and Shell logic with their feature plugins, and permanently cascade workspace deletion to associated conversations without deleting project files.
+- Allow plugin-specific SVG icon paths and arbitrary symbolic icon identifiers. Remove `agentResources` metadata and use one consistent plugin reconfiguration lifecycle.
 
 - Add five frontend extension points with owned mount/disposal, shared plugin configuration, dependency ordering and custom tool renderers. Split requests, settings, conversations, message rendering, attachments and file inspection into browser modules.
 - Add neutral light/dark surfaces, consistent icons, a collapsed navigation rail, grouped settings, an input-level model selector and a single file inspector.
