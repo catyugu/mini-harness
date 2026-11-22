@@ -43,9 +43,7 @@ export class PluginHost {
       const folder = join(this.directory, id);
       const source = join(folder, 'plugin.js');
       if (!existsSync(source) || lstatSync(folder).isSymbolicLink() || !lstatSync(source).isFile() || lstatSync(source).isSymbolicLink()) return [];
-      let manifest: Partial<PluginMetadata> | null = null;
-      try { manifest = readJson(join(folder, 'plugin.json'), null); }
-      catch (error) { if (!(error instanceof SyntaxError)) throw error; }
+      const manifest = readJson<Partial<PluginMetadata> | null>(join(folder, 'plugin.json'), null);
       const title = typeof manifest?.title === 'string' ? manifest.title.slice(0, 100) : id;
       const description = typeof manifest?.description === 'string' ? manifest.description.slice(0, 300) : 'Runs local JavaScript with your user permissions.';
       const requires = manifest?.requires ?? [];

@@ -154,3 +154,16 @@ test('cyclic dependencies reject a configuration before mounting either plugin',
   await assert.rejects(runtime.updateSettings({ plugins: { first: true, second: true } }), /Cyclic plugin/);
   assert.equal(runtime.settings.plugins.first, undefined);
 });
+
+test('malformed plugin manifests fail discovery instead of silently dropping their metadata', async (t) => {
+  const mock = await createMockProvider();
+  const { root, paths } = createFixturePaths(mock.url);
+  const runtime = new MiniHarnessRuntime(paths);
+  t.after(async () => { await runtime.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
+  const folder = join(paths.plugins, 'broken-manifest');
+  mkdirSync(folder);
+  writeFileSync(join(folder, 'plugin.js'), 'export default () => {};');
+  writeFileSync(join(folder, 'plugin.json'), '{"requires": [');
+  assert.throws(() => runtime.plugins.metadata(), SyntaxError);
+  await assert.rejects(runtime.start(), SyntaxError);
+});
