@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 
@@ -140,4 +140,61 @@ test('application composition is outside the generic kernel', () => {
   assert.equal(existsSync(join(source, 'kernel', 'plugins.ts')), false);
   assert.ok(existsSync(join(source, 'plugins', 'catalog.ts')));
   assert.ok(existsSync(join(source, 'plugins', 'host.ts')));
+});
+
+test('each internal Cordis provider declares every required scoped service read', () => {
+  const indexPath = join(features, 'index.ts');
+  const indexSource = ts.createSourceFile(indexPath, readFileSync(indexPath, 'utf8'), ts.ScriptTarget.Latest, true);
+  const imports = new Map<string, string>();
+  for (const statement of indexSource.statements) {
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
+    const bindings = statement.importClause?.namedBindings;
+    if (!bindings || !ts.isNamedImports(bindings)) continue;
+    for (const item of bindings.elements) {
+      const specifier = statement.moduleSpecifier.text;
+      if (specifier.startsWith('.')) imports.set(item.name.text,
+        resolve(dirname(indexPath), specifier).replace(/\.js$/, '.ts'));
+    }
+  }
+  const entries = indexSource.statements.filter(ts.isVariableStatement)
+    .flatMap((statement) => [...statement.declarationList.declarations])
+    .find((item) => ts.isIdentifier(item.name) && item.name.text === 'system');
+  assert.ok(entries?.initializer && ts.isArrayLiteralExpression(entries.initializer), 'System capabilities have a declarative composition root');
+  const property = (node: ts.ObjectLiteralExpression, name: string) =>
+    node.properties.find((item): item is ts.PropertyAssignment =>
+      ts.isPropertyAssignment(item) && (ts.isIdentifier(item.name) || ts.isStringLiteral(item.name)) && item.name.text === name);
+  for (const entry of entries.initializer.elements) {
+    assert.ok(ts.isObjectLiteralExpression(entry), 'System entries are static objects');
+    const id = property(entry, 'id')?.initializer;
+    const inject = property(entry, 'inject')?.initializer;
+    const setup = property(entry, 'setup')?.initializer;
+    assert.ok(id && ts.isStringLiteral(id) && inject && ts.isArrayLiteralExpression(inject)
+      && setup && ts.isIdentifier(setup), 'System metadata declares ID, inject and setup');
+    const allowed = new Set(inject.elements.map((value) => {
+      assert.ok(ts.isStringLiteral(value), 'Inject names are literal strings');
+      return value.text;
+    }));
+    const owner = imports.get(setup.text);
+    assert.ok(owner && existsSync(owner), id.text + ' must have an owning implementation');
+    let code = readFileSync(owner, 'utf8');
+    // Account for a host delegating its setup to a same-feature registration function.
+    const hostAst = ts.createSourceFile(owner, code, ts.ScriptTarget.Latest, true);
+    for (const statement of hostAst.statements) {
+      if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
+      const bindings = statement.importClause?.namedBindings;
+      if (!bindings || !ts.isNamedImports(bindings)) continue;
+      for (const item of bindings.elements) {
+        const alias = item.name.text;
+        if (!new RegExp('\\b' + alias + '\\s*\\(\\s*ctx\\s*[,)]').test(code)) continue;
+        const imported = resolve(dirname(owner), statement.moduleSpecifier.text).replace(/\.js$/, '.ts');
+        if (imported.startsWith(dirname(owner) + '/') && existsSync(imported)) code += readFileSync(imported, 'utf8');
+      }
+    }
+    const provided = new Set([...code.matchAll(/ctx\.provide\(['"]([A-Za-z]\w+)['"]/g)].map((match) => match[1]));
+    const accessed = [...code.matchAll(/ctx\.(harness[A-Za-z]\w*)\b/g)].map((match) => match[1]);
+    for (const name of accessed) {
+      assert.ok(allowed.has(name) || provided.has(name),
+        id.text + ' reads ' + name + ' without an inject declaration; optional services must use ctx.get()');
+    }
+  }
 });
