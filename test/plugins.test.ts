@@ -91,17 +91,18 @@ test('plugin JSON Schema applies defaults and rejects invalid changes before set
   mkdirSync(folder);
   writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ configSchema: {
     type: 'object', additionalProperties: false, required: ['count'],
-    properties: { count: { type: 'integer', minimum: 1, maximum: 10, default: 3 } }
+    properties: { count: { type: 'integer', minimum: 1, maximum: 10, default: 3 },
+      options: { type: 'object', default: {}, properties: { enabled: { type: 'boolean', default: true } } } }
   } }));
   writeFileSync(join(folder, 'plugin.js'), `export default (ctx, api) => {
     api.registerTool({ name: 'schema_value', description: 'Fixture', parameters: { type: 'object', properties: {} },
-      execute: async () => ({ content: [{ type: 'text', text: String(api.config.count) }] }) });
+      execute: async () => ({ content: [{ type: 'text', text: String(api.config.count) + ':' + api.config.options.enabled }] }) });
   };`);
   await runtime.start();
   await runtime.updateSettings({ plugins: { schema: true } });
   const item = runtime.registry.create();
   const tool = runtime.plugins.ctx.harnessTools.forSession(item.id).find(({ name }) => name === 'schema_value');
-  assert.match(JSON.stringify(await tool.execute('test', {}, undefined, undefined, undefined)), /3/);
+  assert.match(JSON.stringify(await tool.execute('test', {}, undefined, undefined, undefined)), /3:true/);
   await assert.rejects(runtime.updateSettings({ pluginConfig: { schema: { count: 0 } } }), /Invalid configuration/);
   assert.strictEqual(runtime.plugins.ctx.harnessTools.forSession(item.id).find(({ name }) => name === 'schema_value'), tool);
 });
