@@ -150,7 +150,7 @@ The server runs one Runtime for all registered workspaces. Each conversation has
 | - | - |
 | `GET /api/workspaces`, `POST /api/workspaces` with `{path, name?}` | List or register local directories |
 | `GET /api/workspaces/directories?path=...` | Browse local subdirectories for registration |
-| `PATCH /api/workspaces/:id` with `{name}`, `DELETE /api/workspaces/:id` | Rename or remove a workspace entry |
+| `PATCH /api/workspaces/:id` with `{name}`, `DELETE /api/workspaces/:id` | Rename a workspace or permanently delete its conversations and descendants while leaving the project directory intact |
 | `PUT /api/workspaces` with `{ids}` | Reorder registered workspaces |
 | `GET /api/navigation/events` | NDJSON snapshot followed by workspace and conversation updates |
 | `GET /api/workspaces/:id/sessions`, `POST /api/workspaces/:id/sessions` | List or create conversations in a workspace |

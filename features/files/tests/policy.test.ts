@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { sandboxCommand } from '../../shell/sandbox.js';
-import { supportsIsolation } from '../../../src/platform/isolation.js';
+import { supportsIsolation } from '../../shell/isolation.js';
 import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
