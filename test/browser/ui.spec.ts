@@ -18,7 +18,7 @@ async function availablePort(): Promise<number> {
 async function startIsolatedHost(paths: ReturnType<typeof createFixturePaths>['paths']) {
   const port = await availablePort();
   const child: ChildProcess = spawn(process.execPath, [
-    resolve('dist/bin/mini-harness.js'), '--cwd', paths.cwd, '--port', String(port)
+    resolve('dist/bin/mini-harness.js'), '--no-open', '--cwd', paths.cwd, '--port', String(port)
   ], {
     env: { ...process.env, MINI_HARNESS_HOME: paths.home },
     stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true
@@ -245,7 +245,11 @@ test('renders Markdown and tool results, and stops a pending reply', async ({ pa
     await page.getByRole('button', { name: 'Send' }).click();
     await expect(page.getByRole('heading', { name: 'Workspace' })).toBeVisible();
     await expect(page.locator('.code-block code')).toHaveText('Example');
-    await expect(page.getByRole('button', { name: 'Copy', exact: true })).toBeVisible();
+    await expect(page.locator('.code-block').getByRole('button', { name: 'Copy', exact: true })).toBeVisible();
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+    await page.locator('.message-row.assistant .message-actions button').click();
+    await expect(page.locator('.message-row.assistant .message-actions button')).toHaveText('Copied');
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toContain('```text\nExample\n```');
     await expect(page.locator('.message img, .message .overlay')).toHaveCount(0);
     await expect(page.getByText('A tool note')).toBeVisible();
     await expect(page.locator('.tool-card summary')).toContainText('ls');
@@ -296,4 +300,232 @@ test('the global recent model survives history navigation and page reload', asyn
   } finally {
     await page.close(); await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('drafts, search, rename, single deletion, attachment and input discovery', async ({ page }) => {
+  const mock = await createMockProvider(), { root, paths } = createFixturePaths(mock.url);
+  writeFileSync(join(paths.cwd, 'notes.md'), '# Notes\nTask details');
+  const skill = join(paths.skills, 'review'); mkdirSync(skill); writeFileSync(join(skill, 'SKILL.md'), '---\nname: review\ndescription: Review the work\n---\n\nReview carefully.');
+  const service = await startIsolatedHost(paths);
+  try {
+    await page.goto(service.url + '/#token=' + service.token);
+    for (let i = 0; i < 3; i++) await page.getByRole('button', { name: 'New conversation', exact: true }).click();
+    await expect(page.locator('#sessions .session-row')).toHaveCount(0);
+    const index = readJson<any>(paths.registry, { sessions: [] }); expect(index.sessions).toHaveLength(0);
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('@notes');
+    await page.getByRole('button', { name: 'notes.md', exact: true }).click();
+    await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toHaveValue('@"notes.md" ');
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('/rev');
+    await page.getByRole('button', { name: 'review', exact: true }).click();
+    await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toHaveValue('/skill:review ');
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Read this attachment');
+    await page.locator('#composer input[type=file]').setInputFiles({ name: 'task.txt', mimeType: 'text/plain', buffer: Buffer.from('ATTACHED TASK') });
+    await expect(page.getByRole('button', { name: 'Remove task.txt' })).toBeVisible();
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.locator('.message.assistant')).toHaveText('Mock response');
+    expect(JSON.stringify(mock.requests[0])).toContain('ATTACHED TASK');
+    await expect(page.locator('.attachment')).toHaveCount(0);
+    await page.locator('.session-row').hover();
+    await page.getByRole('button', { name: /^Rename Read this attachment/ }).click();
+    await page.getByRole('textbox', { name: 'Title', exact: true }).fill('Project review');
+    await page.getByRole('button', { name: 'Rename', exact: true }).click();
+    await expect(page.locator('#conversationTitle')).toHaveText('Project review');
+    await page.getByRole('searchbox', { name: 'Search conversations' }).fill('absent');
+    await expect(page.locator('#sessions .session-row')).toHaveCount(0);
+    await page.getByRole('searchbox', { name: 'Search conversations' }).fill('review');
+    await expect(page.locator('#sessions .session-row')).toHaveCount(1);
+    page.once('dialog', (dialog) => dialog.accept());
+    await page.getByRole('button', { name: 'Delete Project review', exact: true }).click();
+    await expect(page.locator('#sessions .session-row')).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'What are we working on?' })).toBeVisible();
+  } finally { await page.close(); await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+test('frontend plugins own all five slots and clean up on disable and reconfiguration', async ({ page }) => {
+  const mock = await createMockProvider(({ messages }) => messages.at(-1).role === 'tool' ? 'Done' : { tool: 'ls', args: {} });
+  const { root, paths } = createFixturePaths(mock.url), folder = join(paths.plugins, 'ui-example'); mkdirSync(folder);
+  writeFileSync(join(folder, 'plugin.js'), 'export default function() {}');
+  writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ title: 'UI example', configSchema: { type: 'object', properties: { label: { type: 'string', title: 'Button label', default: 'Plugin entry' } } } }));
+  writeFileSync(join(folder, 'web.js'), `export default function(api) {
+    for (const slot of ['sidebar','composer','settings','inspector']) {
+      const node = document.createElement(slot === 'settings' ? 'section' : 'button');
+      if (node.tagName === 'BUTTON') node.type = 'button';
+      node.dataset.exampleSlot = slot; node.textContent = slot === 'sidebar' ? api.config.label : 'Plugin ' + slot;
+      if (slot === 'composer') node.onclick = () => api.insert('Inserted by plugin');
+      if (slot === 'inspector') node.onclick = () => {const p = document.createElement('p');p.textContent='Plugin preview';api.inspect('Example',p);};
+      api.mount(slot,node);
+    }
+    api.tool('ls', () => { const node = document.createElement('p'); node.textContent = 'Custom listing result'; return node; });
+  }`);
+  const dependent = join(paths.plugins, 'a-dependent'); mkdirSync(dependent);
+  writeFileSync(join(dependent, 'plugin.js'), 'export default function() {}');
+  writeFileSync(join(dependent, 'plugin.json'), JSON.stringify({ title: 'Dependent UI', requires: ['ui-example'] }));
+  writeFileSync(join(dependent, 'web.js'), `export default function(api) {
+    const parent = document.querySelector('[data-example-slot=sidebar]');
+    if (!parent) throw new Error('Dependency must mount first');
+    const node = document.createElement('button'); node.type = 'button'; node.textContent = 'Dependent ' + parent.textContent; api.mount('sidebar', node);
+    api.onDispose(() => { document.documentElement.dataset.dependencyDisposal = parent.isConnected ? 'ordered' : 'incorrect'; });
+  }`);
+  const settings = readJson<any>(paths.settings, {}); writeJson(paths.settings, { ...settings, plugins: { 'ui-example': true, 'a-dependent': true } });
+  const service = await startIsolatedHost(paths);
+  try {
+    await page.goto(service.url + '/#token=' + service.token);
+    await expect(page.getByRole('button', { name: 'Plugin entry', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Dependent Plugin entry', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Plugin composer', exact: true }).click();
+    await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toHaveValue('Inserted by plugin');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.getByText('Custom listing result')).toBeHidden();
+    await expect(page.locator('.message.assistant')).toHaveText('Done');
+    await page.locator('.tool-card summary').click(); await expect(page.getByText('Custom listing result')).toBeVisible();
+    await page.getByRole('button', { name: 'Open inspector', exact: true }).click();
+    await page.getByRole('button', { name: 'Plugin inspector', exact: true }).click();
+    await expect(page.getByText('Plugin preview', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.getByLabel('Button label · ui-example', { exact: true }).fill('Updated plugin');
+    await page.getByRole('button', { name: 'Save settings', exact: true }).click();
+    await expect(page.locator('#settingsStatus')).toHaveText('Saved.');
+    await expect(page.locator('[data-example-slot=sidebar]')).toHaveCount(1);
+    await expect(page.locator('[data-example-slot=sidebar]')).toHaveText('Updated plugin');
+    await expect(page.getByRole('button', { name: 'Dependent Updated plugin', exact: true })).toBeAttached();
+    await page.getByRole('checkbox', { name: 'UI example', exact: true }).uncheck();
+    await page.getByRole('checkbox', { name: 'Dependent UI', exact: true }).uncheck();
+    await page.getByRole('button', { name: 'Save settings', exact: true }).click();
+    await expect(page.locator('#settingsStatus')).toHaveText('Saved.');
+    await expect(page.locator('[data-example-slot]')).toHaveCount(0);
+    await expect(page.locator('html')).toHaveAttribute('data-dependency-disposal', 'ordered');
+    await expect(page.getByText('Plugin preview', { exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Close settings' }).click();
+    await page.locator('.tool-card summary').click();
+    await expect(page.getByText('Custom listing result')).toHaveCount(0);
+    await expect(page.locator('.tool-content pre').first()).toBeVisible();
+  } finally { await page.close(); await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+test('file inspection, responsive themes and reduced viewport height keep controls reachable', async ({ browser }) => {
+  const mock = await createMockProvider(), { root, paths } = createFixturePaths(mock.url);
+  writeFileSync(join(paths.cwd, 'notes.md'), '# Visible file\nWorkspace content');
+  const service = await startIsolatedHost(paths);
+  try {
+    for (const width of [1366, 768, 390, 320]) {
+      const page = await browser.newPage({ viewport: { width, height: 700 } });
+      try {
+        await page.goto(service.url + '/#token=' + service.token);
+        if (width <= 860) await page.getByRole('button', { name: 'Toggle navigation' }).click();
+        await page.getByRole('button', { name: 'Workspace files', exact: true }).click();
+        await expect(page.getByText('Git is unavailable or this workspace is not a repository.')).toBeVisible();
+        await page.getByRole('button', { name: 'notes.md', exact: true }).click();
+        await expect(page.locator('.file-preview')).toHaveText('# Visible file\nWorkspace content');
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        await page.getByRole('button', { name: 'Close inspector' }).click();
+        if (width <= 860) await page.getByRole('button', { name: 'Close navigation' }).first().click();
+        for (const theme of ['dark', 'light']) {
+          if (width <= 860) await page.getByRole('button', { name: 'Toggle navigation' }).click();
+          await page.getByRole('button', { name: 'Settings', exact: true }).click();
+          await page.getByRole('combobox', { name: 'Theme', exact: true }).selectOption(theme);
+          await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+          await page.getByRole('button', { name: 'Close settings' }).click();
+        }
+        await page.setViewportSize({ width, height: 380 });
+        await page.getByRole('textbox', { name: 'Message', exact: true }).fill('A long task '.repeat(100));
+        const send = await page.getByRole('button', { name: 'Send', exact: true }).boundingBox();
+        expect(send.y + send.height).toBeLessThanOrEqual(380);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      } finally { await page.close(); }
+    }
+  } finally { await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+test('custom provider onboarding and switching workspace work entirely in the GUI', async ({ page }) => {
+  const mock = await createMockProvider(), { root, paths } = createFixturePaths(mock.url);
+  const second = join(root, 'another-workspace'); mkdirSync(second);
+  const service = await startIsolatedHost(paths);
+  try {
+    await page.goto(service.url + '/#token=' + service.token);
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.getByRole('textbox', { name: 'Provider ID', exact: true }).fill('gui-added');
+    await page.getByRole('textbox', { name: 'API endpoint', exact: true }).fill(mock.url);
+    await page.getByRole('textbox', { name: 'Model IDs (one per line)', exact: true }).fill('new-model');
+    await page.getByRole('button', { name: 'Save endpoint', exact: true }).click();
+    await expect(page.locator('#providerStatus')).toContainText('Endpoint saved.');
+    await expect(page.getByRole('combobox', { name: 'Provider', exact: true })).toHaveValue('gui-added');
+    await page.getByRole('textbox', { name: 'API key', exact: true }).fill('test-only-key');
+    await page.getByRole('button', { name: 'Save API key', exact: true }).click();
+    await expect(page.locator('#settingsStatus')).toHaveText('API key saved locally.');
+    await expect(page.getByRole('combobox', { name: 'Provider', exact: true })).toHaveValue('gui-added');
+    await page.getByRole('combobox', { name: 'Model ID', exact: true }).selectOption('new-model');
+    await page.getByRole('button', { name: 'Save settings', exact: true }).click();
+    await expect(page.locator('#settingsStatus')).toHaveText('Saved.');
+    await page.getByRole('button', { name: 'Close settings' }).click();
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Configured from GUI');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.locator('.message.assistant')).toHaveText('Mock response');
+    expect(mock.requests.at(-1).model).toBe('new-model');
+    await page.getByRole('button', { name: 'Choose workspace', exact: true }).click();
+    await page.getByRole('textbox', { name: 'Absolute directory path', exact: true }).fill(second);
+    await page.getByRole('button', { name: 'Open workspace', exact: true }).click();
+    await expect(page.locator('#workspaceLabel')).toHaveText(second);
+    await expect(page.locator('#sessions .session-row')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Choose workspace', exact: true }).click();
+    await page.getByRole('textbox', { name: 'Absolute directory path', exact: true }).fill(paths.cwd);
+    await page.getByRole('button', { name: 'Open workspace', exact: true }).click();
+    await expect(page.locator('#workspaceLabel')).toHaveText(paths.cwd);
+    await expect(page.locator('.message.assistant')).toHaveText('Mock response');
+  } finally { await page.close(); await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+test('running messages can queue follow-ups and approve shell commands from the GUI', async ({ page }) => {
+  let release: () => void, entered: () => void;
+  const held = new Promise<void>((done) => { release = done; }), waiting = new Promise<void>((done) => { entered = done; });
+  const mock = await createMockProvider(async ({ messages }) => {
+    if (messages.at(-1).content === 'Wait') { entered(); await held; return 'First reply'; }
+    if (messages.at(-1).content === 'Shell task') return { tool: 'sandbox_shell', args: { command: 'echo approved' } };
+    return 'Finished';
+  });
+  const { root, paths } = createFixturePaths(mock.url);
+  writeJson(paths.settings, { ...readJson<any>(paths.settings, {}), plugins: { shell: true }, sandbox: { mode: 'host' } });
+  const service = await startIsolatedHost(paths);
+  try {
+    await page.goto(service.url + '/#token=' + service.token);
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Wait');
+    await page.getByRole('button', { name: 'Send', exact: true }).click(); await waiting;
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Continue');
+    await page.getByRole('combobox', { name: 'While running', exact: true }).selectOption('followUp');
+    await page.getByRole('button', { name: 'Queue', exact: true }).click();
+    await expect(page.locator('#queuedMessages')).toHaveText('Follow up: Continue');
+    release();
+    await expect(page.locator('.message.assistant')).toHaveCount(2);
+    await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeVisible();
+    await expect(page.locator('#queuedMessages')).toBeHidden();
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Shell task');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.locator('.approval-card pre')).toHaveText('echo approved');
+    await page.getByRole('button', { name: 'Allow once', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeVisible();
+    await expect(page.locator('.approval-card')).toHaveCount(0);
+    await page.locator('.tool-card summary').click();
+    await expect(page.locator('.tool-arguments')).toContainText('echo approved');
+    await expect(page.locator('.tool-content')).toContainText('Exit 0');
+  } finally { release(); await page.close(); await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+test('retry retains image attachments after selecting an image-capable model', async ({ page }) => {
+  const mock = await createMockProvider(), { root, paths } = createFixturePaths(mock.url);
+  const models = readJson<any>(join(paths.home, 'models.json'), {});
+  models.providers['local-mock'].models.push({ ...models.providers['local-mock'].models[0], id: 'vision-model', input: ['text', 'image'] });
+  writeJson(join(paths.home, 'models.json'), models);
+  const service = await startIsolatedHost(paths);
+  try {
+    await page.goto(service.url + '/#token=' + service.token);
+    await page.locator('#composer input[type=file]').setInputFiles(resolve('web/icon-192.png'));
+    await expect(page.locator('.attachment')).toHaveCount(1);
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Read the picture');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.locator('.message.error')).toContainText('does not support image input');
+    await page.getByRole('combobox', { name: 'Model', exact: true }).selectOption('local-mock/vision-model');
+    await page.getByRole('button', { name: 'Retry', exact: true }).click();
+    await expect(page.locator('.message.assistant')).toHaveText('Mock response');
+    expect(JSON.stringify(mock.requests.at(-1))).toContain('image_url');
+    await expect(page.locator('.message-image')).toHaveCount(1);
+  } finally { await page.close(); await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
 });

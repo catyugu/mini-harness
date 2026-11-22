@@ -496,7 +496,7 @@ element('sidebarClose').onclick = element('overlay').onclick = () => { closeDraw
 narrow.onchange = () => setSidebar(!narrow.matches);
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && !settingsPanel.open) {
-    if (!element('inspector').hidden) { element('inspector').hidden = true; element('inspectorOpen').focus(); }
+    if (!element('inspector').hidden) { element('inspectorClose').click(); element('inspectorOpen').focus(); }
     else closeDrawer();
   }
 });

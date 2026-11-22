@@ -19,9 +19,12 @@ function fillSettings() {
   element('isolationStatus').textContent = isolation
     ? 'File tools are workspace-scoped. Linux shell isolation is available. Trusted host mode uses your user permissions.'
     : 'File tools are workspace-scoped. Shell isolation is unavailable on this host. Trusted host mode uses your user permissions.';
-  element('pluginSettings').replaceChildren(...plugins.map((plugin) => {
+  element('pluginSettings').replaceChildren(...plugins.map((plugin, index) => {
     const group = document.createElement('div');
     group.className = 'plugin-group';
+    if (index === 0 || Boolean(plugins[index - 1].trustedCode) !== Boolean(plugin.trustedCode)) {
+      const heading = document.createElement('h4'); heading.textContent = plugin.trustedCode ? 'Local plugins' : 'Built-in capabilities'; group.append(heading);
+    }
     const label = document.createElement('label');
     label.className = 'switch-line';
     const description = document.createElement('span');

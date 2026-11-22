@@ -1,0 +1,173 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, symlinkSync } from 'node:fs';
+import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { createMiniHarnessServer } from '../src/server.js';
+import { prepareInput } from '../src/input.js';
+import { Inspection } from '../src/inspection.js';
+import { createFixturePaths, createMockProvider } from './helpers/mock-provider.js';
+
+const waitUntil = async <T>(read: () => T | Promise<T>, accept: (value: T) => boolean) => {
+  for (let i = 0; i < 300; i++) { const value = await read(); if (accept(value)) return value; await new Promise((done) => setTimeout(done, 10)); }
+  throw new Error('Timed out waiting for operation');
+};
+async function fixture(t: any, reply?: Parameters<typeof createMockProvider>[0]) {
+  const mock = await createMockProvider(reply), { root, paths } = createFixturePaths(mock.url);
+  const app = await createMiniHarnessServer(paths), base = 'http://127.0.0.1:' + await app.listen(0);
+  t.after(async () => { await app.close(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
+  const request = async (path: string, method = 'GET', body?: any, extra = {}) => {
+    const response = await fetch(base + '/api' + path, { method, headers: { Authorization: 'Bearer ' + app.token, 'Content-Type': 'application/json', ...extra }, body: body === undefined ? undefined : JSON.stringify(body) });
+    return { status: response.status, body: await response.json() };
+  };
+  const finish = (id: string) => waitUntil(() => request('/sessions/' + id + '/runs'), (r) => ['completed', 'failed', 'cancelled'].includes(r.body.run?.state));
+  return { mock, paths, root, app, request, finish };
+}
+
+test('attachments enforce encoding, format and byte limits without creating files', () => {
+  const png = 'iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAFElEQVR4nGPUCIhigAEmBiSAmwMAKdYA2gR3lpgAAAAASUVORK5CYII=';
+  const prepared = prepareInput('', [{ name: 'one.png', mimeType: 'image/png', data: png }, { name: 'notes.md', mimeType: 'text/plain', data: Buffer.from('An attached note').toString('base64') }]);
+  assert.equal(prepared.images.length, 1); assert.match(prepared.text, /An attached note/);
+  assert.throws(() => prepareInput('a', [{ name: 'fake.png', mimeType: 'image/png', data: 'eA==' }]), /Invalid image/);
+  assert.throws(() => prepareInput('a', [{ name: 'b', mimeType: 'text/plain', data: '!!!' }]), /Invalid attachment/);
+  assert.throws(() => prepareInput('a', [{ name: 'b', mimeType: 'application/pdf', data: Buffer.from([0, 1, 2]).toString('base64') }]), /UTF-8/);
+  assert.throws(() => prepareInput('a', new Array(9).fill({})), /eight/);
+});
+
+test('GUI APIs configure providers, persist keys privately, discover Skills and scope files', async (t) => {
+  const { app, paths, request, mock, finish } = await fixture(t);
+  writeFileSync(join(paths.cwd, 'note.md'), 'workspace note');
+  mkdirSync(join(paths.skills, 'verify'));
+  writeFileSync(join(paths.skills, 'verify', 'SKILL.md'), '---\nname: verify\ndescription: Verify a task\n---\n\nRead the task.');
+  assert.ok((await request('/skills')).body.some((s) => s.name === 'verify'));
+  assert.ok((await request('/files/search?q=note')).body.includes('note.md'));
+  assert.equal((await request('/files/preview?path=note.md')).body.content, 'workspace note');
+  assert.equal((await request('/files/preview?path=' + encodeURIComponent(paths.settings))).status, 400);
+  assert.equal((await request('/files/tree?path=..')).status, 400);
+  assert.equal((await request('/settings', 'PATCH', { plugins: { files: false, skills: false } })).status, 200);
+  assert.equal((await request('/files/tree')).status, 400); assert.deepEqual((await request('/skills')).body, []);
+  const save = await request('/providers', 'PUT', { id: 'gui-test', baseUrl: mock.url, api: 'openai-completions', models: [{ id: 'gui-model', input: ['text', 'image'] }] });
+  assert.equal(save.status, 200, JSON.stringify(save.body));
+  assert.equal((await request('/credentials', 'POST', { provider: 'gui-test', key: 'gui-private-key' })).status, 200);
+  assert.equal((await request('/settings', 'PATCH', { model: { provider: 'gui-test', id: 'gui-model' } })).status, 200);
+  const bootstrap = await request('/bootstrap'); assert.equal(JSON.stringify(bootstrap.body).includes('gui-private-key'), false);
+  assert.ok(readFileSync(join(paths.home, 'auth.json'), 'utf8').includes('gui-private-key'));
+  const { body: session } = await request('/sessions', 'POST', {});
+  const png = 'iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAFElEQVR4nGPUCIhigAEmBiSAmwMAKdYA2gR3lpgAAAAASUVORK5CYII=';
+  assert.equal((await request('/sessions/' + session.id + '/runs', 'POST', { message: 'Read the image and text', attachments: [
+    { name: 'one.png', mimeType: 'image/png', data: png }, { name: 'note.md', mimeType: 'text/plain', data: Buffer.from('ATTACHED CONTENT').toString('base64') }
+  ] })).status, 202);
+  assert.equal((await finish(session.id)).body.run.state, 'completed');
+  assert.match(JSON.stringify(mock.requests.at(-1)), /ATTACHED CONTENT/); assert.match(JSON.stringify(mock.requests.at(-1)), /image_url/);
+  const history = (await request('/sessions/' + session.id)).body;
+  assert.ok(history.messages.some((m) => m.role === 'user' && m.content.some((b) => b.type === 'image')));
+  assert.equal((await request('/sessions/' + session.id, 'PATCH', { title: 'Renamed task' })).body.title, 'Renamed task');
+  assert.equal((await request('/providers', 'DELETE', { id: 'gui-test' })).status, 400);
+});
+
+test('workspace switching isolates conversations and rejects stale tabs and busy runs', async (t) => {
+  let release: () => void;
+  const held = new Promise<void>((done) => { release = done; });
+  t.after(() => release());
+  const { root, paths, app, request, finish } = await fixture(t, async () => { await held; return 'Done'; });
+  const next = join(root, 'second'); mkdirSync(next);
+  const { body: session } = await request('/sessions', 'POST', {});
+  await request('/sessions/' + session.id + '/runs', 'POST', { message: 'Wait for switch' });
+  assert.equal((await request('/workspaces', 'POST', { path: next })).status, 400);
+  release(); await finish(session.id);
+  assert.equal((await request('/workspaces', 'POST', { path: next })).status, 200);
+  assert.equal(app.runtime.paths.cwd, next); assert.deepEqual((await request('/sessions')).body, []);
+  assert.equal((await request('/sessions', 'POST', {}, { 'X-Workspace': encodeURIComponent(paths.cwd) })).status, 409);
+  assert.equal((await request('/workspaces', 'POST', { path: paths.cwd })).status, 200);
+  assert.ok((await request('/sessions')).body.some((s) => s.id === session.id));
+});
+
+test('shell approval gates execution, handles rejection and cancellation', async (t) => {
+  const { app, paths, request, finish } = await fixture(t, ({ messages }) => messages.at(-1).role === 'tool' ? 'Tool completed' :
+    { tool: 'sandbox_shell', args: { command: 'echo approved' } });
+  await app.runtime.updateSettings({ plugins: { shell: true }, sandbox: { mode: 'host' } });
+  const { body: session } = await request('/sessions', 'POST', {});
+  for (const allow of [false, true]) {
+    await request('/sessions/' + session.id + '/runs', 'POST', { message: 'Run a shell command' });
+    const pending = await waitUntil(() => request('/approvals'), (r) => r.body.length > 0);
+    assert.equal(pending.body[0].command, 'echo approved');
+    assert.equal((await request('/approvals', 'POST', { id: pending.body[0].id, allow })).status, 200);
+    await finish(session.id);
+    const history = (await request('/sessions/' + session.id)).body.messages;
+    const tool = history.filter((m) => m.role === 'toolResult').at(-1);
+    assert.equal(tool.isError, !allow); assert.deepEqual(tool.arguments, { command: 'echo approved' });
+    if (allow) assert.match(JSON.stringify(tool.content), /approved/);
+  }
+  await request('/sessions/' + session.id + '/runs', 'POST', { message: 'Cancel pending approval' });
+  await waitUntil(() => request('/approvals'), (r) => r.body.length > 0);
+  await request('/sessions/' + session.id + '/cancel', 'POST', {}); await finish(session.id);
+  assert.deepEqual((await request('/approvals')).body, []);
+});
+
+test('queued follow-ups run within the existing Pi run and are consumed once', async (t) => {
+  let release: () => void;
+  const held = new Promise<void>((done) => { release = done; });
+  t.after(() => release());
+  const { mock, request, finish } = await fixture(t, async ({ messages }) => { if (messages.at(-1).content === 'First') await held; return 'Answer'; });
+  const { body: session } = await request('/sessions', 'POST', {});
+  await request('/sessions/' + session.id + '/runs', 'POST', { message: 'First' });
+  await waitUntil(() => mock.requests.length, (count) => count > 0);
+  const queue = await request('/sessions/' + session.id + '/queue', 'POST', { message: 'Second', mode: 'followUp' });
+  assert.equal(queue.status, 202, JSON.stringify(queue.body)); assert.deepEqual(queue.body.followUp, ['Second']);
+  release(); await finish(session.id);
+  assert.equal(mock.requests.length, 2);
+  const history = (await request('/sessions/' + session.id)).body.messages;
+  assert.equal(history.filter((m) => m.role === 'user').length, 2);
+  assert.deepEqual((await request('/sessions/' + session.id + '/queue')).body, { steer: [], followUp: [] });
+});
+
+test('local plugins install disabled, load UI only when enabled, and uninstall permanently', async (t) => {
+  const { paths, request } = await fixture(t);
+  const bundle = { id: 'gui-plugin', files: [{ name: 'plugin.js', content: 'export default function() {}' }, { name: 'web.js', content: 'export default function(api) {}' }] };
+  assert.equal((await request('/plugins/install', 'POST', bundle)).status, 201);
+  assert.equal((await request('/plugins/gui-plugin/web')).status, 400);
+  assert.equal((await request('/settings', 'PATCH', { plugins: { 'gui-plugin': true } })).status, 200);
+  assert.match((await request('/plugins/gui-plugin/web')).body.source, /function/);
+  assert.equal((await request('/plugins/gui-plugin', 'DELETE')).status, 400);
+  await request('/settings', 'PATCH', { plugins: { 'gui-plugin': false } });
+  assert.equal((await request('/plugins/gui-plugin', 'DELETE')).status, 200);
+  assert.equal(existsSync(join(paths.plugins, 'gui-plugin')), false);
+  assert.equal((await request('/plugins/install', 'POST', { ...bundle, files: [{ name: '../escape.js', content: '' }] })).status, 400);
+  assert.equal((await request('/plugins/install', 'POST', { ...bundle, files: [...bundle.files, { name: 'plugin.json', content: JSON.stringify({ requires: 'invalid' }) }] })).status, 400);
+  assert.equal((await request('/bootstrap')).status, 200);
+  assert.equal(existsSync(join(paths.plugins, 'gui-plugin')), false);
+});
+
+test('Git inspection includes staged, unstaged and untracked files and refuses linked previews', async (t) => {
+  const { paths, root } = await fixture(t);
+  const git = (...args: string[]) => execFileSync('git', args, { cwd: paths.cwd, encoding: 'utf8' });
+  git('init', '-q'); git('config', 'user.name', 'Test'); git('config', 'user.email', 'test@example.com');
+  writeFileSync(join(paths.cwd, 'file.txt'), 'before\n'); git('add', '.'); git('commit', '-qm', 'init');
+  writeFileSync(join(paths.cwd, 'file.txt'), 'staged\n'); git('add', '.'); writeFileSync(join(paths.cwd, 'file.txt'), 'after\n');
+  writeFileSync(join(paths.cwd, 'new.txt'), 'new\n');
+  const inspection = new Inspection(paths.cwd, paths.home);
+  const changes = await inspection.changes(); assert.equal(changes.available, true); assert.equal(changes.files.length, 2);
+  const diff = await inspection.diff('file.txt'); assert.match(diff.content, /Staged/); assert.match(diff.content, /Working tree/);
+  assert.match((await inspection.diff('new.txt')).content, /new/);
+  await assert.rejects(inspection.preview('../home/settings.json'));
+  const nestedState = join(paths.cwd, 'private'); mkdirSync(nestedState); writeFileSync(join(nestedState, 'secret.txt'), 'private contents');
+  git('add', '.'); git('commit', '-qm', 'track state for denial test'); rmSync(join(nestedState, 'secret.txt'));
+  await assert.rejects(new Inspection(paths.cwd, nestedState).diff('private/secret.txt')); 
+  if (process.platform !== 'win32') {
+    const outside = join(root, 'secret'); writeFileSync(outside, 'outside'); symlinkSync(outside, join(paths.cwd, 'link.txt'));
+    await assert.rejects(inspection.preview('link.txt')); await assert.rejects(inspection.diff('link.txt'));
+  }
+});
+
+test('successful file writes retain arguments and this-turn paths after reopening history', async (t) => {
+  const { paths, request, finish } = await fixture(t, ({ messages }) => messages.at(-1).role === 'tool' ? 'Written' :
+    { tool: 'write', args: { path: 'result.txt', content: 'Result for inspection\n' } });
+  const { body: session } = await request('/sessions', 'POST', {});
+  await request('/sessions/' + session.id + '/runs', 'POST', { message: 'Write a result' });
+  const terminal = await finish(session.id);
+  assert.equal(terminal.body.run.state, 'completed'); assert.deepEqual(terminal.body.run.changedFiles, ['result.txt']);
+  assert.equal(readFileSync(join(paths.cwd, 'result.txt'), 'utf8'), 'Result for inspection\n');
+  const history = (await request('/sessions/' + session.id)).body;
+  assert.deepEqual(history.run.changedFiles, ['result.txt']);
+  assert.deepEqual(history.messages.find((m) => m.toolName === 'write').arguments, { path: 'result.txt', content: 'Result for inspection\n' });
+});

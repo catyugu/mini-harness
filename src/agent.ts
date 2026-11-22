@@ -1,6 +1,6 @@
 import { Approvals } from './approvals.js';
 import { prepareInput, type Attachment, type ImageInput } from './input.js';
-import { join, relative }  from 'node:path';
+import { join, relative, resolve, sep }  from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { randomUUID } from 'node:crypto';
 import {
@@ -324,7 +324,7 @@ export class MiniHarnessRuntime {
           const args = toolArguments.get(event.toolCallId) as { path?: string };
           const run = this.busy.get(id);
           if (!event.isError && ['write', 'edit'].includes(event.toolName) && typeof args?.path === 'string' && run) {
-            const path = args.path.startsWith('/') ? relative(this.paths.cwd, args.path) : args.path;
+            const path = relative(this.paths.cwd, resolve(this.paths.cwd, args.path)).split(sep).join('/');
             run.info.changedFiles = [...new Set([...(run.info.changedFiles ?? []), path])];
           }
           emit({ type: 'tool', id: event.toolCallId, name: event.toolName, state: event.isError ? 'error' : 'finished',

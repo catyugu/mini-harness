@@ -88,3 +88,64 @@ All API requests require `Authorization: Bearer <token>`.
 | `POST /api/sessions/:id/cancel` | Explicitly cancel that conversation and running descendants |
 
 Run states are queued, running, completed, failed, cancelled and interrupted. Event replay is bounded to 2,048 events and approximately 1 MiB per active conversation. An older cursor receives a snapshot of Pi history and current output, then follows live events. Completed runs use saved history snapshots. The server persists latest status and Pi JSONL, rather than a separate execution context or an event archive.
+
+## Browser extensions
+
+A local plugin may include a self-contained ESM `web.js` beside `plugin.js`. Its default export receives the browser API below. Bundle browser dependencies into this one file; relative imports and Node APIs are unavailable. The browser fetches it through the authenticated API and only loads enabled plugins. It runs as trusted page code and can access the same interface as the user.
+
+```js
+export default function setup(api) {
+  const open = document.createElement('button');
+  open.type = 'button';
+  open.textContent = api.config.label ?? 'Task notes';
+  open.onclick = () => {
+    const text = document.createElement('p');
+    text.textContent = 'Notes for the current task';
+    api.inspect('Task notes', text);
+  };
+  api.mount('sidebar', open);
+  api.tool('conversation_count', (result) => {
+    const output = document.createElement('p');
+    output.textContent = typeof result.content === 'string' ? result.content :
+      (result.content ?? []).filter((block) => block.type === 'text').map((block) => block.text).join('\n');
+    return output;
+  });
+}
+```
+
+| API | Behavior |
+| - | - |
+| `mount('sidebar', node)` | Add a sidebar entry |
+| `mount('composer', node)` | Add an input toolbar control |
+| `tool(name, render)` | Register one renderer for a tool name; returning `undefined` uses the generic result view |
+| `mount('settings', node)` | Add a settings section |
+| `mount('inspector', node)` | Add a right-panel entry; use `inspect(title, node)` to show its content |
+| `insert(text)` | Insert text at the input selection |
+| `request(path, options?)` | Request authenticated JSON from `/api` using a path such as `/sessions` |
+| `config` | Same validated configuration and schema defaults as the server plugin |
+| `onDispose(cleanup)` / returned cleanup | Release listeners, timers and other browser resources |
+
+The host removes mounted nodes, inspected content and tool registrations when disabling or reconfiguring the plugin. Register document/window listeners with matching `onDispose` cleanup. Dependencies mount first and dispose last; configuration changes also rebuild dependent browser extensions. Setup failures remove partial contributions and leave ordinary chat available. The backend and UI share one plugin switch; attachments, file inspection and Skills use these same extension interfaces.
+
+Settings can install a single-file local bundle containing `plugin.js`, optional `plugin.json` and `web.js` (at most 1 MiB combined). New installations stay disabled. Disable and save before uninstalling; uninstall removes the local plugin directory permanently. Larger development plugins can still be placed in the local plugins directory manually.
+
+## GUI API additions
+
+`X-Workspace: <encodeURIComponent(absolute path)>` rejects requests from tabs opened before another tab switched workspace. The browser sends this automatically. Switching waits for idle tasks, reloads the runtime and preserves each workspace's indexed conversations. One workspace is active per server; this does not create additional server processes.
+
+| Request | Result |
+| - | - |
+| `GET /api/workspaces`, `POST /api/workspaces` with `{path}` | Current/recent directories; switch to an existing absolute directory |
+| `GET /api/providers`, `PUT /api/providers`, `DELETE /api/providers` | List credential status and model catalogs; save/remove custom endpoint definitions in Pi `models.json` |
+| `PATCH /api/sessions/:id` with `{title}` | Rename a conversation |
+| `POST /api/sessions/:id/runs` with `{message, attachments?}` | Attachments are `{name, mimeType, data}` where `data` is base64 |
+| `POST /api/sessions/:id/queue` with `{message, mode, attachments?}` | Pi `steer` (after the current tool batch) or `followUp` (after the current task); maximum 16 queued messages |
+| `GET /api/sessions/:id/queue` | Undelivered instructions and follow-ups |
+| `GET /api/skills` | Names/descriptions discovered by Pi; invoke with `/skill:name` |
+| `GET /api/files/tree?path=...`, `/files/search?q=...` | Workspace-scoped listing/search; search follows `.gitignore` |
+| `GET /api/files/preview?path=...`, `/files/changes`, `/files/diff?path=...` | Bounded text preview, repository status, staged and working-tree differences |
+| `GET /api/approvals`, `POST /api/approvals` with `{id, allow}` | Pending Shell requests; allow once or deny |
+
+Images (PNG/JPEG/GIF/WebP) go through Pi's image input and require an image-capable model. UTF-8 text attachments become message text. Limits: eight files, 6 MiB per image, 1 MiB per text file, 12 MiB total. Binary documents such as PDF/Office files are not parsed. Attachment content lives in the Pi conversation; there is no independent upload store. Git inspection requires the selected workspace to be the repository root and caps output at 512 KiB. “Files written this turn” lists successful built-in `write`/`edit` paths; Git changes show the entire working tree, including earlier edits and shell changes.
+
+Every enabled built-in Shell call requires approval. Requests expire after five minutes; stopping the run or server cancels pending approval. Approval permits the command under the existing shell policy. Reviewed local plugins remain trusted code; this is not a general-purpose containment mechanism.
