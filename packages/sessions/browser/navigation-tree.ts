@@ -38,10 +38,10 @@ export function workspaceTree(workspaces: WorkspaceRecord[], sessions: Conversat
   return { parents, children, grouped, labels };
 }
 
-export function sessionHierarchy(sessions: Conversation[], query: string) {
+export function sessionHierarchy(sessions: Conversation[], query: string, matches?: ReadonlySet<string>) {
   const byId = new Map(sessions.map((item) => [item.id, item]));
   const included = new Set<string>();
-  for (const item of sessions) if (!query || item.title.toLowerCase().includes(query)) {
+  for (const item of sessions) if (!query || item.title.toLowerCase().includes(query) || matches?.has(item.id)) {
     for (let id: string | null = item.id; id && !included.has(id); id = byId.get(id)?.parentId) included.add(id);
   }
   const visible = sessions.filter((item) => included.has(item.id));

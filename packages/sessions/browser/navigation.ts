@@ -119,6 +119,9 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
 
   let selecting = false;
   let visible: Conversation[] = [];
+  let contentMatches = new Set<string>();
+  let searchRevision = 0;
+  let searchTimer: ReturnType<typeof setTimeout> | undefined;
   const selectAll = button('Select all');
   const exportButton = button('Export');
   const deleteButton = button('Delete', 'danger');
@@ -212,7 +215,7 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
         const current = state.selectedWorkspace === id;
         const tree = sessionTree(grouped.get(id) ?? [], {
           active: state.activeConversation, expanded, selection, selecting, query: matches ? '' : query,
-          render, selectionChanged, activate: options.activate, rename,
+          matches: contentMatches, render, selectionChanged, activate: options.activate, rename,
           remove(item) {
             void confirmAction('Permanently delete "' + item.title + '" and all child conversations?',
               { title: 'Delete conversation', signal: api.signal })
@@ -336,7 +339,22 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
   }, { signal: api.signal });
 
   element('selectMode').onclick = () => toggleSelection(!selecting);
-  element('sessionSearch').oninput = render;
+  element('sessionSearch').oninput = () => {
+    const query = value('sessionSearch');
+    const revision = ++searchRevision;
+    clearTimeout(searchTimer);
+    contentMatches = new Set();
+    render();
+    if (query.length < 2) return;
+    searchTimer = setTimeout(() => {
+      void api.request<string[]>('/sessions/search?q=' + encodeURIComponent(query)).then((ids) => {
+        if (revision !== searchRevision) return;
+        contentMatches = new Set(ids);
+        render();
+      }).catch((error) => { if (!api.signal.aborted && revision === searchRevision) options.report(error); });
+    }, 250);
+  };
+  api.onDispose(() => clearTimeout(searchTimer));
   cancel.onclick = () => toggleSelection(false);
   selectAll.onclick = () => { for (const item of visible) selection.add(item.id); render(); };
   exportButton.onclick = () => void exportSessions([...selection], api.signal).catch(options.report);

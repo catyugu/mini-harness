@@ -42,6 +42,9 @@ test('GUI APIs configure providers, persist keys privately, discover Skills and 
   assert.doesNotMatch(JSON.stringify(user), /ATTACHED CONTENT/);
   assert.equal(history.title, 'Read the image and text');
   assert.equal((await request('/sessions/' + session.id, 'PATCH', { title: 'Renamed task' })).body.title, 'Renamed task');
+  assert.deepEqual((await request('/sessions/search?q=Read%20the%20image')).body, [session.id],
+    'Content search must not depend on title');
+  assert.deepEqual((await request('/sessions/search?q=unmatched-phrase')).body, []);
   assert.equal((await request('/providers', 'DELETE', { id: 'gui-test' })).status, 200);
   const afterRemoval = (await request('/settings')).body;
   assert.deepEqual(afterRemoval.model, { provider: '', id: '' });

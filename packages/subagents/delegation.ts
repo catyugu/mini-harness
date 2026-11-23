@@ -87,6 +87,13 @@ export function selectChildModel(request: { provider?: string; model?: string },
   return { provider: inheritedProvider, id: model || inheritedModel };
 }
 
+/** Prefer the action over an injected workspace preamble in delegated task titles. */
+export function childTitle(task: string) {
+  const action = task.trim().replace(/^in the workspace at [^,\n]+,\s*/i, '').trim();
+  const firstLine = action.split(/\r?\n/).find((line) => line.trim()) ?? action;
+  return (firstLine || 'Subagent task').slice(0, 72);
+}
+
 export function requireChildDepth(parentDepth: number, maxDepth = 1): void {
   if (parentDepth >= maxDepth) throw new Error('Recursive subagents reached the configured depth limit');
 }
@@ -142,7 +149,7 @@ export class Delegation implements DelegationPort {
     const model = this.models(parentId).resolve(choice);
     if (!model) throw new Error('Unknown child model: ' + choice.provider + '/' + choice.id);
     const record = this.registry.create({
-      parentId, workspaceId: parent.workspaceId, title: task.slice(0, 72)
+      parentId, workspaceId: parent.workspaceId, title: childTitle(task)
     });
     try {
       const text = await this.runs().send(record.id, task, undefined, { signal, model,
@@ -150,7 +157,7 @@ export class Delegation implements DelegationPort {
       return { id: record.id, text };
     } catch (error) {
       if (this.registry.get(record.id)) this.registry.rename(record.id,
-        (signal?.aborted || this.runs().info(record.id)?.state === 'cancelled' ? '[Cancelled] ' : '[Failed] ') + task.slice(0, 60));
+        (signal?.aborted || this.runs().info(record.id)?.state === 'cancelled' ? '[Cancelled] ' : '[Failed] ') + childTitle(task).slice(0, 60));
       throw error;
     }
   }

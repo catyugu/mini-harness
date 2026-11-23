@@ -4,11 +4,11 @@ import { button, iconButton } from '@mini-harness/ui-primitives/primitives';
 
 export function sessionTree(sessions: Conversation[], options: {
   active?: string; expanded: Set<string>; selection: Set<string>; selecting: boolean;
-  query: string; render(): void; selectionChanged(): void;
+  query: string; matches?: ReadonlySet<string>; render(): void; selectionChanged(): void;
   activate(id: string): void; rename(item: Conversation): void; remove(item: Conversation): void;
 }) {
   const { active, expanded, selection, selecting, query } = options;
-  const { children, visible } = sessionHierarchy(sessions, query);
+  const { children, visible } = sessionHierarchy(sessions, query, options.matches);
 
   function branch(parent: string | null) {
     const list = document.createElement('ul');

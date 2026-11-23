@@ -82,3 +82,26 @@ test('desktop and mobile: send, navigate, settings and bulk select', async ({ br
     await mock.close();
   }
 });
+
+test('search matches conversation body even after the title changes', async ({ page }) => {
+  const mock = await createMockProvider();
+  const { root, paths } = createFixturePaths(mock.url);
+  const service = await startIsolatedHost(paths);
+  try {
+    await page.goto(service.url + '/#token=' + service.token);
+    await page.getByRole('textbox', { name: 'Message' }).fill('rarely indexed violet-sparrow detail');
+    await page.getByRole('button', { name: 'Send' }).click();
+    await expect(page.locator('.message.assistant')).toHaveText('Mock response');
+    const id = await page.locator('.session-row .session-name').first().getAttribute('id');
+    const sessionId = id?.replace('session-', '');
+    expect(sessionId).toBeTruthy();
+    await page.request.patch(service.url + '/api/sessions/' + sessionId, {
+      headers: { Authorization: 'Bearer ' + service.token },
+      data: { title: 'Renamed chat' }
+    });
+    await page.reload();
+    await expect(page.locator('.session-name')).toContainText(['Renamed chat']);
+    await page.getByRole('searchbox', { name: 'Search workspaces and conversations' }).fill('violet-sparrow');
+    await expect(page.locator('.session-name')).toContainText(['Renamed chat']);
+  } finally { await page.close(); await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
+});
