@@ -5,6 +5,20 @@ import { createLayout } from './layout.js';
 import { createRightTabs } from './right-tabs.js';
 
 /** App frame owns geometry and slot declarations, never feature navigation controls. */
+declare module '../ui-slots/registry.js' {
+  interface SlotMap {
+    'sidebar.primary': { kind: 'list' };
+    'sidebar.actions': { kind: 'list' };
+    'sidebar.navigation': { kind: 'list' };
+    'sidebar.footer': { kind: 'list' };
+    'header.actions': { kind: 'list' };
+    'conversation.header': { kind: 'list' };
+    'conversation.body': { kind: 'single' };
+    'inspector.extensions': { kind: 'list' };
+    'dialog.root': { kind: 'list' };
+  }
+}
+
 const slots = {
   'sidebar.primary': 'sidebarPrimary',
   'sidebar.actions': 'sidebarExtensions',

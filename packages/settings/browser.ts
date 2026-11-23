@@ -6,6 +6,12 @@ import { closeOnBackdrop, field, fromMarkup } from '../ui-primitives/primitives.
 
 const pageIcons = { Model: 'model', Appearance: 'theme' } as const;
 
+declare module '../ui-slots/registry.js' {
+  interface SlotMap {
+    'settings.extensions': { kind: 'list' };
+  }
+}
+
 export const settingsPlugin: BrowserPlugin = {
   id: 'core:settings', inject: ['miniState', 'miniLayout'],
   setup(ctx, api) {

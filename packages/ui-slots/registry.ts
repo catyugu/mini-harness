@@ -2,11 +2,9 @@
  * Contributions can arrive before their owner and are restored when an owner remounts.
  * The registry has no knowledge of business features or Cordis.
  */
-export type SlotName =
-  | 'sidebar.primary' | 'sidebar.actions' | 'sidebar.navigation' | 'sidebar.footer'
-  | 'header.title' | 'header.actions' | 'conversation.body' | 'conversation.header'
-  | 'conversation.composer' | 'conversation.approvals'
-  | 'settings.extensions' | 'inspector.extensions' | 'dialog.root';
+/** Plugins declare their own slot names via TypeScript module augmentation. */
+export interface SlotMap {}
+export type SlotName = keyof SlotMap & string;
 export type SlotKind = 'single' | 'list';
 interface Entry { node: HTMLElement; order: number; sequence: number }
 

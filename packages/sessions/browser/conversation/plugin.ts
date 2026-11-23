@@ -1,6 +1,13 @@
 import type { BrowserPlugin } from '../../../ui-runtime/frontend.js';
 import { conversationView } from './view.js';
 
+declare module '../../../ui-slots/registry.js' {
+  interface SlotMap {
+    'conversation.composer': { kind: 'list' };
+    'conversation.approvals': { kind: 'list' };
+  }
+}
+
 export const conversationPlugin: BrowserPlugin = {
   id: 'core:conversation', inject: ['miniState', 'miniLayout', 'miniPages', 'miniHeader', 'miniWorkspace', 'miniHost'],
   setup(ctx, api) {
