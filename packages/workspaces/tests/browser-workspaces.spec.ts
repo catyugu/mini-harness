@@ -77,6 +77,7 @@ test('switching workspaces preserves running conversations and each workspace’
     await expect(page.locator('.message.assistant')).toHaveText('First workspace finished');
     await nav.getByRole('button', { name: 'Collapse workspace workspace', exact: true }).click();
     await expect(nav.getByRole('button', { name: 'nested', exact: true })).toBeHidden();
+    await page.getByRole('button', { name: 'Search workspaces and conversations' }).click();
     const search = page.getByRole('searchbox', { name: 'Search workspaces and conversations' });
     await search.fill('child workspace');
     await expect(nav.getByRole('button', { name: 'Start in the child workspace', exact: true })).toBeVisible();
