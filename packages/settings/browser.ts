@@ -1,6 +1,6 @@
 import type { Settings } from '../contracts/config.js';
 import { payload, scopedElements } from '../web/api.js';
-import type { BrowserPlugin, FrontendApi } from '../web/kernel/extensions.js';
+import type { BrowserPlugin, FrontendApi } from '../ui-runtime/frontend.js';
 import { icon } from '../ui-primitives/icons.js';
 import { closeOnBackdrop, field, fromMarkup } from '../ui-primitives/primitives.js';
 

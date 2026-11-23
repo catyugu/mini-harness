@@ -1,6 +1,6 @@
 import { scopedElements } from '../web/api.js';
 import { fromMarkup } from '../ui-primitives/primitives.js';
-import type { BrowserPlugin } from '../web/kernel/extensions.js';
+import type { BrowserPlugin } from '../ui-runtime/frontend.js';
 import { createLayout } from './layout.js';
 import { createRightTabs } from './right-tabs.js';
 

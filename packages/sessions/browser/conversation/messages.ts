@@ -1,10 +1,10 @@
 import type { MessageContent, ViewMessage } from '../../../contracts/message.js';
 import type { RunEvent } from '../../../contracts/transport.js';
 import type { ConversationView } from '../../../web/types.js';
-import type { FrontendHost } from '../../../web/kernel/extensions.js';
+import type { FrontendHost } from '../../../ui-runtime/frontend.js';
 import { icon } from '../../../ui-primitives/icons.js';
 import { renderMarkdown, markdownSource } from '../../../ui-primitives/markdown.js';
-import type { MessageActionContext } from '../../../web/kernel/extensions.js';
+import type { MessageActionContext } from '../../../ui-runtime/frontend.js';
 
 export function createMessageView(messages: HTMLElement, extensions: Pick<FrontendHost, 'render' | 'messageActions'>,
   current: () => { sessionId?: string; leafId?: string | null }, retryLast: () => void) {

@@ -12,7 +12,7 @@ import { CommandRegistry } from './commands.js';
 import type { ComposerCommand } from '../../../web/contracts/commands.js';
 import { createComposer } from './composer.js';
 import { createModelPicker } from './model-picker.js';
-import type { FrontendApi, FrontendHost, DraftMode } from '../../../web/kernel/extensions.js';
+import type { FrontendApi, FrontendHost, DraftMode } from '../../../ui-runtime/frontend.js';
 import { fromMarkup } from '../../../ui-primitives/primitives.js';
 
 type Queue = ConversationView['queue'];

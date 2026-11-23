@@ -3,7 +3,7 @@ import { icon } from '../../../ui-primitives/icons.js';
 import type { CommandRegistry } from './commands.js';
 import type { ComposerCommand } from '../../../web/contracts/commands.js';
 import type { Attachment } from '../../../contracts/input.js';
-import type { Completer, FrontendApi, Suggestion } from '../../../web/kernel/extensions.js';
+import type { Completer, FrontendApi, Suggestion } from '../../../ui-runtime/frontend.js';
 export function createComposer(root: HTMLElement, report: (error: Error) => void, commands: CommandRegistry, signal: AbortSignal) {
   const { element } = scopedElements(root);
   const prompt = element<'textarea'>('prompt'), form = element<'form'>('composer');
