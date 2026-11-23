@@ -1,5 +1,5 @@
 import type { Attachment } from '@mini-harness/contracts/input';
-import type { Conversation, ModelChoice } from '@mini-harness/contracts/conversation';
+import type { Conversation, ConversationPermission, ModelChoice } from '@mini-harness/contracts/conversation';
 import type { RunEvent, RunInfo } from '@mini-harness/contracts/transport';
 import type { ConversationView } from '../types.js';
 import { payload, workspaceRoute } from '../api.js';
@@ -12,7 +12,10 @@ export function createConversationController(request: BrowserRequest) {
     read: (id: string, signal: AbortSignal) => readConversation(id, signal),
     follow: (view: ConversationView, signal: AbortSignal, accept: (event: RunEvent) => void, reconnect: () => void) =>
       observeRun(view, signal, accept, reconnect),
-    create: (workspaceId: string) => request<Conversation>(workspaceRoute(workspaceId, '/sessions'), payload('POST', {})),
+    create: (workspaceId: string, permission: ConversationPermission) =>
+      request<Conversation>(workspaceRoute(workspaceId, '/sessions'), payload('POST', { permission })),
+    setPermission: (id: string, permission: ConversationPermission) =>
+      request<Conversation>('/sessions/' + id + '/permissions', payload('PATCH', { permission })),
     start: (id: string, input: { message: string; attachments?: Attachment[]; model?: ModelChoice; thinkingLevel?: string | null }) =>
       request<RunInfo>('/sessions/' + id + '/runs', payload('POST', input)),
     queue: (id: string, input: { message: string; mode: 'steer' | 'followUp';

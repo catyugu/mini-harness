@@ -121,3 +121,16 @@
   overflow-wrap: anywhere;
   padding: 3px 8px;
 }
+
+.permission-select { display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0; padding: 6px 8px; border: 0; background: transparent; color: var(--muted); font-size: 12px; border-radius: 8px; }
+.permission-select:hover, .permission-select[aria-expanded="true"] { background: var(--hover); color: var(--ink); }
+.permission-select svg { width: 14px; height: 14px; flex-shrink: 0; }
+.permission-select svg:last-child { width: 11px; height: 11px; transform: rotate(90deg); }
+.permission-picker { max-width: calc(100vw - 16px); }
+.permission-option { display: flex; flex-direction: column; gap: 2px; font-size: 13px; border-radius: 8px; }
+.permission-option small { white-space: normal; color: var(--muted); font-size: 11px; line-height: 1.4; }
+.permission-option[aria-selected="true"] { background: var(--selected); }
+.permission-option[aria-selected="true"] strong::after { content: ' ✓'; color: var(--focus); }
+@media (max-width: 560px) {
+  .permission-select { min-height: 40px; padding-inline: 4px; }
+}

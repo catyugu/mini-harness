@@ -63,10 +63,10 @@ test('file-tool names follow the same scoped registration, restriction and lifet
   assert.deepEqual((await tool.execute('call', {})).content, [{ type: 'text', text: 'child' }]);
   allowed = false;
   assert.deepEqual(registry.forSession('child'), []);
-  await assert.rejects(tool.execute('restricted', {}), /Tool denied by plugin policy/);
+  await assert.rejects(tool.execute('restricted', {}), /Tool denied by conversation or plugin policy/);
   allowed = true;
   denied = true;
-  await assert.rejects(tool.execute('denied', {}), /Tool denied by plugin policy/);
+  await assert.rejects(tool.execute('denied', {}), /Tool denied by conversation or plugin policy/);
   denied = false;
   await releaseChild();
   await assert.rejects(tool.execute('disposed', {}), /no longer available/);

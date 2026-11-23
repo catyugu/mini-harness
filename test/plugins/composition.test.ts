@@ -152,7 +152,7 @@ test('a decision hook can deny an inherited tool and is removed with its owner',
   const tools = app.runtime.plugins.ctx.harnessTools;
   const call = (id: string) => expectPresent(tools.forSession(id).find(({ name }) => name === 'ls'), 'ls tool')
     .execute('policy', { path: '.' }, undefined, undefined, undefined);
-  await assert.rejects(call(child.id), /Tool denied by plugin policy/);
+  await assert.rejects(call(child.id), /Tool denied by conversation or plugin policy/);
   assert.equal((await call(other.id)).content[0].type, 'text');
   assert.equal((await toggle({})).status, 200);
   assert.equal((await call(child.id)).content[0].type, 'text');

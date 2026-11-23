@@ -20,8 +20,14 @@ test('running messages can queue follow-ups and approve shell commands from the 
     await page.goto(service.url + '/#token=' + service.token);
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Wait');
     await page.getByRole('button', { name: 'Send', exact: true }).click(); await waiting;
+    await page.getByRole('button', { name: 'Permissions: Standard' }).click();
+    await page.getByRole('option', { name: /Read-only/ }).click();
+    await expect(page.getByRole('button', { name: 'Permissions: Read-only' })).toBeVisible();
+    await page.getByRole('button', { name: 'Permissions: Read-only' }).click();
+    await page.getByRole('option', { name: /Standard/ }).click();
+    await expect(page.getByRole('button', { name: 'Permissions: Standard' })).toBeVisible();
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('First instruction');
-    await page.getByRole('combobox', { name: 'While running', exact: true }).selectOption('steer');
+    await expect(page.getByRole('combobox', { name: 'While running', exact: true })).toHaveCount(0);
     await page.getByRole('button', { name: 'Queue', exact: true }).click();
     await page.getByRole('button', { name: 'Cancel queued message: First instruction' }).click();
     await expect(page.locator('#queuedMessages')).toBeHidden();
@@ -29,7 +35,14 @@ test('running messages can queue follow-ups and approve shell commands from the 
     await page.getByRole('button', { name: 'Queue', exact: true }).click();
     await expect(page.locator('#queuedMessages .queue-item > span')).toHaveText('Instruction: Additional instruction');
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Continue');
-    await page.getByRole('combobox', { name: 'While running', exact: true }).selectOption('followUp');
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    const settings = page.getByRole('dialog', { name: 'Settings' });
+    await settings.getByRole('button', { name: 'General', exact: true }).click();
+    const addInstructions = settings.getByRole('switch', { name: 'Add instructions' });
+    await expect(addInstructions).toBeChecked();
+    await addInstructions.uncheck();
+    await expect(addInstructions).not.toBeChecked();
+    await settings.getByRole('button', { name: 'Close settings' }).click();
     await page.getByRole('button', { name: 'Queue', exact: true }).click();
     await expect(page.locator('#queuedMessages .queue-item > span')).toHaveText(['Instruction: Additional instruction', 'Follow up: Continue']);
     release();
@@ -56,7 +69,14 @@ test('running messages can queue follow-ups and approve shell commands from the 
     await expect(page.locator('.tool-duration')).toHaveText(/\d+ (ms|s)/);
     await expect(page.locator('.tool-exit-code')).toHaveText('Exit 0');
     await expect(page.locator('#runSummary')).toContainText('Completed');
+    await page.getByRole('button', { name: 'Permissions: Standard' }).click();
+    await page.getByRole('option', { name: /Read-only/ }).click();
+    await page.getByRole('button', { name: 'New conversation', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Permissions: Standard' })).toBeVisible();
+    await page.getByRole('button', { name: 'Wait', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Permissions: Read-only' })).toBeVisible();
     await page.reload();
+    await expect(page.getByRole('button', { name: 'Permissions: Read-only' })).toBeVisible();
     await expect(page.locator('.tool-exit-code')).toHaveText('Exit 0');
     await expect(page.locator('.tool-duration')).toHaveText(/\d+ (ms|s)/);
   } finally { release(); await page.close(); await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
