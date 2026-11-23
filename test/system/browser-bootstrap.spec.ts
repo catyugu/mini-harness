@@ -88,6 +88,7 @@ test('frontend API preserves caller headers and retains host authorization', asy
     await expect(page.getByRole('textbox', { name: 'Message' })).toBeVisible();
     const seen: Record<string, string>[] = [];
     await page.route('**/api/settings', async (route) => {
+      if (route.request().method() !== 'PATCH') return route.continue();
       seen.push(route.request().headers());
       await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
     });

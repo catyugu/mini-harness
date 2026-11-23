@@ -8,6 +8,9 @@ import { fixture } from '../support/api-fixture.js';
 test('GUI APIs configure providers, persist keys privately, discover Skills and scope files', async (t) => {
   const { app, paths, request, mock, finish } = await fixture(t);
   const scope = '/workspaces/' + app.runtime.registry.workspaces.defaultId;
+  const invalidChildModel = await request('/settings', 'PATCH', { pluginConfig: { subagents: { provider: 'nonexistent', model: 'missing' } } });
+  assert.equal(invalidChildModel.status, 400, JSON.stringify(invalidChildModel.body));
+  assert.equal((await request('/settings')).body.pluginConfig.subagents.provider, '');
   writeFileSync(join(paths.cwd, 'note.md'), 'workspace note');
   mkdirSync(join(paths.skills, 'verify'));
   writeFileSync(join(paths.skills, 'verify', 'SKILL.md'), '---\nname: verify\ndescription: Verify a task\n---\n\nRead the task.');
