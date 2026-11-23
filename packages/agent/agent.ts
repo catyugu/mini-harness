@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
+import { createHash } from 'node:crypto';
 import type { AgentPort, SessionStore } from '@mini-harness/contracts/services';
 import type { ModelChoice, SessionRecord } from '@mini-harness/contracts/conversation';
 import type { ModelCatalogPort } from '@mini-harness/contracts/models';
@@ -8,7 +9,7 @@ import type { ToolPort } from '@mini-harness/contracts/plugins';
 import type { SkillPort } from '@mini-harness/contracts/skills';
 import type { StreamEvent } from '@mini-harness/contracts/transport';
 import type { Attachment, ImageInput, PreparedMessage } from '@mini-harness/contracts/input';
-import type { SessionLogPort } from '@mini-harness/contracts/session-log';
+import type { SessionLogPort, MessagePatch } from '@mini-harness/contracts/session-log';
 import type { CapabilityObservation, OrderedHook, ToolProjection } from '@mini-harness/contracts/events';
 import type { MessageContent } from '@mini-harness/contracts/message';
 import { AgentRegistry } from './registry.js';
@@ -39,6 +40,18 @@ interface AgentServices {
 }
 
 const textOf = (message: NativeAssistantMessage) => message.content.filter((part) => part.type === 'text').map((part) => part.text).join('');
+/** Store only the divergent interval of a transformed model context. */
+function messagePatch(base: NativeMessage[], actual: NativeMessage[]): MessagePatch | undefined {
+  let start = 0;
+  while (start < base.length && start < actual.length && isDeepStrictEqual(base[start], actual[start])) start++;
+  if (start === base.length && start === actual.length) return;
+  let endBase = base.length, endActual = actual.length;
+  while (endBase > start && endActual > start && isDeepStrictEqual(base[endBase - 1], actual[endActual - 1])) {
+    endBase--; endActual--;
+  }
+  return { start, deleteCount: endBase - start, insert: actual.slice(start, endActual) };
+}
+
 const failedTool = (call: ToolCallPart, reason: string): NativeToolMessage => ({
   role: 'toolResult', toolCallId: call.id, toolName: call.name, content: [{ type: 'text', text: reason }],
   isError: true, timestamp: Date.now()
@@ -47,6 +60,7 @@ const failedTool = (call: ToolCallPart, reason: string): NativeToolMessage => ({
 /** The harness owns turns, inbox delivery, tool calls, cancellation and compaction. */
 export class NativeAgent implements AgentPort {
   readonly agents = new AgentRegistry();
+  private readonly recordedSchemas = new WeakMap<SessionLogPort, Set<string>>();
 
   constructor(private readonly sessions: SessionStore, private readonly services: AgentServices) {}
 
@@ -281,8 +295,20 @@ export class NativeAgent implements AgentPort {
       ...base, messages: input, systemPrompt, thinkingLevel, maxTokens
     }));
     validate(snapshot);
-    const messages = isDeepStrictEqual(snapshot.messages, projected.contextMessages) ? undefined : snapshot.messages;
-    log.append({ type: 'model-request', request: { ...snapshot, messages } }, projected.leafId);
+    const patch = messagePatch(projected.contextMessages, snapshot.messages);
+    const schemaHashes = this.recordedSchemas.get(log) ?? new Set(log.entries()
+      .filter((entry) => entry.type === 'tool-schema').map((entry) => entry.hash));
+    this.recordedSchemas.set(log, schemaHashes);
+    const toolSchema = snapshot.tools === undefined ? undefined :
+      createHash('sha256').update(JSON.stringify(snapshot.tools)).digest('hex');
+    if (toolSchema && !schemaHashes.has(toolSchema)) {
+      log.append({ type: 'tool-schema', hash: toolSchema, tools: snapshot.tools });
+      schemaHashes.add(toolSchema);
+    }
+    log.append({ type: 'model-request', request: {
+      model: snapshot.model, systemPrompt: snapshot.systemPrompt, thinkingLevel: snapshot.thinkingLevel,
+      maxTokens: snapshot.maxTokens, toolSchema, ...(patch && { messagesPatch: patch })
+    } }, projected.leafId);
     return { ...snapshot, sessionId: context.sessionId, signal: context.signal };
   }
 

@@ -97,8 +97,11 @@ test('an application plugin replaces only LLM and composes execution hooks witho
   const requests = sessionLog.entries().filter((entry) => entry.type === 'model-request');
   assert.equal(requests.length, 2);
   assert.match(requests[0].request.systemPrompt, /\[first\]\[second\]$/);
-  assert.equal(requests[0].request.messages.at(-1).content, 'Temporary context');
-  assert.equal(requests[1].request.messages, undefined);
+  assert.equal(requests[0].request.messagesPatch.insert.at(-1).content, 'Temporary context');
+  assert.equal(requests[1].request.messagesPatch, undefined);
+  assert.equal(sessionLog.requestSnapshot(requests[0].id).messages.at(-1).content, 'Temporary context');
+  assert.equal(sessionLog.requestSnapshot(requests[1].id).messages.at(-1).role, 'toolResult');
+  assert.equal(sessionLog.entries().filter((entry) => entry.type === 'tool-schema').length, 1);
   assert.equal(sessionLog.projection(requests[1].parentId).contextMessages.at(-1).role, 'toolResult');
   assert.deepEqual(log.contextMessages.filter((message) => message.role === 'toolResult').map(({ toolCallId, isError }) =>
     [toolCallId, isError]), [['denied', true], ['allowed', false]]);

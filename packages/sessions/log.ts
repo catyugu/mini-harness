@@ -2,6 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { closeSync, constants, fstatSync, fsyncSync, ftruncateSync, lstatSync, openSync, readFileSync, writeSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { validateNativeMessage, validateRequestSnapshot } from '@mini-harness/contracts/llm';
+import type { ModelRequestSnapshot } from '@mini-harness/contracts/llm';
 import type { SessionEntry, SessionEvent, SessionLogPort, SessionProjection } from '@mini-harness/contracts/session-log';
 import { projectLog } from './projection.js';
 
@@ -82,6 +83,10 @@ export class SessionLog implements SessionLogPort {
         typeof entry.timestamp !== 'string' || !Number.isFinite(Date.parse(entry.timestamp)))
       throw new Error('Invalid session log sequence or ancestry');
     validateEvent(entry);
+    if (entry.type === 'tool-schema' &&
+        createHash('sha256').update(JSON.stringify(entry.tools)).digest('hex') !== entry.hash)
+      throw new Error('Tool schema digest does not match its content');
+    if (entry.type === 'model-request') this.materializeRequest(entry);
     if (entry.type === 'inbox-enqueued' && this.inboxIds.has(entry.item.id)) throw new Error('Inbox delivery ID already exists');
     if (entry.type === 'message' && entry.inboxId &&
         (entry.message.role !== 'user' || !this.pendingInbox.has(entry.inboxId))) throw new Error('Inbox input is not pending');
@@ -166,6 +171,30 @@ export class SessionLog implements SessionLogPort {
     return structuredClone(this.cachedProjection);
   }
 
+  private materializeRequest(entry: Extract<SessionEntry, { type: 'model-request' }>) {
+    const { toolSchema, messagesPatch, ...request } = entry.request;
+    const schema = toolSchema && this.records.find((record) => record.type === 'tool-schema' && record.hash === toolSchema);
+    if (toolSchema && (!schema || schema.type !== 'tool-schema')) throw new Error('Missing recorded tool schema');
+    const context = projectLog(this.records, this.branchEntries(entry.parentId)).contextMessages;
+    let messages = context;
+    if (messagesPatch) {
+      const { start, deleteCount, insert } = messagesPatch;
+      if (!Number.isSafeInteger(start) || start < 0 || start > context.length ||
+          !Number.isSafeInteger(deleteCount) || deleteCount < 0 || start + deleteCount > context.length ||
+          !Array.isArray(insert)) throw new Error('Invalid model request message splice');
+      messages = [...context.slice(0, start), ...insert, ...context.slice(start + deleteCount)];
+    }
+    const snapshot = { ...request, ...(schema && schema.type === 'tool-schema' && { tools: schema.tools }), messages };
+    validateRequestSnapshot(snapshot);
+    return snapshot;
+  }
+
+  requestSnapshot(id: string): ModelRequestSnapshot & { messages: import('@mini-harness/contracts/llm').NativeMessage[] } {
+    const entry = this.byId.get(id);
+    if (entry?.type !== 'model-request') throw new Error('Model request not found');
+    return structuredClone(this.materializeRequest(entry));
+  }
+
   serialize() {
     if (this.closed) throw new Error('Session log is closed');
     this.checkFile(this.length);
@@ -191,7 +220,15 @@ function validateEvent(event: SessionEvent) {
       validateNativeMessage(event.message);
       return;
     case 'model-request':
-      validateRequestSnapshot(event.request);
+      if (!event.request || !event.request.model || typeof event.request.model.provider !== 'string' ||
+          !event.request.model.provider || typeof event.request.model.id !== 'string' ||
+          !event.request.model.id || typeof event.request.systemPrompt !== 'string' ||
+          (event.request.toolSchema !== undefined && !/^[a-f0-9]{64}$/.test(event.request.toolSchema)))
+        throw new Error('Invalid recorded model request');
+      return;
+    case 'tool-schema':
+      validateRequestSnapshot({ model: { provider: 'audit', id: 'audit' }, systemPrompt: '', tools: event.tools });
+      if (!/^[a-f0-9]{64}$/.test(event.hash)) throw new Error('Invalid tool schema hash');
       return;
     case 'tool-execution':
       validateNativeMessage(event.result);
@@ -242,4 +279,4 @@ export function encodeLog(header: SessionHeader, entries: SessionEntry[]) {
   return [JSON.stringify(header), ...entries.map((entry) => JSON.stringify({ ...entry, checksum: digest(entry) }))].join('\n') + '\n';
 }
 
-function operational(entry: SessionEvent) { return entry.type === 'run' || entry.type === 'model-request' || entry.type === 'tool-execution' || entry.type.startsWith('inbox-'); }
+function operational(entry: SessionEvent) { return entry.type === 'run' || entry.type === 'model-request' || entry.type === 'tool-schema' || entry.type === 'tool-execution' || entry.type.startsWith('inbox-'); }
