@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import type { getPaths } from '../platform/config.js';
+import type { Paths } from '../contracts/config.js';
 import { json } from '../transport/http.js';
 import { MiniHarnessRuntime } from './application.js';
 
@@ -64,7 +64,7 @@ export function authorize(request: IncomingMessage, token: string) {
   return supplied.length === expected.length && timingSafeEqual(supplied, expected);
 }
 
-export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>, options: { token?: string; shutdown?: () => void } = {}) {
+export async function createMiniHarnessServer(paths: Paths, options: { token?: string; shutdown?: () => void } = {}) {
   const runtime = new MiniHarnessRuntime(paths);
   const navigation = new AbortController();
   runtime.plugins.ctx.provide('harnessTransportSignal', navigation.signal);

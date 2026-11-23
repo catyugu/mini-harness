@@ -19,7 +19,7 @@ test('config directories are independent and default safe', () => {
 });
 
 test('settings merge preserves other sections and validates bounds', () => {
-  const before = structuredClone(DEFAULTS) as unknown as import('../../packages/platform/config.js').Settings;
+  const before = structuredClone(DEFAULTS) as unknown as import('../../packages/contracts/config.js').Settings;
   const after = mergeSettings(before, { plugins: { shell: true }, pluginConfig: { subagents: { maxParallel: 4 } } });
   assert.equal(after.plugins.skills, true);
   assert.equal(after.plugins.shell, true);

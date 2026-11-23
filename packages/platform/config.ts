@@ -1,5 +1,4 @@
 import type { Settings, SettingsPatch, Paths } from '../contracts/config.js';
-export type { Settings, SettingsPatch, Paths } from '../contracts/config.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -30,7 +29,7 @@ export function getPaths(cwd: string = process.cwd(), env: NodeJS.ProcessEnv = p
 }
 
 
-export function ensurePaths(paths: ReturnType<typeof getPaths>) {
+export function ensurePaths(paths: Paths) {
   for (const path of [paths.home, paths.agent, paths.sessions, paths.skills, paths.plugins]) {
     mkdirSync(path, { recursive: true, mode: 0o700 });
   }
@@ -71,7 +70,7 @@ export function validateSettings(input: any) {
   return true;
 }
 
-export function readSettings(paths: ReturnType<typeof getPaths>): Settings {
+export function readSettings(paths: Paths): Settings {
   const input = readJson<Record<string, any>>(paths.settings, {});
   const settings = {
     port: input.port ?? DEFAULTS.port,

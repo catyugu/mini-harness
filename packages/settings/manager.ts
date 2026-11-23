@@ -1,5 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
-import { mergeSettings, readSettings, writeJson, type Paths, type Settings, type SettingsPatch } from '../platform/config.js';
+import { mergeSettings, readSettings, writeJson } from '../platform/config.js';
+import type { Paths, Settings, SettingsPatch } from '../contracts/config.js';
 import type { ModelChoice } from '../contracts/conversation.js';
 import type { AgentPort, ConversationPort, SettingsPort, PluginConfigurationPort } from '../contracts/services.js';
 

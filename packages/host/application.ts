@@ -4,7 +4,7 @@ import { SettingsManager } from '../settings/manager.js';
 import { PluginHost } from '../plugins/manager.js';
 import { RouteRegistry } from '../transport/http.js';
 import { MutationGate } from '../transport/mutations.js';
-import type { Paths, SettingsPatch } from '../platform/config.js';
+import type { Paths, SettingsPatch } from '../contracts/config.js';
 
 /** Pure application composition. Concrete capability lifecycles are owned by Cordis plugins. */
 export class MiniHarnessRuntime {

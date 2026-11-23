@@ -5,7 +5,8 @@ import {
   type AgentSession, type CustomEntry
 } from '@earendil-works/pi-coding-agent';
 import { getSupportedThinkingLevels } from '@earendil-works/pi-ai/compat';
-import { getPaths, type Paths } from '../platform/config.js';
+import { getPaths } from '../platform/config.js';
+import type { Paths } from '../contracts/config.js';
 import { prepareInput } from '../platform/input.js';
 import type { Attachment, ImageInput } from '../contracts/input.js';
 import type { SessionStore } from '../contracts/services.js';

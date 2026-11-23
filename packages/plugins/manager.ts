@@ -2,7 +2,7 @@ import type { Context } from 'cordis';
 import { lstatSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import type { BuiltinPlugin, PluginApi, SessionRecords } from '../contracts/plugins.js';
-import type { Settings } from '../platform/config.js';
+import type { Settings } from '../contracts/config.js';
 import { PluginMounts, type MountPlan } from '../kernel/mounts.js';
 import { PluginCatalog, type PluginPlan } from './catalog.js';
 

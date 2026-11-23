@@ -1,7 +1,8 @@
 import { readdirSync, existsSync, lstatSync } from 'node:fs';
 import { join } from 'node:path';
 import { Check } from 'typebox/value';
-import { readJson, type Settings } from '../platform/config.js';
+import { readJson } from '../platform/config.js';
+import type { Settings } from '../contracts/config.js';
 import type { BuiltinPlugin, PluginMetadata } from '../contracts/plugins.js';
 
 function configDefaults(schema: Record<string, any>, value: any): any {
