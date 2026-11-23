@@ -1,4 +1,4 @@
-import type { SettingsPatch } from '../platform/config.js';
+import type { SettingsPatch } from '../contracts/config.js';
 import type { PluginMetadata } from '../contracts/plugins.js';
 import type { BrowserPlugin, FrontendApi } from '../web/kernel/extensions.js';
 import type { Bootstrap } from '../web/types.js';

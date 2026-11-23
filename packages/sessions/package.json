@@ -1,0 +1,12 @@
+{
+  "name": "@mini-harness/sessions",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@mini-harness/contracts": "file:../contracts",
+    "@mini-harness/platform": "file:../platform",
+    "@mini-harness/transport": "file:../transport",
+    "@mini-harness/web": "file:../web"
+  }
+}

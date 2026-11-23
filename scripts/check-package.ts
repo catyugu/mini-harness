@@ -35,6 +35,7 @@ async function checkPackage() {
     const [{ name, filename, integrity, files }] = JSON.parse(packed.stdout);
     assert.ok(files.every(({ path }: { path: string }) =>
       !/^dist\/(?:scripts|test)\//.test(path) &&
+      !/^dist\/packages\/[^/]+\/package\.json$/.test(path) &&
       !/^dist\/.*\/tests\//.test(path) &&
       !/\.(?:test|spec)\.js$/.test(path)), 'Published package must exclude test artifacts');
     await mkdir(installed);

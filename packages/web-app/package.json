@@ -1,0 +1,14 @@
+{
+  "name": "@mini-harness/web-app",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@mini-harness/models": "file:../models",
+    "@mini-harness/plugins": "file:../plugins",
+    "@mini-harness/sessions": "file:../sessions",
+    "@mini-harness/settings": "file:../settings",
+    "@mini-harness/web": "file:../web",
+    "@mini-harness/workspaces": "file:../workspaces"
+  }
+}

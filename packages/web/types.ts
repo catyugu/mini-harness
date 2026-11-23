@@ -1,5 +1,5 @@
 import type { WorkspaceRecord } from '../contracts/workspace.js';
-import type { Settings } from '../platform/config.js';
+import type { Settings } from '../contracts/config.js';
 import type { Conversation, ModelChoice } from '../contracts/conversation.js';
 import type { StreamEvent } from '../contracts/transport.js';
 import type { ViewMessage } from '../contracts/message.js';

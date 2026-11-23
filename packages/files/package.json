@@ -1,0 +1,11 @@
+{
+  "name": "@mini-harness/files",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@mini-harness/contracts": "file:../contracts",
+    "@mini-harness/platform": "file:../platform",
+    "@mini-harness/web": "file:../web"
+  }
+}

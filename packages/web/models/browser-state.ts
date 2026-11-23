@@ -1,4 +1,4 @@
-import type { Settings } from '../../platform/config.js';
+import type { Settings } from '../../contracts/config.js';
 import type { Conversation } from '../../contracts/conversation.js';
 import type { NavigationEvent } from '../../contracts/navigation.js';
 import { data } from '../api.js';

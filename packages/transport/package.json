@@ -1,0 +1,9 @@
+{
+  "name": "@mini-harness/transport",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@mini-harness/contracts": "file:../contracts"
+  }
+}

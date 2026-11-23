@@ -75,7 +75,7 @@ test('browser values never load host-only modules', () => {
     ...[join(packages,name,'client.ts'), join(packages,name,'browser.ts')].filter(existsSync),
     ...(existsSync(join(packages,name,'browser')) ? files(join(packages,name,'browser')).filter(production) : [])
   ]);
-  for (const file of [...files(web).filter(production),...clients]) for (const dep of dependencies(file)) {
+  for (const file of [...files(web).filter(production), ...files(join(packages, 'web-app')).filter(production), ...clients]) for (const dep of dependencies(file)) {
     if (dep.typeOnly) continue;
     for (const name of ['host','platform','transport','kernel']) {
       assert.equal(dep.target.startsWith(join(packages,name) + sep), false,
@@ -138,4 +138,85 @@ test('each internal Cordis provider declares every required scoped service read'
         id.text + ' reads ' + name + ' without an inject declaration; optional services must use ctx.get()');
     }
   }
+});
+
+/** The private package manifests are architectural declarations, not separate releases. */
+test('all internal packages declare exact source dependencies and form a DAG', () => {
+  const names = readdirSync(packages, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
+  const declared = new Map<string, Set<string>>();
+  for (const name of names) {
+    const manifestFile = join(packages, name, 'package.json');
+    assert.ok(existsSync(manifestFile), 'Missing package.json for ' + name);
+    const manifest = JSON.parse(readFileSync(manifestFile, 'utf8'));
+    assert.equal(manifest.name, '@mini-harness/' + name);
+    assert.equal(manifest.version, '0.0.0');
+    assert.equal(manifest.private, true, name + ' must not be published separately');
+    assert.equal(manifest.type, 'module');
+    const deps = manifest.dependencies ?? {};
+    assert.deepEqual(Object.keys(deps).sort(),
+      Object.keys(deps).filter((dep) => dep.startsWith('@mini-harness/')).sort(),
+      name + ': third-party dependencies are owned by the single root package');
+    const internal = new Set<string>();
+    for (const [id, link] of Object.entries(deps)) {
+      const target = id.slice('@mini-harness/'.length);
+      assert.ok(names.includes(target), name + ': unknown dependency ' + id);
+      assert.notEqual(target, name, name + ': self-dependency');
+      assert.equal(link, 'file:../' + target, name + ': invalid local dependency ' + id);
+      internal.add(target);
+    }
+    declared.set(name, internal);
+  }
+
+  // Traverse the TypeScript syntax tree so type-only imports, re-exports and
+  // literal dynamic imports count as dependencies too.
+  function references(file: string): string[] {
+    const source = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);
+    const result: string[] = [];
+    function walk(node: ts.Node): void {
+      if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
+        node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier))
+        result.push(node.moduleSpecifier.text);
+      if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument) &&
+        ts.isStringLiteral(node.argument.literal)) result.push(node.argument.literal.text);
+      if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword &&
+        node.arguments.length === 1 && ts.isStringLiteral(node.arguments[0]))
+        result.push(node.arguments[0].text);
+      ts.forEachChild(node, walk);
+    }
+    walk(source);
+    return result;
+  }
+
+  for (const name of names) {
+    const actual = new Set<string>();
+    for (const file of files(join(packages, name)).filter(production)) for (const specifier of references(file)) {
+      if (!specifier.startsWith('.')) continue;
+      const target = resolve(dirname(file), specifier).replace(/\\.js$/, '.ts');
+      assert.ok(target.startsWith(packages + sep), file + ' imports outside packages/: ' + specifier);
+      const owner = target.slice(packages.length + 1).split(sep)[0];
+      assert.ok(names.includes(owner), file + ' imports an unknown package: ' + specifier);
+      if (owner !== name) actual.add(owner);
+      if (name !== 'host') assert.notEqual(owner, 'host', file + ' imports host composition');
+      if (name !== 'web-app') assert.notEqual(owner, 'web-app', file + ' imports browser composition');
+      if (name !== 'host' && name !== 'plugins') assert.notEqual(owner, 'kernel', file + ' imports Cordis kernel');
+    }
+    assert.deepEqual([...actual].sort(), [...declared.get(name)!].sort(),
+      name + ': manifest and production imports differ (including type-only edges)');
+  }
+
+  const visited = new Set<string>();
+  const visiting = new Set<string>();
+  function visit(name: string, path: string[]): void {
+    if (visiting.has(name)) assert.fail('Internal package dependency cycle: ' + [...path, name].join(' -> '));
+    if (visited.has(name)) return;
+    visiting.add(name);
+    for (const target of declared.get(name)!) visit(target, [...path, name]);
+    visiting.delete(name);
+    visited.add(name);
+  }
+  for (const name of names) visit(name, []);
+  const rootManifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
+  assert.equal(rootManifest.name, 'mini-harness');
+  assert.equal(rootManifest.workspaces, undefined, 'Do not install private packages as independent workspaces');
 });
