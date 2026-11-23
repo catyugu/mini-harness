@@ -94,21 +94,24 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
   const permissionButton = element<'button'>('permissionSelect');
   const permissionPopup = element('permissionPicker');
   const permissionResults = element('permissionResults');
-  const permissionLabels: Record<ConversationPermission, string> = { standard: 'Standard', readOnly: 'Read-only' };
+  const permissionLabels: Record<ConversationPermission, string> = {
+    standard: 'Standard', readOnly: 'Read-only', fullAccess: 'Full access'
+  };
   const permissionOptions: Array<{ value: ConversationPermission; description: string }> = [
-    { value: 'standard', description: 'Allow tools subject to existing approvals and policies' },
-    { value: 'readOnly', description: 'Only built-in read, search and skill tools are available' }
+    { value: 'standard', description: 'Ask before Shell commands; follow existing tool policies' },
+    { value: 'readOnly', description: 'Only read files, search and load skills; no edits or Shell' },
+    { value: 'fullAccess', description: 'Run enabled tools without approval prompts, including Shell' }
   ];
   function renderPermission() {
     const current = conversationPermission;
     const label = permissionLabels[current];
-    permissionButton.replaceChildren(icon(current === 'readOnly' ? 'lock' : 'shield'), document.createTextNode(label), icon('chevron'));
+    permissionButton.replaceChildren(icon(current === 'readOnly' ? 'lock' : current === 'fullAccess' ? 'unlock' : 'shield'), document.createTextNode(label), icon('chevron'));
     permissionButton.setAttribute('aria-label', 'Permissions: ' + label);
     permissionButton.title = 'Conversation permissions: ' + label;
     permissionResults.replaceChildren(...permissionOptions.map(({ value, description }) => {
       const option = document.createElement('button');
       option.type = 'button';
-      option.className = 'suggestion permission-option';
+      option.className = 'permission-option';
       option.setAttribute('role', 'option');
       option.setAttribute('aria-selected', String(value === current));
       const name = document.createElement('strong');
