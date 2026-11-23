@@ -4,7 +4,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { fixture } from '../support/api-fixture.js';
-test('an extension owns its authenticated routes and Pi branch records', async (t) => {
+test('an extension owns its authenticated routes and native branch records without starting an agent', async (t) => {
   const { app, paths, request } = await fixture(t);
   const folder = join(paths.plugins, 'records');
   mkdirSync(folder);
@@ -27,11 +27,14 @@ test('an extension owns its authenticated routes and Pi branch records', async (
   assert.equal((await toggle(false)).status, 200);
   assert.equal((await request(route + '?id=' + session.id)).status, 404);
 
-  app.runtime.pi.release(session.id);
   assert.equal((await toggle(true)).status, 200);
   const { body: entries } = await request(route + '?id=' + session.id);
   assert.deepEqual(entries.map(({ id, data }) => ({ id, data })), [{ id: added.body, data: value }]);
-  assert.equal(app.runtime.pi.size, 0);
+  assert.equal(app.runtime.agent.size, 0);
+  assert.equal(app.runtime.agent.hasPending, false);
+  const saved = app.runtime.export([session.id])[0].log;
+  assert.ok(saved.split('\n').filter(Boolean).map((line) => JSON.parse(line))
+    .some((entry) => entry.type === 'custom' && entry.namespace === 'records' && entry.data.note === value.note));
   const fetched = (await request('/sessions/' + session.id)).body;
   assert.equal(fetched.messages.some((message) => JSON.stringify(message).includes(value.note)), false);
 });

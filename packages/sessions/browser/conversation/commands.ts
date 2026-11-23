@@ -20,7 +20,7 @@ export class CommandRegistry {
   }
 
   prepare(text: string) {
-    // Pi expands one skill command at the beginning of its prompt.
+    // The skills provider expands one skill command at the beginning of its prompt.
     for (const match of text.matchAll(/(?:^|\s)\/(skill:[\w-]+)(?=\s|$)/g)) {
       if (!this.commands.has(match[1])) continue;
       const start = match.index + match[0].indexOf('/');

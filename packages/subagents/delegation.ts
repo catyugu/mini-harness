@@ -98,14 +98,14 @@ export class Delegation implements DelegationPort {
   get activeChildren() { return this.semaphore.active; }
   private readonly leases = new Map<string, ChildLease>();
 
-  constructor(private readonly registry: SessionStore, private readonly pi: Pick<AgentPort, 'activeModel'>, private readonly models: ModelCatalogPort,
+  constructor(private readonly registry: SessionStore, private readonly agent: Pick<AgentPort, 'activeModel'>, private readonly models: (id?: string) => ModelCatalogPort,
     private readonly runs: () => RunPort, private readonly settings: () => SubagentPolicy,
     private readonly assertAvailable: (id: string) => void) {
     this.semaphore = new Semaphore(settings().maxParallel);
   }
 
   validate(settings: SubagentPolicy) {
-    if (settings.provider) this.models.resolve({ provider: settings.provider, id: settings.model });
+    if (settings.provider) this.models().resolve({ provider: settings.provider, id: settings.model });
   }
 
   checkProvider(id: string, removing = false) {
@@ -127,7 +127,7 @@ export class Delegation implements DelegationPort {
   }
 
   delegate(id: string, request: { task: string; provider?: string; model?: string }, signal?: AbortSignal) {
-    const model = selectChildModel(request, this.settings(), this.pi.activeModel(id));
+    const model = selectChildModel(request, this.settings(), this.agent.activeModel(id));
     const task = () => this.run(id, request.task, model, this.runs().signal(id, signal));
     const lease = this.leases.get(id);
     return lease ? lease.pause(task) : task();
@@ -139,7 +139,7 @@ export class Delegation implements DelegationPort {
     if (!parent) throw new Error('Parent conversation not found');
     this.assertAvailable(parentId);
     requireChildDepth(this.registry.depth(parentId), this.settings().maxDepth);
-    const model = this.models.resolve(choice);
+    const model = this.models(parentId).resolve(choice);
     const record = this.registry.create({
       parentId, workspaceId: parent.workspaceId, title: task.slice(0, 72)
     });

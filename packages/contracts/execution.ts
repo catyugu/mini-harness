@@ -1,6 +1,8 @@
 export type ProcessMode = 'isolated' | 'host';
 
 export interface ProcessRequest {
+  /** Conversation scope used to select the execution environment. */
+  sessionId?: string;
   command: string;
   cwd: string;
   mode: ProcessMode;

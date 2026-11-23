@@ -72,7 +72,7 @@ test('plugin schema controls, recursive tree navigation, batch export and perman
     await page.getByRole('button', { name: 'Export', exact: true }).click();
     const exported = JSON.parse(readFileSync(await (await download).path(), 'utf8'));
     expect(exported.sessions).toHaveLength(3);
-    expect(exported.sessions.every((item) => item.piSession.includes('"type":"message"'))).toBe(true);
+    expect(exported.sessions.every((item) => item.log.includes('"type":"message"'))).toBe(true);
     page.once('dialog', (dialog) => dialog.accept());
     await page.getByRole('button', { name: 'Delete', exact: true }).click();
     await expect(page.locator('.session-row')).toHaveCount(0);

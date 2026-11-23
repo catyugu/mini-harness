@@ -3,8 +3,16 @@ import type { ImageInput, PreparedMessage } from './input.js';
 import type { StreamEvent } from './transport.js';
 import type { ViewMessage } from './message.js';
 
-/** Pi session capabilities consumed by scheduling services; the adapter implements this port. */
+/** Native execution capabilities consumed by scheduling services. */
 export type ThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+
+export interface PromptPort {
+  build(request: { sessionId: string; cwd: string; tools: import('./tools.js').ToolDefinition[] }): Promise<string>;
+}
+
+declare module 'cordis' {
+  interface Context { harnessPrompt: PromptPort }
+}
 
 export interface RunAgentPort {
   revisionTarget(id: string, sourceEntryId: string, expectedLeafId: string | null): Promise<void>;

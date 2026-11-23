@@ -18,10 +18,25 @@ Example:
 }
 ```
 
-A provider must be enabled in the scope where it is selected. A fixed built-in
-service or application infrastructure service cannot be overridden. Inherited
-provider maps remain unchanged, so a sibling workspace inherits the original
-service. The graph is validated before Cordis mounts the candidate.
+A local replacement must be enabled at that address. Host infrastructure
+(scope resolution, configuration, authenticated routes and mutation control)
+cannot be overridden. Feature services, including the model adapter, can be
+replaced through their declared contracts. An inherited multi-service provider
+continues supplying its other services when a child replaces just one of them.
 
-This is a scoped-provider foundation, **not** the complete native Agent Loop
-or Session Log implementation from the overall refactoring plan.
+Provider selection and isolation follow application → workspace → ancestor
+session → session. A choice affects only its subtree. A sibling keeps its
+parent's provider, and deleting or disabling a local provider restores inherited
+resolution. A second instance of the same provider ID still needs an explicit
+choice to shadow its ancestor.
+
+Consumers call `harnessScopes.prepare(sessionId, signal)` before reading
+`harnessScopes.resolve(sessionId, serviceName)`. This resolves the nearest live
+Cordis service, so the native agent executes through the selected LLM, tool and
+environment services. Plugins declaring `inject` receive services from their own
+scope's context.
+
+The graph is validated before setup. Provider changes restart their dependent
+plugins in dependency order and await cleanup. A failed setup or configuration
+write restores the previous graph. Application replacements must replace a
+multi-service plugin as a unit; scoped replacements leave the parent mounted.

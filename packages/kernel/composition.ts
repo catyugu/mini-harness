@@ -23,7 +23,8 @@ export function resolveCapabilities<T extends Capability>(
   const providers = new Map(inherited);
   const shadowed = new Set<string>();
   for (const [service, id] of Object.entries(choices)) {
-    if (protectedServices.has(service) && inherited.has(service) && inherited.get(service) !== id)
+    if (protectedServices.has(service) && inherited.has(service) &&
+        (inherited.get(service) !== id || byId.get(id)?.provides?.includes(service)))
       throw new Error('Protected service cannot be overridden: ' + service);
     if (!byId.get(id)?.provides?.includes(service) && inherited.get(service) !== id)
       throw new Error('Selected provider ' + id + ' does not provide ' + service);
@@ -39,7 +40,7 @@ export function resolveCapabilities<T extends Capability>(
     if (shadowed.has(id)) continue;
     for (const service of provides) {
       const previous = providers.get(service);
-      if (previous && previous !== id) {
+      if (previous && (previous !== id || inherited.has(service))) {
         if (choices[service] !== id) throw new Error('Multiple enabled providers for ' + service);
         if (protectedServices.has(service))
           throw new Error('Protected service cannot be overridden: ' + service);

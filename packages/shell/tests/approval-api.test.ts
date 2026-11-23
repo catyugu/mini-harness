@@ -21,7 +21,6 @@ test('shell approval gates execution, handles rejection and cancellation', async
       assert.match(JSON.stringify(tool.content), /approved/);
       assert.equal(tool.exitCode, 0);
       assert.ok(Number.isFinite(tool.elapsedMs) && tool.elapsedMs >= 0);
-      app.runtime.pi.release(session.id);
       const restored = (await request('/sessions/' + session.id)).body.messages.filter((m) => m.role === 'toolResult').at(-1);
       assert.equal(restored.exitCode, 0);
       assert.ok(Number.isFinite(restored.elapsedMs) && restored.elapsedMs >= 0);
@@ -62,9 +61,9 @@ test('disabling Shell drains its pending approval and preserves an unrelated run
     assert.ok(!graph.some(({ id }) => id === 'shell'));
     assert.ok(app.runtime.runs.active(other.id));
     assert.equal((await finish(shell.id)).body.run.state, 'completed');
-    const tool = app.runtime.pi.messages(shell.id).find(({ role }) => role === 'toolResult');
+    const tool = app.runtime.agent.messages(shell.id).find(({ role }) => role === 'toolResult');
     assert.equal(tool.isError, true);
-    assert.ok(!(await app.runtime.pi.open(shell.id)).getActiveToolNames().includes('sandbox_shell'));
+    assert.ok(!app.runtime.plugins.ctx.harnessTools.forSession(shell.id).map(({ name }) => name).includes('sandbox_shell'));
   } finally { release(); }
   assert.equal(await pending, 'Unrelated task completed');
 });

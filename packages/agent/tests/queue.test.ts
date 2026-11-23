@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import { fixture, waitUntil } from '../../../test/support/api-fixture.js';
 
-test('queued follow-ups run within the existing Pi run and are consumed once', async (t) => {
+test('queued follow-ups run within the existing native run and are consumed once', async (t) => {
   let release: () => void;
   const held = new Promise<void>((done) => { release = done; });
   t.after(() => release());

@@ -9,10 +9,9 @@ export interface SessionRecord {
   title: string;
   titleSource: 'auto' | 'manual';
   createdAt: string;
-  piSessionRef: string | null;
 }
 
-export interface Conversation extends Omit<SessionRecord, 'piSessionRef'> {
+export interface Conversation extends SessionRecord {
   updatedAt: string;
   waitingApproval?: boolean;
   model?: ModelChoice;

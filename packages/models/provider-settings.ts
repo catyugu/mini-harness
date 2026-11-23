@@ -82,6 +82,5 @@ export async function saveProvider(runtime: ProviderHost, input: any, remove = f
     if (clearedRecent) await runtime.updateSettings({ model: recent });
     throw error;
   }
-  runtime.admin.invalidate(input.id);
   return providerSettings(runtime);
 }

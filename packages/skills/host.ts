@@ -1,21 +1,28 @@
-import { join } from 'node:path';
-import { DefaultResourceLoader, SettingsManager } from '@earendil-works/pi-coding-agent';
 import type { Context } from 'cordis';
-
+import { Type } from 'typebox';
+import { defineTool } from '../contracts/tools.js';
+import { SkillLoader } from './loader.js';
 
 export function setup(ctx: Context) {
-    const { agent, skills } = ctx.harnessState.paths;
-    const paths = (cwd: string) => [skills, join(cwd, '.mini-harness', 'skills')];
-    ctx.provide('harnessSkills', { paths });
+    const loader = new SkillLoader(ctx.harnessState.paths.skills);
+    ctx.provide('harnessSkills', loader);
     ctx.effect(() => ctx.harnessRoutes.register('GET', '/api/workspaces/:id/skills', async ({ params, url }) => {
       const workspace = ctx.harnessWorkspaces.get(params.id);
       const sessionId = url.searchParams.get('sessionId');
       if (sessionId && ctx.harnessRegistry.get(sessionId)?.workspaceId !== workspace.id)
         throw new Error('Conversation not found');
       const cwd = ctx.harnessWorkspaces.resolveRoot(workspace.path, workspace.id);
-      const loader = new DefaultResourceLoader({ cwd, agentDir: agent, settingsManager: SettingsManager.inMemory(),
-        additionalSkillPaths: paths(cwd), noExtensions: true });
-      await loader.reload();
-      return loader.getSkills().skills.map(({ name, description }) => ({ name, description }));
+      return (await loader.discover(cwd)).map(({ name, description }) => ({ name, description }));
     }));
+    ctx.effect(() => ctx.harnessTools.register('load_skill', (sessionId) => defineTool({
+      name: 'load_skill', label: 'Load skill', description: 'Read the instructions for an available skill by name.',
+      parameters: Type.Object({ name: Type.String({ minLength: 1, maxLength: 64 }) }, { additionalProperties: false }),
+      async execute(_callId, { name }, signal) {
+        signal?.throwIfAborted();
+        const skill = (await loader.discover(ctx.harnessRegistry.workspacePath(sessionId))).find((item) => item.name === name);
+        signal?.throwIfAborted();
+        if (!skill) throw new Error('Unknown skill: ' + name);
+        return { content: [{ type: 'text', text: skill.content }], details: { skill: skill.name } };
+      }
+    })));
 }

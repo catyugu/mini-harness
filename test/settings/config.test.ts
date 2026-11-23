@@ -10,7 +10,6 @@ test('config directories are independent and default safe', () => {
   try {
     const paths = getPaths(folder, { MINI_HARNESS_HOME: join(folder, 'home') });
     assert.ok(paths.sessions.startsWith(paths.home));
-    assert.ok(paths.projectSkills.endsWith(join('.mini-harness', 'skills')));
     assert.deepEqual(readSettings(paths).plugins, {});
     assert.deepEqual(readSettings(paths).pluginConfig, {});
     writeJson(paths.settings, { appearance: 'dark' });

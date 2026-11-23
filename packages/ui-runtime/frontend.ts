@@ -1,5 +1,5 @@
 import { Context, type Fiber } from '../web/vendor/cordis.js';
-import type { BrowserPrimitives } from '../contracts/browser.js';
+import type { BrowserPrimitives, BrowserProjectionPort } from '../contracts/browser.js';
 import type { ComposerCommand } from '../web/contracts/commands.js';
 import type { MessageContent, ViewMessage } from '../contracts/message.js';
 import type { Attachment } from '../contracts/input.js';
@@ -92,10 +92,8 @@ export class FrontendHost {
   constructor(
     private readonly ctx: Context,
     private readonly request: <T>(path: string, options?: RequestInit) => Promise<T>,
-    private readonly services: FrontendServices
-  ) {
-    this.ctx.provide('harnessBrowser', services);
-  }
+    private readonly report: (error: Error) => void
+  ) {}
 
   async mount(id: string, setup: FrontendSetup, inject: string[], config: Record<string, unknown> = {}) {
     if (this.disposed) throw new Error('Browser host is disposed');
@@ -167,7 +165,7 @@ export class FrontendHost {
         tool: (name, render) => own(() => this.ctx.miniMessages.registerTool(name, render)),
         toolAction: (name, render) => own(() => this.ctx.miniMessages.registerTool(name, render, true)),
         onDispose: (dispose) => {
-          if (controller.signal.aborted) { void Promise.resolve().then(dispose).catch(this.services.report); return () => {}; }
+          if (controller.signal.aborted) { void Promise.resolve().then(dispose).catch(this.report); return () => {}; }
           return own(() => dispose);
         }
       });
@@ -196,7 +194,7 @@ export class FrontendHost {
     this.disposed = true;
     for (const id of [...this.plugins.keys()].reverse()) {
       try { await this.disable(id); }
-      catch (error) { this.services.report(error); }
+      catch (error) { this.report(error); }
     }
   }
 }
@@ -205,6 +203,7 @@ declare module 'cordis' {
   interface Context {
     harnessBrowser: FrontendServices;
     miniPrimitives: BrowserPrimitives;
+    miniProjections: BrowserProjectionPort;
     miniComposer: {
       insert(text: string): void;
       beginDraftMode(mode: DraftMode): void;

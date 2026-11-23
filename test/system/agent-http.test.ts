@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { createMiniHarnessServer } from '../../packages/host/server.js';
 import { createMockProvider, createFixturePaths } from '../helpers/mock-provider.js';
 
-test('real Pi SDK through HTTP: streaming, persistence, Skills, export and permanent delete', { timeout: 60000 }, async (t) => {
+test('native agent through HTTP: streaming, persistence, Skills, export and permanent delete', { timeout: 60000 }, async (t) => {
   const mock = await createMockProvider();
   t.after(() => mock.close());
   const { root, paths } = createFixturePaths(mock.url);
@@ -41,7 +41,7 @@ test('real Pi SDK through HTTP: streaming, persistence, Skills, export and perma
   const created = await post('/api/sessions', {});
   assert.equal(created.status, 201);
   const session = await created.json();
-  const started = await post('/api/sessions/' + session.id + '/runs', { message: 'Test SDK integration' });
+  const started = await post('/api/sessions/' + session.id + '/runs', { message: 'Test native integration' });
   assert.equal(started.status, 202);
   const { id: runId } = await started.json();
   const stream = await get('/api/sessions/' + session.id + '/events?run=' + runId);
@@ -49,7 +49,7 @@ test('real Pi SDK through HTTP: streaming, persistence, Skills, export and perma
   const raw = await stream.text();
   const events = raw.trim().split('\n').map((line) => JSON.parse(line));
   const user = events.find((event) => event.type === 'user');
-  assert.deepEqual(user.content, [{ type: 'text', text: 'Test SDK integration' }]);
+  assert.deepEqual(user.content, [{ type: 'text', text: 'Test native integration' }]);
   assert.equal(Object.hasOwn(user, 'text'), false);
   assert.ok(events.some((event) => event.type === 'delta'), raw);
   assert.equal(events.find((event) => event.type === 'complete')?.text, 'Mock response');
@@ -57,27 +57,27 @@ test('real Pi SDK through HTTP: streaming, persistence, Skills, export and perma
   assert.ok(mock.requests.length > 0);
 
   const stored = await (await get('/api/sessions/' + session.id)).json();
-  assert.equal(stored.title, 'Test SDK integration');
+  assert.equal(stored.title, 'Test native integration');
   assert.equal(Object.hasOwn(stored, 'piSessionRef'), false);
-  const file = app.runtime.registry.get(session.id).piSessionRef;
+  const file = app.runtime.registry.nativeFile(app.runtime.registry.get(session.id));
   assert.ok(file && existsSync(file));
   assert.ok(stored.messages.some((m: {role: string}) => m.role === 'assistant'));
 
-  // Native skill command is resolved by Pi, using the configured .mini-harness skill directory.
+  // Native skill command is resolved by the skills plugin, using the configured .mini-harness skill directory.
   const skillRun = await post('/api/sessions/' + session.id + '/runs', { message: '/skill:verification' });
   assert.equal(skillRun.status, 202);
   const skillRequest = await get('/api/sessions/' + session.id + '/events?run=' + (await skillRun.json()).id);
   assert.equal(skillRequest.status, 200);
   assert.equal((await skillRequest.text()).includes('"type":"error"'), false);
   assert.ok(JSON.stringify(mock.requests.at(-1)).includes('Mention the verification skill'),
-    'Pi did not expand the native SKILL.md instructions');
+    'The native loader did not expand the native SKILL.md instructions');
 
   await app.close();
   open = false;
   app = await createMiniHarnessServer(paths);
   open = true;
   const restored = await app.runtime.getConversation(session.id);
-  assert.equal(restored.title, 'Test SDK integration');
+  assert.equal(restored.title, 'Test native integration');
   assert.ok(restored.messages.some((m: {role: string}) => m.role === 'assistant'));
 
   // Use the new server's token after restart.
@@ -90,7 +90,7 @@ test('real Pi SDK through HTTP: streaming, persistence, Skills, export and perma
   assert.equal(exported.status, 200);
   const document = await exported.json();
   assert.equal(document.sessions[0].id, session.id);
-  assert.ok(document.sessions[0].piSession.includes('\"type\":\"message\"'));
+  assert.ok(document.sessions[0].log.includes('\"type\":\"message\"'));
 
   const deleted = await fetch(newBase + '/api/sessions/delete', {
     method: 'POST', headers: nextHeaders, body: JSON.stringify({ ids: [session.id] })

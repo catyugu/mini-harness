@@ -19,17 +19,16 @@ export function getPaths(cwd: string = process.cwd(), env: NodeJS.ProcessEnv = p
   const home = resolve(env.MINI_HARNESS_HOME || join(homedir(), '.mini-harness'));
   const key = createHash('sha256').update(process.platform === 'win32' ? project.toLowerCase() : project).digest('hex').slice(0, 16);
   return {
-    home, cwd: project, agent: join(home, 'pi'), settings: join(home, 'settings.json'),
+    home, cwd: project, settings: join(home, 'settings.json'),
     registry: join(home, 'sessions.json'), sessions: join(home, 'sessions', key),
     pid: join(home, 'server.json'), log: join(home, 'server.log'),
-    plugins: join(home, 'plugins'), skills: join(home, 'skills'),
-    projectSkills: join(project, '.mini-harness', 'skills')
+    plugins: join(home, 'plugins'), skills: join(home, 'skills')
   };
 }
 
 
 export function ensurePaths(paths: Paths) {
-  for (const path of [paths.home, paths.agent, paths.sessions, paths.skills, paths.plugins]) {
+  for (const path of [paths.home, paths.sessions, paths.skills, paths.plugins]) {
     mkdirSync(path, { recursive: true, mode: 0o700 });
   }
 }
@@ -83,7 +82,7 @@ function validateProviderChoices(choices: unknown) {
     throw new Error('Invalid provider selections');
   for (const [service, id] of Object.entries(choices)) {
     if (!/^[a-zA-Z][a-zA-Z0-9_.:-]{0,95}$/.test(service) ||
-        typeof id !== 'string' || !/^[a-z][a-z0-9-]{0,63}$/.test(id))
+        typeof id !== 'string' || !/^(?:core:)?[a-z][a-z0-9-]{0,63}$/.test(id))
       throw new Error('Invalid provider selection');
   }
 }
@@ -99,7 +98,7 @@ function validatePluginSettings(input: { plugins?: unknown; pluginConfig?: unkno
     if (typeof value !== 'boolean') throw new Error('Plugin switches must be boolean');
   }
   for (const [id, config] of Object.entries(input.pluginConfig ?? {})) {
-    if (!/^[a-z][a-z0-9-]{0,63}$/.test(id) || !config || typeof config !== 'object' || Array.isArray(config))
+    if (!/^(?:core:)?[a-z][a-z0-9-]{0,63}$/.test(id) || !config || typeof config !== 'object' || Array.isArray(config))
       throw new Error('Invalid plugin configuration for ' + id);
   }
 }

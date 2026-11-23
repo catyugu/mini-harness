@@ -72,6 +72,29 @@ test('the kernel remains independent of product runtime', () => {
     for (const name of capabilityNames)
       assert.equal(dep.target.startsWith(join(packages,name) + sep), false, file + ' depends on feature');
 });
+
+test('native execution contracts and feature code do not depend on the coding SDK', () => {
+  const adapter = join(packages, 'models', 'pi-adapter.ts');
+  for (const file of files(packages).filter(production)) {
+    const source = readFileSync(file, 'utf8');
+    assert.doesNotMatch(source, /@earendil-works\/pi-coding-agent|\bharnessPi\b|\bcreateAgentSession\b|\bAgentSession\b/,
+      file + ' retains an SDK-owned execution interface');
+    if (source.includes('@earendil-works/pi-ai')) assert.equal(file, adapter,
+      file + ' bypasses the native LLM contract');
+  }
+  const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
+  assert.equal(manifest.dependencies['@earendil-works/pi-coding-agent'], undefined);
+  assert.ok(manifest.dependencies['@earendil-works/pi-ai']);
+});
+
+test('browser boot mounts a declared graph instead of constructing feature state', () => {
+  const boot = readFileSync(join(packages, 'ui-runtime', 'boot.ts'), 'utf8');
+  assert.doesNotMatch(boot, /['"]\/(?:sessions|workspaces|settings|models|providers|approvals)(?:['"?\/])/);
+  assert.doesNotMatch(boot, /\b(?:miniSelection|miniSessions|miniWorkspaces|miniSettingsData|miniModels|miniPluginData|miniApprovals)\b/);
+  const browserProviders = new Set(plugins.flatMap(({ browserProvides }) => browserProvides ?? []));
+  for (const service of ['miniSelection', 'miniSessions', 'miniWorkspaces', 'miniSettingsData', 'miniModels', 'miniPluginData', 'miniApprovals'])
+    assert.ok(browserProviders.has(service), service + ' is not owned by a browser plugin');
+});
 test('browser values never load host-only modules', () => {
   const clients = capabilityNames.flatMap(name => [
     ...[join(packages,name,'client.ts'), join(packages,name,'browser.ts')].filter(existsSync),

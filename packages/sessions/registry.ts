@@ -1,36 +1,46 @@
 import { randomUUID } from 'node:crypto';
-import { lstatSync, readFileSync, realpathSync, unlinkSync } from 'node:fs';
-import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
-import { getPaths, readJson, writeJson } from '../platform/config.js';
+import { existsSync, lstatSync, unlinkSync } from 'node:fs';
+import { dirname } from 'node:path';
+import { writeJson } from '../platform/config.js';
+import type { Paths } from '../contracts/config.js';
 import type { SessionStore, WorkspacePort } from '../contracts/services.js';
 import type { ScopePort } from '../contracts/capabilities.js';
 import type { CapabilityObservation } from '../contracts/events.js';
 import type { SessionRecord } from '../contracts/conversation.js';
+import { SessionLog, syncDirectory } from './log.js';
+import { loadCatalog, validateCatalog, type CatalogState } from './migration.js';
+import { missing, nativeFile } from './storage.js';
 
-type StoredFile = Pick<SessionRecord, 'workspaceId' | 'piSessionRef'>;
-interface CatalogState { version: 2; sessions: SessionRecord[]; pendingDelete?: StoredFile[] }
 type Participant = Parameters<SessionStore['beforeDelete']>[0];
-const missing = (error: unknown) => (error as NodeJS.ErrnoException).code === 'ENOENT';
 
 export class SessionRegistry implements SessionStore {
   private state: CatalogState;
   private readonly deleting = new Set<string>();
   private readonly deletingWorkspaces = new Set<string>();
   private readonly participants = new Set<Participant>();
+  private readonly logs = new Map<string, SessionLog>();
   private closing = false;
   readonly events = new EventTarget();
 
-  constructor(private readonly paths: ReturnType<typeof getPaths>, readonly workspaces: WorkspacePort,
+  constructor(private readonly paths: Paths, readonly workspaces: WorkspacePort,
     private readonly scopes?: ScopePort, private readonly observe?: (event: CapabilityObservation) => void,
     private readonly forgetScopes?: (keys: string[]) => void) {
-    this.state = readJson<CatalogState>(paths.registry, { version: 2, sessions: [] });
-    if (this.state.version !== 2 || !Array.isArray(this.state.sessions) ||
-        (this.state.pendingDelete && !Array.isArray(this.state.pendingDelete))) throw new Error('Invalid conversation index');
+    this.state = loadCatalog(paths, workspaces);
+    validateCatalog(this.state.sessions, workspaces);
+    if (this.state.pendingDelete && !Array.isArray(this.state.pendingDelete)) throw new Error('Invalid deletion journal');
     this.finishDeletion();
+    // Recovery does not require a model or a mounted Agent provider.
+    for (const record of this.state.sessions) {
+      const file = this.nativeFile(record);
+      if (!existsSync(file)) continue;
+      const log = new SessionLog(file, record.id, record.createdAt);
+      try { log.recover(); } finally { log.close(); }
+    }
   }
 
   private commit(state: CatalogState) {
     writeJson(this.paths.registry, state);
+    syncDirectory(this.paths.home);
     this.state = state;
   }
 
@@ -59,7 +69,14 @@ export class SessionRegistry implements SessionStore {
     return () => { this.participants.delete(handler); };
   }
 
+  /** Stop accepting work; existing writers remain available while runs drain. */
   close() { this.closing = true; }
+
+  dispose() {
+    this.closing = true;
+    for (const log of this.logs.values()) log.close();
+    this.logs.clear();
+  }
 
   create({ parentId = null, title, workspaceId }: Parameters<SessionStore['create']>[0] = {}) {
     const parent = parentId && this.get(parentId);
@@ -70,8 +87,7 @@ export class SessionRegistry implements SessionStore {
     this.assertAvailable(parentId, workspace.id);
     this.workspaces.resolveRoot(workspace.path, workspace.id);
     const session: SessionRecord = { id: randomUUID(), title: title?.slice(0, 140) || 'New conversation',
-      titleSource: title ? 'manual' : 'auto', workspaceId: workspace.id, parentId,
-      piSessionRef: null, createdAt: new Date().toISOString() };
+      titleSource: title ? 'manual' : 'auto', workspaceId: workspace.id, parentId, createdAt: new Date().toISOString() };
     this.commit({ ...this.state, sessions: [...this.state.sessions, session] });
     this.notify(session.id);
     this.observe?.({ type: 'session-created', sessionId: session.id });
@@ -94,12 +110,17 @@ export class SessionRegistry implements SessionStore {
     return this.replace(id, { title, titleSource: source });
   }
 
-  link(id: string, file: string) {
+  nativeFile(record: Pick<SessionRecord, 'id' | 'workspaceId'>) { return nativeFile(this.paths, this.workspaces, record); }
+
+  log(id: string) {
+    const existing = this.logs.get(id);
+    if (existing) return existing;
+    this.assertAvailable(id);
     const record = this.get(id);
     if (!record) throw new Error('Conversation not found');
-    if (record.piSessionRef === file) return;
-    this.checkedFile({ workspaceId: record.workspaceId, piSessionRef: file });
-    this.replace(id, { piSessionRef: file });
+    const log = new SessionLog(this.nativeFile(record), id, record.createdAt, () => this.notify(id));
+    this.logs.set(id, log);
+    return log;
   }
 
   workspacePath(id: string) {
@@ -135,36 +156,9 @@ export class SessionRegistry implements SessionStore {
     return [...selected];
   }
 
-  checkSessionDirectory(expected: string) {
-    const physicalDir = join(realpathSync(this.paths.home), 'sessions', basename(expected));
-    if (relative(physicalDir, realpathSync(expected)) ||
-        lstatSync(dirname(expected)).isSymbolicLink() || lstatSync(expected).isSymbolicLink()) {
-      throw new Error('Session directory outside managed storage');
-    }
-    return physicalDir;
-  }
-
-  checkedFile({ workspaceId, piSessionRef }: StoredFile) {
-    if (!piSessionRef) return undefined;
-    const { path } = this.workspaces.get(workspaceId);
-    const expected = getPaths(path, { MINI_HARNESS_HOME: this.paths.home }).sessions;
-    const file = resolve(piSessionRef);
-    if (!isAbsolute(piSessionRef) || relative(expected, dirname(file)) !== '' ||
-        !/^[a-z0-9_.-]+\.jsonl$/i.test(basename(file))) throw new Error('Session file outside managed storage');
-    try {
-      const physicalDir = this.checkSessionDirectory(expected);
-      const info = lstatSync(file);
-      if (!info.isFile() || info.nlink !== 1 || relative(join(physicalDir, basename(file)), realpathSync(file)))
-        throw new Error('Session file outside managed storage');
-      return file;
-    } catch (error) { if (!missing(error)) throw error; }
-  }
-
   modifiedAt(record: SessionRecord) {
-    try {
-      const file = this.checkedFile(record);
-      return file ? lstatSync(file).mtime.toISOString() : record.createdAt;
-    } catch { return record.createdAt; }
+    try { return lstatSync(this.nativeFile(record)).mtime.toISOString(); }
+    catch (error) { if (!missing(error)) throw error; return record.createdAt; }
   }
 
   export(ids: string[]) {
@@ -172,10 +166,10 @@ export class SessionRegistry implements SessionStore {
       this.assertAvailable(id);
       if ([...this.participants].some(({ busy }) => busy?.(id)))
         throw new Error('Stop active conversations before exporting them');
-      const item = this.get(id);
-      const file = this.checkedFile(item);
-      const { piSessionRef: _reference, ...metadata } = item;
-      return { ...metadata, piSession: file ? readFileSync(file, 'utf8') : null };
+      const record = this.get(id);
+      this.nativeFile(record);
+      const log = this.log(id);
+      return { ...record, log: log.serialize() };
     });
   }
 
@@ -205,11 +199,11 @@ export class SessionRegistry implements SessionStore {
       this.finishDeletion();
       const chosen = new Set(all);
       const pendingDelete = all.map((id) => {
-        const { workspaceId, piSessionRef } = this.get(id);
-        this.checkedFile({ workspaceId, piSessionRef });
-        if (piSessionRef && this.state.sessions.some((entry) => !chosen.has(entry.id) && entry.piSessionRef && !relative(entry.piSessionRef, piSessionRef)))
-          throw new Error('Session file is shared with another conversation');
-        return { workspaceId, piSessionRef };
+        const record = this.get(id);
+        this.nativeFile(record);
+        this.logs.get(id)?.close();
+        this.logs.delete(id);
+        return { id, workspaceId: record.workspaceId };
       });
       if (all.length) {
         const locations = all.map((id) => ({ id, keys: this.scopes?.address(id) ?? [] }));
@@ -219,7 +213,6 @@ export class SessionRegistry implements SessionStore {
           this.notify(id, true);
           this.observe?.({ type: 'session-deleted', sessionId: id, scopeKeys: keys });
         }
-        this.forgetScopes?.(all.map((id) => 'session:' + id));
       }
       return all;
     } finally { for (const id of all) this.deleting.delete(id); }
@@ -228,11 +221,12 @@ export class SessionRegistry implements SessionStore {
   private finishDeletion() {
     if (!this.state.pendingDelete?.length) return;
     for (const entry of this.state.pendingDelete) {
-      const file = this.checkedFile(entry);
-      if (!file) continue;
-      try { unlinkSync(file); }
+      if (this.state.sessions.some((record) => record.id === entry.id)) throw new Error('Deletion journal includes an active conversation');
+      const file = this.nativeFile(entry);
+      try { unlinkSync(file); syncDirectory(dirname(file)); }
       catch (error) { if (!missing(error)) throw error; }
     }
-    this.commit({ version: 2, sessions: this.state.sessions });
+    this.forgetScopes?.(this.state.pendingDelete.map(({ id }) => 'session:' + id));
+    this.commit({ version: 3, sessions: this.state.sessions });
   }
 }

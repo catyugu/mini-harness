@@ -20,5 +20,5 @@ export const manifest: PluginDescriptor = {
     provider: Type.String({ title: 'Child provider', maxLength: 160, default: '' }),
     model: Type.String({ title: 'Child model', maxLength: 160, default: '' })
   }, { additionalProperties: false }) },
-  inject: ['harnessTools', 'harnessRegistry', 'harnessPi', 'harnessModels', 'harnessRuns', 'harnessSettingsStore']
+  inject: ['harnessScopes', 'harnessTools', 'harnessRegistry', 'harnessAgent', 'harnessModels', 'harnessRuns', 'harnessSettingsStore']
 };

@@ -34,23 +34,23 @@ export interface SessionStore {
   list(workspaceId?: string): SessionRecord[];
   create(input?: { parentId?: string | null; title?: string; workspaceId?: string }): SessionRecord;
   rename(id: string, title: string, source?: SessionRecord['titleSource']): SessionRecord;
-  link(id: string, file: string): void;
+  log(id: string): import('./session-log.js').SessionLogPort;
   assertAvailable(id?: string, workspaceId?: string): void;
   beforeDelete(handler: { quiesce(ids: string[]): Promise<void>; release?(ids: string[]): void; busy?(id: string): boolean }): () => void;
   close(): void;
   workspacePath(id: string): string;
   depth(id: string): number;
   descendants(ids: string[]): string[];
-  checkedFile(record: Pick<SessionRecord, 'piSessionRef' | 'workspaceId'>): string | undefined;
+  nativeFile(record: SessionRecord): string;
   modifiedAt(record: SessionRecord): string;
-  checkSessionDirectory(path: string): string;
-  export(ids: string[]): (Omit<SessionRecord, 'piSessionRef'> & { piSession: string | null })[];
+  export(ids: string[]): (SessionRecord & { log: string })[];
   delete(ids: string[]): Promise<string[]>;
   deleteWorkspace(id: string): Promise<{ removed: string; deleted: string[] }>;
 }
 
 export interface AgentPort extends RunAgentPort {
   readonly hasPending: boolean;
+  prepare(id: string, signal?: AbortSignal): Promise<void>;
   activeModel(id: string): ModelChoice;
   read(id: string): { messages: ViewMessage[]; leafId: string | null; model: ModelChoice; thinkingLevel: ThinkingLevel; queue: unknown };
   queueInput(id: string, text: string, mode: 'steer' | 'followUp', attachments?: Attachment[]): Promise<unknown>;
@@ -104,7 +104,7 @@ declare module 'cordis' {
     harnessWorkspaces: WorkspacePort;
     harnessFileAccess: import('./files.js').FileAccessPort;
     harnessRegistry: SessionStore;
-    harnessPi: AgentPort;
+    harnessAgent: AgentPort;
     harnessRuns: RunPort;
     harnessConversationView: ConversationViewPort;
     harnessChanges: EventTarget;

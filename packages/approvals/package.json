@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@mini-harness/contracts": "file:../contracts"
+    "@mini-harness/contracts": "file:../contracts",
+    "@mini-harness/ui-runtime": "file:../ui-runtime",
+    "@mini-harness/web": "file:../web"
   }
 }

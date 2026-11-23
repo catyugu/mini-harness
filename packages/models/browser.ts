@@ -39,7 +39,7 @@ function providerManager(api: FrontendApi, providers: () => ProviderInfo[], refr
     const form = fromMarkup<HTMLFormElement>('<form class="provider-editor"></form>');
     form.setAttribute('aria-label', provider ? 'Edit ' + provider.name : 'Add provider');
     const mode = fromMarkup<HTMLFieldSetElement>(`<fieldset class="provider-mode"><legend>Provider type</legend>
-      <label><input type="radio" name="provider-type" value="catalog" checked> Pi provider</label>
+      <label><input type="radio" name="provider-type" value="catalog" checked> Built-in provider</label>
       <label><input type="radio" name="provider-type" value="custom"> Custom API</label>
     </fieldset>`);
     const available = providers().filter(({ configured, custom, canSetKey }) => canSetKey && !configured && !custom)

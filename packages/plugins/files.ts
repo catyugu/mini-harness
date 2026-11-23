@@ -45,7 +45,8 @@ export function installPlugin(runtime: PluginFilesHost, input: any) {
 export async function uninstallPlugin(runtime: PluginFilesHost, id: string) {
   const plugin = runtime.plugins.metadata().find((item) => item.id === id && item.trustedCode);
   if (!plugin || !idPattern.test(id)) throw new Error('Unknown local plugin');
-  if (runtime.settings.plugins[id] || Object.values(runtime.settings.scopes).some((scope) => scope.plugins?.[id]) ||
+  if (runtime.settings.plugins[id] || Object.values(runtime.settings.scopes).some((scope) =>
+    scope.plugins?.[id] || Object.values(scope.providers ?? {}).includes(id)) ||
       Object.values(runtime.settings.providers).includes(id)) throw new Error('Disable and save this plugin before uninstalling');
   const folder = join(runtime.paths.plugins, id);
   if (lstatSync(folder).isSymbolicLink()) throw new Error('Linked plugins must be removed locally');

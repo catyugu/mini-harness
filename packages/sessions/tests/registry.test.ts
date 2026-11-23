@@ -1,67 +1,81 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, existsSync, writeFileSync, mkdirSync, realpathSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync, writeFileSync, realpathSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getPaths } from '../../platform/config.js';
 import { SessionRegistry } from '../registry.js';
 import { WorkspaceCatalog } from '../../workspaces/catalog.js';
 
-test('nested sessions and cascading permanent deletion', async () => {
+function fixture(t: test.TestContext) {
   const temp = mkdtempSync(join(tmpdir(), 'mini-harness-sessions-'));
-  try {
-    const paths = getPaths(realpathSync.native(temp), { MINI_HARNESS_HOME: join(temp, 'home') });
-    mkdirSync(paths.sessions, { recursive: true });
-    const registry = new SessionRegistry(paths, new WorkspaceCatalog(paths));
-    const parent = registry.create({ title: 'root' });
-    const child = registry.create({ title: 'worker', parentId: parent.id });
-    const second = registry.create({ title: 'unrelated' });
-    const file = join(paths.sessions, child.id + '.jsonl');
-    writeFileSync(file, 'hello');
-    registry.link(child.id, file);
-    assert.equal(registry.list().length, 3);
-    assert.deepEqual(new Set(registry.descendants([parent.id])), new Set([parent.id, child.id]));
-    const deleted = await registry.delete([parent.id]);
-    assert.equal(deleted.length, 2);
-    assert.equal(registry.list().length, 1);
-    assert.equal(registry.list()[0].id, second.id);
-    assert.equal(existsSync(file), false);
-    await assert.rejects(registry.delete(['does-not-exist']), /Unknown conversation/);
-  } finally { rmSync(temp, { recursive: true, force: true }); }
+  const paths = getPaths(realpathSync.native(temp), { MINI_HARNESS_HOME: join(temp, 'home') });
+  const registry = new SessionRegistry(paths, new WorkspaceCatalog(paths));
+  t.after(() => { registry.dispose(); rmSync(temp, { recursive: true, force: true }); });
+  return { temp, paths, registry };
+}
+
+test('nested sessions cascade permanent deletion through native logs', async (t) => {
+  const { registry } = fixture(t);
+  const parent = registry.create({ title: 'root' });
+  const child = registry.create({ title: 'worker', parentId: parent.id });
+  const second = registry.create({ title: 'unrelated' });
+  const log = registry.log(child.id);
+  log.append({ type: 'message', message: { role: 'user', content: 'hello', timestamp: Date.now() } });
+  const file = log.file;
+  assert.equal(registry.list().length, 3);
+  assert.deepEqual(new Set(registry.descendants([parent.id])), new Set([parent.id, child.id]));
+  const deleted = await registry.delete([parent.id]);
+  assert.equal(deleted.length, 2);
+  assert.deepEqual(registry.list().map(({ id }) => id), [second.id]);
+  assert.equal(existsSync(file), false);
+  assert.throws(() => log.append({ type: 'custom', namespace: 'test', data: 'late write' }), /closed/);
+  await assert.rejects(registry.delete(['does-not-exist']), /Unknown conversation/);
 });
 
-test('refuses deletion of files outside managed session directory', () => {
-  const temp = mkdtempSync(join(tmpdir(), 'mini-harness-safe-'));
-  try {
-    const paths = getPaths(temp, { MINI_HARNESS_HOME: join(temp, 'home') });
-    const registry = new SessionRegistry(paths, new WorkspaceCatalog(paths));
-    const item = registry.create();
-    const foreign = join(temp, 'other.jsonl');
-    writeFileSync(foreign, 'keep');
-    assert.throws(() => registry.link(item.id, foreign), /outside managed storage/);
-    assert.equal(existsSync(foreign), true);
-  } finally { rmSync(temp, { recursive: true, force: true }); }
+test('refuses export and deletion through a symlink outside managed storage', async (t) => {
+  const { temp, registry } = fixture(t);
+  const item = registry.create();
+  const foreign = join(temp, 'other.jsonl');
+  writeFileSync(foreign, 'keep');
+  const file = registry.log(item.id).file;
+  rmSync(file);
+  symlinkSync(foreign, file);
+  assert.throws(() => registry.export([item.id]), /outside managed storage/);
+  await assert.rejects(registry.delete([item.id]), /outside managed storage/);
+  assert.equal(existsSync(foreign), true);
+  assert.ok(registry.get(item.id));
 });
 
-test('restarts finish a journaled deletion after partial cleanup', () => {
-  const temp = mkdtempSync(join(tmpdir(), 'mini-harness-recovery-'));
-  try {
-    const paths = getPaths(realpathSync.native(temp), { MINI_HARNESS_HOME: join(temp, 'home') });
-    mkdirSync(paths.sessions, { recursive: true });
-    const registry = new SessionRegistry(paths, new WorkspaceCatalog(paths));
-    const parent = registry.create();
-    const child = registry.create({ parentId: parent.id });
-    const unrelated = registry.create();
-    const parentFile = join(paths.sessions, parent.id + '.jsonl');
-    const childFile = join(paths.sessions, child.id + '.jsonl');
-    writeFileSync(childFile, 'child history');
-    writeFileSync(paths.registry, JSON.stringify({
-      version: 2, sessions: [unrelated],
-      pendingDelete: [{ ...parent, piSessionRef: parentFile }, { ...child, piSessionRef: childFile }]
-    }));
-    const restored = new SessionRegistry(paths, new WorkspaceCatalog(paths));
-    assert.deepEqual(restored.list().map(({ id }) => id), [unrelated.id]);
-    assert.equal(existsSync(childFile), false);
-  } finally { rmSync(temp, { recursive: true, force: true }); }
+test('restart finishes a journaled deletion after partial cleanup', (t) => {
+  const { paths, registry } = fixture(t);
+  const parent = registry.create();
+  const child = registry.create({ parentId: parent.id });
+  const unrelated = registry.create();
+  const childFile = registry.log(child.id).file;
+  registry.dispose();
+  writeFileSync(paths.registry, JSON.stringify({ version: 3, sessions: [unrelated],
+    pendingDelete: [{ id: parent.id, workspaceId: parent.workspaceId }, { id: child.id, workspaceId: child.workspaceId }] }));
+  const forgotten: string[] = [];
+  const restored = new SessionRegistry(paths, new WorkspaceCatalog(paths), undefined, undefined, (keys) => forgotten.push(...keys));
+  t.after(() => restored.dispose());
+  assert.deepEqual(restored.list().map(({ id }) => id), [unrelated.id]);
+  assert.equal(existsSync(childFile), false);
+  assert.deepEqual(new Set(forgotten), new Set(['session:' + parent.id, 'session:' + child.id]));
 });
 
+test('export includes all branches and rejects in-flight sessions', (t) => {
+  const { registry } = fixture(t);
+  const session = registry.create();
+  const log = registry.log(session.id);
+  const first = log.append({ type: 'message', message: { role: 'user', content: 'original', timestamp: Date.now() } });
+  log.select(null);
+  log.append({ type: 'message', message: { role: 'user', content: 'revision', timestamp: Date.now() } });
+  const [exported] = registry.export([session.id]);
+  assert.ok(exported.log.includes(first.id));
+  assert.ok(exported.log.includes('original') && exported.log.includes('revision'));
+  assert.equal('piSessionRef' in exported || 'piSession' in exported, false);
+  const release = registry.beforeDelete({ quiesce: async () => {}, busy: () => true });
+  assert.throws(() => registry.export([session.id]), /Stop active/);
+  release();
+});

@@ -1,4 +1,5 @@
-import type { ToolDefinition } from '@earendil-works/pi-coding-agent';
+import type { ToolDefinition } from './tools.js';
+import type { SkillPort } from './skills.js';
 import type { Context } from 'cordis';
 import type { Paths, Settings } from './config.js';
 import type { RouteHandler, RoutePort } from './routes.js';
@@ -10,9 +11,8 @@ import type { DelegationPort } from './delegation.js';
 
 /** Host-owned capability; features consume this interface without importing a concrete registry. */
 export interface ToolPort {
-  register(name: string, bind: (id: string) => ToolDefinition, visible?: (id: string) => boolean, builtin?: boolean, scope?: string): () => void | Promise<void>;
+  register(name: string, bind: (id: string) => ToolDefinition, visible?: (id: string) => boolean, scope?: string): () => void | Promise<void>;
   forSession(id: string): ToolDefinition[];
-  resources(id: string): { bind: (id: string) => ToolDefinition; visible: (id: string) => boolean }[];
 }
 
 /** A symbolic icon name or an inline SVG path for plugin-defined artwork. */
@@ -40,7 +40,6 @@ export interface PluginMetadata {
 export interface PluginDescriptor extends PluginMetadata {
   scope: PluginScope['kind'];
   required?: boolean;
-  replaceable?: boolean;
   /** Keep an existing scheduler while it consumes committed policy for new work. */
   configChanges?: 'read-on-use';
   provides?: string[];
@@ -70,7 +69,7 @@ export interface PluginApi {
   registerTool(tool: ToolDefinition): () => Promise<void>;
   /** Mount an authenticated route under /api/extensions/<plugin-id>/. */
   registerRoute(method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string, handler: RouteHandler): () => Promise<void>;
-  /** Read and append this plugin's JSON records on the active Pi session branch. */
+  /** Read and append this plugin's JSON records on the active session branch. */
   records: {
     list(sessionId: string): Promise<ReturnType<SessionRecords['list']>>;
     append(sessionId: string, data: unknown): Promise<string>;
@@ -85,7 +84,7 @@ declare module 'cordis' {
     harnessTools: ToolPort;
     harnessState: { paths: Paths };
     harnessRoutes: RoutePort;
-    harnessSkills?: { paths(cwd: string): string[] };
+    harnessSkills?: SkillPort;
     harnessWorkspace: { resolve(id: string): string };
     harnessDelegation?: DelegationPort;
 

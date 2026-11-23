@@ -40,23 +40,25 @@ test('an installed Cordis plugin can use services, configure a tool, and release
   assert.deepEqual(runtime.plugins.metadata().find(({ id }) => id === 'example')?.icon,
     { path: 'M2 2h20v20H2z', viewBox: '0 0 24 24' });
   await runtime.updateSettings({ plugins: { example: true }, pluginConfig: { example: { prefix: 'Total' } } });
-  const originalSession = await runtime.pi.open(item.id);
-  assert.ok(originalSession.getActiveToolNames().includes('example_count'));
+  await runtime.agent.prepare(item.id);
+  const activeNames = () => runtime.plugins.ctx.harnessTools.forSession(item.id).map(({ name }) => name);
+  assert.ok(activeNames().includes('example_count'));
   const tool = runtime.plugins.ctx.harnessTools.forSession(item.id).find(({ name }) => name === 'example_count');
   assert.equal((await tool.execute('test', {}, undefined, undefined, undefined)).content[0].type, 'text');
   assert.match(JSON.stringify(await tool.execute('test', {}, undefined, undefined, undefined)), /Total: 1/);
   await assert.rejects(runtime.updateSettings({ pluginConfig: { example: { prefix: 12 } } }), /Invalid configuration/);
   assert.equal(runtime.settings.pluginConfig.example.prefix, 'Total');
-  const restoredSession = await runtime.pi.open(item.id);
-  assert.strictEqual(restoredSession, originalSession);
-  assert.ok(restoredSession.getActiveToolNames().includes('example_count'));
+  await runtime.agent.prepare(item.id);
+  assert.match(JSON.stringify(await tool.execute('after-invalid-config', {}, undefined, undefined, undefined)), /Total: 1/);
+  assert.equal(activeNames().filter((name) => name === 'example_count').length, 1);
   await runtime.updateSettings({ plugins: { shell: true } });
   assert.throws(() => readFileSync(log), { code: 'ENOENT' }, 'Unrelated switches and invalid config preserve an active plugin');
   await runtime.updateSettings({ plugins: { example: false } });
   assert.equal(readFileSync(log, 'utf8'), 'dispose\n');
-  assert.ok(!(await runtime.pi.open(item.id)).getActiveToolNames().includes('example_count'));
+  assert.ok(!activeNames().includes('example_count'));
+  await assert.rejects(tool.execute('after-unload', {}, undefined, undefined, undefined), /no longer available/);
   await runtime.updateSettings({ plugins: { example: true } });
-  assert.ok((await runtime.pi.open(item.id)).getActiveToolNames().includes('example_count'));
+  assert.ok(activeNames().includes('example_count'));
 });
 
 test('file tools have a plugin lifecycle and required plugins cannot be disabled independently', async (t) => {
@@ -73,13 +75,15 @@ test('file tools have a plugin lifecycle and required plugins cannot be disabled
   };`);
   await runtime.start();
   const item = runtime.registry.create();
-  assert.ok((await runtime.pi.open(item.id)).getActiveToolNames().includes('read'));
+  await runtime.agent.prepare(item.id);
+  const activeNames = () => runtime.plugins.ctx.harnessTools.forSession(item.id).map(({ name }) => name);
+  assert.ok(activeNames().includes('read'));
   await runtime.updateSettings({ plugins: { files: false } });
-  assert.ok(!(await runtime.pi.open(item.id)).getActiveToolNames().includes('read'));
+  assert.ok(!activeNames().includes('read'));
   await runtime.updateSettings({ plugins: { files: true, dependent: true } });
   await assert.rejects(runtime.updateSettings({ plugins: { files: false } }), /Required plugin/);
   assert.equal(runtime.settings.plugins.files, true);
-  assert.ok((await runtime.pi.open(item.id)).getActiveToolNames().includes('dependent_tool'));
+  assert.ok(activeNames().includes('dependent_tool'));
   await runtime.updateSettings({ plugins: { files: false, dependent: false } });
   assert.equal(runtime.plugins.ctx.harnessTools.forSession(item.id).some(({ name }) => name === 'read' || name === 'dependent_tool'), false);
 });

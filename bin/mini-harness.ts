@@ -10,7 +10,7 @@ import { lockInstance, readServerInfo, requestShutdown, serverStatus } from '../
 const executable = fileURLToPath(import.meta.url);
 
 function help() {
-  console.log(`mini-harness — minimal Pi harness
+  console.log(`mini-harness — minimal native agent harness
 
 Usage:
   mini-harness [--port 3837]              Start the local web interface

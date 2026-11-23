@@ -63,7 +63,7 @@ async function checkPackage() {
       "import 'mini-harness/plugin'; import 'mini-harness/browser-plugin';"], { cwd: installed });
     for (const path of ['contracts/plugin-sdk.d.ts', 'ui-runtime/plugin-sdk.d.ts'])
       assert.ok(files.some((file) => file.path === 'dist/types/packages/' + path), 'Missing SDK declarations: ' + path);
-    assert.match((await cli('--help')).stdout, /minimal Pi harness/);
+    assert.match((await cli('--help')).stdout, /minimal native agent harness/);
     const launch = await cli('--detached', '--cwd', paths.cwd, '--port', String(await availablePort()));
     assert.match(launch.stdout, /started independently/);
     started = true;
@@ -93,7 +93,7 @@ async function checkPackage() {
     assert.match((await cli('status')).stdout, /is running/);
     assert.match((await cli('stop')).stdout, /stopped/);
     started = false;
-    console.log(filename + ' passed clean installation, CLI, browser assets and real Pi smoke checks');
+    console.log(filename + ' passed clean installation, CLI, browser assets and native agent smoke checks');
   } finally {
     if (started) await cli('stop').catch(() => {});
     await mock.close();
