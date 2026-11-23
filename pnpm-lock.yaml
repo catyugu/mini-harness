@@ -295,6 +295,9 @@ importers:
       '@mini-harness/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@mini-harness/sandbox':
+        specifier: workspace:*
+        version: link:../sandbox
       '@mini-harness/ui-runtime':
         specifier: workspace:*
         version: link:../ui-runtime

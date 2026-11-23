@@ -7,14 +7,17 @@ export interface PackedArtifact {
 
 export function parseNpmPackResult(output: string): PackedArtifact {
   const decoded: unknown = JSON.parse(output);
-  const entries: unknown[] = Array.isArray(decoded) ? decoded :
-    decoded !== null && typeof decoded === 'object' ? Object.values(decoded) : [];
-  if (entries.length !== 1 || !entries[0] || typeof entries[0] !== 'object')
+  const keyed = !Array.isArray(decoded) && decoded !== null && typeof decoded === 'object';
+  const entries: [string | undefined, unknown][] = Array.isArray(decoded) ? decoded.map((entry) => [undefined, entry]) :
+    keyed ? Object.entries(decoded) : [];
+  if (entries.length !== 1 || !entries[0][1] || typeof entries[0][1] !== 'object')
     throw new Error('Unexpected npm pack output: expected one artifact');
-  const artifact = entries[0] as Partial<PackedArtifact>;
-  if (typeof artifact.name !== 'string' || !artifact.name ||
+  const [packageName, value] = entries[0];
+  const artifact = value as Partial<PackedArtifact>;
+  const name = artifact.name ?? packageName;
+  if (typeof name !== 'string' || !name ||
       typeof artifact.filename !== 'string' || !/^[^/\\]+\.tgz$/.test(artifact.filename) ||
       !Array.isArray(artifact.files) || artifact.files.some((file) => !file || typeof file.path !== 'string'))
     throw new Error('Unexpected npm pack output: invalid artifact metadata');
-  return artifact as PackedArtifact;
+  return { ...artifact, name } as PackedArtifact;
 }

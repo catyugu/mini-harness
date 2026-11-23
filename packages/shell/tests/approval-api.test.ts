@@ -1,3 +1,5 @@
+import { defaultShellMode } from '../manifest.js';
+import { supportsIsolation } from '@mini-harness/sandbox/isolation';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -66,4 +68,8 @@ test('disabling Shell drains its pending approval and preserves an unrelated run
     assert.ok(!app.runtime.plugins.ctx.harnessTools.forSession(shell.id).map(({ name }) => name).includes('sandbox_shell'));
   } finally { release(); }
   assert.equal(await pending, 'Unrelated task completed');
+});
+
+test('Shell defaults to host only when isolation is unavailable', () => {
+  assert.equal(defaultShellMode, supportsIsolation() ? 'isolated' : 'host');
 });

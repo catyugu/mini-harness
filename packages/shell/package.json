@@ -5,6 +5,7 @@
   "type": "module",
   "dependencies": {
     "@mini-harness/contracts": "workspace:*",
+    "@mini-harness/sandbox": "workspace:*",
     "@mini-harness/ui-runtime": "workspace:*",
     "@mini-harness/web": "workspace:*"
   },

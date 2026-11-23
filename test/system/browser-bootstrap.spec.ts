@@ -30,3 +30,24 @@ test('composed browser plugin graph boots without any historical single app entr
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('a replacement token in a live tab reloads the app and restores authenticated requests', async ({ page }) => {
+  const mock = await createMockProvider();
+  const { root, paths } = createFixturePaths(mock.url);
+  const host = await startIsolatedHost(paths);
+  try {
+    await page.goto(host.url + '/#token=' + host.token);
+    await expect(page.getByRole('textbox', { name: 'Message' })).toBeVisible();
+    // A hash-only navigation to the same page used to leave ESM state and the old token intact.
+    await page.evaluate(() => { location.hash = 'token=invalid-credential'; });
+    await expect(page.locator('#startupStatus')).toContainText('Session authorization expired');
+    await page.evaluate((token) => { location.hash = 'token=' + token; }, host.token);
+    await expect(page.getByRole('textbox', { name: 'Message' })).toBeVisible();
+    await expect(page.locator('#startupStatus')).toBeHidden();
+    expect(await page.evaluate(() => sessionStorage.getItem('mini-harness-token'))).toBe(host.token);
+  } finally {
+    await host.stop();
+    await mock.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});

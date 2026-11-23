@@ -30,12 +30,15 @@ test('running messages can queue follow-ups and approve shell commands from the 
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Shell task');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.locator('.approval-card pre')).toHaveText('echo approved');
+    await expect(page.locator('.approval-card strong')).toHaveText('Shell approval');
     await page.getByRole('button', { name: 'Allow once', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeVisible();
     await expect(page.locator('.approval-card')).toHaveCount(0);
     await page.locator('.tool-card summary').click();
     await expect(page.locator('.tool-arguments')).toContainText('echo approved');
     await expect(page.locator('.tool-content')).toContainText('Exit 0');
+    expect(await page.locator('.tool-content').evaluate((node) =>
+      [...node.children].findIndex((child) => child.classList.contains('tool-arguments')))).toBe(0);
     await expect(page.locator('.tool-duration')).toHaveText(/\d+ (ms|s)/);
     await expect(page.locator('.tool-exit-code')).toHaveText('Exit 0');
     await expect(page.locator('#runSummary')).toContainText('Completed');

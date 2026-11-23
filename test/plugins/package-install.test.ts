@@ -20,6 +20,8 @@ test('npm pack output accepts both array and npm 12 keyed objects', () => {
   const result = { name: 'probe-pkg', filename: 'probe-pkg-1.0.0.tgz', files: [{ path: 'package.json' }] };
   assert.deepEqual(parseNpmPackResult(JSON.stringify([result])), result);
   assert.deepEqual(parseNpmPackResult(JSON.stringify({ 'probe-pkg': result })), result);
+  const { name: _name, ...keyed } = result;
+  assert.deepEqual(parseNpmPackResult(JSON.stringify({ 'probe-pkg': keyed })), result);
   assert.throws(() => parseNpmPackResult('{}'), /Unexpected npm pack output/);
   assert.throws(() => parseNpmPackResult(JSON.stringify({ probe: { filename: '../unsafe.tgz' } })),
     /Unexpected npm pack output/);
