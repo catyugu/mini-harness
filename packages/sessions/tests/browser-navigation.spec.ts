@@ -45,10 +45,13 @@ test('desktop and mobile: send, navigate, settings and bulk select', async ({ br
         }
 
         if (viewport.width < 1000) await page.getByRole('button', { name: 'Toggle navigation' }).click();
-        await page.getByRole('button', { name: 'Select', exact: true }).click();
+        const select = page.getByRole('button', { name: 'Select conversations' });
+        await select.click();
+        await expect(select).toHaveAttribute('aria-pressed', 'true');
         await page.getByRole('checkbox', { name: /Select Hello from the browser/ }).first().check();
         await expect(page.getByText('1 selected')).toBeVisible();
         await page.getByRole('button', { name: 'Cancel' }).click();
+        await expect(select).toHaveAttribute('aria-pressed', 'false');
         await page.getByRole('button', { name: 'Settings' }).click();
         await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
         await expect(settingsSection(page, 'Plugins')).toHaveCount(0);
@@ -103,7 +106,19 @@ test('search matches conversation body even after the title changes', async ({ p
     });
     await page.reload();
     await expect(page.locator('.session-name')).toContainText(['Renamed chat']);
-    await page.getByRole('searchbox', { name: 'Search workspaces and conversations' }).fill('violet-sparrow');
+    const searchToggle = page.getByRole('button', { name: 'Search workspaces and conversations' });
+    const search = page.getByRole('searchbox', { name: 'Search workspaces and conversations' });
+    await expect(search).toBeHidden();
+    await searchToggle.click();
+    await expect(searchToggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(search).toBeFocused();
+    await search.fill('violet-sparrow');
     await expect(page.locator('.session-name')).toContainText(['Renamed chat']);
+    await search.press('Escape');
+    await expect(search).toBeHidden();
+    await expect(searchToggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(searchToggle).toBeFocused();
+    await searchToggle.click();
+    await expect(search).toHaveValue('');
   } finally { await page.close(); await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
 });
