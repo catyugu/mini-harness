@@ -1,4 +1,4 @@
-import type { ModelChoice } from '../../../src/contracts/conversation.js';
+import type { ModelChoice } from '../../../contracts/conversation.js';
 import { scopedElements } from '../../api.js';
 import { icon } from '../components/icons.js';
 import type { ModelInfo } from '../../types.js';

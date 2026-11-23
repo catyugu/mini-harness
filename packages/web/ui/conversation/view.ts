@@ -1,7 +1,7 @@
-import type { Attachment } from '../../../src/contracts/input.js';
-import type { Conversation, ModelChoice } from '../../../src/contracts/conversation.js';
-import type { MessageContent } from '../../../src/contracts/message.js';
-import type { RunEvent, RunInfo } from '../../../src/contracts/transport.js';
+import type { Attachment } from '../../../contracts/input.js';
+import type { Conversation, ModelChoice } from '../../../contracts/conversation.js';
+import type { MessageContent } from '../../../contracts/message.js';
+import type { RunEvent, RunInfo } from '../../../contracts/transport.js';
 import type { ConversationView, ThinkingLevel } from '../../types.js';
 import { scopedElements } from '../../api.js';
 import { exportSessions, isRunning } from '../../transport/session-client.js';
