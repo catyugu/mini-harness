@@ -31,7 +31,13 @@ per conversation. Model requests refer to its SHA-256 hash via `toolSchema`.
 `SessionLog.requestSnapshot(id)` reconstructs and validates the exact model-visible
 input for audit and retry. The session ID comes from the log header.
 
-A `tool-execution` entry records a completed side effect before a model-visible result transform. These records and model requests are operational entries. They do not advance the selected branch or appear as chat messages. A failed result transform commits a safe tool error so the original content stays out of later model requests.
+A `tool-execution` entry records a completed side effect before a model-visible result transform.
+A successful transform commits a `tool-accepted` branch entry referencing the raw execution.
+It saves only a reversible JSON splice when the content differs; an unchanged result stores no
+second copy of the tool output. Projections and the model reconstruct the accepted content,
+never the raw content. Tool executions, tool schemas and model requests are operational entries:
+they do not advance the selected branch or appear as chat messages. A failed result transform
+commits a safe error and preserves the original execution only for auditing.
 
 ## Appending and recovering
 

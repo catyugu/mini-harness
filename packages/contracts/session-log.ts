@@ -21,6 +21,13 @@ export interface MessagePatch {
   insert: NativeMessage[];
 }
 
+/** JSON-string splice, avoiding a second copy of a large tool result. */
+export interface ContentDelta {
+  prefix: number;
+  suffix: number;
+  insert: string;
+}
+
 export type RecordedModelRequest = Omit<ModelRequestSnapshot, 'messages' | 'tools'> & {
   toolSchema?: string;
   messagesPatch?: MessagePatch;
@@ -34,6 +41,8 @@ export type SessionEvent =
   /** The request references its parent branch's context and an optional minimal splice. */
   | { type: 'model-request'; request: RecordedModelRequest }
   | { type: 'tool-execution'; result: NativeToolMessage }
+  /** A committed model-visible projection of the recorded raw execution. */
+  | { type: 'tool-accepted'; executionId: string; contentDelta?: ContentDelta }
   | { type: 'model'; model: ModelChoice }
   | { type: 'thinking'; level: ThinkingLevel }
   | { type: 'custom'; namespace: string; data: unknown }

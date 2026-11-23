@@ -152,3 +152,25 @@ test('attachments retain full model input while display keeps the submitted text
   assert.equal(state.messages[0].attachments[0].name, 'secret.txt');
   assert.match(String(state.contextMessages[0].content), /contents/);
 });
+
+test('tool execution stays auditable while accepted content is stored as a compact reversible delta', (t) => {
+  const { open, file } = fixture(t);
+  let log = open();
+  const content = 'x'.repeat(7200);
+  const raw = log.append({ type: 'tool-execution', result: {
+    role: 'toolResult', toolCallId: 'read-1', toolName: 'read',
+    content: [{ type: 'text', text: content }], isError: false, timestamp: 1
+  } });
+  const accepted = log.append({ type: 'tool-accepted', executionId: raw.id,
+    contentDelta: { prefix: JSON.stringify([{ type: 'text', text: content }]).length - 3,
+      suffix: 3, insert: ' redacted' } });
+  assert.ok(readFileSync(file, 'utf8').length < 9000, 'Original content should not be duplicated');
+  assert.equal(log.projection().leafId, accepted.id);
+  const before = log.projection().contextMessages[0];
+  assert.equal(before.role, 'toolResult');
+  log.close();
+  log = open();
+  assert.deepEqual(log.projection().contextMessages[0], before);
+  assert.equal(log.entries().filter((entry) => entry.type === 'tool-execution').length, 1);
+  assert.throws(() => log.append({ type: 'tool-accepted', executionId: 'a'.repeat(32) }), /missing execution/);
+});

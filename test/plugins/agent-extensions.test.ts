@@ -106,6 +106,11 @@ test('an application plugin replaces only LLM and composes execution hooks witho
   assert.deepEqual(log.contextMessages.filter((message) => message.role === 'toolResult').map(({ toolCallId, isError }) =>
     [toolCallId, isError]), [['denied', true], ['allowed', false]]);
   assert.equal(mock.requests.length, 0);
+  const execution = sessionLog.entries().find((entry) => entry.type === 'tool-execution');
+  const accepted = sessionLog.entries().find((entry) => entry.type === 'tool-accepted');
+  assert.ok(execution && accepted);
+  assert.equal(accepted.executionId, execution.id);
+  assert.ok(JSON.stringify(accepted).length < JSON.stringify(execution).length);
   assert.equal((await request('/settings', 'PATCH', { plugins: { transport: false, pipeline: false }, providers: {} })).status, 200);
   assert.equal(await app.runtime.runs.send(session.id, 'Restore the built-in LLM'), 'Mock response');
 });

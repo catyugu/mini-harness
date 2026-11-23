@@ -16,6 +16,7 @@ import { AgentRegistry } from './registry.js';
 import { Inbox } from './inbox.js';
 import type { ModelFailure, ModelRequestDraft, ModelRequestTransform, ModelRetry, StepContext, ToolResultTransform } from '@mini-harness/contracts/extensions';
 import { isToolContent } from '@mini-harness/contracts/tools';
+import { contentDelta } from '@mini-harness/platform/content-delta';
 import { applyTransforms } from './transforms.js';
 import { executeTool, scheduleTools } from './tool-pipeline.js';
 import { selectModel } from './model-selection.js';
@@ -229,6 +230,8 @@ export class NativeAgent implements AgentPort {
         await scheduleTools(calls, advertisedTools, signal, async (call, tool, toolSignal) => {
           const steering = inbox.next('steer');
           let output: NativeToolMessage;
+          let executionId: string | undefined;
+          let originalContent: NativeToolMessage['content'] | undefined;
           emit({ type: 'tool', id: call.id, name: call.name, state: 'running', arguments: call.arguments });
           if (steering || toolSignal.aborted) output = failedTool(call, steering ? 'Skipped because a steering message arrived.' : 'Agent run cancelled');
           else if (!this.services.allowsTool(id, call.name)) output = failedTool(call, 'Tool denied by inherited scope policy: ' + call.name);
@@ -243,7 +246,8 @@ export class NativeAgent implements AgentPort {
               }
             });
             if (!output.isError && hooks.length) {
-              log.append({ type: 'tool-execution', result: output });
+              executionId = log.append({ type: 'tool-execution', result: output }).id;
+              originalContent = output.content;
               try {
                 const content = await applyTransforms(hooks, output.content, { ...step, signal: toolSignal, tool: call.name, callId: call.id },
                   (value) => { if (!isToolContent(value)) throw new Error('Invalid tool result content'); });
@@ -257,7 +261,12 @@ export class NativeAgent implements AgentPort {
               }
             }
           }
-          log.append({ type: 'message', message: output, elapsedMs: output.elapsedMs });
+          if (executionId) {
+            log.append({ type: 'tool-accepted', executionId,
+              contentDelta: contentDelta(JSON.stringify(originalContent), JSON.stringify(output.content)) });
+          } else {
+            log.append({ type: 'message', message: output, elapsedMs: output.elapsedMs });
+          }
           const details = output.details;
           if (!output.isError && typeof details?.changedPath === 'string') changed?.(details.changedPath);
           emit({ type: 'tool', id: call.id, name: call.name, state: output.isError ? 'error' : 'finished', arguments: call.arguments,

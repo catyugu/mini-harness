@@ -8,6 +8,7 @@
   },
   "exports": {
     "./config": "./config.ts",
+    "./content-delta": "./content-delta.ts",
     "./input": "./input.ts",
     "./isolation": "./isolation.ts",
     "./paths": "./paths.ts"

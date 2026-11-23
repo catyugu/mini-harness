@@ -5,6 +5,7 @@ import { validateNativeMessage, validateRequestSnapshot } from '@mini-harness/co
 import type { ModelRequestSnapshot } from '@mini-harness/contracts/llm';
 import type { SessionEntry, SessionEvent, SessionLogPort, SessionProjection } from '@mini-harness/contracts/session-log';
 import { projectLog } from './projection.js';
+import { applyContentDelta } from '@mini-harness/platform/content-delta';
 
 export interface SessionHeader { type: 'session'; version: 1; id: string; createdAt: string; importedFrom?: string }
 const entryId = /^[a-f0-9]{8,64}$/i;
@@ -87,6 +88,15 @@ export class SessionLog implements SessionLogPort {
         createHash('sha256').update(JSON.stringify(entry.tools)).digest('hex') !== entry.hash)
       throw new Error('Tool schema digest does not match its content');
     if (entry.type === 'model-request') this.materializeRequest(entry);
+    if (entry.type === 'tool-accepted') {
+      const raw = this.byId.get(entry.executionId);
+      if (raw?.type !== 'tool-execution') throw new Error('Tool acceptance references a missing execution');
+      const content = JSON.parse(applyContentDelta(JSON.stringify(raw.result.content), entry.contentDelta));
+      validateNativeMessage({ ...raw.result, content });
+      if (entry.parentId !== raw.parentId &&
+          !this.branchEntries(entry.parentId).some((item) => item.id === raw.parentId))
+        throw new Error('Tool acceptance does not belong to the execution branch');
+    }
     if (entry.type === 'inbox-enqueued' && this.inboxIds.has(entry.item.id)) throw new Error('Inbox delivery ID already exists');
     if (entry.type === 'message' && entry.inboxId &&
         (entry.message.role !== 'user' || !this.pendingInbox.has(entry.inboxId))) throw new Error('Inbox input is not pending');
@@ -233,6 +243,9 @@ function validateEvent(event: SessionEvent) {
     case 'tool-execution':
       validateNativeMessage(event.result);
       if (event.result.role !== 'toolResult' || event.result.isError) throw new Error('Invalid completed tool execution');
+      return;
+    case 'tool-accepted':
+      if (!entryId.test(event.executionId)) throw new Error('Invalid tool execution reference');
       return;
     case 'model':
       if (typeof event.model?.provider !== 'string' || typeof event.model.id !== 'string') throw new Error('Invalid session model');

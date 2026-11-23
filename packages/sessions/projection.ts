@@ -1,6 +1,7 @@
 import type { NativeMessage } from '@mini-harness/contracts/llm';
 import type { MessageContent, ViewMessage } from '@mini-harness/contracts/message';
 import type { InboxItem, SessionEntry, SessionProjection } from '@mini-harness/contracts/session-log';
+import { applyContentDelta } from '@mini-harness/platform/content-delta';
 
 /** Read projections are pure and never write synthetic history back into the transcript. */
 export function projectLog(entries: SessionEntry[], branch: SessionEntry[]): SessionProjection {
@@ -14,6 +15,18 @@ export function projectLog(entries: SessionEntry[], branch: SessionEntry[]): Ses
     if (entry.type === 'message' && entry.inboxId) inbox.delete(entry.inboxId);
   }
   state.inbox = [...inbox.values()];
+  const raw = new Map(entries.flatMap((entry) => entry.type === 'tool-execution'
+    ? [[entry.id, entry.result] as const] : []));
+  const messageOf = (entry: SessionEntry): NativeMessage | undefined => {
+    if (entry.type === 'message') return entry.message;
+    if (entry.type !== 'tool-accepted') return;
+    const result = raw.get(entry.executionId);
+    if (!result) throw new Error('Missing completed tool execution');
+    const content = entry.contentDelta
+      ? JSON.parse(applyContentDelta(JSON.stringify(result.content), entry.contentDelta)) as typeof result.content
+      : result.content;
+    return { ...result, content };
+  };
   const calls = new Map<string, unknown>();
   const edits = new Map<string, NativeMessage['content'] | null>();
   let compaction: Extract<SessionEntry, { type: 'compaction' }>;
@@ -22,13 +35,13 @@ export function projectLog(entries: SessionEntry[], branch: SessionEntry[]): Ses
     if (entry.type === 'thinking') state.thinkingLevel = entry.level;
     if (entry.type === 'compaction') compaction = entry;
     if (entry.type === 'context-edit') edits.set(entry.targetId, entry.replacement);
-    if (entry.type !== 'message') continue;
-    const message = entry.message;
+    const message = messageOf(entry);
+    if (!message) continue;
     if (message.role === 'assistant') for (const block of message.content)
       if (block.type === 'toolCall') calls.set(block.id, block.arguments);
     const view: ViewMessage = { id: entry.id, parentId: entry.parentId,
       role: message.role, content: message.content as MessageContent, timestamp: message.timestamp };
-    if (message.role === 'user' && entry.presentation) {
+    if (entry.type === 'message' && message.role === 'user' && entry.presentation) {
       view.attachments = entry.presentation.attachments;
       view.content = typeof message.content === 'string' ? entry.presentation.userText :
         [...(entry.presentation.userText ? [{ type: 'text', text: entry.presentation.userText }] : []),
@@ -40,7 +53,7 @@ export function projectLog(entries: SessionEntry[], branch: SessionEntry[]): Ses
       view.toolCallId = message.toolCallId;
       view.isError = message.isError;
       view.arguments = calls.get(message.toolCallId);
-      view.elapsedMs = entry.elapsedMs ?? message.elapsedMs;
+      view.elapsedMs = (entry.type === 'message' ? entry.elapsedMs : undefined) ?? message.elapsedMs;
       if (typeof message.details?.sessionId === 'string') view.sessionId = message.details.sessionId;
       if (typeof message.details?.exitCode === 'number' && Number.isInteger(message.details.exitCode)) view.exitCode = message.details.exitCode;
     }
@@ -55,9 +68,10 @@ export function projectLog(entries: SessionEntry[], branch: SessionEntry[]): Ses
     state.contextEntryIds.push(compaction.id);
   }
   state.contextMessages.push(...context.flatMap<NativeMessage>((entry) => {
-    if (entry.type !== 'message' || edits.get(entry.id) === null) return [];
+    const message = messageOf(entry);
+    if (!message || edits.get(entry.id) === null) return [];
     state.contextEntryIds.push(entry.id);
-    return [{ ...entry.message, ...(edits.has(entry.id) ? { content: edits.get(entry.id) } : {}) } as NativeMessage];
+    return [{ ...message, ...(edits.has(entry.id) ? { content: edits.get(entry.id) } : {}) } as NativeMessage];
   }));
   return state;
 }
