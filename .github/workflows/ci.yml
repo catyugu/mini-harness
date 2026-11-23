@@ -39,7 +39,11 @@ jobs:
       - run: pnpm run pack:check
 
   browser:
-    runs-on: ubuntu-24.04
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -50,13 +54,13 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - uses: actions/cache@v4
         with:
-          path: ~/.cache/ms-playwright
-          key: playwright-chromium-1.56.0-ubuntu-24.04
+          path: ${{ runner.os == 'Windows' && '~/AppData/Local/ms-playwright' || '~/.cache/ms-playwright' }}
+          key: playwright-chromium-1.56.0-${{ runner.os }}
       - run: pnpm exec playwright install --with-deps chromium --only-shell
       - run: pnpm run test:browser
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: browser-failure-details
+          name: browser-failure-details-${{ matrix.os }}
           path: test-results/
           retention-days: 7
