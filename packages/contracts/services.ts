@@ -120,7 +120,8 @@ declare module 'cordis' {
     harnessApprovals: {
       readonly events: EventTarget;
       has(id: string): boolean;
-      request(sessionId: string, runId: string | undefined, command: string, signal?: AbortSignal, context?: string): Promise<void>;
+      request(sessionId: string, runId: string | undefined, command: string, signal?: AbortSignal, context?: string): Promise<boolean>;
+      approveSession(id: string): void;
     };
     harnessProcess: import('./execution.js').ProcessExecutionPort;
     harnessSandbox: import('./execution.js').SandboxPort;

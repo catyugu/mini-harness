@@ -29,7 +29,7 @@ export function loadCatalog(paths: Paths, workspaces: WorkspacePort): CatalogSta
 export function validateCatalog(sessions: SessionRecord[], workspaces: WorkspacePort) {
   const records = new Map<string, SessionRecord>();
   for (const record of sessions) {
-    if (record?.permission !== undefined && record.permission !== 'standard' && record.permission !== 'readOnly')
+    if (record?.permission !== undefined && record.permission !== 'standard' && record.permission !== 'readOnly' && record.permission !== 'fullAccess')
       throw new Error('Invalid conversation permission');
     if (!record || !/^[a-f0-9-]{36}$/i.test(record.id) || records.has(record.id) ||
         typeof record.workspaceId !== 'string' || typeof record.title !== 'string' ||

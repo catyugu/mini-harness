@@ -1,7 +1,7 @@
 import type { RunInfo } from './transport.js';
 
 export interface ModelChoice { provider: string; id: string }
-export type ConversationPermission = 'standard' | 'readOnly';
+export type ConversationPermission = 'standard' | 'readOnly' | 'fullAccess';
 
 export interface SessionRecord {
   id: string;

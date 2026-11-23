@@ -8,15 +8,23 @@ export function setup(ctx: Context, { config }: PluginApi) {
   const options = config as { mode: 'isolated' | 'host'; timeoutSeconds: number };
   const tool = (sessionId: string) => defineTool({
     name: 'sandbox_shell', label: 'Shell',
-    description: 'Run a shell command in the workspace after the user approves it in the Web interface.',
+    description: 'Run a shell command in the workspace. Standard requires approval; Full access skips the approval prompt.',
     parameters: Type.Object({ command: Type.String({ minLength: 1, maxLength: 16000 }) }),
     execute: async (_id, args, signal, _update, context) => {
       await scopes.prepare(sessionId, signal);
       const cwd = workspace.workspacePath(sessionId);
       const runId = runs.info(sessionId)?.id;
-      const approval = () => approvals.request(sessionId, runId, args.command, signal, JSON.stringify([cwd, options]));
-      if (context?.waitForApproval) await context.waitForApproval(approval);
-      else await approval();
+      // A pending Standard approval may be released when the user selects Full access.
+      // If the permission is reduced again before resuming, request approval anew.
+      let automaticallyApproved = false;
+      const approval = async () => {
+        automaticallyApproved = await approvals.request(sessionId, runId, args.command, signal, JSON.stringify([cwd, options]));
+      };
+      while (workspace.get(sessionId)?.permission !== 'fullAccess') {
+        if (context?.waitForApproval) await context.waitForApproval(approval);
+        else await approval();
+        if (!automaticallyApproved) break;
+      }
       // Permission changes also apply while a Shell command is awaiting approval.
       if (!scopes.allowsTool(sessionId, 'sandbox_shell')) throw new Error('Shell denied by conversation permissions');
       const execution = scopes.require(sessionId, 'harnessProcess');
