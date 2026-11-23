@@ -27,6 +27,12 @@ for (const entry of readdirSync(WEB_DIR, { recursive: true, withFileTypes: true 
   }
 }
 
+// The browser composition root is a separate private package; expose only its two entry modules.
+for (const module of ['app', 'application']) {
+  const file = join(FEATURE_DIR, 'web-app', module + '.js');
+  if (statSync(file).isFile()) assets.set('packages/web-app/' + module + '.js', 'text/javascript');
+}
+
 // Expose only browser entrypoints. Feature host and manifest JS never become public assets.
 for (const entry of readdirSync(FEATURE_DIR, { withFileTypes: true })) {
   if (!entry.isDirectory() || !/^[a-z][a-z0-9-]{0,63}$/.test(entry.name)) continue;

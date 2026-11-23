@@ -66,7 +66,7 @@ async function checkPackage() {
     assert.ok(info);
     const headers = { Authorization: 'Bearer ' + info.token, 'Content-Type': 'application/json' };
     const get = (path: string) => fetch(info.url + path, { headers });
-    for (const asset of ['/', '/packages/web/app.js', '/packages/web/ui/components/markdown.js', '/packages/session-helper/client.js', '/packages/settings/browser.js', '/packages/sessions/browser/conversation/view.js', '/packages/web/ui/components/primitives.js', '/packages/web/vendor/marked.js', '/packages/web/vendor/purify.js', '/logo.svg', '/manifest.webmanifest', '/style.css', '/icon-192.png', '/icon-512.png', '/favicon.ico']) {
+    for (const asset of ['/', '/packages/web-app/app.js', '/packages/web/ui/components/markdown.js', '/packages/session-helper/client.js', '/packages/settings/browser.js', '/packages/sessions/browser/conversation/view.js', '/packages/web/ui/components/primitives.js', '/packages/web/vendor/marked.js', '/packages/web/vendor/purify.js', '/logo.svg', '/manifest.webmanifest', '/style.css', '/icon-192.png', '/icon-512.png', '/favicon.ico']) {
       const response = await get(asset);
       assert.equal(response.status, 200, asset);
       await response.arrayBuffer();

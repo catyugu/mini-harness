@@ -84,7 +84,7 @@ test('browser values never load host-only modules', () => {
   }
 });
 test('each internal Cordis provider declares every required scoped service read', () => {
-  const indexPath = join(packages, 'index.ts');
+  const indexPath = join(packages, 'host', 'composition.ts');
   const indexSource = ts.createSourceFile(indexPath, readFileSync(indexPath, 'utf8'), ts.ScriptTarget.Latest, true);
   const imports = new Map<string, string>();
   for (const statement of indexSource.statements) {

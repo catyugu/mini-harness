@@ -1,6 +1,6 @@
 import type { ToolDefinition, AgentSession } from '@earendil-works/pi-coding-agent';
 import type { Context } from 'cordis';
-import type { Paths, Settings } from '../platform/config.js';
+import type { Paths, Settings } from './config.js';
 import type { RouteHandler, RoutePort } from './routes.js';
 import type { Conversation } from './conversation.js';
 import type { RunInfo } from './transport.js';

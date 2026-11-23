@@ -12,7 +12,7 @@ mini-harness is **one npm package**, not an internal monorepo. Cordis owns servi
 | `packages/host/application.ts` | Small composition root and public runtime facade. It injects service definitions but has no business algorithms. |
 | `packages/<capability>/` | The actual business rules, Cordis providers, registered routes and optional browser entry. Each feature owns its lifecycle. |
 | `packages/web/kernel/` | Generic outlet, command, tab, message-action and contribution registration with disposal. No concrete UI components. |
-| `packages/web/application.ts` | Browser composition root. `packages/web/ui/` owns reusable UI primitives and core browser plugins. |
+| `packages/web-app/application.ts` | Browser composition root. `packages/web/ui/` owns reusable UI primitives and core browser plugins. |
 | `packages/host/server.ts` | Local HTTP server: static assets, authorization, origin checking, process controls and registered route dispatch only. |
 
 Essential services mount before optional user-facing plugins through `packages/index.ts`. They are Cordis capabilities even though they have no on/off switches. Optional Subagents owns its semaphore and delegation provider. Runs delegates through the optional service when present, and runs directly when it is absent. No inactive subagent implementation is kept by the application.

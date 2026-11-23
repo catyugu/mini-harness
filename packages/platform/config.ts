@@ -1,10 +1,5 @@
-export interface Settings {
-  port: number;
-  model: {provider: string; id: string};
-  plugins: Record<string, boolean>;
-  pluginConfig: Record<string, Record<string, unknown>>;
-  appearance: 'system'|'light'|'dark';
-}
+import type { Settings, SettingsPatch, Paths } from '../contracts/config.js';
+export type { Settings, SettingsPatch, Paths } from '../contracts/config.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -21,7 +16,7 @@ export const DEFAULTS = Object.freeze({
   appearance: 'system'
 });
 
-export function getPaths(cwd: string = process.cwd(), env: NodeJS.ProcessEnv = process.env) {
+export function getPaths(cwd: string = process.cwd(), env: NodeJS.ProcessEnv = process.env): Paths {
   const project = resolve(cwd);
   const home = resolve(env.MINI_HARNESS_HOME || join(homedir(), '.mini-harness'));
   const key = createHash('sha256').update(process.platform === 'win32' ? project.toLowerCase() : project).digest('hex').slice(0, 16);
@@ -91,7 +86,6 @@ export function readSettings(paths: ReturnType<typeof getPaths>): Settings {
   return settings as Settings;
 }
 
-export type SettingsPatch = { [K in keyof Settings]?: Settings[K] extends object ? Partial<Settings[K]> : Settings[K] };
 
 export function mergeSettings(current: Settings, patch: SettingsPatch): Settings {
   if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw new Error('Invalid settings patch');

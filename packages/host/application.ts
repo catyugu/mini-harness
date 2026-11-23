@@ -1,5 +1,5 @@
 import { Context } from 'cordis';
-import { system, builtins } from '../index.js';
+import { system, builtins } from './composition.js';
 import { SettingsManager } from '../settings/manager.js';
 import { PluginHost } from '../plugins/manager.js';
 import { RouteRegistry } from '../transport/http.js';
