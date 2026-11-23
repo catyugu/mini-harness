@@ -1,3 +1,4 @@
+import { expectPresent } from '../support/required.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile as exec } from 'node:child_process';
@@ -33,7 +34,7 @@ test('npm registry installation resolves dependencies, updates atomically and se
   const tarballs = new Map<string, Buffer>();
   let origin: string;
   const registry = createServer((req, res) => {
-    const path = decodeURIComponent(req.url);
+    const path = decodeURIComponent(req.url ?? '/');
     const versions = packages.get(path.slice(1));
     const tarball = tarballs.get(path);
     if (tarball) return res.end(tarball);
@@ -41,7 +42,7 @@ test('npm registry installation resolves dependencies, updates atomically and se
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Cache-Control', 'no-store');
     return res.end(JSON.stringify({
-      name: path.slice(1), 'dist-tags': { latest: versions.at(-1).version },
+      name: path.slice(1), 'dist-tags': { latest: expectPresent(versions.at(-1), 'published package version').version },
       versions: Object.fromEntries(versions.map(({ version, manifest, bytes }) => [version, {
         ...manifest,
         dist: { tarball: origin + path + '/-/' + version + '.tgz',
@@ -117,7 +118,7 @@ test('npm registry installation resolves dependencies, updates atomically and se
   const request = (path: string, method = 'GET', body?: object) => fetch('http://127.0.0.1:' + port + '/api' + path, {
     method, headers, body: JSON.stringify(body)
   });
-  const metadata = (await (await request('/plugins')).json()).find((plugin) => plugin.id === id);
+  const metadata = (await (await request('/plugins')).json()).find((plugin: { id: string }) => plugin.id === id);
   assert.deepEqual(metadata.package, { name, version: '1.1.0' }, metadata.error);
   assert.equal(metadata.state, 'discovered');
   const response = await request('/settings', 'PATCH', { plugins: { [id]: true } });
@@ -129,7 +130,7 @@ test('npm registry installation resolves dependencies, updates atomically and se
   const link = join(active, 'node_modules', '@fixture', 'harness-plugin');
   rmSync(link, { recursive: true });
   symlinkSync(paths.cwd, link, 'junction');
-  const invalid = (await (await request('/plugins')).json()).find((plugin) => plugin.id === id);
+  const invalid = (await (await request('/plugins')).json()).find((plugin: { id: string }) => plugin.id === id);
   assert.equal(invalid.state, 'failed');
   assert.match(invalid.error, /outside its installation directory/);
   assert.equal((await request('/plugins/' + id, 'DELETE')).status, 200);

@@ -21,8 +21,9 @@ export async function installPackagedPlugin(paths: Paths, operation: 'install' |
   const spec = requested ?? previous?.spec;
   const name = typeof spec === 'string' && packageSpecPattern.exec(spec)?.[1];
   if (!name) throw new Error('Expected an npm package name with an optional version or tag');
-  if (previous && packageSpecPattern.exec(previous.spec)[1] !== name)
-    throw new Error('Update must use the installed package name: ' + packageSpecPattern.exec(previous.spec)[1]);
+  const originalName = previous && packageSpecPattern.exec(previous.spec)?.[1];
+  if (previous && (!originalName || originalName !== name))
+    throw new Error('Update must use the installed package name: ' + (originalName ?? previous.spec));
 
   const generation = randomUUID();
   const directory = join(target, generation);

@@ -5,11 +5,12 @@ import { readJson, writeJson } from '@mini-harness/platform/config';
 import { startIsolatedHost } from '../support/browser.js';
 
 test('running messages can queue follow-ups and approve shell commands from the GUI', async ({ page }) => {
-  let release: () => void, entered: () => void;
+  let release: () => void = () => { throw new Error('Not started'); };
+  let entered: () => void = () => { throw new Error('Not started'); };
   const held = new Promise<void>((done) => { release = done; }), waiting = new Promise<void>((done) => { entered = done; });
   const mock = await createMockProvider(async ({ messages }) => {
-    if (messages.at(-1).content === 'Wait') { entered(); await held; return 'First reply'; }
-    if (messages.at(-1).content === 'Shell task') return { tool: 'sandbox_shell', args: { command: 'echo approved' } };
+    if (messages.at(-1)?.content === 'Wait') { entered(); await held; return 'First reply'; }
+    if (messages.at(-1)?.content === 'Shell task') return { tool: 'sandbox_shell', args: { command: 'echo approved' } };
     return 'Finished';
   });
   const { root, paths } = createFixturePaths(mock.url);

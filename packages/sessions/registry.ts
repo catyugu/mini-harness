@@ -60,7 +60,7 @@ export class SessionRegistry implements SessionStore {
   assertAvailable(id?: string, workspaceId = id && this.get(id)?.workspaceId) {
     if (this.closing) throw new Error('Agent service is unavailable during shutdown');
     if (id && this.deleting.has(id)) throw new Error('Conversation is being deleted');
-    if (this.deletingWorkspaces.has(workspaceId)) throw new Error('Workspace is being deleted');
+    if (workspaceId && this.deletingWorkspaces.has(workspaceId)) throw new Error('Workspace is being deleted');
   }
 
   beforeDelete(handler: Participant) {
@@ -78,12 +78,14 @@ export class SessionRegistry implements SessionStore {
   }
 
   create({ parentId = null, title, workspaceId }: Parameters<SessionStore['create']>[0] = {}) {
-    const parent = parentId && this.get(parentId);
+    const parent = parentId ? this.get(parentId) : undefined;
     if (parentId && !parent) throw new Error('Parent conversation not found');
     if (parent && workspaceId !== undefined && workspaceId !== parent.workspaceId)
       throw new Error('Conversation workspace does not match its parent');
-    const workspace = this.workspaces.get(parent?.workspaceId ?? workspaceId ?? this.workspaces.defaultId);
-    this.assertAvailable(parentId, workspace.id);
+    const targetWorkspace = parent?.workspaceId ?? workspaceId ?? this.workspaces.defaultId;
+    if (!targetWorkspace) throw new Error('Create a workspace before starting a conversation');
+    const workspace = this.workspaces.get(targetWorkspace);
+    this.assertAvailable(parentId ?? undefined, workspace.id);
     this.workspaces.resolveRoot(workspace.path, workspace.id);
     const session: SessionRecord = { id: randomUUID(), title: title?.slice(0, 140) || 'New conversation',
       titleSource: title ? 'manual' : 'auto', workspaceId: workspace.id, parentId, createdAt: new Date().toISOString() };
@@ -158,7 +160,7 @@ export class SessionRegistry implements SessionStore {
 
   descendants(ids: string[]) {
     if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string' || !this.get(id))) throw new Error('Unknown conversation');
-    const children = new Map<string, string[]>();
+    const children = new Map<string | null, string[]>();
     for (const { id, parentId } of this.state.sessions) {
       const siblings = children.get(parentId) ?? [];
       siblings.push(id);
@@ -180,6 +182,7 @@ export class SessionRegistry implements SessionStore {
       if ([...this.participants].some(({ busy }) => busy?.(id)))
         throw new Error('Stop active conversations before exporting them');
       const record = this.get(id);
+      if (!record) throw new Error('Conversation disappeared during export');
       this.nativeFile(record);
       const log = this.log(id);
       return { ...record, log: log.serialize() };
@@ -213,6 +216,7 @@ export class SessionRegistry implements SessionStore {
       const chosen = new Set(all);
       const pendingDelete = all.map((id) => {
         const record = this.get(id);
+        if (!record) throw new Error('Conversation disappeared during deletion');
         this.nativeFile(record);
         this.logs.get(id)?.close();
         this.logs.delete(id);

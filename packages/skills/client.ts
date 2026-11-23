@@ -9,7 +9,7 @@ const setup: FrontendSetup = (ctx, api) => {
   button.onclick = () => api.insert('/skill:');
   api.slots.register('conversation.composer', button);
 
-  let workspaceId: string;
+  let workspaceId: string | undefined;
   let request: AbortController;
   let commands: (() => void)[] = [];
   async function update() {
@@ -29,7 +29,7 @@ const setup: FrontendSetup = (ctx, api) => {
       for (const skill of skills) commands.push(api.command({ name: 'skill:' + skill.name, description: skill.description, group: 'Skill' }));
       button.hidden = !skills.length;
     } catch (error) {
-      if (!controller.signal.aborted && !api.signal.aborted) services.report(error);
+      if (!controller.signal.aborted && !api.signal.aborted) services.report(error instanceof Error ? error : new Error(String(error)));
     }
   }
   services.onConversationChange(() => void update(), api.signal);

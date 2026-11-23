@@ -1,3 +1,4 @@
+import { expectPresent } from '../support/required.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -43,7 +44,7 @@ test('an installed Cordis plugin can use services, configure a tool, and release
   await runtime.agent.prepare(item.id);
   const activeNames = () => runtime.plugins.ctx.harnessTools.forSession(item.id).map(({ name }) => name);
   assert.ok(activeNames().includes('example_count'));
-  const tool = runtime.plugins.ctx.harnessTools.forSession(item.id).find(({ name }) => name === 'example_count');
+  const tool = expectPresent(runtime.plugins.ctx.harnessTools.forSession(item.id).find(({ name }) => name === 'example_count'), 'example count tool');
   assert.equal((await tool.execute('test', {}, undefined, undefined, undefined)).content[0].type, 'text');
   assert.match(JSON.stringify(await tool.execute('test', {}, undefined, undefined, undefined)), /Total: 1/);
   await assert.rejects(runtime.updateSettings({ pluginConfig: { example: { prefix: 12 } } }), /Invalid configuration/);
@@ -129,11 +130,11 @@ test('plugin JSON Schema applies defaults and rejects invalid changes before set
   await runtime.start();
   await runtime.updateSettings({ plugins: { schema: true } });
   const item = runtime.registry.create();
-  const tool = runtime.plugins.ctx.harnessTools.forSession(item.id).find(({ name }) => name === 'schema_value');
+  const tool = expectPresent(runtime.plugins.ctx.harnessTools.forSession(item.id).find(({ name }) => name === 'schema_value'), 'schema tool');
   assert.match(JSON.stringify(await tool.execute('test', {}, undefined, undefined, undefined)), /3:true/);
   await assert.rejects(runtime.updateSettings({ pluginConfig: { schema: { count: 0 } } }), /Invalid configuration/);
   assert.deepEqual(await tool.execute('test', {}, undefined, undefined, undefined),
-    await runtime.plugins.ctx.harnessTools.forSession(item.id).find(({ name }) => name === 'schema_value')
+    await expectPresent(runtime.plugins.ctx.harnessTools.forSession(item.id).find(({ name }) => name === 'schema_value'), 'registered schema tool')
       .execute('test', {}, undefined, undefined, undefined));
 });
 
@@ -165,7 +166,7 @@ test('dependent plugins restart in order and partial setup or persistence failur
   assert.equal(runtime.plugins.ctx.harnessTools.forSession(item.id).filter(({ name }) => name === 'base_tool').length, 1);
   const next = mergeSettings(runtime.settings, { pluginConfig: { base: { value: 'replacement' } } });
   await assert.rejects(runtime.plugins.configure(next, () => { throw new Error('Persistence failed'); }), /Persistence failed/);
-  const restored = runtime.plugins.ctx.harnessTools.forSession(item.id).find(({ name }) => name === 'base_tool');
+  const restored = expectPresent(runtime.plugins.ctx.harnessTools.forSession(item.id).find(({ name }) => name === 'base_tool'), 'restored tool');
   assert.match(JSON.stringify(await restored.execute('test', {}, undefined, undefined, undefined)), /original/);
   assert.ok(runtime.plugins.ctx.harnessTools.forSession(item.id).some(({ name }) => name === 'dependent_tool'));
 });
@@ -228,12 +229,12 @@ test('an optional plugin that fails at startup reports its state without blockin
   const restarted = new MiniHarnessRuntime(paths);
   t.after(async () => { await restarted.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
   await restarted.start();
-  const status = restarted.plugins.metadata().find(({ id }) => id === 'fails-to-start');
+  const status = expectPresent(restarted.plugins.metadata().find(({ id }) => id === 'fails-to-start'), 'failed plugin');
   assert.equal(status.state, 'failed');
-  assert.match(status.error, /Startup failed/);
+  assert.match(expectPresent(status.error, 'startup error'), /Startup failed/);
   assert.ok(!restarted.plugins.browser().some(({ id }) => id === status.id));
   await restarted.updateSettings({ appearance: 'dark' });
   assert.equal(restarted.settings.appearance, 'dark');
   await restarted.updateSettings({ plugins: { 'fails-to-start': false } });
-  assert.equal(restarted.plugins.metadata().find(({ id }) => id === status.id).state, 'discovered');
+  assert.equal(expectPresent(restarted.plugins.metadata().find(({ id }) => id === status.id), 'disabled plugin metadata').state, 'discovered');
 });

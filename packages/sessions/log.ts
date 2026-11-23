@@ -28,6 +28,7 @@ export class SessionLog implements SessionLogPort {
     private readonly changed?: () => void) {
     // Windows append handles lack FILE_WRITE_DATA and cannot truncate a torn tail.
     // A single validated writer uses explicit positions at its verified end instead.
+    this.header = { type: 'session', version: 1, id: sessionId, createdAt };
     this.handle = openSync(file, constants.O_RDWR | constants.O_CREAT | (constants.O_NOFOLLOW ?? 0), 0o600);
     try {
       this.checkFile();
@@ -35,7 +36,6 @@ export class SessionLog implements SessionLogPort {
       this.length = bytes.length;
       this.checkFile(this.length);
       if (!bytes.length) {
-        this.header = { type: 'session', version: 1, id: sessionId, createdAt };
         this.write(this.header);
         syncDirectory(dirname(file));
       } else this.load(bytes);
@@ -56,7 +56,9 @@ export class SessionLog implements SessionLogPort {
     if (!end) throw new Error('Invalid session log header');
     const lines = bytes.subarray(0, end).toString('utf8').split('\n');
     lines.pop();
-    const header = JSON.parse(lines.shift());
+    const first = lines.shift();
+    if (!first) throw new Error('Missing session log header');
+    const header = JSON.parse(first);
     if (header?.type !== 'session' || header.version !== 1 || header.id !== this.sessionId ||
         typeof header.createdAt !== 'string') throw new Error('Invalid session log header');
     this.header = header;
@@ -171,7 +173,7 @@ export class SessionLog implements SessionLogPort {
 
   select(leafId: string | null, expectedLeafId?: string | null) {
     if (leafId !== null && !this.byId.has(leafId)) throw new Error('Unknown session branch');
-    if (leafId !== null && operational(this.byId.get(leafId))) throw new Error('Operational records are not conversation branches');
+    if (leafId !== null && operational(this.byId.get(leafId)!)) throw new Error('Operational records are not conversation branches');
     return this.persist({ type: 'branch' }, leafId, expectedLeafId);
   }
 

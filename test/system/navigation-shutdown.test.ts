@@ -18,6 +18,7 @@ test('projection stream is disposed before HTTP shutdown completes', { timeout: 
     headers: { Authorization: 'Bearer ' + app.token }
   });
   assert.equal(response.status, 200);
+  if (!response.body) throw new Error('No streaming response body');
   const reader = response.body.getReader();
   const first = await reader.read();
   assert.equal(first.done, false, 'the initial snapshot arrives on an open stream');

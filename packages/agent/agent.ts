@@ -90,7 +90,7 @@ export class NativeAgent implements AgentPort {
   }
 
   messages(id: string) {
-    return this.sessions.log(id).projection().messages.map((message) => message.role === 'toolResult'
+    return this.sessions.log(id).projection().messages.map((message) => message.role === 'toolResult' && message.toolName
       ? { ...message, content: this.services.transform({ sessionId: id, tool: message.toolName, content: message.content }) }
       : message);
   }
@@ -140,7 +140,7 @@ export class NativeAgent implements AgentPort {
     }
     if (!pending.size) return;
     const branch = new Set(log.branch().map(({ id }) => id));
-    const executed = new Set(log.entries().flatMap((entry) => entry.type === 'tool-execution' && branch.has(entry.parentId)
+    const executed = new Set(log.entries().flatMap((entry) => entry.type === 'tool-execution' && entry.parentId !== null && branch.has(entry.parentId)
       ? [entry.result.toolCallId] : []));
     for (const call of pending.values()) log.append({ type: 'message', message: failedTool(call, executed.has(call.id)
       ? 'The tool completed without a recorded model-visible result. The tool was not retried.'
@@ -151,14 +151,15 @@ export class NativeAgent implements AgentPort {
     options: Parameters<AgentPort['prompt']>[3]): Promise<string> {
     const { id } = record, { signal, choice, images = [], input, thinkingLevel, revision, changed } = options;
     const leave = this.agents.enter(id);
-    let log: SessionLogPort;
+    let runLog: SessionLogPort | undefined;
     try {
       await this.prepare(id, signal);
-      log = this.sessions.log(id);
-      let revisionParent: string | null;
+      const log = runLog = this.sessions.log(id);
+      let revisionParent: string | null = null;
       if (revision) {
         await this.revisionTarget(id, revision.sourceEntryId, revision.expectedLeafId);
         const source = log.branch().find((entry) => entry.id === revision.sourceEntryId);
+        if (!source) throw new Error('Revision source not found');
         revisionParent = source.parentId;
       }
       const previous = revision ? log.projection(revisionParent) : log.projection();
@@ -313,7 +314,7 @@ export class NativeAgent implements AgentPort {
       }
       throw new Error('Agent reached the configured turn limit (' + maxTurns + ')');
     } finally {
-      try { if (log && signal.aborted) new Inbox(log).cancel('Run cancelled'); }
+      try { if (runLog && signal.aborted) new Inbox(runLog).cancel('Run cancelled'); }
       finally { leave(); }
     }
   }
@@ -338,7 +339,7 @@ export class NativeAgent implements AgentPort {
     this.recordedSchemas.set(log, schemaHashes);
     const toolSchema = snapshot.tools === undefined ? undefined :
       createHash('sha256').update(JSON.stringify(snapshot.tools)).digest('hex');
-    if (toolSchema && !schemaHashes.has(toolSchema)) {
+    if (toolSchema && snapshot.tools && !schemaHashes.has(toolSchema)) {
       log.append({ type: 'tool-schema', hash: toolSchema, tools: snapshot.tools });
       schemaHashes.add(toolSchema);
     }
@@ -368,7 +369,9 @@ export class NativeAgent implements AgentPort {
       throw new Error('Nothing to compact; at least three user turns are required');
     }
     // Keep two complete turns, so no retained tool result loses its matching assistant call.
-    const keepFromId = users.at(-2).id;
+    const boundary = users.at(-2);
+    if (!boundary) throw new Error('Not enough user turns to compact');
+    const keepFromId = boundary.id;
     const messages = projection.contextMessages;
     const prefix = messages.slice(0, projection.contextEntryIds.indexOf(keepFromId));
     if (!prefix.length) { if (automatic) return; throw new Error('Nothing to compact'); }

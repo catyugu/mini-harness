@@ -21,7 +21,11 @@ export class Semaphore {
   }
 
   private drain() {
-    while (this.active < this.limit && this.queue.length) this.queue.shift().start();
+    while (this.active < this.limit && this.queue.length) {
+      const next = this.queue.shift();
+      if (!next) break;
+      next.start();
+    }
   }
 
   acquire(signal?: AbortSignal): Promise<() => void> {
@@ -31,7 +35,7 @@ export class Semaphore {
         cancel: () => {
           const index = this.queue.indexOf(waiter);
           if (index >= 0) this.queue.splice(index, 1);
-          reject(signal.reason);
+          reject(signal?.reason ?? new Error('Acquisition cancelled'));
         },
         start: () => {
           signal?.removeEventListener('abort', waiter.cancel);
@@ -52,7 +56,7 @@ export class Semaphore {
   }
 
   async run<T>(work: (lease: { pause<R>(task: () => Promise<R>): Promise<R> }) => Promise<T>, signal?: AbortSignal) {
-    let release = await this.acquire(signal);
+    let release: (() => void) | undefined = await this.acquire(signal);
     let waiting = 0;
     try {
       return await work({

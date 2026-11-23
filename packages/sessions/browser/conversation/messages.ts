@@ -112,9 +112,12 @@ function toolCard(data: { name: string; state: string; content?: MessageContent;
   summary.append(icon('chevron'), name);
   if (data.elapsedMs !== undefined && data.id) {
     toolDurations.set(data.id, data.elapsedMs);
-    if (toolDurations.size > 256) toolDurations.delete(toolDurations.keys().next().value);
+    if (toolDurations.size > 256) {
+      const oldest = toolDurations.keys().next().value;
+      if (oldest !== undefined) toolDurations.delete(oldest);
+    }
   }
-  const elapsed = data.elapsedMs ?? toolDurations.get(data.id);
+  const elapsed = data.elapsedMs ?? (data.id ? toolDurations.get(data.id) : undefined);
   if (elapsed !== undefined && Number.isFinite(elapsed)) {
     const duration = document.createElement('span');
     duration.className = 'tool-duration';
@@ -174,7 +177,7 @@ function appendHistory(message: ViewMessage) {
     const image = document.createElement('img'); image.className = 'message-image'; image.alt = 'Attached image';
     image.src = 'data:' + block.mimeType + ';base64,' + block.data; messages.append(image);
   }
-  if (message.attachments?.length) {
+  if (message.attachments?.length && bubble) {
     const list = document.createElement('ul');
     list.className = 'message-attachments';
     list.setAttribute('aria-label', 'Attachments');
@@ -190,7 +193,8 @@ function appendHistory(message: ViewMessage) {
 
 function refreshTools() {
   for (const card of messages.querySelectorAll<HTMLDetailsElement>('details.tool-card')) {
-    toolCard(toolItems.get(card), card);
+    const tool = toolItems.get(card);
+    if (tool) toolCard(tool, card);
   }
 }
 
@@ -207,8 +211,8 @@ function history(entries: ViewMessage[], error?: string) {
 
 function stream(initial: ConversationView) {
   const cards = new Map<string, HTMLDetailsElement>();
-  let answer: HTMLElement;
-  let text: string;
+  let answer: HTMLElement | undefined;
+  let text = '';
   function live({ partial, tools }: Pick<ConversationView, 'partial' | 'tools'>) {
     text = partial ?? '';
     answer = text ? addMessage('assistant', text) : undefined;

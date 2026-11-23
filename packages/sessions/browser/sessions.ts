@@ -71,7 +71,7 @@ export function sessionTree(sessions: Conversation[], options: {
         marker.className = 'run-state';
         marker.dataset.state = status;
         marker.textContent = item.waitingApproval ? 'Approval' : status;
-        marker.title = item.waitingApproval ? 'Waiting for approval' : item.run.error ?? status;
+        marker.title = item.waitingApproval ? 'Waiting for approval' : item.run?.error ?? status;
         row.append(marker);
       }
       entry.append(row);

@@ -209,7 +209,7 @@ export class FrontendHost {
     this.disposed = true;
     for (const id of [...this.plugins.keys()].reverse()) {
       try { await this.disable(id); }
-      catch (error) { this.report(error); }
+      catch (error) { this.report(error instanceof Error ? error : new Error(String(error))); }
     }
   }
 }

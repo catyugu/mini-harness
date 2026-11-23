@@ -34,7 +34,7 @@ test('custom provider onboarding and registering a workspace work entirely in th
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Configured from GUI');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.locator('.message.assistant')).toHaveText('Mock response');
-    expect(mock.requests.at(-1).model).toBe('new-model');
+    expect(mock.requests.at(-1)?.model).toBe('new-model');
     await page.getByRole('button', { name: 'Add workspace', exact: true }).click();
     const picker = page.getByRole('dialog', { name: 'Add workspace' });
     await expect(picker.getByLabel('Absolute directory path')).toHaveValue(paths.cwd);

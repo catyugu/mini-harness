@@ -9,20 +9,27 @@ export function setup(ctx: Context) {
     const notice: ProjectionNotice = { type: 'change', domain, revision: ++revisions[domain], sessionId };
     for (const send of listeners) send(notice);
   };
-  const listen = (source: EventTarget, callback: (event: CustomEvent) => void) =>
+  const listen = (source: EventTarget, callback: (event: Event) => void) =>
     ctx.effect(() => {
       source.addEventListener('change', callback);
       return () => source.removeEventListener('change', callback);
     });
 
-  listen(ctx.harnessRegistry.events, ({ detail }) => mark('sessions', detail.id));
-  listen(ctx.harnessRuns.events, ({ detail }) => mark('sessions', detail.id));
-  listen(ctx.harnessApprovals.events, ({ detail }) => {
-    mark('approvals', detail.id);
-    mark('sessions', detail.id);
+  listen(ctx.harnessRegistry.events, (event) => {
+    if (event instanceof CustomEvent) mark('sessions', event.detail.id);
+  });
+  listen(ctx.harnessRuns.events, (event) => {
+    if (event instanceof CustomEvent) mark('sessions', event.detail.id);
+  });
+  listen(ctx.harnessApprovals.events, (event) => {
+    if (!(event instanceof CustomEvent)) return;
+    mark('approvals', event.detail.id);
+    mark('sessions', event.detail.id);
   });
   listen(ctx.harnessWorkspaces.events, () => mark('workspaces'));
-  listen(ctx.harnessChanges, ({ detail }) => mark(detail.domain, detail.sessionId));
+  listen(ctx.harnessChanges, (event) => {
+    if (event instanceof CustomEvent) mark(event.detail.domain, event.detail.sessionId);
+  });
 
   ctx.effect(() => ctx.harnessRoutes.register('GET', '/api/bootstrap', () => ({
     ui: ctx.harnessPluginCatalog.browser()

@@ -7,7 +7,7 @@ test('switch transitions respect reduced motion and roll back a failed setting o
   const mock = await createMockProvider(), { root, paths } = createFixturePaths(mock.url);
   const service = await startIsolatedHost(paths);
   try {
-    let requests = 0, release: () => void;
+    let requests = 0, release: () => void = () => { throw new Error('Not started'); };
     const held = new Promise<void>((done) => { release = done; });
     await page.route('**/api/settings', async (route) => {
       if (route.request().method() !== 'PATCH') return route.continue();

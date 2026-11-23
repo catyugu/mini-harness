@@ -18,17 +18,18 @@ export function createBrowserGraphLoader(host: FrontendHost) {
       if (signatures.has(id)) return;
       if (visiting.has(id) || !enabled.has(id)) throw new Error('Invalid browser plugin dependency: ' + id);
       visiting.add(id);
-      const { requires } = enabled.get(id)!;
+      const plugin = enabled.get(id);
+      if (!plugin) throw new Error('Missing browser plugin entry: ' + id);
+      const { requires, browser, web, config, inject } = plugin;
       for (const parent of requires ?? []) visit(parent, visiting);
-      const { browser, web, config } = enabled.get(id);
-      const key = JSON.stringify([browser, web, config, requires, enabled.get(id).inject]);
+      const key = JSON.stringify([browser, web, config, requires, inject]);
       visiting.delete(id);
       signatures.set(id, key);
       ordered.push(id);
     };
     for (const id of enabled.keys()) visit(id);
     const affected = new Set(ordered.filter((id) => mounted.get(id) !== signatures.get(id)));
-    for (const id of ordered) if (enabled.get(id).requires?.some((dependency) => affected.has(dependency))) affected.add(id);
+    for (const id of ordered) if (enabled.get(id)?.requires?.some((dependency) => affected.has(dependency))) affected.add(id);
     const failed = new Map<string, unknown>();
     for (const id of [...mounted.keys()].reverse()) {
       if (enabled.has(id) && !affected.has(id)) continue;
@@ -38,7 +39,8 @@ export function createBrowserGraphLoader(host: FrontendHost) {
     }
     for (const id of ordered) {
       const key = signatures.get(id);
-      const plugin = enabled.get(id)!;
+      const plugin = enabled.get(id);
+      if (key === undefined || !plugin) throw new Error('Browser dependency graph has an unresolved entry: ' + id);
       if ((!plugin.browser && !plugin.web) || mounted.has(id)) continue;
       try {
         if (failed.has(id) || plugin.requires?.some((parent) => failed.has(parent)))

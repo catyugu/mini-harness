@@ -37,14 +37,14 @@ test('an extension owns its authenticated routes and native branch records witho
 
   assert.equal((await toggle(true)).status, 200);
   const { body: entries } = await request(route + '?id=' + session.id);
-  assert.deepEqual(entries.map(({ id, data }) => ({ id, data })), [{ id: added.body, data: value }]);
+  assert.deepEqual(entries.map(({ id, data }: { id: string; data: unknown }) => ({ id, data })), [{ id: added.body, data: value }]);
   assert.equal(app.runtime.agent.size, 0);
   assert.equal(app.runtime.agent.hasPending, false);
   const saved = app.runtime.export([session.id])[0].log;
   assert.ok(saved.split('\n').filter(Boolean).map((line) => JSON.parse(line))
     .some((entry) => entry.type === 'custom' && entry.namespace === 'records' && entry.data.note === value.note));
   const fetched = (await request('/sessions/' + session.id)).body;
-  assert.equal(fetched.messages.some((message) => JSON.stringify(message).includes(value.note)), false);
+  assert.equal(fetched.messages.some((message: { content: unknown }) => JSON.stringify(message).includes(value.note)), false);
   const log = app.runtime.registry.log(session.id);
   log.select(beforePluginRecords, log.projection().leafId);
   assert.deepEqual((await request(notes)).body, []);

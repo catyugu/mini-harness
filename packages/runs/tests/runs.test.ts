@@ -34,9 +34,12 @@ test('HTTP disconnect keeps the native run alive and reconnect replays from a cu
   });
   assert.equal(response.status, 200);
   await entered.promise;
+  assert.ok(response.body);
   const reader = response.body.getReader();
   const first = new TextDecoder().decode((await reader.read()).value).trim().split('\n').map((line) => JSON.parse(line));
-  const cursor = first.at(-1).sequence;
+  const firstEvent = first.at(-1);
+  assert.ok(firstEvent);
+  const cursor = firstEvent.sequence;
   controller.abort();
   await reader.cancel().catch(() => {});
   assert.equal(app.runtime.runs.active(item.id), true);
@@ -49,9 +52,13 @@ test('HTTP disconnect keeps the native run alive and reconnect replays from a cu
   const events = (await (await replay).text()).trim().split('\n').map((line) => JSON.parse(line));
   assert.ok(events.every((event) => event.sequence > cursor));
   assert.ok(events.some((event) => event.type === 'complete' || event.type === 'snapshot'));
-  assert.equal(app.runtime.runs.info(item.id).state, 'completed');
+  const finishedRun = app.runtime.runs.info(item.id);
+  assert.ok(finishedRun);
+  assert.equal(finishedRun.state, 'completed');
   const durable = readFileSync(app.runtime.registry.nativeFile(item), 'utf8').trim().split('\n').map((line) => JSON.parse(line));
-  assert.equal(durable.filter((entry) => entry.type === 'run').at(-1).run.state, 'completed');
+  const persistedRun = durable.filter((entry) => entry.type === 'run').at(-1);
+  assert.ok(persistedRun);
+  assert.equal(persistedRun.run.state, 'completed');
 });
 
 test('independent roots run concurrently and deleting a running tree cancels all descendants', { timeout: 15000 }, async (t) => {
@@ -78,6 +85,7 @@ test('independent roots run concurrently and deleting a running tree cancels all
   assert.equal(app.runtime.runs.active(other.id), true);
   held.release();
   assert.equal(await second, 'Done');
+  assert.ok(app.runtime.delegation);
   assert.equal(app.runtime.delegation.activeChildren, 0);
 });
 
@@ -91,7 +99,9 @@ test('a crash leaves indexed runs interrupted while retaining the conversation t
   registry.dispose();
   const restored = new SessionRegistry(paths, new WorkspaceCatalog(paths));
   t.after(() => restored.dispose());
-  assert.equal(restored.log(child.id).projection().run.state, 'interrupted');
+  const interrupted = restored.log(child.id).projection().run;
+  assert.ok(interrupted);
+  assert.equal(interrupted.state, 'interrupted');
   assert.deepEqual(restored.descendants([parent.id]), [parent.id, child.id]);
   assert.equal(existsSync(paths.registry), true);
 });
@@ -102,8 +112,10 @@ test('child queues honor live limits, explicit cancellation, and depth restricti
   let requests = 0;
   const mock = await createMockProvider(async () => {
     const index = requests++;
-    entered[index].release();
-    await held[index].promise;
+    const ready = entered[index], gate = held[index];
+    assert.ok(ready && gate, 'Mock received more requests than expected');
+    ready.release();
+    await gate.promise;
     return 'Done';
   });
   const { root, paths } = createFixturePaths(mock.url);
@@ -112,28 +124,34 @@ test('child queues honor live limits, explicit cancellation, and depth restricti
   await app.runtime.updateSettings({ pluginConfig: { subagents: { maxParallel: 1 } } });
   const parent = app.runtime.registry.create();
   const choice = { provider: 'local-mock', id: 'mock-model' };
-  const first = app.runtime.delegation.run(parent.id, 'First child', choice);
+  const delegation = app.runtime.delegation;
+  assert.ok(delegation);
+  const first = delegation.run(parent.id, 'First child', choice);
+  assert.ok(entered[0] && entered[1]);
   await entered[0].promise;
-  const second = app.runtime.delegation.run(parent.id, 'Second child', choice);
-  const third = app.runtime.delegation.run(parent.id, 'Cancelled queued child', choice);
+  const second = delegation.run(parent.id, 'Second child', choice);
+  const third = delegation.run(parent.id, 'Cancelled queued child', choice);
   const aborted = assert.rejects(third, /cancelled/);
   const records = app.runtime.registry.list();
   const queued = records.find(({ title }) => title === 'Cancelled queued child');
-  assert.equal(app.runtime.runs.info(queued.id).state, 'queued');
+  assert.ok(queued);
+  assert.equal(app.runtime.runs.info(queued.id)?.state, 'queued');
   app.runtime.runs.cancel(queued.id);
   await aborted;
-  assert.equal(app.runtime.runs.info(queued.id).state, 'cancelled');
+  assert.equal(app.runtime.runs.info(queued.id)?.state, 'cancelled');
   assert.equal(requests, 1);
   await app.runtime.updateSettings({ pluginConfig: { subagents: { maxParallel: 2 } } });
   await entered[1].promise;
-  assert.equal(app.runtime.delegation.activeChildren, 2);
+  assert.equal(delegation.activeChildren, 2);
   await app.runtime.updateSettings({ pluginConfig: { subagents: { maxParallel: 1 } } });
   assert.equal(app.runtime.runs.size, 2, 'Lowering the limit preserves existing executions');
   const child = app.runtime.registry.list().find(({ title }) => title === 'First child');
-  await assert.rejects(app.runtime.delegation.run(child.id, 'Too deep', choice), /depth limit/);
+  assert.ok(child);
+  await assert.rejects(delegation.run(child.id, 'Too deep', choice), /depth limit/);
+  assert.ok(held[0] && held[1]);
   held[0].release(); held[1].release();
   await Promise.all([first, second]);
-  assert.equal(app.runtime.delegation.activeChildren, 0);
+  assert.equal(delegation.activeChildren, 0);
   assert.equal(requests, 2, 'Cancelled queued children never reach the provider');
 });
 
@@ -146,11 +164,15 @@ test('late observers receive a saved snapshot and stale cursors cannot attach to
   await app.runtime.runs.send(item.id, 'First');
   const first = app.runtime.runs.info(item.id);
   const events: RunEvent[] = [];
+  assert.ok(first);
   app.runtime.runs.watch(item.id, first.id, 0, (event) => events.push(event));
   assert.equal(events.length, 1);
+  assert.ok(events[0]);
   assert.equal(events[0].type, 'snapshot');
   assert.ok(events[0].type === 'snapshot' && events[0].messages.some(({ role }) => role === 'assistant'));
   await app.runtime.runs.send(item.id, 'Second');
   assert.throws(() => app.runtime.runs.watch(item.id, first.id, 0, () => {}), /Run not found/);
-  assert.throws(() => app.runtime.runs.watch(item.id, app.runtime.runs.info(item.id).id, Number.NaN, () => {}), /Invalid event cursor/);
+  const latest = app.runtime.runs.info(item.id);
+  assert.ok(latest);
+  assert.throws(() => app.runtime.runs.watch(item.id, latest.id, Number.NaN, () => {}), /Invalid event cursor/);
 });

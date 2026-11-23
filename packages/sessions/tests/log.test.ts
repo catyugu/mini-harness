@@ -1,3 +1,4 @@
+import { expectPresent } from '../../../test/support/required.js';
 import assert from 'node:assert/strict';
 import { appendFileSync, linkSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -66,7 +67,7 @@ test('a durable message acknowledges inbox delivery exactly once and restart ret
   log.append({ type: 'run', run: { id: 'run', sessionId: 'conversation', state: 'running', startedAt: new Date().toISOString(), sequence: 4 } });
   log.close();
   log = open(); log.recover();
-  assert.equal(log.projection().run.state, 'interrupted');
+  assert.equal(log.projection().run?.state, 'interrupted');
   assert.deepEqual(log.projection().inbox.map(({ id }) => id), ['pending']);
   const count = log.entries().length; log.recover();
   assert.equal(log.entries().length, count);
@@ -149,7 +150,7 @@ test('attachments retain full model input while display keeps the submitted text
     presentation: { userText: 'read this', attachments: [{ name: 'secret.txt', mimeType: 'text/plain' }] } });
   const state = log.projection();
   assert.equal(state.messages[0].content, 'read this');
-  assert.equal(state.messages[0].attachments[0].name, 'secret.txt');
+  assert.equal(expectPresent(state.messages[0]?.attachments?.[0], 'session attachment').name, 'secret.txt');
   assert.match(String(state.contextMessages[0].content), /contents/);
 });
 

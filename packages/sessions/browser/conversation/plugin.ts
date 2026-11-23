@@ -37,12 +37,15 @@ const setup: FrontendSetup = (ctx, api) => {
     button.addEventListener('click', () => { pages.open(); conversation.clear(true); }, { signal });
     return button;
   });
-  state.addEventListener('open', (event: CustomEvent<string>) => {
+  state.addEventListener('open', (event: Event) => {
+    if (!(event instanceof CustomEvent) || typeof event.detail !== 'string') return;
     pages.open(); void conversation.activate(event.detail);
   }, { signal: api.signal });
   state.addEventListener('clear', () => conversation.clear(), { signal: api.signal });
   state.addEventListener('draft', () => conversation.clear(true), { signal: api.signal });
-  state.addEventListener('error', (event: CustomEvent<Error>) => conversation.report(event.detail), { signal: api.signal });
+  state.addEventListener('error', (event: Event) => {
+    if (event instanceof CustomEvent && event.detail instanceof Error) conversation.report(event.detail);
+  }, { signal: api.signal });
   const initial = state.initialConversation(sessions.get(), workspaces.get());
   if (initial) void conversation.activate(initial.id, false);
   else conversation.showConversation();

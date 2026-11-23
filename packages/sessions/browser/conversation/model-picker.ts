@@ -9,7 +9,7 @@ export function createModelPicker(root: HTMLElement, onSelect: (model: ModelChoi
   const search = element<'input'>('modelSearch'), results = element('modelResults'), empty = element('modelEmpty');
   let models: ModelInfo[] = [];
   let providers = new Map<string, string>();
-  let selected: ModelInfo;
+  let selected: ModelInfo | undefined;
   let options: HTMLButtonElement[] = [];
   let cursor = -1;
 

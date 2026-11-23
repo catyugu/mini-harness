@@ -111,7 +111,7 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
     (id) => records.get(id), () => ({ list: () => [], append: async () => '' }));
   t.after(async () => { await host.close(); rmSync(directory, { recursive: true, force: true }); });
   await host.start(settings);
-  const configure = (scopes) => {
+  const configure = (scopes: typeof settings.scopes) => {
     const next = { ...settings, scopes };
     return host.configure(next, () => { settings = next; });
   };

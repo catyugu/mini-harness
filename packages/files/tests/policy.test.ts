@@ -1,3 +1,4 @@
+import { expectPresent } from '../../../test/support/required.js';
 import test from 'node:test';
 import { fileTools } from '../tools.js';
 import assert from 'node:assert/strict';
@@ -21,7 +22,7 @@ test('workspace tools share one policy for reads, searches and writes', async (t
   writeFileSync(join(cwd, '.gitignore'), 'hidden.txt\n');
   writeFileSync(join(cwd, 'hidden.txt'), 'marked text');
   const workspace = new Workspace(cwd, state);
-  const execute = (name: string, value: object) => fileTools(cwd, workspace).find((tool) => tool.name === name)
+  const execute = (name: string, value: object) => expectPresent(fileTools(cwd, workspace).find((tool) => tool.name === name), 'file tool ' + name)
     .execute('test', value as never, undefined, undefined, undefined);
   assert.match(JSON.stringify(await execute('write', { path: 'src/note.txt', content: 'good text' })), /wrote/i);
   await execute('edit', { path: 'src/note.txt', edits: [{ oldText: 'good', newText: 'marked' }] });

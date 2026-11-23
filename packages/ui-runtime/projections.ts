@@ -21,7 +21,7 @@ export class BrowserProjections implements BrowserProjectionPort {
     const updates: Promise<void>[] = [];
     for (const [domain, listeners] of this.subscribers) {
       if (event.type === 'change' && event.domain !== domain) continue;
-      const revision = event.type === 'change' ? event.revision : event.revisions[domain] ?? 0;
+      const revision = event.type === 'change' ? event.revision : Object.hasOwn(event.revisions, domain) ? event.revisions[domain as keyof typeof event.revisions] : 0;
       for (const lease of [...listeners]) updates.push(Promise.resolve().then(() => {
         if (lease.active) return lease.projection.sync(revision, event.type === 'snapshot', event.type === 'change' ? event.sessionId : undefined);
       }));

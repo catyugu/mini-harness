@@ -70,8 +70,8 @@ test('scoped model catalogs govern explicit runs and inherited or model-selected
   assert.ok(inherited); assert.ok(explicit);
   assert.deepEqual(app.runtime.agent.read(inherited.id).model, scopedChoice);
   assert.deepEqual(app.runtime.agent.read(explicit.id).model, { provider: 'scoped-only', id: 'child-model' });
-  assert.equal(app.runtime.runs.info(inherited.id).state, 'completed');
-  assert.equal(app.runtime.runs.info(explicit.id).state, 'completed');
+  assert.equal(app.runtime.runs.info(inherited.id)?.state, 'completed');
+  assert.equal(app.runtime.runs.info(explicit.id)?.state, 'completed');
   assert.ok(app.runtime.agent.messages(parent.id).filter(({ role }) => role === 'toolResult').every(({ isError }) => !isError));
   assert.deepEqual(app.runtime.settings.model, applicationChoice);
   assert.equal(await app.runtime.runs.send(sibling.id, 'Use the application model'), 'Mock response');

@@ -30,9 +30,9 @@ export async function createMockProvider(reply?: (request: { messages: { role: s
         JSON.stringify({ id, object: 'chat.completion.chunk', created: 1,
           model: 'mock-model', choices: [{ index: 0, delta, finish_reason }] });
       res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' });
-      const answer = reply ? await reply({ messages: request.messages.map((message) => ({
+      const answer = reply ? await reply({ messages: request.messages.map((message: { role: string; content: string | { text?: string }[] }) => ({
         ...message,
-        content: Array.isArray(message.content) ? message.content.map((part) => part.text ?? '').join('') : message.content
+        content: Array.isArray(message.content) ? message.content.map((part: { text?: string }) => part.text ?? '').join('') : message.content
       })) }) : 'Mock response';
       if (typeof answer === 'string') {
         res.write('data: ' + item({ role: 'assistant', content: answer.slice(0, 5) }, null) + '\n\n');

@@ -21,7 +21,7 @@ test('live tool policy is reevaluated per turn without replacing session state',
   assert.equal(runtime.agent.messages(parent.id)[0].id, firstMessage);
   assert.ok(!tools(parent.id).includes('delegate'));
   assert.ok(!tools(leaf.id).includes('delegate'));
-  assert.ok(!(mock.requests.at(-1).tools as { function: { name: string } }[]).some(({ function: tool }) => tool.name === 'read'));
+  assert.ok(!(mock.requests.at(-1)?.tools as { function: { name: string } }[]).some(({ function: tool }) => tool.name === 'read'));
   await runtime.updateSettings({ plugins: { skills: false } });
   assert.equal(runtime.plugins.ctx.harnessSkills, undefined);
   assert.ok(!tools(parent.id).includes('load_skill'));

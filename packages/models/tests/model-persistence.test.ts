@@ -1,3 +1,4 @@
+import { expectPresent } from '../../../test/support/required.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { rmSync } from 'node:fs';
@@ -25,15 +26,15 @@ test('recent main model survives navigation, child overrides and a restart throu
   assert.deepEqual(runtime.agent.read(old.id).messages, original.messages);
   assert.deepEqual(runtime.agent.read(old.id).model, original.model);
   await runtime.runs.send(old.id, 'Switch the recent model');
-  assert.equal(mock.requests.at(-1).model, 'second-model');
-  await runtime.delegation.run(old.id, 'Child override', { provider: 'local-mock', id: 'mock-model' });
+  assert.equal(mock.requests.at(-1)?.model, 'second-model');
+  await expectPresent(runtime.delegation, 'delegation service').run(old.id, 'Child override', { provider: 'local-mock', id: 'mock-model' });
   assert.equal(runtime.settings.model.id, 'second-model');
   await runtime.runs.send(other.id, 'Other conversation');
-  assert.equal(mock.requests.at(-1).model, 'second-model');
+  assert.equal(mock.requests.at(-1)?.model, 'second-model');
   await runtime.stop();
   runtime = new MiniHarnessRuntime(paths);
   await runtime.start();
   assert.equal(runtime.settings.model.id, 'second-model');
   await runtime.runs.send(old.id, 'After restart');
-  assert.equal(mock.requests.at(-1).model, 'second-model');
+  assert.equal(mock.requests.at(-1)?.model, 'second-model');
 });

@@ -1,3 +1,4 @@
+import { expectPresent } from '../../../test/support/required.js';
 import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { rmSync } from 'node:fs';
@@ -64,7 +65,7 @@ test('tool execution uses the advertised registration and does not execute a hot
   };
   await agent.prompt(record, 'Change it', () => {}, { signal: new AbortController().signal });
   assert.equal(executions, 0);
-  assert.equal(sessions.log(record.id).projection().messages.find((message) => message.role === 'toolResult').isError, true);
+  assert.equal(sessions.log(record.id).projection().messages.find((message) => message.role === 'toolResult')?.isError, true);
 });
 
 test('malformed tool arguments become durable error results without invoking the tool', async (t) => {
@@ -72,7 +73,7 @@ test('malformed tool arguments become durable error results without invoking the
   const { agent, tools, record, sessions } = fixture(t, { async *stream(request) {
     if (requests++ === 0) yield { type: 'done', message: toolsAnswer(call('invalid-call', 'inspect', { path: 42 })) };
     else {
-      assert.equal(request.messages.at(-1).role, 'toolResult');
+      assert.equal(request.messages.at(-1)?.role, 'toolResult');
       assert.equal((request.messages.at(-1) as { isError: boolean }).isError, true);
       yield { type: 'done', message: answer('Recovered') };
     }
@@ -94,7 +95,7 @@ test('cancellation closes the whole tool batch durably and never executes later 
     async execute(_id, _args, signal) {
       ranFirst++;
       controller.abort(new Error('Stopped by test'));
-      signal.throwIfAborted();
+      signal?.throwIfAborted();
       return { content: [] };
     } }));
   tools.register('second', () => defineTool({ name: 'second', description: 'Second', parameters: Type.Object({}),
@@ -121,7 +122,9 @@ test('interrupted calls receive an error record before the next prompt and are n
 });
 
 test('identical queued text preserves each attachment identity and is delivered exactly once', async (t) => {
-  let entered: () => void, release: () => void, requests = 0;
+  let entered: () => void = () => { throw new Error('Not started'); };
+  let release: () => void = () => { throw new Error('Not started'); };
+  let requests = 0;
   const ready = new Promise<void>((resolve) => { entered = resolve; });
   const hold = new Promise<void>((resolve) => { release = resolve; });
   t.after(() => release());
@@ -137,7 +140,7 @@ test('identical queued text preserves each attachment identity and is delivered 
   release(); await run;
   const users = sessions.log(record.id).projection().messages.filter((message) => message.role === 'user');
   assert.equal(requests, 3); assert.equal(users.length, 3);
-  assert.deepEqual(users.slice(1).map(({ attachments }) => attachments[0].name), ['first.png', 'second.png']);
+  assert.deepEqual(users.slice(1).map(({ attachments }) => expectPresent(attachments?.[0], 'queued attachment').name), ['first.png', 'second.png']);
   assert.deepEqual(agent.read(record.id).queue, { steer: [], followUp: [] });
 });
 
@@ -150,7 +153,7 @@ test('opted-in tools overlap, persist independently and respect serial barriers'
   } });
   const log = () => sessions.log(record.id).projection().contextMessages.filter((message) => message.role === 'toolResult');
   const started: string[] = [];
-  let release: () => void;
+  let release: () => void = () => { throw new Error('Not started'); };
   const waitForDurability = new Promise<void>((resolve) => { release = resolve; });
   tools.register('parallel', () => defineTool({
     name: 'parallel', description: 'Parallel', parameters: Type.Object({ wait: Type.Boolean() }),
@@ -159,7 +162,7 @@ test('opted-in tools overlap, persist independently and respect serial barriers'
       started.push(id);
       if (wait) {
         await Promise.race([waitForDurability, new Promise<never>((_, reject) =>
-          signal.addEventListener('abort', () => reject(signal.reason), { once: true }))]);
+          signal?.addEventListener('abort', () => reject(signal.reason), { once: true }))]);
       }
       return { content: [{ type: 'text', text: id }] };
     }
@@ -214,13 +217,14 @@ test('a fatal pipeline failure stops dispatch and drains active calls', async ()
 });
 
 test('a queued follow-up can preselect the next model and thinking level', async (t) => {
-  let release: () => void, entered: () => void;
+  let release: () => void = () => { throw new Error('Not started'); };
+  let entered: () => void = () => { throw new Error('Not started'); };
   const held = new Promise<void>((resolve) => { release = resolve; });
   const started = new Promise<void>((resolve) => { entered = resolve; });
   t.after(() => release());
   const seen: { model: string; thinking: string }[] = [];
   const { agent, record, sessions } = fixture(t, { async *stream(request) {
-    seen.push({ model: request.model.id, thinking: request.thinkingLevel });
+    seen.push({ model: request.model.id, thinking: request.thinkingLevel ?? 'off' });
     if (seen.length === 1) { entered(); await held; }
     yield { type: 'done', message: answer() };
   } });

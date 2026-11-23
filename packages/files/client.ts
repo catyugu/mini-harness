@@ -23,8 +23,8 @@ async function readDirectory(api: FrontendApi, scope: TabScope, path: string, si
   }));
 }
 
-const base = (path: string) => path.split('/').at(-1);
-const extension = (path: string) => base(path).split('.').at(-1).toLowerCase();
+const base = (path: string) => path.split('/').at(-1) ?? '';
+const extension = (path: string) => (base(path).split('.').at(-1) ?? '').toLowerCase();
 const code = new Set(['ts', 'tsx', 'js', 'jsx', 'mjs', 'py', 'rs', 'go', 'c', 'cpp', 'h', 'hpp', 'java', 'cs', 'css', 'html', 'json', 'yaml', 'yml', 'toml', 'sh', 'sql']);
 const images = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg']);
 const documents = new Set(['md', 'markdown', 'txt', 'rst', 'log']);
@@ -122,7 +122,7 @@ function fileTree(api: FrontendApi, services: FrontendServices, address: TabAddr
       let loaded = false;
       async function expand() {
         if (loadSignal.aborted) return;
-        summary.children[1].replaceWith(icon(details.open ? 'folder-open' : 'folder'));
+        summary.children.item(1)?.replaceWith(icon(details.open ? 'folder-open' : 'folder'));
         if (!details.open) { expanded.delete(entry.path); return; }
         expanded.add(entry.path);
         if (loaded || pending) return;
@@ -130,7 +130,7 @@ function fileTree(api: FrontendApi, services: FrontendServices, address: TabAddr
         try {
           const branch = await tree(entry.path, loadSignal);
           if (!loadSignal.aborted) { details.append(branch); loaded = true; }
-        } catch (error) { if (!loadSignal.aborted) details.append(hint(error.message)); }
+        } catch (error) { if (!loadSignal.aborted) details.append(hint((error instanceof Error ? error.message : String(error)))); }
         finally { pending = false; }
       }
       details.ontoggle = () => void expand();
@@ -152,7 +152,7 @@ function fileTree(api: FrontendApi, services: FrontendServices, address: TabAddr
       for (const change of changes.files) groups.set(change.path, change.status);
       const listing = await tree(path, loadSignal);
       if (!loadSignal.aborted) content.replaceChildren(listing);
-    } catch (error) { if (!loadSignal.aborted) content.replaceChildren(hint(error.message)); }
+    } catch (error) { if (!loadSignal.aborted) content.replaceChildren(hint((error instanceof Error ? error.message : String(error)))); }
     finally { if (!loadSignal.aborted) content.removeAttribute('aria-busy'); }
   }
   refresh.onclick = () => void load();
@@ -189,6 +189,7 @@ function source(content: string, highlight: boolean) {
 
 function fileView(api: FrontendApi, services: FrontendServices, address: TabAddress, signal: AbortSignal, diff: boolean) {
   const { path } = address;
+  if (!path) throw new Error('A file preview requires a file path');
   const root = document.createElement('section');
   const toolbar = document.createElement('div');
   toolbar.className = 'file-toolbar';
@@ -247,12 +248,13 @@ const setup: FrontendSetup = (ctx, api) => {
     title: ({ path }) => path ? base(path) : 'Files',
     default: true,
     create(address, signal) {
-      if (!expanded.has(address)) expanded.set(address, new Set());
-      return fileTree(api, services, address, signal, expanded.get(address));
+      let open = expanded.get(address);
+      if (!open) { open = new Set<string>(); expanded.set(address, open); }
+      return fileTree(api, services, address, signal, open);
     }
   });
-  api.rightTab('preview', { title: ({ path }) => base(path), create: (address, signal) => fileView(api, services, address, signal, false) });
-  api.rightTab('diff', { title: ({ path }) => 'Diff · ' + base(path), create: (address, signal) => fileView(api, services, address, signal, true) });
+  api.rightTab('preview', { title: ({ path }) => path ? base(path) : 'Preview', create: (address, signal) => fileView(api, services, address, signal, false) });
+  api.rightTab('diff', { title: ({ path }) => 'Diff · ' + (path ? base(path) : 'File'), create: (address, signal) => fileView(api, services, address, signal, true) });
   api.completion('@', async ({ query, signal, show, replace }) => {
     const scope = services.workspace();
     if (!scope) return;

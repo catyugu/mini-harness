@@ -1,3 +1,4 @@
+import { expectPresent } from '../../../test/support/required.js';
 import { test, expect } from '@playwright/test';
 import { rmSync } from 'node:fs';
 import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.js';
@@ -5,11 +6,11 @@ import { startIsolatedHost } from '../../../test/support/browser.js';
 
 test('renders Markdown and tool results, and stops a pending reply', async ({ page }) => {
   let markWaiting: () => void;
-  let release: () => void;
+  let release: () => void = () => { throw new Error('Not started'); };
   const waiting = new Promise<void>((done) => { markWaiting = done; });
   const delayed = new Promise<void>((done) => { release = done; });
   const mock = await createMockProvider(async ({ messages }) => {
-    const last = messages.at(-1);
+    const last = expectPresent(messages.at(-1), 'model message');
     if (last.content === 'Stop this response') {
       markWaiting();
       await delayed;

@@ -26,6 +26,7 @@ export function renderMarkdown(target: HTMLElement, text: string, interactive = 
   if (interactive) {
     for (const code of fragment.querySelectorAll('pre > code')) {
       const pre = code.parentElement;
+      if (!pre) continue;
       const box = document.createElement('div');
       box.className = 'code-block';
       const header = document.createElement('div');

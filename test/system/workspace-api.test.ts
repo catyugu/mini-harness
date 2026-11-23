@@ -1,3 +1,4 @@
+import { expectPresent } from '../support/required.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync, readFileSync, existsSync, realpathSync } from 'node:fs';
@@ -6,11 +7,12 @@ import { join } from 'node:path';
 import { fixture } from '../support/api-fixture.js';
 
 test('workspace registration, session navigation and scoped tools leave an active run executing', async (t) => {
-  let release: () => void, entered: () => void;
+  let release: () => void = () => { throw new Error('Not started'); };
+  let entered: () => void = () => { throw new Error('Not started'); };
   const held = new Promise<void>((done) => { release = done; });
   const waiting = new Promise<void>((done) => { entered = done; });
   const { root, paths, app, request, finish, base } = await fixture(t, async ({ messages }) => {
-    const last = messages.at(-1);
+    const last = expectPresent(messages.at(-1), 'model message');
     if (last.content === 'Keep working') { entered(); await held; return 'Done'; }
     return last.role === 'tool' ? 'Written' : { tool: 'write', args: { path: 'isolated.txt', content: 'second workspace' } };
   });
@@ -30,17 +32,17 @@ test('workspace registration, session navigation and scoped tools leave an activ
     assert.equal(status, 201);
     const second = '/workspaces/' + workspace.id;
     const directories = await request('/workspaces/directories?path=' + encodeURIComponent(root));
-    assert.ok(directories.body.directories.some(({ path }) => path === realpathSync.native(next)));
-    assert.ok(!directories.body.directories.some(({ path }) => path === realpathSync.native(paths.home)));
-    assert.ok(!(await request(first + '/skills')).body.some(({ name }) => name === 'second-project'));
+    assert.ok(directories.body.directories.some(({ path }: { path: string }) => path === realpathSync.native(next)));
+    assert.ok(!directories.body.directories.some(({ path }: { path: string }) => path === realpathSync.native(paths.home)));
+    assert.ok(!(await request(first + '/skills')).body.some(({ name }: { name: string }) => name === 'second-project'));
     const stream = await fetch(base + '/api/changes', { headers: { Authorization: 'Bearer ' + app.token } });
-    const events = stream.body.pipeThrough(new TextDecoderStream()).getReader();
+    const events = expectPresent(stream.body, 'workspace event stream').pipeThrough(new TextDecoderStream()).getReader();
     try {
-      const snapshot = JSON.parse((await events.read()).value.trim());
+      const snapshot = JSON.parse(expectPresent((await events.read()).value, 'initial stream event').trim());
       assert.equal(snapshot.type, 'snapshot');
       assert.ok(Number.isInteger(snapshot.revisions.sessions));
       const { body: other } = await request(second + '/sessions', 'POST');
-      const event = JSON.parse((await events.read()).value.trim());
+      const event = JSON.parse(expectPresent((await events.read()).value, 'next stream event').trim());
       assert.equal(event.type, 'change');
       assert.equal(event.domain, 'sessions');
       assert.ok(event.revision > snapshot.revisions.sessions);
@@ -48,7 +50,7 @@ test('workspace registration, session navigation and scoped tools leave an activ
       assert.equal(other.workspaceId, workspace.id);
       assert.equal(app.runtime.registry.create({ parentId: other.id }).workspaceId, workspace.id);
       assert.throws(() => app.runtime.registry.create({ parentId: other.id, workspaceId: session.workspaceId }), /parent/);
-      assert.deepEqual((await request(first + '/sessions')).body.map(({ id }) => id), [session.id]);
+      assert.deepEqual((await request(first + '/sessions')).body.map(({ id }: { id: string }) => id), [session.id]);
       assert.equal((await request(second + '/files/preview?path=note.txt&sessionId=' + session.id)).status, 404);
       const preview = await request(second + '/files/preview?path=note.txt&sessionId=' + other.id);
       assert.equal(preview.status, 200, JSON.stringify(preview.body));
@@ -59,7 +61,7 @@ test('workspace registration, session navigation and scoped tools leave an activ
       assert.equal(existsSync(join(paths.cwd, 'isolated.txt')), false);
       assert.equal((await request('/sessions/' + session.id + '/runs')).body.run.state, 'running');
       assert.equal((await request(second, 'PATCH', { name: 'Second project' })).body.name, 'Second project');
-      assert.deepEqual((await request('/workspaces', 'PUT', { ids: [workspace.id, session.workspaceId] })).body.map(({ id }) => id), [workspace.id, session.workspaceId]);
+      assert.deepEqual((await request('/workspaces', 'PUT', { ids: [workspace.id, session.workspaceId] })).body.map(({ id }: { id: string }) => id), [workspace.id, session.workspaceId]);
       release();
       assert.equal((await finish(session.id)).body.run.state, 'completed');
       const removal = await request(first, 'DELETE');

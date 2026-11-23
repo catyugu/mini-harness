@@ -1,3 +1,4 @@
+import { expectPresent } from '../support/required.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, rmSync, writeFileSync, existsSync } from 'node:fs';
@@ -58,7 +59,7 @@ test('native agent through HTTP: streaming, persistence, Skills, export and perm
 
   const stored = await (await get('/api/sessions/' + session.id)).json();
   assert.equal(stored.title, 'Test native integration');
-  const file = app.runtime.registry.nativeFile(app.runtime.registry.get(session.id));
+  const file = app.runtime.registry.nativeFile(expectPresent(app.runtime.registry.get(session.id), 'conversation record'));
   assert.ok(file && existsSync(file));
   assert.ok(stored.messages.some((m: {role: string}) => m.role === 'assistant'));
 

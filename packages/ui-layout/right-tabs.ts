@@ -20,10 +20,14 @@ export function createRightTabs(view: {
   let current = state();
   let nextId = 0;
 
-  function state(scope?: TabScope) {
+  function state(scope?: TabScope): ScopeTabs {
     const key = scopeKey(scope);
-    if (!states.has(key)) states.set(key, { scope, open: false, tabs: [] });
-    return states.get(key);
+    let selected = states.get(key);
+    if (!selected) {
+      selected = { scope, open: false, tabs: [] };
+      states.set(key, selected);
+    }
+    return selected;
   }
 
   function render(focus = false) {
@@ -45,7 +49,13 @@ export function createRightTabs(view: {
       return item;
     }));
     for (const tab of tabs) {
-      const node = tab.view?.node ?? mount(tab, (signal) => types.get(tab.address.type).create(tab.address, signal));
+      const node = tab.view?.node ?? mount(tab, (signal) => {
+        const address = tab.address;
+        if (!address) throw new Error('Tab has no registered address');
+        const factory = types.get(address.type);
+        if (!factory) throw new Error('Tab type is not available: ' + address.type);
+        return factory.create(address, signal);
+      });
       node.hidden = tab !== active;
       if (node.parentElement !== view.body) view.body.append(node);
     }
@@ -136,7 +146,8 @@ export function createRightTabs(view: {
   view.bar.addEventListener('keydown', (event) => {
     if (!(event.target as HTMLElement).matches('[role=tab]')) return;
     const { tabs } = current;
-    const index = tabs.indexOf(current.active);
+    if (!tabs.length) return;
+    const index = current.active ? tabs.indexOf(current.active) : 0;
     const target = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 :
       event.key === 'ArrowLeft' ? (index + tabs.length - 1) % tabs.length :
         event.key === 'ArrowRight' ? (index + 1) % tabs.length : undefined;
@@ -173,13 +184,15 @@ export function createRightTabs(view: {
       const key = 'inspect-' + owner;
       const previous = target.tabs.find((tab) => tab.key === key);
       if (previous) remove(target, previous);
-      const tab = { key, title, view: undefined };
+      const tab: Tab = { key, title };
       target.tabs.push(tab);
       mount(tab, () => node);
+      if (!tab.view) throw new Error('Inspector tab failed to mount');
+      const lifetime = tab.view.controller.signal;
       signal.addEventListener('abort', () => {
         remove(target, tab);
         if (target === current) render();
-      }, { once: true, signal: tab.view.controller.signal });
+      }, { once: true, signal: lifetime });
       reveal(tab);
     }
   };

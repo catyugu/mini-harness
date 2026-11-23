@@ -62,7 +62,7 @@ export class Prompt implements PromptPort {
         sections.set(section.id, section);
     }
     const parts: string[] = [];
-    for (const section of [...sections.values()].sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))) {
+    for (const section of [...sections.values()].sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.id.localeCompare(b.id))) {
       context.signal.throwIfAborted();
       const text = await section.render(context);
       if (text !== undefined && typeof text !== 'string') throw new Error('Invalid prompt section output: ' + section.id);

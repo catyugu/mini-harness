@@ -15,7 +15,7 @@ import type { ComposerCommand } from '@mini-harness/web/contracts/commands';
 import { createComposer } from './composer.js';
 import { createModelPicker } from './model-picker.js';
 import type { FrontendApi, ToolView, MessageAction, DraftMode } from '@mini-harness/ui-runtime/frontend';
-import { fromMarkup } from '@mini-harness/ui-primitives/primitives';
+import { fromMarkup, required } from '@mini-harness/ui-primitives/primitives';
 
 type Queue = ConversationView['queue'];
 
@@ -74,17 +74,17 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
 
   const messages = element('messages');
   const welcome = element('welcome');
-  const summary = element('runSummary'), summaryStatus = summary.querySelector('span'), elapsed = summary.querySelector('time');
+  const summary = element('runSummary'), summaryStatus = required(summary.querySelector('span')), elapsed = required(summary.querySelector('time'));
   const states = { queued: 'Queued', running: 'Running', completed: 'Completed', failed: 'Failed',
     cancelled: 'Cancelled', interrupted: 'Interrupted' };
-  let runSummary: RunInfo;
+  let runSummary: RunInfo | undefined;
   const changedFiles = element<'details'>('changedFiles');
   function renderChangedFiles(run?: RunInfo) {
     const paths = run?.changedFiles ?? [];
     changedFiles.hidden = paths.length === 0;
     if (!paths.length) { changedFiles.open = false; return; }
-    changedFiles.querySelector('summary').textContent = paths.length + (paths.length === 1 ? ' file changed' : ' files changed');
-    changedFiles.querySelector('ul').replaceChildren(...paths.map((path) => {
+    required(changedFiles.querySelector('summary')).textContent = paths.length + (paths.length === 1 ? ' file changed' : ' files changed');
+    required(changedFiles.querySelector('ul')).replaceChildren(...paths.map((path) => {
       const item = document.createElement('li');
       item.textContent = path;
       return item;
@@ -114,8 +114,8 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
   let sending = false;
   let visit = new AbortController();
   let pending = false;
-  let modelDraft: ModelChoice;
-  let conversationModel: ModelChoice;
+  let modelDraft: ModelChoice | undefined;
+  let conversationModel: ModelChoice | undefined;
   let conversationThinking: ThinkingLevel;
   let activeLeaf: string | null | undefined;
   let draftMode: DraftMode | undefined;
@@ -123,14 +123,14 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
     draftMode = mode;
     const banner = element('draftMode');
     banner.hidden = !mode;
-    banner.querySelector('span').textContent = mode?.title ?? '';
+    required(banner.querySelector('span')).textContent = mode?.title ?? '';
     if (mode) {
       prompt.value = mode.text;
       adjustPrompt();
       prompt.focus();
     }
   }
-  element('draftMode').querySelector('button').addEventListener('click', () => setDraftMode());
+  required(element('draftMode').querySelector('button')).addEventListener('click', () => setDraftMode());
   const modelPicker = createModelPicker(view, (choice) => { modelDraft = choice; updateModelControls(); }, api.signal);
   const lastInputs = new Map<string, { message: string; attachments: Attachment[] }>();
   const drafts = new Map<string, string>();
@@ -162,14 +162,15 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
   const messageView = createMessageView(messages, {
     render: options.renderTool, messageActions: options.messageActions
   }, () => ({ sessionId: active(), leafId: activeLeaf }), () => {
-    const last = lastInputs.get(active());
+    const id = active();
+    const last = id ? lastInputs.get(id) : undefined;
     if (last && !sending) void send(last.message, last.attachments);
   });
 
   function rememberInput(id: string, content: MessageContent) {
-    const attachments = (typeof content === 'string' ? [] : content ?? [])
-      .filter((block) => block.type === 'image')
-      .map(({ mimeType, data }) => ({ name: 'image', mimeType, data }));
+    const attachments: Attachment[] = (typeof content === 'string' ? [] : content ?? [])
+      .flatMap((block) => block.type === 'image' && block.mimeType && block.data
+        ? [{ name: 'image', mimeType: block.mimeType, data: block.data }] : []);
     lastInputs.set(id, { message: messageView.textOf(content), attachments });
   }
 
@@ -221,7 +222,7 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
       if (signal.aborted) return;
       display(item, signal, revealWorkspace);
       options.closeDrawer();
-    } catch (error) { if (!signal.aborted) report(error); }
+    } catch (error) { if (!signal.aborted) report(error instanceof Error ? error : new Error(String(error))); }
     finally { if (!signal.aborted) pending = false; }
   }
 
@@ -290,12 +291,13 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
         await activate(id);
       }
     } catch (error) {
-      if (!signal.aborted) { report(error); setSending(false); }
+      if (!signal.aborted) { report(error instanceof Error ? error : new Error(String(error))); setSending(false); }
     } finally { if (!signal.aborted) pending = false; }
   }
 
   async function observe(item: ConversationView, signal: AbortSignal) {
     const render = messageView.stream(item);
+    if (!item.run) return;
     showStatus(item.run.state === 'queued' ? 'Queued…' : 'Thinking…');
     function accept(event: RunEvent) {
       render(event);
@@ -318,15 +320,16 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
     try {
       const latest = await controller.follow(item, signal, accept, () => showStatus('Reconnecting…'));
       if (latest && !signal.aborted) display(latest, signal, false);
-    } catch (error) { if (!signal.aborted) report(error); }
+    } catch (error) { if (!signal.aborted) report(error instanceof Error ? error : new Error(String(error))); }
   }
 
   function updateModelControls() {
     const catalog = options.models.get();
-    if (modelDraft && !catalog.models.some((model) => model.configured && model.provider === modelDraft.provider && model.id === modelDraft.id))
+    const draft = modelDraft;
+    if (draft && !catalog.models.some((model) => model.configured && model.provider === draft.provider && model.id === draft.id))
       modelDraft = undefined;
     const selected = modelPicker.update(catalog.models, catalog.providers,
-      modelDraft ?? conversationModel ?? options.settings.get().model);
+      modelDraft ?? (sending ? conversationModel : undefined) ?? options.settings.get().model);
     const levels = selected?.thinkingLevels ?? [];
     const sameModel = selected && selected.provider === conversationModel?.provider && selected.id === conversationModel.id;
     thinkingSelect.replaceChildren(new Option('Default', ''), ...levels.map((level) =>
@@ -364,7 +367,7 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
       if (id) drafts.set(id, '');
       modelDraft = undefined;
       composerUi.clear(); adjustPrompt(); updateModelControls(); showQueue(queued);
-    } catch (error) { if (!signal.aborted) report(error); } finally { button.disabled = false; }
+    } catch (error) { if (!signal.aborted) report(error instanceof Error ? error : new Error(String(error))); } finally { button.disabled = false; }
   }
   function showQueue(queue: Queue = { steer: [], followUp: [] }) {
     const items = [...queue.steer.map((text) => 'Instruction: ' + text), ...queue.followUp.map((text) => 'Follow up: ' + text)];
@@ -386,7 +389,7 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
     element<'button'>('stop').disabled = true;
     showStatus('Cancelling…');
     try { await controller.cancel(id); }
-    catch (error) { if (!signal.aborted) { report(error); element<'button'>('stop').disabled = false; } }
+    catch (error) { if (!signal.aborted) { report(error instanceof Error ? error : new Error(String(error))); element<'button'>('stop').disabled = false; } }
   };
   composer.onsubmit = (event) => { event.preventDefault(); void send(prompt.value); };
   prompt.onkeydown = (event) => {
@@ -416,8 +419,9 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
       composerUi.attach(api);
       api.command({ name: 'model', group: 'Conversation', description: 'Choose a configured model', run: () => modelPicker.open() });
       api.command({ name: 'export', group: 'Conversation', description: 'Export the current conversation', run: () => {
-        if (!active()) throw new Error('Open a conversation to export it.');
-        return exportSessions([active()], api.signal);
+        const id = active();
+        if (!id) throw new Error('Open a conversation to export it.');
+        return exportSessions([id], api.signal);
       } });
       api.command({ name: 'compact', group: 'Conversation', description: 'Summarize earlier messages to free context', run: compactConversation });
     },

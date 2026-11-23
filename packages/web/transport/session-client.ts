@@ -6,8 +6,10 @@ export const isRunning = (run?: RunInfo) => run?.state === 'queued' || run?.stat
 export const readConversation = (id: string, signal: AbortSignal) => data<ConversationView>('/sessions/' + id, { signal });
 
 export async function observeRun(item: ConversationView, signal: AbortSignal, accept: (event: RunEvent) => void, reconnect: () => void) {
-  const url = '/sessions/' + item.id + '/events?run=' + item.run.id + '&after=';
-  let cursor = item.run.sequence, retries = 0, ended = false;
+  const originalRun = item.run;
+  if (!originalRun) throw new Error('Cannot observe a conversation without a run');
+  const url = '/sessions/' + item.id + '/events?run=' + originalRun.id + '&after=';
+  let cursor = originalRun.sequence, retries = 0, ended = false;
   while (!signal.aborted && !ended) {
     try {
       const response = await api(url + cursor, { signal });
@@ -25,7 +27,7 @@ export async function observeRun(item: ConversationView, signal: AbortSignal, ac
       if (signal.aborted) return;
       try {
         const latest = await readConversation(item.id, signal);
-        if (latest.run?.id !== item.run.id || !isRunning(latest.run)) return latest;
+        if (latest.run?.id !== originalRun.id || !isRunning(latest.run)) return latest;
       } catch { /* Retry while the conversation remains selected. */ }
     }
   }

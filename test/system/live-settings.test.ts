@@ -1,3 +1,4 @@
+import { expectPresent } from '../support/required.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { rmSync } from 'node:fs';
@@ -6,7 +7,7 @@ import { createFixturePaths, createMockProvider } from '../helpers/mock-provider
 
 test('appearance, parallelism and child defaults update without interrupting a running session', async (t) => {
   let entered: () => void;
-  let release: () => void;
+  let release: () => void = () => { throw new Error('Not started'); };
   const waiting = new Promise<void>((done) => { entered = done; });
   const held = new Promise<void>((done) => { release = done; });
   const mock = await createMockProvider(async () => { entered(); await held; return 'Done'; });
@@ -20,7 +21,7 @@ test('appearance, parallelism and child defaults update without interrupting a r
   const original = runtime.registry.log(item.id);
   await runtime.updateSettings({ appearance: 'dark', pluginConfig: { subagents: { maxParallel: 2 } } });
   assert.strictEqual(runtime.registry.log(item.id), original);
-  assert.equal(runtime.delegation.parallelLimit, 2);
+  assert.equal(expectPresent(runtime.delegation, 'delegation service').parallelLimit, 2);
   assert.equal(runtime.runs.active(item.id), true);
   await runtime.updateSettings({ plugins: { files: false, 'session-helper': false } });
   assert.equal(runtime.settings.plugins['session-helper'], false);

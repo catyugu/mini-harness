@@ -50,7 +50,7 @@ export class Runs {
     return owner && signal ? AbortSignal.any([owner, signal]) : owner ?? signal;
   }
 
-  private launch(id: string, prompt: string, emit: (event: StreamEvent) => void, { signal, model, attachments, thinkingLevel, revision, schedule }: RunOptions) {
+  private launch(id: string, prompt: string, emit: ((event: StreamEvent) => void) | undefined, { signal, model, attachments, thinkingLevel, revision, schedule }: RunOptions) {
     this.registry.assertAvailable(id);
     if (this.active(id)) throw new Error('Conversation is already running');
     if (thinkingLevel !== undefined && !['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(thinkingLevel))
@@ -94,7 +94,7 @@ export class Runs {
       info.state = cancellation.aborted ? 'cancelled' : 'failed';
       info.error = cancellation.aborted ? controller.signal.reason?.message ?? 'Agent run cancelled' :
         error instanceof Error ? error.message : String(error);
-      publish({ type: 'error', error: info.error });
+      publish({ type: 'error', error: info.error ?? 'Agent run failed' });
       throw new Error(info.error, { cause: error });
     }).finally(() => {
       info.finishedAt = new Date().toISOString();

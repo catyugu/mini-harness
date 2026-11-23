@@ -1,7 +1,7 @@
 import { payload } from '@mini-harness/web/api';
 import type { FrontendSetup, FrontendApi } from '@mini-harness/ui-runtime/frontend';
 import { icon } from '@mini-harness/ui-primitives/icons';
-import { button, field, fromMarkup, confirmAction } from '@mini-harness/ui-primitives/primitives';
+import { button, field, fromMarkup, confirmAction, required } from '@mini-harness/ui-primitives/primitives';
 
 import type { ProviderInfo, ProviderModel } from '@mini-harness/web/contracts/providers';
 
@@ -20,12 +20,12 @@ function providerManager(api: FrontendApi, providers: () => ProviderInfo[], refr
     <div class="provider-add"></div>
     <p class="hint provider-status" role="status"></p>
   </div>`);
-  const list = content.querySelector<HTMLElement>('.provider-list');
-  const addArea = content.querySelector<HTMLElement>('.provider-add');
-  const status = content.querySelector<HTMLElement>('[role="status"]');
+  const list = required(content.querySelector<HTMLElement>('.provider-list'));
+  const addArea = required(content.querySelector<HTMLElement>('.provider-add'));
+  const status = required(content.querySelector<HTMLElement>('[role="status"]'));
   const add = button('Add provider', 'quiet');
   add.prepend(icon('plus'));
-  let activeEditor: HTMLElement;
+  let activeEditor: HTMLElement | undefined;
 
   function closeEditor() {
     activeEditor?.remove();
@@ -89,7 +89,7 @@ function providerManager(api: FrontendApi, providers: () => ProviderInfo[], refr
         status.textContent = 'Provider saved.';
         list.querySelector<HTMLButtonElement>('[data-provider="' + (provider?.id ?? (custom() ? endpoint.id.value : picker.value)) + '"]')?.focus();
       } catch (failure) {
-        (form.isConnected ? error : status).textContent = failure.message;
+        (form.isConnected ? error : status).textContent = (failure instanceof Error ? failure.message : String(failure));
       } finally { save.disabled = false; }
     };
     activeEditor = form;
@@ -107,15 +107,15 @@ function providerManager(api: FrontendApi, providers: () => ProviderInfo[], refr
         <div class="provider-row"><div><strong></strong><small class="provider-state"></small></div><div class="ui-actions"></div></div>
         <div class="provider-inline"></div>
       </article>`);
-      card.querySelector('strong').textContent = provider.name;
-      const summary = card.querySelector<HTMLElement>('.provider-state');
+      required(card.querySelector('strong')).textContent = provider.name;
+      const summary = required(card.querySelector<HTMLElement>('.provider-state'));
       summary.textContent = provider.configured ? 'Configured · ' + provider.models.length + (provider.models.length === 1 ? ' model' : ' models') : 'API key needed';
       summary.dataset.connected = String(provider.configured);
-      const actions = card.querySelector('.ui-actions');
+      const actions = required(card.querySelector('.ui-actions'));
       const editButton = button('Edit', 'quiet');
       editButton.dataset.provider = provider.id;
       editButton.setAttribute('aria-label', 'Edit ' + provider.name);
-      editButton.onclick = () => edit(card.querySelector('.provider-inline'), provider);
+      editButton.onclick = () => edit(required(card.querySelector<HTMLElement>('.provider-inline')), provider);
       if (provider.custom || provider.canSetKey) actions.append(editButton);
       if (provider.custom || provider.storedCredential) {
         const remove = button('Remove', 'quiet');
@@ -131,7 +131,7 @@ function providerManager(api: FrontendApi, providers: () => ProviderInfo[], refr
             await refresh();
             status.textContent = 'Provider removed.';
             add.focus();
-          } catch (error) { status.textContent = error.message; }
+          } catch (error) { status.textContent = (error instanceof Error ? error.message : String(error)); }
           finally { remove.disabled = false; }
         };
         actions.append(remove);
@@ -155,14 +155,14 @@ function customEndpoint(provider?: ProviderInfo) {
     <label>API endpoint<input name="url" type="url" placeholder="https://api.example.com/v1" required></label>
     <div class="endpoint-models"></div>
   </fieldset>`);
-  const id = element.querySelector<HTMLInputElement>('[name="id"]');
-  const api = element.querySelector<HTMLSelectElement>('[name="api"]');
-  const url = element.querySelector<HTMLInputElement>('[name="url"]');
+  const id = required(element.querySelector<HTMLInputElement>('[name="id"]'));
+  const api = required(element.querySelector<HTMLSelectElement>('[name="api"]'));
+  const url = required(element.querySelector<HTMLInputElement>('[name="url"]'));
   id.value = provider?.id ?? '';
   id.readOnly = Boolean(provider);
   api.value = provider?.api ?? 'openai-completions';
   url.value = provider?.baseUrl ?? '';
-  const models = element.querySelector('.endpoint-models');
+  const models = required(element.querySelector('.endpoint-models'));
   const add = button('Add model', 'quiet');
   add.prepend(icon('plus'));
   element.append(add);

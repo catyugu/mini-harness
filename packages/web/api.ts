@@ -48,7 +48,7 @@ export async function readEvents<T>(response: Response, accept: (event: T) => vo
       if (done) break;
       buffer += value;
       const lines = buffer.split('\n');
-      buffer = lines.pop();
+      buffer = lines.pop() ?? '';
       for (const line of lines) if (line.trim()) accept(JSON.parse(line));
     }
   } finally { await reader.cancel().catch(() => {}); }

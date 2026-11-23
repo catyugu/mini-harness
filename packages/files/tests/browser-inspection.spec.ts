@@ -1,3 +1,4 @@
+import { expectPresent } from '../../../test/support/required.js';
 import { test, expect } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import { rmSync, writeFileSync } from 'node:fs';
@@ -39,7 +40,7 @@ test('file inspection, responsive themes and reduced viewport height keep contro
         const file = panel.getByRole('button', { name: 'notes.md AM', exact: true });
         await expect(file).toBeVisible();
         expect(await file.evaluate((node) => getComputedStyle(node).justifyContent)).toBe('flex-start');
-        expect(await file.evaluate((node) => node.querySelector('svg').getBoundingClientRect().left -
+        expect(await file.evaluate((node) => expectPresent(node.querySelector('svg'), 'file icon').getBoundingClientRect().left -
           node.getBoundingClientRect().left)).toBeLessThan(32);
         await file.click();
         await panel.getByRole('button', { name: 'Diff', exact: true }).click();
@@ -63,7 +64,7 @@ test('file inspection, responsive themes and reduced viewport height keep contro
         await page.setViewportSize({ width, height: 380 });
         await page.getByRole('textbox', { name: 'Message', exact: true }).fill('A long task '.repeat(100));
         const send = await page.getByRole('button', { name: 'Send', exact: true }).boundingBox();
-        expect(send.y + send.height).toBeLessThanOrEqual(380);
+        expect(expectPresent(send, 'send button bounds').y + expectPresent(send, 'send button bounds').height).toBeLessThanOrEqual(380);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
       } finally { await page.close(); }
     }

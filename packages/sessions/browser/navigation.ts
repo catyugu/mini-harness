@@ -155,7 +155,7 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
     try {
       await api.request('/sessions/' + renaming, payload('PATCH', { title: title.value }));
       renameDialog.close();
-    } catch (error) { status.textContent = error.message; }
+    } catch (error) { status.textContent = (error instanceof Error ? error.message : String(error)); }
     finally { save.disabled = false; }
   };
 
@@ -176,7 +176,7 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
   const rememberCollapsed = () => localStorage.setItem(storageKey, JSON.stringify([...collapsed]));
   function revealWorkspace(id: string) {
     const parents = workspaceTree(workspaceStore.get()).parents;
-    for (let cursor = id; cursor; cursor = parents.get(cursor)) collapsed.delete(cursor);
+    for (let cursor: string | undefined = id; cursor; cursor = parents.get(cursor)) collapsed.delete(cursor);
     rememberCollapsed();
   }
 
@@ -184,7 +184,8 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
     const sessions = sessionStore.get(), workspaces = workspaceStore.get();
     const query = value('sessionSearch').toLowerCase();
     const container = element('sessions');
-    const focus = container.contains(document.activeElement) ? document.activeElement.id : '';
+    const focused = document.activeElement;
+    const focus = focused instanceof HTMLElement && container.contains(focused) ? focused.id : '';
     const scroll = container.scrollTop;
     const { children, grouped, labels, parents } = workspaceTree(workspaces, sessions);
     visible = [];
@@ -204,7 +205,7 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
       try {
         await api.request('/workspaces', payload('PUT', { ids }));
         await workspaceStore.refresh();
-      } catch (error) { options.report(error); }
+      } catch (error) { options.report(error instanceof Error ? error : new Error(String(error))); }
     }
     function workspaceBranch(parent?: string) {
       const list = document.createElement('ul');
@@ -238,13 +239,14 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
           closeMenu();
           draggingWorkspace = id;
           row.classList.add('workspace-dragging');
+          if (!event.dataTransfer) { event.preventDefault(); return; }
           event.dataTransfer.effectAllowed = 'move';
           event.dataTransfer.setData('text/plain', id);
         };
         row.ondragover = (event) => {
           if (!draggingWorkspace || draggingWorkspace === id || parents.get(draggingWorkspace) !== parents.get(id)) return;
           event.preventDefault();
-          event.dataTransfer.dropEffect = 'move';
+          if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
           const bounds = row.getBoundingClientRect();
           row.dataset.dropSide = event.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after';
         };
@@ -276,7 +278,7 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
         chooser.title = path;
         if (current) chooser.setAttribute('aria-current', 'location');
         fileLabel(chooser, name, open ? 'folder-open' : 'folder');
-        if (labels.get(name) > 1) {
+        if ((labels.get(name) ?? 0) > 1) {
           const shortPath = document.createElement('small');
           shortPath.textContent = path.split(/[/\\]/).filter(Boolean).slice(-3).join('/');
           chooser.append(shortPath);
@@ -305,8 +307,9 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
       }
       return list;
     }
-    container.replaceChildren(workspaceBranch());
-    if (!container.firstElementChild.childElementCount) {
+    const tree = workspaceBranch();
+    container.replaceChildren(tree);
+    if (!tree.childElementCount) {
       const empty = document.createElement('p');
       empty.className = 'hint workspace-empty';
       empty.textContent = query ? 'No matches' : 'Add a workspace to start a conversation.';
@@ -331,11 +334,12 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
   }
   state.subscribe(update, api.signal);
   sessionStore.subscribe(update, api.signal);
-  state.addEventListener('selection', (event: CustomEvent<{ item?: Conversation; revealWorkspace: boolean }>) => {
-    const { item, revealWorkspace: workspace } = event.detail;
+  state.addEventListener('selection', (event: Event) => {
+    if (!(event instanceof CustomEvent)) return;
+    const { item, revealWorkspace: workspace } = event.detail as { item?: Conversation; revealWorkspace: boolean };
     if (!item) return;
     if (workspace) revealWorkspace(item.workspaceId);
-    for (let parent = item.parentId; parent && !expanded.has(parent); parent = sessionStore.get().find(({ id }) => id === parent)?.parentId) expanded.add(parent);
+    for (let parent = item.parentId; parent && !expanded.has(parent); parent = sessionStore.get().find(({ id }) => id === parent)?.parentId ?? null) expanded.add(parent);
   }, { signal: api.signal });
 
   element('selectMode').onclick = () => toggleSelection(!selecting);

@@ -1,7 +1,7 @@
 import { payload, scopedElements } from '@mini-harness/web/api';
 import type { FrontendSetup, FrontendApi } from '@mini-harness/ui-runtime/frontend';
 import { icon } from '@mini-harness/ui-primitives/icons';
-import { closeOnBackdrop, field, fromMarkup } from '@mini-harness/ui-primitives/primitives';
+import { closeOnBackdrop, field, fromMarkup, required } from '@mini-harness/ui-primitives/primitives';
 
 const pageIcons = { Model: 'model', Appearance: 'theme' } as const;
 
@@ -17,7 +17,7 @@ const setup: FrontendSetup = (ctx, api) => {
   const theme = fromMarkup<HTMLSelectElement>(`<select><option value="system">System</option>
     <option value="light">Light</option><option value="dark">Dark</option></select>`);
   const content = fromMarkup('<div class="appearance-settings"><p class="hint form-error" role="alert"></p></div>');
-  const status = content.querySelector('[role="alert"]');
+  const status = required(content.querySelector('[role="alert"]'));
   content.prepend(field('Theme', theme));
   function sync() { theme.value = state.get().appearance; }
   sync();
@@ -27,7 +27,7 @@ const setup: FrontendSetup = (ctx, api) => {
     theme.disabled = true;
     status.textContent = '';
     try { await api.request('/settings', payload('PATCH', { appearance: theme.value })); await state.refresh(); }
-    catch (error) { status.textContent = error.message; sync(); }
+    catch (error) { status.textContent = (error instanceof Error ? error.message : String(error)); sync(); }
     finally { theme.disabled = false; }
   };
 };
@@ -47,9 +47,9 @@ function mountSettings(api: FrontendApi) {
     </div>
   </dialog>`);
   const { element } = scopedElements(panel);
-  const nav = panel.querySelector<HTMLElement>('nav');
-  const sections = panel.querySelector<HTMLElement>('.settings-sections');
-  const body = panel.querySelector<HTMLElement>('.settings-body');
+  const nav = required(panel.querySelector<HTMLElement>('nav'));
+  const sections = required(panel.querySelector<HTMLElement>('.settings-sections'));
+  const body = required(panel.querySelector<HTMLElement>('.settings-body'));
   const back = element<'button'>('settingsBack');
   const close = element<'button'>('settingsClose');
   close.append(icon('close'));
@@ -61,7 +61,7 @@ function mountSettings(api: FrontendApi) {
   let selected: HTMLElement;
 
   function select(section?: HTMLElement, detail = true) {
-    selected = section ?? [...sections.children].find((page) => !pages.get(page as HTMLElement).hidden) as HTMLElement;
+    selected = section ?? [...sections.children].find((page) => !pages.get(page as HTMLElement)?.hidden) as HTMLElement;
     for (const [page, trigger] of pages) {
       page.hidden = page !== selected;
       if (page === selected) trigger.setAttribute('aria-current', 'page');
@@ -78,7 +78,7 @@ function mountSettings(api: FrontendApi) {
     const trigger = document.createElement('button');
     trigger.type = 'button';
     trigger.className = 'link-button';
-    trigger.append(icon(pageIcons[title] ?? 'plugin'), document.createTextNode(title));
+    trigger.append(icon(title === 'Model' ? pageIcons.Model : title === 'Appearance' ? pageIcons.Appearance : 'plugin'), document.createTextNode(title));
     trigger.onclick = () => {
       select(section);
       if (matchMedia('(max-width: 560px)').matches) back.focus();

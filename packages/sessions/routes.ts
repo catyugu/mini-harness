@@ -22,7 +22,10 @@ export function registerSessionRoutes(ctx: Context) {
     const requested = new Set(url.searchParams.getAll('id'));
     if (requested.size > 100 || [...requested].some((id) => !validSession.test(id)))
       throw new Error('Invalid conversation selection');
-    const records = requested.size ? [...requested].map((id) => ctx.harnessRegistry.get(id)).filter(Boolean) : ctx.harnessRegistry.list();
+    const records = requested.size ? [...requested].flatMap((id) => {
+      const record = ctx.harnessRegistry.get(id);
+      return record ? [record] : [];
+    }) : ctx.harnessRegistry.list();
     return records.map((record) => projectSession(ctx, record));
   });
   add('GET', '/api/sessions/search', ({ url }) => {

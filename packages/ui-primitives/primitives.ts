@@ -80,12 +80,12 @@ export function dialog(title: string, content: HTMLElement) {
     <div class="ui-dialog-body"></div>
   </dialog>`);
   node.setAttribute('aria-label', title);
-  node.querySelector('h2').textContent = title;
-  const close = node.querySelector('button');
+  required(node.querySelector('h2')).textContent = title;
+  const close = required(node.querySelector('button'));
   close.append(icon('close'));
   close.setAttribute('aria-label', 'Close ' + title.toLowerCase());
   close.onclick = () => node.close();
-  node.querySelector('.ui-dialog-body').append(content);
+  required(node.querySelector('.ui-dialog-body')).append(content);
   closeOnBackdrop(node);
   return node;
 }
@@ -120,4 +120,10 @@ export function confirmAction(message: string, options: { title?: string; confir
     modal.showModal();
     cancel.focus();
   });
+}
+
+/** Assert that a node declared by a component's own static markup actually exists. */
+export function required<T>(value: T | null | undefined): T {
+  if (value === null || value === undefined) throw new Error('Required UI element is missing');
+  return value;
 }

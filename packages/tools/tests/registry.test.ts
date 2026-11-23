@@ -1,3 +1,4 @@
+import { expectPresent } from '../../../test/support/required.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Type } from 'typebox';
@@ -32,10 +33,10 @@ test('scoped tools inherit locally and disposal aborts and drains active executi
   const dispose = registry.register('wait', () => defineTool({ name: 'wait', description: 'Wait', parameters: Type.Object({}),
     async execute(_id, _args, signal) {
       entered();
-      await new Promise<void>((_resolve, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true }));
+      await new Promise<void>((_resolve, reject) => signal?.addEventListener('abort', () => reject(signal.reason), { once: true }));
       return { content: [] };
     } }));
-  const pending = registry.forSession('child').find(({ name }) => name === 'wait').execute('call', {});
+  const pending = expectPresent(registry.forSession('child').find(({ name }) => name === 'wait'), 'wait tool').execute('call', {});
   const rejected = assert.rejects(pending, /no longer available/);
   await ready;
   await dispose();

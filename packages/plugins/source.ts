@@ -17,7 +17,7 @@ export function packageSource(folder: string): PackageSource | undefined {
   const marker = join(folder, packageMarker);
   if (!lstatSync(marker, { throwIfNoEntry: false })) return;
   if (!isRegularFile(marker)) throw new Error('Invalid plugin package source file');
-  const source = readJson<PackageSource>(marker, null);
+  const source = readJson<PackageSource | null>(marker, null);
   if (!source || typeof source.spec !== 'string' || !packageSpecPattern.test(source.spec) ||
       typeof source.generation !== 'string' || !generationPattern.test(source.generation))
     throw new Error('Invalid plugin package source');

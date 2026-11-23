@@ -15,9 +15,11 @@ const setup: FrontendSetup = async (ctx, api) => {
   selection.reconcileWorkspace(workspaces.get());
   workspaces.subscribe(() => selection.reconcileWorkspace(workspaces.get()), api.signal);
   const report = (error: Error) => selection.dispatchEvent(new CustomEvent('error', { detail: error }));
-  window.addEventListener('mini-harness:error', (event: CustomEvent<Error>) => report(event.detail), { signal: api.signal });
+  window.addEventListener('mini-harness:error', (event: Event) => {
+    if (event instanceof CustomEvent && event.detail instanceof Error) report(event.detail);
+  }, { signal: api.signal });
   const browser: FrontendServices = {
-    workspace: selection.scope,
+    workspace: () => selection.scope() || undefined,
     workspaceRecord: (id) => workspaces.get().find((record) => record.id === id),
     session: (id = selection.activeConversation) => sessions.get().find((item) => item.id === id),
     onConversationChange(listener, signal) {

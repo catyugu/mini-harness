@@ -37,7 +37,7 @@ const setup: FrontendSetup = (ctx, api) => {
             await api.request('/approvals', payload('POST', { id: approval.id, allow }));
             await approvals.refresh();
           } catch (error) {
-            if (!api.signal.aborted) services.report(error);
+            if (!api.signal.aborted) services.report(error instanceof Error ? error : new Error(String(error)));
             for (const action of card.querySelectorAll('button')) action.disabled = false;
           }
         };

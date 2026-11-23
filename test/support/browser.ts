@@ -67,6 +67,7 @@ export async function chooseModel(page: Page, query: string) {
 export async function expectInViewport(panel: ReturnType<Page['locator']>, viewport: { width: number; height: number }) {
   await expect(panel).toBeInViewport({ ratio: 0.99 });
   const bounds = await panel.boundingBox();
+  if (!bounds) throw new Error('Expected panel bounding box');
   expect(bounds.x).toBeGreaterThanOrEqual(0);
   expect(bounds.y).toBeGreaterThanOrEqual(0);
   expect(bounds.x + bounds.width).toBeLessThanOrEqual(viewport.width + 1);

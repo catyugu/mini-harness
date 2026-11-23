@@ -11,7 +11,7 @@ test('GUI APIs configure providers, persist keys privately, discover Skills and 
   writeFileSync(join(paths.cwd, 'note.md'), 'workspace note');
   mkdirSync(join(paths.skills, 'verify'));
   writeFileSync(join(paths.skills, 'verify', 'SKILL.md'), '---\nname: verify\ndescription: Verify a task\n---\n\nRead the task.');
-  assert.ok((await request(scope + '/skills')).body.some((s) => s.name === 'verify'));
+  assert.ok((await request(scope + '/skills')).body.some((s: { name: string }) => s.name === 'verify'));
   const search = await request(scope + '/files/search?q=note');
   assert.equal(search.status, 200, JSON.stringify(search.body));
   assert.ok(search.body.includes('note.md'));
@@ -35,10 +35,10 @@ test('GUI APIs configure providers, persist keys privately, discover Skills and 
   assert.equal((await finish(session.id)).body.run.state, 'completed');
   assert.match(JSON.stringify(mock.requests.at(-1)), /ATTACHED CONTENT/); assert.match(JSON.stringify(mock.requests.at(-1)), /image_url/);
   const history = (await request('/sessions/' + session.id)).body;
-  const user = history.messages.find((message) => message.role === 'user');
-  assert.ok(user.content.some((block) => block.type === 'image'));
+  const user = history.messages.find((message: { role: string; content: unknown }) => message.role === 'user');
+  assert.ok(user.content.some((block: { type: string }) => block.type === 'image'));
   assert.deepEqual(user.attachments, [{ name: 'one.png', mimeType: 'image/png' }, { name: 'note.md', mimeType: 'text/plain' }]);
-  assert.deepEqual(user.content.filter((block) => block.type === 'text'), [{ type: 'text', text: 'Read the image and text' }]);
+  assert.deepEqual(user.content.filter((block: { type: string }) => block.type === 'text'), [{ type: 'text', text: 'Read the image and text' }]);
   assert.doesNotMatch(JSON.stringify(user), /ATTACHED CONTENT/);
   assert.equal(history.title, 'Read the image and text');
   assert.equal((await request('/sessions/' + session.id, 'PATCH', { title: 'Renamed task' })).body.title, 'Renamed task');
@@ -48,7 +48,7 @@ test('GUI APIs configure providers, persist keys privately, discover Skills and 
   assert.equal((await request('/providers', 'DELETE', { id: 'gui-test' })).status, 200);
   const afterRemoval = (await request('/settings')).body;
   assert.deepEqual(afterRemoval.model, { provider: '', id: '' });
-  assert.equal((await request('/providers')).body.some((provider) => provider.id === 'gui-test'), false);
+  assert.equal((await request('/providers')).body.some((provider: { id: string }) => provider.id === 'gui-test'), false);
   assert.equal(readFileSync(join(paths.home, 'auth.json'), 'utf8').includes('gui-private-key'), false);
   const afterHistory = await request('/sessions/' + session.id);
   assert.equal(afterHistory.status, 200);

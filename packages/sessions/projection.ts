@@ -29,7 +29,7 @@ export function projectLog(entries: SessionEntry[], branch: SessionEntry[]): Ses
   };
   const calls = new Map<string, unknown>();
   const edits = new Map<string, NativeMessage['content'] | null>();
-  let compaction: Extract<SessionEntry, { type: 'compaction' }>;
+  let compaction: Extract<SessionEntry, { type: 'compaction' }> | undefined;
   for (const entry of branch) {
     if (entry.type === 'model') state.model = entry.model;
     if (entry.type === 'thinking') state.thinkingLevel = entry.level;

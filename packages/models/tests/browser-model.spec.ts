@@ -36,7 +36,7 @@ test('the global recent model survives history navigation and page reload', asyn
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.locator('.message.assistant')).toHaveText('Mock response');
     await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeVisible();
-    expect(mock.requests.at(-1).model).toBe('second-model');
+    expect(mock.requests.at(-1)?.model).toBe('second-model');
     await expect(page.getByLabel('Thinking level')).toHaveValue('high');
     await page.getByRole('button', { name: 'Old model conversation', exact: true }).click();
     await expect(modelButton(page)).toHaveText('Second Model');
@@ -45,7 +45,7 @@ test('the global recent model survives history navigation and page reload', asyn
     await page.getByRole('textbox', { name: 'Message' }).fill('Use the recent model');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.locator('.message.assistant')).toHaveCount(2);
-    expect(mock.requests.at(-1).model).toBe('second-model');
+    expect(mock.requests.at(-1)?.model).toBe('second-model');
   } finally {
     await page.close(); await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true });
   }
