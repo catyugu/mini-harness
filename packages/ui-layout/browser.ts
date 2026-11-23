@@ -13,7 +13,6 @@ const slots = {
   'header.actions': 'headerActions',
   'conversation.header': 'conversationExtensions',
   'conversation.body': 'conversationSlot',
-  'page.main': 'mainSlot',
   'inspector.extensions': 'inspectorExtensions',
   'dialog.root': 'dialogSlot'
 } as const;

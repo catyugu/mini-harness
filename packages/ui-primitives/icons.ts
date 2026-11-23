@@ -45,8 +45,10 @@ export function icon(spec: PluginIcon = 'plugin') {
   svg.append(path);
   return svg;
 }
-export function hydrateIcons() {
-  for (const node of document.querySelectorAll<HTMLElement>('[data-icon]')) {
+export function hydrateIcons(root: ParentNode = document) {
+  const nodes = [...root.querySelectorAll<HTMLElement>('[data-icon]')];
+  if (root instanceof HTMLElement && root.matches('[data-icon]')) nodes.unshift(root);
+  for (const node of nodes) {
     node.replaceChildren(icon(node.dataset.icon ?? 'plugin'));
     node.removeAttribute('data-icon');
   }

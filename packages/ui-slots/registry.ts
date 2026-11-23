@@ -6,7 +6,7 @@ export type SlotName =
   | 'sidebar.primary' | 'sidebar.actions' | 'sidebar.navigation' | 'sidebar.footer'
   | 'header.title' | 'header.actions' | 'conversation.body' | 'conversation.header'
   | 'conversation.composer' | 'conversation.approvals'
-  | 'settings.extensions' | 'inspector.extensions' | 'dialog.root' | 'page.main';
+  | 'settings.extensions' | 'inspector.extensions' | 'dialog.root';
 export type SlotKind = 'single' | 'list';
 interface Entry { node: HTMLElement; order: number; sequence: number }
 
