@@ -1,0 +1,11 @@
+{
+  "name": "@mini-harness/ui-runtime",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@mini-harness/contracts": "file:../contracts",
+    "@mini-harness/ui-slots": "file:../ui-slots",
+    "@mini-harness/web": "file:../web"
+  }
+}

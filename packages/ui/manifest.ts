@@ -1,11 +1,7 @@
 /** The only built-in browser roster. Entries contain URLs, not imports of feature implementations.
  * This graph is served by the Host and assembled by the generic browser boot.
  */
-export interface BrowserEntry {
-  id: string;
-  browser: string;
-  requires?: string[];
-}
+import type { BrowserEntry } from '../contracts/browser.js';
 
 export const browserEntries: BrowserEntry[] = [
   { id: 'core:theme', browser: '/packages/ui-theme/browser.js' },

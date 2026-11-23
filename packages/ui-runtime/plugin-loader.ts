@@ -1,8 +1,8 @@
-import type { FrontendHost, FrontendSetup } from './extensions.js';
-import type { Bootstrap } from '../types.js';
-import type { BrowserEntry } from '../../ui/manifest.js';
-import type { PluginMetadata } from '../../contracts/plugins.js';
-import { data } from '../api.js';
+import type { FrontendHost, FrontendSetup } from './frontend.js';
+import type { Bootstrap } from '../web/types.js';
+import type { BrowserEntry } from '../contracts/browser.js';
+import type { PluginMetadata } from '../contracts/plugins.js';
+import { data } from '../web/api.js';
 
 export type BrowserPluginFailures = ReadonlyMap<string, unknown>;
 
@@ -45,7 +45,7 @@ export function createBrowserGraphLoader(host: FrontendHost) {
       try {
         if (failed.has(id) || plugin.requires?.some((parent) => failed.has(parent)))
           throw failed.get(id) ?? new Error('Browser dependency failed');
-        let setup: FrontendSetup | import('./extensions.js').BrowserPlugin;
+        let setup: FrontendSetup | import('./frontend.js').BrowserPlugin;
         let config = snapshot.settings.pluginConfig[id];
         if (plugin.browser) setup = (await import(plugin.browser)).default;
         else {

@@ -1,12 +1,12 @@
-import { Context, type Fiber } from '../vendor/cordis.js';
-import type { ComposerCommand } from '../contracts/commands.js';
-import type { MessageContent, ViewMessage } from '../../contracts/message.js';
-import type { Attachment } from '../../contracts/input.js';
-import type { ModelChoice } from '../../contracts/conversation.js';
-import type { Conversation } from '../../contracts/conversation.js';
-import type { RightTabType, TabScope, RightTabsPort } from '../contracts/tabs.js';
-import type { Bootstrap } from '../types.js';
-import { SlotRegistry, type SlotName, type SlotKind } from '../../ui-slots/registry.js';
+import { Context, type Fiber } from '../web/vendor/cordis.js';
+import type { ComposerCommand } from '../web/contracts/commands.js';
+import type { MessageContent, ViewMessage } from '../contracts/message.js';
+import type { Attachment } from '../contracts/input.js';
+import type { ModelChoice } from '../contracts/conversation.js';
+import type { Conversation } from '../contracts/conversation.js';
+import type { RightTabType, TabScope, RightTabsPort } from '../web/contracts/tabs.js';
+import type { Bootstrap } from '../web/types.js';
+import { SlotRegistry, type SlotName, type SlotKind } from '../ui-slots/registry.js';
 
 export interface ToolView { name: string; state: string; content?: MessageContent; arguments?: unknown; sessionId?: string }
 export interface Suggestion {

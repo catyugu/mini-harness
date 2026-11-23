@@ -4,10 +4,10 @@ import type { RunEvent, RunInfo } from '../../contracts/transport.js';
 import type { ConversationView } from '../types.js';
 import { payload, workspaceRoute } from '../api.js';
 import { readConversation, observeRun } from '../transport/session-client.js';
-import type { FrontendApi } from '../kernel/extensions.js';
+type BrowserRequest = <T>(path: string, options?: RequestInit) => Promise<T>;
 
 /** No DOM state or browser layout dependencies: the conversation command boundary. */
-export function createConversationController(request: FrontendApi['request']) {
+export function createConversationController(request: BrowserRequest) {
   return {
     read: (id: string, signal: AbortSignal) => readConversation(id, signal),
     follow: (view: ConversationView, signal: AbortSignal, accept: (event: RunEvent) => void, reconnect: () => void) =>

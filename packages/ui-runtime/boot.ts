@@ -1,9 +1,9 @@
-import { Context } from './vendor/cordis.js';
-import { data } from './api.js';
-import { BrowserState } from './models/browser-state.js';
-import { FrontendHost } from './kernel/extensions.js';
-import { createBrowserGraphLoader, type BrowserPluginFailures } from './kernel/plugin-loader.js';
-import type { Bootstrap } from './types.js';
+import { Context } from '../web/vendor/cordis.js';
+import { data } from '../web/api.js';
+import { BrowserState } from '../web/models/browser-state.js';
+import { FrontendHost } from './frontend.js';
+import { createBrowserGraphLoader, type BrowserPluginFailures } from './plugin-loader.js';
+import type { Bootstrap } from '../web/types.js';
 
 declare module 'cordis' {
   interface Context {
