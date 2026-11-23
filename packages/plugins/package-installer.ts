@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { lstatSync, mkdtempSync, readdirSync, renameSync, rmSync } from 'node:fs';
+import { lstatSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import type { Paths } from '@mini-harness/contracts/config';
@@ -36,31 +36,25 @@ export async function installPackagedPlugin(paths: Paths, operation: 'install' |
   if (previous && packageSpecPattern.exec(previous.spec)[1] !== name)
     throw new Error('Update must use the installed package name: ' + packageSpecPattern.exec(previous.spec)[1]);
 
-  const staging = mkdtempSync(join(paths.plugins, '.package-'));
   const generation = randomUUID();
-  const directory = join(staging, generation);
+  const directory = join(target, generation);
+  // Windows pnpm junctions use absolute paths. Install at the permanent path and publish only the pointer.
+  if (operation === 'install') mkdirSync(target, { mode: 0o700 });
+  let installedPackage: ReturnType<typeof packageBundle>['package'];
   try {
     writeJson(join(directory, 'package.json'), { name: 'mini-harness-plugin-install', private: true });
     await installPackage(directory, spec);
-    const { folder, package: installedPackage } = packageBundle(directory, spec);
-    describePlugin(id, folder);
-    const source = { spec, generation };
-    if (operation === 'install') {
-      writeJson(join(staging, packageMarker), source);
-      renameSync(staging, target);
-    } else {
-      const installed = join(target, generation);
-      renameSync(directory, installed);
-      try { writeJson(join(target, packageMarker), source); }
-      catch (error) { rmSync(installed, { recursive: true, force: true }); throw error; }
-      // A generation is private staging storage. Remove every former generation after publishing.
-      for (const entry of readdirSync(target, { withFileTypes: true })) {
-        if (entry.isDirectory() && entry.name !== generation && generationPattern.test(entry.name))
-          rmSync(join(target, entry.name), { recursive: true, force: true });
-      }
-    }
-    return installedPackage;
-  } finally {
-    rmSync(staging, { recursive: true, force: true });
+    const bundle = packageBundle(directory, spec);
+    describePlugin(id, bundle.folder);
+    installedPackage = bundle.package;
+    writeJson(join(target, packageMarker), { spec, generation });
+  } catch (error) {
+    rmSync(operation === 'install' ? target : directory, { recursive: true, force: true });
+    throw error;
   }
+  for (const entry of readdirSync(target, { withFileTypes: true })) {
+    if (entry.isDirectory() && entry.name !== generation && generationPattern.test(entry.name))
+      rmSync(join(target, entry.name), { recursive: true, force: true });
+  }
+  return installedPackage;
 }

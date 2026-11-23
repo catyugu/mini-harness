@@ -106,7 +106,7 @@ test('pnpm distribution resolves dependencies, updates atomically and serves bot
     method, headers, body: JSON.stringify(body)
   });
   const metadata = (await (await request('/plugins')).json()).find((plugin) => plugin.id === id);
-  assert.deepEqual(metadata.package, { name, version: '1.1.0' });
+  assert.deepEqual(metadata.package, { name, version: '1.1.0' }, metadata.error);
   assert.equal(metadata.state, 'discovered');
   const response = await request('/settings', 'PATCH', { plugins: { [id]: true } });
   assert.equal(response.status, 200, await response.text());
