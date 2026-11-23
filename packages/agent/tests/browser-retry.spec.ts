@@ -13,7 +13,7 @@ test('retry retains image attachments after selecting an image-capable model', a
   const service = await startIsolatedHost(paths);
   try {
     await page.goto(service.url + '/#token=' + service.token);
-    await page.locator('#composer input[type=file]').setInputFiles(resolve('web/icon-192.png'));
+    await page.locator('#composer input[type=file]').setInputFiles(resolve('packages/web/icon-192.png'));
     await expect(page.locator('.attachment')).toHaveCount(1);
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Read the picture');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
