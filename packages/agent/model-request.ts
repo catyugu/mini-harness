@@ -39,6 +39,7 @@ export async function requestModel(llm: LlmPort, request: LlmRequest, options: {
     if (!failed || streamed || message.content.length || signal.aborted || message.stopReason === 'aborted' || attempt >= 3)
       return message;
     try {
+      if (!sessionId) return message; // A plugin retry requires an owned conversation.
       const retry = await options.retry?.({ sessionId, model, attempt, signal, error: message.errorMessage || 'Model request failed' });
       if (!retry) return message;
       if (retry.delayMs) await sleep(retry.delayMs, undefined, { signal });

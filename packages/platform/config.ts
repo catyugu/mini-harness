@@ -123,14 +123,25 @@ export function mergeSettings(current: Settings, patch: SettingsPatch): Settings
   if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw new Error('Invalid settings patch');
   const allowed = Object.keys(DEFAULTS);
   if (Object.keys(patch).some((key) => !allowed.includes(key))) throw new Error('Unknown settings field');
-  for (const group of ['model', 'plugins', 'pluginConfig', 'providers', 'scopes']) {
+  for (const group of ['model', 'plugins', 'pluginConfig', 'providers', 'scopes'] as const) {
     if (group in patch && (!patch[group] || typeof patch[group] !== 'object' || Array.isArray(patch[group]))) throw new Error('Invalid settings section');
   }
   const next: Settings = {
     ...current,
     ...patch,
     model: { ...current.model, ...(patch.model || {}) },
-    plugins: { ...current.plugins, ...patch.plugins },
+    providers: patch.providers ? Object.fromEntries(Object.entries(patch.providers).map(([id, provider]) => {
+      if (typeof provider !== 'string') throw new Error('Invalid provider selection: ' + id);
+      return [id, provider];
+    })) : current.providers,
+    scopes: patch.scopes ? Object.fromEntries(Object.entries(patch.scopes).map(([id, scope]) => {
+      if (!scope || typeof scope !== 'object' || Array.isArray(scope)) throw new Error('Invalid scope: ' + id);
+      return [id, scope];
+    })) : current.scopes,
+    plugins: Object.fromEntries(Object.entries({ ...current.plugins, ...patch.plugins }).map(([id, enabled]) => {
+      if (typeof enabled !== 'boolean') throw new Error('Invalid plugin switch: ' + id);
+      return [id, enabled];
+    })),
     pluginConfig: Object.fromEntries([...new Set([...Object.keys(current.pluginConfig), ...Object.keys(patch.pluginConfig ?? {})])]
       .map((id) => [id, { ...(current.pluginConfig[id] ?? {}), ...(patch.pluginConfig?.[id] ?? {}) }]))
   };

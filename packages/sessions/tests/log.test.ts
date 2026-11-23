@@ -1,3 +1,4 @@
+import { expectPresent } from '../../../test/support/required.js';
 import assert from 'node:assert/strict';
 import { appendFileSync, linkSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -66,7 +67,7 @@ test('a durable message acknowledges inbox delivery exactly once and restart ret
   log.append({ type: 'run', run: { id: 'run', sessionId: 'conversation', state: 'running', startedAt: new Date().toISOString(), sequence: 4 } });
   log.close();
   log = open(); log.recover();
-  assert.equal(log.projection().run.state, 'interrupted');
+  assert.equal(log.projection().run?.state, 'interrupted');
   assert.deepEqual(log.projection().inbox.map(({ id }) => id), ['pending']);
   const count = log.entries().length; log.recover();
   assert.equal(log.entries().length, count);
@@ -149,6 +150,28 @@ test('attachments retain full model input while display keeps the submitted text
     presentation: { userText: 'read this', attachments: [{ name: 'secret.txt', mimeType: 'text/plain' }] } });
   const state = log.projection();
   assert.equal(state.messages[0].content, 'read this');
-  assert.equal(state.messages[0].attachments[0].name, 'secret.txt');
+  assert.equal(expectPresent(state.messages[0]?.attachments?.[0], 'session attachment').name, 'secret.txt');
   assert.match(String(state.contextMessages[0].content), /contents/);
+});
+
+test('tool execution stays auditable while accepted content is stored as a compact reversible delta', (t) => {
+  const { open, file } = fixture(t);
+  let log = open();
+  const content = 'x'.repeat(7200);
+  const raw = log.append({ type: 'tool-execution', result: {
+    role: 'toolResult', toolCallId: 'read-1', toolName: 'read',
+    content: [{ type: 'text', text: content }], isError: false, timestamp: 1
+  } });
+  const accepted = log.append({ type: 'tool-accepted', executionId: raw.id,
+    contentDelta: { prefix: JSON.stringify([{ type: 'text', text: content }]).length - 3,
+      suffix: 3, insert: ' redacted' } });
+  assert.ok(readFileSync(file, 'utf8').length < 9000, 'Original content should not be duplicated');
+  assert.equal(log.projection().leafId, accepted.id);
+  const before = log.projection().contextMessages[0];
+  assert.equal(before.role, 'toolResult');
+  log.close();
+  log = open();
+  assert.deepEqual(log.projection().contextMessages[0], before);
+  assert.equal(log.entries().filter((entry) => entry.type === 'tool-execution').length, 1);
+  assert.throws(() => log.append({ type: 'tool-accepted', executionId: 'a'.repeat(32) }), /missing execution/);
 });

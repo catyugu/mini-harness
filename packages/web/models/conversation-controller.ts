@@ -15,7 +15,8 @@ export function createConversationController(request: BrowserRequest) {
     create: (workspaceId: string) => request<Conversation>(workspaceRoute(workspaceId, '/sessions'), payload('POST', {})),
     start: (id: string, input: { message: string; attachments?: Attachment[]; model?: ModelChoice; thinkingLevel?: string }) =>
       request<RunInfo>('/sessions/' + id + '/runs', payload('POST', input)),
-    queue: (id: string, input: { message: string; mode: 'steer' | 'followUp'; attachments?: Attachment[] }) =>
+    queue: (id: string, input: { message: string; mode: 'steer' | 'followUp';
+      attachments?: Attachment[]; model?: ModelChoice; thinkingLevel?: string }) =>
       request<ConversationView['queue']>('/sessions/' + id + '/queue', payload('POST', input)),
     getQueue: (id: string, signal: AbortSignal) =>
       request<ConversationView['queue']>('/sessions/' + id + '/queue', { signal }),

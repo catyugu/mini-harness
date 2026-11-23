@@ -1,24 +1,12 @@
-import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { lstatSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import type { Paths } from '@mini-harness/contracts/config';
 import { readSettings, writeJson } from '@mini-harness/platform/config';
 import { describePlugin } from './descriptor.js';
 import { assertDisabled } from './files.js';
+import { installRegistryPackage } from './registry-client.js';
 import { generationPattern, packageBundle, packageMarker, packageSource, packageSpecPattern, pluginIdPattern } from './source.js';
-
-function installPackage(cwd: string, spec: string) {
-  const pnpm = join(dirname(createRequire(import.meta.url).resolve('pnpm')), 'bin/pnpm.cjs');
-  const args = ['add', '--save-prod', '--save-exact', '--ignore-scripts', '--ignore-pnpmfile', '--ignore-workspace',
-    '--config.node-linker=isolated', '--config.lockfile=true', '--', spec];
-  return new Promise<void>((resolve, reject) => {
-    const child = spawn(process.execPath, [pnpm, ...args], { cwd, stdio: 'inherit', windowsHide: true });
-    child.once('error', reject);
-    child.once('exit', (code) => code === 0 ? resolve() : reject(new Error('pnpm plugin installation failed')));
-  });
-}
 
 /** CLI holds the instance lock for all inspection, installation and publication. */
 export async function installPackagedPlugin(paths: Paths, operation: 'install' | 'update', id: string, requested: string | undefined, reserved: (id: string) => boolean) {
@@ -33,17 +21,18 @@ export async function installPackagedPlugin(paths: Paths, operation: 'install' |
   const spec = requested ?? previous?.spec;
   const name = typeof spec === 'string' && packageSpecPattern.exec(spec)?.[1];
   if (!name) throw new Error('Expected an npm package name with an optional version or tag');
-  if (previous && packageSpecPattern.exec(previous.spec)[1] !== name)
-    throw new Error('Update must use the installed package name: ' + packageSpecPattern.exec(previous.spec)[1]);
+  const originalName = previous && packageSpecPattern.exec(previous.spec)?.[1];
+  if (previous && (!originalName || originalName !== name))
+    throw new Error('Update must use the installed package name: ' + (originalName ?? previous.spec));
 
   const generation = randomUUID();
   const directory = join(target, generation);
-  // Windows pnpm junctions use absolute paths. Install at the permanent path and publish only the pointer.
+  // Stage inside the permanent directory so installation paths remain stable across platforms.
   if (operation === 'install') mkdirSync(target, { mode: 0o700 });
   let installedPackage: ReturnType<typeof packageBundle>['package'];
   try {
     writeJson(join(directory, 'package.json'), { name: 'mini-harness-plugin-install', private: true });
-    await installPackage(directory, spec);
+    await installRegistryPackage(directory, spec);
     const bundle = packageBundle(directory, spec);
     describePlugin(id, bundle.folder);
     installedPackage = bundle.package;

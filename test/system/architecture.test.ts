@@ -1,3 +1,4 @@
+import { expectPresent } from '../support/required.js';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -130,7 +131,7 @@ test('each capability declares the services it reads and publishes', () => {
   for (const [, specifier] of descriptors) {
     const path = join(packages, specifier + '.ts');
     const descriptor = readFileSync(path, 'utf8');
-    const id = descriptor.match(/id: '([^']+)'/)[1];
+    const id = expectPresent(descriptor.match(/id: '([^']+)'/), 'plugin identifier')[1];
     const plugin = byId.get(id);
     assert.ok(plugin);
     let source = descriptor;

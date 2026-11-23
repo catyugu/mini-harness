@@ -1,3 +1,4 @@
+import { expectPresent } from '../support/required.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -28,7 +29,9 @@ test('prompt contributions coexist, override within a session tree and are remov
   const sibling = app.runtime.registry.create();
   async function prompt(id: string) {
     await app.runtime.runs.send(id, 'Continue');
-    return (mock.requests.at(-1).messages as { role: string; content: string }[]).find(({ role }) => role === 'system').content;
+    const request = expectPresent(mock.requests.at(-1), 'recorded model request');
+    const system = (request.messages as { role: string; content: string }[]).find(({ role }) => role === 'system');
+    return expectPresent(system, 'system message').content;
   }
   const configured = await request('/settings', 'PATCH', {
     plugins: { 'app-prompt': true, 'more-prompt': true },
@@ -97,12 +100,20 @@ test('an application plugin replaces only LLM and composes execution hooks witho
   const requests = sessionLog.entries().filter((entry) => entry.type === 'model-request');
   assert.equal(requests.length, 2);
   assert.match(requests[0].request.systemPrompt, /\[first\]\[second\]$/);
-  assert.equal(requests[0].request.messages.at(-1).content, 'Temporary context');
-  assert.equal(requests[1].request.messages, undefined);
-  assert.equal(sessionLog.projection(requests[1].parentId).contextMessages.at(-1).role, 'toolResult');
+  assert.equal(expectPresent(expectPresent(requests[0].request.messagesPatch, 'transformed message patch').insert.at(-1), 'transformed message').content, 'Temporary context');
+  assert.equal(requests[1].request.messagesPatch, undefined);
+  assert.equal(expectPresent(sessionLog.requestSnapshot(requests[0].id).messages.at(-1), 'model input message').content, 'Temporary context');
+  assert.equal(expectPresent(sessionLog.requestSnapshot(requests[1].id).messages.at(-1), 'model tool result').role, 'toolResult');
+  assert.equal(sessionLog.entries().filter((entry) => entry.type === 'tool-schema').length, 1);
+  assert.equal(expectPresent(sessionLog.projection(requests[1].parentId).contextMessages.at(-1), 'projection tool result').role, 'toolResult');
   assert.deepEqual(log.contextMessages.filter((message) => message.role === 'toolResult').map(({ toolCallId, isError }) =>
     [toolCallId, isError]), [['denied', true], ['allowed', false]]);
   assert.equal(mock.requests.length, 0);
+  const execution = sessionLog.entries().find((entry) => entry.type === 'tool-execution');
+  const accepted = sessionLog.entries().find((entry) => entry.type === 'tool-accepted');
+  assert.ok(execution && accepted);
+  assert.equal(accepted.executionId, execution.id);
+  assert.ok(JSON.stringify(accepted).length < JSON.stringify(execution).length);
   assert.equal((await request('/settings', 'PATCH', { plugins: { transport: false, pipeline: false }, providers: {} })).status, 200);
   assert.equal(await app.runtime.runs.send(session.id, 'Restore the built-in LLM'), 'Mock response');
 });
@@ -149,13 +160,16 @@ test('an invalid transformed request fails before the provider is invoked', asyn
 test('unmount signals an active request hook and runs cleanup after it settles', { timeout: 5000 }, async (t) => {
   const { app, paths, request } = await fixture(t);
   const key = Symbol.for('mini-harness-test-hook-drain');
-  let entered: () => void, cancelled: () => void, release: () => void;
+  let entered: () => void = () => { throw new Error('Not started'); };
+  let cancelled: () => void = () => { throw new Error('Not started'); };
+  let release: () => void = () => { throw new Error('Not started'); };
   const started = new Promise<void>((resolve) => { entered = resolve; });
   const signalled = new Promise<void>((resolve) => { cancelled = resolve; });
   const hold = new Promise<void>((resolve) => { release = resolve; });
   const state = { entered, cancelled, hold, cleaned: false };
-  globalThis[key] = state;
-  t.after(() => { release(); delete globalThis[key]; });
+  const shared = globalThis as typeof globalThis & Record<symbol, typeof state>;
+  shared[key] = state;
+  t.after(() => { release(); delete shared[key]; });
   plugin(paths.plugins, 'slow-transform', {}, `export default (_ctx, api) => {
     const state = globalThis[Symbol.for('mini-harness-test-hook-drain')];
     api.modelRequest(async (_request, { signal }) => {

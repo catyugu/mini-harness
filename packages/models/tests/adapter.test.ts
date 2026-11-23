@@ -8,7 +8,7 @@ import { readJson, writeJson } from '@mini-harness/platform/config';
 import type { LlmEvent, NativeMessage } from '@mini-harness/contracts/llm';
 
 test('model adapter streams native messages, tool calls and metadata through the HTTP provider', async (t) => {
-  const mock = await createMockProvider(({ messages }) => messages.at(-1).role === 'tool'
+  const mock = await createMockProvider(({ messages }) => messages.at(-1)?.role === 'tool'
     ? 'Tool complete' : { tool: 'inspect', args: { path: 'note.txt' } });
   const { root, paths } = createFixturePaths(mock.url);
   const adapter = new PiModelStore(paths.home);
@@ -22,11 +22,12 @@ test('model adapter streams native messages, tool calls and metadata through the
   const first: LlmEvent[] = [];
   for await (const event of new PiLlm(adapter).stream(request)) first.push(event);
   const final = first.find((event) => event.type === 'done');
-  assert.equal(final.type, 'done');
+  assert.ok(final && final.type === 'done', 'Model must produce a terminal event');
   assert.equal(final.message.stopReason, 'toolUse');
+  assert.ok(final.message.providerData);
   assert.equal(final.message.providerData.api, 'openai-completions');
   const call = final.message.content.find((part) => part.type === 'toolCall');
-  assert.equal(call.type, 'toolCall');
+  assert.ok(call && call.type === 'toolCall');
   assert.deepEqual(call.arguments, { path: 'note.txt' });
   assert.ok(first.some((event) => event.type === 'tool-call' && event.call.id === call.id));
   const messages: NativeMessage[] = [input, final.message, { role: 'toolResult', content: [{ type: 'text', text: 'Contents' }],
@@ -34,9 +35,16 @@ test('model adapter streams native messages, tool calls and metadata through the
   let answer = '';
   for await (const event of new PiLlm(adapter).stream({ ...request, messages })) if (event.type === 'text-delta') answer += event.text;
   assert.equal(answer, 'Tool complete');
-  assert.equal((mock.requests.at(-1).messages as any[]).at(-1).role, 'tool');
-  assert.equal(adapter.capabilities(choice).contextWindow, 32768);
-  assert.equal(adapter.list().find(({ provider }) => provider === 'local-mock').configured, true);
+  const latest = mock.requests.at(-1);
+  assert.ok(latest);
+  const lastMessage = latest.messages as { role?: string }[];
+  assert.equal(lastMessage.at(-1)?.role, 'tool');
+  const capabilities = adapter.capabilities(choice);
+  assert.ok(capabilities);
+  assert.equal(capabilities.contextWindow, 32768);
+  const configured = adapter.list().find(({ provider }) => provider === 'local-mock');
+  assert.ok(configured);
+  assert.equal(configured.configured, true);
 });
 
 test('credential updates serialize across providers and survive adapter replacement without leaking keys', async (t) => {
@@ -80,7 +88,7 @@ test('invalid provider refresh leaves the working catalog intact and unsupported
 });
 
 test('abort reaches the model transport and yields a native terminal message without retrying', async (t) => {
-  let entered: () => void, release: () => void;
+  let entered!: () => void, release!: () => void;
   const ready = new Promise<void>((resolve) => { entered = resolve; });
   const hold = new Promise<void>((resolve) => { release = resolve; });
   const mock = await createMockProvider(async () => { entered(); await hold; return 'Late response'; });
@@ -98,7 +106,7 @@ test('abort reaches the model transport and yields a native terminal message wit
   await ready;
   controller.abort(new Error('Cancelled'));
   const terminal = (await pending).find((event) => event.type === 'done');
-  assert.equal(terminal.type, 'done');
+  assert.ok(terminal && terminal.type === 'done');
   assert.equal(terminal.message.stopReason, 'aborted');
   assert.equal(mock.requests.length, 1);
   release();

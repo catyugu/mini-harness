@@ -83,6 +83,10 @@
 .status { padding: 0 8px 7px; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
 .status:empty { display: none; }
 .status.error { color: var(--danger); }
+#changedFiles { position: relative; font-size: 12px; min-width: 0; }
+#changedFiles summary { cursor: pointer; color: var(--muted); }
+#changedFiles ul { margin: 4px 0; padding: 6px 8px 6px 24px; max-height: 150px; overflow: auto; overflow-wrap: anywhere; font: 11px/1.5 ui-monospace, monospace; }
+#changedFiles[hidden] { display: none; }
 .composer {
   padding: 8px 10px 6px; border: 1px solid var(--border); background: var(--surface);
   border-radius: var(--radius-lg); box-shadow: var(--shadow);

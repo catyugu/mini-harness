@@ -17,7 +17,7 @@ export function packageSource(folder: string): PackageSource | undefined {
   const marker = join(folder, packageMarker);
   if (!lstatSync(marker, { throwIfNoEntry: false })) return;
   if (!isRegularFile(marker)) throw new Error('Invalid plugin package source file');
-  const source = readJson<PackageSource>(marker, null);
+  const source = readJson<PackageSource | null>(marker, null);
   if (!source || typeof source.spec !== 'string' || !packageSpecPattern.test(source.spec) ||
       typeof source.generation !== 'string' || !generationPattern.test(source.generation))
     throw new Error('Invalid plugin package source');
@@ -33,7 +33,7 @@ export function packageBundle(directory: string, spec: string) {
   const location = relative(root, folder);
   if (!location || location === '..' || location.startsWith('..' + sep) || isAbsolute(location))
     throw new Error('Plugin package resolves outside its installation directory');
-  if (!isRegularFile(join(root, 'pnpm-lock.yaml'))) throw new Error('Missing plugin dependency lockfile');
+  if (!isRegularFile(join(root, 'package-lock.json'))) throw new Error('Missing plugin dependency lockfile');
   const manifestPath = join(folder, 'package.json');
   if (!isRegularFile(manifestPath)) throw new Error('Missing plugin package.json');
   const manifest = readJson<{ name?: string; version?: string; type?: string }>(manifestPath, {});

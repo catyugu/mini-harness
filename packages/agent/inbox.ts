@@ -16,12 +16,14 @@ export class Inbox {
     };
   }
 
-  enqueue(text: string, mode: InboxItem['mode'], attachments?: Attachment[]) {
+  enqueue(text: string, mode: InboxItem['mode'], attachments?: Attachment[],
+    options: Pick<InboxItem, 'model' | 'thinkingLevel'> = {}) {
     if (mode !== 'steer' && mode !== 'followUp') throw new Error('Invalid queue mode');
     if (this.list().length >= 16) throw new Error('Queue is full');
     const prepared = prepareInput(text, attachments);
     this.log.append({ type: 'inbox-enqueued', item: {
-      id: randomBytes(16).toString('hex'), mode, text: prepared.text, images: prepared.images, input: prepared.input
+      id: randomBytes(16).toString('hex'), mode, text: prepared.text, images: prepared.images,
+      input: prepared.input, ...options
     } });
     return this.view();
   }

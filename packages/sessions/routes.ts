@@ -22,8 +22,24 @@ export function registerSessionRoutes(ctx: Context) {
     const requested = new Set(url.searchParams.getAll('id'));
     if (requested.size > 100 || [...requested].some((id) => !validSession.test(id)))
       throw new Error('Invalid conversation selection');
-    const records = requested.size ? [...requested].map((id) => ctx.harnessRegistry.get(id)).filter(Boolean) : ctx.harnessRegistry.list();
+    const records = requested.size ? [...requested].flatMap((id) => {
+      const record = ctx.harnessRegistry.get(id);
+      return record ? [record] : [];
+    }) : ctx.harnessRegistry.list();
     return records.map((record) => projectSession(ctx, record));
+  });
+  add('GET', '/api/sessions/search', ({ url }) => {
+    const query = (url.searchParams.get('q') ?? '').trim().toLocaleLowerCase();
+    if (query.length > 120) throw new Error('Search query is too long');
+    if (query.length < 2) return [];
+    return ctx.harnessRegistry.list().filter((record) => {
+      if (record.title.toLocaleLowerCase().includes(query)) return true;
+      return ctx.harnessRegistry.log(record.id).projection().messages.some((message) => {
+        const content = typeof message.content === 'string' ? message.content :
+          message.content.filter((part) => part.type === 'text').map((part) => part.text).join(' ');
+        return content.toLocaleLowerCase().includes(query);
+      });
+    }).map((record) => record.id);
   });
   add('POST', '/api/sessions', async ({ body }) => {
     const input = await body();

@@ -1,3 +1,4 @@
+import { expectPresent } from '../../../test/support/required.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { fixture } from '../../../test/support/api-fixture.js';
@@ -19,7 +20,7 @@ test('rejected revision input never changes the selected conversation branch', a
   ];
   for (const input of invalid) {
     const result = await request('/extensions/session-helper/revise', 'POST', {
-      sessionId: session.id, sourceEntryId: source.id, expectedLeafId: before.leafId, ...input
+      sessionId: session.id, sourceEntryId: expectPresent(source, 'source user message').id, expectedLeafId: before.leafId, ...input
     });
     if (result.status === 200) assert.equal((await finish(session.id)).body.run.state, 'failed');
     else assert.equal(result.status, 400, JSON.stringify(result.body));

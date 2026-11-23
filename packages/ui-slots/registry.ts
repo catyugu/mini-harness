@@ -105,7 +105,7 @@ export class SlotRegistry {
 
   private unmount(outlet: Outlet, entry: Entry, active: ActiveEntry) {
     outlet.active.delete(entry);
-    while (active.layers.length) active.layers.pop().mount.release();
+    while (active.layers.length) active.layers.pop()?.mount.release();
     active.base.release();
   }
 
@@ -125,7 +125,11 @@ export class SlotRegistry {
     try {
       for (const entry of entries) {
         if (owner.active.has(entry)) continue;
-        staged.set(entry, { base: this.mount(entry.render ?? (() => entry.node)), layers: [] });
+        const renderer: SlotRenderer = entry.render ?? (() => {
+          if (!entry.node) throw new Error('Slot contribution has no node or renderer');
+          return entry.node;
+        });
+        staged.set(entry, { base: this.mount(renderer), layers: [] });
       }
     } catch (error) {
       for (const { base } of staged.values()) base.release();
@@ -136,10 +140,11 @@ export class SlotRegistry {
     const decorators = [...(this.decorators.get(name) ?? [])].sort((a, b) => a.order - b.order);
     const nodes = entries.map((entry) => {
       const active = owner.active.get(entry);
+      if (!active) throw new Error('Missing mounted slot contribution');
       const applied = decorators.filter(({ key }) => key === undefined || key === entry.key);
       let reusable = 0;
       while (active.layers[reusable] && active.layers[reusable].decoration === applied[reusable]) reusable++;
-      while (active.layers.length > reusable) active.layers.pop().mount.release();
+      while (active.layers.length > reusable) active.layers.pop()?.mount.release();
       let node = active.layers.at(-1)?.mount.node ?? active.base.node;
       for (const decoration of applied.slice(reusable)) {
         const child = node;

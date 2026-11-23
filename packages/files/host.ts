@@ -12,7 +12,9 @@ export function setup(ctx: Context) {
     ctx.effect(() => tools.register(name, (id) => {
       const root = sessions.workspacePath(id);
       const access = scopes.require(id, 'harnessFileAccess');
-      const tool = fileTools(root, access.open(sessions.get(id).workspaceId))[index];
+      const session = sessions.get(id);
+    if (!session) throw new Error('Conversation not found');
+    const tool = fileTools(root, access.open(session.workspaceId))[index];
       if (name !== 'edit' && name !== 'write') return tool;
       return {
         ...tool,

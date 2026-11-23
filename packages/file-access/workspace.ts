@@ -71,7 +71,7 @@ export class Workspace implements WorkspaceFileAccess {
           const previous = handle;
           handle = nextHandle;
           dir = descriptor(handle);
-          await previous.close();
+          await previous?.close();
         } else {
           const stat = await lstat(next);
           if (stat.isSymbolicLink() || !stat.isDirectory() || !samePath(await realpath(next), next)) throw denied();
@@ -222,7 +222,9 @@ export class Workspace implements WorkspaceFileAccess {
     let visited = 0;
     while (pending.length) {
       signal?.throwIfAborted();
-      const { dir, inherited } = pending.pop();
+      const item = pending.pop();
+      if (!item) break;
+      const { dir, inherited } = item;
       const rules = await withRules(dir, inherited);
       for (const entry of await this.entries(dir)) {
         signal?.throwIfAborted();

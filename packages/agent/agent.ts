@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
+import { createHash } from 'node:crypto';
 import type { AgentPort, SessionStore } from '@mini-harness/contracts/services';
 import type { ModelChoice, SessionRecord } from '@mini-harness/contracts/conversation';
 import type { ModelCatalogPort } from '@mini-harness/contracts/models';
@@ -8,13 +9,15 @@ import type { ToolPort } from '@mini-harness/contracts/plugins';
 import type { SkillPort } from '@mini-harness/contracts/skills';
 import type { StreamEvent } from '@mini-harness/contracts/transport';
 import type { Attachment, ImageInput, PreparedMessage } from '@mini-harness/contracts/input';
-import type { SessionLogPort } from '@mini-harness/contracts/session-log';
+import type { SessionLogPort, MessagePatch } from '@mini-harness/contracts/session-log';
 import type { CapabilityObservation, OrderedHook, ToolProjection } from '@mini-harness/contracts/events';
 import type { MessageContent } from '@mini-harness/contracts/message';
 import { AgentRegistry } from './registry.js';
 import { Inbox } from './inbox.js';
 import type { ModelFailure, ModelRequestDraft, ModelRequestTransform, ModelRetry, StepContext, ToolResultTransform } from '@mini-harness/contracts/extensions';
+import type { InboxItem } from '@mini-harness/contracts/session-log';
 import { isToolContent } from '@mini-harness/contracts/tools';
+import { contentDelta } from '@mini-harness/platform/content-delta';
 import { applyTransforms } from './transforms.js';
 import { executeTool, scheduleTools } from './tool-pipeline.js';
 import { selectModel } from './model-selection.js';
@@ -39,6 +42,18 @@ interface AgentServices {
 }
 
 const textOf = (message: NativeAssistantMessage) => message.content.filter((part) => part.type === 'text').map((part) => part.text).join('');
+/** Store only the divergent interval of a transformed model context. */
+function messagePatch(base: NativeMessage[], actual: NativeMessage[]): MessagePatch | undefined {
+  let start = 0;
+  while (start < base.length && start < actual.length && isDeepStrictEqual(base[start], actual[start])) start++;
+  if (start === base.length && start === actual.length) return;
+  let endBase = base.length, endActual = actual.length;
+  while (endBase > start && endActual > start && isDeepStrictEqual(base[endBase - 1], actual[endActual - 1])) {
+    endBase--; endActual--;
+  }
+  return { start, deleteCount: endBase - start, insert: actual.slice(start, endActual) };
+}
+
 const failedTool = (call: ToolCallPart, reason: string): NativeToolMessage => ({
   role: 'toolResult', toolCallId: call.id, toolName: call.name, content: [{ type: 'text', text: reason }],
   isError: true, timestamp: Date.now()
@@ -47,6 +62,7 @@ const failedTool = (call: ToolCallPart, reason: string): NativeToolMessage => ({
 /** The harness owns turns, inbox delivery, tool calls, cancellation and compaction. */
 export class NativeAgent implements AgentPort {
   readonly agents = new AgentRegistry();
+  private readonly recordedSchemas = new WeakMap<SessionLogPort, Set<string>>();
 
   constructor(private readonly sessions: SessionStore, private readonly services: AgentServices) {}
 
@@ -74,7 +90,7 @@ export class NativeAgent implements AgentPort {
   }
 
   messages(id: string) {
-    return this.sessions.log(id).projection().messages.map((message) => message.role === 'toolResult'
+    return this.sessions.log(id).projection().messages.map((message) => message.role === 'toolResult' && message.toolName
       ? { ...message, content: this.services.transform({ sessionId: id, tool: message.toolName, content: message.content }) }
       : message);
   }
@@ -89,10 +105,19 @@ export class NativeAgent implements AgentPort {
     if (source?.type !== 'message' || source.message.role !== 'user') throw new Error('User message not found on active branch');
   }
 
-  async queueInput(id: string, text: string, mode: 'steer' | 'followUp', attachments?: Attachment[]) {
+  async queueInput(id: string, text: string, mode: 'steer' | 'followUp', attachments?: Attachment[],
+    options: Pick<InboxItem, 'model' | 'thinkingLevel'> = {}) {
     this.sessions.assertAvailable(id);
     if (!this.agents.acceptsInput(id)) throw new Error('The agent is not streaming; send a new message');
-    return new Inbox(this.sessions.log(id)).enqueue(text, mode, attachments);
+    const choice = options.model ? this.services.models(id).resolve(options.model) : this.activeModel(id);
+    if (!choice) throw new Error('Unknown queued model');
+    const capabilities = this.services.models(id).capabilities(choice);
+    if (options.thinkingLevel !== undefined &&
+      (!['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(options.thinkingLevel) ||
+       options.thinkingLevel !== 'off' && !capabilities?.reasoning ||
+       capabilities?.thinkingLevels && !capabilities.thinkingLevels.includes(options.thinkingLevel)))
+      throw new Error('Invalid queued thinking level');
+    return new Inbox(this.sessions.log(id)).enqueue(text, mode, attachments, options);
   }
 
   private async user(id: string, log: SessionLogPort, text: string, images: ImageInput[], input: PreparedMessage | undefined,
@@ -115,7 +140,7 @@ export class NativeAgent implements AgentPort {
     }
     if (!pending.size) return;
     const branch = new Set(log.branch().map(({ id }) => id));
-    const executed = new Set(log.entries().flatMap((entry) => entry.type === 'tool-execution' && branch.has(entry.parentId)
+    const executed = new Set(log.entries().flatMap((entry) => entry.type === 'tool-execution' && entry.parentId !== null && branch.has(entry.parentId)
       ? [entry.result.toolCallId] : []));
     for (const call of pending.values()) log.append({ type: 'message', message: failedTool(call, executed.has(call.id)
       ? 'The tool completed without a recorded model-visible result. The tool was not retried.'
@@ -126,21 +151,22 @@ export class NativeAgent implements AgentPort {
     options: Parameters<AgentPort['prompt']>[3]): Promise<string> {
     const { id } = record, { signal, choice, images = [], input, thinkingLevel, revision, changed } = options;
     const leave = this.agents.enter(id);
-    let log: SessionLogPort;
+    let runLog: SessionLogPort | undefined;
     try {
       await this.prepare(id, signal);
-      log = this.sessions.log(id);
-      let revisionParent: string | null;
+      const log = runLog = this.sessions.log(id);
+      let revisionParent: string | null = null;
       if (revision) {
         await this.revisionTarget(id, revision.sourceEntryId, revision.expectedLeafId);
         const source = log.branch().find((entry) => entry.id === revision.sourceEntryId);
+        if (!source) throw new Error('Revision source not found');
         revisionParent = source.parentId;
       }
       const previous = revision ? log.projection(revisionParent) : log.projection();
       const models = this.services.models(id);
-      const model = selectModel(models, { explicit: choice, stored: previous.model,
+      let model = selectModel(models, { explicit: choice, stored: previous.model,
         global: this.services.defaultModel(), child: Boolean(record.parentId) });
-      const capabilities = models.capabilities(model);
+      let capabilities = models.capabilities(model);
       if (images.length && !capabilities?.input.includes('image'))
         throw new Error('The selected model does not support image input. Choose an image-capable model and retry.');
       if (thinkingLevel !== undefined && thinkingLevel !== 'off' && !capabilities?.reasoning)
@@ -148,6 +174,7 @@ export class NativeAgent implements AgentPort {
       if (thinkingLevel !== undefined && capabilities?.thinkingLevels && !capabilities.thinkingLevels.includes(thinkingLevel))
         throw new Error('The selected model does not support thinking level: ' + thinkingLevel);
       const nextThinking = thinkingLevel ?? (capabilities?.reasoning ? previous.thinkingLevel : 'off');
+      let activeThinking = nextThinking;
       const skills = this.services.skills(id);
       const expanded = skills ? await skills.expand(this.sessions.workspacePath(id), prompt) : prompt;
       signal.throwIfAborted();
@@ -167,8 +194,25 @@ export class NativeAgent implements AgentPort {
       const deliver = async (mode: 'steer' | 'followUp') => {
         const item = inbox.next(mode);
         if (!item) return false;
-        if (item.images.length && !capabilities?.input.includes('image'))
+        const chosen = item.model ? selectModel(models, { explicit: item.model,
+          stored: model, global: this.services.defaultModel(), child: Boolean(record.parentId) }) : model;
+        const nextCapabilities = models.capabilities(chosen);
+        if (item.images.length && !nextCapabilities?.input.includes('image'))
           throw new Error('The selected model does not support queued image input');
+        const level = item.thinkingLevel ?? (nextCapabilities?.reasoning ? activeThinking : 'off');
+        if (level !== 'off' && !nextCapabilities?.reasoning ||
+            nextCapabilities?.thinkingLevels && !nextCapabilities.thinkingLevels.includes(level))
+          throw new Error('The selected model does not support queued thinking level');
+        if (model.provider !== chosen.provider || model.id !== chosen.id) {
+          model = chosen;
+          capabilities = nextCapabilities;
+          log.append({ type: 'model', model });
+          if (!record.parentId) this.services.rememberModel(model, id);
+        }
+        if (level !== activeThinking) {
+          activeThinking = level;
+          log.append({ type: 'thinking', level });
+        }
         await this.user(id, log, item.text, item.images, item.input, emit, item.id);
         return true;
       };
@@ -215,6 +259,8 @@ export class NativeAgent implements AgentPort {
         await scheduleTools(calls, advertisedTools, signal, async (call, tool, toolSignal) => {
           const steering = inbox.next('steer');
           let output: NativeToolMessage;
+          let executionId: string | undefined;
+          let originalContent: NativeToolMessage['content'] | undefined;
           emit({ type: 'tool', id: call.id, name: call.name, state: 'running', arguments: call.arguments });
           if (steering || toolSignal.aborted) output = failedTool(call, steering ? 'Skipped because a steering message arrived.' : 'Agent run cancelled');
           else if (!this.services.allowsTool(id, call.name)) output = failedTool(call, 'Tool denied by inherited scope policy: ' + call.name);
@@ -229,7 +275,8 @@ export class NativeAgent implements AgentPort {
               }
             });
             if (!output.isError && hooks.length) {
-              log.append({ type: 'tool-execution', result: output });
+              executionId = log.append({ type: 'tool-execution', result: output }).id;
+              originalContent = output.content;
               try {
                 const content = await applyTransforms(hooks, output.content, { ...step, signal: toolSignal, tool: call.name, callId: call.id },
                   (value) => { if (!isToolContent(value)) throw new Error('Invalid tool result content'); });
@@ -243,7 +290,12 @@ export class NativeAgent implements AgentPort {
               }
             }
           }
-          log.append({ type: 'message', message: output, elapsedMs: output.elapsedMs });
+          if (executionId) {
+            log.append({ type: 'tool-accepted', executionId,
+              contentDelta: contentDelta(JSON.stringify(originalContent), JSON.stringify(output.content)) });
+          } else {
+            log.append({ type: 'message', message: output, elapsedMs: output.elapsedMs });
+          }
           const details = output.details;
           if (!output.isError && typeof details?.changedPath === 'string') changed?.(details.changedPath);
           emit({ type: 'tool', id: call.id, name: call.name, state: output.isError ? 'error' : 'finished', arguments: call.arguments,
@@ -262,7 +314,7 @@ export class NativeAgent implements AgentPort {
       }
       throw new Error('Agent reached the configured turn limit (' + maxTurns + ')');
     } finally {
-      try { if (log && signal.aborted) new Inbox(log).cancel('Run cancelled'); }
+      try { if (runLog && signal.aborted) new Inbox(runLog).cancel('Run cancelled'); }
       finally { leave(); }
     }
   }
@@ -281,8 +333,20 @@ export class NativeAgent implements AgentPort {
       ...base, messages: input, systemPrompt, thinkingLevel, maxTokens
     }));
     validate(snapshot);
-    const messages = isDeepStrictEqual(snapshot.messages, projected.contextMessages) ? undefined : snapshot.messages;
-    log.append({ type: 'model-request', request: { ...snapshot, messages } }, projected.leafId);
+    const patch = messagePatch(projected.contextMessages, snapshot.messages);
+    const schemaHashes = this.recordedSchemas.get(log) ?? new Set(log.entries()
+      .filter((entry) => entry.type === 'tool-schema').map((entry) => entry.hash));
+    this.recordedSchemas.set(log, schemaHashes);
+    const toolSchema = snapshot.tools === undefined ? undefined :
+      createHash('sha256').update(JSON.stringify(snapshot.tools)).digest('hex');
+    if (toolSchema && snapshot.tools && !schemaHashes.has(toolSchema)) {
+      log.append({ type: 'tool-schema', hash: toolSchema, tools: snapshot.tools });
+      schemaHashes.add(toolSchema);
+    }
+    log.append({ type: 'model-request', request: {
+      model: snapshot.model, systemPrompt: snapshot.systemPrompt, thinkingLevel: snapshot.thinkingLevel,
+      maxTokens: snapshot.maxTokens, toolSchema, ...(patch && { messagesPatch: patch })
+    } }, projected.leafId);
     return { ...snapshot, sessionId: context.sessionId, signal: context.signal };
   }
 
@@ -305,7 +369,9 @@ export class NativeAgent implements AgentPort {
       throw new Error('Nothing to compact; at least three user turns are required');
     }
     // Keep two complete turns, so no retained tool result loses its matching assistant call.
-    const keepFromId = users.at(-2).id;
+    const boundary = users.at(-2);
+    if (!boundary) throw new Error('Not enough user turns to compact');
+    const keepFromId = boundary.id;
     const messages = projection.contextMessages;
     const prefix = messages.slice(0, projection.contextEntryIds.indexOf(keepFromId));
     if (!prefix.length) { if (automatic) return; throw new Error('Nothing to compact'); }

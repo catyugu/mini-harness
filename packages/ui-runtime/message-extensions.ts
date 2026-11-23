@@ -35,6 +35,6 @@ export class MessageExtensions {
 
   render(tool: ToolView, action = false) {
     try { return (action ? this.toolActions : this.renderers).get(tool.name)?.(tool); }
-    catch (error) { this.report(error); }
+    catch (error) { this.report(error instanceof Error ? error : new Error(String(error))); }
   }
 }

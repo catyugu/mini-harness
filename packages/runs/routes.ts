@@ -37,6 +37,8 @@ export function registerRoutes(ctx: Context) {
   });
   add('GET', '/api/sessions/:id/events', async ({ params, url, response }) => {
     const id = session(params.id);
-    runEvents(id, url.searchParams.get('run'), Number(url.searchParams.get('after') ?? 0), response);
+    const runId = url.searchParams.get('run');
+    if (!runId) throw new Error('Run ID is required');
+    runEvents(id, runId, Number(url.searchParams.get('after') ?? 0), response);
   });
 }

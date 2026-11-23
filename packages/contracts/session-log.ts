@@ -2,6 +2,7 @@ import type { ThinkingLevel } from './agent.js';
 import type { ModelChoice } from './conversation.js';
 import type { ImageInput, PreparedMessage } from './input.js';
 import type { ModelRequestSnapshot, NativeMessage, NativeToolMessage } from './llm.js';
+import type { ToolSchema } from './tools.js';
 import type { ViewMessage } from './message.js';
 import type { RunInfo } from './transport.js';
 
@@ -11,14 +12,39 @@ export interface InboxItem {
   text: string;
   images: ImageInput[];
   input?: PreparedMessage;
+  model?: ModelChoice;
+  thinkingLevel?: ThinkingLevel;
 }
+
+/** Changes relative to the parent branch's model context, not a copied transcript. */
+export interface MessagePatch {
+  start: number;
+  deleteCount: number;
+  insert: NativeMessage[];
+}
+
+/** JSON-string splice, avoiding a second copy of a large tool result. */
+export interface ContentDelta {
+  prefix: number;
+  suffix: number;
+  insert: string;
+}
+
+export type RecordedModelRequest = Omit<ModelRequestSnapshot, 'messages' | 'tools'> & {
+  toolSchema?: string;
+  messagesPatch?: MessagePatch;
+};
 
 /** The durable session protocol is independent of any model SDK. */
 export type SessionEvent =
   | { type: 'message'; message: NativeMessage; presentation?: PreparedMessage; elapsedMs?: number; inboxId?: string }
-  /** With no override, the request references the model context at its parent entry. */
-  | { type: 'model-request'; request: ModelRequestSnapshot }
+  /** Tool definitions are written once per distinct content and referenced by model requests. */
+  | { type: 'tool-schema'; hash: string; tools: ToolSchema[] }
+  /** The request references its parent branch's context and an optional minimal splice. */
+  | { type: 'model-request'; request: RecordedModelRequest }
   | { type: 'tool-execution'; result: NativeToolMessage }
+  /** A committed model-visible projection of the recorded raw execution. */
+  | { type: 'tool-accepted'; executionId: string; contentDelta?: ContentDelta }
   | { type: 'model'; model: ModelChoice }
   | { type: 'thinking'; level: ThinkingLevel }
   | { type: 'custom'; namespace: string; data: unknown }
@@ -60,5 +86,7 @@ export interface SessionLogPort {
   /** Starts a new active branch, preserving prior branches in the log. */
   select(leafId: string | null, expectedLeafId?: string | null): SessionEntry;
   projection(leafId?: string | null): SessionProjection;
+  /** Reconstruct exact model-visible inputs for audits, including distinct tool schemas. */
+  requestSnapshot(id: string): ModelRequestSnapshot & { messages: NativeMessage[] };
   close(): void;
 }

@@ -63,16 +63,19 @@ async function detached(paths: ReturnType<typeof getPaths>, port?: number) {
       cwd: paths.cwd, detached: true, stdio: ['ignore', output, output], windowsHide: true
     });
   } finally { closeSync(output); }
-  let failure: Error;
+  let failure: Error | undefined;
   child.on('error', (error) => { failure = error; });
   child.unref();
   for (let attempt = 0; attempt < 120; attempt++) {
     if (failure) throw failure;
     const info = readServerInfo(paths.pid);
-    if (info?.pid === child.pid && await serverStatus(paths.home, paths.pid)) {
-      console.log('mini-harness started independently (PID ' + child.pid + ')');
-      console.log(info.url + '/#token=' + info.token);
-      return;
+    if (info && info.pid === child.pid) {
+      const running = await serverStatus(paths.home, paths.pid);
+      if (running?.pid === info.pid) {
+        console.log('mini-harness started independently (PID ' + child.pid + ')');
+        console.log(info.url + '/#token=' + info.token);
+        return;
+      }
     }
     if (child.exitCode !== null || child.signalCode !== null) break;
     await sleep(100);
@@ -85,7 +88,7 @@ async function serve(paths: ReturnType<typeof getPaths>, port?: number, open = f
   const unlock = await lockInstance(paths.home);
   let app: Awaited<ReturnType<typeof import('@mini-harness/host/server').createMiniHarnessServer>>;
   let ready: Promise<void>;
-  let ending: Promise<void>;
+  let ending: Promise<void> | undefined;
   let stopping = false;
   const shutdown = () => {
     if (stopping) return;
@@ -123,7 +126,7 @@ async function serve(paths: ReturnType<typeof getPaths>, port?: number, open = f
   } catch (error) {
     shutdown();
     await ending;
-    if (error.code === 'EADDRINUSE') throw new Error('The requested HTTP port is already in use. Choose another with --port.');
+    if (error instanceof Error && 'code' in error && error.code === 'EADDRINUSE') throw new Error('The requested HTTP port is already in use. Choose another with --port.');
     throw error;
   }
 }

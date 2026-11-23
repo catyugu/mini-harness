@@ -1,3 +1,4 @@
+import { expectPresent } from '../../../test/support/required.js';
 import { test, expect } from '@playwright/test';
 import { rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -5,11 +6,12 @@ import { createFixturePaths, createMockProvider } from '../../../test/helpers/mo
 import { startIsolatedHost } from '../../../test/support/browser.js';
 
 test('switching workspaces preserves running conversations and each conversation’s file tabs', async ({ page }) => {
-  let entered: () => void, release: () => void;
+  let entered: () => void = () => { throw new Error('Not started'); };
+  let release: () => void = () => { throw new Error('Not started'); };
   const waiting = new Promise<void>((done) => { entered = done; });
   const held = new Promise<void>((done) => { release = done; });
   const mock = await createMockProvider(async ({ messages }) => {
-    if (messages.at(-1).content === 'Keep working here') { entered(); await held; return 'First workspace finished'; }
+    if (messages.at(-1)?.content === 'Keep working here') { entered(); await held; return 'First workspace finished'; }
     return 'Second workspace finished';
   });
   const { root, paths } = createFixturePaths(mock.url);
@@ -42,7 +44,7 @@ test('switching workspaces preserves running conversations and each conversation
     await separator.press('ArrowLeft');
     await expect(separator).toHaveAttribute('aria-valuenow', '400');
     await expect.poll(() => panel.evaluate((node) => Math.round(node.getBoundingClientRect().width))).toBe(400);
-    const handle = await separator.boundingBox();
+    const handle = expectPresent(await separator.boundingBox(), 'panel resize handle');
     await page.mouse.move(handle.x + 3, handle.y + 60);
     await page.mouse.down();
     await page.mouse.move(handle.x - 37, handle.y + 60);

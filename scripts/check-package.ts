@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { readServerInfo } from '@mini-harness/host/process';
+import { parseNpmPackResult } from './npm-pack.js';
 import { createFixturePaths, createMockProvider } from '../test/helpers/mock-provider.js';
 
 const execFile = promisify(exec);
@@ -33,7 +34,7 @@ async function checkPackage() {
   const cli = (...args: string[]) => npm(['exec', '--offline', '--', 'mini-harness', ...args], { cwd: installed, env });
   try {
     const packed = await npm(['pack', '--json', '--pack-destination', work], { cwd: resolve('.') });
-    const [{ name, filename, files }] = JSON.parse(packed.stdout);
+    const { name, filename, files } = parseNpmPackResult(packed.stdout);
     assert.ok(files.every(({ path }: { path: string }) =>
       !/^dist\/(?:scripts|test)\//.test(path) &&
       !/^dist\/packages\/[^/]+\/package\.json$/.test(path) &&
@@ -92,10 +93,10 @@ async function checkPackage() {
       await response.arrayBuffer();
     }
     const plugins = await (await get('/api/plugins')).json();
-    assert.deepEqual(plugins.map(({ id }) => id), ['files', 'skills', 'subagents', 'shell', 'session-helper']);
+    assert.deepEqual(plugins.map(({ id }: { id: string }) => id), ['files', 'skills', 'subagents', 'shell', 'session-helper']);
     const bootstrap = await (await get('/api/bootstrap')).json();
-    assert.ok(bootstrap.ui.some(({ id }) => id === 'core:conversation'));
-    assert.ok(!bootstrap.ui.some(({ id }) => id === 'shell'));
+    assert.ok(bootstrap.ui.some(({ id }: { id: string }) => id === 'core:conversation'));
+    assert.ok(!bootstrap.ui.some(({ id }: { id: string }) => id === 'shell'));
     const item = await (await fetch(info.url + '/api/sessions', { method: 'POST', headers, body: '{}' })).json();
     const url = info.url + '/api/sessions/' + item.id;
     const startedRun = await fetch(url + '/runs', { method: 'POST', headers, body: JSON.stringify({ message: 'Pack smoke test' }) });

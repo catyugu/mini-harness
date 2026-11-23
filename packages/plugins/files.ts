@@ -13,14 +13,14 @@ type PluginFilesHost = {
 };
 export function installPlugin(runtime: PluginFilesHost, input: any) {
   if (!input || !pluginIdPattern.test(input.id) || (runtime.plugins.reserved(input.id) || runtime.plugins.metadata().some(({ id }) => id === input.id))) throw new Error('Invalid or existing plugin ID');
-  if (!Array.isArray(input.files) || input.files.length > 3 || !input.files.some((f) => f.name === 'plugin.js' || f.name === 'web.js')) throw new Error('Provide plugin.js, web.js or both');
+  if (!Array.isArray(input.files) || input.files.length > 3 || !input.files.some((f: { name?: unknown }) => f.name === 'plugin.js' || f.name === 'web.js')) throw new Error('Provide plugin.js, web.js or both');
   const seen = new Set(); let size = 0;
   for (const file of input.files) {
     if (!['plugin.js', 'plugin.json', 'web.js'].includes(file.name) || seen.has(file.name) || typeof file.content !== 'string') throw new Error('Invalid plugin file');
     seen.add(file.name); size += Buffer.byteLength(file.content);
   }
   if (size > 1024 * 1024) throw new Error('Plugin bundle exceeds 1 MiB');
-  const manifest = input.files.find((file) => file.name === 'plugin.json');
+  const manifest = input.files.find((file: { name?: unknown }) => file.name === 'plugin.json');
   if (!manifest) throw new Error('Include plugin.json');
   const descriptor = JSON.parse(manifest.content);
   if (!descriptor || typeof descriptor !== 'object' || Array.isArray(descriptor)) throw new Error('Expected an object in plugin.json');

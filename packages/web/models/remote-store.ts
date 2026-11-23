@@ -4,7 +4,7 @@ interface ScopedRefresh<T> {
 }
 
 export class RemoteStore<T> extends EventTarget {
-  private snapshot: T;
+  private snapshot?: T;
   private revision = -1;
   private full = false;
   private readonly dirty = new Set<string>();
@@ -12,7 +12,10 @@ export class RemoteStore<T> extends EventTarget {
 
   constructor(private readonly fetchSnapshot: () => Promise<T>, private readonly scoped?: ScopedRefresh<T>) { super(); }
 
-  get = (): T => this.snapshot;
+  get = (): T => {
+    if (this.snapshot === undefined) throw new Error('Remote snapshot has not loaded');
+    return this.snapshot;
+  };
 
   subscribe = (listener: () => void, signal: AbortSignal) => {
     this.addEventListener('change', listener, { signal });
@@ -46,7 +49,9 @@ export class RemoteStore<T> extends EventTarget {
         this.dirty.clear();
         if (full) this.snapshot = await this.fetchSnapshot();
         else {
+          if (!this.scoped) throw new Error('Scoped refresh unavailable');
           const updated = await this.scoped.fetch([...dirty]);
+          if (this.snapshot === undefined) throw new Error('Missing remote snapshot for scoped update');
           this.snapshot = this.scoped.merge(this.snapshot, updated, dirty);
         }
         if (!this.full && !this.dirty.size) this.dispatchEvent(new Event('change'));

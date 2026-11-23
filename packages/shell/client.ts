@@ -22,7 +22,7 @@ const setup: FrontendSetup = (ctx, api) => {
       const card = document.createElement('section');
       card.className = 'approval-card';
       const title = document.createElement('strong');
-      title.textContent = 'Shell approval · ' + (services.session(approval.sessionId)?.title ?? 'Conversation');
+      title.textContent = 'Shell approval';
       const command = document.createElement('pre');
       command.textContent = approval.command;
       card.append(title, command);
@@ -37,7 +37,7 @@ const setup: FrontendSetup = (ctx, api) => {
             await api.request('/approvals', payload('POST', { id: approval.id, allow }));
             await approvals.refresh();
           } catch (error) {
-            if (!api.signal.aborted) services.report(error);
+            if (!api.signal.aborted) services.report(error instanceof Error ? error : new Error(String(error)));
             for (const action of card.querySelectorAll('button')) action.disabled = false;
           }
         };

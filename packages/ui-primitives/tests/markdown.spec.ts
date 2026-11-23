@@ -1,3 +1,4 @@
+import { expectPresent } from '../../../test/support/required.js';
 import { test, expect } from '@playwright/test';
 import { rmSync } from 'node:fs';
 import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.js';
@@ -5,11 +6,11 @@ import { startIsolatedHost } from '../../../test/support/browser.js';
 
 test('renders Markdown and tool results, and stops a pending reply', async ({ page }) => {
   let markWaiting: () => void;
-  let release: () => void;
+  let release: () => void = () => { throw new Error('Not started'); };
   const waiting = new Promise<void>((done) => { markWaiting = done; });
   const delayed = new Promise<void>((done) => { release = done; });
   const mock = await createMockProvider(async ({ messages }) => {
-    const last = messages.at(-1);
+    const last = expectPresent(messages.at(-1), 'model message');
     if (last.content === 'Stop this response') {
       markWaiting();
       await delayed;
@@ -30,7 +31,8 @@ test('renders Markdown and tool results, and stops a pending reply', async ({ pa
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
     await page.locator('.message-row.assistant .message-actions button').click();
     await expect(page.locator('.message-row.assistant .message-actions button')).toHaveAttribute('aria-label', 'Copied');
-    expect(await page.evaluate(() => navigator.clipboard.readText())).toContain('```text\nExample\n```');
+    const copied = (await page.evaluate(() => navigator.clipboard.readText())).replace(/\r\n?/g, '\n');
+    expect(copied).toMatch(/```text[ \t]*\nExample[ \t]*\n```/);
     await expect(page.locator('.message img, .message .overlay')).toHaveCount(0);
     await expect(page.getByText('A tool note')).toBeVisible();
     await expect(page.locator('.tool-card summary')).toContainText('ls');

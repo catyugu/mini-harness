@@ -5,6 +5,7 @@ import type { RunAgentPort, ThinkingLevel } from './agent.js';
 import type { RunEvent, RunInfo, StreamEvent } from './transport.js';
 import type { ViewMessage } from './message.js';
 import type { Attachment } from './input.js';
+import type { InboxItem } from './session-log.js';
 import type { PluginMetadata, SessionRecords } from './plugins.js';
 import type { Settings, SettingsPatch } from './config.js';
 
@@ -54,7 +55,8 @@ export interface AgentPort extends RunAgentPort {
   prepare(id: string, signal?: AbortSignal): Promise<void>;
   activeModel(id: string): ModelChoice;
   read(id: string): { messages: ViewMessage[]; leafId: string | null; model: ModelChoice; thinkingLevel: ThinkingLevel; queue: unknown };
-  queueInput(id: string, text: string, mode: 'steer' | 'followUp', attachments?: Attachment[]): Promise<unknown>;
+  queueInput(id: string, text: string, mode: 'steer' | 'followUp', attachments?: Attachment[],
+    options?: Pick<InboxItem, 'model' | 'thinkingLevel'>): Promise<unknown>;
 }
 
 export interface RunPort {

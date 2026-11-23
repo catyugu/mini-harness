@@ -1,3 +1,4 @@
+import { expectPresent } from '../../../test/support/required.js';
 import { test, expect } from '@playwright/test';
 import { rmSync } from 'node:fs';
 import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.js';
@@ -5,11 +6,12 @@ import { startIsolatedHost, settingsSection } from '../../../test/support/browse
 
 test('refresh and navigation preserve a run while another conversation completes', async ({ browser }) => {
   for (const viewport of [{ width: 1366, height: 900 }, { width: 390, height: 844 }]) {
-    let entered: () => void, release: () => void;
+    let entered: () => void = () => { throw new Error('Not started'); };
+    let release: () => void = () => { throw new Error('Not started'); };
     const waiting = new Promise<void>((done) => { entered = done; });
     const held = new Promise<void>((done) => { release = done; });
     const mock = await createMockProvider(async ({ messages }) => {
-      if (messages.at(-1).content === 'Keep working') { entered(); await held; return 'Continued after refresh'; }
+      if (messages.at(-1)?.content === 'Keep working') { entered(); await held; return 'Continued after refresh'; }
       return 'Independent reply';
     });
     const { root, paths } = createFixturePaths(mock.url);
@@ -42,8 +44,9 @@ test('refresh and navigation preserve a run while another conversation completes
       await expect(page.locator('.message.assistant')).toHaveText('Independent reply');
       await openSidebar();
       const first = page.getByRole('button', { name: 'Keep working', exact: true });
-      const id = (await first.getAttribute('id')).slice('session-'.length);
-      let resume: () => void, intercept: () => void;
+      const id = expectPresent(await first.getAttribute('id'), 'conversation id').slice('session-'.length);
+      let resume: () => void = () => { throw new Error('Not started'); };
+      let intercept: () => void = () => { throw new Error('Not started'); };
       const reached = new Promise<void>((done) => { intercept = done; });
       const delayed = new Promise<void>((done) => { resume = done; });
       await page.route('**/api/sessions/' + id, async (route) => {

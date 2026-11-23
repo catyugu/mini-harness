@@ -1,3 +1,4 @@
+import { expectPresent } from '../support/required.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -34,7 +35,7 @@ test('external services and their declared consumers share Cordis provider selec
   assert.equal((await patch({ plugins: { 'greeting-alt': true }, providers: { exampleGreeting: 'greeting-alt' } })).status, 200);
   assert.equal((await request(endpoint)).body.greeting, 'Welcome, Harness!');
   const graph = (await request('/plugins/diagnostics')).body;
-  assert.equal(graph.find(({ id }) => id === 'greeting-route').services.exampleGreeting, 'greeting-alt');
+  assert.equal(expectPresent(graph.find(({ id }: { id: string }) => id === 'greeting-route'), 'greeting route').services.exampleGreeting, 'greeting-alt');
   assert.equal((await patch({ plugins: { 'greeting-alt': false }, providers: {} })).status, 200);
   assert.equal((await request(endpoint)).body.greeting, 'Hello, Harness!');
 });
@@ -47,7 +48,7 @@ test('Shell delegates to a selected external process provider and still requires
   });
   assert.equal(result.status, 200, JSON.stringify(result.body));
   const { id } = app.runtime.registry.create();
-  const tool = app.runtime.plugins.ctx.harnessTools.forSession(id).find(({ name }) => name === 'sandbox_shell');
+  const tool = expectPresent(app.runtime.plugins.ctx.harnessTools.forSession(id).find(({ name }) => name === 'sandbox_shell'), 'shell tool');
   const execution = tool.execute('preview', { command: 'Preview command' }, undefined, undefined, undefined);
   const pending = await waitUntil(() => request('/approvals'), ({ body }) => body.length === 1);
   await request('/approvals', 'POST', { id: pending.body[0].id, allow: true });
@@ -57,7 +58,7 @@ test('Shell delegates to a selected external process provider and still requires
 
 test('scoped plugins inherit declared services and tool policies, and release their own resources', async (t) => {
   const { app, paths, root, request, mock } = await fixture(t, ({ messages }) =>
-    messages.at(-1).role === 'tool' ? 'Finished greeting' : { tool: 'scoped_greeting', args: {} });
+    messages.at(-1)?.role === 'tool' ? 'Finished greeting' : { tool: 'scoped_greeting', args: {} });
   copyExample(paths.plugins, 'scoped-tool');
   const cleaned = join(root, 'released');
   plugin(paths.plugins, 'workspace-greeting', { scope: 'workspace', provides: ['exampleGreeting'] }, `
@@ -93,11 +94,11 @@ test('scoped plugins inherit declared services and tool policies, and release th
     assert.ok(!names(id).includes('scoped_greeting'));
     assert.ok(names(id).includes('read'));
   }
-  const tool = tools.forSession(child.id).find(({ name }) => name === 'scoped_greeting');
+  const tool = expectPresent(tools.forSession(child.id).find(({ name }) => name === 'scoped_greeting'), 'scoped greeting tool');
   assert.match(JSON.stringify(await tool.execute('scope', {}, undefined, undefined, undefined)), new RegExp(parent.id));
   assert.equal(await app.runtime.runs.send(parent.id, 'Run scoped greeting'), 'Finished greeting');
   const saved = (await request('/sessions/' + parent.id)).body;
-  assert.equal(saved.messages.find((message) => message.role === 'toolResult').content[0].text, 'Greeting returned.');
+  assert.equal(expectPresent(saved.messages.find((message: { role: string; content: { text?: string }[] }) => message.role === 'toolResult'), 'persisted tool result').content[0]?.text, 'Greeting returned.');
   assert.ok(JSON.stringify(mock.requests).includes(parent.workspaceId + ':' + parent.id));
 
   const rejected = await request('/settings', 'PATCH', { scopes: { ...scopes, [workspaceKey]: {
@@ -149,7 +150,7 @@ test('a decision hook can deny an inherited tool and is removed with its owner',
   assert.equal((await toggle({ ['session:' + selected.id]: { plugins: { policy: true } } })).status, 200);
   await app.runtime.agent.prepare(child.id);
   const tools = app.runtime.plugins.ctx.harnessTools;
-  const call = (id: string) => tools.forSession(id).find(({ name }) => name === 'ls')
+  const call = (id: string) => expectPresent(tools.forSession(id).find(({ name }) => name === 'ls'), 'ls tool')
     .execute('policy', { path: '.' }, undefined, undefined, undefined);
   await assert.rejects(call(child.id), /Tool denied by plugin policy/);
   assert.equal((await call(other.id)).content[0].type, 'text');
@@ -174,7 +175,7 @@ test('file tools and HTTP preview consume the same selected File Access provider
   const session = app.runtime.registry.create();
   const preview = await request('/workspaces/' + session.workspaceId + '/files/preview?path=virtual.txt');
   assert.equal(preview.body.content, 'Provided file content');
-  const tool = app.runtime.plugins.ctx.harnessTools.forSession(session.id).find(({ name }) => name === 'read');
+  const tool = expectPresent(app.runtime.plugins.ctx.harnessTools.forSession(session.id).find(({ name }) => name === 'read'), 'read tool');
   assert.match(JSON.stringify((await tool.execute('virtual', { path: 'virtual.txt' }, undefined, undefined, undefined)).content), /Provided file content/);
 });
 
@@ -211,7 +212,7 @@ test('native runs use the nearest scoped LLM provider while siblings retain the 
 
 test('native file and shell tools use scoped file, process and sandbox services without changing siblings', async (t) => {
   const { app, paths, request } = await fixture(t, ({ messages }) => {
-    const last = messages.at(-1);
+    const last = expectPresent(messages.at(-1), 'model input');
     return last.role === 'tool' ? 'Completed' : last.content.startsWith('read')
       ? { tool: 'read', args: { path: 'note.txt' } }
       : { tool: 'sandbox_shell', args: { command: 'requested command' } };
@@ -243,7 +244,8 @@ test('native file and shell tools use scoped file, process and sandbox services 
   const child = app.runtime.registry.create({ parentId: parent.id });
   const sibling = app.runtime.registry.create();
   const configured = await request('/settings', 'PATCH', {
-    plugins: { shell: true, 'application-sandbox': true }, providers: { harnessSandbox: 'application-sandbox' },
+    plugins: { shell: true, 'application-sandbox': true },
+    pluginConfig: { shell: { mode: 'isolated' } }, providers: { harnessSandbox: 'application-sandbox' },
     scopes: {
       ['session:' + parent.id]: { plugins: { 'scoped-environment': true },
         providers: { harnessFileAccess: 'scoped-environment', harnessSandbox: 'scoped-environment' } },
@@ -254,15 +256,15 @@ test('native file and shell tools use scoped file, process and sandbox services 
   const preview = (id: string) => request('/workspaces/' + parent.workspaceId + '/files/preview?path=note.txt&sessionId=' + id);
   assert.equal((await preview(parent.id)).body.content, 'scoped file', 'HTTP inspection prepares the lazy scope');
   assert.equal((await preview(sibling.id)).body.content, 'application file');
-  const lastTool = (id: string) => app.runtime.agent.messages(id).filter(({ role }) => role === 'toolResult').at(-1);
+  const lastTool = (id: string) => expectPresent(app.runtime.agent.messages(id).filter(({ role }) => role === 'toolResult').at(-1), 'tool result');
   await app.runtime.runs.send(child.id, 'read in inherited scope');
   assert.match(JSON.stringify(lastTool(child.id).content), /scoped file/);
   await app.runtime.runs.send(sibling.id, 'read in sibling');
   assert.match(JSON.stringify(lastTool(sibling.id).content), /application file/);
   for (const [id, expected] of [[parent.id, 'scoped sandbox'], [child.id, 'scoped process'], [sibling.id, 'application sandbox']]) {
     const running = app.runtime.runs.send(id, 'shell execution');
-    const pending = await waitUntil(() => request('/approvals'), ({ body }) => body.some((item) => item.sessionId === id));
-    const approval = pending.body.find((item) => item.sessionId === id);
+    const pending = await waitUntil(() => request('/approvals'), ({ body }) => body.some((item: { sessionId: string }) => item.sessionId === id));
+    const approval = expectPresent(pending.body.find((item: { sessionId: string }) => item.sessionId === id), 'pending approval');
     assert.equal((await request('/approvals', 'POST', { id: approval.id, allow: true })).status, 200);
     await running;
     assert.equal(lastTool(id).isError, false);

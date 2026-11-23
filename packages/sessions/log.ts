@@ -2,8 +2,10 @@ import { createHash, randomBytes } from 'node:crypto';
 import { closeSync, constants, fstatSync, fsyncSync, ftruncateSync, lstatSync, openSync, readFileSync, writeSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { validateNativeMessage, validateRequestSnapshot } from '@mini-harness/contracts/llm';
+import type { ModelRequestSnapshot } from '@mini-harness/contracts/llm';
 import type { SessionEntry, SessionEvent, SessionLogPort, SessionProjection } from '@mini-harness/contracts/session-log';
 import { projectLog } from './projection.js';
+import { applyContentDelta } from '@mini-harness/platform/content-delta';
 
 export interface SessionHeader { type: 'session'; version: 1; id: string; createdAt: string; importedFrom?: string }
 const entryId = /^[a-f0-9]{8,64}$/i;
@@ -26,6 +28,7 @@ export class SessionLog implements SessionLogPort {
     private readonly changed?: () => void) {
     // Windows append handles lack FILE_WRITE_DATA and cannot truncate a torn tail.
     // A single validated writer uses explicit positions at its verified end instead.
+    this.header = { type: 'session', version: 1, id: sessionId, createdAt };
     this.handle = openSync(file, constants.O_RDWR | constants.O_CREAT | (constants.O_NOFOLLOW ?? 0), 0o600);
     try {
       this.checkFile();
@@ -33,7 +36,6 @@ export class SessionLog implements SessionLogPort {
       this.length = bytes.length;
       this.checkFile(this.length);
       if (!bytes.length) {
-        this.header = { type: 'session', version: 1, id: sessionId, createdAt };
         this.write(this.header);
         syncDirectory(dirname(file));
       } else this.load(bytes);
@@ -54,7 +56,9 @@ export class SessionLog implements SessionLogPort {
     if (!end) throw new Error('Invalid session log header');
     const lines = bytes.subarray(0, end).toString('utf8').split('\n');
     lines.pop();
-    const header = JSON.parse(lines.shift());
+    const first = lines.shift();
+    if (!first) throw new Error('Missing session log header');
+    const header = JSON.parse(first);
     if (header?.type !== 'session' || header.version !== 1 || header.id !== this.sessionId ||
         typeof header.createdAt !== 'string') throw new Error('Invalid session log header');
     this.header = header;
@@ -82,6 +86,19 @@ export class SessionLog implements SessionLogPort {
         typeof entry.timestamp !== 'string' || !Number.isFinite(Date.parse(entry.timestamp)))
       throw new Error('Invalid session log sequence or ancestry');
     validateEvent(entry);
+    if (entry.type === 'tool-schema' &&
+        createHash('sha256').update(JSON.stringify(entry.tools)).digest('hex') !== entry.hash)
+      throw new Error('Tool schema digest does not match its content');
+    if (entry.type === 'model-request') this.materializeRequest(entry);
+    if (entry.type === 'tool-accepted') {
+      const raw = this.byId.get(entry.executionId);
+      if (raw?.type !== 'tool-execution') throw new Error('Tool acceptance references a missing execution');
+      const content = JSON.parse(applyContentDelta(JSON.stringify(raw.result.content), entry.contentDelta));
+      validateNativeMessage({ ...raw.result, content });
+      if (entry.parentId !== raw.parentId &&
+          !this.branchEntries(entry.parentId).some((item) => item.id === raw.parentId))
+        throw new Error('Tool acceptance does not belong to the execution branch');
+    }
     if (entry.type === 'inbox-enqueued' && this.inboxIds.has(entry.item.id)) throw new Error('Inbox delivery ID already exists');
     if (entry.type === 'message' && entry.inboxId &&
         (entry.message.role !== 'user' || !this.pendingInbox.has(entry.inboxId))) throw new Error('Inbox input is not pending');
@@ -156,7 +173,7 @@ export class SessionLog implements SessionLogPort {
 
   select(leafId: string | null, expectedLeafId?: string | null) {
     if (leafId !== null && !this.byId.has(leafId)) throw new Error('Unknown session branch');
-    if (leafId !== null && operational(this.byId.get(leafId))) throw new Error('Operational records are not conversation branches');
+    if (leafId !== null && operational(this.byId.get(leafId)!)) throw new Error('Operational records are not conversation branches');
     return this.persist({ type: 'branch' }, leafId, expectedLeafId);
   }
 
@@ -164,6 +181,30 @@ export class SessionLog implements SessionLogPort {
     if (leafId !== undefined) return structuredClone(projectLog(this.records, this.branchEntries(leafId)));
     this.cachedProjection ??= projectLog(this.records, this.branchEntries());
     return structuredClone(this.cachedProjection);
+  }
+
+  private materializeRequest(entry: Extract<SessionEntry, { type: 'model-request' }>) {
+    const { toolSchema, messagesPatch, ...request } = entry.request;
+    const schema = toolSchema && this.records.find((record) => record.type === 'tool-schema' && record.hash === toolSchema);
+    if (toolSchema && (!schema || schema.type !== 'tool-schema')) throw new Error('Missing recorded tool schema');
+    const context = projectLog(this.records, this.branchEntries(entry.parentId)).contextMessages;
+    let messages = context;
+    if (messagesPatch) {
+      const { start, deleteCount, insert } = messagesPatch;
+      if (!Number.isSafeInteger(start) || start < 0 || start > context.length ||
+          !Number.isSafeInteger(deleteCount) || deleteCount < 0 || start + deleteCount > context.length ||
+          !Array.isArray(insert)) throw new Error('Invalid model request message splice');
+      messages = [...context.slice(0, start), ...insert, ...context.slice(start + deleteCount)];
+    }
+    const snapshot = { ...request, ...(schema && schema.type === 'tool-schema' && { tools: schema.tools }), messages };
+    validateRequestSnapshot(snapshot);
+    return snapshot;
+  }
+
+  requestSnapshot(id: string): ModelRequestSnapshot & { messages: import('@mini-harness/contracts/llm').NativeMessage[] } {
+    const entry = this.byId.get(id);
+    if (entry?.type !== 'model-request') throw new Error('Model request not found');
+    return structuredClone(this.materializeRequest(entry));
   }
 
   serialize() {
@@ -191,11 +232,22 @@ function validateEvent(event: SessionEvent) {
       validateNativeMessage(event.message);
       return;
     case 'model-request':
-      validateRequestSnapshot(event.request);
+      if (!event.request || !event.request.model || typeof event.request.model.provider !== 'string' ||
+          !event.request.model.provider || typeof event.request.model.id !== 'string' ||
+          !event.request.model.id || typeof event.request.systemPrompt !== 'string' ||
+          (event.request.toolSchema !== undefined && !/^[a-f0-9]{64}$/.test(event.request.toolSchema)))
+        throw new Error('Invalid recorded model request');
+      return;
+    case 'tool-schema':
+      validateRequestSnapshot({ model: { provider: 'audit', id: 'audit' }, systemPrompt: '', tools: event.tools });
+      if (!/^[a-f0-9]{64}$/.test(event.hash)) throw new Error('Invalid tool schema hash');
       return;
     case 'tool-execution':
       validateNativeMessage(event.result);
       if (event.result.role !== 'toolResult' || event.result.isError) throw new Error('Invalid completed tool execution');
+      return;
+    case 'tool-accepted':
+      if (!entryId.test(event.executionId)) throw new Error('Invalid tool execution reference');
       return;
     case 'model':
       if (typeof event.model?.provider !== 'string' || typeof event.model.id !== 'string') throw new Error('Invalid session model');
@@ -242,4 +294,4 @@ export function encodeLog(header: SessionHeader, entries: SessionEntry[]) {
   return [JSON.stringify(header), ...entries.map((entry) => JSON.stringify({ ...entry, checksum: digest(entry) }))].join('\n') + '\n';
 }
 
-function operational(entry: SessionEvent) { return entry.type === 'run' || entry.type === 'model-request' || entry.type === 'tool-execution' || entry.type.startsWith('inbox-'); }
+function operational(entry: SessionEvent) { return entry.type === 'run' || entry.type === 'model-request' || entry.type === 'tool-schema' || entry.type === 'tool-execution' || entry.type.startsWith('inbox-'); }

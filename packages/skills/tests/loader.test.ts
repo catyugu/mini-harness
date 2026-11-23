@@ -20,7 +20,7 @@ test('skills resolve workspace overrides and expand explicit commands without lo
   skill(home, 'other', 'Other instructions');
   const loader = new SkillLoader(home);
   assert.deepEqual((await loader.discover(cwd)).map(({ name }) => name), ['other', 'review']);
-  assert.equal((await loader.discover(cwd)).find(({ name }) => name === 'review').description, 'Review the task with care');
+  assert.equal((await loader.discover(cwd)).find(({ name }) => name === 'review')?.description, 'Review the task with care');
   const expanded = await loader.expand(cwd, '/skill:review inspect this change\nand the tests');
   assert.match(expanded, /Workspace instructions/);
   assert.doesNotMatch(expanded, /Home instructions/);

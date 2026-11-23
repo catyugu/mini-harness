@@ -28,7 +28,7 @@
 .sessions ul { padding: 0; margin: 0; list-style: none; }
 .sessions li ul { margin: 1px 0 2px 10px; padding-left: 4px; border-left: 1px solid var(--border); }
 .sessions li ul ul ul ul { margin-left: 3px; padding-left: 2px; }
-.run-state { flex-shrink: 0; max-width: 75px; overflow: hidden; text-overflow: ellipsis; font-size: 10px; padding: 2px 5px; color: var(--muted); }
+.run-state { flex: 0 0 auto; white-space: nowrap; font-size: 10px; padding: 2px 5px; color: var(--muted); }
 .run-state:is([data-state="running"], [data-state="queued"]) { color: var(--focus); font-weight: 600; }
 .run-state:is([data-state="failed"], [data-state="cancelled"], [data-state="interrupted"]) { color: var(--danger); }
 .session-row { display: flex; align-items: center; min-height: 34px; min-width: 0; padding: 1px 3px; border-radius: 7px; }
@@ -59,3 +59,9 @@
 .title-block > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .title-block strong { font-weight: 600; font-size: 14px; }
 .title-block small { font: 11px/1.4 ui-monospace, monospace; color: var(--muted); }
+
+/* Feature-contributed pages share the same frame and responsive content rhythm. */
+.plugin-page { flex: 1; min-height: 0; overflow: auto; padding: clamp(14px, 3vw, 28px); }
+.plugin-page > header { max-width: 960px; margin-inline: auto; padding: 0 0 14px; border-bottom: 1px solid var(--border); }
+.plugin-page > header h1 { font-size: clamp(18px, 2.2vw, 24px); font-weight: 620; margin: 0; }
+.plugin-page-body { max-width: 960px; min-width: 0; margin: 18px auto 30px; }

@@ -106,8 +106,8 @@ test('overrides restore the previous contribution and release its node and decor
   assert.deepEqual(wrapper.children, [base]);
   removeDecoration();
   assert.deepEqual(outlet.children, [base, sibling]);
-  assert.equal(lifetimes.at(-2).aborted, false);
-  assert.equal(lifetimes.at(-1).aborted, true);
+  assert.equal(lifetimes.at(-2)?.aborted, false);
+  assert.equal(lifetimes.at(-1)?.aborted, true);
   stop();
   assert.ok(lifetimes.every(({ aborted }) => aborted));
 });
@@ -116,7 +116,7 @@ test('keyed priority is explicit and a failed replacement retains the mounted in
   const registry = new SlotRegistry();
   const outlet = element(), preferred = element(), lower = element();
   const stop = registry.define('sidebar.primary', node(outlet));
-  let lifetime: AbortSignal;
+  let lifetime: AbortSignal | undefined;
   registry.registerKeyed('sidebar.primary', 'control', (signal) => {
     lifetime = signal;
     return node(preferred);
@@ -126,7 +126,7 @@ test('keyed priority is explicit and a failed replacement retains the mounted in
     throw new Error('render failed');
   }, { priority: 20 }), /render failed/);
   assert.deepEqual(outlet.children, [preferred]);
-  assert.equal(lifetime.aborted, false);
+  assert.equal(lifetime?.aborted, false);
   stop();
-  assert.equal(lifetime.aborted, true);
+  assert.equal(lifetime?.aborted, true);
 });

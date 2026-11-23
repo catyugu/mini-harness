@@ -12,11 +12,12 @@ const root = fileURLToPath(new URL('../../../', import.meta.url));
 test('the composed browser graph is derived from the mounted capability descriptors', async (t) => {
   const { request } = await fixture(t);
   const { body } = await request('/bootstrap');
-  const mounted = new Map<string, { browser?: string }>(body.ui.map((entry) => [entry.id, entry]));
+  const mounted = new Map<string, { browser?: string }>(body.ui.map((entry: { id: string; browser?: string }) => [entry.id, entry]));
   assert.equal(mounted.size, body.ui.length);
   assert.deepEqual(Object.keys(body), ['ui']);
   const browser = new Map(plugins.filter(({ browser }) => browser).map((plugin) => [plugin.id, plugin]));
   for (const entry of plugins.filter(({ browser }) => browser)) {
+    if (!entry.browser) throw new Error('Browser entry missing for ' + entry.id);
     assert.match(entry.browser, /^\/packages\/[a-z-]+(?:\/[a-z-]+)*\.js$/);
     const source = resolve(root, entry.browser.slice(1).replace(/\.js$/, '.ts'));
     assert.ok(existsSync(source), 'Missing browser entry: ' + entry.browser);
@@ -36,6 +37,6 @@ test('the composed browser graph is derived from the mounted capability descript
   }
   await request('/settings', 'PATCH', { plugins: { files: false, shell: true } });
   const changed = (await request('/bootstrap')).body.ui;
-  assert.ok(!changed.some(({ id }) => id === 'files'));
-  assert.ok(changed.some(({ id }) => id === 'shell' && browser.has(id)));
+  assert.ok(!changed.some(({ id }: { id: string }) => id === 'files'));
+  assert.ok(changed.some(({ id }: { id: string }) => id === 'shell' && browser.has(id)));
 });

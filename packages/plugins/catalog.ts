@@ -12,7 +12,8 @@ function configDefaults(schema: Record<string, any>, value: any): any {
   if (value === undefined && Object.hasOwn(schema, 'default')) value = structuredClone(schema.default);
   if (schema.type === 'object' && value && typeof value === 'object' && !Array.isArray(value)) {
     for (const [key, property] of Object.entries(schema.properties ?? {})) {
-      const item = configDefaults(property, Object.hasOwn(value, key) ? value[key] : undefined);
+      if (!property || typeof property !== 'object' || Array.isArray(property)) throw new Error('Invalid plugin config property');
+      const item = configDefaults(property as Record<string, unknown>, Object.hasOwn(value, key) ? value[key] : undefined);
       if (item !== undefined) Object.defineProperty(value, key, { value: item, enumerable: true, writable: true, configurable: true });
     }
   }

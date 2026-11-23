@@ -80,12 +80,50 @@ export function dialog(title: string, content: HTMLElement) {
     <div class="ui-dialog-body"></div>
   </dialog>`);
   node.setAttribute('aria-label', title);
-  node.querySelector('h2').textContent = title;
-  const close = node.querySelector('button');
+  required(node.querySelector('h2')).textContent = title;
+  const close = required(node.querySelector('button'));
   close.append(icon('close'));
   close.setAttribute('aria-label', 'Close ' + title.toLowerCase());
   close.onclick = () => node.close();
-  node.querySelector('.ui-dialog-body').append(content);
+  required(node.querySelector('.ui-dialog-body')).append(content);
   closeOnBackdrop(node);
   return node;
+}
+
+/** One accessible, app-styled confirmation instead of platform-specific window.confirm(). */
+export function confirmAction(message: string, options: { title?: string; confirmLabel?: string; signal?: AbortSignal } = {}): Promise<boolean> {
+  if (options.signal?.aborted) return Promise.resolve(false);
+  const actions = document.createElement('form');
+  actions.className = 'ui-confirm';
+  actions.method = 'dialog';
+  const text = document.createElement('p');
+  text.textContent = message;
+  const row = document.createElement('div');
+  row.className = 'ui-actions';
+  const cancel = button('Cancel', 'quiet');
+  const confirm = button(options.confirmLabel ?? 'Delete', 'danger');
+  confirm.type = 'submit';
+  confirm.value = 'confirmed';
+  cancel.onclick = () => modal.close();
+  row.append(cancel, confirm);
+  actions.append(text, row);
+  const modal = dialog(options.title ?? 'Confirm deletion', actions);
+  document.body.append(modal);
+  return new Promise((resolve) => {
+    const abort = () => modal.close();
+    options.signal?.addEventListener('abort', abort, { once: true });
+    modal.addEventListener('close', () => {
+      options.signal?.removeEventListener('abort', abort);
+      resolve(modal.returnValue === 'confirmed');
+      modal.remove();
+    }, { once: true });
+    modal.showModal();
+    cancel.focus();
+  });
+}
+
+/** Assert that a node declared by a component's own static markup actually exists. */
+export function required<T>(value: T | null | undefined): T {
+  if (value === null || value === undefined) throw new Error('Required UI element is missing');
+  return value;
 }

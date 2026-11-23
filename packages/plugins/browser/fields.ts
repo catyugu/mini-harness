@@ -21,7 +21,10 @@ export function schemaFields(plugin: string, schema: Record<string, any>, values
     if (property.enum) {
       const select = document.createElement('select');
       if (!schema.required?.includes(key)) select.add(new Option('Default', ''));
-      for (const option of property.enum) select.add(new Option(String(option), JSON.stringify(option)));
+      for (const [index, option] of property.enum.entries()) {
+        const label = Array.isArray(property['x-enumLabels']) ? property['x-enumLabels'][index] : undefined;
+        select.add(new Option(typeof label === 'string' ? label : String(option), JSON.stringify(option)));
+      }
       if (current !== undefined) select.value = JSON.stringify(current);
       input = select;
       input.dataset.kind = 'enum';
@@ -69,12 +72,18 @@ export function readPluginValues(current: Record<string, Record<string, unknown>
   const config = structuredClone(current);
   for (const field of container.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('[data-plugin]')) {
     if (field.matches(':disabled')) continue;
-    const path: string[] = JSON.parse(field.dataset.path);
+    const plugin = field.dataset.plugin;
+    const encoded = field.dataset.path;
+    if (!plugin || !encoded) throw new Error('Invalid plugin configuration field');
+    const path: unknown = JSON.parse(encoded);
+    if (!Array.isArray(path) || !path.length || path.some((part) => typeof part !== 'string'))
+      throw new Error('Invalid configuration field path');
+    const key = path[path.length - 1];
     const kind = field.dataset.kind;
-    let target = config[field.dataset.plugin] ??= {};
+    let target = config[plugin] ??= {};
     for (const key of path.slice(0, -1)) target = (target[key] ??= {}) as Record<string, unknown>;
-    if (kind !== 'boolean' && !field.value && field.dataset.schemaRequired !== 'true') { delete target[path.at(-1)]; continue; }
-    target[path.at(-1)] = kind === 'boolean' ? (field as HTMLInputElement).checked :
+    if (kind !== 'boolean' && !field.value && field.dataset.schemaRequired !== 'true') { delete target[key]; continue; }
+    target[key] = kind === 'boolean' ? (field as HTMLInputElement).checked :
       kind === 'number' || kind === 'integer' ? Number(field.value) :
       kind === 'enum' || kind === 'json' ? JSON.parse(field.value) : field.value;
   }

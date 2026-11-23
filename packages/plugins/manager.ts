@@ -105,7 +105,7 @@ export class PluginHost implements ScopePort {
     while (this.applying) {
       const current = this.applying.catch(() => {});
       if (!signal) { await current; continue; }
-      let listener: ReturnType<typeof addAbortListener>;
+      let listener: ReturnType<typeof addAbortListener> | undefined;
       try {
         await Promise.race([current, new Promise<never>((_, reject) => {
           listener = addAbortListener(signal, () => reject(signal.reason));
@@ -141,7 +141,8 @@ export class PluginHost implements ScopePort {
 
     const visiting = new Set<string>();
     const visit = (key: string): typeof app => {
-      if (graph.has(key)) return graph.get(key);
+      const cached = graph.get(key);
+      if (cached) return cached;
       if (visiting.has(key)) throw new Error('Cyclic scope ancestry: ' + key);
       visiting.add(key);
       const [kind, id] = key.split(':');
@@ -158,7 +159,11 @@ export class PluginHost implements ScopePort {
       const { plans, providers } = this.catalog.plans(settings, descriptors, scope.kind, parent.providers, new Set(parent.ids.keys()), overrides);
       const ids = new Map<string, string>([...parent.ids, ...plans.map(({ id }) => [id, key + '/' + id] as const)]);
       const owners = new Map(parent.owners);
-      for (const plan of plans) for (const service of plan.descriptor.provides ?? []) owners.set(service, ids.get(plan.id));
+      for (const plan of plans) {
+        const owner = ids.get(plan.id);
+        if (!owner) throw new Error('Scoped plugin has no local identity: ' + plan.id);
+        for (const service of plan.descriptor.provides ?? []) owners.set(service, owner);
+      }
       let ctx = parent.ctx;
       if (active.has(key)) {
         const existing = scopes.get(key);
@@ -169,13 +174,17 @@ export class PluginHost implements ScopePort {
         scopes.set(key, { ctx, parent: parent.ctx, scope, isolates });
         for (const plan of plans) {
           const needs = [...new Set([
-            ...(descriptors.find(({ id }) => id === plan.id)?.requires ?? []).flatMap((id) => ids.has(id) ? [ids.get(id)] : []),
+            ...(descriptors.find(({ id }) => id === plan.id)?.requires ?? []).flatMap((id) => {
+              const dependency = ids.get(id);
+              return dependency ? [dependency] : [];
+            }),
             ...Object.keys(plan.services).flatMap((service) => {
               const owner = owners.get(service);
               return owner && owner !== 'application' ? [owner] : [];
             })
           ])];
           const id = ids.get(plan.id);
+          if (!id) throw new Error('Scoped mount has no identity: ' + plan.id);
           mounts.push(this.mountPlan(plan, scope, id, key, ctx, needs));
           diagnostics.push(this.describe(plan, id, needs));
         }
@@ -224,8 +233,9 @@ export class PluginHost implements ScopePort {
     })), new Map(runtimeServices.map((name) => [name, 'browser-runtime'])), {}, unavailable);
     return ordered.map(({ descriptor, requires }): BrowserEntry => {
       const plan = browser.get(descriptor.id);
-      return { id: plan.id, requires, inject: descriptor.inject, browser: plan.browser, web: plan.web,
-        config: plan.config, required: plan.descriptor.required };
+      if (!plan) throw new Error('Composed browser capability is unavailable: ' + descriptor.id);
+      return { id: plan.id, requires: requires ?? [], inject: descriptor.inject, browser: plan.browser, web: plan.web,
+        config: plan.config ?? {}, required: plan.descriptor.required };
     });
   }
 
@@ -272,7 +282,7 @@ export class PluginHost implements ScopePort {
         for (const [id, error] of failures) this.failures.set(id, error);
         const ready = new Set<string>();
         this.published = browser.filter(({ id, requires }) => {
-          if (!this.mounts.plan(id) || requires.some((dependency) => !ready.has(dependency))) return false;
+          if (!this.mounts.plan(id) || (requires ?? []).some((dependency) => !ready.has(dependency))) return false;
           ready.add(id);
           return true;
         });

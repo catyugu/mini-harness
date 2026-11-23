@@ -40,22 +40,22 @@ export function createComposer(root: HTMLElement, report: (error: Error) => void
         if ([...files, ...added].reduce((total, file) => total + file.data.length * .75, 0) > 12 * 1024 * 1024) throw new Error('Attachments exceed 12 MiB per message');
         files.push(...added); render();
       }
-    } catch (error) { report(error); }
+    } catch (error) { report(error instanceof Error ? error : new Error(String(error))); }
     finally { loading -= incoming.length; element<'button'>('send').disabled = loading > 0; }
   };
   form.addEventListener('dragover', (event) => { event.preventDefault(); form.classList.add('dragging'); });
   form.addEventListener('dragleave', () => form.classList.remove('dragging'));
-  form.addEventListener('drop', (event) => { event.preventDefault(); form.classList.remove('dragging'); void addFiles([...event.dataTransfer.files]); });
+  form.addEventListener('drop', (event) => { event.preventDefault(); form.classList.remove('dragging'); void addFiles([...(event.dataTransfer?.files ?? [])]); });
   prompt.addEventListener('paste', (event) => {
-    const images = [...event.clipboardData.files];
+    const images = [...(event.clipboardData?.files ?? [])];
     if (images.length) { event.preventDefault(); void addFiles(images); }
   });
   const input = document.createElement('input'); input.type = 'file'; input.multiple = true; input.hidden = true;
   input.accept = 'image/png,image/jpeg,image/webp,image/gif,text/*,.json,.csv,.md,.ts,.js,.py,.cpp,.h,.xml,.yaml,.yml,.log,.sql';
-  input.onchange = () => { void addFiles([...input.files]); input.value = ''; };
+  input.onchange = () => { void addFiles([...(input.files ?? [])]); input.value = ''; };
   form.append(input);
   type Token = { start: number; end: number; query: string; kind: string };
-  let token: Token;
+  let token: Token | undefined;
   let completeSelected: (() => void)[] = [];
   let buttons: HTMLButtonElement[] = [], selected = -1;
 
@@ -66,7 +66,7 @@ export function createComposer(root: HTMLElement, report: (error: Error) => void
     if (!match) return;
     const [, marker, query] = match;
     if (marker !== '/' && !completions.has(marker)) return;
-    const tail = /^\S*/.exec(prompt.value.slice(cursor))[0];
+    const tail = /^\S*/.exec(prompt.value.slice(cursor))?.[0] ?? '';
     if (marker === '/' && !/^[\w:-]*$/.test(query + tail)) return;
 
     return { start: cursor - query.length - 1, end: cursor + tail.length, query, kind: marker as Token['kind'] };

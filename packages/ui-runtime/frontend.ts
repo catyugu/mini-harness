@@ -129,8 +129,19 @@ export class FrontendHost {
           entry.classList.add('nav-action');
           entry.dataset.pageLink = page;
           entry.addEventListener('click', () => this.ctx.miniPages.open(page), { signal: controller.signal });
+          const frame = document.createElement('section');
+          frame.className = 'plugin-page';
+          frame.tabIndex = -1;
+          const header = document.createElement('header');
+          const heading = document.createElement('h1');
+          heading.textContent = title;
+          header.append(heading);
+          const body = document.createElement('div');
+          body.className = 'plugin-page-body';
+          body.append(content);
+          frame.append(header, body);
           return own(function* () {
-            yield root.miniPages.register(page, content);
+            yield root.miniPages.register(page, frame);
             yield root.miniSlots.register('sidebar.actions', entry, order);
           });
         },
@@ -198,7 +209,7 @@ export class FrontendHost {
     this.disposed = true;
     for (const id of [...this.plugins.keys()].reverse()) {
       try { await this.disable(id); }
-      catch (error) { this.report(error); }
+      catch (error) { this.report(error instanceof Error ? error : new Error(String(error))); }
     }
   }
 }

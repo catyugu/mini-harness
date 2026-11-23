@@ -70,7 +70,9 @@ export class PluginMounts {
     try {
       beforeChange(obsolete.map(({ id }) => id));
       for (const plan of obsolete.reverse()) {
-        unloaded.unshift(this.mounted.get(plan.id));
+        const previous = this.mounted.get(plan.id);
+        if (!previous) throw new Error('Cannot unmount missing plugin: ' + plan.id);
+        unloaded.unshift(previous);
         await this.unmount(plan.id);
       }
       for (const plan of additions) {
@@ -78,7 +80,9 @@ export class PluginMounts {
         try {
           const missing = plan.requires.find((id) => !this.mounted.has(id));
           if (missing) throw new Error('Required plugin is unavailable: ' + missing);
-          await this.mount(plan, prepared.get(plan.id));
+          const preparedPlugin = prepared.get(plan.id);
+          if (!preparedPlugin) throw new Error('Prepared plugin unavailable: ' + plan.id);
+          await this.mount(plan, preparedPlugin);
           loaded.push(plan.id);
         } catch (error) { if (!unavailable?.(plan.id, error)) throw error; }
       }

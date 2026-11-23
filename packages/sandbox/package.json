@@ -8,7 +8,6 @@
     "@mini-harness/platform": "workspace:*"
   },
   "exports": {
-    "./isolation": "./isolation.ts",
     "./linux": "./linux.ts",
     "./manifest": "./manifest.ts"
   }

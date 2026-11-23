@@ -1,3 +1,4 @@
+import { expectPresent } from '../support/required.js';
 import { test, expect } from '@playwright/test';
 import { readFileSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -7,7 +8,7 @@ import { startIsolatedHost } from '../support/browser.js';
 
 test('plugin schema controls, recursive tree navigation, batch export and permanent deletion', async ({ page }) => {
   const mock = await createMockProvider(({ messages }) => {
-    const last = messages.at(-1);
+    const last = expectPresent(messages.at(-1), 'model message');
     if (last.role === 'tool') return 'Delegation complete';
     if (last.content === 'Parent task') return { tool: 'delegate', args: { task: 'Child task' } };
     if (last.content === 'Child task') return { tool: 'delegate', args: { task: 'Leaf task' } };
@@ -72,9 +73,11 @@ test('plugin schema controls, recursive tree navigation, batch export and perman
     await page.getByRole('button', { name: 'Export', exact: true }).click();
     const exported = JSON.parse(readFileSync(await (await download).path(), 'utf8'));
     expect(exported.sessions).toHaveLength(3);
-    expect(exported.sessions.every((item) => item.log.includes('"type":"message"'))).toBe(true);
-    page.once('dialog', (dialog) => dialog.accept());
+    expect(exported.sessions.every((item: { log: string }) => item.log.includes('"type":"message"'))).toBe(true);
     await page.getByRole('button', { name: 'Delete', exact: true }).click();
+    const confirmation = page.getByRole('dialog', { name: 'Delete conversations' });
+    await expect(confirmation).toBeVisible();
+    await confirmation.getByRole('button', { name: 'Delete', exact: true }).click();
     await expect(page.locator('.session-row')).toHaveCount(0);
     expect(readJson<any>(paths.registry, {}).sessions).toHaveLength(0);
   } finally {

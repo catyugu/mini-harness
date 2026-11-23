@@ -14,7 +14,7 @@ export function setup(ctx: Context) {
     catalog.get(id);
     return id;
   };
-  add('GET', '/api/workspaces/directories', ({ url }) => catalog.browse(url.searchParams.get('path')));
+  add('GET', '/api/workspaces/directories', ({ url }) => catalog.browse(url.searchParams.get('path') ?? ''));
   add('GET', '/api/workspaces', () => catalog.list());
   add('PUT', '/api/workspaces', async ({ body }) => catalog.reorder((await body())?.ids));
   add('POST', '/api/workspaces', async ({ body }) => {

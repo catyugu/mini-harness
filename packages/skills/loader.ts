@@ -7,7 +7,7 @@ const maximumSize = 128 * 1024;
 const maximumEntries = 8192;
 const maximumDirectories = 1024;
 const maximumSkills = 256;
-const unavailable = (error: unknown) => ['ENOENT', 'ENOTDIR', 'ELOOP', 'EACCES', 'EPERM'].includes((error as NodeJS.ErrnoException).code);
+const unavailable = (error: unknown) => ['ENOENT', 'ENOTDIR', 'ELOOP', 'EACCES', 'EPERM'].includes((error as NodeJS.ErrnoException).code ?? '');
 const inside = (root: string, path: string) => {
   const rel = relative(root, path);
   return !isAbsolute(rel) && rel !== '..' && !rel.startsWith('..' + sep);

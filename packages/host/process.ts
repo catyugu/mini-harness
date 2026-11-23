@@ -21,7 +21,7 @@ export async function lockInstance(home: string) {
   if (process.platform === 'linux') {
     try { return await listenLock({ path: '\0mini-harness-' + hash.slice(0, 32) }); }
     catch (error) {
-      if (!['EACCES', 'EPERM', 'EAFNOSUPPORT', 'EPROTONOSUPPORT'].includes((error as NodeJS.ErrnoException).code)) throw error;
+      if (!['EACCES', 'EPERM', 'EAFNOSUPPORT', 'EPROTONOSUPPORT'].includes((error as NodeJS.ErrnoException).code ?? '')) throw error;
     }
   }
   return listenLock(fallback);

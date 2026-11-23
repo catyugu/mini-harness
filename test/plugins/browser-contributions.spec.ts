@@ -8,7 +8,7 @@ import { startIsolatedHost } from '../support/browser.js';
 test('a browser plugin owns and releases its page and dialog', async ({ page }) => {
   const mock = await createMockProvider();
   const { paths, root } = createFixturePaths(mock.url);
-  let server: Awaited<ReturnType<typeof startIsolatedHost>>;
+  let server: Awaited<ReturnType<typeof startIsolatedHost>> | undefined;
   try {
     cpSync(resolve('docs/examples/browser-panel'), join(paths.plugins, 'browser-panel'), { recursive: true });
     writeJson(paths.settings, { model: { provider: 'local-mock', id: 'mock-model' }, plugins: { 'browser-panel': true } });
@@ -36,7 +36,7 @@ test('a browser plugin owns and releases its page and dialog', async ({ page }) 
 test('a keyed browser contribution cleans up its listener and restores the built-in control', async ({ page }) => {
   const mock = await createMockProvider();
   const { paths, root } = createFixturePaths(mock.url);
-  let server: Awaited<ReturnType<typeof startIsolatedHost>>;
+  let server: Awaited<ReturnType<typeof startIsolatedHost>> | undefined;
   try {
     const folder = join(paths.plugins, 'replace-new');
     mkdirSync(folder);

@@ -45,7 +45,7 @@ export async function saveProvider(runtime: ProviderHost, input: any, remove = f
     if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.hash) throw new Error('Invalid API endpoint');
     if (!Array.isArray(input.models) || !input.models.length || input.models.length > 50) throw new Error('Provide 1–50 models');
     const ids = new Set<string>();
-    const models = input.models.map((model) => {
+    const models = input.models.map((model: { id?: unknown; name?: unknown; reasoning?: unknown; input?: string[]; contextWindow?: number; maxTokens?: number }) => {
       const id = typeof model?.id === 'string' ? model.id.trim() : '';
       if (!id || id.length > 160 || ids.has(id)) throw new Error('Invalid or duplicate model ID');
       ids.add(id);
@@ -58,7 +58,7 @@ export async function saveProvider(runtime: ProviderHost, input: any, remove = f
     });
     // Retain existing per-model capabilities and key references when editing an endpoint.
     next.providers[input.id] = { ...next.providers[input.id], api: input.api, baseUrl: url.href.replace(/\/$/, ''),
-      models: models.map((model) => ({ ...next.providers[input.id]?.models?.find((old) => old.id === model.id), ...model })) };
+      models: models.map((model: { id: string }) => ({ ...next.providers[input.id]?.models?.find((old: { id: string }) => old.id === model.id), ...model })) };
   }
   const recent = runtime.settings.model;
   writeJson(path, next);

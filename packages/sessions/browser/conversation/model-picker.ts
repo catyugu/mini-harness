@@ -9,7 +9,7 @@ export function createModelPicker(root: HTMLElement, onSelect: (model: ModelChoi
   const search = element<'input'>('modelSearch'), results = element('modelResults'), empty = element('modelEmpty');
   let models: ModelInfo[] = [];
   let providers = new Map<string, string>();
-  let selected: ModelInfo;
+  let selected: ModelInfo | undefined;
   let options: HTMLButtonElement[] = [];
   let cursor = -1;
 
@@ -140,10 +140,6 @@ export function createModelPicker(root: HTMLElement, onSelect: (model: ModelChoi
   return {
     open,
     selected: () => selected,
-    setDisabled(disabled: boolean) {
-      button.disabled = disabled;
-      if (disabled && popup.matches(':popover-open')) popup.hidePopover();
-    },
     update(catalog: ModelInfo[], names: { id: string; name: string }[], choice: ModelChoice) {
       providers = new Map(names.map(({ id, name }) => [id, name]));
       models = catalog.filter((model) => model.configured).sort((a, b) =>

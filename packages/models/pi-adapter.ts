@@ -66,7 +66,12 @@ class FileCredentials implements CredentialStore {
 
 /** Owns provider definitions, credentials and the shared SDK provider registry. */
 export class PiModelStore implements ModelCatalogPort, ModelAdminPort {
-  private runtime: MutableModels;
+  private initializedRuntime?: MutableModels;
+  private get runtime(): MutableModels {
+    if (!this.initializedRuntime) throw new Error('Model store is not initialized; refresh before use');
+    return this.initializedRuntime;
+  }
+  private set runtime(value: MutableModels) { this.initializedRuntime = value; }
   private readonly credentials: FileCredentials;
   private status = new Map<string, { configured: boolean; source?: string }>();
   constructor(private readonly home: string) {
@@ -159,7 +164,10 @@ export class PiModelStore implements ModelCatalogPort, ModelAdminPort {
   providers() {
     return this.runtime.getProviders().map((provider) => ({
       id: provider.id, name: provider.name, canSetKey: Boolean(provider.auth.apiKey?.login),
-      models: this.runtime.getModels(provider.id).map((model) => this.capabilities({ provider: model.provider, id: model.id }))
+      models: this.runtime.getModels(provider.id).flatMap((model) => {
+        const capabilities = this.capabilities({ provider: model.provider, id: model.id });
+        return capabilities ? [capabilities] : [];
+      })
     }));
   }
   authStatus(id: string) { return { ...(this.status.get(id) ?? { configured: false }) }; }

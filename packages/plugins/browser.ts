@@ -3,7 +3,7 @@ import type { PluginMetadata } from '@mini-harness/contracts/plugins';
 import type { FrontendSetup, FrontendApi } from '@mini-harness/ui-runtime/frontend';
 import { payload } from '@mini-harness/web/api';
 import { icon } from '@mini-harness/ui-primitives/icons';
-import { button, field, fromMarkup, iconButton, saveToggle, toggle } from '@mini-harness/ui-primitives/primitives';
+import { button, field, fromMarkup, iconButton, saveToggle, toggle, confirmAction, required } from '@mini-harness/ui-primitives/primitives';
 import { readPluginValues, schemaFields } from './browser/fields.js';
 
 const setup: FrontendSetup = (ctx, api) => {
@@ -34,10 +34,10 @@ function installer(api: FrontendApi, installed: () => Promise<void>) {
   const modal = api.dialog('Install plugin', form);
   const id = fromMarkup<HTMLInputElement>('<input pattern="[a-z](?:[a-z0-9]|-){0,63}" placeholder="my-plugin" required>');
   form.prepend(field('Plugin ID', id));
-  const input = form.querySelector<HTMLInputElement>('.bundle-input');
-  const drop = form.querySelector<HTMLElement>('.bundle-drop');
-  const list = form.querySelector('.bundle-files');
-  const outcome = form.querySelector<HTMLElement>('[role="alert"]');
+  const input = required(form.querySelector<HTMLInputElement>('.bundle-input'));
+  const drop = required(form.querySelector<HTMLElement>('.bundle-drop'));
+  const list = required(form.querySelector('.bundle-files'));
+  const outcome = required(form.querySelector<HTMLElement>('[role="alert"]'));
   const choose = button('Choose files');
   choose.onclick = () => input.click();
   drop.insertBefore(choose, list);
@@ -45,7 +45,7 @@ function installer(api: FrontendApi, installed: () => Promise<void>) {
   cancel.onclick = () => modal.close();
   const submit = button('Install plugin', 'primary');
   submit.type = 'submit';
-  form.querySelector('.ui-actions').append(cancel, submit);
+  required(form.querySelector('.ui-actions')).append(cancel, submit);
   let files: File[] = [];
   let installing = false;
 
@@ -67,13 +67,13 @@ function installer(api: FrontendApi, installed: () => Promise<void>) {
     }));
   }
 
-  input.onchange = () => setFiles([...input.files]);
+  input.onchange = () => setFiles([...(input.files ?? [])]);
   drop.ondragover = (event) => { event.preventDefault(); if (!installing) drop.dataset.dragging = 'true'; };
   drop.ondragleave = (event) => { if (!drop.contains(event.relatedTarget as Node)) delete drop.dataset.dragging; };
   drop.ondrop = (event) => {
     event.preventDefault();
     delete drop.dataset.dragging;
-    if (!installing) setFiles([...event.dataTransfer.files]);
+    if (!installing) setFiles([...(event.dataTransfer?.files ?? [])]);
   };
   modal.addEventListener('close', () => {
     form.reset();
@@ -90,7 +90,7 @@ function installer(api: FrontendApi, installed: () => Promise<void>) {
       await api.request('/plugins/install', payload('POST', { id: id.value.trim(), files: bundle }));
       await installed();
       modal.close();
-    } catch (error) { outcome.textContent = error.message; }
+    } catch (error) { outcome.textContent = (error instanceof Error ? error.message : String(error)); }
     finally { installing = submit.disabled = choose.disabled = cancel.disabled = false; }
   };
   submit.disabled = true;
@@ -109,9 +109,9 @@ function pluginCatalog(api: FrontendApi, snapshot: () => { plugins: PluginMetada
   </section>`);
   const openInstall = button('Install plugin', 'primary');
   openInstall.prepend(icon('plus'));
-  const header = page.querySelector('header');
-  const content = page.querySelector('.catalog-content');
-  const status = page.querySelector<HTMLElement>('.catalog-status');
+  const header = required(page.querySelector('header'));
+  const content = required(page.querySelector('.catalog-content'));
+  const status = required(page.querySelector<HTMLElement>('.catalog-status'));
   header.append(openInstall);
   const modal = installer(api, async () => {
     await refresh();
@@ -131,9 +131,9 @@ function pluginCatalog(api: FrontendApi, snapshot: () => { plugins: PluginMetada
     try {
       await operation();
       try { await refresh(); }
-      catch (error) { failed(new Error('Saved on the server. ' + error.message)); }
+      catch (error) { failed(new Error('Saved on the server. ' + (error instanceof Error ? error.message : String(error)))); }
       return true;
-    } catch (error) { failed(error); return false; }
+    } catch (error) { failed(error instanceof Error ? error : new Error(String(error))); return false; }
     finally { busy = false; }
   }
 
@@ -149,17 +149,17 @@ function pluginCatalog(api: FrontendApi, snapshot: () => { plugins: PluginMetada
     back.prepend(icon('chevron'));
     back.onclick = () => { render(); rowButton(plugin.id)?.focus(); };
     section.prepend(back);
-    section.querySelector('.plugin-symbol').append(icon(plugin.icon ?? 'plugin'));
-    section.querySelector('h1').textContent = plugin.title;
-    section.querySelector('p').textContent = plugin.description;
+    required(section.querySelector('.plugin-symbol')).append(icon(plugin.icon ?? 'plugin'));
+    required(section.querySelector('h1')).textContent = plugin.title;
+    required(section.querySelector('p')).textContent = plugin.description;
     const schema = plugin.configSchema;
     if (schema) {
       const form = fromMarkup<HTMLFormElement>('<form><div class="detail-fields"></div><p class="hint" role="status"></p></form>');
       const save = button('Save configuration', 'primary');
       save.type = 'submit';
       form.append(save);
-      const fields = form.querySelector<HTMLElement>('.detail-fields');
-      const outcome = form.querySelector<HTMLElement>('[role="status"]');
+      const fields = required(form.querySelector<HTMLElement>('.detail-fields'));
+      const outcome = required(form.querySelector<HTMLElement>('[role="status"]'));
       const values = () => snapshot().settings.pluginConfig[plugin.id] ?? {};
       if (plugin.configHint) {
         const note = document.createElement('p');
@@ -170,7 +170,7 @@ function pluginCatalog(api: FrontendApi, snapshot: () => { plugins: PluginMetada
       if (plugin.configGroups) {
         for (const group of plugin.configGroups) {
           const block = fromMarkup('<section class="ui-section"><h3></h3></section>');
-          block.querySelector('h3').textContent = group.title;
+          required(block.querySelector('h3')).textContent = group.title;
           const properties = Object.fromEntries(group.fields.map((id) => [id, schema.properties[id]]));
           block.append(schemaFields(plugin.id, { ...schema, properties }, values()));
           fields.append(block);
@@ -187,7 +187,7 @@ function pluginCatalog(api: FrontendApi, snapshot: () => { plugins: PluginMetada
           const saved = await mutate(() => api.request('/settings', payload('PATCH', patch)),
             (error) => { outcome.textContent = error.message; });
           if (saved && !outcome.textContent) outcome.textContent = 'Saved.';
-        } catch (error) { outcome.textContent = error.message; }
+        } catch (error) { outcome.textContent = (error instanceof Error ? error.message : String(error)); }
         finally { save.disabled = false; }
       };
       section.append(form);
@@ -211,7 +211,7 @@ function pluginCatalog(api: FrontendApi, snapshot: () => { plugins: PluginMetada
     ];
     content.replaceChildren(...groups.map((group) => {
       const list = fromMarkup('<section class="catalog-group"><h2></h2></section>');
-      list.querySelector('h2').textContent = group.title;
+      required(list.querySelector('h2')).textContent = group.title;
       if (!group.plugins.length) list.append(fromMarkup('<p class="hint">No local plugins installed.</p>'));
       for (const plugin of group.plugins) {
         const row = fromMarkup(`<article class="catalog-row">
@@ -220,14 +220,14 @@ function pluginCatalog(api: FrontendApi, snapshot: () => { plugins: PluginMetada
           </button>
           <div class="catalog-controls"></div>
         </article>`);
-        const open = row.querySelector('button');
+        const open = required(row.querySelector('button'));
         open.dataset.pluginRow = plugin.id;
         open.setAttribute('aria-label', plugin.title + ' settings');
         open.onclick = () => detail(plugin);
-        row.querySelector('.plugin-symbol').append(icon(plugin.icon ?? 'plugin'));
-        row.querySelector('strong').textContent = plugin.title;
-        row.querySelector('small').textContent = plugin.error ?? plugin.description;
-        const controls = row.querySelector('.catalog-controls');
+        required(row.querySelector('.plugin-symbol')).append(icon(plugin.icon ?? 'plugin'));
+        required(row.querySelector('strong')).textContent = plugin.title;
+        required(row.querySelector('small')).textContent = plugin.error ?? plugin.description;
+        const controls = required(row.querySelector('.catalog-controls'));
         const scoped = plugin.scope && plugin.scope !== 'application';
         const checked = scoped ? Object.values(settings.scopes).some((scope) => scope.plugins?.[plugin.id]) :
           Boolean(settings.plugins[plugin.id]);
@@ -242,7 +242,8 @@ function pluginCatalog(api: FrontendApi, snapshot: () => { plugins: PluginMetada
         if (remove) {
           remove.hidden = checked;
           remove.onclick = async () => {
-            if (!confirm('Permanently uninstall ' + plugin.title + '?')) return;
+            if (!await confirmAction('Permanently uninstall ' + plugin.title + '?',
+              { title: 'Uninstall plugin', confirmLabel: 'Uninstall', signal: api.signal })) return;
             remove.disabled = true;
             status.textContent = '';
             const deleted = await mutate(() => api.request('/plugins/' + plugin.id, { method: 'DELETE' }),

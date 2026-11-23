@@ -11,7 +11,7 @@ export function requestBody(req: IncomingMessage, max = 1024 * 1024, signal?: Ab
       signal?.removeEventListener('abort', cancel);
     };
     const fail = (error: Error) => { clear(); reject(error); };
-    const cancel = () => { fail(signal.reason); req.resume(); };
+    const cancel = () => { fail(signal?.reason ?? new Error('Request aborted')); req.resume(); };
     const receive = (data: Buffer) => {
       size += data.length;
       if (size > max) { fail(new Error('Request too large')); req.destroy(); return; }
@@ -95,6 +95,7 @@ export class RouteRegistry implements RoutePort {
       .find(({ match }) => match !== null);
     if (!matching) return;
     const { route, match } = matching;
+    if (!match) return;
     const params = Object.fromEntries(route.names.map((name, i) => [name, decodeURIComponent(match[i + 1])]));
     const disconnect = new AbortController();
     const signal = AbortSignal.any([route.controller.signal, disconnect.signal]);

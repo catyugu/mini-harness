@@ -1,6 +1,6 @@
 import type { WorkspaceRecord } from '@mini-harness/contracts/workspace';
 import type { FrontendSetup, FrontendApi } from '@mini-harness/ui-runtime/frontend';
-import { button, field } from '@mini-harness/ui-primitives/primitives';
+import { button, field, confirmAction } from '@mini-harness/ui-primitives/primitives';
 import { payload, workspaceRoute } from '@mini-harness/web/api';
 import { fileLabel, icon } from '@mini-harness/ui-primitives/icons';
 
@@ -23,7 +23,7 @@ const setup: FrontendSetup = (ctx, api) => {
       node.title = selected?.path ?? '';
       node.hidden = !selected;
     }
-    tabs.selectScope(select.scope());
+    tabs.selectScope(select.scope() || undefined);
     tabs.prune(new Set(sessions.get().map(({ id }) => id)), new Set(workspaces.get().map(({ id }) => id)));
   };
   select.subscribe(update, api.signal);
@@ -75,7 +75,7 @@ function workspacePicker(api: FrontendApi, sessions: () => { workspaceId: string
       if (controller.signal.aborted) return;
       path.value = result.path;
       up.disabled = !result.parent;
-      up.onclick = () => void browse(result.parent);
+      up.onclick = () => { if (result.parent) void browse(result.parent); };
       list.replaceChildren(...result.directories.map((entry) => {
         const row = button('', 'quiet');
         row.classList.add('file-entry');
@@ -84,7 +84,7 @@ function workspacePicker(api: FrontendApi, sessions: () => { workspaceId: string
         return row;
       }));
       if (!result.directories.length) list.textContent = 'No subdirectories';
-    } catch (error) { if (!controller.signal.aborted) status.textContent = error.message; }
+    } catch (error) { if (!controller.signal.aborted) status.textContent = (error instanceof Error ? error.message : String(error)); }
     finally { if (browsing === controller) list.removeAttribute('aria-busy'); }
   }
 
@@ -102,7 +102,7 @@ function workspacePicker(api: FrontendApi, sessions: () => { workspaceId: string
       const record = await api.request<WorkspaceRecord>('/workspaces', payload('POST', { path: path.value.trim() }));
       picker.close();
       selected(record);
-    } catch (error) { status.textContent = error.message; }
+    } catch (error) { status.textContent = (error instanceof Error ? error.message : String(error)); }
     finally { register.disabled = false; }
   };
 
@@ -138,7 +138,7 @@ function workspacePicker(api: FrontendApi, sessions: () => { workspaceId: string
     try {
       await api.request(workspaceRoute(editing.id), payload('PATCH', { name: name.value.trim() }));
       editor.close();
-    } catch (error) { editStatus.textContent = error.message; }
+    } catch (error) { editStatus.textContent = (error instanceof Error ? error.message : String(error)); }
     finally { rename.disabled = false; }
   };
 
@@ -160,8 +160,9 @@ function workspacePicker(api: FrontendApi, sessions: () => { workspaceId: string
     },
     async remove(record: WorkspaceRecord) {
       const count = sessions().filter((session) => session.workspaceId === record.id).length;
-      if (!confirm('Permanently delete workspace "' + record.name + '" and its ' + count +
-        ' conversation' + (count === 1 ? '' : 's') + ' (including subagents)? Workspace files will be kept.')) return;
+      if (!await confirmAction('Permanently delete workspace "' + record.name + '" and its ' + count +
+        ' conversation' + (count === 1 ? '' : 's') + ' (including subagents)? Workspace files will be kept.',
+        { title: 'Delete workspace', signal: api.signal })) return;
       await api.request(workspaceRoute(record.id), { method: 'DELETE' });
     }
   };

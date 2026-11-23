@@ -23,9 +23,21 @@ native event, a monotonically increasing `seq`, a stable hexadecimal `id`, a
 `parentId`, an ISO timestamp and a SHA-256 checksum. Native IDs contain 32
 hexadecimal characters.
 
-A `model-request` entry captures the native input before streaming. Its parent identifies the active branch snapshot. An omitted `request.messages` means the messages are derived from that parent's model context. Transformed messages and compaction inputs are stored directly. The session ID comes from the log header. A retry uses the same captured input.
+A `model-request` entry captures the native input before streaming without duplicating history.
+Its parent identifies the active branch snapshot. The optional `messagesPatch` splices
+only changed messages into that snapshot, including transforms and compaction inputs.
+A content-addressed `tool-schema` record stores each distinct advertised tool list once
+per conversation. Model requests refer to its SHA-256 hash via `toolSchema`.
+`SessionLog.requestSnapshot(id)` reconstructs and validates the exact model-visible
+input for audit and retry. The session ID comes from the log header.
 
-A `tool-execution` entry records a completed side effect before a model-visible result transform. These records and model requests are operational entries. They do not advance the selected branch or appear as chat messages. A failed result transform commits a safe tool error so the original content stays out of later model requests.
+A `tool-execution` entry records a completed side effect before a model-visible result transform.
+A successful transform commits a `tool-accepted` branch entry referencing the raw execution.
+It saves only a reversible JSON splice when the content differs; an unchanged result stores no
+second copy of the tool output. Projections and the model reconstruct the accepted content,
+never the raw content. Tool executions, tool schemas and model requests are operational entries:
+they do not advance the selected branch or appear as chat messages. A failed result transform
+commits a safe error and preserves the original execution only for auditing.
 
 ## Appending and recovering
 

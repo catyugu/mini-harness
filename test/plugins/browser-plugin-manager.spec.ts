@@ -6,7 +6,7 @@ import { readJson, writeJson } from '@mini-harness/platform/config';
 import { startIsolatedHost, settingsSection, suggestions } from '../support/browser.js';
 
 test('frontend plugins own all five slots and clean up on disable and reconfiguration', async ({ page }) => {
-  const mock = await createMockProvider(({ messages }) => messages.at(-1).role === 'tool' ? 'Done' : { tool: 'ls', args: {} });
+  const mock = await createMockProvider(({ messages }) => messages.at(-1)?.role === 'tool' ? 'Done' : { tool: 'ls', args: {} });
   const { root, paths } = createFixturePaths(mock.url), folder = join(paths.plugins, 'ui-example'); mkdirSync(folder);
   writeFileSync(join(folder, 'plugin.js'), 'export default function() {}');
   writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ browserRequires: ['core:layout', 'core:conversation', 'core:settings'], title: 'UI example', icon: {
