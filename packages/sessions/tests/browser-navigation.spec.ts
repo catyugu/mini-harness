@@ -19,7 +19,8 @@ test('desktop and mobile: send, navigate, settings and bulk select', async ({ br
         const welcome = page.getByRole('heading', { name: 'What are we working on?' });
         await expect(welcome).toBeVisible();
         await expect.poll(() => welcome.evaluate((title) => {
-          const composer = expectPresent(document.getElementById('composer'), 'composer');
+          const composer = document.getElementById('composer');
+          if (!composer) throw new Error('Missing composer');
           return composer.getBoundingClientRect().top - title.getBoundingClientRect().top;
         }), { message: 'Welcome heading stays close to the composer at ' + viewport.width + 'px' }).toBeLessThan(145);
         await expect(modelButton(page)).toHaveText('Mock Model');
