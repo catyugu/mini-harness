@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 
@@ -52,9 +52,9 @@ test('capabilities do not import other capabilities concrete source', () => {
   for (const name of capabilityNames) {
     const owned = join(packages,name);
     for (const file of files(owned).filter(production)) for (const dep of dependencies(file)) {
-      if (name === 'plugins' && dep.target.startsWith(owned + '/')) continue;
+      if (name === 'plugins' && dep.target.startsWith(owned + sep)) continue;
       for (const other of capabilityNames.filter(other=>other!==name)) {
-        assert.equal(dep.target.startsWith(join(packages, other) + '/'), false,
+        assert.equal(dep.target.startsWith(join(packages, other) + sep), false,
           file + ' imports another feature concrete file: ' + dep.specifier);
       }
       assert.notEqual(dep.target, join(packages,'host','server.ts'), file + ' imports HTTP server');
@@ -63,19 +63,19 @@ test('capabilities do not import other capabilities concrete source', () => {
 });
 test('the kernel remains independent of product runtime', () => {
   for (const file of files(join(packages,'kernel'))) for (const dep of dependencies(file))
-    assert.equal(dep.target.startsWith(packages + '/'), false, file + ' depends on product code');
+    assert.equal(dep.target.startsWith(packages + sep), false, file + ' depends on product code');
   for (const file of files(join(packages,'web','kernel'))) for (const dep of dependencies(file))
-    assert.equal(dep.target.startsWith(join(web,'ui') + '/'), false, file + ' depends on UI');
+    assert.equal(dep.target.startsWith(join(web,'ui') + sep), false, file + ' depends on UI');
   for (const file of files(join(packages,'contracts'))) for (const dep of dependencies(file))
     for (const name of capabilityNames)
-      assert.equal(dep.target.startsWith(join(packages,name) + '/'), false, file + ' depends on feature');
+      assert.equal(dep.target.startsWith(join(packages,name) + sep), false, file + ' depends on feature');
 });
 test('browser values never load host-only modules', () => {
   const clients = capabilityNames.map(name=>join(packages,name,'client.ts')).filter(existsSync);
   for (const file of [...files(web).filter(production),...clients]) for (const dep of dependencies(file)) {
     if (dep.typeOnly) continue;
     for (const name of ['host','platform','transport','kernel']) {
-      assert.equal(dep.target.startsWith(join(packages,name) + '/'), false,
+      assert.equal(dep.target.startsWith(join(packages,name) + sep), false,
         file + ' loads host implementation: ' + dep.specifier);
     }
   }
@@ -125,7 +125,7 @@ test('each internal Cordis provider declares every required scoped service read'
         const alias = item.name.text;
         if (!new RegExp('\\b' + alias + '\\s*\\(\\s*ctx\\s*[,)]').test(code)) continue;
         const imported = resolve(dirname(owner), statement.moduleSpecifier.text).replace(/\.js$/, '.ts');
-        if (imported.startsWith(dirname(owner) + '/') && existsSync(imported)) code += readFileSync(imported, 'utf8');
+        if (imported.startsWith(dirname(owner) + sep) && existsSync(imported)) code += readFileSync(imported, 'utf8');
       }
     }
     const provided = new Set([...code.matchAll(/ctx\.provide\(['"]([A-Za-z]\w+)['"]/g)].map((match) => match[1]));
