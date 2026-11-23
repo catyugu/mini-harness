@@ -12,3 +12,5 @@ export const themePlugin: BrowserPlugin = {
     ctx.miniState.on('settings', apply, api.signal);
   }
 };
+
+export default themePlugin;

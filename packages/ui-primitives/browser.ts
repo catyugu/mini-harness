@@ -11,3 +11,5 @@ export const primitivesPlugin: BrowserPlugin = {
     api.onDispose(() => observer.disconnect());
   }
 };
+
+export default primitivesPlugin;

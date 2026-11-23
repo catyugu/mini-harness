@@ -26,12 +26,12 @@ test('compiled browser tests and host-only feature code are not public static as
     const response = await fetch(base + asset);
     assert.equal(response.status, 404, asset);
   }
-  for (const entry of ['/packages/web-app/app.js', '/packages/web-app/application.js']) {
+  for (const entry of ['/packages/web/boot.js', '/packages/ui-layout/browser.js']) {
     const response = await fetch(base + entry);
     assert.equal(response.status, 200, entry);
   }
-  assert.equal((await fetch(base + '/packages/web/app.js')).status, 404, 'No legacy browser bootstrap alias');
-  const publicAsset = await fetch(base + '/packages/web/ui/components/primitives.js');
+  assert.equal((await fetch(base + '/packages/web-app/app.js')).status, 404, 'Removed legacy browser bootstrap');
+  const publicAsset = await fetch(base + '/packages/ui-primitives/primitives.js');
   assert.equal(publicAsset.status, 200);
 
   assert.equal((await fetch(base + '/packages/plugins/browser-fields.js')).status, 404);
@@ -42,8 +42,8 @@ test('compiled browser tests and host-only feature code are not public static as
     headers: { Authorization: 'Bearer ' + app.token }
   });
   assert.equal(bootstrap.status, 200);
-  const snapshot = await bootstrap.json() as { plugins: { browser?: string }[] };
-  const pending = ['/packages/web-app/app.js',
+  const snapshot = await bootstrap.json() as { ui: { browser: string }[]; plugins: { browser?: string }[] };
+  const pending = ['/packages/web/boot.js', ...snapshot.ui.map(({ browser }) => browser),
     ...snapshot.plugins.flatMap((plugin) => plugin.browser ? [new URL(plugin.browser, base).pathname] : [])];
   const seen = new Set<string>();
   while (pending.length) {

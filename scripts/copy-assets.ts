@@ -7,7 +7,7 @@ mkdirSync('dist/packages/web/vendor', { recursive: true });
 for (const asset of ['index.html', 'logo.svg', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'favicon.ico']) {
   copyFileSync(join('packages/web', asset), join('dist/packages/web', asset));
 }
-copyFileSync('packages/web/ui/styles/app.css', 'dist/packages/web/style.css');
+copyFileSync('packages/ui-theme/style.css', 'dist/packages/web/theme.css');
 copyFileSync(join(dirname(require.resolve('marked')), 'marked.esm.js'), 'dist/packages/web/vendor/marked.js');
 copyFileSync(join(dirname(require.resolve('dompurify')), 'purify.es.mjs'), 'dist/packages/web/vendor/purify.js');
 copyFileSync(join(dirname(require.resolve('marked')), '..', 'LICENSE'), 'dist/packages/web/vendor/marked.LICENSE');

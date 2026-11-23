@@ -75,7 +75,7 @@ test('browser values never load host-only modules', () => {
     ...[join(packages,name,'client.ts'), join(packages,name,'browser.ts')].filter(existsSync),
     ...(existsSync(join(packages,name,'browser')) ? files(join(packages,name,'browser')).filter(production) : [])
   ]);
-  for (const file of [...files(web).filter(production), ...files(join(packages, 'web-app')).filter(production), ...clients]) for (const dep of dependencies(file)) {
+  for (const file of [...files(web).filter(production), ...files(join(packages, 'ui-layout')).filter(production), ...files(join(packages, 'ui-primitives')).filter(production), ...files(join(packages, 'ui-theme')).filter(production), ...clients]) for (const dep of dependencies(file)) {
     if (dep.typeOnly) continue;
     for (const name of ['host','platform','transport','kernel']) {
       assert.equal(dep.target.startsWith(join(packages,name) + sep), false,
@@ -198,7 +198,7 @@ test('all internal packages declare exact source dependencies and form a DAG', (
       assert.ok(names.includes(owner), file + ' imports an unknown package: ' + specifier);
       if (owner !== name) actual.add(owner);
       if (name !== 'host') assert.notEqual(owner, 'host', file + ' imports host composition');
-      if (name !== 'web-app') assert.notEqual(owner, 'web-app', file + ' imports browser composition');
+      
       if (name !== 'host' && name !== 'plugins') assert.notEqual(owner, 'kernel', file + ' imports Cordis kernel');
     }
     assert.deepEqual([...actual].sort(), [...declared.get(name)!].sort(),
@@ -216,6 +216,7 @@ test('all internal packages declare exact source dependencies and form a DAG', (
     visited.add(name);
   }
   for (const name of names) visit(name, []);
+  assert.ok(!names.includes('web-app'), 'Legacy browser app entry must not exist');
   const rootManifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
   assert.equal(rootManifest.name, 'mini-harness');
   assert.equal(rootManifest.workspaces, undefined, 'Do not install private packages as independent workspaces');
