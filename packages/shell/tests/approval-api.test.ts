@@ -1,5 +1,5 @@
 import { defaultShellMode } from '../manifest.js';
-import { supportsIsolation } from '@mini-harness/sandbox/isolation';
+import { supportsIsolation } from '@mini-harness/platform/isolation';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 

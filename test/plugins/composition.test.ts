@@ -243,7 +243,8 @@ test('native file and shell tools use scoped file, process and sandbox services 
   const child = app.runtime.registry.create({ parentId: parent.id });
   const sibling = app.runtime.registry.create();
   const configured = await request('/settings', 'PATCH', {
-    plugins: { shell: true, 'application-sandbox': true }, providers: { harnessSandbox: 'application-sandbox' },
+    plugins: { shell: true, 'application-sandbox': true },
+    pluginConfig: { shell: { mode: 'isolated' } }, providers: { harnessSandbox: 'application-sandbox' },
     scopes: {
       ['session:' + parent.id]: { plugins: { 'scoped-environment': true },
         providers: { harnessFileAccess: 'scoped-environment', harnessSandbox: 'scoped-environment' } },

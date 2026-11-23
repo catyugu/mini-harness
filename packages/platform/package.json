@@ -9,6 +9,7 @@
   "exports": {
     "./config": "./config.ts",
     "./input": "./input.ts",
+    "./isolation": "./isolation.ts",
     "./paths": "./paths.ts"
   }
 }
