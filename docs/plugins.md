@@ -209,7 +209,7 @@ The file and Skill endpoints return 404 when their plugin is disabled. The Appro
 
 ## External development and resources
 
-The reference package in [examples/remote-web](../examples/remote-web) builds against the published TypeScript interfaces. Run `mini-harness plugin dev <directory>` from a directory with a valid plugin descriptor. It builds the plugin, starts an isolated instance and restarts it after source changes so both the server and browser reload against the new graph.
+Run `mini-harness plugin dev <directory>` from a directory with a valid plugin descriptor. It builds the plugin, starts an isolated instance and restarts it after source changes so both the server and browser reload against the new graph.
 
 Declare browser CSS, ESM chunks, images and fonts in `browserAssets`. Only listed files below `web/` and the entry `web.js` are served, and only while the plugin is enabled. Resources use same-origin URLs with their media types. `browserPreload` can select one listed ESM entry. Its default function receives a lifetime signal and may return cleanup. Pre-start functions run in the resolved dependency order before ordinary browser setup.
 

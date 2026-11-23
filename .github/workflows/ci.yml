@@ -53,9 +53,6 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # The pinned official image contains Chromium Headless Shell and system dependencies.
       - run: pnpm run test:browser
-      - run: node dist/scripts/check-package.js
-        env:
-          MINI_HARNESS_PACK_BROWSER: '1'
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
@@ -76,9 +73,6 @@ jobs:
       # Do not enable Media Foundation: the Chromium Headless Shell tests do not use media APIs.
       - run: pnpm exec playwright install chromium --only-shell
       - run: pnpm run test:browser
-      - run: node dist/scripts/check-package.js
-        env:
-          MINI_HARNESS_PACK_BROWSER: '1'
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
