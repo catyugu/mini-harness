@@ -6,6 +6,8 @@ export type PluginScope = { kind: 'application' }
 
 export interface ScopeSettings {
   disabledTools?: string[];
+  /** A scoped selection replaces an inherited provider only in this subtree. */
+  providers?: Record<string, string>;
   plugins?: Record<string, boolean>;
   pluginConfig?: Record<string, Record<string, unknown>>;
 }

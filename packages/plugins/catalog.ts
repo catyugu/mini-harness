@@ -36,8 +36,11 @@ export interface PluginPlan {
 
 export class PluginCatalog {
   readonly builtins: Map<string, PluginDescriptor>;
+  private readonly protectedServices: Set<string>;
   constructor(private readonly directory: string, builtins: PluginDescriptor[], rootServices: string[]) {
     this.builtins = new Map(builtins.map((plugin) => [plugin.id, plugin]));
+    this.protectedServices = new Set([...rootServices,
+      ...builtins.filter((plugin) => !plugin.replaceable).flatMap((plugin) => plugin.provides ?? [])]);
     if (this.builtins.size !== builtins.length) throw new Error('Duplicate builtin plugin ID');
     const services = new Set(builtins.flatMap(({ provides }) => provides ?? []));
     for (const service of rootServices) if (services.has(service)) throw new Error('Duplicate provider for ' + service);
@@ -134,7 +137,10 @@ export class PluginCatalog {
     inherited: ReadonlyMap<string, string>, parentIds: ReadonlySet<string>,
     overrides?: ScopeSettings, unavailable?: (id: string, error: unknown) => boolean) {
     const isApp = scope === 'application';
-    const choices = isApp ? settings.providers : {};
+    const choices = isApp ? settings.providers : overrides?.providers ?? {};
+    for (const [service, id] of Object.entries(choices))
+      if (inherited.has(service) && inherited.get(service) !== id && this.protectedServices.has(service))
+        throw new Error('Protected service cannot be overridden: ' + service);
     const enabled: DiscoveredPlugin[] = [];
     for (const [id, active] of Object.entries(overrides?.plugins ?? {})) {
       if (active && !descriptors.some((item) => item.id === id && item.scope === scope))
@@ -156,7 +162,7 @@ export class PluginCatalog {
     }
     const { ordered, providers } = resolveCapabilities(enabled.map((item) => ({
       ...item, requires: item.requires?.filter((id) => !parentIds.has(id))
-    })), inherited, choices, unavailable);
+    })), inherited, choices, unavailable, this.protectedServices);
     const plans: PluginPlan[] = [];
     for (const { descriptor, requires, services } of ordered) {
       const { id, browser, browserRequires, source, web, configSchema } = descriptor;
