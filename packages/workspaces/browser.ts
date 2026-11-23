@@ -1,8 +1,8 @@
-import type { WorkspaceRecord } from '../../contracts/workspace.js';
-import type { BrowserPlugin, FrontendApi } from '../kernel/extensions.js';
-import { button, dialog, field } from './components/primitives.js';
-import { payload, workspaceRoute } from '../api.js';
-import { fileLabel, icon } from './components/icons.js';
+import type { WorkspaceRecord } from '../contracts/workspace.js';
+import type { BrowserPlugin, FrontendApi } from '../web/kernel/extensions.js';
+import { button, dialog, field } from '../web/ui/components/primitives.js';
+import { payload, workspaceRoute } from '../web/api.js';
+import { fileLabel, icon } from '../web/ui/components/icons.js';
 
 export const workspacePlugin: BrowserPlugin = {
   id: 'core:workspace', inject: ['miniState'],

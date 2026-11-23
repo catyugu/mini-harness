@@ -1,9 +1,9 @@
-import { payload } from '../api.js';
-import type { BrowserPlugin, FrontendApi } from '../kernel/extensions.js';
-import { icon } from './components/icons.js';
-import { button, field, fromMarkup } from './components/primitives.js';
+import { payload } from '../web/api.js';
+import type { BrowserPlugin, FrontendApi } from '../web/kernel/extensions.js';
+import { icon } from '../web/ui/components/icons.js';
+import { button, field, fromMarkup } from '../web/ui/components/primitives.js';
 
-import type { ProviderInfo, ProviderModel } from '../contracts/providers.js';
+import type { ProviderInfo, ProviderModel } from '../web/contracts/providers.js';
 
 export const modelPlugin: BrowserPlugin = {
   id: 'core:models', inject: ['miniSettings', 'miniState'],

@@ -1,14 +1,14 @@
 import type { Conversation } from '../../contracts/conversation.js';
 import type { WorkspaceRecord } from '../../contracts/workspace.js';
 import type { NavigationEvent } from '../../contracts/navigation.js';
-import { exportSessions } from '../transport/session-client.js';
-import type { BrowserState } from '../models/browser-state.js';
-import type { FrontendApi } from '../kernel/extensions.js';
-import { api as request, readEvents, scopedElements, payload, wait } from '../api.js';
+import { exportSessions } from '../../web/transport/session-client.js';
+import type { BrowserState } from '../../web/models/browser-state.js';
+import type { FrontendApi } from '../../web/kernel/extensions.js';
+import { api as request, readEvents, scopedElements, payload, wait } from '../../web/api.js';
 import { workspaceTree } from './navigation-tree.js';
 import { sessionTree } from './sessions.js';
-import { button, dialog, field, fromMarkup, iconButton } from './components/primitives.js';
-import { fileLabel, icon } from './components/icons.js';
+import { button, dialog, field, fromMarkup, iconButton } from '../../web/ui/components/primitives.js';
+import { fileLabel, icon } from '../../web/ui/components/icons.js';
 
 interface NavigationServices {
   state: BrowserState;

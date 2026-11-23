@@ -1,11 +1,11 @@
-import type { SettingsPatch } from '../../platform/config.js';
-import type { PluginMetadata } from '../../contracts/plugins.js';
-import type { BrowserPlugin, FrontendApi } from '../kernel/extensions.js';
-import type { Bootstrap } from '../types.js';
-import { payload } from '../api.js';
-import { icon } from './components/icons.js';
-import { button, dialog, field, fromMarkup, iconButton, saveToggle, toggle } from './components/primitives.js';
-import { readPluginValues, schemaFields } from './settings-fields.js';
+import type { SettingsPatch } from '../platform/config.js';
+import type { PluginMetadata } from '../contracts/plugins.js';
+import type { BrowserPlugin, FrontendApi } from '../web/kernel/extensions.js';
+import type { Bootstrap } from '../web/types.js';
+import { payload } from '../web/api.js';
+import { icon } from '../web/ui/components/icons.js';
+import { button, dialog, field, fromMarkup, iconButton, saveToggle, toggle } from '../web/ui/components/primitives.js';
+import { readPluginValues, schemaFields } from './browser-fields.js';
 
 export const catalogPlugin: BrowserPlugin = {
   id: 'core:plugins', inject: ['miniState', 'miniShell', 'miniSwitch'],

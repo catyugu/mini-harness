@@ -1,4 +1,4 @@
-import type { BrowserPlugin } from '../kernel/extensions.js';
+import type { BrowserPlugin } from '../../web/kernel/extensions.js';
 import { sessionNavigation } from './navigation.js';
 
 export const navigationPlugin: BrowserPlugin = {
