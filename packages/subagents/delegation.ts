@@ -1,6 +1,6 @@
-import type { DelegationPort, SubagentPolicy } from '../../src/contracts/delegation.js';
-import type { AgentPort, RunPort, SessionStore } from '../../src/contracts/services.js';
-import type { Conversation, ModelChoice } from '../../src/contracts/conversation.js';
+import type { DelegationPort, SubagentPolicy } from '../contracts/delegation.js';
+import type { AgentPort, RunPort, SessionStore } from '../contracts/services.js';
+import type { Conversation, ModelChoice } from '../contracts/conversation.js';
 
 interface Waiter {
   cancel(): void;

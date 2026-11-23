@@ -2,7 +2,7 @@ import { defineTool } from '@earendil-works/pi-coding-agent';
 import type { Context } from 'cordis';
 import { Type } from 'typebox';
 import { Delegation } from './delegation.js';
-import type { SubagentPolicy } from '../../src/contracts/delegation.js';
+import type { SubagentPolicy } from '../contracts/delegation.js';
 
 /** Optional plugin: delegation, scheduling and child-model rules exist only while mounted. */
 export function setup(ctx: Context) {

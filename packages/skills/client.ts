@@ -1,6 +1,6 @@
-import type { FrontendSetup } from '../../web/kernel/extensions.js';
-import { workspaceRoute } from '../../web/api.js';
-import { iconButton } from '../../web/ui/components/primitives.js';
+import type { FrontendSetup } from '../web/kernel/extensions.js';
+import { workspaceRoute } from '../web/api.js';
+import { iconButton } from '../web/ui/components/primitives.js';
 
 const setup: FrontendSetup = (api, services) => {
   const button = iconButton('Choose skill', 'skills');

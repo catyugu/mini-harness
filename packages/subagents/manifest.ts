@@ -1,10 +1,10 @@
-import type { BuiltinPlugin } from '../../src/contracts/plugins.js';
+import type { BuiltinPlugin } from '../contracts/plugins.js';
 import { Type } from 'typebox';
 
 /** One self-contained plugin schema. Changes to child limits are safe during active runs. */
 export const manifest: Omit<BuiltinPlugin, 'setup'> = {
   id: 'subagents', title: 'Subagents', description: 'Delegate tasks to child conversations.',
-  icon: 'delegate', browser: '/features/subagents/client.js',
+  icon: 'delegate', browser: '/packages/subagents/client.js',
   liveConfig: true,
   configGroups: [
     { title: 'Run limits', fields: ['maxDepth', 'maxParallel'] },

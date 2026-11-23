@@ -2,10 +2,10 @@ import { createHash } from 'node:crypto';
 import { lstatSync, mkdirSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
-import { readJson, writeJson, type getPaths } from '../../src/config.js';
-import { containsPath } from '../../src/platform/paths.js';
+import { readJson, writeJson, type getPaths } from '../platform/config.js';
+import { containsPath } from '../platform/paths.js';
 
-import type { WorkspaceRecord } from '../../src/contracts/workspace.js';
+import type { WorkspaceRecord } from '../contracts/workspace.js';
 interface CatalogState { records: WorkspaceRecord[] }
 
 // Use the same native resolver as fs/promises.realpath, including Windows long path names.

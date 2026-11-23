@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { createMiniHarnessServer } from '../../../src/server.js';
+import { createMiniHarnessServer } from '../../host/server.js';
 import { createMockProvider, createFixturePaths } from '../../../test/helpers/mock-provider.js';
 
 test('subagent tool is mounted in parent only, with an explicit concurrency limit', { timeout: 30000 }, async (t) => {
