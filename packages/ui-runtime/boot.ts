@@ -1,5 +1,5 @@
 import { Context } from '@mini-harness/web/vendor/cordis';
-import { api, data, readEvents, wait } from '@mini-harness/web/api';
+import { api, data, readEvents, wait, AuthenticationError } from '@mini-harness/web/api';
 import { RemoteStore } from '@mini-harness/web/models/remote-store';
 import type { SlotRegistry } from '@mini-harness/ui-slots/registry';
 import type { MessageExtensions } from './message-extensions.js';
@@ -17,6 +17,13 @@ declare module 'cordis' {
   }
 }
 
+function showAuthenticationError(error: AuthenticationError) {
+  const status = document.getElementById('startupStatus');
+  if (!status) return;
+  status.hidden = false;
+  status.textContent = error.message;
+}
+
 async function observe(projections: BrowserProjections, signal: AbortSignal) {
   let backoff = 300;
   while (!signal.aborted) {
@@ -27,7 +34,14 @@ async function observe(projections: BrowserProjections, signal: AbortSignal) {
         backoff = 300;
         void projections.dispatch(event).catch(() => connection.abort());
       });
-    } catch { /* Reconnection sends a complete revision snapshot. */ }
+    } catch (error) {
+      if (signal.aborted) break;
+      if (error instanceof AuthenticationError) {
+        showAuthenticationError(error);
+        break; // A stale token will not heal through connection retries.
+      }
+      // Transient disconnections retry with a complete revision snapshot.
+    }
     await wait(backoff, signal);
     backoff = Math.min(5000, backoff * 2);
   }

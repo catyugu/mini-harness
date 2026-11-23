@@ -4,10 +4,22 @@ export function scopedElements(root: HTMLElement) {
   }
   return { element, value: (id: string) => element<'input'>(id).value.trim() };
 }
-const tokenFromUrl = new URLSearchParams(location.hash.slice(1)).get('token');
-if (tokenFromUrl) {
-  sessionStorage.setItem('mini-harness-token', tokenFromUrl);
+/** A hash-only navigation does not reload ESM modules. Recover by reloading with the new credential. */
+function acceptTokenFromUrl() {
+  const token = new URLSearchParams(location.hash.slice(1)).get('token');
+  if (!token) return false;
+  const changed = sessionStorage.getItem('mini-harness-token') !== token;
+  sessionStorage.setItem('mini-harness-token', token);
   history.replaceState(null, '', location.pathname + location.search);
+  return changed;
+}
+acceptTokenFromUrl();
+window.addEventListener('hashchange', () => {
+  if (acceptTokenFromUrl()) location.reload();
+});
+
+export class AuthenticationError extends Error {
+  constructor() { super('Session authorization expired. Restart mini-harness and open the new URL printed by the CLI.'); }
 }
 export async function api(path: string, options: RequestInit = {}) {
   const token = sessionStorage.getItem('mini-harness-token');
@@ -15,6 +27,7 @@ export async function api(path: string, options: RequestInit = {}) {
   const headers = { Authorization: 'Bearer ' + token, ...(options.body ? { 'Content-Type': 'application/json' } : {}) };
   const response = await fetch('/api' + path, { ...options, headers });
   if (!response.ok) {
+    if (response.status === 401) throw new AuthenticationError();
     const body = await response.json().catch(() => null);
     throw new Error(body?.error || 'Request failed (' + response.status + ')');
   }

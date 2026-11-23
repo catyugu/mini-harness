@@ -22,7 +22,7 @@ const setup: FrontendSetup = (ctx, api) => {
       const card = document.createElement('section');
       card.className = 'approval-card';
       const title = document.createElement('strong');
-      title.textContent = 'Shell approval · ' + (services.session(approval.sessionId)?.title ?? 'Conversation');
+      title.textContent = 'Shell approval';
       const command = document.createElement('pre');
       command.textContent = approval.command;
       card.append(title, command);

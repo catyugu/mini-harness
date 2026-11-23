@@ -107,7 +107,7 @@ function toolCard(data: { name: string; state: string; content?: MessageContent;
   const status = document.createElement('span');
   status.className = 'tool-state';
   status.textContent = data.state === 'finished' ? 'Done' : data.state === 'running' ? 'Running' : 'Failed';
-  if (data.state === 'error' && item.dataset.renderedState !== 'error') item.open = true;
+  // Errors are visible in the summary, but details stay collapsed unless the user opens them.
   item.dataset.renderedState = data.state;
   summary.append(icon('chevron'), name);
   if (data.elapsedMs !== undefined && data.id) {
@@ -131,14 +131,14 @@ function toolCard(data: { name: string; state: string; content?: MessageContent;
   summary.append(status);
   const body = document.createElement('div');
   body.className = 'tool-content';
-  const custom = extensions.render(data);
-  if (custom) body.append(custom);
   if (data.arguments !== undefined) {
     const args = document.createElement('pre');
     args.className = 'tool-arguments';
     args.textContent = JSON.stringify(data.arguments, null, 2);
     body.append(args);
   }
+  const custom = extensions.render(data);
+  if (custom) body.append(custom);
   const output = custom ? '' : textOf(data.content);
   if (output) {
     const result = document.createElement('pre');
