@@ -57,6 +57,44 @@ test('shell approval gates execution, handles rejection and cancellation', async
   assert.deepEqual((await request('/approvals')).body, []);
 });
 
+test('full access bypasses Shell prompts only for its conversation and applies to pending approvals', async (t) => {
+  const { app, request, finish } = await fixture(t, ({ messages }) =>
+    messages.at(-1)?.role === 'tool' ? 'Command finished' : { tool: 'sandbox_shell', args: { command: 'echo permitted' } });
+  await app.runtime.updateSettings({ plugins: { shell: true }, pluginConfig: { shell: { mode: 'host' } } });
+
+  const { body: full } = await request('/sessions', 'POST', { permission: 'fullAccess' });
+  const { body: standard } = await request('/sessions', 'POST', {});
+  assert.equal(full.permission, 'fullAccess');
+  assert.equal(standard.permission, 'standard');
+  await request('/sessions/' + full.id + '/runs', 'POST', { message: 'Run without approval' });
+  assert.equal((await finish(full.id)).body.run.state, 'completed');
+  const fullHistory = (await request('/sessions/' + full.id)).body.messages;
+  assert.equal(fullHistory.filter((message: { role: string }) => message.role === 'toolResult').at(-1)?.isError, false);
+  assert.deepEqual((await request('/approvals')).body, []);
+  assert.equal((await request('/sessions/' + standard.id)).body.permission, 'standard');
+
+  await request('/sessions/' + standard.id + '/runs', 'POST', { message: 'Switch while pending' });
+  await waitUntil(() => request('/approvals'), ({ body }) => body.some((item: { sessionId: string }) => item.sessionId === standard.id));
+  assert.equal((await request('/sessions/' + standard.id + '/permissions', 'PATCH',
+    { permission: 'fullAccess' })).status, 200);
+  assert.deepEqual((await request('/approvals')).body, []);
+  assert.equal((await finish(standard.id)).body.run.state, 'completed');
+  const switched = (await request('/sessions/' + standard.id)).body.messages;
+  assert.equal(switched.filter((message: { role: string }) => message.role === 'toolResult').at(-1)?.isError, false);
+
+  assert.equal((await request('/sessions/' + standard.id + '/permissions', 'PATCH',
+    { permission: 'standard' })).status, 200);
+  await request('/sessions/' + standard.id + '/runs', 'POST', { message: 'Approval restored' });
+  const pending = await waitUntil(() => request('/approvals'), ({ body }) => body.length === 1);
+  assert.equal(pending.body[0].sessionId, standard.id);
+  await request('/approvals', 'POST', { id: pending.body[0].id, allow: true });
+  await finish(standard.id);
+
+  const parent = app.runtime.registry.create({ permission: 'readOnly' });
+  const child = app.runtime.registry.create({ parentId: parent.id, permission: 'fullAccess' });
+  assert.equal(app.runtime.plugins.ctx.harnessScopes.allowsTool(child.id, 'sandbox_shell'), false);
+});
+
 test('disabling Shell drains its pending approval and preserves an unrelated run', { timeout: 15000 }, async (t) => {
   let entered: () => void;
   let release: () => void = () => { throw new Error('Not started'); };
