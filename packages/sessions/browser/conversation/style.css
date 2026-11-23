@@ -2,10 +2,15 @@
   display: flex; align-items: center; gap: 6px; max-width: min(36vw, 260px); min-width: 0; border: 0;
   border-radius: 8px; background: transparent; padding: 6px 8px; font-size: 12px; margin-left: auto;
 }
-.model-select:hover, #thinkingLevel:hover { background: var(--hover); }
+.model-select:hover { background: var(--hover); }
 .model-select span { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: inherit; color: inherit; }
 .model-select svg { flex: 0 0 12px; height: 12px; transform: rotate(90deg); }
-#thinkingLevel { min-width: 0; border: 0; padding: 6px 4px; background: var(--surface); font-size: 12px; }
+#thinkingLevel { margin-left: 0; flex-shrink: 0; }
+.thinking-picker { max-width: calc(100vw - 16px); }
+#thinkingResults { min-height: 0; overflow: auto; overscroll-behavior: contain; }
+#thinkingResults .model-option { display: flex; align-items: center; min-height: 36px; padding: 8px 10px; border-radius: 8px; font-size: 13px; }
+#thinkingResults .model-option[aria-selected="true"] { background: var(--selected); }
+#thinkingResults .model-option[aria-selected="true"]::after { content: '✓'; margin-left: auto; color: var(--focus); }
 .model-picker {
   position: fixed; inset: auto; margin: 0; padding: 8px; min-height: 0;
   color: var(--ink); background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
