@@ -10,6 +10,8 @@ export interface SlotMap {
   'sidebar.footer': { kind: 'list' };
   'header.actions': { kind: 'list' };
   'conversation.header': { kind: 'list' };
+  'workspace.header': { kind: 'single' };
+  'workspace.welcome': { kind: 'single' };
   'conversation.body': { kind: 'single' };
   'conversation.composer': { kind: 'list' };
   'conversation.approvals': { kind: 'list' };

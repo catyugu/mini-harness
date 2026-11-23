@@ -102,6 +102,7 @@ export class FrontendHost {
     await this.disable(id);
     if (this.disposed) throw new Error('Browser host is disposed');
     const controller = new AbortController();
+    const root = this.ctx;
     const fiber = this.ctx.inject(inject, async (ctx) => {
       const own = (install: () => Release | Iterable<Release, void, void>) => {
         if (controller.signal.aborted) return () => {};
@@ -114,7 +115,7 @@ export class FrontendHost {
       });
       const cleanup = await setup(ctx, {
         signal: controller.signal,
-        get ui() { return ctx.miniPrimitives; },
+        get ui() { return root.miniPrimitives; },
         dialog: (title, content) => {
           const dialog = this.ctx.miniPrimitives.dialog(title, content);
           own(() => this.ctx.miniSlots.register('dialog.root', dialog));
@@ -129,8 +130,8 @@ export class FrontendHost {
           entry.dataset.pageLink = page;
           entry.addEventListener('click', () => this.ctx.miniPages.open(page), { signal: controller.signal });
           return own(function* () {
-            yield ctx.miniPages.register(page, content);
-            yield ctx.miniSlots.register('sidebar.actions', entry, order);
+            yield root.miniPages.register(page, content);
+            yield root.miniSlots.register('sidebar.actions', entry, order);
           });
         },
         slots: {

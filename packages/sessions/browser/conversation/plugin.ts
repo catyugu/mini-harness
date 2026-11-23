@@ -3,16 +3,13 @@ import { MessageExtensions } from '../../../ui-runtime/message-extensions.js';
 import { conversationView } from './view.js';
 
 const setup: FrontendSetup = (ctx, api) => {
-  const { miniSelection: state, miniSessions: sessions, miniWorkspaces: workspaces, miniSettingsData: settings, miniModels: models, miniLayout: layout, miniPages: pages, miniHeader: header, miniWorkspace: workspace } = ctx;
+  const { miniSelection: state, miniSessions: sessions, miniWorkspaces: workspaces, miniSettingsData: settings, miniModels: models, miniLayout: layout, miniPages: pages, miniHeader: header } = ctx;
   const extensions = new MessageExtensions((error) => state.dispatchEvent(new CustomEvent('error', { detail: error })));
   ctx.provide('miniMessages', extensions);
   const conversation = conversationView(api, state, {
     sessions, settings, models,
     closeDrawer: layout.closeDrawer,
-    placeWorkspace(welcome) {
-      if (welcome) welcome.append(workspace.current);
-      else header.placeWorkspace(workspace.current);
-    },
+    showWorkspaceInHeader: header.showWorkspace,
     setTitle: header.setTitle, renderTool: (tool, action) => extensions.render(tool, action),
     messageActions: () => extensions.actionsForMessage()
   });
@@ -25,6 +22,7 @@ const setup: FrontendSetup = (ctx, api) => {
   });
   api.slots.define('conversation.composer', conversation.outlets.composer);
   api.slots.define('conversation.approvals', conversation.outlets.approvals);
+  api.slots.define('workspace.welcome', conversation.outlets.workspace, 'single');
   conversation.attach();
   extensions.subscribe(conversation.refreshActions, api.signal);
   settings.subscribe(conversation.updateModelControls, api.signal);

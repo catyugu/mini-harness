@@ -1,15 +1,28 @@
 import type { WorkspaceRecord } from '../contracts/workspace.js';
 import type { FrontendSetup, FrontendApi } from '../ui-runtime/frontend.js';
-import { button, dialog, field } from '../ui-primitives/primitives.js';
+import { button, field } from '../ui-primitives/primitives.js';
 import { payload, workspaceRoute } from '../web/api.js';
 import { fileLabel, icon } from '../ui-primitives/icons.js';
 
 const setup: FrontendSetup = (ctx, api) => {
   const { miniSelection: select, miniSessions: sessions, miniWorkspaces: workspaces, miniTabs: tabs } = ctx;
   const picker = workspacePicker(api, sessions.get);
+  const badges = (['workspace.header', 'workspace.welcome'] as const).map((slot) => {
+    const node = document.createElement('div');
+    node.className = 'workspace-button';
+    const label = document.createElement('small');
+    node.append(icon('folder'), label);
+    api.slots.register(slot, node);
+    return { node, label };
+  });
   ctx.provide('miniWorkspace', picker);
   const update = () => {
-    picker.label(workspaces.get().find(({ id }) => id === select.selectedWorkspace));
+    const selected = workspaces.get().find(({ id }) => id === select.selectedWorkspace);
+    for (const { node, label } of badges) {
+      label.textContent = selected?.path ?? '';
+      node.title = selected?.path ?? '';
+      node.hidden = !selected;
+    }
     tabs.selectScope(select.scope());
     tabs.prune(new Set(sessions.get().map(({ id }) => id)), new Set(workspaces.get().map(({ id }) => id)));
   };
@@ -47,8 +60,7 @@ function workspacePicker(api: FrontendApi, sessions: () => { workspaceId: string
   browseActions.className = 'ui-actions';
   browseActions.append(up, go);
   form.append(field('Absolute directory path', path), browseActions, list, status, register);
-  const picker = dialog('Add workspace', form);
-  api.slots.register('dialog.root', picker);
+  const picker = api.dialog('Add workspace', form);
   let selected: (record: WorkspaceRecord) => void;
   let browsing: AbortController;
   picker.addEventListener('close', () => browsing?.abort());
@@ -111,9 +123,8 @@ function workspacePicker(api: FrontendApi, sessions: () => { workspaceId: string
   rename.type = 'submit';
   actions.append(cancel, rename);
   editForm.append(name, editStatus, actions);
-  const editor = dialog('Rename workspace', editForm);
+  const editor = api.dialog('Rename workspace', editForm);
   editor.classList.add('workspace-rename-dialog');
-  api.slots.register('dialog.root', editor);
   let editing: WorkspaceRecord;
   cancel.onclick = () => editor.close();
   name.oninput = () => {
@@ -131,19 +142,7 @@ function workspacePicker(api: FrontendApi, sessions: () => { workspaceId: string
     finally { rename.disabled = false; }
   };
 
-  const current = document.createElement('div');
-  current.className = 'workspace-button';
-  current.append(icon('folder'));
-  const currentLabel = document.createElement('small');
-  currentLabel.id = 'workspaceLabel';
-  current.append(currentLabel);
   return {
-    current,
-    label(record?: WorkspaceRecord) {
-      currentLabel.textContent = record?.path ?? '';
-      current.title = record?.path ?? '';
-      current.hidden = !record;
-    },
     open(record: WorkspaceRecord | undefined, onAdd: typeof selected) {
       selected = onAdd;
       path.value = record?.path ?? '';

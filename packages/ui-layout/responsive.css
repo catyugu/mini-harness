@@ -73,6 +73,7 @@ button { border-radius: var(--radius); }
   #sessionSearch { font-size: 16px; min-height: 44px; }
   .composer-footer { justify-content: initial; }
 }
+#workspaceHeader, #workspaceWelcome { min-width: 0; max-width: 100%; }
 .workspace-button { display: flex; align-items: center; gap: 5px; min-width: 0; max-width: 100%; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-button small { min-width: 0; overflow: hidden; text-overflow: ellipsis; font: 11px/1.4 ui-monospace, monospace; }
 .workspace-button span { display: inline-flex; flex: 0 0 auto; }
