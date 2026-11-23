@@ -20,6 +20,7 @@ test('custom provider onboarding and registering a workspace work entirely in th
     await page.goto(service.url + '/#token=' + service.token);
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
     const settings = page.getByRole('dialog', { name: 'Settings' });
+    await settings.getByRole('button', { name: 'Model', exact: true }).click();
     await expect(settings.getByRole('combobox', { name: 'Provider', exact: true })).toHaveCount(0);
     await settings.getByRole('button', { name: 'Add provider' }).click();
     await expect(settings.getByRole('combobox', { name: 'Provider', exact: true })).toBeVisible();
