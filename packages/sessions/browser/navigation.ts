@@ -7,7 +7,7 @@ import type { FrontendApi } from '@mini-harness/ui-runtime/frontend';
 import { scopedElements, payload } from '@mini-harness/web/api';
 import { workspaceTree } from './navigation-tree.js';
 import { sessionTree } from './sessions.js';
-import { button, dialog, field, fromMarkup, iconButton } from '@mini-harness/ui-primitives/primitives';
+import { button, dialog, field, fromMarkup, iconButton, confirmAction } from '@mini-harness/ui-primitives/primitives';
 import { fileLabel, icon } from '@mini-harness/ui-primitives/icons';
 
 interface NavigationServices {
@@ -214,8 +214,9 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
           active: state.activeConversation, expanded, selection, selecting, query: matches ? '' : query,
           render, selectionChanged, activate: options.activate, rename,
           remove(item) {
-            if (confirm('Permanently delete "' + item.title + '" and all child conversations?'))
-              void remove([item.id]).catch(options.report);
+            void confirmAction('Permanently delete "' + item.title + '" and all child conversations?',
+              { title: 'Delete conversation', signal: api.signal })
+              .then((confirmed) => confirmed ? remove([item.id]) : undefined).catch(options.report);
           }
         });
         const branches = workspaceBranch(id);
@@ -340,8 +341,13 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
   selectAll.onclick = () => { for (const item of visible) selection.add(item.id); render(); };
   exportButton.onclick = () => void exportSessions([...selection], api.signal).catch(options.report);
   deleteButton.onclick = () => {
-    if (confirm('Permanently delete ' + selection.size + ' selected conversations and their descendants?'))
-      void remove([...selection]).then(() => toggleSelection(false)).catch(options.report);
+    const ids = [...selection];
+    void confirmAction('Permanently delete ' + ids.length + ' selected conversations and their descendants?',
+      { title: 'Delete conversations', signal: api.signal }).then(async (confirmed) => {
+        if (!confirmed) return;
+        await remove(ids);
+        toggleSelection(false);
+      }).catch(options.report);
   };
 
   render();

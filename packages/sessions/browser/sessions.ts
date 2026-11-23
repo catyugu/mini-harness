@@ -66,7 +66,7 @@ export function sessionTree(sessions: Conversation[], options: {
         row.append(actions);
       }
       const status = item.waitingApproval ? 'approval' : item.run?.state;
-      if (status && status !== 'completed') {
+      if (status === 'approval' || status === 'running' || status === 'queued') {
         const marker = document.createElement('span');
         marker.className = 'run-state';
         marker.dataset.state = status;

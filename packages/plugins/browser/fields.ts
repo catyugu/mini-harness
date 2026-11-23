@@ -21,7 +21,10 @@ export function schemaFields(plugin: string, schema: Record<string, any>, values
     if (property.enum) {
       const select = document.createElement('select');
       if (!schema.required?.includes(key)) select.add(new Option('Default', ''));
-      for (const option of property.enum) select.add(new Option(String(option), JSON.stringify(option)));
+      for (const [index, option] of property.enum.entries()) {
+        const label = Array.isArray(property['x-enumLabels']) ? property['x-enumLabels'][index] : undefined;
+        select.add(new Option(typeof label === 'string' ? label : String(option), JSON.stringify(option)));
+      }
       if (current !== undefined) select.value = JSON.stringify(current);
       input = select;
       input.dataset.kind = 'enum';

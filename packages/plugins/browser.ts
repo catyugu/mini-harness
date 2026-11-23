@@ -3,7 +3,7 @@ import type { PluginMetadata } from '@mini-harness/contracts/plugins';
 import type { FrontendSetup, FrontendApi } from '@mini-harness/ui-runtime/frontend';
 import { payload } from '@mini-harness/web/api';
 import { icon } from '@mini-harness/ui-primitives/icons';
-import { button, field, fromMarkup, iconButton, saveToggle, toggle } from '@mini-harness/ui-primitives/primitives';
+import { button, field, fromMarkup, iconButton, saveToggle, toggle, confirmAction } from '@mini-harness/ui-primitives/primitives';
 import { readPluginValues, schemaFields } from './browser/fields.js';
 
 const setup: FrontendSetup = (ctx, api) => {
@@ -242,7 +242,8 @@ function pluginCatalog(api: FrontendApi, snapshot: () => { plugins: PluginMetada
         if (remove) {
           remove.hidden = checked;
           remove.onclick = async () => {
-            if (!confirm('Permanently uninstall ' + plugin.title + '?')) return;
+            if (!await confirmAction('Permanently uninstall ' + plugin.title + '?',
+              { title: 'Uninstall plugin', confirmLabel: 'Uninstall', signal: api.signal })) return;
             remove.disabled = true;
             status.textContent = '';
             const deleted = await mutate(() => api.request('/plugins/' + plugin.id, { method: 'DELETE' }),

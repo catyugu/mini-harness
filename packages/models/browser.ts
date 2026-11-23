@@ -1,7 +1,7 @@
 import { payload } from '@mini-harness/web/api';
 import type { FrontendSetup, FrontendApi } from '@mini-harness/ui-runtime/frontend';
 import { icon } from '@mini-harness/ui-primitives/icons';
-import { button, field, fromMarkup } from '@mini-harness/ui-primitives/primitives';
+import { button, field, fromMarkup, confirmAction } from '@mini-harness/ui-primitives/primitives';
 
 import type { ProviderInfo, ProviderModel } from '@mini-harness/web/contracts/providers';
 
@@ -122,7 +122,8 @@ function providerManager(api: FrontendApi, providers: () => ProviderInfo[], refr
         remove.classList.add('danger');
         remove.setAttribute('aria-label', 'Remove ' + provider.name);
         remove.onclick = async () => {
-          if (!confirm(provider.custom ? 'Remove endpoint ' + provider.name + '?' : 'Remove the saved credentials for ' + provider.name + '?')) return;
+          if (!await confirmAction(provider.custom ? 'Remove endpoint ' + provider.name + '?' : 'Remove the saved credentials for ' + provider.name + '?',
+            { title: 'Remove provider', confirmLabel: 'Remove', signal: api.signal })) return;
           remove.disabled = true;
           try {
             await api.request(provider.custom ? '/providers' : '/credentials', payload('DELETE',

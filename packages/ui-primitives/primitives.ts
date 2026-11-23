@@ -89,3 +89,35 @@ export function dialog(title: string, content: HTMLElement) {
   closeOnBackdrop(node);
   return node;
 }
+
+/** One accessible, app-styled confirmation instead of platform-specific window.confirm(). */
+export function confirmAction(message: string, options: { title?: string; confirmLabel?: string; signal?: AbortSignal } = {}): Promise<boolean> {
+  if (options.signal?.aborted) return Promise.resolve(false);
+  const actions = document.createElement('form');
+  actions.className = 'ui-confirm';
+  actions.method = 'dialog';
+  const text = document.createElement('p');
+  text.textContent = message;
+  const row = document.createElement('div');
+  row.className = 'ui-actions';
+  const cancel = button('Cancel', 'quiet');
+  const confirm = button(options.confirmLabel ?? 'Delete', 'danger');
+  confirm.type = 'submit';
+  confirm.value = 'confirmed';
+  cancel.onclick = () => modal.close();
+  row.append(cancel, confirm);
+  actions.append(text, row);
+  const modal = dialog(options.title ?? 'Confirm deletion', actions);
+  document.body.append(modal);
+  return new Promise((resolve) => {
+    const abort = () => modal.close();
+    options.signal?.addEventListener('abort', abort, { once: true });
+    modal.addEventListener('close', () => {
+      options.signal?.removeEventListener('abort', abort);
+      resolve(modal.returnValue === 'confirmed');
+      modal.remove();
+    }, { once: true });
+    modal.showModal();
+    cancel.focus();
+  });
+}

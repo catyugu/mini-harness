@@ -1,6 +1,6 @@
 import type { WorkspaceRecord } from '@mini-harness/contracts/workspace';
 import type { FrontendSetup, FrontendApi } from '@mini-harness/ui-runtime/frontend';
-import { button, field } from '@mini-harness/ui-primitives/primitives';
+import { button, field, confirmAction } from '@mini-harness/ui-primitives/primitives';
 import { payload, workspaceRoute } from '@mini-harness/web/api';
 import { fileLabel, icon } from '@mini-harness/ui-primitives/icons';
 
@@ -160,8 +160,9 @@ function workspacePicker(api: FrontendApi, sessions: () => { workspaceId: string
     },
     async remove(record: WorkspaceRecord) {
       const count = sessions().filter((session) => session.workspaceId === record.id).length;
-      if (!confirm('Permanently delete workspace "' + record.name + '" and its ' + count +
-        ' conversation' + (count === 1 ? '' : 's') + ' (including subagents)? Workspace files will be kept.')) return;
+      if (!await confirmAction('Permanently delete workspace "' + record.name + '" and its ' + count +
+        ' conversation' + (count === 1 ? '' : 's') + ' (including subagents)? Workspace files will be kept.',
+        { title: 'Delete workspace', signal: api.signal })) return;
       await api.request(workspaceRoute(record.id), { method: 'DELETE' });
     }
   };

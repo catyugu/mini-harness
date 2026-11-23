@@ -11,3 +11,10 @@ button:disabled { cursor: default; opacity: .55; }
 a, .link-button { color: var(--focus); }
 input[type="checkbox"] { accent-color: var(--accent); }
 
+
+.ui-confirm { display: grid; gap: 18px; }
+.ui-confirm p { margin: 0; line-height: 1.5; overflow-wrap: anywhere; }
+.ui-confirm .ui-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.ui-confirm .ui-button { min-width: 84px; }
+select { appearance: none; padding-right: 28px !important; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='none' stroke='%23777780' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m3 5 4 4 4-4'/%3E%3C/svg%3E") !important; background-repeat: no-repeat !important; background-position: right 9px center !important; }
+select:focus-visible { border-color: var(--focus); }
