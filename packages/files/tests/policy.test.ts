@@ -27,9 +27,8 @@ test('workspace tools share one policy for reads, searches and writes', async (t
   await execute('edit', { path: 'src/note.txt', edits: [{ oldText: 'good', newText: 'marked' }] });
   assert.match(JSON.stringify(await execute('read', { path: 'src/note.txt' })), /marked text/);
   assert.match(JSON.stringify(await execute('grep', { path: '.', pattern: 'marked text', glob: '*.txt' })), /src\/note.txt/);
-  const found = JSON.stringify(await execute('find', { path: '.', pattern: '*.txt' }));
-  assert.match(found, /src\/note.txt/);
-  assert.doesNotMatch(found, /hidden\.txt/);
+  const found = await execute('find', { path: '.', pattern: '*.txt' });
+  assert.deepEqual(found.content, [{ type: 'text', text: join(cwd, 'src', 'note.txt') }]);
   assert.doesNotMatch(JSON.stringify(await execute('grep', { path: '.', pattern: 'marked text' })), /hidden\.txt/);
   assert.doesNotMatch(JSON.stringify(await execute('ls', { path: '.' })), /linked|state/);
   await assert.rejects(execute('read', { path: '../private/secret.txt' }), /permitted workspace/);

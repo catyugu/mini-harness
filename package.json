@@ -1,7 +1,7 @@
 {
   "name": "mini-harness",
   "version": "0.4.0",
-  "description": "A minimal, plugin-first Web harness for Pi",
+  "description": "A minimal, plugin-first Web harness with a native agent kernel",
   "license": "MIT",
   "type": "module",
   "bin": {
@@ -41,7 +41,6 @@
   },
   "dependencies": {
     "@earendil-works/pi-ai": "1.6.0",
-    "@earendil-works/pi-coding-agent": "1.6.0",
     "cordis": "4.0.0-rc.13",
     "ignore": "7.0.8",
     "re2-wasm": "1.0.2",

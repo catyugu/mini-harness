@@ -8,4 +8,5 @@ export function setup(ctx: Context) {
   ctx.provide('harnessRegistry', registry);
   ctx.provide('harnessSessions', { get: (id) => registry.get(id), list: (id) => registry.list(id) });
   ctx.provide('harnessWorkspace', { resolve: (id) => registry.workspacePath(id) });
+  ctx.effect(() => () => registry.dispose());
 }

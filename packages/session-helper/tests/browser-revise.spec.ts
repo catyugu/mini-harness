@@ -3,7 +3,7 @@ import { rmSync } from 'node:fs';
 import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.js';
 import { startIsolatedHost } from '../../../test/support/browser.js';
 
-test('editing a user message creates a new Pi branch from the editor on mobile and desktop', async ({ browser }) => {
+test('editing a user message creates a native branch from the editor on mobile and desktop', async ({ browser }) => {
   const mock = await createMockProvider(({ messages }) => 'Response: ' + messages.filter((entry) => entry.role === 'user').at(-1)?.content);
   try {
     for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 }]) {

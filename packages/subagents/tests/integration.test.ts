@@ -14,14 +14,14 @@ test('subagent tool is mounted in parent only, with an explicit concurrency limi
   t.after(() => app.close());
   const rootSession = app.runtime.registry.create();
   const child = app.runtime.registry.create({ parentId: rootSession.id });
-  const parent = await app.runtime.pi.open(rootSession.id);
-  const worker = await app.runtime.pi.open(child.id);
-  assert.ok(parent.getActiveToolNames().includes('delegate'));
-  assert.ok(!worker.getActiveToolNames().includes('delegate'));
+  await Promise.all([app.runtime.agent.prepare(rootSession.id), app.runtime.agent.prepare(child.id)]);
+  const names = (id: string) => app.runtime.plugins.ctx.harnessTools.forSession(id).map(({ name }) => name);
+  assert.ok(names(rootSession.id).includes('delegate'));
+  assert.ok(!names(child.id).includes('delegate'));
   assert.equal(app.runtime.delegation.parallelLimit, 4);
 });
 
-test('Pi honors file policy and recursive delegates can finish with one slot', { timeout: 30000 }, async (t) => {
+test('Native execution honors file policy and recursive delegates can finish with one slot', { timeout: 30000 }, async (t) => {
   const mock = await createMockProvider(({ messages }) => {
     const last = messages.at(-1);
     if (last.role === 'tool') return 'Finished ' + ([...messages].reverse().find((message) => message.role === 'user')?.content ?? '');
@@ -40,12 +40,12 @@ test('Pi honors file policy and recursive delegates can finish with one slot', {
   await app.runtime.runs.send(parent.id, 'root task', (event) => { if (event.type === 'tool') toolEvents.push(event); });
   const records = app.runtime.registry.descendants([parent.id]).map((id) => app.runtime.registry.get(id));
   assert.deepEqual(records.map(({ title }) => title), ['root task', 'child task', 'leaf task']);
-  assert.deepEqual(app.runtime.pi.read(records[2].id).model, { provider: 'local-mock', id: 'mock-model' });
-  assert.equal((await app.runtime.pi.open(records[2].id)).getActiveToolNames().includes('delegate'), false);
+  assert.deepEqual(app.runtime.agent.read(records[2].id).model, { provider: 'local-mock', id: 'mock-model' });
+  assert.equal(app.runtime.plugins.ctx.harnessTools.forSession(records[2].id).map(({ name }) => name).includes('delegate'), false);
   assert.ok(toolEvents.some((event) => event.state === 'finished' && event.sessionId === records[1].id));
   const check = app.runtime.registry.create();
   await app.runtime.runs.send(check.id, 'read policy');
-  const failure = app.runtime.pi.messages(check.id).find((message) => message.role === 'toolResult');
+  const failure = app.runtime.agent.messages(check.id).find((message) => message.role === 'toolResult');
   assert.equal(failure.isError, true);
   assert.match(JSON.stringify(failure.content), /permitted workspace/);
   assert.doesNotMatch(JSON.stringify(failure.content), /private fixture/);
@@ -54,7 +54,7 @@ test('Pi honors file policy and recursive delegates can finish with one slot', {
   const exported = app.runtime.export([parent.id, records[1].id]);
   assert.deepEqual(exported.map(({ id, parentId }) => ({ id, parentId })),
     records.map(({ id, parentId }) => ({ id, parentId })));
-  assert.ok(exported.every(({ piSession }) => piSession?.includes('"type":"session"')));
+  assert.ok(exported.every(({ log }) => log?.includes('"type":"session"')));
   assert.equal((await app.runtime.getConversation(records[2].id)).model.id, 'mock-model');
 });
 
@@ -83,6 +83,6 @@ test('cancelling a root aborts its active child and preserves indexed history', 
   assert.equal(app.runtime.delegation.activeChildren, 0);
   const child = app.runtime.export([parent.id])[1];
   assert.equal(child.title, '[Cancelled] hold child');
-  assert.ok(child.piSession?.includes('hold child'));
+  assert.ok(child.log?.includes('hold child'));
 });
 

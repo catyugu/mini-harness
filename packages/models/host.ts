@@ -1,7 +1,7 @@
 import type { Context } from 'cordis';
 import { providerSettings, saveProvider } from './provider-settings.js';
 
-/** Provider discovery, credentials and Pi model selection have one capability owner. */
+/** Provider discovery, credentials and model selection have one capability owner. */
 export function setup(ctx: Context) {
   const host = {
     paths: ctx.harnessState.paths,
@@ -9,7 +9,7 @@ export function setup(ctx: Context) {
     catalog: ctx.harnessModels,
     admin: ctx.harnessModelAdmin,
     get delegation() { return ctx.get('harnessDelegation'); },
-    get hasActiveWork() { return (ctx.harnessRuns.size > 0 || ctx.harnessPi.hasPending); },
+    get hasActiveWork() { return (ctx.harnessRuns.size > 0 || ctx.harnessAgent.hasPending); },
     updateSettings: (patch: Parameters<typeof ctx.harnessUpdateSettings>[0]) => ctx.harnessUpdateSettings(patch)
   };
   const add = (method: string, path: string, handler: Parameters<typeof ctx.harnessRoutes.register>[2]) =>
@@ -33,7 +33,7 @@ export function setup(ctx: Context) {
         throw new Error('Invalid provider');
       if (!host.admin.hasProvider(input.provider)) throw new Error('Unknown provider');
       if (method === 'DELETE') {
-        if ((ctx.harnessRuns.size > 0 || ctx.harnessPi.hasPending)) throw new Error('Stop active conversations before removing credentials');
+        if ((ctx.harnessRuns.size > 0 || ctx.harnessAgent.hasPending)) throw new Error('Stop active conversations before removing credentials');
         await host.admin.removeCredential(input.provider);
       } else {
         if (typeof input.key !== 'string' || !input.key.trim()) throw new Error('Invalid credential');

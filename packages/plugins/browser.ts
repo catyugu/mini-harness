@@ -9,6 +9,7 @@ import { readPluginValues, schemaFields } from './browser/fields.js';
 const setup: FrontendSetup = (ctx, api) => {
   const { miniPluginData: plugins, miniSettingsData: settings, miniPages: pages, miniSwitch: syncPlugins } = ctx;
   const refresh = async () => {
+    await Promise.all([plugins.refresh(), settings.refresh()]);
     const failures = await syncPlugins();
     if (failures.size) throw new Error('Browser plugins failed: ' + [...failures.keys()].join(', '));
   };

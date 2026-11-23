@@ -6,7 +6,7 @@ import { MiniHarnessRuntime } from '../../host/application.js';
 import { readJson, writeJson } from '../../platform/config.js';
 import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.js';
 
-test('recent main model survives navigation, child overrides and a restart through the real Pi SDK', async (t) => {
+test('recent main model survives navigation, child overrides and a restart through the native agent', async (t) => {
   const mock = await createMockProvider();
   const { root, paths } = createFixturePaths(mock.url);
   const config = readJson<any>(join(paths.home, 'models.json'), {});
@@ -18,12 +18,13 @@ test('recent main model survives navigation, child overrides and a restart throu
   const old = runtime.registry.create();
   const other = runtime.registry.create();
   await runtime.runs.send(old.id, 'First');
-  const original = await runtime.pi.open(old.id);
+  const original = runtime.agent.read(old.id);
   await runtime.updateSettings({ model: { provider: 'local-mock', id: 'second-model' } });
   await runtime.getConversation(old.id);
   assert.equal(runtime.settings.model.id, 'second-model');
-  assert.strictEqual(await runtime.pi.open(old.id), original);
-  await runtime.runs.send(old.id, 'Switch with SDK');
+  assert.deepEqual(runtime.agent.read(old.id).messages, original.messages);
+  assert.deepEqual(runtime.agent.read(old.id).model, original.model);
+  await runtime.runs.send(old.id, 'Switch the recent model');
   assert.equal(mock.requests.at(-1).model, 'second-model');
   await runtime.delegation.run(old.id, 'Child override', { provider: 'local-mock', id: 'mock-model' });
   assert.equal(runtime.settings.model.id, 'second-model');

@@ -54,6 +54,6 @@ export function registerSessionRoutes(ctx: Context) {
     const records = ctx.harnessRegistry.export(input.ids);
     response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8',
       'Content-Disposition': 'attachment; filename="mini-harness-sessions.json"', 'Cache-Control': 'no-store' });
-    response.end(JSON.stringify({ version: 2, exportedAt: new Date().toISOString(), sessions: records }, null, 2));
+    response.end(JSON.stringify({ version: 3, exportedAt: new Date().toISOString(), sessions: records }, null, 2));
   });
 }

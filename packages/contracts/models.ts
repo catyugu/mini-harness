@@ -14,12 +14,14 @@ export interface ProviderModel {
   contextWindow: number;
   maxTokens: number;
   reasoning: boolean;
+  thinkingLevels?: string[];
 }
 
 export interface ModelCatalogPort {
   list(): ModelSummary[];
   available(): Promise<ModelSummary[]>;
   resolve(choice: ModelChoice): ModelChoice | undefined;
+  capabilities(choice: ModelChoice): ProviderModel | undefined;
 }
 
 export interface ModelAdminPort {
@@ -29,7 +31,6 @@ export interface ModelAdminPort {
   refresh(): Promise<void>;
   storeCredential(id: string, key: string): Promise<void>;
   removeCredential(id: string): Promise<void>;
-  invalidate(id: string): void;
 }
 
 declare module 'cordis' {

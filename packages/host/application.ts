@@ -1,7 +1,6 @@
 import { Context } from 'cordis';
-import type { PiSessions } from '../agent/pi-sessions.js';
+import type { NativeAgent } from '../agent/agent.js';
 import { plugins } from './composition.js';
-import { upgrade } from './upgrade.js';
 import { SettingsManager } from '../settings/manager.js';
 import { PluginHost } from '../plugins/manager.js';
 import { RouteRegistry } from '../transport/http.js';
@@ -11,18 +10,19 @@ import type { Paths, SettingsPatch } from '../contracts/config.js';
 export class MiniHarnessRuntime {
   readonly plugins: PluginHost;
   readonly configuration: SettingsManager;
+  private readonly unsubscribeSettings: () => void;
 
   constructor(readonly paths: Paths) {
     const ctx = new Context();
-    upgrade(paths);
     this.configuration = new SettingsManager(paths, (settings) => this.plugins.effective(settings));
     const changes = new EventTarget();
     const emit = (domain: string) => changes.dispatchEvent(new CustomEvent('change', { detail: { domain } }));
-    this.configuration.subscribe(() => emit('settings'));
+    this.unsubscribeSettings = this.configuration.subscribe(() => emit('settings'));
     const root = {
       harnessState: { paths },
       harnessScopes: {
         prepare: (id: string, signal?: AbortSignal) => this.plugins.prepare(id, signal),
+        resolve: <T>(id: string, service: string) => this.plugins.resolve<T>(id, service),
         allowsTool: (id: string, tool: string) => this.plugins.allowsTool(id, tool),
         address: (id: string) => this.plugins.address(id),
         release: (ids: string[], workspaceId?: string) => this.plugins.release(ids, workspaceId)
@@ -42,15 +42,15 @@ export class MiniHarnessRuntime {
     };
     for (const [name, service] of Object.entries(root)) ctx.provide(name, service);
     this.plugins = new PluginHost(ctx, paths.plugins, plugins, Object.keys(root),
-      () => this.settings, (id) => ctx.get('harnessRegistry')?.get(id), (id, pluginId) => ctx.harnessPi.records(id, pluginId));
+      () => this.settings, (id) => ctx.get('harnessRegistry')?.get(id), (id, pluginId) => ctx.harnessAgent.records(id, pluginId));
   }
 
   get settings() { return this.configuration.settings; }
   get registry() { return this.plugins.ctx.harnessRegistry; }
-  get pi() { return this.plugins.ctx.harnessPi as PiSessions; }
+  get agent() { return this.plugins.ctx.harnessAgent as NativeAgent; }
   get runs() { return this.plugins.ctx.harnessRuns; }
   get delegation() { return this.plugins.ctx.harnessDelegation; }
-  get hasActiveWork() { return this.runs.size > 0 || this.pi.hasPending; }
+  get hasActiveWork() { return this.runs.size > 0 || this.agent.hasPending; }
 
   start() { return this.plugins.start(this.settings); }
   createConversation(input: { workspaceId?: string } = {}) { return this.registry.create(input); }
@@ -68,6 +68,9 @@ export class MiniHarnessRuntime {
     const { harnessRuns: runs, harnessRegistry: registry } = this.plugins.ctx;
     registry?.close();
     try { await runs?.stop(); }
-    finally { await this.plugins.close(); }
+    finally {
+      try { await this.plugins.close(); }
+      finally { this.unsubscribeSettings(); }
+    }
   }
 }

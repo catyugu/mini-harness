@@ -7,7 +7,7 @@ export function setup(ctx: Context) {
     read(id) {
       const record = ctx.harnessRegistry.get(id);
       if (!record) throw new Error('Conversation not found');
-      return { ...projectSession(ctx, record), ...ctx.harnessPi.read(id),
+      return { ...projectSession(ctx, record), ...ctx.harnessAgent.read(id),
         ...ctx.harnessRuns.view(id) };
     }
   });

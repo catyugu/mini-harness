@@ -17,9 +17,9 @@ test('appearance, parallelism and child defaults update without interrupting a r
   const item = runtime.registry.create();
   const pending = runtime.runs.send(item.id, 'Hold');
   await waiting;
-  const original = await runtime.pi.open(item.id);
+  const original = runtime.registry.log(item.id);
   await runtime.updateSettings({ appearance: 'dark', pluginConfig: { subagents: { maxParallel: 2 } } });
-  assert.strictEqual(await runtime.pi.open(item.id), original);
+  assert.strictEqual(runtime.registry.log(item.id), original);
   assert.equal(runtime.delegation.parallelLimit, 2);
   assert.equal(runtime.runs.active(item.id), true);
   await runtime.updateSettings({ plugins: { files: false, 'session-helper': false } });
@@ -27,5 +27,5 @@ test('appearance, parallelism and child defaults update without interrupting a r
   assert.equal(runtime.runs.active(item.id), true);
   release();
   assert.equal(await pending, 'Done');
-  assert.ok(!(await runtime.pi.open(item.id)).getActiveToolNames().includes('read'));
+  assert.ok(!runtime.plugins.ctx.harnessTools.forSession(item.id).map(({ name }) => name).includes('read'));
 });

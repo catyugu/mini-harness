@@ -19,7 +19,7 @@ export class PluginHost implements ScopePort {
   private readonly catalog: PluginCatalog;
   private readonly mounts: PluginMounts;
   private readonly root: ReadonlyMap<string, string>;
-  private readonly scopes = new Map<string, { ctx: Context; parent: Context; scope: PluginScope }>();
+  private readonly scopes = new Map<string, { ctx: Context; parent: Context; scope: PluginScope; isolates: string[] }>();
   private started = false;
   private applying?: Promise<void>;
   private closing = false;
@@ -80,6 +80,11 @@ export class PluginHost implements ScopePort {
     return ['workspace:' + records[0].workspaceId, ...records.map(({ id }) => 'session:' + id)];
   }
 
+  resolve<T>(id: string, service: string): T | undefined {
+    const scope = this.address(id).reverse().map((key) => this.scopes.get(key)).find(Boolean);
+    return (scope?.ctx ?? this.ctx).get(service) as T | undefined;
+  }
+
   allowsTool(id: string, tool: string) {
     if (!this.started) return true;
     const { scopes } = this.settings();
@@ -118,10 +123,13 @@ export class PluginHost implements ScopePort {
     const mounts: MountPlan[] = [];
     const diagnostics: ReturnType<PluginHost['describe']>[] = [];
     const allKeys = Object.keys(settings.scopes).filter((key) => !released.has(key));
+    const active = new Set([...scopes.keys(), ...(preparing ? this.address(preparing) : [])]);
+    for (const key of active) if (key.startsWith('session:'))
+      for (const ancestor of this.address(key.slice('session:'.length))) if (!released.has(ancestor)) active.add(ancestor);
     const appIds = new Map(appPlans.map(({ id }) => [id, id]));
-    const graph = new Map<string, { ctx: Context; providers: ReadonlyMap<string, string>; ids: ReadonlyMap<string, string> }>();
-    const app: { ctx: Context; providers: ReadonlyMap<string, string>; ids: ReadonlyMap<string, string> } =
-      { ctx: this.ctx, providers: appProviders, ids: appIds };
+    const graph = new Map<string, { ctx: Context; providers: ReadonlyMap<string, string>; ids: ReadonlyMap<string, string>; owners: ReadonlyMap<string, string> }>();
+    const app: { ctx: Context; providers: ReadonlyMap<string, string>; ids: ReadonlyMap<string, string>; owners: ReadonlyMap<string, string> } =
+      { ctx: this.ctx, providers: appProviders, ids: appIds, owners: appProviders };
 
     const visiting = new Set<string>();
     const visit = (key: string): typeof app => {
@@ -141,23 +149,30 @@ export class PluginHost implements ScopePort {
       if (!overrides) { scopes.delete(key); return parent; }
       const { plans, providers } = this.catalog.plans(settings, descriptors, scope.kind, parent.providers, new Set(parent.ids.keys()), overrides);
       const ids = new Map<string, string>([...parent.ids, ...plans.map(({ id }) => [id, key + '/' + id] as const)]);
+      const owners = new Map(parent.owners);
+      for (const plan of plans) for (const service of plan.descriptor.provides ?? []) owners.set(service, ids.get(plan.id));
       let ctx = parent.ctx;
-      if (scopes.has(key) || (preparing && this.address(preparing).includes(key))) {
+      if (active.has(key)) {
         const existing = scopes.get(key);
-        ctx = existing?.parent === parent.ctx ? existing.ctx : parent.ctx.extend();
-        for (const { descriptor } of plans) for (const service of descriptor.provides ?? [])
-          if (!existing || existing.ctx !== ctx || !Object.hasOwn(ctx[Context.isolate], service))
-            ctx = ctx.isolate(service);
-        scopes.set(key, { ctx, parent: parent.ctx, scope });
+        const isolates = [...new Set(plans.flatMap(({ descriptor }) => descriptor.provides ?? []))].sort();
+        const reusable = existing?.parent === parent.ctx && isDeepStrictEqual(existing.isolates, isolates);
+        ctx = reusable ? existing.ctx : parent.ctx.extend();
+        if (!reusable) for (const service of isolates) ctx = ctx.isolate(service);
+        scopes.set(key, { ctx, parent: parent.ctx, scope, isolates });
         for (const plan of plans) {
-          const needs = [...new Set([...(descriptors.find(({ id }) => id === plan.id)?.requires ?? []), ...Object.values(plan.services)])]
-            .flatMap((id) => ids.has(id) ? [ids.get(id)] : []);
+          const needs = [...new Set([
+            ...(descriptors.find(({ id }) => id === plan.id)?.requires ?? []).flatMap((id) => ids.has(id) ? [ids.get(id)] : []),
+            ...Object.keys(plan.services).flatMap((service) => {
+              const owner = owners.get(service);
+              return owner && owner !== 'application' ? [owner] : [];
+            })
+          ])];
           const id = ids.get(plan.id);
           mounts.push(this.mountPlan(plan, scope, id, key, ctx, needs));
           diagnostics.push(this.describe(plan, id, needs));
         }
       }
-      const current = { ctx, ids, providers };
+      const current = { ctx, ids, providers, owners };
       graph.set(key, current);
       return current;
     };
@@ -214,7 +229,7 @@ export class PluginHost implements ScopePort {
         },
         registerTool: (tool) => {
           const tools = use<Context['harnessTools']>('harnessTools');
-          return ctx.effect(() => tools.register(tool.name, () => tool, undefined, false, scopeKey));
+          return ctx.effect(() => tools.register(tool.name, () => tool, undefined, scopeKey));
         },
         registerRoute: (method, path, handler) => {
           if (scopeKey || !['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method) ||
@@ -246,8 +261,7 @@ export class PluginHost implements ScopePort {
 
   private browserPlan(candidate: PluginPlan[], unavailable: (id: string, error: unknown) => boolean) {
     const browser = new Map(candidate.filter(({ browser, web }) => browser || web).map((plan) => [plan.id, plan]));
-    const runtimeServices = ['harnessBrowser', 'miniSelection', 'miniSessions',
-      'miniWorkspaces', 'miniSettingsData', 'miniModels', 'miniPluginData', 'miniApprovals', 'miniSwitch'];
+    const runtimeServices = ['miniProjections', 'miniSwitch'];
     const { ordered } = resolveCapabilities([...browser.values()].map((plan) => ({
       id: plan.id, provides: plan.descriptor.browserProvides, inject: plan.descriptor.browserInject,
       requires: [...new Set([...(plan.browserRequires ?? []),

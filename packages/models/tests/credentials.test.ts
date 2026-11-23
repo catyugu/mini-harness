@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { createMiniHarnessServer } from '../../host/server.js';
 import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.js';
 
-test('credential settings persist using Pi and do not return secrets', async (t) => {
+test('credential settings persist atomically and do not return secrets', async (t) => {
   const mock = await createMockProvider();
   const { root, paths } = createFixturePaths(mock.url);
   const app = await createMiniHarnessServer(paths);

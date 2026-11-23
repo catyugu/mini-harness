@@ -19,17 +19,16 @@ export function getPaths(cwd: string = process.cwd(), env: NodeJS.ProcessEnv = p
   const home = resolve(env.MINI_HARNESS_HOME || join(homedir(), '.mini-harness'));
   const key = createHash('sha256').update(process.platform === 'win32' ? project.toLowerCase() : project).digest('hex').slice(0, 16);
   return {
-    home, cwd: project, agent: join(home, 'pi'), settings: join(home, 'settings.json'),
+    home, cwd: project, settings: join(home, 'settings.json'),
     registry: join(home, 'sessions.json'), sessions: join(home, 'sessions', key),
     pid: join(home, 'server.json'), log: join(home, 'server.log'),
-    plugins: join(home, 'plugins'), skills: join(home, 'skills'),
-    projectSkills: join(project, '.mini-harness', 'skills')
+    plugins: join(home, 'plugins'), skills: join(home, 'skills')
   };
 }
 
 
 export function ensurePaths(paths: Paths) {
-  for (const path of [paths.home, paths.agent, paths.sessions, paths.skills, paths.plugins]) {
+  for (const path of [paths.home, paths.sessions, paths.skills, paths.plugins]) {
     mkdirSync(path, { recursive: true, mode: 0o700 });
   }
 }
@@ -59,24 +58,33 @@ export function validateSettings(input: any) {
     if (section !== undefined && (!section || typeof section !== 'object' || Array.isArray(section)))
       throw new Error('Invalid capability settings section');
   }
-  for (const [service, id] of Object.entries(input.providers ?? {})) {
-    if (!/^[a-zA-Z][a-zA-Z0-9_.:-]{0,95}$/.test(service) || typeof id !== 'string' || !/^[a-z][a-z0-9-]{0,63}$/.test(id))
-      throw new Error('Invalid provider selection');
-  }
+  validateProviderChoices(input.providers);
   for (const [key, scope] of Object.entries(input.scopes ?? {})) {
     if (!/^(?:workspace:[a-f0-9]{32}|session:[a-f0-9-]{36})$/.test(key) ||
         !scope || typeof scope !== 'object' || Array.isArray(scope) ||
-        Object.keys(scope).some((field) => !['plugins', 'pluginConfig', 'disabledTools'].includes(field)))
+        Object.keys(scope).some((field) => !['plugins', 'pluginConfig', 'disabledTools', 'providers'].includes(field)))
       throw new Error('Invalid plugin scope: ' + key);
     const { disabledTools } = scope as import('../contracts/capabilities.js').ScopeSettings;
     if (disabledTools !== undefined && (!Array.isArray(disabledTools) ||
         disabledTools.some((name) => typeof name !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(name))))
       throw new Error('Invalid scoped tool restriction: ' + key);
     validatePluginSettings(scope);
+    validateProviderChoices((scope as import('../contracts/capabilities.js').ScopeSettings).providers);
   }
   if (!['system', 'light', 'dark'].includes(input.appearance ?? 'system')) throw new Error('Invalid appearance');
   if (!Number.isInteger(input.port ?? 3837) || (input.port ?? 3837) < 1024 || (input.port ?? 3837) > 65535) throw new Error('Invalid port');
   return true;
+}
+
+function validateProviderChoices(choices: unknown) {
+  if (choices === undefined) return;
+  if (!choices || typeof choices !== 'object' || Array.isArray(choices))
+    throw new Error('Invalid provider selections');
+  for (const [service, id] of Object.entries(choices)) {
+    if (!/^[a-zA-Z][a-zA-Z0-9_.:-]{0,95}$/.test(service) ||
+        typeof id !== 'string' || !/^(?:core:)?[a-z][a-z0-9-]{0,63}$/.test(id))
+      throw new Error('Invalid provider selection');
+  }
 }
 
 function validatePluginSettings(input: { plugins?: unknown; pluginConfig?: unknown }) {
@@ -90,7 +98,7 @@ function validatePluginSettings(input: { plugins?: unknown; pluginConfig?: unkno
     if (typeof value !== 'boolean') throw new Error('Plugin switches must be boolean');
   }
   for (const [id, config] of Object.entries(input.pluginConfig ?? {})) {
-    if (!/^[a-z][a-z0-9-]{0,63}$/.test(id) || !config || typeof config !== 'object' || Array.isArray(config))
+    if (!/^(?:core:)?[a-z][a-z0-9-]{0,63}$/.test(id) || !config || typeof config !== 'object' || Array.isArray(config))
       throw new Error('Invalid plugin configuration for ' + id);
   }
 }

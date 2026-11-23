@@ -36,8 +36,10 @@ export interface PluginPlan {
 
 export class PluginCatalog {
   readonly builtins: Map<string, PluginDescriptor>;
+  private readonly protectedServices: Set<string>;
   constructor(private readonly directory: string, builtins: PluginDescriptor[], rootServices: string[]) {
     this.builtins = new Map(builtins.map((plugin) => [plugin.id, plugin]));
+    this.protectedServices = new Set(rootServices);
     if (this.builtins.size !== builtins.length) throw new Error('Duplicate builtin plugin ID');
     const services = new Set(builtins.flatMap(({ provides }) => provides ?? []));
     for (const service of rootServices) if (services.has(service)) throw new Error('Duplicate provider for ' + service);
@@ -53,8 +55,7 @@ export class PluginCatalog {
     const plugins = { ...settings.plugins };
     const pluginConfig = { ...settings.pluginConfig };
     for (const { id, required, configSchema, defaultEnabled } of this.builtins.values()) {
-      if (required) continue;
-      plugins[id] ??= defaultEnabled ?? false;
+      if (!required) plugins[id] ??= defaultEnabled ?? false;
       if (configSchema) pluginConfig[id] = configDefaults(configSchema, structuredClone(pluginConfig[id] ?? {}));
     }
     return { ...settings, plugins, pluginConfig };
@@ -125,7 +126,7 @@ export class PluginCatalog {
 
   metadata(): PluginMetadata[] {
     return this.descriptors().filter(({ required }) => !required).map((item) => {
-      const { source, inject, setup, provides, optional, browserRequires, browserInject, browserProvides, required, configChanges, replaceable, ...metadata } = item;
+      const { source, inject, setup, provides, optional, browserRequires, browserInject, browserProvides, required, configChanges, ...metadata } = item;
       return metadata;
     });
   }
@@ -134,7 +135,10 @@ export class PluginCatalog {
     inherited: ReadonlyMap<string, string>, parentIds: ReadonlySet<string>,
     overrides?: ScopeSettings, unavailable?: (id: string, error: unknown) => boolean) {
     const isApp = scope === 'application';
-    const choices = isApp ? settings.providers : {};
+    const choices = isApp ? settings.providers : overrides?.providers ?? {};
+    for (const [service, id] of Object.entries(choices))
+      if (inherited.has(service) && inherited.get(service) !== id && this.protectedServices.has(service))
+        throw new Error('Protected service cannot be overridden: ' + service);
     const enabled: DiscoveredPlugin[] = [];
     for (const [id, active] of Object.entries(overrides?.plugins ?? {})) {
       if (active && !descriptors.some((item) => item.id === id && item.scope === scope))
@@ -145,18 +149,16 @@ export class PluginCatalog {
         throw new Error('Select a scope for plugin ' + id);
     }
     for (const item of descriptors) {
-      const { id, scope: kind, provides } = item;
+      const { id, scope: kind } = item;
       if (kind !== scope || !(isApp ? item.required || settings.plugins[id] === true : overrides?.plugins?.[id] === true)) continue;
       try {
         if (item.error) throw new Error('Invalid plugin ' + id + ': ' + item.error);
-        if (this.builtins.has(id) && !item.replaceable && provides?.some((name) => Object.hasOwn(choices, name) && choices[name] !== id))
-          throw new Error('Provider ' + id + ' is part of the fixed application composition');
         enabled.push(item);
       } catch (error) { if (!unavailable?.(id, error)) throw error; }
     }
     const { ordered, providers } = resolveCapabilities(enabled.map((item) => ({
       ...item, requires: item.requires?.filter((id) => !parentIds.has(id))
-    })), inherited, choices, unavailable);
+    })), inherited, choices, unavailable, this.protectedServices);
     const plans: PluginPlan[] = [];
     for (const { descriptor, requires, services } of ordered) {
       const { id, browser, browserRequires, source, web, configSchema } = descriptor;

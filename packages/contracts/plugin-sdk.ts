@@ -4,4 +4,11 @@ export type { CapabilityObservation, ToolDecision, ToolProjection } from './even
 export type { FileAccessPort, WorkspaceFileAccess } from './files.js';
 export type { ProcessExecutionPort, SandboxPort } from './execution.js';
 export type { ModelCatalogPort, ModelAdminPort } from './models.js';
+export type { LlmPort, LlmRequest, LlmEvent, NativeMessage, NativeAssistantMessage, ToolCallPart } from './llm.js';
+export type { ToolDefinition, ToolSchema, ToolResult, ToolContext } from './tools.js';
+export { defineTool } from './tools.js';
+export type { SkillPort, Skill } from './skills.js';
+export type { AgentPort, RunPort, SessionStore } from './services.js';
+export type { PromptPort, RunAgentPort, ThinkingLevel } from './agent.js';
+export type { SessionLogPort, SessionEntry, SessionEvent, SessionProjection, InboxItem } from './session-log.js';
 export type { BrowserPrimitives } from './browser.js';

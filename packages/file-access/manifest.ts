@@ -4,7 +4,7 @@ import { Workspace } from './workspace.js';
 export const manifest: PluginDescriptor = {
   scope: 'application',
   id: 'core:file-access', title: 'File access', description: 'Access paths within registered workspaces',
-  required: true, replaceable: true,
+  required: true,
   inject: ['harnessState', 'harnessWorkspaces'], provides: ['harnessFileAccess'],
   setup(ctx) {
     const { home } = ctx.harnessState.paths;

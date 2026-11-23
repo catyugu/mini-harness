@@ -2,11 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { prepareInput } from '../platform/input.js';
 import type { Attachment } from '../contracts/input.js';
 import type { CapabilityObservation } from '../contracts/events.js';
-import type { ModelCatalogPort } from '../contracts/models.js';
 import type { RunAgentPort, ThinkingLevel } from '../contracts/agent.js';
 import type { ModelChoice } from '../contracts/conversation.js';
 import type { StreamEvent, RunEvent, RunInfo } from '../contracts/transport.js';
-import type { Checkpoints } from './checkpoints.js';
 import { RunEvents } from './events.js';
 import type { SessionStore } from '../contracts/services.js';
 
@@ -32,10 +30,7 @@ export class Runs {
 
   constructor(
     private readonly registry: SessionStore,
-    private readonly pi: RunAgentPort,
-    private readonly checkpoints: Checkpoints,
-    private readonly defaultModel: () => ModelChoice,
-    private readonly models: Pick<ModelCatalogPort, 'resolve'>,
+    private readonly agent: RunAgentPort,
     private readonly observe: (event: CapabilityObservation) => void
   ) {}
 
@@ -66,14 +61,12 @@ export class Runs {
     if (model !== undefined) {
       if (!model || typeof model.provider !== 'string' || typeof model.id !== 'string' ||
           model.provider.length > 160 || model.id.length > 160) throw new Error('Invalid model choice');
-      this.models.resolve(model);
     }
-    const choice = model ?? (record.parentId ? undefined : this.defaultModel());
     const info: RunInfo = { id: randomUUID(), sessionId: id, state: 'queued', startedAt: new Date().toISOString(), sequence: 0 };
     const events = new RunEvents(info);
     const controller = new AbortController();
     const cancellation = signal ? AbortSignal.any([controller.signal, signal]) : controller.signal;
-    this.checkpoints.save(info);
+    this.registry.log(id).append({ type: 'run', run: info });
     const publish = (event: StreamEvent) => {
       const item = events.publish(event);
       try { emit?.(item); } catch { /* An observer cannot terminate the run. */ }
@@ -82,12 +75,12 @@ export class Runs {
       cancellation.throwIfAborted();
       info.state = 'running';
       const running = { ...info, sequence: info.sequence + 1 };
-      this.checkpoints.save(running);
+      this.registry.log(id).append({ type: 'run', run: running });
       this.changed(id);
       publish({ type: 'run', run: running });
       this.observe({ type: 'run-started', sessionId: id, run: running });
-      return this.pi.prompt(record, prepared.text, publish, {
-        signal: cancellation, choice, images: prepared.images, input: prepared.input, thinkingLevel, revision,
+      return this.agent.prompt(record, prepared.text, publish, {
+        signal: cancellation, choice: model, images: prepared.images, input: prepared.input, thinkingLevel, revision,
         changed: (path) => { info.changedFiles = [...new Set([...(info.changedFiles ?? []), path])]; }
       });
     };
@@ -106,7 +99,7 @@ export class Runs {
     }).finally(() => {
       info.finishedAt = new Date().toISOString();
       publish({ type: 'run', run: { ...info, sequence: info.sequence + 1 } });
-      try { this.checkpoints.save(info); }
+      try { this.registry.log(id).append({ type: 'run', run: info }); }
       finally {
         this.work.delete(id);
         events.close();
@@ -128,11 +121,11 @@ export class Runs {
     return { ...this.launch(id, prompt, undefined, { model, attachments, thinkingLevel }).info };
   }
 
-  /** A run reservation protects Pi branch navigation from concurrent submissions. */
+  /** A run reservation protects branch navigation from concurrent submissions. */
   async reviseAndStart(id: string, input: { sourceEntryId: string; expectedLeafId: string | null; message: string;
     attachments?: Attachment[]; model?: ModelChoice; thinkingLevel?: ThinkingLevel }) {
     if (this.active(id)) throw new Error('Conversation is already running');
-    await this.pi.revisionTarget(id, input.sourceEntryId, input.expectedLeafId);
+    await this.agent.revisionTarget(id, input.sourceEntryId, input.expectedLeafId);
     return this.launch(id, input.message, undefined, {
       attachments: input.attachments, model: input.model, thinkingLevel: input.thinkingLevel,
       revision: { sourceEntryId: input.sourceEntryId, expectedLeafId: input.expectedLeafId }
@@ -140,7 +133,7 @@ export class Runs {
   }
 
   info(id: string): RunInfo | undefined {
-    const info = this.work.get(id)?.events?.info ?? this.checkpoints.get(id);
+    const info = this.work.get(id)?.events?.info ?? (this.registry.get(id) ? this.registry.log(id).projection().run : undefined);
     return info && structuredClone(info);
   }
 
@@ -148,9 +141,11 @@ export class Runs {
     const events = this.work.get(id)?.events;
     const info = this.info(id);
     if (!info || info.id !== runId) throw new Error('Run not found');
-    if (!Number.isSafeInteger(after) || after < 0 || after > info.sequence) throw new Error('Invalid event cursor');
-    if (events) return events.watch(after, emit, () => this.pi.messages(id));
-    emit({ type: 'snapshot', messages: this.pi.messages(id), tools: [], run: info, sequence: info.sequence, runId: info.id, runSessionId: id });
+    // A restarted run has no volatile delta cursor; its durable interrupted snapshot is authoritative.
+    if (!Number.isSafeInteger(after) || after < 0 || (after > info.sequence && info.state !== 'interrupted'))
+      throw new Error('Invalid event cursor');
+    if (events) return events.watch(after, emit, () => this.agent.messages(id));
+    emit({ type: 'snapshot', messages: this.agent.messages(id), tools: [], run: info, sequence: info.sequence, runId: info.id, runSessionId: id });
     return () => {};
   }
 
@@ -169,7 +164,7 @@ export class Runs {
     this.registry.assertAvailable(id);
     if (this.active(id)) throw new Error('Stop the open conversation before compacting it');
     const controller = new AbortController();
-    const done = this.pi.compact(id, controller.signal);
+    const done = this.agent.compact(id, controller.signal);
     this.work.set(id, { done, controller });
     try { await done; }
     finally { this.work.delete(id); }

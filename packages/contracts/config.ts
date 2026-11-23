@@ -17,7 +17,6 @@ export type SettingsPatch = { [K in keyof Settings]?: Settings[K] extends object
 export interface Paths {
   home: string;
   cwd: string;
-  agent: string;
   settings: string;
   registry: string;
   sessions: string;
@@ -25,5 +24,4 @@ export interface Paths {
   log: string;
   plugins: string;
   skills: string;
-  projectSkills: string;
 }

@@ -1,0 +1,18 @@
+import type { Static, TSchema } from 'typebox';
+import type { TextPart, ImagePart } from './llm.js';
+
+export interface ToolSchema { name: string; description: string; parameters: object }
+export interface ToolResult { content: (TextPart | ImagePart)[]; details?: Record<string, unknown> }
+export interface ToolContext { sessionId: string; cwd: string }
+export interface ToolDefinition<Arguments = Record<string, any>> extends ToolSchema {
+  label?: string;
+  promptSnippet?: string;
+  promptGuidelines?: string[];
+  execute(callId: string, args: Arguments, signal?: AbortSignal,
+    onUpdate?: (result: ToolResult) => void, context?: ToolContext): Promise<ToolResult>;
+}
+
+/** Infer argument types from a JSON schema without binding plugins to a model SDK. */
+export function defineTool<Schema extends TSchema>(definition: Omit<ToolDefinition<Static<Schema>>, 'parameters'> & { parameters: Schema }): ToolDefinition<Static<Schema>> {
+  return definition;
+}

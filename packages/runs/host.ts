@@ -1,13 +1,25 @@
 import type { Context } from 'cordis';
+import type { AgentPort } from '../contracts/services.js';
+import type { RunAgentPort } from '../contracts/agent.js';
 import { registerRoutes } from './routes.js';
-import { join } from 'node:path';
 import { Runs } from './runs.js';
-import { Checkpoints } from './checkpoints.js';
 
 export function setup(ctx: Context) {
-  const { harnessRegistry: catalog } = ctx;
-  const checkpoints = new Checkpoints(join(ctx.harnessState.paths.home, 'runs.json'), (id) => Boolean(catalog.get(id)));
-  const runs = new Runs(catalog, ctx.harnessPi, checkpoints, () => ctx.harnessSettings().model, ctx.harnessModels,
+  const { harnessRegistry: catalog, harnessScopes: scopes } = ctx;
+  const selected = (id: string) => scopes.resolve<AgentPort>(id, 'harnessAgent') ?? ctx.harnessAgent;
+  const agent: RunAgentPort = {
+    async prompt(record, text, emit, options) {
+      await scopes.prepare(record.id, options.signal);
+      return selected(record.id).prompt(record, text, emit, options);
+    },
+    async revisionTarget(id, source, leaf) {
+      await scopes.prepare(id);
+      return selected(id).revisionTarget(id, source, leaf);
+    },
+    messages: (id) => selected(id).messages(id),
+    async compact(id, signal) { await scopes.prepare(id, signal); return selected(id).compact(id, signal); }
+  };
+  const runs = new Runs(catalog, agent,
     (event) => ctx.emit('harness/observe', event));
   ctx.provide('harnessRuns', runs);
   ctx.effect(() => () => runs.stop());
@@ -18,12 +30,5 @@ export function setup(ctx: Context) {
       await Promise.allSettled(ids.map((id) => runs.completion(id)));
     }
   }));
-  ctx.effect(() => {
-    const onChange = (event: CustomEvent<{ id: string; deleted: boolean }>) => {
-      if (event.detail.deleted) checkpoints.remove(event.detail.id);
-    };
-    catalog.events.addEventListener('change', onChange);
-    return () => catalog.events.removeEventListener('change', onChange);
-  });
   registerRoutes(ctx);
 }

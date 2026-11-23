@@ -1,10 +1,10 @@
 # mini-harness
 
-A minimal local Web harness for the [Pi coding-agent SDK](https://github.com/earendil-works/pi), shipped as one npm package. [Cordis](https://github.com/cordiverse/cordis) manages services, tools and plugin lifecycles.
+A minimal local Web harness with a native agent kernel, shipped as one npm package. [Cordis](https://github.com/cordiverse/cordis) composes services, tools and plugin lifecycles. The [Pi model transport](https://github.com/earendil-works/pi) supports model providers behind a harness-owned adapter; mini-harness owns execution and conversation state.
 
 ## Start
 
-Requires Node.js 22.19 or later. Install the published package:
+Requires Node.js 22.19 or later. Install the package:
 
 ```sh
 npm install -g mini-harness
@@ -27,23 +27,31 @@ One process owns each configuration directory. Detached processes write to `serv
 
 ## Use
 
-- Choose a configured model under the message input. The next main conversation message uses the global selection; sending remembers the actual model across navigation and restarts. Child agents have their own inherited or explicit model and do not change that selection. Pi manages model switching and conversation context.
-- Add or edit a provider in Settings → Model. Pi stores API keys in `auth.json` and custom endpoints and model definitions in `models.json`. Credential status reports local configuration. The provider validates access when a request is made.
-- Add local directories from Workspaces in the sidebar. Browse or start conversations in any registered directory while other conversations keep running. Removing a workspace permanently deletes its registered conversations and descendant session histories, while preserving the workspace directory and its files.
-- Open the workspace panel to browse folders, preview files, inspect Git changes and view paths written by the current turn in separate tabs. Each conversation keeps its own open tabs.
-- Paste images, drop files or use the attachment button. Image-capable models receive native image input; UTF-8 files become message text. Use `@` to find workspace files and `/` to discover Skills.
-- While a task runs, choose Add instruction or Follow up and Queue the next message. Pi delivers it after the current tool batch or task.
-- New conversation stays a draft until the first send. Search and rename conversations; copy messages, retry errors, and delete individual conversation trees.
-- Refreshing, disconnecting or changing conversations leaves tasks running. Reopen a conversation to reconnect, or use Stop to cancel it and its descendants. Server shutdown cancels runs; a restart marks unfinished runs interrupted and restores their saved history.
-- Child agents default to one level and four concurrent executions. In Plugins → Subagents, set depth 0–8 and concurrency 1–16. Explicit delegate models override child defaults, which override the parent model. A child awaiting descendants yields its slot. Lowering concurrency lets existing work finish before admitting more children.
-- Expand conversation trees to view children. Selecting a parent for export includes descendants and original Pi JSONL. Permanent deletion cancels the selected trees, waits for their runs, and removes their files.
-- Toggle workspace files, native Skills, subagents, Shell, Session helper and local plugins in Plugins. Session helper provides message copy and edit/resend together under one switch. Pi loads Skills from global `skills/` and project `.mini-harness/skills/` folders. Appearance, model choice and child-agent limits can change during runs. Disabling a tool cancels its pending calls, and Pi updates the available tool and Skill list before the next idle run.
+- Choose a configured model under the message input. The next main conversation message uses the global selection; sending remembers the actual model across navigation and restarts. Child agents have their own inherited or explicit model and do not change that selection.
+- Add or edit a provider in Settings → Model. API keys are stored privately in `auth.json`; custom endpoints and model definitions live in `models.json`. Credential status reports local configuration. The provider validates access when a request is made.
+- Register local directories from Workspaces in the sidebar. Browse or start conversations in any registered directory while other conversations keep running. Removing a workspace deletes its conversation trees and histories while preserving the directory and project files.
+- Open the workspace panel to browse folders, preview files, inspect Git changes and view paths written by the current turn. Each conversation keeps its own open tabs.
+- Paste images, drop files or use the attachment button. Image-capable models receive image content; UTF-8 files become message text. Use `@` to find workspace files and `/` to discover skills.
+- While a task runs, choose Add instruction or Follow up and queue a message. The native inbox commits it before acknowledging it. Steering takes effect at the next safe boundary and skips tool calls that have not started; follow-ups run after the current answer. Identical text and different attachments retain distinct delivery identities.
+- New conversation stays a draft until the first send. Search and rename conversations, copy messages, retry errors, and edit/resend from a persisted message. A revision creates a new active branch; exports retain every branch.
+- Refreshing, disconnecting or changing conversations leaves tasks running. Reopen a conversation to reconnect, or use Stop to cancel it and its descendants. Restart marks unfinished runs interrupted; acknowledged pending inbox items remain visible and are consumed by a later explicit run. Unknown tool outcomes are never automatically retried.
+- Child agents default to one level and four concurrent executions. Plugins → Subagents exposes depth 0–8 and concurrency 1–16. A provider/model selected by the delegating model overrides registered child defaults, which override the parent model. A child awaiting descendants yields its slot. Lowering concurrency lets existing work finish before admitting more children.
+- Expand the conversation tree to view children. Use checkboxes for bulk export or permanent deletion. Selecting a parent includes descendants. Export contains native JSONL and metadata; deletion cancels the selected trees, waits for their runs, and removes their files.
+- Toggle Files, Skills, Subagents, Shell, Session helper and installed plugins. Session helper owns message copy and edit/resend under one switch. Changes to tool availability are reflected at the next model turn. Unloading a tool revokes its outstanding calls; unrelated runs continue.
 
-Shell is disabled by default and requests approval for each command when enabled. File tools restrict access to the active workspace; Linux isolated Shell requires bubblewrap and `prlimit`. Trusted host Shell and reviewed JavaScript plugins run with your user permissions. See [SECURITY.md](SECURITY.md).
+Skills load from `~/.mini-harness/skills/` and `<workspace>/.mini-harness/skills/`; a workspace skill takes precedence over a global skill with the same name. `/skill:name` expands a skill explicitly, and the `load_skill` tool lets a model load listed skills even when Files is disabled. Native prompts also read `AGENTS.md` in the configuration directory and workspace root. Skill and instruction reads are bounded and reject linked files.
+
+Long conversations compact automatically. Manual compaction keeps two recent turns plus a summary for model context while preserving all message identities and history. Advanced users can set `pluginConfig["core:agent"]` with `maxTurns` (default 128) and `autoCompact` (default `true`).
+
+Shell starts disabled and asks for approval for every command. File tools restrict access to the active workspace; Linux isolated Shell requires bubblewrap and `prlimit`. Trusted host Shell and reviewed JavaScript plugins run with your user permissions. See [SECURITY.md](SECURITY.md).
+
+## Upgrading existing histories
+
+Startup imports supported old indexes and Pi JSONL into native Session Logs once. It validates and flushes every new log before changing the index, then permanently removes the superseded source files and run checkpoints. A crash resumes the cutover or cleanup without duplicating messages. Unsupported or corrupt input stops the import and preserves the source. See [Session Log and migration](docs/session-log.md) for supported formats and recovery behavior.
 
 ## Develop
 
-Each local plugin bundle has a `plugin.json` descriptor and a server or browser setup function, or both. See the [architecture](docs/architecture.md) and [plugin development guide](docs/plugins.md).
+Each local plugin bundle has a `plugin.json` descriptor and a server or browser setup function, or both. Services can be selected at application, workspace and nested session scopes. Parent and sibling scopes retain their own providers. See the [architecture](docs/architecture.md), [plugin guide](docs/plugins.md), and [scoped provider examples](docs/scoped-providers.md).
 
 ```sh
 npm ci
@@ -53,7 +61,6 @@ npm run test:browser
 npm run pack:check
 ```
 
-CI covers native Windows/Linux and Node.js 22/24, Chromium desktop/tablet/mobile flows, and a clean tarball installation with the real Pi SDK against a local mock provider. No live provider credentials are needed for tests.
+The test suites cover native execution and persistence, provider adapters with local HTTP mocks, plugin lifecycles, file policy, shell approval, detached CLI startup, and Chromium desktop/tablet/mobile journeys. `pack:check` installs the single tarball into a clean project and checks public exports, assets, CLI and a model/tool-independent chat roundtrip. No live model credentials are needed.
 
 MIT. See [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
-

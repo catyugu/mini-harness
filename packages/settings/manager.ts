@@ -48,14 +48,16 @@ export class SettingsManager implements SettingsPort {
     const pluginConfig = { ...this.stored.pluginConfig };
     delete plugins[id];
     delete pluginConfig[id];
+    const providers = Object.fromEntries(Object.entries(this.stored.providers).filter(([, provider]) => provider !== id));
     const scopes = Object.fromEntries(Object.entries(this.stored.scopes).map(([key, entry]) => {
       const scopedPlugins = { ...entry.plugins };
       const scopedConfig = { ...entry.pluginConfig };
       delete scopedPlugins[id];
       delete scopedConfig[id];
-      return [key, { ...entry, plugins: scopedPlugins, pluginConfig: scopedConfig }];
+      const scopedProviders = Object.fromEntries(Object.entries(entry.providers ?? {}).filter(([, provider]) => provider !== id));
+      return [key, { ...entry, plugins: scopedPlugins, pluginConfig: scopedConfig, providers: scopedProviders }];
     }));
-    this.save({ ...this.stored, plugins, pluginConfig, scopes });
+    this.save({ ...this.stored, plugins, pluginConfig, providers, scopes });
     this.publish();
   }
 

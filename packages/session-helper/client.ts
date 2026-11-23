@@ -1,7 +1,7 @@
 import type { FrontendSetup } from '../ui-runtime/frontend.js';
 import { payload } from '../web/api.js';
 
-/** One Cordis scope owns both message actions and the Pi branch draft mode. */
+/** One Cordis scope owns both message actions and the branch revision draft. */
 const setup: FrontendSetup = (_ctx, api) => {
   api.messageAction({
     id: 'session-helper:copy', label: 'Copy message', successLabel: 'Copied', icon: 'copy', order: 10,
