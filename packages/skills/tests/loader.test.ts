@@ -64,13 +64,17 @@ test('a skill that grows after opening is rejected with an actual bounded read',
   const skills = join(root, 'skills'); mkdirSync(skills);
   const file = join(skills, 'SKILL.md');
   writeFileSync(file, '---\nname: growing\ndescription: Changes during reading\n---\nInitial content');
+  const expected = fs.statSync(file, { bigint: true });
   const originalOpen = fs.promises.open;
-  let readBytes = 0;
+  let readBytes = 0, intercepted = false, grew = false;
   const mock = t.mock.method(fs.promises, 'open', (async (...args: Parameters<typeof fs.promises.open>) => {
     const handle = await originalOpen(...args);
-    if (String(args[0]) === file) {
+    // Windows temp roots can have short-name aliases while discovery opens the canonical path.
+    // Match the opened file itself, so the race is injected regardless of path spelling.
+    const identity = await handle.stat({ bigint: true });
+    if (identity.dev === expected.dev && identity.ino === expected.ino) {
+      intercepted = true;
       const originalStat = handle.stat.bind(handle), originalRead = handle.read.bind(handle);
-      let grew = false;
       t.mock.method(handle, 'stat', (async () => {
         const stat = await originalStat();
         if (!grew) { appendFileSync(file, 'x'.repeat(512 * 1024)); grew = true; }
@@ -86,7 +90,10 @@ test('a skill that grows after opening is rejected with an actual bounded read',
   }) as typeof fs.promises.open);
   syncBuiltinESMExports();
   try {
-    assert.deepEqual(await new SkillLoader(skills).discover(join(root, 'workspace')), []);
+    const discovered = await new SkillLoader(skills).discover(join(root, 'workspace'));
+    assert.equal(intercepted, true, 'The opened skill file must be intercepted even through a canonical path');
+    assert.equal(grew, true, 'The fixture must grow the file after the open-file size check');
+    assert.deepEqual(discovered, []);
     assert.ok(readBytes > 0 && readBytes <= 128 * 1024 + 1, 'Reading must remain bounded after the size check races a writer');
   } finally { mock.mock.restore(); syncBuiltinESMExports(); }
 });

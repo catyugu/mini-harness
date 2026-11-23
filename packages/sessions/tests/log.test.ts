@@ -102,6 +102,17 @@ test('checksum changes fail closed even when the record remains valid JSON', (t)
   assert.throws(() => open(), /checksum/);
 });
 
+test('a writer refuses an externally changed file size without overwriting any bytes', (t) => {
+  const { open, file } = fixture(t);
+  const log = open(); log.append(user('acknowledged'));
+  appendFileSync(file, 'external write\n');
+  const bytes = readFileSync(file);
+  assert.throws(() => log.serialize(), /size changed/);
+  assert.throws(() => log.append(user('must not overwrite')), /size changed/);
+  assert.throws(() => log.serialize(), /closed/);
+  assert.deepEqual(readFileSync(file), bytes);
+});
+
 test('log writers reject symlinks, hardlinks, and replaced paths', (t) => {
   const { open, file, root } = fixture(t);
   const log = open(); log.append(user('safe'));

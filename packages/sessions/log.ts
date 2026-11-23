@@ -19,13 +19,18 @@ export class SessionLog implements SessionLogPort {
   private cachedProjection?: SessionProjection;
   private header: SessionHeader;
   private closed = false;
+  private length = 0;
 
   constructor(readonly file: string, readonly sessionId: string, createdAt = new Date().toISOString(),
     private readonly changed?: () => void) {
-    this.handle = openSync(file, constants.O_RDWR | constants.O_CREAT | constants.O_APPEND | (constants.O_NOFOLLOW ?? 0), 0o600);
+    // Windows append handles lack FILE_WRITE_DATA and cannot truncate a torn tail.
+    // A single validated writer uses explicit positions at its verified end instead.
+    this.handle = openSync(file, constants.O_RDWR | constants.O_CREAT | (constants.O_NOFOLLOW ?? 0), 0o600);
     try {
       this.checkFile();
       const bytes = readFileSync(this.handle);
+      this.length = bytes.length;
+      this.checkFile(this.length);
       if (!bytes.length) {
         this.header = { type: 'session', version: 1, id: sessionId, createdAt };
         this.write(this.header);
@@ -34,11 +39,13 @@ export class SessionLog implements SessionLogPort {
     } catch (error) { closeSync(this.handle); this.closed = true; throw error; }
   }
 
-  private checkFile() {
+  private checkFile(expectedLength?: number) {
     const descriptor = fstatSync(this.handle), path = lstatSync(this.file);
     if (!descriptor.isFile() || descriptor.nlink !== 1 || path.isSymbolicLink() ||
         descriptor.dev !== path.dev || descriptor.ino !== path.ino)
       throw new Error('Session file outside managed storage or replaced while open');
+    if (expectedLength !== undefined && descriptor.size !== expectedLength)
+      throw new Error('Session file size changed outside its writer');
   }
 
   private load(bytes: Buffer) {
@@ -60,7 +67,12 @@ export class SessionLog implements SessionLogPort {
       this.remember(entry as SessionEntry);
     }
     // An incomplete, unacknowledged final write can be discarded; complete corrupt records cannot.
-    if (end < bytes.length) { ftruncateSync(this.handle, end); fsyncSync(this.handle); }
+    if (end < bytes.length) {
+      this.checkFile(bytes.length);
+      ftruncateSync(this.handle, end);
+      fsyncSync(this.handle);
+      this.length = end;
+    }
   }
 
   private validateEntry(entry: SessionEntry) {
@@ -94,13 +106,15 @@ export class SessionLog implements SessionLogPort {
   }
 
   private write(value: unknown) {
+    this.checkFile(this.length);
     const bytes = Buffer.from(JSON.stringify(value) + '\n');
     for (let offset = 0; offset < bytes.length;) {
-      const written = writeSync(this.handle, bytes, offset, bytes.length - offset);
+      const written = writeSync(this.handle, bytes, offset, bytes.length - offset, this.length + offset);
       if (written <= 0) throw new Error('Session log write made no progress');
       offset += written;
     }
     fsyncSync(this.handle);
+    this.length += bytes.length;
   }
 
   private get leafId() { return this.currentLeafId; }
@@ -153,7 +167,7 @@ export class SessionLog implements SessionLogPort {
 
   serialize() {
     if (this.closed) throw new Error('Session log is closed');
-    this.checkFile();
+    this.checkFile(this.length);
     return encodeLog(this.header, this.records);
   }
 

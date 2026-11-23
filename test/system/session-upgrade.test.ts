@@ -1,21 +1,21 @@
 import assert from 'node:assert/strict';
-import fs, { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import fs, { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { SessionRegistry } from '../../packages/sessions/registry.js';
 import { WorkspaceCatalog } from '../../packages/workspaces/catalog.js';
 import { getPaths, writeJson } from '../../packages/platform/config.js';
 
 function fixture(t: test.TestContext, version: 2 | 0 = 2) {
-  const root = mkdtempSync(join(tmpdir(), 'mini-harness-import-'));
+  const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'mini-harness-import-')));
   const paths = getPaths(root, { MINI_HARNESS_HOME: join(root, 'home') });
   const registry = new SessionRegistry(paths, new WorkspaceCatalog(paths));
   const parent = registry.create({ title: 'Existing conversation' });
   const child = registry.create({ parentId: parent.id, title: 'Child' });
   const target = registry.nativeFile(parent);
-  const source = join(paths.sessions, 'old-transcript.jsonl');
+  const source = join(dirname(target), 'old-transcript.jsonl');
   const timestamp = '2026-11-01T00:00:00.000Z';
   const records = [
     { type: 'session', version: 3, id: parent.id, timestamp, cwd: root },
