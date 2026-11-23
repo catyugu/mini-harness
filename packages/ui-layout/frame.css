@@ -22,6 +22,7 @@
 .new-session:hover, .sidebar-bottom button:hover, .icon-button:hover { background: var(--hover); }
 .sidebar-caption > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
 .sidebar-caption { display: flex; justify-content: space-between; align-items: center; gap: 6px; padding: 13px 4px 2px; color: var(--muted); font-size: 12px; }
+#workspaceActions .icon-button:is([aria-pressed="true"], [aria-expanded="true"]) { color: var(--ink); background: var(--hover); }
 .icon-button, .tree-button, .link-button { border: 0; background: transparent; border-radius: 6px; }
 .icon-button { min-width: 36px; min-height: 36px; font-size: 18px; color: var(--muted); }
 .tree-button { flex: 0 0 24px; min-height: 30px; padding: 0; color: var(--muted); }
