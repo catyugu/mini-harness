@@ -17,7 +17,7 @@
   font-size: 13px;
 }
 .new-session { width: 100%; }
-.sidebar-bottom button { min-height: 44px; }
+.sidebar-bottom button { min-height: 44px; line-height: 18px; }
 .sidebar-bottom button svg { flex: 0 0 18px; }
 .new-session:hover, .sidebar-bottom button:hover, .icon-button:hover { background: var(--hover); }
 .sidebar-caption > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
