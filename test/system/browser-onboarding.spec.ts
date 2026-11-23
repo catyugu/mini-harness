@@ -15,6 +15,9 @@ test('custom provider onboarding and registering a workspace work entirely in th
     await expect(settings.getByRole('combobox', { name: 'Provider', exact: true })).toHaveCount(0);
     await settings.getByRole('button', { name: 'Add provider' }).click();
     await expect(settings.getByRole('combobox', { name: 'Provider', exact: true })).toBeVisible();
+    await settings.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(settings.locator('.provider-editor [role="alert"]')).not.toBeEmpty();
+    await expect(settings.getByRole('combobox', { name: 'Provider', exact: true })).toBeFocused();
     await settings.getByRole('radio', { name: 'Custom API' }).check();
     await settings.getByRole('textbox', { name: 'Provider ID', exact: true }).fill('gui-added');
     await settings.getByRole('textbox', { name: 'API endpoint', exact: true }).fill(mock.url);

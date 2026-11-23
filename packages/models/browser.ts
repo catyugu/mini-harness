@@ -38,6 +38,7 @@ function providerManager(api: FrontendApi, providers: () => ProviderInfo[], refr
     status.textContent = '';
     const form = fromMarkup<HTMLFormElement>('<form class="provider-editor"></form>');
     form.setAttribute('aria-label', provider ? 'Edit ' + provider.name : 'Add provider');
+    form.noValidate = true; // Render validation feedback inline instead of platform-native bubbles.
     const mode = fromMarkup<HTMLFieldSetElement>(`<fieldset class="provider-mode"><legend>Provider type</legend>
       <label><input type="radio" name="provider-type" value="catalog" checked> Built-in provider</label>
       <label><input type="radio" name="provider-type" value="custom"> Custom API</label>
@@ -76,6 +77,13 @@ function providerManager(api: FrontendApi, providers: () => ProviderInfo[], refr
       event.preventDefault();
       if (save.disabled) return;
       error.textContent = '';
+      const invalid = [...form.querySelectorAll<HTMLInputElement | HTMLSelectElement>('input, select')]
+        .find((control) => !control.disabled && !control.checkValidity());
+      if (invalid) {
+        error.textContent = invalid.validationMessage || 'Please complete the required fields.';
+        invalid.focus();
+        return;
+      }
       save.disabled = true;
       try {
         const secret = key.value.trim();
