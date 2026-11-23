@@ -21,7 +21,7 @@ test('running messages can queue follow-ups and approve shell commands from the 
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Wait');
     await page.getByRole('button', { name: 'Send', exact: true }).click(); await waiting;
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('First instruction');
-    await page.getByRole('combobox', { name: 'While running', exact: true }).selectOption('steer');
+    await expect(page.getByRole('combobox', { name: 'While running', exact: true })).toHaveCount(0);
     await page.getByRole('button', { name: 'Queue', exact: true }).click();
     await page.getByRole('button', { name: 'Cancel queued message: First instruction' }).click();
     await expect(page.locator('#queuedMessages')).toBeHidden();
@@ -29,7 +29,14 @@ test('running messages can queue follow-ups and approve shell commands from the 
     await page.getByRole('button', { name: 'Queue', exact: true }).click();
     await expect(page.locator('#queuedMessages .queue-item > span')).toHaveText('Instruction: Additional instruction');
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Continue');
-    await page.getByRole('combobox', { name: 'While running', exact: true }).selectOption('followUp');
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    const settings = page.getByRole('dialog', { name: 'Settings' });
+    await settings.getByRole('button', { name: 'General', exact: true }).click();
+    const addInstructions = settings.getByRole('switch', { name: 'Add instructions' });
+    await expect(addInstructions).toBeChecked();
+    await addInstructions.uncheck();
+    await expect(addInstructions).not.toBeChecked();
+    await settings.getByRole('button', { name: 'Close settings' }).click();
     await page.getByRole('button', { name: 'Queue', exact: true }).click();
     await expect(page.locator('#queuedMessages .queue-item > span')).toHaveText(['Instruction: Additional instruction', 'Follow up: Continue']);
     release();

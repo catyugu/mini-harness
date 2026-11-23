@@ -64,7 +64,6 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
             </div>
             <button id="thinkingLevel" class="model-select" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="thinkingResults" hidden>Default</button>
             <div id="thinkingPicker" class="model-picker thinking-picker" popover="auto"><div id="thinkingResults" role="listbox" aria-label="Thinking levels"></div></div>
-            <select id="queueMode" aria-label="While running" hidden><option value="steer">Add instruction</option><option value="followUp">Follow up</option></select>
             <button id="queueSend" class="small-button" type="button" hidden>Queue</button>
             <button id="stop" type="button" aria-label="Stop response" hidden data-icon="stop"></button>
             <button id="send" type="submit" aria-label="Send" data-icon="send"></button>
@@ -73,7 +72,7 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
       </div>
     </div>`);
   api.slots.register('conversation.body', view);
-  const { element, value } = scopedElements(view);
+  const { element } = scopedElements(view);
   const outlets = {
     composer: element('composerExtensions'), approvals: element('approvalRequests'), workspace: element('workspaceWelcome')
   };
@@ -219,7 +218,6 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
   function setSending(value: boolean) {
     sending = value;
     element<'button'>('send').hidden = value;
-    element('queueMode').hidden = !value;
     element('queueSend').hidden = !value;
     element<'button'>('stop').hidden = !value;
     element<'button'>('stop').disabled = false;
@@ -342,7 +340,7 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
     const button = element<'button'>('queueSend'); button.disabled = true;
     try {
       const queued = await controller.queue(id, {
-        message: commands.prepare(prompt.value), mode: value('queueMode') as 'steer' | 'followUp',
+        message: commands.prepare(prompt.value), mode: options.settings.get().queueMode,
         attachments: composerUi.attachments(), model: modelDraft,
         thinkingLevel: thinkingDraft
       });

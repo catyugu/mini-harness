@@ -1,9 +1,9 @@
 import { payload, scopedElements } from '@mini-harness/web/api';
 import type { FrontendSetup, FrontendApi } from '@mini-harness/ui-runtime/frontend';
 import { icon } from '@mini-harness/ui-primitives/icons';
-import { closeOnBackdrop, field, fromMarkup, required } from '@mini-harness/ui-primitives/primitives';
+import { closeOnBackdrop, field, fromMarkup, required, toggle } from '@mini-harness/ui-primitives/primitives';
 
-const pageIcons = { Model: 'model', Appearance: 'theme' } as const;
+const pageIcons = { General: 'settings', Model: 'model', Appearance: 'theme' } as const;
 
 const setup: FrontendSetup = (ctx, api) => {
   const { miniLayout: layout, miniSettingsData: state } = ctx;
@@ -14,6 +14,24 @@ const setup: FrontendSetup = (ctx, api) => {
   const launcher = fromMarkup<HTMLButtonElement>('<button type="button" aria-label="Settings"><span data-icon="settings"></span><span class="nav-label">Settings</span></button>');
   launcher.onclick = () => { layout.closeDrawer(); settings.open(); };
   api.slots.register('sidebar.footer', launcher);
+  const general = fromMarkup('<div class="general-settings"><label class="switch-line"><span><strong>Add instructions</strong><small>When a response is running, queued messages steer the current task. Turn off to send them after the response as follow-ups.</small></span></label><p class="hint form-error" role="alert"></p></div>');
+  const addInstructions = toggle('Add instructions', state.get().queueMode === 'steer');
+  required(general.querySelector('.switch-line')).append(addInstructions);
+  const generalStatus = required(general.querySelector<HTMLElement>('[role="alert"]'));
+  const syncGeneral = () => { addInstructions.checked = state.get().queueMode === 'steer'; };
+  state.subscribe(syncGeneral, api.signal);
+  api.onDispose(settings.addPage('General', general, true));
+  addInstructions.onchange = async () => {
+    addInstructions.disabled = true;
+    generalStatus.textContent = '';
+    try {
+      await api.request('/settings', payload('PATCH', { queueMode: addInstructions.checked ? 'steer' : 'followUp' }));
+      await state.refresh();
+    } catch (error) {
+      generalStatus.textContent = error instanceof Error ? error.message : String(error);
+      syncGeneral();
+    } finally { addInstructions.disabled = false; }
+  };
   const theme = fromMarkup<HTMLSelectElement>(`<select><option value="system">System</option>
     <option value="light">Light</option><option value="dark">Dark</option></select>`);
   const content = fromMarkup('<div class="appearance-settings"><p class="hint form-error" role="alert"></p></div>');
@@ -78,7 +96,7 @@ function mountSettings(api: FrontendApi) {
     const trigger = document.createElement('button');
     trigger.type = 'button';
     trigger.className = 'link-button';
-    trigger.append(icon(title === 'Model' ? pageIcons.Model : title === 'Appearance' ? pageIcons.Appearance : 'plugin'), document.createTextNode(title));
+    trigger.append(icon(pageIcons[title as keyof typeof pageIcons] ?? 'plugin'), document.createTextNode(title));
     trigger.onclick = () => {
       select(section);
       if (matchMedia('(max-width: 560px)').matches) back.focus();

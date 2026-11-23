@@ -18,6 +18,11 @@
 .plugin-fields textarea { display: block; width: 100%; min-height: 80px; color: var(--ink); background: var(--surface); border: 1px solid var(--border); border-radius: 7px; }
 .settings-scroll section { padding: 12px 0 15px; border-bottom: 1px solid var(--border); }
 .settings-scroll h3 { font-size: 14px; margin: 0 0 5px; }
+.general-settings { max-width: 480px; }
+.general-settings .switch-line { align-items: flex-start; margin: 0; cursor: pointer; }
+.general-settings .switch-line strong { display: block; font-weight: 550; }
+.general-settings .switch-line input { margin-top: 4px; }
+.general-settings .form-error:empty { display: none; }
 .settings-scroll label { display: block; margin: 8px 0 4px; font-size: 13px; }
 .settings-scroll :is(input:not([type="checkbox"], [type="radio"]), select, textarea) {
   display: block; width: 100%; border: 1px solid var(--border); border-radius: 7px;
