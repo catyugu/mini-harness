@@ -27,7 +27,11 @@ test('GUI APIs configure providers, persist keys privately, discover Skills and 
   const save = await request('/providers', 'PUT', { id: 'gui-test', baseUrl: mock.url, api: 'openai-completions', models: [{ id: 'gui-model', input: ['text', 'image'] }] });
   assert.equal(save.status, 200, JSON.stringify(save.body));
   assert.equal((await request('/credentials', 'POST', { provider: 'gui-test', key: 'gui-private-key' })).status, 200);
-  assert.equal((await request('/settings', 'PATCH', { model: { provider: 'gui-test', id: 'gui-model' } })).status, 200);
+  assert.equal((await request('/settings/plugins/core%3Amodels', 'PATCH', { model: { provider: 'gui-test', id: 'gui-model' } })).status, 200);
+  assert.equal((await request('/settings/plugins/core%3Atheme', 'PATCH', { appearance: 'lavender' })).status, 400);
+  assert.equal((await request('/settings/plugins/core%3Atheme', 'PATCH', { model: { provider: '', id: '' } })).status, 400);
+  assert.equal((await request('/settings/plugins/files', 'PATCH', {})).status, 404);
+  assert.equal((await request('/settings')).body.pluginConfig['core:theme'].appearance, 'system');
   const bootstrap = await request('/bootstrap'); assert.equal(JSON.stringify(bootstrap.body).includes('gui-private-key'), false);
   assert.ok(readFileSync(join(paths.home, 'auth.json'), 'utf8').includes('gui-private-key'));
   const { body: session } = await request('/sessions', 'POST', {});
@@ -50,7 +54,7 @@ test('GUI APIs configure providers, persist keys privately, discover Skills and 
   assert.deepEqual((await request('/sessions/search?q=unmatched-phrase')).body, []);
   assert.equal((await request('/providers', 'DELETE', { id: 'gui-test' })).status, 200);
   const afterRemoval = (await request('/settings')).body;
-  assert.deepEqual(afterRemoval.model, { provider: '', id: '' });
+  assert.deepEqual(afterRemoval.pluginConfig['core:models'].model, { provider: '', id: '' });
   assert.equal((await request('/providers')).body.some((provider: { id: string }) => provider.id === 'gui-test'), false);
   assert.equal(readFileSync(join(paths.home, 'auth.json'), 'utf8').includes('gui-private-key'), false);
   const afterHistory = await request('/sessions/' + session.id);

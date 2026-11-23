@@ -7,6 +7,10 @@ import { startIsolatedHost, modelSearch, suggestions } from '../../../test/suppo
 
 test('drafts, search, rename, single deletion, attachment and input discovery', async ({ page }) => {
   const mock = await createMockProvider(), { root, paths } = createFixturePaths(mock.url);
+  const modelsPath = join(paths.home, 'models.json');
+  const models = readJson<any>(modelsPath, {});
+  models.providers['local-mock'].models[0].input.push('image');
+  writeFileSync(modelsPath, JSON.stringify(models));
   writeFileSync(join(paths.cwd, 'notes.md'), '# Notes\nTask details');
   mkdirSync(join(paths.cwd, 'task files'));
   writeFileSync(join(paths.cwd, 'task files', 'draft.md'), '# Draft');
@@ -49,10 +53,38 @@ test('drafts, search, rename, single deletion, attachment and input discovery', 
     await expect(suggestions(page).getByRole('option', { name: /Review the work/ })).toBeVisible();
     await draft.press('Enter');
     await expect(draft).toHaveValue('Read this attachment /skill:review and keep this text');
-    await page.locator('#composer input[type=file]').setInputFiles({ name: 'task.txt', mimeType: 'text/plain', buffer: Buffer.from('ATTACHED TASK') });
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAFElEQVR4nGPUCIhigAEmBiSAmwMAKdYA2gR3lpgAAAAASUVORK5CYII=', 'base64');
+    await page.locator('#composer input[type=file]').setInputFiles([
+      { name: 'task.txt', mimeType: 'text/plain', buffer: Buffer.from('ATTACHED TASK') },
+      { name: 'blue.png', mimeType: 'image/png', buffer: png },
+      { name: 'reference.png', mimeType: 'image/png', buffer: png }
+    ]);
     await expect(page.getByRole('button', { name: 'Remove task.txt' })).toBeVisible();
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.locator('.message.assistant')).toHaveText('Mock response');
+    const bubble = page.locator('.message.user').first();
+    const thumbs = bubble.locator('.message-images img');
+    await expect(thumbs).toHaveCount(2);
+    await expect(bubble.getByRole('img', { name: 'blue.png' })).toBeVisible();
+    await expect(bubble.getByRole('img', { name: 'reference.png' })).toBeVisible();
+    await expect(bubble.getByRole('list', { name: 'Attachments' })).toHaveText('task.txt');
+    const desktop = page.viewportSize();
+    if (!desktop) throw new Error('Expected a browser viewport');
+    for (const viewport of [desktop, { width: 320, height: 568 }]) {
+      await page.setViewportSize(viewport);
+      const layout = await bubble.evaluate((node) => {
+        const images = [...node.querySelectorAll<HTMLImageElement>('.message-images img')];
+        const gallery = images[0].parentElement!.getBoundingClientRect();
+        const last = images.at(-1)!.getBoundingClientRect();
+        return { widths: images.map((image) => image.getBoundingClientRect().width),
+          offset: Math.abs(gallery.right - last.right), overflow: node.scrollWidth - node.clientWidth };
+      });
+      expect(layout.widths.every((width) => width >= 56 && width <= 72)).toBe(true);
+      expect(layout.offset).toBeLessThan(1);
+      expect(layout.overflow).toBeLessThanOrEqual(1);
+    }
+    await page.setViewportSize(desktop);
+    expect(JSON.stringify(mock.requests[0])).toContain('image_url');
     expect(JSON.stringify(mock.requests[0])).toContain('ATTACHED TASK');
     expect(JSON.stringify(mock.requests[0])).toContain('Review carefully.');
     expect(JSON.stringify(mock.requests[0])).toContain('Read this attachment and keep this text');

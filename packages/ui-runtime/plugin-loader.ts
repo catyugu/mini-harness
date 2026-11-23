@@ -33,9 +33,9 @@ export function createBrowserGraphLoader(host: FrontendHost) {
       visiting.add(id);
       const plugin = enabled.get(id);
       if (!plugin) throw new Error('Missing browser plugin entry: ' + id);
-      const { requires, browser, styles, preload, config, inject } = plugin;
+      const { requires, browser, styles, preload, config, inject, liveConfig } = plugin;
       for (const parent of requires ?? []) visit(parent, visiting);
-      const key = JSON.stringify([browser, styles, preload, config, requires, inject]);
+      const key = JSON.stringify([browser, styles, preload, liveConfig, liveConfig ? undefined : config, requires, inject]);
       visiting.delete(id);
       signatures.set(id, key);
       ordered.push(id);
@@ -77,7 +77,11 @@ export function createBrowserGraphLoader(host: FrontendHost) {
       const key = signatures.get(id);
       const plugin = enabled.get(id);
       if (key === undefined || !plugin) throw new Error('Browser dependency graph has an unresolved entry: ' + id);
-      if (!plugin.browser || mounted.has(id)) continue;
+      if (!plugin.browser) continue;
+      if (mounted.has(id)) {
+        if (plugin.liveConfig) host.configure(id, plugin.config);
+        continue;
+      }
       try {
         if (failed.has(id) || plugin.requires?.some((parent) => failed.has(parent)))
           throw failed.get(id) ?? new Error('Browser dependency failed');

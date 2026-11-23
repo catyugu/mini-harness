@@ -38,12 +38,14 @@ export class PluginHost implements ScopePort {
     private readonly settings: () => Settings,
     private readonly session: (id: string) => SessionRecord | undefined,
     private readonly sessionRecords: (sessionId: string, pluginId: string) => SessionRecords,
-    private readonly upgrade?: (path: string, handler: UpgradeHandler) => () => void, devPlugin?: string) {
+    private readonly upgrade?: (path: string, handler: UpgradeHandler) => () => void, devPlugin?: string,
+    private readonly writePlugin?: (id: string, key: string | undefined, patch: unknown, check: () => void) => Promise<void>) {
     this.catalog = new PluginCatalog(directory, builtins, rootServices, devPlugin);
     this.mounts = new PluginMounts(ctx);
     this.root = new Map(rootServices.map((name) => [name, 'application']));
   }
 
+  private configSchemas = new Set<string>();
   private assets = new Map<string, { path: string; mime: string }>();
   private published: BrowserEntry[] = [];
   private readonly failures = new Map<string, string>();
@@ -51,6 +53,12 @@ export class PluginHost implements ScopePort {
 
   effective(settings: Settings) { return this.catalog.effective(settings); }
   browser() { return structuredClone(this.published); }
+
+  assertBrowserConfigurable(id: string) {
+    if (!this.published.some((entry) => entry.id === id && entry.browser) || !this.configSchemas.has(id))
+      throw new HttpError('not_found', 'Plugin settings are unavailable');
+  }
+
   diagnostics() { return structuredClone(this.graph); }
   private describe(plan: PluginPlan, id = plan.id, requires = plan.requires) {
     const { services, descriptor } = plan;
@@ -69,7 +77,7 @@ export class PluginHost implements ScopePort {
         try {
           const values = key ? { ...settings.pluginConfig[id], ...settings.scopes[key]?.pluginConfig?.[id] } : settings.pluginConfig[id];
           const config = this.catalog.configValues(id, values, descriptor?.configSchema);
-          if (models) descriptor?.validateConfig?.(config, models);
+          if (models) descriptor?.validateConfig?.(config, models, 'inspect');
         } catch (error) { return error instanceof Error ? error.message : String(error); }
       };
       const scopes = metadata.scope === 'application'
@@ -206,13 +214,25 @@ export class PluginHost implements ScopePort {
         address: (id) => this.address(id), records: (id) => this.sessionRecords(id, plan.id),
         routes: this.ctx.get('harnessRoutes'), upgrade: this.upgrade,
         dataRoot: join(dirname(this.directory), 'plugin-data'),
+        readConfig: () => {
+          const settings = this.settings();
+          const values = scopeKey
+            ? { ...settings.pluginConfig[plan.id], ...settings.scopes[scopeKey]?.pluginConfig?.[plan.id] }
+            : settings.pluginConfig[plan.id];
+          return this.catalog.configValues(plan.id, values, descriptor.configSchema);
+        },
+        subscribeConfig: (listener) => this.ctx.harnessSettingsStore.subscribe(listener),
+        writeConfig: (patch, check) => {
+          if (!this.writePlugin || !descriptor.configSchema) throw new Error('Plugin configuration schema is unavailable');
+          return this.writePlugin(plan.id, scopeKey, patch, check);
+        },
         invalidate: () => this.ctx.harnessChanges.dispatchEvent(new CustomEvent('change', {
           detail: { domain: 'plugin:' + plan.id }
         }))
       });
       setDrain(runtime.drain);
       const models = ctx.get('harnessModels');
-      if (models) descriptor.validateConfig?.(runtime.api.config, models);
+      if (models) descriptor.validateConfig?.(runtime.api.config, models, 'mount');
       const cleanup = await setup(ctx, runtime.api);
       if (typeof cleanup === 'function') ctx.effect(() => cleanup);
       runtime.checkPublications();
@@ -235,7 +255,7 @@ export class PluginHost implements ScopePort {
 
   private browserPlan(candidate: PluginPlan[], unavailable: (id: string, error: unknown) => boolean) {
     const browser = new Map(candidate.filter(({ browser, web }) => browser || web).map((plan) => [plan.id, plan]));
-    const runtimeServices = ['miniProjections', 'miniSwitch', 'miniBrowserFailures'];
+    const runtimeServices = ['miniProjections', 'miniSwitch', 'miniBrowserFailures', 'miniSettingsRegistry'];
     const { ordered } = resolveCapabilities([...browser.values()].map((plan) => ({
       id: plan.id, provides: plan.descriptor.browserProvides, inject: plan.descriptor.browserInject,
       requires: [...new Set([...(plan.browserRequires ?? []),
@@ -246,11 +266,11 @@ export class PluginHost implements ScopePort {
       if (!plan) throw new Error('Composed browser capability is unavailable: ' + descriptor.id);
       const resources = plan.descriptor.resources;
       return { id: plan.id, requires: requires ?? [], inject: plan.descriptor.browserInject, browser: resources?.entry ?? plan.browser,
-        styles: resources?.styles, preload: resources?.preload, config: plan.config ?? {}, required: plan.descriptor.required };
+        styles: resources?.styles, preload: resources?.preload, config: plan.config ?? {}, liveConfig: plan.descriptor.configChanges === 'live', required: plan.descriptor.required };
     });
   }
 
-  start(settings: Settings) { return this.configure(settings, undefined, true); }
+  start(settings: Settings, commit?: () => void) { return this.configure(settings, commit, true); }
 
   async configure(settings: Settings, commit = () => {}, starting = false) {
     while (this.applying) await this.applying.catch(() => {});
@@ -275,7 +295,7 @@ export class PluginHost implements ScopePort {
         const validate = (values: Record<string, unknown> | undefined, before: Record<string, unknown> | undefined) => {
           if (isDeepStrictEqual(values, before)) return;
           const config = this.catalog.configValues(id, values, configSchema);
-          if (models) validateConfig?.(config, models);
+          if (models) validateConfig?.(config, models, 'write');
         };
         validate(settings.pluginConfig[id], previous.pluginConfig[id]);
         if (scope === 'application') continue;
@@ -335,6 +355,7 @@ export class PluginHost implements ScopePort {
         this.failures.clear();
         for (const [id, error] of failures) this.failures.set(id, error);
         const ready = new Set<string>();
+        this.configSchemas = new Set(descriptors.filter(({ configSchema }) => configSchema).map(({ id }) => id));
         this.published = browser.filter(({ id, requires }) => {
           if (!this.mounts.plan(id) || (requires ?? []).some((dependency) => !ready.has(dependency))) return false;
           ready.add(id);

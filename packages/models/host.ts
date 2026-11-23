@@ -1,21 +1,26 @@
 import { HttpError } from '@mini-harness/contracts/routes';
-import { isDeepStrictEqual } from 'node:util';
+import type { PluginApi } from '@mini-harness/contracts/plugins';
+import type { ModelChoice } from '@mini-harness/contracts/conversation';
 import type { Context } from 'cordis';
 import { providerSettings, saveProvider } from './provider-settings.js';
 
 /** Provider discovery, credentials and model selection have one capability owner. */
-export function setup(ctx: Context) {
+export function setup(ctx: Context, api: PluginApi) {
+  const recent = () => api.configuration.get<ModelChoice>('model');
+  const remember = (model: ModelChoice) => api.configuration.set('model', model);
+  ctx.provide('harnessModelPreference', {
+    recent,
+    remember: async (model) => {
+      // Scoped-only models must not become an unusable application default.
+      if (ctx.harnessModels.resolve(model)) await remember(model);
+    }
+  });
   const host = {
     paths: ctx.harnessState.paths,
-    get settings() { return ctx.harnessSettings(); },
+    recent, remember,
     catalog: ctx.harnessModels,
-    admin: ctx.harnessModelAdmin,
-    updateSettings: (patch: Parameters<typeof ctx.harnessUpdateSettings>[0]) => ctx.harnessUpdateSettings(patch)
+    admin: ctx.harnessModelAdmin
   };
-  ctx.effect(() => ctx.harnessSettingsStore.validate(({ model }, previous) => {
-    if (!isDeepStrictEqual(model, previous.model) && (model.provider || model.id) && !host.catalog.resolve(model))
-      throw new HttpError('invalid_input', 'Unknown model: ' + model.provider + '/' + model.id);
-  }));
   const add = (method: string, path: string, handler: Parameters<typeof ctx.harnessRoutes.register>[2]) =>
     ctx.effect(() => ctx.harnessRoutes.register(method, path, handler));
   const changed = () => ctx.harnessChanges.dispatchEvent(new CustomEvent('change', { detail: { domain: 'models' } }));

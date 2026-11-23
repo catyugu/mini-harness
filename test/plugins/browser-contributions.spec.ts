@@ -11,7 +11,7 @@ test('a browser plugin owns and releases its page and dialog', async ({ page }) 
   let server: Awaited<ReturnType<typeof startIsolatedHost>> | undefined;
   try {
     cpSync(resolve('docs/examples/browser-panel'), join(paths.plugins, 'browser-panel'), { recursive: true });
-    writeJson(paths.settings, { model: { provider: 'local-mock', id: 'mock-model' }, plugins: { 'browser-panel': true } });
+    writeJson(paths.settings, { pluginConfig: { 'core:models': { model: { provider: 'local-mock', id: 'mock-model' } } }, plugins: { 'browser-panel': true } });
     server = await startIsolatedHost(paths);
     await page.goto(server.url + '/#token=' + server.token);
     await page.getByRole('button', { name: 'Example panel', exact: true }).click();
@@ -50,7 +50,7 @@ test('a keyed browser contribution cleans up its listener and restores the built
         return { node: button, dispose() { document.body.dataset.slotDisposed = 'yes'; } };
       });
     };`);
-    writeJson(paths.settings, { model: { provider: 'local-mock', id: 'mock-model' }, plugins: { 'replace-new': true } });
+    writeJson(paths.settings, { pluginConfig: { 'core:models': { model: { provider: 'local-mock', id: 'mock-model' } } }, plugins: { 'replace-new': true } });
     server = await startIsolatedHost(paths);
     await page.goto(server.url + '/#token=' + server.token);
     await expect(page.getByRole('button', { name: 'Replacement conversation' })).toBeVisible();

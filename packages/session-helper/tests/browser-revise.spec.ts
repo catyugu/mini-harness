@@ -32,7 +32,7 @@ test('editing a user message creates a native branch from the editor on mobile a
         await page.getByRole('button', { name: 'Send', exact: true }).click();
         await expect(page.locator('.message-row.assistant .message')).toHaveText('Response: Revised prompt');
         await expect(page.locator('.message-row.user .message')).toContainText('Revised prompt');
-        await expect(page.locator('.message-image')).toHaveCount(1);
+        await expect(page.locator('.message.user').getByRole('img', { name: 'icon-192.png' })).toHaveCount(1);
         expect(JSON.stringify(mock.requests.at(-1))).toContain('image_url');
         await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeVisible();
         await page.locator('.message-row.user').getByRole('button', { name: 'Edit message' }).click();
@@ -40,7 +40,7 @@ test('editing a user message creates a native branch from the editor on mobile a
         await prompt.fill('Removed picture');
         await page.getByRole('button', { name: 'Send', exact: true }).click();
         await expect(page.locator('.message-row.assistant .message')).toHaveText('Response: Removed picture');
-        await expect(page.locator('.message-image')).toHaveCount(0);
+        await expect(page.locator('.message.user').getByRole('img', { name: 'icon-192.png' })).toHaveCount(0);
         expect(JSON.stringify(mock.requests.at(-1))).not.toContain('image_url');
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
       } finally {

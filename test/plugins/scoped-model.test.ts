@@ -51,7 +51,7 @@ test('scoped model catalogs govern explicit runs and inherited or model-selected
   const parent = app.runtime.registry.create();
   const sibling = app.runtime.registry.create();
   const scopedChoice = { provider: 'scoped-only', id: 'parent-model' };
-  const applicationChoice = { ...app.runtime.settings.model };
+  const applicationChoice = { ...app.runtime.plugins.ctx.harnessModelPreference.recent() };
   assert.equal(app.runtime.plugins.ctx.harnessModels.resolve(scopedChoice), undefined);
   const configured = await request('/settings', 'PATCH', { scopes: {
     ['session:' + parent.id]: { plugins: { 'scoped-models': true },
@@ -60,7 +60,7 @@ test('scoped model catalogs govern explicit runs and inherited or model-selected
   assert.equal(configured.status, 200, JSON.stringify(configured.body));
 
   assert.equal(await app.runtime.runs.send(parent.id, 'Delegate inherited', undefined, { model: scopedChoice }), 'Scoped parent-model');
-  assert.deepEqual(app.runtime.settings.model, applicationChoice);
+  assert.deepEqual(app.runtime.plugins.ctx.harnessModelPreference.recent(), applicationChoice);
   assert.equal(await app.runtime.runs.send(parent.id, 'Delegate explicit', undefined, { model: scopedChoice }), 'Scoped parent-model');
   assert.equal(await app.runtime.runs.send(parent.id, 'Continue without an explicit model'), 'Scoped parent-model');
   const children = app.runtime.registry.list().filter(({ parentId }) => parentId === parent.id);
@@ -73,7 +73,7 @@ test('scoped model catalogs govern explicit runs and inherited or model-selected
   assert.equal(app.runtime.runs.info(inherited.id)?.state, 'completed');
   assert.equal(app.runtime.runs.info(explicit.id)?.state, 'completed');
   assert.ok(app.runtime.agent.messages(parent.id).filter(({ role }) => role === 'toolResult').every(({ isError }) => !isError));
-  assert.deepEqual(app.runtime.settings.model, applicationChoice);
+  assert.deepEqual(app.runtime.plugins.ctx.harnessModelPreference.recent(), applicationChoice);
   assert.equal(await app.runtime.runs.send(sibling.id, 'Use the application model'), 'Mock response');
   assert.deepEqual(app.runtime.agent.read(sibling.id).model, applicationChoice);
   assert.equal(mock.requests.length, 1);

@@ -93,11 +93,9 @@ export interface RunPort {
 
 export interface SettingsPort {
   readonly settings: Settings;
-  rememberModel(model: ModelChoice): void;
   forgetPlugin(id: string): void;
   forgetScopes(keys: string[]): void;
   subscribe(listener: () => void): () => void;
-  validate(listener: (settings: Settings, previous: Settings) => void): () => void;
 }
 
 export interface ConversationViewPort {
@@ -128,6 +126,7 @@ declare module 'cordis' {
     harnessSandbox: import('./execution.js').SandboxPort;
     harnessSettingsStore: SettingsPort;
     harnessUpdateSettings: (patch: unknown) => Promise<Settings>;
+    harnessWriteBrowserConfig: (id: string, patch: unknown, signal: AbortSignal) => Promise<void>;
     harnessPluginCatalog: {
       metadata(): PluginMetadata[];
       reserved(id: string): boolean;

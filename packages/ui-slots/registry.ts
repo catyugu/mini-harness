@@ -14,7 +14,6 @@ export interface SlotMap {
   'conversation.body': { kind: 'single' };
   'conversation.composer': { kind: 'list' };
   'conversation.approvals': { kind: 'list' };
-  'settings.extensions': { kind: 'list' };
   'dialog.root': { kind: 'list' };
 }
 export type SlotName = keyof SlotMap & string;

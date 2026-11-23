@@ -1,7 +1,7 @@
 import type { ToolDefinition } from './tools.js';
 import type { SkillPort } from './skills.js';
 import type { Context } from 'cordis';
-import type { Paths, Settings } from './config.js';
+import type { Paths, PluginConfiguration, Settings } from './config.js';
 import type { RouteHandler, RoutePort, UpgradeHandler } from './routes.js';
 import type { SessionRecord } from './conversation.js';
 import type { CapabilityObservation, ToolDecision, ToolProjection } from './events.js';
@@ -47,7 +47,10 @@ export interface PluginDescriptor extends PluginMetadata {
   required?: boolean;
   /** A mounted plugin may opt in to configuration updates without a restart. */
   configChanges?: 'live';
-  validateConfig?(config: Readonly<Record<string, unknown>>, models: import('./models.js').ModelCatalogPort): void;
+  /** Startup migration from former root fields, keyed by the old field name. Built-ins only. */
+  migrateConfig?: Record<string, string>;
+  validateConfig?(config: Readonly<Record<string, unknown>>, models: import('./models.js').ModelCatalogPort,
+    operation: 'mount' | 'inspect' | 'write'): void;
   inject?: string[];
   optional?: string[];
   browserRequires?: string[];
@@ -64,6 +67,9 @@ export interface SessionRecords {
 export interface PluginApi {
   /** The value comes from settings.pluginConfig[pluginId]. */
   readonly config: Readonly<Record<string, unknown>>;
+  /** Committed values and writes in this instance's own namespace and scope. */
+  readonly configuration: PluginConfiguration;
+  /** A live plugin can update dependent resources before commit and on rollback. */
   onConfigChange(apply: (next: Readonly<Record<string, unknown>>) => void | Promise<void>): void;
   readonly scope: PluginScope;
   readonly signal: AbortSignal;

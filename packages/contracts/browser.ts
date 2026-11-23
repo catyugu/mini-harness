@@ -6,6 +6,7 @@ export interface BrowserEntry {
   preload?: string;
   required?: boolean;
   config: Record<string, unknown>;
+  liveConfig?: boolean;
   requires?: string[];
   inject?: string[];
 }

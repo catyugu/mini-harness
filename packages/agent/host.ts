@@ -6,7 +6,7 @@ import type { OrderedHook } from '@mini-harness/contracts/events';
 import { NativeAgent } from './agent.js';
 
 export function setup(ctx: Context, api: PluginApi) {
-  const { harnessRegistry: catalog, harnessScopes: scopes, harnessSettingsStore: settings } = ctx;
+  const { harnessRegistry: catalog, harnessScopes: scopes, harnessModelPreference: preference } = ctx;
   const agent = new NativeAgent(catalog, {
     models: (id) => scopes.require(id, 'harnessModels'),
     llm: (id) => scopes.require(id, 'harnessLlm'),
@@ -15,11 +15,8 @@ export function setup(ctx: Context, api: PluginApi) {
     prompt: (id) => scopes.require(id, 'harnessPrompt'),
     skills: (id) => scopes.optional(id, 'harnessSkills'),
     prepare: (id, signal) => scopes.prepare(id, signal),
-    defaultModel: () => settings.settings.model,
-    rememberModel: (model) => {
-      // A scoped-only model must not become an unusable global default for siblings.
-      if (scopes.require(undefined, 'harnessModels').resolve(model)) settings.rememberModel(model);
-    },
+    defaultModel: preference.recent,
+    rememberModel: preference.remember,
     policy: () => api.config as { maxTurns: number; autoCompact: boolean },
     observe: (event) => ctx.emit('harness/observe', event),
     modelRequestHooks(id) {
