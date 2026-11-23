@@ -15,6 +15,11 @@ test('the composed browser graph is derived from the mounted capability descript
   const mounted = new Map<string, { browser?: string }>(body.ui.map((entry: { id: string; browser?: string }) => [entry.id, entry]));
   assert.equal(mounted.size, body.ui.length);
   assert.deepEqual(Object.keys(body), ['ui']);
+  for (const id of ['core:models-data', 'core:plugins-data', 'core:approvals-data'])
+    assert.equal(mounted.has(id), false, 'Retired proxy plugin remains mounted: ' + id);
+  assert.ok(mounted.has('core:settings-data'), 'Theme requires an independent settings projection');
+  for (const id of ['core:settings', 'core:models', 'core:plugins', 'core:approvals'])
+    assert.ok(mounted.has(id), 'Domain plugin is missing: ' + id);
   const browser = new Map(plugins.filter(({ browser }) => browser).map((plugin) => [plugin.id, plugin]));
   for (const entry of plugins.filter(({ browser }) => browser)) {
     if (!entry.browser) throw new Error('Browser entry missing for ' + entry.id);

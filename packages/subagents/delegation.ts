@@ -1,4 +1,5 @@
 import type { DelegationPort, SubagentPolicy } from '@mini-harness/contracts/delegation';
+import { HttpError } from '@mini-harness/contracts/routes';
 import type { ModelCatalogPort } from '@mini-harness/contracts/models';
 import type { AgentPort, RunPort, SessionStore } from '@mini-harness/contracts/services';
 import type { SessionRecord, ModelChoice } from '@mini-harness/contracts/conversation';
@@ -116,7 +117,8 @@ export class Delegation implements DelegationPort {
   }
 
   validate(settings: SubagentPolicy) {
-    if (settings.provider) this.models().resolve({ provider: settings.provider, id: settings.model });
+    if (settings.provider && !this.models().resolve({ provider: settings.provider, id: settings.model }))
+      throw new HttpError('invalid_input', 'Unknown child model: ' + settings.provider + '/' + settings.model);
   }
 
   checkProvider(id: string, removing = false) {

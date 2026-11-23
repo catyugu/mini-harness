@@ -78,3 +78,30 @@ test('an already open tab reconnects to the same instance after restart', async 
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('frontend API preserves caller headers and retains host authorization', async ({ page }) => {
+  const mock = await createMockProvider();
+  const { root, paths } = createFixturePaths(mock.url);
+  const host = await startIsolatedHost(paths);
+  try {
+    await page.goto(host.url + '/#token=' + host.token);
+    await expect(page.getByRole('textbox', { name: 'Message' })).toBeVisible();
+    const seen: Record<string, string>[] = [];
+    await page.route('**/api/settings', async (route) => {
+      if (route.request().method() !== 'PATCH') return route.continue();
+      seen.push(route.request().headers());
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+    });
+    await page.evaluate(async () => {
+      const { api } = await import(String('/packages/web/api.js')) as { api: (path: string, options: RequestInit) => Promise<Response> };
+      await api('/settings', {
+        method: 'PATCH',
+        headers: new Headers({ 'X-Plugin-Request': 'present', 'Content-Type': 'application/merge-patch+json', Authorization: 'Bearer stale' }),
+        body: '{}'
+      });
+    });
+    expect(seen.at(-1)?.['x-plugin-request']).toBe('present');
+    expect(seen.at(-1)?.['content-type']).toBe('application/merge-patch+json');
+    expect(seen.at(-1)?.authorization).toBe('Bearer ' + host.token);
+  } finally { await host.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
+});

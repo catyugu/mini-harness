@@ -24,7 +24,9 @@ export class AuthenticationError extends Error {
 export async function api(path: string, options: RequestInit = {}) {
   const token = sessionStorage.getItem('mini-harness-token');
   if (!token) throw new Error('Open mini-harness using the URL printed by the CLI.');
-  const headers = { Authorization: 'Bearer ' + token, ...(options.body ? { 'Content-Type': 'application/json' } : {}) };
+  const headers = new Headers(options.headers);
+  headers.set('Authorization', 'Bearer ' + token);
+  if (options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
   const response = await fetch('/api' + path, { ...options, headers });
   if (!response.ok) {
     if (response.status === 401) throw new AuthenticationError();

@@ -1,12 +1,23 @@
 import { payload } from '@mini-harness/web/api';
+import type { ModelCatalog } from '@mini-harness/web/types';
+import { RemoteStore } from '@mini-harness/web/models/remote-store';
 import type { FrontendSetup, FrontendApi } from '@mini-harness/ui-runtime/frontend';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { button, field, fromMarkup, confirmAction, required } from '@mini-harness/ui-primitives/primitives';
 
 import type { ProviderInfo, ProviderModel } from '@mini-harness/web/contracts/providers';
 
-const setup: FrontendSetup = (ctx, api) => {
-  const { miniSettings: settings, miniModels: state } = ctx;
+const setup: FrontendSetup = async (ctx, api) => {
+  const { miniSettings: settings } = ctx;
+  const state = new RemoteStore(async () => {
+    const [{ models }, providers] = await Promise.all([
+      api.request<Pick<ModelCatalog, 'models'>>('/models'), api.request<ModelCatalog['providers']>('/providers')
+    ]);
+    return { models, providers };
+  });
+  await state.refresh();
+  api.onDispose(ctx.miniProjections.register('models', state));
+  ctx.provide('miniModels', state);
   const manager = providerManager(api, () => state.get().providers, state.refresh);
   api.onDispose(settings.addPage('Model', manager.content, true));
   settings.onClose(manager.reset, api.signal);
@@ -220,6 +231,10 @@ function customEndpoint(provider?: ProviderInfo) {
   return { element, id, url, read: () => ({
     id: id.value.trim(), api: api.value, baseUrl: url.value.trim(), models: [...readModels.values()].map((read) => read())
   }) };
+}
+
+declare module 'cordis' {
+  interface Context { miniModels: RemoteStore<ModelCatalog> }
 }
 
 export default setup;

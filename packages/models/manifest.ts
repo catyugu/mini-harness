@@ -3,7 +3,7 @@ import { setup } from './host.js';
 
 export const manifest: PluginDescriptor = {
   scope: 'application',
-  browserInject: ['miniSettings', 'miniModels'],
+  browserInject: ['miniSettings', 'miniProjections'], browserProvides: ['miniModels'],
   id: 'core:models', title: 'Models', description: 'Model endpoints and credentials', required: true,
   optional: ['harnessDelegation'],
   inject: ['harnessAgent', 'harnessModels', 'harnessModelAdmin', 'harnessRuns', 'harnessUpdateSettings', 'harnessSettings', 'harnessSettingsStore', 'harnessState', 'harnessRoutes', 'harnessMutations', 'harnessChanges'], provides: [], setup,

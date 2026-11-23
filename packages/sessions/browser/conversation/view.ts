@@ -2,7 +2,7 @@ import type { BrowserProjectionPort } from '@mini-harness/contracts/browser';
 import type { Attachment } from '@mini-harness/contracts/input';
 import type { Conversation, ModelChoice } from '@mini-harness/contracts/conversation';
 import type { MessageContent } from '@mini-harness/contracts/message';
-import type { RunEvent, RunInfo } from '@mini-harness/contracts/transport';
+import type { RunEvent } from '@mini-harness/contracts/transport';
 import type { ConversationView, ThinkingLevel, ModelCatalog } from '@mini-harness/web/types';
 import { scopedElements } from '@mini-harness/web/api';
 import { exportSessions, isRunning } from '@mini-harness/web/transport/session-client';
@@ -17,6 +17,8 @@ import { createComposer } from './composer.js';
 import { createModelPicker } from './model-picker.js';
 import type { FrontendApi, ToolView, MessageAction, DraftMode } from '@mini-harness/ui-runtime/frontend';
 import { fromMarkup, required } from '@mini-harness/ui-primitives/primitives';
+import { createRunSummary } from './run-summary.js';
+import { renderQueue } from './queue-view.js';
 
 type Queue = ConversationView['queue'];
 
@@ -76,39 +78,7 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
 
   const messages = element('messages');
   const welcome = element('welcome');
-  const summary = element('runSummary'), summaryStatus = required(summary.querySelector('span')), elapsed = required(summary.querySelector('time'));
-  const states = { queued: 'Queued', running: 'Running', completed: 'Completed', failed: 'Failed',
-    cancelled: 'Cancelled', interrupted: 'Interrupted. You can continue this conversation. Unconfirmed tools will not rerun.' };
-  let runSummary: RunInfo | undefined;
-  const changedFiles = element<'details'>('changedFiles');
-  function renderChangedFiles(run?: RunInfo) {
-    const paths = run?.changedFiles ?? [];
-    changedFiles.hidden = paths.length === 0;
-    if (!paths.length) { changedFiles.open = false; return; }
-    required(changedFiles.querySelector('summary')).textContent = paths.length + (paths.length === 1 ? ' file changed' : ' files changed');
-    required(changedFiles.querySelector('ul')).replaceChildren(...paths.map((path) => {
-      const item = document.createElement('li');
-      item.textContent = path;
-      return item;
-    }));
-  }
-  function renderElapsed() {
-    if (!runSummary) return;
-    const end = runSummary.finishedAt ? Date.parse(runSummary.finishedAt) : Date.now();
-    const seconds = Math.max(0, Math.floor((end - Date.parse(runSummary.startedAt)) / 1000));
-    elapsed.textContent = seconds < 60 ? seconds + ' s' : Math.floor(seconds / 60) + ' min ' + seconds % 60 + ' s';
-  }
-  function showRunSummary(run?: RunInfo) {
-    runSummary = run;
-    summary.hidden = !run;
-    if (!run) return;
-    summary.dataset.state = run.state;
-    summaryStatus.textContent = states[run.state];
-    renderChangedFiles(run);
-    renderElapsed();
-  }
-  const elapsedTimer = setInterval(() => { if (isRunning(runSummary)) renderElapsed(); }, 1000);
-  api.onDispose(() => clearInterval(elapsedTimer));
+  const showRunSummary = createRunSummary(element('runSummary'), api.onDispose);
   const composer = element<'form'>('composer');
   const prompt = element<'textarea'>('prompt');
   const thinkingSelect = element<'select'>('thinkingLevel');
@@ -396,41 +366,7 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
   }
   function showQueue(queue: Queue = []) {
     queueRevision++;
-    const panel = element('queuedMessages');
-    panel.replaceChildren();
-    let pendingCount = 0;
-    for (const item of queue ?? []) {
-      const row = document.createElement('div');
-      row.className = 'queue-item';
-      const label = document.createElement('span');
-      label.textContent = (item.mode === 'steer' ? 'Instruction: ' : 'Follow up: ') + item.summary;
-      row.append(label);
-      if (item.state === 'failed') {
-        const reason = document.createElement('span');
-        reason.textContent = item.reason ?? 'Could not deliver';
-        reason.setAttribute('role', 'status');
-        row.append(reason);
-      } else {
-        pendingCount++;
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'small-button';
-        button.textContent = 'Cancel';
-        button.setAttribute('aria-label', 'Cancel queued message: ' + item.summary);
-        button.onclick = () => void cancelQueue(item.id);
-        row.append(button);
-      }
-      panel.append(row);
-    }
-    if (pendingCount > 1) {
-      const clear = document.createElement('button');
-      clear.type = 'button';
-      clear.className = 'small-button';
-      clear.textContent = 'Clear queue';
-      clear.onclick = () => void cancelQueue();
-      panel.append(clear);
-    }
-    panel.hidden = !panel.childElementCount;
+    renderQueue(element('queuedMessages'), queue, cancelQueue);
   }
   api.onDispose(options.projections.register('queue', {
     async sync(_revision, reconnect, changedId) {

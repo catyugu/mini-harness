@@ -1,13 +1,18 @@
 import type { Settings, SettingsPatch } from '@mini-harness/contracts/config';
 import type { PluginMetadata } from '@mini-harness/contracts/plugins';
+import { RemoteStore } from '@mini-harness/web/models/remote-store';
 import type { FrontendSetup, FrontendApi } from '@mini-harness/ui-runtime/frontend';
 import { payload } from '@mini-harness/web/api';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { button, field, fromMarkup, iconButton, saveToggle, toggle, confirmAction, required } from '@mini-harness/ui-primitives/primitives';
 import { readPluginValues, schemaFields } from './browser/fields.js';
 
-const setup: FrontendSetup = (ctx, api) => {
-  const { miniPluginData: plugins, miniSettingsData: settings, miniPages: pages, miniSwitch: syncPlugins, miniBrowserFailures: browserFailures } = ctx;
+const setup: FrontendSetup = async (ctx, api) => {
+  const { miniSettingsData: settings, miniPages: pages, miniSwitch: syncPlugins, miniBrowserFailures: browserFailures } = ctx;
+  const plugins = new RemoteStore(() => api.request<PluginMetadata[]>('/plugins'));
+  await plugins.refresh();
+  api.onDispose(ctx.miniProjections.register('plugins', plugins));
+  ctx.provide('miniPluginData', plugins);
   const refresh = async () => {
     await Promise.all([plugins.refresh(), settings.refresh()]);
     const failures = await syncPlugins();
@@ -284,6 +289,10 @@ function pluginCatalog(api: FrontendApi, snapshot: () => { plugins: PluginMetada
   function open() { status.textContent = ''; render(); pages.open('plugins'); }
   entry.onclick = open;
   return { open, refresh: () => { if (!editing && !savingSwitch) render(); } };
+}
+
+declare module 'cordis' {
+  interface Context { miniPluginData: RemoteStore<PluginMetadata[]> }
 }
 
 export default setup;

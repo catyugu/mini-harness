@@ -23,6 +23,10 @@ test('appearance, parallelism and child defaults update without interrupting a r
   assert.strictEqual(runtime.registry.log(item.id), original);
   assert.equal(expectPresent(runtime.delegation, 'delegation service').parallelLimit, 2);
   assert.equal(runtime.runs.active(item.id), true);
+  await assert.rejects(runtime.updateSettings({ pluginConfig: { subagents: { provider: 'missing', model: 'unavailable' } } }), /Unknown child model/);
+  await assert.rejects(runtime.updateSettings({ pluginConfig: { subagents: { provider: 'local-mock', model: 'unavailable' } } }), /Unknown child model/);
+  assert.equal((runtime.settings.pluginConfig.subagents as { provider: string }).provider, '');
+  assert.equal(expectPresent(runtime.delegation, 'delegation service').parallelLimit, 2);
   await runtime.updateSettings({ plugins: { files: false, 'session-helper': false } });
   assert.equal(runtime.settings.plugins['session-helper'], false);
   assert.equal(runtime.runs.active(item.id), true);
