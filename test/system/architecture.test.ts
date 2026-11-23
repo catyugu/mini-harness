@@ -26,7 +26,7 @@ function dependencies(file: string) {
       (clause?.namedBindings && ts.isNamedImports(clause.namedBindings) &&
         clause.namedBindings.elements.every((item) => item.isTypeOnly)));
     const specifier = statement.moduleSpecifier.text;
-    const target = specifier.startsWith('.') ? resolve(file, '..', specifier).replace(/\\.js$/, '.ts') : specifier;
+    const target = specifier.startsWith('.') ? resolve(file, '..', specifier).replace(/\.js$/, '.ts') : specifier;
     return [{ specifier, target, typeOnly }];
   });
 }
