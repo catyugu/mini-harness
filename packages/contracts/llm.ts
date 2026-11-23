@@ -55,24 +55,38 @@ export function validateRequestSnapshot(request: ModelRequestSnapshot) {
     typeof tool.parameters !== 'object' || Array.isArray(tool.parameters)))) throw new Error('Invalid advertised tools');
   if (request.messages === undefined) return;
   if (!Array.isArray(request.messages)) throw new Error('Invalid model request messages');
-  const pending = new Map<string, string>();
-  const identities = new Set<string>();
-  for (const message of request.messages) {
-    validateNativeMessage(message);
-    if (message.role === 'toolResult') {
-      if (pending.get(message.toolCallId) !== message.toolName) throw new Error('Unmatched model request tool result');
-      pending.delete(message.toolCallId);
-      continue;
-    }
-    if (pending.size) throw new Error('Model request contains unfinished tool calls');
-    if (message.role !== 'assistant') continue;
-    for (const part of message.content) if (part.type === 'toolCall') {
-      if (!part.id || part.id.length > 256 || !part.name || identities.has(part.id)) throw new Error('Duplicate or invalid model request tool call');
-      identities.add(part.id);
-      pending.set(part.id, part.name);
+  const checker = new RequestMessages();
+  checker.append(request.messages);
+  checker.complete();
+}
+
+/** Incremental tool-call validation for a single linear request context. */
+export class RequestMessages {
+  private readonly pending = new Map<string, string>();
+  private readonly identities = new Set<string>();
+
+  append(messages: Iterable<NativeMessage>) {
+    for (const message of messages) {
+      validateNativeMessage(message);
+      if (message.role === 'toolResult') {
+        if (this.pending.get(message.toolCallId) !== message.toolName) throw new Error('Unmatched model request tool result');
+        this.pending.delete(message.toolCallId);
+        continue;
+      }
+      this.complete();
+      if (message.role !== 'assistant') continue;
+      for (const part of message.content) if (part.type === 'toolCall') {
+        if (!part.id || part.id.length > 256 || !part.name || this.identities.has(part.id))
+          throw new Error('Duplicate or invalid model request tool call');
+        this.identities.add(part.id);
+        this.pending.set(part.id, part.name);
+      }
     }
   }
-  if (pending.size) throw new Error('Model request contains unfinished tool calls');
+
+  complete() {
+    if (this.pending.size) throw new Error('Model request contains unfinished tool calls');
+  }
 }
 
 export type LlmEvent =

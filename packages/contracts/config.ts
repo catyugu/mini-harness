@@ -24,4 +24,5 @@ export interface Paths {
   log: string;
   plugins: string;
   skills: string;
+  devPlugin?: string;
 }

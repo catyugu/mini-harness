@@ -49,17 +49,11 @@ test('a keyed browser contribution cleans up its listener and restores the built
         }, { signal });
         return { node: button, dispose() { document.body.dataset.slotDisposed = 'yes'; } };
       });
-      api.slots.decorate('sidebar.primary', 'new-conversation', (button) => {
-        const wrapper = document.createElement('section');
-        wrapper.dataset.testid = 'new-conversation-wrapper';
-        wrapper.append(button);
-        return wrapper;
-      });
     };`);
     writeJson(paths.settings, { model: { provider: 'local-mock', id: 'mock-model' }, plugins: { 'replace-new': true } });
     server = await startIsolatedHost(paths);
     await page.goto(server.url + '/#token=' + server.token);
-    await expect(page.getByTestId('new-conversation-wrapper').getByRole('button', { name: 'Replacement conversation' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Replacement conversation' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'New conversation', exact: true })).toHaveCount(0);
     await page.evaluate(() => window.dispatchEvent(new Event('slot-test')));
     await expect(page.locator('body')).toHaveAttribute('data-slot-events', '1');
@@ -69,7 +63,7 @@ test('a keyed browser contribution cleans up its listener and restores the built
       body: JSON.stringify({ plugins: { 'replace-new': false } })
     });
     expect(settings.status).toBe(200);
-    await expect(page.getByTestId('new-conversation-wrapper')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Replacement conversation' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'New conversation', exact: true })).toBeVisible();
     await expect(page.locator('body')).toHaveAttribute('data-slot-disposed', 'yes');
     await page.evaluate(() => window.dispatchEvent(new Event('slot-test')));

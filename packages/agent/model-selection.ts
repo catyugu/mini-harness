@@ -1,5 +1,25 @@
+import { HttpError } from '@mini-harness/contracts/routes';
+import type { ThinkingLevel } from '@mini-harness/contracts/agent';
 import type { ModelChoice } from '@mini-harness/contracts/conversation';
 import type { ModelCatalogPort } from '@mini-harness/contracts/models';
+
+type Capabilities = ReturnType<ModelCatalogPort['capabilities']>;
+
+function supportsThinking(level: ThinkingLevel, capabilities: Capabilities) {
+  if (level === 'off') return true;
+  return ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(level) &&
+    capabilities?.reasoning && (!capabilities.thinkingLevels || capabilities.thinkingLevels.includes(level));
+}
+
+export function resolveThinking(capabilities: Capabilities, explicit?: ThinkingLevel | null, inherited?: ThinkingLevel) {
+  if (explicit === null) return undefined;
+  if (explicit !== undefined) {
+    if (!supportsThinking(explicit, capabilities))
+      throw new HttpError('invalid_input', 'The selected model does not support thinking level: ' + explicit);
+    return explicit;
+  }
+  return inherited !== undefined && supportsThinking(inherited, capabilities) ? inherited : undefined;
+}
 
 export function selectModel(catalog: ModelCatalogPort, options: {
   explicit?: ModelChoice;

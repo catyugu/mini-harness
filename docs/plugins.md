@@ -142,8 +142,7 @@ Setup, schema or settings persistence failures retain the previous effective gra
 | `dialog(title, content)` | A shared modal registered under the plugin lifetime |
 | `page(id, {title, content, order?})` | Register a page and sidebar entry |
 | `slots.register(name, node, order?)` | Contribute to a layout or feature slot |
-| `slots.registerKeyed(name, key, render, { order?, priority? }?)` | Contribute or override a keyed slot entry with a render lifetime |
-| `slots.decorate(name, key, wrap, order?)` | Wrap a keyed entry, or all entries when the key is undefined |
+| `slots.registerKeyed(name, key, render, { order? }?)` | Contribute or override a keyed slot entry with a render lifetime |
 | `settingsPage(title, node)` | Add a settings category |
 | `rightTab(type, {title, create})`, `openTab(type, path?)` | Register or open a scoped workspace tab. Creation receives its address and an abort signal. |
 | `inspect(title, node)` | Show content in the workspace inspector |
@@ -155,7 +154,7 @@ Setup, schema or settings persistence failures retain the previous effective gra
 
 Page, dialog, tab and inspector contributions depend on `core:layout`. Tools, message actions and composer operations depend on `core:conversation`. Settings pages depend on `core:settings`. The theme and primitives are shared. Declare the corresponding dependencies in `browserRequires` or declare the service in `browserInject`. Domain snapshots are provided by the owning feature's browser data plugin. The browser runtime routes revision notices and mounts the declared graph; it does not initialize sessions, settings, models or other feature state. Browser code runs with the page's permissions. Put custom UI listeners and requests under the plugin's lifetime and use contribution APIs to interact with another feature.
 
-Keyed entries use the highest priority for each key, with the most recent registration breaking ties and restore the previous contribution when it is released. A renderer receives an abort signal and returns a node or `{ node, dispose }`. Decorators receive the current node and their own signal. Return the node itself for an in-place decoration or a wrapper containing it. On replacement or outlet removal, the registry aborts the render lifetime and calls cleanup. Use the renderer signal for listeners and subscriptions. For example, `sidebar.primary` publishes the built-in button under `new-conversation`. Declare the owner in `browserRequires` when overriding its contribution so your plugin mounts after it.
+The most recent registration supplies each keyed contribution. Releasing it restores the previous contribution. A renderer receives an abort signal and returns a node or an object with a node and a cleanup function. The registry aborts its signal before cleanup on replacement or outlet removal. Declare the owner in `browserRequires` when overriding its contribution so your plugin mounts after it.
 
 A data plugin declares its services in `browserProvides`, publishes them through
 `ctx.provide`, and declares `miniProjections` in `browserInject` to follow a
@@ -168,7 +167,7 @@ Disposal removes the subscription and cancels invalidations that have not begun.
 
 ## Run API
 
-All API requests require `Authorization: Bearer <token>`.
+The local API requires a bearer credential. A trusted gateway can forward authenticated read-only viewer requests without disclosing that credential.
 
 | Request | Result |
 | - | - |
@@ -207,3 +206,13 @@ The server runs one Runtime for all registered workspaces. Each conversation has
 Images (PNG/JPEG/GIF/WebP) enter the native multimodal message and require an image-capable model. UTF-8 text attachments are included in the model input. The conversation view displays their names alongside the original message. Limits: eight files, 6 MiB per image, 1 MiB per text file, 12 MiB total. Binary documents such as PDF/Office files are not parsed. Attachment content lives in the native Session Log; there is no independent upload store. Git inspection requires the selected workspace to be the repository root and caps output at 512 KiB. “Files written this turn” lists successful built-in `write`/`edit` paths; Git changes show the entire working tree, including earlier edits and shell changes.
 
 The file and Skill endpoints return 404 when their plugin is disabled. The Approvals endpoint lists pending decisions from the active Shell tool. Disabling Shell cancels its pending requests. Every enabled built-in Shell call requires approval. Requests expire after five minutes; stopping the run or server cancels pending approval. Approval permits the command under the existing shell policy. Reviewed local plugins remain trusted code; this is not a general-purpose containment mechanism.
+
+## External development and resources
+
+Run `mini-harness plugin dev <directory>` from a directory with a valid plugin descriptor. It builds the plugin, starts an isolated instance and restarts it after source changes so both the server and browser reload against the new graph.
+
+Declare browser CSS, ESM chunks, images and fonts in `browserAssets`. Only listed files below `web/` and the entry `web.js` are served, and only while the plugin is enabled. Resources use same-origin URLs with their media types. `browserPreload` can select one listed ESM entry. Its default function receives a lifetime signal and may return cleanup. Pre-start functions run in the resolved dependency order before ordinary browser setup.
+
+Mount HTTP routes with `api.registerRoute` and local WebSocket endpoints with `api.registerUpgrade`. The host authenticates upgrades, checks the browser origin and closes owned sockets when the plugin unloads. Gateway plugins create their own listener and authenticate the viewer before calling `harnessNetwork.forward`. The host authorizes only a read-only subset of its UI, session and workspace APIs on this path. Gateway credentials must be independent of the local management credential.
+
+`pluginConfig` changes remount plugins by default. A plugin declaring `configChanges: "live"` registers one handler with `api.onConfigChange`. The handler receives validated configuration and can keep its services alive. If a transaction fails, the previous configuration is applied again. Handlers should make updates reversible. Store private state with `api.storage` and keep credentials in `api.secrets`. Disabling a plugin keeps its data. Uninstall deletes its data and secrets. Each workspace or session mount has its own storage. Browser plugins can use `api.watch` to refresh their own snapshot after the server calls `api.invalidate`. `api.locale` reports the browser's language, supports change listeners and selects translations from a supplied dictionary.

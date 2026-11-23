@@ -1,5 +1,7 @@
+import { scheduler } from 'node:timers/promises';
+import type { SessionSearchResult } from '@mini-harness/contracts/conversation';
 import type { Context } from 'cordis';
-import { HttpReply } from '@mini-harness/contracts/routes';
+import { HttpError, HttpReply } from '@mini-harness/contracts/routes';
 import { projectSession } from './navigation.js';
 
 const validSession = /^[a-f0-9-]{36}$/;
@@ -10,41 +12,64 @@ export function registerSessionRoutes(ctx: Context) {
   const add = (method: string, path: string, handler: Parameters<typeof ctx.harnessRoutes.register>[2]) =>
     ctx.effect(() => ctx.harnessRoutes.register(method, path, handler));
   const session = (id: string) => {
-    if (!validSession.test(id) || !ctx.harnessRegistry.get(id)) throw new Error('Conversation not found');
+    if (!validSession.test(id) || !ctx.harnessRegistry.get(id)) throw new HttpError('not_found', 'Conversation not found');
     return id;
   };
   const workspace = (id: string) => {
-    if (!validWorkspace.test(id)) throw new Error('Workspace not found');
+    if (!validWorkspace.test(id)) throw new HttpError('not_found', 'Workspace not found');
     ctx.harnessWorkspaces.get(id);
     return id;
   };
   add('GET', '/api/sessions', ({ url }) => {
     const requested = new Set(url.searchParams.getAll('id'));
     if (requested.size > 100 || [...requested].some((id) => !validSession.test(id)))
-      throw new Error('Invalid conversation selection');
+      throw new HttpError('invalid_input', 'Invalid conversation selection');
     const records = requested.size ? [...requested].flatMap((id) => {
       const record = ctx.harnessRegistry.get(id);
       return record ? [record] : [];
     }) : ctx.harnessRegistry.list();
     return records.map((record) => projectSession(ctx, record));
   });
-  add('GET', '/api/sessions/search', ({ url }) => {
-    const query = (url.searchParams.get('q') ?? '').trim().toLocaleLowerCase();
-    if (query.length > 120) throw new Error('Search query is too long');
+  add('GET', '/api/sessions/diagnostics', () => ctx.harnessRegistry.diagnostics());
+  add('GET', '/api/sessions/search', async ({ url, signal }) => {
+    const query = (url.searchParams.get('q') ?? '').trim();
+    if (query.length > 120) throw new HttpError('invalid_input', 'Search query is too long');
     if (query.length < 2) return [];
-    return ctx.harnessRegistry.list().filter((record) => {
-      if (record.title.toLocaleLowerCase().includes(query)) return true;
-      return ctx.harnessRegistry.log(record.id).projection().messages.some((message) => {
-        const content = typeof message.content === 'string' ? message.content :
-          message.content.filter((part) => part.type === 'text').map((part) => part.text).join(' ');
-        return content.toLocaleLowerCase().includes(query);
-      });
-    }).map((record) => record.id);
+    const literal = new RegExp(query.replace(/[.*+?^$\{\}()|[\]\\]/g, '\\$&'), 'iu');
+    function find(id: string, field: SessionSearchResult['field'], text: string): SessionSearchResult | undefined {
+      const match = literal.exec(text);
+      if (!match) return;
+      const end = match.index + match[0].length;
+      if (field === 'title') return { id, field, snippet: text, match: [match.index, end] };
+      const left = Math.max(0, match.index - 36), right = Math.min(text.length, end + 36);
+      const prefix = left ? '…' : '';
+      return { id, field, snippet: prefix + text.slice(left, right) + (right < text.length ? '…' : ''),
+        match: [match.index - left + prefix.length, end - left + prefix.length] };
+    }
+    const hits: SessionSearchResult[] = [];
+    const candidates = ctx.harnessRegistry.list().slice(-500).reverse();
+    for (const [index, { id, title }] of candidates.entries()) {
+      if (index % 10 === 0) { await scheduler.yield(); signal.throwIfAborted(); }
+      let hit = find(id, 'title', title);
+      if (!hit) {
+        const messages = ctx.harnessRegistry.inspectLog(id, (log) => log.projection().messages.slice(-500)) ?? [];
+        for (const message of messages.reverse()) {
+          if (message.role === 'toolResult') continue;
+          const content = typeof message.content === 'string' ? message.content :
+            message.content.filter((part) => part.type === 'text').map((part) => part.text).join(' ');
+          hit = find(id, 'message', content.slice(0, 32768));
+          if (hit) break;
+        }
+      }
+      if (hit) hits.push(hit);
+      if (hits.length === 50) break;
+    }
+    return hits;
   });
   add('POST', '/api/sessions', async ({ body }) => {
     const input = await body();
     if (input?.workspaceId !== undefined && typeof input.workspaceId !== 'string')
-      throw new Error('Invalid workspace ID');
+      throw new HttpError('invalid_input', 'Invalid workspace ID');
     return new HttpReply(201, projectSession(ctx, ctx.harnessRegistry.create({ workspaceId: input?.workspaceId })));
   });
   add('GET', '/api/workspaces/:id/sessions', ({ params }) =>
@@ -55,7 +80,7 @@ export function registerSessionRoutes(ctx: Context) {
   add('PATCH', '/api/sessions/:id', async ({ params, body }) => {
     const id = session(params.id), input = await body();
     if (typeof input.title !== 'string' || !input.title.trim() || input.title.length > 140)
-      throw new Error('Title must contain 1–140 characters');
+      throw new HttpError('invalid_input', 'Title must contain 1–140 characters');
     return projectSession(ctx, ctx.harnessRegistry.rename(id, input.title.trim()));
   });
   add('DELETE', '/api/workspaces/:id', ({ params }) => ctx.harnessRegistry.deleteWorkspace(workspace(params.id)));

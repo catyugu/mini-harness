@@ -104,7 +104,7 @@ test('scoped plugins inherit declared services and tool policies, and release th
   const rejected = await request('/settings', 'PATCH', { scopes: { ...scopes, [workspaceKey]: {
     ...scopes[workspaceKey], pluginConfig: { 'workspace-greeting': { fail: true } }
   } } });
-  assert.match(rejected.body.error, /Scoped setup failed/);
+  assert.match(rejected.body.error, /Internal server error/);
   assert.ok(names(child.id).includes('scoped_greeting'));
   assert.equal((await request('/workspaces/' + parent.workspaceId, 'DELETE')).status, 200);
   assert.equal(readFileSync(cleaned, 'utf8'), 'released\nreleased\n');

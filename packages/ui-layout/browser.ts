@@ -10,11 +10,9 @@ const slots = {
   'sidebar.actions': 'sidebarExtensions',
   'sidebar.navigation': 'navigationSlot',
   'sidebar.footer': 'sidebarFooter',
-  'header.actions': 'headerActions',
   'conversation.header': 'conversationExtensions',
   'workspace.header': 'workspaceHeader',
   'conversation.body': 'conversationSlot',
-  'inspector.extensions': 'inspectorExtensions',
   'dialog.root': 'dialogSlot'
 } as const;
 
@@ -55,7 +53,7 @@ function createAppFrame(signal: AbortSignal) {
   <main class="main" id="main">
     <header class="topbar">
       <button id="sidebarOpen" class="icon-button" type="button" aria-label="Toggle navigation" aria-controls="sidebar" data-icon="menu"></button>
-      <div class="title-block" id="titleBlock"><strong id="conversationTitle">New conversation</strong><div id="conversationExtensions"></div><div id="headerActions"></div><div id="workspaceHeader" hidden></div></div>
+      <div class="title-block" id="titleBlock"><strong id="conversationTitle">New conversation</strong><div id="conversationExtensions"></div><div id="workspaceHeader" hidden></div></div>
       <button id="inspectorOpen" class="icon-button" type="button" aria-label="Open workspace panel" aria-controls="inspector" data-icon="files"></button>
     </header>
     <div id="conversationSlot"></div>
@@ -67,7 +65,6 @@ function createAppFrame(signal: AbortSignal) {
       <div id="rightTabList" class="right-tab-list" role="tablist" aria-label="Workspace tabs"></div>
       <button id="inspectorClose" class="icon-button" type="button" aria-label="Close workspace panel" data-icon="close"></button>
     </header>
-    <div id="inspectorExtensions"></div>
     <div id="inspectorContent" class="right-content"></div>
   </aside>
   <div id="dialogSlot"></div>

@@ -6,14 +6,16 @@ import { PluginHost } from '@mini-harness/plugins/manager';
 import { RouteRegistry } from '@mini-harness/transport/http';
 import { MutationGate } from '@mini-harness/transport/mutations';
 import type { ScopePort } from '@mini-harness/contracts/capabilities';
-import type { Paths, SettingsPatch } from '@mini-harness/contracts/config';
+import type { NetworkPort } from '@mini-harness/contracts/routes';
+import type { Paths } from '@mini-harness/contracts/config';
 
 export class MiniHarnessRuntime {
   readonly plugins: PluginHost;
   readonly configuration: SettingsManager;
   private readonly unsubscribeSettings: () => void;
 
-  constructor(readonly paths: Paths) {
+  constructor(readonly paths: Paths, network?: NetworkPort,
+    upgrade?: (path: string, handler: import('@mini-harness/contracts/routes').UpgradeHandler) => () => void) {
     const ctx = new Context();
     this.configuration = new SettingsManager(paths, (settings) => this.plugins.effective(settings));
     const changes = new EventTarget();
@@ -32,9 +34,10 @@ export class MiniHarnessRuntime {
       harnessSettings: () => this.configuration.settings,
       harnessSettingsStore: this.configuration,
       harnessRoutes: new RouteRegistry(),
+      ...(network ? { harnessNetwork: network } : {}),
       harnessMutations: new MutationGate(),
       harnessChanges: changes,
-      harnessUpdateSettings: (patch: SettingsPatch) => this.updateSettings(patch),
+      harnessUpdateSettings: (patch: unknown) => this.updateSettings(patch),
       harnessPluginCatalog: {
         metadata: () => this.plugins.metadata(),
         reserved: (id: string) => this.plugins.reserved(id),
@@ -44,7 +47,7 @@ export class MiniHarnessRuntime {
     };
     for (const [name, service] of Object.entries(root)) ctx.provide(name, service);
     this.plugins = new PluginHost(ctx, paths.plugins, plugins, Object.keys(root),
-      () => this.settings, (id) => ctx.get('harnessRegistry')?.get(id), (id, pluginId) => ctx.harnessRegistry.records(id, pluginId));
+      () => this.settings, (id) => ctx.get('harnessRegistry')?.get(id), (id, pluginId) => ctx.harnessRegistry.records(id, pluginId), upgrade, paths.devPlugin);
   }
 
   get settings() { return this.configuration.settings; }
@@ -59,7 +62,7 @@ export class MiniHarnessRuntime {
   getConversation(id: string) { return this.plugins.ctx.harnessConversationView.read(id); }
   export(ids: string[]) { return this.registry.export(ids); }
   delete(ids: string[]) { return this.registry.delete(ids); }
-  async updateSettings(patch: SettingsPatch) {
+  async updateSettings(patch: unknown) {
     try { return await this.configuration.update(patch, this.plugins); }
     finally {
       this.plugins.ctx.harnessChanges.dispatchEvent(new CustomEvent('change', { detail: { domain: 'plugins' } }));

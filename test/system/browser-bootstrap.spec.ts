@@ -51,3 +51,30 @@ test('a replacement token in a live tab reloads the app and restores authenticat
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('an already open tab reconnects to the same instance after restart', async ({ page }) => {
+  const mock = await createMockProvider();
+  const { root, paths } = createFixturePaths(mock.url);
+  let host = await startIsolatedHost(paths);
+  try {
+    await page.goto(host.url + '/#token=' + host.token);
+    const composer = page.getByRole('textbox', { name: 'Message' });
+    await expect(composer).toBeVisible();
+    await composer.fill('Before restart');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.locator('.message.assistant')).toHaveText('Mock response');
+    const { url, token } = host;
+    await host.stop();
+    host = await startIsolatedHost(paths, Number(new URL(url).port));
+    expect(host.token).toBe(token);
+    await composer.fill('After restart');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.locator('.message.assistant')).toHaveCount(2);
+    await expect(page.locator('#startupStatus')).toBeHidden();
+  } finally {
+    await page.close();
+    await host.stop();
+    await mock.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});

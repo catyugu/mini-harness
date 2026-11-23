@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.js';
 import { startIsolatedHost } from '../../../test/support/browser.js';
 
-test('switching workspaces preserves running conversations and each conversation’s file tabs', async ({ page }) => {
+test('switching workspaces preserves running conversations and each workspace’s file tabs', async ({ page }) => {
   let entered: () => void = () => { throw new Error('Not started'); };
   let release: () => void = () => { throw new Error('Not started'); };
   const waiting = new Promise<void>((done) => { entered = done; });

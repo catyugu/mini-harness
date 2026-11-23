@@ -1,4 +1,4 @@
-import type {} from 'cordis';
+import type { Context } from 'cordis';
 import type { ServiceMap } from './plugin-sdk.js';
 
 export type PluginScope = { kind: 'application' }
@@ -13,11 +13,17 @@ export interface ScopeSettings {
   pluginConfig?: Record<string, Record<string, unknown>>;
 }
 
+export type HostServices = ServiceMap & Pick<Context,
+  | 'harnessAgent' | 'harnessApprovals' | 'harnessChanges' | 'harnessConversationView' | 'harnessDelegation'
+  | 'harnessModelAdmin' | 'harnessMutations' | 'harnessPluginCatalog' | 'harnessProcess' | 'harnessRegistry'
+  | 'harnessRoutes' | 'harnessRuns' | 'harnessSandbox' | 'harnessScopes' | 'harnessSettings'
+  | 'harnessSettingsStore' | 'harnessState' | 'harnessUpdateSettings' | 'harnessWorkspaces'>;
+
 export interface ScopePort {
   prepare(sessionId: string, signal?: AbortSignal): Promise<void>;
   /** Read the nearest prepared Cordis service without changing a parent or sibling scope. */
-  require<Name extends keyof ServiceMap & string>(sessionId: string | null | undefined, service: Name): NonNullable<ServiceMap[Name]>;
-  optional<Name extends keyof ServiceMap & string>(sessionId: string | null | undefined, service: Name): ServiceMap[Name] | undefined;
+  require<Name extends keyof HostServices & string>(sessionId: string | null | undefined, service: Name): NonNullable<HostServices[Name]>;
+  optional<Name extends keyof HostServices & string>(sessionId: string | null | undefined, service: Name): HostServices[Name] | undefined;
   allowsTool(sessionId: string, tool: string): boolean;
   address(sessionId: string): readonly string[];
   release(sessionIds: string[], workspaceId?: string): Promise<void>;

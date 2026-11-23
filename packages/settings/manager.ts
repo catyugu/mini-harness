@@ -1,6 +1,7 @@
+import { HttpError } from '@mini-harness/contracts/routes';
 import { isDeepStrictEqual } from 'node:util';
 import { mergeSettings, readSettings, writeJson } from '@mini-harness/platform/config';
-import type { Paths, Settings, SettingsPatch } from '@mini-harness/contracts/config';
+import type { Paths, Settings } from '@mini-harness/contracts/config';
 import type { ModelChoice } from '@mini-harness/contracts/conversation';
 import type { SettingsPort, PluginConfigurationPort } from '@mini-harness/contracts/services';
 
@@ -72,18 +73,19 @@ export class SettingsManager implements SettingsPort {
     if (changed) { this.save({ ...this.stored, scopes }); this.publish(); }
   }
 
-  async update(patch: SettingsPatch, host: PluginConfigurationPort) {
-    if (this.updating) throw new Error('Configuration is already changing');
+  async update(patch: unknown, host: PluginConfigurationPort) {
+    if (this.updating) throw new HttpError('conflict', 'Configuration is already changing');
     const originalScopes = this.stored.scopes;
     const updated = mergeSettings(this.stored, patch);
     const next = this.effective(updated);
+    const modelChanged = Object.hasOwn(patch as object, 'model');
     for (const validate of this.validators) validate(next);
     this.updating = true;
     try {
       await host.configure(next, () => {
         const removed = Object.keys(originalScopes).filter((key) => !Object.hasOwn(this.stored.scopes, key));
         const scopes = Object.fromEntries(Object.entries(updated.scopes).filter(([key]) => !removed.includes(key)));
-        this.save({ ...updated, model: patch.model ? updated.model : this.stored.model, scopes });
+        this.save({ ...updated, model: modelChanged ? updated.model : this.stored.model, scopes });
       });
       this.publish();
       return this.settings;

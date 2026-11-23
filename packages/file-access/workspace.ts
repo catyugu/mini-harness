@@ -1,5 +1,7 @@
+import { HttpError } from '@mini-harness/contracts/routes';
+import { randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
-import { lstat, mkdir, open, opendir, realpath, stat, type FileHandle } from 'node:fs/promises';
+import { link, lstat, mkdir, open, opendir, realpath, rename, stat, unlink, type FileHandle } from 'node:fs/promises';
 import { basename, dirname, matchesGlob, parse, relative, resolve, sep } from 'node:path';
 import type { SearchInput, WorkspaceFileAccess } from '@mini-harness/contracts/files';
 import { RE2 } from 're2-wasm';
@@ -17,12 +19,12 @@ import { containsPath } from '@mini-harness/platform/paths';
 function checkName(name: string) {
   if (windows && (/[<>:"|?*\x00-\x1f]/.test(name) || /[ .]$/.test(name) ||
     /^(?:con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/i.test(name))) {
-    throw new Error('Unsupported workspace path component');
+    throw new HttpError('invalid_input', 'Unsupported workspace path component');
   }
 }
 
 function samePath(a: string, b: string) { return relative(a, b) === ''; }
-const denied = () => new Error('Path is outside the permitted workspace or is a link');
+const denied = () => new HttpError('forbidden', 'Path is outside the permitted workspace or is a link');
 const missing = (error: unknown) => (error as NodeJS.ErrnoException).code === 'ENOENT';
 
 export class Workspace implements WorkspaceFileAccess {
@@ -83,30 +85,21 @@ export class Workspace implements WorkspaceFileAccess {
     } finally { await handle?.close(); }
   }
 
-  private async openFile(path: string, write: boolean, create: boolean) {
+  private async openFile(path: string) {
     path = resolve(this.cwd, path);
     const name = basename(path);
     await this.location(path);
     if (!name || name === '.' || name === '..') throw denied();
     return await this.directory(dirname(path), false, async (dir) => {
       const target = resolve(dir, name);
-      let handle: FileHandle;
-      let before;
-      const flags = noFollow | (write ? constants.O_WRONLY : constants.O_RDONLY);
-      try {
-        // Check the type before opening so devices and FIFOs never act as regular files.
-        before = await lstat(target, { bigint: true });
-        if (!before.isFile() || before.nlink !== 1n || (!linux && !samePath(await realpath(target), target))) throw denied();
-        handle = await open(target, flags);
-      } catch (error) {
-        if (!create || !missing(error)) throw error;
-        before = undefined;
-        handle = await open(target, flags | constants.O_CREAT | constants.O_EXCL, 0o600);
-      }
+      // Check before opening so devices and FIFOs never act as regular files.
+      const before = await lstat(target, { bigint: true });
+      if (!before.isFile() || before.nlink !== 1n || (!linux && !samePath(await realpath(target), target))) throw denied();
+      const handle = await open(target, constants.O_RDONLY | noFollow);
       try {
         const actual = await handle.stat({ bigint: true });
         if (!actual.isFile() || actual.nlink !== 1n ||
-            (before && (before.dev !== actual.dev || before.ino !== actual.ino))) throw denied();
+            before.dev !== actual.dev || before.ino !== actual.ino) throw denied();
         if (linux && !samePath(await realpath(descriptor(handle)), path)) throw denied();
         if (!linux) {
           const current = await lstat(target, { bigint: true });
@@ -120,14 +113,14 @@ export class Workspace implements WorkspaceFileAccess {
     });
   }
 
-  private async file<T>(path: string, write: boolean, create: boolean, action: (handle: FileHandle) => Promise<T>) {
-    const handle = await this.openFile(path, write, create);
+  private async file<T>(path: string, action: (handle: FileHandle) => Promise<T>) {
+    const handle = await this.openFile(path);
     try { return await action(handle); }
     finally { await handle.close(); }
   }
 
   async *chunks(path: string, signal?: AbortSignal): AsyncGenerator<Uint8Array> {
-    const handle = await this.openFile(path, false, false);
+    const handle = await this.openFile(path);
     try {
       const size = Math.min((await handle.stat()).size, readLimit);
       for (let offset = 0; offset < size;) {
@@ -142,9 +135,9 @@ export class Workspace implements WorkspaceFileAccess {
   }
 
   readFile(path: string) {
-    return this.file(path, false, false, async (handle) => {
+    return this.file(path, async (handle) => {
       const size = (await handle.stat()).size;
-      if (size > readLimit) throw new Error('File exceeds the 16 MiB read limit');
+      if (size > readLimit) throw new HttpError('invalid_input', 'File exceeds the 16 MiB read limit');
       const buffer = Buffer.allocUnsafe(size);
       let offset = 0;
       while (offset < size) {
@@ -161,12 +154,55 @@ export class Workspace implements WorkspaceFileAccess {
     await this.directory(dirname(resolve(this.cwd, path)), false, async () => {});
   }
 
-  access(path: string) { return this.file(path, false, false, async () => {}); }
+  access(path: string) { return this.file(path, async () => {}); }
 
-  writeFile(path: string, content: string, create = true) {
-    return this.file(path, true, create, async (handle) => {
-      await handle.writeFile(content, 'utf8');
-      await handle.truncate(Buffer.byteLength(content));
+  async writeFile(path: string, content: string, create = true, signal?: AbortSignal) {
+    signal?.throwIfAborted();
+    path = resolve(this.cwd, path);
+    await this.location(path);
+    const parent = dirname(path);
+    await this.directory(parent, false, async (dir) => {
+      const target = resolve(dir, basename(path));
+      const identify = async () => {
+        const info = await lstat(target, { bigint: true });
+        if (!info.isFile() || info.nlink !== 1n || !samePath(await realpath(target), path)) throw denied();
+        return info;
+      };
+      const before = await identify().catch((error: unknown) => {
+        if (create && missing(error)) return undefined;
+        throw error;
+      });
+      if (before) {
+        const writable = await open(target, constants.O_WRONLY | noFollow);
+        try {
+          const actual = await writable.stat({ bigint: true });
+          if (actual.ino !== before.ino || actual.dev !== before.dev) throw denied();
+        } finally { await writable.close(); }
+      }
+      const temporary = resolve(dir, '.mini-harness-' + randomUUID() + '.tmp');
+      const handle = await open(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | noFollow, 0o600);
+      try {
+        try {
+          await handle.writeFile(content, { encoding: 'utf8', signal });
+          if (before && !windows) await handle.chmod(Number(before.mode & 0o777n));
+          await handle.sync();
+        } finally { await handle.close(); }
+        if (!samePath(await realpath(dir), parent)) throw denied();
+        signal?.throwIfAborted();
+        if (!before) {
+          // A hard link publishes a complete new file without overwriting a concurrent creation.
+          await link(temporary, target);
+        } else {
+          const current = await identify();
+          if (current.ino !== before.ino || current.dev !== before.dev ||
+              current.mtimeNs !== before.mtimeNs || current.ctimeNs !== before.ctimeNs)
+            throw new HttpError('conflict', 'File changed during write: ' + basename(path));
+          signal?.throwIfAborted();
+          await rename(temporary, target);
+        }
+      } finally {
+        await unlink(temporary).catch((error: unknown) => { if (!missing(error)) throw error; });
+      }
     });
   }
 
@@ -193,7 +229,7 @@ export class Workspace implements WorkspaceFileAccess {
         const child = resolve(path, entry.name);
         if (containsPath(this.state, child)) continue;
         checkName(entry.name);
-        if (result.length >= 20000) throw new Error('Directory exceeds the listing limit');
+        if (result.length >= 20000) throw new HttpError('invalid_input', 'Directory exceeds the listing limit');
         result.push({ name: entry.name, directory: entry.isDirectory() });
       }
       return result.sort((a, b) => a.name.localeCompare(b.name));
@@ -228,7 +264,7 @@ export class Workspace implements WorkspaceFileAccess {
       const rules = await withRules(dir, inherited);
       for (const entry of await this.entries(dir)) {
         signal?.throwIfAborted();
-        if (++visited > 20000) throw new Error('Search limit reached. Select a narrower directory.');
+        if (++visited > 20000) throw new HttpError('invalid_input', 'Search limit reached. Select a narrower directory.');
         if (entry.name === '.git') continue;
         const path = resolve(dir, entry.name);
         let ignored = false;
@@ -255,7 +291,7 @@ export class Workspace implements WorkspaceFileAccess {
   }
 
   imageType(path: string) {
-    return this.file(path, false, false, async (handle) => {
+    return this.file(path, async (handle) => {
       const buffer = Buffer.alloc(12);
       const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
       const prefix = buffer.subarray(0, bytesRead);
@@ -269,9 +305,10 @@ export class Workspace implements WorkspaceFileAccess {
 
   async find(pattern: string, root: string, limit: number) {
     if (pattern.length > 512) throw new Error('Glob is too long');
+    const base = resolve(this.cwd, root);
     const files = [];
-    for await (const entry of this.walk(root)) {
-      if (matchesGlob(pattern.includes('/') ? relative(root, entry.path).split(sep).join('/') : entry.name, pattern)) {
+    for await (const entry of this.walk(base)) {
+      if (matchesGlob(pattern.includes('/') ? relative(base, entry.path).split(sep).join('/') : entry.name, pattern)) {
         files.push(entry.path);
         if (files.length >= limit) break;
       }
@@ -281,7 +318,7 @@ export class Workspace implements WorkspaceFileAccess {
 
   async grep(input: SearchInput, signal?: AbortSignal) {
     const { pattern, glob, literal, ignoreCase } = input;
-    if (!pattern || pattern.length > 4096 || (glob?.length ?? 0) > 512) throw new Error('Invalid search pattern');
+    if (!pattern || pattern.length > 4096 || (glob?.length ?? 0) > 512) throw new HttpError('invalid_input', 'Invalid search pattern');
     const expression = new RE2(literal ? pattern.replace(/[.*+?^$${}()|[\]\\]/g, '\\$&') : pattern, ignoreCase ? 'ui' : 'u');
     const path = resolve(this.cwd, input.path || '.');
     const directory = (await this.stat(path)).isDirectory();

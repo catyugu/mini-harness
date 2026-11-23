@@ -17,3 +17,10 @@ export interface Conversation extends SessionRecord {
   model?: ModelChoice;
   run?: RunInfo;
 }
+
+export interface SessionSearchResult {
+  id: string;
+  field: 'title' | 'message';
+  snippet: string;
+  match: [start: number, end: number];
+}

@@ -10,7 +10,7 @@ type Tab = {
   view?: { node: HTMLElement; controller: AbortController };
 };
 type ScopeTabs = { scope?: TabScope; open: boolean; active?: Tab; tabs: Tab[] };
-const scopeKey = (scope?: TabScope) => JSON.stringify([scope?.workspaceId, scope?.sessionId]);
+const scopeKey = (scope?: TabScope) => scope?.workspaceId ?? '';
 
 export function createRightTabs(view: {
   root: HTMLElement; bar: HTMLElement; body: HTMLElement; toggle: HTMLButtonElement;
@@ -42,7 +42,7 @@ export function createRightTabs(view: {
       select.setAttribute('aria-selected', String(tab === active));
       select.setAttribute('aria-controls', tab.key);
       select.tabIndex = tab === active ? 0 : -1;
-      select.onclick = () => { current.active = tab; render(true); };
+      select.onclick = () => activate(tab);
       const close = iconButton('Close tab ' + tab.title, 'close');
       close.onclick = () => { remove(current, tab); render(true); };
       item.append(select, close);
@@ -62,14 +62,22 @@ export function createRightTabs(view: {
     if (focus) (active ? document.getElementById(active.key + '-select') : view.root.querySelector<HTMLElement>('#inspectorClose'))?.focus();
   }
 
+  function activate(tab: Tab) {
+    current.active = tab;
+    render(true);
+    tab.view?.node.dispatchEvent(new Event('tab-activate'));
+  }
+
   function selectScope(scope?: TabScope) {
-    if (scopeKey(scope) === scopeKey(current.scope)) return;
+    if (scopeKey(scope) === scopeKey(current.scope) && scope?.sessionId === current.scope?.sessionId) return;
     current.open = layout.panelOpen();
     for (const tab of [...current.tabs]) {
       if (tab.address) unmount(tab);
       else remove(current, tab);
     }
     current = state(scope);
+    current.scope = scope;
+    for (const tab of current.tabs) if (tab.address) tab.address.sessionId = scope?.sessionId;
     render();
     layout.setPanel(current.open);
   }
@@ -98,22 +106,22 @@ export function createRightTabs(view: {
   }
 
   function reveal(tab: Tab) {
-    current.active = tab;
     layout.closeDrawer(false);
     layout.setPanel(true, true);
-    render(true);
+    activate(tab);
   }
 
-  function open(type: string, path?: string, scope = current.scope) {
+  function open(type: string, path?: string, scope = current.scope, mode?: string) {
     const definition = types.get(type);
     if (!definition || !scope) return;
     const target = state(scope);
     let tab = target.tabs.find(({ address }) => address?.type === type && address.path === path);
     if (!tab) {
-      const address = { ...scope, type, path };
+      const address = { ...scope, type, path, mode };
       tab = { key: 'right-tab-' + ++nextId, title: definition.title(address), address };
       target.tabs.push(tab);
     }
+    if (mode !== undefined && tab.address) tab.address.mode = mode;
     target.active = tab;
     if (target === current) reveal(tab);
   }
@@ -129,7 +137,11 @@ export function createRightTabs(view: {
   function prune(sessions: ReadonlySet<string>, workspaces: ReadonlySet<string>) {
     for (const [key, target] of states) {
       const scope = target.scope;
-      if (!scope || (workspaces.has(scope.workspaceId) && (!scope.sessionId || sessions.has(scope.sessionId)))) continue;
+      if (!scope) continue;
+      if (workspaces.has(scope.workspaceId)) {
+        if (target === current && scope.sessionId && !sessions.has(scope.sessionId)) selectScope({ workspaceId: scope.workspaceId });
+        continue;
+      }
       for (const tab of target.tabs) unmount(tab);
       states.delete(key);
       if (target === current) selectScope();
@@ -141,7 +153,9 @@ export function createRightTabs(view: {
       const entry = [...types].find(([, type]) => type.default);
       if (entry) { open(entry[0]); return; }
     }
-    layout.setPanel(!layout.panelOpen(), true);
+    const opening = !layout.panelOpen();
+    layout.setPanel(opening, true);
+    if (opening) current.active?.view?.node.dispatchEvent(new Event('tab-activate'));
   };
   view.bar.addEventListener('keydown', (event) => {
     if (!(event.target as HTMLElement).matches('[role=tab]')) return;
@@ -153,8 +167,7 @@ export function createRightTabs(view: {
         event.key === 'ArrowRight' ? (index + 1) % tabs.length : undefined;
     if (target === undefined) return;
     event.preventDefault();
-    current.active = tabs[target];
-    render(true);
+    activate(tabs[target]);
   }, { signal });
   signal.addEventListener('abort', () => {
     for (const tab of current.tabs) unmount(tab);

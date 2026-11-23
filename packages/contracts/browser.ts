@@ -2,7 +2,8 @@
 export interface BrowserEntry {
   id: string;
   browser?: string;
-  web?: boolean;
+  styles?: string[];
+  preload?: string;
   required?: boolean;
   config: Record<string, unknown>;
   requires?: string[];

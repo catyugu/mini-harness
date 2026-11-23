@@ -33,6 +33,7 @@
   "exports": {
     "./application": "./application.ts",
     "./composition": "./composition.ts",
+    "./instance-credential": "./instance-credential.ts",
     "./process": "./process.ts",
     "./server": "./server.ts"
   }

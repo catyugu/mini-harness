@@ -42,7 +42,9 @@ test('renders Markdown and tool results, and stops a pending reply', async ({ pa
     await page.getByRole('button', { name: 'Send' }).click();
     await waiting;
     await page.getByRole('button', { name: 'Stop response' }).click();
-    await expect(page.locator('.message.error')).toContainText('Agent run cancelled');
+    await expect(page.getByLabel('Latest run')).toHaveAttribute('data-state', 'cancelled');
+    await expect(page.locator('.message.error')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Retry' })).toHaveCount(0);
   } finally {
     release();
     await page.close();

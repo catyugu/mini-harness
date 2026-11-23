@@ -69,12 +69,20 @@ async function checkPackage() {
       const llm: LlmPort | undefined = api.service('harnessLlm');
       api.provide('example', { greet: (name) => name.toUpperCase() });
       api.service('example')?.greet('world');
+      api.storage.write('state', { count: 1 });
+      api.secrets.read('credential');
+      api.onConfigChange(() => {});
+      api.registerUpgrade('/updates', (_request, socket, _head, signal) => {
+        if (signal.aborted) socket.destroy();
+      });
       // @ts-expect-error The declared service takes a string.
       api.service('example')?.greet(1);
       // @ts-expect-error TypeScript plugins declare their own services.
       api.service('undeclared');
       declare const frontend: FrontendApi, render: SlotRenderer;
       frontend.slots.registerKeyed('sidebar.primary', 'example', render);
+      frontend.watch(() => {});
+      const language: string = frontend.locale.current();
     `);
     await execFile(process.execPath, [resolve('node_modules/typescript/bin/tsc'),
       '--strict', '--skipLibCheck', '--noEmit', '--target', 'ES2022', '--module', 'NodeNext', 'plugin-types.mts'],
@@ -85,7 +93,9 @@ async function checkPackage() {
     started = true;
     const info = readServerInfo(paths.pid);
     assert.ok(info);
-    const headers = { Authorization: 'Bearer ' + info.token, 'Content-Type': 'application/json' };
+    const token = /#token=([a-f0-9]{64})/.exec(launch.stdout)?.[1];
+    assert.ok(token);
+    const headers = { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' };
     const get = (path: string) => fetch(info.url + path, { headers });
     for (const asset of ['/', '/packages/ui-runtime/boot.js', '/packages/ui-primitives/markdown.js', '/packages/session-helper/client.js', '/packages/settings/browser.js', '/packages/sessions/browser/conversation/view.js', '/packages/ui-primitives/primitives.js', '/packages/web/vendor/marked.js', '/packages/web/vendor/purify.js', '/logo.svg', '/manifest.webmanifest', '/theme.css', '/icon-192.png', '/icon-512.png', '/favicon.ico']) {
       const response = await get(asset);

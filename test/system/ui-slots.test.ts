@@ -76,9 +76,9 @@ test('a late single owner rejects ambiguous earlier contributions without claimi
   first();
 });
 
-test('overrides restore the previous contribution and release its node and decorators', () => {
+test('overrides restore the previous contribution and release its node', () => {
   const registry = new SlotRegistry();
-  const outlet = element(), base = element(), replacement = element(), wrapper = element(), sibling = element();
+  const outlet = element(), base = element(), replacement = element(), sibling = element();
   const lifetimes: AbortSignal[] = [];
   const disposed: string[] = [];
   const stop = registry.define('sidebar.primary', node(outlet));
@@ -87,44 +87,34 @@ test('overrides restore the previous contribution and release its node and decor
     lifetimes.push(signal);
     return { node: node(base), dispose: () => disposed.push('base') };
   });
-  const removeDecoration = registry.decorate('sidebar.primary', 'button', (child, signal) => {
-    lifetimes.push(signal);
-    wrapper.replaceChildren(child as unknown as ElementStub);
-    return { node: node(wrapper), dispose: () => disposed.push('wrap') };
-  });
-  assert.deepEqual(outlet.children, [wrapper, sibling]);
-  assert.deepEqual(wrapper.children, [base]);
+  assert.deepEqual(outlet.children, [base, sibling]);
 
   const removeReplacement = registry.registerKeyed('sidebar.primary', 'button', () =>
     ({ node: node(replacement), dispose: () => disposed.push('replacement') }));
-  assert.deepEqual(disposed, ['wrap', 'base']);
-  assert.ok(lifetimes.slice(0, 2).every(({ aborted }) => aborted));
-  assert.deepEqual(wrapper.children, [replacement]);
+  assert.deepEqual(disposed, ['base']);
+  assert.ok(lifetimes.slice(0, 1).every(({ aborted }) => aborted));
+  assert.deepEqual(outlet.children, [replacement, sibling]);
 
   removeReplacement();
-  assert.deepEqual(disposed, ['wrap', 'base', 'wrap', 'replacement']);
-  assert.deepEqual(wrapper.children, [base]);
-  removeDecoration();
+  assert.deepEqual(disposed, ['base', 'replacement']);
   assert.deepEqual(outlet.children, [base, sibling]);
-  assert.equal(lifetimes.at(-2)?.aborted, false);
-  assert.equal(lifetimes.at(-1)?.aborted, true);
+  assert.equal(lifetimes.at(-1)?.aborted, false);
   stop();
   assert.ok(lifetimes.every(({ aborted }) => aborted));
 });
 
-test('keyed priority is explicit and a failed replacement retains the mounted instance', () => {
+test('a failed keyed replacement retains the mounted instance', () => {
   const registry = new SlotRegistry();
-  const outlet = element(), preferred = element(), lower = element();
+  const outlet = element(), preferred = element();
   const stop = registry.define('sidebar.primary', node(outlet));
   let lifetime: AbortSignal | undefined;
   registry.registerKeyed('sidebar.primary', 'control', (signal) => {
     lifetime = signal;
     return node(preferred);
-  }, { priority: 10 });
-  registry.registerKeyed('sidebar.primary', 'control', () => node(lower));
+  });
   assert.throws(() => registry.registerKeyed('sidebar.primary', 'control', () => {
     throw new Error('render failed');
-  }, { priority: 20 }), /render failed/);
+  }), /render failed/);
   assert.deepEqual(outlet.children, [preferred]);
   assert.equal(lifetime?.aborted, false);
   stop();

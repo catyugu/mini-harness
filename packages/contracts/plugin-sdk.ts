@@ -2,12 +2,8 @@ import type { Context } from 'cordis';
 
 /** Augment this interface in mini-harness/plugin to declare plugin-owned services. */
 export interface ServiceMap extends Pick<Context,
-  | 'harnessAgent' | 'harnessApprovals' | 'harnessChanges' | 'harnessConversationView' | 'harnessDelegation'
-  | 'harnessFileAccess' | 'harnessLlm' | 'harnessModelAdmin' | 'harnessModels' | 'harnessMutations'
-  | 'harnessPluginCatalog' | 'harnessProcess' | 'harnessPrompt' | 'harnessRegistry' | 'harnessRoutes'
-  | 'harnessRuns' | 'harnessSandbox' | 'harnessScopes' | 'harnessSessions' | 'harnessSettings'
-  | 'harnessSettingsStore' | 'harnessSkills' | 'harnessState' | 'harnessTools' | 'harnessUpdateSettings'
-  | 'harnessWorkspaces'> {}
+  | 'harnessFileAccess' | 'harnessLlm' | 'harnessModels' | 'harnessNetwork'
+  | 'harnessPrompt' | 'harnessSessions' | 'harnessSkills' | 'harnessTools'> {}
 
 export type { PluginScope, ScopeSettings } from './capabilities.js';
 export type { PluginApi, PluginDescriptor } from './plugins.js';
@@ -24,3 +20,6 @@ export type { AgentPort, RunPort, SessionStore } from './services.js';
 export type { PromptPort, RunAgentPort, ThinkingLevel } from './agent.js';
 export type { SessionLogPort, SessionEntry, SessionEvent, SessionProjection, InboxItem } from './session-log.js';
 export type { BrowserPrimitives } from './browser.js';
+
+export { HttpError, HttpReply } from './routes.js';
+export type { GatewayRequest, NetworkPort, RouteRequest, UpgradeHandler } from './routes.js';

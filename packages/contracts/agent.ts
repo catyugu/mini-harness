@@ -19,7 +19,7 @@ export interface RunAgentPort {
   revisionTarget(id: string, sourceEntryId: string, expectedLeafId: string | null): Promise<void>;
   prompt(record: SessionRecord, prompt: string, emit: (event: StreamEvent) => void, options: {
     signal: AbortSignal; choice?: ModelChoice; images?: ImageInput[]; input?: PreparedMessage;
-    thinkingLevel?: ThinkingLevel; changed?: (path: string) => void;
+    thinkingLevel?: ThinkingLevel | null; changed?: (path: string) => void;
     revision?: { sourceEntryId: string; expectedLeafId: string | null };
   }): Promise<string>;
   messages(id: string): ViewMessage[];

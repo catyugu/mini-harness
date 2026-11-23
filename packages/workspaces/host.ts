@@ -1,6 +1,6 @@
 import type { Context } from 'cordis';
 import { WorkspaceCatalog } from './catalog.js';
-import { HttpReply } from '@mini-harness/contracts/routes';
+import { HttpError, HttpReply } from '@mini-harness/contracts/routes';
 const validId = /^[a-f0-9]{32}$/;
 
 /** Workspace identity, mutations and registered HTTP routes have one owner. */
@@ -10,7 +10,7 @@ export function setup(ctx: Context) {
   const add = (method: string, path: string, handler: Parameters<typeof ctx.harnessRoutes.register>[2]) =>
     ctx.effect(() => ctx.harnessRoutes.register(method, path, handler));
   const requireId = (id: string) => {
-    if (!validId.test(id)) throw new Error('Workspace not found');
+    if (!validId.test(id)) throw new HttpError('not_found', 'Workspace not found');
     catalog.get(id);
     return id;
   };

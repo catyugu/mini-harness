@@ -1,4 +1,5 @@
-import type { Settings, SettingsPatch, Paths } from '@mini-harness/contracts/config';
+import { HttpError } from '@mini-harness/contracts/routes';
+import type { Settings, Paths } from '@mini-harness/contracts/config';
 import { createHash, randomUUID } from 'node:crypto';
 import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -22,7 +23,8 @@ export function getPaths(cwd: string = process.cwd(), env: NodeJS.ProcessEnv = p
     home, cwd: project, settings: join(home, 'settings.json'),
     registry: join(home, 'sessions.json'), sessions: join(home, 'sessions', key),
     pid: join(home, 'server.json'), log: join(home, 'server.log'),
-    plugins: join(home, 'plugins'), skills: join(home, 'skills')
+    plugins: join(home, 'plugins'), skills: join(home, 'skills'),
+    ...(env.MINI_HARNESS_DEV_PLUGIN ? { devPlugin: resolve(env.MINI_HARNESS_DEV_PLUGIN) } : {})
   };
 }
 
@@ -51,99 +53,105 @@ export function writeJson(file: string, value: unknown) {
   } finally { rmSync(temp, { force: true }); }
 }
 
-export function validateSettings(input: any) {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Invalid settings object');
-  validatePluginSettings(input);
-  for (const section of [input.providers, input.scopes]) {
-    if (section !== undefined && (!section || typeof section !== 'object' || Array.isArray(section)))
-      throw new Error('Invalid capability settings section');
-  }
-  validateProviderChoices(input.providers);
-  for (const [key, scope] of Object.entries(input.scopes ?? {})) {
-    if (!/^(?:workspace:[a-f0-9]{32}|session:[a-f0-9-]{36})$/.test(key) ||
-        !scope || typeof scope !== 'object' || Array.isArray(scope) ||
-        Object.keys(scope).some((field) => !['plugins', 'pluginConfig', 'disabledTools', 'providers'].includes(field)))
-      throw new Error('Invalid plugin scope: ' + key);
-    const { disabledTools } = scope as import('@mini-harness/contracts/capabilities').ScopeSettings;
-    if (disabledTools !== undefined && (!Array.isArray(disabledTools) ||
-        disabledTools.some((name) => typeof name !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(name))))
-      throw new Error('Invalid scoped tool restriction: ' + key);
-    validatePluginSettings(scope);
-    validateProviderChoices((scope as import('@mini-harness/contracts/capabilities').ScopeSettings).providers);
-  }
-  if (!['system', 'light', 'dark'].includes(input.appearance ?? 'system')) throw new Error('Invalid appearance');
-  if (!Number.isInteger(input.port ?? 3837) || (input.port ?? 3837) < 1024 || (input.port ?? 3837) > 65535) throw new Error('Invalid port');
-  return true;
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function validateProviderChoices(choices: unknown) {
-  if (choices === undefined) return;
-  if (!choices || typeof choices !== 'object' || Array.isArray(choices))
-    throw new Error('Invalid provider selections');
+function section(value: unknown, name: string) {
+  if (value === undefined) return {};
+  if (!isObject(value)) throw new HttpError('invalid_input', 'Invalid settings section: ' + name);
+  return value;
+}
+
+function validateModel(model: Record<string, unknown>, partial: boolean) {
+  for (const key of Object.keys(model))
+    if (key !== 'provider' && key !== 'id') throw new HttpError('invalid_input', 'Unknown model setting');
+  for (const key of ['provider', 'id'] as const) {
+    const value = model[key];
+    if (partial && !Object.hasOwn(model, key)) continue;
+    if (typeof value !== 'string' || value.length > 160)
+      throw new HttpError('invalid_input', 'Invalid settings field: model.' + key);
+  }
+}
+
+export function validateSettings(input: unknown): asserts input is Settings {
+  if (!isObject(input)) throw new HttpError('invalid_input', 'Invalid settings object');
+  const { model, plugins, pluginConfig, providers, scopes, appearance, port } = input;
+  validateModel(section(model, 'model'), false);
+  for (const [key, value] of Object.entries({ plugins, pluginConfig, providers, scopes }))
+    if (!isObject(value)) throw new HttpError('invalid_input', 'Invalid settings section: ' + key);
+  validatePluginSettings(section(plugins, 'plugins'), section(pluginConfig, 'pluginConfig'));
+  validateProviderChoices(section(providers, 'providers'));
+  for (const [key, scope] of Object.entries(section(scopes, 'scopes'))) {
+    if (!/^(?:workspace:[a-f0-9]{32}|session:[a-f0-9-]{36})$/.test(key) || !isObject(scope) ||
+        Object.keys(scope).some((field) => !['plugins', 'pluginConfig', 'disabledTools', 'providers'].includes(field)))
+      throw new HttpError('invalid_input', 'Invalid plugin scope: ' + key);
+    const { disabledTools } = scope;
+    if (disabledTools !== undefined && (!Array.isArray(disabledTools) ||
+        disabledTools.some((name) => typeof name !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(name))))
+      throw new HttpError('invalid_input', 'Invalid scoped tool restriction: ' + key);
+    validatePluginSettings(section(scope.plugins, key + '.plugins'), section(scope.pluginConfig, key + '.pluginConfig'));
+    validateProviderChoices(section(scope.providers, key + '.providers'));
+  }
+  if (appearance !== 'system' && appearance !== 'light' && appearance !== 'dark')
+    throw new HttpError('invalid_input', 'Invalid appearance');
+  if (typeof port !== 'number' || !Number.isInteger(port) || port < 1024 || port > 65535)
+    throw new HttpError('invalid_input', 'Invalid port');
+}
+
+function validateProviderChoices(choices: Record<string, unknown>) {
   for (const [service, id] of Object.entries(choices)) {
     if (!/^[a-zA-Z][a-zA-Z0-9_.:-]{0,95}$/.test(service) ||
         typeof id !== 'string' || !/^(?:core:)?[a-z][a-z0-9-]{0,63}$/.test(id))
-      throw new Error('Invalid provider selection');
+      throw new HttpError('invalid_input', 'Invalid provider selection');
   }
 }
 
-function validatePluginSettings(input: { plugins?: unknown; pluginConfig?: unknown }) {
-  for (const section of [input.plugins, input.pluginConfig]) {
-    if (section !== undefined && (!section || typeof section !== 'object' || Array.isArray(section)))
-      throw new Error('Invalid plugin settings section');
+function validatePluginSettings(plugins: Record<string, unknown>, configs: Record<string, unknown>) {
+  for (const [key, value] of Object.entries(plugins)) {
+    if (!/^[a-z][a-z0-9-]{0,63}$/.test(key)) throw new HttpError('invalid_input', 'Invalid plugin name');
+    if (typeof value !== 'boolean') throw new HttpError('invalid_input', 'Plugin switches must be boolean');
   }
-  const p = input.plugins ?? {};
-  for (const [key, value] of Object.entries(p)) {
-    if (!/^[a-z][a-z0-9-]{0,63}$/.test(key)) throw new Error('Invalid plugin name');
-    if (typeof value !== 'boolean') throw new Error('Plugin switches must be boolean');
-  }
-  for (const [id, config] of Object.entries(input.pluginConfig ?? {})) {
-    if (!/^(?:core:)?[a-z][a-z0-9-]{0,63}$/.test(id) || !config || typeof config !== 'object' || Array.isArray(config))
-      throw new Error('Invalid plugin configuration for ' + id);
+  for (const [id, config] of Object.entries(configs)) {
+    if (!/^(?:core:)?[a-z][a-z0-9-]{0,63}$/.test(id) || !isObject(config))
+      throw new HttpError('invalid_input', 'Invalid plugin configuration for ' + id);
   }
 }
 
 export function readSettings(paths: Paths): Settings {
-  const input = readJson<Record<string, any>>(paths.settings, {});
+  const input = readJson<unknown>(paths.settings, {});
+  if (!isObject(input)) throw new HttpError('invalid_input', 'Invalid settings object');
   const settings = {
-    port: input.port ?? DEFAULTS.port,
-    model: { ...DEFAULTS.model, ...input.model },
-    plugins: { ...DEFAULTS.plugins, ...input.plugins },
-    pluginConfig: input.pluginConfig ?? {},
-    providers: input.providers ?? {},
-    scopes: input.scopes ?? {},
-    appearance: input.appearance ?? DEFAULTS.appearance
+    port: input.port === undefined ? DEFAULTS.port : input.port,
+    model: { ...DEFAULTS.model, ...section(input.model, 'model') },
+    plugins: section(input.plugins, 'plugins'),
+    pluginConfig: section(input.pluginConfig, 'pluginConfig'),
+    providers: section(input.providers, 'providers'),
+    scopes: section(input.scopes, 'scopes'),
+    appearance: input.appearance === undefined ? DEFAULTS.appearance : input.appearance
   };
   validateSettings(settings);
-  return settings as Settings;
+  return settings;
 }
 
-
-export function mergeSettings(current: Settings, patch: SettingsPatch): Settings {
-  if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw new Error('Invalid settings patch');
-  const allowed = Object.keys(DEFAULTS);
-  if (Object.keys(patch).some((key) => !allowed.includes(key))) throw new Error('Unknown settings field');
-  for (const group of ['model', 'plugins', 'pluginConfig', 'providers', 'scopes'] as const) {
-    if (group in patch && (!patch[group] || typeof patch[group] !== 'object' || Array.isArray(patch[group]))) throw new Error('Invalid settings section');
-  }
-  const next: Settings = {
+export function mergeSettings(current: Settings, patch: unknown): Settings {
+  if (!isObject(patch)) throw new HttpError('invalid_input', 'Invalid settings patch');
+  if (Object.keys(patch).some((key) => !Object.hasOwn(DEFAULTS, key)))
+    throw new HttpError('invalid_input', 'Unknown settings field');
+  const model = section(patch.model, 'model');
+  validateModel(model, true);
+  const plugins = section(patch.plugins, 'plugins');
+  const pluginConfig = section(patch.pluginConfig, 'pluginConfig');
+  validatePluginSettings(plugins, pluginConfig);
+  const next = {
     ...current,
     ...patch,
-    model: { ...current.model, ...(patch.model || {}) },
-    providers: patch.providers ? Object.fromEntries(Object.entries(patch.providers).map(([id, provider]) => {
-      if (typeof provider !== 'string') throw new Error('Invalid provider selection: ' + id);
-      return [id, provider];
-    })) : current.providers,
-    scopes: patch.scopes ? Object.fromEntries(Object.entries(patch.scopes).map(([id, scope]) => {
-      if (!scope || typeof scope !== 'object' || Array.isArray(scope)) throw new Error('Invalid scope: ' + id);
-      return [id, scope];
-    })) : current.scopes,
-    plugins: Object.fromEntries(Object.entries({ ...current.plugins, ...patch.plugins }).map(([id, enabled]) => {
-      if (typeof enabled !== 'boolean') throw new Error('Invalid plugin switch: ' + id);
-      return [id, enabled];
-    })),
-    pluginConfig: Object.fromEntries([...new Set([...Object.keys(current.pluginConfig), ...Object.keys(patch.pluginConfig ?? {})])]
-      .map((id) => [id, { ...(current.pluginConfig[id] ?? {}), ...(patch.pluginConfig?.[id] ?? {}) }]))
+    model: { ...current.model, ...model },
+    providers: patch.providers === undefined ? current.providers : section(patch.providers, 'providers'),
+    scopes: patch.scopes === undefined ? current.scopes : section(patch.scopes, 'scopes'),
+    plugins: { ...current.plugins, ...plugins },
+    pluginConfig: Object.fromEntries([...new Set([...Object.keys(current.pluginConfig), ...Object.keys(pluginConfig)])]
+      .map((id) => [id, { ...(current.pluginConfig[id] ?? {}), ...section(pluginConfig[id], 'pluginConfig.' + id) }]))
   };
   validateSettings(next);
   return next;

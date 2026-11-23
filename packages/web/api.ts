@@ -19,7 +19,7 @@ window.addEventListener('hashchange', () => {
 });
 
 export class AuthenticationError extends Error {
-  constructor() { super('Session authorization expired. Restart mini-harness and open the new URL printed by the CLI.'); }
+  constructor() { super('Session authorization expired. Open the current URL printed by mini-harness.'); }
 }
 export async function api(path: string, options: RequestInit = {}) {
   const token = sessionStorage.getItem('mini-harness-token');

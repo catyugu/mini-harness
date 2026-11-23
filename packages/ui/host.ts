@@ -3,10 +3,12 @@ import { projectionDomains, type ProjectionDomain, type ProjectionNotice } from 
 import { eventStream } from '@mini-harness/transport/http';
 
 export function setup(ctx: Context) {
-  const revisions = Object.fromEntries(projectionDomains.map((domain) => [domain, 0])) as Record<ProjectionDomain, number>;
+  const revisions = new Map<ProjectionDomain, number>(projectionDomains.map((domain) => [domain, 0]));
   const listeners = new Set<(notice: ProjectionNotice) => void>();
-  const mark = (domain: ProjectionDomain, sessionId?: string) => {
-    const notice: ProjectionNotice = { type: 'change', domain, revision: ++revisions[domain], sessionId };
+  const mark = (domain: ProjectionDomain, sessionId?: string, workspaceId?: string) => {
+    const revision = (revisions.get(domain) ?? 0) + 1;
+    revisions.set(domain, revision);
+    const notice: ProjectionNotice = { type: 'change', domain, revision, sessionId, workspaceId };
     for (const send of listeners) send(notice);
   };
   const listen = (source: EventTarget, callback: (event: Event) => void) =>
@@ -16,7 +18,9 @@ export function setup(ctx: Context) {
     });
 
   listen(ctx.harnessRegistry.events, (event) => {
-    if (event instanceof CustomEvent) mark('sessions', event.detail.id);
+    if (!(event instanceof CustomEvent)) return;
+    if (event.detail.queue) mark('queue', event.detail.id);
+    else mark('sessions', event.detail.id);
   });
   listen(ctx.harnessRuns.events, (event) => {
     if (event instanceof CustomEvent) mark('sessions', event.detail.id);
@@ -28,7 +32,7 @@ export function setup(ctx: Context) {
   });
   listen(ctx.harnessWorkspaces.events, () => mark('workspaces'));
   listen(ctx.harnessChanges, (event) => {
-    if (event instanceof CustomEvent) mark(event.detail.domain, event.detail.sessionId);
+    if (event instanceof CustomEvent) mark(event.detail.domain, event.detail.sessionId, event.detail.workspaceId);
   });
 
   ctx.effect(() => ctx.harnessRoutes.register('GET', '/api/bootstrap', () => ({
@@ -45,6 +49,6 @@ export function setup(ctx: Context) {
       signal?.removeEventListener('abort', shutdown);
     });
     listeners.add(send);
-    send({ type: 'snapshot', revisions });
+    send({ type: 'snapshot', revisions: Object.fromEntries(revisions) });
   }));
 }

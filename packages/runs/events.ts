@@ -16,7 +16,7 @@ export class RunEvents {
     if (event.type === 'assistant-start' || event.type === 'assistant-end') this.partial = '';
     if (event.type === 'delta') this.partial += event.text;
     if (event.type === 'tool') {
-      if (event.state === 'running') this.tools.set(event.id, event);
+      if (event.state === 'running' || event.state === 'approval') this.tools.set(event.id, event);
       else this.tools.delete(event.id);
     }
     const item: RunEvent = { ...event, runId: this.info.id, runSessionId: this.info.sessionId, sequence: ++this.info.sequence };

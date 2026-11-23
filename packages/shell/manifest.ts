@@ -17,5 +17,5 @@ export const manifest: PluginDescriptor = {
       'x-enumLabels': ['Isolated (Linux)', 'Host (approval required)'] }),
     timeoutSeconds: Type.Integer({ title: 'Timeout (seconds)', minimum: 1, maximum: 300, default: 60 })
   }, { additionalProperties: false }) },
-  inject: ['harnessRegistry', 'harnessApprovals', 'harnessRuns', 'harnessProcess', 'harnessTools', 'harnessScopes']
+  inject: ['harnessRegistry', 'harnessApprovals', 'harnessRuns', 'harnessProcess', 'harnessTools', 'harnessScopes', 'harnessChanges']
 };

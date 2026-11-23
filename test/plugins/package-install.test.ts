@@ -70,7 +70,11 @@ test('npm registry installation resolves dependencies, updates atomically and se
     const manifest = { name, version, type: 'module', dependencies, main: files['index.js'] ? 'index.js' : undefined,
       scripts: { postinstall: 'node -e "process.exit(13)"' } };
     writeJson(join(cwd, 'package.json'), manifest);
-    for (const [file, source] of Object.entries(files)) writeFileSync(join(cwd, file), source);
+    for (const [file, source] of Object.entries(files)) {
+      const target = join(cwd, file);
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, source);
+    }
     const args = ['pack', '--ignore-scripts', '--json'];
     const result = await execFile(process.execPath, [npmCli, ...args], { cwd, env });
     const { filename } = parseNpmPackResult(result.stdout);
@@ -82,10 +86,16 @@ test('npm registry installation resolves dependencies, updates atomically and se
   const name = '@fixture/harness-plugin';
   const id = 'npm-plugin';
   const files = {
-    'plugin.json': JSON.stringify({ inject: ['harnessRoutes'] }),
+    'plugin.json': JSON.stringify({
+      inject: ['harnessRoutes'], browserInject: ['miniPages'], browserAssets: ['web/panel.css', 'web/preload.js'],
+      browserPreload: 'web/preload.js'
+    }),
     'plugin.js': `import { label } from 'mini-setup-helper';
       export default (_ctx, api) => api.registerRoute('GET', '/label', () => label);`,
-    'web.js': 'export default () => {};'
+    'web.js': 'export default () => {};',
+    'web/panel.css': '.panel { color: inherit; }',
+    'web/preload.js': 'export default (signal) => { signal.throwIfAborted(); };',
+    'web/private.js': 'export const privateValue = "not published";'
   };
   await publish('mini-setup-helper', '1.0.0', {
     'index.js': 'export const label = "From dependency";'
@@ -124,8 +134,19 @@ test('npm registry installation resolves dependencies, updates atomically and se
   const response = await request('/settings', 'PATCH', { plugins: { [id]: true } });
   assert.equal(response.status, 200, await response.text());
   assert.equal(await (await request('/extensions/' + id + '/label')).json(), 'From dependency');
-  assert.equal((await (await request('/plugins/' + id + '/web')).json()).source, files['web.js']);
+  const bootstrap = await (await request('/bootstrap')).json();
+  const entry = bootstrap.ui.find((entry: { id: string }) => entry.id === id);
+  assert.deepEqual(entry.inject, ['miniPages']);
+  const asset = (path: string) => fetch('http://127.0.0.1:' + port + path);
+  assert.equal(await (await asset(entry.browser)).text(), files['web.js']);
+  const css = await asset(entry.styles[0]);
+  assert.match(css.headers.get('Content-Type') ?? '', /^text\/css/);
+  assert.equal(await css.text(), files['web/panel.css']);
+  assert.equal(await (await asset(entry.preload)).text(), files['web/preload.js']);
+  assert.equal((await asset(entry.browser.replace(/web\.js$/, 'web/private.js'))).status, 404);
   assert.equal((await request('/settings', 'PATCH', { plugins: { [id]: false } })).status, 200);
+  assert.equal((await asset(entry.browser)).status, 404);
+  assert.equal((await asset(entry.styles[0])).status, 404);
   const active = join(directory, source.generation);
   const link = join(active, 'node_modules', '@fixture', 'harness-plugin');
   rmSync(link, { recursive: true });

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, existsSync, writeFileSync, realpathSync, symlinkSync } from 'node:fs';
+import { appendFileSync, mkdtempSync, rmSync, existsSync, writeFileSync, realpathSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getPaths } from '@mini-harness/platform/config';
@@ -77,4 +77,26 @@ test('export includes all branches and rejects in-flight sessions', (t) => {
   const release = registry.beforeDelete({ quiesce: async () => {}, busy: () => true });
   assert.throws(() => registry.export([session.id]), /Stop active/);
   release();
+});
+
+test('a corrupt log is isolated, remains deletable and never creates a log for an unopened session', async (t) => {
+  const { paths, registry } = fixture(t);
+  const damaged = registry.create({ title: 'Damaged' });
+  const healthy = registry.create({ title: 'Healthy' });
+  const unopened = registry.create();
+  const invalid = registry.log(damaged.id).file;
+  registry.log(healthy.id).append({ type: 'message', message: { role: 'user', content: 'intact', timestamp: Date.now() } });
+  registry.dispose();
+  appendFileSync(invalid, '{"checksum":"bad"}\n');
+  const restored = new SessionRegistry(paths, new WorkspaceCatalog(paths));
+  t.after(() => restored.dispose());
+  assert.equal(restored.list().length, 3);
+  assert.equal(restored.inspectLog(unopened.id, (log) => log.entries()), undefined);
+  assert.equal(existsSync(restored.nativeFile(unopened)), false);
+  assert.equal(restored.log(healthy.id).projection().messages[0].content, 'intact');
+  assert.throws(() => restored.log(damaged.id), /session diagnostics/);
+  assert.deepEqual(restored.diagnostics(), [{ id: damaged.id, message: 'Corrupt session log checksum' }]);
+  assert.deepEqual(await restored.delete([damaged.id]), [damaged.id]);
+  assert.equal(existsSync(invalid), false);
+  assert.deepEqual(restored.diagnostics(), []);
 });

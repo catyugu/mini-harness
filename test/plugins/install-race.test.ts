@@ -23,10 +23,10 @@ test('plugin file writes wait for an in-flight plugin configuration', async (t) 
     const installation = await request('/plugins/install', 'POST', {
       id: 'another-plugin', files: [{ name: 'plugin.js', content: 'export default () => {};' }]
     });
-    assert.equal(installation.status, 400);
+    assert.equal(installation.status, 409);
     assert.match(installation.body.error, /Configuration is already changing/);
     const removal = await request('/plugins/slow-plugin', 'DELETE');
-    assert.equal(removal.status, 400);
+    assert.equal(removal.status, 409);
     assert.match(removal.body.error, /Configuration is already changing/);
     assert.equal(existsSync(folder), true);
   } finally {

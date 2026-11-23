@@ -2,10 +2,12 @@ import { lstatSync } from 'node:fs';
 import { join } from 'node:path';
 import { readJson } from '@mini-harness/platform/config';
 import type { PluginDescriptor } from '@mini-harness/contracts/plugins';
+import { readBrowserAssets } from './browser-assets.js';
 import { isRegularFile } from './source.js';
 
 export interface DiscoveredPlugin extends PluginDescriptor {
   source?: string;
+  resources?: ReturnType<typeof readBrowserAssets>;
 }
 
 export function describePlugin(id: string, folder: string): DiscoveredPlugin {
@@ -15,7 +17,7 @@ export function describePlugin(id: string, folder: string): DiscoveredPlugin {
   if (!hasHost && !hasWeb) throw new Error('Provide plugin.js, web.js or both');
   if (hasWeb && lstatSync(join(folder, 'web.js')).size > 1024 * 1024) throw new Error('Plugin browser entry exceeds 1 MiB');
   const descriptor = join(folder, 'plugin.json');
-  const manifest = isRegularFile(descriptor) ? readJson<Partial<PluginDescriptor> | null>(descriptor, null) : null;
+  const manifest = isRegularFile(descriptor) ? readJson<(Partial<PluginDescriptor> & { browserAssets?: unknown; browserPreload?: unknown }) | null>(descriptor, null) : null;
   if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest))
     throw new Error('Expected an object in plugin.json');
   const title = typeof manifest.title === 'string' ? manifest.title.slice(0, 100) : id;
@@ -40,8 +42,13 @@ export function describePlugin(id: string, folder: string): DiscoveredPlugin {
   if (!hasWeb && (browserRequires.length || browserInject.length || browserProvides.length))
     throw new Error('Browser dependencies require web.js');
   if (!hasHost && (provides.length || inject.length || optional.length)) throw new Error('Server services require plugin.js');
-  if (scope !== 'application' && (hasWeb || inject.includes('harnessRoutes'))) throw new Error('Scoped plugins require a server entry without routes');
+  if (scope !== 'application' && (hasWeb || [...inject, ...optional].some((name) => name === 'harnessRoutes' || name === 'harnessNetwork'))) throw new Error('Scoped plugins require a server entry without routes');
   if (inject.some((service) => optional.includes(service) || provides.includes(service))) throw new Error('Conflicting service declarations');
+  if (!hasWeb && (manifest.browserAssets !== undefined || manifest.browserPreload !== undefined))
+    throw new Error('Browser assets require web.js');
+  const resources = hasWeb ? readBrowserAssets(id, folder, manifest.browserAssets, manifest.browserPreload) : undefined;
+  if (manifest.configChanges !== undefined && (manifest.configChanges !== 'live' || !hasHost))
+    throw new Error('Live configuration requires plugin.js');
   const configSchema = manifest.configSchema;
   if (configSchema && (configSchema.type !== 'object' || !configSchema.properties || typeof configSchema.properties !== 'object'))
     throw new Error('Expected an object configSchema for plugin: ' + id);
@@ -52,6 +59,6 @@ export function describePlugin(id: string, folder: string): DiscoveredPlugin {
     typeof icon.path === 'string' && icon.path.length > 0 && icon.path.length <= 8192 &&
     (icon.viewBox === undefined || typeof icon.viewBox === 'string' && icon.viewBox.length <= 100)
   )) throw new Error('Invalid plugin icon: ' + id);
-  return { source: hasHost ? source : undefined, scope, id, title, description,
-    requires, provides, inject, optional, browserRequires, browserInject, browserProvides, configSchema, icon, web: hasWeb, trustedCode: true };
+  return { source: hasHost ? source : undefined, resources, scope, id, title, description,
+    requires, provides, inject, optional, browserRequires, browserInject, browserProvides, configSchema, configChanges: manifest.configChanges, icon, web: hasWeb, trustedCode: true };
 }

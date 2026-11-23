@@ -26,5 +26,7 @@ export interface ViewMessage {
   arguments?: unknown;
   isError?: boolean;
   elapsedMs?: number;
+  approvalMs?: number;
+  approvalDenied?: boolean;
   exitCode?: number;
 }

@@ -1,6 +1,6 @@
 # Security model
 
-mini-harness binds to `127.0.0.1`. Its HTTP API requires a bearer token and checks the Origin on state-changing browser requests. The server state file contains the token. Keep the configuration directory private.
+mini-harness binds to `127.0.0.1` and requires a bearer credential on its API. The instance credential survives a restart. On Unix it is stored in an owner-only file. Windows protects the credential using DPAPI for the current user. The server metadata and detached log omit the credential. Run `mini-harness reset-token` to stop the instance and revoke its current credential.
 
 ## Workspace and execution
 
@@ -18,3 +18,5 @@ Provider credentials can come from the environment or `~/.mini-harness/auth.json
 Session messages and inbox acknowledgments are flushed before completion is reported. Checksums, sequence numbers and ancestry detect corrupt complete records; only an incomplete final write is discarded at recovery. Restart marks unfinished runs interrupted and never retries tools automatically. A tool interrupted before its result was committed has an unknown outcome; the next turn receives an explicit error result rather than silently rerunning it.
 
 The conversation catalog is validated at startup: invalid identities, unknown workspaces and broken ancestry are rejected instead of loading a partial index.
+
+A trusted gateway plugin may expose a separately authenticated viewer. The host limits this path to read-only UI and workspace inspection routes. Pairing credentials and listener lifecycle belong to the gateway.

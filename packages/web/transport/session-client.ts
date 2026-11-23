@@ -1,5 +1,5 @@
 import type { RunEvent, RunInfo } from '@mini-harness/contracts/transport';
-import { api, data, payload, readEvents, wait } from '../api.js';
+import { api, AuthenticationError, data, payload, readEvents, wait } from '../api.js';
 import type { ConversationView } from '../types.js';
 
 export const isRunning = (run?: RunInfo) => run?.state === 'queued' || run?.state === 'running';
@@ -20,15 +20,18 @@ export async function observeRun(item: ConversationView, signal: AbortSignal, ac
         if (event.type === 'run' || event.type === 'snapshot') ended = !isRunning(event.run);
       });
       if (!ended) throw new Error('Connection closed');
-    } catch {
+    } catch (error) {
       if (signal.aborted) return;
+      if (error instanceof AuthenticationError) throw error;
       reconnect();
       await wait(Math.min(5000, 500 * ++retries), signal);
       if (signal.aborted) return;
       try {
         const latest = await readConversation(item.id, signal);
         if (latest.run?.id !== originalRun.id || !isRunning(latest.run)) return latest;
-      } catch { /* Retry while the conversation remains selected. */ }
+      } catch (error) {
+        if (error instanceof AuthenticationError) throw error;
+      }
     }
   }
   if (!signal.aborted) return readConversation(item.id, signal);

@@ -7,7 +7,7 @@ const setup: FrontendSetup = (ctx, api) => {
   const extensions = new MessageExtensions((error) => state.dispatchEvent(new CustomEvent('error', { detail: error })));
   ctx.provide('miniMessages', extensions);
   const conversation = conversationView(api, state, {
-    sessions, settings, models,
+    sessions, settings, models, projections: ctx.miniProjections,
     closeDrawer: layout.closeDrawer,
     showWorkspaceInHeader: header.showWorkspace,
     setTitle: header.setTitle, renderTool: (tool, action) => extensions.render(tool, action),

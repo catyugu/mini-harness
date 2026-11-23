@@ -2,7 +2,7 @@ import type { ToolDefinition } from './tools.js';
 import type { SkillPort } from './skills.js';
 import type { Context } from 'cordis';
 import type { Paths, Settings } from './config.js';
-import type { RouteHandler, RoutePort } from './routes.js';
+import type { RouteHandler, RoutePort, UpgradeHandler } from './routes.js';
 import type { SessionRecord } from './conversation.js';
 import type { CapabilityObservation, ToolDecision, ToolProjection } from './events.js';
 import type { MessageContent } from './message.js';
@@ -43,8 +43,8 @@ export interface PluginMetadata {
 export interface PluginDescriptor extends PluginMetadata {
   scope: PluginScope['kind'];
   required?: boolean;
-  /** Keep an existing scheduler while it consumes committed policy for new work. */
-  configChanges?: 'read-on-use';
+  /** A mounted plugin may opt in to configuration updates without a restart. */
+  configChanges?: 'live';
   provides?: string[];
   inject?: string[];
   optional?: string[];
@@ -62,6 +62,7 @@ export interface SessionRecords {
 export interface PluginApi {
   /** The value comes from settings.pluginConfig[pluginId]. */
   readonly config: Readonly<Record<string, unknown>>;
+  onConfigChange(apply: (next: Readonly<Record<string, unknown>>) => void | Promise<void>): void;
   readonly scope: PluginScope;
   readonly signal: AbortSignal;
   provide<Name extends keyof ServiceMap & string>(name: Name, service: ServiceMap[Name]): void;
@@ -73,6 +74,20 @@ export interface PluginApi {
   modelRequest(handler: ModelRequestTransform, order?: number): () => void;
   toolResult(handler: ToolResultTransform, order?: number): () => void;
   retryModel(handler: (failure: ModelFailure) => ModelRetry | undefined | Promise<ModelRetry | undefined>): () => void;
+  /** Invalidate this plugin's application-wide state for its live browser clients. */
+  invalidate(): void;
+  /** Read and write an instance's private JSON data. */
+  readonly storage: {
+    read<T>(name: string, fallback: T): T;
+    write(name: string, value: unknown): void;
+    remove(name: string): void;
+  };
+  /** Use OS-backed private storage for values that must never enter browser configuration. */
+  readonly secrets: {
+    read(name: string): string | undefined;
+    write(name: string, value: string): void;
+    remove(name: string): void;
+  };
   registerProjection<State>(projection: RecordProjection<State>): {
     read(sessionId: string): Promise<State>;
     dispose(): void;
@@ -81,6 +96,8 @@ export interface PluginApi {
   registerTool(tool: ToolDefinition): () => Promise<void>;
   /** Mount an authenticated route under /api/extensions/<plugin-id>/. */
   registerRoute(method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string, handler: RouteHandler): () => Promise<void>;
+  /** Mount a local authenticated WebSocket endpoint under /api/extensions/<plugin-id>/. */
+  registerUpgrade(path: string, handler: UpgradeHandler): () => Promise<void>;
   /** Read and append this plugin's JSON records on the active session branch. */
   records: {
     list(sessionId: string): Promise<ReturnType<SessionRecords['list']>>;

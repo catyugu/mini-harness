@@ -2,13 +2,13 @@ import type { ServerResponse } from 'node:http';
 import { isRunning } from '@mini-harness/contracts/transport';
 import { eventStream } from '@mini-harness/transport/http';
 import type { Context } from 'cordis';
-import { HttpReply } from '@mini-harness/contracts/routes';
+import { HttpError, HttpReply } from '@mini-harness/contracts/routes';
 
 export function registerRoutes(ctx: Context) {
   const add = (method: string, path: string, handler: Parameters<typeof ctx.harnessRoutes.register>[2]) =>
     ctx.effect(() => ctx.harnessRoutes.register(method, path, handler));
   const session = (id: string) => {
-    if (!ctx.harnessRegistry.get(id)) throw new Error('Conversation not found');
+    if (!ctx.harnessRegistry.get(id)) throw new HttpError('not_found', 'Conversation not found');
     return id;
   };
   function runEvents(id: string, runId: string, after: number, res: ServerResponse) {
@@ -38,7 +38,7 @@ export function registerRoutes(ctx: Context) {
   add('GET', '/api/sessions/:id/events', async ({ params, url, response }) => {
     const id = session(params.id);
     const runId = url.searchParams.get('run');
-    if (!runId) throw new Error('Run ID is required');
+    if (!runId) throw new HttpError('invalid_input', 'Run ID is required');
     runEvents(id, runId, Number(url.searchParams.get('after') ?? 0), response);
   });
 }

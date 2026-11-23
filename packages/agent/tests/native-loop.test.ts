@@ -19,14 +19,15 @@ const answer = (text = 'Done'): NativeAssistantMessage => ({ role: 'assistant', 
 const call = (id: string, name: string, args: Record<string, unknown> = {}): ToolCallPart => ({ type: 'toolCall', id, name, arguments: args });
 const toolsAnswer = (...calls: ToolCallPart[]): NativeAssistantMessage => ({ ...answer(), content: calls, stopReason: 'toolUse' });
 
-function fixture(t: TestContext, llm: LlmPort, retryModel?: () => Promise<ModelRetry>) {
+function fixture(t: TestContext, llm: LlmPort, retryModel?: () => Promise<ModelRetry>,
+  thinkingLevels: (id: string) => string[] | undefined = () => undefined) {
   const { root, paths } = createFixturePaths('http://127.0.0.1:1/v1');
   const sessions = new SessionRegistry(paths, new WorkspaceCatalog(paths));
   t.after(() => { sessions.dispose(); rmSync(root, { recursive: true, force: true }); });
   const tools = new ToolRegistry();
   const agent = new NativeAgent(sessions, {
     models: () => ({ list: () => [], available: async () => [], resolve: (choice) => choice,
-      capabilities: () => ({ id: model.id, name: 'Fixture', input: ['text', 'image'], contextWindow: 32000, maxTokens: 1024, reasoning: true }) }),
+      capabilities: (choice) => ({ id: model.id, name: 'Fixture', input: ['text', 'image'], contextWindow: 32000, maxTokens: 1024, reasoning: true, thinkingLevels: thinkingLevels(choice.id) }) }),
     llm: () => llm, tools: () => tools, allowsTool: () => true, prompt: () => ({ build: async () => 'Fixture' }), skills: () => undefined,
     prepare: async () => {}, defaultModel: () => model, rememberModel: () => {},
     policy: () => ({ maxTurns: 8, autoCompact: false }), retryModel, observe: () => {}, transform: ({ content }) => content
@@ -141,7 +142,43 @@ test('identical queued text preserves each attachment identity and is delivered 
   const users = sessions.log(record.id).projection().messages.filter((message) => message.role === 'user');
   assert.equal(requests, 3); assert.equal(users.length, 3);
   assert.deepEqual(users.slice(1).map(({ attachments }) => expectPresent(attachments?.[0], 'queued attachment').name), ['first.png', 'second.png']);
-  assert.deepEqual(agent.read(record.id).queue, { steer: [], followUp: [] });
+  assert.deepEqual(agent.read(record.id).queue, []);
+});
+
+test('steering accepts off, skips deterministic failures and resets incompatible inherited thinking for a new model', async (t) => {
+  let started = () => {};
+  let release = () => {};
+  const ready = new Promise<void>((resolve) => { started = resolve; });
+  const hold = new Promise<void>((resolve) => { release = resolve; });
+  t.after(() => release());
+  const levels: (string | undefined)[] = [];
+  const { agent, sessions, record, tools } = fixture(t, { async *stream(request) {
+    levels.push(request.thinkingLevel);
+    if (levels.length === 1) {
+      started();
+      await hold;
+      yield { type: 'done', message: toolsAnswer(call('steered-call', 'first')) };
+    } else yield { type: 'done', message: answer() };
+  } }, undefined, (id) => id === 'new-model' ? ['low'] : ['low', 'medium', 'high', 'xhigh', 'max']);
+  tools.register('first', () => defineTool({ name: 'first', description: 'Should be skipped', parameters: Type.Object({}),
+    async execute() { assert.fail('Steering did not skip the next tool'); } }));
+  const run = agent.prompt(record, 'Initial', () => {}, { signal: new AbortController().signal, thinkingLevel: 'off' });
+  await ready;
+  const log = sessions.log(record.id);
+  log.append({ type: 'inbox-enqueued', item: { id: 'stale-level', mode: 'steer', text: 'Stale instruction',
+    images: [], model: { provider: model.provider, id: 'new-model' }, thinkingLevel: 'high' } });
+  await agent.queueInput(record.id, 'Actual instruction', 'steer');
+  await agent.queueInput(record.id, 'Keep reasoning', 'followUp', undefined, { thinkingLevel: 'high' });
+  await agent.queueInput(record.id, 'Switch model', 'followUp', undefined, { model: { ...model, id: 'new-model' } });
+  const queue = await agent.queueInput(record.id, 'Cancel me', 'followUp');
+  agent.cancelQueue(record.id, expectPresent(queue.find(({ summary }) => summary === 'Cancel me'), 'cancelled entry').id);
+  release();
+  await run;
+  assert.deepEqual(levels, ['off', 'off', 'high', undefined]);
+  assert.deepEqual(log.inbox(), []);
+  assert.deepEqual(log.queue().map(({ id, state }) => [id, state]), [['stale-level', 'failed']]);
+  assert.ok(log.entries().some(({ type }) => type === 'inbox-cancelled'));
+  assert.equal(log.entries().filter((entry) => entry.type === 'message' && entry.inboxId).length, 3);
 });
 
 test('opted-in tools overlap, persist independently and respect serial barriers', { timeout: 5000 }, async (t) => {
@@ -237,5 +274,5 @@ test('a queued follow-up can preselect the next model and thinking level', async
   await pending;
   assert.deepEqual(seen, [{ model: 'native', thinking: 'off' }, { model: 'next-model', thinking: 'medium' }]);
   assert.deepEqual(sessions.log(record.id).projection().model, { provider: 'fixture', id: 'next-model' });
-  assert.deepEqual(sessions.log(record.id).projection().inbox, []);
+  assert.deepEqual(sessions.log(record.id).inbox(), []);
 });

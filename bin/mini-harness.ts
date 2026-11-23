@@ -7,6 +7,8 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { getPaths, ensurePaths, writeJson } from '@mini-harness/platform/config';
 import { lockInstance, readServerInfo, requestShutdown, serverStatus } from '@mini-harness/host/process';
 
+import { instanceCredential } from '@mini-harness/host/instance-credential';
+
 const executable = fileURLToPath(import.meta.url);
 
 function help() {
@@ -18,6 +20,8 @@ Usage:
   mini-harness --no-open                 Start without opening a browser
   mini-harness status                    Show server status
   mini-harness stop                      Stop the running server
+  mini-harness reset-token               Stop the server and replace its browser credential
+  mini-harness plugin dev <directory>    Build and reload a plugin in an isolated host
   mini-harness plugin install <id> <package[@version-or-tag]>
   mini-harness plugin update <id> [package[@version-or-tag]]
   mini-harness --help                    Show help
@@ -29,7 +33,7 @@ Access: localhost only; bearer token required for all API endpoints.
 }
 
 function parse(argv: string[]) {
-  const args: { help?: boolean; noOpen?: boolean; detached: boolean; serve: boolean; cwd: string; port?: number; command?: 'status' | 'stop' } =
+  const args: { help?: boolean; noOpen?: boolean; detached: boolean; serve: boolean; cwd: string; port?: number; command?: 'status' | 'stop' | 'reset-token' } =
     { detached: false, serve: false, cwd: process.cwd() };
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i];
@@ -44,7 +48,7 @@ function parse(argv: string[]) {
       const number = Number(argv[++i]);
       if (!Number.isInteger(number) || number < 1024 || number > 65535) throw new Error('Invalid port');
       args.port = number;
-    } else if (flag === 'status' || flag === 'stop') {
+    } else if (flag === 'status' || flag === 'stop' || flag === 'reset-token') {
       if (args.command) throw new Error('Specify one command');
       args.command = flag;
     } else throw new Error('Unknown option: ' + flag);
@@ -73,7 +77,7 @@ async function detached(paths: ReturnType<typeof getPaths>, port?: number) {
       const running = await serverStatus(paths.home, paths.pid);
       if (running?.pid === info.pid) {
         console.log('mini-harness started independently (PID ' + child.pid + ')');
-        console.log(info.url + '/#token=' + info.token);
+        console.log(info.url + '/#token=' + running.token);
         return;
       }
     }
@@ -84,7 +88,7 @@ async function detached(paths: ReturnType<typeof getPaths>, port?: number) {
   throw new Error('Detached server failed to become ready. See ' + paths.log);
 }
 
-async function serve(paths: ReturnType<typeof getPaths>, port?: number, open = false) {
+async function serve(paths: ReturnType<typeof getPaths>, port?: number, open = false, childProcess = false) {
   const unlock = await lockInstance(paths.home);
   let app: Awaited<ReturnType<typeof import('@mini-harness/host/server').createMiniHarnessServer>>;
   let ready: Promise<void>;
@@ -107,14 +111,14 @@ async function serve(paths: ReturnType<typeof getPaths>, port?: number, open = f
   ready = (async () => {
     rmSync(paths.pid, { force: true });
     const { createMiniHarnessServer } = await import('@mini-harness/host/server');
-    app = await createMiniHarnessServer(paths, { shutdown });
+    app = await createMiniHarnessServer(paths, { shutdown, token: instanceCredential(paths.home) });
     if (stopping) return;
     const listening = await app.listen(port);
     if (stopping) return;
     const url = 'http://127.0.0.1:' + listening;
-    writeJson(paths.pid, { pid: process.pid, url, token: app.token, startedAt: new Date().toISOString() });
+    writeJson(paths.pid, { pid: process.pid, url, startedAt: new Date().toISOString() });
     const address = url + '/#token=' + app.token;
-    console.log('mini-harness listening at ' + address);
+    console.log('mini-harness listening at ' + (childProcess ? url : address));
     if (open) {
       const command = process.platform === 'win32' ? 'rundll32' : process.platform === 'darwin' ? 'open' : 'xdg-open';
       const child = spawn(command, process.platform === 'win32' ? ['url.dll,FileProtocolHandler', address] : [address], { stdio: 'ignore', detached: true, windowsHide: true });
@@ -133,6 +137,12 @@ async function serve(paths: ReturnType<typeof getPaths>, port?: number, open = f
 
 async function main() {
   const argv = process.argv.slice(2);
+  if (argv[0] === 'plugin' && argv[1] === 'dev') {
+    if (argv.length !== 3) throw new Error('Usage: mini-harness plugin dev <directory>');
+    const { pluginDev } = await import('./plugin-dev.js');
+    await pluginDev(argv[2], executable);
+    return;
+  }
   if (argv[0] === 'plugin') {
     const [, operation, id, spec, ...extra] = argv;
     if ((operation !== 'install' && operation !== 'update') || !id || extra.length || (operation === 'install' && !spec))
@@ -140,14 +150,22 @@ async function main() {
     const paths = getPaths();
     ensurePaths(paths);
     const unlock = await lockInstance(paths.home);
+    const cancellation = new AbortController();
+    const abort = () => cancellation.abort();
+    process.on('SIGINT', abort);
+    process.on('SIGTERM', abort);
     try {
       const [{ installPackagedPlugin }, { plugins }] = await Promise.all([
         import('@mini-harness/plugins/package-installer'), import('@mini-harness/host/composition')
       ]);
       const { name, version } = await installPackagedPlugin(paths, operation, id, spec,
-        (id) => plugins.some((plugin) => plugin.id === id));
+        (id) => plugins.some((plugin) => plugin.id === id), cancellation.signal);
       console.log(id + ': ' + name + '@' + version);
-    } finally { await unlock(); }
+    } finally {
+      process.off('SIGINT', abort);
+      process.off('SIGTERM', abort);
+      await unlock();
+    }
     return;
   }
   const args = parse(argv);
@@ -156,27 +174,28 @@ async function main() {
   ensurePaths(paths);
   if (args.command) {
     const info = await serverStatus(paths.home, paths.pid);
-    if (!info) {
-      console.log('mini-harness is not running');
-      if (args.command === 'status') process.exitCode = 1;
-      return;
-    }
     if (args.command === 'status') {
-      console.log('mini-harness is running (PID ' + info.pid + ') at ' + info.url);
+      if (info) {
+        console.log('mini-harness is running (PID ' + info.pid + ') at ' + info.url);
+        for (const diagnostic of info.sessionDiagnostics) console.log('Conversation ' + diagnostic.id + ': ' + diagnostic.message);
+      } else { console.log('mini-harness is not running'); process.exitCode = 1; }
       return;
     }
-    if (!await requestShutdown(info)) throw new Error('Could not request mini-harness shutdown');
-    for (let i = 0; i < 100; i++) {
-      if (readServerInfo(paths.pid)?.token !== info.token) {
-        console.log('mini-harness stopped');
-        return;
-      }
-      await sleep(100);
+    if (info) {
+      if (!await requestShutdown(info)) throw new Error('Could not request mini-harness shutdown');
+      for (let i = 0; i < 100 && readServerInfo(paths.pid)?.pid === info.pid; i++) await sleep(100);
+      if (readServerInfo(paths.pid)?.pid === info.pid) throw new Error('mini-harness is still shutting down');
     }
-    throw new Error('mini-harness is still shutting down');
+    if (args.command === 'reset-token') {
+      const unlock = await lockInstance(paths.home);
+      try { instanceCredential(paths.home, true); }
+      finally { await unlock(); }
+      console.log('Browser credential reset. Start mini-harness and open the new URL.');
+    } else console.log(info ? 'mini-harness stopped' : 'mini-harness is not running');
+    return;
   }
   if (args.detached && !args.serve) await detached(paths, args.port);
-  else await serve(paths, args.port, !args.noOpen && !args.serve);
+  else await serve(paths, args.port, !args.noOpen && !args.serve, args.serve);
 }
 
 main().catch((error) => { console.error('mini-harness:', error.message); process.exitCode = 1; });

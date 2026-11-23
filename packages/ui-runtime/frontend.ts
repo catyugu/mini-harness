@@ -7,7 +7,7 @@ import type { ModelChoice } from '@mini-harness/contracts/conversation';
 import type { Conversation } from '@mini-harness/contracts/conversation';
 import type { RightTabType, TabScope } from '@mini-harness/web/contracts/tabs';
 import type { WorkspaceRecord } from '@mini-harness/contracts/workspace';
-import type { SlotName, SlotKind, SlotRenderer, SlotDecorator, KeyedSlotOptions } from '@mini-harness/ui-slots/registry';
+import type { SlotName, SlotKind, SlotRenderer, KeyedSlotOptions } from '@mini-harness/ui-slots/registry';
 
 export interface ToolView { name: string; state: string; content?: MessageContent; arguments?: unknown; sessionId?: string }
 export interface Suggestion {
@@ -45,7 +45,7 @@ export interface MessageAction {
 export interface DraftMode {
   title: string;
   text: string;
-  submit(input: { text: string; attachments: Attachment[]; model?: ModelChoice; thinkingLevel?: string }): Promise<unknown>;
+  submit(input: { text: string; attachments: Attachment[]; model?: ModelChoice; thinkingLevel?: string | null }): Promise<unknown>;
 }
 type Release = () => void | Promise<void>;
 
@@ -57,7 +57,6 @@ export interface FrontendApi {
     define(name: SlotName, container: HTMLElement, kind?: SlotKind): void;
     register(name: SlotName, node: HTMLElement, order?: number): () => void;
     registerKeyed(name: SlotName, key: string, render: SlotRenderer, options?: KeyedSlotOptions): Release;
-    decorate(name: SlotName, key: string | undefined, wrap: SlotDecorator, order?: number): Release;
   };
   messageAction(action: MessageAction): Release;
   beginDraftMode(mode: DraftMode): void;
@@ -70,10 +69,17 @@ export interface FrontendApi {
   onDispose(cleanup: () => void | Promise<void>): Release;
   readonly config: Readonly<Record<string, unknown>>;
   readonly signal: AbortSignal;
+  /** Refresh a plugin-owned snapshot when this plugin invalidates its state. */
+  watch(refresh: () => void | Promise<void>): Release;
+  readonly locale: {
+    current(): string;
+    subscribe(listener: (language: string) => void): Release;
+    text(messages: Record<string, string>, fallback: string): string;
+  };
   request<T>(path: string, options?: RequestInit): Promise<T>;
   insert(text: string): void;
   rightTab(type: string, definition: RightTabType): Release;
-  openTab(type: string, path?: string, scope?: TabScope): void;
+  openTab(type: string, path?: string, scope?: TabScope, mode?: string): void;
   inspect(title: string, content: HTMLElement): void;
 }
 
@@ -149,7 +155,16 @@ export class FrontendHost {
           define: (name, container, kind) => { own(() => this.ctx.miniSlots.define(name, container, kind)); },
           register: (name, node, order) => own(() => this.ctx.miniSlots.register(name, node, order)),
           registerKeyed: (name, key, render, options) => own(() => this.ctx.miniSlots.registerKeyed(name, key, render, options)),
-          decorate: (name, key, wrap, order) => own(() => this.ctx.miniSlots.decorate(name, key, wrap, order))
+        },
+        watch: (refresh) => own(() => root.miniProjections.register('plugin:' + id, { sync: refresh })),
+        locale: {
+          current: () => navigator.language,
+          subscribe: (listener) => {
+            const change = () => listener(navigator.language);
+            window.addEventListener('languagechange', change, { signal: controller.signal });
+            return () => window.removeEventListener('languagechange', change);
+          },
+          text: (messages, fallback) => messages[navigator.language] ?? messages[navigator.language.split('-')[0]] ?? fallback
         },
         request: (path, options) => this.request(path, { ...options, signal: options?.signal
           ? AbortSignal.any([controller.signal, options.signal]) : controller.signal }),
@@ -167,8 +182,8 @@ export class FrontendHost {
         },
         messageAction: (action) => own(() => this.ctx.miniMessages.registerAction(action)),
         rightTab: (type, definition) => own(() => this.ctx.miniTabs.register(id + ':' + type, definition)),
-        openTab: (type, path, scope) => {
-          if (!controller.signal.aborted) this.ctx.miniTabs.open(id + ':' + type, path, scope);
+        openTab: (type, path, scope, mode) => {
+          if (!controller.signal.aborted) this.ctx.miniTabs.open(id + ':' + type, path, scope, mode);
         },
         inspect: (title, content) => {
           if (!controller.signal.aborted) this.ctx.miniTabs.inspect(id, title, content, controller.signal);

@@ -1,3 +1,4 @@
+import type { BrowserProjectionPort } from '@mini-harness/contracts/browser';
 import type { Attachment } from '@mini-harness/contracts/input';
 import type { Conversation, ModelChoice } from '@mini-harness/contracts/conversation';
 import type { MessageContent } from '@mini-harness/contracts/message';
@@ -21,6 +22,7 @@ type Queue = ConversationView['queue'];
 
 interface ConversationServices {
   sessions: RemoteStore<Conversation[]>;
+  projections: BrowserProjectionPort;
   settings: RemoteStore<Settings>;
   models: RemoteStore<ModelCatalog>;
   closeDrawer(): void;
@@ -76,7 +78,7 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
   const welcome = element('welcome');
   const summary = element('runSummary'), summaryStatus = required(summary.querySelector('span')), elapsed = required(summary.querySelector('time'));
   const states = { queued: 'Queued', running: 'Running', completed: 'Completed', failed: 'Failed',
-    cancelled: 'Cancelled', interrupted: 'Interrupted' };
+    cancelled: 'Cancelled', interrupted: 'Interrupted. You can continue this conversation. Unconfirmed tools will not rerun.' };
   let runSummary: RunInfo | undefined;
   const changedFiles = element<'details'>('changedFiles');
   function renderChangedFiles(run?: RunInfo) {
@@ -114,9 +116,12 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
   let sending = false;
   let visit = new AbortController();
   let pending = false;
+  let queueRevision = 0;
   let modelDraft: ModelChoice | undefined;
   let conversationModel: ModelChoice | undefined;
-  let conversationThinking: ThinkingLevel;
+  let conversationThinking: ThinkingLevel | undefined;
+  let thinkingDraft: ThinkingLevel | null | undefined;
+  thinkingSelect.onchange = () => { thinkingDraft = (thinkingSelect.value || null) as ThinkingLevel | null; };
   let activeLeaf: string | null | undefined;
   let draftMode: DraftMode | undefined;
   function setDraftMode(mode?: DraftMode) {
@@ -131,7 +136,7 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
     }
   }
   required(element('draftMode').querySelector('button')).addEventListener('click', () => setDraftMode());
-  const modelPicker = createModelPicker(view, (choice) => { modelDraft = choice; updateModelControls(); }, api.signal);
+  const modelPicker = createModelPicker(view, (choice) => { modelDraft = choice; thinkingDraft = undefined; updateModelControls(); }, api.signal);
   const lastInputs = new Map<string, { message: string; attachments: Attachment[] }>();
   const drafts = new Map<string, string>();
   let draftConversation: string | undefined;
@@ -197,7 +202,7 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
     }
     updateModelControls();
     options.setTitle(item?.title ?? 'New conversation');
-    messageView.history(history, item?.run?.error);
+    messageView.history(history, item?.run?.state === 'failed' ? item.run.error : undefined);
     showWelcome(!messages.childElementCount && !isRunning(item?.run));
     state.selectConversation(item, revealWorkspace);
   }
@@ -251,15 +256,18 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
   }
 
   async function send(text: string, attached?: Attachment[]) {
-    const attachments = attached ?? composerUi.attachments();
-    if (sending || pending || (!text.trim() && !attachments.length)) return;
+    if (sending || pending) return;
+    let attachments: Attachment[];
+    try { attachments = attached ?? composerUi.attachments(); }
+    catch (error) { report(error instanceof Error ? error : new Error(String(error))); return; }
+    if (!text.trim() && !attachments.length) return;
     if (!modelPicker.selected()) {
       showStatus('Choose a configured model before sending.');
       modelPicker.open();
       return;
     }
     const choice = modelDraft;
-    const thinkingLevel = thinkingSelect.value || undefined;
+    const thinkingLevel = thinkingDraft;
     const message = commands.prepare(text);
     const signal = begin();
     const workspace = state.selectedWorkspace;
@@ -282,7 +290,7 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
       }
       setDraftMode();
       if (!signal.aborted) {
-        modelDraft = undefined;
+        modelDraft = undefined; thinkingDraft = undefined;
         prompt.value = '';
         if (id) drafts.set(id, '');
         composerUi.clear();
@@ -303,7 +311,10 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
       render(event);
       switch (event.type) {
         case 'user': if (!lastInputs.has(item.id)) rememberInput(item.id, event.content); break;
-        case 'tool': showStatus(event.state === 'running' ? 'Running ' + event.name + '…' : 'Thinking…'); break;
+        case 'tool':
+          showStatus(event.state === 'approval' ? 'Waiting for approval…' :
+            event.state === 'running' ? 'Running ' + event.name + '…' : 'Thinking…');
+          break;
         case 'complete':
         case 'error': showStatus(''); break;
         case 'run':
@@ -326,15 +337,20 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
   function updateModelControls() {
     const catalog = options.models.get();
     const draft = modelDraft;
-    if (draft && !catalog.models.some((model) => model.configured && model.provider === draft.provider && model.id === draft.id))
+    if (draft && !catalog.models.some((model) => model.configured && model.provider === draft.provider && model.id === draft.id)) {
       modelDraft = undefined;
+      thinkingDraft = undefined;
+    }
     const selected = modelPicker.update(catalog.models, catalog.providers,
       modelDraft ?? (sending ? conversationModel : undefined) ?? options.settings.get().model);
-    const levels = selected?.thinkingLevels ?? [];
+    const advertised = selected?.thinkingLevels ?? [];
+    const levels: ThinkingLevel[] = advertised.length ? ['off', ...advertised.filter((level) => level !== 'off')] : [];
     const sameModel = selected && selected.provider === conversationModel?.provider && selected.id === conversationModel.id;
     thinkingSelect.replaceChildren(new Option('Default', ''), ...levels.map((level) =>
       new Option(level === 'xhigh' ? 'Extra high' : level[0].toUpperCase() + level.slice(1), level)));
-    thinkingSelect.value = sameModel && levels.includes(conversationThinking) ? conversationThinking : '';
+    const inherited = sameModel ? conversationThinking : undefined;
+    const desired = thinkingDraft === undefined ? inherited : thinkingDraft;
+    thinkingSelect.value = desired && levels.includes(desired) ? desired : '';
     thinkingSelect.hidden = levels.length < 2;
   }
   async function compactConversation() {
@@ -360,29 +376,76 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
       const queued = await controller.queue(id, {
         message: commands.prepare(prompt.value), mode: value('queueMode') as 'steer' | 'followUp',
         attachments: composerUi.attachments(), model: modelDraft,
-        thinkingLevel: thinkingSelect.value || undefined
+        thinkingLevel: thinkingDraft
       });
       if (signal.aborted) return;
       prompt.value = '';
       if (id) drafts.set(id, '');
-      modelDraft = undefined;
+      modelDraft = undefined; thinkingDraft = undefined;
       composerUi.clear(); adjustPrompt(); updateModelControls(); showQueue(queued);
     } catch (error) { if (!signal.aborted) report(error instanceof Error ? error : new Error(String(error))); } finally { button.disabled = false; }
   }
-  function showQueue(queue: Queue = { steer: [], followUp: [] }) {
-    const items = [...queue.steer.map((text) => 'Instruction: ' + text), ...queue.followUp.map((text) => 'Follow up: ' + text)];
-    element('queuedMessages').textContent = items.map((text) => text.slice(0, 180)).join('\n');
-    element('queuedMessages').hidden = !items.length;
-  }
-  const queueTimer = setInterval(async () => {
+  async function cancelQueue(item?: string) {
     const id = active(), signal = visit.signal;
-    if (document.hidden || !sending || !id || pending) return;
+    if (!id) return;
+    const revision = ++queueRevision;
     try {
-      const queue = await controller.getQueue(id, signal);
-      if (!signal.aborted && sending) showQueue(queue);
-    } catch { /* A completed or deleted conversation can remove the queue. */ }
-  }, 1500);
-  api.onDispose(() => { clearInterval(queueTimer); visit.abort(); });
+      const queue = await controller.cancelQueue(id, item);
+      if (!signal.aborted && revision === queueRevision) showQueue(queue);
+    } catch (error) { if (!signal.aborted) report(error instanceof Error ? error : new Error(String(error))); }
+  }
+  function showQueue(queue: Queue = []) {
+    queueRevision++;
+    const panel = element('queuedMessages');
+    panel.replaceChildren();
+    let pendingCount = 0;
+    for (const item of queue ?? []) {
+      const row = document.createElement('div');
+      row.className = 'queue-item';
+      const label = document.createElement('span');
+      label.textContent = (item.mode === 'steer' ? 'Instruction: ' : 'Follow up: ') + item.summary;
+      row.append(label);
+      if (item.state === 'failed') {
+        const reason = document.createElement('span');
+        reason.textContent = item.reason ?? 'Could not deliver';
+        reason.setAttribute('role', 'status');
+        row.append(reason);
+      } else {
+        pendingCount++;
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'small-button';
+        button.textContent = 'Cancel';
+        button.setAttribute('aria-label', 'Cancel queued message: ' + item.summary);
+        button.onclick = () => void cancelQueue(item.id);
+        row.append(button);
+      }
+      panel.append(row);
+    }
+    if (pendingCount > 1) {
+      const clear = document.createElement('button');
+      clear.type = 'button';
+      clear.className = 'small-button';
+      clear.textContent = 'Clear queue';
+      clear.onclick = () => void cancelQueue();
+      panel.append(clear);
+    }
+    panel.hidden = !panel.childElementCount;
+  }
+  api.onDispose(options.projections.register('queue', {
+    async sync(_revision, reconnect, changedId) {
+      const id = active(), signal = visit.signal;
+      if (!id || (!reconnect && changedId && id !== changedId)) return;
+      const revision = ++queueRevision;
+      try {
+        const queue = await controller.getQueue(id, signal);
+        if (!signal.aborted && revision === queueRevision) showQueue(queue);
+      } catch (error) {
+        if (!signal.aborted && revision === queueRevision) throw error;
+      }
+    }
+  }));
+  api.onDispose(() => visit.abort());
   element<'button'>('stop').onclick = async () => {
     const id = active(), signal = visit.signal;
     if (!id) return;

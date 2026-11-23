@@ -1,3 +1,4 @@
+import type { SessionSearchResult } from '@mini-harness/contracts/conversation';
 import type { Conversation } from '@mini-harness/contracts/conversation';
 import type { WorkspaceRecord } from '@mini-harness/contracts/workspace';
 import { exportSessions } from '@mini-harness/web/transport/session-client';
@@ -119,7 +120,8 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
 
   let selecting = false;
   let visible: Conversation[] = [];
-  let contentMatches = new Set<string>();
+  let contentMatches = new Map<string, SessionSearchResult>();
+  let searchRequest: AbortController | undefined;
   let searchRevision = 0;
   let searchTimer: ReturnType<typeof setTimeout> | undefined;
   const selectAll = button('Select all');
@@ -215,7 +217,7 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
         const matches = !query || name.toLowerCase().includes(query) || path.toLowerCase().includes(query);
         const current = state.selectedWorkspace === id;
         const tree = sessionTree(grouped.get(id) ?? [], {
-          active: state.activeConversation, expanded, selection, selecting, query: matches ? '' : query,
+          active: state.activeConversation, expanded, selection, selecting, query: matches ? '' : query, highlight: query,
           matches: contentMatches, render, selectionChanged, activate: options.activate, rename,
           remove(item) {
             void confirmAction('Permanently delete "' + item.title + '" and all child conversations?',
@@ -347,18 +349,20 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
     const query = value('sessionSearch');
     const revision = ++searchRevision;
     clearTimeout(searchTimer);
-    contentMatches = new Set();
+    searchRequest?.abort();
+    contentMatches = new Map();
     render();
     if (query.length < 2) return;
     searchTimer = setTimeout(() => {
-      void api.request<string[]>('/sessions/search?q=' + encodeURIComponent(query)).then((ids) => {
-        if (revision !== searchRevision) return;
-        contentMatches = new Set(ids);
+      const request = searchRequest = new AbortController();
+      void api.request<SessionSearchResult[]>('/sessions/search?q=' + encodeURIComponent(query), { signal: request.signal }).then((hits) => {
+        if (request.signal.aborted || revision !== searchRevision) return;
+        contentMatches = new Map(hits.map((hit) => [hit.id, hit]));
         render();
-      }).catch((error) => { if (!api.signal.aborted && revision === searchRevision) options.report(error); });
+      }).catch((error) => { if (!request.signal.aborted && revision === searchRevision) options.report(error); });
     }, 250);
   };
-  api.onDispose(() => clearTimeout(searchTimer));
+  api.onDispose(() => { clearTimeout(searchTimer); searchRequest?.abort(); });
   cancel.onclick = () => toggleSelection(false);
   selectAll.onclick = () => { for (const item of visible) selection.add(item.id); render(); };
   exportButton.onclick = () => void exportSessions([...selection], api.signal).catch(options.report);

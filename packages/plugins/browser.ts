@@ -7,15 +7,17 @@ import { button, field, fromMarkup, iconButton, saveToggle, toggle, confirmActio
 import { readPluginValues, schemaFields } from './browser/fields.js';
 
 const setup: FrontendSetup = (ctx, api) => {
-  const { miniPluginData: plugins, miniSettingsData: settings, miniPages: pages, miniSwitch: syncPlugins } = ctx;
+  const { miniPluginData: plugins, miniSettingsData: settings, miniPages: pages, miniSwitch: syncPlugins, miniBrowserFailures: browserFailures } = ctx;
   const refresh = async () => {
     await Promise.all([plugins.refresh(), settings.refresh()]);
     const failures = await syncPlugins();
     if (failures.size) throw new Error('Browser plugins failed: ' + [...failures.keys()].join(', '));
   };
-  const catalog = pluginCatalog(api, () => ({ plugins: plugins.get(), settings: settings.get() }), refresh, pages);
+  const catalog = pluginCatalog(api, () => ({ plugins: plugins.get().map((plugin) => browserFailures.has(plugin.id)
+    ? { ...plugin, error: 'Browser setup or resource loading failed.' } : plugin), settings: settings.get() }), refresh, pages);
   plugins.subscribe(catalog.refresh, api.signal);
   settings.subscribe(catalog.refresh, api.signal);
+  browserFailures.subscribe(catalog.refresh, api.signal);
 };
 
 const bundleNames = ['plugin.js', 'plugin.json', 'web.js'];
