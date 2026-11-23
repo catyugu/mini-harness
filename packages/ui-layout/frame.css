@@ -16,6 +16,9 @@
   border: 1px solid var(--border); border-radius: 9px; padding: 9px 10px; background: var(--surface);
   font-size: 13px;
 }
+.new-session { width: 100%; }
+.sidebar-bottom button { min-height: 44px; line-height: 18px; }
+.sidebar-bottom button svg { flex: 0 0 18px; }
 .new-session:hover, .sidebar-bottom button:hover, .icon-button:hover { background: var(--hover); }
 .sidebar-caption > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
 .sidebar-caption { display: flex; justify-content: space-between; align-items: center; gap: 6px; padding: 13px 4px 2px; color: var(--muted); font-size: 12px; }
