@@ -64,8 +64,9 @@ test('capabilities do not import other capabilities concrete source', () => {
 test('the kernel remains independent of product runtime', () => {
   for (const file of files(join(packages,'kernel'))) for (const dep of dependencies(file))
     assert.equal(dep.target.startsWith(packages + sep), false, file + ' depends on product code');
-  for (const file of files(join(packages,'web','kernel'))) for (const dep of dependencies(file))
-    assert.equal(dep.target.startsWith(join(web,'ui') + sep), false, file + ' depends on UI');
+  for (const file of files(join(packages,'ui-runtime')).filter(production)) for (const dep of dependencies(file))
+    for (const feature of capabilityNames)
+      assert.equal(dep.target.startsWith(join(packages,feature) + sep), false, file + ' depends on a feature');
   for (const file of files(join(packages,'contracts'))) for (const dep of dependencies(file))
     for (const name of capabilityNames)
       assert.equal(dep.target.startsWith(join(packages,name) + sep), false, file + ' depends on feature');
@@ -75,7 +76,7 @@ test('browser values never load host-only modules', () => {
     ...[join(packages,name,'client.ts'), join(packages,name,'browser.ts')].filter(existsSync),
     ...(existsSync(join(packages,name,'browser')) ? files(join(packages,name,'browser')).filter(production) : [])
   ]);
-  for (const file of [...files(web).filter(production), ...files(join(packages, 'ui-layout')).filter(production), ...files(join(packages, 'ui-primitives')).filter(production), ...files(join(packages, 'ui-theme')).filter(production), ...clients]) for (const dep of dependencies(file)) {
+  for (const file of [...files(web).filter(production), ...files(join(packages, 'ui-runtime')).filter(production), ...files(join(packages, 'ui-layout')).filter(production), ...files(join(packages, 'ui-primitives')).filter(production), ...files(join(packages, 'ui-theme')).filter(production), ...clients]) for (const dep of dependencies(file)) {
     if (dep.typeOnly) continue;
     for (const name of ['host','platform','transport','kernel']) {
       assert.equal(dep.target.startsWith(join(packages,name) + sep), false,

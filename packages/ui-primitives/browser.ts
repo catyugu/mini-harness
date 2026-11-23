@@ -1,4 +1,4 @@
-import type { BrowserPlugin } from '../web/kernel/extensions.js';
+import type { BrowserPlugin } from '../ui-runtime/frontend.js';
 import { hydrateIcons } from './icons.js';
 
 /** Elements contributed by plugins are hydrated without a global app-entry pass. */

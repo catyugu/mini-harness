@@ -1,4 +1,4 @@
-import type { BrowserPlugin } from '../web/kernel/extensions.js';
+import type { BrowserPlugin } from '../ui-runtime/frontend.js';
 
 /** Theme presentation is owned by the theme plugin, not by the global data mirror. */
 export const themePlugin: BrowserPlugin = {

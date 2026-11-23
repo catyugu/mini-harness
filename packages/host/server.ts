@@ -28,7 +28,7 @@ for (const entry of readdirSync(WEB_DIR, { recursive: true, withFileTypes: true 
 }
 
 // UI foundations have no host-side implementations. All their compiled modules are public.
-for (const name of ['ui-slots', 'ui-theme', 'ui-primitives', 'ui-layout']) {
+for (const name of ['ui-runtime', 'ui-slots', 'ui-theme', 'ui-primitives', 'ui-layout']) {
   const root = join(FEATURE_DIR, name);
   for (const entry of readdirSync(root, { recursive: true, withFileTypes: true })) {
     if (!entry.isFile() || !entry.name.endsWith('.js')) continue;

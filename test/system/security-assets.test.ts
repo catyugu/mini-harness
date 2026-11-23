@@ -26,7 +26,7 @@ test('compiled browser tests and host-only feature code are not public static as
     const response = await fetch(base + asset);
     assert.equal(response.status, 404, asset);
   }
-  for (const entry of ['/packages/web/boot.js', '/packages/ui-layout/browser.js']) {
+  for (const entry of ['/packages/ui-runtime/boot.js', '/packages/ui-layout/browser.js']) {
     const response = await fetch(base + entry);
     assert.equal(response.status, 200, entry);
   }
@@ -43,7 +43,7 @@ test('compiled browser tests and host-only feature code are not public static as
   });
   assert.equal(bootstrap.status, 200);
   const snapshot = await bootstrap.json() as { ui: { browser: string }[]; plugins: { browser?: string }[] };
-  const pending = ['/packages/web/boot.js', ...snapshot.ui.map(({ browser }) => browser),
+  const pending = ['/packages/ui-runtime/boot.js', ...snapshot.ui.map(({ browser }) => browser),
     ...snapshot.plugins.flatMap((plugin) => plugin.browser ? [new URL(plugin.browser, base).pathname] : [])];
   const seen = new Set<string>();
   while (pending.length) {
