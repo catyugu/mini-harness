@@ -12,6 +12,8 @@ export interface InboxItem {
   text: string;
   images: ImageInput[];
   input?: PreparedMessage;
+  model?: ModelChoice;
+  thinkingLevel?: ThinkingLevel;
 }
 
 /** Changes relative to the parent branch's model context, not a copied transcript. */

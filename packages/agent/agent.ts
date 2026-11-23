@@ -15,6 +15,7 @@ import type { MessageContent } from '@mini-harness/contracts/message';
 import { AgentRegistry } from './registry.js';
 import { Inbox } from './inbox.js';
 import type { ModelFailure, ModelRequestDraft, ModelRequestTransform, ModelRetry, StepContext, ToolResultTransform } from '@mini-harness/contracts/extensions';
+import type { InboxItem } from '@mini-harness/contracts/session-log';
 import { isToolContent } from '@mini-harness/contracts/tools';
 import { contentDelta } from '@mini-harness/platform/content-delta';
 import { applyTransforms } from './transforms.js';
@@ -104,10 +105,19 @@ export class NativeAgent implements AgentPort {
     if (source?.type !== 'message' || source.message.role !== 'user') throw new Error('User message not found on active branch');
   }
 
-  async queueInput(id: string, text: string, mode: 'steer' | 'followUp', attachments?: Attachment[]) {
+  async queueInput(id: string, text: string, mode: 'steer' | 'followUp', attachments?: Attachment[],
+    options: Pick<InboxItem, 'model' | 'thinkingLevel'> = {}) {
     this.sessions.assertAvailable(id);
     if (!this.agents.acceptsInput(id)) throw new Error('The agent is not streaming; send a new message');
-    return new Inbox(this.sessions.log(id)).enqueue(text, mode, attachments);
+    const choice = options.model ? this.services.models(id).resolve(options.model) : this.activeModel(id);
+    if (!choice) throw new Error('Unknown queued model');
+    const capabilities = this.services.models(id).capabilities(choice);
+    if (options.thinkingLevel !== undefined &&
+      (!['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(options.thinkingLevel) ||
+       options.thinkingLevel !== 'off' && !capabilities?.reasoning ||
+       capabilities?.thinkingLevels && !capabilities.thinkingLevels.includes(options.thinkingLevel)))
+      throw new Error('Invalid queued thinking level');
+    return new Inbox(this.sessions.log(id)).enqueue(text, mode, attachments, options);
   }
 
   private async user(id: string, log: SessionLogPort, text: string, images: ImageInput[], input: PreparedMessage | undefined,
@@ -153,9 +163,9 @@ export class NativeAgent implements AgentPort {
       }
       const previous = revision ? log.projection(revisionParent) : log.projection();
       const models = this.services.models(id);
-      const model = selectModel(models, { explicit: choice, stored: previous.model,
+      let model = selectModel(models, { explicit: choice, stored: previous.model,
         global: this.services.defaultModel(), child: Boolean(record.parentId) });
-      const capabilities = models.capabilities(model);
+      let capabilities = models.capabilities(model);
       if (images.length && !capabilities?.input.includes('image'))
         throw new Error('The selected model does not support image input. Choose an image-capable model and retry.');
       if (thinkingLevel !== undefined && thinkingLevel !== 'off' && !capabilities?.reasoning)
@@ -163,6 +173,7 @@ export class NativeAgent implements AgentPort {
       if (thinkingLevel !== undefined && capabilities?.thinkingLevels && !capabilities.thinkingLevels.includes(thinkingLevel))
         throw new Error('The selected model does not support thinking level: ' + thinkingLevel);
       const nextThinking = thinkingLevel ?? (capabilities?.reasoning ? previous.thinkingLevel : 'off');
+      let activeThinking = nextThinking;
       const skills = this.services.skills(id);
       const expanded = skills ? await skills.expand(this.sessions.workspacePath(id), prompt) : prompt;
       signal.throwIfAborted();
@@ -182,8 +193,25 @@ export class NativeAgent implements AgentPort {
       const deliver = async (mode: 'steer' | 'followUp') => {
         const item = inbox.next(mode);
         if (!item) return false;
-        if (item.images.length && !capabilities?.input.includes('image'))
+        const chosen = item.model ? selectModel(models, { explicit: item.model,
+          stored: model, global: this.services.defaultModel(), child: Boolean(record.parentId) }) : model;
+        const nextCapabilities = models.capabilities(chosen);
+        if (item.images.length && !nextCapabilities?.input.includes('image'))
           throw new Error('The selected model does not support queued image input');
+        const level = item.thinkingLevel ?? (nextCapabilities?.reasoning ? activeThinking : 'off');
+        if (level !== 'off' && !nextCapabilities?.reasoning ||
+            nextCapabilities?.thinkingLevels && !nextCapabilities.thinkingLevels.includes(level))
+          throw new Error('The selected model does not support queued thinking level');
+        if (model.provider !== chosen.provider || model.id !== chosen.id) {
+          model = chosen;
+          capabilities = nextCapabilities;
+          log.append({ type: 'model', model });
+          if (!record.parentId) this.services.rememberModel(model, id);
+        }
+        if (level !== activeThinking) {
+          activeThinking = level;
+          log.append({ type: 'thinking', level });
+        }
         await this.user(id, log, item.text, item.images, item.input, emit, item.id);
         return true;
       };

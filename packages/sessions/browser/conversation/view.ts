@@ -246,8 +246,7 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
     element('queueSend').hidden = !value;
     element<'button'>('stop').hidden = !value;
     element<'button'>('stop').disabled = false;
-    modelPicker.setDisabled(value);
-    thinkingSelect.disabled = value;
+    // Queue composer selections target the next queued turn, not the in-flight request.
   }
 
   async function send(text: string, attached?: Attachment[]) {
@@ -326,7 +325,8 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
     const catalog = options.models.get();
     if (modelDraft && !catalog.models.some((model) => model.configured && model.provider === modelDraft.provider && model.id === modelDraft.id))
       modelDraft = undefined;
-    const selected = modelPicker.update(catalog.models, catalog.providers, modelDraft ?? options.settings.get().model);
+    const selected = modelPicker.update(catalog.models, catalog.providers,
+      modelDraft ?? conversationModel ?? options.settings.get().model);
     const levels = selected?.thinkingLevels ?? [];
     const sameModel = selected && selected.provider === conversationModel?.provider && selected.id === conversationModel.id;
     thinkingSelect.replaceChildren(new Option('Default', ''), ...levels.map((level) =>
@@ -355,10 +355,15 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
     const button = element<'button'>('queueSend'); button.disabled = true;
     try {
       const queued = await controller.queue(id, {
-        message: commands.prepare(prompt.value), mode: value('queueMode') as 'steer' | 'followUp', attachments: composerUi.attachments()
+        message: commands.prepare(prompt.value), mode: value('queueMode') as 'steer' | 'followUp',
+        attachments: composerUi.attachments(), model: modelDraft,
+        thinkingLevel: thinkingSelect.value || undefined
       });
       if (signal.aborted) return;
-      prompt.value = ''; composerUi.clear(); adjustPrompt(); showQueue(queued);
+      prompt.value = '';
+      if (id) drafts.set(id, '');
+      modelDraft = undefined;
+      composerUi.clear(); adjustPrompt(); updateModelControls(); showQueue(queued);
     } catch (error) { if (!signal.aborted) report(error); } finally { button.disabled = false; }
   }
   function showQueue(queue: Queue = { steer: [], followUp: [] }) {

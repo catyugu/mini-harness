@@ -212,3 +212,26 @@ test('a fatal pipeline failure stops dispatch and drains active calls', async ()
   assert.equal(started.length, 16);
   assert.equal(drained, 15);
 });
+
+test('a queued follow-up can preselect the next model and thinking level', async (t) => {
+  let release: () => void, entered: () => void;
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  const started = new Promise<void>((resolve) => { entered = resolve; });
+  t.after(() => release());
+  const seen: { model: string; thinking: string }[] = [];
+  const { agent, record, sessions } = fixture(t, { async *stream(request) {
+    seen.push({ model: request.model.id, thinking: request.thinkingLevel });
+    if (seen.length === 1) { entered(); await held; }
+    yield { type: 'done', message: answer() };
+  } });
+  const pending = agent.prompt(record, 'Initial', () => {}, { signal: new AbortController().signal });
+  await started;
+  await agent.queueInput(record.id, 'Follow up', 'followUp', undefined, {
+    model: { provider: 'fixture', id: 'next-model' }, thinkingLevel: 'medium'
+  });
+  release();
+  await pending;
+  assert.deepEqual(seen, [{ model: 'native', thinking: 'off' }, { model: 'next-model', thinking: 'medium' }]);
+  assert.deepEqual(sessions.log(record.id).projection().model, { provider: 'fixture', id: 'next-model' });
+  assert.deepEqual(sessions.log(record.id).projection().inbox, []);
+});

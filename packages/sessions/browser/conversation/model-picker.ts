@@ -140,10 +140,6 @@ export function createModelPicker(root: HTMLElement, onSelect: (model: ModelChoi
   return {
     open,
     selected: () => selected,
-    setDisabled(disabled: boolean) {
-      button.disabled = disabled;
-      if (disabled && popup.matches(':popover-open')) popup.hidePopover();
-    },
     update(catalog: ModelInfo[], names: { id: string; name: string }[], choice: ModelChoice) {
       providers = new Map(names.map(({ id, name }) => [id, name]));
       models = catalog.filter((model) => model.configured).sort((a, b) =>

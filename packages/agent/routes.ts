@@ -10,7 +10,8 @@ export function registerRoutes(ctx: Context) {
   };
   add('POST', '/api/sessions/:id/queue', async ({ params, body }) => {
     const id = session(params.id), input = await body(20 * 1024 * 1024);
-    return new HttpReply(202, await ctx.harnessAgent.queueInput(id, input.message, input.mode, input.attachments));
+    return new HttpReply(202, await ctx.harnessAgent.queueInput(id, input.message, input.mode, input.attachments,
+      { model: input.model, thinkingLevel: input.thinkingLevel }));
   });
   add('GET', '/api/sessions/:id/queue', ({ params }) => ctx.harnessAgent.read(session(params.id)).queue);
 }
