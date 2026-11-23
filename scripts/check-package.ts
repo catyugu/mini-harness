@@ -85,7 +85,9 @@ async function checkPackage() {
     started = true;
     const info = readServerInfo(paths.pid);
     assert.ok(info);
-    const headers = { Authorization: 'Bearer ' + info.token, 'Content-Type': 'application/json' };
+    const token = /#token=([a-f0-9]{64})/.exec(launch.stdout)?.[1];
+    assert.ok(token);
+    const headers = { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' };
     const get = (path: string) => fetch(info.url + path, { headers });
     for (const asset of ['/', '/packages/ui-runtime/boot.js', '/packages/ui-primitives/markdown.js', '/packages/session-helper/client.js', '/packages/settings/browser.js', '/packages/sessions/browser/conversation/view.js', '/packages/ui-primitives/primitives.js', '/packages/web/vendor/marked.js', '/packages/web/vendor/purify.js', '/logo.svg', '/manifest.webmanifest', '/theme.css', '/icon-192.png', '/icon-512.png', '/favicon.ico']) {
       const response = await get(asset);

@@ -16,16 +16,19 @@ test('browser invalidations reach only registered feature owners and dispose ind
   assert.deepEqual(seen, [['second', 4, false, undefined]]);
   second();
   seen.length = 0;
-  await registry.dispatch({ type: 'snapshot', revisions: { sessions: 5, settings: 2, plugins: 0, models: 0, workspaces: 0, approvals: 0 } });
+  await registry.dispatch({ type: 'snapshot', revisions: { sessions: 5, settings: 2, plugins: 0, models: 0, workspaces: 0, approvals: 0, files: 0, queue: 0 } });
   assert.deepEqual(seen, [['settings', 2, true, undefined]]);
 });
 
 test('a failing projection surfaces recovery while other owners still synchronize', async () => {
-  const registry = new BrowserProjections();
+  const failures: string[] = [];
+  const registry = new BrowserProjections((_domain, error) => { failures.push(String(error)); });
   let healthy = false;
   registry.register('plugins', { sync: () => { throw new Error('Refresh failed'); } });
   registry.register('plugins', { sync: async () => { healthy = true; } });
-  await assert.rejects(registry.dispatch({ type: 'change', domain: 'plugins', revision: 1 }), /Refresh failed/);
+  await registry.dispatch({ type: 'change', domain: 'plugins', revision: 1 });
+  await registry.dispatch({ type: 'change', domain: 'plugins', revision: 2 });
+  assert.deepEqual(failures, ['Error: Refresh failed']);
   assert.equal(healthy, true);
 });
 

@@ -5,9 +5,9 @@ import type { RunAgentPort, ThinkingLevel } from './agent.js';
 import type { RunEvent, RunInfo, StreamEvent } from './transport.js';
 import type { ViewMessage } from './message.js';
 import type { Attachment } from './input.js';
-import type { InboxItem } from './session-log.js';
+import type { InboxItem, QueueEntry } from './session-log.js';
 import type { PluginMetadata, SessionRecords } from './plugins.js';
-import type { Settings, SettingsPatch } from './config.js';
+import type { Settings } from './config.js';
 
 /** Stable, implementation-free ports for the independently mounted product capabilities. */
 export interface PluginConfigurationPort {
@@ -37,6 +37,10 @@ export interface SessionStore {
   rename(id: string, title: string, source?: SessionRecord['titleSource']): SessionRecord;
   records(id: string, pluginId: string): SessionRecords;
   log(id: string): import('./session-log.js').SessionLogPort;
+  inspectLog<T>(id: string, read: (log: import('./session-log.js').SessionLogPort) => T): T | undefined;
+  runSummary(id: string): RunInfo | undefined;
+  reserveRun(id: string, run: RunInfo): void;
+  diagnostics(): { id: string; message: string }[];
   assertAvailable(id?: string, workspaceId?: string): void;
   beforeDelete(handler: { quiesce(ids: string[]): Promise<void>; release?(ids: string[]): void; busy?(id: string): boolean }): () => void;
   close(): void;
@@ -54,9 +58,11 @@ export interface AgentPort extends RunAgentPort {
   readonly hasPending: boolean;
   prepare(id: string, signal?: AbortSignal): Promise<void>;
   activeModel(id: string): ModelChoice;
-  read(id: string): { messages: ViewMessage[]; leafId: string | null; model: ModelChoice; thinkingLevel: ThinkingLevel; queue: unknown };
+  read(id: string): { messages: ViewMessage[]; leafId: string | null; model: ModelChoice; thinkingLevel?: ThinkingLevel; queue: QueueEntry[] };
   queueInput(id: string, text: string, mode: 'steer' | 'followUp', attachments?: Attachment[],
-    options?: Pick<InboxItem, 'model' | 'thinkingLevel'>): Promise<unknown>;
+    options?: Pick<InboxItem, 'model' | 'thinkingLevel'>): Promise<QueueEntry[]>;
+  queue(id: string): QueueEntry[];
+  cancelQueue(id: string, itemId?: string): QueueEntry[];
 }
 
 export interface RunPort {
@@ -95,9 +101,9 @@ export interface SettingsPort {
 export interface ConversationViewPort {
   read(id: string): Conversation & {
     messages: ViewMessage[]; leafId: string | null; selectedModel: ModelChoice;
-    thinkingLevel: ThinkingLevel;
+    thinkingLevel?: ThinkingLevel;
     partial?: string; tools: Extract<StreamEvent, { type: 'tool' }>[];
-    queue: unknown;
+    queue: QueueEntry[];
   };
 }
 
@@ -113,12 +119,12 @@ declare module 'cordis' {
     harnessApprovals: {
       readonly events: EventTarget;
       has(id: string): boolean;
-      request(sessionId: string, runId: string | undefined, command: string, signal?: AbortSignal): Promise<void>;
+      request(sessionId: string, runId: string | undefined, command: string, signal?: AbortSignal, context?: string): Promise<void>;
     };
     harnessProcess: import('./execution.js').ProcessExecutionPort;
     harnessSandbox: import('./execution.js').SandboxPort;
     harnessSettingsStore: SettingsPort;
-    harnessUpdateSettings: (patch: SettingsPatch) => Promise<Settings>;
+    harnessUpdateSettings: (patch: unknown) => Promise<Settings>;
     harnessPluginCatalog: {
       metadata(): PluginMetadata[];
       reserved(id: string): boolean;

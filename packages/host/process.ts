@@ -1,15 +1,16 @@
 import { createHash } from 'node:crypto';
 import { realpathSync, rmSync } from 'node:fs';
 import { createServer, type ListenOptions } from 'node:net';
+import { readInstanceCredential } from './instance-credential.js';
 import { readJson } from '@mini-harness/platform/config';
 
-export interface ServerInfo { pid: number; url: string; token: string; startedAt: string }
+export interface ServerInfo { pid: number; url: string; startedAt: string }
 
 export function readServerInfo(file: string): ServerInfo | undefined {
   try {
     const info = readJson<ServerInfo | null>(file, null);
     if (info && Number.isSafeInteger(info.pid) && info.pid > 0 && /^http:\/\/127\.0\.0\.1:\d{1,5}$/.test(info.url) &&
-      /^[a-f0-9]{64}$/.test(info.token)) return info;
+      typeof info.startedAt === 'string') return info;
   } catch (error) { if (!(error instanceof SyntaxError)) throw error; }
 }
 
@@ -43,21 +44,26 @@ async function listenLock(options: ListenOptions) {
   return () => new Promise<void>((done) => lock.close(() => done()));
 }
 
-async function request(info: ServerInfo, operation: 'status' | 'shutdown') {
+async function request(info: ServerInfo & { token: string }, operation: 'status' | 'shutdown') {
   try {
     const response = await fetch(info.url + '/api/' + operation, {
       method: operation === 'status' ? 'GET' : 'POST',
       headers: { Authorization: 'Bearer ' + info.token },
       redirect: 'error', signal: AbortSignal.timeout(1500)
     });
-    if (!response.ok) { await response.body?.cancel(); return false; }
-    return (await response.json()).pid === info.pid;
-  } catch { return false; }
+    if (!response.ok) { await response.body?.cancel(); return; }
+    const data = await response.json() as { pid: number; sessionDiagnostics?: { id: string; message: string }[] };
+    return data.pid === info.pid ? data : undefined;
+  } catch { return; }
 }
 
 export async function serverStatus(home: string, file: string) {
   const info = readServerInfo(file);
-  if (info && await request(info, 'status')) return info;
+  if (info) {
+    const token = readInstanceCredential(home);
+    const status = token && await request({ ...info, token }, 'status');
+    if (status && token) return { ...info, token, sessionDiagnostics: status.sessionDiagnostics ?? [] };
+  }
   // Only the owner of the OS lock may change metadata. During startup it may still be absent.
   let unlock: () => Promise<void>;
   try { unlock = await lockInstance(home); }
@@ -69,4 +75,4 @@ export async function serverStatus(home: string, file: string) {
   finally { await unlock(); }
 }
 
-export function requestShutdown(info: ServerInfo) { return request(info, 'shutdown'); }
+export function requestShutdown(info: ServerInfo & { token: string }) { return request(info, 'shutdown'); }

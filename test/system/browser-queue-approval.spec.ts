@@ -23,7 +23,7 @@ test('running messages can queue follow-ups and approve shell commands from the 
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Continue');
     await page.getByRole('combobox', { name: 'While running', exact: true }).selectOption('followUp');
     await page.getByRole('button', { name: 'Queue', exact: true }).click();
-    await expect(page.locator('#queuedMessages')).toHaveText('Follow up: Continue');
+    await expect(page.locator('#queuedMessages .queue-item > span')).toHaveText('Follow up: Continue');
     release();
     await expect(page.locator('.message.assistant')).toHaveCount(2);
     await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeVisible();

@@ -63,8 +63,6 @@ button { border-radius: var(--radius); }
   .settings-nav { border: 0; }
   .settings-back { display: inline-flex; align-items: center; gap: 5px; align-self: flex-start; margin: 4px 12px 0; }
 }
-#inspectorExtensions { padding-inline: 12px; }
-#inspectorExtensions:empty { display: none; }
 .tool-arguments { border-bottom: 1px solid var(--border); color: var(--muted); }
 @media (min-width: 861px) { .mobile-only { display: none; } }
 @media (max-width: 860px) {
@@ -96,7 +94,7 @@ button { border-radius: var(--radius); }
 .session-actions .icon-button { min-width: 24px; min-height: 28px; padding: 3px; }
 .session-actions svg { width: 14px; height: 14px; }
 .session-row:is(:hover, :focus-within) .session-actions { opacity: 1; position: static; background: transparent; }
-.session-row:has(.session-actions) .run-state { max-width: 44px; }
+.session-row:has(.session-actions) .run-state { max-width: 100%; }
 .attachments { display: flex; flex-wrap: wrap; gap: 6px; max-height: 150px; overflow: auto; padding-bottom: 7px; }
 .attachment { display: flex; align-items: center; gap: 5px; padding-left: 6px; max-width: 100%; border: 1px solid var(--border); border-radius: var(--radius); font-size: 12px; }
 .attachment span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -160,3 +158,6 @@ button { border-radius: var(--radius); }
 .nav-action svg { flex: 0 0 16px; height: 16px; color: var(--muted); }
 #mainSlot { flex: 1; min-height: 0; overflow: auto; }
 
+
+.queue-item { display: flex; align-items: baseline; gap: 6px; overflow-wrap: anywhere; }
+.queue-item > span:first-child { flex: 1; min-width: 0; }

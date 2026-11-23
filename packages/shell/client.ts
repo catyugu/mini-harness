@@ -18,20 +18,24 @@ const setup: FrontendSetup = (ctx, api) => {
   const list = document.createElement('div');
   api.slots.register('conversation.approvals', list);
   function render() {
-    list.replaceChildren(...approvals.get().map((approval) => {
+    const session = services.session();
+    list.replaceChildren(...approvals.get().filter(({ sessionId }) => sessionId === session?.id).map((approval) => {
       const card = document.createElement('section');
       card.className = 'approval-card';
       const title = document.createElement('strong');
       title.textContent = 'Shell approval';
       const command = document.createElement('pre');
       command.textContent = approval.command;
-      card.append(title, command);
+      const origin = document.createElement('small');
+      origin.textContent = services.workspaceRecord(session!.workspaceId)?.path ?? session!.title;
+      card.append(title, origin, command);
       for (const allow of [false, true]) {
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'small-button';
         button.textContent = allow ? 'Allow once' : 'Deny';
         button.onclick = async () => {
+          if (services.session()?.id !== approval.sessionId) return;
           for (const action of card.querySelectorAll('button')) action.disabled = true;
           try {
             await api.request('/approvals', payload('POST', { id: approval.id, allow }));
@@ -47,6 +51,7 @@ const setup: FrontendSetup = (ctx, api) => {
     }));
   }
   approvals.subscribe(render, api.signal);
+  services.onConversationChange(render, api.signal);
   render();
 };
 export default setup;

@@ -9,7 +9,7 @@ import { installRegistryPackage } from './registry-client.js';
 import { generationPattern, packageBundle, packageMarker, packageSource, packageSpecPattern, pluginIdPattern } from './source.js';
 
 /** CLI holds the instance lock for all inspection, installation and publication. */
-export async function installPackagedPlugin(paths: Paths, operation: 'install' | 'update', id: string, requested: string | undefined, reserved: (id: string) => boolean) {
+export async function installPackagedPlugin(paths: Paths, operation: 'install' | 'update', id: string, requested: string | undefined, reserved: (id: string) => boolean, signal?: AbortSignal) {
   if (!pluginIdPattern.test(id) || reserved(id)) throw new Error('Invalid plugin ID');
   const target = join(paths.plugins, id);
   const existing = lstatSync(target, { throwIfNoEntry: false });
@@ -32,7 +32,8 @@ export async function installPackagedPlugin(paths: Paths, operation: 'install' |
   let installedPackage: ReturnType<typeof packageBundle>['package'];
   try {
     writeJson(join(directory, 'package.json'), { name: 'mini-harness-plugin-install', private: true });
-    await installRegistryPackage(directory, spec);
+    await installRegistryPackage(directory, spec, signal);
+    signal?.throwIfAborted();
     const bundle = packageBundle(directory, spec);
     describePlugin(id, bundle.folder);
     installedPackage = bundle.package;

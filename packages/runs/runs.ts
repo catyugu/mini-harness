@@ -1,3 +1,4 @@
+import { HttpError } from '@mini-harness/contracts/routes';
 import { randomUUID } from 'node:crypto';
 import { prepareInput } from '@mini-harness/platform/input';
 import type { Attachment } from '@mini-harness/contracts/input';
@@ -52,21 +53,23 @@ export class Runs {
 
   private launch(id: string, prompt: string, emit: ((event: StreamEvent) => void) | undefined, { signal, model, attachments, thinkingLevel, revision, schedule }: RunOptions) {
     this.registry.assertAvailable(id);
-    if (this.active(id)) throw new Error('Conversation is already running');
+    if (this.active(id)) throw new HttpError('conflict', 'Conversation is already running');
     if (thinkingLevel !== undefined && !['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(thinkingLevel))
-      throw new Error('Invalid thinking level');
+      throw new HttpError('invalid_input', 'Invalid thinking level');
     const prepared = prepareInput(prompt, attachments);
     const record = this.registry.get(id);
-    if (!record) throw new Error('Conversation not found');
+    if (!record) throw new HttpError('not_found', 'Conversation not found');
     if (model !== undefined) {
       if (!model || typeof model.provider !== 'string' || typeof model.id !== 'string' ||
-          model.provider.length > 160 || model.id.length > 160) throw new Error('Invalid model choice');
+          model.provider.length > 160 || model.id.length > 160) throw new HttpError('invalid_input', 'Invalid model choice');
     }
     const info: RunInfo = { id: randomUUID(), sessionId: id, state: 'queued', startedAt: new Date().toISOString(), sequence: 0 };
     const events = new RunEvents(info);
     const controller = new AbortController();
     const cancellation = signal ? AbortSignal.any([controller.signal, signal]) : controller.signal;
-    this.registry.log(id).append({ type: 'run', run: info });
+    const log = this.registry.log(id);
+    this.registry.reserveRun(id, info);
+    log.append({ type: 'run', run: info });
     const publish = (event: StreamEvent) => {
       const item = events.publish(event);
       try { emit?.(item); } catch { /* An observer cannot terminate the run. */ }
@@ -94,7 +97,7 @@ export class Runs {
       info.state = cancellation.aborted ? 'cancelled' : 'failed';
       info.error = cancellation.aborted ? controller.signal.reason?.message ?? 'Agent run cancelled' :
         error instanceof Error ? error.message : String(error);
-      publish({ type: 'error', error: info.error ?? 'Agent run failed' });
+      if (info.state === 'failed') publish({ type: 'error', error: info.error ?? 'Agent run failed' });
       throw new Error(info.error, { cause: error });
     }).finally(() => {
       info.finishedAt = new Date().toISOString();
@@ -124,7 +127,7 @@ export class Runs {
   /** A run reservation protects branch navigation from concurrent submissions. */
   async reviseAndStart(id: string, input: { sourceEntryId: string; expectedLeafId: string | null; message: string;
     attachments?: Attachment[]; model?: ModelChoice; thinkingLevel?: ThinkingLevel }) {
-    if (this.active(id)) throw new Error('Conversation is already running');
+    if (this.active(id)) throw new HttpError('conflict', 'Conversation is already running');
     await this.agent.revisionTarget(id, input.sourceEntryId, input.expectedLeafId);
     return this.launch(id, input.message, undefined, {
       attachments: input.attachments, model: input.model, thinkingLevel: input.thinkingLevel,
@@ -133,17 +136,17 @@ export class Runs {
   }
 
   info(id: string): RunInfo | undefined {
-    const info = this.work.get(id)?.events?.info ?? (this.registry.get(id) ? this.registry.log(id).projection().run : undefined);
+    const info = this.work.get(id)?.events?.info ?? this.registry.runSummary(id);
     return info && structuredClone(info);
   }
 
   watch(id: string, runId: string, after: number, emit: (event: RunEvent) => void) {
     const events = this.work.get(id)?.events;
     const info = this.info(id);
-    if (!info || info.id !== runId) throw new Error('Run not found');
+    if (!info || info.id !== runId) throw new HttpError('not_found', 'Run not found');
     // A restarted run has no volatile delta cursor; its durable interrupted snapshot is authoritative.
     if (!Number.isSafeInteger(after) || after < 0 || (after > info.sequence && info.state !== 'interrupted'))
-      throw new Error('Invalid event cursor');
+      throw new HttpError('invalid_input', 'Invalid event cursor');
     if (events) return events.watch(after, emit, () => this.agent.messages(id));
     emit({ type: 'snapshot', messages: this.agent.messages(id), tools: [], run: info, sequence: info.sequence, runId: info.id, runSessionId: id });
     return () => {};
@@ -162,7 +165,7 @@ export class Runs {
 
   async compact(id: string) {
     this.registry.assertAvailable(id);
-    if (this.active(id)) throw new Error('Stop the open conversation before compacting it');
+    if (this.active(id)) throw new HttpError('conflict', 'Stop the open conversation before compacting it');
     const controller = new AbortController();
     const done = this.agent.compact(id, controller.signal);
     this.work.set(id, { done, controller });

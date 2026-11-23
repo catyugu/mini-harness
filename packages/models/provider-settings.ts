@@ -1,3 +1,4 @@
+import { HttpError } from '@mini-harness/contracts/routes';
 import { join } from 'node:path';
 import { readJson, writeJson } from '@mini-harness/platform/config';
 import type { Settings, SettingsPatch } from '@mini-harness/contracts/config';
@@ -28,7 +29,7 @@ export function providerSettings(runtime: ProviderHost) {
 }
 export async function saveProvider(runtime: ProviderHost, input: any, remove = false) {
   if (runtime.hasActiveWork) throw new Error('Stop active conversations before changing providers');
-  if (!input || typeof input.id !== 'string' || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(input.id)) throw new Error('Invalid provider ID');
+  if (!input || typeof input.id !== 'string' || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(input.id)) throw new HttpError('invalid_input', 'Invalid provider ID');
   const path = join(runtime.paths.home, 'models.json');
   const previous = readJson<any>(path, { providers: {} });
   const next = structuredClone(previous); next.providers ??= {};
@@ -38,21 +39,21 @@ export async function saveProvider(runtime: ProviderHost, input: any, remove = f
     delete next.providers[input.id];
   } else {
     if (input.create && (runtime.admin.hasProvider(input.id) || Object.hasOwn(next.providers, input.id))) throw new Error('A provider with this ID already exists');
-    if (input.key !== undefined && typeof input.key !== 'string') throw new Error('Invalid credential');
+    if (input.key !== undefined && typeof input.key !== 'string') throw new HttpError('invalid_input', 'Invalid credential');
     if (!['openai-completions', 'openai-responses', 'anthropic-messages', 'google-generative-ai'].includes(input.api)) throw new Error('Unsupported API type');
     let url: URL;
-    try { url = new URL(input.baseUrl); } catch { throw new Error('Invalid API endpoint'); }
-    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.hash) throw new Error('Invalid API endpoint');
+    try { url = new URL(input.baseUrl); } catch { throw new HttpError('invalid_input', 'Invalid API endpoint'); }
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.hash) throw new HttpError('invalid_input', 'Invalid API endpoint');
     if (!Array.isArray(input.models) || !input.models.length || input.models.length > 50) throw new Error('Provide 1–50 models');
     const ids = new Set<string>();
     const models = input.models.map((model: { id?: unknown; name?: unknown; reasoning?: unknown; input?: string[]; contextWindow?: number; maxTokens?: number }) => {
       const id = typeof model?.id === 'string' ? model.id.trim() : '';
-      if (!id || id.length > 160 || ids.has(id)) throw new Error('Invalid or duplicate model ID');
+      if (!id || id.length > 160 || ids.has(id)) throw new HttpError('invalid_input', 'Invalid or duplicate model ID');
       ids.add(id);
       for (const [name, fallback] of [['contextWindow', 128000], ['maxTokens', 8192]] as const) {
-        if (!Number.isSafeInteger(model[name] ?? fallback) || (model[name] ?? fallback) < 1 || (model[name] ?? fallback) > 10000000) throw new Error('Invalid ' + name);
+        if (!Number.isSafeInteger(model[name] ?? fallback) || (model[name] ?? fallback) < 1 || (model[name] ?? fallback) > 10000000) throw new HttpError('invalid_input', 'Invalid ' + name);
       }
-      if (model.input !== undefined && !Array.isArray(model.input)) throw new Error('Invalid model input');
+      if (model.input !== undefined && !Array.isArray(model.input)) throw new HttpError('invalid_input', 'Invalid model input');
       return { id, name: String(model.name ?? id).slice(0, 160), reasoning: Boolean(model.reasoning),
         input: model.input?.includes('image') ? ['text', 'image'] : ['text'], contextWindow: model.contextWindow ?? 128000, maxTokens: model.maxTokens ?? 8192 };
     });

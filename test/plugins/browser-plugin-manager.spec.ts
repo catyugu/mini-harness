@@ -5,7 +5,7 @@ import { createFixturePaths, createMockProvider } from '../helpers/mock-provider
 import { readJson, writeJson } from '@mini-harness/platform/config';
 import { startIsolatedHost, settingsSection, suggestions } from '../support/browser.js';
 
-test('frontend plugins own all five slots and clean up on disable and reconfiguration', async ({ page }) => {
+test('frontend plugins own UI contributions and clean up on disable and reconfiguration', async ({ page }) => {
   const mock = await createMockProvider(({ messages }) => messages.at(-1)?.role === 'tool' ? 'Done' : { tool: 'ls', args: {} });
   const { root, paths } = createFixturePaths(mock.url), folder = join(paths.plugins, 'ui-example'); mkdirSync(folder);
   writeFileSync(join(folder, 'plugin.js'), 'export default function() {}');
@@ -19,7 +19,7 @@ test('frontend plugins own all five slots and clean up on disable and reconfigur
       node.dataset.exampleSlot = slot; node.textContent = slot === 'sidebar' ? api.config.label : 'Plugin ' + slot;
       if (slot === 'composer') node.onclick = () => api.insert('Inserted by plugin');
       if (slot === 'inspector') node.onclick = () => {const p = document.createElement('p');p.textContent='Plugin preview';api.inspect('Example',p);};
-      api.slots.register({sidebar:'sidebar.actions',composer:'conversation.composer',settings:'settings.extensions',inspector:'inspector.extensions'}[slot],node);
+      api.slots.register({sidebar:'sidebar.actions',composer:'conversation.composer',settings:'settings.extensions',inspector:'conversation.header'}[slot],node);
     }
     const settingsPage = document.createElement('p'); settingsPage.textContent = 'Plugin preferences';
     api.settingsPage('Example settings', settingsPage);
@@ -47,7 +47,6 @@ test('frontend plugins own all five slots and clean up on disable and reconfigur
     await expect(page.getByText('Custom listing result')).toBeHidden();
     await expect(page.locator('.message.assistant')).toHaveText('Done');
     await page.locator('.tool-card summary').click(); await expect(page.getByText('Custom listing result')).toBeVisible();
-    await page.getByRole('button', { name: 'Open workspace panel', exact: true }).click();
     await page.getByRole('button', { name: 'Plugin inspector', exact: true }).click();
     await expect(page.getByText('Plugin preview', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Settings', exact: true }).click();

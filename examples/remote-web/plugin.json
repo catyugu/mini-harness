@@ -1,0 +1,18 @@
+{
+  "title": "Remote Web",
+  "description": "Pair a device for read-only access to this mini-harness instance.",
+  "scope": "application",
+  "inject": ["harnessNetwork"],
+  "browserRequires": ["core:layout"],
+  "browserAssets": ["web/style.css"],
+  "configChanges": "live",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "port": { "type": "integer", "title": "Gateway port", "minimum": 1024, "maximum": 65535, "default": 3840 },
+      "publicOrigin": { "type": "string", "title": "HTTPS reverse-proxy origin", "default": "" },
+      "lifetimeMinutes": { "type": "integer", "title": "Device lifetime (minutes)", "minimum": 5, "maximum": 1440, "default": 60 }
+    }
+  }
+}

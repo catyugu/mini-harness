@@ -28,12 +28,9 @@ async function observe(projections: BrowserProjections, signal: AbortSignal) {
   let backoff = 300;
   while (!signal.aborted) {
     try {
-      const connection = new AbortController();
-      const streamSignal = AbortSignal.any([signal, connection.signal]);
-      await readEvents<ProjectionNotice>(await api('/changes', { signal: streamSignal }), (event) => {
-        backoff = 300;
-        void projections.dispatch(event).catch(() => connection.abort());
-      });
+      const connectedAt = performance.now();
+      await readEvents<ProjectionNotice>(await api('/changes', { signal }), (event) => { void projections.dispatch(event); });
+      if (performance.now() - connectedAt > 10000) backoff = 300;
     } catch (error) {
       if (signal.aborted) break;
       if (error instanceof AuthenticationError) {
@@ -50,9 +47,12 @@ async function observe(projections: BrowserProjections, signal: AbortSignal) {
 async function boot() {
   const ctx = new Context();
   const lifetime = new AbortController();
-  const projections = new BrowserProjections();
   const graph = new RemoteStore(() => data<Bootstrap>('/bootstrap', { signal: lifetime.signal }));
   const report = (error: Error) => window.dispatchEvent(new CustomEvent('mini-harness:error', { detail: error }));
+  const projections = new BrowserProjections((domain, error) => {
+    if (error instanceof AuthenticationError) showAuthenticationError(error);
+    else report(new Error('Could not refresh ' + domain + ': ' + (error instanceof Error ? error.message : String(error))));
+  });
   const host = new FrontendHost(ctx, data, report);
   const sync = createBrowserGraphLoader(host);
   const applyGraph = () => sync(graph.get());

@@ -20,6 +20,8 @@ export function createConversationController(request: BrowserRequest) {
       request<ConversationView['queue']>('/sessions/' + id + '/queue', payload('POST', input)),
     getQueue: (id: string, signal: AbortSignal) =>
       request<ConversationView['queue']>('/sessions/' + id + '/queue', { signal }),
+    cancelQueue: (id: string, item?: string) =>
+      request<ConversationView['queue']>('/sessions/' + id + '/queue' + (item ? '/' + encodeURIComponent(item) : ''), { method: 'DELETE' }),
     compact: (id: string) => request('/sessions/' + id + '/compact', payload('POST', {})),
     cancel: (id: string) => request('/sessions/' + id + '/cancel', payload('POST', {}))
   };

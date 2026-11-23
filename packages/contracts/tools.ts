@@ -3,7 +3,11 @@ import type { TextPart, ImagePart } from './llm.js';
 
 export interface ToolSchema { name: string; description: string; parameters: object }
 export interface ToolResult { content: (TextPart | ImagePart)[]; details?: Record<string, unknown> }
-export interface ToolContext { sessionId: string; cwd: string }
+export interface ToolContext {
+  sessionId: string;
+  cwd: string;
+  waitForApproval?(request: () => Promise<void>): Promise<void>;
+}
 export interface ToolDefinition<Arguments = Record<string, any>> extends ToolSchema {
   label?: string;
   promptSnippet?: string;

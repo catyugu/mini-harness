@@ -50,9 +50,12 @@ test('--detached starts an independent, accessible server', { timeout: 30000 }, 
   assert.ok(existsSync(statePath), 'No detached server metadata: ' + out + err);
   const state = JSON.parse(readFileSync(statePath, 'utf8'));
   assert.ok(Number.isInteger(state.pid) && state.pid > 0);
+  const token = /#token=([a-f0-9]{64})/.exec(out)?.[1];
+  assert.ok(token);
+  assert.equal(state.token, undefined);
   try {
     const response = await fetch('http://127.0.0.1:' + port + '/api/bootstrap', {
-      headers: { Authorization: 'Bearer ' + state.token }
+      headers: { Authorization: 'Bearer ' + token }
     });
     assert.equal(response.status, 200);
     const data = await response.json();

@@ -1,10 +1,16 @@
-import type { Conversation } from '@mini-harness/contracts/conversation';
+import type { Conversation, SessionSearchResult } from '@mini-harness/contracts/conversation';
 import { sessionHierarchy } from './navigation-tree.js';
 import { button, iconButton } from '@mini-harness/ui-primitives/primitives';
 
+function highlight(node: HTMLElement, text: string, start: number, end: number) {
+  const mark = document.createElement('mark');
+  mark.textContent = text.slice(start, end);
+  node.replaceChildren(text.slice(0, start), mark, text.slice(end));
+}
+
 export function sessionTree(sessions: Conversation[], options: {
   active?: string; expanded: Set<string>; selection: Set<string>; selecting: boolean;
-  query: string; matches?: ReadonlySet<string>; render(): void; selectionChanged(): void;
+  query: string; highlight: string; matches: ReadonlyMap<string, SessionSearchResult>; render(): void; selectionChanged(): void;
   activate(id: string): void; rename(item: Conversation): void; remove(item: Conversation): void;
 }) {
   const { active, expanded, selection, selecting, query } = options;
@@ -18,6 +24,14 @@ export function sessionTree(sessions: Conversation[], options: {
       const row = document.createElement('div');
       row.className = 'session-row' + (item.id === active ? ' active' : '');
       const open = expanded.has(item.id) || Boolean(query);
+      const hit = options.matches.get(item.id);
+      const titleMatch = (node: HTMLElement) => {
+        if (hit?.field === 'title' && hit.snippet === item.title) highlight(node, item.title, ...hit.match);
+        else if (options.highlight) {
+          const start = item.title.toLowerCase().indexOf(options.highlight);
+          if (start >= 0) highlight(node, item.title, start, start + options.highlight.length);
+        }
+      };
       if (children.has(item.id)) {
         const toggle = iconButton((open ? 'Collapse ' : 'Expand ') + item.title, 'chevron', 'tree-button');
         toggle.id = 'tree-' + item.id;
@@ -43,12 +57,14 @@ export function sessionTree(sessions: Conversation[], options: {
         const label = document.createElement('label');
         label.htmlFor = checkbox.id;
         label.textContent = item.title;
+        titleMatch(label);
         row.append(checkbox, label);
       } else {
         const title = button(item.title, 'quiet');
         title.id = 'session-' + item.id;
         title.classList.add('session-name');
         title.title = item.title;
+        titleMatch(title);
         if (item.id === active) title.setAttribute('aria-current', 'page');
         title.onclick = () => options.activate(item.id);
         row.append(title);
@@ -75,6 +91,12 @@ export function sessionTree(sessions: Conversation[], options: {
         row.append(marker);
       }
       entry.append(row);
+      if (hit?.field === 'message') {
+        const snippet = document.createElement('div');
+        snippet.className = 'session-match';
+        highlight(snippet, hit.snippet, ...hit.match);
+        entry.append(snippet);
+      }
       if (open && children.has(item.id)) entry.append(branch(item.id));
       list.append(entry);
     }

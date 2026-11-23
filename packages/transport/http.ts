@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { HttpReply, type RouteHandler, type RoutePort } from '@mini-harness/contracts/routes';
+import { HttpError, HttpReply, type RouteHandler, type RoutePort } from '@mini-harness/contracts/routes';
 
 export function requestBody(req: IncomingMessage, max = 1024 * 1024, signal?: AbortSignal): Promise<any> {
   return new Promise((resolve, reject) => {
@@ -14,13 +14,13 @@ export function requestBody(req: IncomingMessage, max = 1024 * 1024, signal?: Ab
     const cancel = () => { fail(signal?.reason ?? new Error('Request aborted')); req.resume(); };
     const receive = (data: Buffer) => {
       size += data.length;
-      if (size > max) { fail(new Error('Request too large')); req.destroy(); return; }
+      if (size > max) { fail(new HttpError('payload_too_large', 'Request too large')); req.destroy(); return; }
       chunks.push(data);
     };
     const finish = () => {
       clear();
       try { resolve(chunks.length ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {}); }
-      catch { reject(new Error('Malformed JSON')); }
+      catch { reject(new HttpError('invalid_input', 'Malformed JSON')); }
     };
 
     if (signal?.aborted) { cancel(); return; }
@@ -80,7 +80,7 @@ export class RouteRegistry implements RoutePort {
     this.routes.set(key, entry);
     return async () => {
       if (this.routes.get(key) === entry) this.routes.delete(key);
-      controller.abort(new Error('Route is no longer available'));
+      controller.abort(new HttpError('invalid_input', 'Route is no longer available'));
       await Promise.allSettled(entry.active);
     };
   }

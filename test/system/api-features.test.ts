@@ -16,8 +16,8 @@ test('GUI APIs configure providers, persist keys privately, discover Skills and 
   assert.equal(search.status, 200, JSON.stringify(search.body));
   assert.ok(search.body.includes('note.md'));
   assert.equal((await request(scope + '/files/preview?path=note.md')).body.content, 'workspace note');
-  assert.equal((await request(scope + '/files/preview?path=' + encodeURIComponent(paths.settings))).status, 400);
-  assert.equal((await request(scope + '/files/tree?path=..')).status, 400);
+  assert.equal((await request(scope + '/files/preview?path=' + encodeURIComponent(paths.settings))).status, 403);
+  assert.equal((await request(scope + '/files/tree?path=..')).status, 403);
   assert.equal((await request('/settings', 'PATCH', { plugins: { files: false, skills: false } })).status, 200);
   assert.equal((await request(scope + '/files/tree')).status, 404);
   assert.equal((await request(scope + '/skills')).status, 404);
@@ -42,7 +42,7 @@ test('GUI APIs configure providers, persist keys privately, discover Skills and 
   assert.doesNotMatch(JSON.stringify(user), /ATTACHED CONTENT/);
   assert.equal(history.title, 'Read the image and text');
   assert.equal((await request('/sessions/' + session.id, 'PATCH', { title: 'Renamed task' })).body.title, 'Renamed task');
-  assert.deepEqual((await request('/sessions/search?q=Read%20the%20image')).body, [session.id],
+  assert.deepEqual((await request('/sessions/search?q=Read%20the%20image')).body.map(({ id }: { id: string }) => id), [session.id],
     'Content search must not depend on title');
   assert.deepEqual((await request('/sessions/search?q=unmatched-phrase')).body, []);
   assert.equal((await request('/providers', 'DELETE', { id: 'gui-test' })).status, 200);

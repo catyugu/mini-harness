@@ -28,9 +28,9 @@
 .sessions ul { padding: 0; margin: 0; list-style: none; }
 .sessions li ul { margin: 1px 0 2px 10px; padding-left: 4px; border-left: 1px solid var(--border); }
 .sessions li ul ul ul ul { margin-left: 3px; padding-left: 2px; }
-.run-state { flex: 0 0 auto; white-space: nowrap; font-size: 10px; padding: 2px 5px; color: var(--muted); }
+.run-state { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; padding: 2px 5px; color: var(--muted); }
 .run-state:is([data-state="running"], [data-state="queued"]) { color: var(--focus); font-weight: 600; }
-.run-state:is([data-state="failed"], [data-state="cancelled"], [data-state="interrupted"]) { color: var(--danger); }
+.run-state[data-state="failed"] { color: var(--danger); }
 .session-row { display: flex; align-items: center; min-height: 34px; min-width: 0; padding: 1px 3px; border-radius: 7px; }
 .session-row:hover { background: var(--hover); }
 .session-row.active { background: var(--selected); }
@@ -65,3 +65,8 @@
 .plugin-page > header { max-width: 960px; margin-inline: auto; padding: 0 0 14px; border-bottom: 1px solid var(--border); }
 .plugin-page > header h1 { font-size: clamp(18px, 2.2vw, 24px); font-weight: 620; margin: 0; }
 .plugin-page-body { max-width: 960px; min-width: 0; margin: 18px auto 30px; }
+
+.session-match {
+  color: var(--muted); font-size: 11px; padding: 0 8px 4px; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.session-branch mark { color: var(--text); background: var(--selected); font-weight: 700; }

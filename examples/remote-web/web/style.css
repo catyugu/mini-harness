@@ -1,0 +1,6 @@
+.remote-web { display: grid; gap: .85rem; color: var(--text); }
+.remote-web > div { display: flex; align-items: center; flex-wrap: wrap; gap: .6rem; }
+.remote-web figure { margin: 0; overflow-wrap: anywhere; }
+.remote-web figure img { display: block; max-width: 100%; background: white; }
+.remote-web li { margin-block: .4rem; }
+.remote-web li button { margin-inline-start: .6rem; }

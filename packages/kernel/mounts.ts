@@ -2,19 +2,26 @@ import type { Context, Fiber } from 'cordis';
 import { isDeepStrictEqual } from 'node:util';
 
 /** Pure lifecycle plan. Discovery, settings, feature APIs and filesystem access belong to adapters. */
+type Config = Record<string, unknown>;
+type UpdateConfig = (next: Config) => Promise<void>;
+
 export interface MountPlan {
   id: string;
   requires: string[];
   context?: Context;
   signature: unknown;
-  load(): Promise<{ inject: string[]; setup(ctx: Context, signal: AbortSignal, setDrain: (drain: () => Promise<void>) => void): void | Promise<void> }>;
+  config?: Config;
+  load(): Promise<{ inject: string[]; setup(ctx: Context, signal: AbortSignal, setDrain: (drain: () => Promise<void>) => void, setConfig: (update: UpdateConfig) => void): void | Promise<void> }>;
 }
 
 type Loaded = Awaited<ReturnType<MountPlan['load']>>;
+type Mounted = { plan: MountPlan; fiber: Fiber; loaded: Loaded; lifetime: AbortController;
+  drain: () => Promise<void>; updateConfig?: UpdateConfig };
+type ConfigUpdate = { mounted: Mounted; previous: Config; next: Config; plan: MountPlan };
 
 /** Cordis fiber composition and rollback, independent of any product capability. */
 export class PluginMounts {
-  private readonly mounted = new Map<string, { plan: MountPlan; fiber: Fiber; loaded: Loaded; lifetime: AbortController; drain: () => Promise<void> }>();
+  private readonly mounted = new Map<string, Mounted>();
 
   constructor(private readonly ctx: Context) {}
 
@@ -24,11 +31,13 @@ export class PluginMounts {
     const lifetime = new AbortController();
     let fiber: Fiber | undefined;
     let drain = async () => {};
+    let updateConfig: UpdateConfig | undefined;
     try {
       const { inject, setup } = loaded;
-      fiber = (plan.context ?? this.ctx).inject(inject, (ctx) => setup(ctx, lifetime.signal, (cleanup) => { drain = cleanup; }));
+      fiber = (plan.context ?? this.ctx).inject(inject, (ctx) =>
+        setup(ctx, lifetime.signal, (cleanup) => { drain = cleanup; }, (update) => { updateConfig = update; }));
       await fiber.await();
-      this.mounted.set(plan.id, { plan, fiber, loaded, lifetime, drain });
+      this.mounted.set(plan.id, { plan, fiber, loaded, lifetime, drain, updateConfig });
     } catch (error) {
       lifetime.abort();
       try { await drain(); } finally { await fiber?.dispose(); }
@@ -54,11 +63,17 @@ export class PluginMounts {
     for (const plan of ordered) if (plan.requires.some((id) => affected.has(id))) affected.add(plan.id);
     const obsolete = [...this.mounted.values()].map(({ plan }) => plan).filter((plan) => affected.has(plan.id));
     const additions = ordered.filter((plan) => affected.has(plan.id) || !this.mounted.has(plan.id));
-    if (!obsolete.length && !additions.length) { commit(); return; }
-    return this.apply(obsolete, additions, commit, beforeChange, unavailable);
+    const updates: ConfigUpdate[] = ordered.flatMap((plan) => {
+      const value = this.mounted.get(plan.id);
+      const previous = value?.plan.config;
+      return value && previous && plan.config && !affected.has(plan.id) && !isDeepStrictEqual(previous, plan.config)
+        ? [{ mounted: value, previous, next: plan.config, plan }] : [];
+    });
+    if (!obsolete.length && !additions.length && !updates.length) { commit(); return; }
+    return this.apply(obsolete, additions, updates, commit, beforeChange, unavailable);
   }
 
-  private async apply(obsolete: MountPlan[], additions: MountPlan[], commit: () => void,
+  private async apply(obsolete: MountPlan[], additions: MountPlan[], updates: ConfigUpdate[], commit: () => void,
     beforeChange: (ids: string[]) => void, unavailable?: (id: string, error: unknown) => boolean) {
     const prepared = new Map<string, Loaded>();
     for (const plan of additions) {
@@ -67,6 +82,7 @@ export class PluginMounts {
     }
     const unloaded: { plan: MountPlan; loaded: Loaded }[] = [];
     const loaded: string[] = [];
+    const applied: ConfigUpdate[] = [];
     try {
       beforeChange(obsolete.map(({ id }) => id));
       for (const plan of obsolete.reverse()) {
@@ -86,14 +102,23 @@ export class PluginMounts {
           loaded.push(plan.id);
         } catch (error) { if (!unavailable?.(plan.id, error)) throw error; }
       }
+      for (const update of updates) {
+        if (!update.mounted.updateConfig) throw new Error('Missing live configuration handler: ' + update.plan.id);
+        applied.push(update);
+        await update.mounted.updateConfig(update.next);
+      }
       commit();
+      for (const update of applied) update.mounted.plan = update.plan;
     } catch (error) {
       const failures: unknown[] = [];
+      for (const { mounted, previous } of applied.reverse()) {
+        try { await mounted.updateConfig?.(previous); } catch (failure) { failures.push(failure); }
+      }
       for (const id of loaded.reverse()) {
         try { await this.unmount(id); } catch (failure) { failures.push(failure); }
       }
       for (const { plan, loaded } of unloaded) {
-        try { await this.mount(plan, loaded); } catch (failure) { failures.push(failure); }
+        try { await this.mount(plan, plan.config ? await plan.load() : loaded); } catch (failure) { failures.push(failure); }
       }
       if (failures.length) throw new AggregateError([error, ...failures], 'Could not restore the previous plugin configuration');
       throw error;

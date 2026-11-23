@@ -1,38 +1,53 @@
-import type { NativeMessage } from '@mini-harness/contracts/llm';
+import type { NativeMessage, NativeToolMessage } from '@mini-harness/contracts/llm';
 import type { MessageContent, ViewMessage } from '@mini-harness/contracts/message';
 import type { InboxItem, SessionEntry, SessionProjection } from '@mini-harness/contracts/session-log';
 import { applyContentDelta } from '@mini-harness/platform/content-delta';
 
+export function projectMessage(entry: SessionEntry, execution: (id: string) => NativeToolMessage | undefined): NativeMessage | undefined {
+  if (entry.type === 'message') return entry.message;
+  if (entry.type !== 'tool-accepted') return;
+  const result = execution(entry.executionId);
+  if (!result) throw new Error('Missing completed tool execution');
+  const content = entry.contentDelta
+    ? JSON.parse(applyContentDelta(JSON.stringify(result.content), entry.contentDelta)) as typeof result.content
+    : result.content;
+  return { ...result, content };
+}
+
 /** Read projections are pure and never write synthetic history back into the transcript. */
 export function projectLog(entries: SessionEntry[], branch: SessionEntry[]): SessionProjection {
   const state: SessionProjection = { leafId: branch.at(-1)?.id ?? null, messages: [], contextMessages: [], contextEntryIds: [],
-    thinkingLevel: 'off', inbox: [] };
+    inbox: [], inboxFailures: [] };
   const inbox = new Map<string, InboxItem>();
   for (const entry of entries) {
     if (entry.type === 'run') state.run = entry.run;
     if (entry.type === 'inbox-enqueued') inbox.set(entry.item.id, entry.item);
     if (entry.type === 'inbox-consumed' || entry.type === 'inbox-cancelled') for (const id of entry.ids) inbox.delete(id);
+    if (entry.type === 'inbox-failed') {
+      const item = inbox.get(entry.id);
+      if (item) {
+        const summary = (item.input?.userText || item.input?.attachments[0]?.name || item.text).slice(0, 180);
+        if (state.inboxFailures.length === 5) state.inboxFailures.shift();
+        state.inboxFailures.push({ id: entry.id, mode: item.mode, summary, state: 'failed', reason: entry.reason });
+        inbox.delete(entry.id);
+      }
+    }
     if (entry.type === 'message' && entry.inboxId) inbox.delete(entry.inboxId);
   }
   state.inbox = [...inbox.values()];
   const raw = new Map(entries.flatMap((entry) => entry.type === 'tool-execution'
     ? [[entry.id, entry.result] as const] : []));
-  const messageOf = (entry: SessionEntry): NativeMessage | undefined => {
-    if (entry.type === 'message') return entry.message;
-    if (entry.type !== 'tool-accepted') return;
-    const result = raw.get(entry.executionId);
-    if (!result) throw new Error('Missing completed tool execution');
-    const content = entry.contentDelta
-      ? JSON.parse(applyContentDelta(JSON.stringify(result.content), entry.contentDelta)) as typeof result.content
-      : result.content;
-    return { ...result, content };
-  };
+  const messageOf = (entry: SessionEntry) => projectMessage(entry, (id) => raw.get(id));
   const calls = new Map<string, unknown>();
   const edits = new Map<string, NativeMessage['content'] | null>();
   let compaction: Extract<SessionEntry, { type: 'compaction' }> | undefined;
   for (const entry of branch) {
     if (entry.type === 'model') state.model = entry.model;
-    if (entry.type === 'thinking') state.thinkingLevel = entry.level;
+    if (entry.type === 'thinking') state.thinkingLevel = entry.level ?? undefined;
+    if (entry.type === 'message' && entry.selection) {
+      state.model = entry.selection.model;
+      state.thinkingLevel = entry.selection.thinkingLevel;
+    }
     if (entry.type === 'compaction') compaction = entry;
     if (entry.type === 'context-edit') edits.set(entry.targetId, entry.replacement);
     const message = messageOf(entry);
@@ -47,11 +62,13 @@ export function projectLog(entries: SessionEntry[], branch: SessionEntry[]): Ses
         [...(entry.presentation.userText ? [{ type: 'text', text: entry.presentation.userText }] : []),
           ...message.content.filter((block) => block.type === 'image')];
     }
-    if (message.role === 'assistant') view.error = message.errorMessage;
+    if (message.role === 'assistant' && message.stopReason !== 'aborted') view.error = message.errorMessage;
     if (message.role === 'toolResult') {
       view.toolName = message.toolName;
       view.toolCallId = message.toolCallId;
       view.isError = message.isError;
+      if (message.details?.approvalDenied === true) view.approvalDenied = true;
+      if (typeof message.details?.approvalMs === 'number') view.approvalMs = message.details.approvalMs;
       view.arguments = calls.get(message.toolCallId);
       view.elapsedMs = (entry.type === 'message' ? entry.elapsedMs : undefined) ?? message.elapsedMs;
       if (typeof message.details?.sessionId === 'string') view.sessionId = message.details.sessionId;

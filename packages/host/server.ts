@@ -1,11 +1,13 @@
 import { createServer } from 'node:http';
-import { createReadStream, readdirSync, statSync } from 'node:fs';
+import { createReadStream, lstatSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { dirname, join, resolve, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { Paths } from '@mini-harness/contracts/config';
+import { Upgrades } from './upgrade.js';
+import { HttpError, type GatewayRequest } from '@mini-harness/contracts/routes';
 import { json } from '@mini-harness/transport/http';
 import { MiniHarnessRuntime } from './application.js';
 
@@ -53,7 +55,7 @@ for (const entry of readdirSync(FEATURE_DIR, { withFileTypes: true })) {
     for (const file of readdirSync(browserDir, { recursive: true, withFileTypes: true })) {
       if (!file.isFile() || !file.name.endsWith('.js')) continue;
       const path = relative(FEATURE_DIR, join(file.parentPath, file.name)).split(sep).join('/');
-      if (path.split('/').includes('tests') || /\\.(?:test|spec)\\.js$/.test(path)) continue;
+      if (path.split('/').includes('tests') || /\.(?:test|spec)\.js$/.test(path)) continue;
       assets.set('packages/' + path, 'text/javascript');
     }
   } catch (error) {
@@ -69,50 +71,101 @@ export function authorize(request: IncomingMessage, token: string) {
   return supplied.length === expected.length && timingSafeEqual(supplied, expected);
 }
 
+function remoteRoute(method: string | undefined, path: string) {
+  if (method !== 'GET') return false;
+  const basic = ['/api/bootstrap', '/api/changes', '/api/settings', '/api/providers', '/api/models', '/api/plugins',
+    '/api/workspaces', '/api/sessions', '/api/sessions/search', '/api/approvals'];
+  return basic.includes(path) ||
+    /^\/api\/sessions\/[a-f0-9-]{36}(?:\/(?:runs|events|queue))?$/.test(path) ||
+    /^\/api\/workspaces\/[a-f0-9]{32}\/(?:sessions|skills|files\/(?:tree|search|preview|changes|diff))$/.test(path);
+}
+
 export async function createMiniHarnessServer(paths: Paths, options: { token?: string; shutdown?: () => void } = {}) {
-  const runtime = new MiniHarnessRuntime(paths);
+  const upgrades = new Upgrades();
+  const runtime = new MiniHarnessRuntime(paths, {
+    async forward(req, res, access) {
+      if (access.signal.aborted) { res.destroy(); return; }
+      const abort = () => { res.destroy(); };
+      access.signal.addEventListener('abort', abort, { once: true });
+      res.once('close', () => access.signal.removeEventListener('abort', abort));
+      await route(req, res, access);
+    }
+  }, (path, handler) => upgrades.register(path, handler));
   const navigation = new AbortController();
   runtime.plugins.ctx.provide('harnessTransportSignal', navigation.signal);
-  await runtime.start();
   const token = options.token ?? randomBytes(32).toString('hex');
-  const route = async (req: IncomingMessage, res: ServerResponse) => {
-    const url = new URL(req.url || '/', 'http://localhost');
-    const pathname = url.pathname;
+  const route = async (req: IncomingMessage, res: ServerResponse, remote?: GatewayRequest): Promise<void> => {
     try {
+      const url = new URL(req.url || '/', 'http://localhost');
+      const pathname = url.pathname;
+      if (remote) {
+        const origin = new URL(remote.origin);
+        if (req.headers.host !== origin.host || (req.headers.origin && req.headers.origin !== origin.origin))
+          throw new HttpError('forbidden', 'Origin not allowed');
+        if (pathname.startsWith('/api/') && !remoteRoute(req.method, pathname))
+          throw new HttpError('forbidden', 'This action requires local access');
+      }
       if (!pathname.startsWith('/api/')) {
         if (req.method !== 'GET' && req.method !== 'HEAD') return json(res, 405, { error: 'Method not allowed' });
         const requested = pathname === '/' ? 'index.html' : decodeURIComponent(pathname.slice(1));
-        const mime = assets.get(requested);
-        if (!mime) return json(res, 404, { error: 'Not found' });
-        const path = requested.startsWith('packages/') ? join(FEATURE_DIR, requested.slice('packages/'.length)) : join(WEB_DIR, requested);
+        const extension = runtime.plugins.browserAsset(pathname);
+        const mime = extension?.mime ?? assets.get(requested);
+        if (!mime) throw new HttpError('not_found', 'Not found');
+        const path = extension?.path ?? (requested.startsWith('packages/') ? join(FEATURE_DIR, requested.slice('packages/'.length)) : join(WEB_DIR, requested));
+        if (extension) {
+          const info = lstatSync(path, { throwIfNoEntry: false });
+          if (!info?.isFile() || info.nlink !== 1 || info.size > 1024 * 1024 || relative(path, realpathSync(path)))
+            throw new HttpError('not_found', 'Not found');
+        }
         const size = statSync(path).size;
         res.writeHead(200, { 'Content-Type': mime + '; charset=utf-8',
-          'Content-Length': size, 'X-Content-Type-Options': 'nosniff',
+          'Content-Length': size, 'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff',
           'Content-Security-Policy': "default-src 'self'; script-src 'self' blob:; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'",
           'Referrer-Policy': 'no-referrer' });
-        return req.method === 'HEAD' ? res.end() : createReadStream(path).pipe(res);
+        if (req.method === 'HEAD') { res.end(); return; }
+        const stream = createReadStream(path);
+        stream.on('error', (error) => res.destroy(error));
+        res.once('close', () => stream.destroy());
+        stream.pipe(res);
+        return;
       }
-      if (!authorize(req, token)) return json(res, 401, { error: 'Unauthorized' });
-      if (req.method !== 'GET' && req.headers.origin && new URL(req.headers.origin).origin !== 'http://' + req.headers.host) {
-        return json(res, 403, { error: 'Origin not allowed' });
+      if (!remote && !authorize(req, token)) throw new HttpError('unauthorized', 'Unauthorized');
+      if (!remote && req.method !== 'GET' && req.headers.origin && req.headers.origin !== 'http://' + req.headers.host) {
+        throw new HttpError('forbidden', 'Origin not allowed');
       }
       if (pathname === '/api/status' && req.method === 'GET')
-        return json(res, 200, { pid: process.pid });
+        return json(res, 200, { pid: process.pid, sessionDiagnostics: runtime.registry.diagnostics() });
       if (pathname === '/api/shutdown' && req.method === 'POST' && options.shutdown) {
         res.once('finish', options.shutdown);
         return json(res, 202, { pid: process.pid });
       }
       const result = runtime.plugins.ctx.harnessRoutes.dispatch(req, res, url);
       if (result) return await result;
-      return json(res, 404, { error: 'Not found' });
+      throw new HttpError('not_found', 'Not found');
     } catch (error) {
+      if (res.destroyed || res.writableEnded) return;
+      if (error instanceof HttpError) {
+        if (res.headersSent) { res.end(); return; }
+        return json(res, error.status, { code: error.code, error: error.message });
+      }
+      if (error instanceof URIError) {
+        if (res.headersSent) { res.end(); return; }
+        return json(res, 400, { code: 'invalid_input', error: 'Invalid URL encoding' });
+      }
+      runtime.plugins.ctx.logger.error('HTTP %s failed: %s', req.method, error instanceof Error ? error.stack ?? error.message : String(error));
       if (res.headersSent) { res.end(); return; }
-      json(res, ['Conversation not found', 'Workspace not found'].includes((error instanceof Error ? error.message : String(error))) ? 404 :
-        (error instanceof Error ? error.message : String(error)) === 'Conversation changed; refresh before editing' || (error instanceof Error ? error.message : String(error)) === 'Conversation is already running' ? 409 : 400,
-        { error: (error instanceof Error ? error.message : String(error)) });
+      json(res, 500, { code: 'internal_error', error: 'Internal server error' });
     }
   };
+  await runtime.start();
   const server = createServer((req, res) => { void route(req, res); });
+  server.on('upgrade', (request, socket, head) => {
+    const reject = (status: string) => socket.end('HTTP/1.1 ' + status + '\r\nConnection: close\r\n\r\n');
+    if (!authorize(request, token)) { reject('401 Unauthorized'); return; }
+    if (request.headers.origin && request.headers.origin !== 'http://' + request.headers.host) { reject('403 Forbidden'); return; }
+    if (request.method !== 'GET' || request.headers.upgrade?.toLowerCase() !== 'websocket') { reject('400 Bad Request'); return; }
+    if (!upgrades.dispatch((request.url ?? '').split('?')[0], request, socket, head)) reject('404 Not Found');
+  });
   let closing: Promise<void>;
   return {
     server, get runtime() { return runtime; }, token,

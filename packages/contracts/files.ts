@@ -17,7 +17,7 @@ export interface WorkspaceFileAccess {
   searchFiles(query: string, signal?: AbortSignal): Promise<string[]>;
   access(path: string): Promise<void>;
   readFile(path: string): Promise<Buffer>;
-  writeFile(path: string, content: string, create?: boolean): Promise<void>;
+  writeFile(path: string, content: string, create?: boolean, signal?: AbortSignal): Promise<void>;
   chunks(path: string, signal?: AbortSignal): AsyncIterable<Uint8Array>;
   imageType(path: string): Promise<'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp' | null>;
   mkdir(path: string): Promise<void>;

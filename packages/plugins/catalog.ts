@@ -1,5 +1,6 @@
+import { HttpError } from '@mini-harness/contracts/routes';
 import { readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { Check } from 'typebox/value';
 import type { Settings } from '@mini-harness/contracts/config';
 import type { PluginScope, ScopeSettings } from '@mini-harness/contracts/capabilities';
@@ -12,7 +13,7 @@ function configDefaults(schema: Record<string, any>, value: any): any {
   if (value === undefined && Object.hasOwn(schema, 'default')) value = structuredClone(schema.default);
   if (schema.type === 'object' && value && typeof value === 'object' && !Array.isArray(value)) {
     for (const [key, property] of Object.entries(schema.properties ?? {})) {
-      if (!property || typeof property !== 'object' || Array.isArray(property)) throw new Error('Invalid plugin config property');
+      if (!property || typeof property !== 'object' || Array.isArray(property)) throw new HttpError('invalid_input', 'Invalid plugin config property');
       const item = configDefaults(property as Record<string, unknown>, Object.hasOwn(value, key) ? value[key] : undefined);
       if (item !== undefined) Object.defineProperty(value, key, { value: item, enumerable: true, writable: true, configurable: true });
     }
@@ -35,7 +36,7 @@ export interface PluginPlan {
 export class PluginCatalog {
   readonly builtins: Map<string, PluginDescriptor>;
   private readonly protectedServices: Set<string>;
-  constructor(private readonly directory: string, builtins: PluginDescriptor[], rootServices: string[]) {
+  constructor(private readonly directory: string, builtins: PluginDescriptor[], rootServices: string[], private readonly devPlugin?: string) {
     this.builtins = new Map(builtins.map((plugin) => [plugin.id, plugin]));
     this.protectedServices = new Set(rootServices);
     if (this.builtins.size !== builtins.length) throw new Error('Duplicate builtin plugin ID');
@@ -62,6 +63,11 @@ export class PluginCatalog {
   reserved(id: string) { return this.builtins.has(id); }
 
   private discover(): DiscoveredPlugin[] {
+    if (this.devPlugin) {
+      const id = basename(this.devPlugin);
+      if (!pluginIdPattern.test(id) || this.builtins.has(id)) throw new Error('Invalid development plugin ID');
+      return [describePlugin(id, this.devPlugin)];
+    }
     return readdirSync(this.directory, { withFileTypes: true }).flatMap((entry): DiscoveredPlugin[] => {
       const id = entry.name;
       if (!entry.isDirectory() || !pluginIdPattern.test(id) || this.builtins.has(id)) return [];
@@ -81,7 +87,7 @@ export class PluginCatalog {
 
   metadata(): PluginMetadata[] {
     return this.descriptors().filter(({ required }) => !required).map((item) => {
-      const { source, inject, setup, provides, optional, browserRequires, browserInject, browserProvides, required, configChanges, ...metadata } = item;
+      const { source, resources, inject, setup, provides, optional, browserRequires, browserInject, browserProvides, required, configChanges, ...metadata } = item;
       return metadata;
     });
   }
@@ -93,27 +99,33 @@ export class PluginCatalog {
     const choices = isApp ? settings.providers : overrides?.providers ?? {};
     for (const [service, id] of Object.entries(choices))
       if (inherited.has(service) && inherited.get(service) !== id && this.protectedServices.has(service))
-        throw new Error('Protected service cannot be overridden: ' + service);
+        throw new HttpError('invalid_input', 'Protected service cannot be overridden: ' + service);
     const enabled: DiscoveredPlugin[] = [];
     for (const [id, active] of Object.entries(overrides?.plugins ?? {})) {
       if (active && !descriptors.some((item) => item.id === id && item.scope === scope))
-        throw new Error('Plugin ' + id + ' is unavailable in ' + scope + ' scope');
+        throw new HttpError('invalid_input', 'Plugin ' + id + ' is unavailable in ' + scope + ' scope');
     }
     if (isApp) for (const [id, active] of Object.entries(settings.plugins)) {
       if (active && descriptors.some((item) => item.id === id && item.scope !== 'application'))
-        throw new Error('Select a scope for plugin ' + id);
+        throw new HttpError('invalid_input', 'Select a scope for plugin ' + id);
     }
     for (const item of descriptors) {
       const { id, scope: kind } = item;
       if (kind !== scope || !(isApp ? item.required || settings.plugins[id] === true : overrides?.plugins?.[id] === true)) continue;
       try {
-        if (item.error) throw new Error('Invalid plugin ' + id + ': ' + item.error);
+        if (item.error) throw new HttpError('invalid_input', 'Invalid plugin ' + id + ': ' + item.error);
         enabled.push(item);
       } catch (error) { if (!unavailable?.(id, error)) throw error; }
     }
-    const { ordered, providers } = resolveCapabilities(enabled.map((item) => ({
-      ...item, requires: item.requires?.filter((id) => !parentIds.has(id))
-    })), inherited, choices, unavailable, this.protectedServices);
+    const { ordered, providers } = (() => {
+      try {
+        return resolveCapabilities(enabled.map((item) => ({
+          ...item, requires: item.requires?.filter((id) => !parentIds.has(id))
+        })), inherited, choices, unavailable, this.protectedServices);
+      } catch (error) {
+        throw new HttpError('invalid_input', error instanceof Error ? error.message : 'Invalid plugin dependency graph');
+      }
+    })();
     const plans: PluginPlan[] = [];
     for (const { descriptor, requires, services } of ordered) {
       const { id, browser, browserRequires, source, web, configSchema } = descriptor;
@@ -129,7 +141,7 @@ export class PluginCatalog {
     const input = structuredClone(values && typeof values === 'object' ? values : {});
     if (!schema) return input;
     const config = configDefaults(schema, input) as Record<string, unknown>;
-    if (!Check(schema, config)) throw new Error('Invalid configuration for plugin: ' + id);
+    if (!Check(schema, config)) throw new HttpError('invalid_input', 'Invalid configuration for plugin: ' + id);
     return config;
   }
 

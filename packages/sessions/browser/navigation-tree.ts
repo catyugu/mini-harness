@@ -45,7 +45,7 @@ export function workspaceTree(workspaces: WorkspaceRecord[], sessions: Conversat
   return { parents, children, grouped, labels };
 }
 
-export function sessionHierarchy(sessions: Conversation[], query: string, matches?: ReadonlySet<string>) {
+export function sessionHierarchy(sessions: Conversation[], query: string, matches?: { has(id: string): boolean }) {
   const byId = new Map(sessions.map((item) => [item.id, item]));
   const included = new Set<string>();
   for (const item of sessions) if (!query || item.title.toLowerCase().includes(query) || matches?.has(item.id)) {

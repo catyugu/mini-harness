@@ -124,7 +124,9 @@ test('npm registry installation resolves dependencies, updates atomically and se
   const response = await request('/settings', 'PATCH', { plugins: { [id]: true } });
   assert.equal(response.status, 200, await response.text());
   assert.equal(await (await request('/extensions/' + id + '/label')).json(), 'From dependency');
-  assert.equal((await (await request('/plugins/' + id + '/web')).json()).source, files['web.js']);
+  const bootstrap = await (await request('/bootstrap')).json();
+  const browser = bootstrap.ui.find((entry: { id: string }) => entry.id === id).browser;
+  assert.equal(await (await fetch('http://127.0.0.1:' + port + browser)).text(), files['web.js']);
   assert.equal((await request('/settings', 'PATCH', { plugins: { [id]: false } })).status, 200);
   const active = join(directory, source.generation);
   const link = join(active, 'node_modules', '@fixture', 'harness-plugin');

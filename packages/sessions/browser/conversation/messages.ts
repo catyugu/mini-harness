@@ -95,7 +95,7 @@ function refreshActions() {
   for (const wrapper of messages.querySelectorAll<HTMLElement>('.message-row')) renderMessageActions(wrapper);
 }
 
-function toolCard(data: { name: string; state: string; content?: MessageContent; arguments?: unknown; sessionId?: string; id?: string; elapsedMs?: number; exitCode?: number }, card?: HTMLDetailsElement) {
+function toolCard(data: { name: string; state: string; content?: MessageContent; arguments?: unknown; sessionId?: string; id?: string; elapsedMs?: number; approvalMs?: number; exitCode?: number }, card?: HTMLDetailsElement) {
   const item = card ?? document.createElement('details');
   toolItems.set(item, data);
   item.className = 'tool-card';
@@ -106,7 +106,8 @@ function toolCard(data: { name: string; state: string; content?: MessageContent;
   name.title = data.name;
   const status = document.createElement('span');
   status.className = 'tool-state';
-  status.textContent = data.state === 'finished' ? 'Done' : data.state === 'running' ? 'Running' : 'Failed';
+  const labels: Record<string, string> = { finished: 'Done', running: 'Running', approval: 'Waiting for approval', denied: 'Denied', error: 'Failed' };
+  status.textContent = labels[data.state] ?? data.state;
   // Errors are visible in the summary, but details stay collapsed unless the user opens them.
   item.dataset.renderedState = data.state;
   summary.append(icon('chevron'), name);
@@ -122,6 +123,7 @@ function toolCard(data: { name: string; state: string; content?: MessageContent;
     const duration = document.createElement('span');
     duration.className = 'tool-duration';
     duration.textContent = elapsed < 1000 ? Math.round(elapsed) + ' ms' : (elapsed / 1000).toFixed(1) + ' s';
+    if (data.approvalMs !== undefined) duration.title = 'Execution only. Approval took ' + Math.round(data.approvalMs) + ' ms.';
     summary.append(duration);
   }
   if (data.exitCode !== undefined && Number.isInteger(data.exitCode)) {
@@ -165,9 +167,9 @@ function toolCard(data: { name: string; state: string; content?: MessageContent;
 
 function appendHistory(message: ViewMessage) {
   if (message.role === 'toolResult') {
-    toolCard({ name: message.toolName ?? 'Tool', state: message.isError ? 'error' : 'finished',
+    toolCard({ name: message.toolName ?? 'Tool', state: message.approvalDenied ? 'denied' : message.isError ? 'error' : 'finished',
       id: message.toolCallId, content: message.content, arguments: message.arguments, sessionId: message.sessionId,
-      elapsedMs: message.elapsedMs, exitCode: message.exitCode });
+      elapsedMs: message.elapsedMs, approvalMs: message.approvalMs, exitCode: message.exitCode });
     return;
   }
   const text = textOf(message.content);

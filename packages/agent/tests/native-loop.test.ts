@@ -141,7 +141,7 @@ test('identical queued text preserves each attachment identity and is delivered 
   const users = sessions.log(record.id).projection().messages.filter((message) => message.role === 'user');
   assert.equal(requests, 3); assert.equal(users.length, 3);
   assert.deepEqual(users.slice(1).map(({ attachments }) => expectPresent(attachments?.[0], 'queued attachment').name), ['first.png', 'second.png']);
-  assert.deepEqual(agent.read(record.id).queue, { steer: [], followUp: [] });
+  assert.deepEqual(agent.read(record.id).queue, []);
 });
 
 test('opted-in tools overlap, persist independently and respect serial barriers', { timeout: 5000 }, async (t) => {

@@ -31,8 +31,8 @@ export function executionHooks(ctx: Context, id: string, { lifetime, scopeKey, a
     observe: (handler) => ctx.on('harness/observe', (event) => {
       if (lifetime.aborted) return;
       const scoped = event.type === 'session-deleted' ? !scopeKey || event.scopeKeys.includes(scopeKey) : inScope(event.sessionId);
-      if (scoped) void run(() => handler(structuredClone(event))).catch(() => {
-        if (!lifetime.aborted) ctx.logger.warn('Plugin observer failed: ' + id);
+      if (scoped) void run(() => handler(structuredClone(event))).catch((error: unknown) => {
+        if (!lifetime.aborted) ctx.logger.warn('Plugin %s observer failed for %s in session %s: %s', id, event.type, event.sessionId, error instanceof Error ? error.stack ?? error.message : String(error));
       });
     }),
     decideTool: (handler) => ctx.on('harness/tool-decision', async (request) => {

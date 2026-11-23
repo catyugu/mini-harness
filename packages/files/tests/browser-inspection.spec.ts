@@ -49,7 +49,9 @@ test('file inspection, responsive themes and reduced viewport height keep contro
         await panel.getByRole('button', { name: 'Diff', exact: true }).click();
         await expect(panel.locator('.diff .added')).toHaveText(['+# Visible file', '+Before edits', '+Workspace content']);
         await panel.getByRole('button', { name: 'Preview', exact: true }).click();
-        await expect(panel.getByRole('tab', { name: 'notes.md', exact: true })).toBeFocused();
+        await expect(panel.getByRole('tab', { name: 'notes.md', exact: true })).toHaveCount(1);
+        await expect(panel.getByRole('tab', { name: 'notes.md', exact: true })).toHaveAttribute('aria-selected', 'true');
+        await expect(panel.getByRole('button', { name: 'Diff', exact: true })).toBeFocused();
         await expect(panel.getByRole('heading', { name: 'Visible file' })).toBeVisible();
         await panel.getByRole('button', { name: 'Source', exact: true }).click();
         await expect(panel.locator('.file-preview')).toHaveText('# Visible file\nWorkspace content');

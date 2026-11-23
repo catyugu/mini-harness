@@ -142,8 +142,7 @@ Setup, schema or settings persistence failures retain the previous effective gra
 | `dialog(title, content)` | A shared modal registered under the plugin lifetime |
 | `page(id, {title, content, order?})` | Register a page and sidebar entry |
 | `slots.register(name, node, order?)` | Contribute to a layout or feature slot |
-| `slots.registerKeyed(name, key, render, { order?, priority? }?)` | Contribute or override a keyed slot entry with a render lifetime |
-| `slots.decorate(name, key, wrap, order?)` | Wrap a keyed entry, or all entries when the key is undefined |
+| `slots.registerKeyed(name, key, render, { order? }?)` | Contribute or override a keyed slot entry with a render lifetime |
 | `settingsPage(title, node)` | Add a settings category |
 | `rightTab(type, {title, create})`, `openTab(type, path?)` | Register or open a scoped workspace tab. Creation receives its address and an abort signal. |
 | `inspect(title, node)` | Show content in the workspace inspector |
@@ -155,7 +154,7 @@ Setup, schema or settings persistence failures retain the previous effective gra
 
 Page, dialog, tab and inspector contributions depend on `core:layout`. Tools, message actions and composer operations depend on `core:conversation`. Settings pages depend on `core:settings`. The theme and primitives are shared. Declare the corresponding dependencies in `browserRequires` or declare the service in `browserInject`. Domain snapshots are provided by the owning feature's browser data plugin. The browser runtime routes revision notices and mounts the declared graph; it does not initialize sessions, settings, models or other feature state. Browser code runs with the page's permissions. Put custom UI listeners and requests under the plugin's lifetime and use contribution APIs to interact with another feature.
 
-Keyed entries use the highest priority for each key, with the most recent registration breaking ties and restore the previous contribution when it is released. A renderer receives an abort signal and returns a node or `{ node, dispose }`. Decorators receive the current node and their own signal. Return the node itself for an in-place decoration or a wrapper containing it. On replacement or outlet removal, the registry aborts the render lifetime and calls cleanup. Use the renderer signal for listeners and subscriptions. For example, `sidebar.primary` publishes the built-in button under `new-conversation`. Declare the owner in `browserRequires` when overriding its contribution so your plugin mounts after it.
+The most recent registration supplies each keyed contribution. Releasing it restores the previous contribution. A renderer receives an abort signal and returns a node or an object with a node and a cleanup function. The registry aborts its signal before cleanup on replacement or outlet removal. Declare the owner in `browserRequires` when overriding its contribution so your plugin mounts after it.
 
 A data plugin declares its services in `browserProvides`, publishes them through
 `ctx.provide`, and declares `miniProjections` in `browserInject` to follow a

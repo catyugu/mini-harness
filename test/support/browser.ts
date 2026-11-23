@@ -29,10 +29,11 @@ export async function startIsolatedHost(paths: ReturnType<typeof createFixturePa
   for (let attempt = 0; attempt < 200; attempt++) {
     if (existsSync(pidPath)) {
       const info = JSON.parse(readFileSync(pidPath, 'utf8'));
-      if (info.pid === child.pid) {
+      const token = /#token=([a-f0-9]{64})/.exec(output)?.[1];
+      if (info.pid === child.pid && token) {
         return {
           url: info.url as string,
-          token: info.token as string,
+          token,
           async stop() {
             if (child.exitCode === null) child.kill('SIGTERM');
             await new Promise<void>((resolve) => {

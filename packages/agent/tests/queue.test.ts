@@ -12,10 +12,11 @@ test('queued follow-ups run within the existing native run and are consumed once
   await request('/sessions/' + session.id + '/runs', 'POST', { message: 'First' });
   await waitUntil(() => mock.requests.length, (count) => count > 0);
   const queue = await request('/sessions/' + session.id + '/queue', 'POST', { message: 'Second', mode: 'followUp' });
-  assert.equal(queue.status, 202, JSON.stringify(queue.body)); assert.deepEqual(queue.body.followUp, ['Second']);
+  assert.equal(queue.status, 202, JSON.stringify(queue.body)); assert.deepEqual(queue.body.map(({ mode, summary, state }: { mode: string; summary: string; state: string }) =>
+    ({ mode, summary, state })), [{ mode: 'followUp', summary: 'Second', state: 'pending' }]);
   release(); await finish(session.id);
   assert.equal(mock.requests.length, 2);
   const history = (await request('/sessions/' + session.id)).body.messages;
   assert.equal(history.filter((m: { role: string }) => m.role === 'user').length, 2);
-  assert.deepEqual((await request('/sessions/' + session.id + '/queue')).body, { steer: [], followUp: [] });
+  assert.deepEqual((await request('/sessions/' + session.id + '/queue')).body, []);
 });

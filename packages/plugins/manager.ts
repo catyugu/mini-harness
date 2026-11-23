@@ -1,3 +1,4 @@
+import { dirname, join } from 'node:path';
 import { Context } from 'cordis';
 import { isDeepStrictEqual } from 'node:util';
 import { lstatSync } from 'node:fs';
@@ -8,6 +9,7 @@ import type { BrowserEntry } from '@mini-harness/contracts/browser';
 import { addAbortListener } from 'node:events';
 import type { SessionRecord } from '@mini-harness/contracts/conversation';
 import type { ServiceMap } from '@mini-harness/contracts/plugin-sdk';
+import type { UpgradeHandler } from '@mini-harness/contracts/routes';
 import type { Settings } from '@mini-harness/contracts/config';
 import { resolveCapabilities } from '@mini-harness/kernel/composition';
 import { PluginMounts, type MountPlan } from '@mini-harness/kernel/mounts';
@@ -26,16 +28,18 @@ export class PluginHost implements ScopePort {
   private applying?: Promise<void>;
   private closing = false;
 
-  constructor(readonly ctx: Context, directory: string, builtins: PluginDescriptor[], rootServices: string[],
+  constructor(readonly ctx: Context, private readonly directory: string, builtins: PluginDescriptor[], rootServices: string[],
     private readonly settings: () => Settings,
     private readonly session: (id: string) => SessionRecord | undefined,
-    private readonly sessionRecords: (sessionId: string, pluginId: string) => SessionRecords) {
-    this.catalog = new PluginCatalog(directory, builtins, rootServices);
+    private readonly sessionRecords: (sessionId: string, pluginId: string) => SessionRecords,
+    private readonly upgrade?: (path: string, handler: UpgradeHandler) => () => void, devPlugin?: string) {
+    this.catalog = new PluginCatalog(directory, builtins, rootServices, devPlugin);
     this.mounts = new PluginMounts(ctx);
     this.root = new Map(rootServices.map((name) => [name, 'application']));
   }
 
   private failedConfig = new Map<string, Record<string, unknown> | undefined>();
+  private assets = new Map<string, { path: string; mime: string }>();
   private published: BrowserEntry[] = [];
   private readonly failures = new Map<string, string>();
   private readonly draining = new Set<string>();
@@ -203,13 +207,20 @@ export class PluginHost implements ScopePort {
     const setup = source ? mod.default : descriptor.setup ?? (() => {});
     if (typeof setup !== 'function' || mod?.inject !== undefined || (source && setup.inject !== undefined))
       throw new Error('Export a default setup function and declare dependencies in plugin.json');
-    return { inject: descriptor.inject ?? [], setup: async (ctx, lifetime, setDrain) => {
+    return { inject: descriptor.inject ?? [], setup: async (ctx, lifetime, setDrain, setConfig) => {
       const runtime = createPluginApi(ctx, plan, { scope, scopeKey, lifetime,
-        address: (id) => this.address(id), records: (id) => this.sessionRecords(id, plan.id) });
+        address: (id) => this.address(id), records: (id) => this.sessionRecords(id, plan.id),
+        upgrade: this.upgrade,
+        dataRoot: join(dirname(this.directory), 'plugin-data'),
+        invalidate: () => this.ctx.harnessChanges.dispatchEvent(new CustomEvent('change', {
+          detail: { domain: 'plugin:' + plan.id }
+        }))
+      });
       setDrain(runtime.drain);
       const cleanup = await setup(ctx, runtime.api);
       if (typeof cleanup === 'function') ctx.effect(() => cleanup);
       runtime.checkPublications();
+      if (descriptor.configChanges === 'live') setConfig(runtime.updateConfig);
     } };
   }
 
@@ -218,10 +229,13 @@ export class PluginHost implements ScopePort {
       id: key, requires, context,
       signature: { source: plan.source, requires, inject: plan.descriptor.inject, provides: plan.descriptor.provides,
         optional: plan.descriptor.optional, services: plan.services,
-        config: plan.descriptor.configChanges === 'read-on-use' ? undefined : plan.config },
+        config: plan.descriptor.configChanges === 'live' ? undefined : plan.config },
+      config: plan.descriptor.configChanges === 'live' ? plan.config ?? {} : undefined,
       load: () => this.load(plan, scope, scopeKey)
     };
   }
+
+  browserAsset(url: string) { return this.assets.get(url); }
 
   private browserPlan(candidate: PluginPlan[], unavailable: (id: string, error: unknown) => boolean) {
     const browser = new Map(candidate.filter(({ browser, web }) => browser || web).map((plan) => [plan.id, plan]));
@@ -234,8 +248,9 @@ export class PluginHost implements ScopePort {
     return ordered.map(({ descriptor, requires }): BrowserEntry => {
       const plan = browser.get(descriptor.id);
       if (!plan) throw new Error('Composed browser capability is unavailable: ' + descriptor.id);
-      return { id: plan.id, requires: requires ?? [], inject: descriptor.inject, browser: plan.browser, web: plan.web,
-        config: plan.config ?? {}, required: plan.descriptor.required };
+      const resources = plan.descriptor.resources;
+      return { id: plan.id, requires: requires ?? [], inject: plan.descriptor.browserInject, browser: resources?.entry ?? plan.browser,
+        styles: resources?.styles, preload: resources?.preload, config: plan.config ?? {}, required: plan.descriptor.required };
     });
   }
 
@@ -286,6 +301,8 @@ export class PluginHost implements ScopePort {
           ready.add(id);
           return true;
         });
+        this.assets = new Map(plans.filter(({ id }) => ready.has(id)).flatMap(({ descriptor }) =>
+          [...(descriptor.resources?.urls ?? [])]));
         this.graph = [...plans.map((plan) => this.describe(plan)), ...scoped.diagnostics]
           .filter(({ id }) => this.mounts.plan(id));
       }, (ids) => { for (const id of ids) this.draining.add(id); }, unavailable);

@@ -48,7 +48,7 @@ export function fileTools(cwd: string, files: WorkspaceFileAccess): ToolDefiniti
         signal?.throwIfAborted();
         await files.mkdir(dirname(resolve(cwd, path)));
         signal?.throwIfAborted();
-        await files.writeFile(path, content);
+        await files.writeFile(path, content, true, signal);
         return textResult(`Wrote ${Buffer.byteLength(content)} bytes to ${path}`, { changedPath: path });
       }
     }),
@@ -68,7 +68,7 @@ export function fileTools(cwd: string, files: WorkspaceFileAccess): ToolDefiniti
           text = text.slice(0, index) + newText + text.slice(index + oldText.length);
         }
         signal?.throwIfAborted();
-        await files.writeFile(path, text, false);
+        await files.writeFile(path, text, false, signal);
         return textResult(`Applied ${edits.length} edit${edits.length === 1 ? '' : 's'} to ${path}`, { changedPath: path });
       }
     }),
