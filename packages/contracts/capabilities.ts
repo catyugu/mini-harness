@@ -1,4 +1,5 @@
 import type {} from 'cordis';
+import type { ServiceMap } from './plugin-sdk.js';
 
 export type PluginScope = { kind: 'application' }
   | { kind: 'workspace'; workspaceId: string }
@@ -15,7 +16,8 @@ export interface ScopeSettings {
 export interface ScopePort {
   prepare(sessionId: string, signal?: AbortSignal): Promise<void>;
   /** Read the nearest prepared Cordis service without changing a parent or sibling scope. */
-  resolve<T>(sessionId: string, service: string): T | undefined;
+  require<Name extends keyof ServiceMap & string>(sessionId: string | null | undefined, service: Name): NonNullable<ServiceMap[Name]>;
+  optional<Name extends keyof ServiceMap & string>(sessionId: string | null | undefined, service: Name): ServiceMap[Name] | undefined;
   allowsTool(sessionId: string, tool: string): boolean;
   address(sessionId: string): readonly string[];
   release(sessionIds: string[], workspaceId?: string): Promise<void>;

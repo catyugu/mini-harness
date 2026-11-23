@@ -2,5 +2,9 @@
   "name": "@mini-harness/kernel",
   "version": "0.0.0",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "exports": {
+    "./composition": "./composition.ts",
+    "./mounts": "./mounts.ts"
+  }
 }

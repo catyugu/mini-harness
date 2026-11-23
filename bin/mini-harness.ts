@@ -4,8 +4,8 @@ import { openSync, closeSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { getPaths, ensurePaths, writeJson } from '../packages/platform/config.js';
-import { lockInstance, readServerInfo, requestShutdown, serverStatus } from '../packages/host/process.js';
+import { getPaths, ensurePaths, writeJson } from '@mini-harness/platform/config';
+import { lockInstance, readServerInfo, requestShutdown, serverStatus } from '@mini-harness/host/process';
 
 const executable = fileURLToPath(import.meta.url);
 
@@ -83,7 +83,7 @@ async function detached(paths: ReturnType<typeof getPaths>, port?: number) {
 
 async function serve(paths: ReturnType<typeof getPaths>, port?: number, open = false) {
   const unlock = await lockInstance(paths.home);
-  let app: Awaited<ReturnType<typeof import('../packages/host/server.js').createMiniHarnessServer>>;
+  let app: Awaited<ReturnType<typeof import('@mini-harness/host/server').createMiniHarnessServer>>;
   let ready: Promise<void>;
   let ending: Promise<void>;
   let stopping = false;
@@ -103,7 +103,7 @@ async function serve(paths: ReturnType<typeof getPaths>, port?: number, open = f
   process.once('SIGINT', shutdown);
   ready = (async () => {
     rmSync(paths.pid, { force: true });
-    const { createMiniHarnessServer } = await import('../packages/host/server.js');
+    const { createMiniHarnessServer } = await import('@mini-harness/host/server');
     app = await createMiniHarnessServer(paths, { shutdown });
     if (stopping) return;
     const listening = await app.listen(port);
@@ -138,10 +138,10 @@ async function main() {
     ensurePaths(paths);
     const unlock = await lockInstance(paths.home);
     try {
-      const [{ installNpmPlugin }, { plugins }] = await Promise.all([
-        import('../packages/plugins/npm.js'), import('../packages/host/composition.js')
+      const [{ installPackagedPlugin }, { plugins }] = await Promise.all([
+        import('@mini-harness/plugins/package-installer'), import('@mini-harness/host/composition')
       ]);
-      const { name, version } = await installNpmPlugin(paths, operation, id, spec,
+      const { name, version } = await installPackagedPlugin(paths, operation, id, spec,
         (id) => plugins.some((plugin) => plugin.id === id));
       console.log(id + ': ' + name + '@' + version);
     } finally { await unlock(); }

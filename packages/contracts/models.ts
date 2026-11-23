@@ -20,6 +20,7 @@ export interface ProviderModel {
 export interface ModelCatalogPort {
   list(): ModelSummary[];
   available(): Promise<ModelSummary[]>;
+  /** Returns undefined when the choice is absent from this catalog. */
   resolve(choice: ModelChoice): ModelChoice | undefined;
   capabilities(choice: ModelChoice): ProviderModel | undefined;
 }

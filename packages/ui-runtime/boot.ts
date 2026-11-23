@@ -1,13 +1,13 @@
-import { Context } from '../web/vendor/cordis.js';
-import { api, data, readEvents, wait } from '../web/api.js';
-import { RemoteStore } from '../web/models/remote-store.js';
-import type { SlotRegistry } from '../ui-slots/registry.js';
+import { Context } from '@mini-harness/web/vendor/cordis';
+import { api, data, readEvents, wait } from '@mini-harness/web/api';
+import { RemoteStore } from '@mini-harness/web/models/remote-store';
+import type { SlotRegistry } from '@mini-harness/ui-slots/registry';
 import type { MessageExtensions } from './message-extensions.js';
 import { FrontendHost } from './frontend.js';
 import { createBrowserGraphLoader, type BrowserPluginFailures } from './plugin-loader.js';
 import { BrowserProjections } from './projections.js';
-import type { Bootstrap } from '../web/types.js';
-import type { ProjectionNotice } from '../contracts/navigation.js';
+import type { Bootstrap } from '@mini-harness/web/types';
+import type { ProjectionNotice } from '@mini-harness/contracts/navigation';
 
 declare module 'cordis' {
   interface Context {

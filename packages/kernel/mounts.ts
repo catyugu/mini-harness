@@ -7,14 +7,14 @@ export interface MountPlan {
   requires: string[];
   context?: Context;
   signature: unknown;
-  load(): Promise<{ inject: string[]; setup(ctx: Context, signal: AbortSignal): void | Promise<void> }>;
+  load(): Promise<{ inject: string[]; setup(ctx: Context, signal: AbortSignal, setDrain: (drain: () => Promise<void>) => void): void | Promise<void> }>;
 }
 
 type Loaded = Awaited<ReturnType<MountPlan['load']>>;
 
 /** Cordis fiber composition and rollback, independent of any product capability. */
 export class PluginMounts {
-  private readonly mounted = new Map<string, { plan: MountPlan; fiber: Fiber; loaded: Loaded; lifetime: AbortController }>();
+  private readonly mounted = new Map<string, { plan: MountPlan; fiber: Fiber; loaded: Loaded; lifetime: AbortController; drain: () => Promise<void> }>();
 
   constructor(private readonly ctx: Context) {}
 
@@ -23,14 +23,15 @@ export class PluginMounts {
   private async mount(plan: MountPlan, loaded: Loaded) {
     const lifetime = new AbortController();
     let fiber: Fiber | undefined;
+    let drain = async () => {};
     try {
       const { inject, setup } = loaded;
-      fiber = (plan.context ?? this.ctx).inject(inject, (ctx) => setup(ctx, lifetime.signal));
+      fiber = (plan.context ?? this.ctx).inject(inject, (ctx) => setup(ctx, lifetime.signal, (cleanup) => { drain = cleanup; }));
       await fiber.await();
-      this.mounted.set(plan.id, { plan, fiber, loaded, lifetime });
+      this.mounted.set(plan.id, { plan, fiber, loaded, lifetime, drain });
     } catch (error) {
       lifetime.abort();
-      await fiber?.dispose();
+      try { await drain(); } finally { await fiber?.dispose(); }
       throw new Error('Plugin ' + plan.id + ': ' + (error instanceof Error ? error.message : String(error)), { cause: error });
     }
   }
@@ -40,7 +41,7 @@ export class PluginMounts {
     if (!installed) return;
     this.mounted.delete(id);
     installed.lifetime.abort();
-    await installed.fiber.dispose();
+    try { await installed.drain(); } finally { await installed.fiber.dispose(); }
   }
 
   configure(ordered: MountPlan[], commit: () => void = () => {}, beforeChange: (ids: string[]) => void = () => {},

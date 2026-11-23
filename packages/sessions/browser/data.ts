@@ -1,7 +1,7 @@
-import type { Conversation } from '../../contracts/conversation.js';
-import type { FrontendSetup, FrontendServices } from '../../ui-runtime/frontend.js';
-import { RemoteStore } from '../../web/models/remote-store.js';
-import { Selection } from '../../web/models/selection.js';
+import type { Conversation } from '@mini-harness/contracts/conversation';
+import type { FrontendSetup, FrontendServices } from '@mini-harness/ui-runtime/frontend';
+import { RemoteStore } from '@mini-harness/web/models/remote-store';
+import { Selection } from '@mini-harness/web/models/selection';
 
 const setup: FrontendSetup = async (ctx, api) => {
   const byRecent = (a: Conversation, b: Conversation) => b.updatedAt.localeCompare(a.updatedAt);

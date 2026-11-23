@@ -1,9 +1,9 @@
-import type { Settings, SettingsPatch } from '../contracts/config.js';
-import type { PluginMetadata } from '../contracts/plugins.js';
-import type { FrontendSetup, FrontendApi } from '../ui-runtime/frontend.js';
-import { payload } from '../web/api.js';
-import { icon } from '../ui-primitives/icons.js';
-import { button, field, fromMarkup, iconButton, saveToggle, toggle } from '../ui-primitives/primitives.js';
+import type { Settings, SettingsPatch } from '@mini-harness/contracts/config';
+import type { PluginMetadata } from '@mini-harness/contracts/plugins';
+import type { FrontendSetup, FrontendApi } from '@mini-harness/ui-runtime/frontend';
+import { payload } from '@mini-harness/web/api';
+import { icon } from '@mini-harness/ui-primitives/icons';
+import { button, field, fromMarkup, iconButton, saveToggle, toggle } from '@mini-harness/ui-primitives/primitives';
 import { readPluginValues, schemaFields } from './browser/fields.js';
 
 const setup: FrontendSetup = (ctx, api) => {

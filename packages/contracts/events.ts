@@ -1,7 +1,7 @@
 import type {} from 'cordis';
 import type { RunInfo } from './transport.js';
 import type { MessageContent } from './message.js';
-import type { AgentStage, AgentTransform, ModelFailure, ModelRetry, PromptSection } from './extensions.js';
+import type { ModelFailure, ModelRequestTransform, ModelRetry, PromptSection, ToolResultTransform } from './extensions.js';
 
 export type CapabilityObservation =
   | { type: 'session-created'; sessionId: string }
@@ -30,16 +30,17 @@ export interface ScopedPromptSection extends PromptSection {
   pluginId: string;
 }
 
-export interface WaterfallHandler<Stage extends AgentStage> {
+export interface OrderedHook<Transform> {
   pluginId: string;
   order: number;
-  transform: AgentTransform<Stage>;
+  transform: Transform;
 }
 
 declare module 'cordis' {
   interface Events {
     'harness/prompt-sections'(sessionId: string, sections: ScopedPromptSection[]): void;
-    'harness/agent-waterfall'<Stage extends AgentStage>(sessionId: string, stage: Stage, handlers: WaterfallHandler<Stage>[]): void;
+    'harness/model-request'(sessionId: string, handlers: OrderedHook<ModelRequestTransform>[]): void;
+    'harness/tool-result'(sessionId: string, handlers: OrderedHook<ToolResultTransform>[]): void;
     'harness/model-retry'(failure: ModelFailure): ModelRetry | undefined | Promise<ModelRetry | undefined>;
     'harness/observe'(event: CapabilityObservation): void;
     'harness/tool-decision'(request: ToolDecision): 'deny' | undefined | Promise<'deny' | undefined>;

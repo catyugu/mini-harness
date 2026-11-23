@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Approval } from '../contracts/approval.js';
+import type { Approval } from '@mini-harness/contracts/approval';
 export class Approvals {
   private pending = new Map<string, { info: Approval; settle: (allowed: boolean) => void }>();
   readonly events = new EventTarget();

@@ -1,52 +1,36 @@
 import type { Context } from 'cordis';
-import type { PluginApi } from '../contracts/plugins.js';
+import type { PluginApi } from '@mini-harness/contracts/plugins';
 import { registerRoutes } from './routes.js';
-import { isToolContent } from '../contracts/tools.js';
-import type { AgentStage, AgentWaterfalls } from '../contracts/extensions.js';
-import type { WaterfallHandler } from '../contracts/events.js';
+import type { ModelRequestTransform, ToolResultTransform } from '@mini-harness/contracts/extensions';
+import type { OrderedHook } from '@mini-harness/contracts/events';
 import { NativeAgent } from './agent.js';
 
 export function setup(ctx: Context, api: PluginApi) {
   const { harnessRegistry: catalog, harnessScopes: scopes, harnessSettingsStore: settings } = ctx;
   const agent = new NativeAgent(catalog, {
-    models: (id) => scopes.resolve(id, 'harnessModels') ?? ctx.harnessModels,
-    llm: (id) => scopes.resolve(id, 'harnessLlm') ?? ctx.harnessLlm,
-    tools: (id) => scopes.resolve(id, 'harnessTools') ?? ctx.harnessTools,
+    models: (id) => scopes.require(id, 'harnessModels'),
+    llm: (id) => scopes.require(id, 'harnessLlm'),
+    tools: (id) => scopes.require(id, 'harnessTools'),
     allowsTool: (id, name) => scopes.allowsTool(id, name),
-    prompt: (id) => scopes.resolve(id, 'harnessPrompt') ?? ctx.harnessPrompt,
-    skills: (id) => scopes.resolve(id, 'harnessSkills') ?? ctx.get('harnessSkills'),
+    prompt: (id) => scopes.require(id, 'harnessPrompt'),
+    skills: (id) => scopes.optional(id, 'harnessSkills'),
     prepare: (id, signal) => scopes.prepare(id, signal),
     defaultModel: () => settings.settings.model,
     rememberModel: (model) => {
       // A scoped-only model must not become an unusable global default for siblings.
-      try { if (!ctx.harnessModels.resolve(model)) return; }
-      catch { return; }
-      settings.rememberModel(model);
+      if (scopes.require(undefined, 'harnessModels').resolve(model)) settings.rememberModel(model);
     },
     policy: () => api.config as { maxTurns: number; autoCompact: boolean },
     observe: (event) => ctx.emit('harness/observe', event),
-    async waterfall(stage, value, request) {
-      const handlers: WaterfallHandler<typeof stage>[] = [];
-      ctx.emit('harness/agent-waterfall', request.sessionId, stage, handlers);
-      handlers.sort((a, b) => a.order - b.order || a.pluginId.localeCompare(b.pluginId));
-      for (const { pluginId, transform } of handlers) {
-        request.signal.throwIfAborted();
-        try {
-          const next = await transform(value, request);
-          if (next !== undefined) {
-            if (!validWaterfall(stage, next)) throw new Error('Invalid waterfall result');
-            value = next;
-          }
-        } catch (error) {
-          if (stage !== 'toolResult') {
-            request.signal.throwIfAborted();
-            throw new Error('Plugin ' + pluginId + ' failed in ' + stage, { cause: error });
-          }
-          ctx.logger.warn('Plugin tool result transform failed: ' + pluginId);
-        }
-        if (stage === 'toolResult' && request.signal.aborted) break;
-      }
-      return value;
+    modelRequestHooks(id) {
+      const hooks: OrderedHook<ModelRequestTransform>[] = [];
+      ctx.emit('harness/model-request', id, hooks);
+      return hooks;
+    },
+    toolResultHooks(id) {
+      const hooks: OrderedHook<ToolResultTransform>[] = [];
+      ctx.emit('harness/tool-result', id, hooks);
+      return hooks;
     },
     retryModel: (failure) => ctx.serial('harness/model-retry', failure),
     transform: (projection) => ctx.waterfall('harness/tool-projection', projection, () => projection.content)
@@ -58,14 +42,4 @@ export function setup(ctx: Context, api: PluginApi) {
     quiesce: (ids) => agent.agents.settle(ids)
   }));
   registerRoutes(ctx);
-}
-
-function validWaterfall(stage: AgentStage, value: unknown): boolean {
-  if (stage === 'beforeStep') return Array.isArray(value);
-  if (stage === 'toolResult') return isToolContent(value);
-  const request = value as AgentWaterfalls['modelRequest']['value'];
-  return Boolean(request && typeof request.systemPrompt === 'string' && Array.isArray(request.messages) &&
-    (request.maxTokens === undefined || Number.isSafeInteger(request.maxTokens) && request.maxTokens > 0) &&
-    (request.thinkingLevel === undefined ||
-      ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(request.thinkingLevel)));
 }

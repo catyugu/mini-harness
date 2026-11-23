@@ -1,4 +1,4 @@
-import type { PluginDescriptor } from '../contracts/plugins.js';
+import type { PluginDescriptor } from '@mini-harness/contracts/plugins';
 
 export const manifest: PluginDescriptor = {
   scope: 'application', id: 'core:settings-data', title: 'Settings data',

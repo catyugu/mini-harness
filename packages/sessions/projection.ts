@@ -1,6 +1,6 @@
-import type { NativeMessage } from '../contracts/llm.js';
-import type { MessageContent, ViewMessage } from '../contracts/message.js';
-import type { InboxItem, SessionEntry, SessionProjection } from '../contracts/session-log.js';
+import type { NativeMessage } from '@mini-harness/contracts/llm';
+import type { MessageContent, ViewMessage } from '@mini-harness/contracts/message';
+import type { InboxItem, SessionEntry, SessionProjection } from '@mini-harness/contracts/session-log';
 
 /** Read projections are pure and never write synthetic history back into the transcript. */
 export function projectLog(entries: SessionEntry[], branch: SessionEntry[]): SessionProjection {

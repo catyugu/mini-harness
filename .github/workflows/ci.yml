@@ -18,11 +18,12 @@ jobs:
         node: ["22", "24"]
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
-          cache: npm
-      - run: npm ci --ignore-scripts --no-audit --no-fund
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
       - name: Set up Linux workspace isolation
         if: runner.os == 'Linux'
         run: |
@@ -32,26 +33,27 @@ jobs:
             sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           fi
           bwrap --unshare-all --ro-bind / / -- /usr/bin/prlimit -- /bin/true
-      - run: npm run check
+      - run: pnpm run check
         env:
           MINI_HARNESS_REQUIRE_ISOLATION: ${{ runner.os == 'Linux' && '1' || '0' }}
-      - run: npm run pack:check
+      - run: pnpm run pack:check
 
   browser:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
-          cache: npm
-      - run: npm ci --ignore-scripts --no-audit --no-fund
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
       - uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
           key: playwright-chromium-1.56.0-ubuntu-24.04
-      - run: npx playwright install --with-deps chromium --only-shell
-      - run: npm run test:browser
+      - run: pnpm exec playwright install --with-deps chromium --only-shell
+      - run: pnpm run test:browser
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

@@ -4,17 +4,30 @@ import test from 'node:test';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
-import { plugins } from '../../packages/host/composition.js';
+import { plugins } from '@mini-harness/host/composition';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const packages = join(root, 'packages');
 const web = join(packages, 'web');
+const prefix = '@mini-harness/';
+const manifests = new Map(readdirSync(packages, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map(({ name }) =>
+  [name, JSON.parse(readFileSync(join(packages, name, 'package.json'), 'utf8'))]));
+
+function workspaceTarget(specifier: string) {
+  const [owner, ...parts] = specifier.slice(prefix.length).split('/');
+  const entry = manifests.get(owner)?.exports?.['./' + parts.join('/')];
+  assert.ok(entry, 'Missing workspace export: ' + specifier);
+  const directory = join(packages, owner);
+  const target = resolve(directory, entry);
+  assert.ok(target.startsWith(directory + sep) && existsSync(target), 'Invalid workspace export: ' + specifier);
+  return { owner, target };
+}
 const capabilityNames = ['agent','approvals','file-access','files','models','plugins','process-execution','runs','sandbox','session-helper','sessions','settings','shell','skills','subagents','tools','ui','workspaces'];
 const infrastructureNames = ['contracts','host','kernel','platform','transport'];
 function files(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const path = join(directory, entry.name);
-    return entry.isDirectory() ? files(path) : entry.name.endsWith('.ts') ? [path] : [];
+    return entry.isDirectory() && entry.name !== 'node_modules' ? files(path) : entry.name.endsWith('.ts') ? [path] : [];
   });
 }
 const production = (path: string) => !path.split(/[\\/]/).includes('tests');
@@ -27,7 +40,8 @@ function dependencies(file: string) {
       (clause?.namedBindings && ts.isNamedImports(clause.namedBindings) &&
         clause.namedBindings.elements.every((item) => item.isTypeOnly)));
     const specifier = statement.moduleSpecifier.text;
-    const target = specifier.startsWith('.') ? resolve(file, '..', specifier).replace(/\.js$/, '.ts') : specifier;
+    const target = specifier.startsWith(prefix) ? workspaceTarget(specifier).target :
+      specifier.startsWith('.') ? resolve(file, '..', specifier).replace(/\.js$/, '.ts') : specifier;
     return [{ specifier, target, typeOnly }];
   });
 }
@@ -110,10 +124,10 @@ test('browser values never load host-only modules', () => {
 });
 test('each capability declares the services it reads and publishes', () => {
   const composition = readFileSync(join(packages, 'host', 'composition.ts'), 'utf8');
-  const manifests = [...composition.matchAll(/import { manifest as \w+ } from '..\/([^']+)\.js'/g)];
-  assert.equal(manifests.length, plugins.length);
+  const descriptors = [...composition.matchAll(/import { manifest as \w+ } from '@mini-harness\/([^']+)'/g)];
+  assert.equal(descriptors.length, plugins.length);
   const byId = new Map(plugins.map((plugin) => [plugin.id, plugin]));
-  for (const [, specifier] of manifests) {
+  for (const [, specifier] of descriptors) {
     const path = join(packages, specifier + '.ts');
     const descriptor = readFileSync(path, 'utf8');
     const id = descriptor.match(/id: '([^']+)'/)[1];
@@ -142,8 +156,7 @@ test('each capability declares the services it reads and publishes', () => {
 
 /** The private package manifests are architectural declarations, not separate releases. */
 test('all internal packages declare exact source dependencies and form a DAG', () => {
-  const names = readdirSync(packages, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
+  const names = [...manifests.keys()].sort();
   const declared = new Map<string, Set<string>>();
   for (const name of names) {
     const manifestFile = join(packages, name, 'package.json');
@@ -162,7 +175,7 @@ test('all internal packages declare exact source dependencies and form a DAG', (
       const target = id.slice('@mini-harness/'.length);
       assert.ok(names.includes(target), name + ': unknown dependency ' + id);
       assert.notEqual(target, name, name + ': self-dependency');
-      assert.equal(link, 'file:../' + target, name + ': invalid local dependency ' + id);
+      assert.equal(link, 'workspace:*', name + ': invalid local dependency ' + id);
       internal.add(target);
     }
     declared.set(name, internal);
@@ -191,12 +204,15 @@ test('all internal packages declare exact source dependencies and form a DAG', (
   for (const name of names) {
     const actual = new Set<string>();
     for (const file of files(join(packages, name)).filter(production)) for (const specifier of references(file)) {
-      if (!specifier.startsWith('.')) continue;
-      const target = resolve(dirname(file), specifier).replace(/\\.js$/, '.ts');
-      assert.ok(target.startsWith(packages + sep), file + ' imports outside packages/: ' + specifier);
-      const owner = target.slice(packages.length + 1).split(sep)[0];
-      assert.ok(names.includes(owner), file + ' imports an unknown package: ' + specifier);
-      if (owner !== name) actual.add(owner);
+      if (specifier.startsWith('.')) {
+        const target = resolve(dirname(file), specifier);
+        assert.ok(target.startsWith(join(packages, name) + sep), file + ' crosses a workspace boundary by path: ' + specifier);
+        continue;
+      }
+      if (!specifier.startsWith(prefix)) continue;
+      const { owner } = workspaceTarget(specifier);
+      assert.notEqual(owner, name, file + ' imports its own workspace package by name');
+      actual.add(owner);
       if (name !== 'host') assert.notEqual(owner, 'host', file + ' imports host composition');
       
       if (name !== 'host' && name !== 'plugins') assert.notEqual(owner, 'kernel', file + ' imports Cordis kernel');
@@ -219,5 +235,7 @@ test('all internal packages declare exact source dependencies and form a DAG', (
   assert.ok(!names.includes('web-app'), 'Legacy browser app entry must not exist');
   const rootManifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
   assert.equal(rootManifest.name, 'mini-harness');
-  assert.equal(rootManifest.workspaces, undefined, 'Do not install private packages as independent workspaces');
+  assert.ok(existsSync(join(root, 'pnpm-workspace.yaml')));
+  assert.ok(existsSync(join(root, 'pnpm-lock.yaml')));
+  assert.ok(Object.keys({ ...rootManifest.dependencies, ...rootManifest.devDependencies }).every((name) => !name.startsWith(prefix)));
 });

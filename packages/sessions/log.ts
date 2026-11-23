@@ -1,7 +1,8 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { closeSync, constants, fstatSync, fsyncSync, ftruncateSync, lstatSync, openSync, readFileSync, writeSync } from 'node:fs';
 import { dirname } from 'node:path';
-import type { SessionEntry, SessionEvent, SessionLogPort, SessionProjection } from '../contracts/session-log.js';
+import { validateNativeMessage, validateRequestSnapshot } from '@mini-harness/contracts/llm';
+import type { SessionEntry, SessionEvent, SessionLogPort, SessionProjection } from '@mini-harness/contracts/session-log';
 import { projectLog } from './projection.js';
 
 export interface SessionHeader { type: 'session'; version: 1; id: string; createdAt: string; importedFrom?: string }
@@ -91,7 +92,7 @@ export class SessionLog implements SessionLogPort {
     if (entry.type === 'context-edit') {
       const target = this.branch(entry.parentId).find((item) => item.id === entry.targetId && item.type === 'message');
       if (target?.type !== 'message') throw new Error('Context edit target is not a message on the selected branch');
-      if (entry.replacement !== null) validateMessage({ ...target.message, content: entry.replacement } as typeof target.message);
+      if (entry.replacement !== null) validateNativeMessage({ ...target.message, content: entry.replacement } as typeof target.message);
     }
   }
 
@@ -187,7 +188,14 @@ export class SessionLog implements SessionLogPort {
 function validateEvent(event: SessionEvent) {
   switch (event.type) {
     case 'message':
-      validateMessage(event.message);
+      validateNativeMessage(event.message);
+      return;
+    case 'model-request':
+      validateRequestSnapshot(event.request);
+      return;
+    case 'tool-execution':
+      validateNativeMessage(event.result);
+      if (event.result.role !== 'toolResult' || event.result.isError) throw new Error('Invalid completed tool execution');
       return;
     case 'model':
       if (typeof event.model?.provider !== 'string' || typeof event.model.id !== 'string') throw new Error('Invalid session model');
@@ -234,30 +242,4 @@ export function encodeLog(header: SessionHeader, entries: SessionEntry[]) {
   return [JSON.stringify(header), ...entries.map((entry) => JSON.stringify({ ...entry, checksum: digest(entry) }))].join('\n') + '\n';
 }
 
-function operational(entry: SessionEvent) { return entry.type === 'run' || entry.type.startsWith('inbox-'); }
-
-function validateMessage(message: Extract<SessionEvent, { type: 'message' }>['message']) {
-  if (!message || !['user', 'assistant', 'toolResult'].includes(message.role) || !Number.isFinite(message.timestamp))
-    throw new Error('Invalid session message');
-  if (message.role === 'user' && typeof message.content === 'string') return;
-  if (!Array.isArray(message.content)) throw new Error('Invalid session message content');
-  for (const block of message.content) {
-    if (!block || typeof block !== 'object') throw new Error('Invalid session message content');
-    switch (block.type) {
-      case 'text': if (typeof block.text !== 'string') throw new Error('Invalid text content'); break;
-      case 'image':
-        if (message.role === 'assistant' || typeof block.data !== 'string' || typeof block.mimeType !== 'string') throw new Error('Invalid image content');
-        break;
-      case 'thinking':
-        if (message.role !== 'assistant' || typeof block.thinking !== 'string') throw new Error('Invalid reasoning content');
-        break;
-      case 'toolCall':
-        if (message.role !== 'assistant' || typeof block.id !== 'string' || typeof block.name !== 'string' ||
-            !block.arguments || typeof block.arguments !== 'object' || Array.isArray(block.arguments)) throw new Error('Invalid tool call');
-        break;
-      default: throw new Error('Unknown session content type');
-    }
-  }
-  if (message.role === 'toolResult' && (typeof message.toolCallId !== 'string' || typeof message.toolName !== 'string' || typeof message.isError !== 'boolean'))
-    throw new Error('Invalid tool result');
-}
+function operational(entry: SessionEvent) { return entry.type === 'run' || entry.type === 'model-request' || entry.type === 'tool-execution' || entry.type.startsWith('inbox-'); }

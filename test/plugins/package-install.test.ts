@@ -2,19 +2,20 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile as exec } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
-import { basename, join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
-import { readSettings, writeJson } from '../../packages/platform/config.js';
-import { createMiniHarnessServer } from '../../packages/host/server.js';
+import { readSettings, writeJson } from '@mini-harness/platform/config';
+import { createMiniHarnessServer } from '@mini-harness/host/server';
 import { createFixturePaths } from '../helpers/mock-provider.js';
 
 const execFile = promisify(exec);
-const npmCli = basename(process.env.npm_execpath ?? '') === 'npm-cli.js' ? process.env.npm_execpath : undefined;
+const npmCli = process.env.MINI_HARNESS_NPM_CLI ?? resolve(dirname(process.execPath),
+  process.platform === 'win32' ? 'node_modules/npm/bin/npm-cli.js' : '../lib/node_modules/npm/bin/npm-cli.js');
 const cli = resolve('dist/bin/mini-harness.js');
 
-test('npm distribution resolves dependencies, updates atomically and serves both entrypoints', { timeout: 45000 }, async (t) => {
+test('pnpm distribution resolves dependencies, updates atomically and serves both entrypoints', { timeout: 45000 }, async (t) => {
   const { paths, root } = createFixturePaths('http://127.0.0.1:1/v1');
   const packages = new Map<string, { version: string; bytes: Buffer; manifest: object }[]>();
   const tarballs = new Map<string, Buffer>();
@@ -58,9 +59,7 @@ test('npm distribution resolves dependencies, updates atomically and serves both
     writeJson(join(cwd, 'package.json'), manifest);
     for (const [file, source] of Object.entries(files)) writeFileSync(join(cwd, file), source);
     const args = ['pack', '--ignore-scripts', '--json'];
-    const result = await (npmCli ? execFile(process.execPath, [npmCli, ...args], { cwd, env }) :
-      process.platform === 'win32' ? execFile('npm.cmd ' + args.join(' '), { cwd, env, shell: true }) :
-        execFile('npm', args, { cwd, env }));
+    const result = await execFile(process.execPath, [npmCli, ...args], { cwd, env });
     const [{ filename }] = JSON.parse(result.stdout);
     const bytes = readFileSync(join(cwd, filename));
     tarballs.set('/' + name + '/-/' + version + '.tgz', bytes);
@@ -85,6 +84,9 @@ test('npm distribution resolves dependencies, updates atomically and serves both
   assert.match((await run('update', id)).stdout, /harness-plugin@1\.1\.0/);
   const directory = join(paths.plugins, id);
   const installed = readdirSync(directory);
+  const source = JSON.parse(readFileSync(join(directory, '.package-source.json'), 'utf8'));
+  const lock = readFileSync(join(directory, source.generation, 'pnpm-lock.yaml'), 'utf8');
+  assert.match(lock, /mini-setup-helper@1\.0\.0/);
   assert.equal(installed.length, 2);
 
   const settings = readSettings(paths);
@@ -104,13 +106,20 @@ test('npm distribution resolves dependencies, updates atomically and serves both
     method, headers, body: JSON.stringify(body)
   });
   const metadata = (await (await request('/plugins')).json()).find((plugin) => plugin.id === id);
-  assert.deepEqual(metadata.npm, { name, version: '1.1.0' });
+  assert.deepEqual(metadata.package, { name, version: '1.1.0' });
   assert.equal(metadata.state, 'discovered');
   const response = await request('/settings', 'PATCH', { plugins: { [id]: true } });
   assert.equal(response.status, 200, await response.text());
   assert.equal(await (await request('/extensions/' + id + '/label')).json(), 'From dependency');
   assert.equal((await (await request('/plugins/' + id + '/web')).json()).source, files['web.js']);
   assert.equal((await request('/settings', 'PATCH', { plugins: { [id]: false } })).status, 200);
+  const active = join(directory, source.generation);
+  const link = join(active, 'node_modules', '@fixture', 'harness-plugin');
+  rmSync(link, { recursive: true });
+  symlinkSync(paths.cwd, link, 'junction');
+  const invalid = (await (await request('/plugins')).json()).find((plugin) => plugin.id === id);
+  assert.equal(invalid.state, 'failed');
+  assert.match(invalid.error, /outside its installation directory/);
   assert.equal((await request('/plugins/' + id, 'DELETE')).status, 200);
   assert.ok(!readdirSync(paths.plugins).includes(id));
 });

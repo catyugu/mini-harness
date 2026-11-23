@@ -16,29 +16,33 @@ export interface PromptSection {
   render(context: PromptContext): string | undefined | Promise<string | undefined>;
 }
 
-interface StepContext {
+export interface StepContext {
   readonly sessionId: string;
   readonly cwd: string;
   readonly model: Readonly<ModelChoice>;
   readonly turn: number;
+  readonly phase: 'turn' | 'compaction';
   readonly signal: AbortSignal;
 }
 
-export interface AgentWaterfalls {
-  beforeStep: { context: StepContext; value: NativeMessage[] };
-  modelRequest: {
-    context: StepContext;
-    value: { messages: NativeMessage[]; systemPrompt: string; thinkingLevel?: ThinkingLevel; maxTokens?: number };
-  };
-  toolResult: {
-    context: StepContext & { readonly callId: string; readonly tool: string };
-    value: (TextPart | ImagePart)[];
-  };
+export interface ModelRequestDraft {
+  messages: NativeMessage[];
+  systemPrompt: string;
+  thinkingLevel?: ThinkingLevel;
+  maxTokens?: number;
 }
-export type AgentStage = keyof AgentWaterfalls;
-export type AgentTransform<Stage extends AgentStage> = (
-  value: AgentWaterfalls[Stage]['value'], context: AgentWaterfalls[Stage]['context']
-) => AgentWaterfalls[Stage]['value'] | undefined | Promise<AgentWaterfalls[Stage]['value'] | undefined>;
+
+export interface ToolResultContext extends StepContext {
+  readonly callId: string;
+  readonly tool: string;
+}
+
+export type AgentTransform<Value, Context extends StepContext> = (
+  value: Value, context: Context
+) => Value | undefined | Promise<Value | undefined>;
+
+export type ModelRequestTransform = AgentTransform<ModelRequestDraft, StepContext>;
+export type ToolResultTransform = AgentTransform<(TextPart | ImagePart)[], ToolResultContext>;
 
 export interface ModelFailure {
   readonly sessionId: string;

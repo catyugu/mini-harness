@@ -1,4 +1,4 @@
-import type { MutationPort } from '../contracts/routes.js';
+import type { MutationPort } from '@mini-harness/contracts/routes';
 
 /** One transaction gate for HTTP settings and installed plugin operations. */
 export class MutationGate implements MutationPort {

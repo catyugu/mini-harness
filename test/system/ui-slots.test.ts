@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { SlotRegistry } from '../../packages/ui-slots/registry.js';
+import { SlotRegistry } from '@mini-harness/ui-slots/registry';
 
 class ElementStub {
   children: ElementStub[] = [];
@@ -110,4 +110,23 @@ test('overrides restore the previous contribution and release its node and decor
   assert.equal(lifetimes.at(-1).aborted, true);
   stop();
   assert.ok(lifetimes.every(({ aborted }) => aborted));
+});
+
+test('keyed priority is explicit and a failed replacement retains the mounted instance', () => {
+  const registry = new SlotRegistry();
+  const outlet = element(), preferred = element(), lower = element();
+  const stop = registry.define('sidebar.primary', node(outlet));
+  let lifetime: AbortSignal;
+  registry.registerKeyed('sidebar.primary', 'control', (signal) => {
+    lifetime = signal;
+    return node(preferred);
+  }, { priority: 10 });
+  registry.registerKeyed('sidebar.primary', 'control', () => node(lower));
+  assert.throws(() => registry.registerKeyed('sidebar.primary', 'control', () => {
+    throw new Error('render failed');
+  }, { priority: 20 }), /render failed/);
+  assert.deepEqual(outlet.children, [preferred]);
+  assert.equal(lifetime.aborted, false);
+  stop();
+  assert.equal(lifetime.aborted, true);
 });

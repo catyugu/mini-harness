@@ -3,12 +3,13 @@ import assert from 'node:assert/strict';
 import { rmSync } from 'node:fs';
 import { Type } from 'typebox';
 import { NativeAgent } from '../agent.js';
-import { SessionRegistry } from '../../sessions/registry.js';
-import { WorkspaceCatalog } from '../../workspaces/catalog.js';
-import { ToolRegistry } from '../../tools/registry.js';
-import { defineTool } from '../../contracts/tools.js';
-import type { LlmPort, NativeAssistantMessage, ToolCallPart } from '../../contracts/llm.js';
-import type { ModelRetry } from '../../contracts/extensions.js';
+import { scheduleTools } from '../tool-pipeline.js';
+import { SessionRegistry } from '@mini-harness/sessions/registry';
+import { WorkspaceCatalog } from '@mini-harness/workspaces/catalog';
+import { ToolRegistry } from '@mini-harness/tools/registry';
+import { defineTool } from '@mini-harness/contracts/tools';
+import type { LlmPort, NativeAssistantMessage, ToolCallPart } from '@mini-harness/contracts/llm';
+import type { ModelRetry } from '@mini-harness/contracts/extensions';
 import { createFixturePaths } from '../../../test/helpers/mock-provider.js';
 
 const model = { provider: 'fixture', id: 'native' };
@@ -190,4 +191,24 @@ test('the retry policy cannot replay a model attempt after output has streamed',
     if (event.type === 'delta') deltas.push(event.text);
   }, { signal: new AbortController().signal }), /Transport closed after output/);
   assert.deepEqual({ requests, retries, deltas }, { requests: 1, retries: 0, deltas: ['Partial'] });
+});
+
+test('a fatal pipeline failure stops dispatch and drains active calls', async () => {
+  const tool = defineTool({ name: 'parallel', description: 'Parallel', parameters: Type.Object({}),
+    isConcurrencySafe: () => true, async execute() { return { content: [] }; } });
+  const tools = new Map([[tool.name, tool]]);
+  const calls = Array.from({ length: 18 }, (_, index) => call(String(index), 'parallel'));
+  const started: string[] = [];
+  let drained = 0;
+  await assert.rejects(scheduleTools(calls, tools, new AbortController().signal, async (call, _tool, signal) => {
+    started.push(call.id);
+    if (call.id === '0') throw new Error('Log write failed');
+    await new Promise<void>((resolve) => {
+      if (signal.aborted) return resolve();
+      signal.addEventListener('abort', () => resolve(), { once: true });
+    });
+    drained++;
+  }), /Log write failed/);
+  assert.equal(started.length, 16);
+  assert.equal(drained, 15);
 });

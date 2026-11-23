@@ -1,6 +1,6 @@
-import type { WorkspaceRecord } from '../../contracts/workspace.js';
-import type { FrontendSetup } from '../../ui-runtime/frontend.js';
-import { RemoteStore } from '../../web/models/remote-store.js';
+import type { WorkspaceRecord } from '@mini-harness/contracts/workspace';
+import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend';
+import { RemoteStore } from '@mini-harness/web/models/remote-store';
 
 const setup: FrontendSetup = async (ctx, api) => {
   const store = new RemoteStore(() => api.request<WorkspaceRecord[]>('/workspaces'));

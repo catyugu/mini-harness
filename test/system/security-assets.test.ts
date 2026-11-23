@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { rmSync } from 'node:fs';
 import ts from 'typescript';
-import { createMiniHarnessServer } from '../../packages/host/server.js';
+import { createMiniHarnessServer } from '@mini-harness/host/server';
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
 
 test('compiled browser tests and host-only feature code are not public static assets', async (t) => {

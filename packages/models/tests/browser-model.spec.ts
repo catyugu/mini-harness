@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.js';
-import { readJson, writeJson } from '../../platform/config.js';
+import { readJson, writeJson } from '@mini-harness/platform/config';
 import { startIsolatedHost, modelButton, modelSearch, chooseModel } from '../../../test/support/browser.js';
 
 test('the global recent model survives history navigation and page reload', async ({ page }) => {

@@ -2,35 +2,19 @@ import { Context } from 'cordis';
 import { isDeepStrictEqual } from 'node:util';
 import { lstatSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import type { PluginDescriptor, PluginApi, SessionRecords } from '../contracts/plugins.js';
-import type { PluginScope, ScopePort } from '../contracts/capabilities.js';
-import type { BrowserEntry } from '../contracts/browser.js';
+import type { PluginDescriptor, SessionRecords } from '@mini-harness/contracts/plugins';
+import type { PluginScope, ScopePort } from '@mini-harness/contracts/capabilities';
+import type { BrowserEntry } from '@mini-harness/contracts/browser';
 import { addAbortListener } from 'node:events';
-import type { SessionRecord } from '../contracts/conversation.js';
-import type { AgentStage, AgentTransform } from '../contracts/extensions.js';
-import type { ServiceMap } from '../contracts/plugin-sdk.js';
-import type { Settings } from '../contracts/config.js';
-import { resolveCapabilities } from '../kernel/composition.js';
-import { PluginMounts, type MountPlan } from '../kernel/mounts.js';
+import type { SessionRecord } from '@mini-harness/contracts/conversation';
+import type { ServiceMap } from '@mini-harness/contracts/plugin-sdk';
+import type { Settings } from '@mini-harness/contracts/config';
+import { resolveCapabilities } from '@mini-harness/kernel/composition';
+import { PluginMounts, type MountPlan } from '@mini-harness/kernel/mounts';
+import { createPluginApi } from './api.js';
 import { PluginCatalog, type PluginPlan } from './catalog.js';
 
 const appScope: PluginScope = { kind: 'application' };
-
-async function whileActive<T>(signal: AbortSignal, work: () => T | Promise<T>): Promise<T> {
-  signal.throwIfAborted();
-  let listener: ReturnType<typeof addAbortListener>;
-  try {
-    const cancelled = new Promise<never>((_, reject) => {
-      listener = addAbortListener(signal, () => reject(signal.reason));
-    });
-    const result = await Promise.race([cancelled, Promise.resolve().then(() => {
-      signal.throwIfAborted();
-      return work();
-    })]);
-    signal.throwIfAborted();
-    return result;
-  } finally { listener?.[Symbol.dispose](); }
-}
 
 /** The descriptor and its resolved graph are the source of both server and browser mounts. */
 export class PluginHost implements ScopePort {
@@ -98,9 +82,15 @@ export class PluginHost implements ScopePort {
     return ['workspace:' + records[0].workspaceId, ...records.map(({ id }) => 'session:' + id)];
   }
 
-  resolve<T>(id: string, service: string): T | undefined {
-    const scope = this.address(id).reverse().map((key) => this.scopes.get(key)).find(Boolean);
-    return (scope?.ctx ?? this.ctx).get(service) as T | undefined;
+  require<Name extends keyof ServiceMap & string>(id: string | null | undefined, service: Name): NonNullable<ServiceMap[Name]> {
+    const value = this.optional(id, service);
+    if (value == null) throw new Error('Required service is unavailable: ' + service + (id ? ' in session ' + id : ''));
+    return value;
+  }
+
+  optional<Name extends keyof ServiceMap & string>(id: string | null | undefined, service: Name): ServiceMap[Name] | undefined {
+    const scope = id && this.address(id).reverse().map((key) => this.scopes.get(key)).find(Boolean);
+    return ((scope || undefined)?.ctx ?? this.ctx).get(service) as ServiceMap[Name] | undefined;
   }
 
   allowsTool(id: string, tool: string) {
@@ -204,131 +194,13 @@ export class PluginHost implements ScopePort {
     const setup = source ? mod.default : descriptor.setup ?? (() => {});
     if (typeof setup !== 'function' || mod?.inject !== undefined || (source && setup.inject !== undefined))
       throw new Error('Export a default setup function and declare dependencies in plugin.json');
-    return { inject: descriptor.inject ?? [], setup: async (ctx: Context, lifetime: AbortSignal) => {
-      const values = Object.freeze(structuredClone(plan.config ?? {}));
-      const provided = new Set<string>();
-      const use = <Name extends keyof ServiceMap & string>(name: Name): ServiceMap[Name] | undefined => {
-        if (!descriptor.inject?.includes(name) && !descriptor.optional?.includes(name))
-          throw new Error('Service is not declared by ' + plan.id + ': ' + name);
-        return ctx.get(name) as ServiceMap[Name] | undefined;
-      };
-      const inScope = (id: string) => !scopeKey || this.address(id).includes(scopeKey);
-      const checkSession = (id: string) => {
-        lifetime.throwIfAborted();
-        if (!inScope(id)) throw new Error('Conversation outside plugin scope');
-      };
-      const recordsFor = (id: string) => this.sessionRecords(id, plan.id);
-      const sectionIds = new Set<string>();
-      const callbackSignal = (signal?: AbortSignal) => signal ? AbortSignal.any([lifetime, signal]) : lifetime;
-      const cleanup = await setup(ctx, {
-        scope: Object.freeze({ ...scope }), signal: lifetime, config: values, service: use,
-        observe: (handler) => ctx.on('harness/observe', (event) => {
-          if (lifetime.aborted || (event.type === 'session-deleted'
-            ? scopeKey && !event.scopeKeys.includes(scopeKey)
-            : !inScope(event.sessionId))) return;
-          void Promise.resolve().then(() => {
-            if (!lifetime.aborted) return handler(structuredClone(event));
-          }).catch(() => ctx.logger.warn('Plugin observer failed: ' + plan.id));
-        }),
-        decideTool: (handler) => ctx.on('harness/tool-decision', async (request) => {
-          if (lifetime.aborted || !inScope(request.sessionId)) return;
-          const signal = callbackSignal(request.signal);
-          const decision = await whileActive(signal,
-            () => handler({ ...request, arguments: structuredClone(request.arguments), signal }));
-          if (decision !== undefined && decision !== 'deny') throw new Error('Invalid tool policy decision: ' + plan.id);
-          return decision;
-        }),
-        promptSection: (section) => {
-          const { id, order = 500, render } = section;
-          if (!/^[a-zA-Z][a-zA-Z0-9_.:-]{0,95}$/.test(id) || !Number.isFinite(order) ||
-              typeof render !== 'function' || sectionIds.has(id))
-            throw new Error('Invalid or duplicate prompt section: ' + id);
-          lifetime.throwIfAborted();
-          sectionIds.add(id);
-          let active = true;
-          const unregister = ctx.on('harness/prompt-sections', (sessionId, sections) => {
-            if (lifetime.aborted || !inScope(sessionId)) return;
-            const depth = scopeKey ? this.address(sessionId).indexOf(scopeKey) + 1 : 0;
-            sections.push({ id, order, depth, pluginId: plan.id, async render(request) {
-              if (!active) return;
-              const signal = callbackSignal(request.signal);
-              return whileActive(signal, () => render({ ...structuredClone({ ...request, signal: undefined }), signal }));
-            } });
-          });
-          return () => {
-            if (!active) return;
-            active = false;
-            sectionIds.delete(id);
-            unregister();
-          };
-        },
-        waterfall: <Stage extends AgentStage>(stage: Stage, handler: AgentTransform<Stage>, order = 0) => {
-          if (!['beforeStep', 'modelRequest', 'toolResult'].includes(stage) || typeof handler !== 'function' || !Number.isFinite(order))
-            throw new Error('Invalid agent waterfall: ' + stage);
-          return ctx.on('harness/agent-waterfall', (sessionId, current, handlers) => {
-            if (String(current) !== stage || lifetime.aborted || !inScope(sessionId)) return;
-            handlers.push({ pluginId: plan.id, order, transform: (async (value, request) => {
-              if (lifetime.aborted) return;
-              const signal = callbackSignal(request.signal);
-              const result = await whileActive(signal,
-                () => handler(structuredClone(value), { ...request, model: { ...request.model }, signal }));
-              return result === undefined ? undefined : structuredClone(result);
-            }) as typeof handlers[number]['transform'] });
-          });
-        },
-        retryModel: (handler) => ctx.on('harness/model-retry', async (failure) => {
-          if (lifetime.aborted || !inScope(failure.sessionId)) return;
-          const signal = callbackSignal(failure.signal);
-          const retry = await whileActive(signal, () => handler({ ...failure, model: { ...failure.model }, signal }));
-          if (retry !== undefined && (!retry || typeof retry !== 'object' ||
-              (retry.delayMs !== undefined && (!Number.isFinite(retry.delayMs) || retry.delayMs < 0 || retry.delayMs > 30000))))
-            throw new Error('Invalid model retry decision: ' + plan.id);
-          return retry;
-        }),
-        registerProjection: (projection) => {
-          if (typeof projection.initial !== 'function' || typeof projection.reduce !== 'function')
-            throw new Error('Invalid session record projection');
-          lifetime.throwIfAborted();
-          let active = true;
-          const dispose = () => { active = false; };
-          ctx.effect(() => dispose);
-          return { async read(sessionId) {
-            checkSession(sessionId);
-            if (!active) throw new Error('Session record projection is disposed');
-            const records = recordsFor(sessionId).list();
-            return records.reduce((state, record) => projection.reduce(state, record), projection.initial());
-          }, dispose };
-        },
-        transformTool: (handler) => ctx.on('harness/tool-projection', (request, next) => {
-          const content = next();
-          if (lifetime.aborted || !inScope(request.sessionId)) return content;
-          try { return handler(structuredClone({ ...request, content })) ?? content; }
-          catch { ctx.logger.warn('Plugin tool projection failed: ' + plan.id); return content; }
-        }),
-        provide(name, service) {
-          if (!descriptor.provides?.includes(name) || provided.has(name)) throw new Error('Undeclared or duplicate service: ' + name);
-          ctx.provide(name, service);
-          provided.add(name);
-        },
-        registerTool: (tool) => {
-          const tools = use('harnessTools');
-          return ctx.effect(() => tools.register(tool.name, () => tool, undefined, scopeKey));
-        },
-        registerRoute: (method, path, handler) => {
-          if (scopeKey || !['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method) ||
-              !/^\/(?:[a-zA-Z0-9_-]+\/)*[a-zA-Z0-9_-]+$/.test(path)) throw new Error('Invalid plugin route');
-          const routes = use('harnessRoutes');
-          return ctx.effect(() => routes.register(method, '/api/extensions/' + plan.id + path, handler));
-        },
-        records: {
-          list: async (sessionId) => { checkSession(sessionId); return recordsFor(sessionId).list(); },
-          append: async (sessionId, data) => { checkSession(sessionId); return recordsFor(sessionId).append(data); }
-        },
-        onDispose: (dispose) => ctx.effect(() => dispose)
-      } satisfies PluginApi);
+    return { inject: descriptor.inject ?? [], setup: async (ctx, lifetime, setDrain) => {
+      const runtime = createPluginApi(ctx, plan, { scope, scopeKey, lifetime,
+        address: (id) => this.address(id), records: (id) => this.sessionRecords(id, plan.id) });
+      setDrain(runtime.drain);
+      const cleanup = await setup(ctx, runtime.api);
       if (typeof cleanup === 'function') ctx.effect(() => cleanup);
-      if (descriptor.trustedCode && descriptor.provides?.some((service) => !provided.has(service)))
-        throw new Error('Plugin did not publish all declared services: ' + plan.id);
+      runtime.checkPublications();
     } };
   }
 

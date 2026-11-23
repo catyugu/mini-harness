@@ -5,10 +5,10 @@ import {
   type Model, type MutableModels, type ProviderStreams
 } from '@earendil-works/pi-ai';
 import { builtinModels } from '@earendil-works/pi-ai/providers/all';
-import { readJson, writeJson } from '../platform/config.js';
-import type { ModelChoice } from '../contracts/conversation.js';
-import type { ModelAdminPort, ModelCatalogPort, ProviderModel } from '../contracts/models.js';
-import type { LlmEvent, LlmPort, LlmRequest, NativeAssistantMessage, NativeMessage } from '../contracts/llm.js';
+import { readJson, writeJson } from '@mini-harness/platform/config';
+import type { ModelChoice } from '@mini-harness/contracts/conversation';
+import type { ModelAdminPort, ModelCatalogPort, ProviderModel } from '@mini-harness/contracts/models';
+import type { LlmEvent, LlmPort, LlmRequest, NativeAssistantMessage, NativeMessage } from '@mini-harness/contracts/llm';
 
 const apiLoaders: Record<string, () => Promise<ProviderStreams>> = {
   'openai-completions': () => import('@earendil-works/pi-ai/api/openai-completions'),
@@ -143,14 +143,9 @@ export class PiModelStore implements ModelCatalogPort, ModelAdminPort {
   }
   async available() { this.status = await this.readStatus(); return this.list(); }
   private model(choice: ModelChoice) {
-    if (!choice?.provider) {
-      if (choice?.id) throw new Error('A model ID requires a provider');
-      return undefined;
-    }
+    if (!choice?.provider) return undefined;
     const id = choice.id || this.runtime.getModels(choice.provider)[0]?.id;
-    const model = id && this.runtime.getModel(choice.provider, id);
-    if (!model) throw new Error('Unknown model: ' + choice.provider + '/' + (id ?? ''));
-    return model;
+    return id ? this.runtime.getModel(choice.provider, id) : undefined;
   }
   resolve(choice: ModelChoice) {
     const model = this.model(choice);

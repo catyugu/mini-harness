@@ -1,4 +1,4 @@
-import type { ComposerCommand } from '../../../web/contracts/commands.js';
+import type { ComposerCommand } from '@mini-harness/web/contracts/commands';
 
 export class CommandRegistry {
   private commands = new Map<string, ComposerCommand>();

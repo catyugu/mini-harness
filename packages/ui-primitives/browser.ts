@@ -1,5 +1,5 @@
-import type { FrontendSetup } from '../ui-runtime/frontend.js';
-import type { BrowserPrimitives } from '../contracts/browser.js';
+import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend';
+import type { BrowserPrimitives } from '@mini-harness/contracts/browser';
 import { button, field, dialog } from './primitives.js';
 import { hydrateIcons } from './icons.js';
 

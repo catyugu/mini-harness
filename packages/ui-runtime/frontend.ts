@@ -1,13 +1,13 @@
-import { Context, type Fiber } from '../web/vendor/cordis.js';
-import type { BrowserPrimitives, BrowserProjectionPort } from '../contracts/browser.js';
-import type { ComposerCommand } from '../web/contracts/commands.js';
-import type { MessageContent, ViewMessage } from '../contracts/message.js';
-import type { Attachment } from '../contracts/input.js';
-import type { ModelChoice } from '../contracts/conversation.js';
-import type { Conversation } from '../contracts/conversation.js';
-import type { RightTabType, TabScope } from '../web/contracts/tabs.js';
-import type { WorkspaceRecord } from '../contracts/workspace.js';
-import type { SlotName, SlotKind, SlotRenderer, SlotDecorator } from '../ui-slots/registry.js';
+import { Context, type Fiber } from '@mini-harness/web/vendor/cordis';
+import type { BrowserPrimitives, BrowserProjectionPort } from '@mini-harness/contracts/browser';
+import type { ComposerCommand } from '@mini-harness/web/contracts/commands';
+import type { MessageContent, ViewMessage } from '@mini-harness/contracts/message';
+import type { Attachment } from '@mini-harness/contracts/input';
+import type { ModelChoice } from '@mini-harness/contracts/conversation';
+import type { Conversation } from '@mini-harness/contracts/conversation';
+import type { RightTabType, TabScope } from '@mini-harness/web/contracts/tabs';
+import type { WorkspaceRecord } from '@mini-harness/contracts/workspace';
+import type { SlotName, SlotKind, SlotRenderer, SlotDecorator, KeyedSlotOptions } from '@mini-harness/ui-slots/registry';
 
 export interface ToolView { name: string; state: string; content?: MessageContent; arguments?: unknown; sessionId?: string }
 export interface Suggestion {
@@ -56,7 +56,7 @@ export interface FrontendApi {
   readonly slots: {
     define(name: SlotName, container: HTMLElement, kind?: SlotKind): void;
     register(name: SlotName, node: HTMLElement, order?: number): () => void;
-    registerKeyed(name: SlotName, key: string, render: SlotRenderer, order?: number): Release;
+    registerKeyed(name: SlotName, key: string, render: SlotRenderer, options?: KeyedSlotOptions): Release;
     decorate(name: SlotName, key: string | undefined, wrap: SlotDecorator, order?: number): Release;
   };
   messageAction(action: MessageAction): Release;
@@ -137,7 +137,7 @@ export class FrontendHost {
         slots: {
           define: (name, container, kind) => { own(() => this.ctx.miniSlots.define(name, container, kind)); },
           register: (name, node, order) => own(() => this.ctx.miniSlots.register(name, node, order)),
-          registerKeyed: (name, key, render, order) => own(() => this.ctx.miniSlots.registerKeyed(name, key, render, order)),
+          registerKeyed: (name, key, render, options) => own(() => this.ctx.miniSlots.registerKeyed(name, key, render, options)),
           decorate: (name, key, wrap, order) => own(() => this.ctx.miniSlots.decorate(name, key, wrap, order))
         },
         request: (path, options) => this.request(path, { ...options, signal: options?.signal

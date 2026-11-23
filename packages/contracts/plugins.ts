@@ -9,7 +9,7 @@ import type { MessageContent } from './message.js';
 import type { PluginScope } from './capabilities.js';
 import type { DelegationPort } from './delegation.js';
 import type { ServiceMap } from './plugin-sdk.js';
-import type { AgentStage, AgentTransform, ModelFailure, ModelRetry, PromptSection, RecordProjection } from './extensions.js';
+import type { ModelFailure, ModelRequestTransform, ModelRetry, PromptSection, RecordProjection, ToolResultTransform } from './extensions.js';
 
 /** Host-owned capability; features consume this interface without importing a concrete registry. */
 export interface ToolPort {
@@ -26,7 +26,7 @@ export interface PluginMetadata {
   title: string;
   description: string;
   trustedCode?: boolean;
-  npm?: { name: string; version: string };
+  package?: { name: string; version: string };
   /** An installed but unusable plugin must never prevent the host from starting. */
   error?: string;
   state?: 'discovered' | 'ready' | 'draining' | 'failed';
@@ -65,11 +65,13 @@ export interface PluginApi {
   readonly scope: PluginScope;
   readonly signal: AbortSignal;
   provide<Name extends keyof ServiceMap & string>(name: Name, service: ServiceMap[Name]): void;
-  service<Name extends keyof ServiceMap & string>(name: Name): ServiceMap[Name] | undefined;
+  service<Name extends keyof ServiceMap & string>(name: Name): NonNullable<ServiceMap[Name]>;
+  optionalService<Name extends keyof ServiceMap & string>(name: Name): ServiceMap[Name] | undefined;
   observe(handler: (event: CapabilityObservation) => void | Promise<void>): () => void;
   decideTool(handler: (request: ToolDecision) => 'deny' | undefined | Promise<'deny' | undefined>): () => void;
   promptSection(section: PromptSection): () => void;
-  waterfall<Stage extends AgentStage>(stage: Stage, handler: AgentTransform<Stage>, order?: number): () => void;
+  modelRequest(handler: ModelRequestTransform, order?: number): () => void;
+  toolResult(handler: ToolResultTransform, order?: number): () => void;
   retryModel(handler: (failure: ModelFailure) => ModelRetry | undefined | Promise<ModelRetry | undefined>): () => void;
   registerProjection<State>(projection: RecordProjection<State>): {
     read(sessionId: string): Promise<State>;

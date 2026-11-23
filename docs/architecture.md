@@ -41,7 +41,7 @@ The durable inbox assigns every message its own ID. Delivery commits the user me
 
 The prompt composes ordered sections for workspace identity, tool guidance, bounded `AGENTS.md` files and plugin contributions. The Skills plugin owns discovery, its prompt section, explicit `/skill:name` expansion and `load_skill`. It can unload independently. Text/image attachments are normalized once and stored with separate presentation metadata, so context expansion does not alter the user's displayed text or attachment identity.
 
-Execution hooks compose turn context, the outbound model request and durable successful tool content. Retry policy runs before any model output has streamed and is bounded. Plugin state projections fold the current branch's custom records directly from the native log.
+Execution hooks compose the outbound model request and model-visible tool content. The Session Log records each request and any replacement context before streaming. Successful tool executions are recorded before invoking result transforms. A failed transform stops dispatch and records a safe result. Retry policy runs before any model output has streamed and is bounded. Plugin state projections fold the current branch's custom records directly from the native log.
 
 Compaction asks the selected LLM to summarize an older prefix and retains two recent turns. It commits a summary only after successful completion and cancellation checks. Existing message IDs and branch history remain available. Turn limits bound autonomous work. Subagents use the same session, execution and run services; their semaphore leases are yielded while awaiting descendants, permitting nested execution with one slot.
 
@@ -61,9 +61,9 @@ The authenticated `/api/changes` stream publishes revisions and scoped invalidat
 
 ## Verification boundaries
 
-Private `packages/<name>/package.json` files declare exact source dependencies; the root manifest defines the only published package. Architecture tests enforce the dependency DAG, declared services, SDK isolation, generic browser runtime and public asset boundaries.
+Private packages use pnpm workspace dependencies and named exports. Strict TypeScript checking covers the contracts, plugin API, and agent selection and transform policies. The build resolves workspace imports in JavaScript and declarations so the root manifest defines the sole published package. Architecture tests enforce the dependency DAG, declared services, SDK isolation, generic browser runtime and public asset boundaries.
 
-- `npm run check` checks TypeScript and runs Node tests.
-- `npm run check:deps` runs architecture checks.
-- `npm run test:browser` runs desktop, tablet and mobile Playwright journeys.
-- `npm run pack:check` installs the tarball in an empty project and checks exports, assets, detached CLI and native execution against a local mock model provider.
+- `pnpm run check` checks TypeScript and runs Node tests.
+- `pnpm run check:deps` runs architecture checks.
+- `pnpm run test:browser` runs desktop, tablet and mobile Playwright journeys.
+- `pnpm run pack:check` installs the tarball in an empty project and checks exports, assets, detached CLI and native execution against a local mock model provider.

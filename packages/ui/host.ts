@@ -1,6 +1,6 @@
 import type { Context } from 'cordis';
-import { projectionDomains, type ProjectionDomain, type ProjectionNotice } from '../contracts/navigation.js';
-import { eventStream } from '../transport/http.js';
+import { projectionDomains, type ProjectionDomain, type ProjectionNotice } from '@mini-harness/contracts/navigation';
+import { eventStream } from '@mini-harness/transport/http';
 
 export function setup(ctx: Context) {
   const revisions = Object.fromEntries(projectionDomains.map((domain) => [domain, 0])) as Record<ProjectionDomain, number>;

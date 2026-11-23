@@ -2,5 +2,32 @@
   "name": "@mini-harness/contracts",
   "version": "0.0.0",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "exports": {
+    "./agent": "./agent.ts",
+    "./approval": "./approval.ts",
+    "./browser": "./browser.ts",
+    "./capabilities": "./capabilities.ts",
+    "./config": "./config.ts",
+    "./conversation": "./conversation.ts",
+    "./delegation": "./delegation.ts",
+    "./events": "./events.ts",
+    "./execution": "./execution.ts",
+    "./extensions": "./extensions.ts",
+    "./files": "./files.ts",
+    "./input": "./input.ts",
+    "./llm": "./llm.ts",
+    "./message": "./message.ts",
+    "./models": "./models.ts",
+    "./navigation": "./navigation.ts",
+    "./plugin-sdk": "./plugin-sdk.ts",
+    "./plugins": "./plugins.ts",
+    "./routes": "./routes.ts",
+    "./services": "./services.ts",
+    "./session-log": "./session-log.ts",
+    "./skills": "./skills.ts",
+    "./tools": "./tools.ts",
+    "./transport": "./transport.ts",
+    "./workspace": "./workspace.ts"
+  }
 }

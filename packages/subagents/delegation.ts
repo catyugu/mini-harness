@@ -1,7 +1,7 @@
-import type { DelegationPort, SubagentPolicy } from '../contracts/delegation.js';
-import type { ModelCatalogPort } from '../contracts/models.js';
-import type { AgentPort, RunPort, SessionStore } from '../contracts/services.js';
-import type { SessionRecord, ModelChoice } from '../contracts/conversation.js';
+import type { DelegationPort, SubagentPolicy } from '@mini-harness/contracts/delegation';
+import type { ModelCatalogPort } from '@mini-harness/contracts/models';
+import type { AgentPort, RunPort, SessionStore } from '@mini-harness/contracts/services';
+import type { SessionRecord, ModelChoice } from '@mini-harness/contracts/conversation';
 
 interface Waiter {
   cancel(): void;
@@ -140,6 +140,7 @@ export class Delegation implements DelegationPort {
     this.assertAvailable(parentId);
     requireChildDepth(this.registry.depth(parentId), this.settings().maxDepth);
     const model = this.models(parentId).resolve(choice);
+    if (!model) throw new Error('Unknown child model: ' + choice.provider + '/' + choice.id);
     const record = this.registry.create({
       parentId, workspaceId: parent.workspaceId, title: task.slice(0, 72)
     });

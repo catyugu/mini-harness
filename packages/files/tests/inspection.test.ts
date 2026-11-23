@@ -1,4 +1,4 @@
-import { Workspace } from '../../file-access/workspace.js';
+import { Workspace } from '@mini-harness/file-access/workspace';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, realpathSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';

@@ -1,7 +1,7 @@
 import type { FrontendHost, FrontendSetup } from './frontend.js';
-import type { Bootstrap } from '../web/types.js';
-import type { BrowserEntry } from '../contracts/browser.js';
-import { data } from '../web/api.js';
+import type { Bootstrap } from '@mini-harness/web/types';
+import type { BrowserEntry } from '@mini-harness/contracts/browser';
+import { data } from '@mini-harness/web/api';
 
 export type BrowserPluginFailures = ReadonlyMap<string, unknown>;
 

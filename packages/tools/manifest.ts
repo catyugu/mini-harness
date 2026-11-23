@@ -1,4 +1,4 @@
-import type { PluginDescriptor } from '../contracts/plugins.js';
+import type { PluginDescriptor } from '@mini-harness/contracts/plugins';
 import { ToolRegistry } from './registry.js';
 
 export const manifest: PluginDescriptor = {

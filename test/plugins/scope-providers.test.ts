@@ -3,13 +3,13 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { resolveCapabilities } from '../../packages/kernel/composition.js';
-import { PluginCatalog } from '../../packages/plugins/catalog.js';
-import { PluginHost } from '../../packages/plugins/manager.js';
+import { resolveCapabilities } from '@mini-harness/kernel/composition';
+import { PluginCatalog } from '@mini-harness/plugins/catalog';
+import { PluginHost } from '@mini-harness/plugins/manager';
 import { Context } from 'cordis';
-import type { PluginDescriptor } from '../../packages/contracts/plugins.js';
-import type { SessionRecord } from '../../packages/contracts/conversation.js';
-import { DEFAULTS, mergeSettings, validateSettings } from '../../packages/platform/config.js';
+import type { PluginDescriptor } from '@mini-harness/contracts/plugins';
+import type { SessionRecord } from '@mini-harness/contracts/conversation';
+import { DEFAULTS, mergeSettings, validateSettings } from '@mini-harness/platform/config';
 
 declare module '../../packages/contracts/plugin-sdk.js' {
   interface ServiceMap {
@@ -119,28 +119,28 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
   const child = { plugins: { layer: true }, providers: { greeting: 'layer' }, pluginConfig: { layer: { value: 'child' } } };
   await configure({ 'session:parent': parent, 'session:child': child });
   await Promise.all([host.prepare('child'), host.prepare('sibling')]);
-  assert.equal(host.resolve('parent', 'greeting'), 'parent');
-  assert.equal(host.resolve('child', 'greeting'), 'child');
-  assert.equal(host.resolve('sibling', 'greeting'), 'global');
-  assert.equal(host.resolve('child', 'extra'), 'retained');
+  assert.equal(host.require('parent', 'greeting'), 'parent');
+  assert.equal(host.require('child', 'greeting'), 'child');
+  assert.equal(host.require('sibling', 'greeting'), 'global');
+  assert.equal(host.require('child', 'extra'), 'retained');
   await assert.rejects(configure({ ...settings.scopes, 'session:parent': {
     ...parent, pluginConfig: { layer: { value: 'broken', fail: true } }
   } }), /Scoped setup failed/);
-  assert.equal(host.resolve('child', 'greeting'), 'child');
-  assert.equal(host.resolve('parent', 'greeting'), 'parent');
+  assert.equal(host.require('child', 'greeting'), 'child');
+  assert.equal(host.require('parent', 'greeting'), 'parent');
   assert.ok(released.includes('broken'));
 
   // Keep the scope alive for policy but remove its service; a stale isolate must not mask the parent.
   await configure({ 'session:parent': parent, 'session:child': { disabledTools: ['shell'] } });
-  assert.equal(host.resolve('child', 'greeting'), 'parent');
+  assert.equal(host.require('child', 'greeting'), 'parent');
   assert.equal(host.allowsTool('child', 'shell'), false);
 
   // Adding a configured ancestor of an already mounted child must mount that ancestor immediately.
   await configure({ ['workspace:' + workspaceId]: { plugins: { workspace: true }, providers: { greeting: 'workspace' } },
     'session:child': { disabledTools: ['shell'] } });
-  assert.equal(host.resolve('child', 'greeting'), 'workspace');
-  assert.equal(host.resolve('sibling', 'greeting'), 'workspace');
+  assert.equal(host.require('child', 'greeting'), 'workspace');
+  assert.equal(host.require('sibling', 'greeting'), 'workspace');
   assert.equal(ctx.get('greeting'), 'global');
   await configure({});
-  assert.equal(host.resolve('child', 'greeting'), 'global');
+  assert.equal(host.require('child', 'greeting'), 'global');
 });

@@ -1,10 +1,10 @@
-import { defineTool } from '../contracts/tools.js';
+import { defineTool } from '@mini-harness/contracts/tools';
 import type { Context } from 'cordis';
 import { Type } from 'typebox';
-import type { PluginApi } from '../contracts/plugins.js';
+import type { PluginApi } from '@mini-harness/contracts/plugins';
 
 export function setup(ctx: Context, { config }: PluginApi) {
-  const { harnessApprovals: approvals, harnessProcess: process, harnessRegistry: workspace, harnessRuns: runs, harnessScopes: scopes } = ctx;
+  const { harnessApprovals: approvals, harnessRegistry: workspace, harnessRuns: runs, harnessScopes: scopes } = ctx;
   const options = config as { mode: 'isolated' | 'host'; timeoutSeconds: number };
   const tool = (sessionId: string) => defineTool({
     name: 'sandbox_shell', label: 'Shell',
@@ -14,7 +14,7 @@ export function setup(ctx: Context, { config }: PluginApi) {
       await scopes.prepare(sessionId, signal);
       const cwd = workspace.workspacePath(sessionId);
       await approvals.request(sessionId, runs.info(sessionId)?.id, args.command, signal);
-      const execution = scopes.resolve<Context['harnessProcess']>(sessionId, 'harnessProcess') ?? process;
+      const execution = scopes.require(sessionId, 'harnessProcess');
       const output = await execution.run({ command: args.command, cwd, ...options, signal, sessionId });
       return { content: [{ type: 'text', text: JSON.stringify(output) }], details: { ...output, exitCode: output.code } };
     }

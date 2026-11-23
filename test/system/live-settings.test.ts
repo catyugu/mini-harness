@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { rmSync } from 'node:fs';
-import { MiniHarnessRuntime } from '../../packages/host/application.js';
+import { MiniHarnessRuntime } from '@mini-harness/host/application';
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
 
 test('appearance, parallelism and child defaults update without interrupting a running session', async (t) => {

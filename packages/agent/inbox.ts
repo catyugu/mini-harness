@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
-import { prepareInput } from '../platform/input.js';
-import type { Attachment } from '../contracts/input.js';
-import type { SessionLogPort, InboxItem } from '../contracts/session-log.js';
+import { prepareInput } from '@mini-harness/platform/input';
+import type { Attachment } from '@mini-harness/contracts/input';
+import type { SessionLogPort, InboxItem } from '@mini-harness/contracts/session-log';
 
 /** Inbox acknowledgments and deliveries are committed to the same session log. */
 export class Inbox {

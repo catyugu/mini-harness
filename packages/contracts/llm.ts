@@ -42,6 +42,39 @@ export interface LlmRequest {
   sessionId?: string;
   maxTokens?: number;
 }
+export type ModelRequestSnapshot = Omit<LlmRequest, 'signal' | 'sessionId' | 'messages'> & { messages?: NativeMessage[] };
+
+export function validateRequestSnapshot(request: ModelRequestSnapshot) {
+  if (!request || !request.model || typeof request.model.provider !== 'string' || !request.model.provider ||
+      typeof request.model.id !== 'string' || !request.model.id || typeof request.systemPrompt !== 'string' ||
+      (request.thinkingLevel !== undefined && !['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(request.thinkingLevel)) ||
+      (request.maxTokens !== undefined && (!Number.isSafeInteger(request.maxTokens) || request.maxTokens < 1)))
+    throw new Error('Invalid model request');
+  if (request.tools !== undefined && (!Array.isArray(request.tools) || request.tools.some((tool) =>
+    !tool || typeof tool.name !== 'string' || typeof tool.description !== 'string' || !tool.parameters ||
+    typeof tool.parameters !== 'object' || Array.isArray(tool.parameters)))) throw new Error('Invalid advertised tools');
+  if (request.messages === undefined) return;
+  if (!Array.isArray(request.messages)) throw new Error('Invalid model request messages');
+  const pending = new Map<string, string>();
+  const identities = new Set<string>();
+  for (const message of request.messages) {
+    validateNativeMessage(message);
+    if (message.role === 'toolResult') {
+      if (pending.get(message.toolCallId) !== message.toolName) throw new Error('Unmatched model request tool result');
+      pending.delete(message.toolCallId);
+      continue;
+    }
+    if (pending.size) throw new Error('Model request contains unfinished tool calls');
+    if (message.role !== 'assistant') continue;
+    for (const part of message.content) if (part.type === 'toolCall') {
+      if (!part.id || part.id.length > 256 || !part.name || identities.has(part.id)) throw new Error('Duplicate or invalid model request tool call');
+      identities.add(part.id);
+      pending.set(part.id, part.name);
+    }
+  }
+  if (pending.size) throw new Error('Model request contains unfinished tool calls');
+}
+
 export type LlmEvent =
   | { type: 'text-delta'; text: string }
   | { type: 'thinking-delta'; text: string }
@@ -51,4 +84,30 @@ export interface LlmPort { stream(request: LlmRequest): AsyncIterable<LlmEvent> 
 
 declare module 'cordis' {
   interface Context { harnessLlm: LlmPort }
+}
+
+export function validateNativeMessage(message: NativeMessage) {
+  if (!message || !['user', 'assistant', 'toolResult'].includes(message.role) || !Number.isFinite(message.timestamp))
+    throw new Error('Invalid session message');
+  if (message.role === 'user' && typeof message.content === 'string') return;
+  if (!Array.isArray(message.content)) throw new Error('Invalid session message content');
+  for (const block of message.content) {
+    if (!block || typeof block !== 'object') throw new Error('Invalid session message content');
+    switch (block.type) {
+      case 'text': if (typeof block.text !== 'string') throw new Error('Invalid text content'); break;
+      case 'image':
+        if (message.role === 'assistant' || typeof block.data !== 'string' || typeof block.mimeType !== 'string') throw new Error('Invalid image content');
+        break;
+      case 'thinking':
+        if (message.role !== 'assistant' || typeof block.thinking !== 'string') throw new Error('Invalid reasoning content');
+        break;
+      case 'toolCall':
+        if (message.role !== 'assistant' || typeof block.id !== 'string' || typeof block.name !== 'string' ||
+            !block.arguments || typeof block.arguments !== 'object' || Array.isArray(block.arguments)) throw new Error('Invalid tool call');
+        break;
+      default: throw new Error('Unknown session content type');
+    }
+  }
+  if (message.role === 'toolResult' && (typeof message.toolCallId !== 'string' || typeof message.toolName !== 'string' || typeof message.isError !== 'boolean'))
+    throw new Error('Invalid tool result');
 }

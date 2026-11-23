@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { MiniHarnessRuntime } from '../../host/application.js';
-import { readJson, writeJson } from '../../platform/config.js';
+import { MiniHarnessRuntime } from '@mini-harness/host/application';
+import { readJson, writeJson } from '@mini-harness/platform/config';
 import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.js';
 
 test('recent main model survives navigation, child overrides and a restart through the native agent', async (t) => {

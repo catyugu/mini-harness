@@ -1,7 +1,7 @@
 import { constants } from 'node:fs';
 import { lstat, mkdir, open, opendir, realpath, stat, type FileHandle } from 'node:fs/promises';
 import { basename, dirname, matchesGlob, parse, relative, resolve, sep } from 'node:path';
-import type { SearchInput, WorkspaceFileAccess } from '../contracts/files.js';
+import type { SearchInput, WorkspaceFileAccess } from '@mini-harness/contracts/files';
 import { RE2 } from 're2-wasm';
 import ignore from 'ignore';
 
@@ -12,7 +12,7 @@ const noFollow = linux ? constants.O_NOFOLLOW | constants.O_NONBLOCK : 0;
 const directories = linux ? noFollow | constants.O_DIRECTORY : 0;
 const descriptor = (handle: FileHandle) => '/proc/self/fd/' + handle.fd;
 
-import { containsPath } from '../platform/paths.js';
+import { containsPath } from '@mini-harness/platform/paths';
 
 function checkName(name: string) {
   if (windows && (/[<>:"|?*\x00-\x1f]/.test(name) || /[ .]$/.test(name) ||
