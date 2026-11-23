@@ -1,7 +1,7 @@
 import type { AgentSession } from '@earendil-works/pi-coding-agent';
-import type { ConversationPort, SessionStore, AgentPort, RunPort, SettingsPort } from '../../src/contracts/services.js';
-import type { ModelChoice } from '../../src/contracts/conversation.js';
-import type { Attachment } from '../../src/contracts/input.js';
+import type { ConversationPort, SessionStore, AgentPort, RunPort, SettingsPort } from '../contracts/services.js';
+import type { ModelChoice } from '../contracts/conversation.js';
+import type { Attachment } from '../contracts/input.js';
 
 export class ConversationOperations implements ConversationPort {
   private readonly deleting = new Set<string>();

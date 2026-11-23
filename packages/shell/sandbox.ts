@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { realpath } from 'node:fs/promises';
-import { containsPath } from '../../src/platform/paths.js';
+import { containsPath } from '../platform/paths.js';
 
 type ShellMode = 'isolated' | 'host';
 interface ShellResult {

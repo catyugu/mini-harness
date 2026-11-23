@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, existsSync, writeFileSync, mkdirSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { getPaths } from '../../../src/config.js';
+import { getPaths } from '../../platform/config.js';
 import { SessionRegistry } from '../registry.js';
 import { WorkspaceCatalog } from '../../workspaces/catalog.js';
 

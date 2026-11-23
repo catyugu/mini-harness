@@ -1,8 +1,8 @@
 import type { Context } from 'cordis';
 import type { ServerResponse } from 'node:http';
-import { HttpReply } from '../../src/contracts/routes.js';
-import { isRunning } from '../../src/contracts/transport.js';
-import { eventStream } from '../../src/transport/http.js';
+import { HttpReply } from '../contracts/routes.js';
+import { isRunning } from '../contracts/transport.js';
+import { eventStream } from '../transport/http.js';
 import { navigationSession, streamNavigation } from './navigation.js';
 
 const validSession = /^[a-f0-9-]{36}$/;

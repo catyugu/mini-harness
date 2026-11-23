@@ -1,8 +1,8 @@
 import { isDeepStrictEqual } from 'node:util';
-import { mergeSettings, readSettings, writeJson, type Paths, type Settings, type SettingsPatch } from '../../src/config.js';
-import type { ModelChoice } from '../../src/contracts/conversation.js';
-import type { AgentPort, ConversationPort, SettingsPort } from '../../src/contracts/services.js';
-import type { PluginHost } from '../../src/plugins/host.js';
+import { mergeSettings, readSettings, writeJson, type Paths, type Settings, type SettingsPatch } from '../platform/config.js';
+import type { ModelChoice } from '../contracts/conversation.js';
+import type { AgentPort, ConversationPort, SettingsPort } from '../contracts/services.js';
+import type { PluginHost } from '../plugins/manager.js';
 
 /** The settings capability owns persistence, validation hooks and the transaction boundary. */
 export class SettingsManager implements SettingsPort {
