@@ -1,3 +1,5 @@
+import type { Settings } from '@mini-harness/contracts/config';
+import { RemoteStore } from '@mini-harness/web/models/remote-store';
 import { payload, scopedElements } from '@mini-harness/web/api';
 import type { FrontendSetup, FrontendApi } from '@mini-harness/ui-runtime/frontend';
 import { icon } from '@mini-harness/ui-primitives/icons';
@@ -5,8 +7,12 @@ import { closeOnBackdrop, field, fromMarkup, required } from '@mini-harness/ui-p
 
 const pageIcons = { Model: 'model', Appearance: 'theme' } as const;
 
-const setup: FrontendSetup = (ctx, api) => {
-  const { miniLayout: layout, miniSettingsData: state } = ctx;
+const setup: FrontendSetup = async (ctx, api) => {
+  const { miniLayout: layout } = ctx;
+  const state = new RemoteStore(() => api.request<Settings>('/settings'));
+  await state.refresh();
+  api.onDispose(ctx.miniProjections.register('settings', state));
+  ctx.provide('miniSettingsData', state);
   const settings = mountSettings(api);
   ctx.provide('miniSettings', settings);
   ctx.provide('miniSettingsPages', { addPage: settings.addPage });
@@ -125,7 +131,7 @@ function mountSettings(api: FrontendApi) {
 }
 
 declare module 'cordis' {
-  interface Context { miniSettings: ReturnType<typeof mountSettings> }
+  interface Context { miniSettings: ReturnType<typeof mountSettings>; miniSettingsData: RemoteStore<Settings> }
 }
 
 export default setup;
