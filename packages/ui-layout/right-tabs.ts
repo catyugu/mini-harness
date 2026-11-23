@@ -1,7 +1,7 @@
-import { button, iconButton } from './primitives.js';
-import type { createLayout } from '../shell/layout.js';
+import { button, iconButton } from '../ui-primitives/primitives.js';
+import type { createLayout } from './layout.js';
 
-import type { TabScope, TabAddress, RightTabType } from '../../contracts/tabs.js';
+import type { TabScope, TabAddress, RightTabType } from '../web/contracts/tabs.js';
 
 type Tab = {
   key: string;

@@ -7,14 +7,16 @@ import { closeOnBackdrop, field, fromMarkup } from '../web/ui/components/primiti
 const pageIcons = { Model: 'model', Appearance: 'theme' } as const;
 
 export const settingsPlugin: BrowserPlugin = {
-  id: 'core:settings', inject: ['miniState', 'miniShell'],
+  id: 'core:settings', inject: ['miniState', 'miniLayout'],
   setup(ctx, api) {
-    const { miniShell: shell, miniState: state } = ctx;
+    const { miniLayout: layout, miniState: state } = ctx;
     const settings = mountSettings(api);
     ctx.provide('miniSettings', settings);
     ctx.provide('miniSettingsPages', { addPage: settings.addPage });
-    api.outlet('settings', settings.outlet);
-    shell.bindSettings(() => { shell.closeDrawer(); settings.open(); }, api.signal);
+    api.slots.define('settings.extensions', settings.outlet);
+    const launcher = fromMarkup<HTMLButtonElement>('<button type="button" aria-label="Settings"><span data-icon="settings"></span><span class="nav-label">Settings</span></button>');
+    launcher.onclick = () => { layout.closeDrawer(); settings.open(); };
+    api.slots.register('sidebar.footer', launcher);
     const theme = fromMarkup<HTMLSelectElement>(`<select><option value="system">System</option>
       <option value="light">Light</option><option value="dark">Dark</option></select>`);
     const content = fromMarkup('<div class="appearance-settings"><p class="hint form-error" role="alert"></p></div>');
@@ -57,7 +59,7 @@ function mountSettings(api: FrontendApi) {
   close.append(icon('close'));
   close.onclick = () => panel.close();
   back.prepend(icon('chevron'));
-  api.mount('dialogs', panel);
+  api.slots.register('dialog.root', panel);
   closeOnBackdrop(panel);
   const pages = new Map<HTMLElement, HTMLButtonElement>();
   let selected: HTMLElement;
@@ -129,3 +131,5 @@ function mountSettings(api: FrontendApi) {
 declare module 'cordis' {
   interface Context { miniSettings: ReturnType<typeof mountSettings> }
 }
+
+export default settingsPlugin;

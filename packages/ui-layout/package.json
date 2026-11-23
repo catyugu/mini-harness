@@ -1,0 +1,10 @@
+{
+  "name": "@mini-harness/ui-layout",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@mini-harness/web": "file:../web",
+    "@mini-harness/ui-primitives": "file:../ui-primitives"
+  }
+}

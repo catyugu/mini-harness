@@ -13,7 +13,7 @@ const WEB_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'web');
 const FEATURE_DIR = resolve(WEB_DIR, '..');
 const assets = new Map([
   ['index.html', 'text/html'],
-  ['style.css', 'text/css'], ['logo.svg', 'image/svg+xml'], ['manifest.webmanifest', 'application/manifest+json'],
+  ['theme.css', 'text/css'], ['logo.svg', 'image/svg+xml'], ['manifest.webmanifest', 'application/manifest+json'],
   ['icon-192.png', 'image/png'], ['icon-512.png', 'image/png'], ['favicon.ico', 'image/x-icon']
 ]);
 
@@ -27,10 +27,15 @@ for (const entry of readdirSync(WEB_DIR, { recursive: true, withFileTypes: true 
   }
 }
 
-// The browser composition root is a separate private package; expose only its two entry modules.
-for (const module of ['app', 'application']) {
-  const file = join(FEATURE_DIR, 'web-app', module + '.js');
-  if (statSync(file).isFile()) assets.set('packages/web-app/' + module + '.js', 'text/javascript');
+// UI foundations have no host-side implementations. All their compiled modules are public.
+for (const name of ['ui-slots', 'ui-theme', 'ui-primitives', 'ui-layout']) {
+  const root = join(FEATURE_DIR, name);
+  for (const entry of readdirSync(root, { recursive: true, withFileTypes: true })) {
+    if (!entry.isFile() || !entry.name.endsWith('.js')) continue;
+    const path = relative(FEATURE_DIR, join(entry.parentPath, entry.name)).split(sep).join('/');
+    if (path.split('/').includes('tests') || /\\.(?:spec|test)\\.js$/.test(path)) continue;
+    assets.set('packages/' + path, 'text/javascript');
+  }
 }
 
 // Expose only browser entrypoints. Feature host and manifest JS never become public assets.

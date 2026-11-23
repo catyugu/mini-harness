@@ -43,7 +43,7 @@ export function createBrowserGraphLoader(host: FrontendHost) {
       try {
         if (failed.has(id) || plugin.requires?.some((parent) => failed.has(parent)))
           throw failed.get(id) ?? new Error('Browser dependency failed');
-        let setup: FrontendSetup;
+        let setup: FrontendSetup | import('./extensions.js').BrowserPlugin;
         let config = snapshot.settings.pluginConfig[id];
         if (plugin.browser) setup = (await import(plugin.browser)).default;
         else {
@@ -53,8 +53,10 @@ export function createBrowserGraphLoader(host: FrontendHost) {
           try { setup = (await import(url)).default; }
           finally { URL.revokeObjectURL(url); }
         }
-        if (typeof setup !== 'function') throw new Error('Plugin UI must export a default setup function: ' + id);
-        await host.enable(id, setup, config);
+        if (typeof setup === 'function') await host.enable(id, setup, config);
+        else if (setup && typeof setup === 'object' && typeof setup.setup === 'function' && setup.id === id)
+          await host.mountPlugin(setup, config);
+        else throw new Error('Invalid browser plugin entry: ' + id);
         mounted.set(id, key);
       } catch (error) {
         failed.set(id, error);
