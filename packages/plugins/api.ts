@@ -1,7 +1,7 @@
 import type { Context } from 'cordis';
-import type { PluginScope } from '@mini-harness/contracts/capabilities';
-import type { ServiceMap } from '@mini-harness/contracts/plugin-sdk';
-import type { PluginApi, PluginDescriptor, SessionRecords } from '@mini-harness/contracts/plugins';
+import type { PluginScope } from '#mini-harness/contracts/capabilities.js';
+import type { ServiceMap } from '#mini-harness/contracts/plugin-sdk.js';
+import type { PluginApi, PluginDescriptor, SessionRecords } from '#mini-harness/contracts/plugins.js';
 import { executionHooks } from './execution-hooks.js';
 
 export interface PluginLifetime {

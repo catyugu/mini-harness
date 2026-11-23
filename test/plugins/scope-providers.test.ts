@@ -3,13 +3,13 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { resolveCapabilities } from '@mini-harness/kernel/composition';
-import { PluginCatalog } from '@mini-harness/plugins/catalog';
-import { PluginHost } from '@mini-harness/plugins/manager';
+import { resolveCapabilities } from '#mini-harness/kernel/composition.js';
+import { PluginCatalog } from '#mini-harness/plugins/catalog.js';
+import { PluginHost } from '#mini-harness/plugins/manager.js';
 import { Context } from 'cordis';
-import type { PluginDescriptor } from '@mini-harness/contracts/plugins';
-import type { SessionRecord } from '@mini-harness/contracts/conversation';
-import { DEFAULTS, mergeSettings, validateSettings } from '@mini-harness/platform/config';
+import type { PluginDescriptor } from '#mini-harness/contracts/plugins.js';
+import type { SessionRecord } from '#mini-harness/contracts/conversation.js';
+import { DEFAULTS, mergeSettings, validateSettings } from '#mini-harness/platform/config.js';
 
 declare module '../../packages/contracts/plugin-sdk.js' {
   interface ServiceMap {

@@ -1,13 +1,13 @@
-import { Context, type Fiber } from '@mini-harness/web/vendor/cordis';
-import type { BrowserPrimitives, BrowserProjectionPort } from '@mini-harness/contracts/browser';
-import type { ComposerCommand } from '@mini-harness/web/contracts/commands';
-import type { MessageContent, ViewMessage } from '@mini-harness/contracts/message';
-import type { Attachment } from '@mini-harness/contracts/input';
-import type { ModelChoice } from '@mini-harness/contracts/conversation';
-import type { Conversation } from '@mini-harness/contracts/conversation';
-import type { RightTabType, TabScope } from '@mini-harness/web/contracts/tabs';
-import type { WorkspaceRecord } from '@mini-harness/contracts/workspace';
-import type { SlotName, SlotKind, SlotRenderer, SlotDecorator, KeyedSlotOptions } from '@mini-harness/ui-slots/registry';
+import { Context, type Fiber } from '#mini-harness/web/vendor/cordis.js';
+import type { BrowserPrimitives, BrowserProjectionPort } from '#mini-harness/contracts/browser.js';
+import type { ComposerCommand } from '#mini-harness/web/contracts/commands.js';
+import type { MessageContent, ViewMessage } from '#mini-harness/contracts/message.js';
+import type { Attachment } from '#mini-harness/contracts/input.js';
+import type { ModelChoice } from '#mini-harness/contracts/conversation.js';
+import type { Conversation } from '#mini-harness/contracts/conversation.js';
+import type { RightTabType, TabScope } from '#mini-harness/web/contracts/tabs.js';
+import type { WorkspaceRecord } from '#mini-harness/contracts/workspace.js';
+import type { SlotName, SlotKind, SlotRenderer, SlotDecorator, KeyedSlotOptions } from '#mini-harness/ui-slots/registry.js';
 
 export interface ToolView { name: string; state: string; content?: MessageContent; arguments?: unknown; sessionId?: string }
 export interface Suggestion {

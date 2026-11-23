@@ -1,5 +1,5 @@
-import type { PluginDescriptor } from '@mini-harness/contracts/plugins';
-import type { ModelAdminPort } from '@mini-harness/contracts/models';
+import type { PluginDescriptor } from '#mini-harness/contracts/plugins.js';
+import type { ModelAdminPort } from '#mini-harness/contracts/models.js';
 
 export const manifest: PluginDescriptor = {
   id: 'core:model-admin', scope: 'application', required: true,

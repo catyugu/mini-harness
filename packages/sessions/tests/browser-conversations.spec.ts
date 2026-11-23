@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.js';
-import { readJson } from '@mini-harness/platform/config';
+import { readJson } from '#mini-harness/platform/config.js';
 import { startIsolatedHost, modelSearch, suggestions } from '../../../test/support/browser.js';
 
 test('drafts, search, rename, single deletion, attachment and input discovery', async ({ page }) => {

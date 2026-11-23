@@ -1,5 +1,5 @@
 import type { Context } from 'cordis';
-import type { RunAgentPort } from '@mini-harness/contracts/agent';
+import type { RunAgentPort } from '#mini-harness/contracts/agent.js';
 import { registerRoutes } from './routes.js';
 import { Runs } from './runs.js';
 

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { rmSync } from 'node:fs';
 import ts from 'typescript';
-import { createMiniHarnessServer } from '@mini-harness/host/server';
+import { createMiniHarnessServer } from '#mini-harness/host/server.js';
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
 
 test('compiled browser tests and host-only feature code are not public static assets', async (t) => {
@@ -43,6 +43,11 @@ test('compiled browser tests and host-only feature code are not public static as
   });
   assert.equal(bootstrap.status, 200);
   const snapshot = await bootstrap.json() as { ui: { browser?: string }[] };
+  const html = await (await fetch(base + '/')).text();
+  const mapBody = html.match(/<script type="importmap">([\s\S]*?)<\/script>/)?.[1];
+  if (!mapBody) throw new Error('Missing native import map');
+  const aliases = (JSON.parse(mapBody) as { imports: Record<string, string> }).imports;
+  assert.equal(aliases['#mini-harness/'], '/packages/');
   const pending = ['/packages/ui-runtime/boot.js', ...snapshot.ui.flatMap(({ browser }) => browser ? [browser] : [])];
   const seen = new Set<string>();
   while (pending.length) {
@@ -64,9 +69,11 @@ test('compiled browser tests and host-only feature code are not public static as
         specifier = node.arguments[0].text;
       }
       if (specifier !== undefined) {
-        assert.ok(specifier.startsWith('.') || specifier.startsWith('/'),
-          'Unbundled bare browser import in ' + path + ': ' + specifier);
-        pending.push(new URL(specifier, base + path).pathname);
+        const modulePath = specifier.startsWith('#mini-harness/')
+          ? aliases['#mini-harness/'] + specifier.slice('#mini-harness/'.length) : specifier;
+        assert.ok(modulePath.startsWith('.') || modulePath.startsWith('/'),
+          'Unmapped bare browser import in ' + path + ': ' + specifier);
+        pending.push(new URL(modulePath, base + path).pathname);
       }
       ts.forEachChild(node, scan);
     }

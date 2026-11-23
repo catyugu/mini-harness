@@ -1,7 +1,7 @@
 import type { Context } from 'cordis';
 import { Type } from 'typebox';
-import type { PluginApi } from '@mini-harness/contracts/plugins';
-import { defineTool } from '@mini-harness/contracts/tools';
+import type { PluginApi } from '#mini-harness/contracts/plugins.js';
+import { defineTool } from '#mini-harness/contracts/tools.js';
 import { SkillLoader } from './loader.js';
 
 export function setup(ctx: Context, api: PluginApi) {

@@ -1,4 +1,4 @@
-import type { PluginDescriptor } from '@mini-harness/contracts/plugins';
+import type { PluginDescriptor } from '#mini-harness/contracts/plugins.js';
 
 export const manifest: PluginDescriptor = {
   scope: 'application', id: 'core:approvals-data', title: 'Approval data',

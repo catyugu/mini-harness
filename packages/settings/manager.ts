@@ -1,8 +1,8 @@
 import { isDeepStrictEqual } from 'node:util';
-import { mergeSettings, readSettings, writeJson } from '@mini-harness/platform/config';
-import type { Paths, Settings, SettingsPatch } from '@mini-harness/contracts/config';
-import type { ModelChoice } from '@mini-harness/contracts/conversation';
-import type { SettingsPort, PluginConfigurationPort } from '@mini-harness/contracts/services';
+import { mergeSettings, readSettings, writeJson } from '#mini-harness/platform/config.js';
+import type { Paths, Settings, SettingsPatch } from '#mini-harness/contracts/config.js';
+import type { ModelChoice } from '#mini-harness/contracts/conversation.js';
+import type { SettingsPort, PluginConfigurationPort } from '#mini-harness/contracts/services.js';
 
 export class SettingsManager implements SettingsPort {
   private stored: Settings;

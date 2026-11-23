@@ -1,7 +1,7 @@
-import type { DelegationPort, SubagentPolicy } from '@mini-harness/contracts/delegation';
-import type { ModelCatalogPort } from '@mini-harness/contracts/models';
-import type { AgentPort, RunPort, SessionStore } from '@mini-harness/contracts/services';
-import type { SessionRecord, ModelChoice } from '@mini-harness/contracts/conversation';
+import type { DelegationPort, SubagentPolicy } from '#mini-harness/contracts/delegation.js';
+import type { ModelCatalogPort } from '#mini-harness/contracts/models.js';
+import type { AgentPort, RunPort, SessionStore } from '#mini-harness/contracts/services.js';
+import type { SessionRecord, ModelChoice } from '#mini-harness/contracts/conversation.js';
 
 interface Waiter {
   cancel(): void;

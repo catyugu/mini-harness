@@ -2,7 +2,7 @@ import { relative, resolve, sep } from 'node:path';
 import type { Context } from 'cordis';
 import { Inspection } from './inspection.js';
 import { fileTools, fileToolNames } from './tools.js';
-import type { RouteRequest } from '@mini-harness/contracts/routes';
+import type { RouteRequest } from '#mini-harness/contracts/routes.js';
 
 export function setup(ctx: Context) {
   const { harnessRegistry: sessions, harnessWorkspaces: workspaces,

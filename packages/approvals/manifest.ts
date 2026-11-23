@@ -1,4 +1,4 @@
-import type { PluginDescriptor } from '@mini-harness/contracts/plugins';
+import type { PluginDescriptor } from '#mini-harness/contracts/plugins.js';
 import { Approvals } from './approvals.js';
 
 export const manifest: PluginDescriptor = {

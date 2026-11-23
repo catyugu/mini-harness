@@ -1,5 +1,5 @@
-import type { Conversation } from '@mini-harness/contracts/conversation';
-import type { WorkspaceRecord } from '@mini-harness/contracts/workspace';
+import type { Conversation } from '#mini-harness/contracts/conversation.js';
+import type { WorkspaceRecord } from '#mini-harness/contracts/workspace.js';
 
 export class Selection extends EventTarget {
   selectedWorkspace: string | undefined = localStorage.getItem('mini-harness-workspace') ?? undefined;

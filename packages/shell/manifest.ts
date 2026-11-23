@@ -1,7 +1,7 @@
-import type { PluginDescriptor } from '@mini-harness/contracts/plugins';
+import type { PluginDescriptor } from '#mini-harness/contracts/plugins.js';
 import { setup } from './host.js';
 import { Type } from 'typebox';
-import { supportsIsolation } from '@mini-harness/platform/isolation';
+import { supportsIsolation } from '#mini-harness/platform/isolation.js';
 
 export const defaultShellMode = supportsIsolation() ? 'isolated' : 'host';
 

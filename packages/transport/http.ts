@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { HttpReply, type RouteHandler, type RoutePort } from '@mini-harness/contracts/routes';
+import { HttpReply, type RouteHandler, type RoutePort } from '#mini-harness/contracts/routes.js';
 
 export function requestBody(req: IncomingMessage, max = 1024 * 1024, signal?: AbortSignal): Promise<any> {
   return new Promise((resolve, reject) => {

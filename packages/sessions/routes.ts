@@ -1,5 +1,5 @@
 import type { Context } from 'cordis';
-import { HttpReply } from '@mini-harness/contracts/routes';
+import { HttpReply } from '#mini-harness/contracts/routes.js';
 import { projectSession } from './navigation.js';
 
 const validSession = /^[a-f0-9-]{36}$/;

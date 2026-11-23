@@ -1,7 +1,7 @@
 import type { Context } from 'cordis';
-import type { PluginApi } from '@mini-harness/contracts/plugins';
-import type { ModelRequestTransform, ToolResultTransform } from '@mini-harness/contracts/extensions';
-import type { OrderedHook } from '@mini-harness/contracts/events';
+import type { PluginApi } from '#mini-harness/contracts/plugins.js';
+import type { ModelRequestTransform, ToolResultTransform } from '#mini-harness/contracts/extensions.js';
+import type { OrderedHook } from '#mini-harness/contracts/events.js';
 import type { PluginLifetime } from './api.js';
 
 export function executionHooks(ctx: Context, id: string, { lifetime, scopeKey, address }: PluginLifetime,

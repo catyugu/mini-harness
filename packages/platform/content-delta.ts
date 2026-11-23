@@ -1,4 +1,4 @@
-import type { ContentDelta } from '@mini-harness/contracts/session-log';
+import type { ContentDelta } from '#mini-harness/contracts/session-log.js';
 
 /** Reversible splice for the serialized JSON representation of a tool result. */
 export function contentDelta(original: string, transformed: string): ContentDelta | undefined {

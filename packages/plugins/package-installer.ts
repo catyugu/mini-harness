@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { lstatSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import type { Paths } from '@mini-harness/contracts/config';
-import { readSettings, writeJson } from '@mini-harness/platform/config';
+import type { Paths } from '#mini-harness/contracts/config.js';
+import { readSettings, writeJson } from '#mini-harness/platform/config.js';
 import { describePlugin } from './descriptor.js';
 import { assertDisabled } from './files.js';
 import { installRegistryPackage } from './registry-client.js';

@@ -1,7 +1,7 @@
-import { isToolContent, type ToolDefinition } from '@mini-harness/contracts/tools';
+import { isToolContent, type ToolDefinition } from '#mini-harness/contracts/tools.js';
 import { Check, Errors } from 'typebox/value';
-import type { ToolDecision } from '@mini-harness/contracts/events';
-import type { ToolPort } from '@mini-harness/contracts/plugins';
+import type { ToolDecision } from '#mini-harness/contracts/events.js';
+import type { ToolPort } from '#mini-harness/contracts/plugins.js';
 
 interface ToolRegistration {
   name: string;

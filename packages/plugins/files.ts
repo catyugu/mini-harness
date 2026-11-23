@@ -1,10 +1,10 @@
 import { mkdirSync, renameSync, rmSync, lstatSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { writeJson } from '@mini-harness/platform/config';
-import type { Settings } from '@mini-harness/contracts/config';
+import { writeJson } from '#mini-harness/platform/config.js';
+import type { Settings } from '#mini-harness/contracts/config.js';
 import { isRegularFile, pluginBundle, pluginIdPattern } from './source.js';
-import type { PluginMetadata } from '@mini-harness/contracts/plugins';
+import type { PluginMetadata } from '#mini-harness/contracts/plugins.js';
 
 type PluginFilesHost = {
   paths: { plugins: string };

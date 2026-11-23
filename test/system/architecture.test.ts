@@ -5,18 +5,18 @@ import test from 'node:test';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
-import { plugins } from '@mini-harness/host/composition';
+import { plugins } from '#mini-harness/host/composition.js';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const packages = join(root, 'packages');
 const web = join(packages, 'web');
-const prefix = '@mini-harness/';
+const prefix = '#mini-harness/';
 const manifests = new Map(readdirSync(packages, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map(({ name }) =>
   [name, JSON.parse(readFileSync(join(packages, name, 'package.json'), 'utf8'))]));
 
 function workspaceTarget(specifier: string) {
   const [owner, ...parts] = specifier.slice(prefix.length).split('/');
-  const entry = manifests.get(owner)?.exports?.['./' + parts.join('/')];
+  const entry = manifests.get(owner)?.exports?.['./' + parts.join('/').replace(/\.js$/, '')];
   assert.ok(entry, 'Missing workspace export: ' + specifier);
   const directory = join(packages, owner);
   const target = resolve(directory, entry);
@@ -125,7 +125,7 @@ test('browser values never load host-only modules', () => {
 });
 test('each capability declares the services it reads and publishes', () => {
   const composition = readFileSync(join(packages, 'host', 'composition.ts'), 'utf8');
-  const descriptors = [...composition.matchAll(/import { manifest as \w+ } from '@mini-harness\/([^']+)'/g)];
+  const descriptors = [...composition.matchAll(/import { manifest as \w+ } from ['"]#mini-harness\/([^'"]+)\.js['"]/g)];
   assert.equal(descriptors.length, plugins.length);
   const byId = new Map(plugins.map((plugin) => [plugin.id, plugin]));
   for (const [, specifier] of descriptors) {

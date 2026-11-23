@@ -2,7 +2,7 @@ import { expectPresent } from '../support/required.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { rmSync } from 'node:fs';
-import { MiniHarnessRuntime } from '@mini-harness/host/application';
+import { MiniHarnessRuntime } from '#mini-harness/host/application.js';
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
 
 test('appearance, parallelism and child defaults update without interrupting a running session', async (t) => {

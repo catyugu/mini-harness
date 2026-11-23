@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, existsSync, writeFileSync, realpathSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { getPaths } from '@mini-harness/platform/config';
+import { getPaths } from '#mini-harness/platform/config.js';
 import { SessionRegistry } from '../registry.js';
-import { WorkspaceCatalog } from '@mini-harness/workspaces/catalog';
+import { WorkspaceCatalog } from '#mini-harness/workspaces/catalog.js';
 
 function fixture(t: test.TestContext) {
   const temp = mkdtempSync(join(tmpdir(), 'mini-harness-sessions-'));

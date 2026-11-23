@@ -1,7 +1,7 @@
-import { payload, scopedElements } from '@mini-harness/web/api';
-import type { FrontendSetup, FrontendApi } from '@mini-harness/ui-runtime/frontend';
-import { icon } from '@mini-harness/ui-primitives/icons';
-import { closeOnBackdrop, field, fromMarkup, required } from '@mini-harness/ui-primitives/primitives';
+import { payload, scopedElements } from '#mini-harness/web/api.js';
+import type { FrontendSetup, FrontendApi } from '#mini-harness/ui-runtime/frontend.js';
+import { icon } from '#mini-harness/ui-primitives/icons.js';
+import { closeOnBackdrop, field, fromMarkup, required } from '#mini-harness/ui-primitives/primitives.js';
 
 const pageIcons = { Model: 'model', Appearance: 'theme' } as const;
 

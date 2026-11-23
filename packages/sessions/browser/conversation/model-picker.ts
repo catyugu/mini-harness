@@ -1,7 +1,7 @@
-import type { ModelChoice } from '@mini-harness/contracts/conversation';
-import { scopedElements } from '@mini-harness/web/api';
-import { icon } from '@mini-harness/ui-primitives/icons';
-import type { ModelInfo } from '@mini-harness/web/types';
+import type { ModelChoice } from '#mini-harness/contracts/conversation.js';
+import { scopedElements } from '#mini-harness/web/api.js';
+import { icon } from '#mini-harness/ui-primitives/icons.js';
+import type { ModelInfo } from '#mini-harness/web/types.js';
 
 export function createModelPicker(root: HTMLElement, onSelect: (model: ModelChoice) => void, signal: AbortSignal) {
   const { element } = scopedElements(root);

@@ -1,6 +1,6 @@
 import { lstatSync, realpathSync } from 'node:fs';
 import { isAbsolute, join, relative, sep } from 'node:path';
-import { readJson } from '@mini-harness/platform/config';
+import { readJson } from '#mini-harness/platform/config.js';
 
 export const pluginIdPattern = /^[a-z][a-z0-9-]{0,63}$/;
 export const packageSpecPattern = /^((?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*)(?:@[a-zA-Z0-9][a-zA-Z0-9.+_-]*)?$/;

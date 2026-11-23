@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { createMiniHarnessServer } from '@mini-harness/host/server';
+import { createMiniHarnessServer } from '#mini-harness/host/server.js';
 import { createMockProvider, createFixturePaths } from '../helpers/mock-provider.js';
 
 test('native agent through HTTP: streaming, persistence, Skills, export and permanent delete', { timeout: 60000 }, async (t) => {

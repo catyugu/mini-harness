@@ -1,4 +1,4 @@
-import type { Settings, SettingsPatch, Paths } from '@mini-harness/contracts/config';
+import type { Settings, SettingsPatch, Paths } from '#mini-harness/contracts/config.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -64,12 +64,12 @@ export function validateSettings(input: any) {
         !scope || typeof scope !== 'object' || Array.isArray(scope) ||
         Object.keys(scope).some((field) => !['plugins', 'pluginConfig', 'disabledTools', 'providers'].includes(field)))
       throw new Error('Invalid plugin scope: ' + key);
-    const { disabledTools } = scope as import('@mini-harness/contracts/capabilities').ScopeSettings;
+    const { disabledTools } = scope as import('#mini-harness/contracts/capabilities.js').ScopeSettings;
     if (disabledTools !== undefined && (!Array.isArray(disabledTools) ||
         disabledTools.some((name) => typeof name !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(name))))
       throw new Error('Invalid scoped tool restriction: ' + key);
     validatePluginSettings(scope);
-    validateProviderChoices((scope as import('@mini-harness/contracts/capabilities').ScopeSettings).providers);
+    validateProviderChoices((scope as import('#mini-harness/contracts/capabilities.js').ScopeSettings).providers);
   }
   if (!['system', 'light', 'dark'].includes(input.appearance ?? 'system')) throw new Error('Invalid appearance');
   if (!Number.isInteger(input.port ?? 3837) || (input.port ?? 3837) < 1024 || (input.port ?? 3837) > 65535) throw new Error('Invalid port');

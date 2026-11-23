@@ -5,10 +5,10 @@ import {
   type Model, type MutableModels, type ProviderStreams
 } from '@earendil-works/pi-ai';
 import { builtinModels } from '@earendil-works/pi-ai/providers/all';
-import { readJson, writeJson } from '@mini-harness/platform/config';
-import type { ModelChoice } from '@mini-harness/contracts/conversation';
-import type { ModelAdminPort, ModelCatalogPort, ProviderModel } from '@mini-harness/contracts/models';
-import type { LlmEvent, LlmPort, LlmRequest, NativeAssistantMessage, NativeMessage } from '@mini-harness/contracts/llm';
+import { readJson, writeJson } from '#mini-harness/platform/config.js';
+import type { ModelChoice } from '#mini-harness/contracts/conversation.js';
+import type { ModelAdminPort, ModelCatalogPort, ProviderModel } from '#mini-harness/contracts/models.js';
+import type { LlmEvent, LlmPort, LlmRequest, NativeAssistantMessage, NativeMessage } from '#mini-harness/contracts/llm.js';
 
 const apiLoaders: Record<string, () => Promise<ProviderStreams>> = {
   'openai-completions': () => import('@earendil-works/pi-ai/api/openai-completions'),

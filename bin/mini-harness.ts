@@ -4,8 +4,8 @@ import { openSync, closeSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { getPaths, ensurePaths, writeJson } from '@mini-harness/platform/config';
-import { lockInstance, readServerInfo, requestShutdown, serverStatus } from '@mini-harness/host/process';
+import { getPaths, ensurePaths, writeJson } from '#mini-harness/platform/config.js';
+import { lockInstance, readServerInfo, requestShutdown, serverStatus } from '#mini-harness/host/process.js';
 
 const executable = fileURLToPath(import.meta.url);
 
@@ -86,7 +86,7 @@ async function detached(paths: ReturnType<typeof getPaths>, port?: number) {
 
 async function serve(paths: ReturnType<typeof getPaths>, port?: number, open = false) {
   const unlock = await lockInstance(paths.home);
-  let app: Awaited<ReturnType<typeof import('@mini-harness/host/server').createMiniHarnessServer>>;
+  let app: Awaited<ReturnType<typeof import('#mini-harness/host/server.js').createMiniHarnessServer>>;
   let ready: Promise<void>;
   let ending: Promise<void> | undefined;
   let stopping = false;
@@ -106,7 +106,7 @@ async function serve(paths: ReturnType<typeof getPaths>, port?: number, open = f
   process.once('SIGINT', shutdown);
   ready = (async () => {
     rmSync(paths.pid, { force: true });
-    const { createMiniHarnessServer } = await import('@mini-harness/host/server');
+    const { createMiniHarnessServer } = await import('#mini-harness/host/server.js');
     app = await createMiniHarnessServer(paths, { shutdown });
     if (stopping) return;
     const listening = await app.listen(port);
@@ -142,7 +142,7 @@ async function main() {
     const unlock = await lockInstance(paths.home);
     try {
       const [{ installPackagedPlugin }, { plugins }] = await Promise.all([
-        import('@mini-harness/plugins/package-installer'), import('@mini-harness/host/composition')
+        import('#mini-harness/plugins/package-installer.js'), import('#mini-harness/host/composition.js')
       ]);
       const { name, version } = await installPackagedPlugin(paths, operation, id, spec,
         (id) => plugins.some((plugin) => plugin.id === id));

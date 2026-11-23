@@ -1,10 +1,10 @@
-import type { MessageContent, ViewMessage } from '@mini-harness/contracts/message';
-import type { RunEvent } from '@mini-harness/contracts/transport';
-import type { ConversationView } from '@mini-harness/web/types';
-import type { ToolView, MessageAction } from '@mini-harness/ui-runtime/frontend';
-import { icon } from '@mini-harness/ui-primitives/icons';
-import { renderMarkdown, markdownSource } from '@mini-harness/ui-primitives/markdown';
-import type { MessageActionContext } from '@mini-harness/ui-runtime/frontend';
+import type { MessageContent, ViewMessage } from '#mini-harness/contracts/message.js';
+import type { RunEvent } from '#mini-harness/contracts/transport.js';
+import type { ConversationView } from '#mini-harness/web/types.js';
+import type { ToolView, MessageAction } from '#mini-harness/ui-runtime/frontend.js';
+import { icon } from '#mini-harness/ui-primitives/icons.js';
+import { renderMarkdown, markdownSource } from '#mini-harness/ui-primitives/markdown.js';
+import type { MessageActionContext } from '#mini-harness/ui-runtime/frontend.js';
 
 export function createMessageView(messages: HTMLElement, extensions: { render(tool: ToolView, action?: boolean): HTMLElement | undefined; messageActions(): MessageAction[] },
   current: () => { sessionId?: string; leafId?: string | null }, retryLast: () => void) {

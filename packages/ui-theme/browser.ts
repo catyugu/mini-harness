@@ -1,4 +1,4 @@
-import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend';
+import type { FrontendSetup } from '#mini-harness/ui-runtime/frontend.js';
 
 /** Theme presentation is owned by the theme plugin, not by the global data mirror. */
 const setup: FrontendSetup = (ctx, api) => {

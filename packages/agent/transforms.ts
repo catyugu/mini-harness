@@ -1,5 +1,5 @@
-import type { AgentTransform, StepContext } from '@mini-harness/contracts/extensions';
-import type { OrderedHook } from '@mini-harness/contracts/events';
+import type { AgentTransform, StepContext } from '#mini-harness/contracts/extensions.js';
+import type { OrderedHook } from '#mini-harness/contracts/events.js';
 
 export async function applyTransforms<Value, Context extends StepContext>(
   hooks: OrderedHook<AgentTransform<Value, Context>>[], value: Value, context: Context,

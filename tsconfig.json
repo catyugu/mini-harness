@@ -24,9 +24,8 @@
     "declaration": true,
     "declarationDir": "dist/types",
     "paths": {
-      "@mini-harness/*": [
-        "./packages/*.ts",
-        "./packages/*.d.ts"
+      "#mini-harness/*": [
+        "./packages/*"
       ]
     },
     "rewriteRelativeImportExtensions": true

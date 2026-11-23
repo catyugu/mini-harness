@@ -1,9 +1,9 @@
-import { defineTool } from '@mini-harness/contracts/tools';
+import { defineTool } from '#mini-harness/contracts/tools.js';
 import type { Context } from 'cordis';
-import type { PluginApi } from '@mini-harness/contracts/plugins';
+import type { PluginApi } from '#mini-harness/contracts/plugins.js';
 import { Type } from 'typebox';
 import { Delegation } from './delegation.js';
-import type { SubagentPolicy } from '@mini-harness/contracts/delegation';
+import type { SubagentPolicy } from '#mini-harness/contracts/delegation.js';
 
 /** Optional plugin: delegation, scheduling and child-model rules exist only while mounted. */
 export function setup(ctx: Context, { config }: PluginApi) {

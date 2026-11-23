@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { SlotRegistry } from '@mini-harness/ui-slots/registry';
+import { SlotRegistry } from '#mini-harness/ui-slots/registry.js';
 
 class ElementStub {
   children: ElementStub[] = [];

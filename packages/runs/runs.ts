@@ -1,12 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import { prepareInput } from '@mini-harness/platform/input';
-import type { Attachment } from '@mini-harness/contracts/input';
-import type { CapabilityObservation } from '@mini-harness/contracts/events';
-import type { RunAgentPort, ThinkingLevel } from '@mini-harness/contracts/agent';
-import type { ModelChoice } from '@mini-harness/contracts/conversation';
-import type { StreamEvent, RunEvent, RunInfo } from '@mini-harness/contracts/transport';
+import { prepareInput } from '#mini-harness/platform/input.js';
+import type { Attachment } from '#mini-harness/contracts/input.js';
+import type { CapabilityObservation } from '#mini-harness/contracts/events.js';
+import type { RunAgentPort, ThinkingLevel } from '#mini-harness/contracts/agent.js';
+import type { ModelChoice } from '#mini-harness/contracts/conversation.js';
+import type { StreamEvent, RunEvent, RunInfo } from '#mini-harness/contracts/transport.js';
 import { RunEvents } from './events.js';
-import type { SessionStore } from '@mini-harness/contracts/services';
+import type { SessionStore } from '#mini-harness/contracts/services.js';
 
 
 interface RunOptions {

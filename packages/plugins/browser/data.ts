@@ -1,6 +1,6 @@
-import type { PluginMetadata } from '@mini-harness/contracts/plugins';
-import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend';
-import { RemoteStore } from '@mini-harness/web/models/remote-store';
+import type { PluginMetadata } from '#mini-harness/contracts/plugins.js';
+import type { FrontendSetup } from '#mini-harness/ui-runtime/frontend.js';
+import { RemoteStore } from '#mini-harness/web/models/remote-store.js';
 
 const setup: FrontendSetup = async (ctx, api) => {
   const store = new RemoteStore(() => api.request<PluginMetadata[]>('/plugins'));

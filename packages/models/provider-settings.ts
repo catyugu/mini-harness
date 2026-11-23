@@ -1,7 +1,7 @@
 import { join } from 'node:path';
-import { readJson, writeJson } from '@mini-harness/platform/config';
-import type { Settings, SettingsPatch } from '@mini-harness/contracts/config';
-import type { ModelAdminPort, ModelCatalogPort } from '@mini-harness/contracts/models';
+import { readJson, writeJson } from '#mini-harness/platform/config.js';
+import type { Settings, SettingsPatch } from '#mini-harness/contracts/config.js';
+import type { ModelAdminPort, ModelCatalogPort } from '#mini-harness/contracts/models.js';
 
 type ProviderHost = {
   paths: { home: string };

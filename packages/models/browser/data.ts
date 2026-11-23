@@ -1,6 +1,6 @@
-import type { ModelCatalog } from '@mini-harness/web/types';
-import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend';
-import { RemoteStore } from '@mini-harness/web/models/remote-store';
+import type { ModelCatalog } from '#mini-harness/web/types.js';
+import type { FrontendSetup } from '#mini-harness/ui-runtime/frontend.js';
+import { RemoteStore } from '#mini-harness/web/models/remote-store.js';
 
 const setup: FrontendSetup = async (ctx, api) => {
   const store = new RemoteStore(async () => {
