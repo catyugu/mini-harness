@@ -8,7 +8,7 @@ test('an extension owns its authenticated routes and Pi branch records', async (
   const { app, paths, request } = await fixture(t);
   const folder = join(paths.plugins, 'records');
   mkdirSync(folder);
-  writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ protocol: 2, inject: ['harnessRoutes'] }));
+  writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ inject: ['harnessRoutes'] }));
   writeFileSync(join(folder, 'plugin.js'), `export default (_ctx, api) => {
     api.registerRoute('POST', '/entries', async ({ body }) => {
       const { id, value } = await body();

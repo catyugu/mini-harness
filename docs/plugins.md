@@ -1,12 +1,13 @@
 # Plugin development
 
-Bundles use protocol 2. Put a `plugin.json` descriptor and `plugin.js`, `web.js`, or both in `~/.mini-harness/plugins/<id>/`. The Plugins page installs bundles up to 1 MiB and leaves them disabled until enabled. IDs start with a lowercase letter and can contain lowercase letters, digits and hyphens, up to 64 characters. Disable a plugin in every scope and remove any provider selection before uninstalling. Uninstalling permanently removes the bundle and its configuration. Review local code before enabling it.
+Put a `plugin.json` descriptor and `plugin.js`, `web.js`, or both in `~/.mini-harness/plugins/<id>/`. The Plugins page installs bundles up to 1 MiB and leaves them disabled until enabled. IDs start with a lowercase letter and can contain lowercase letters, digits and hyphens, up to 64 characters. Disable a plugin in every scope and remove any provider selection before uninstalling. Uninstalling permanently removes the bundle and its configuration. Review local code before enabling it.
 
 ## Descriptor and entrypoints
 
+A plugin with no descriptor fields can use `{}` as its `plugin.json`.
+
 ```json
 {
-  "protocol": 2,
   "title": "Conversation count",
   "description": "Count registered conversations.",
   "inject": ["harnessSessions", "harnessRoutes"],
@@ -24,7 +25,6 @@ Bundles use protocol 2. Put a `plugin.json` descriptor and `plugin.js`, `web.js`
 
 | Field | Contract |
 | - | - |
-| `protocol` | Required integer, currently `2` |
 | `scope` | `application` (default), `workspace` or `session` |
 | `provides`, `inject`, `optional` | Server services published, required, or read opportunistically |
 | `requires` | Required plugin IDs |

@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { Check } from 'typebox/value';
 import { readJson } from '../platform/config.js';
 import type { Settings } from '../contracts/config.js';
-import { pluginProtocol, type PluginScope, type ScopeSettings } from '../contracts/capabilities.js';
+import type { PluginScope, ScopeSettings } from '../contracts/capabilities.js';
 import { resolveCapabilities } from '../kernel/composition.js';
 import type { PluginDescriptor, PluginMetadata } from '../contracts/plugins.js';
 
@@ -75,9 +75,10 @@ export class PluginCatalog {
       if (!hasHost && !hasWeb) return [];
       try {
         const manifest = readJson<Partial<PluginDescriptor> | null>(join(folder, 'plugin.json'), null);
-        const title = typeof manifest?.title === 'string' ? manifest.title.slice(0, 100) : id;
-        const description = typeof manifest?.description === 'string' ? manifest.description.slice(0, 300) : 'Runs local JavaScript with your user permissions.';
-        if (manifest?.protocol !== pluginProtocol) throw new Error('Plugin protocol 2 is required');
+        if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest))
+          throw new Error('Expected an object in plugin.json');
+        const title = typeof manifest.title === 'string' ? manifest.title.slice(0, 100) : id;
+        const description = typeof manifest.description === 'string' ? manifest.description.slice(0, 300) : 'Runs local JavaScript with your user permissions.';
         const scope = manifest.scope ?? 'application';
         if (scope !== 'application' && scope !== 'workspace' && scope !== 'session') throw new Error('Invalid plugin scope');
         const names = (field: 'requires' | 'inject' | 'optional' | 'provides' | 'browserRequires' | 'browserInject' | 'browserProvides', pattern: RegExp) => {
@@ -100,21 +101,21 @@ export class PluginCatalog {
         if (!hasHost && (provides.length || inject.length || optional.length)) throw new Error('Server services require plugin.js');
         if (scope !== 'application' && (hasWeb || inject.includes('harnessRoutes'))) throw new Error('Scoped plugins require a server entry without routes');
         if (inject.some((service) => optional.includes(service) || provides.includes(service))) throw new Error('Conflicting service declarations');
-        const configSchema = manifest?.configSchema;
+        const configSchema = manifest.configSchema;
         if (configSchema && (configSchema.type !== 'object' || !configSchema.properties || typeof configSchema.properties !== 'object'))
           throw new Error('Expected an object configSchema for plugin: ' + id);
-        const icon = manifest?.icon;
+        const icon = manifest.icon;
         if (icon !== undefined && !(
           typeof icon === 'string' && icon.length > 0 && icon.length <= 128 ||
           icon !== null && typeof icon === 'object' && !Array.isArray(icon) &&
           typeof icon.path === 'string' && icon.path.length > 0 && icon.path.length <= 8192 &&
           (icon.viewBox === undefined || typeof icon.viewBox === 'string' && icon.viewBox.length <= 100)
         )) throw new Error('Invalid plugin icon: ' + id);
-        return [{ source: hasHost ? source : undefined, protocol: pluginProtocol, scope, id, title, description,
+        return [{ source: hasHost ? source : undefined, scope, id, title, description,
           requires, provides, inject, optional, browserRequires, browserInject, browserProvides, configSchema, icon, web: hasWeb, trustedCode: true }];
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        return [{ protocol: pluginProtocol, scope: 'application', id, title: id, description: 'Plugin manifest cannot be loaded.',
+        return [{ scope: 'application', id, title: id, description: 'Plugin manifest cannot be loaded.',
           trustedCode: true, error: message, web: false }];
       }
     });

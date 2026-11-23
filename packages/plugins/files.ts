@@ -13,7 +13,7 @@ type PluginFilesHost = {
 const idPattern = /^[a-z][a-z0-9-]{0,63}$/;
 export function installPlugin(runtime: PluginFilesHost, input: any) {
   if (!input || !idPattern.test(input.id) || (runtime.plugins.reserved(input.id) || runtime.plugins.metadata().some(({ id }) => id === input.id))) throw new Error('Invalid or existing plugin ID');
-  if (!Array.isArray(input.files) || input.files.length > 3 || !input.files.some((f) => f.name === 'plugin.js' || f.name === 'web.js')) throw new Error('Provide plugin.js, web.js or both, optionally with plugin.json');
+  if (!Array.isArray(input.files) || input.files.length > 3 || !input.files.some((f) => f.name === 'plugin.js' || f.name === 'web.js')) throw new Error('Provide plugin.js, web.js or both');
   const seen = new Set(); let size = 0;
   for (const file of input.files) {
     if (!['plugin.js', 'plugin.json', 'web.js'].includes(file.name) || seen.has(file.name) || typeof file.content !== 'string') throw new Error('Invalid plugin file');
@@ -21,15 +21,15 @@ export function installPlugin(runtime: PluginFilesHost, input: any) {
   }
   if (size > 1024 * 1024) throw new Error('Plugin bundle exceeds 1 MiB');
   const manifest = input.files.find((file) => file.name === 'plugin.json');
-  if (!manifest) throw new Error('Include plugin.json with protocol 2');
+  if (!manifest) throw new Error('Include plugin.json');
   const descriptor = JSON.parse(manifest.content);
-  if (!descriptor || typeof descriptor !== 'object' || Array.isArray(descriptor)) throw new Error('Invalid manifest');
+  if (!descriptor || typeof descriptor !== 'object' || Array.isArray(descriptor)) throw new Error('Expected an object in plugin.json');
   const temp = join(runtime.paths.plugins, '.' + randomUUID()); mkdirSync(temp, { mode: 0o700 });
   try {
     for (const file of input.files) {
       // writeJson provides atomic private writes; JS uses the same private file mode.
       const path = join(temp, file.name);
-      if (file.name === 'plugin.json') writeJson(path, JSON.parse(file.content));
+      if (file.name === 'plugin.json') writeJson(path, descriptor);
       else writeFileSync(path, file.content, { mode: 0o600 });
     }
     renameSync(temp, join(runtime.paths.plugins, input.id));

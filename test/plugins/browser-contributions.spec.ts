@@ -5,7 +5,7 @@ import { writeJson } from '../../packages/platform/config.js';
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
 import { startIsolatedHost } from '../support/browser.js';
 
-test('a protocol 2 browser plugin owns and releases its page and dialog', async ({ page }) => {
+test('a browser plugin owns and releases its page and dialog', async ({ page }) => {
   const mock = await createMockProvider();
   const { paths, root } = createFixturePaths(mock.url);
   let server: Awaited<ReturnType<typeof startIsolatedHost>>;

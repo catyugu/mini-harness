@@ -1,4 +1,4 @@
-# Protocol 2 examples
+# Plugin examples
 
 Copy each example directory into your mini-harness plugins directory under its current name.
 

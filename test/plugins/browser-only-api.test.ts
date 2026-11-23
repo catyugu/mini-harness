@@ -5,7 +5,7 @@ import { fixture } from '../support/api-fixture.js';
 test('web-only plugins install and unload without a dummy backend entry', async (t) => {
   const { request } = await fixture(t);
   assert.equal((await request('/plugins/install', 'POST', {
-    id: 'browser-only', files: [{ name: 'plugin.json', content: JSON.stringify({ protocol: 2, browserRequires: ['core:conversation'] }) }, { name: 'web.js', content: 'export default (_ctx, api) => api.command({name:"browser-only",description:"Test"});' }]
+    id: 'browser-only', files: [{ name: 'plugin.json', content: JSON.stringify({ browserRequires: ['core:conversation'] }) }, { name: 'web.js', content: 'export default (_ctx, api) => api.command({name:"browser-only",description:"Test"});' }]
   })).status, 201);
   assert.equal((await request('/plugins/browser-only/web')).status, 400);
   assert.equal((await request('/settings', 'PATCH', { plugins: { 'browser-only': true } })).status, 200);

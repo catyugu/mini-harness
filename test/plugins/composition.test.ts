@@ -10,7 +10,7 @@ function copyExample(directory: string, id: string) { cpSync(join(examples, id),
 function plugin(directory: string, id: string, descriptor: Record<string, unknown>, code: string) {
   const folder = join(directory, id);
   mkdirSync(folder);
-  writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ protocol: 2, ...descriptor }));
+  writeFileSync(join(folder, 'plugin.json'), JSON.stringify(descriptor));
   writeFileSync(join(folder, 'plugin.js'), code);
 }
 

@@ -59,10 +59,10 @@ async function checkPackage() {
     await npm(['ci', networkPolicy, '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund'], {
       cwd: installed, timeout: 240000
     });
-    const sdk = await execFile(process.execPath, ['--input-type=module', '-e',
-      "import { pluginProtocol } from 'mini-harness/plugin'; import 'mini-harness/browser-plugin'; console.log(pluginProtocol);"], { cwd: installed });
-    assert.equal(sdk.stdout.trim(), '2');
-    assert.ok(files.some(({ path }) => path === 'dist/types/packages/ui-runtime/plugin-sdk.d.ts'));
+    await execFile(process.execPath, ['--input-type=module', '-e',
+      "import 'mini-harness/plugin'; import 'mini-harness/browser-plugin';"], { cwd: installed });
+    for (const path of ['contracts/plugin-sdk.d.ts', 'ui-runtime/plugin-sdk.d.ts'])
+      assert.ok(files.some((file) => file.path === 'dist/types/packages/' + path), 'Missing SDK declarations: ' + path);
     assert.match((await cli('--help')).stdout, /minimal Pi harness/);
     const launch = await cli('--detached', '--cwd', paths.cwd, '--port', String(await availablePort()));
     assert.match(launch.stdout, /started independently/);

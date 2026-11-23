@@ -5,7 +5,7 @@ import type { RouteHandler, RoutePort } from './routes.js';
 import type { SessionRecord } from './conversation.js';
 import type { CapabilityObservation, ToolDecision, ToolProjection } from './events.js';
 import type { MessageContent } from './message.js';
-import type { PluginScope, pluginProtocol } from './capabilities.js';
+import type { PluginScope } from './capabilities.js';
 import type { DelegationPort } from './delegation.js';
 
 /** Host-owned capability; features consume this interface without importing a concrete registry. */
@@ -38,7 +38,6 @@ export interface PluginMetadata {
 }
 
 export interface PluginDescriptor extends PluginMetadata {
-  protocol: typeof pluginProtocol;
   scope: PluginScope['kind'];
   required?: boolean;
   replaceable?: boolean;

@@ -4,7 +4,7 @@ import { Type } from 'typebox';
 
 /** One self-contained plugin schema. Changes to child limits are safe during active runs. */
 export const manifest: PluginDescriptor = {
-  protocol: 2, scope: 'application', browserInject: ['harnessBrowser'],
+  scope: 'application', browserInject: ['harnessBrowser'],
   setup, defaultEnabled: true, browserRequires: ['core:conversation'],
   configChanges: 'read-on-use',
   provides: ['harnessDelegation'],

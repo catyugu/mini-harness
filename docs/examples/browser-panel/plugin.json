@@ -1,5 +1,4 @@
 {
-  "protocol": 2,
   "title": "Example panel",
   "browserRequires": ["core:layout", "core:settings", "core:conversation"]
 }

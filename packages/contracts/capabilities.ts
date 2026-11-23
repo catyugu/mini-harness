@@ -1,7 +1,5 @@
 import type {} from 'cordis';
 
-export const pluginProtocol = 2;
-
 export type PluginScope = { kind: 'application' }
   | { kind: 'workspace'; workspaceId: string }
   | { kind: 'session'; workspaceId: string; sessionId: string };

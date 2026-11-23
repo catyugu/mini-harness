@@ -45,7 +45,7 @@ export class PluginHost implements ScopePort {
   private describe(plan: PluginPlan, id = plan.id, requires = plan.requires) {
     const { services, descriptor } = plan;
     return { id, requires, services, provides: descriptor.provides ?? [], optional: descriptor.optional ?? [],
-      scope: descriptor.scope, protocol: descriptor.protocol, source: descriptor.trustedCode ? 'local' : 'built-in' };
+      scope: descriptor.scope, source: descriptor.trustedCode ? 'local' : 'built-in' };
   }
 
   metadata() {

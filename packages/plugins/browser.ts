@@ -54,7 +54,7 @@ function installer(api: FrontendApi, installed: () => Promise<void>) {
     let error = '';
     if (names.some((name) => !bundleNames.includes(name)) || new Set(names).size !== names.length)
       error = 'Choose one copy each of plugin.js, plugin.json and web.js.';
-    else if (!names.includes('plugin.json')) error = 'Include plugin.json with protocol 2.';
+    else if (!names.includes('plugin.json')) error = 'Include plugin.json.';
     else if (!names.includes('plugin.js') && !names.includes('web.js')) error = 'Include plugin.js or web.js (or both).';
     else if (selection.reduce((total, file) => total + file.size, 0) > 1024 * 1024) error = 'Plugin bundle exceeds 1 MiB.';
     outcome.textContent = error;
