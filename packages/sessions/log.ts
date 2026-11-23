@@ -229,7 +229,7 @@ export function syncDirectory(path: string) {
   try { fsyncSync(handle); } finally { closeSync(handle); }
 }
 
-/** Used only by the atomic one-time importer; live appends go through SessionLog. */
+/** Renders a complete log document for exports; live appends go through SessionLog. */
 export function encodeLog(header: SessionHeader, entries: SessionEntry[]) {
   return [JSON.stringify(header), ...entries.map((entry) => JSON.stringify({ ...entry, checksum: digest(entry) }))].join('\n') + '\n';
 }

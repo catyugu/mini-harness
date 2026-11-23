@@ -54,7 +54,7 @@ test('restart finishes a journaled deletion after partial cleanup', (t) => {
   const unrelated = registry.create();
   const childFile = registry.log(child.id).file;
   registry.dispose();
-  writeFileSync(paths.registry, JSON.stringify({ version: 3, sessions: [unrelated],
+  writeFileSync(paths.registry, JSON.stringify({ sessions: [unrelated],
     pendingDelete: [{ id: parent.id, workspaceId: parent.workspaceId }, { id: child.id, workspaceId: child.workspaceId }] }));
   const forgotten: string[] = [];
   const restored = new SessionRegistry(paths, new WorkspaceCatalog(paths), undefined, undefined, (keys) => forgotten.push(...keys));
@@ -74,7 +74,6 @@ test('export includes all branches and rejects in-flight sessions', (t) => {
   const [exported] = registry.export([session.id]);
   assert.ok(exported.log.includes(first.id));
   assert.ok(exported.log.includes('original') && exported.log.includes('revision'));
-  assert.equal('piSessionRef' in exported || 'piSession' in exported, false);
   const release = registry.beforeDelete({ quiesce: async () => {}, busy: () => true });
   assert.throws(() => registry.export([session.id]), /Stop active/);
   release();

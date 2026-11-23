@@ -8,7 +8,7 @@ import type { ScopePort } from '../contracts/capabilities.js';
 import type { CapabilityObservation } from '../contracts/events.js';
 import type { SessionRecord } from '../contracts/conversation.js';
 import { SessionLog, syncDirectory } from './log.js';
-import { loadCatalog, validateCatalog, type CatalogState } from './migration.js';
+import { loadCatalog, type CatalogState } from './catalog.js';
 import { missing, nativeFile } from './storage.js';
 
 type Participant = Parameters<SessionStore['beforeDelete']>[0];
@@ -26,8 +26,6 @@ export class SessionRegistry implements SessionStore {
     private readonly scopes?: ScopePort, private readonly observe?: (event: CapabilityObservation) => void,
     private readonly forgetScopes?: (keys: string[]) => void) {
     this.state = loadCatalog(paths, workspaces);
-    validateCatalog(this.state.sessions, workspaces);
-    if (this.state.pendingDelete && !Array.isArray(this.state.pendingDelete)) throw new Error('Invalid deletion journal');
     this.finishDeletion();
     // Recovery does not require a model or a mounted Agent provider.
     for (const record of this.state.sessions) {
@@ -227,6 +225,6 @@ export class SessionRegistry implements SessionStore {
       catch (error) { if (!missing(error)) throw error; }
     }
     this.forgetScopes?.(this.state.pendingDelete.map(({ id }) => 'session:' + id));
-    this.commit({ version: 3, sessions: this.state.sessions });
+    this.commit({ sessions: this.state.sessions });
   }
 }

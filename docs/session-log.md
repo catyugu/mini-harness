@@ -6,7 +6,7 @@ open or write session files.
 
 ## Files and ownership
 
-`~/.mini-harness/sessions.json` is the version 3 conversation catalog. Each record
+`~/.mini-harness/sessions.json` is the conversation catalog. Each record
 contains `id`, `workspaceId`, `parentId`, `title`, `titleSource` and `createdAt`.
 Workspace identity is stored separately in `workspaces.json`.
 
@@ -21,10 +21,7 @@ new log files use `0600` where supported.
 The log starts with a version 1 `session` header. Every later line contains a
 native event, a monotonically increasing `seq`, a stable hexadecimal `id`, a
 `parentId`, an ISO timestamp and a SHA-256 checksum. Native IDs contain 32
-hexadecimal characters. Imported valid IDs retain their original identities.
-
-The index version and event format version describe stored data. They are not
-plugin protocol versions.
+hexadecimal characters.
 
 ## Appending and recovering
 
@@ -95,46 +92,6 @@ execute that input by itself. A subsequent explicit run can consume it. Explicit
 cancellation records the cancelled delivery IDs and removes them from the pending
 projection. No content-string matching or process-local queue is needed to
 reconstruct delivery state.
-
-## One-time import
-
-The importer supports the former unversioned conversation catalog and the
-version 2 catalog. It reads their Pi JSONL session formats 1, 2 and 3 directly;
-the Pi coding-agent package is not used. The application itself reads only the
-native version 3 catalog and native logs.
-
-Import preserves message IDs, parent relationships and all branches. It converts
-model and thinking changes, compaction boundaries, context edits, custom plugin
-records, custom contextual messages and branch summaries. Usage, labels and
-session metadata remain native namespaced custom records. Input presentation and
-tool timings are attached to their corresponding native messages. Assistant
-provider-specific fields are carried in `providerData` for the model adapter.
-
-Old run checkpoints, including checkpoints embedded in an unversioned catalog,
-are imported into their session logs. Unfinished runs become interrupted. Import
-never executes previous requests or tools.
-
-The cutover is ordered as follows:
-
-1. Validate the source catalog and every referenced managed path.
-2. Convert each transcript into a temporary native log, synchronize it and verify
-   it, then atomically install it at the native destination.
-3. Import run checkpoints and synchronize the native records.
-4. Atomically commit the version 3 catalog with a durable source-cleanup journal.
-5. Delete the old transcript sources and `runs.json`, then clear the journal.
-
-An interrupted attempt before step 4 leaves the old catalog authoritative.
-Already-installed native logs carry a source digest and are reused only when
-that digest matches, so retrying does not duplicate entries. Separate source files
-remain intact until cutover. If a source already occupies its native destination,
-the verified temporary log atomically replaces it, and retry recognizes that
-completed conversion. An interruption after step 4 resumes the cleanup journal.
-No archive or alternate legacy runtime is retained.
-
-Unsupported formats, corrupt complete records, conflicting native destinations,
-unsafe paths and invalid ancestry abort import. Sources are not deleted before
-the native catalog cutover. The importer may discard an incomplete final JSON
-fragment from a source file, but never ignores a malformed complete source line.
 
 ## Export and permanent deletion
 

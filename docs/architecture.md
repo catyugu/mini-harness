@@ -29,7 +29,7 @@ Configuration changes validate the candidate graph and schema defaults before se
 | Service instances and resource lifetimes | Cordis Plugin Host |
 | Selection, expanded branches and open panels | Feature-owned browser state |
 
-The log is append-only, checksummed and newline framed. An append is acknowledged after fsync. Transcript events advance the selected branch; operational run and inbox events advance the durable sequence without changing that branch. History and context are separate projections: compaction reduces context while preserving visible messages and their revision targets. See [the protocol and migration reference](session-log.md).
+The log is append-only, checksummed and newline framed. An append is acknowledged after fsync. Transcript events advance the selected branch; operational run and inbox events advance the durable sequence without changing that branch. History and context are separate projections: compaction reduces context while preserving visible messages and their revision targets. See [the session log reference](session-log.md).
 
 ## Native execution
 
@@ -47,7 +47,7 @@ Compaction asks the selected LLM to summarize an older prefix and retains two re
 
 Runs owns server-side work independently of HTTP subscribers. Its replay buffer is bounded by event count and size. A reconnect can resume from a cursor; a cursor older than the live buffer receives a durable history projection plus the current partial response and active tools. Completed runs can be read without recreating an execution instance. After restart, an interrupted run is terminal and no pending tool executes until new user work is submitted.
 
-Session deletion records a durable journal after descendant runs have drained. Cleanup is repeated after a crash and removes only validated owned files. Deleting a workspace retains project files. The one-time importer is the sole reader of historical Pi formats; the running application has one native storage and execution path.
+Session deletion records a durable journal after descendant runs have drained. Cleanup is repeated after a crash and removes only validated owned files. Deleting a workspace retains project files. The running application has one native storage and execution path.
 
 ## Browser composition
 

@@ -17,4 +17,4 @@ Provider credentials can come from the environment or `~/.mini-harness/auth.json
 
 Session messages and inbox acknowledgments are flushed before completion is reported. Checksums, sequence numbers and ancestry detect corrupt complete records; only an incomplete final write is discarded at recovery. Restart marks unfinished runs interrupted and never retries tools automatically. A tool interrupted before its result was committed has an unknown outcome; the next turn receives an explicit error result rather than silently rerunning it.
 
-The one-time session importer validates old paths and all converted logs before switching the index. Source histories are deleted only after the native index is durable; an interrupted cleanup resumes on startup. Unsupported or corrupt histories stop migration without deleting the sources. There is no legacy execution mode or archive directory.
+The conversation catalog is validated at startup: invalid identities, unknown workspaces and broken ancestry are rejected instead of loading a partial index.

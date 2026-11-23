@@ -58,7 +58,6 @@ test('native agent through HTTP: streaming, persistence, Skills, export and perm
 
   const stored = await (await get('/api/sessions/' + session.id)).json();
   assert.equal(stored.title, 'Test native integration');
-  assert.equal(Object.hasOwn(stored, 'piSessionRef'), false);
   const file = app.runtime.registry.nativeFile(app.runtime.registry.get(session.id));
   assert.ok(file && existsSync(file));
   assert.ok(stored.messages.some((m: {role: string}) => m.role === 'assistant'));

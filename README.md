@@ -45,13 +45,9 @@ Long conversations compact automatically. Manual compaction keeps two recent tur
 
 Shell starts disabled and asks for approval for every command. File tools restrict access to the active workspace; Linux isolated Shell requires bubblewrap and `prlimit`. Trusted host Shell and reviewed JavaScript plugins run with your user permissions. See [SECURITY.md](SECURITY.md).
 
-## Upgrading existing histories
-
-Startup imports supported old indexes and Pi JSONL into native Session Logs once. It validates and flushes every new log before changing the index, then permanently removes the superseded source files and run checkpoints. A crash resumes the cutover or cleanup without duplicating messages. Unsupported or corrupt input stops the import and preserves the source. See [Session Log and migration](docs/session-log.md) for supported formats and recovery behavior.
-
 ## Develop
 
-Each local plugin bundle has a `plugin.json` descriptor and a server or browser setup function, or both. Services can be selected at application, workspace and nested session scopes. Parent and sibling scopes retain their own providers. See the [architecture](docs/architecture.md), [plugin guide](docs/plugins.md), and [scoped provider examples](docs/scoped-providers.md).
+Each local plugin bundle has a `plugin.json` descriptor and a server or browser setup function, or both. Services can be selected at application, workspace and nested session scopes. Parent and sibling scopes retain their own providers. See the [architecture](docs/architecture.md), [plugin guide](docs/plugins.md), [scoped provider examples](docs/scoped-providers.md), and [session log reference](docs/session-log.md).
 
 ```sh
 npm ci
