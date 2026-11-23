@@ -33,9 +33,9 @@ export function createBrowserGraphLoader(host: FrontendHost) {
       visiting.add(id);
       const plugin = enabled.get(id);
       if (!plugin) throw new Error('Missing browser plugin entry: ' + id);
-      const { requires, browser, styles, config, inject } = plugin;
+      const { requires, browser, styles, preload, config, inject } = plugin;
       for (const parent of requires ?? []) visit(parent, visiting);
-      const key = JSON.stringify([browser, styles, config, requires, inject]);
+      const key = JSON.stringify([browser, styles, preload, config, requires, inject]);
       visiting.delete(id);
       signatures.set(id, key);
       ordered.push(id);

@@ -116,7 +116,8 @@ export class Delegation implements DelegationPort {
   }
 
   validate(settings: SubagentPolicy) {
-    if (settings.provider) this.models().resolve({ provider: settings.provider, id: settings.model });
+    if (settings.provider && !this.models().resolve({ provider: settings.provider, id: settings.model }))
+      throw new Error('Unknown child model: ' + settings.provider + '/' + settings.model);
   }
 
   checkProvider(id: string, removing = false) {
