@@ -17,8 +17,10 @@ test('desktop and mobile: send, navigate, settings and bulk select', async ({ br
         await page.goto(service.url + '/#token=' + service.token);
         const welcome = page.getByRole('heading', { name: 'What are we working on?' });
         await expect(welcome).toBeVisible();
-        const title = await welcome.boundingBox(), composer = await page.locator('#composer').boundingBox();
-        expect(composer.y - title.y).toBeLessThan(145);
+        await expect.poll(() => welcome.evaluate((title) => {
+          const composer = document.getElementById('composer');
+          return composer.getBoundingClientRect().top - title.getBoundingClientRect().top;
+        }), { message: 'Welcome heading stays close to the composer at ' + viewport.width + 'px' }).toBeLessThan(145);
         await expect(modelButton(page)).toHaveText('Mock Model');
         await modelButton(page).click();
         await expect(modelSearch(page)).toBeFocused();
