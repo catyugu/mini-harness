@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { rmSync } from 'node:fs';
-import { createFixturePaths, createMockProvider } from '../../../../test/helpers/mock-provider.js';
-import { startIsolatedHost } from '../../../../test/support/browser.js';
+import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.js';
+import { startIsolatedHost } from '../../../test/support/browser.js';
 
 test('renders Markdown and tool results, and stops a pending reply', async ({ page }) => {
   let markWaiting: () => void;

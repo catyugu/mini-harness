@@ -3,7 +3,7 @@ import type { RunEvent } from '../../../contracts/transport.js';
 import type { ConversationView } from '../../../web/types.js';
 import type { FrontendHost } from '../../../web/kernel/extensions.js';
 import { icon } from '../../../ui-primitives/icons.js';
-import { renderMarkdown, markdownSource } from '../../../web/ui/components/markdown.js';
+import { renderMarkdown, markdownSource } from '../../../ui-primitives/markdown.js';
 import type { MessageActionContext } from '../../../web/kernel/extensions.js';
 
 export function createMessageView(messages: HTMLElement, extensions: Pick<FrontendHost, 'render' | 'messageActions'>,
