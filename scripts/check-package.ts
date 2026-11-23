@@ -72,6 +72,7 @@ async function checkPackage() {
       api.storage.write('state', { count: 1 });
       api.secrets.read('credential');
       api.onConfigChange(() => {});
+      void api.configuration.set('showDetails', true);
       api.registerUpgrade('/updates', (_request, socket, _head, signal) => {
         if (signal.aborted) socket.destroy();
       });
@@ -82,6 +83,9 @@ async function checkPackage() {
       declare const frontend: FrontendApi, render: SlotRenderer;
       frontend.slots.registerKeyed('sidebar.primary', 'example', render);
       frontend.watch(() => {});
+      frontend.settings.register({ id: 'example', section: 'General', render: ({ configuration }) =>
+        frontend.ui.status(String(configuration.get<boolean>('showDetails')))
+      });
       const language: string = frontend.locale.current();
     `);
     await execFile(process.execPath, [resolve('node_modules/typescript/bin/tsc'),

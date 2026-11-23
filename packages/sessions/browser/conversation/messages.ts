@@ -13,6 +13,7 @@ const actionContext = new WeakMap<HTMLElement, MessageActionContext>();
 const saved = new Map<string, { node: HTMLElement; signature?: string }>();
 const liveTools = new Map<string, HTMLDetailsElement>();
 const runError = 'run-error';
+const imageMime = /^image\/(?:png|jpeg|gif|webp)$/;
 
 function textOf(value?: MessageContent) {
   if (typeof value === 'string') return value;
@@ -159,7 +160,7 @@ function toolCard(data: { name: string; state: string; content?: MessageContent;
     body.append(result);
   }
   for (const block of typeof data.content === 'string' ? [] : data.content ?? []) {
-    if (block.type !== 'image' || !/^image\/(?:png|jpeg|gif|webp)$/.test(block.mimeType ?? '') || !block.data) continue;
+    if (block.type !== 'image' || !imageMime.test(block.mimeType ?? '') || !block.data) continue;
     const img = document.createElement('img');
     img.alt = 'Tool output';
     img.loading = 'lazy';
@@ -196,22 +197,40 @@ function renderEntry(message: ViewMessage, node?: HTMLElement) {
   const entry = document.createElement('div');
   entry.className = 'message-entry';
   const text = textOf(message.content);
-  const bubble = text || message.attachments?.length ? addMessage(message.role, text, message.timestamp, message, entry) : undefined;
-  for (const block of typeof message.content === 'string' ? [] : message.content ?? []) {
-    if (block.type !== 'image' || !/^image\/(png|jpeg|gif|webp)$/.test(block.mimeType ?? '')) continue;
-    const image = document.createElement('img'); image.className = 'message-image'; image.alt = 'Attached image';
-    image.src = 'data:' + block.mimeType + ';base64,' + block.data; entry.append(image);
-  }
-  if (message.attachments?.length && bubble) {
-    const list = document.createElement('ul');
-    list.className = 'message-attachments';
-    list.setAttribute('aria-label', 'Attachments');
-    for (const attachment of message.attachments) {
-      const item = document.createElement('li');
-      item.textContent = attachment.name;
-      list.append(item);
+  const blocks = typeof message.content === 'string' ? [] : message.content;
+  const images = blocks.filter((block) => block.type === 'image' && imageMime.test(block.mimeType ?? '') && block.data);
+  const attachments = message.attachments ?? [];
+  if (text || images.length || attachments.length) {
+    const bubble = addMessage(message.role, text, message.timestamp, message, entry);
+    const imageFiles = attachments.filter(({ mimeType }) => imageMime.test(mimeType));
+    const files = new Set(attachments);
+    if (images.length) {
+      const thumbnails = document.createElement('div');
+      thumbnails.className = 'message-images';
+      for (const [index, block] of images.entries()) {
+        const attachment = imageFiles[index];
+        const image = document.createElement('img');
+        image.alt = attachment?.name ?? 'Attached image ' + (index + 1);
+        image.title = image.alt;
+        image.loading = 'lazy';
+        image.src = 'data:' + block.mimeType + ';base64,' + block.data;
+        thumbnails.append(image);
+        if (attachment) files.delete(attachment);
+      }
+      if (text || files.size) thumbnails.classList.add('with-content');
+      bubble.prepend(thumbnails);
     }
-    bubble.append(list);
+    if (files.size) {
+      const list = document.createElement('ul');
+      list.className = 'message-attachments';
+      list.setAttribute('aria-label', 'Attachments');
+      for (const { name } of files) {
+        const item = document.createElement('li');
+        item.textContent = name;
+        list.append(item);
+      }
+      bubble.append(list);
+    }
   }
   if (message.error) addMessage('error', message.error, undefined, undefined, entry);
   return entry;
@@ -227,7 +246,7 @@ function refreshTools() {
 function preserveScroll(update: () => void, reset = false) {
   const pinned = messages.scrollHeight - messages.clientHeight - messages.scrollTop < 96;
   const top = messages.getBoundingClientRect().top;
-  const visible = !reset && !pinned && [...messages.querySelectorAll<HTMLElement>('.message-row, .tool-card, .message-image')]
+  const visible = !reset && !pinned && [...messages.querySelectorAll<HTMLElement>('.message-row, .tool-card')]
     .find((node) => node.getBoundingClientRect().bottom > top);
   const offset = visible ? visible.getBoundingClientRect().top : 0;
   update();

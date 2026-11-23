@@ -15,7 +15,8 @@ test('running messages can queue follow-ups and approve shell commands from the 
     return 'Finished';
   });
   const { root, paths } = createFixturePaths(mock.url);
-  writeJson(paths.settings, { ...readJson<any>(paths.settings, {}), plugins: { shell: true }, pluginConfig: { shell: { mode: 'host', timeoutSeconds: 60 } } });
+  const config = readJson<any>(paths.settings, {});
+  writeJson(paths.settings, { ...config, plugins: { shell: true }, pluginConfig: { ...config.pluginConfig, shell: { mode: 'host', timeoutSeconds: 60 } } });
   const workspace = join(root, 'Workspace path with spaces ' + 'x'.repeat(100));
   mkdirSync(workspace);
   const service = await startIsolatedHost({ ...paths, cwd: workspace });
@@ -24,6 +25,7 @@ test('running messages can queue follow-ups and approve shell commands from the 
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Wait');
     await page.getByRole('button', { name: 'Send', exact: true }).click(); await waiting;
     await page.getByRole('button', { name: 'Permissions: Standard' }).click();
+    await expect(page.getByRole('listbox', { name: 'Conversation permissions' }).getByRole('option')).toHaveText([/Full access/, /Standard/, /Read-only/]);
     await page.getByRole('option', { name: /Read-only/ }).click();
     await expect(page.getByRole('button', { name: 'Permissions: Read-only' })).toBeVisible();
     await page.getByRole('button', { name: 'Permissions: Read-only' }).click();
@@ -45,6 +47,7 @@ test('running messages can queue follow-ups and approve shell commands from the 
     await expect(addInstructions).toBeChecked();
     await addInstructions.uncheck();
     await expect(addInstructions).not.toBeChecked();
+    await expect(addInstructions).toBeEnabled();
     await settings.getByRole('button', { name: 'Close settings' }).click();
     await page.getByRole('button', { name: 'Queue', exact: true }).click();
     await expect(page.locator('#queuedMessages .queue-item > span')).toHaveText(['Instruction: Additional instruction', 'Follow up: Continue']);

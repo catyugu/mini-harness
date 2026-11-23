@@ -7,13 +7,10 @@ import { join, resolve } from 'node:path';
 
 export const DEFAULTS = Object.freeze({
   port: 3837,
-  model: { provider: '', id: '' },
   plugins: {},
   pluginConfig: {},
   providers: {},
-  scopes: {},
-  appearance: 'system',
-  queueMode: 'steer'
+  scopes: {}
 });
 
 export function getPaths(cwd: string = process.cwd(), env: NodeJS.ProcessEnv = process.env): Paths {
@@ -64,21 +61,9 @@ function section(value: unknown, name: string) {
   return value;
 }
 
-function validateModel(model: Record<string, unknown>, partial: boolean) {
-  for (const key of Object.keys(model))
-    if (key !== 'provider' && key !== 'id') throw new HttpError('invalid_input', 'Unknown model setting');
-  for (const key of ['provider', 'id'] as const) {
-    const value = model[key];
-    if (partial && !Object.hasOwn(model, key)) continue;
-    if (typeof value !== 'string' || value.length > 160)
-      throw new HttpError('invalid_input', 'Invalid settings field: model.' + key);
-  }
-}
-
 export function validateSettings(input: unknown): asserts input is Settings {
   if (!isObject(input)) throw new HttpError('invalid_input', 'Invalid settings object');
-  const { model, plugins, pluginConfig, providers, scopes, appearance, queueMode, port } = input;
-  validateModel(section(model, 'model'), false);
+  const { plugins, pluginConfig, providers, scopes, port } = input;
   for (const [key, value] of Object.entries({ plugins, pluginConfig, providers, scopes }))
     if (!isObject(value)) throw new HttpError('invalid_input', 'Invalid settings section: ' + key);
   validatePluginSettings(section(plugins, 'plugins'), section(pluginConfig, 'pluginConfig'));
@@ -94,10 +79,6 @@ export function validateSettings(input: unknown): asserts input is Settings {
     validatePluginSettings(section(scope.plugins, key + '.plugins'), section(scope.pluginConfig, key + '.pluginConfig'));
     validateProviderChoices(section(scope.providers, key + '.providers'));
   }
-  if (appearance !== 'system' && appearance !== 'light' && appearance !== 'dark')
-    throw new HttpError('invalid_input', 'Invalid appearance');
-  if (queueMode !== 'steer' && queueMode !== 'followUp')
-    throw new HttpError('invalid_input', 'Invalid queue mode');
   if (typeof port !== 'number' || !Number.isInteger(port) || port < 1024 || port > 65535)
     throw new HttpError('invalid_input', 'Invalid port');
 }
@@ -122,17 +103,17 @@ function validatePluginSettings(plugins: Record<string, unknown>, configs: Recor
 }
 
 export function readSettings(paths: Paths): Settings {
-  const input = readJson<unknown>(paths.settings, {});
+  return parseSettings(readJson<unknown>(paths.settings, {}));
+}
+
+export function parseSettings(input: unknown): Settings {
   if (!isObject(input)) throw new HttpError('invalid_input', 'Invalid settings object');
   const settings = {
     port: input.port === undefined ? DEFAULTS.port : input.port,
-    model: { ...DEFAULTS.model, ...section(input.model, 'model') },
     plugins: section(input.plugins, 'plugins'),
     pluginConfig: section(input.pluginConfig, 'pluginConfig'),
     providers: section(input.providers, 'providers'),
-    scopes: section(input.scopes, 'scopes'),
-    appearance: input.appearance === undefined ? DEFAULTS.appearance : input.appearance,
-    queueMode: input.queueMode === undefined ? DEFAULTS.queueMode : input.queueMode
+    scopes: section(input.scopes, 'scopes')
   };
   validateSettings(settings);
   return settings;
@@ -142,15 +123,12 @@ export function mergeSettings(current: Settings, patch: unknown): Settings {
   if (!isObject(patch)) throw new HttpError('invalid_input', 'Invalid settings patch');
   if (Object.keys(patch).some((key) => !Object.hasOwn(DEFAULTS, key)))
     throw new HttpError('invalid_input', 'Unknown settings field');
-  const model = section(patch.model, 'model');
-  validateModel(model, true);
   const plugins = section(patch.plugins, 'plugins');
   const pluginConfig = section(patch.pluginConfig, 'pluginConfig');
   validatePluginSettings(plugins, pluginConfig);
   const next = {
     ...current,
     ...patch,
-    model: { ...current.model, ...model },
     providers: patch.providers === undefined ? current.providers : section(patch.providers, 'providers'),
     scopes: patch.scopes === undefined ? current.scopes : section(patch.scopes, 'scopes'),
     plugins: { ...current.plugins, ...plugins },

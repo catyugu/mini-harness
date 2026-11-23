@@ -15,7 +15,7 @@ export interface ScopeSettings {
 
 export type HostServices = ServiceMap & Pick<Context,
   | 'harnessAgent' | 'harnessApprovals' | 'harnessChanges' | 'harnessConversationView' | 'harnessDelegation'
-  | 'harnessModelAdmin' | 'harnessMutations' | 'harnessPluginCatalog' | 'harnessProcess' | 'harnessRegistry'
+  | 'harnessModelAdmin' | 'harnessModelPreference' | 'harnessMutations' | 'harnessPluginCatalog' | 'harnessProcess' | 'harnessRegistry'
   | 'harnessRoutes' | 'harnessRuns' | 'harnessSandbox' | 'harnessScopes' | 'harnessSettings'
   | 'harnessSettingsStore' | 'harnessState' | 'harnessUpdateSettings' | 'harnessWorkspaces'>;
 

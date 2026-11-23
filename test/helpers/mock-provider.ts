@@ -81,6 +81,6 @@ export function createFixturePaths(mockUrl: string) {
       }
     }
   });
-  writeJson(paths.settings, { model: { provider: 'local-mock', id: 'mock-model' } });
+  writeJson(paths.settings, { pluginConfig: { 'core:models': { model: { provider: 'local-mock', id: 'mock-model' } } } });
   return { root, paths };
 }

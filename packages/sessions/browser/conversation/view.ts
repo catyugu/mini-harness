@@ -9,7 +9,6 @@ import { exportSessions, isRunning } from '@mini-harness/web/transport/session-c
 import { createConversationController } from '@mini-harness/web/models/conversation-controller';
 import type { Selection } from '@mini-harness/web/models/selection';
 import type { RemoteStore } from '@mini-harness/web/models/remote-store';
-import type { Settings } from '@mini-harness/contracts/config';
 import { createMessageView } from './messages.js';
 import { CommandRegistry } from './commands.js';
 import type { ComposerCommand } from '@mini-harness/web/contracts/commands';
@@ -27,8 +26,7 @@ type Queue = ConversationView['queue'];
 interface ConversationServices {
   sessions: RemoteStore<Conversation[]>;
   projections: BrowserProjectionPort;
-  settings: RemoteStore<Settings>;
-  models: RemoteStore<ModelCatalog>;
+  models: { get(): ModelCatalog & { recent: ModelChoice } };
   closeDrawer(): void;
   showWorkspaceInHeader(show: boolean): void;
   setTitle(title: string): void;
@@ -98,9 +96,9 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
     standard: 'Standard', readOnly: 'Read-only', fullAccess: 'Full access'
   };
   const permissionOptions: Array<{ value: ConversationPermission; description: string }> = [
+    { value: 'fullAccess', description: 'Run enabled tools without approval prompts, including Shell' },
     { value: 'standard', description: 'Ask before Shell commands; follow existing tool policies' },
-    { value: 'readOnly', description: 'Only read files, search and load skills; no edits or Shell' },
-    { value: 'fullAccess', description: 'Run enabled tools without approval prompts, including Shell' }
+    { value: 'readOnly', description: 'Only read files, search and load skills; no edits or Shell' }
   ];
   function renderPermission() {
     const current = conversationPermission;
@@ -430,7 +428,7 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
       thinkingDraft = undefined;
     }
     const selected = modelPicker.update(catalog.models, catalog.providers,
-      modelDraft ?? (sending ? conversationModel : undefined) ?? options.settings.get().model);
+      modelDraft ?? (sending ? conversationModel : undefined) ?? options.models.get().recent);
     const advertised = selected?.thinkingLevels ?? [];
     const levels: ThinkingLevel[] = advertised.length ? ['off', ...advertised.filter((level) => level !== 'off')] : [];
     const sameModel = selected && selected.provider === conversationModel?.provider && selected.id === conversationModel.id;
@@ -463,7 +461,7 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
       const snapshot = snapshotDraft();
       if (snapshot.revision) throw new Error('Finish editing before queuing a message');
       const queued = await controller.queue(id, {
-        message: commands.prepare(prompt.value), mode: options.settings.get().queueMode,
+        message: commands.prepare(prompt.value), mode: api.configuration.get<'steer' | 'followUp'>('queueMode'),
         attachments: snapshot.attachments, model: modelDraft, thinkingLevel: thinkingDraft
       });
       snapshot.clear();

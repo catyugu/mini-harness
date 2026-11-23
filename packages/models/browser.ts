@@ -1,3 +1,4 @@
+import type { ModelChoice } from '@mini-harness/contracts/conversation';
 import { payload } from '@mini-harness/web/api';
 import type { ModelCatalog } from '@mini-harness/web/types';
 import { RemoteStore } from '@mini-harness/web/models/remote-store';
@@ -17,12 +18,25 @@ const setup: FrontendSetup = async (ctx, api) => {
   });
   await state.refresh();
   api.onDispose(ctx.miniProjections.register('models', state));
-  ctx.provide('miniModels', state);
-  const manager = providerManager(api, () => state.get().providers, state.refresh);
-  api.onDispose(settings.addPage('Model', manager.content, true));
-  settings.onClose(manager.reset, api.signal);
-  state.subscribe(manager.render, api.signal);
-  if (!state.get().models.some((model) => model.configured)) settings.open(true);
+  ctx.provide('miniModels', {
+    get: () => ({ ...state.get(), recent: api.configuration.get<ModelChoice>('model') }),
+    subscribe(listener, signal) {
+      state.subscribe(listener, signal);
+      const release = api.configuration.subscribe('model', listener);
+      signal.addEventListener('abort', release, { once: true });
+    }
+  });
+  api.settings.register({
+    id: 'providers',
+    section: { title: 'Model', icon: 'model', order: 10 },
+    render({ signal }) {
+      const manager = providerManager(api, () => state.get().providers, state.refresh);
+      settings.onClose(manager.reset, signal);
+      state.subscribe(manager.render, signal);
+      return manager.content;
+    }
+  });
+  if (!state.get().models.some((model) => model.configured)) settings.open('Model');
 };
 
 function providerManager(api: FrontendApi, providers: () => ProviderInfo[], refresh: () => Promise<void>) {
@@ -234,7 +248,12 @@ function customEndpoint(provider?: ProviderInfo) {
 }
 
 declare module 'cordis' {
-  interface Context { miniModels: RemoteStore<ModelCatalog> }
+  interface Context {
+    miniModels: {
+      get(): ModelCatalog & { recent: ModelChoice };
+      subscribe(listener: () => void, signal: AbortSignal): void;
+    };
+  }
 }
 
 export default setup;

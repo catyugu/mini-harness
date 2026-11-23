@@ -13,6 +13,7 @@
     "dist/types/packages/contracts/",
     "dist/types/packages/ui-runtime/frontend.d.ts",
     "dist/types/packages/ui-runtime/plugin-sdk.d.ts",
+    "dist/types/packages/ui-runtime/settings.d.ts",
     "dist/types/packages/ui-slots/registry.d.ts",
     "dist/types/packages/web/contracts/",
     "dist/types/packages/web/vendor/cordis.d.ts",

@@ -7,7 +7,11 @@ export default function setup(_ctx, api) {
   open.addEventListener('click', () => modal.showModal(), { signal: api.signal });
   panel.append(open);
   api.page('example', { title: 'Example panel', content: panel });
-  api.settingsPage('Example settings', api.ui.status('The example panel requires no configuration.'));
+  api.settings.register({
+    id: 'example-info',
+    section: 'Extensions',
+    render: () => api.ui.status('The example panel requires no configuration.')
+  });
   api.messageAction({
     id: 'example-use-message', label: 'Use message in draft', icon: 'copy',
     visible: ({ message }) => message.role === 'assistant',

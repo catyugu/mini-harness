@@ -119,20 +119,34 @@ test('plugin JSON Schema applies defaults and rejects invalid changes before set
   t.after(async () => { await runtime.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
   const folder = join(paths.plugins, 'schema');
   mkdirSync(folder);
-  writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ inject: ['harnessTools'], configSchema: {
+  writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ inject: ['harnessTools'], configChanges: 'live', configSchema: {
     type: 'object', additionalProperties: false, required: ['count'],
     properties: { count: { type: 'integer', minimum: 1, maximum: 10, default: 3 },
       options: { type: 'object', default: {}, properties: { enabled: { type: 'boolean', default: true } } } }
   } }));
   writeFileSync(join(folder, 'plugin.js'), `export default (ctx, api) => {
+    const changes = [];
+    api.configuration.subscribe('count', (value) => changes.push(value));
     api.registerTool({ name: 'schema_value', description: 'Fixture', parameters: { type: 'object', properties: {} },
-      execute: async () => ({ content: [{ type: 'text', text: String(api.config.count) + ':' + api.config.options.enabled }] }) });
+      async execute(_id, changesToSave) {
+        if (Object.keys(changesToSave).length) await api.configuration.patch(changesToSave);
+        return { content: [{ type: 'text', text: api.configuration.get('count') + ':' +
+          api.configuration.get('options').enabled + ':' + changes.join(',') }] };
+      }
+    });
   };`);
   await runtime.start();
   await runtime.updateSettings({ plugins: { schema: true } });
   const item = runtime.registry.create();
   const tool = expectPresent(runtime.plugins.ctx.harnessTools.forSession(item.id).find(({ name }) => name === 'schema_value'), 'schema tool');
   assert.match(JSON.stringify(await tool.execute('test', {}, undefined, undefined, undefined)), /3:true/);
+  await Promise.all([
+    tool.execute('set-count', { count: 7 }, undefined, undefined, undefined),
+    tool.execute('set-options', { options: { enabled: false } }, undefined, undefined, undefined),
+  ]);
+  assert.deepEqual(readSettings(paths).pluginConfig.schema, { count: 7, options: { enabled: false } });
+  await assert.rejects(tool.execute('invalid-count', { count: 0 }, undefined, undefined, undefined), /Invalid configuration/);
+  assert.match(JSON.stringify(await tool.execute('committed', {}, undefined, undefined, undefined)), /7:false:7/);
   await assert.rejects(runtime.updateSettings({ pluginConfig: { schema: { count: 0 } } }), /Invalid configuration/);
   assert.deepEqual(await tool.execute('test', {}, undefined, undefined, undefined),
     await expectPresent(runtime.plugins.ctx.harnessTools.forSession(item.id).find(({ name }) => name === 'schema_value'), 'registered schema tool')
@@ -208,8 +222,9 @@ test('disabled optional builtins cannot block boot or reload because their confi
   const { root, paths } = createFixturePaths(mock.url);
   const runtime = new MiniHarnessRuntime(paths);
   t.after(async () => { await runtime.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
-  writeJson(paths.settings, { ...readSettings(paths), plugins: { subagents: false },
-    pluginConfig: { subagents: { maxDepth: 100 } } });
+  const settings = readSettings(paths);
+  writeJson(paths.settings, { ...settings, plugins: { subagents: false },
+    pluginConfig: { ...settings.pluginConfig, subagents: { maxDepth: 100 } } });
   const restored = new MiniHarnessRuntime(paths);
   t.after(() => restored.stop());
   await restored.start();
@@ -217,7 +232,7 @@ test('disabled optional builtins cannot block boot or reload because their confi
   assert.match(restored.plugins.metadata().find(({ id }) => id === 'subagents')?.error ?? '', /Invalid configuration/);
   await assert.rejects(restored.updateSettings({ pluginConfig: { subagents: { maxDepth: 101 } } }), /Invalid configuration/);
   await assert.rejects(restored.updateSettings({ pluginConfig: { subagents: { model: { provider: 'unknown', id: 'missing' } } } }), /Unknown child model/);
-  await restored.updateSettings({ appearance: 'dark' });
+  await restored.updateSettings({ pluginConfig: { 'core:theme': { appearance: 'dark' } } });
   const conversation = restored.registry.create();
   assert.equal(await restored.runs.send(conversation.id, 'Main agent still works'), 'Mock response');
   await restored.updateSettings({ plugins: { subagents: true }, pluginConfig: { subagents: { maxDepth: 2 } } });
@@ -240,8 +255,8 @@ test('an optional plugin that fails at startup reports its state without blockin
   assert.equal(status.state, 'failed');
   assert.match(expectPresent(status.error, 'startup error'), /Startup failed/);
   assert.ok(!restarted.plugins.browser().some(({ id }) => id === status.id));
-  await restarted.updateSettings({ appearance: 'dark' });
-  assert.equal(restarted.settings.appearance, 'dark');
+  await restarted.updateSettings({ pluginConfig: { 'core:theme': { appearance: 'dark' } } });
+  assert.equal(restarted.settings.pluginConfig['core:theme'].appearance, 'dark');
   await restarted.updateSettings({ plugins: { 'fails-to-start': false } });
   assert.equal(expectPresent(restarted.plugins.metadata().find(({ id }) => id === status.id), 'disabled plugin metadata').state, 'disabled');
 });

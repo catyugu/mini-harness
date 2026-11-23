@@ -12,9 +12,6 @@ test('config directories are independent and default safe', () => {
     assert.ok(paths.sessions.startsWith(paths.home));
     assert.deepEqual(readSettings(paths).plugins, {});
     assert.deepEqual(readSettings(paths).pluginConfig, {});
-    assert.equal(readSettings(paths).queueMode, 'steer');
-    writeJson(paths.settings, { appearance: 'dark' });
-    assert.equal(readSettings(paths).appearance, 'dark');
   } finally { rmSync(folder, { recursive: true, force: true }); }
 });
 
@@ -26,10 +23,8 @@ test('settings merge preserves other sections and validates bounds', () => {
   assert.equal(after.plugins.shell, true);
   assert.equal(after.pluginConfig.subagents.maxParallel, 4);
   assert.equal(before.plugins.shell, undefined);
-  assert.equal(mergeSettings(before, { queueMode: 'followUp' }).queueMode, 'followUp');
-  assert.throws(() => mergeSettings(before, { queueMode: 'unknown' }), /Invalid queue mode/);
-  assert.throws(() => mergeSettings(before, { model: { provider: 42 } }), /model\.provider/);
-  assert.throws(() => mergeSettings(before, { model: { id: [] } }), /model\.id/);
+  assert.throws(() => mergeSettings(before, { queueMode: 'steer' }), /Unknown settings field/);
+  assert.throws(() => mergeSettings(before, { model: { provider: 'example' } }), /Unknown settings field/);
   assert.throws(() => validateSettings({ ...before, pluginConfig: { shell: null } }), /Invalid plugin configuration/);
   assert.throws(() => mergeSettings(before, { sandbox: { mode: 'host' } } as any), /Unknown settings field/);
   assert.throws(() => mergeSettings(before, { bogus: true } as any), /Unknown/);

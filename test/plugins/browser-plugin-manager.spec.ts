@@ -12,18 +12,38 @@ test('frontend plugins own UI contributions and clean up on disable and reconfig
   writeFileSync(join(folder, 'plugin.js'), 'export default function() {}');
   writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ browserRequires: ['core:layout', 'core:conversation', 'core:settings'], title: 'UI example', icon: {
     path: 'M2 2h20v20H2z', viewBox: '0 0 24 24'
-  }, configSchema: { type: 'object', properties: { label: { type: 'string', title: 'Button label', default: 'Plugin entry' } } } }));
+  }, configSchema: { type: 'object', properties: {
+    label: { type: 'string', title: 'Button label', default: 'Plugin entry' },
+    showDetails: { type: 'boolean', default: false }
+  } } }));
   writeFileSync(join(folder, 'web.js'), `export default function(_ctx, api) {
-    for (const slot of ['sidebar','composer','settings','inspector']) {
-      const node = document.createElement(slot === 'settings' ? 'section' : 'button');
+    for (const slot of ['sidebar','composer','inspector']) {
+      const node = document.createElement('button');
       if (node.tagName === 'BUTTON') node.type = 'button';
       node.dataset.exampleSlot = slot; node.textContent = slot === 'sidebar' ? api.config.label : 'Plugin ' + slot;
       if (slot === 'composer') node.onclick = () => api.insert('Inserted by plugin');
       if (slot === 'inspector') node.onclick = () => {const p = document.createElement('p');p.textContent='Plugin preview';api.inspect('Example',p);};
-      api.slots.register({sidebar:'sidebar.actions',composer:'conversation.composer',settings:'settings.extensions',inspector:'conversation.header'}[slot],node);
+      api.slots.register({sidebar:'sidebar.actions',composer:'conversation.composer',inspector:'conversation.header'}[slot],node);
     }
-    const settingsPage = document.createElement('p'); settingsPage.textContent = 'Plugin preferences';
-    api.settingsPage('Example settings', settingsPage);
+    api.settings.register({ section: 'General', id: 'preferences', order: 10, render({ bind }) {
+      const content = document.createElement('div');
+      const control = document.createElement('input');
+      control.type = 'checkbox';
+      content.append(api.ui.field('Plugin preferences', control), bind(control, 'showDetails', {
+        read(value) { control.checked = value; }, write() { return control.checked; }
+      }));
+      return content;
+    } });
+    for (const [section, id, text] of [
+      ['Model', 'model', 'Plugin model preferences'],
+      ['Extensions', 'extensions', 'Plugin settings']
+    ]) {
+      api.settings.register({ section, id, order: 10, render() {
+        const item = document.createElement('p');
+        item.textContent = text;
+        return item;
+      } });
+    }
     api.command({ name: 'example', description: 'Add a plugin note', run: () => api.insert('Plugin note') });
     api.tool('ls', () => { const node = document.createElement('p'); node.textContent = 'Custom listing result'; return node; });
   }`);
@@ -51,8 +71,17 @@ test('frontend plugins own UI contributions and clean up on disable and reconfig
     await page.getByRole('button', { name: 'Plugin inspector', exact: true }).click();
     await expect(page.getByText('Plugin preview', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
-    await settingsSection(page, 'Example settings').click();
-    await expect(page.getByText('Plugin preferences')).toBeVisible();
+    await settingsSection(page, 'General').click();
+    await expect(page.getByRole('switch', { name: 'Add instructions' })).toBeVisible();
+    const preferences = page.getByRole('checkbox', { name: 'Plugin preferences' });
+    await expect(preferences).not.toBeChecked();
+    await preferences.check();
+    await expect(preferences).toBeEnabled();
+    await expect(preferences).toBeChecked();
+    expect(readJson<any>(paths.settings, {}).pluginConfig['ui-example']).toEqual({ showDetails: true });
+    await settingsSection(page, 'Model').click();
+    await expect(page.getByRole('button', { name: 'Add provider' })).toBeVisible();
+    await expect(page.getByText('Plugin model preferences')).toBeVisible();
     await settingsSection(page, 'Extensions').click();
     await expect(page.getByText('Plugin settings', { exact: true })).toBeVisible();
     await expect(settingsSection(page, 'Plugins')).toHaveCount(0);
@@ -75,7 +104,9 @@ test('frontend plugins own UI contributions and clean up on disable and reconfig
     await expect(page.locator('html')).toHaveAttribute('data-dependency-disposal', 'ordered');
     await expect(page.getByText('Plugin preview', { exact: true })).toHaveCount(0);
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
-    await expect(settingsSection(page, 'Example settings')).toHaveCount(0);
+    await settingsSection(page, 'General').click();
+    await expect(page.getByRole('switch', { name: 'Add instructions' })).toBeVisible();
+    await expect(page.getByText('Plugin preferences', { exact: true })).toHaveCount(0);
     await expect(settingsSection(page, 'Extensions')).toBeHidden();
     await page.getByRole('button', { name: 'Close settings' }).click();
     await page.getByRole('button', { name: 'Inserted by plugin', exact: true }).click();

@@ -44,7 +44,6 @@ button { border-radius: var(--radius); }
 @media (max-width: 860px) {
   .message-actions .message-action { flex-basis: 36px; min-width: 36px; min-height: 36px; }
 }
-.message-image { max-width: min(100%, 380px); max-height: 360px; object-fit: contain; border-radius: var(--radius); }
 .settings-body { display: grid; grid-template-columns: 168px minmax(0, 1fr); flex: 1; min-height: 0; }
 .settings-nav { display: flex; flex-direction: column; gap: 4px; overflow: auto; padding: 12px; background: var(--panel); border-right: 1px solid var(--border); }
 .settings-nav button { display: flex; align-items: center; gap: 9px; text-align: left; padding: 8px 9px; color: var(--ink); white-space: nowrap; }
@@ -54,7 +53,6 @@ button { border-radius: var(--radius); }
 .settings-sections { flex: 1; }
 .settings-sections > section { border: 0; padding-block: 12px; }
 .settings-sections > section > h3 { font-size: 17px; margin-bottom: 14px; }
-.appearance-settings { max-width: 280px; }
 .settings-back { display: none; }
 @media (max-width: 560px) {
   .settings-panel { width: 100%; height: var(--app-height, 100dvh); border: 0; border-radius: 0; }
@@ -114,7 +112,6 @@ button { border-radius: var(--radius); }
 .suggestions-empty { padding: 0 10px; }
 .queued-messages { max-height: 84px; overflow: auto; white-space: pre-wrap; font-size: 12px; color: var(--muted); padding: 6px 10px; }
 .approval-requests { max-height: 30vh; overflow: auto; }
-#queueMode { max-width: 130px; min-width: 0; font-size: 12px; border: 0; background: var(--surface); }
 #queueSend { margin: 0; }
 .settings-scroll textarea { width: 100%; background: var(--surface); color: var(--ink); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px; font: inherit; }
 .danger { color: var(--danger); }
@@ -133,7 +130,6 @@ button { border-radius: var(--radius); }
   .composer-footer .model-select { flex: 1 1 90px; max-width: initial; min-height: 40px; margin-left: 0; }
   #thinkingLevel { min-height: 40px; }
   .model-picker input { font-size: 16px; }
-  #queueMode { margin-right: auto; width: 130px; min-height: 36px; }
   .settings-nav { padding-inline: 10px; }
 }
 

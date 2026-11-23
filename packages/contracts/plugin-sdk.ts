@@ -23,3 +23,4 @@ export type { BrowserPrimitives } from './browser.js';
 
 export { HttpError, HttpReply } from './routes.js';
 export type { GatewayRequest, NetworkPort, RouteRequest, UpgradeHandler } from './routes.js';
+export type { PluginConfiguration } from './config.js';

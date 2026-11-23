@@ -1,15 +1,15 @@
 import { HttpError } from '@mini-harness/contracts/routes';
 import { join } from 'node:path';
 import { readJson, writeJson } from '@mini-harness/platform/config';
-import type { Settings, SettingsPatch } from '@mini-harness/contracts/config';
+import type { ModelChoice } from '@mini-harness/contracts/conversation';
 import type { ModelAdminPort, ModelCatalogPort } from '@mini-harness/contracts/models';
 
 type ProviderHost = {
   paths: { home: string };
-  settings: Pick<Settings, 'model'>;
+  recent(): ModelChoice;
+  remember(model: ModelChoice): Promise<void>;
   catalog: ModelCatalogPort;
   admin: ModelAdminPort;
-  updateSettings(patch: SettingsPatch): Promise<Settings>;
 };
 export function providerSettings(runtime: ProviderHost) {
   const config = readJson<any>(join(runtime.paths.home, 'models.json'), { providers: {} });
@@ -57,14 +57,14 @@ export async function saveProvider(runtime: ProviderHost, input: any, remove = f
     next.providers[input.id] = { ...next.providers[input.id], api: input.api, baseUrl: url.href.replace(/\/$/, ''),
       models: models.map((model: { id: string }) => ({ ...next.providers[input.id]?.models?.find((old: { id: string }) => old.id === model.id), ...model })) };
   }
-  const recent = runtime.settings.model;
+  const recent = runtime.recent();
   writeJson(path, next);
   let clearedRecent = false;
   try {
     await runtime.admin.refresh();
     if (recent.provider === input.id) {
       if (!runtime.catalog.resolve(recent)) {
-        await runtime.updateSettings({ model: { provider: '', id: '' } });
+        await runtime.remember({ provider: '', id: '' });
         clearedRecent = true;
       }
     }
@@ -73,7 +73,7 @@ export async function saveProvider(runtime: ProviderHost, input: any, remove = f
   } catch (error) {
     writeJson(path, previous);
     await runtime.admin.refresh();
-    if (clearedRecent) await runtime.updateSettings({ model: recent });
+    if (clearedRecent) await runtime.remember(recent);
     throw error;
   }
   return providerSettings(runtime);

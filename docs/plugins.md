@@ -42,6 +42,7 @@ A plugin with no descriptor fields can use `{}` as its `plugin.json`.
 | `requires` | Required plugin IDs |
 | `browserProvides`, `browserInject`, `browserRequires` | Published and required browser services, and required browser plugin IDs |
 | `configSchema` | Self-contained JSON Schema for an object. Defaults apply before validation. |
+| `configChanges` | Set to `live` to apply validated changes without remounting the plugin. |
 | `icon` | A symbolic icon name or an SVG path object with optional `viewBox` |
 
 ```js
@@ -57,6 +58,8 @@ export default function setup(_ctx, api) {
 | Server API | Contract |
 | - | - |
 | `config`, `scope`, `signal` | Validated setup settings, scope address and lifetime signal |
+| `configuration.get(key)`, `.subscribe(key, listener)` | Read a field or listen for committed changes in this instance’s namespace and scope |
+| `configuration.set(key, value)`, `.patch(values)` | Validate and save fields in one transaction. The server SDK requires `configChanges: 'live'` for writes. |
 | `provide(name, service)` | Publish a declared service for Cordis consumers |
 | `service(name)` | Read a declared required service or fail with its name |
 | `optionalService(name)` | Read a service declared in `optional` |
@@ -143,7 +146,8 @@ Setup, schema or settings persistence failures retain the previous effective gra
 | `page(id, {title, content, order?})` | Register a page and sidebar entry |
 | `slots.register(name, node, order?)` | Contribute to a layout or feature slot |
 | `slots.registerKeyed(name, key, render, { order? }?)` | Contribute or override a keyed slot entry with a render lifetime |
-| `settingsPage(title, node)` | Add a settings category |
+| `settings.register({ id, section, order?, render })` | Add a control or panel to a Settings section |
+| `configuration.get`, `.set`, `.patch`, `.subscribe` | Read, write or follow the browser plugin’s own application configuration |
 | `rightTab(type, {title, create})`, `openTab(type, path?)` | Register or open a scoped workspace tab. Creation receives its address and an abort signal. |
 | `inspect(title, node)` | Show content in the workspace inspector |
 | `command({name, description, group?, run?})`, `completion(trigger, complete)` | Slash commands and punctuation-triggered suggestions |
@@ -152,7 +156,33 @@ Setup, schema or settings persistence failures retain the previous effective gra
 | `beginDraftMode({title, text, submit})`, `cancelDraftMode()`, `insert(text)` | Own an editing flow or insert content into the composer |
 | `request(path, options?)`, `signal`, `onDispose(cleanup)` | Authenticated requests and lifetime management |
 
-Page, dialog, tab and inspector contributions depend on `core:layout`. Tools, message actions and composer operations depend on `core:conversation`. Settings pages depend on `core:settings`. The theme and primitives are shared. Declare the corresponding dependencies in `browserRequires` or declare the service in `browserInject`. Domain snapshots are provided by the owning feature's browser data plugin. The browser runtime routes revision notices and mounts the declared graph; it does not initialize sessions, settings, models or other feature state. Browser code runs with the page's permissions. Put custom UI listeners and requests under the plugin's lifetime and use contribution APIs to interact with another feature.
+Page, dialog, tab and inspector contributions depend on `core:layout`. Tools, message actions and composer operations depend on `core:conversation`. The theme and primitives are shared. Declare the corresponding dependencies in `browserRequires` or declare the service in `browserInject`. Domain snapshots are provided by the owning feature's browser data plugin. The browser runtime routes revision notices and mounts the declared graph; it does not initialize sessions, settings, models or other feature state. Browser code runs with the page's permissions. Put custom UI listeners and requests under the plugin's lifetime and use contribution APIs to interact with another feature.
+
+Settings contributions use a section title such as `General`, `Model`, or `Extensions`. A plugin can introduce a section with `{ title, icon, order }`. Contributions are sorted by order and plugin-qualified ID. Sections are ordered by their declared order and title. A section appears when it has content. Disabling a plugin removes its contributions and aborts their render signals.
+
+Declare the settings fields and defaults in the plugin’s `configSchema`. For example, declare `showDetails` as a boolean with a default, then register its control from `web.js`.
+
+```js
+api.settings.register({
+  id: 'show-details',
+  section: 'General',
+  order: 50,
+  render({ bind }) {
+    const control = document.createElement('input');
+    control.type = 'checkbox';
+    const label = api.ui.field('Show details', control);
+    const status = bind(control, 'showDetails', {
+      read: (value) => { control.checked = value; },
+      write: () => control.checked
+    });
+    const row = document.createElement('div');
+    row.append(label, status);
+    return row;
+  }
+});
+```
+
+`bind` handles committed values, pending state, error feedback and rollback. Custom controls can use `configuration` from the render context and the render signal to release their subscriptions. A write patches only the calling plugin’s namespace. Browser writes target the application scope. Native workspace and session plugins write that instance’s overrides. The server SDK permits writes after setup and outside configuration callbacks. Live plugins can use `onConfigChange` to stage updates and restore previous values on rollback. Subscribers see changes after commit. A section title affects layout only.
 
 The most recent registration supplies each keyed contribution. Releasing it restores the previous contribution. A renderer receives an abort signal and returns a node or an object with a node and a cleanup function. The registry aborts its signal before cleanup on replacement or outlet removal. Declare the owner in `browserRequires` when overriding its contribution so your plugin mounts after it.
 
@@ -191,6 +221,7 @@ The server runs one Runtime for all registered workspaces. Each conversation has
 | `PUT /api/workspaces` with `{ids}` | Reorder registered workspaces |
 | `GET /api/bootstrap` | Mounted browser plugin graph |
 | `GET /api/changes` | NDJSON stream with domain revisions and invalidations |
+| `PATCH /api/settings/plugins/:id` | Patch fields in one active browser plugin’s configuration namespace |
 | `GET /api/sessions`, `GET /api/settings`, `GET /api/plugins`, `GET /api/models` | Authoritative projections for the browser |
 | `GET /api/workspaces/:id/sessions`, `POST /api/workspaces/:id/sessions` | List or create conversations in a workspace |
 | `GET /api/providers`, `PUT /api/providers`, `DELETE /api/providers` | List credential status and model catalogs; save/remove custom endpoint definitions in `models.json` |

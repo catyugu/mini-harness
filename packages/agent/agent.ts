@@ -33,7 +33,7 @@ interface AgentServices {
   skills(id: string): SkillPort | undefined;
   prepare(id: string, signal?: AbortSignal): Promise<void>;
   defaultModel(): ModelChoice;
-  rememberModel(model: ModelChoice, sessionId: string): void;
+  rememberModel(model: ModelChoice, sessionId: string): void | Promise<void>;
   policy(): { maxTurns: number; autoCompact: boolean };
   observe(event: CapabilityObservation): void;
   modelRequestHooks?(id: string): OrderedHook<ModelRequestTransform>[];
@@ -257,7 +257,7 @@ export class NativeAgent implements AgentPort {
             inboxId: item.id, selection: { model: chosen, thinkingLevel: level }
           });
           if ((model.provider !== chosen.provider || model.id !== chosen.id) && !record.parentId)
-            this.services.rememberModel(chosen, id);
+            await this.services.rememberModel(chosen, id);
           model = chosen;
           capabilities = nextCapabilities;
           activeThinking = level;
@@ -267,18 +267,18 @@ export class NativeAgent implements AgentPort {
       };
       // Drain recovered follow-ups as turns before committing the new manual input.
       let submitted = false;
-      const submit = () => {
+      const submit = async () => {
         model = manualModel;
         capabilities = models.capabilities(model);
         activeThinking = nextThinking;
         this.user(log, expanded, images, input, emit, { submissionId, selection: { model, thinkingLevel: nextThinking } },
           revision && target ? { parentId: target.parentId, expectedLeafId: revision.expectedLeafId } : undefined);
         if (revision) this.closeUnfinishedTools(log);
-        if (!record.parentId) this.services.rememberModel(model, id);
+        if (!record.parentId) await this.services.rememberModel(model, id);
         submitted = true;
       };
       const manualModel = model;
-      if (revision || !await deliver('followUp')) submit();
+      if (revision || !await deliver('followUp')) await submit();
       const maxTurns = this.services.policy().maxTurns;
       for (let turn = 0; turn < maxTurns; turn++) {
         signal.throwIfAborted();
@@ -373,7 +373,7 @@ export class NativeAgent implements AgentPort {
         if (await deliver('steer')) continue;
         if (calls.length) continue;
         if (await deliver('followUp')) continue;
-        if (!submitted) { submit(); turn = -1; continue; }
+        if (!submitted) { await submit(); turn = -1; continue; }
         const answer = textOf(result);
         emit({ type: 'complete', text: answer });
         return answer;

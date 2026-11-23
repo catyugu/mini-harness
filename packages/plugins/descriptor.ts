@@ -47,8 +47,8 @@ export function describePlugin(id: string, folder: string): DiscoveredPlugin {
   if (!hasWeb && (manifest.browserAssets !== undefined || manifest.browserPreload !== undefined))
     throw new Error('Browser assets require web.js');
   const resources = hasWeb ? readBrowserAssets(id, folder, manifest.browserAssets, manifest.browserPreload) : undefined;
-  if (manifest.configChanges !== undefined && (manifest.configChanges !== 'live' || !hasHost))
-    throw new Error('Live configuration requires plugin.js');
+  if (manifest.configChanges !== undefined && manifest.configChanges !== 'live')
+    throw new Error('Invalid plugin configChanges: ' + id);
   const configSchema = manifest.configSchema;
   if (configSchema && (configSchema.type !== 'object' || !configSchema.properties || typeof configSchema.properties !== 'object'))
     throw new Error('Expected an object configSchema for plugin: ' + id);

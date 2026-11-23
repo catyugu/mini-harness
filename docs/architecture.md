@@ -17,7 +17,7 @@ Configuration changes validate the candidate graph and schema defaults before se
 | State | Owner |
 | --- | --- |
 | Workspace IDs, canonical roots, labels and order | Workspace Catalog, `workspaces.json` |
-| Session identity, title, workspace and parent | Session Catalog v3, `sessions.json` |
+| Session identity, title, workspace, parent and conversation permissions | Session Catalog v3, `sessions.json` |
 | Transcript, branch selection, model, thinking, compaction and plugin records | Native Session Log |
 | Acknowledged inbox items and their delivery/cancellation | The same Session Log |
 | Durable queued/running/terminal run state | The same Session Log |
@@ -25,11 +25,13 @@ Configuration changes validate the candidate graph and schema defaults before se
 | Cancellation and bounded streaming replay | Runs |
 | Pending command approvals | Approvals |
 | Provider definitions and credentials | Model store, `models.json` and `auth.json` |
-| Plugin selections, scope overrides, appearance and default model | Settings, `settings.json` |
+| Plugin selections, service providers, scope overrides and namespaced plugin configuration | Configuration service, `settings.json` |
 | Service instances and resource lifetimes | Cordis Plugin Host |
 | Selection, expanded branches and open panels | Feature-owned browser state |
 
 The log is append-only, checksummed and newline framed. An append is acknowledged after fsync. Transcript events advance the selected branch; operational run and inbox events advance the durable sequence without changing that branch. History and context are separate projections: compaction reduces context while preserving visible messages and their revision targets. See [the session log reference](session-log.md).
+
+Application preferences such as theme, queue behavior and the recent model live in `pluginConfig` under their owner’s ID. A plugin declares its schema and defaults. The configuration service validates candidates, atomically writes the file, and publishes committed state. Native configuration handles are scoped to a plugin instance. Settings navigation groups browser contributions by title, independently of configuration ownership. Conversation permissions live in the Session Catalog and apply during execution.
 
 ## Native execution
 

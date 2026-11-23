@@ -39,5 +39,9 @@ declare module 'cordis' {
   interface Context {
     harnessModels: ModelCatalogPort;
     harnessModelAdmin: ModelAdminPort;
+    harnessModelPreference: {
+      recent(): ModelChoice;
+      remember(model: ModelChoice): Promise<void>;
+    };
   }
 }
