@@ -17,7 +17,7 @@ test('composed browser plugin graph boots without any historical single app entr
     })).json();
     assert.ok(Array.isArray(bootstrap.ui) && bootstrap.ui.length > 0, 'Host must publish UI graph');
     await page.goto(host.url + '/#token=' + host.token);
-    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(1500); // Navigation and run event feeds keep network connections open.
     const failure = await page.locator('#startupStatus').textContent();
     expect(await page.locator('#app').count(),
       'Browser startup failed: ' + failure + '; errors: ' + errors.join(' | ')).toBe(1);
