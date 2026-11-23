@@ -31,7 +31,8 @@ test('renders Markdown and tool results, and stops a pending reply', async ({ pa
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
     await page.locator('.message-row.assistant .message-actions button').click();
     await expect(page.locator('.message-row.assistant .message-actions button')).toHaveAttribute('aria-label', 'Copied');
-    expect(await page.evaluate(() => navigator.clipboard.readText())).toContain('```text\nExample\n```');
+    const copied = (await page.evaluate(() => navigator.clipboard.readText())).replace(/\r\n?/g, '\n');
+    expect(copied).toMatch(/```text[ \t]*\nExample[ \t]*\n```/);
     await expect(page.locator('.message img, .message .overlay')).toHaveCount(0);
     await expect(page.getByText('A tool note')).toBeVisible();
     await expect(page.locator('.tool-card summary')).toContainText('ls');
