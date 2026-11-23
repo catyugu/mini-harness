@@ -7,8 +7,8 @@ import type { FrontendApi } from '../../web/kernel/extensions.js';
 import { api as request, readEvents, scopedElements, payload, wait } from '../../web/api.js';
 import { workspaceTree } from './navigation-tree.js';
 import { sessionTree } from './sessions.js';
-import { button, dialog, field, fromMarkup, iconButton } from '../../web/ui/components/primitives.js';
-import { fileLabel, icon } from '../../web/ui/components/icons.js';
+import { button, dialog, field, fromMarkup, iconButton } from '../../ui-primitives/primitives.js';
+import { fileLabel, icon } from '../../ui-primitives/icons.js';
 
 interface NavigationServices {
   state: BrowserState;
@@ -35,7 +35,7 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
       <span id="selectedCount" aria-live="polite"></span>
     </div>
   </div>`);
-  api.mount('session-navigation', panel);
+  api.slots.register('sidebar.navigation', panel);
   const { element, value } = scopedElements(panel);
   const title = document.createElement('input');
   title.required = true;
@@ -49,7 +49,7 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
   save.type = 'submit';
   renameForm.append(field('Title', title), status, save);
   const renameDialog = dialog('Rename conversation', renameForm);
-  api.mount('dialogs', renameDialog);
+  api.slots.register('dialog.root', renameDialog);
   let renaming: string;
   const selection = new Set<string>(), expanded = new Set<string>();
   const storageKey = 'mini-harness-collapsed-workspaces';
@@ -68,7 +68,7 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
   removeAction.dataset.danger = 'true';
   removeAction.prepend(icon('trash'));
   menu.append(renameAction, removeAction);
-  api.mount('dialogs', menu);
+  api.slots.register('dialog.root', menu);
   let menuTrigger: HTMLElement | undefined;
 
   function closeMenu(restoreFocus = false) {

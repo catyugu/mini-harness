@@ -2,7 +2,7 @@ import type { MessageContent, ViewMessage } from '../../../contracts/message.js'
 import type { RunEvent } from '../../../contracts/transport.js';
 import type { ConversationView } from '../../../web/types.js';
 import type { FrontendHost } from '../../../web/kernel/extensions.js';
-import { icon } from '../../../web/ui/components/icons.js';
+import { icon } from '../../../ui-primitives/icons.js';
 import { renderMarkdown, markdownSource } from '../../../web/ui/components/markdown.js';
 import type { MessageActionContext } from '../../../web/kernel/extensions.js';
 
