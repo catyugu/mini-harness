@@ -172,13 +172,32 @@ export class PiModelStore implements ModelCatalogPort, ModelAdminPort {
   }
   authStatus(id: string) { return { ...(this.status.get(id) ?? { configured: false }) }; }
   hasProvider(id: string) { return Boolean(this.runtime.getProvider(id)); }
+  /** Credential persistence and authentication status must change together. */
+  private async changeCredential(id: string, next?: Credential) {
+    const previous = await this.credentials.read(id);
+    const previousStatus = this.status;
+    const write = (value: Credential | undefined): Promise<unknown> => value === undefined
+      ? this.credentials.delete(id)
+      : this.credentials.modify(id, async () => value);
+    try {
+      await write(next);
+      this.status = await this.readStatus();
+    } catch (error) {
+      try {
+        await write(previous);
+        this.status = previousStatus;
+      } catch (rollbackError) {
+        throw new AggregateError([error, rollbackError], 'Could not restore model credentials after a failed update');
+      }
+      throw error;
+    }
+  }
   async storeCredential(id: string, key: string) {
     if (!this.hasProvider(id)) throw new Error('Unknown provider');
     if (typeof key !== 'string' || !key.trim() || key.length > 65536) throw new Error('Invalid credential');
-    await this.credentials.modify(id, async () => ({ type: 'api_key', key: key.trim() }));
-    this.status = await this.readStatus();
+    await this.changeCredential(id, { type: 'api_key', key: key.trim() });
   }
-  async removeCredential(id: string) { await this.credentials.delete(id); this.status = await this.readStatus(); }
+  async removeCredential(id: string) { await this.changeCredential(id); }
   async close() { await this.credentials.settle(); }
 
   connection(choice: ModelChoice) {

@@ -5,7 +5,7 @@ import type { FrontendHost } from '@mini-harness/ui-runtime/frontend';
 
 const browser = 'data:text/javascript,' + encodeURIComponent('export default () => {}');
 const preload = (version: string) => 'data:text/javascript,' + encodeURIComponent(
-  "export default () => { globalThis.__miniLoaderEvents.push('preload:" + "${version}" + "'); return () => globalThis.__miniLoaderEvents.push('dispose:" + "${version}" + "'); }"
+  "export default () => { globalThis.__miniLoaderEvents.push('preload:" + version + "'); return () => globalThis.__miniLoaderEvents.push('dispose:" + version + "'); }"
 );
 
 test('changing only a browser preload remounts its consumer after disposal', async (t) => {
