@@ -43,7 +43,7 @@ Skills load from `~/.mini-harness/skills/` and `<workspace>/.mini-harness/skills
 
 Long conversations compact automatically. Manual compaction keeps two recent turns plus a summary for model context while preserving all message identities and history. Advanced users can set `pluginConfig["core:agent"]` with `maxTurns` (default 128) and `autoCompact` (default `true`).
 
-Shell starts disabled and asks for approval for every command. File tools restrict access to the active workspace; Linux isolated Shell requires bubblewrap and `prlimit`. Trusted host Shell and reviewed JavaScript plugins run with your user permissions. See [SECURITY.md](SECURITY.md).
+Conversation permissions can be changed at any time from the left side of the composer. Standard keeps the existing tool and approval rules; Read-only allows only built-in file reading/search and skill loading, including for subagents. Changes apply to tool calls that have not started and are preserved per conversation. Shell starts disabled and asks for approval for every command. File tools restrict access to the active workspace; Linux isolated Shell requires bubblewrap and `prlimit`. Trusted host Shell and reviewed JavaScript plugins run with your user permissions. See [SECURITY.md](SECURITY.md).
 
 ## Develop
 

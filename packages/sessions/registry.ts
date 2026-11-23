@@ -75,7 +75,7 @@ export class SessionRegistry implements SessionStore {
     this.logs.clear();
   }
 
-  create({ parentId = null, title, workspaceId }: Parameters<SessionStore['create']>[0] = {}) {
+  create({ parentId = null, title, workspaceId, permission = 'standard' }: Parameters<SessionStore['create']>[0] = {}) {
     const parent = parentId ? this.get(parentId) : undefined;
     if (parentId && !parent) throw new HttpError('not_found', 'Parent conversation not found');
     if (parent && workspaceId !== undefined && workspaceId !== parent.workspaceId)
@@ -87,7 +87,7 @@ export class SessionRegistry implements SessionStore {
     this.workspaces.resolveRoot(workspace.path, workspace.id);
     const session: SessionRecord = { id: randomUUID(), title: title?.slice(0, 140) || 'New conversation',
       titleSource: title ? 'manual' : 'auto', workspaceId: workspace.id, parentId, createdAt: new Date().toISOString(),
-      permission: input.permission ?? 'standard' };
+      permission };
     this.commit({ ...this.state, sessions: [...this.state.sessions, session] });
     this.notify(session.id);
     this.observe?.({ type: 'session-created', sessionId: session.id });
