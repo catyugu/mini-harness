@@ -2,7 +2,7 @@ import { createServer, type Server } from 'node:http';
 import { mkdtempSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { getPaths, ensurePaths, writeJson } from '../../src/config.js';
+import { getPaths, ensurePaths, writeJson } from '../../packages/platform/config.js';
 
 export interface MockProvider {
   url: string;

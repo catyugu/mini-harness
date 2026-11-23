@@ -5,8 +5,8 @@ import { fileURLToPath } from 'node:url';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import type { getPaths } from './config.js';
-import { json } from './transport/http.js';
+import type { getPaths } from '../platform/config.js';
+import { json } from '../transport/http.js';
 import { MiniHarnessRuntime } from './application.js';
 
 const WEB_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'web');

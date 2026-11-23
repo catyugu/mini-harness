@@ -1,7 +1,7 @@
 import { mkdirSync, renameSync, rmSync, lstatSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { writeJson } from '../config.js';
+import { writeJson } from '../platform/config.js';
 import type { PluginMetadata } from '../contracts/plugins.js';
 
 type PluginFilesHost = {

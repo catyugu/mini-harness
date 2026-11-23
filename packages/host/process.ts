@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { realpathSync, rmSync } from 'node:fs';
 import { createServer, type ListenOptions } from 'node:net';
-import { readJson } from './config.js';
+import { readJson } from '../platform/config.js';
 
 export interface ServerInfo { pid: number; url: string; token: string; startedAt: string }
 
