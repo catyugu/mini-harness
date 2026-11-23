@@ -1,6 +1,6 @@
 import type { Context } from 'cordis';
-import { HttpReply } from '../../src/contracts/routes.js';
-import { installPlugin, uninstallPlugin, frontendSource } from '../../src/plugins/files.js';
+import { HttpReply } from '../contracts/routes.js';
+import { installPlugin, uninstallPlugin, frontendSource } from './files.js';
 
 /** All local plugin filesystem mutations and browser source delivery belong to Plugins. */
 export function setup(ctx: Context) {

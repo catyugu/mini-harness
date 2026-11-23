@@ -1,13 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import { prepareInput } from '../../src/input.js';
-import type { Attachment } from '../../src/contracts/input.js';
-import type { RunAgentPort } from '../../src/contracts/agent.js';
+import { prepareInput } from '../platform/input.js';
+import type { Attachment } from '../contracts/input.js';
+import type { RunAgentPort } from '../contracts/agent.js';
 import type { AgentSession } from '@earendil-works/pi-coding-agent';
-import type { Conversation, ModelChoice } from '../../src/contracts/conversation.js';
-import type { StreamEvent, RunEvent, RunInfo } from '../../src/contracts/transport.js';
+import type { Conversation, ModelChoice } from '../contracts/conversation.js';
+import type { StreamEvent, RunEvent, RunInfo } from '../contracts/transport.js';
 import { RunEvents } from './events.js';
 type ThinkingLevel = AgentSession['thinkingLevel'];
-import type { SessionStore } from '../../src/contracts/services.js';
+import type { SessionStore } from '../contracts/services.js';
 
 
 interface RunOptions {

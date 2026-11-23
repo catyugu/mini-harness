@@ -1,7 +1,7 @@
-import type { BuiltinPlugin } from '../../src/contracts/plugins.js';
+import type { BuiltinPlugin } from '../contracts/plugins.js';
 
 /** One metadata definition for the host, settings, and browser loader. */
 export const manifest: Omit<BuiltinPlugin, 'setup'> = {
   id: 'session-helper', title: 'Session helper', description: 'Copy messages and edit/resend prompts on a Pi session branch.',
-  icon: 'edit', browser: '/features/session-helper/client.js', inject: ['harnessRevision', 'harnessRoutes'],
+  icon: 'edit', browser: '/packages/session-helper/client.js', inject: ['harnessRevision', 'harnessRoutes'],
 };

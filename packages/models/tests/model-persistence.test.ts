@@ -2,9 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { MiniHarnessRuntime } from '../../../src/application.js';
-import { createMiniHarnessServer } from '../../../src/server.js';
-import { readJson, writeJson } from '../../../src/config.js';
+import { MiniHarnessRuntime } from '../../host/application.js';
+import { createMiniHarnessServer } from '../../host/server.js';
+import { readJson, writeJson } from '../../platform/config.js';
 import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.js';
 
 test('recent main model survives navigation, child overrides and a restart through the real Pi SDK', async (t) => {
