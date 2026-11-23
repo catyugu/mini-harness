@@ -4,26 +4,30 @@ import { resolve } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
-import { browserEntries } from '../../packages/ui/manifest.js';
+import { plugins } from '../../packages/host/composition.js';
+import { fixture } from '../support/api-fixture.js';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
-const owned = new Set(browserEntries.map(({ id }) => id));
 
-test('browser graph declares one exported implementation and valid dependencies for each core plugin', () => {
-  assert.equal(owned.size, browserEntries.length, 'Duplicate browser plugin ids');
-  const started = new Set<string>();
-  for (const entry of browserEntries) {
-    assert.match(entry.id, /^core:[a-z-]+$/);
+test('the composed browser graph is derived from the mounted capability descriptors', async (t) => {
+  const { request } = await fixture(t);
+  const { body } = await request('/bootstrap');
+  const mounted = new Map<string, { browser?: string }>(body.ui.map((entry) => [entry.id, entry]));
+  assert.equal(mounted.size, body.ui.length);
+  assert.deepEqual(Object.keys(body), ['ui']);
+  const browser = new Set(plugins.filter(({ browser }) => browser).map(({ id }) => id));
+  for (const entry of plugins.filter(({ browser }) => browser)) {
     assert.match(entry.browser, /^\/packages\/[a-z-]+(?:\/[a-z-]+)*\.js$/);
     const source = resolve(root, entry.browser.slice(1).replace(/\.js$/, '.ts'));
     assert.ok(existsSync(source), 'Missing browser entry: ' + entry.browser);
     const ast = ts.createSourceFile(source, readFileSync(source, 'utf8'), ts.ScriptTarget.Latest, true);
     assert.ok(ast.statements.some((statement) => ts.isExportAssignment(statement) && !statement.isExportEquals),
       'Missing default browser plugin export: ' + entry.browser);
-    for (const required of entry.requires ?? []) {
-      assert.ok(owned.has(required), 'Unknown core browser dependency: ' + required);
-      assert.ok(started.has(required), 'Core browser graph must declare dependencies first: ' + entry.id + ' -> ' + required);
-    }
-    started.add(entry.id);
+    for (const required of entry.browserRequires ?? []) assert.ok(browser.has(required));
+    if (entry.required || entry.defaultEnabled) assert.equal(mounted.get(entry.id)?.browser, entry.browser);
   }
+  await request('/settings', 'PATCH', { plugins: { files: false, shell: true } });
+  const changed = (await request('/bootstrap')).body.ui;
+  assert.ok(!changed.some(({ id }) => id === 'files'));
+  assert.ok(changed.some(({ id }) => id === 'shell' && browser.has(id)));
 });

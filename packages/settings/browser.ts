@@ -1,5 +1,4 @@
 import type {} from '../ui-slots/registry.js';
-import type { Settings } from '../contracts/config.js';
 import { payload, scopedElements } from '../web/api.js';
 import type { BrowserPlugin, FrontendApi } from '../ui-runtime/frontend.js';
 import { icon } from '../ui-primitives/icons.js';
@@ -14,9 +13,9 @@ declare module '../ui-slots/registry.js' {
 }
 
 export const settingsPlugin: BrowserPlugin = {
-  id: 'core:settings', inject: ['miniState', 'miniLayout'],
+  id: 'core:settings', inject: ['miniSettingsData', 'miniLayout'],
   setup(ctx, api) {
-    const { miniLayout: layout, miniState: state } = ctx;
+    const { miniLayout: layout, miniSettingsData: state } = ctx;
     const settings = mountSettings(api);
     ctx.provide('miniSettings', settings);
     ctx.provide('miniSettingsPages', { addPage: settings.addPage });
@@ -29,14 +28,14 @@ export const settingsPlugin: BrowserPlugin = {
     const content = fromMarkup('<div class="appearance-settings"><p class="hint form-error" role="alert"></p></div>');
     const status = content.querySelector('[role="alert"]');
     content.prepend(field('Theme', theme));
-    function sync() { theme.value = state.get().settings.appearance; }
+    function sync() { theme.value = state.get().appearance; }
     sync();
-    state.on('settings', sync, api.signal);
+    state.subscribe(sync, api.signal);
     api.onDispose(settings.addPage('Appearance', content));
     theme.onchange = async () => {
       theme.disabled = true;
       status.textContent = '';
-      try { state.apply(await api.request<Settings>('/settings', payload('PATCH', { appearance: theme.value }))); }
+      try { await api.request('/settings', payload('PATCH', { appearance: theme.value })); await state.refresh(); }
       catch (error) { status.textContent = error.message; sync(); }
       finally { theme.disabled = false; }
     };

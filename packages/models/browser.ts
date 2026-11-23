@@ -6,13 +6,13 @@ import { button, field, fromMarkup } from '../ui-primitives/primitives.js';
 import type { ProviderInfo, ProviderModel } from '../web/contracts/providers.js';
 
 export const modelPlugin: BrowserPlugin = {
-  id: 'core:models', inject: ['miniSettings', 'miniState'],
+  id: 'core:models', inject: ['miniSettings', 'miniModels'],
   setup(ctx, api) {
-    const { miniSettings: settings, miniState: state } = ctx;
+    const { miniSettings: settings, miniModels: state } = ctx;
     const manager = providerManager(api, () => state.get().providers, state.refresh);
     api.onDispose(settings.addPage('Model', manager.content, true));
     settings.onClose(manager.reset, api.signal);
-    state.on('bootstrap', manager.render, api.signal);
+    state.subscribe(manager.render, api.signal);
     if (!state.get().models.some((model) => model.configured)) settings.open(true);
   }
 };

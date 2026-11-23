@@ -2,11 +2,11 @@ import type { BrowserPlugin } from '../../ui-runtime/frontend.js';
 import { sessionNavigation } from './navigation.js';
 
 export const navigationPlugin: BrowserPlugin = {
-  id: 'core:navigation', inject: ['miniState', 'miniLayout', 'miniPages', 'miniHeader', 'miniWorkspace'],
+  id: 'core:navigation', inject: ['miniSelection', 'miniSessions', 'miniWorkspaces', 'miniLayout', 'miniPages', 'miniHeader', 'miniWorkspace'],
   setup(ctx, api) {
-    const { miniLayout: layout, miniPages: pages, miniHeader: header, miniState: state, miniWorkspace: workspace } = ctx;
+    const { miniLayout: layout, miniPages: pages, miniHeader: header, miniSelection: state, miniSessions: sessions, miniWorkspaces: workspaces, miniWorkspace: workspace } = ctx;
     sessionNavigation(api, {
-      state,
+      state, sessions, workspaces,
       select(id, draft) {
         const changed = state.selectedWorkspace !== id;
         state.selectWorkspace(id);
@@ -15,7 +15,7 @@ export const navigationPlugin: BrowserPlugin = {
         else state.changed();
         if (!draft) layout.closeDrawer();
       },
-      chooseWorkspace: (onAdd) => workspace.open(state.workspace(), onAdd),
+      chooseWorkspace: (onAdd) => workspace.open(workspaces.get().find(({ id }) => state.selectedWorkspace === id), onAdd),
       renameWorkspace: workspace.rename,
       removeWorkspace: workspace.remove,
       activate: (id) => state.dispatchEvent(new CustomEvent('open', { detail: id })),

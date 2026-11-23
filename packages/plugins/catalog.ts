@@ -21,17 +21,35 @@ export interface PluginPlan {
   source?: string;
   config?: Record<string, unknown>;
   requires: string[];
-  liveConfig?: boolean;
+  browser?: string;
+  browserRequires?: string[];
+  web?: boolean;
 }
 
 export class PluginCatalog {
   readonly builtins: Map<string, BuiltinPlugin>;
-  private readonly systemIds: Set<string>;
+  constructor(private readonly directory: string, builtins: BuiltinPlugin[], private readonly rootServices: string[]) {
+    this.builtins = new Map(builtins.map((plugin) => [plugin.id, plugin]));
+    if (this.builtins.size !== builtins.length) throw new Error('Duplicate builtin plugin ID');
+    const services = new Set(builtins.flatMap(({ provides }) => provides ?? []));
+    for (const service of rootServices) if (services.has(service)) throw new Error('Duplicate provider for ' + service);
+    for (const { id, inject = [], browserRequires = [] } of builtins) {
+      for (const service of inject) if (!rootServices.includes(service) && !services.has(service))
+        throw new Error('Missing provider for ' + service + ' (' + id + ')');
+      for (const dependency of browserRequires) if (!this.builtins.get(dependency)?.browser)
+        throw new Error('Missing browser dependency: ' + dependency);
+    }
+  }
 
-  constructor(private readonly directory: string, system: BuiltinPlugin[], builtins: BuiltinPlugin[]) {
-    this.systemIds = new Set(system.map(({ id }) => id));
-    this.builtins = new Map([...system, ...builtins].map((plugin) => [plugin.id, plugin]));
-    if (this.builtins.size !== system.length + builtins.length) throw new Error('Duplicate builtin plugin ID');
+  effective(settings: Settings): Settings {
+    const plugins = { ...settings.plugins };
+    const pluginConfig = { ...settings.pluginConfig };
+    for (const { id, required, configSchema, defaultEnabled } of this.builtins.values()) {
+      if (required) continue;
+      plugins[id] ??= defaultEnabled ?? false;
+      if (configSchema) pluginConfig[id] = configDefaults(configSchema, structuredClone(pluginConfig[id] ?? {}));
+    }
+    return { ...settings, plugins, pluginConfig };
   }
 
   reserved(id: string) { return this.builtins.has(id); }
@@ -76,23 +94,42 @@ export class PluginCatalog {
   }
 
   metadata() {
-    return [...[...this.builtins.values()].filter(({ id }) => !this.systemIds.has(id)).map(({ inject, setup, ...metadata }) => metadata),
+    return [...[...this.builtins.values()].filter(({ required }) => !required).map(({ inject, setup, provides, optional, browserRequires, scope, required, configChanges, ...metadata }) => metadata),
       ...this.discover().map(({ metadata }) => metadata)];
   }
 
-  plans(settings: Settings) {
-    const next = [
-      ...[...this.builtins.values()].filter(({ id }) => this.systemIds.has(id) || settings.plugins[id] === true)
-        .map(({ id, requires = [], configSchema, liveConfig }): PluginPlan => ({
-        id, requires, liveConfig, config: this.configValues(id, settings, configSchema)
-      })),
-      ...this.discover().filter(({ metadata: { id } }) => settings.plugins[id]).map(({ source, metadata }): PluginPlan => {
-        if (metadata.error) throw new Error('Invalid plugin ' + metadata.id + ': ' + metadata.error);
-        return { id: metadata.id, source, requires: metadata.requires ?? [],
-          config: this.configValues(metadata.id, settings, metadata.configSchema) };
-      })
-    ];
-    const desired = new Map(next.map((plan) => [plan.id, plan]));
+  plans(settings: Settings, unavailable?: (id: string, error: unknown) => boolean) {
+    const enabled = [...this.builtins.values()].filter(({ id, required }) => required || settings.plugins[id] === true);
+    const providers = new Map<string, string>();
+    for (const { id, provides = [] } of enabled) for (const service of provides) {
+      if (providers.has(service)) throw new Error('Multiple enabled providers for ' + service);
+      providers.set(service, id);
+    }
+    const desired = new Map<string, PluginPlan>();
+    const add = (id: string, make: () => PluginPlan) => {
+      try { desired.set(id, make()); }
+      catch (error) { if (!unavailable?.(id, error)) throw error; }
+    };
+    for (const { id, requires = [], inject = [], configSchema, browser, browserRequires } of enabled) {
+      add(id, () => {
+        const dependencies = inject.filter((service) => !this.rootServices.includes(service)).map((service) => {
+          const provider = providers.get(service);
+          if (!provider) throw new Error('No enabled provider for ' + service);
+          return provider;
+        });
+        return { id, browser, browserRequires,
+          requires: [...new Set([...requires, ...dependencies])],
+          config: this.configValues(id, settings, configSchema) };
+      });
+    }
+    for (const { source, metadata } of this.discover()) {
+      const { id, web, requires = [], configSchema, error } = metadata;
+      if (!settings.plugins[id]) continue;
+      add(id, () => {
+        if (error) throw new Error('Invalid plugin ' + id + ': ' + error);
+        return { id, source, web, requires, browserRequires: requires, config: this.configValues(id, settings, configSchema) };
+      });
+    }
     const ordered: PluginPlan[] = [];
     const visiting = new Set<string>();
     const visited = new Set<string>();
@@ -102,12 +139,15 @@ export class PluginCatalog {
       const plan = desired.get(id);
       if (!plan) throw new Error('Required plugin is not enabled: ' + id);
       visiting.add(id);
-      for (const dependency of plan.requires) visit(dependency);
-      visiting.delete(id);
+      try { for (const dependency of plan.requires) visit(dependency); }
+      finally { visiting.delete(id); }
       visited.add(id);
       ordered.push(plan);
     };
-    for (const plan of next) visit(plan.id);
+    for (const id of desired.keys()) {
+      try { visit(id); }
+      catch (error) { if (!unavailable?.(id, error)) throw error; }
+    }
     return ordered;
   }
 

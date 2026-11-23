@@ -1,23 +1,22 @@
-import type { SettingsPatch } from '../contracts/config.js';
+import type { Settings, SettingsPatch } from '../contracts/config.js';
 import type { PluginMetadata } from '../contracts/plugins.js';
 import type { BrowserPlugin, FrontendApi } from '../ui-runtime/frontend.js';
-import type { Bootstrap } from '../web/types.js';
 import { payload } from '../web/api.js';
 import { icon } from '../ui-primitives/icons.js';
 import { button, dialog, field, fromMarkup, iconButton, saveToggle, toggle } from '../ui-primitives/primitives.js';
 import { readPluginValues, schemaFields } from './browser/fields.js';
 
 export const catalogPlugin: BrowserPlugin = {
-  id: 'core:plugins', inject: ['miniState', 'miniPages', 'miniSwitch'],
+  id: 'core:plugins', inject: ['miniPluginData', 'miniSettingsData', 'miniPages', 'miniSwitch'],
   setup(ctx, api) {
-    const { miniState: state, miniPages: pages, miniSwitch: syncPlugins } = ctx;
+    const { miniPluginData: plugins, miniSettingsData: settings, miniPages: pages, miniSwitch: syncPlugins } = ctx;
     const refresh = async () => {
-      await state.refresh();
-      const failures = await syncPlugins(state.get());
+      const failures = await syncPlugins();
       if (failures.size) throw new Error('Browser plugins failed: ' + [...failures.keys()].join(', '));
     };
-    const catalog = pluginCatalog(api, state.get, refresh, pages);
-    state.on('bootstrap', catalog.refresh, api.signal);
+    const catalog = pluginCatalog(api, () => ({ plugins: plugins.get(), settings: settings.get() }), refresh, pages);
+    plugins.subscribe(catalog.refresh, api.signal);
+    settings.subscribe(catalog.refresh, api.signal);
   }
 };
 
@@ -100,7 +99,7 @@ function installer(api: FrontendApi, installed: () => Promise<void>) {
   return modal;
 }
 
-function pluginCatalog(api: FrontendApi, snapshot: () => Bootstrap, refresh: () => Promise<void>, pages: { open(id?: string): void; register(id: string, node: HTMLElement): () => void }) {
+function pluginCatalog(api: FrontendApi, snapshot: () => { plugins: PluginMetadata[]; settings: Settings }, refresh: () => Promise<void>, pages: { open(id?: string): void; register(id: string, node: HTMLElement): () => void }) {
   const entry = fromMarkup<HTMLButtonElement>('<button type="button" class="nav-action" aria-label="Browse plugins" aria-controls="pluginCatalog"><span class="nav-label">Plugins</span></button>');
   entry.prepend(icon('plugin'));
   const page = fromMarkup(`<section id="pluginCatalog" class="catalog-page" tabindex="-1" aria-label="Plugin catalog">
@@ -234,7 +233,7 @@ function pluginCatalog(api: FrontendApi, snapshot: () => Bootstrap, refresh: () 
         const checked = Boolean(settings.plugins[plugin.id]);
         const control = toggle(plugin.title, checked);
         control.dataset.pluginToggle = plugin.id;
-        if (plugin.error) control.disabled = true;
+        if (plugin.error && !checked) control.disabled = true;
         const remove = plugin.trustedCode ? iconButton('Uninstall ' + plugin.title, 'trash', 'icon-button danger') : undefined;
         if (remove) {
           remove.hidden = checked;

@@ -6,6 +6,9 @@ import { prepareInput } from '../../platform/input.js';
 test('attachments enforce encoding, format and byte limits without creating files', () => {
   const png = 'iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAFElEQVR4nGPUCIhigAEmBiSAmwMAKdYA2gR3lpgAAAAASUVORK5CYII=';
   const prepared = prepareInput('', [{ name: 'one.png', mimeType: 'image/png', data: png }, { name: 'notes.md', mimeType: 'text/plain', data: Buffer.from('An attached note').toString('base64') }]);
+  assert.deepEqual(prepared.input, { userText: '', attachments: [
+    { name: 'one.png', mimeType: 'image/png' }, { name: 'notes.md', mimeType: 'text/plain' }
+  ] });
   assert.equal(prepared.images.length, 1); assert.match(prepared.text, /An attached note/);
   assert.throws(() => prepareInput('a', [{ name: 'fake.png', mimeType: 'image/png', data: 'eA==' }]), /Invalid image/);
   assert.throws(() => prepareInput('a', [{ name: 'b', mimeType: 'text/plain', data: '!!!' }]), /Invalid attachment/);

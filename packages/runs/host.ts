@@ -1,12 +1,27 @@
 import type { Context } from 'cordis';
+import { registerRoutes } from './routes.js';
+import { join } from 'node:path';
 import { Runs } from './runs.js';
+import { Checkpoints } from './checkpoints.js';
 
-/** Active work, streaming and cancellation are owned by Runs. */
 export function setup(ctx: Context) {
-  const runs = new Runs(ctx.harnessRegistry, ctx.harnessPi,
-    () => ctx.harnessSettings().model,
-    (id) => ctx.get('harnessOperations')!.assertAvailable(id),
-    (record, task, signal) => ctx.get('harnessDelegation')?.schedule(record, task, signal) ?? task());
+  const { harnessRegistry: catalog } = ctx;
+  const checkpoints = new Checkpoints(join(ctx.harnessState.paths.home, 'runs.json'), (id) => Boolean(catalog.get(id)));
+  const runs = new Runs(catalog, ctx.harnessPi, checkpoints, () => ctx.harnessSettings().model);
   ctx.provide('harnessRuns', runs);
-  ctx.provide('harnessRevision', { reviseAndStart: (id, input) => runs.reviseAndStart(id, input) });
+  ctx.effect(() => catalog.beforeDelete({
+    busy: (id) => runs.active(id),
+    async quiesce(ids) {
+      for (const id of ids) runs.cancel(id);
+      await Promise.allSettled(ids.map((id) => runs.completion(id)));
+    }
+  }));
+  ctx.effect(() => {
+    const onChange = (event: CustomEvent<{ id: string; deleted: boolean }>) => {
+      if (event.detail.deleted) checkpoints.remove(event.detail.id);
+    };
+    catalog.events.addEventListener('change', onChange);
+    return () => catalog.events.removeEventListener('change', onChange);
+  });
+  registerRoutes(ctx);
 }

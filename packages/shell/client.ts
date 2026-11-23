@@ -1,7 +1,5 @@
-import type { FrontendSetup, ToolView } from '../ui-runtime/frontend.js';
+import type { BrowserPlugin, ToolView } from '../ui-runtime/frontend.js';
 import { payload } from '../web/api.js';
-
-interface Approval { id: string; sessionId: string; command: string }
 
 function renderResult(tool: ToolView) {
   const result = typeof tool.content === 'string' ? tool.content : tool.content?.filter((b) => b.type === 'text').map((b) => b.text).join('\n');
@@ -14,22 +12,15 @@ function renderResult(tool: ToolView) {
   return pre;
 }
 
-const setup: FrontendSetup = (api, services) => {
-  api.tool('sandbox_shell', renderResult);
-  const list = document.createElement('div');
-  api.slots.register('conversation.approvals', list);
-  let pending = false;
-  let previous = '';
-  const poll = async () => {
-    if (pending || api.signal.aborted || document.hidden) return;
-    pending = true;
-    try {
-      const approvals = await api.request<Approval[]>('/approvals');
-      if (api.signal.aborted) return;
-      const key = JSON.stringify(approvals);
-      if (key === previous) return;
-      previous = key;
-      list.replaceChildren(...approvals.map((approval) => {
+const plugin: BrowserPlugin = {
+  id: 'shell', inject: ['miniApprovals', 'harnessBrowser'],
+  setup(ctx, api) {
+    const { miniApprovals: approvals, harnessBrowser: services } = ctx;
+    api.tool('sandbox_shell', renderResult);
+    const list = document.createElement('div');
+    api.slots.register('conversation.approvals', list);
+    function render() {
+      list.replaceChildren(...approvals.get().map((approval) => {
         const card = document.createElement('section');
         card.className = 'approval-card';
         const title = document.createElement('strong');
@@ -46,9 +37,7 @@ const setup: FrontendSetup = (api, services) => {
             for (const action of card.querySelectorAll('button')) action.disabled = true;
             try {
               await api.request('/approvals', payload('POST', { id: approval.id, allow }));
-              card.remove();
-              previous = '';
-              void poll();
+              await approvals.refresh();
             } catch (error) {
               if (!api.signal.aborted) services.report(error);
               for (const action of card.querySelectorAll('button')) action.disabled = false;
@@ -58,12 +47,9 @@ const setup: FrontendSetup = (api, services) => {
         }
         return card;
       }));
-    } catch (error) {
-      if (!api.signal.aborted) services.report(error);
-    } finally { pending = false; }
-  };
-  const timer = setInterval(() => void poll(), 1000);
-  api.onDispose(() => clearInterval(timer));
-  void poll();
+    }
+    approvals.subscribe(render, api.signal);
+    render();
+  }
 };
-export default setup;
+export default plugin;

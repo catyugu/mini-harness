@@ -3,13 +3,13 @@ import type { BrowserPlugin } from '../ui-runtime/frontend.js';
 /** Theme presentation is owned by the theme plugin, not by the global data mirror. */
 export const themePlugin: BrowserPlugin = {
   id: 'core:theme',
-  inject: ['miniState'],
+  inject: ['miniSettingsData'],
   setup(ctx, api) {
     const apply = () => {
-      document.documentElement.dataset.theme = ctx.miniState.get().settings.appearance;
+      document.documentElement.dataset.theme = ctx.miniSettingsData.get().appearance;
     };
     apply();
-    ctx.miniState.on('settings', apply, api.signal);
+    ctx.miniSettingsData.subscribe(apply, api.signal);
   }
 };
 

@@ -1,12 +1,12 @@
 import type { MessageContent, ViewMessage } from '../../../contracts/message.js';
 import type { RunEvent } from '../../../contracts/transport.js';
 import type { ConversationView } from '../../../web/types.js';
-import type { FrontendHost } from '../../../ui-runtime/frontend.js';
+import type { ToolView, MessageAction } from '../../../ui-runtime/frontend.js';
 import { icon } from '../../../ui-primitives/icons.js';
 import { renderMarkdown, markdownSource } from '../../../ui-primitives/markdown.js';
 import type { MessageActionContext } from '../../../ui-runtime/frontend.js';
 
-export function createMessageView(messages: HTMLElement, extensions: Pick<FrontendHost, 'render' | 'messageActions'>,
+export function createMessageView(messages: HTMLElement, extensions: { render(tool: ToolView, action?: boolean): HTMLElement | undefined; messageActions(): MessageAction[] },
   current: () => { sessionId?: string; leafId?: string | null }, retryLast: () => void) {
 const toolItems = new WeakMap<HTMLDetailsElement, Parameters<typeof toolCard>[0]>();
 const toolDurations = new Map<string, number>();
@@ -168,11 +168,22 @@ function appendHistory(message: ViewMessage) {
     return;
   }
   const text = textOf(message.content);
-  if (text) addMessage(message.role, text, message.timestamp, message);
+  const bubble = text || message.attachments?.length ? addMessage(message.role, text, message.timestamp, message) : undefined;
   for (const block of typeof message.content === 'string' ? [] : message.content ?? []) {
     if (block.type !== 'image' || !/^image\/(png|jpeg|gif|webp)$/.test(block.mimeType ?? '')) continue;
     const image = document.createElement('img'); image.className = 'message-image'; image.alt = 'Attached image';
     image.src = 'data:' + block.mimeType + ';base64,' + block.data; messages.append(image);
+  }
+  if (message.attachments?.length) {
+    const list = document.createElement('ul');
+    list.className = 'message-attachments';
+    list.setAttribute('aria-label', 'Attachments');
+    for (const attachment of message.attachments) {
+      const item = document.createElement('li');
+      item.textContent = attachment.name;
+      list.append(item);
+    }
+    bubble.append(list);
   }
   if (message.error) addMessage('error', message.error);
 }
@@ -214,7 +225,7 @@ function stream(initial: ConversationView) {
     const pinned = messages.scrollHeight - messages.clientHeight - messages.scrollTop < 96;
     switch (event.type) {
       case 'user':
-        appendHistory({ role: 'user', content: event.content, timestamp: Date.now() });
+        appendHistory({ role: 'user', content: event.content, attachments: event.attachments, timestamp: Date.now() });
         break;
       case 'assistant-start':
         finish();

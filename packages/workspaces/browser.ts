@@ -5,12 +5,19 @@ import { payload, workspaceRoute } from '../web/api.js';
 import { fileLabel, icon } from '../ui-primitives/icons.js';
 
 export const workspacePlugin: BrowserPlugin = {
-  id: 'core:workspace', inject: ['miniState'],
+  id: 'core:workspace', inject: ['miniSelection', 'miniSessions', 'miniWorkspaces', 'miniTabs'],
   setup(ctx, api) {
-    const { miniState: state } = ctx;
-    const picker = workspacePicker(api, () => state.get().sessions);
+    const { miniSelection: select, miniSessions: sessions, miniWorkspaces: workspaces, miniTabs: tabs } = ctx;
+    const picker = workspacePicker(api, sessions.get);
     ctx.provide('miniWorkspace', picker);
-    state.on('navigation', () => picker.label(state.workspace()), api.signal);
+    const update = () => {
+      picker.label(workspaces.get().find(({ id }) => id === select.selectedWorkspace));
+      tabs.selectScope(select.scope());
+      tabs.prune(new Set(sessions.get().map(({ id }) => id)), new Set(workspaces.get().map(({ id }) => id)));
+    };
+    select.subscribe(update, api.signal);
+    sessions.subscribe(update, api.signal);
+    update();
   }
 };
 

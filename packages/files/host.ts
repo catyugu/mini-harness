@@ -2,16 +2,23 @@ import type { ToolDefinition } from '@earendil-works/pi-coding-agent';
 import { relative, resolve, sep } from 'node:path';
 import type { Context } from 'cordis';
 import { Inspection } from './inspection.js';
+import { Workspace } from './workspace.js';
+import { fileTools } from './tools.js';
 import type { RouteRequest } from '../contracts/routes.js';
 
 
 export function setup(ctx: Context) {
     const { home, cwd } = ctx.harnessState.paths;
+    const open = (workspaceId: string) => {
+      const workspace = ctx.harnessWorkspaces.get(workspaceId);
+      return new Workspace(ctx.harnessWorkspaces.resolveRoot(workspace.path, workspace.id), home, true);
+    };
+    ctx.provide('harnessFiles', { open });
     let cachedRoot: string;
     let definitions: ToolDefinition[];
-    function tools(root: string) {
+    function tools(root: string, workspaceId?: string) {
       if (cachedRoot !== root) {
-        definitions = new Inspection(root, home, true).files.tools();
+        definitions = fileTools(root, workspaceId ? open(workspaceId) : new Workspace(root, home, true));
         cachedRoot = root;
       }
       return definitions;
@@ -19,7 +26,7 @@ export function setup(ctx: Context) {
     for (const [index, { name }] of tools(cwd).entries()) {
       ctx.effect(() => ctx.harnessTools.register(name, (id) => {
         const root = ctx.harnessWorkspace.resolve(id);
-        const tool = tools(root)[index];
+        const tool = tools(root, ctx.harnessRegistry.get(id)?.workspaceId)[index];
         if (tool.name !== 'edit' && tool.name !== 'write') return tool;
         return {
           ...tool,

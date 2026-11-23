@@ -5,6 +5,7 @@
   "type": "module",
   "dependencies": {
     "@mini-harness/contracts": "file:../contracts",
-    "@mini-harness/platform": "file:../platform"
+    "@mini-harness/platform": "file:../platform",
+    "@mini-harness/transport": "file:../transport"
   }
 }

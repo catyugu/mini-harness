@@ -42,9 +42,8 @@ test('compiled browser tests and host-only feature code are not public static as
     headers: { Authorization: 'Bearer ' + app.token }
   });
   assert.equal(bootstrap.status, 200);
-  const snapshot = await bootstrap.json() as { ui: { browser: string }[]; plugins: { browser?: string }[] };
-  const pending = ['/packages/ui-runtime/boot.js', ...snapshot.ui.map(({ browser }) => browser),
-    ...snapshot.plugins.flatMap((plugin) => plugin.browser ? [new URL(plugin.browser, base).pathname] : [])];
+  const snapshot = await bootstrap.json() as { ui: { browser?: string }[] };
+  const pending = ['/packages/ui-runtime/boot.js', ...snapshot.ui.flatMap(({ browser }) => browser ? [browser] : [])];
   const seen = new Set<string>();
   while (pending.length) {
     const path = pending.shift()!;

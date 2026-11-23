@@ -34,7 +34,7 @@ test('real Pi SDK through HTTP: streaming, persistence, Skills, export and perma
   assert.equal(bundle.status, 200);
   assert.match(await bundle.text(), /mini-harness-token/);
 
-  const bootstrap = await (await get('/api/bootstrap')).json();
+  const bootstrap = await (await get('/api/models')).json();
   assert.ok(bootstrap.models.some((m: {provider: string; id: string}) =>
     m.provider === 'local-mock' && m.id === 'mock-model'));
 
@@ -58,7 +58,9 @@ test('real Pi SDK through HTTP: streaming, persistence, Skills, export and perma
 
   const stored = await (await get('/api/sessions/' + session.id)).json();
   assert.equal(stored.title, 'Test SDK integration');
-  assert.ok(stored.file && existsSync(stored.file));
+  assert.equal(Object.hasOwn(stored, 'piSessionRef'), false);
+  const file = app.runtime.registry.get(session.id).piSessionRef;
+  assert.ok(file && existsSync(file));
   assert.ok(stored.messages.some((m: {role: string}) => m.role === 'assistant'));
 
   // Native skill command is resolved by Pi, using the configured .mini-harness skill directory.
@@ -96,6 +98,6 @@ test('real Pi SDK through HTTP: streaming, persistence, Skills, export and perma
   assert.equal(deleted.status, 200);
   assert.equal((await deleted.json()).deleted[0], session.id);
   assert.equal((await app.runtime.registry.list()).length, 0);
-  assert.equal(existsSync(stored.file), false);
+  assert.equal(existsSync(file), false);
 });
 

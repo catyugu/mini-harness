@@ -1,3 +1,5 @@
+import type { InputAttachment } from './input.js';
+
 export interface ContentBlock {
   type: string;
   text?: string;
@@ -15,6 +17,7 @@ export interface ViewMessage {
   parentId?: string | null;
   role: 'user' | 'assistant' | 'toolResult';
   content: MessageContent;
+  attachments?: InputAttachment[];
   timestamp: number;
   error?: string;
   toolName?: string;

@@ -1,16 +1,20 @@
 import type { RunInfo } from './transport.js';
 
 export interface ModelChoice { provider: string; id: string }
-export interface Conversation {
+
+export interface SessionRecord {
   id: string;
-  title: string;
-  cwd: string;
   workspaceId: string;
-  waitingApproval?: boolean;
   parentId: string | null;
-  file: string | null;
+  title: string;
+  titleSource: 'auto' | 'manual';
+  createdAt: string;
+  piSessionRef: string | null;
+}
+
+export interface Conversation extends Omit<SessionRecord, 'piSessionRef'> {
+  updatedAt: string;
+  waitingApproval?: boolean;
   model?: ModelChoice;
   run?: RunInfo;
-  createdAt: string;
-  updatedAt: string;
 }

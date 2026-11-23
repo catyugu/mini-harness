@@ -4,11 +4,12 @@ import test from 'node:test';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
+import { plugins } from '../../packages/host/composition.js';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const packages = join(root, 'packages');
 const web = join(packages, 'web');
-const capabilityNames = ['agent','files','models','plugins','runs','session-helper','sessions','settings','shell','skills','subagents','ui','workspaces'];
+const capabilityNames = ['agent','approvals','files','models','plugins','process-execution','runs','session-helper','sessions','settings','shell','skills','subagents','tools','ui','workspaces'];
 const infrastructureNames = ['contracts','host','kernel','platform','transport'];
 function files(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -37,7 +38,7 @@ test('one package tree, with feature-owned tests and no legacy source axes', () 
     assert.ok(existsSync(owned), name + ' lacks capability');
     if (['files','skills','shell','subagents','session-helper'].includes(name))
       assert.ok(existsSync(join(owned,'manifest.ts')), name + ' lacks manifest');
-    assert.ok(existsSync(join(owned,'host.ts')) || existsSync(join(owned,'client.ts')), name + ' has no entry');
+    assert.ok(existsSync(join(owned,'host.ts')) || existsSync(join(owned,'manifest.ts')), name + ' has no entry');
   }
   assert.ok(existsSync(join(packages,'plugins','manager.ts')));
   assert.ok(existsSync(join(packages,'host','application.ts')));
@@ -84,61 +85,36 @@ test('browser values never load host-only modules', () => {
     }
   }
 });
-test('each internal Cordis provider declares every required scoped service read', () => {
-  const indexPath = join(packages, 'host', 'composition.ts');
-  const indexSource = ts.createSourceFile(indexPath, readFileSync(indexPath, 'utf8'), ts.ScriptTarget.Latest, true);
-  const imports = new Map<string, string>();
-  for (const statement of indexSource.statements) {
-    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
-    const bindings = statement.importClause?.namedBindings;
-    if (!bindings || !ts.isNamedImports(bindings)) continue;
-    for (const item of bindings.elements) {
-      const specifier = statement.moduleSpecifier.text;
-      if (specifier.startsWith('.')) imports.set(item.name.text,
-        resolve(dirname(indexPath), specifier).replace(/\.js$/, '.ts'));
+test('each capability declares the services it reads and publishes', () => {
+  const composition = readFileSync(join(packages, 'host', 'composition.ts'), 'utf8');
+  const manifests = [...composition.matchAll(/import { manifest as \w+ } from '..\/([^']+)\.js'/g)];
+  assert.equal(manifests.length, plugins.length);
+  const byId = new Map(plugins.map((plugin) => [plugin.id, plugin]));
+  for (const [, specifier] of manifests) {
+    const path = join(packages, specifier + '.ts');
+    const descriptor = readFileSync(path, 'utf8');
+    const id = descriptor.match(/id: '([^']+)'/)[1];
+    const plugin = byId.get(id);
+    assert.ok(plugin);
+    let source = descriptor;
+    const impl = /import { setup } from '\.\/([^']+)\.js'/.exec(descriptor);
+    if (impl) {
+      const host = readFileSync(join(dirname(path), impl[1] + '.ts'), 'utf8');
+      source += host;
+      if (/register(?:Session)?Routes\(ctx\)/.test(host)) source += readFileSync(join(dirname(path), 'routes.ts'), 'utf8');
     }
+    const provided = [...source.matchAll(/ctx\.provide\('([^']+)'/g)].map((match) => match[1]);
+    assert.deepEqual(provided.sort(), [...(plugin.provides ?? [])].sort(), id);
+    const required = new Set([...(plugin.inject ?? []), ...provided]);
+    const reads = [...source.matchAll(/ctx\.(harness\w+)\b/g)].map((match) => match[1]);
+    for (const [, destructure] of source.matchAll(/(?:const|let)\s+{([^}]+)}\s*=\s*ctx\b/g))
+      for (const [name] of destructure.matchAll(/harness\w+/g)) reads.push(name);
+    for (const service of reads) assert.ok(required.has(service), id + ' reads undeclared service ' + service);
+    for (const [, service] of source.matchAll(/ctx\.get\('([^']+)'/g))
+      assert.ok(plugin.optional?.includes(service), id + ' reads undeclared optional service ' + service);
   }
-  const entries = indexSource.statements.filter(ts.isVariableStatement)
-    .flatMap((statement) => [...statement.declarationList.declarations])
-    .find((item) => ts.isIdentifier(item.name) && item.name.text === 'system');
-  assert.ok(entries?.initializer && ts.isArrayLiteralExpression(entries.initializer), 'System capabilities have a declarative composition root');
-  const property = (node: ts.ObjectLiteralExpression, name: string) =>
-    node.properties.find((item): item is ts.PropertyAssignment =>
-      ts.isPropertyAssignment(item) && (ts.isIdentifier(item.name) || ts.isStringLiteral(item.name)) && item.name.text === name);
-  for (const entry of entries.initializer.elements) {
-    assert.ok(ts.isObjectLiteralExpression(entry), 'System entries are static objects');
-    const id = property(entry, 'id')?.initializer;
-    const inject = property(entry, 'inject')?.initializer;
-    const setup = property(entry, 'setup')?.initializer;
-    assert.ok(id && ts.isStringLiteral(id) && inject && ts.isArrayLiteralExpression(inject)
-      && setup && ts.isIdentifier(setup), 'System metadata declares ID, inject and setup');
-    const allowed = new Set(inject.elements.map((value) => {
-      assert.ok(ts.isStringLiteral(value), 'Inject names are literal strings');
-      return value.text;
-    }));
-    const owner = imports.get(setup.text);
-    assert.ok(owner && existsSync(owner), id.text + ' must have an owning implementation');
-    let code = readFileSync(owner, 'utf8');
-    // Account for a host delegating its setup to a same-feature registration function.
-    const hostAst = ts.createSourceFile(owner, code, ts.ScriptTarget.Latest, true);
-    for (const statement of hostAst.statements) {
-      if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
-      const bindings = statement.importClause?.namedBindings;
-      if (!bindings || !ts.isNamedImports(bindings)) continue;
-      for (const item of bindings.elements) {
-        const alias = item.name.text;
-        if (!new RegExp('\\b' + alias + '\\s*\\(\\s*ctx\\s*[,)]').test(code)) continue;
-        const imported = resolve(dirname(owner), statement.moduleSpecifier.text).replace(/\.js$/, '.ts');
-        if (imported.startsWith(dirname(owner) + sep) && existsSync(imported)) code += readFileSync(imported, 'utf8');
-      }
-    }
-    const provided = new Set([...code.matchAll(/ctx\.provide\(['"]([A-Za-z]\w+)['"]/g)].map((match) => match[1]));
-    const accessed = [...code.matchAll(/ctx\.(harness[A-Za-z]\w*)\b/g)].map((match) => match[1]);
-    for (const name of accessed) {
-      assert.ok(allowed.has(name) || provided.has(name),
-        id.text + ' reads ' + name + ' without an inject declaration; optional services must use ctx.get()');
-    }
-  }
+  for (const removed of ['ui/manifest.ts', 'sessions/operations.ts', 'web/models/browser-state.ts'])
+    assert.equal(existsSync(join(packages, removed)), false);
 });
 
 /** The private package manifests are architectural declarations, not separate releases. */

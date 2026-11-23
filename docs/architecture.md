@@ -1,54 +1,48 @@
 # Architecture
 
-mini-harness publishes **one npm package**. Internally, every folder under `packages/` is a private package with its own `package.json`, but these are **not** separately released or installed as npm workspaces. The root npm manifest and lockfile own the actual runtime dependency installation. Cordis owns service injection and plugin lifecycle; the **official Pi SDK** owns agent execution, model access, and conversation history. A capability is defined by what it owns, not by the number of source files.
+mini-harness ships as one npm package. Cordis composes capabilities and manages their lifetimes. The official Pi SDK runs agents, talks to model providers, and manages conversation history and context.
 
-## Responsibility boundaries
+## Capability descriptors
 
-| Owner | Responsibility |
-| --- | --- |
-| `packages/kernel/mounts.ts` | Generic Cordis fiber mount, dependency-sensitive remount, reverse disposal and rollback. It knows nothing about Sessions, Agents, Workspaces, HTTP or app settings. |
-| `packages/contracts/` | Implementation-free service, configuration, tool, route and transport types. Runtime configuration I/O belongs to `platform`. |
-| `packages/plugins/` | Plugin discovery, manifest and configuration validation, and adaptation onto the generic fiber mount lifecycle. |
-| `packages/host/application.ts` | Small composition root and public runtime facade. It injects service definitions but has no business algorithms. |
-| `packages/<capability>/` | The actual business rules, Cordis providers, registered routes and optional browser entry. Each feature owns its lifecycle. |
-| `packages/ui-runtime/` | Generic outlet, command, tab, message-action and contribution registration with disposal. No concrete UI components. |
-| `packages/ui-runtime/boot.ts` | Generic Cordis browser runtime, loader and boot. Consumes the Host-published browser graph without importing any feature implementation. |
-| `packages/ui/manifest.ts` | Declarative browser plugin roster consumed by the bootstrap API. Shared graph types belong to `contracts/browser.ts`. |
-| `packages/ui-slots/` | Framework-neutral, scope-owned UI slot registry. Contributions can precede owners and survive owner remounts. |
-| `packages/ui-layout/` | Composable app frame, navigation page registration and right panel geometry. |
-| `packages/ui-theme/`, `packages/ui-primitives/` | Central theme tokens and shared UI controls. |
-| `packages/host/server.ts` | Local HTTP server: static assets, authorization, origin checking, process controls and registered route dispatch only. |
+Each built-in capability declares its descriptor in its own directory. The host composition root imports those descriptors. A descriptor can declare server setup, a browser entrypoint, a configuration schema, required and optional services, and the services it provides. Features that the app needs at startup use the same mounting path as user-switchable features.
 
-Essential services mount before optional user-facing plugins through `packages/host/composition.ts`. They are Cordis capabilities even though they have no on/off switches. Optional Subagents owns its semaphore and delegation provider. Runs delegates through the optional service when present, and runs directly when it is absent.
+The catalog resolves required service dependencies against the enabled providers. Each service has at most one enabled provider in the application context. A workspace or conversation ID scopes access to services that manage resources for more than one workspace or session. The browser graph uses the same descriptors and contains the entries published after server setup succeeds. Built-ins can declare additional browser dependencies for the layout and contribution points they use.
 
-Plugin settings are uniformly stored under `settings.pluginConfig[pluginId]` and validated through the owning feature's schema. Settings publishes committed changes; consumers own live update hooks. Lifecycle-changing edits require idle runs, while the Subagents live policy can update without a remount.
+The Cordis kernel mounts providers before consumers and disposes consumers before providers. The plugin runtime validates the candidate graph and configuration before applying a change. It publishes the resulting browser graph after the settings write succeeds. On a failed change, it restores the previous mounts. During startup an optional failure is visible in the plugin catalog, and the rest of the app can start.
 
-## Browser composition and ownership
+Configuration schemas define plugin defaults. Settings persists user overrides and owns the global model choice. Most plugin configuration changes remount the affected capability. Subagents uses committed policy for new delegations while keeping one scheduler for active children and queued work. Tool registrations have their own cancellation and cleanup. On disposal, the registry removes the tool from future agent sessions, aborts invocations of that tool, and waits for their cleanup. Other runs can continue. Pi refreshes an idle AgentSession's tools and Skills when opening it for new work.
 
-The Host bootstrap publishes a browser plugin graph (`ui`) alongside optional plugin metadata. The generic `ui-runtime/boot.ts` loads enabled entries in dependency order and mounts them in Cordis scopes. Built-in browser entries export a `BrowserPlugin` object, while installed local `web.js` entries export an extension setup function; both are mounted through the same scoped lifecycle.
+## Data ownership
 
-Each feature owns its browser view and may contribute to named slots by `api.slots.register(name, element, order?)`. Slot owners call `api.slots.define(name, container, kind?)`. The registry retains contributions when an owner is not mounted, and every effect cleanup releases its own contribution or ownership declaration. The layout contributes a page registry, header service and drawer controls, without importing Session, Workspace, Settings or Plugin business modules.
+| State | Owner |
+| - | - |
+| Workspace IDs, roots, labels, and order | Workspaces, in `workspaces.json` |
+| Session identity, title, workspace reference, and parent relationship | Session Catalog, in `sessions.json` |
+| Messages, branches, model history, thinking level, and input metadata | Pi SessionManager, in Pi JSONL |
+| Steering and follow-up queues | Pi AgentSession |
+| Active runs, cancellation, and restart checkpoints | Runs, with the latest checkpoint in `runs.json` |
+| Pending approval requests | Approvals |
+| Provider definitions and credentials | Pi ModelRuntime, in `models.json` and `auth.json` |
+| Plugin switches, configuration overrides, appearance, and default model | Settings |
+| Mounted plugin state | Plugin runtime |
+| Selected conversation and workspace, expanded branches, and open panels | Browser UI |
 
-The theme plugin owns theme application. Primitives are shared from `ui-primitives`; feature browser implementations should not invent independent basic controls. UI foundations are private internal packages but all dist output is part of the single published npm package. The generated browser stylesheet is assembled from theme and layout sources without keeping a runtime compatibility alias.
+The Session Catalog resolves workspace paths through Workspaces and keeps a reference to the Pi file. Reading a conversation projects the active Pi branch from memory or the file without opening an executable AgentSession. Run streaming keeps a bounded in-memory replay buffer. A restart marks queued or running checkpoints interrupted and uses the existing Pi history for replay. Text attachment content is part of the Pi user message, while the message's attachment metadata records names and media types for display. Titles are derived from the original input.
 
-## Internal package dependency graph
+Deleting a session reserves its subtree, waits for Runs and Pi to release it, then permanently deletes its Pi histories. A small journal allows an interrupted deletion to finish at restart. Workspace deletion uses the same cascade and preserves the project directory. At startup the one-time index upgrade moves existing Run checkpoints to their own file and rewrites the catalog records in the new format.
 
-Every private `packages/<name>/package.json` declares **only** its direct internal edges, using `@mini-harness/<dependency>: file:../<dependency>`. These declarations describe the source graph and are not runtime package imports. TypeScript source continues to use explicit relative imports, and the root build emits one self-contained `dist/packages/` tree. There is no additional package manager workspace, build pipeline or versioning mechanism.
+## Browser composition
 
-`test/system/architecture.test.ts` reads every manifest and traverses production TypeScript imports, including type-only imports, re-exports and static dynamic imports. It fails if any edge is undeclared, any declaration is unused, a package depends on the host composition root, or the internal graph contains a cycle. In particular, `contracts` cannot import `platform`, and the reusable `web` package cannot import feature-owned browser modules. The browser graph is declared by `ui/manifest.ts`; the browser boot is generic. Only `host` composes server capabilities. Run `npm run check:deps` to verify these rules independently.
+`GET /api/bootstrap` returns the mounted plugin graph. The browser owns one read-only projection per domain, shared by the components that need it. The authenticated `/api/changes` stream sends revisions and scoped invalidations. The stores re-read authoritative endpoints after a change or reconnect. Conversation history and stream replay are loaded by the selected conversation view.
 
-## Dependency rules
+The layout exposes slots, tabs, and page registration. Settings owns its pages, the composer owns input commands and completions, and the message contribution service owns tool renderers and message actions. The browser plugin loader binds those APIs to a Cordis scope, so disabling a plugin removes its contributions and cancels its requests. Feature views use the shared primitives, theme tokens, and responsive layout.
 
-- The kernel may import Cordis and generic language/runtime utilities. It must not depend on configuration, transport, adapters or capabilities.
-- A feature imports shared contracts and platform primitives, **not another feature's concrete files**. Cross-feature behavior is expressed by Cordis services and ports.
-- The `ui-runtime` bootstrap uses the Host graph and never imports concrete feature entries. UI plugins register through the slot service and typed view services.
-- Browser modules may import server **types** from contracts, never server implementation values.
-- Registration and cleanup belong to the same Cordis fiber. Publishing settings or UI events happens only after successful operations; rollback restores the previous scope set.
+Workspace Files supplies constrained file access. File tools adapt that access to Pi, while the browser uses workspace-scoped inspection routes. Shell combines the Process Execution and Approvals services. Isolated execution requires a supported Linux host. Host execution requires explicit configuration and each command still requires approval.
 
-Deleting a registered workspace cascades through all its conversations and descendant Pi histories, while leaving the user's project directory untouched. Session deletion retains a minimal crash-recovery journal, not an archive.
+## Verification
 
-## Test ownership and packaging
+Private `packages/<name>/package.json` files declare direct internal imports using `file:../<name>` links. The root manifest and lockfile install dependencies and define the published package. Architecture checks cover package and capability dependencies, Cordis service declarations, and browser imports. Feature tests live under `packages/<name>/tests/`, with cross-capability tests under `test/`.
 
-Feature-owned tests live under `packages/<id>/tests/`. Kernel and infrastructure tests live exclusively under `test/` (`test/plugins/` for plugin host and lifecycle tests, `test/settings/` for configuration, and `test/system/` for cross-capability journeys and architecture checks). Reusable browser UI tests live with their owning UI packages, such as `packages/ui-primitives/tests/`; generic slot and bootstrap invariants live under `test/system/`. Shared fixtures live under `test/support/`. Never place test files or `tests/` directories under production infrastructure directories. Tests must exercise real composition when service injection or disposal is the contract.
-
-Run `npm run check` for compilation and co-located Node tests, `npm run test:browser` for all Playwright tests, and `npm run pack:check` for clean-package installation and launch. Build output is one package; the package allowlist excludes all `tests/` folders from the published tarball.
+- `npm run check` runs TypeScript and Node tests.
+- `npm run test:browser` runs the Playwright journeys.
+- `npm run pack:check` installs the npm tarball into a clean directory and exercises the CLI, browser assets, and Pi.

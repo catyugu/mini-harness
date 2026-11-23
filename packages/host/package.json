@@ -5,11 +5,13 @@
   "type": "module",
   "dependencies": {
     "@mini-harness/agent": "file:../agent",
+    "@mini-harness/approvals": "file:../approvals",
     "@mini-harness/contracts": "file:../contracts",
     "@mini-harness/files": "file:../files",
     "@mini-harness/models": "file:../models",
     "@mini-harness/platform": "file:../platform",
     "@mini-harness/plugins": "file:../plugins",
+    "@mini-harness/process-execution": "file:../process-execution",
     "@mini-harness/runs": "file:../runs",
     "@mini-harness/session-helper": "file:../session-helper",
     "@mini-harness/sessions": "file:../sessions",
@@ -17,8 +19,12 @@
     "@mini-harness/shell": "file:../shell",
     "@mini-harness/skills": "file:../skills",
     "@mini-harness/subagents": "file:../subagents",
+    "@mini-harness/tools": "file:../tools",
     "@mini-harness/transport": "file:../transport",
     "@mini-harness/ui": "file:../ui",
+    "@mini-harness/ui-layout": "file:../ui-layout",
+    "@mini-harness/ui-primitives": "file:../ui-primitives",
+    "@mini-harness/ui-theme": "file:../ui-theme",
     "@mini-harness/workspaces": "file:../workspaces"
   }
 }

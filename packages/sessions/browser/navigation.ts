@@ -1,17 +1,19 @@
 import type { Conversation } from '../../contracts/conversation.js';
 import type { WorkspaceRecord } from '../../contracts/workspace.js';
-import type { NavigationEvent } from '../../contracts/navigation.js';
 import { exportSessions } from '../../web/transport/session-client.js';
-import type { BrowserState } from '../../web/models/browser-state.js';
+import type { Selection } from '../../web/models/selection.js';
+import type { RemoteStore } from '../../web/models/remote-store.js';
 import type { FrontendApi } from '../../ui-runtime/frontend.js';
-import { api as request, readEvents, scopedElements, payload, wait } from '../../web/api.js';
+import { scopedElements, payload } from '../../web/api.js';
 import { workspaceTree } from './navigation-tree.js';
 import { sessionTree } from './sessions.js';
 import { button, dialog, field, fromMarkup, iconButton } from '../../ui-primitives/primitives.js';
 import { fileLabel, icon } from '../../ui-primitives/icons.js';
 
 interface NavigationServices {
-  state: BrowserState;
+  state: Selection;
+  sessions: RemoteStore<Conversation[]>;
+  workspaces: RemoteStore<WorkspaceRecord[]>;
   activate(id: string): void;
   select(id: string, draft?: boolean): void;
   chooseWorkspace(onAdd: (record: WorkspaceRecord) => void): void;
@@ -23,7 +25,7 @@ interface NavigationServices {
 }
 
 export function sessionNavigation(api: FrontendApi, options: NavigationServices) {
-  const { state } = options;
+  const { state, sessions: sessionStore, workspaces: workspaceStore } = options;
   const panel = fromMarkup(`<div class="session-navigation">
     <div class="sidebar-caption">
       <span>Workspaces</span>
@@ -125,14 +127,15 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
   const addWorkspace = iconButton('Add workspace', 'plus');
   element('workspaceActions').append(addWorkspace);
   addWorkspace.onclick = () => options.chooseWorkspace((record) => {
-    if (!state.get().workspaces.some(({ id }) => id === record.id)) state.get().workspaces.push(record);
-    revealWorkspace(record.id);
-    options.select(record.id);
+    void workspaceStore.refresh().then(() => {
+      revealWorkspace(record.id);
+      options.select(record.id);
+    }).catch(options.report);
   });
 
   async function remove(ids: string[]) {
-    const result = await api.request<{ deleted: string[] }>('/sessions/delete', payload('POST', { ids }));
-    for (const id of result.deleted) state.applyNavigation({ type: 'delete', id });
+    await api.request('/sessions/delete', payload('POST', { ids }));
+    await sessionStore.refresh();
   }
 
   function rename(item: Conversation) {
@@ -169,13 +172,13 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
 
   const rememberCollapsed = () => localStorage.setItem(storageKey, JSON.stringify([...collapsed]));
   function revealWorkspace(id: string) {
-    const parents = workspaceTree(state.get().workspaces).parents;
+    const parents = workspaceTree(workspaceStore.get()).parents;
     for (let cursor = id; cursor; cursor = parents.get(cursor)) collapsed.delete(cursor);
     rememberCollapsed();
   }
 
   function render() {
-    const { sessions, workspaces } = state.get();
+    const sessions = sessionStore.get(), workspaces = workspaceStore.get();
     const query = value('sessionSearch').toLowerCase();
     const container = element('sessions');
     const focus = container.contains(document.activeElement) ? document.activeElement.id : '';
@@ -196,8 +199,8 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
       let next = 0;
       const ids = workspaces.map(({ id }) => siblingSet.has(id) ? moved[next++] : id);
       try {
-        const saved = await api.request<WorkspaceRecord[]>('/workspaces', payload('PUT', { ids }));
-        state.applyNavigation({ type: 'workspaces', workspaces: saved });
+        await api.request('/workspaces', payload('PUT', { ids }));
+        await workspaceStore.refresh();
       } catch (error) { options.report(error); }
     }
     function workspaceBranch(parent?: string) {
@@ -310,37 +313,26 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
     selectionChanged();
   }
 
-  state.on('navigation', () => {
-    const { sessions, workspaces } = state.get();
+  function update() {
+    const sessions = sessionStore.get(), workspaces = workspaceStore.get();
     const registered = new Set(workspaces.map(({ id }) => id));
     const available = new Set(sessions.filter(({ workspaceId }) => registered.has(workspaceId)).map(({ id }) => id));
     for (const id of selection) if (!available.has(id)) selection.delete(id);
-    const active = state.session();
+    const active = sessions.find(({ id }) => id === state.activeConversation);
     if (state.activeConversation && !available.has(state.activeConversation)) options.clearConversation();
     else {
       if (active) options.setTitle(active.title);
       render();
     }
-  }, api.signal);
+  }
+  state.subscribe(update, api.signal);
+  sessionStore.subscribe(update, api.signal);
   state.addEventListener('selection', (event: CustomEvent<{ item?: Conversation; revealWorkspace: boolean }>) => {
     const { item, revealWorkspace: workspace } = event.detail;
     if (!item) return;
     if (workspace) revealWorkspace(item.workspaceId);
-    for (let parent = item.parentId; parent && !expanded.has(parent); parent = state.session(parent)?.parentId) expanded.add(parent);
+    for (let parent = item.parentId; parent && !expanded.has(parent); parent = sessionStore.get().find(({ id }) => id === parent)?.parentId) expanded.add(parent);
   }, { signal: api.signal });
-
-  async function subscribe() {
-    let delay = 300;
-    while (!api.signal.aborted) {
-      try {
-        const response = await request('/navigation/events', { signal: api.signal });
-        await readEvents<NavigationEvent>(response, (event) => { delay = 300; state.applyNavigation(event); });
-      } catch { /* The next connection starts with the current snapshot. */ }
-      if (api.signal.aborted) return;
-      await wait(delay, api.signal);
-      delay = Math.min(delay * 2, 5000);
-    }
-  }
 
   element('selectMode').onclick = () => toggleSelection(!selecting);
   element('sessionSearch').oninput = render;
@@ -353,5 +345,4 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
   };
 
   render();
-  void subscribe();
 }

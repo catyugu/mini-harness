@@ -1,10 +1,7 @@
 import { constants } from 'node:fs';
 import { lstat, mkdir, open, opendir, realpath, stat, type FileHandle } from 'node:fs/promises';
 import { basename, dirname, matchesGlob, relative, resolve, sep } from 'node:path';
-import {
-  createEditToolDefinition, createFindToolDefinition, createGrepToolDefinition,
-  createLsToolDefinition, createReadToolDefinition, createWriteToolDefinition, truncateHead
-} from '@earendil-works/pi-coding-agent';
+import type { SearchInput } from '../contracts/files.js';
 import { RE2 } from 're2-wasm';
 import ignore from 'ignore';
 
@@ -167,7 +164,7 @@ export class Workspace {
 
   mkdir(path: string) { return this.directory(path, true, async () => {}); }
 
-  private async stat(path: string) {
+  async stat(path: string) {
     path = resolve(this.cwd, path);
     const { parts } = await this.location(path);
     if (!parts.length) return this.directory(path, false, async (dir) => stat(dir));
@@ -260,33 +257,7 @@ export class Workspace {
     });
   }
 
-  tools() {
-    const cwd = this.cwd;
-    const readFile = (path: string) => this.readFile(path);
-    const access = (path: string) => this.access(path);
-    const find = createFindToolDefinition(cwd, { operations: {
-      exists: async (path) => { await this.stat(path); return true; },
-      glob: async (pattern, root, { limit }) => this.find(pattern, root, limit)
-    } });
-    const grep = createGrepToolDefinition(cwd);
-    return [
-      createReadToolDefinition(cwd, { operations: { readFile, access, detectImageMimeType: (path) => this.imageType(path), createReadStream: (path, { signal }) => this.chunks(path, signal) } }),
-      createEditToolDefinition(cwd, { operations: { readFile, access, writeFile: (path, content) => this.writeFile(path, content, false) } }),
-      createWriteToolDefinition(cwd, { operations: { writeFile: (path, content) => this.writeFile(path, content), mkdir: (path) => this.mkdir(path) } }),
-      createLsToolDefinition(cwd, { operations: {
-        exists: async (path) => { await this.stat(path); return true; },
-        stat: (path) => this.stat(path),
-        readdir: async (path) => (await this.entries(path)).map(({ name }) => name)
-      } }),
-      { ...find, description: 'Find files and directories matching a glob in the workspace. Respects .gitignore and skips links.',
-        promptSnippet: 'Find files by workspace glob' },
-      { ...grep, description: 'Search workspace text files with a literal or RE2 pattern. Respects .gitignore and skips links.',
-        promptSnippet: 'Search text files in the workspace',
-        execute: async (_id: string, input: Parameters<typeof grep.execute>[1], signal?: AbortSignal) => this.grep(input, signal) }
-    ];
-  }
-
-  private async find(pattern: string, root: string, limit: number) {
+  async find(pattern: string, root: string, limit: number) {
     if (pattern.length > 512) throw new Error('Glob is too long');
     const files = [];
     for await (const entry of this.walk(root)) {
@@ -298,7 +269,7 @@ export class Workspace {
     return files;
   }
 
-  private async grep(input: Parameters<ReturnType<typeof createGrepToolDefinition>['execute']>[1], signal?: AbortSignal) {
+  async grep(input: SearchInput, signal?: AbortSignal) {
     const { pattern, glob, literal, ignoreCase } = input;
     if (!pattern || pattern.length > 4096 || (glob?.length ?? 0) > 512) throw new Error('Invalid search pattern');
     const expression = new RE2(literal ? pattern.replace(/[.*+?^$${}()|[\]\\]/g, '\\$&') : pattern, ignoreCase ? 'ui' : 'u');
@@ -331,8 +302,6 @@ export class Workspace {
         if (++count >= limit) break search;
       }
     }
-    const result = truncateHead(matches.join('\n'));
-    return { content: [{ type: 'text' as const, text: (result.content || 'No matches found') +
-      (result.truncated || count >= limit ? '\n[Results limited]' : '') }], details: undefined };
+    return { matches, limited: count >= limit };
   }
 }

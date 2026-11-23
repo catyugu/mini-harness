@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { existsSync, rmSync } from 'node:fs';
 import { createMiniHarnessServer } from '../../host/server.js';
 import { SessionRegistry } from '../../sessions/registry.js';
+import { join } from 'node:path';
+import { Checkpoints } from '../checkpoints.js';
 import { WorkspaceCatalog } from '../../workspaces/catalog.js';
 import type { RunEvent } from '../../contracts/transport.js';
 import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.js';
@@ -50,8 +52,8 @@ test('HTTP disconnect keeps the Pi run alive and reconnect replays from a cursor
   assert.ok(events.every((event) => event.sequence > cursor));
   assert.ok(events.some((event) => event.type === 'complete' || event.type === 'snapshot'));
   assert.equal(app.runtime.runs.info(item.id).state, 'completed');
-  const restored = new SessionRegistry(paths, new WorkspaceCatalog(paths));
-  assert.equal(restored.get(item.id).run.state, 'completed');
+  const restored = new Checkpoints(join(paths.home, 'runs.json'), () => true);
+  assert.equal(restored.get(item.id).state, 'completed');
 });
 
 test('independent roots run concurrently and deleting a running tree cancels all descendants', { timeout: 15000 }, async (t) => {
@@ -87,9 +89,10 @@ test('a crash leaves indexed runs interrupted while retaining the conversation t
   t.after(async () => { await mock.close(); rmSync(root, { recursive: true, force: true }); });
   const registry = new SessionRegistry(paths, new WorkspaceCatalog(paths));
   const parent = registry.create(), child = registry.create({ parentId: parent.id });
-  registry.update(child.id, { run: { id: 'fixture-run', sessionId: child.id, state: 'running', startedAt: new Date().toISOString(), sequence: 1 } });
+  const file = join(paths.home, 'runs.json');
+  new Checkpoints(file, () => true).save({ id: 'fixture-run', sessionId: child.id, state: 'running', startedAt: new Date().toISOString(), sequence: 1 });
   const restored = new SessionRegistry(paths, new WorkspaceCatalog(paths));
-  assert.equal(restored.get(child.id).run.state, 'interrupted');
+  assert.equal(new Checkpoints(file, (id) => Boolean(restored.get(id))).get(child.id).state, 'interrupted');
   assert.deepEqual(restored.descendants([parent.id]), [parent.id, child.id]);
   assert.equal(existsSync(paths.registry), true);
 });

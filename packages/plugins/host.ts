@@ -11,16 +11,21 @@ export function setup(ctx: Context) {
   });
   const add = (method: string, path: string, handler: Parameters<typeof ctx.harnessRoutes.register>[2]) =>
     ctx.effect(() => ctx.harnessRoutes.register(method, path, handler));
-  add('POST', '/api/plugins/install', async ({ body }) => ctx.harnessMutations.run(async () =>
-    new HttpReply(201, installPlugin(host(), await body(2 * 1024 * 1024)))));
+  const changed = () => ctx.harnessChanges.dispatchEvent(new CustomEvent('change', { detail: { domain: 'plugins' } }));
+  add('GET', '/api/plugins', () => ctx.harnessPluginCatalog.metadata());
+  add('POST', '/api/plugins/install', async ({ body }) => ctx.harnessMutations.run(async () => {
+    const installed = installPlugin(host(), await body(2 * 1024 * 1024));
+    changed();
+    return new HttpReply(201, installed);
+  }));
   add('DELETE', '/api/plugins/:id', ({ params }) =>
     ctx.harnessMutations.run(async () => {
       const metadata = await uninstallPlugin(host(), params.id);
       ctx.harnessSettingsStore.forgetPlugin(params.id);
+      changed();
       return metadata;
     }));
   add('GET', '/api/plugins/:id/web', ({ params }) => ({
-    source: frontendSource(host(), params.id),
-    config: ctx.harnessPluginCatalog.configuration(params.id)
+    source: frontendSource(host(), params.id)
   }));
 }

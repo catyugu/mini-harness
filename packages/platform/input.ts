@@ -3,6 +3,7 @@ import type { Attachment, ImageInput } from '../contracts/input.js';
 export function prepareInput(text: unknown, attachments: Attachment[] = []) {
   if (typeof text !== 'string' || text.length > 200000 || (!text.trim() && !attachments?.length)) throw new Error('Invalid message');
   if (!Array.isArray(attachments) || attachments.length > 8) throw new Error('Attach at most eight files');
+  const userText = (text as string).trim();
   const images: ImageInput[] = [];
   let total = 0;
   for (const file of attachments) {
@@ -28,5 +29,5 @@ export function prepareInput(text: unknown, attachments: Attachment[] = []) {
       text += '\n\nAttached file: ' + JSON.stringify(file.name) + '\n' + content;
     }
   }
-  return { text: (text as string).trim() || 'See attached images.', images };
+  return { text: (text as string).trim() || 'See attached images.', images, input: { userText, attachments: attachments.map(({ name, mimeType }) => ({ name, mimeType })) } };
 }

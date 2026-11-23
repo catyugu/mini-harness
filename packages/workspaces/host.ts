@@ -23,6 +23,4 @@ export function setup(ctx: Context) {
   });
   add('PATCH', '/api/workspaces/:id', async ({ params, body }) =>
     catalog.rename(requireId(params.id), (await body())?.name));
-  add('DELETE', '/api/workspaces/:id', ({ params }) =>
-    ctx.get('harnessOperations')!.deleteWorkspace(requireId(params.id)));
 }

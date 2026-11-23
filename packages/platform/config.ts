@@ -7,11 +7,8 @@ import { join, resolve } from 'node:path';
 export const DEFAULTS = Object.freeze({
   port: 3837,
   model: { provider: '', id: '' },
-  plugins: { files: true, skills: true, subagents: true, shell: false, 'session-helper': true },
-  pluginConfig: {
-    subagents: { maxDepth: 1, maxParallel: 4, provider: '', model: '' },
-    shell: { mode: 'isolated', timeoutSeconds: 60 }
-  },
+  plugins: {},
+  pluginConfig: {},
   appearance: 'system'
 });
 
@@ -75,8 +72,7 @@ export function readSettings(paths: Paths): Settings {
     port: input.port ?? DEFAULTS.port,
     model: { ...DEFAULTS.model, ...input.model },
     plugins: { ...DEFAULTS.plugins, ...input.plugins },
-    pluginConfig: Object.fromEntries([...new Set([...Object.keys(DEFAULTS.pluginConfig), ...Object.keys(input.pluginConfig ?? {})])]
-      .map((id) => [id, { ...(DEFAULTS.pluginConfig[id] ?? {}), ...(input.pluginConfig?.[id] ?? {}) }])),
+    pluginConfig: input.pluginConfig ?? {},
     appearance: input.appearance ?? DEFAULTS.appearance
   };
   validateSettings(settings);
