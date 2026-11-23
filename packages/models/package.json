@@ -6,6 +6,7 @@
   "dependencies": {
     "@mini-harness/contracts": "file:../contracts",
     "@mini-harness/platform": "file:../platform",
-    "@mini-harness/web": "file:../web"
+    "@mini-harness/web": "file:../web",
+    "@mini-harness/ui-primitives": "file:../ui-primitives"
   }
 }
