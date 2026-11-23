@@ -69,8 +69,7 @@ test('export includes all branches and rejects in-flight sessions', (t) => {
   const session = registry.create();
   const log = registry.log(session.id);
   const first = log.append({ type: 'message', message: { role: 'user', content: 'original', timestamp: Date.now() } });
-  log.select(null);
-  log.append({ type: 'message', message: { role: 'user', content: 'revision', timestamp: Date.now() } });
+  log.revise({ type: 'message', message: { role: 'user', content: 'revision', timestamp: Date.now() } }, null, first.id);
   const [exported] = registry.export([session.id]);
   assert.ok(exported.log.includes(first.id));
   assert.ok(exported.log.includes('original') && exported.log.includes('revision'));

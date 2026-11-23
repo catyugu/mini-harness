@@ -10,7 +10,7 @@ export function setup(ctx: Context) {
         throw new HttpError('invalid_input', 'Invalid revision request');
       return ctx.harnessRuns.reviseAndStart(input.sessionId, {
         sourceEntryId: input.sourceEntryId, expectedLeafId: input.expectedLeafId as string | null,
-        message: input.message, attachments: input.attachments as import('@mini-harness/contracts/input').Attachment[],
+        message: input.message, removedImages: input.removedImages as number[] | undefined, attachments: input.attachments as import('@mini-harness/contracts/input').Attachment[],
         model: input.model as import('@mini-harness/contracts/conversation').ModelChoice,
         thinkingLevel: input.thinkingLevel as import('@mini-harness/contracts/agent').ThinkingLevel | null
       });

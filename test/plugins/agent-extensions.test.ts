@@ -157,15 +157,16 @@ test('an invalid transformed request fails before the provider is invoked', asyn
   assert.equal(app.runtime.registry.log(session.id).entries().some((entry) => entry.type === 'model-request'), false);
 });
 
-test('unmount signals an active request hook and runs cleanup after it settles', { timeout: 5000 }, async (t) => {
+test('configuration cannot unmount an active request hook and can retry after the run', { timeout: 5000 }, async (t) => {
   const { app, paths, request } = await fixture(t);
   const key = Symbol.for('mini-harness-test-hook-drain');
   let entered: () => void = () => { throw new Error('Not started'); };
   let cancelled: () => void = () => { throw new Error('Not started'); };
   let release: () => void = () => { throw new Error('Not started'); };
   const started = new Promise<void>((resolve) => { entered = resolve; });
-  const signalled = new Promise<void>((resolve) => { cancelled = resolve; });
   const hold = new Promise<void>((resolve) => { release = resolve; });
+  let aborted = false;
+  cancelled = () => { aborted = true; };
   const state = { entered, cancelled, hold, cleaned: false };
   const shared = globalThis as typeof globalThis & Record<symbol, typeof state>;
   shared[key] = state;
@@ -181,13 +182,14 @@ test('unmount signals an active request hook and runs cleanup after it settles',
   };`);
   assert.equal((await request('/settings', 'PATCH', { plugins: { 'slow-transform': true } })).status, 200);
   const session = app.runtime.registry.create();
-  const run = assert.rejects(app.runtime.runs.send(session.id, 'Wait for unload'), /failed to transform/);
+  const run = app.runtime.runs.send(session.id, 'Keep the active hook');
   await started;
-  const unload = request('/settings', 'PATCH', { plugins: { 'slow-transform': false } });
-  await signalled;
-  try { assert.equal(state.cleaned, false); }
-  finally { release(); }
+  try {
+    assert.equal((await request('/settings', 'PATCH', { plugins: { 'slow-transform': false } })).status, 409);
+    assert.equal(aborted, false);
+    assert.equal(state.cleaned, false);
+  } finally { release(); }
   await run;
-  assert.equal((await unload).status, 200);
+  assert.equal((await request('/settings', 'PATCH', { plugins: { 'slow-transform': false } })).status, 200);
   assert.equal(state.cleaned, true);
 });

@@ -18,10 +18,12 @@ test('retry retains image attachments after selecting an image-capable model', a
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Read the picture');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.locator('.message.error')).toContainText('does not support image input');
+    await expect(page.locator('.attachment')).toHaveCount(1);
     await chooseModel(page, 'vision-model');
     await page.getByRole('button', { name: 'Retry', exact: true }).click();
     await expect(page.locator('.message.assistant')).toHaveText('Mock response');
     expect(JSON.stringify(mock.requests.at(-1))).toContain('image_url');
     await expect(page.locator('.message-image')).toHaveCount(1);
+    await expect(page.locator('.attachment')).toHaveCount(0);
   } finally { await page.close(); await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
 });

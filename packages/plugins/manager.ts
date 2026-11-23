@@ -1,9 +1,10 @@
+import { HttpError } from '@mini-harness/contracts/routes';
 import { dirname, join } from 'node:path';
 import { Context } from 'cordis';
 import { isDeepStrictEqual } from 'node:util';
 import { lstatSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import type { PluginDescriptor, SessionRecords } from '@mini-harness/contracts/plugins';
+import type { PluginDescriptor, PluginMetadata, SessionRecords } from '@mini-harness/contracts/plugins';
 import type { HostServices, PluginScope, ScopePort } from '@mini-harness/contracts/capabilities';
 import type { BrowserEntry } from '@mini-harness/contracts/browser';
 import { addAbortListener } from 'node:events';
@@ -40,11 +41,9 @@ export class PluginHost implements ScopePort {
     this.root = new Map(rootServices.map((name) => [name, 'application']));
   }
 
-  private failedConfig = new Map<string, Record<string, unknown> | undefined>();
   private assets = new Map<string, { path: string; mime: string }>();
   private published: BrowserEntry[] = [];
   private readonly failures = new Map<string, string>();
-  private readonly draining = new Set<string>();
   private graph: ReturnType<PluginHost['describe']>[] = [];
 
   effective(settings: Settings) { return this.catalog.effective(settings); }
@@ -57,12 +56,32 @@ export class PluginHost implements ScopePort {
   }
 
   metadata() {
-    return this.catalog.metadata().map((metadata) => {
+    const settings = this.settings();
+    const descriptors = new Map(this.catalog.descriptors().map((item) => [item.id, item]));
+    const models = this.ctx.get('harnessModels');
+    return this.catalog.metadata([...descriptors.values()]).map((metadata): PluginMetadata => {
       const { id } = metadata;
-      const error = metadata.error ?? (this.mounts.plan(id) ? undefined : this.failures.get(id));
-      const scopedReady = [...this.scopes.keys()].some((key) => this.mounts.plan(key + '/' + id));
-      const state = this.draining.has(id) ? 'draining' : this.mounts.plan(id) || scopedReady ? 'ready' : error ? 'failed' : 'discovered';
-      return { ...metadata, error, state } as const;
+      const descriptor = descriptors.get(id);
+      const configurationError = (key?: string) => {
+        try {
+          const values = key ? { ...settings.pluginConfig[id], ...settings.scopes[key]?.pluginConfig?.[id] } : settings.pluginConfig[id];
+          const config = this.catalog.configValues(id, values, descriptor?.configSchema);
+          if (models) descriptor?.validateConfig?.(config, models);
+        } catch (error) { return error instanceof Error ? error.message : String(error); }
+      };
+      const scopes = metadata.scope === 'application'
+        ? settings.plugins[id] === true ? ['application'] : []
+        : Object.entries(settings.scopes).flatMap(([key, scope]) =>
+          scope.plugins?.[id] || Object.values(scope.providers ?? {}).includes(id) ? [key] : []);
+      const instances = scopes.map((scope): NonNullable<PluginMetadata['instances']>[number] => {
+        const key = scope === 'application' ? id : scope + '/' + id;
+        const error = this.failures.get(key) ?? metadata.error ?? configurationError(scope === 'application' ? undefined : scope);
+        return { scope, error, state: error ? 'failed' : this.mounts.plan(key) ? 'ready' : 'inactive' };
+      });
+      const failed = instances.filter(({ state }) => state === 'failed');
+      const ready = instances.some(({ state }) => state === 'ready');
+      return { ...metadata, instances, error: failed[0]?.error ?? metadata.error ?? (metadata.scope === 'application' ? configurationError() : undefined),
+        state: failed.length ? ready ? 'partial' : 'failed' : ready ? 'ready' : scopes.length ? 'inactive' : 'disabled' };
     });
   }
   reserved(id: string) { return this.catalog.reserved(id); }
@@ -90,7 +109,15 @@ export class PluginHost implements ScopePort {
 
   require<Name extends keyof HostServices & string>(id: string | null | undefined, service: Name): NonNullable<HostServices[Name]> {
     const value = this.optional(id, service);
-    if (value == null) throw new Error('Required service is unavailable: ' + service + (id ? ' in session ' + id : ''));
+    if (value == null) {
+      const settings = this.settings();
+      for (const key of id ? [...this.address(id)].reverse() : []) {
+        const provider = settings.scopes[key]?.providers?.[service];
+        const failure = provider && this.failures.get(key + '/' + provider);
+        if (failure) throw new HttpError('unavailable', 'Provider ' + provider + ' failed in ' + key + ': ' + failure);
+      }
+      throw new Error('Required service is unavailable: ' + service + (id ? ' in session ' + id : ''));
+    }
     return value;
   }
 
@@ -132,15 +159,16 @@ export class PluginHost implements ScopePort {
   }
 
   private scopedMounts(settings: Settings, descriptors: ReturnType<PluginCatalog['descriptors']>,
-    appPlans: PluginPlan[], appProviders: ReadonlyMap<string, string>, preparing?: string, released = new Set<string>()) {
+    appPlans: PluginPlan[], appProviders: ReadonlyMap<string, string>, unavailable: (id: string, error: unknown) => boolean,
+    preparing?: string, released = new Set<string>()) {
     const scopes = new Map<string, MountedScope>();
     const mounts: MountPlan[] = [];
     const diagnostics: ReturnType<PluginHost['describe']>[] = [];
-    const active = new Set([...this.scopes.keys(), ...(preparing ? this.address(preparing) : [])]);
+    const active = new Set([...Object.keys(settings.scopes).filter((key) => key.startsWith('workspace:')), ...this.scopes.keys(), ...(preparing ? this.address(preparing) : [])]);
     for (const key of active) if (key.startsWith('session:'))
       for (const ancestor of this.address(key.slice('session:'.length))) if (!released.has(ancestor)) active.add(ancestor);
     const graph = resolveScopes(settings, this.catalog.plans.bind(this.catalog), this.session,
-      descriptors, appPlans, appProviders, active, released);
+      descriptors, appPlans, appProviders, active, released, unavailable);
     for (const { key, parent, scope, isolates, plugins } of graph) {
       const parentContext = parent ? scopes.get(parent)?.ctx : this.ctx;
       if (!parentContext) throw new Error('Scoped mount is missing its parent: ' + key);
@@ -173,6 +201,8 @@ export class PluginHost implements ScopePort {
         }))
       });
       setDrain(runtime.drain);
+      const models = ctx.get('harnessModels');
+      if (models) descriptor.validateConfig?.(runtime.api.config, models);
       const cleanup = await setup(ctx, runtime.api);
       if (typeof cleanup === 'function') ctx.effect(() => cleanup);
       runtime.checkPublications();
@@ -226,29 +256,72 @@ export class PluginHost implements ScopePort {
 
   private async configureGraph(settings: Settings, commit: () => void, starting: boolean, preparing?: string, released?: Set<string>) {
     const failures = new Map<string, string>();
-    const failedConfig = new Map<string, Record<string, unknown> | undefined>();
-    const unavailable = (id: string, error: unknown) => {
-      if (this.catalog.builtins.get(id)?.required || Object.values(settings.providers).includes(id)) return false;
-      const config = settings.pluginConfig[id];
-      const canSkip = starting || (this.failedConfig.has(id) && isDeepStrictEqual(config, this.failedConfig.get(id)));
-      if (canSkip) {
-        failedConfig.set(id, config);
-        failures.set(id, error instanceof Error ? error.message : String(error));
-      }
-      return canSkip;
-    };
+    const previous = this.settings();
     const descriptors = this.catalog.descriptors();
-    const { plans, providers } = this.catalog.plans(settings, descriptors, 'application', this.root, new Set(), undefined, unavailable);
-    const scoped = this.scopedMounts(settings, descriptors, plans, providers, preparing, released);
-    const browser = this.browserPlan(plans, unavailable);
+    const models = this.ctx.get('harnessModels');
+    if (!starting && !preparing && !released) {
+      for (const descriptor of descriptors) {
+        const { id, configSchema, validateConfig, scope } = descriptor;
+        const validate = (values: Record<string, unknown> | undefined, before: Record<string, unknown> | undefined) => {
+          if (isDeepStrictEqual(values, before)) return;
+          const config = this.catalog.configValues(id, values, configSchema);
+          if (models) validateConfig?.(config, models);
+        };
+        validate(settings.pluginConfig[id], previous.pluginConfig[id]);
+        if (scope === 'application') continue;
+        for (const [key, next] of Object.entries(settings.scopes)) {
+          const changed = next.pluginConfig?.[id];
+          if (!isDeepStrictEqual(changed, previous.scopes[key]?.pluginConfig?.[id]))
+            validate({ ...settings.pluginConfig[id], ...changed }, undefined);
+        }
+      }
+    }
+    const healthy = new Set<string>();
+    const unavailable = (id: string, error: unknown) => {
+      if (this.catalog.builtins.get(id)?.required || healthy.has(id) || this.mounts.plan(id)) return false;
+      failures.set(id, error instanceof Error ? error.message : String(error));
+      return true;
+    };
+    const planningUnavailable = (id: string, error: unknown) => {
+      if (!starting && !preparing && !released && !this.failures.has(id)) {
+        const separator = id.indexOf('/');
+        if (separator < 0) {
+          if (settings.plugins[id] !== previous.plugins[id] || !isDeepStrictEqual(previous.providers, settings.providers)) return false;
+        } else {
+          const key = id.slice(0, separator), plugin = id.slice(separator + 1);
+          const before = previous.scopes[key], next = settings.scopes[key];
+          if (before?.plugins?.[plugin] !== next?.plugins?.[plugin] ||
+              !isDeepStrictEqual(before?.providers, next?.providers)) return false;
+        }
+      }
+      return unavailable(id, error);
+    };
+    const { plans, providers } = this.catalog.plans(settings, descriptors, 'application', this.root, new Set(), undefined, planningUnavailable);
+    const scoped = this.scopedMounts(settings, descriptors, plans, providers, planningUnavailable, preparing, released);
+    const browser = this.browserPlan(plans, planningUnavailable);
     const mounts = [...plans.filter(({ id }) => !failures.has(id)).map((plan) => this.mountPlan(plan, appScope)), ...scoped.mounts];
+    for (const { id } of mounts) if (this.mounts.plan(id)) healthy.add(id);
+    const appChanged = !isDeepStrictEqual(previous.providers, settings.providers) ||
+      descriptors.some(({ id, configChanges, scope, setup, source }) => scope === 'application' && (setup || source) &&
+        (previous.plugins[id] !== settings.plugins[id] || configChanges !== 'live' && settings.plugins[id] &&
+          !isDeepStrictEqual(settings.pluginConfig[id], previous.pluginConfig[id])));
+    const scopeChanges = new Set([...Object.keys(previous.scopes), ...Object.keys(settings.scopes)]
+      .filter((key) => {
+        const before = previous.scopes[key], after = settings.scopes[key];
+        return !isDeepStrictEqual(before?.plugins, after?.plugins) ||
+          !isDeepStrictEqual(before?.providers, after?.providers) ||
+          descriptors.some(({ id, configChanges }) => configChanges !== 'live' && after?.plugins?.[id] &&
+            (!isDeepStrictEqual(before?.pluginConfig?.[id], after.pluginConfig?.[id]) ||
+             !isDeepStrictEqual(previous.pluginConfig[id], settings.pluginConfig[id])));
+      }));
+    const release = !starting && !preparing && !released && (appChanged || scopeChanges.size)
+      ? this.ctx.get('harnessMutations')?.protect(appChanged ? undefined : scopeChanges) : undefined;
     try {
       await this.mounts.configure(mounts, () => {
         commit();
         this.started = true;
         this.scopes.clear();
         for (const [key, state] of scoped.scopes) this.scopes.set(key, state);
-        this.failedConfig = failedConfig;
         this.failures.clear();
         for (const [id, error] of failures) this.failures.set(id, error);
         const ready = new Set<string>();
@@ -261,8 +334,9 @@ export class PluginHost implements ScopePort {
           [...(descriptor.resources?.urls ?? [])]));
         this.graph = [...plans.map((plan) => this.describe(plan)), ...scoped.diagnostics]
           .filter(({ id }) => this.mounts.plan(id));
-      }, (ids) => { for (const id of ids) this.draining.add(id); }, unavailable);
-    } finally { this.draining.clear(); }
+        this.ctx.get('harnessChanges')?.dispatchEvent(new CustomEvent('change', { detail: { domain: 'plugins' } }));
+      }, unavailable);
+    } finally { release?.(); }
   }
 
   async close() {

@@ -13,7 +13,7 @@ import type { Settings } from '@mini-harness/contracts/config';
 import { createMessageView } from './messages.js';
 import { CommandRegistry } from './commands.js';
 import type { ComposerCommand } from '@mini-harness/web/contracts/commands';
-import { createComposer } from './composer.js';
+import { createComposer, type ConversationDraft } from './composer.js';
 import { createModelPicker } from './model-picker.js';
 import { createThinkingPicker } from './thinking-picker.js';
 import type { FrontendApi, ToolView, MessageAction, DraftMode } from '@mini-harness/ui-runtime/frontend';
@@ -94,30 +94,42 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
   let thinkingDraft: ThinkingLevel | null | undefined;
   const thinkingPicker = createThinkingPicker(view, (level) => { thinkingDraft = level; updateModelControls(); }, api.signal);
   let activeLeaf: string | null | undefined;
-  let draftMode: DraftMode | undefined;
-  function setDraftMode(mode?: DraftMode) {
-    draftMode = mode;
-    const banner = element('draftMode');
-    banner.hidden = !mode;
-    required(banner.querySelector('span')).textContent = mode?.title ?? '';
-    if (mode) {
-      prompt.value = mode.text;
-      adjustPrompt();
-      prompt.focus();
-    }
-  }
-  required(element('draftMode').querySelector('button')).addEventListener('click', () => setDraftMode());
   const modelPicker = createModelPicker(view, (choice) => { modelDraft = choice; thinkingDraft = undefined; updateModelControls(); }, api.signal);
+  const submitted = new Map<string, { runId: string; clear: () => void }>();
   const lastInputs = new Map<string, { message: string; attachments: Attachment[] }>();
-  const drafts = new Map<string, string>();
-  let draftConversation: string | undefined;
-  function switchDraft(id?: string) {
-    if (draftConversation === id) return;
-    if (draftConversation) drafts.set(draftConversation, prompt.value);
-    draftConversation = id;
-    prompt.value = id ? drafts.get(id) ?? '' : '';
+  const blankDraft = (): ConversationDraft => ({ text: '', attachments: [], version: 0, loading: 0 });
+  const drafts = new Map<string, { input: ConversationDraft; edit?: ConversationDraft }>();
+  const ensureDraft = (key: string) => {
+    let entry = drafts.get(key);
+    if (!entry) { entry = { input: blankDraft() }; drafts.set(key, entry); }
+    return entry;
+  };
+  let draftEntry = ensureDraft('workspace:' + state.selectedWorkspace);
+  const draft = () => draftEntry.edit ?? draftEntry.input;
+  function renderDraft() {
+    const current = draft();
+    const banner = element('draftMode');
+    banner.hidden = !current.revision;
+    required(banner.querySelector('span')).textContent = current.revision?.title ?? '';
+    prompt.value = current.text;
     adjustPrompt();
+    composerUi.resetSuggestions();
+    composerUi.render();
   }
+  function switchDraft(id?: string) {
+    const next = ensureDraft(id ?? 'workspace:' + state.selectedWorkspace);
+    if (draftEntry === next) return;
+    draftEntry = next;
+    renderDraft();
+  }
+  function cancelDraftMode() {
+    for (const entry of drafts.values()) delete entry.edit;
+    renderDraft();
+  }
+  required(element('draftMode').querySelector('button')).addEventListener('click', () => {
+    delete draftEntry.edit;
+    renderDraft();
+  });
   const active = () => state.activeConversation;
   const begin = () => {
     visit.abort();
@@ -134,13 +146,17 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
     prompt.style.height = Math.min(prompt.scrollHeight, 210) + 'px';
   };
   const commands = new CommandRegistry();
-  const composerUi = createComposer(view, report, commands, api.signal);
+  const composerUi = createComposer(view, draft, report, commands, api.signal);
   const messageView = createMessageView(messages, {
     render: options.renderTool, messageActions: options.messageActions
   }, () => ({ sessionId: active(), leafId: activeLeaf }), () => {
     const id = active();
     const last = id ? lastInputs.get(id) : undefined;
-    if (last && !sending) void send(last.message, last.attachments);
+    if (!last || sending) return;
+    const current = draft();
+    if (current.text === last.message && (current.revision || JSON.stringify(current.attachments) === JSON.stringify(last.attachments)))
+      void send(current.text);
+    else void send(last.message, last.attachments);
   });
 
   function rememberInput(id: string, content: MessageContent) {
@@ -159,13 +175,20 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
   function showConversation(item?: Conversation | ConversationView, revealWorkspace = true) {
     const view = item as ConversationView;
     const history = view?.messages ?? [];
+    if (item && view?.messages) {
+      const submission = submitted.get(item.id);
+      if (submission && history.some(({ submissionId }) => submissionId === submission.runId)) {
+        submission.clear();
+        submitted.delete(item.id);
+      } else if (submission && !isRunning(item.run)) submitted.delete(item.id);
+    }
     setSending(isRunning(item?.run));
     showRunSummary(item?.run);
     showQueue(view?.queue);
     conversationModel = item?.model;
     conversationThinking = view?.thinkingLevel;
     activeLeaf = view?.leafId;
-    setDraftMode();
+    const switched = item?.id !== active();
     switchDraft(item?.id);
     if (item && !lastInputs.has(item.id)) {
       const previous = history.filter((message) => message.role === 'user').at(-1);
@@ -173,15 +196,15 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
     }
     updateModelControls();
     options.setTitle(item?.title ?? 'New conversation');
-    messageView.history(history, item?.run?.state === 'failed' ? item.run.error : undefined);
-    showWelcome(!messages.childElementCount && !isRunning(item?.run));
     state.selectConversation(item, revealWorkspace);
+    messageView.history(history, item?.run?.state === 'failed' ? item.run.error : undefined, switched);
+    showWelcome(!messages.childElementCount && !isRunning(item?.run));
   }
 
   function display(item: ConversationView, signal: AbortSignal, revealWorkspace: boolean) {
     showConversation(item, revealWorkspace);
     if (signal.aborted) return;
-    showStatus('');
+    showStatus(item.logError ?? '', Boolean(item.logError));
     if (isRunning(item.run)) void observe(item, signal);
   }
 
@@ -205,12 +228,9 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
   function clear(draft = false) {
     begin();
     pending = false;
-    composerUi.clear();
     showConversation();
     showStatus('');
     if (draft) {
-      prompt.value = '';
-      adjustPrompt();
       options.closeDrawer();
       prompt.focus();
     }
@@ -226,12 +246,29 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
     // Queue composer selections target the next queued turn, not the in-flight request.
   }
 
+  function snapshotDraft(attached?: Attachment[]) {
+    const entry = draftEntry, current = draft();
+    if (current.loading && !attached) throw new Error('Files are still loading');
+    const { revision, version } = current;
+    const attachments = structuredClone(attached ?? current.attachments
+      .filter(({ originalIndex }) => originalIndex === undefined).map(({ name, mimeType, data }) => ({ name, mimeType, data })));
+    const removedImages = revision?.images?.flatMap((_, index) =>
+      current.attachments.some(({ originalIndex }) => index === originalIndex) ? [] : [index]) ?? [];
+    return { attachments, revision, removedImages, clear() {
+      if (attached || current.version !== version) return;
+      if (revision) { if (entry.edit === current) delete entry.edit; }
+      else if (entry.input === current) entry.input = blankDraft();
+      if (draftEntry === entry) renderDraft();
+    } };
+  }
+
   async function send(text: string, attached?: Attachment[]) {
     if (sending || pending) return;
-    let attachments: Attachment[];
-    try { attachments = attached ?? composerUi.attachments(); }
+    let snapshot: ReturnType<typeof snapshotDraft>;
+    try { snapshot = snapshotDraft(attached); }
     catch (error) { report(error instanceof Error ? error : new Error(String(error))); return; }
-    if (!text.trim() && !attachments.length) return;
+    const { attachments, revision, removedImages } = snapshot;
+    if (!text.trim() && !attachments.length && (revision?.images?.length ?? 0) === removedImages.length) return;
     if (!modelPicker.selected()) {
       showStatus('Choose a configured model before sending.');
       modelPicker.open();
@@ -242,6 +279,7 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
     const message = commands.prepare(text);
     const signal = begin();
     const workspace = state.selectedWorkspace;
+    const entry = draftEntry;
     pending = true;
     setSending(true);
     try {
@@ -249,23 +287,20 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
       if (!id) {
         if (!workspace) throw new Error('Add a workspace before starting a conversation.');
         const item = await controller.create(workspace);
-        await options.sessions.refresh();
         id = item.id;
+        drafts.set(id, entry);
+        if (drafts.get('workspace:' + workspace) === entry) drafts.delete('workspace:' + workspace);
+        await options.sessions.refresh();
         if (!signal.aborted) { showConversation(item); setSending(true); }
+        else if (!active() && draftEntry === entry) switchDraft();
       }
+      const run = revision && !attached
+        ? await revision.submit({ text, attachments, removedImages, model: choice, thinkingLevel })
+        : await controller.start(id, { message, attachments, model: choice, thinkingLevel });
       lastInputs.set(id, { message: text, attachments });
-      if (draftMode) {
-        await draftMode.submit({ text, attachments, model: choice, thinkingLevel });
-      } else {
-        await controller.start(id, { message, attachments, model: choice, thinkingLevel });
-      }
-      setDraftMode();
+      submitted.set(id, { runId: run.id, clear: snapshot.clear });
       if (!signal.aborted) {
         modelDraft = undefined; thinkingDraft = undefined;
-        prompt.value = '';
-        if (id) drafts.set(id, '');
-        composerUi.clear();
-        adjustPrompt();
         pending = false;
         await activate(id);
       }
@@ -281,7 +316,15 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
     function accept(event: RunEvent) {
       render(event);
       switch (event.type) {
-        case 'user': if (!lastInputs.has(item.id)) rememberInput(item.id, event.content); break;
+        case 'user': {
+          const submission = submitted.get(item.id);
+          if (submission && submission.runId === event.submissionId) {
+            submission.clear();
+            submitted.delete(item.id);
+          }
+          if (!lastInputs.has(item.id)) rememberInput(item.id, event.content);
+          break;
+        }
         case 'tool':
           showStatus(event.state === 'approval' ? 'Waiting for approval…' :
             event.state === 'running' ? 'Running ' + event.name + '…' : 'Thinking…');
@@ -339,19 +382,22 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
   async function queueMessage() {
     const id = active(); if (!id || !sending || pending) return;
     const signal = visit.signal;
-    const button = element<'button'>('queueSend'); button.disabled = true;
+    const button = element<'button'>('queueSend');
+    pending = true;
+    button.disabled = true;
     try {
+      const snapshot = snapshotDraft();
+      if (snapshot.revision) throw new Error('Finish editing before queuing a message');
       const queued = await controller.queue(id, {
         message: commands.prepare(prompt.value), mode: value('queueMode') as 'steer' | 'followUp',
-        attachments: composerUi.attachments(), model: modelDraft,
-        thinkingLevel: thinkingDraft
+        attachments: snapshot.attachments, model: modelDraft, thinkingLevel: thinkingDraft
       });
+      snapshot.clear();
       if (signal.aborted) return;
-      prompt.value = '';
-      if (id) drafts.set(id, '');
       modelDraft = undefined; thinkingDraft = undefined;
-      composerUi.clear(); adjustPrompt(); updateModelControls(); showQueue(queued);
-    } catch (error) { if (!signal.aborted) report(error instanceof Error ? error : new Error(String(error))); } finally { button.disabled = false; }
+      updateModelControls(); showQueue(queued);
+    } catch (error) { if (!signal.aborted) report(error instanceof Error ? error : new Error(String(error))); }
+    finally { if (!signal.aborted) { pending = false; composerUi.render(); } }
   }
   async function cancelQueue(item?: string) {
     const id = active(), signal = visit.signal;
@@ -395,7 +441,11 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
       if (sending) void queueMessage(); else composer.requestSubmit();
     }
   };
-  prompt.oninput = adjustPrompt;
+  prompt.oninput = () => {
+    draft().text = prompt.value;
+    draft().version++;
+    adjustPrompt();
+  };
 
   element('queueSend').onclick = () => void queueMessage();
   return {
@@ -404,9 +454,12 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
     refreshActions: messageView.refreshActions,
     beginDraftMode(mode: DraftMode) {
       if (sending || pending || !active()) return;
-      setDraftMode(mode);
+      draftEntry.edit = { ...blankDraft(), text: mode.text, revision: mode,
+        attachments: (mode.images ?? []).map((file, originalIndex) => ({ ...file, originalIndex })) };
+      renderDraft();
+      prompt.focus();
     },
-    cancelDraftMode: () => setDraftMode(),
+    cancelDraftMode,
     command(command: ComposerCommand) {
       const dispose = commands.register(command);
       composerUi.refresh(true);

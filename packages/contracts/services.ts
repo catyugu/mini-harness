@@ -37,9 +37,9 @@ export interface SessionStore {
   rename(id: string, title: string, source?: SessionRecord['titleSource']): SessionRecord;
   records(id: string, pluginId: string): SessionRecords;
   log(id: string): import('./session-log.js').SessionLogPort;
-  inspectLog<T>(id: string, read: (log: import('./session-log.js').SessionLogPort) => T): T | undefined;
+  inspectLog<T>(id: string, read: (log: import('./session-log.js').SessionLogPort) => T, strict?: boolean): T | undefined;
   runSummary(id: string): RunInfo | undefined;
-  reserveRun(id: string, run: RunInfo): void;
+  logError(id: string): string | undefined;
   diagnostics(): { id: string; message: string }[];
   assertAvailable(id?: string, workspaceId?: string): void;
   beforeDelete(handler: { quiesce(ids: string[]): Promise<void>; release?(ids: string[]): void; busy?(id: string): boolean }): () => void;
@@ -69,6 +69,7 @@ export interface RunPort {
   readonly size: number;
   readonly events: EventTarget;
   active(id: string): boolean;
+  activeInScope(scopes: ReadonlySet<string>): boolean;
   completion(id: string): Promise<unknown> | undefined;
   view(id: string): { run?: RunInfo; partial?: string; tools: Extract<StreamEvent, { type: 'tool' }>[] };
   signal(id: string, signal?: AbortSignal): AbortSignal | undefined;
@@ -80,10 +81,10 @@ export interface RunPort {
   startRun(id: string, prompt: string, options?: {
     model?: ModelChoice; attachments?: Attachment[]; thinkingLevel?: ThinkingLevel | null;
   }): RunInfo;
-  reviseAndStart(id: string, input: { sourceEntryId: string; expectedLeafId: string | null; message: string;
+  reviseAndStart(id: string, input: { sourceEntryId: string; expectedLeafId: string | null; message: string; removedImages?: number[];
     attachments?: Attachment[]; model?: ModelChoice; thinkingLevel?: ThinkingLevel | null }): Promise<RunInfo>;
   info(id: string): RunInfo | undefined;
-  watch(id: string, runId: string, after: number, emit: (event: RunEvent) => void): () => void;
+  watch(id: string, runId: string, after: number, emit: (event: RunEvent) => void, end?: () => void): () => void;
   cancel(id: string): boolean;
   compact(id: string): Promise<void>;
   stop(): Promise<void>;
@@ -95,7 +96,7 @@ export interface SettingsPort {
   forgetPlugin(id: string): void;
   forgetScopes(keys: string[]): void;
   subscribe(listener: () => void): () => void;
-  validate(listener: (settings: Settings) => void): () => void;
+  validate(listener: (settings: Settings, previous: Settings) => void): () => void;
 }
 
 export interface ConversationViewPort {

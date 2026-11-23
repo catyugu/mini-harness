@@ -31,7 +31,8 @@ export class SessionLog implements SessionLogPort {
   private length = 0;
 
   constructor(readonly file: string, readonly sessionId: string, createdAt = new Date().toISOString(),
-    private readonly changed?: (entry: SessionEntry) => void, private readonly readOnly = false) {
+    private readonly changed?: (entry: SessionEntry) => void, private readonly readOnly = false,
+    private readonly writeFailed?: (error: unknown) => void) {
     // Windows append handles lack FILE_WRITE_DATA and cannot truncate a torn tail.
     // A single validated writer uses explicit positions at its verified end instead.
     this.header = { type: 'session', version: 1, id: sessionId, createdAt };
@@ -183,7 +184,6 @@ export class SessionLog implements SessionLogPort {
     if (this.readOnly) throw new Error('Session log is read-only');
     if (expectedLeafId !== undefined && expectedLeafId !== this.leafId)
       throw new HttpError('conflict', 'Conversation changed; refresh before editing');
-    this.checkFile();
     const value = JSON.parse(JSON.stringify(event)) as SessionEvent;
     const entry = { ...value, version: 1, seq: this.records.length + 1, id: randomBytes(16).toString('hex'),
       parentId, timestamp: new Date().toISOString() } as SessionEntry;
@@ -191,8 +191,10 @@ export class SessionLog implements SessionLogPort {
     try { this.write({ ...entry, checksum: digest(entry) }); }
     catch (error) {
       // The disk may contain a partial record. Prevent a later append from masking the damage.
-      this.close();
-      throw error;
+      try { this.close(); }
+      finally { this.writeFailed?.(error); }
+      if (!this.writeFailed) throw error;
+      throw new HttpError('unavailable', 'Could not write conversation log. See session diagnostics.', { cause: error });
     }
     this.remember(entry);
     this.changed?.(entry);
@@ -201,10 +203,8 @@ export class SessionLog implements SessionLogPort {
 
   append(event: SessionEvent, expectedLeafId?: string | null) { return this.persist(event, this.leafId, expectedLeafId); }
 
-  select(leafId: string | null, expectedLeafId?: string | null) {
-    if (leafId !== null && !this.byId.has(leafId)) throw new Error('Unknown session branch');
-    if (leafId !== null && operational(this.byId.get(leafId)!)) throw new Error('Operational records are not conversation branches');
-    return this.persist({ type: 'branch' }, leafId, expectedLeafId);
+  revise(event: Extract<SessionEvent, { type: 'message' }>, parentId: string | null, expectedLeafId: string | null) {
+    return this.persist(event, parentId, expectedLeafId);
   }
 
   projection(leafId?: string | null) {
@@ -279,9 +279,14 @@ export class SessionLog implements SessionLogPort {
 
   /** Opening an existing log resolves interrupted work before it becomes writable. */
   recover() {
-    if (this.run && isRunning(this.run))
+    if (this.run && isRunning(this.run)) {
+      for (const item of this.pendingInbox.values()) {
+        if (item.mode === 'steer') this.append({ type: 'inbox-failed', inboxId: item.id,
+          reason: 'The target run was interrupted before delivery' });
+      }
       this.append({ type: 'run', run: { ...this.run, state: 'interrupted', finishedAt: new Date().toISOString(),
-        error: 'The previous process stopped before this run finished' } });
+        error: 'The run stopped before a terminal state was recorded' } });
+    }
   }
 
   close() {
@@ -299,7 +304,7 @@ function validateEvent(event: SessionEvent) {
     case 'message':
       validateNativeMessage(event.message);
       if (event.selection) {
-        if (!event.inboxId || event.message.role !== 'user') throw new Error('Invalid inbox model selection');
+        if (event.message.role !== 'user') throw new Error('Invalid user model selection');
         validateEvent({ type: 'model', model: event.selection.model });
         if (event.selection.thinkingLevel !== undefined) validateEvent({ type: 'thinking', level: event.selection.thinkingLevel });
       }

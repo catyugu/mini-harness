@@ -16,6 +16,7 @@ export interface Conversation extends SessionRecord {
   waitingApproval?: boolean;
   model?: ModelChoice;
   run?: RunInfo;
+  logError?: string;
 }
 
 export interface SessionSearchResult {

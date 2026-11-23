@@ -79,6 +79,9 @@ export function createModelPicker(root: HTMLElement, onSelect: (model: ModelChoi
         id.textContent = model.id;
         label.append(id);
       }
+      const modality = document.createElement('small');
+      modality.textContent = model.input.includes('image') ? 'Text and images' : 'Text only';
+      label.append(modality);
       option.append(label);
       option.onpointermove = () => highlight(options.indexOf(option), false);
       option.onclick = () => {

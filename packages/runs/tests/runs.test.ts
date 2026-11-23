@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import fs, { existsSync, readFileSync, rmSync } from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 import { createMiniHarnessServer } from '@mini-harness/host/server';
 import { SessionRegistry } from '@mini-harness/sessions/registry';
 import { WorkspaceCatalog } from '@mini-harness/workspaces/catalog';
@@ -89,21 +90,41 @@ test('independent roots run concurrently and deleting a running tree cancels all
   assert.equal(app.runtime.delegation.activeChildren, 0);
 });
 
-test('a crash leaves indexed runs interrupted while retaining the conversation tree', async (t) => {
+test('startup durably interrupts runs, fails stale steering, and recovers idempotently', async (t) => {
   const mock = await createMockProvider();
   const { root, paths } = createFixturePaths(mock.url);
   t.after(async () => { await mock.close(); rmSync(root, { recursive: true, force: true }); });
   const registry = new SessionRegistry(paths, new WorkspaceCatalog(paths));
   const parent = registry.create(), child = registry.create({ parentId: parent.id });
   registry.log(child.id).append({ type: 'run', run: { id: 'fixture-run', sessionId: child.id, state: 'running', startedAt: new Date().toISOString(), sequence: 1 } });
+  registry.log(child.id).append({ type: 'inbox-enqueued', item: { id: 'steer', mode: 'steer', text: 'Old instruction', images: [] } });
+  registry.log(child.id).append({ type: 'inbox-enqueued', item: { id: 'follow', mode: 'followUp', text: 'Recovered follow-up', images: [] } });
+  const file = registry.nativeFile(child);
   registry.dispose();
   const restored = new SessionRegistry(paths, new WorkspaceCatalog(paths));
   t.after(() => restored.dispose());
-  const interrupted = restored.log(child.id).projection().run;
+  const interrupted = restored.runSummary(child.id);
   assert.ok(interrupted);
   assert.equal(interrupted.state, 'interrupted');
   assert.deepEqual(restored.descendants([parent.id]), [parent.id, child.id]);
-  assert.equal(existsSync(paths.registry), true);
+  const bytes = readFileSync(file);
+  assert.match(bytes.toString(), /"state":"interrupted"/);
+  assert.deepEqual(restored.inspectLog(child.id, (log) => log.queue().map(({ id, state }) => [id, state])),
+    [['follow', 'pending'], ['steer', 'failed']]);
+  assert.equal(existsSync(restored.nativeFile(parent)), false);
+  assert.doesNotMatch(readFileSync(paths.registry, 'utf8'), /lastRuns|fixture-run/);
+  restored.dispose();
+  const restarted = await createMiniHarnessServer(paths);
+  try {
+    assert.deepEqual(readFileSync(file), bytes);
+    assert.equal(await restarted.runtime.runs.send(child.id, 'New manual input'), 'Mock response');
+    const prompts = mock.requests.map(({ messages }) => {
+      const content = (messages as { role: string; content: string | { text: string }[] }[]).at(-1)?.content;
+      return Array.isArray(content) ? content.map(({ text }) => text).join('') : content;
+    });
+    assert.deepEqual(prompts, ['Recovered follow-up', 'New manual input']);
+    assert.deepEqual(restarted.runtime.agent.queue(child.id).map(({ id, state }) => [id, state]), [['steer', 'failed']]);
+  } finally { await restarted.close(); }
 });
 
 test('child queues honor live limits, explicit cancellation, and depth restrictions', { timeout: 15000 }, async (t) => {
@@ -175,4 +196,57 @@ test('late observers receive a saved snapshot and stale cursors cannot attach to
   const latest = app.runtime.runs.info(item.id);
   assert.ok(latest);
   assert.throws(() => app.runtime.runs.watch(item.id, latest.id, Number.NaN, () => {}), /Invalid event cursor/);
+});
+
+test('append, torn write and fsync failures evict the writer without acknowledging a queued run', async (t) => {
+  const mock = await createMockProvider();
+  const { root, paths } = createFixturePaths(mock.url);
+  const app = await createMiniHarnessServer(paths);
+  t.after(async () => { await app.close(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
+  const base = 'http://127.0.0.1:' + await app.listen(0);
+  const headers = { Authorization: 'Bearer ' + app.token };
+  const healthy = app.runtime.registry.create();
+  for (const fault of ['append', 'torn', 'sync']) {
+    const session = app.runtime.registry.create();
+    const log = app.runtime.registry.log(session.id);
+    const original = readFileSync(log.file);
+    const write = fs.writeSync;
+    let shortened = false;
+    const mocked = fault === 'sync'
+      ? t.mock.method(fs, 'fsyncSync', () => { throw new Error('Injected sync failure'); })
+      : t.mock.method(fs, 'writeSync', ((fd: number, bytes: Uint8Array, offset: number, length: number, position: number) => {
+        if (fault === 'torn' && !shortened) {
+          shortened = true;
+          return write(fd, bytes, offset, Math.floor(length / 2), position);
+        }
+        throw new Error('Injected append failure');
+      }) as typeof fs.writeSync);
+    syncBuiltinESMExports();
+    try { assert.throws(() => app.runtime.runs.startRun(session.id, 'Unacknowledged'), /Could not write/); }
+    finally { mocked.mock.restore(); syncBuiltinESMExports(); }
+    assert.throws(() => log.append({ type: 'custom', namespace: 'test', data: null }), /closed/);
+    assert.equal(app.runtime.runs.active(session.id), false);
+    const damaged = readFileSync(log.file);
+    if (fault === 'append') assert.deepEqual(damaged, original);
+    if (fault === 'torn') {
+      assert.ok(damaged.length > original.length);
+      assert.notEqual(damaged.at(-1), 10);
+    }
+    if (fault === 'sync') assert.equal(damaged.at(-1), 10);
+    const details = await (await fetch(base + '/api/sessions/' + session.id, { headers })).json();
+    const status = await (await fetch(base + '/api/status', { headers })).json();
+    assert.equal(details.run, undefined);
+    assert.match(details.logError, /Injected/);
+    assert.ok(status.sessionDiagnostics.some(({ id }: { id: string }) => id === session.id));
+    assert.deepEqual(readFileSync(log.file), damaged, 'GET must leave even a torn tail intact');
+    assert.equal(await app.runtime.runs.send(healthy.id, 'Healthy session'), 'Mock response');
+    const reopened = app.runtime.registry.log(session.id);
+    assert.notStrictEqual(reopened, log);
+    assert.equal(app.runtime.runs.info(session.id)?.state, fault === 'sync' ? 'interrupted' : undefined);
+    if (fault === 'torn') assert.deepEqual(readFileSync(log.file), original);
+    assert.equal(await app.runtime.runs.send(session.id, 'Accepted retry'), 'Mock response');
+    assert.deepEqual(app.runtime.agent.messages(session.id).filter(({ role }) => role === 'user').map(({ content }) =>
+      Array.isArray(content) ? content[0]?.text : content), ['Accepted retry']);
+    assert.equal(app.runtime.registry.logError(session.id), undefined);
+  }
 });

@@ -7,19 +7,14 @@ import type { SubagentPolicy } from '@mini-harness/contracts/delegation';
 
 /** Optional plugin: delegation, scheduling and child-model rules exist only while mounted. */
 export function setup(ctx: Context, api: PluginApi) {
-  const { harnessRegistry: catalog, harnessScopes: scopes, harnessRuns: runs, harnessSettingsStore: settings } = ctx;
+  const { harnessRegistry: catalog, harnessScopes: scopes, harnessRuns: runs } = ctx;
   const policy = () => api.config as unknown as SubagentPolicy;
   const delegation = new Delegation(catalog, { activeModel: (id) => scopes.require(id, 'harnessAgent').activeModel(id) },
     (id) => scopes.require(id, 'harnessModels'), () => runs, policy, (id) => catalog.assertAvailable(id));
-  delegation.validate(policy());
   api.onConfigChange((next) => {
     const config = next as unknown as SubagentPolicy;
-    delegation.validate(config);
     delegation.semaphore.setLimit(config.maxParallel);
   });
-  ctx.effect(() => settings.validate((next) => {
-    if (next.plugins.subagents) delegation.validate(next.pluginConfig.subagents as unknown as SubagentPolicy);
-  }));
   ctx.provide('harnessDelegation', delegation);
   const tool = (id: string) => defineTool({
     name: 'delegate', label: 'Delegate',

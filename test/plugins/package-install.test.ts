@@ -130,7 +130,7 @@ test('npm registry installation resolves dependencies, updates atomically and se
   });
   const metadata = (await (await request('/plugins')).json()).find((plugin: { id: string }) => plugin.id === id);
   assert.deepEqual(metadata.package, { name, version: '1.1.0' }, metadata.error);
-  assert.equal(metadata.state, 'discovered');
+  assert.equal(metadata.state, 'disabled');
   const response = await request('/settings', 'PATCH', { plugins: { [id]: true } });
   assert.equal(response.status, 200, await response.text());
   assert.equal(await (await request('/extensions/' + id + '/label')).json(), 'From dependency');
@@ -152,7 +152,7 @@ test('npm registry installation resolves dependencies, updates atomically and se
   rmSync(link, { recursive: true });
   symlinkSync(paths.cwd, link, 'junction');
   const invalid = (await (await request('/plugins')).json()).find((plugin: { id: string }) => plugin.id === id);
-  assert.equal(invalid.state, 'failed');
+  assert.equal(invalid.state, 'disabled');
   assert.match(invalid.error, /outside its installation directory/);
   assert.equal((await request('/plugins/' + id, 'DELETE')).status, 200);
   assert.ok(!readdirSync(paths.plugins).includes(id));

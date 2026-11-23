@@ -1,12 +1,10 @@
 import type { SessionRecord, ModelChoice } from './conversation.js';
 
 /** Configuration belongs to the Subagents plugin, not global Settings. */
-export interface SubagentPolicy { maxDepth: number; maxParallel: number; provider: string; model: string }
+export interface SubagentPolicy { maxDepth: number; maxParallel: number; model: ModelChoice | null }
 
 /** The host-facing seam for child-agent scheduling. The kernel never imports its implementation. */
 export interface DelegationPort {
-  validate(policy: SubagentPolicy): void;
-  checkProvider(id: string, removing?: boolean): void;
   visible(id: string): boolean;
   readonly parallelLimit: number;
   readonly activeChildren: number;

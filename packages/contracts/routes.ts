@@ -36,7 +36,8 @@ export interface RoutePort {
   dispatch(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> | undefined;
 }
 export interface MutationPort {
-  readonly changing: boolean;
+  protect(scopes?: ReadonlySet<string>): () => void;
+  admit(scopeKeys: readonly string[]): void;
   run<T>(operation: () => Promise<T> | T): Promise<T>;
 }
 

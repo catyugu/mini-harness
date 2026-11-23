@@ -46,7 +46,8 @@ test('an extension owns its authenticated routes and native branch records witho
   const fetched = (await request('/sessions/' + session.id)).body;
   assert.equal(fetched.messages.some((message: { content: unknown }) => JSON.stringify(message).includes(value.note)), false);
   const log = app.runtime.registry.log(session.id);
-  log.select(beforePluginRecords, log.projection().leafId);
+  log.revise({ type: 'message', message: { role: 'user', content: 'New branch', timestamp: Date.now() } },
+    beforePluginRecords, log.projection().leafId);
   assert.deepEqual((await request(notes)).body, []);
   assert.ok(log.entries().some(({ id }) => id === added.body));
 });

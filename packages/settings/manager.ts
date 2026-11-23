@@ -9,7 +9,7 @@ export class SettingsManager implements SettingsPort {
   private stored: Settings;
   private updating = false;
   private readonly listeners = new Set<() => void>();
-  private readonly validators = new Set<(settings: Settings) => void>();
+  private readonly validators = new Set<(settings: Settings, previous: Settings) => void>();
 
   constructor(private readonly paths: Paths, private readonly effective: (settings: Settings) => Settings) {
     this.stored = readSettings(paths);
@@ -22,7 +22,7 @@ export class SettingsManager implements SettingsPort {
     return () => { this.listeners.delete(listener); };
   }
 
-  validate(listener: (settings: Settings) => void) {
+  validate(listener: (settings: Settings, previous: Settings) => void) {
     this.validators.add(listener);
     return () => { this.validators.delete(listener); };
   }
@@ -79,7 +79,7 @@ export class SettingsManager implements SettingsPort {
     const updated = mergeSettings(this.stored, patch);
     const next = this.effective(updated);
     const modelChanged = Object.hasOwn(patch as object, 'model');
-    for (const validate of this.validators) validate(next);
+    for (const validate of this.validators) validate(next, this.settings);
     this.updating = true;
     try {
       await host.configure(next, () => {

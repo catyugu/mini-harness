@@ -16,7 +16,7 @@ export function registerRoutes(ctx: Context) {
     const detach = ctx.harnessRuns.watch(id, runId, after, (event) => {
       stream.send(event);
       if ((event.type === 'run' || event.type === 'snapshot') && !isRunning(event.run)) res.end();
-    });
+    }, () => res.end());
     res.once('close', detach);
     stream.start();
   }

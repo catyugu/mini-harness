@@ -66,6 +66,26 @@ test('drafts, search, rename, single deletion, attachment and input discovery', 
     await page.getByRole('textbox', { name: 'Title', exact: true }).fill('Project review');
     await page.getByRole('button', { name: 'Rename', exact: true }).click();
     await expect(page.locator('#conversationTitle')).toHaveText('Project review');
+    await draft.fill('Keep this draft');
+    await page.evaluate(() => {
+      const read = FileReader.prototype.readAsDataURL;
+      FileReader.prototype.readAsDataURL = function (file) {
+        window.setTimeout(() => read.call(this, file), 700);
+      };
+    });
+    await page.locator('#composer input[type=file]').setInputFiles({ name: 'private.txt', mimeType: 'text/plain', buffer: Buffer.from('ONLY FOR PROJECT REVIEW') });
+    await page.getByRole('button', { name: 'New conversation', exact: true }).click();
+    await expect(draft).toHaveValue('');
+    await draft.fill('Different conversation');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.locator('.message.assistant')).toHaveText('Mock response');
+    expect(JSON.stringify(mock.requests.at(-1))).not.toContain('ONLY FOR PROJECT REVIEW');
+    await page.getByRole('button', { name: 'Project review', exact: true }).click();
+    await expect(draft).toHaveValue('Keep this draft');
+    await expect(page.getByRole('button', { name: 'Remove private.txt' })).toBeVisible();
+    await page.locator('.session-row').filter({ hasText: 'Different conversation' }).hover();
+    await page.getByRole('button', { name: 'Delete Different conversation', exact: true }).click();
+    await page.getByRole('dialog', { name: 'Delete conversation' }).getByRole('button', { name: 'Delete', exact: true }).click();
     await page.getByRole('button', { name: 'Search workspaces and conversations' }).click();
     await page.getByRole('searchbox', { name: 'Search workspaces and conversations' }).fill('absent');
     await expect(page.locator('#sessions .session-row')).toHaveCount(0);

@@ -45,7 +45,8 @@ export interface MessageAction {
 export interface DraftMode {
   title: string;
   text: string;
-  submit(input: { text: string; attachments: Attachment[]; model?: ModelChoice; thinkingLevel?: string | null }): Promise<unknown>;
+  images?: Attachment[];
+  submit(input: { text: string; attachments: Attachment[]; removedImages: number[]; model?: ModelChoice; thinkingLevel?: string | null }): Promise<import('@mini-harness/contracts/transport').RunInfo>;
 }
 type Release = () => void | Promise<void>;
 

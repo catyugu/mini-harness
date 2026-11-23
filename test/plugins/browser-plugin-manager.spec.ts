@@ -80,7 +80,7 @@ test('frontend plugins own UI contributions and clean up on disable and reconfig
     await page.getByRole('button', { name: 'Inserted by plugin', exact: true }).click();
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('/ex');
     await expect(suggestions(page).getByRole('option', { name: /Add a plugin note/ })).toHaveCount(0);
-    await page.locator('.tool-card summary').click();
+    await expect(page.locator('.tool-card')).toHaveAttribute('open', '');
     await expect(page.getByText('Custom listing result')).toHaveCount(0);
     await expect(page.locator('.tool-content pre').first()).toBeVisible();
   } finally { await page.close(); await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
@@ -155,10 +155,13 @@ test('plugin catalog applies configuration and removes disabled browser capabili
     await catalog.getByRole('spinbutton', { name: 'Maximum child depth · subagents' }).fill('2');
     await catalog.getByRole('button', { name: 'Save configuration' }).click();
     await expect(catalog.getByText('Saved.', { exact: true })).toBeVisible();
-    // An empty but schema-required string must not block form submission or be omitted.
-    const childConfig = readJson<any>(paths.settings, {}).pluginConfig.subagents;
-    expect(childConfig.provider).toBe('');
-    expect(childConfig.model).toBe('');
+    const model = catalog.getByRole('combobox', { name: 'Child model · subagents' });
+    await expect(model).toHaveValue('null');
+    expect(readJson<any>(paths.settings, {}).pluginConfig.subagents.model).toBeNull();
+    await model.selectOption({ label: 'Mock Model · local-mock' });
+    await catalog.getByRole('button', { name: 'Save configuration' }).click();
+    await expect(catalog.getByText('Saved.', { exact: true })).toBeVisible();
+    expect(readJson<any>(paths.settings, {}).pluginConfig.subagents.model).toEqual({ provider: 'local-mock', id: 'mock-model' });
     await catalog.getByRole('button', { name: /All plugins/ }).click();
     await catalog.getByRole('button', { name: 'Subagents settings' }).click();
     await expect(catalog.getByRole('spinbutton', { name: 'Maximum child depth · subagents' })).toHaveValue('2');

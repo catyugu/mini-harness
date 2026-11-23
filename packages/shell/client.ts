@@ -29,7 +29,12 @@ const setup: FrontendSetup = (ctx, api) => {
       command.textContent = approval.command;
       const origin = document.createElement('small');
       origin.textContent = services.workspaceRecord(session.workspaceId)?.path ?? session.title;
-      card.append(title, origin, command);
+      const heading = document.createElement('header');
+      heading.className = 'approval-heading';
+      heading.append(title, origin);
+      const actions = document.createElement('div');
+      actions.className = 'approval-actions';
+      card.append(heading, command, actions);
       for (const allow of [false, true]) {
         const button = document.createElement('button');
         button.type = 'button';
@@ -46,7 +51,7 @@ const setup: FrontendSetup = (ctx, api) => {
             for (const action of card.querySelectorAll('button')) action.disabled = false;
           }
         };
-        card.append(button);
+        actions.append(button);
       }
       return card;
     }));

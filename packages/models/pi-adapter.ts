@@ -143,7 +143,7 @@ export class PiModelStore implements ModelCatalogPort, ModelAdminPort {
   list() {
     return this.runtime.getModels().map((model) => ({
       provider: model.provider, id: model.id, name: model.name || model.id,
-      configured: this.authStatus(model.provider).configured, thinkingLevels: getSupportedThinkingLevels(model)
+      configured: this.authStatus(model.provider).configured, input: [...model.input], thinkingLevels: getSupportedThinkingLevels(model)
     }));
   }
   async available() { this.status = await this.readStatus(); return this.list(); }

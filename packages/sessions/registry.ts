@@ -1,5 +1,4 @@
-import { isDeepStrictEqual } from 'node:util';
-import { isRunning, type RunInfo } from '@mini-harness/contracts/transport';
+import type { RunInfo } from '@mini-harness/contracts/transport';
 import type { SessionEntry } from '@mini-harness/contracts/session-log';
 import { HttpError } from '@mini-harness/contracts/routes';
 import { randomUUID } from 'node:crypto';
@@ -24,6 +23,7 @@ export class SessionRegistry implements SessionStore {
   private readonly deletingWorkspaces = new Set<string>();
   private readonly participants = new Set<Participant>();
   private readonly logs = new Map<string, SessionLog>();
+  private readonly latestRuns = new Map<string, RunInfo>();
   private readonly logErrors = new Map<string, string>();
   private closing = false;
   readonly events = new EventTarget();
@@ -33,6 +33,10 @@ export class SessionRegistry implements SessionStore {
     private readonly forgetScopes?: (keys: string[]) => void) {
     this.state = loadCatalog(paths, workspaces);
     this.finishDeletion();
+    for (const record of this.state.sessions) {
+      try { this.openLog(record, 'recover')?.close(); }
+      catch (error) { if (!(error instanceof HttpError && error.code === 'unavailable')) throw error; }
+    }
   }
 
   private commit(state: CatalogState) {
@@ -111,56 +115,53 @@ export class SessionRegistry implements SessionStore {
 
   nativeFile(record: Pick<SessionRecord, 'id' | 'workspaceId'>) { return nativeFile(this.paths, this.workspaces, record); }
 
-  private storeRun(id: string, run: RunInfo | undefined) {
-    const lastRuns = { ...this.state.lastRuns };
-    if (isDeepStrictEqual(lastRuns[id], run)) return;
-    if (run) lastRuns[id] = structuredClone(run);
-    else delete lastRuns[id];
-    this.commit({ ...this.state, lastRuns });
-  }
-
-  reserveRun(id: string, run: RunInfo) {
-    // A crash after reservation can be reconciled with the actual log on its next open.
-    this.storeRun(id, run);
-  }
-
   runSummary(id: string) {
-    const run = this.state.lastRuns?.[id];
-    if (!run) return;
-    return structuredClone(isRunning(run) ? { ...run, state: 'interrupted' as const } : run);
+    const run = this.latestRuns.get(id);
+    return run && structuredClone(run);
   }
+
+  logError(id: string) { return this.logErrors.get(id); }
 
   diagnostics() { return [...this.logErrors].map(([id, message]) => ({ id, message })); }
 
-  private openLog(id: string, record: SessionRecord, readOnly = false) {
+  private fault(id: string, error: unknown) {
+    const detail = error instanceof Error ? error.message : String(error);
+    if (this.logErrors.get(id) === detail) return;
+    this.logErrors.set(id, detail);
+    console.error('Conversation log ' + id, error);
+    this.notify(id);
+  }
+
+  private openLog(record: SessionRecord, mode: 'read' | 'write' | 'recover') {
+    const { id } = record;
+    const writable = mode !== 'read';
     const onChange = (entry: SessionEntry) => {
-      if (entry.type === 'run') {
-        try { this.storeRun(id, entry.run); }
-        catch (error) { console.error('Could not update conversation run summary for ' + id, error); }
-      }
+      if (entry.type === 'run') this.latestRuns.set(id, entry.run);
       const inbox = entry.type.startsWith('inbox-');
       if (inbox || entry.type === 'message' && entry.inboxId) this.notify(id, false, true);
       if (!inbox && entry.type !== 'model-request' && entry.type !== 'tool-schema') this.notify(id);
     };
     let log: SessionLog | undefined;
     try {
-      const file = this.nativeFile(record);
-      log = new SessionLog(file, id, record.createdAt, readOnly ? undefined : onChange, readOnly);
-      if (!readOnly) {
+      const file = nativeFile(this.paths, this.workspaces, record, mode === 'write');
+      if (mode === 'recover') lstatSync(file);
+      log = new SessionLog(file, id, record.createdAt, writable ? onChange : undefined, !writable, (error) => {
+        if (this.logs.get(id) === log) this.logs.delete(id);
+        this.latestRuns.delete(id);
+        this.fault(id, error);
+      });
+      if (writable) {
         log.recover();
-        this.storeRun(id, log.latestRun);
+        const run = log.latestRun;
+        if (run) this.latestRuns.set(id, run);
+        else this.latestRuns.delete(id);
+        if (this.logErrors.delete(id)) this.notify(id);
       }
-      if (this.logErrors.delete(id)) this.notify(id);
       return log;
     } catch (error) {
       log?.close();
-      if (readOnly && missing(error)) return;
-      const detail = error instanceof Error ? error.message : String(error);
-      if (this.logErrors.get(id) !== detail) {
-        this.logErrors.set(id, detail);
-        console.error('Could not open conversation log ' + id, error);
-        this.notify(id);
-      }
+      if (mode !== 'write' && missing(error)) return;
+      this.fault(id, error instanceof Error ? error.cause ?? error : error);
       throw new HttpError('unavailable', 'This conversation log could not be opened. See session diagnostics.', { cause: error });
     }
   }
@@ -175,7 +176,9 @@ export class SessionRegistry implements SessionStore {
     this.assertAvailable(id);
     const record = this.get(id);
     if (!record) throw new HttpError('not_found', 'Conversation not found');
-    const log = this.openLog(id, record);
+    if (this.logErrors.has(id) && [...this.participants].some(({ busy }) => busy?.(id)))
+      throw new HttpError('unavailable', 'The conversation must finish before reopening its log');
+    const log = this.openLog(record, 'write');
     if (!log) throw new Error('Could not open conversation log');
     this.logs.set(id, log);
     for (const [key, candidate] of this.logs) {
@@ -187,18 +190,18 @@ export class SessionRegistry implements SessionStore {
     return log;
   }
 
-  inspectLog<T>(id: string, read: (log: SessionLog) => T): T | undefined {
+  inspectLog<T>(id: string, read: (log: SessionLog) => T, strict = false): T | undefined {
     const existing = this.logs.get(id);
     if (existing) return read(existing);
     const record = this.get(id);
     if (!record) return;
     try {
-      const log = this.openLog(id, record, true);
+      const log = this.openLog(record, 'read');
       if (!log) return;
       try { return read(log); }
       finally { log.close(); }
     } catch (error) {
-      if (error instanceof HttpError && error.code === 'unavailable') return;
+      if (!strict && error instanceof HttpError && error.code === 'unavailable') return;
       throw error;
     }
   }
@@ -206,8 +209,8 @@ export class SessionRegistry implements SessionStore {
   records(id: string, namespace: string): SessionRecords {
     this.assertAvailable(id);
     return {
-      list: () => this.log(id).branch().flatMap((entry) => entry.type === 'custom' && entry.namespace === namespace
-        ? [{ id: entry.id, timestamp: entry.timestamp, data: structuredClone(entry.data) }] : []),
+      list: () => this.inspectLog(id, (log) => log.branch().flatMap((entry) => entry.type === 'custom' && entry.namespace === namespace
+        ? [{ id: entry.id, timestamp: entry.timestamp, data: structuredClone(entry.data) }] : []), true) ?? [],
       append: async (data) => {
         this.assertAvailable(id);
         const value = JSON.parse(JSON.stringify(data));
@@ -250,7 +253,7 @@ export class SessionRegistry implements SessionStore {
   }
 
   modifiedAt(record: SessionRecord) {
-    try { return lstatSync(this.nativeFile(record)).mtime.toISOString(); }
+    try { return lstatSync(nativeFile(this.paths, this.workspaces, record, false)).mtime.toISOString(); }
     catch { return record.createdAt; }
   }
 
@@ -299,12 +302,12 @@ export class SessionRegistry implements SessionStore {
         this.logs.get(id)?.close();
         this.logs.delete(id);
         this.logErrors.delete(id);
+        this.latestRuns.delete(id);
         return { id, workspaceId: record.workspaceId };
       });
       if (all.length) {
         const locations = all.map((id) => ({ id, keys: this.scopes?.address(id) ?? [] }));
-        const lastRuns = Object.fromEntries(Object.entries(this.state.lastRuns ?? {}).filter(([id]) => !chosen.has(id)));
-        this.commit({ ...this.state, sessions: this.state.sessions.filter((entry) => !chosen.has(entry.id)), lastRuns, pendingDelete });
+        this.commit({ ...this.state, sessions: this.state.sessions.filter((entry) => !chosen.has(entry.id)), pendingDelete });
         this.finishDeletion();
         for (const { id, keys } of locations) {
           this.notify(id, true);
@@ -324,6 +327,6 @@ export class SessionRegistry implements SessionStore {
       catch (error) { if (!missing(error)) throw error; }
     }
     this.forgetScopes?.(this.state.pendingDelete.map(({ id }) => 'session:' + id));
-    this.commit({ sessions: this.state.sessions, lastRuns: this.state.lastRuns });
+    this.commit({ sessions: this.state.sessions });
   }
 }

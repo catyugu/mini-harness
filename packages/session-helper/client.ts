@@ -16,11 +16,20 @@ const setup: FrontendSetup = (_ctx, api) => {
     run({ message, sessionId, leafId, rawText }) {
       const sourceEntryId = message.id;
       const expectedLeafId = leafId;
+      const files = message.attachments ?? [];
+      const imageType = /^image\/(png|jpeg|gif|webp)$/;
+      const imageFiles = files.filter(({ mimeType }) => imageType.test(mimeType));
+      const textFiles = files.filter(({ mimeType }) => !imageType.test(mimeType));
+      const images = typeof message.content === 'string' ? [] : message.content
+        .filter((part): part is typeof part & { mimeType: string; data: string } => part.type === 'image' && !!part.mimeType && !!part.data)
+        .map(({ mimeType, data }, index) => ({ name: imageFiles[index]?.name ?? 'Image ' + (index + 1), mimeType, data }));
       api.beginDraftMode({
-        title: 'Editing message · creates a new conversation branch', text: rawText,
-        submit: async ({ text, attachments, model, thinkingLevel }) => {
-          await api.request('/extensions/session-helper/revise', payload('POST', {
-            sessionId, sourceEntryId, expectedLeafId, message: text, attachments, model, thinkingLevel
+        title: textFiles.length ? 'Editing a new branch. Reattach: ' + textFiles.map(({ name }) => name).join(', ')
+          : 'Editing message · creates a new conversation branch',
+        text: rawText, images,
+        submit: async ({ text, attachments, removedImages, model, thinkingLevel }) => {
+          return api.request<import('@mini-harness/contracts/transport').RunInfo>('/extensions/session-helper/revise', payload('POST', {
+            sessionId, sourceEntryId, expectedLeafId, message: text, attachments, removedImages, model, thinkingLevel
           }));
         }
       });

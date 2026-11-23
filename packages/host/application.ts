@@ -35,7 +35,8 @@ export class MiniHarnessRuntime {
       harnessSettingsStore: this.configuration,
       harnessRoutes: new RouteRegistry(),
       ...(network ? { harnessNetwork: network } : {}),
-      harnessMutations: new MutationGate(),
+      harnessMutations: new MutationGate((scopes) => scopes ? ctx.get('harnessRuns')?.activeInScope(scopes) === true :
+        Boolean(ctx.get('harnessRuns')?.size || ctx.get('harnessAgent')?.hasPending)),
       harnessChanges: changes,
       harnessUpdateSettings: (patch: unknown) => this.updateSettings(patch),
       harnessPluginCatalog: {

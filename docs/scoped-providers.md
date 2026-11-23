@@ -26,9 +26,10 @@ continues supplying its other services when a child replaces just one of them.
 
 Provider selection and isolation follow application → workspace → ancestor
 session → session. A choice affects only its subtree. A sibling keeps its
-parent's provider, and deleting or disabling a local provider restores inherited
-resolution. A second instance of the same provider ID still needs an explicit
-choice to shadow its ancestor.
+parent's provider. Remove the local provider selection to restore inheritance.
+A selected provider that fails to mount remains unavailable in its subtree until
+repaired. A second instance of the same provider ID needs an explicit choice to
+shadow its ancestor.
 
 Consumers call `harnessScopes.prepare(sessionId, signal)` before reading
 `harnessScopes.require(sessionId, serviceName)` or `harnessScopes.optional(sessionId, serviceName)`. This resolves the nearest live
@@ -37,6 +38,7 @@ environment services. Plugins declaring `inject` receive services from their own
 scope's context.
 
 The graph is validated before setup. Provider changes restart their dependent
-plugins in dependency order and await cleanup. A failed setup or configuration
-write restores the previous graph. Application replacements must replace a
+plugins in dependency order and await cleanup. A failed update to a healthy
+instance restores its previous configuration. A failed optional instance is
+shown in the Plugins page, where its scope configuration can be repaired. Application replacements must replace a
 multi-service plugin as a unit; scoped replacements leave the parent mounted.

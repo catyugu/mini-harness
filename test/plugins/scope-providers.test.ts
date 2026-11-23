@@ -85,18 +85,20 @@ test('reusing a provider ID in a descendant still requires explicit shadowing', 
 
 test('live scoped providers isolate siblings, restore inheritance and roll back failed setup', async (t) => {
   const directory = mkdtempSync(join(tmpdir(), 'mini-live-scopes-'));
-  const workspaceId = 'a'.repeat(32);
+  const workspaceId = 'a'.repeat(32), otherWorkspace = 'b'.repeat(32);
   const records = new Map<string, SessionRecord>([
     ['parent', { id: 'parent', workspaceId, parentId: null } as SessionRecord],
     ['child', { id: 'child', workspaceId, parentId: 'parent' } as SessionRecord],
-    ['sibling', { id: 'sibling', workspaceId, parentId: null } as SessionRecord]
+    ['sibling', { id: 'sibling', workspaceId, parentId: null } as SessionRecord],
+    ['independent', { id: 'independent', workspaceId: otherWorkspace, parentId: null } as SessionRecord]
   ]);
   const released: string[] = [];
   const builtins: PluginDescriptor[] = [
     { id: 'global', scope: 'application', title: 'Global', description: '', required: true,
       provides: ['greeting', 'extra'], setup(_ctx, api) { api.provide('greeting', 'global'); api.provide('extra', 'retained'); } },
     { id: 'workspace', scope: 'workspace', title: 'Workspace', description: '', provides: ['greeting'],
-      setup(_ctx, api) { api.provide('greeting', 'workspace'); } },
+      configSchema: { type: 'object', properties: { value: { type: 'string' } }, required: ['value'] },
+      setup(_ctx, api) { api.provide('greeting', String(api.config.value)); } },
     { id: 'layer', scope: 'session', title: 'Layer', description: '', provides: ['greeting'],
       setup(_ctx, api) {
         api.onDispose(() => { released.push(String(api.config.value)); });
@@ -104,24 +106,39 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
         api.provide('greeting', String(api.config.value));
       } }
   ];
-  let settings = structuredClone(DEFAULTS);
+  const workspaceKey = 'workspace:' + workspaceId;
+  const workspace = { plugins: { workspace: true }, providers: { greeting: 'workspace' }, pluginConfig: { workspace: { value: 'workspace' } } };
+  let settings: typeof DEFAULTS = { ...structuredClone(DEFAULTS), scopes: {
+    [workspaceKey]: { ...workspace, pluginConfig: { workspace: { value: 42 } } }
+  } };
   const ctx = new Context();
   ctx.provide('authority', {});
   const host = new PluginHost(ctx, directory, builtins, ['authority'], () => settings,
     (id) => records.get(id), () => ({ list: () => [], append: async () => '' }));
   t.after(async () => { await host.close(); rmSync(directory, { recursive: true, force: true }); });
   await host.start(settings);
+  assert.equal(host.metadata().find(({ id }) => id === 'workspace')?.state, 'failed');
+  assert.throws(() => host.require('sibling', 'greeting'), /Invalid configuration/);
+  assert.equal(host.require('independent', 'greeting'), 'global');
   const configure = (scopes: typeof settings.scopes) => {
     const next = { ...settings, scopes };
     return host.configure(next, () => { settings = next; });
   };
   const parent = { plugins: { layer: true }, providers: { greeting: 'layer' }, pluginConfig: { layer: { value: 'parent' } } };
   const child = { plugins: { layer: true }, providers: { greeting: 'layer' }, pluginConfig: { layer: { value: 'child' } } };
-  await configure({ 'session:parent': parent, 'session:child': child });
+  const broken = { ...parent, pluginConfig: { layer: { fail: true } } };
+  await configure({ [workspaceKey]: workspace, 'session:parent': parent, 'session:child': child, 'session:sibling': broken });
+  assert.equal(host.metadata().find(({ id }) => id === 'layer')?.state, 'inactive');
   await Promise.all([host.prepare('child'), host.prepare('sibling')]);
   assert.equal(host.require('parent', 'greeting'), 'parent');
   assert.equal(host.require('child', 'greeting'), 'child');
-  assert.equal(host.require('sibling', 'greeting'), 'global');
+  await host.prepare('sibling');
+  assert.throws(() => host.require('sibling', 'greeting'), /Scoped setup failed/);
+  assert.equal(host.require('independent', 'greeting'), 'global');
+  assert.equal(host.metadata().find(({ id }) => id === 'layer')?.state, 'partial');
+  await configure({ ...settings.scopes, 'session:sibling': { ...parent, pluginConfig: { layer: { value: 'fixed' } } } });
+  assert.equal(host.require('sibling', 'greeting'), 'fixed');
+  assert.equal(host.metadata().find(({ id }) => id === 'layer')?.state, 'ready');
   assert.equal(host.require('child', 'extra'), 'retained');
   await assert.rejects(configure({ ...settings.scopes, 'session:parent': {
     ...parent, pluginConfig: { layer: { value: 'broken', fail: true } }
@@ -136,7 +153,7 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
   assert.equal(host.allowsTool('child', 'shell'), false);
 
   // Adding a configured ancestor of an already mounted child must mount that ancestor immediately.
-  await configure({ ['workspace:' + workspaceId]: { plugins: { workspace: true }, providers: { greeting: 'workspace' } },
+  await configure({ [workspaceKey]: workspace,
     'session:child': { disabledTools: ['shell'] } });
   assert.equal(host.require('child', 'greeting'), 'workspace');
   assert.equal(host.require('sibling', 'greeting'), 'workspace');
