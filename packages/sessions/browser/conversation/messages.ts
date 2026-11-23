@@ -1,10 +1,10 @@
 import type { MessageContent, ViewMessage } from '../../../contracts/message.js';
 import type { RunEvent } from '../../../contracts/transport.js';
-import type { ConversationView } from '../../types.js';
-import type { FrontendHost } from '../../kernel/extensions.js';
-import { icon } from '../components/icons.js';
-import { renderMarkdown, markdownSource } from '../components/markdown.js';
-import type { MessageAction, MessageActionContext } from '../../kernel/extensions.js';
+import type { ConversationView } from '../../../web/types.js';
+import type { FrontendHost } from '../../../web/kernel/extensions.js';
+import { icon } from '../../../web/ui/components/icons.js';
+import { renderMarkdown, markdownSource } from '../../../web/ui/components/markdown.js';
+import type { MessageAction, MessageActionContext } from '../../../web/kernel/extensions.js';
 
 export function createMessageView(messages: HTMLElement, extensions: Pick<FrontendHost, 'render' | 'messageActions'>,
   current: () => { sessionId?: string; leafId?: string | null }, retryLast: () => void) {

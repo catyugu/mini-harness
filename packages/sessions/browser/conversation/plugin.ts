@@ -1,4 +1,4 @@
-import type { BrowserPlugin } from '../../kernel/extensions.js';
+import type { BrowserPlugin } from '../../../web/kernel/extensions.js';
 import { conversationView } from './view.js';
 
 export const conversationPlugin: BrowserPlugin = {

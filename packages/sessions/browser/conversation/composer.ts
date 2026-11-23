@@ -1,9 +1,9 @@
-import { scopedElements } from '../../api.js';
-import { icon } from '../components/icons.js';
+import { scopedElements } from '../../../web/api.js';
+import { icon } from '../../../web/ui/components/icons.js';
 import type { CommandRegistry } from './commands.js';
-import type { ComposerCommand } from '../../contracts/commands.js';
+import type { ComposerCommand } from '../../../web/contracts/commands.js';
 import type { Attachment } from '../../../contracts/input.js';
-import type { Completer, FrontendApi, Suggestion } from '../../kernel/extensions.js';
+import type { Completer, FrontendApi, Suggestion } from '../../../web/kernel/extensions.js';
 export function createComposer(root: HTMLElement, report: (error: Error) => void, commands: CommandRegistry, signal: AbortSignal) {
   const { element } = scopedElements(root);
   const prompt = element<'textarea'>('prompt'), form = element<'form'>('composer');

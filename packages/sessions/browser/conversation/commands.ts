@@ -1,4 +1,4 @@
-import type { ComposerCommand } from '../../contracts/commands.js';
+import type { ComposerCommand } from '../../../web/contracts/commands.js';
 
 export class CommandRegistry {
   private commands = new Map<string, ComposerCommand>();

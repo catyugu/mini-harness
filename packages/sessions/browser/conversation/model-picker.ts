@@ -1,7 +1,7 @@
 import type { ModelChoice } from '../../../contracts/conversation.js';
-import { scopedElements } from '../../api.js';
-import { icon } from '../components/icons.js';
-import type { ModelInfo } from '../../types.js';
+import { scopedElements } from '../../../web/api.js';
+import { icon } from '../../../web/ui/components/icons.js';
+import type { ModelInfo } from '../../../web/types.js';
 
 export function createModelPicker(root: HTMLElement, onSelect: (model: ModelChoice) => void, signal: AbortSignal) {
   const { element } = scopedElements(root);
