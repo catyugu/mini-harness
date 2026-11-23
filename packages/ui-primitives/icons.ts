@@ -13,6 +13,7 @@ const paths = {
   delegate: 'M12 3v6M5 14v-2h14v2M5 14a3 3 0 1 0 0 6 3 3 0 0 0 0-6Zm14 0a3 3 0 1 0 0 6 3 3 0 0 0 0-6ZM10 2h4v5h-4z',
   terminal: 'M3 5h18v14H3zM7 9l3 3-3 3m6 0h4',
   search: 'M16 10a6 6 0 1 0-12 0 6 6 0 0 0 12 0m-2 5 5 5',
+  'list-checks': 'M3 5l1.5 1.5L7 4M10 6h11M3 12l1.5 1.5L7 10M10 12h11M3 19l1.5 1.5L7 17M10 18h11',
   files: 'M3 7h7l2-3h9v16H3z',
   file: 'M6 3h8l4 4v14H6zM14 3v5h4',
   'file-code': 'M6 3h8l4 4v14H6zM14 3v5h4m-7 4-2 2 2 2m2-4 2 2-2 2',

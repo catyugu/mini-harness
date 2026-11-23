@@ -66,6 +66,7 @@ test('drafts, search, rename, single deletion, attachment and input discovery', 
     await page.getByRole('textbox', { name: 'Title', exact: true }).fill('Project review');
     await page.getByRole('button', { name: 'Rename', exact: true }).click();
     await expect(page.locator('#conversationTitle')).toHaveText('Project review');
+    await page.getByRole('button', { name: 'Search workspaces and conversations' }).click();
     await page.getByRole('searchbox', { name: 'Search workspaces and conversations' }).fill('absent');
     await expect(page.locator('#sessions .session-row')).toHaveCount(0);
     await page.getByRole('searchbox', { name: 'Search workspaces and conversations' }).fill('review');
