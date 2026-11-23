@@ -1,4 +1,4 @@
-import type { Settings } from '../../src/config.js';
+import type { Settings } from '../../platform/config.js';
 import { payload, scopedElements } from '../api.js';
 import type { BrowserPlugin, FrontendApi } from '../kernel/extensions.js';
 import { icon } from './components/icons.js';

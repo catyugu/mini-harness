@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test';
 import { rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.js';
-import { readJson, writeJson } from '../../../src/config.js';
-import { startIsolatedHost, settingsSection, modelButton, modelSearch, suggestions, chooseModel } from '../../../test/support/browser.js';
+import { createFixturePaths, createMockProvider } from '../../../../test/helpers/mock-provider.js';
+import { readJson, writeJson } from '../../../platform/config.js';
+import { startIsolatedHost, settingsSection, modelButton, modelSearch, suggestions, chooseModel } from '../../../../test/support/browser.js';
 
 test('desktop and mobile: send, navigate, settings and bulk select', async ({ browser }) => {
   const mock = await createMockProvider();

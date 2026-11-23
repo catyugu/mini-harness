@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { rmSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.js';
-import { startIsolatedHost, settingsSection, chooseModel, expectInViewport } from '../../../test/support/browser.js';
+import { createFixturePaths, createMockProvider } from '../../../../test/helpers/mock-provider.js';
+import { startIsolatedHost, settingsSection, chooseModel, expectInViewport } from '../../../../test/support/browser.js';
 
 test('switch transitions respect reduced motion and roll back a failed setting once', async ({ page }) => {
   const mock = await createMockProvider(), { root, paths } = createFixturePaths(mock.url);
