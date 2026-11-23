@@ -1,9 +1,8 @@
 import { test, expect } from '@playwright/test';
-import { execFileSync } from 'node:child_process';
 import { rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.js';
-import { startIsolatedHost, settingsSection, expectInViewport } from '../../../test/support/browser.js';
+import { startIsolatedHost } from '../../../test/support/browser.js';
 
 test('switching workspaces preserves running conversations and each conversation’s file tabs', async ({ page }) => {
   let entered: () => void, release: () => void;

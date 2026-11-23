@@ -136,11 +136,11 @@ export function conversationView(api: FrontendApi, state: BrowserState, options:
     if (last && !sending) void send(last.message, last.attachments);
   });
 
-  function rememberInput(id: string, content: MessageContent, message = messageView.textOf(content)) {
+  function rememberInput(id: string, content: MessageContent) {
     const attachments = (typeof content === 'string' ? [] : content ?? [])
       .filter((block) => block.type === 'image')
       .map(({ mimeType, data }) => ({ name: 'image', mimeType, data }));
-    lastInputs.set(id, { message, attachments });
+    lastInputs.set(id, { message: messageView.textOf(content), attachments });
   }
 
   function showWelcome(show: boolean) {
@@ -270,7 +270,7 @@ export function conversationView(api: FrontendApi, state: BrowserState, options:
     function accept(event: RunEvent) {
       render(event);
       switch (event.type) {
-        case 'user': rememberInput(item.id, event.content, event.text); break;
+        case 'user': rememberInput(item.id, event.content); break;
         case 'tool': showStatus(event.state === 'running' ? 'Running ' + event.name + '…' : 'Thinking…'); break;
         case 'complete':
         case 'error': showStatus(''); break;

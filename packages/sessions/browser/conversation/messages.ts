@@ -4,7 +4,7 @@ import type { ConversationView } from '../../../web/types.js';
 import type { FrontendHost } from '../../../web/kernel/extensions.js';
 import { icon } from '../../../web/ui/components/icons.js';
 import { renderMarkdown, markdownSource } from '../../../web/ui/components/markdown.js';
-import type { MessageAction, MessageActionContext } from '../../../web/kernel/extensions.js';
+import type { MessageActionContext } from '../../../web/kernel/extensions.js';
 
 export function createMessageView(messages: HTMLElement, extensions: Pick<FrontendHost, 'render' | 'messageActions'>,
   current: () => { sessionId?: string; leafId?: string | null }, retryLast: () => void) {
@@ -214,7 +214,7 @@ function stream(initial: ConversationView) {
     const pinned = messages.scrollHeight - messages.clientHeight - messages.scrollTop < 96;
     switch (event.type) {
       case 'user':
-        appendHistory({ role: 'user', content: event.content ?? event.text, timestamp: Date.now() });
+        appendHistory({ role: 'user', content: event.content, timestamp: Date.now() });
         break;
       case 'assistant-start':
         finish();

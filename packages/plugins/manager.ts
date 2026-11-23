@@ -26,7 +26,7 @@ export class PluginHost {
     const builtin = this.catalog.builtins.get(plan.id);
     const mod = builtin || !plan.source ? undefined :
       await import(pathToFileURL(plan.source).href + '?v=' + lstatSync(plan.source).mtimeMs);
-    const component = builtin ?? mod?.default ?? mod?.apply;
+    const component = builtin ?? mod?.default;
     const setup = builtin || !plan.source
       ? (builtin?.setup ?? (() => {}))
       : (typeof component === 'function' ? component : component?.apply?.bind(component));

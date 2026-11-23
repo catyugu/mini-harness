@@ -86,6 +86,27 @@ test('file tools have a plugin lifecycle and required plugins cannot be disabled
   assert.equal(runtime.plugins.ctx.harnessTools.forSession(item.id).some(({ name }) => name === 'read' || name === 'dependent_tool'), false);
 });
 
+test('local plugins require a default setup function or Cordis component', async (t) => {
+  const mock = await createMockProvider();
+  const { root, paths } = createFixturePaths(mock.url);
+  const runtime = new MiniHarnessRuntime(paths);
+  t.after(async () => { await runtime.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
+  for (const [id, source] of [
+    ['component', `export default { inject: ['harnessSessions'], apply(ctx) {
+      if (ctx.harnessSessions.list().length !== 0) throw new Error('Unexpected sessions');
+    } };`],
+    ['named-entry', 'export function apply() {}']
+  ]) {
+    mkdirSync(join(paths.plugins, id));
+    writeFileSync(join(paths.plugins, id, 'plugin.js'), source);
+  }
+  await runtime.start();
+  await runtime.updateSettings({ plugins: { component: true } });
+  await assert.rejects(runtime.updateSettings({ plugins: { 'named-entry': true } }), /Expected a setup function or a Cordis component/);
+  assert.equal(runtime.settings.plugins.component, true);
+  assert.equal(runtime.settings.plugins['named-entry'], undefined);
+});
+
 test('plugin JSON Schema applies defaults and rejects invalid changes before setup', async (t) => {
   const mock = await createMockProvider();
   const { root, paths } = createFixturePaths(mock.url);

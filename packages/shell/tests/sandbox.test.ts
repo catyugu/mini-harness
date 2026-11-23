@@ -2,11 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { sandboxCommand } from '../sandbox.js';
 import { supportsIsolation } from '../isolation.js';
-import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { runShell } from '../sandbox.js';
-import { Workspace } from '../../files/workspace.js';
 
 test('isolation refuses unsupported hosts', () => {
   assert.equal(supportsIsolation('win32'), false);

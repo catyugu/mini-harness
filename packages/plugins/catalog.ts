@@ -91,7 +91,7 @@ export class PluginCatalog {
         return { id: metadata.id, source, requires: metadata.requires ?? [],
           config: this.configValues(metadata.id, settings, metadata.configSchema) };
       })
-    ].filter(({ id }) => this.systemIds.has(id) || Object.hasOwn(settings.plugins, id) && settings.plugins[id]);
+    ];
     const desired = new Map(next.map((plan) => [plan.id, plan]));
     const ordered: PluginPlan[] = [];
     const visiting = new Set<string>();

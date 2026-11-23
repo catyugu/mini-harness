@@ -1,9 +1,7 @@
 import { test, expect } from '@playwright/test';
-import { rmSync, mkdirSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { rmSync } from 'node:fs';
 import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.js';
-import { readJson, writeJson } from '../../platform/config.js';
-import { startIsolatedHost, settingsSection, modelButton, modelSearch, suggestions, chooseModel } from '../../../test/support/browser.js';
+import { startIsolatedHost } from '../../../test/support/browser.js';
 
 test('message actions use icons and allow copying or editing the text', async ({ page }) => {
   const mock = await createMockProvider(), { root, paths } = createFixturePaths(mock.url);

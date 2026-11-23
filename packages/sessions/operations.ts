@@ -1,7 +1,4 @@
-import type { AgentSession } from '@earendil-works/pi-coding-agent';
 import type { ConversationPort, SessionStore, AgentPort, RunPort, SettingsPort } from '../contracts/services.js';
-import type { ModelChoice } from '../contracts/conversation.js';
-import type { Attachment } from '../contracts/input.js';
 
 export class ConversationOperations implements ConversationPort {
   private readonly deleting = new Set<string>();
@@ -64,12 +61,6 @@ export class ConversationOperations implements ConversationPort {
       for (const id of all) this.pi.release(id);
       return this.registry.delete(ids);
     } finally { for (const id of all) this.deleting.delete(id); }
-  }
-
-  async reviseAndStart(id: string, input: { sourceEntryId: string; expectedLeafId: string | null; message: string;
-    attachments?: Attachment[]; model?: ModelChoice; thinkingLevel?: AgentSession['thinkingLevel'] }) {
-    this.assertAvailable(id);
-    return this.runs.reviseAndStart(id, input);
   }
 
   async stop() {

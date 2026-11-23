@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { fixture, waitUntil } from '../../../test/support/api-fixture.js';
 
 test('shell approval gates execution, handles rejection and cancellation', async (t) => {
-  const { app, paths, request, finish } = await fixture(t, ({ messages }) => messages.at(-1).role === 'tool' ? 'Tool completed' :
+  const { app, request, finish } = await fixture(t, ({ messages }) => messages.at(-1).role === 'tool' ? 'Tool completed' :
     { tool: 'sandbox_shell', args: { command: 'echo approved' } });
   await app.runtime.updateSettings({ plugins: { shell: true }, pluginConfig: { shell: { mode: 'host' } } });
   const { body: session } = await request('/sessions', 'POST', {});

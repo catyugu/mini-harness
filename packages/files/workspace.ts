@@ -1,6 +1,6 @@
 import { constants } from 'node:fs';
 import { lstat, mkdir, open, opendir, realpath, stat, type FileHandle } from 'node:fs/promises';
-import { basename, dirname, isAbsolute, matchesGlob, relative, resolve, sep } from 'node:path';
+import { basename, dirname, matchesGlob, relative, resolve, sep } from 'node:path';
 import {
   createEditToolDefinition, createFindToolDefinition, createGrepToolDefinition,
   createLsToolDefinition, createReadToolDefinition, createWriteToolDefinition, truncateHead

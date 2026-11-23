@@ -40,13 +40,9 @@ export class MiniHarnessRuntime {
   createConversation(input: { workspaceId?: string } = {}) {
     return this.plugins.ctx.harnessOperations.createConversation(input);
   }
-  deleteWorkspace(id: string) { return this.plugins.ctx.harnessOperations.deleteWorkspace(id); }
   getConversation(id: string) { return this.plugins.ctx.harnessOperations.getConversation(id); }
   export(ids: string[]) { return this.plugins.ctx.harnessOperations.export(ids); }
   delete(ids: string[]) { return this.plugins.ctx.harnessOperations.delete(ids); }
-  reviseAndStart(id: string, input: Parameters<import('../contracts/services.js').ConversationPort['reviseAndStart']>[1]) {
-    return this.plugins.ctx.harnessOperations.reviseAndStart(id, input);
-  }
   updateSettings(patch: SettingsPatch) {
     return this.configuration.update(patch, this.plugins, this.plugins.ctx.harnessOperations, this.pi);
   }

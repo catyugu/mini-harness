@@ -59,7 +59,7 @@ export default function setup(ctx, api) {
 }
 ```
 
-The default export can also be a Cordis component with `apply` and `inject`. Declare service names with `inject`; declare plugin IDs with manifest `requires`. Register tools during setup and honor cancellation in tool execution.
+`plugin.js` must have a default export: a setup function or a Cordis component with `apply` and `inject`. Declare service names with `inject`; declare plugin IDs with manifest `requires`. Register tools during setup and honor cancellation in tool execution.
 
 | API | Purpose |
 | - | - |
@@ -142,7 +142,7 @@ The Plugins page can install a local bundle containing `plugin.js`, `web.js` or 
 
 Register a right-panel tab with `api.rightTab(type, { title, create })`. Both callbacks receive an address with `workspaceId`, optional `sessionId`, and optional `path`. `create(address, signal)` returns the tab's element and receives an abort signal for any in-flight work. Call `api.openTab(type, path?)` to open or focus the tab in the current conversation or workspace. Changing conversations aborts and releases the outgoing tab views. Registered tabs keep their address and selection, and recreate their views on return. Inspector content added with `inspect` lasts for the current scope. Disabling a plugin closes its tabs.
 
-## GUI API additions
+## Workspace and GUI API
 
 The server runs one Runtime for all registered workspaces. Each conversation has a stable Workspace ID. A request can address a conversation by ID or scope file and Skills requests to a registered Workspace ID. Deleting a Workspace permanently deletes all associated conversations and Pi session files, including subagent descendants; it leaves the project directory and its files untouched.
 
@@ -178,20 +178,8 @@ Use `beginDraftMode({ title, text, submit(input) })` for a custom composer opera
 
 The `session-helper` plugin submits to its authenticated route `POST /api/extensions/session-helper/revise`, passing `sessionId`, `sourceEntryId`, `expectedLeafId`, `message` and optional send parameters. The host checks an optimistic Pi leaf token, navigates the AgentSession tree and starts a run. Earlier branches remain in Pi JSONL. This does **not** roll back files written to the workspace. Existing branch selection/navigation UX is a separate concern.
 
-## Co-located built-in capabilities
+## Built-in capabilities and tests
 
-Every internal capability lives under `packages/<id>/` and has a private `package.json` declaring its direct internal dependencies. These manifests define a checked source dependency graph, not separately installed or published npm packages. Only the root `mini-harness` package is released. The root build compiles all `packages/**/*.ts` into `dist/packages/`; the npm tarball excludes feature-owned tests and private package manifests.
+Add capabilities under `packages/<id>/`, register server setup in `packages/host/composition.ts` and browser setup in `packages/web-app/application.ts`. Optional plugin entrypoints use their own manifest and lifecycle.
 
-User-toggleable capabilities such as Files, Skills, Shell, Subagents and Session helper own a `manifest.ts`, `host.ts` and optional `client.ts`. Essential capabilities such as Agent, Sessions, Runs, Models, Workspaces and UI also own their implementations, but mount invisibly as non-toggleable Cordis providers. The server composition root is `packages/host/composition.ts`; it assembles these providers without moving their business logic into the kernel.
-
-The reusable browser kernel, shared UI and browser primitives live under `packages/web/`. Feature UI belongs with its feature as `packages/<id>/browser.ts` and, when needed, subsidiary modules under `packages/<id>/browser/`. `packages/web-app/application.ts` is the single browser composition root and imports concrete browser plugins; the shared `web` package never imports features. Browser feature imports use real module paths without aliases or redirects.
-
-The web server publishes only a deliberately restricted set of browser JavaScript modules: the reusable `/packages/web/` source (excluding tests), the two `/packages/web-app/` entry modules, and feature `client.js`, `browser.js` and `browser/` modules. Server-only modules, manifests, test bundles and other feature internals are not public URLs. When a browser entry imports another feature-owned runtime module, place that dependency under its `browser/` directory. The system test checks the complete transitive browser module import graph to prevent broken runtime imports.
-
-Do not recreate the retired top-level `src/`, `features/` or `web/` trees. Add new capabilities under `packages/<id>/`, register their server setup in `packages/host/composition.ts` and their browser setup in `packages/web-app/application.ts` as appropriate. Optional plugin entrypoints remain controlled by their own manifest and plugin lifecycle.
-
-## Architecture and tests
-
-See [the architecture contract](architecture.md). Feature-owned tests belong under `packages/<id>/tests/`; infrastructure and kernel tests under the root `test/` directory; reusable browser UI tests under `packages/web/ui/tests/`; cross-capability journeys under `test/system/`; and shared fixtures under `test/support/`. Keep tests out of infrastructure package source trees.
-
-`npm run check:deps` verifies private package manifests against all cross-package TypeScript imports, validates dependency direction, and rejects cycles. `npm test` discovers Node `*.test.js` tests recursively, while `npm run test:browser` runs the Playwright `*.spec.ts` suite. `npm run pack:check` builds and installs the single published npm tarball and verifies that it starts successfully without co-located tests, private manifests or host-only browser assets.
+See [architecture](architecture.md) for package boundaries, browser asset exposure, test ownership and verification commands.

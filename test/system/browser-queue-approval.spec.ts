@@ -1,9 +1,8 @@
 import { test, expect } from '@playwright/test';
-import { rmSync, mkdirSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { rmSync } from 'node:fs';
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
 import { readJson, writeJson } from '../../packages/platform/config.js';
-import { startIsolatedHost, settingsSection, modelButton, modelSearch, suggestions, chooseModel } from '../support/browser.js';
+import { startIsolatedHost } from '../support/browser.js';
 
 test('running messages can queue follow-ups and approve shell commands from the GUI', async ({ page }) => {
   let release: () => void, entered: () => void;

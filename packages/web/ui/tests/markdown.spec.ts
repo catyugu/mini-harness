@@ -1,9 +1,7 @@
 import { test, expect } from '@playwright/test';
-import { rmSync, mkdirSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { rmSync } from 'node:fs';
 import { createFixturePaths, createMockProvider } from '../../../../test/helpers/mock-provider.js';
-import { readJson, writeJson } from '../../../platform/config.js';
-import { startIsolatedHost, settingsSection, modelButton, modelSearch, suggestions, chooseModel } from '../../../../test/support/browser.js';
+import { startIsolatedHost } from '../../../../test/support/browser.js';
 
 test('renders Markdown and tool results, and stops a pending reply', async ({ page }) => {
   let markWaiting: () => void;

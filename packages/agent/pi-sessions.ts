@@ -276,7 +276,7 @@ export class PiSessions {
     const off = session.subscribe((event) => {
       switch (event.type) {
         case 'message_start':
-          if (event.message.role === 'user') emit({ type: 'user', content: event.message.content, text: typeof event.message.content === 'string' ? event.message.content : event.message.content.filter((block) => block.type === 'text').map((block) => block.text).join('\n') });
+          if (event.message.role === 'user') emit({ type: 'user', content: event.message.content });
           if (event.message.role === 'assistant') emit({ type: 'assistant-start' });
           break;
         case 'message_update':

@@ -1,4 +1,4 @@
-import type { Context } from 'cordis';
+import type {} from 'cordis';
 import type { AgentSession, ModelRuntime } from '@earendil-works/pi-coding-agent';
 import type { Conversation, ModelChoice } from './conversation.js';
 import type { WorkspaceRecord } from './workspace.js';
@@ -108,8 +108,6 @@ export interface ConversationPort {
   }>;
   export(ids: string[]): ReturnType<SessionStore['export']>;
   delete(ids: string[]): Promise<string[]>;
-  reviseAndStart(id: string, input: { sourceEntryId: string; expectedLeafId: string | null; message: string;
-    attachments?: Attachment[]; model?: ModelChoice; thinkingLevel?: AgentSession['thinkingLevel'] }): Promise<RunInfo>;
   stop(): Promise<void>;
 }
 

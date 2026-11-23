@@ -1,4 +1,4 @@
-import type { Context } from 'cordis';
+import type {} from 'cordis';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 /** HTTP-specific transport contracts. Capability handlers never import the server. */

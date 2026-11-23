@@ -3,7 +3,7 @@ import { lstatSync, readFileSync, realpathSync, unlinkSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { getPaths, readJson, writeJson } from '../platform/config.js';
 import type { WorkspacePort } from '../contracts/services.js';
-import { isRunning, type RunInfo } from '../contracts/transport.js';
+import { isRunning } from '../contracts/transport.js';
 
 import type { ModelChoice, Conversation } from '../contracts/conversation.js';
 

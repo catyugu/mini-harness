@@ -48,6 +48,9 @@ test('real Pi SDK through HTTP: streaming, persistence, Skills, export and perma
   assert.equal(stream.status, 200);
   const raw = await stream.text();
   const events = raw.trim().split('\n').map((line) => JSON.parse(line));
+  const user = events.find((event) => event.type === 'user');
+  assert.deepEqual(user.content, [{ type: 'text', text: 'Test SDK integration' }]);
+  assert.equal(Object.hasOwn(user, 'text'), false);
   assert.ok(events.some((event) => event.type === 'delta'), raw);
   assert.equal(events.find((event) => event.type === 'complete')?.text, 'Mock response');
   assert.equal(events.some((event) => event.type === 'error'), false, raw);

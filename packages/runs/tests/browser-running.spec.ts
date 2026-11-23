@@ -1,9 +1,7 @@
 import { test, expect } from '@playwright/test';
-import { rmSync, mkdirSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { rmSync } from 'node:fs';
 import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.js';
-import { readJson, writeJson } from '../../platform/config.js';
-import { startIsolatedHost, settingsSection, modelButton, modelSearch, suggestions, chooseModel } from '../../../test/support/browser.js';
+import { startIsolatedHost, settingsSection } from '../../../test/support/browser.js';
 
 test('refresh and navigation preserve a run while another conversation completes', async ({ browser }) => {
   for (const viewport of [{ width: 1366, height: 900 }, { width: 390, height: 844 }]) {

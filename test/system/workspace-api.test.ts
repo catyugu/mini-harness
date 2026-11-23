@@ -1,14 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, symlinkSync, realpathSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync, existsSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
-import { execFileSync } from 'node:child_process';
-import { createMiniHarnessServer } from '../../packages/host/server.js';
-import { prepareInput } from '../../packages/platform/input.js';
-import { Inspection } from '../../packages/files/inspection.js';
-import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
 
-import { fixture, waitUntil } from '../support/api-fixture.js';
+import { fixture } from '../support/api-fixture.js';
 
 test('workspace registration, session navigation and scoped tools leave an active run executing', async (t) => {
   let release: () => void, entered: () => void;

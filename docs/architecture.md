@@ -15,7 +15,7 @@ mini-harness publishes **one npm package**. Internally, every folder under `pack
 | `packages/web-app/application.ts` | Browser composition root (a private package separate from reusable `web`). `packages/web/ui/` owns reusable UI primitives and core browser plugins. |
 | `packages/host/server.ts` | Local HTTP server: static assets, authorization, origin checking, process controls and registered route dispatch only. |
 
-Essential services mount before optional user-facing plugins through `packages/index.ts`. They are Cordis capabilities even though they have no on/off switches. Optional Subagents owns its semaphore and delegation provider. Runs delegates through the optional service when present, and runs directly when it is absent. No inactive subagent implementation is kept by the application.
+Essential services mount before optional user-facing plugins through `packages/host/composition.ts`. They are Cordis capabilities even though they have no on/off switches. Optional Subagents owns its semaphore and delegation provider. Runs delegates through the optional service when present, and runs directly when it is absent.
 
 Plugin settings are uniformly stored under `settings.pluginConfig[pluginId]` and validated through the owning feature's schema. Settings publishes committed changes; consumers own live update hooks. Lifecycle-changing edits require idle runs, while the Subagents live policy can update without a remount.
 
@@ -32,7 +32,6 @@ Every private `packages/<name>/package.json` declares **only** its direct intern
 - Only application and browser composition roots import concrete feature entries.
 - Browser modules may import server **types** from contracts, never server implementation values.
 - Registration and cleanup belong to the same Cordis fiber. Publishing settings or UI events happens only after successful operations; rollback restores the previous scope set.
-- No transitional file aliases, orphaned compatibility adapters, archives or parallel feature implementations are maintained.
 
 Deleting a registered workspace cascades through all its conversations and descendant Pi histories, while leaving the user's project directory untouched. Session deletion retains a minimal crash-recovery journal, not an archive.
 

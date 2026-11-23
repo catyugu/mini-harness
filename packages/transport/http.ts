@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { HttpReply, type RouteRequest, type RouteHandler, type RoutePort } from '../contracts/routes.js';
+import { HttpReply, type RouteHandler, type RoutePort } from '../contracts/routes.js';
 
 export function requestBody(req: IncomingMessage, max = 1024 * 1024): Promise<any> {
   return new Promise((resolve, reject) => {

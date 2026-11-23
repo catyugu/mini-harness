@@ -2,7 +2,7 @@ import type { Settings, SettingsPatch, Paths } from '../contracts/config.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { isAbsolute, join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 
 export const DEFAULTS = Object.freeze({
   port: 3837,
@@ -56,7 +56,6 @@ export function writeJson(file: string, value: unknown) {
 export function validateSettings(input: any) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Invalid settings object');
   const p = input.plugins || {};
-  const model = input.model || {};
   for (const [key, value] of Object.entries(p)) {
     if (!/^[a-z][a-z0-9-]{0,63}$/.test(key)) throw new Error('Invalid plugin name');
     if (typeof value !== 'boolean') throw new Error('Plugin switches must be boolean');

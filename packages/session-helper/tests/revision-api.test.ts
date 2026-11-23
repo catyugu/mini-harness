@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { join } from 'node:path';
 
 import { fixture } from '../../../test/support/api-fixture.js';
 test('session-helper edits branch the Pi session instead of appending and enforces the active leaf', async (t) => {

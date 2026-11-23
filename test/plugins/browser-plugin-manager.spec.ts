@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { readFileSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
+import { rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
 import { readJson, writeJson } from '../../packages/platform/config.js';

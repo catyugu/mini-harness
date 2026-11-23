@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, rmSync, writeFileSync, existsSync } from 'node:fs';
+import { rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createMiniHarnessServer } from '../../host/server.js';
 import { createMockProvider, createFixturePaths } from '../../../test/helpers/mock-provider.js';
