@@ -1,10 +1,10 @@
 import { Context } from 'cordis';
-import { system, builtins } from '../features/index.js';
-import { SettingsManager } from '../features/settings/manager.js';
-import { PluginHost } from './plugins/host.js';
-import { RouteRegistry } from './transport/http.js';
-import { MutationGate } from './transport/mutations.js';
-import type { Paths, SettingsPatch } from './config.js';
+import { system, builtins } from '../index.js';
+import { SettingsManager } from '../settings/manager.js';
+import { PluginHost } from '../plugins/manager.js';
+import { RouteRegistry } from '../transport/http.js';
+import { MutationGate } from '../transport/mutations.js';
+import type { Paths, SettingsPatch } from '../platform/config.js';
 
 /** Pure application composition. Concrete capability lifecycles are owned by Cordis plugins. */
 export class MiniHarnessRuntime {
@@ -44,7 +44,7 @@ export class MiniHarnessRuntime {
   getConversation(id: string) { return this.plugins.ctx.harnessOperations.getConversation(id); }
   export(ids: string[]) { return this.plugins.ctx.harnessOperations.export(ids); }
   delete(ids: string[]) { return this.plugins.ctx.harnessOperations.delete(ids); }
-  reviseAndStart(id: string, input: Parameters<import('./contracts/services.js').ConversationPort['reviseAndStart']>[1]) {
+  reviseAndStart(id: string, input: Parameters<import('../contracts/services.js').ConversationPort['reviseAndStart']>[1]) {
     return this.plugins.ctx.harnessOperations.reviseAndStart(id, input);
   }
   updateSettings(patch: SettingsPatch) {

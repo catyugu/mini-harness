@@ -5,7 +5,7 @@ import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
-import { readServerInfo } from '../src/process.js';
+import { readServerInfo } from '../packages/host/process.js';
 import { createFixturePaths, createMockProvider } from '../test/helpers/mock-provider.js';
 
 const execFile = promisify(exec);
@@ -66,7 +66,7 @@ async function checkPackage() {
     assert.ok(info);
     const headers = { Authorization: 'Bearer ' + info.token, 'Content-Type': 'application/json' };
     const get = (path: string) => fetch(info.url + path, { headers });
-    for (const asset of ['/', '/app.js', '/ui/components/markdown.js', '/features/session-helper/client.js', '/ui/components/primitives.js', '/vendor/marked.js', '/vendor/purify.js', '/logo.svg', '/manifest.webmanifest', '/style.css', '/icon-192.png', '/icon-512.png', '/favicon.ico']) {
+    for (const asset of ['/', '/app.js', '/ui/components/markdown.js', '/packages/session-helper/client.js', '/ui/components/primitives.js', '/vendor/marked.js', '/vendor/purify.js', '/logo.svg', '/manifest.webmanifest', '/style.css', '/icon-192.png', '/icon-512.png', '/favicon.ico']) {
       const response = await get(asset);
       assert.equal(response.status, 200, asset);
       await response.arrayBuffer();

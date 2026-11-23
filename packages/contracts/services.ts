@@ -7,7 +7,7 @@ import type { RunEvent, RunInfo, StreamEvent } from './transport.js';
 import type { ViewMessage } from './message.js';
 import type { Attachment } from './input.js';
 import type { PluginMetadata, SessionRecords } from './plugins.js';
-import type { Settings, SettingsPatch } from '../config.js';
+import type { Settings, SettingsPatch } from '../platform/config.js';
 
 /** Stable, implementation-free ports for the independently mounted product capabilities. */
 export interface WorkspacePort {
