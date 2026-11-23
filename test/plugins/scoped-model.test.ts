@@ -15,7 +15,7 @@ test('scoped model catalogs govern explicit runs and inherited or model-selected
       const ids = ['parent-model', 'child-model'];
       const resolve = (choice) => {
         const id = choice?.id || ids[0];
-        if (choice?.provider !== provider || !ids.includes(id)) throw new Error('Model is not in this scoped catalog');
+        if (choice?.provider !== provider || !ids.includes(id)) return undefined;
         return { provider, id };
       };
       const list = () => ids.map(id => ({ provider, id, name: id, configured: true, thinkingLevels: ['off'] }));
@@ -52,7 +52,7 @@ test('scoped model catalogs govern explicit runs and inherited or model-selected
   const sibling = app.runtime.registry.create();
   const scopedChoice = { provider: 'scoped-only', id: 'parent-model' };
   const applicationChoice = { ...app.runtime.settings.model };
-  assert.throws(() => app.runtime.plugins.ctx.harnessModels.resolve(scopedChoice), /Unknown model/);
+  assert.equal(app.runtime.plugins.ctx.harnessModels.resolve(scopedChoice), undefined);
   const configured = await request('/settings', 'PATCH', { scopes: {
     ['session:' + parent.id]: { plugins: { 'scoped-models': true },
       providers: { harnessModels: 'scoped-models', harnessLlm: 'scoped-models' } }

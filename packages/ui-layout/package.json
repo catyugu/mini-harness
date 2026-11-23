@@ -4,9 +4,12 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@mini-harness/contracts": "file:../contracts",
-    "@mini-harness/ui-primitives": "file:../ui-primitives",
-    "@mini-harness/ui-runtime": "file:../ui-runtime",
-    "@mini-harness/web": "file:../web"
+    "@mini-harness/contracts": "workspace:*",
+    "@mini-harness/ui-primitives": "workspace:*",
+    "@mini-harness/ui-runtime": "workspace:*",
+    "@mini-harness/web": "workspace:*"
+  },
+  "exports": {
+    "./manifest": "./manifest.ts"
   }
 }

@@ -1,21 +1,21 @@
-import type { Attachment } from '../../../contracts/input.js';
-import type { Conversation, ModelChoice } from '../../../contracts/conversation.js';
-import type { MessageContent } from '../../../contracts/message.js';
-import type { RunEvent, RunInfo } from '../../../contracts/transport.js';
-import type { ConversationView, ThinkingLevel, ModelCatalog } from '../../../web/types.js';
-import { scopedElements } from '../../../web/api.js';
-import { exportSessions, isRunning } from '../../../web/transport/session-client.js';
-import { createConversationController } from '../../../web/models/conversation-controller.js';
-import type { Selection } from '../../../web/models/selection.js';
-import type { RemoteStore } from '../../../web/models/remote-store.js';
-import type { Settings } from '../../../contracts/config.js';
+import type { Attachment } from '@mini-harness/contracts/input';
+import type { Conversation, ModelChoice } from '@mini-harness/contracts/conversation';
+import type { MessageContent } from '@mini-harness/contracts/message';
+import type { RunEvent, RunInfo } from '@mini-harness/contracts/transport';
+import type { ConversationView, ThinkingLevel, ModelCatalog } from '@mini-harness/web/types';
+import { scopedElements } from '@mini-harness/web/api';
+import { exportSessions, isRunning } from '@mini-harness/web/transport/session-client';
+import { createConversationController } from '@mini-harness/web/models/conversation-controller';
+import type { Selection } from '@mini-harness/web/models/selection';
+import type { RemoteStore } from '@mini-harness/web/models/remote-store';
+import type { Settings } from '@mini-harness/contracts/config';
 import { createMessageView } from './messages.js';
 import { CommandRegistry } from './commands.js';
-import type { ComposerCommand } from '../../../web/contracts/commands.js';
+import type { ComposerCommand } from '@mini-harness/web/contracts/commands';
 import { createComposer } from './composer.js';
 import { createModelPicker } from './model-picker.js';
-import type { FrontendApi, ToolView, MessageAction, DraftMode } from '../../../ui-runtime/frontend.js';
-import { fromMarkup } from '../../../ui-primitives/primitives.js';
+import type { FrontendApi, ToolView, MessageAction, DraftMode } from '@mini-harness/ui-runtime/frontend';
+import { fromMarkup } from '@mini-harness/ui-primitives/primitives';
 
 type Queue = ConversationView['queue'];
 

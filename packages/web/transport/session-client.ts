@@ -1,4 +1,4 @@
-import type { RunEvent, RunInfo } from '../../contracts/transport.js';
+import type { RunEvent, RunInfo } from '@mini-harness/contracts/transport';
 import { api, data, payload, readEvents, wait } from '../api.js';
 import type { ConversationView } from '../types.js';
 

@@ -201,7 +201,7 @@ test('native runs use the nearest scoped LLM provider while siblings retain the 
   assert.equal(await app.runtime.runs.send(child.id, 'Child task'), 'Child adapter');
   assert.equal(await app.runtime.runs.send(sibling.id, 'Sibling task'), 'Mock response');
   assert.equal(mock.requests.length, 1);
-  assert.strictEqual(app.runtime.plugins.resolve(child.id, 'harnessModels'), app.runtime.plugins.ctx.harnessModels);
+  assert.strictEqual(app.runtime.plugins.require(child.id, 'harnessModels'), app.runtime.plugins.ctx.harnessModels);
   assert.equal((await request('/settings', 'PATCH', { scopes: {
     ['session:' + parent.id]: scopes['session:' + parent.id], ['session:' + child.id]: { disabledTools: ['sandbox_shell'] }
   } })).status, 200);

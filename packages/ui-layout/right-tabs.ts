@@ -1,7 +1,7 @@
-import { button, iconButton } from '../ui-primitives/primitives.js';
+import { button, iconButton } from '@mini-harness/ui-primitives/primitives';
 import type { createLayout } from './layout.js';
 
-import type { TabScope, TabAddress, RightTabType } from '../web/contracts/tabs.js';
+import type { TabScope, TabAddress, RightTabType } from '@mini-harness/web/contracts/tabs';
 
 type Tab = {
   key: string;

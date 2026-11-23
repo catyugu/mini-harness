@@ -34,6 +34,7 @@ export interface SessionStore {
   list(workspaceId?: string): SessionRecord[];
   create(input?: { parentId?: string | null; title?: string; workspaceId?: string }): SessionRecord;
   rename(id: string, title: string, source?: SessionRecord['titleSource']): SessionRecord;
+  records(id: string, pluginId: string): SessionRecords;
   log(id: string): import('./session-log.js').SessionLogPort;
   assertAvailable(id?: string, workspaceId?: string): void;
   beforeDelete(handler: { quiesce(ids: string[]): Promise<void>; release?(ids: string[]): void; busy?(id: string): boolean }): () => void;
@@ -54,7 +55,6 @@ export interface AgentPort extends RunAgentPort {
   activeModel(id: string): ModelChoice;
   read(id: string): { messages: ViewMessage[]; leafId: string | null; model: ModelChoice; thinkingLevel: ThinkingLevel; queue: unknown };
   queueInput(id: string, text: string, mode: 'steer' | 'followUp', attachments?: Attachment[]): Promise<unknown>;
-  records(id: string, pluginId: string): SessionRecords;
 }
 
 export interface RunPort {

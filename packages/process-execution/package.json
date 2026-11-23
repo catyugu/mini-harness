@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@mini-harness/contracts": "file:../contracts"
+    "@mini-harness/contracts": "workspace:*"
+  },
+  "exports": {
+    "./manifest": "./manifest.ts"
   }
 }

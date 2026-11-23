@@ -1,7 +1,7 @@
 import type { ThinkingLevel } from './agent.js';
 import type { ModelChoice } from './conversation.js';
 import type { ImageInput, PreparedMessage } from './input.js';
-import type { NativeMessage } from './llm.js';
+import type { ModelRequestSnapshot, NativeMessage, NativeToolMessage } from './llm.js';
 import type { ViewMessage } from './message.js';
 import type { RunInfo } from './transport.js';
 
@@ -16,6 +16,9 @@ export interface InboxItem {
 /** The durable session protocol is independent of any model SDK. */
 export type SessionEvent =
   | { type: 'message'; message: NativeMessage; presentation?: PreparedMessage; elapsedMs?: number; inboxId?: string }
+  /** With no override, the request references the model context at its parent entry. */
+  | { type: 'model-request'; request: ModelRequestSnapshot }
+  | { type: 'tool-execution'; result: NativeToolMessage }
   | { type: 'model'; model: ModelChoice }
   | { type: 'thinking'; level: ThinkingLevel }
   | { type: 'custom'; namespace: string; data: unknown }

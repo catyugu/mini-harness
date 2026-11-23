@@ -2,7 +2,7 @@ import { createServer, type Server } from 'node:http';
 import { mkdtempSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { getPaths, ensurePaths, writeJson } from '../../packages/platform/config.js';
+import { getPaths, ensurePaths, writeJson } from '@mini-harness/platform/config';
 
 export interface MockProvider {
   url: string;

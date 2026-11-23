@@ -1,16 +1,17 @@
 import assert from 'node:assert/strict';
 import { execFile as exec } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
-import { readServerInfo } from '../packages/host/process.js';
+import { readServerInfo } from '@mini-harness/host/process';
 import { createFixturePaths, createMockProvider } from '../test/helpers/mock-provider.js';
 
 const execFile = promisify(exec);
-const npmPath = process.env.npm_execpath;
-if (!npmPath) throw new Error('Run npm run pack:check');
+const npmPath = process.env.MINI_HARNESS_NPM_CLI ?? resolve(dirname(process.execPath),
+  process.platform === 'win32' ? 'node_modules/npm/bin/npm-cli.js' : '../lib/node_modules/npm/bin/npm-cli.js');
+await access(npmPath);
 const npm = (args: string[], options = {}) => execFile(process.execPath, [npmPath, ...args], { timeout: 120000, ...options });
 
 async function availablePort() {
@@ -32,37 +33,51 @@ async function checkPackage() {
   const cli = (...args: string[]) => npm(['exec', '--offline', '--', 'mini-harness', ...args], { cwd: installed, env });
   try {
     const packed = await npm(['pack', '--json', '--pack-destination', work], { cwd: resolve('.') });
-    const [{ name, filename, integrity, files }] = JSON.parse(packed.stdout);
+    const [{ name, filename, files }] = JSON.parse(packed.stdout);
     assert.ok(files.every(({ path }: { path: string }) =>
       !/^dist\/(?:scripts|test)\//.test(path) &&
       !/^dist\/packages\/[^/]+\/package\.json$/.test(path) &&
       !/^dist\/.*\/tests\//.test(path) &&
       !/\.(?:test|spec)\.js$/.test(path)), 'Published package must exclude test artifacts');
     await mkdir(installed);
-    const source = JSON.parse(await readFile('package-lock.json', 'utf8'));
     const tarball = 'file:../' + filename;
-    const fixture = { name: 'mini-harness-install-check', version: '0.0.0', dependencies: { [name]: tarball } };
-    const { version, license, dependencies, bin, engines } = source.packages[''];
-    // Install the tarball into an empty project while keeping the tested dependency resolutions.
-    const lock = {
-      name: fixture.name, version: fixture.version, lockfileVersion: source.lockfileVersion, requires: true,
-      packages: {
-        ...source.packages,
-        '': fixture,
-        ['node_modules/' + name]: { version, resolved: tarball, integrity, license, dependencies, bin, engines }
-      }
-    };
-    await writeFile(join(installed, 'package.json'), JSON.stringify({ ...fixture, private: true }));
-    await writeFile(join(installed, 'package-lock.json'), JSON.stringify(lock));
-    const networkPolicy = process.env.CI === 'true' ? '--offline' : '--prefer-offline';
-    console.log('Installing ' + filename + ' and its locked production dependencies');
-    await npm(['ci', networkPolicy, '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund'], {
+    const fixture = { name: 'mini-harness-install-check', private: true, version: '0.0.0', dependencies: { [name]: tarball } };
+    await writeFile(join(installed, 'package.json'), JSON.stringify(fixture));
+    console.log('Installing ' + filename + ' and its production dependencies with npm');
+    await npm(['install', '--prefer-offline', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund'], {
       cwd: installed, timeout: 240000
     });
+    const published = join(installed, 'node_modules', name);
+    const manifest = JSON.parse(await readFile(join(published, 'package.json'), 'utf8'));
+    assert.doesNotMatch(JSON.stringify(manifest), /@mini-harness\/|workspace:\*/);
+    for (const { path } of files.filter(({ path }) => /\.(?:js|d\.ts)$/.test(path))) {
+      const emitted = await readFile(join(published, path), 'utf8');
+      assert.doesNotMatch(emitted, /['"]@mini-harness\//, path + ' depends on a private workspace');
+    }
     await execFile(process.execPath, ['--input-type=module', '-e',
       "import 'mini-harness/plugin'; import 'mini-harness/browser-plugin';"], { cwd: installed });
     for (const path of ['contracts/plugin-sdk.d.ts', 'ui-runtime/plugin-sdk.d.ts'])
       assert.ok(files.some((file) => file.path === 'dist/types/packages/' + path), 'Missing SDK declarations: ' + path);
+    await writeFile(join(installed, 'plugin-types.mts'), `
+      import type { PluginApi, LlmPort } from 'mini-harness/plugin';
+      import type { FrontendApi, SlotRenderer } from 'mini-harness/browser-plugin';
+      declare module 'mini-harness/plugin' {
+        interface ServiceMap { example: { greet(name: string): string } }
+      }
+      declare const api: PluginApi;
+      const llm: LlmPort | undefined = api.service('harnessLlm');
+      api.provide('example', { greet: (name) => name.toUpperCase() });
+      api.service('example')?.greet('world');
+      // @ts-expect-error The declared service takes a string.
+      api.service('example')?.greet(1);
+      // @ts-expect-error TypeScript plugins declare their own services.
+      api.service('undeclared');
+      declare const frontend: FrontendApi, render: SlotRenderer;
+      frontend.slots.registerKeyed('sidebar.primary', 'example', render);
+    `);
+    await execFile(process.execPath, [resolve('node_modules/typescript/bin/tsc'),
+      '--strict', '--skipLibCheck', '--noEmit', '--target', 'ES2022', '--module', 'NodeNext', 'plugin-types.mts'],
+    { cwd: installed });
     assert.match((await cli('--help')).stdout, /minimal native agent harness/);
     const launch = await cli('--detached', '--cwd', paths.cwd, '--port', String(await availablePort()));
     assert.match(launch.stdout, /started independently/);

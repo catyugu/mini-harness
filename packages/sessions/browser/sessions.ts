@@ -1,6 +1,6 @@
-import type { Conversation } from '../../contracts/conversation.js';
+import type { Conversation } from '@mini-harness/contracts/conversation';
 import { sessionHierarchy } from './navigation-tree.js';
-import { button, iconButton } from '../../ui-primitives/primitives.js';
+import { button, iconButton } from '@mini-harness/ui-primitives/primitives';
 
 export function sessionTree(sessions: Conversation[], options: {
   active?: string; expanded: Set<string>; selection: Set<string>; selecting: boolean;

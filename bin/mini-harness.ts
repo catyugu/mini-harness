@@ -4,8 +4,8 @@ import { openSync, closeSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { getPaths, ensurePaths, writeJson } from '../packages/platform/config.js';
-import { lockInstance, readServerInfo, requestShutdown, serverStatus } from '../packages/host/process.js';
+import { getPaths, ensurePaths, writeJson } from '@mini-harness/platform/config';
+import { lockInstance, readServerInfo, requestShutdown, serverStatus } from '@mini-harness/host/process';
 
 const executable = fileURLToPath(import.meta.url);
 
@@ -18,6 +18,8 @@ Usage:
   mini-harness --no-open                 Start without opening a browser
   mini-harness status                    Show server status
   mini-harness stop                      Stop the running server
+  mini-harness plugin install <id> <package[@version-or-tag]>
+  mini-harness plugin update <id> [package[@version-or-tag]]
   mini-harness --help                    Show help
 
 Configuration: ~/.mini-harness/settings.json (or MINI_HARNESS_HOME)
@@ -81,7 +83,7 @@ async function detached(paths: ReturnType<typeof getPaths>, port?: number) {
 
 async function serve(paths: ReturnType<typeof getPaths>, port?: number, open = false) {
   const unlock = await lockInstance(paths.home);
-  let app: Awaited<ReturnType<typeof import('../packages/host/server.js').createMiniHarnessServer>>;
+  let app: Awaited<ReturnType<typeof import('@mini-harness/host/server').createMiniHarnessServer>>;
   let ready: Promise<void>;
   let ending: Promise<void>;
   let stopping = false;
@@ -101,7 +103,7 @@ async function serve(paths: ReturnType<typeof getPaths>, port?: number, open = f
   process.once('SIGINT', shutdown);
   ready = (async () => {
     rmSync(paths.pid, { force: true });
-    const { createMiniHarnessServer } = await import('../packages/host/server.js');
+    const { createMiniHarnessServer } = await import('@mini-harness/host/server');
     app = await createMiniHarnessServer(paths, { shutdown });
     if (stopping) return;
     const listening = await app.listen(port);
@@ -127,7 +129,25 @@ async function serve(paths: ReturnType<typeof getPaths>, port?: number, open = f
 }
 
 async function main() {
-  const args = parse(process.argv.slice(2));
+  const argv = process.argv.slice(2);
+  if (argv[0] === 'plugin') {
+    const [, operation, id, spec, ...extra] = argv;
+    if ((operation !== 'install' && operation !== 'update') || !id || extra.length || (operation === 'install' && !spec))
+      throw new Error('Usage: mini-harness plugin install <id> <package> or mini-harness plugin update <id> [package]');
+    const paths = getPaths();
+    ensurePaths(paths);
+    const unlock = await lockInstance(paths.home);
+    try {
+      const [{ installPackagedPlugin }, { plugins }] = await Promise.all([
+        import('@mini-harness/plugins/package-installer'), import('@mini-harness/host/composition')
+      ]);
+      const { name, version } = await installPackagedPlugin(paths, operation, id, spec,
+        (id) => plugins.some((plugin) => plugin.id === id));
+      console.log(id + ': ' + name + '@' + version);
+    } finally { await unlock(); }
+    return;
+  }
+  const args = parse(argv);
   if (args.help) return help();
   const paths = getPaths(args.cwd);
   ensurePaths(paths);

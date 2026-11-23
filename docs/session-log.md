@@ -23,6 +23,10 @@ native event, a monotonically increasing `seq`, a stable hexadecimal `id`, a
 `parentId`, an ISO timestamp and a SHA-256 checksum. Native IDs contain 32
 hexadecimal characters.
 
+A `model-request` entry captures the native input before streaming. Its parent identifies the active branch snapshot. An omitted `request.messages` means the messages are derived from that parent's model context. Transformed messages and compaction inputs are stored directly. The session ID comes from the log header. A retry uses the same captured input.
+
+A `tool-execution` entry records a completed side effect before a model-visible result transform. These records and model requests are operational entries. They do not advance the selected branch or appear as chat messages. A failed result transform commits a safe tool error so the original content stays out of later model requests.
+
 ## Appending and recovering
 
 Each append writes one complete JSON record followed by a newline, then calls

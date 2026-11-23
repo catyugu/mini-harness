@@ -1,4 +1,4 @@
-import type { PluginDescriptor } from '../contracts/plugins.js';
+import type { PluginDescriptor } from '@mini-harness/contracts/plugins';
 import { setup } from './view-host.js';
 
 export const manifest: PluginDescriptor = {

@@ -1,11 +1,14 @@
 import type { Context } from 'cordis';
 import { Type } from 'typebox';
-import { defineTool } from '../contracts/tools.js';
+import type { PluginApi } from '@mini-harness/contracts/plugins';
+import { defineTool } from '@mini-harness/contracts/tools';
 import { SkillLoader } from './loader.js';
 
-export function setup(ctx: Context) {
+export function setup(ctx: Context, api: PluginApi) {
     const loader = new SkillLoader(ctx.harnessState.paths.skills);
     ctx.provide('harnessSkills', loader);
+    api.promptSection({ id: 'skills', order: 400, render: ({ sessionId, cwd }) =>
+      ctx.harnessScopes.require(sessionId, 'harnessSkills').prompt(cwd) });
     ctx.effect(() => ctx.harnessRoutes.register('GET', '/api/workspaces/:id/skills', async ({ params, url }) => {
       const workspace = ctx.harnessWorkspaces.get(params.id);
       const sessionId = url.searchParams.get('sessionId');

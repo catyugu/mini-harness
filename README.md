@@ -11,7 +11,7 @@ npm install -g mini-harness
 mini-harness --detached
 ```
 
-To run from source, use `npm ci && npm run build`, then `node dist/bin/mini-harness.js --detached`.
+To run from source, use `pnpm install --frozen-lockfile && pnpm run build`, then `node dist/bin/mini-harness.js --detached`.
 
 Ordinary foreground startup opens the browser; use `--no-open` to keep it closed. Detached startup prints the URL without opening a browser. The server listens on `127.0.0.1`; the browser keeps the access token in tab storage. Configuration lives in `~/.mini-harness`, or `MINI_HARNESS_HOME`.
 
@@ -50,11 +50,11 @@ Shell starts disabled and asks for approval for every command. File tools restri
 Each local plugin bundle has a `plugin.json` descriptor and a server or browser setup function, or both. Services can be selected at application, workspace and nested session scopes. Parent and sibling scopes retain their own providers. See the [architecture](docs/architecture.md), [plugin guide](docs/plugins.md), [scoped provider examples](docs/scoped-providers.md), and [session log reference](docs/session-log.md).
 
 ```sh
-npm ci
-npm run check
-npx playwright install chromium --only-shell
-npm run test:browser
-npm run pack:check
+pnpm install --frozen-lockfile
+pnpm run check
+pnpm exec playwright install chromium --only-shell
+pnpm run test:browser
+pnpm run pack:check
 ```
 
 The test suites cover native execution and persistence, provider adapters with local HTTP mocks, plugin lifecycles, file policy, shell approval, detached CLI startup, and Chromium desktop/tablet/mobile journeys. `pack:check` installs the single tarball into a clean project and checks public exports, assets, CLI and a model/tool-independent chat roundtrip. No live model credentials are needed.

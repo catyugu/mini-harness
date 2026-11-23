@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { executeProcess } from '../executor.js';
-import { LinuxSandbox } from '../../sandbox/linux.js';
-import { supportsIsolation } from '../../sandbox/isolation.js';
+import { LinuxSandbox } from '@mini-harness/sandbox/linux';
+import { supportsIsolation } from '@mini-harness/sandbox/isolation';
 import { tmpdir } from 'node:os';
 
 const sandbox = new LinuxSandbox(tmpdir());

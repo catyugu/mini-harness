@@ -2,6 +2,18 @@
 
 Put a `plugin.json` descriptor and `plugin.js`, `web.js`, or both in `~/.mini-harness/plugins/<id>/`. The Plugins page installs bundles up to 1 MiB and leaves them disabled until enabled. IDs start with a lowercase letter and can contain lowercase letters, digits and hyphens, up to 64 characters. Disable a plugin in every scope and remove any provider selection before uninstalling. Uninstalling permanently removes the bundle and its configuration. Review local code before enabling it.
 
+## npm distribution
+
+Publish a standard npm package with `plugin.json` and its entries at the package root. A server entry needs `"type": "module"` in `package.json` and can import the package's npm dependencies. Bundle browser dependencies into a self-contained `web.js` of at most 1 MiB.
+
+```sh
+mini-harness plugin install my-tools @example/harness-tools
+mini-harness plugin update my-tools
+mini-harness plugin update my-tools @example/harness-tools@1.2.0
+```
+
+The first argument is the local plugin ID used in settings and routes. An unversioned name follows the registry's default tag. An explicit version stays pinned until you supply a new version or tag on update. Installation uses the bundled, pinned pnpm with your registry configuration. It installs production dependencies, records an exact version and a lockfile, and disables lifecycle scripts and pnpmfile hooks. Stop the server before installing or updating. For an update, disable the plugin in every scope and clear its provider selections first. The CLI validates the staged package before publishing it and keeps existing plugin configuration. Enable the installed plugin in Settings or select it at its declared scope.
+
 ## Descriptor and entrypoints
 
 A plugin with no descriptor fields can use `{}` as its `plugin.json`.
@@ -46,25 +58,62 @@ export default function setup(_ctx, api) {
 | - | - |
 | `config`, `scope`, `signal` | Validated setup settings, scope address and lifetime signal |
 | `provide(name, service)` | Publish a declared service for Cordis consumers |
-| `service(name)` | Read a required or optional declared service |
+| `service(name)` | Read a declared required service or fail with its name |
+| `optionalService(name)` | Read a service declared in `optional` |
 | `registerTool(tool)` | Register a native tool definition. Its signal aborts when the registration drains. |
 | `registerRoute(method, path, handler)` | Authenticated route under `/api/extensions/<id>`. Handler receives URL, `body(maxBytes?)` and `signal`. Application scope only. |
 | `records.list(id)` / `records.append(id, data)` | Namespaced custom records on the active native Session Log branch |
+| `registerProjection({ initial, reduce })` | Build a computed view of this plugin's records on the active branch |
 | `onDispose(cleanup)` | Register sync or async cleanup |
 
 Declare `harnessRoutes` and `harnessTools` when using their registration methods. Return JSON from route handlers and honor their cancellation signals. Tool names contain 1–64 letters, digits, underscores or hyphens. Duplicate names at the same scope are rejected. A nearer scoped registration can replace an inherited tool, including a file tool; unloading it restores the inherited tool. All selected tools still pass inherited restrictions and policy decisions. Use the plugin lifetime signal for other work owned by setup. Use the model credential service for credentials; plugin configuration is not a secret store.
 
-## Events
+For TypeScript, `api.service('harnessLlm')` infers `LlmPort`. Declare your own names in the public service map. Declare the same names in the plugin descriptor so the host can validate them when it mounts the plugin.
 
-- `api.observe(handler)` observes created/deleted sessions, started/ended runs and completed tools. Observers receive copies and run asynchronously. Observer errors are reported without affecting the operation.
-- `api.decideTool(handler)` participates before a tool executes. Cordis awaits handlers in registration order. The first `'deny'` stops the operation. A thrown error also prevents execution. Handlers receive the tool name, session ID and cancellation signal. Shell still requires its approval.
-- `api.transformTool(handler)` synchronously transforms displayed tool content. Transformations compose in reverse registration order. They receive copies and apply to live and saved projections. Errors keep the prior projection. Native model context and Session Log retain their original contents.
+```ts
+import type { PluginApi } from 'mini-harness/plugin';
 
-Event subscriptions are scoped and are removed on disposal. Unload aborts pending policy work. A scoped observer can only see sessions in its scope and descendants.
+declare module 'mini-harness/plugin' {
+  interface ServiceMap {
+    greetings: { hello(name: string): string };
+  }
+}
+
+export default function setup(_ctx: unknown, api: PluginApi) {
+  api.provide('greetings', { hello: (name) => 'Hello, ' + name });
+}
+```
+
+## Agent extensions
+
+- `api.promptSection({ id, order, render })` adds a section rendered for every model turn. The renderer receives the session ID, workspace path, advertised tool metadata and a cancellation signal. The nearest scope wins for a shared ID. In the same scope, the alphabetically first plugin ID wins. Sections render in ascending order, then by section ID. Built-in sections use orders 0, 100, 200 and 300 for `base`, `tools`, `user-instructions` and `workspace-instructions`. Skills registers `skills` at 400. Plugin contributions default to 500.
+- `api.modelRequest(handler, order?)` transforms the system prompt, messages, thinking level and output token limit before a turn or compaction request. Each resulting request is validated and written to the Session Log before transmission. Use a Prompt Section for additional system instructions.
+- `api.toolResult(handler, order?)` transforms successful tool content for the model and conversation view. The original execution is written before the transform runs. A failed transform records a safe error and stops execution before sending another model request. Raw tool updates are withheld while a result transform is installed.
+- Both transforms apply in ascending order, then by plugin ID. Return `undefined` to keep the previous value.
+- `api.retryModel(handler)` can return `{ delayMs }` after a failed generation or compaction request and before any content has streamed. The first decision wins, with a limit of three attempts and a maximum delay of 30 seconds. Without a decision, the failure is returned immediately.
+- `api.decideTool(handler)` receives the tool name, call ID, validated arguments, session ID and cancellation signal. Return `'deny'` to deny execution or `undefined` to defer to other handlers. A policy can await a confirmation before deciding. A rejection prevents execution. Shell still requires its own approval.
+- `api.observe(handler)` receives copies of session, run, step, model-attempt and completed-tool events. Handler failures are reported independently of the operation. The executor continues while observers run.
+- `api.transformTool(handler)` synchronously transforms displayed tool content in reverse registration order. It applies to live and saved views. A failed transform leaves the earlier display content in place.
+
+Extensions follow scope ancestry and unregister with their owning plugin. Blocking handlers receive cancellation when the run stops or their owner unloads. Unload waits for in-flight callbacks to settle before running disposal. Callbacks should honor their signal and avoid waiting on their own plugin reconfiguration.
+
+Tools execute serially by default. `isConcurrencySafe(args)` may opt a validated call into parallel execution with other opted-in calls. Keep it pure and return true only when the call can run alongside any other opted-in tool. A serial call waits for prior work to drain and completes before the following calls begin. The scheduler starts at most 16 calls from one turn at a time. A pipeline failure stops dispatch, signals in-flight calls and waits for them to settle. Ordinary tool errors are reported as durable results. Each result is persisted before its completion event.
+
+## Session record projections
+
+A projection computes state from the plugin's records on the current branch in log order. Each `read(sessionId)` starts with a fresh `initial()` value and uses a synchronous, deterministic reducer. Branch changes immediately affect subsequent reads. The returned handle belongs to the plugin lifetime and can also be released via `dispose()`.
+
+```js
+const plan = api.registerProjection({
+  initial: () => [],
+  reduce: (tasks, { data }) => [...tasks, data]
+});
+const tasks = await plan.read(sessionId);
+```
 
 ## Provider selection and scopes
 
-In `settings.json`, `providers` maps service names to explicit enabled provider IDs. A replacement publishes the same contract. At application scope, replacing a plugin that provides multiple services requires replacements for all its services together. A workspace or session can replace one inherited service while its parent continues supplying the others. To restore the default, remove the selection and disable the replacement.
+In `settings.json`, `providers` maps service names to explicit enabled provider IDs. A replacement publishes the same contract. At application scope, replacing a plugin that provides multiple services requires replacements for all its services together. The LLM transport, model catalog and model administration use independent providers over the built-in model store. A workspace or session can replace one inherited service while its parent continues supplying the others. To restore the default, remove the selection and disable the replacement.
 
 ```json
 {
@@ -93,6 +142,8 @@ Setup, schema or settings persistence failures retain the previous effective gra
 | `dialog(title, content)` | A shared modal registered under the plugin lifetime |
 | `page(id, {title, content, order?})` | Register a page and sidebar entry |
 | `slots.register(name, node, order?)` | Contribute to a layout or feature slot |
+| `slots.registerKeyed(name, key, render, { order?, priority? }?)` | Contribute or override a keyed slot entry with a render lifetime |
+| `slots.decorate(name, key, wrap, order?)` | Wrap a keyed entry, or all entries when the key is undefined |
 | `settingsPage(title, node)` | Add a settings category |
 | `rightTab(type, {title, create})`, `openTab(type, path?)` | Register or open a scoped workspace tab. Creation receives its address and an abort signal. |
 | `inspect(title, node)` | Show content in the workspace inspector |
@@ -103,6 +154,8 @@ Setup, schema or settings persistence failures retain the previous effective gra
 | `request(path, options?)`, `signal`, `onDispose(cleanup)` | Authenticated requests and lifetime management |
 
 Page, dialog, tab and inspector contributions depend on `core:layout`. Tools, message actions and composer operations depend on `core:conversation`. Settings pages depend on `core:settings`. The theme and primitives are shared. Declare the corresponding dependencies in `browserRequires` or declare the service in `browserInject`. Domain snapshots are provided by the owning feature's browser data plugin. The browser runtime routes revision notices and mounts the declared graph; it does not initialize sessions, settings, models or other feature state. Browser code runs with the page's permissions. Put custom UI listeners and requests under the plugin's lifetime and use contribution APIs to interact with another feature.
+
+Keyed entries use the highest priority for each key, with the most recent registration breaking ties and restore the previous contribution when it is released. A renderer receives an abort signal and returns a node or `{ node, dispose }`. Decorators receive the current node and their own signal. Return the node itself for an in-place decoration or a wrapper containing it. On replacement or outlet removal, the registry aborts the render lifetime and calls cleanup. Use the renderer signal for listeners and subscriptions. For example, `sidebar.primary` publishes the built-in button under `new-conversation`. Declare the owner in `browserRequires` when overriding its contribution so your plugin mounts after it.
 
 A data plugin declares its services in `browserProvides`, publishes them through
 `ctx.provide`, and declares `miniProjections` in `browserInject` to follow a

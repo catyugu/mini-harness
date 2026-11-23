@@ -1,27 +1,38 @@
 import type { Context } from 'cordis';
-import type { PluginApi } from '../contracts/plugins.js';
+import type { PluginApi } from '@mini-harness/contracts/plugins';
 import { registerRoutes } from './routes.js';
+import type { ModelRequestTransform, ToolResultTransform } from '@mini-harness/contracts/extensions';
+import type { OrderedHook } from '@mini-harness/contracts/events';
 import { NativeAgent } from './agent.js';
 
 export function setup(ctx: Context, api: PluginApi) {
   const { harnessRegistry: catalog, harnessScopes: scopes, harnessSettingsStore: settings } = ctx;
   const agent = new NativeAgent(catalog, {
-    models: (id) => scopes.resolve(id, 'harnessModels') ?? ctx.harnessModels,
-    llm: (id) => scopes.resolve(id, 'harnessLlm') ?? ctx.harnessLlm,
-    tools: (id) => scopes.resolve(id, 'harnessTools') ?? ctx.harnessTools,
+    models: (id) => scopes.require(id, 'harnessModels'),
+    llm: (id) => scopes.require(id, 'harnessLlm'),
+    tools: (id) => scopes.require(id, 'harnessTools'),
     allowsTool: (id, name) => scopes.allowsTool(id, name),
-    prompt: (id) => scopes.resolve(id, 'harnessPrompt') ?? ctx.harnessPrompt,
-    skills: (id) => scopes.resolve(id, 'harnessSkills') ?? ctx.get('harnessSkills'),
+    prompt: (id) => scopes.require(id, 'harnessPrompt'),
+    skills: (id) => scopes.optional(id, 'harnessSkills'),
     prepare: (id, signal) => scopes.prepare(id, signal),
     defaultModel: () => settings.settings.model,
     rememberModel: (model) => {
       // A scoped-only model must not become an unusable global default for siblings.
-      try { if (!ctx.harnessModels.resolve(model)) return; }
-      catch { return; }
-      settings.rememberModel(model);
+      if (scopes.require(undefined, 'harnessModels').resolve(model)) settings.rememberModel(model);
     },
     policy: () => api.config as { maxTurns: number; autoCompact: boolean },
     observe: (event) => ctx.emit('harness/observe', event),
+    modelRequestHooks(id) {
+      const hooks: OrderedHook<ModelRequestTransform>[] = [];
+      ctx.emit('harness/model-request', id, hooks);
+      return hooks;
+    },
+    toolResultHooks(id) {
+      const hooks: OrderedHook<ToolResultTransform>[] = [];
+      ctx.emit('harness/tool-result', id, hooks);
+      return hooks;
+    },
+    retryModel: (failure) => ctx.serial('harness/model-retry', failure),
     transform: (projection) => ctx.waterfall('harness/tool-projection', projection, () => projection.content)
   });
   ctx.provide('harnessAgent', agent);

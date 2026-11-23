@@ -1,7 +1,7 @@
 import { realpath } from 'node:fs/promises';
 import { relative } from 'node:path';
-import { containsPath } from '../platform/paths.js';
-import type { IsolatedProcess, ProcessRequest, SandboxPort } from '../contracts/execution.js';
+import { containsPath } from '@mini-harness/platform/paths';
+import type { IsolatedProcess, ProcessRequest, SandboxPort } from '@mini-harness/contracts/execution';
 import { supportsIsolation, bubblewrap } from './isolation.js';
 
 export function isolationCommand(command: string, cwd: string, timeout: number): IsolatedProcess {

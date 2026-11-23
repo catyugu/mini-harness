@@ -31,7 +31,7 @@ resolution. A second instance of the same provider ID still needs an explicit
 choice to shadow its ancestor.
 
 Consumers call `harnessScopes.prepare(sessionId, signal)` before reading
-`harnessScopes.resolve(sessionId, serviceName)`. This resolves the nearest live
+`harnessScopes.require(sessionId, serviceName)` or `harnessScopes.optional(sessionId, serviceName)`. This resolves the nearest live
 Cordis service, so the native agent executes through the selected LLM, tool and
 environment services. Plugins declaring `inject` receive services from their own
 scope's context.

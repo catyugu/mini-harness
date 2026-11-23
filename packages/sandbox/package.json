@@ -4,7 +4,12 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@mini-harness/contracts": "file:../contracts",
-    "@mini-harness/platform": "file:../platform"
+    "@mini-harness/contracts": "workspace:*",
+    "@mini-harness/platform": "workspace:*"
+  },
+  "exports": {
+    "./isolation": "./isolation.ts",
+    "./linux": "./linux.ts",
+    "./manifest": "./manifest.ts"
   }
 }

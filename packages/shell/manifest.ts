@@ -1,4 +1,4 @@
-import type { PluginDescriptor } from '../contracts/plugins.js';
+import type { PluginDescriptor } from '@mini-harness/contracts/plugins';
 import { setup } from './host.js';
 import { Type } from 'typebox';
 
@@ -13,5 +13,5 @@ export const manifest: PluginDescriptor = {
     mode: Type.String({ title: 'Shell policy', enum: ['isolated', 'host'], default: 'isolated' }),
     timeoutSeconds: Type.Integer({ title: 'Timeout (seconds)', minimum: 1, maximum: 300, default: 60 })
   }, { additionalProperties: false }) },
-  inject: ['harnessWorkspace', 'harnessApprovals', 'harnessRuns', 'harnessProcess', 'harnessTools', 'harnessScopes']
+  inject: ['harnessRegistry', 'harnessApprovals', 'harnessRuns', 'harnessProcess', 'harnessTools', 'harnessScopes']
 };

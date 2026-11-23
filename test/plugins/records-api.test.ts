@@ -15,6 +15,11 @@ test('an extension owns its authenticated routes and native branch records witho
       return api.records.append(id, value);
     });
     api.registerRoute('GET', '/entries', ({ url }) => api.records.list(url.searchParams.get('id')));
+    const notes = api.registerProjection({
+      initial: () => [],
+      reduce: (state, { data }) => [...state, data.note]
+    });
+    api.registerRoute('GET', '/notes', ({ url }) => notes.read(url.searchParams.get('id')));
   };`);
   const toggle = (enabled: boolean) => request('/settings', 'PATCH', { plugins: { records: enabled } });
   assert.equal((await toggle(true)).status, 200);
@@ -22,8 +27,11 @@ test('an extension owns its authenticated routes and native branch records witho
   await app.runtime.runs.send(session.id, 'Persist this conversation');
   const route = '/extensions/records/entries';
   const value = { note: 'stored by the plugin' };
+  const beforePluginRecords = app.runtime.registry.log(session.id).projection().leafId;
+  const notes = '/extensions/records/notes?id=' + session.id;
   const added = await request(route, 'POST', { id: session.id, value });
   assert.equal(added.status, 200);
+  assert.deepEqual((await request(notes)).body, [value.note]);
   assert.equal((await toggle(false)).status, 200);
   assert.equal((await request(route + '?id=' + session.id)).status, 404);
 
@@ -37,4 +45,8 @@ test('an extension owns its authenticated routes and native branch records witho
     .some((entry) => entry.type === 'custom' && entry.namespace === 'records' && entry.data.note === value.note));
   const fetched = (await request('/sessions/' + session.id)).body;
   assert.equal(fetched.messages.some((message) => JSON.stringify(message).includes(value.note)), false);
+  const log = app.runtime.registry.log(session.id);
+  log.select(beforePluginRecords, log.projection().leafId);
+  assert.deepEqual((await request(notes)).body, []);
+  assert.ok(log.entries().some(({ id }) => id === added.body));
 });

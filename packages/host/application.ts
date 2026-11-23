@@ -1,11 +1,12 @@
 import { Context } from 'cordis';
-import type { NativeAgent } from '../agent/agent.js';
+import type { NativeAgent } from '@mini-harness/agent/agent';
 import { plugins } from './composition.js';
-import { SettingsManager } from '../settings/manager.js';
-import { PluginHost } from '../plugins/manager.js';
-import { RouteRegistry } from '../transport/http.js';
-import { MutationGate } from '../transport/mutations.js';
-import type { Paths, SettingsPatch } from '../contracts/config.js';
+import { SettingsManager } from '@mini-harness/settings/manager';
+import { PluginHost } from '@mini-harness/plugins/manager';
+import { RouteRegistry } from '@mini-harness/transport/http';
+import { MutationGate } from '@mini-harness/transport/mutations';
+import type { ScopePort } from '@mini-harness/contracts/capabilities';
+import type { Paths, SettingsPatch } from '@mini-harness/contracts/config';
 
 export class MiniHarnessRuntime {
   readonly plugins: PluginHost;
@@ -22,11 +23,12 @@ export class MiniHarnessRuntime {
       harnessState: { paths },
       harnessScopes: {
         prepare: (id: string, signal?: AbortSignal) => this.plugins.prepare(id, signal),
-        resolve: <T>(id: string, service: string) => this.plugins.resolve<T>(id, service),
+        require: (id, service) => this.plugins.require(id, service),
+        optional: (id, service) => this.plugins.optional(id, service),
         allowsTool: (id: string, tool: string) => this.plugins.allowsTool(id, tool),
         address: (id: string) => this.plugins.address(id),
         release: (ids: string[], workspaceId?: string) => this.plugins.release(ids, workspaceId)
-      },
+      } satisfies ScopePort,
       harnessSettings: () => this.configuration.settings,
       harnessSettingsStore: this.configuration,
       harnessRoutes: new RouteRegistry(),
@@ -42,7 +44,7 @@ export class MiniHarnessRuntime {
     };
     for (const [name, service] of Object.entries(root)) ctx.provide(name, service);
     this.plugins = new PluginHost(ctx, paths.plugins, plugins, Object.keys(root),
-      () => this.settings, (id) => ctx.get('harnessRegistry')?.get(id), (id, pluginId) => ctx.harnessAgent.records(id, pluginId));
+      () => this.settings, (id) => ctx.get('harnessRegistry')?.get(id), (id, pluginId) => ctx.harnessRegistry.records(id, pluginId));
   }
 
   get settings() { return this.configuration.settings; }

@@ -1,7 +1,7 @@
 import { join } from 'node:path';
-import { readJson, writeJson } from '../platform/config.js';
-import type { Settings, SettingsPatch } from '../contracts/config.js';
-import type { ModelAdminPort, ModelCatalogPort } from '../contracts/models.js';
+import { readJson, writeJson } from '@mini-harness/platform/config';
+import type { Settings, SettingsPatch } from '@mini-harness/contracts/config';
+import type { ModelAdminPort, ModelCatalogPort } from '@mini-harness/contracts/models';
 
 type ProviderHost = {
   paths: { home: string };
@@ -67,9 +67,7 @@ export async function saveProvider(runtime: ProviderHost, input: any, remove = f
     await runtime.admin.refresh();
     runtime.delegation?.checkProvider(input.id);
     if (recent.provider === input.id) {
-      let exists = false;
-      try { exists = Boolean(runtime.catalog.resolve(recent)); } catch { /* The custom model was removed. */ }
-      if (!exists) {
+      if (!runtime.catalog.resolve(recent)) {
         await runtime.updateSettings({ model: { provider: '', id: '' } });
         clearedRecent = true;
       }

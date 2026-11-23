@@ -8,8 +8,15 @@ export interface ToolDefinition<Arguments = Record<string, any>> extends ToolSch
   label?: string;
   promptSnippet?: string;
   promptGuidelines?: string[];
+  /** Calls are serial unless this returns true for the validated arguments. */
+  isConcurrencySafe?(args: Arguments): boolean;
   execute(callId: string, args: Arguments, signal?: AbortSignal,
     onUpdate?: (result: ToolResult) => void, context?: ToolContext): Promise<ToolResult>;
+}
+
+export function isToolContent(value: unknown): value is ToolResult['content'] {
+  return Array.isArray(value) && value.every((part) => part?.type === 'text' ? typeof part.text === 'string' :
+    part?.type === 'image' && typeof part.data === 'string' && typeof part.mimeType === 'string');
 }
 
 /** Infer argument types from a JSON schema without binding plugins to a model SDK. */

@@ -1,9 +1,9 @@
-import { payload } from '../web/api.js';
-import type { FrontendSetup, FrontendApi } from '../ui-runtime/frontend.js';
-import { icon } from '../ui-primitives/icons.js';
-import { button, field, fromMarkup } from '../ui-primitives/primitives.js';
+import { payload } from '@mini-harness/web/api';
+import type { FrontendSetup, FrontendApi } from '@mini-harness/ui-runtime/frontend';
+import { icon } from '@mini-harness/ui-primitives/icons';
+import { button, field, fromMarkup } from '@mini-harness/ui-primitives/primitives';
 
-import type { ProviderInfo, ProviderModel } from '../web/contracts/providers.js';
+import type { ProviderInfo, ProviderModel } from '@mini-harness/web/contracts/providers';
 
 const setup: FrontendSetup = (ctx, api) => {
   const { miniSettings: settings, miniModels: state } = ctx;

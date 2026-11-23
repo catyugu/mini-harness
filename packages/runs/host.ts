@@ -1,12 +1,11 @@
 import type { Context } from 'cordis';
-import type { AgentPort } from '../contracts/services.js';
-import type { RunAgentPort } from '../contracts/agent.js';
+import type { RunAgentPort } from '@mini-harness/contracts/agent';
 import { registerRoutes } from './routes.js';
 import { Runs } from './runs.js';
 
 export function setup(ctx: Context) {
   const { harnessRegistry: catalog, harnessScopes: scopes } = ctx;
-  const selected = (id: string) => scopes.resolve<AgentPort>(id, 'harnessAgent') ?? ctx.harnessAgent;
+  const selected = (id: string) => scopes.require(id, 'harnessAgent');
   const agent: RunAgentPort = {
     async prompt(record, text, emit, options) {
       await scopes.prepare(record.id, options.signal);

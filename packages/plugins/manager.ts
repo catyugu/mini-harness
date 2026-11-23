@@ -2,14 +2,16 @@ import { Context } from 'cordis';
 import { isDeepStrictEqual } from 'node:util';
 import { lstatSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import type { PluginDescriptor, PluginApi, SessionRecords } from '../contracts/plugins.js';
-import type { PluginScope, ScopePort } from '../contracts/capabilities.js';
-import type { BrowserEntry } from '../contracts/browser.js';
+import type { PluginDescriptor, SessionRecords } from '@mini-harness/contracts/plugins';
+import type { PluginScope, ScopePort } from '@mini-harness/contracts/capabilities';
+import type { BrowserEntry } from '@mini-harness/contracts/browser';
 import { addAbortListener } from 'node:events';
-import type { SessionRecord } from '../contracts/conversation.js';
-import type { Settings } from '../contracts/config.js';
-import { resolveCapabilities } from '../kernel/composition.js';
-import { PluginMounts, type MountPlan } from '../kernel/mounts.js';
+import type { SessionRecord } from '@mini-harness/contracts/conversation';
+import type { ServiceMap } from '@mini-harness/contracts/plugin-sdk';
+import type { Settings } from '@mini-harness/contracts/config';
+import { resolveCapabilities } from '@mini-harness/kernel/composition';
+import { PluginMounts, type MountPlan } from '@mini-harness/kernel/mounts';
+import { createPluginApi } from './api.js';
 import { PluginCatalog, type PluginPlan } from './catalog.js';
 
 const appScope: PluginScope = { kind: 'application' };
@@ -80,9 +82,15 @@ export class PluginHost implements ScopePort {
     return ['workspace:' + records[0].workspaceId, ...records.map(({ id }) => 'session:' + id)];
   }
 
-  resolve<T>(id: string, service: string): T | undefined {
-    const scope = this.address(id).reverse().map((key) => this.scopes.get(key)).find(Boolean);
-    return (scope?.ctx ?? this.ctx).get(service) as T | undefined;
+  require<Name extends keyof ServiceMap & string>(id: string | null | undefined, service: Name): NonNullable<ServiceMap[Name]> {
+    const value = this.optional(id, service);
+    if (value == null) throw new Error('Required service is unavailable: ' + service + (id ? ' in session ' + id : ''));
+    return value;
+  }
+
+  optional<Name extends keyof ServiceMap & string>(id: string | null | undefined, service: Name): ServiceMap[Name] | undefined {
+    const scope = id && this.address(id).reverse().map((key) => this.scopes.get(key)).find(Boolean);
+    return ((scope || undefined)?.ctx ?? this.ctx).get(service) as ServiceMap[Name] | undefined;
   }
 
   allowsTool(id: string, tool: string) {
@@ -186,66 +194,13 @@ export class PluginHost implements ScopePort {
     const setup = source ? mod.default : descriptor.setup ?? (() => {});
     if (typeof setup !== 'function' || mod?.inject !== undefined || (source && setup.inject !== undefined))
       throw new Error('Export a default setup function and declare dependencies in plugin.json');
-    return { inject: descriptor.inject ?? [], setup: async (ctx: Context, lifetime: AbortSignal) => {
-      const values = Object.freeze(structuredClone(plan.config ?? {}));
-      const provided = new Set<string>();
-      const use = <T>(name: string): T | undefined => {
-        if (!descriptor.inject?.includes(name) && !descriptor.optional?.includes(name))
-          throw new Error('Service is not declared by ' + plan.id + ': ' + name);
-        return ctx.get(name) as T | undefined;
-      };
-      const inScope = (id: string) => !scopeKey || this.address(id).includes(scopeKey);
-      const checkSession = (id: string) => {
-        if (!inScope(id)) throw new Error('Conversation outside plugin scope');
-      };
-      const cleanup = await setup(ctx, {
-        scope: Object.freeze({ ...scope }), signal: lifetime, config: values, service: use,
-        observe: (handler) => ctx.on('harness/observe', (event) => {
-          if (lifetime.aborted || (event.type === 'session-deleted'
-            ? scopeKey && !event.scopeKeys.includes(scopeKey)
-            : !inScope(event.sessionId))) return;
-          void Promise.resolve().then(() => {
-            if (!lifetime.aborted) return handler(structuredClone(event));
-          }).catch(() => ctx.logger.warn('Plugin observer failed: ' + plan.id));
-        }),
-        decideTool: (handler) => ctx.on('harness/tool-decision', async (request) => {
-          if (lifetime.aborted || !inScope(request.sessionId)) return;
-          const signal = AbortSignal.any([lifetime, request.signal]);
-          signal.throwIfAborted();
-          const decision = await handler({ ...request, signal });
-          signal.throwIfAborted();
-          return decision;
-        }),
-        transformTool: (handler) => ctx.on('harness/tool-projection', (request, next) => {
-          const content = next();
-          if (lifetime.aborted || !inScope(request.sessionId)) return content;
-          try { return handler(structuredClone({ ...request, content })) ?? content; }
-          catch { ctx.logger.warn('Plugin tool projection failed: ' + plan.id); return content; }
-        }),
-        provide(name, service) {
-          if (!descriptor.provides?.includes(name) || provided.has(name)) throw new Error('Undeclared or duplicate service: ' + name);
-          ctx.provide(name, service);
-          provided.add(name);
-        },
-        registerTool: (tool) => {
-          const tools = use<Context['harnessTools']>('harnessTools');
-          return ctx.effect(() => tools.register(tool.name, () => tool, undefined, scopeKey));
-        },
-        registerRoute: (method, path, handler) => {
-          if (scopeKey || !['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method) ||
-              !/^\/(?:[a-zA-Z0-9_-]+\/)*[a-zA-Z0-9_-]+$/.test(path)) throw new Error('Invalid plugin route');
-          const routes = use<Context['harnessRoutes']>('harnessRoutes');
-          return ctx.effect(() => routes.register(method, '/api/extensions/' + plan.id + path, handler));
-        },
-        records: {
-          list: async (sessionId) => { checkSession(sessionId); return this.sessionRecords(sessionId, plan.id).list(); },
-          append: async (sessionId, data) => { checkSession(sessionId); return this.sessionRecords(sessionId, plan.id).append(data); }
-        },
-        onDispose: (dispose) => ctx.effect(() => dispose)
-      } satisfies PluginApi);
+    return { inject: descriptor.inject ?? [], setup: async (ctx, lifetime, setDrain) => {
+      const runtime = createPluginApi(ctx, plan, { scope, scopeKey, lifetime,
+        address: (id) => this.address(id), records: (id) => this.sessionRecords(id, plan.id) });
+      setDrain(runtime.drain);
+      const cleanup = await setup(ctx, runtime.api);
       if (typeof cleanup === 'function') ctx.effect(() => cleanup);
-      if (descriptor.trustedCode && descriptor.provides?.some((service) => !provided.has(service)))
-        throw new Error('Plugin did not publish all declared services: ' + plan.id);
+      runtime.checkPublications();
     } };
   }
 
