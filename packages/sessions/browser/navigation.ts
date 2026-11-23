@@ -30,9 +30,9 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
   const panel = fromMarkup(`<div class="session-navigation">
     <div class="sidebar-caption">
       <span>Workspaces</span>
-      <div id="workspaceActions"><button id="selectMode" class="link-button" type="button" aria-pressed="false">Select</button></div>
+      <div id="workspaceActions"></div>
     </div>
-    <input id="sessionSearch" class="ui-input" type="search" placeholder="Search workspaces and chats" aria-label="Search workspaces and conversations">
+    <input id="sessionSearch" class="ui-input" type="search" placeholder="Search workspaces and chats" aria-label="Search workspaces and conversations" hidden>
     <nav id="sessions" class="sessions" aria-label="Conversation tree"></nav>
     <div id="bulkActions" class="bulk-actions" hidden>
       <span id="selectedCount" aria-live="polite"></span>
@@ -129,8 +129,16 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
   const deleteButton = button('Delete', 'danger');
   const cancel = button('Cancel', 'quiet');
   element('bulkActions').append(selectAll, exportButton, deleteButton, cancel);
+  const searchInput = element<'input'>('sessionSearch');
+  const searchToggle = iconButton('Search workspaces and conversations', 'search');
+  searchToggle.id = 'searchToggle';
+  searchToggle.setAttribute('aria-controls', 'sessionSearch');
+  searchToggle.setAttribute('aria-expanded', 'false');
+  const selectMode = iconButton('Select conversations', 'list-checks');
+  selectMode.id = 'selectMode';
+  selectMode.setAttribute('aria-pressed', 'false');
   const addWorkspace = iconButton('Add workspace', 'plus');
-  element('workspaceActions').append(addWorkspace);
+  element('workspaceActions').append(searchToggle, selectMode, addWorkspace);
   addWorkspace.onclick = () => options.chooseWorkspace((record) => {
     void workspaceStore.refresh().then(() => {
       revealWorkspace(record.id);
@@ -162,7 +170,7 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
   };
 
   function selectionChanged() {
-    element('selectMode').setAttribute('aria-pressed', String(selecting));
+    selectMode.setAttribute('aria-pressed', String(selecting));
     element('bulkActions').hidden = !selecting;
     element('selectedCount').textContent = selection.size + ' selected';
     exportButton.disabled = deleteButton.disabled = !selection.size;
@@ -344,8 +352,8 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
     for (let parent = item.parentId; parent && !expanded.has(parent); parent = sessionStore.get().find(({ id }) => id === parent)?.parentId ?? null) expanded.add(parent);
   }, { signal: api.signal });
 
-  element('selectMode').onclick = () => toggleSelection(!selecting);
-  element('sessionSearch').oninput = () => {
+  selectMode.onclick = () => toggleSelection(!selecting);
+  function updateSearch() {
     const query = value('sessionSearch');
     const revision = ++searchRevision;
     clearTimeout(searchTimer);
@@ -361,6 +369,25 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
         render();
       }).catch((error) => { if (!request.signal.aborted && revision === searchRevision) options.report(error); });
     }, 250);
+  }
+  searchInput.oninput = updateSearch;
+  searchToggle.onclick = () => {
+    const open = searchInput.hidden;
+    searchInput.hidden = !open;
+    searchToggle.setAttribute('aria-expanded', String(open));
+    if (open) searchInput.focus();
+    else {
+      searchInput.value = '';
+      updateSearch();
+      searchToggle.focus();
+    }
+  };
+  searchInput.onkeydown = (event) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      searchToggle.click();
+      searchToggle.focus();
+    }
   };
   api.onDispose(() => { clearTimeout(searchTimer); searchRequest?.abort(); });
   cancel.onclick = () => toggleSelection(false);
