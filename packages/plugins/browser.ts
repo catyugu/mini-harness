@@ -5,7 +5,7 @@ import type { Bootstrap } from '../web/types.js';
 import { payload } from '../web/api.js';
 import { icon } from '../web/ui/components/icons.js';
 import { button, dialog, field, fromMarkup, iconButton, saveToggle, toggle } from '../web/ui/components/primitives.js';
-import { readPluginValues, schemaFields } from './browser-fields.js';
+import { readPluginValues, schemaFields } from './browser/fields.js';
 
 export const catalogPlugin: BrowserPlugin = {
   id: 'core:plugins', inject: ['miniState', 'miniShell', 'miniSwitch'],
