@@ -17,7 +17,7 @@ function renderResult(tool: ToolView) {
 const setup: FrontendSetup = (api, services) => {
   api.tool('sandbox_shell', renderResult);
   const list = document.createElement('div');
-  api.mount('approvals', list);
+  api.slots.register('conversation.approvals', list);
   let pending = false;
   let previous = '';
   const poll = async () => {

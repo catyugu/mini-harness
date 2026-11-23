@@ -1,8 +1,8 @@
 import type { Settings } from '../contracts/config.js';
 import { payload, scopedElements } from '../web/api.js';
 import type { BrowserPlugin, FrontendApi } from '../web/kernel/extensions.js';
-import { icon } from '../web/ui/components/icons.js';
-import { closeOnBackdrop, field, fromMarkup } from '../web/ui/components/primitives.js';
+import { icon } from '../ui-primitives/icons.js';
+import { closeOnBackdrop, field, fromMarkup } from '../ui-primitives/primitives.js';
 
 const pageIcons = { Model: 'model', Appearance: 'theme' } as const;
 

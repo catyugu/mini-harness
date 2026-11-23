@@ -1,5 +1,5 @@
 import type { FrontendSetup } from '../web/kernel/extensions.js';
-import { icon } from '../web/ui/components/icons.js';
+import { icon } from '../ui-primitives/icons.js';
 
 const setup: FrontendSetup = (api, services) => {
   const trail = document.createElement('nav');
@@ -26,7 +26,7 @@ const setup: FrontendSetup = (api, services) => {
       return step;
     }));
   };
-  api.mount('conversation-header', trail);
+  api.slots.register('conversation.header', trail);
   services.onConversationChange(renderTrail, api.signal);
   renderTrail();
   api.toolAction('delegate', ({ sessionId }) => {
