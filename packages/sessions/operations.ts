@@ -59,7 +59,7 @@ export class ConversationOperations implements ConversationPort {
     if (all.some((id) => this.deleting.has(id))) throw new Error('Conversation is being deleted');
     for (const id of all) this.deleting.add(id);
     try {
-      for (const id of ids) this.runs.cancel(id);
+      for (const id of all) this.runs.cancel(id);
       await Promise.allSettled(all.flatMap((id) => [this.runs.completion(id), this.pi.openingSession(id)]));
       for (const id of all) this.pi.release(id);
       return this.registry.delete(ids);
