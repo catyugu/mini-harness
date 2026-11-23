@@ -70,8 +70,10 @@ test('drafts, search, rename, single deletion, attachment and input discovery', 
     await expect(page.locator('#sessions .session-row')).toHaveCount(0);
     await page.getByRole('searchbox', { name: 'Search workspaces and conversations' }).fill('review');
     await expect(page.locator('#sessions .session-row')).toHaveCount(1);
-    page.once('dialog', (dialog) => dialog.accept());
     await page.getByRole('button', { name: 'Delete Project review', exact: true }).click();
+    const confirmation = page.getByRole('dialog', { name: 'Delete conversation' });
+    await expect(confirmation).toBeVisible();
+    await confirmation.getByRole('button', { name: 'Delete', exact: true }).click();
     await expect(page.locator('#sessions .session-row')).toHaveCount(0);
     await expect(page.getByRole('heading', { name: 'What are we working on?' })).toBeVisible();
   } finally { await page.close(); await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }

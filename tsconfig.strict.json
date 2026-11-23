@@ -1,0 +1,19 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "strict": true,
+    "noImplicitAny": true,
+    "noEmit": true
+  },
+  "include": [
+    "packages/contracts/**/*.ts",
+    "packages/plugins/api.ts",
+    "packages/plugins/execution-hooks.ts",
+    "packages/agent/model-selection.ts",
+    "packages/agent/transforms.ts",
+    "packages/platform/isolation.ts",
+    "packages/platform/content-delta.ts",
+    "packages/plugins/registry-client.ts",
+    "scripts/npm-pack.ts"
+  ]
+}

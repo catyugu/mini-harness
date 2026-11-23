@@ -33,7 +33,7 @@
     "build": "pnpm run clean && tsc -p tsconfig.json && node scripts/resolve-imports.mjs && node dist/scripts/copy-assets.js",
     "start": "pnpm run build && node dist/bin/mini-harness.js",
     "test": "pnpm run build && node dist/scripts/run-node-tests.js",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.strict.json",
     "check": "pnpm run typecheck && npm test",
     "pack:check": "pnpm run build && node dist/scripts/check-package.js",
     "test:browser": "pnpm run build && playwright test -c playwright.config.ts",
