@@ -1,4 +1,4 @@
-import type { FrontendSetup } from '../web/kernel/extensions.js';
+import type { FrontendSetup } from '../ui-runtime/frontend.js';
 import { icon } from '../ui-primitives/icons.js';
 
 const setup: FrontendSetup = (api, services) => {

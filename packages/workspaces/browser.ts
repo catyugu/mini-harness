@@ -1,5 +1,5 @@
 import type { WorkspaceRecord } from '../contracts/workspace.js';
-import type { BrowserPlugin, FrontendApi } from '../web/kernel/extensions.js';
+import type { BrowserPlugin, FrontendApi } from '../ui-runtime/frontend.js';
 import { button, dialog, field } from '../ui-primitives/primitives.js';
 import { payload, workspaceRoute } from '../web/api.js';
 import { fileLabel, icon } from '../ui-primitives/icons.js';

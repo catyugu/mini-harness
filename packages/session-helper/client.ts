@@ -1,4 +1,4 @@
-import type { FrontendSetup } from '../web/kernel/extensions.js';
+import type { FrontendSetup } from '../ui-runtime/frontend.js';
 import { payload } from '../web/api.js';
 
 /** One Cordis scope owns both message actions and the Pi branch draft mode. */

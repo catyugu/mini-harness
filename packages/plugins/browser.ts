@@ -1,6 +1,6 @@
 import type { SettingsPatch } from '../contracts/config.js';
 import type { PluginMetadata } from '../contracts/plugins.js';
-import type { BrowserPlugin, FrontendApi } from '../web/kernel/extensions.js';
+import type { BrowserPlugin, FrontendApi } from '../ui-runtime/frontend.js';
 import type { Bootstrap } from '../web/types.js';
 import { payload } from '../web/api.js';
 import { icon } from '../ui-primitives/icons.js';

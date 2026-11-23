@@ -1,4 +1,4 @@
-import type { FrontendSetup } from '../web/kernel/extensions.js';
+import type { FrontendSetup } from '../ui-runtime/frontend.js';
 import { workspaceRoute } from '../web/api.js';
 import { iconButton } from '../ui-primitives/primitives.js';
 

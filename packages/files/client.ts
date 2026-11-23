@@ -1,4 +1,4 @@
-import type { FrontendApi, FrontendServices, FrontendSetup, Suggestion } from '../web/kernel/extensions.js';
+import type { FrontendApi, FrontendServices, FrontendSetup, Suggestion } from '../ui-runtime/frontend.js';
 import type { TabAddress, TabScope } from '../web/contracts/tabs.js';
 import { icon } from '../ui-primitives/icons.js';
 import { button as control, iconButton } from '../ui-primitives/primitives.js';
