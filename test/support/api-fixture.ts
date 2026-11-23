@@ -2,7 +2,7 @@
 
 import { rmSync } from 'node:fs';
 
-import { createMiniHarnessServer } from '../../src/server.js';
+import { createMiniHarnessServer } from '../../packages/host/server.js';
 
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
 

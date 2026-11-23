@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { readFileSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
-import { readJson, writeJson } from '../../src/config.js';
+import { readJson, writeJson } from '../../packages/platform/config.js';
 import { startIsolatedHost, settingsSection, suggestions } from '../support/browser.js';
 
 test('plugin schema controls, recursive tree navigation, batch export and permanent deletion', async ({ page }) => {
