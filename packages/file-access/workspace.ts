@@ -1,7 +1,7 @@
 import { constants } from 'node:fs';
 import { lstat, mkdir, open, opendir, realpath, stat, type FileHandle } from 'node:fs/promises';
-import { basename, dirname, matchesGlob, relative, resolve, sep } from 'node:path';
-import type { SearchInput } from '../contracts/files.js';
+import { basename, dirname, matchesGlob, parse, relative, resolve, sep } from 'node:path';
+import type { SearchInput, WorkspaceFileAccess } from '../contracts/files.js';
 import { RE2 } from 're2-wasm';
 import ignore from 'ignore';
 
@@ -25,15 +25,15 @@ function samePath(a: string, b: string) { return relative(a, b) === ''; }
 const denied = () => new Error('Path is outside the permitted workspace or is a link');
 const missing = (error: unknown) => (error as NodeJS.ErrnoException).code === 'ENOENT';
 
-export class Workspace {
-  constructor(private readonly cwd: string, private readonly state: string, private readonly canonicalRoot = false) {}
+export class Workspace implements WorkspaceFileAccess {
+  constructor(private readonly cwd: string, private readonly state: string) {}
 
   private async location(path: string) {
     const from = resolve(this.cwd);
     const requested = resolve(from, path);
     if (!containsPath(from, requested)) throw denied();
     const root = await realpath(from);
-    if (this.canonicalRoot && !samePath(root, from)) throw denied();
+    if (!samePath(root, from)) throw denied();
     const state = await realpath(this.state);
     const parts = relative(from, requested).split(sep).filter(Boolean);
     parts.forEach(checkName);
@@ -49,7 +49,13 @@ export class Workspace {
     try {
       if (linux) {
         const expected = await lstat(root, { bigint: true });
-        handle = await open(root, directories);
+        const anchor = parse(root).root;
+        handle = await open(anchor, directories);
+        for (const part of relative(anchor, root).split(sep).filter(Boolean)) {
+          const previous = handle;
+          handle = await open(resolve(descriptor(previous), part), directories);
+          await previous.close();
+        }
         const current = await handle.stat({ bigint: true });
         if (expected.dev !== current.dev || expected.ino !== current.ino) throw denied();
         dir = descriptor(handle);
@@ -72,6 +78,7 @@ export class Workspace {
           dir = next;
         }
       }
+      if (linux && !samePath(await realpath(dir), resolve(root, ...parts))) throw denied();
       return await action(dir);
     } finally { await handle?.close(); }
   }
@@ -100,6 +107,7 @@ export class Workspace {
         const actual = await handle.stat({ bigint: true });
         if (!actual.isFile() || actual.nlink !== 1n ||
             (before && (before.dev !== actual.dev || before.ino !== actual.ino))) throw denied();
+        if (linux && !samePath(await realpath(descriptor(handle)), path)) throw denied();
         if (!linux) {
           const current = await lstat(target, { bigint: true });
           if (!samePath(await realpath(target), target) || current.dev !== actual.dev || current.ino !== actual.ino) throw denied();
@@ -233,10 +241,10 @@ export class Workspace {
     }
   }
 
-  async searchFiles(query: string) {
+  async searchFiles(query: string, signal?: AbortSignal) {
     if (query.length > 200) throw new Error('Search is too long');
     const files: string[] = [];
-    for await (const entry of this.walk('.')) {
+    for await (const entry of this.walk('.', signal)) {
       const path = relative(this.cwd, entry.path).split(sep).join('/');
       if (!entry.directory && path.toLowerCase().includes(query.toLowerCase())) files.push(path);
       if (files.length >= 100) break;

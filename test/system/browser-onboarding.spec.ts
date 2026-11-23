@@ -42,10 +42,10 @@ test('custom provider onboarding and registering a workspace work entirely in th
     await picker.getByRole('button', { name: 'another-workspace', exact: true }).click();
     await expect(picker.getByLabel('Absolute directory path')).toHaveValue(second);
     await picker.getByRole('button', { name: 'Add workspace', exact: true }).click();
-    await expect(page.locator('#workspaceLabel')).toHaveText(second);
+    await expect(page.locator('.workspace-button:visible')).toHaveText(second);
     await expect(page.locator('#sessions .session-row')).toHaveCount(1);
     await page.getByRole('button', { name: 'Configured from GUI', exact: true }).click();
-    await expect(page.locator('#workspaceLabel')).toHaveText(paths.cwd);
+    await expect(page.locator('.workspace-button:visible')).toHaveText(paths.cwd);
     await expect(page.locator('.message.assistant')).toHaveText('Mock response');
   } finally { await page.close(); await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
 });

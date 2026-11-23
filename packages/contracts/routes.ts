@@ -18,7 +18,7 @@ export interface RouteRequest {
 export type RouteHandler = (request: RouteRequest) => unknown | Promise<unknown>;
 
 export interface RoutePort {
-  register(method: string, path: string, handler: RouteHandler): () => void;
+  register(method: string, path: string, handler: RouteHandler): () => Promise<void>;
   dispatch(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> | undefined;
 }
 export interface MutationPort {

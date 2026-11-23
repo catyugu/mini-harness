@@ -1,8 +1,7 @@
 import type {} from 'cordis';
-import type { AgentSession, ModelRuntime } from '@earendil-works/pi-coding-agent';
 import type { Conversation, ModelChoice, SessionRecord } from './conversation.js';
 import type { WorkspaceRecord } from './workspace.js';
-import type { RunAgentPort } from './agent.js';
+import type { RunAgentPort, ThinkingLevel } from './agent.js';
 import type { RunEvent, RunInfo, StreamEvent } from './transport.js';
 import type { ViewMessage } from './message.js';
 import type { Attachment } from './input.js';
@@ -51,22 +50,11 @@ export interface SessionStore {
 }
 
 export interface AgentPort extends RunAgentPort {
-  readonly models: ModelRuntime;
-  readonly size: number;
   readonly hasPending: boolean;
-  readonly pending: Iterable<Promise<AgentSession>>;
-  open(id: string): Promise<AgentSession>;
-  openingSession(id: string): Promise<AgentSession> | undefined;
-  release(id: string): void;
-  close(): void;
-  availableModels(): { provider: string; id: string; name: string; configured: boolean; thinkingLevels: string[] }[];
   activeModel(id: string): ModelChoice;
-  modelInfo(model: AgentSession['model']): ModelChoice;
-  queue(session: AgentSession): unknown;
-  read(id: string): { messages: ViewMessage[]; leafId: string | null; model: ModelChoice; thinkingLevel: AgentSession['thinkingLevel']; queue: unknown };
+  read(id: string): { messages: ViewMessage[]; leafId: string | null; model: ModelChoice; thinkingLevel: ThinkingLevel; queue: unknown };
   queueInput(id: string, text: string, mode: 'steer' | 'followUp', attachments?: Attachment[]): Promise<unknown>;
-  records(id: string, pluginId: string): Promise<SessionRecords>;
-  invalidateProviderSessions(provider: string): void;
+  records(id: string, pluginId: string): SessionRecords;
 }
 
 export interface RunPort {
@@ -79,13 +67,13 @@ export interface RunPort {
   send(id: string, prompt: string, emit?: (event: StreamEvent) => void, options?: {
     signal?: AbortSignal; model?: ModelChoice; attachments?: Attachment[];
     schedule?: (task: () => Promise<string>, signal: AbortSignal) => Promise<string>;
-    thinkingLevel?: AgentSession['thinkingLevel'];
+    thinkingLevel?: ThinkingLevel;
   }): Promise<string>;
   startRun(id: string, prompt: string, options?: {
-    model?: ModelChoice; attachments?: Attachment[]; thinkingLevel?: AgentSession['thinkingLevel'];
+    model?: ModelChoice; attachments?: Attachment[]; thinkingLevel?: ThinkingLevel;
   }): RunInfo;
   reviseAndStart(id: string, input: { sourceEntryId: string; expectedLeafId: string | null; message: string;
-    attachments?: Attachment[]; model?: ModelChoice; thinkingLevel?: AgentSession['thinkingLevel'] }): Promise<RunInfo>;
+    attachments?: Attachment[]; model?: ModelChoice; thinkingLevel?: ThinkingLevel }): Promise<RunInfo>;
   info(id: string): RunInfo | undefined;
   watch(id: string, runId: string, after: number, emit: (event: RunEvent) => void): () => void;
   cancel(id: string): boolean;
@@ -97,6 +85,7 @@ export interface SettingsPort {
   readonly settings: Settings;
   rememberModel(model: ModelChoice): void;
   forgetPlugin(id: string): void;
+  forgetScopes(keys: string[]): void;
   subscribe(listener: () => void): () => void;
   validate(listener: (settings: Settings) => void): () => void;
 }
@@ -104,7 +93,7 @@ export interface SettingsPort {
 export interface ConversationViewPort {
   read(id: string): Conversation & {
     messages: ViewMessage[]; leafId: string | null; selectedModel: ModelChoice;
-    thinkingLevel: AgentSession['thinkingLevel'];
+    thinkingLevel: ThinkingLevel;
     partial?: string; tools: Extract<StreamEvent, { type: 'tool' }>[];
     queue: unknown;
   };
@@ -113,7 +102,7 @@ export interface ConversationViewPort {
 declare module 'cordis' {
   interface Context {
     harnessWorkspaces: WorkspacePort;
-    harnessFiles?: { open(workspaceId: string): import('./files.js').WorkspaceFileAccess };
+    harnessFileAccess: import('./files.js').FileAccessPort;
     harnessRegistry: SessionStore;
     harnessPi: AgentPort;
     harnessRuns: RunPort;
@@ -124,13 +113,15 @@ declare module 'cordis' {
       has(id: string): boolean;
       request(sessionId: string, runId: string | undefined, command: string, signal?: AbortSignal): Promise<void>;
     };
-    harnessProcess: { run(command: string, cwd: string, options: { mode: 'isolated' | 'host'; timeoutSeconds: number; signal?: AbortSignal }): Promise<{ code: number | null }> };
+    harnessProcess: import('./execution.js').ProcessExecutionPort;
+    harnessSandbox: import('./execution.js').SandboxPort;
     harnessSettingsStore: SettingsPort;
     harnessUpdateSettings: (patch: SettingsPatch) => Promise<Settings>;
     harnessPluginCatalog: {
       metadata(): PluginMetadata[];
       reserved(id: string): boolean;
-      browser(): import('./browser.js').BrowserEntry[];
+      diagnostics(): unknown;
+    browser(): import('./browser.js').BrowserEntry[];
     };
   }
 }

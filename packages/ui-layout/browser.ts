@@ -1,25 +1,10 @@
-import type {} from '../ui-slots/registry.js';
 import { scopedElements } from '../web/api.js';
 import { fromMarkup } from '../ui-primitives/primitives.js';
-import type { BrowserPlugin } from '../ui-runtime/frontend.js';
+import type { FrontendSetup } from '../ui-runtime/frontend.js';
 import { createLayout } from './layout.js';
 import { createRightTabs } from './right-tabs.js';
 
 /** App frame owns geometry and slot declarations, never feature navigation controls. */
-declare module '../ui-slots/registry.js' {
-  interface SlotMap {
-    'sidebar.primary': { kind: 'list' };
-    'sidebar.actions': { kind: 'list' };
-    'sidebar.navigation': { kind: 'list' };
-    'sidebar.footer': { kind: 'list' };
-    'header.actions': { kind: 'list' };
-    'conversation.header': { kind: 'list' };
-    'conversation.body': { kind: 'single' };
-    'inspector.extensions': { kind: 'list' };
-    'dialog.root': { kind: 'list' };
-  }
-}
-
 const slots = {
   'sidebar.primary': 'sidebarPrimary',
   'sidebar.actions': 'sidebarExtensions',
@@ -27,25 +12,23 @@ const slots = {
   'sidebar.footer': 'sidebarFooter',
   'header.actions': 'headerActions',
   'conversation.header': 'conversationExtensions',
+  'workspace.header': 'workspaceHeader',
   'conversation.body': 'conversationSlot',
   'inspector.extensions': 'inspectorExtensions',
   'dialog.root': 'dialogSlot'
 } as const;
 
-export const layoutPlugin: BrowserPlugin = {
-  id: 'core:layout',
-  setup(ctx, api) {
-    const { layout, pages, header, tabs, outlet } = createAppFrame(api.signal);
-    ctx.provide('miniLayout', layout);
-    ctx.provide('miniPages', pages);
-    ctx.provide('miniHeader', header);
-    ctx.provide('miniTabs', tabs);
-    for (const name of Object.keys(slots) as Array<keyof typeof slots>)
-      api.slots.define(name, outlet(name), name === 'conversation.body' ? 'single' : 'list');
+const setup: FrontendSetup = (ctx, api) => {
+  const { layout, pages, header, tabs, outlet } = createAppFrame(api.signal);
+  ctx.provide('miniLayout', layout);
+  ctx.provide('miniPages', pages);
+  ctx.provide('miniHeader', header);
+  ctx.provide('miniTabs', tabs);
+  for (const name of Object.keys(slots) as Array<keyof typeof slots>)
+    api.slots.define(name, outlet(name), name === 'conversation.body' || name === 'workspace.header' ? 'single' : 'list');
 
-  }
 };
-export default layoutPlugin;
+export default setup;
 
 declare module 'cordis' {
   interface Context {
@@ -72,7 +55,7 @@ function createAppFrame(signal: AbortSignal) {
   <main class="main" id="main">
     <header class="topbar">
       <button id="sidebarOpen" class="icon-button" type="button" aria-label="Toggle navigation" aria-controls="sidebar" data-icon="menu"></button>
-      <div class="title-block" id="titleBlock"><strong id="conversationTitle">New conversation</strong><div id="conversationExtensions"></div><div id="headerActions"></div></div>
+      <div class="title-block" id="titleBlock"><strong id="conversationTitle">New conversation</strong><div id="conversationExtensions"></div><div id="headerActions"></div><div id="workspaceHeader" hidden></div></div>
       <button id="inspectorOpen" class="icon-button" type="button" aria-label="Open workspace panel" aria-controls="inspector" data-icon="files"></button>
     </header>
     <div id="conversationSlot"></div>
@@ -133,7 +116,7 @@ function createAppFrame(signal: AbortSignal) {
   };
   const header = {
     setTitle: (title: string) => { element('conversationTitle').textContent = title; },
-    placeWorkspace: (button: HTMLElement) => element('titleBlock').append(button)
+    showWorkspace: (show: boolean) => { element('workspaceHeader').hidden = !show; }
   };
   const ui = {
     closeDrawer: layout.closeDrawer

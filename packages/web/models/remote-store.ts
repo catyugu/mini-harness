@@ -1,11 +1,16 @@
+interface ScopedRefresh<T> {
+  fetch(ids: string[]): Promise<T>;
+  merge(current: T, updated: T, ids: ReadonlySet<string>): T;
+}
+
 export class RemoteStore<T> extends EventTarget {
   private snapshot: T;
   private revision = -1;
-  private requested = 0;
-  private loaded = 0;
+  private full = false;
+  private readonly dirty = new Set<string>();
   private pending?: Promise<void>;
 
-  constructor(private readonly fetchSnapshot: () => Promise<T>) { super(); }
+  constructor(private readonly fetchSnapshot: () => Promise<T>, private readonly scoped?: ScopedRefresh<T>) { super(); }
 
   get = (): T => this.snapshot;
 
@@ -13,26 +18,42 @@ export class RemoteStore<T> extends EventTarget {
     this.addEventListener('change', listener, { signal });
   };
 
-  sync(revision: number, reconnect: boolean) {
-    if (!reconnect && revision <= this.revision) return;
-    return this.refresh().then(() => { this.revision = revision; });
+  sync(revision: number, reconnect: boolean, id?: string) {
+    if (!reconnect && revision <= this.revision) return this.pending;
+    const consecutive = revision === this.revision + 1;
+    this.revision = revision;
+    if (!reconnect && consecutive && id && this.scoped && this.snapshot !== undefined) this.dirty.add(id);
+    else this.full = true;
+    return this.schedule();
   }
 
-  refresh = (): Promise<void> => {
-    this.requested++;
-    this.pending ??= this.load().finally(() => { this.pending = undefined; });
-    return this.pending;
+  refresh = () => {
+    this.full = true;
+    return this.schedule();
   };
 
+  private schedule() {
+    this.pending ??= this.load().finally(() => { this.pending = undefined; });
+    return this.pending;
+  }
+
   private async load() {
-    while (this.loaded < this.requested) {
-      const requested = this.requested;
-      const snapshot = await this.fetchSnapshot();
-      if (requested !== this.requested) continue;
-      this.loaded = requested;
-      if (JSON.stringify(snapshot) === JSON.stringify(this.snapshot)) continue;
-      this.snapshot = snapshot;
-      this.dispatchEvent(new Event('change'));
+    try {
+      while (this.full || this.dirty.size) {
+        const full = this.full || this.dirty.size > 100;
+        const dirty = new Set(this.dirty);
+        this.full = false;
+        this.dirty.clear();
+        if (full) this.snapshot = await this.fetchSnapshot();
+        else {
+          const updated = await this.scoped.fetch([...dirty]);
+          this.snapshot = this.scoped.merge(this.snapshot, updated, dirty);
+        }
+        if (!this.full && !this.dirty.size) this.dispatchEvent(new Event('change'));
+      }
+    } catch (error) {
+      this.full = true;
+      throw error;
     }
   }
 }

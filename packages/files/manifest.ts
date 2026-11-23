@@ -1,10 +1,10 @@
-import type { BuiltinPlugin } from '../contracts/plugins.js';
+import type { PluginDescriptor } from '../contracts/plugins.js';
 import { setup } from './host.js';
 
 /** One metadata definition for the host, settings, and browser loader. */
-export const manifest: BuiltinPlugin = {
+export const manifest: PluginDescriptor = {
+  protocol: 2, scope: 'application', browserInject: ['harnessBrowser'],
   setup, defaultEnabled: true, browserRequires: ['core:layout', 'core:conversation'],
-  provides: ['harnessFiles'],
   id: 'files', title: 'Workspace files', description: 'Read, search and edit files within the workspace.',
-  icon: 'files', browser: '/packages/files/client.js', inject: ['harnessState', 'harnessWorkspace', 'harnessWorkspaces', 'harnessRegistry', 'harnessTools', 'harnessRoutes'],
+  icon: 'files', browser: '/packages/files/client.js', inject: ['harnessFileAccess', 'harnessWorkspaces', 'harnessRegistry', 'harnessTools', 'harnessRoutes'],
 };

@@ -13,7 +13,7 @@ export function setup(ctx: Context, { config }: PluginApi) {
     execute: async (_id, args, signal) => {
       const cwd = workspace.resolve(sessionId);
       await approvals.request(sessionId, runs.info(sessionId)?.id, args.command, signal);
-      const output = await process.run(args.command, cwd, { ...options, signal });
+      const output = await process.run({ command: args.command, cwd, ...options, signal });
       return { content: [{ type: 'text', text: JSON.stringify(output) }], details: { ...output, exitCode: output.code } };
     }
   });

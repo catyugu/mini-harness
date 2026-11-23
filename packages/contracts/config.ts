@@ -1,9 +1,13 @@
+import type { ScopeSettings } from './capabilities.js';
+
 /** Types shared by all runtimes. No imports from platform or features. */
 export interface Settings {
   port: number;
   model: { provider: string; id: string };
   plugins: Record<string, boolean>;
   pluginConfig: Record<string, Record<string, unknown>>;
+  providers: Record<string, string>;
+  scopes: Record<string, ScopeSettings>;
   appearance: 'system' | 'light' | 'dark';
 }
 

@@ -9,7 +9,7 @@ import type { SubagentPolicy } from '../contracts/delegation.js';
 export function setup(ctx: Context, { config }: PluginApi) {
   const { harnessRegistry: catalog, harnessPi: pi, harnessRuns: runs, harnessSettingsStore: settings } = ctx;
   const policy = () => settings.settings.pluginConfig.subagents as unknown as SubagentPolicy;
-  const delegation = new Delegation(catalog, pi, () => runs, policy, (id) => catalog.assertAvailable(id));
+  const delegation = new Delegation(catalog, pi, ctx.harnessModels, () => runs, policy, (id) => catalog.assertAvailable(id));
   delegation.validate(config as unknown as SubagentPolicy);
   ctx.effect(() => settings.validate((next) => {
     if (next.plugins.subagents) delegation.validate(next.pluginConfig.subagents as unknown as SubagentPolicy);

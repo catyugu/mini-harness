@@ -1,0 +1,33 @@
+export type ProcessMode = 'isolated' | 'host';
+
+export interface ProcessRequest {
+  command: string;
+  cwd: string;
+  mode: ProcessMode;
+  timeoutSeconds: number;
+  signal?: AbortSignal;
+}
+
+export interface ProcessResult {
+  code: number | null;
+  signal: NodeJS.Signals | null;
+  reason?: 'timeout' | 'cancelled' | 'output-limit';
+  stdout: string;
+  stderr: string;
+  truncated: boolean;
+}
+
+export interface ProcessExecutionPort {
+  run(request: ProcessRequest): Promise<ProcessResult>;
+}
+
+export interface IsolatedProcess {
+  file: string;
+  args: string[];
+  cwd: string;
+  env: NodeJS.ProcessEnv;
+}
+
+export interface SandboxPort {
+  prepare(request: ProcessRequest): Promise<IsolatedProcess>;
+}

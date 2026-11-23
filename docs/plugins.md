@@ -1,85 +1,110 @@
-# Local plugins
+# Plugin development
 
-Install reviewed ESM code in `~/.mini-harness/plugins/<id>/plugin.js`. IDs start with a lowercase letter and contain lowercase letters, digits and hyphens (up to 64 characters). Plugins run with your user permissions. Enable them in the Plugins page. Settings also links to this page.
+Bundles use protocol 2. Put a `plugin.json` descriptor and `plugin.js`, `web.js`, or both in `~/.mini-harness/plugins/<id>/`. The Plugins page installs bundles up to 1 MiB and leaves them disabled until enabled. IDs start with a lowercase letter and can contain lowercase letters, digits and hyphens, up to 64 characters. Disable a plugin in every scope and remove any provider selection before uninstalling. Uninstalling permanently removes the bundle and its configuration. Review local code before enabling it.
 
-## Manifest and configuration
-
-`plugin.json` supplies metadata, required plugins, and a JSON Schema for configuration:
+## Descriptor and entrypoints
 
 ```json
 {
+  "protocol": 2,
   "title": "Conversation count",
   "description": "Count registered conversations.",
-  "requires": ["files"],
+  "inject": ["harnessSessions", "harnessRoutes"],
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
-    "required": ["prefix"],
     "properties": {
-      "prefix": {
-        "type": "string",
-        "title": "Prefix",
-        "description": "Text before the count.",
-        "default": "Count",
-        "minLength": 1
-      }
+      "prefix": { "type": "string", "default": "Count" }
     }
   }
 }
 ```
 
-The optional `icon` field accepts a symbolic icon name or an inline SVG path object such as `{"path":"M2 2h20v20H2z","viewBox":"0 0 24 24"}`. Custom vector data is rendered as an SVG `<path>` without interpreting HTML; unknown symbolic names fall back to the generic plugin icon. No fixed list of icon names is imposed by the plugin contract.
+`plugin.js` and `web.js` each export a default `setup(ctx, api)` function and may return cleanup. For TypeScript use `mini-harness/plugin` for the server API and service types, and `mini-harness/browser-plugin` for the browser API. Exported SDK types compile away. Bundles can use their own local ESM dependencies on the server. Bundle browser dependencies into `web.js` for the authenticated browser loader.
 
-Dependencies must be enabled; cycles and missing dependencies reject the configuration before unloading anything. Built-in IDs are `files`, `skills`, `subagents`, `shell` and `session-helper`.
-
-The GUI renders strings, booleans, numbers, integers, enums and nested objects from the schema. Other values use JSON input. Use `title`, `description`, `default`, `required`, bounds and `additionalProperties` to describe the accepted configuration. Keep schemas self-contained; external references are unsupported. Defaults apply recursively to object properties, then TypeBox validates the resulting value. Store configuration in `settings.json` under `pluginConfig.<id>`; it is ordinary local configuration, so use Pi credential storage for model secrets.
-
-## Entry point
+| Field | Contract |
+| - | - |
+| `protocol` | Required integer, currently `2` |
+| `scope` | `application` (default), `workspace` or `session` |
+| `provides`, `inject`, `optional` | Server services published, required, or read opportunistically |
+| `requires` | Required plugin IDs |
+| `browserProvides`, `browserInject`, `browserRequires` | Published and required browser services, and required browser plugin IDs |
+| `configSchema` | Self-contained JSON Schema for an object. Defaults apply before validation. |
+| `icon` | A symbolic icon name or an SVG path object with optional `viewBox` |
 
 ```js
-export const inject = ['harnessSessions'];
-
-export default function setup(ctx, api) {
-  const { prefix } = api.config;
-  api.registerRoute('GET', '/count', () => ({ count: ctx.harnessSessions.list().length }));
-  api.registerTool({
-    name: 'conversation_count',
-    label: 'Conversation count',
-    description: 'Count registered conversations.',
-    parameters: { type: 'object', properties: {} },
-    async execute(_callId, _args, signal) {
-      signal?.throwIfAborted();
-      return {
-        content: [{ type: 'text', text: prefix + ': ' + ctx.harnessSessions.list().length }]
-      };
-    }
-  });
-  const timer = setInterval(() => {}, 60000);
-  api.onDispose(() => clearInterval(timer));
+export default function setup(_ctx, api) {
+  const sessions = api.service('harnessSessions');
+  api.registerRoute('GET', '/count', () => ({
+    label: api.config.prefix,
+    count: sessions.list().length
+  }));
 }
 ```
 
-`plugin.js` must have a default export: a setup function or a Cordis component with `apply` and `inject`. Declare service names with `inject`; declare plugin IDs with manifest `requires`. Register tools during setup and honor cancellation in tool execution.
-
-| API | Purpose |
+| Server API | Contract |
 | - | - |
-| `api.config` | Cloned, read-only top-level configuration with schema defaults applied |
-| `api.defineConfig(defaults, validate?)` | Optional JavaScript defaults and validation, including plugins without a schema |
-| `api.registerTool(tool)` | Register a Pi tool and return an async unregister function |
-| `api.registerRoute(method, path, handler)` | Mount an authenticated JSON route under `/api/extensions/<id>` and return an async unregister function |
-| `api.records.list(sessionId)` / `append(sessionId, data)` | Read or append this plugin’s JSON records on the current Pi branch |
-| `api.onDispose(cleanup)` | Register synchronous or asynchronous resource cleanup |
-| Returned cleanup function | Alternative cleanup for the setup function |
+| `config`, `scope`, `signal` | Validated setup settings, scope address and lifetime signal |
+| `provide(name, service)` | Publish a declared service for Cordis consumers |
+| `service(name)` | Read a required or optional declared service |
+| `registerTool(tool)` | Register a Pi tool. Its signal aborts when the registration drains. |
+| `registerRoute(method, path, handler)` | Authenticated route under `/api/extensions/<id>`. Handler receives URL, `body(maxBytes?)` and `signal`. Application scope only. |
+| `records.list(id)` / `records.append(id, data)` | Namespaced Pi branch records |
+| `onDispose(cleanup)` | Register sync or async cleanup |
 
-Tool names must be unique, use letters, digits, underscores or hyphens, and be 1–64 characters long. Built-in coding-tool names are reserved even while the file plugin is disabled.
+Declare `harnessRoutes` and `harnessTools` when using their registration methods. Return JSON from route handlers and honor their cancellation signals. Tool names contain 1–64 letters, digits, underscores or hyphens. Built-in Pi coding-tool names are reserved. Use the plugin lifetime signal for other work owned by setup. Store credentials in Pi credential storage.
 
-## Services and lifecycle
+## Events
 
-Public metadata services are `harnessModels.list()` and `harnessSessions.get(id)` / `list()`. Read plugin settings through `api.config` and register tools and routes through the plugin API. Session metadata is returned as a snapshot. Plugin records live in the Pi JSONL as namespaced Custom Entries. Pi starts the file on the first conversation message and leaves Custom Entries out of model context.
+- `api.observe(handler)` observes created/deleted sessions, started/ended runs and completed tools. Observers receive copies and run asynchronously. Observer errors are reported without affecting the operation.
+- `api.decideTool(handler)` participates before a tool executes. Cordis awaits handlers in registration order. The first `'deny'` stops the operation. A thrown error also prevents execution. Handlers receive the tool name, session ID and cancellation signal. Shell still requires its approval.
+- `api.transformTool(handler)` synchronously transforms displayed tool content. Transformations compose in reverse registration order. They receive copies and apply to live and saved projections. Errors keep the prior projection. Pi model context and history keep their original contents.
 
-Built-in and local setup functions run in Cordis scopes. Dependencies mount first and unload last. Disabling a required plugin also requires disabling its dependents. Reconfiguring a dependency restarts its enabled dependents. Unchanged plugin scopes stay mounted. A route handler receives `{ url, body(maxBytes?), signal }`. The signal aborts when its route unloads. Read JSON with `await body()` and return a JSON-serializable result.
+Event subscriptions are scoped and are removed on disposal. Unload aborts pending policy work. A scoped observer can only see sessions in its scope and descendants.
 
-Schema validation precedes setup. If setup or settings persistence fails, the host unloads new scopes and restores the previous plugin configuration. Cleanup handlers must release their resources and tolerate partial setup; failure to restore is reported explicitly. Plugin enable/disable and tool, Skill or Shell reconfiguration require idle conversations. Subagent depth, concurrency and child-model defaults use a live configuration service and may change without interrupting runs; newly eligible tools become available when the session is next idle. Appearance and model selection updates also preserve active runs. Pi reconciles tool and Skill resources after lifecycle changes.
+## Provider selection and scopes
+
+In `settings.json`, `providers` maps service names to explicit enabled provider IDs. A replacement publishes the same contract. If replacing a plugin that provides multiple services, select replacements for all its services together. To restore the default, remove the selection and disable the replacement.
+
+```json
+{
+  "plugins": { "process-preview": true, "shell": true },
+  "providers": { "harnessProcess": "process-preview" },
+  "scopes": {
+    "workspace:<workspaceId>": {
+      "disabledTools": ["sandbox_shell"]
+    },
+    "session:<sessionId>": {
+      "plugins": { "scoped-tool": true }
+    }
+  }
+}
+```
+
+A `scopes` entry can set `plugins`, `pluginConfig` and `disabledTools`. Workspace and session plugins are server-only and are selected at a matching address. Registered tools and services are inherited by descendants. Tool restrictions apply transitively. Duplicate providers in the same ancestry are rejected. Use the workspace and session API IDs, and keep values in `pluginConfig` only for overrides. A Settings API PATCH supplying `providers` or `scopes` replaces the corresponding map.
+
+Setup, schema or settings persistence failures retain the previous effective graph. A failed candidate that already drained resources cannot resume a cancelled call. Routes and tools dispose cooperatively. An unsuccessful browser setup removes its partial contributions and is reported in the Plugins page.
+
+## Browser contributions
+
+| API | Contract |
+| - | - |
+| `ui.button`, `ui.field`, `ui.menu`, `ui.status` | Shared visual primitives |
+| `dialog(title, content)` | A shared modal registered under the plugin lifetime |
+| `page(id, {title, content, order?})` | Register a page and sidebar entry |
+| `slots.register(name, node, order?)` | Contribute to a layout or feature slot |
+| `settingsPage(title, node)` | Add a settings category |
+| `rightTab(type, {title, create})`, `openTab(type, path?)` | Register or open a scoped workspace tab. Creation receives its address and an abort signal. |
+| `inspect(title, node)` | Show content in the workspace inspector |
+| `command({name, description, group?, run?})`, `completion(trigger, complete)` | Slash commands and punctuation-triggered suggestions |
+| `tool(name, render)`, `toolAction(name, render)` | Register tool result presentation or controls |
+| `messageAction({id, label, icon, visible, run})` | Register an action on the eligible messages |
+| `beginDraftMode({title, text, submit})`, `cancelDraftMode()`, `insert(text)` | Own an editing flow or insert content into the composer |
+| `request(path, options?)`, `signal`, `onDispose(cleanup)` | Authenticated requests and lifetime management |
+
+Page, dialog, tab and inspector contributions depend on `core:layout`. Tools, message actions and composer operations depend on `core:conversation`. Settings pages depend on `core:settings`. The theme and primitives are shared. Declare the corresponding dependencies in `browserRequires` or declare the service in `browserInject`. Browser code runs with the page's permissions. Put custom UI listeners and requests under the plugin's lifetime and use contribution APIs to interact with another feature.
+
+[Runnable examples](examples/) cover [publishing](examples/greeting-service/), [consuming](examples/greeting-route/) and [replacing](examples/process-preview/) a service, [scoped tools](examples/scoped-tool/), and [browser pages and actions](examples/browser-panel/). The test suites install and exercise these bundles.
 
 ## Run API
 
@@ -94,53 +119,6 @@ All API requests require `Authorization: Bearer <token>`.
 | `POST /api/sessions/:id/cancel` | Explicitly cancel that conversation and running descendants |
 
 Run states are queued, running, completed, failed, cancelled and interrupted. Event replay is bounded to 2,048 events and approximately 1 MiB per active conversation. An older cursor receives a snapshot of Pi history and current output, then follows live events. Completed runs use saved history snapshots. The server persists latest status and Pi JSONL, rather than a separate execution context or an event archive.
-
-## Browser extensions
-
-A local plugin may include a self-contained ESM `web.js` beside `plugin.js`. Its default export receives the browser API below. Bundle browser dependencies into this one file; relative imports and Node APIs are unavailable. The browser fetches it through the authenticated API and only loads enabled plugins. Browser UI entrypoints mount under the same lifecycle as the built-in browser graph. There is no deprecated single-app entrypoint or old `mount` API. It runs as trusted page code and can access the same interface as the user.
-
-```js
-export default function setup(api) {
-  const open = document.createElement('button');
-  open.type = 'button';
-  open.textContent = api.config.label ?? 'Task notes';
-  open.onclick = () => {
-    const text = document.createElement('p');
-    text.textContent = 'Notes for the current task';
-    api.inspect('Task notes', text);
-  };
-  api.slots.register('sidebar.actions', open);
-  api.tool('conversation_count', (result) => {
-    const output = document.createElement('p');
-    output.textContent = typeof result.content === 'string' ? result.content :
-      (result.content ?? []).filter((block) => block.type === 'text').map((block) => block.text).join('\n');
-    return output;
-  });
-}
-```
-
-| API | Behavior |
-| - | - |
-| `slots.register('sidebar.actions', node, order?)` | Add a sidebar entry. Lower orders appear first. |
-| `command({name, description, group?, run?})` | Register a slash suggestion. Omit the leading slash from the name. With no callback the command is inserted into the draft. |
-| `slots.register('conversation.composer', node)` | Add an input toolbar control |
-| `completion(trigger, complete)` | Register a punctuation-triggered input completion. The callback receives `{query, signal, show, replace}`. |
-| `toolAction(name, render)` | Add a control to a tool result while keeping its normal output. |
-| `tool(name, render)` | Register one renderer for a tool name; returning `undefined` uses the generic result view |
-| `settingsPage(title, node)` | Register a settings category and its content |
-| `slots.register('settings.extensions', node)` | Add content to the shared Extensions category |
-| `slots.register('inspector.extensions', node)` | Add a right-panel entry; use `inspect(title, node)` to show its content |
-| `insert(text)` | Insert text at the input selection |
-| `request(path, options?)` | Request authenticated JSON from `/api` using a path such as `/sessions` |
-| `signal` | Aborts when the browser plugin scope unloads. Requests made through the API use it automatically. |
-| `config` | Same validated configuration and schema defaults as the server plugin |
-| `onDispose(cleanup)` / returned cleanup | Release listeners, timers and other browser resources |
-
-The browser runs each plugin in a Cordis scope and disposes its slot contributions, completions, settings pages, tool registrations and inspector content when the scope unloads. Pass `api.signal` to document or window listeners or release them with `onDispose`. Dependencies mount first and dispose last; configuration changes also rebuild dependent browser extensions. Setup failures remove partial contributions and leave ordinary chat available. The catalog reports which browser plugins failed after the server saved a change. The backend and UI share one plugin switch; attachments, file inspection and Skills use these same extension interfaces.
-
-The Plugins page can install a local bundle containing `plugin.js`, `web.js` or both, with optional `plugin.json` (at most 1 MiB combined). New installations stay disabled. Disable the plugin before uninstalling; uninstall permanently removes its directory and its entries in the plugin switch/configuration maps. Larger development plugins can still be placed in the local plugins directory manually.
-
-Register a right-panel tab with `api.rightTab(type, { title, create })`. Both callbacks receive an address with `workspaceId`, optional `sessionId`, and optional `path`. `create(address, signal)` returns the tab's element and receives an abort signal for any in-flight work. Call `api.openTab(type, path?)` to open or focus the tab in the current conversation or workspace. Changing conversations aborts and releases the outgoing tab views. Registered tabs keep their address and selection, and recreate their views on return. Inspector content added with `inspect` lasts for the current scope. Disabling a plugin closes its tabs.
 
 ## Workspace and GUI API
 
@@ -169,19 +147,3 @@ The server runs one Runtime for all registered workspaces. Each conversation has
 Images (PNG/JPEG/GIF/WebP) go through Pi's image input and require an image-capable model. UTF-8 text attachments are included in the Pi model input. The conversation view displays their names alongside the original message. Limits: eight files, 6 MiB per image, 1 MiB per text file, 12 MiB total. Binary documents such as PDF/Office files are not parsed. Attachment content lives in the Pi conversation; there is no independent upload store. Git inspection requires the selected workspace to be the repository root and caps output at 512 KiB. “Files written this turn” lists successful built-in `write`/`edit` paths; Git changes show the entire working tree, including earlier edits and shell changes.
 
 The file and Skill endpoints return 404 when their plugin is disabled. The Approvals endpoint lists pending decisions from the active Shell tool. Disabling Shell cancels its pending requests. Every enabled built-in Shell call requires approval. Requests expire after five minutes; stopping the run or server cancels pending approval. Approval permits the command under the existing shell policy. Reviewed local plugins remain trusted code; this is not a general-purpose containment mechanism.
-
-## Message action and composer extensions
-
-Browser-only local plugins may contain only `web.js` (optionally `plugin.json`). The built-in `session-helper` feature demonstrates a shared capability boundary: one manifest, one on/off switch and one Cordis lifecycle provide both Copy message and Edit & resend. Its backend registers the edit route, while both message actions are browser contributions.
-
-The browser API exposes `messageAction({ id, label, icon, order?, visible(context), run(context) })`. `context.message` contains the Pi entry ID and the message's presentation content and attachment metadata; `context.rawText` contains the original text. `context.leafId` identifies the active Pi branch. The host owns button styling, placement, ordering, error rendering and cleanup. A plugin must not mutate message DOM or inspect private conversation components. Actions are removed automatically when its Cordis scope is disposed.
-
-Use `beginDraftMode({ title, text, submit(input) })` for a custom composer operation and `cancelDraftMode()` to leave it. The input contains text, attachments, chosen model and thinking level. An active mode intercepts the normal submit only while enabled. Disabling a plugin cancels its outstanding mode. The host owns the editor, cancel control and responsive layout.
-
-The `session-helper` plugin submits to its authenticated route `POST /api/extensions/session-helper/revise`, passing `sessionId`, `sourceEntryId`, `expectedLeafId`, `message` and optional send parameters. The host checks an optimistic Pi leaf token, navigates the AgentSession tree and starts a run. Earlier branches remain in Pi JSONL. This does **not** roll back files written to the workspace. Existing branch selection/navigation UX is a separate concern.
-
-## Built-in capabilities and tests
-
-Add capabilities under `packages/<id>/`, register server setup in `packages/host/composition.ts` and the built-in browser entry in `packages/ui/manifest.ts`. Optional plugin entrypoints use their own manifest and lifecycle.
-
-See [architecture](architecture.md) for package boundaries, browser asset exposure, test ownership and verification commands.

@@ -48,19 +48,40 @@ export class SettingsManager implements SettingsPort {
     const pluginConfig = { ...this.stored.pluginConfig };
     delete plugins[id];
     delete pluginConfig[id];
-    this.save({ ...this.stored, plugins, pluginConfig });
+    const scopes = Object.fromEntries(Object.entries(this.stored.scopes).map(([key, entry]) => {
+      const scopedPlugins = { ...entry.plugins };
+      const scopedConfig = { ...entry.pluginConfig };
+      delete scopedPlugins[id];
+      delete scopedConfig[id];
+      return [key, { ...entry, plugins: scopedPlugins, pluginConfig: scopedConfig }];
+    }));
+    this.save({ ...this.stored, plugins, pluginConfig, scopes });
     this.publish();
+  }
+
+  forgetScopes(keys: string[]) {
+    const scopes = { ...this.stored.scopes };
+    let changed = false;
+    for (const key of keys) {
+      if (!Object.hasOwn(scopes, key)) continue;
+      delete scopes[key];
+      changed = true;
+    }
+    if (changed) { this.save({ ...this.stored, scopes }); this.publish(); }
   }
 
   async update(patch: SettingsPatch, host: PluginConfigurationPort) {
     if (this.updating) throw new Error('Configuration is already changing');
+    const originalScopes = this.stored.scopes;
     const updated = mergeSettings(this.stored, patch);
     const next = this.effective(updated);
     for (const validate of this.validators) validate(next);
     this.updating = true;
     try {
       await host.configure(next, () => {
-        this.save(patch.model ? updated : { ...updated, model: this.stored.model });
+        const removed = Object.keys(originalScopes).filter((key) => !Object.hasOwn(this.stored.scopes, key));
+        const scopes = Object.fromEntries(Object.entries(updated.scopes).filter(([key]) => !removed.includes(key)));
+        this.save({ ...updated, model: patch.model ? updated.model : this.stored.model, scopes });
       });
       this.publish();
       return this.settings;

@@ -1,20 +1,31 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { HttpReply, type RouteHandler, type RoutePort } from '../contracts/routes.js';
 
-export function requestBody(req: IncomingMessage, max = 1024 * 1024): Promise<any> {
+export function requestBody(req: IncomingMessage, max = 1024 * 1024, signal?: AbortSignal): Promise<any> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     let size = 0;
-    req.on('data', (data) => {
+
+    const clear = () => {
+      req.off('data', receive).off('end', finish).off('error', fail);
+      signal?.removeEventListener('abort', cancel);
+    };
+    const fail = (error: Error) => { clear(); reject(error); };
+    const cancel = () => { fail(signal.reason); req.resume(); };
+    const receive = (data: Buffer) => {
       size += data.length;
-      if (size > max) { reject(new Error('Request too large')); req.destroy(); return; }
+      if (size > max) { fail(new Error('Request too large')); req.destroy(); return; }
       chunks.push(data);
-    });
-    req.on('end', () => {
+    };
+    const finish = () => {
+      clear();
       try { resolve(chunks.length ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {}); }
       catch { reject(new Error('Malformed JSON')); }
-    });
-    req.on('error', reject);
+    };
+
+    if (signal?.aborted) { cancel(); return; }
+    signal?.addEventListener('abort', cancel, { once: true });
+    req.on('data', receive).once('end', finish).once('error', fail);
   });
 }
 
@@ -46,7 +57,7 @@ export function eventStream(res: ServerResponse) {
 
 export class RouteRegistry implements RoutePort {
   private readonly routes = new Map<string, { path: string; pattern: RegExp; names: string[]; literal: boolean;
-    handler: RouteHandler; signal: AbortSignal; controller: AbortController }>();
+    handler: RouteHandler; controller: AbortController; active: Set<Promise<unknown>> }>();
 
   register(method: string, path: string, handler: RouteHandler) {
     if (!['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method) || !/^\/[a-zA-Z0-9_:/-]+$/.test(path))
@@ -65,9 +76,13 @@ export class RouteRegistry implements RoutePort {
     });
     const controller = new AbortController();
     const entry = { path, pattern: new RegExp('^/' + parts.join('/') + '$'), names, literal: names.length === 0,
-      handler, signal: controller.signal, controller };
+      handler, controller, active: new Set<Promise<unknown>>() };
     this.routes.set(key, entry);
-    return () => { if (this.routes.get(key) === entry) this.routes.delete(key); controller.abort(); };
+    return async () => {
+      if (this.routes.get(key) === entry) this.routes.delete(key);
+      controller.abort(new Error('Route is no longer available'));
+      await Promise.allSettled(entry.active);
+    };
   }
 
   dispatch(req: IncomingMessage, res: ServerResponse, url: URL) {
@@ -81,21 +96,34 @@ export class RouteRegistry implements RoutePort {
     if (!matching) return;
     const { route, match } = matching;
     const params = Object.fromEntries(route.names.map((name, i) => [name, decodeURIComponent(match[i + 1])]));
-    return Promise.resolve(route.handler({
-      url, params, request: req, response: res, signal: route.signal,
-      async body(max) {
-        const result = await requestBody(req, max);
-        route.signal.throwIfAborted();
-        return result;
-      }
-    })).then((result) => {
+    const disconnect = new AbortController();
+    const signal = AbortSignal.any([route.controller.signal, disconnect.signal]);
+    const close = () => { if (res.headersSent) res.end(); };
+    route.controller.signal.addEventListener('abort', close, { once: true });
+    res.once('close', () => {
+      disconnect.abort();
+      route.controller.signal.removeEventListener('abort', close);
+    });
+    const active = Promise.resolve().then(() => {
+      signal.throwIfAborted();
+      return route.handler({
+        url, params, request: req, response: res, signal,
+        async body(max) {
+          const result = await requestBody(req, max, signal);
+          signal.throwIfAborted();
+          return result;
+        }
+      });
+    });
+    route.active.add(active);
+    return active.then((result) => {
       if (res.destroyed || res.writableEnded || res.headersSent) return;
-      route.signal.throwIfAborted();
+      signal.throwIfAborted();
       if (result instanceof HttpReply) {
         res.writeHead(result.status, { 'Content-Type': 'application/json; charset=utf-8',
           'Cache-Control': 'no-store', ...result.headers });
         res.end(JSON.stringify(result.body));
       } else json(res, 200, result ?? null);
-    });
+    }).finally(() => { route.active.delete(active); });
   }
 }

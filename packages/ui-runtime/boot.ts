@@ -2,8 +2,8 @@ import { Context } from '../web/vendor/cordis.js';
 import { api, data, readEvents, wait } from '../web/api.js';
 import { Selection } from '../web/models/selection.js';
 import { RemoteStore } from '../web/models/remote-store.js';
-import { SlotRegistry } from '../ui-slots/registry.js';
-import { MessageExtensions } from './message-extensions.js';
+import type { SlotRegistry } from '../ui-slots/registry.js';
+import type { MessageExtensions } from './message-extensions.js';
 import { FrontendHost } from './frontend.js';
 import { createBrowserGraphLoader, type BrowserPluginFailures } from './plugin-loader.js';
 import type { Bootstrap, ModelCatalog } from '../web/types.js';
@@ -39,7 +39,7 @@ async function observe(stores: Record<ProjectionDomain, Pick<RemoteStore<unknown
       await readEvents<ProjectionNotice>(await api('/changes', { signal: streamSignal }), (event) => {
         backoff = 300;
         if (event.type === 'change') {
-          void stores[event.domain].sync(event.revision, false)?.catch(recover);
+          void stores[event.domain].sync(event.revision, false, event.sessionId)?.catch(recover);
         } else {
           for (const domain of Object.keys(stores) as ProjectionDomain[])
             void stores[domain].sync(event.revisions[domain], true)?.catch(recover);
@@ -56,8 +56,11 @@ async function boot() {
   const lifetime = new AbortController();
   const select = new Selection();
   const settings = new RemoteStore(() => data<Settings>('/settings'));
-  const sessions = new RemoteStore(async () => (await data<Conversation[]>('/sessions'))
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
+  const byRecent = (a: Conversation, b: Conversation) => b.updatedAt.localeCompare(a.updatedAt);
+  const sessions = new RemoteStore(async () => (await data<Conversation[]>('/sessions')).sort(byRecent), {
+    fetch: (ids) => data<Conversation[]>('/sessions?' + new URLSearchParams(ids.map((id) => ['id', id]))),
+    merge: (current, updated, ids) => [...current.filter(({ id }) => !ids.has(id)), ...updated].sort(byRecent)
+  });
   const workspaces = new RemoteStore(() => data<WorkspaceRecord[]>('/workspaces'));
   const models = new RemoteStore(async () => {
     const [{ models }, providers] = await Promise.all([
@@ -89,8 +92,6 @@ async function boot() {
     return applyGraph();
   };
 
-  ctx.provide('miniSlots', new SlotRegistry());
-  ctx.provide('miniMessages', new MessageExtensions(report));
   ctx.provide('miniSelection', select);
   ctx.provide('miniSettingsData', settings);
   ctx.provide('miniSessions', sessions);

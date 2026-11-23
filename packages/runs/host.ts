@@ -7,8 +7,10 @@ import { Checkpoints } from './checkpoints.js';
 export function setup(ctx: Context) {
   const { harnessRegistry: catalog } = ctx;
   const checkpoints = new Checkpoints(join(ctx.harnessState.paths.home, 'runs.json'), (id) => Boolean(catalog.get(id)));
-  const runs = new Runs(catalog, ctx.harnessPi, checkpoints, () => ctx.harnessSettings().model);
+  const runs = new Runs(catalog, ctx.harnessPi, checkpoints, () => ctx.harnessSettings().model, ctx.harnessModels,
+    (event) => ctx.emit('harness/observe', event));
   ctx.provide('harnessRuns', runs);
+  ctx.effect(() => () => runs.stop());
   ctx.effect(() => catalog.beforeDelete({
     busy: (id) => runs.active(id),
     async quiesce(ids) {

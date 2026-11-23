@@ -240,7 +240,8 @@ function fileView(api: FrontendApi, services: FrontendServices, address: TabAddr
   return root;
 }
 
-const setup: FrontendSetup = (api, services) => {
+const setup: FrontendSetup = (ctx, api) => {
+  const services = ctx.harnessBrowser;
   const expanded = new WeakMap<TabAddress, Set<string>>();
   api.rightTab('files', {
     title: ({ path }) => path ? base(path) : 'Files',

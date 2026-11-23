@@ -24,7 +24,7 @@ interface ConversationServices {
   settings: RemoteStore<Settings>;
   models: RemoteStore<ModelCatalog>;
   closeDrawer(): void;
-  placeWorkspace(welcome?: HTMLElement): void;
+  showWorkspaceInHeader(show: boolean): void;
   setTitle(title: string): void;
   renderTool(tool: ToolView, action?: boolean): HTMLElement | undefined;
   messageActions(): MessageAction[];
@@ -37,6 +37,7 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
       <section id="welcome" class="welcome">
         <img src="/logo.svg" width="52" height="52" alt="">
         <h1>What are we working on?</h1>
+        <div id="workspaceWelcome"></div>
       </section>
       <div id="runSummary" class="run-summary" aria-label="Latest run" hidden><span></span><time></time></div>
       <section id="messages" class="messages" aria-label="Messages" hidden></section>
@@ -67,7 +68,9 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
     </div>`);
   api.slots.register('conversation.body', view);
   const { element, value } = scopedElements(view);
-  const outlets = { composer: element('composerExtensions'), approvals: element('approvalRequests') };
+  const outlets = {
+    composer: element('composerExtensions'), approvals: element('approvalRequests'), workspace: element('workspaceWelcome')
+  };
 
   const messages = element('messages');
   const welcome = element('welcome');
@@ -151,7 +154,7 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
   function showWelcome(show: boolean) {
     welcome.hidden = !show;
     messages.hidden = show;
-    options.placeWorkspace(show ? welcome : undefined);
+    options.showWorkspaceInHeader(!show);
   }
 
   function showConversation(item?: Conversation | ConversationView, revealWorkspace = true) {

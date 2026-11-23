@@ -1,0 +1,35 @@
+import { realpath } from 'node:fs/promises';
+import { relative } from 'node:path';
+import { containsPath } from '../platform/paths.js';
+import type { IsolatedProcess, ProcessRequest, SandboxPort } from '../contracts/execution.js';
+import { supportsIsolation, bubblewrap } from './isolation.js';
+
+export function isolationCommand(command: string, cwd: string, timeout: number): IsolatedProcess {
+  return { file: bubblewrap, cwd, env: { PATH: '/usr/bin:/bin' }, args: [
+    '--die-with-parent', '--unshare-all', '--cap-drop', 'ALL', '--clearenv',
+    '--ro-bind', '/usr', '/usr', '--ro-bind-try', '/bin', '/bin',
+    '--ro-bind-try', '/lib', '/lib', '--ro-bind-try', '/lib64', '/lib64',
+    '--ro-bind-try', '/etc/ld.so.cache', '/etc/ld.so.cache',
+    '--ro-bind-try', '/etc/alternatives', '/etc/alternatives',
+    '--proc', '/proc', '--dev', '/dev', '--tmpfs', '/tmp',
+    '--bind', cwd, '/workspace', '--chdir', '/workspace',
+    '--setenv', 'PATH', '/usr/local/bin:/usr/bin:/bin', '--setenv', 'HOME', '/tmp',
+    '--', '/usr/bin/prlimit', '--nofile=1024', '--fsize=268435456', '--cpu=' + timeout,
+    '--core=0', '--', '/bin/sh', '-c', command
+  ] };
+}
+
+export class LinuxSandbox implements SandboxPort {
+  constructor(private readonly stateDir: string, private readonly platform = process.platform) {}
+
+  async prepare({ command, cwd, timeoutSeconds, signal }: ProcessRequest) {
+    signal?.throwIfAborted();
+    if (this.platform !== 'linux') throw new Error('Isolated shell requires Linux and bubblewrap');
+    const [root, state] = await Promise.all([realpath(cwd), realpath(this.stateDir)]);
+    if (relative(root, cwd) || containsPath(root, state) || containsPath(state, root))
+      throw new Error('Use a canonical workspace separate from mini-harness storage for isolated shell');
+    if (!supportsIsolation()) throw new Error('Isolation unavailable: Linux bubblewrap namespaces and prlimit are required');
+    signal?.throwIfAborted();
+    return isolationCommand(command, root, timeoutSeconds);
+  }
+}

@@ -9,7 +9,7 @@ import { plugins } from '../../packages/host/composition.js';
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const packages = join(root, 'packages');
 const web = join(packages, 'web');
-const capabilityNames = ['agent','approvals','files','models','plugins','process-execution','runs','session-helper','sessions','settings','shell','skills','subagents','tools','ui','workspaces'];
+const capabilityNames = ['agent','approvals','file-access','files','models','plugins','process-execution','runs','sandbox','session-helper','sessions','settings','shell','skills','subagents','tools','ui','workspaces'];
 const infrastructureNames = ['contracts','host','kernel','platform','transport'];
 function files(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {

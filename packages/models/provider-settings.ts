@@ -1,27 +1,28 @@
 import { join } from 'node:path';
 import { readJson, writeJson } from '../platform/config.js';
 import type { Settings, SettingsPatch } from '../contracts/config.js';
-import type { AgentPort } from '../contracts/services.js';
+import type { ModelAdminPort, ModelCatalogPort } from '../contracts/models.js';
 
 type ProviderHost = {
   paths: { home: string };
   settings: Pick<Settings, 'model'>;
-  pi: Pick<AgentPort, 'models' | 'invalidateProviderSessions'>;
+  catalog: ModelCatalogPort;
+  admin: ModelAdminPort;
   delegation?: { checkProvider(id: string, removing?: boolean): void };
   hasActiveWork: boolean;
   updateSettings(patch: SettingsPatch): Promise<Settings>;
 };
 export function providerSettings(runtime: ProviderHost) {
   const config = readJson<any>(join(runtime.paths.home, 'models.json'), { providers: {} });
-  return runtime.pi.models.getProviders().map((provider) => {
-    const auth = runtime.pi.models.getProviderAuthStatus(provider.id);
+  return runtime.admin.providers().map((provider) => {
+    const auth = runtime.admin.authStatus(provider.id);
     return {
       id: provider.id, name: provider.name ?? provider.id,
       configured: auth.configured, storedCredential: auth.source === 'stored',
-      canSetKey: Boolean(provider.auth.apiKey?.login),
+      canSetKey: provider.canSetKey,
       custom: Boolean(config.providers?.[provider.id]),
       baseUrl: config.providers?.[provider.id]?.baseUrl ?? '', api: config.providers?.[provider.id]?.api ?? 'openai-completions',
-      models: runtime.pi.models.getModels(provider.id).map(({ id, name, input, contextWindow, maxTokens, reasoning }) => ({ id, name, input, contextWindow, maxTokens, reasoning }))
+      models: provider.models
     };
   });
 }
@@ -36,7 +37,7 @@ export async function saveProvider(runtime: ProviderHost, input: any, remove = f
     runtime.delegation?.checkProvider(input.id, true);
     delete next.providers[input.id];
   } else {
-    if (input.create && (runtime.pi.models.getProvider(input.id) || Object.hasOwn(next.providers, input.id))) throw new Error('A provider with this ID already exists');
+    if (input.create && (runtime.admin.hasProvider(input.id) || Object.hasOwn(next.providers, input.id))) throw new Error('A provider with this ID already exists');
     if (input.key !== undefined && typeof input.key !== 'string') throw new Error('Invalid credential');
     if (!['openai-completions', 'openai-responses', 'anthropic-messages', 'google-generative-ai'].includes(input.api)) throw new Error('Unsupported API type');
     let url: URL;
@@ -63,33 +64,24 @@ export async function saveProvider(runtime: ProviderHost, input: any, remove = f
   writeJson(path, next);
   let clearedRecent = false;
   try {
-    await runtime.pi.models.refresh({ allowNetwork: false });
-    if (runtime.pi.models.getError()) throw new Error(runtime.pi.models.getError());
+    await runtime.admin.refresh();
     runtime.delegation?.checkProvider(input.id);
-    if (recent.provider === input.id && !(recent.id
-      ? runtime.pi.models.getModel(recent.provider, recent.id)
-      : runtime.pi.models.getModels(recent.provider).length)) {
-      await runtime.updateSettings({ model: { provider: '', id: '' } });
-      clearedRecent = true;
+    if (recent.provider === input.id) {
+      let exists = false;
+      try { exists = Boolean(runtime.catalog.resolve(recent)); } catch { /* The custom model was removed. */ }
+      if (!exists) {
+        await runtime.updateSettings({ model: { provider: '', id: '' } });
+        clearedRecent = true;
+      }
     }
-    if (remove && !runtime.pi.models.getProvider(input.id)) await runtime.pi.models.logout(input.id);
-    else if (!remove && input.key?.trim()) await saveProviderCredential(runtime, input.id, input.key.trim());
+    if (remove && !runtime.admin.hasProvider(input.id)) await runtime.admin.removeCredential(input.id);
+    else if (!remove && input.key?.trim()) await runtime.admin.storeCredential(input.id, input.key.trim());
   } catch (error) {
     writeJson(path, previous);
-    await runtime.pi.models.refresh({ allowNetwork: false });
+    await runtime.admin.refresh();
     if (clearedRecent) await runtime.updateSettings({ model: recent });
     throw error;
   }
-  runtime.pi.invalidateProviderSessions(input.id);
+  runtime.admin.invalidate(input.id);
   return providerSettings(runtime);
-}
-
-export async function saveProviderCredential(runtime: ProviderHost, provider: string, key: string) {
-  await runtime.pi.models.login(provider, 'api_key', {
-    prompt: async (prompt) => {
-      if (prompt.type !== 'secret') throw new Error('This provider requires additional credential setup through Pi');
-      return key;
-    },
-    notify: () => {}
-  });
 }

@@ -2,12 +2,10 @@ import { execFile } from 'node:child_process';
 import { realpath } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { resolve, relative } from 'node:path';
-import { Workspace } from './workspace.js';
-import { containsPath } from '../platform/paths.js';
+import type { WorkspaceFileAccess } from '../contracts/files.js';
 const exec = promisify(execFile);
 export class Inspection {
-  readonly files: Workspace;
-  constructor(private cwd: string, home: string, canonicalRoot = false) { this.files = new Workspace(cwd, home, canonicalRoot); }
+  constructor(private readonly cwd: string, readonly files: WorkspaceFileAccess) {}
   async tree(path = '.') {
     return (await this.files.entries(resolve(this.cwd, path))).filter(({ name }) => name !== '.git');
   }
@@ -44,7 +42,6 @@ export class Inspection {
     } catch { return { available: false, files: [], reason: 'Git is unavailable or this workspace is not a repository.' }; }
   }
   async diff(path: string) {
-    if (!containsPath(this.cwd, resolve(this.cwd, path))) throw new Error('Path outside workspace');
     await this.files.validatePath(path);
     const changes = await this.changes();
     const file = changes.files.find((item) => item.path === path);

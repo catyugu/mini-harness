@@ -1,7 +1,8 @@
-import type { BuiltinPlugin } from '../contracts/plugins.js';
+import type { PluginDescriptor } from '../contracts/plugins.js';
 import { Approvals } from './approvals.js';
 
-export const manifest: BuiltinPlugin = {
+export const manifest: PluginDescriptor = {
+  protocol: 2, scope: 'application',
   id: 'core:approvals', title: 'Approvals', description: 'Pending user decisions', required: true,
   inject: ['harnessRoutes'], provides: ['harnessApprovals'],
   setup(ctx) {

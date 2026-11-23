@@ -1,13 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { prepareInput } from '../platform/input.js';
 import type { Attachment } from '../contracts/input.js';
-import type { RunAgentPort } from '../contracts/agent.js';
-import type { AgentSession } from '@earendil-works/pi-coding-agent';
+import type { CapabilityObservation } from '../contracts/events.js';
+import type { ModelCatalogPort } from '../contracts/models.js';
+import type { RunAgentPort, ThinkingLevel } from '../contracts/agent.js';
 import type { ModelChoice } from '../contracts/conversation.js';
 import type { StreamEvent, RunEvent, RunInfo } from '../contracts/transport.js';
 import type { Checkpoints } from './checkpoints.js';
 import { RunEvents } from './events.js';
-type ThinkingLevel = AgentSession['thinkingLevel'];
 import type { SessionStore } from '../contracts/services.js';
 
 
@@ -34,7 +34,9 @@ export class Runs {
     private readonly registry: SessionStore,
     private readonly pi: RunAgentPort,
     private readonly checkpoints: Checkpoints,
-    private readonly defaultModel: () => ModelChoice
+    private readonly defaultModel: () => ModelChoice,
+    private readonly models: Pick<ModelCatalogPort, 'resolve'>,
+    private readonly observe: (event: CapabilityObservation) => void
   ) {}
 
   private changed(id: string) { this.events.dispatchEvent(new CustomEvent('change', { detail: { id } })); }
@@ -56,7 +58,7 @@ export class Runs {
   private launch(id: string, prompt: string, emit: (event: StreamEvent) => void, { signal, model, attachments, thinkingLevel, revision, schedule }: RunOptions) {
     this.registry.assertAvailable(id);
     if (this.active(id)) throw new Error('Conversation is already running');
-    if (thinkingLevel !== undefined && !['off', 'minimal', 'low', 'medium', 'high', 'xhigh'].includes(thinkingLevel))
+    if (thinkingLevel !== undefined && !['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(thinkingLevel))
       throw new Error('Invalid thinking level');
     const prepared = prepareInput(prompt, attachments);
     const record = this.registry.get(id);
@@ -64,7 +66,7 @@ export class Runs {
     if (model !== undefined) {
       if (!model || typeof model.provider !== 'string' || typeof model.id !== 'string' ||
           model.provider.length > 160 || model.id.length > 160) throw new Error('Invalid model choice');
-      this.pi.resolveModel(model);
+      this.models.resolve(model);
     }
     const choice = model ?? (record.parentId ? undefined : this.defaultModel());
     const info: RunInfo = { id: randomUUID(), sessionId: id, state: 'queued', startedAt: new Date().toISOString(), sequence: 0 };
@@ -83,6 +85,7 @@ export class Runs {
       this.checkpoints.save(running);
       this.changed(id);
       publish({ type: 'run', run: running });
+      this.observe({ type: 'run-started', sessionId: id, run: running });
       return this.pi.prompt(record, prepared.text, publish, {
         signal: cancellation, choice, images: prepared.images, input: prepared.input, thinkingLevel, revision,
         changed: (path) => { info.changedFiles = [...new Set([...(info.changedFiles ?? []), path])]; }
@@ -96,14 +99,20 @@ export class Runs {
       return text;
     }, (error) => {
       info.state = cancellation.aborted ? 'cancelled' : 'failed';
-      info.error = cancellation.aborted ? 'Agent run cancelled' : error instanceof Error ? error.message : String(error);
+      info.error = cancellation.aborted ? controller.signal.reason?.message ?? 'Agent run cancelled' :
+        error instanceof Error ? error.message : String(error);
       publish({ type: 'error', error: info.error });
       throw new Error(info.error, { cause: error });
     }).finally(() => {
       info.finishedAt = new Date().toISOString();
       publish({ type: 'run', run: { ...info, sequence: info.sequence + 1 } });
       try { this.checkpoints.save(info); }
-      finally { this.work.delete(id); events.close(); this.changed(id); }
+      finally {
+        this.work.delete(id);
+        events.close();
+        this.changed(id);
+        this.observe({ type: 'run-ended', sessionId: id, run: info });
+      }
     });
     // Server-owned runs may outlive every observer.
     activity.done = done;
@@ -168,7 +177,7 @@ export class Runs {
 
   async stop() {
     const active = [...this.work.values()];
-    for (const { controller } of active) controller.abort();
+    for (const { controller } of active) controller.abort(new Error('Agent service is shutting down'));
     await Promise.allSettled(active.map(({ done }) => done));
   }
 }

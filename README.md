@@ -37,13 +37,13 @@ One process owns each configuration directory. Detached processes write to `serv
 - Refreshing, disconnecting or changing conversations leaves tasks running. Reopen a conversation to reconnect, or use Stop to cancel it and its descendants. Server shutdown cancels runs; a restart marks unfinished runs interrupted and restores their saved history.
 - Child agents default to one level and four concurrent executions. In Plugins → Subagents, set depth 0–8 and concurrency 1–16. Explicit delegate models override child defaults, which override the parent model. A child awaiting descendants yields its slot. Lowering concurrency lets existing work finish before admitting more children.
 - Expand conversation trees to view children. Selecting a parent for export includes descendants and original Pi JSONL. Permanent deletion cancels the selected trees, waits for their runs, and removes their files.
-- Toggle workspace files, native Skills, subagents, Shell, Session helper and local plugins in Plugins. Session helper provides message copy and edit/resend together under one switch. Pi loads Skills from global `skills/` and project `.mini-harness/skills/` folders. Appearance, model choice and child-agent limits can change during runs; changing active tools, Skills or Shell requires idle conversations.
+- Toggle workspace files, native Skills, subagents, Shell, Session helper and local plugins in Plugins. Session helper provides message copy and edit/resend together under one switch. Pi loads Skills from global `skills/` and project `.mini-harness/skills/` folders. Appearance, model choice and child-agent limits can change during runs. Disabling a tool cancels its pending calls, and Pi updates the available tool and Skill list before the next idle run.
 
 Shell is disabled by default and requests approval for each command when enabled. File tools restrict access to the active workspace; Linux isolated Shell requires bubblewrap and `prlimit`. Trusted host Shell and reviewed JavaScript plugins run with your user permissions. See [SECURITY.md](SECURITY.md).
 
 ## Develop
 
-See [architecture](docs/architecture.md) and [plugin development](docs/plugins.md).
+Local plugins use protocol 2. Each bundle has a `plugin.json` descriptor and a server or browser setup function, or both. See the [architecture](docs/architecture.md) and [plugin development guide](docs/plugins.md).
 
 ```sh
 npm ci

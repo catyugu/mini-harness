@@ -20,7 +20,9 @@
     ],
     "types": [
       "node"
-    ]
+    ],
+    "declaration": true,
+    "declarationDir": "dist/types"
   },
   "include": [
     "bin/**/*.ts",

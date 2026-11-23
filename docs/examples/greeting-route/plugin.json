@@ -1,0 +1,6 @@
+{
+  "protocol": 2,
+  "title": "Greeting route",
+  "inject": ["harnessRoutes", "exampleGreeting"],
+  "optional": ["exampleSuffix"]
+}

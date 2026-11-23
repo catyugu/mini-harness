@@ -27,13 +27,13 @@ for (const entry of readdirSync(WEB_DIR, { recursive: true, withFileTypes: true 
   }
 }
 
-// UI foundations have no host-side implementations. All their compiled modules are public.
+// Only client modules from UI foundations may be served.
 for (const name of ['ui-runtime', 'ui-slots', 'ui-theme', 'ui-primitives', 'ui-layout']) {
   const root = join(FEATURE_DIR, name);
   for (const entry of readdirSync(root, { recursive: true, withFileTypes: true })) {
     if (!entry.isFile() || !entry.name.endsWith('.js')) continue;
     const path = relative(FEATURE_DIR, join(entry.parentPath, entry.name)).split(sep).join('/');
-    if (path.split('/').includes('tests') || /\\.(?:spec|test)\\.js$/.test(path)) continue;
+    if (path.split('/').includes('tests') || /\.(?:spec|test)\.js$/.test(path) || entry.name === 'manifest.js') continue;
     assets.set('packages/' + path, 'text/javascript');
   }
 }

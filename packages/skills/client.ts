@@ -2,7 +2,8 @@ import type { FrontendSetup } from '../ui-runtime/frontend.js';
 import { workspaceRoute } from '../web/api.js';
 import { iconButton } from '../ui-primitives/primitives.js';
 
-const setup: FrontendSetup = (api, services) => {
+const setup: FrontendSetup = (ctx, api) => {
+  const services = ctx.harnessBrowser;
   const button = iconButton('Choose skill', 'skills');
   button.hidden = true;
   button.onclick = () => api.insert('/skill:');
