@@ -1,8 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import { mergeSettings, readSettings, writeJson, type Paths, type Settings, type SettingsPatch } from '../platform/config.js';
 import type { ModelChoice } from '../contracts/conversation.js';
-import type { AgentPort, ConversationPort, SettingsPort } from '../contracts/services.js';
-import type { PluginHost } from '../plugins/manager.js';
+import type { AgentPort, ConversationPort, SettingsPort, PluginConfigurationPort } from '../contracts/services.js';
 
 /** The settings capability owns persistence, validation hooks and the transaction boundary. */
 export class SettingsManager implements SettingsPort {
@@ -49,7 +48,7 @@ export class SettingsManager implements SettingsPort {
     this.publish();
   }
 
-  async update(patch: SettingsPatch, host: PluginHost, operations: ConversationPort, pi: AgentPort) {
+  async update(patch: SettingsPatch, host: PluginConfigurationPort, operations: ConversationPort, pi: AgentPort) {
     operations.assertAvailable();
     const next = mergeSettings(this.settings, patch);
     for (const validate of this.validators) validate(next);

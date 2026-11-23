@@ -10,6 +10,10 @@ import type { PluginMetadata, SessionRecords } from './plugins.js';
 import type { Settings, SettingsPatch } from '../platform/config.js';
 
 /** Stable, implementation-free ports for the independently mounted product capabilities. */
+export interface PluginConfigurationPort {
+  configure(settings: Settings, commit?: () => void, beforeChange?: () => void): void | Promise<void>;
+}
+
 export interface WorkspacePort {
   readonly events: EventTarget;
   readonly defaultId: string | undefined;
