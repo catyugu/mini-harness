@@ -9,6 +9,8 @@ export const DEFAULTS = Object.freeze({
   model: { provider: '', id: '' },
   plugins: {},
   pluginConfig: {},
+  providers: {},
+  scopes: {},
   appearance: 'system'
 });
 
@@ -52,7 +54,37 @@ export function writeJson(file: string, value: unknown) {
 
 export function validateSettings(input: any) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Invalid settings object');
-  const p = input.plugins || {};
+  validatePluginSettings(input);
+  for (const section of [input.providers, input.scopes]) {
+    if (section !== undefined && (!section || typeof section !== 'object' || Array.isArray(section)))
+      throw new Error('Invalid capability settings section');
+  }
+  for (const [service, id] of Object.entries(input.providers ?? {})) {
+    if (!/^[a-zA-Z][a-zA-Z0-9_.:-]{0,95}$/.test(service) || typeof id !== 'string' || !/^[a-z][a-z0-9-]{0,63}$/.test(id))
+      throw new Error('Invalid provider selection');
+  }
+  for (const [key, scope] of Object.entries(input.scopes ?? {})) {
+    if (!/^(?:workspace:[a-f0-9]{32}|session:[a-f0-9-]{36})$/.test(key) ||
+        !scope || typeof scope !== 'object' || Array.isArray(scope) ||
+        Object.keys(scope).some((field) => !['plugins', 'pluginConfig', 'disabledTools'].includes(field)))
+      throw new Error('Invalid plugin scope: ' + key);
+    const { disabledTools } = scope as import('../contracts/capabilities.js').ScopeSettings;
+    if (disabledTools !== undefined && (!Array.isArray(disabledTools) ||
+        disabledTools.some((name) => typeof name !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(name))))
+      throw new Error('Invalid scoped tool restriction: ' + key);
+    validatePluginSettings(scope);
+  }
+  if (!['system', 'light', 'dark'].includes(input.appearance ?? 'system')) throw new Error('Invalid appearance');
+  if (!Number.isInteger(input.port ?? 3837) || (input.port ?? 3837) < 1024 || (input.port ?? 3837) > 65535) throw new Error('Invalid port');
+  return true;
+}
+
+function validatePluginSettings(input: { plugins?: unknown; pluginConfig?: unknown }) {
+  for (const section of [input.plugins, input.pluginConfig]) {
+    if (section !== undefined && (!section || typeof section !== 'object' || Array.isArray(section)))
+      throw new Error('Invalid plugin settings section');
+  }
+  const p = input.plugins ?? {};
   for (const [key, value] of Object.entries(p)) {
     if (!/^[a-z][a-z0-9-]{0,63}$/.test(key)) throw new Error('Invalid plugin name');
     if (typeof value !== 'boolean') throw new Error('Plugin switches must be boolean');
@@ -61,9 +93,6 @@ export function validateSettings(input: any) {
     if (!/^[a-z][a-z0-9-]{0,63}$/.test(id) || !config || typeof config !== 'object' || Array.isArray(config))
       throw new Error('Invalid plugin configuration for ' + id);
   }
-  if (!['system', 'light', 'dark'].includes(input.appearance ?? 'system')) throw new Error('Invalid appearance');
-  if (!Number.isInteger(input.port ?? 3837) || (input.port ?? 3837) < 1024 || (input.port ?? 3837) > 65535) throw new Error('Invalid port');
-  return true;
 }
 
 export function readSettings(paths: Paths): Settings {
@@ -73,6 +102,8 @@ export function readSettings(paths: Paths): Settings {
     model: { ...DEFAULTS.model, ...input.model },
     plugins: { ...DEFAULTS.plugins, ...input.plugins },
     pluginConfig: input.pluginConfig ?? {},
+    providers: input.providers ?? {},
+    scopes: input.scopes ?? {},
     appearance: input.appearance ?? DEFAULTS.appearance
   };
   validateSettings(settings);
@@ -84,7 +115,7 @@ export function mergeSettings(current: Settings, patch: SettingsPatch): Settings
   if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw new Error('Invalid settings patch');
   const allowed = Object.keys(DEFAULTS);
   if (Object.keys(patch).some((key) => !allowed.includes(key))) throw new Error('Unknown settings field');
-  for (const group of ['model', 'plugins', 'pluginConfig']) {
+  for (const group of ['model', 'plugins', 'pluginConfig', 'providers', 'scopes']) {
     if (group in patch && (!patch[group] || typeof patch[group] !== 'object' || Array.isArray(patch[group]))) throw new Error('Invalid settings section');
   }
   const next: Settings = {

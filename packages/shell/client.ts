@@ -1,4 +1,4 @@
-import type { BrowserPlugin, ToolView } from '../ui-runtime/frontend.js';
+import type { FrontendSetup, ToolView } from '../ui-runtime/frontend.js';
 import { payload } from '../web/api.js';
 
 function renderResult(tool: ToolView) {
@@ -12,44 +12,41 @@ function renderResult(tool: ToolView) {
   return pre;
 }
 
-const plugin: BrowserPlugin = {
-  id: 'shell', inject: ['miniApprovals', 'harnessBrowser'],
-  setup(ctx, api) {
-    const { miniApprovals: approvals, harnessBrowser: services } = ctx;
-    api.tool('sandbox_shell', renderResult);
-    const list = document.createElement('div');
-    api.slots.register('conversation.approvals', list);
-    function render() {
-      list.replaceChildren(...approvals.get().map((approval) => {
-        const card = document.createElement('section');
-        card.className = 'approval-card';
-        const title = document.createElement('strong');
-        title.textContent = 'Shell approval · ' + (services.session(approval.sessionId)?.title ?? 'Conversation');
-        const command = document.createElement('pre');
-        command.textContent = approval.command;
-        card.append(title, command);
-        for (const allow of [false, true]) {
-          const button = document.createElement('button');
-          button.type = 'button';
-          button.className = 'small-button';
-          button.textContent = allow ? 'Allow once' : 'Deny';
-          button.onclick = async () => {
-            for (const action of card.querySelectorAll('button')) action.disabled = true;
-            try {
-              await api.request('/approvals', payload('POST', { id: approval.id, allow }));
-              await approvals.refresh();
-            } catch (error) {
-              if (!api.signal.aborted) services.report(error);
-              for (const action of card.querySelectorAll('button')) action.disabled = false;
-            }
-          };
-          card.append(button);
-        }
-        return card;
-      }));
-    }
-    approvals.subscribe(render, api.signal);
-    render();
+const setup: FrontendSetup = (ctx, api) => {
+  const { miniApprovals: approvals, harnessBrowser: services } = ctx;
+  api.tool('sandbox_shell', renderResult);
+  const list = document.createElement('div');
+  api.slots.register('conversation.approvals', list);
+  function render() {
+    list.replaceChildren(...approvals.get().map((approval) => {
+      const card = document.createElement('section');
+      card.className = 'approval-card';
+      const title = document.createElement('strong');
+      title.textContent = 'Shell approval · ' + (services.session(approval.sessionId)?.title ?? 'Conversation');
+      const command = document.createElement('pre');
+      command.textContent = approval.command;
+      card.append(title, command);
+      for (const allow of [false, true]) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'small-button';
+        button.textContent = allow ? 'Allow once' : 'Deny';
+        button.onclick = async () => {
+          for (const action of card.querySelectorAll('button')) action.disabled = true;
+          try {
+            await api.request('/approvals', payload('POST', { id: approval.id, allow }));
+            await approvals.refresh();
+          } catch (error) {
+            if (!api.signal.aborted) services.report(error);
+            for (const action of card.querySelectorAll('button')) action.disabled = false;
+          }
+        };
+        card.append(button);
+      }
+      return card;
+    }));
   }
+  approvals.subscribe(render, api.signal);
+  render();
 };
-export default plugin;
+export default setup;

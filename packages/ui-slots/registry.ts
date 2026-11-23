@@ -3,7 +3,20 @@
  * The registry has no knowledge of business features or Cordis.
  */
 /** Plugins declare their own slot names via TypeScript module augmentation. */
-export interface SlotMap {}
+export interface SlotMap {
+  'sidebar.primary': { kind: 'list' };
+  'sidebar.actions': { kind: 'list' };
+  'sidebar.navigation': { kind: 'list' };
+  'sidebar.footer': { kind: 'list' };
+  'header.actions': { kind: 'list' };
+  'conversation.header': { kind: 'list' };
+  'conversation.body': { kind: 'single' };
+  'conversation.composer': { kind: 'list' };
+  'conversation.approvals': { kind: 'list' };
+  'settings.extensions': { kind: 'list' };
+  'inspector.extensions': { kind: 'list' };
+  'dialog.root': { kind: 'list' };
+}
 export type SlotName = keyof SlotMap & string;
 export type SlotKind = 'single' | 'list';
 interface Entry { node: HTMLElement; order: number; sequence: number }

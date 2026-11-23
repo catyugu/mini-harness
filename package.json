@@ -1,6 +1,6 @@
 {
   "name": "mini-harness",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "A minimal, plugin-first Web harness for Pi",
   "license": "MIT",
   "type": "module",
@@ -10,6 +10,12 @@
   "files": [
     "dist/bin/",
     "dist/packages/",
+    "dist/types/packages/contracts/",
+    "dist/types/packages/ui-runtime/frontend.d.ts",
+    "dist/types/packages/ui-runtime/plugin-sdk.d.ts",
+    "dist/types/packages/ui-slots/registry.d.ts",
+    "dist/types/packages/web/contracts/",
+    "dist/types/packages/web/vendor/cordis.d.ts",
     "!dist/**/tests/**",
     "!dist/**/*.test.js",
     "!dist/**/*.spec.js",
@@ -58,5 +64,15 @@
     "harness",
     "web",
     "plugins"
-  ]
+  ],
+  "exports": {
+    "./plugin": {
+      "types": "./dist/types/packages/contracts/plugin-sdk.d.ts",
+      "default": "./dist/packages/contracts/plugin-sdk.js"
+    },
+    "./browser-plugin": {
+      "types": "./dist/types/packages/ui-runtime/plugin-sdk.d.ts",
+      "default": "./dist/packages/ui-runtime/plugin-sdk.js"
+    }
+  }
 }

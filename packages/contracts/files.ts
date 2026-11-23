@@ -8,7 +8,13 @@ export interface SearchInput {
   context?: number;
 }
 
+export interface FileAccessPort {
+  open(workspaceId: string): WorkspaceFileAccess;
+}
+
 export interface WorkspaceFileAccess {
+  validatePath(path: string): Promise<void>;
+  searchFiles(query: string, signal?: AbortSignal): Promise<string[]>;
   access(path: string): Promise<void>;
   readFile(path: string): Promise<Buffer>;
   writeFile(path: string, content: string, create?: boolean): Promise<void>;

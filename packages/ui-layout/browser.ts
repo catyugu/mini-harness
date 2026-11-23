@@ -1,25 +1,10 @@
-import type {} from '../ui-slots/registry.js';
 import { scopedElements } from '../web/api.js';
 import { fromMarkup } from '../ui-primitives/primitives.js';
-import type { BrowserPlugin } from '../ui-runtime/frontend.js';
+import type { FrontendSetup } from '../ui-runtime/frontend.js';
 import { createLayout } from './layout.js';
 import { createRightTabs } from './right-tabs.js';
 
 /** App frame owns geometry and slot declarations, never feature navigation controls. */
-declare module '../ui-slots/registry.js' {
-  interface SlotMap {
-    'sidebar.primary': { kind: 'list' };
-    'sidebar.actions': { kind: 'list' };
-    'sidebar.navigation': { kind: 'list' };
-    'sidebar.footer': { kind: 'list' };
-    'header.actions': { kind: 'list' };
-    'conversation.header': { kind: 'list' };
-    'conversation.body': { kind: 'single' };
-    'inspector.extensions': { kind: 'list' };
-    'dialog.root': { kind: 'list' };
-  }
-}
-
 const slots = {
   'sidebar.primary': 'sidebarPrimary',
   'sidebar.actions': 'sidebarExtensions',
@@ -32,20 +17,17 @@ const slots = {
   'dialog.root': 'dialogSlot'
 } as const;
 
-export const layoutPlugin: BrowserPlugin = {
-  id: 'core:layout',
-  setup(ctx, api) {
-    const { layout, pages, header, tabs, outlet } = createAppFrame(api.signal);
-    ctx.provide('miniLayout', layout);
-    ctx.provide('miniPages', pages);
-    ctx.provide('miniHeader', header);
-    ctx.provide('miniTabs', tabs);
-    for (const name of Object.keys(slots) as Array<keyof typeof slots>)
-      api.slots.define(name, outlet(name), name === 'conversation.body' ? 'single' : 'list');
+const setup: FrontendSetup = (ctx, api) => {
+  const { layout, pages, header, tabs, outlet } = createAppFrame(api.signal);
+  ctx.provide('miniLayout', layout);
+  ctx.provide('miniPages', pages);
+  ctx.provide('miniHeader', header);
+  ctx.provide('miniTabs', tabs);
+  for (const name of Object.keys(slots) as Array<keyof typeof slots>)
+    api.slots.define(name, outlet(name), name === 'conversation.body' ? 'single' : 'list');
 
-  }
 };
-export default layoutPlugin;
+export default setup;
 
 declare module 'cordis' {
   interface Context {

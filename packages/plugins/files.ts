@@ -2,11 +2,12 @@ import { mkdirSync, renameSync, rmSync, lstatSync, readFileSync, writeFileSync }
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { writeJson } from '../platform/config.js';
+import type { Settings } from '../contracts/config.js';
 import type { PluginMetadata } from '../contracts/plugins.js';
 
 type PluginFilesHost = {
   paths: { plugins: string };
-  settings: { plugins: Record<string, boolean> };
+  settings: Pick<Settings, 'plugins' | 'scopes' | 'providers'>;
   plugins: { metadata(): PluginMetadata[]; reserved(id: string): boolean };
 };
 const idPattern = /^[a-z][a-z0-9-]{0,63}$/;
@@ -20,7 +21,9 @@ export function installPlugin(runtime: PluginFilesHost, input: any) {
   }
   if (size > 1024 * 1024) throw new Error('Plugin bundle exceeds 1 MiB');
   const manifest = input.files.find((file) => file.name === 'plugin.json');
-  if (manifest) { const data = JSON.parse(manifest.content); if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Invalid manifest'); }
+  if (!manifest) throw new Error('Include plugin.json with protocol 2');
+  const descriptor = JSON.parse(manifest.content);
+  if (!descriptor || typeof descriptor !== 'object' || Array.isArray(descriptor)) throw new Error('Invalid manifest');
   const temp = join(runtime.paths.plugins, '.' + randomUUID()); mkdirSync(temp, { mode: 0o700 });
   try {
     for (const file of input.files) {
@@ -42,7 +45,8 @@ export function installPlugin(runtime: PluginFilesHost, input: any) {
 export async function uninstallPlugin(runtime: PluginFilesHost, id: string) {
   const plugin = runtime.plugins.metadata().find((item) => item.id === id && item.trustedCode);
   if (!plugin || !idPattern.test(id)) throw new Error('Unknown local plugin');
-  if (runtime.settings.plugins[id]) throw new Error('Disable and save this plugin before uninstalling');
+  if (runtime.settings.plugins[id] || Object.values(runtime.settings.scopes).some((scope) => scope.plugins?.[id]) ||
+      Object.values(runtime.settings.providers).includes(id)) throw new Error('Disable and save this plugin before uninstalling');
   const folder = join(runtime.paths.plugins, id);
   if (lstatSync(folder).isSymbolicLink()) throw new Error('Linked plugins must be removed locally');
   rmSync(folder, { recursive: true });

@@ -1,4 +1,5 @@
 import { Context } from 'cordis';
+import type { PiSessions } from '../agent/pi-sessions.js';
 import { plugins } from './composition.js';
 import { upgrade } from './upgrade.js';
 import { SettingsManager } from '../settings/manager.js';
@@ -20,6 +21,12 @@ export class MiniHarnessRuntime {
     this.configuration.subscribe(() => emit('settings'));
     const root = {
       harnessState: { paths },
+      harnessScopes: {
+        prepare: (id: string, signal?: AbortSignal) => this.plugins.prepare(id, signal),
+        allowsTool: (id: string, tool: string) => this.plugins.allowsTool(id, tool),
+        address: (id: string) => this.plugins.address(id),
+        release: (ids: string[], workspaceId?: string) => this.plugins.release(ids, workspaceId)
+      },
       harnessSettings: () => this.configuration.settings,
       harnessSettingsStore: this.configuration,
       harnessRoutes: new RouteRegistry(),
@@ -29,17 +36,18 @@ export class MiniHarnessRuntime {
       harnessPluginCatalog: {
         metadata: () => this.plugins.metadata(),
         reserved: (id: string) => this.plugins.reserved(id),
-        browser: () => this.plugins.browser()
+        browser: () => this.plugins.browser(),
+        diagnostics: () => this.plugins.diagnostics()
       }
     };
     for (const [name, service] of Object.entries(root)) ctx.provide(name, service);
     this.plugins = new PluginHost(ctx, paths.plugins, plugins, Object.keys(root),
-      (id, pluginId) => ctx.harnessPi.records(id, pluginId));
+      () => this.settings, (id) => ctx.get('harnessRegistry')?.get(id), (id, pluginId) => ctx.harnessPi.records(id, pluginId));
   }
 
   get settings() { return this.configuration.settings; }
   get registry() { return this.plugins.ctx.harnessRegistry; }
-  get pi() { return this.plugins.ctx.harnessPi; }
+  get pi() { return this.plugins.ctx.harnessPi as PiSessions; }
   get runs() { return this.plugins.ctx.harnessRuns; }
   get delegation() { return this.plugins.ctx.harnessDelegation; }
   get hasActiveWork() { return this.runs.size > 0 || this.pi.hasPending; }
@@ -57,11 +65,9 @@ export class MiniHarnessRuntime {
   }
 
   async stop() {
-    const { harnessPi: pi, harnessRuns: runs, harnessRegistry: registry } = this.plugins.ctx;
+    const { harnessRuns: runs, harnessRegistry: registry } = this.plugins.ctx;
     registry?.close();
-    await Promise.allSettled([runs?.stop(), ...pi?.pending ?? []]);
-    pi?.close();
-    await this.plugins.close();
-    await pi?.models.settleCredentialWrites();
+    try { await runs?.stop(); }
+    finally { await this.plugins.close(); }
   }
 }

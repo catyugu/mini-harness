@@ -1,6 +1,9 @@
-import type { BuiltinPlugin } from '../contracts/plugins.js';
+import type { PluginDescriptor } from '../contracts/plugins.js';
 
-export const manifest: BuiltinPlugin = {
+export const manifest: PluginDescriptor = {
+  protocol: 2, scope: 'application',
+  browserInject: ['miniSlots'],
+  browserProvides: ['miniLayout', 'miniPages', 'miniHeader', 'miniTabs'],
   id: 'core:layout', title: 'Layout', description: 'Application layout', required: true,
   browser: '/packages/ui-layout/browser.js', browserRequires: ['core:primitives'],
 };

@@ -1,9 +1,10 @@
-import type { BuiltinPlugin } from '../contracts/plugins.js';
+import type { PluginDescriptor } from '../contracts/plugins.js';
 import { setup } from './host.js';
 import { Type } from 'typebox';
 
 /** One self-contained plugin schema. Changes to child limits are safe during active runs. */
-export const manifest: BuiltinPlugin = {
+export const manifest: PluginDescriptor = {
+  protocol: 2, scope: 'application', browserInject: ['harnessBrowser'],
   setup, defaultEnabled: true, browserRequires: ['core:conversation'],
   configChanges: 'read-on-use',
   provides: ['harnessDelegation'],
@@ -19,5 +20,5 @@ export const manifest: BuiltinPlugin = {
     provider: Type.String({ title: 'Child provider', maxLength: 160, default: '' }),
     model: Type.String({ title: 'Child model', maxLength: 160, default: '' })
   }, { additionalProperties: false }) },
-  inject: ['harnessTools', 'harnessRegistry', 'harnessPi', 'harnessRuns', 'harnessSettingsStore']
+  inject: ['harnessTools', 'harnessRegistry', 'harnessPi', 'harnessModels', 'harnessRuns', 'harnessSettingsStore']
 };

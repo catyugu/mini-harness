@@ -1,10 +1,12 @@
 import {
-  createEditToolDefinition, createFindToolDefinition, createGrepToolDefinition, createLsToolDefinition,
+  type ToolDefinition, createEditToolDefinition, createFindToolDefinition, createGrepToolDefinition, createLsToolDefinition,
   createReadToolDefinition, createWriteToolDefinition, truncateHead
 } from '@earendil-works/pi-coding-agent';
 import type { WorkspaceFileAccess } from '../contracts/files.js';
 
-export function fileTools(cwd: string, files: WorkspaceFileAccess) {
+export const fileToolNames = ['read', 'edit', 'write', 'ls', 'find', 'grep'] as const;
+
+export function fileTools(cwd: string, files: WorkspaceFileAccess): ToolDefinition[] {
   const readFile = (path: string) => files.readFile(path);
   const access = (path: string) => files.access(path);
   const exists = async (path: string) => { await files.stat(path); return true; };

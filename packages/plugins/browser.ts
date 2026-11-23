@@ -1,23 +1,20 @@
 import type { Settings, SettingsPatch } from '../contracts/config.js';
 import type { PluginMetadata } from '../contracts/plugins.js';
-import type { BrowserPlugin, FrontendApi } from '../ui-runtime/frontend.js';
+import type { FrontendSetup, FrontendApi } from '../ui-runtime/frontend.js';
 import { payload } from '../web/api.js';
 import { icon } from '../ui-primitives/icons.js';
-import { button, dialog, field, fromMarkup, iconButton, saveToggle, toggle } from '../ui-primitives/primitives.js';
+import { button, field, fromMarkup, iconButton, saveToggle, toggle } from '../ui-primitives/primitives.js';
 import { readPluginValues, schemaFields } from './browser/fields.js';
 
-export const catalogPlugin: BrowserPlugin = {
-  id: 'core:plugins', inject: ['miniPluginData', 'miniSettingsData', 'miniPages', 'miniSwitch'],
-  setup(ctx, api) {
-    const { miniPluginData: plugins, miniSettingsData: settings, miniPages: pages, miniSwitch: syncPlugins } = ctx;
-    const refresh = async () => {
-      const failures = await syncPlugins();
-      if (failures.size) throw new Error('Browser plugins failed: ' + [...failures.keys()].join(', '));
-    };
-    const catalog = pluginCatalog(api, () => ({ plugins: plugins.get(), settings: settings.get() }), refresh, pages);
-    plugins.subscribe(catalog.refresh, api.signal);
-    settings.subscribe(catalog.refresh, api.signal);
-  }
+const setup: FrontendSetup = (ctx, api) => {
+  const { miniPluginData: plugins, miniSettingsData: settings, miniPages: pages, miniSwitch: syncPlugins } = ctx;
+  const refresh = async () => {
+    const failures = await syncPlugins();
+    if (failures.size) throw new Error('Browser plugins failed: ' + [...failures.keys()].join(', '));
+  };
+  const catalog = pluginCatalog(api, () => ({ plugins: plugins.get(), settings: settings.get() }), refresh, pages);
+  plugins.subscribe(catalog.refresh, api.signal);
+  settings.subscribe(catalog.refresh, api.signal);
 };
 
 const bundleNames = ['plugin.js', 'plugin.json', 'web.js'];
@@ -33,7 +30,7 @@ function installer(api: FrontendApi, installed: () => Promise<void>) {
     <p class="hint form-error" role="alert"></p>
     <div class="ui-actions"></div>
   </form>`);
-  const modal = dialog('Install plugin', form);
+  const modal = api.dialog('Install plugin', form);
   const id = fromMarkup<HTMLInputElement>('<input pattern="[a-z](?:[a-z0-9]|-){0,63}" placeholder="my-plugin" required>');
   form.prepend(field('Plugin ID', id));
   const input = form.querySelector<HTMLInputElement>('.bundle-input');
@@ -57,6 +54,7 @@ function installer(api: FrontendApi, installed: () => Promise<void>) {
     let error = '';
     if (names.some((name) => !bundleNames.includes(name)) || new Set(names).size !== names.length)
       error = 'Choose one copy each of plugin.js, plugin.json and web.js.';
+    else if (!names.includes('plugin.json')) error = 'Include plugin.json with protocol 2.';
     else if (!names.includes('plugin.js') && !names.includes('web.js')) error = 'Include plugin.js or web.js (or both).';
     else if (selection.reduce((total, file) => total + file.size, 0) > 1024 * 1024) error = 'Plugin bundle exceeds 1 MiB.';
     outcome.textContent = error;
@@ -95,7 +93,6 @@ function installer(api: FrontendApi, installed: () => Promise<void>) {
     finally { installing = submit.disabled = choose.disabled = cancel.disabled = false; }
   };
   submit.disabled = true;
-  api.slots.register('dialog.root', modal);
   return modal;
 }
 
@@ -230,9 +227,15 @@ function pluginCatalog(api: FrontendApi, snapshot: () => { plugins: PluginMetada
         row.querySelector('strong').textContent = plugin.title;
         row.querySelector('small').textContent = plugin.error ?? plugin.description;
         const controls = row.querySelector('.catalog-controls');
-        const checked = Boolean(settings.plugins[plugin.id]);
+        const scoped = plugin.scope && plugin.scope !== 'application';
+        const checked = scoped ? Object.values(settings.scopes).some((scope) => scope.plugins?.[plugin.id]) :
+          Boolean(settings.plugins[plugin.id]);
         const control = toggle(plugin.title, checked);
         control.dataset.pluginToggle = plugin.id;
+        if (scoped) {
+          control.disabled = true;
+          control.title = 'Configure this plugin under scopes in settings.json';
+        }
         if (plugin.error && !checked) control.disabled = true;
         const remove = plugin.trustedCode ? iconButton('Uninstall ' + plugin.title, 'trash', 'icon-button danger') : undefined;
         if (remove) {
@@ -279,4 +282,4 @@ function pluginCatalog(api: FrontendApi, snapshot: () => { plugins: PluginMetada
   return { open, refresh: () => { if (!editing && !savingSwitch) render(); } };
 }
 
-export default catalogPlugin;
+export default setup;

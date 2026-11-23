@@ -22,6 +22,8 @@ copyFileSync(join(dirname(require.resolve('dompurify')), 'purify.es.mjs'), 'dist
 copyFileSync(join(dirname(require.resolve('marked')), '..', 'LICENSE'), 'dist/packages/web/vendor/marked.LICENSE');
 copyFileSync(join(dirname(require.resolve('dompurify')), '..', 'LICENSE'), 'dist/packages/web/vendor/purify.LICENSE');
 
+mkdirSync('dist/types/packages/web/vendor', { recursive: true });
+copyFileSync('packages/web/vendor/cordis.d.ts', 'dist/types/packages/web/vendor/cordis.d.ts');
 copyFileSync('packages/web/vendor/cordis.LICENSE', 'dist/packages/web/vendor/cordis.LICENSE');
 const cordis = require.resolve('cordis');
 const requireCordis = createRequire(cordis);

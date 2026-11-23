@@ -1,8 +1,10 @@
-import type { BuiltinPlugin } from '../contracts/plugins.js';
+import type { PluginDescriptor } from '../contracts/plugins.js';
 import { setup } from './host.js';
 import { Type } from 'typebox';
 
-export const manifest: BuiltinPlugin = {
+export const manifest: PluginDescriptor = {
+  protocol: 2, scope: 'application',
+  browserInject: ['miniApprovals', 'harnessBrowser'],
   setup, defaultEnabled: false, browserRequires: ['core:conversation'],
   id: 'shell', title: 'Shell', description: 'Run commands using the configured execution policy.',
   icon: 'terminal', browser: '/packages/shell/client.js',

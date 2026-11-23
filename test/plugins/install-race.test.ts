@@ -11,6 +11,7 @@ test('plugin file writes wait for an in-flight plugin configuration', async (t) 
   const entered = join(folder, 'entered');
   const release = join(folder, 'release');
   mkdirSync(folder);
+  writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ protocol: 2 }));
   writeFileSync(join(folder, 'plugin.js'), `import { existsSync, writeFileSync } from 'node:fs';
     export default async () => {
       writeFileSync(${JSON.stringify(entered)}, 'ready');

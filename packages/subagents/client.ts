@@ -1,7 +1,8 @@
 import type { FrontendSetup } from '../ui-runtime/frontend.js';
 import { icon } from '../ui-primitives/icons.js';
 
-const setup: FrontendSetup = (api, services) => {
+const setup: FrontendSetup = (ctx, api) => {
+  const services = ctx.harnessBrowser;
   const trail = document.createElement('nav');
   trail.className = 'parent-conversations';
   trail.setAttribute('aria-label', 'Parent conversations');

@@ -1,20 +1,17 @@
 import { payload } from '../web/api.js';
-import type { BrowserPlugin, FrontendApi } from '../ui-runtime/frontend.js';
+import type { FrontendSetup, FrontendApi } from '../ui-runtime/frontend.js';
 import { icon } from '../ui-primitives/icons.js';
 import { button, field, fromMarkup } from '../ui-primitives/primitives.js';
 
 import type { ProviderInfo, ProviderModel } from '../web/contracts/providers.js';
 
-export const modelPlugin: BrowserPlugin = {
-  id: 'core:models', inject: ['miniSettings', 'miniModels'],
-  setup(ctx, api) {
-    const { miniSettings: settings, miniModels: state } = ctx;
-    const manager = providerManager(api, () => state.get().providers, state.refresh);
-    api.onDispose(settings.addPage('Model', manager.content, true));
-    settings.onClose(manager.reset, api.signal);
-    state.subscribe(manager.render, api.signal);
-    if (!state.get().models.some((model) => model.configured)) settings.open(true);
-  }
+const setup: FrontendSetup = (ctx, api) => {
+  const { miniSettings: settings, miniModels: state } = ctx;
+  const manager = providerManager(api, () => state.get().providers, state.refresh);
+  api.onDispose(settings.addPage('Model', manager.content, true));
+  settings.onClose(manager.reset, api.signal);
+  state.subscribe(manager.render, api.signal);
+  if (!state.get().models.some((model) => model.configured)) settings.open(true);
 };
 
 function providerManager(api: FrontendApi, providers: () => ProviderInfo[], refresh: () => Promise<void>) {
@@ -216,4 +213,4 @@ function customEndpoint(provider?: ProviderInfo) {
   }) };
 }
 
-export default modelPlugin;
+export default setup;

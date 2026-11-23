@@ -6,7 +6,7 @@ import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { Workspace } from '../workspace.js';
+import { Workspace } from '../../file-access/workspace.js';
 
 test('workspace tools share one policy for reads, searches and writes', async (t) => {
   const root = mkdtempSync(join(tmpdir(), 'mini-harness-policy-'));

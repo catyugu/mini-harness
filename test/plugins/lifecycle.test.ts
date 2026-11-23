@@ -15,16 +15,15 @@ test('an installed Cordis plugin can use services, configure a tool, and release
   const folder = join(paths.plugins, 'example');
   const log = join(folder, 'effects.log');
   mkdirSync(folder);
-  writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ title: 'Example plugin', icon: {
+  writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ protocol: 2, inject: ['harnessTools', 'harnessSessions'], configSchema: {
+    type: 'object', properties: { prefix: { type: 'string', default: 'Count' } }
+  }, title: 'Example plugin', icon: {
     path: 'M2 2h20v20H2z', viewBox: '0 0 24 24'
   } }));
   writeFileSync(join(folder, 'plugin.js'), `
     import { appendFileSync } from 'node:fs';
-    export const inject = ['harnessSessions'];
     export default (ctx, api) => {
-      const config = api.defineConfig({ prefix: 'Count' }, (value) => {
-        if (typeof value.prefix !== 'string') throw new Error('Invalid prefix');
-      });
+      const { config } = api;
       api.onDispose(() => appendFileSync(${JSON.stringify(log)}, 'dispose\\n'));
       api.registerTool({
         name: 'example_count', label: 'Count', description: 'Count sessions',
@@ -46,16 +45,15 @@ test('an installed Cordis plugin can use services, configure a tool, and release
   const tool = runtime.plugins.ctx.harnessTools.forSession(item.id).find(({ name }) => name === 'example_count');
   assert.equal((await tool.execute('test', {}, undefined, undefined, undefined)).content[0].type, 'text');
   assert.match(JSON.stringify(await tool.execute('test', {}, undefined, undefined, undefined)), /Total: 1/);
-  await assert.rejects(runtime.updateSettings({ pluginConfig: { example: { prefix: 12 } } }), /Invalid prefix/);
+  await assert.rejects(runtime.updateSettings({ pluginConfig: { example: { prefix: 12 } } }), /Invalid configuration/);
   assert.equal(runtime.settings.pluginConfig.example.prefix, 'Total');
   const restoredSession = await runtime.pi.open(item.id);
-  assert.notStrictEqual(restoredSession, originalSession);
+  assert.strictEqual(restoredSession, originalSession);
   assert.ok(restoredSession.getActiveToolNames().includes('example_count'));
-  assert.equal(readFileSync(log, 'utf8'), 'dispose\n');
   await runtime.updateSettings({ plugins: { shell: true } });
-  assert.equal(readFileSync(log, 'utf8'), 'dispose\n', 'Unrelated switches should preserve an active plugin');
+  assert.throws(() => readFileSync(log), { code: 'ENOENT' }, 'Unrelated switches and invalid config preserve an active plugin');
   await runtime.updateSettings({ plugins: { example: false } });
-  assert.equal(readFileSync(log, 'utf8'), 'dispose\ndispose\n');
+  assert.equal(readFileSync(log, 'utf8'), 'dispose\n');
   assert.ok(!(await runtime.pi.open(item.id)).getActiveToolNames().includes('example_count'));
   await runtime.updateSettings({ plugins: { example: true } });
   assert.ok((await runtime.pi.open(item.id)).getActiveToolNames().includes('example_count'));
@@ -68,7 +66,7 @@ test('file tools have a plugin lifecycle and required plugins cannot be disabled
   t.after(async () => { await runtime.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
   const folder = join(paths.plugins, 'dependent');
   mkdirSync(folder);
-  writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ requires: ['files'] }));
+  writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ protocol: 2, inject: ['harnessTools'], requires: ['files'] }));
   writeFileSync(join(folder, 'plugin.js'), `export default (ctx, api) => {
     api.registerTool({ name: 'dependent_tool', description: 'Fixture', parameters: { type: 'object', properties: {} },
       execute: async () => ({ content: [{ type: 'text', text: 'ok' }] }) });
@@ -86,24 +84,25 @@ test('file tools have a plugin lifecycle and required plugins cannot be disabled
   assert.equal(runtime.plugins.ctx.harnessTools.forSession(item.id).some(({ name }) => name === 'read' || name === 'dependent_tool'), false);
 });
 
-test('local plugins require a default setup function or Cordis component', async (t) => {
+test('protocol 2 accepts a default setup function and rejects former component entries', async (t) => {
   const mock = await createMockProvider();
   const { root, paths } = createFixturePaths(mock.url);
   const runtime = new MiniHarnessRuntime(paths);
   t.after(async () => { await runtime.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
   for (const [id, source] of [
-    ['component', `export default { inject: ['harnessSessions'], apply(ctx) {
+    ['function-entry', `export default function(ctx) {
       if (ctx.harnessSessions.list().length !== 0) throw new Error('Unexpected sessions');
-    } };`],
-    ['named-entry', 'export function apply() {}']
+    }`],
+    ['named-entry', 'export default { apply() {} }']
   ]) {
     mkdirSync(join(paths.plugins, id));
     writeFileSync(join(paths.plugins, id, 'plugin.js'), source);
+    writeFileSync(join(paths.plugins, id, 'plugin.json'), JSON.stringify({ protocol: 2, inject: ['harnessSessions'] }));
   }
   await runtime.start();
-  await runtime.updateSettings({ plugins: { component: true } });
-  await assert.rejects(runtime.updateSettings({ plugins: { 'named-entry': true } }), /Expected a setup function or a Cordis component/);
-  assert.equal(runtime.settings.plugins.component, true);
+  await runtime.updateSettings({ plugins: { 'function-entry': true } });
+  await assert.rejects(runtime.updateSettings({ plugins: { 'named-entry': true } }), /Export a default setup function/);
+  assert.equal(runtime.settings.plugins['function-entry'], true);
   assert.equal(runtime.settings.plugins['named-entry'], undefined);
 });
 
@@ -114,7 +113,7 @@ test('plugin JSON Schema applies defaults and rejects invalid changes before set
   t.after(async () => { await runtime.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
   const folder = join(paths.plugins, 'schema');
   mkdirSync(folder);
-  writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ configSchema: {
+  writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ protocol: 2, inject: ['harnessTools'], configSchema: {
     type: 'object', additionalProperties: false, required: ['count'],
     properties: { count: { type: 'integer', minimum: 1, maximum: 10, default: 3 },
       options: { type: 'object', default: {}, properties: { enabled: { type: 'boolean', default: true } } } }
@@ -129,7 +128,9 @@ test('plugin JSON Schema applies defaults and rejects invalid changes before set
   const tool = runtime.plugins.ctx.harnessTools.forSession(item.id).find(({ name }) => name === 'schema_value');
   assert.match(JSON.stringify(await tool.execute('test', {}, undefined, undefined, undefined)), /3:true/);
   await assert.rejects(runtime.updateSettings({ pluginConfig: { schema: { count: 0 } } }), /Invalid configuration/);
-  assert.strictEqual(runtime.plugins.ctx.harnessTools.forSession(item.id).find(({ name }) => name === 'schema_value'), tool);
+  assert.deepEqual(await tool.execute('test', {}, undefined, undefined, undefined),
+    await runtime.plugins.ctx.harnessTools.forSession(item.id).find(({ name }) => name === 'schema_value')
+      .execute('test', {}, undefined, undefined, undefined));
 });
 
 test('dependent plugins restart in order and partial setup or persistence failures restore their resources', async (t) => {
@@ -141,7 +142,7 @@ test('dependent plugins restart in order and partial setup or persistence failur
   for (const id of ['base', 'dependent']) {
     const folder = join(paths.plugins, id);
     mkdirSync(folder);
-    writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ requires: id === 'dependent' ? ['base'] : [] }));
+    writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ protocol: 2, inject: ['harnessTools'], requires: id === 'dependent' ? ['base'] : [] }));
     writeFileSync(join(folder, 'plugin.js'), `
       import { appendFileSync } from 'node:fs';
       export default (ctx, api) => {
@@ -173,7 +174,7 @@ test('cyclic dependencies reject a configuration before mounting either plugin',
   for (const [id, dependency] of [['first', 'second'], ['second', 'first']]) {
     const folder = join(paths.plugins, id);
     mkdirSync(folder);
-    writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ requires: [dependency] }));
+    writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ protocol: 2, requires: [dependency] }));
     writeFileSync(join(folder, 'plugin.js'), 'export default () => { throw new Error("Should not mount"); };');
   }
   await runtime.start();
@@ -218,6 +219,7 @@ test('an optional plugin that fails at startup reports its state without blockin
   mkdirSync(folder);
   writeFileSync(join(folder, 'plugin.js'), "export default () => { throw new Error('Startup failed'); };");
   writeFileSync(join(folder, 'web.js'), 'export default () => {};');
+  writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ protocol: 2 }));
   writeJson(paths.settings, { ...readSettings(paths), plugins: { 'fails-to-start': true } });
   const restarted = new MiniHarnessRuntime(paths);
   t.after(async () => { await restarted.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); });

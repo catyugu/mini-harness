@@ -3,7 +3,8 @@ import type { StreamEvent } from '../contracts/transport.js';
 import type { ViewMessage } from '../contracts/message.js';
 import type { ProviderInfo } from './contracts/providers.js';
 import type { BrowserEntry } from '../contracts/browser.js';
-export type ThinkingLevel = import('@earendil-works/pi-coding-agent').AgentSession['thinkingLevel'];
+import type { ThinkingLevel } from '../contracts/agent.js';
+export type { ThinkingLevel } from '../contracts/agent.js';
 export interface ModelInfo { provider: string; id: string; name: string; configured: boolean; thinkingLevels: ThinkingLevel[] }
 export interface Bootstrap { ui: BrowserEntry[] }
 export interface ModelCatalog { models: ModelInfo[]; providers: ProviderInfo[] }

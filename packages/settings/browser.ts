@@ -1,45 +1,35 @@
-import type {} from '../ui-slots/registry.js';
 import { payload, scopedElements } from '../web/api.js';
-import type { BrowserPlugin, FrontendApi } from '../ui-runtime/frontend.js';
+import type { FrontendSetup, FrontendApi } from '../ui-runtime/frontend.js';
 import { icon } from '../ui-primitives/icons.js';
 import { closeOnBackdrop, field, fromMarkup } from '../ui-primitives/primitives.js';
 
 const pageIcons = { Model: 'model', Appearance: 'theme' } as const;
 
-declare module '../ui-slots/registry.js' {
-  interface SlotMap {
-    'settings.extensions': { kind: 'list' };
-  }
-}
-
-export const settingsPlugin: BrowserPlugin = {
-  id: 'core:settings', inject: ['miniSettingsData', 'miniLayout'],
-  setup(ctx, api) {
-    const { miniLayout: layout, miniSettingsData: state } = ctx;
-    const settings = mountSettings(api);
-    ctx.provide('miniSettings', settings);
-    ctx.provide('miniSettingsPages', { addPage: settings.addPage });
-    api.slots.define('settings.extensions', settings.outlet);
-    const launcher = fromMarkup<HTMLButtonElement>('<button type="button" aria-label="Settings"><span data-icon="settings"></span><span class="nav-label">Settings</span></button>');
-    launcher.onclick = () => { layout.closeDrawer(); settings.open(); };
-    api.slots.register('sidebar.footer', launcher);
-    const theme = fromMarkup<HTMLSelectElement>(`<select><option value="system">System</option>
-      <option value="light">Light</option><option value="dark">Dark</option></select>`);
-    const content = fromMarkup('<div class="appearance-settings"><p class="hint form-error" role="alert"></p></div>');
-    const status = content.querySelector('[role="alert"]');
-    content.prepend(field('Theme', theme));
-    function sync() { theme.value = state.get().appearance; }
-    sync();
-    state.subscribe(sync, api.signal);
-    api.onDispose(settings.addPage('Appearance', content));
-    theme.onchange = async () => {
-      theme.disabled = true;
-      status.textContent = '';
-      try { await api.request('/settings', payload('PATCH', { appearance: theme.value })); await state.refresh(); }
-      catch (error) { status.textContent = error.message; sync(); }
-      finally { theme.disabled = false; }
-    };
-  }
+const setup: FrontendSetup = (ctx, api) => {
+  const { miniLayout: layout, miniSettingsData: state } = ctx;
+  const settings = mountSettings(api);
+  ctx.provide('miniSettings', settings);
+  ctx.provide('miniSettingsPages', { addPage: settings.addPage });
+  api.slots.define('settings.extensions', settings.outlet);
+  const launcher = fromMarkup<HTMLButtonElement>('<button type="button" aria-label="Settings"><span data-icon="settings"></span><span class="nav-label">Settings</span></button>');
+  launcher.onclick = () => { layout.closeDrawer(); settings.open(); };
+  api.slots.register('sidebar.footer', launcher);
+  const theme = fromMarkup<HTMLSelectElement>(`<select><option value="system">System</option>
+    <option value="light">Light</option><option value="dark">Dark</option></select>`);
+  const content = fromMarkup('<div class="appearance-settings"><p class="hint form-error" role="alert"></p></div>');
+  const status = content.querySelector('[role="alert"]');
+  content.prepend(field('Theme', theme));
+  function sync() { theme.value = state.get().appearance; }
+  sync();
+  state.subscribe(sync, api.signal);
+  api.onDispose(settings.addPage('Appearance', content));
+  theme.onchange = async () => {
+    theme.disabled = true;
+    status.textContent = '';
+    try { await api.request('/settings', payload('PATCH', { appearance: theme.value })); await state.refresh(); }
+    catch (error) { status.textContent = error.message; sync(); }
+    finally { theme.disabled = false; }
+  };
 };
 
 function mountSettings(api: FrontendApi) {
@@ -138,4 +128,4 @@ declare module 'cordis' {
   interface Context { miniSettings: ReturnType<typeof mountSettings> }
 }
 
-export default settingsPlugin;
+export default setup;

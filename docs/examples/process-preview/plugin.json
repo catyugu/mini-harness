@@ -1,0 +1,5 @@
+{
+  "protocol": 2,
+  "title": "Process preview",
+  "provides": ["harnessProcess"]
+}

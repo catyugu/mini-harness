@@ -1,8 +1,12 @@
-import type { BuiltinPlugin } from '../contracts/plugins.js';
+import type { PluginDescriptor } from '../contracts/plugins.js';
 import { ToolRegistry } from './registry.js';
 
-export const manifest: BuiltinPlugin = {
+export const manifest: PluginDescriptor = {
+  protocol: 2, scope: 'application',
   id: 'core:tools', title: 'Tools', description: 'Tool registration and execution leases', required: true,
-  provides: ['harnessTools'],
-  setup(ctx) { ctx.provide('harnessTools', new ToolRegistry()); }
+  inject: ['harnessScopes'], provides: ['harnessTools'],
+  setup(ctx) {
+    ctx.provide('harnessTools', new ToolRegistry((id) => ctx.harnessScopes.address(id),
+      (request) => ctx.serial('harness/tool-decision', request), (id, name) => ctx.harnessScopes.allowsTool(id, name)));
+  }
 };

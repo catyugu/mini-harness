@@ -3,6 +3,8 @@ import { lstatSync, readFileSync, realpathSync, unlinkSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { getPaths, readJson, writeJson } from '../platform/config.js';
 import type { SessionStore, WorkspacePort } from '../contracts/services.js';
+import type { ScopePort } from '../contracts/capabilities.js';
+import type { CapabilityObservation } from '../contracts/events.js';
 import type { SessionRecord } from '../contracts/conversation.js';
 
 type StoredFile = Pick<SessionRecord, 'workspaceId' | 'piSessionRef'>;
@@ -18,7 +20,9 @@ export class SessionRegistry implements SessionStore {
   private closing = false;
   readonly events = new EventTarget();
 
-  constructor(private readonly paths: ReturnType<typeof getPaths>, readonly workspaces: WorkspacePort) {
+  constructor(private readonly paths: ReturnType<typeof getPaths>, readonly workspaces: WorkspacePort,
+    private readonly scopes?: ScopePort, private readonly observe?: (event: CapabilityObservation) => void,
+    private readonly forgetScopes?: (keys: string[]) => void) {
     this.state = readJson<CatalogState>(paths.registry, { version: 2, sessions: [] });
     if (this.state.version !== 2 || !Array.isArray(this.state.sessions) ||
         (this.state.pendingDelete && !Array.isArray(this.state.pendingDelete))) throw new Error('Invalid conversation index');
@@ -70,6 +74,7 @@ export class SessionRegistry implements SessionStore {
       piSessionRef: null, createdAt: new Date().toISOString() };
     this.commit({ ...this.state, sessions: [...this.state.sessions, session] });
     this.notify(session.id);
+    this.observe?.({ type: 'session-created', sessionId: session.id });
     return { ...session };
   }
 
@@ -180,7 +185,9 @@ export class SessionRegistry implements SessionStore {
     this.deletingWorkspaces.add(id);
     try {
       const deleted = await this.delete(this.list(id).map((record) => record.id));
+      await this.scopes?.release([], id);
       this.workspaces.remove(id);
+      this.forgetScopes?.(['workspace:' + id]);
       return { removed: id, deleted };
     } finally { this.deletingWorkspaces.delete(id); }
   }
@@ -194,6 +201,7 @@ export class SessionRegistry implements SessionStore {
       const participants = [...this.participants];
       await Promise.all(participants.map(({ quiesce }) => quiesce(all)));
       for (const { release } of participants) release?.(all);
+      await this.scopes?.release(all);
       this.finishDeletion();
       const chosen = new Set(all);
       const pendingDelete = all.map((id) => {
@@ -204,9 +212,14 @@ export class SessionRegistry implements SessionStore {
         return { workspaceId, piSessionRef };
       });
       if (all.length) {
+        const locations = all.map((id) => ({ id, keys: this.scopes?.address(id) ?? [] }));
         this.commit({ ...this.state, sessions: this.state.sessions.filter((entry) => !chosen.has(entry.id)), pendingDelete });
         this.finishDeletion();
-        for (const id of all) this.notify(id, true);
+        for (const { id, keys } of locations) {
+          this.notify(id, true);
+          this.observe?.({ type: 'session-deleted', sessionId: id, scopeKeys: keys });
+        }
+        this.forgetScopes?.(all.map((id) => 'session:' + id));
       }
       return all;
     } finally { for (const id of all) this.deleting.delete(id); }

@@ -1,24 +1,21 @@
 import type { WorkspaceRecord } from '../contracts/workspace.js';
-import type { BrowserPlugin, FrontendApi } from '../ui-runtime/frontend.js';
+import type { FrontendSetup, FrontendApi } from '../ui-runtime/frontend.js';
 import { button, dialog, field } from '../ui-primitives/primitives.js';
 import { payload, workspaceRoute } from '../web/api.js';
 import { fileLabel, icon } from '../ui-primitives/icons.js';
 
-export const workspacePlugin: BrowserPlugin = {
-  id: 'core:workspace', inject: ['miniSelection', 'miniSessions', 'miniWorkspaces', 'miniTabs'],
-  setup(ctx, api) {
-    const { miniSelection: select, miniSessions: sessions, miniWorkspaces: workspaces, miniTabs: tabs } = ctx;
-    const picker = workspacePicker(api, sessions.get);
-    ctx.provide('miniWorkspace', picker);
-    const update = () => {
-      picker.label(workspaces.get().find(({ id }) => id === select.selectedWorkspace));
-      tabs.selectScope(select.scope());
-      tabs.prune(new Set(sessions.get().map(({ id }) => id)), new Set(workspaces.get().map(({ id }) => id)));
-    };
-    select.subscribe(update, api.signal);
-    sessions.subscribe(update, api.signal);
-    update();
-  }
+const setup: FrontendSetup = (ctx, api) => {
+  const { miniSelection: select, miniSessions: sessions, miniWorkspaces: workspaces, miniTabs: tabs } = ctx;
+  const picker = workspacePicker(api, sessions.get);
+  ctx.provide('miniWorkspace', picker);
+  const update = () => {
+    picker.label(workspaces.get().find(({ id }) => id === select.selectedWorkspace));
+    tabs.selectScope(select.scope());
+    tabs.prune(new Set(sessions.get().map(({ id }) => id)), new Set(workspaces.get().map(({ id }) => id)));
+  };
+  select.subscribe(update, api.signal);
+  sessions.subscribe(update, api.signal);
+  update();
 };
 
 declare module 'cordis' {
@@ -171,4 +168,4 @@ function workspacePicker(api: FrontendApi, sessions: () => { workspaceId: string
   };
 }
 
-export default workspacePlugin;
+export default setup;

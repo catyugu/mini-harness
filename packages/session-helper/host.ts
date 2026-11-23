@@ -11,7 +11,7 @@ export function setup(ctx: Context) {
         sourceEntryId: input.sourceEntryId, expectedLeafId: input.expectedLeafId as string | null,
         message: input.message, attachments: input.attachments as import('../contracts/input.js').Attachment[],
         model: input.model as import('../contracts/conversation.js').ModelChoice,
-        thinkingLevel: input.thinkingLevel as import('@earendil-works/pi-coding-agent').AgentSession['thinkingLevel']
+        thinkingLevel: input.thinkingLevel as import('../contracts/agent.js').ThinkingLevel
       });
     }));
 }

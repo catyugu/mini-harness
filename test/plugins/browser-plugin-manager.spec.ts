@@ -9,10 +9,10 @@ test('frontend plugins own all five slots and clean up on disable and reconfigur
   const mock = await createMockProvider(({ messages }) => messages.at(-1).role === 'tool' ? 'Done' : { tool: 'ls', args: {} });
   const { root, paths } = createFixturePaths(mock.url), folder = join(paths.plugins, 'ui-example'); mkdirSync(folder);
   writeFileSync(join(folder, 'plugin.js'), 'export default function() {}');
-  writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ title: 'UI example', icon: {
+  writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ protocol: 2, browserRequires: ['core:layout', 'core:conversation', 'core:settings'], title: 'UI example', icon: {
     path: 'M2 2h20v20H2z', viewBox: '0 0 24 24'
   }, configSchema: { type: 'object', properties: { label: { type: 'string', title: 'Button label', default: 'Plugin entry' } } } }));
-  writeFileSync(join(folder, 'web.js'), `export default function(api) {
+  writeFileSync(join(folder, 'web.js'), `export default function(_ctx, api) {
     for (const slot of ['sidebar','composer','settings','inspector']) {
       const node = document.createElement(slot === 'settings' ? 'section' : 'button');
       if (node.tagName === 'BUTTON') node.type = 'button';
@@ -28,8 +28,8 @@ test('frontend plugins own all five slots and clean up on disable and reconfigur
   }`);
   const dependent = join(paths.plugins, 'a-dependent'); mkdirSync(dependent);
   writeFileSync(join(dependent, 'plugin.js'), 'export default function() {}');
-  writeFileSync(join(dependent, 'plugin.json'), JSON.stringify({ title: 'Dependent UI', requires: ['ui-example'] }));
-  writeFileSync(join(dependent, 'web.js'), `export default function(api) {
+  writeFileSync(join(dependent, 'plugin.json'), JSON.stringify({ protocol: 2, title: 'Dependent UI', requires: ['ui-example'] }));
+  writeFileSync(join(dependent, 'web.js'), `export default function(_ctx, api) {
     const parent = document.querySelector('[data-example-slot=sidebar]');
     if (!parent) throw new Error('Dependency must mount first');
     const node = document.createElement('button'); node.type = 'button'; node.textContent = 'Dependent ' + parent.textContent; api.slots.register('sidebar.actions', node);
@@ -92,10 +92,10 @@ test('a failed browser plugin reports the saved state and can be retried', async
   const folder = join(paths.plugins, 'retry-ui');
   mkdirSync(folder);
   writeFileSync(join(folder, 'plugin.js'), 'export default () => {}');
-  writeJson(join(folder, 'plugin.json'), { title: 'Retry UI', configSchema: {
+  writeJson(join(folder, 'plugin.json'), { protocol: 2, title: 'Retry UI', configSchema: {
     type: 'object', properties: { ready: { type: 'boolean', title: 'Ready', default: false } }
   } });
-  writeFileSync(join(folder, 'web.js'), `export default (api) => {
+  writeFileSync(join(folder, 'web.js'), `export default (_ctx, api) => {
     const node = document.createElement('button');
     node.textContent = 'Recovered UI';
     api.slots.register('conversation.composer', node);
@@ -145,10 +145,10 @@ test('plugin catalog applies configuration and removes disabled browser capabili
     const install = page.getByRole('dialog', { name: 'Install plugin' });
     await install.getByLabel('Plugin ID', { exact: true }).fill('local-example');
     await expect(install.getByRole('button', { name: 'Install plugin', exact: true })).toBeDisabled();
-    await install.getByLabel('Plugin bundle files').setInputFiles({
+    await install.getByLabel('Plugin bundle files').setInputFiles([{
       name: 'plugin.js', mimeType: 'text/javascript', buffer: Buffer.from('export default function setup() {}')
-    });
-    await expect(install.getByRole('list', { name: 'Selected files' })).toHaveText('plugin.js');
+    }, { name: 'plugin.json', mimeType: 'application/json', buffer: Buffer.from('{"protocol":2}') }]);
+    await expect(install.getByRole('list', { name: 'Selected files' }).getByRole('listitem')).toHaveText(['plugin.js', 'plugin.json']);
     await install.getByRole('button', { name: 'Install plugin', exact: true }).click();
     await expect(install).toBeHidden();
     await expect(catalog.getByRole('switch', { name: 'local-example', exact: true })).not.toBeChecked();

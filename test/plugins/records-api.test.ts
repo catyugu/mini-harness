@@ -8,6 +8,7 @@ test('an extension owns its authenticated routes and Pi branch records', async (
   const { app, paths, request } = await fixture(t);
   const folder = join(paths.plugins, 'records');
   mkdirSync(folder);
+  writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ protocol: 2, inject: ['harnessRoutes'] }));
   writeFileSync(join(folder, 'plugin.js'), `export default (_ctx, api) => {
     api.registerRoute('POST', '/entries', async ({ body }) => {
       const { id, value } = await body();
@@ -30,6 +31,7 @@ test('an extension owns its authenticated routes and Pi branch records', async (
   assert.equal((await toggle(true)).status, 200);
   const { body: entries } = await request(route + '?id=' + session.id);
   assert.deepEqual(entries.map(({ id, data }) => ({ id, data })), [{ id: added.body, data: value }]);
+  assert.equal(app.runtime.pi.size, 0);
   const fetched = (await request('/sessions/' + session.id)).body;
   assert.equal(fetched.messages.some((message) => JSON.stringify(message).includes(value.note)), false);
 });

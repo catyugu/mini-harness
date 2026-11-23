@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
@@ -14,11 +15,13 @@ import type { SessionRecord, ModelChoice } from '../contracts/conversation.js';
 import type { Context } from 'cordis';
 import type { SessionRecords, ToolPort } from '../contracts/plugins.js';
 import type { StreamEvent } from '../contracts/transport.js';
-import type { ViewMessage } from '../contracts/message.js';
+import type { CapabilityObservation, ToolProjection } from '../contracts/events.js';
+import type { ViewMessage, MessageContent } from '../contracts/message.js';
 
-export type ThinkingLevel = AgentSession['thinkingLevel'];
+import type { ThinkingLevel } from '../contracts/agent.js';
 
-type QueuedInput = PreparedMessage & { text: string; mode: 'steer' | 'followUp' };
+type QueuedPresentation = PreparedMessage & { digest: string; length: number; mode: 'steer' | 'followUp' };
+const digest = (text: string) => createHash('sha256').update(text).digest('base64');
 const inputRecord = 'mini-harness:input';
 type InputRecord = Pick<PreparedMessage, 'attachments'> & { userTextLength: number };
 
@@ -29,7 +32,8 @@ export class PiSessions {
   private readonly opening = new Map<string, Promise<AgentSession>>();
   private readonly staleSessions = new Set<string>();
   private readonly inUse = new Set<string>();
-  private readonly queuedInputs = new Map<string, QueuedInput[]>();
+  // Pi exposes queue strings without a delivery ID. Keep only the correlation and display metadata.
+  private readonly queuedPresentation = new Map<string, QueuedPresentation[]>();
   models!: ModelRuntime;
 
   constructor(
@@ -38,7 +42,10 @@ export class PiSessions {
     private readonly tools: ToolPort,
     private readonly skills: () => Context['harnessSkills'],
     private readonly defaultModel: () => ModelChoice,
-    private readonly rememberModel: (model: ModelChoice) => void
+    private readonly rememberModel: (model: ModelChoice) => void,
+    private readonly prepareScope?: (id: string, signal?: AbortSignal) => Promise<void>,
+    private readonly observe?: (event: CapabilityObservation) => void,
+    private readonly transform?: (projection: ToolProjection) => MessageContent
   ) {}
 
   async start() {
@@ -119,7 +126,9 @@ export class PiSessions {
     }
   }
 
-  async open(id: string): Promise<AgentSession> {
+  async open(id: string, signal?: AbortSignal): Promise<AgentSession> {
+    this.registry.assertAvailable(id);
+    await this.prepareScope?.(id, signal);
     this.registry.assertAvailable(id);
     this.reopenStale(id);
     const active = this.openSessions.get(id);
@@ -170,15 +179,19 @@ export class PiSessions {
     return session;
   }
 
-  async records(id: string, pluginId: string): Promise<SessionRecords> {
-    const { sessionManager } = await this.open(id);
+  records(id: string, pluginId: string): SessionRecords {
     this.registry.assertAvailable(id);
     const type = 'mini-harness:' + pluginId;
     return {
-      list: () => sessionManager.getBranch()
+      list: () => (this.manager(id)?.getBranch() ?? [])
         .filter((entry): entry is CustomEntry => entry.type === 'custom' && entry.customType === type)
         .map(({ id, timestamp, data }) => ({ id, timestamp, data: structuredClone(data) })),
-      append: (data: unknown) => sessionManager.appendCustomEntry(type, JSON.parse(JSON.stringify(data)))
+      append: async (data: unknown) => {
+        const value = JSON.parse(JSON.stringify(data));
+        const { sessionManager } = await this.open(id);
+        this.registry.assertAvailable(id);
+        return sessionManager.appendCustomEntry(type, value);
+      }
     };
   }
 
@@ -198,14 +211,14 @@ export class PiSessions {
     const context = manager?.buildSessionContext();
     const model = session ? this.modelInfo(session.model) :
       context?.model ? { provider: context.model.provider, id: context.model.modelId } : this.defaultModel();
-    return { model, messages: this.projectMessages(manager), leafId: manager?.getLeafId() ?? null,
+    return { model, messages: this.projectMessages(id, manager), leafId: manager?.getLeafId() ?? null,
       thinkingLevel: (session?.thinkingLevel ?? context?.thinkingLevel ?? 'off') as ThinkingLevel,
       queue: session ? this.queue(session) : { steer: [], followUp: [] } };
   }
 
-  messages(id: string): ViewMessage[] { return this.projectMessages(this.manager(id)); }
+  messages(id: string): ViewMessage[] { return this.projectMessages(id, this.manager(id)); }
 
-  private projectMessages(manager?: SessionManager): ViewMessage[] {
+  private projectMessages(id: string, manager?: SessionManager): ViewMessage[] {
     if (!manager) return [];
     const branch = manager.getBranch();
     const inputs = new Map<string, InputRecord>();
@@ -243,7 +256,7 @@ export class PiSessions {
           const code = message.details && typeof message.details === 'object' &&
             'exitCode' in message.details ? message.details.exitCode : undefined;
           return [{
-            ...identity, role: message.role, content: message.content, timestamp: message.timestamp,
+            ...identity, role: message.role, content: this.toolContent(id, message.toolName, message.content), timestamp: message.timestamp,
             arguments: argumentsById.get(message.toolCallId), toolName: message.toolName, toolCallId: message.toolCallId, isError: message.isError,
             sessionId: message.details && typeof message.details === 'object' && 'sessionId' in message.details &&
               typeof message.details.sessionId === 'string' ? message.details.sessionId : undefined,
@@ -256,6 +269,10 @@ export class PiSessions {
     });
   }
 
+  private toolContent(sessionId: string, tool: string, content: MessageContent) {
+    return content === undefined ? undefined : this.transform?.({ sessionId, tool, content }) ?? content;
+  }
+
   /** Validate an editable entry on the selected Pi branch and reject stale browser views. */
   async revisionTarget(id: string, sourceEntryId: string, expectedLeafId: string | null) {
     if (typeof sourceEntryId !== 'string' || !/^[a-f0-9]{8,64}$/i.test(sourceEntryId) ||
@@ -265,7 +282,6 @@ export class PiSessions {
     if (sessionManager.getLeafId() !== expectedLeafId) throw new Error('Conversation changed; refresh before editing');
     const source = sessionManager.getBranch().find((entry) => entry.id === sourceEntryId);
     if (source?.type !== 'message' || source.message.role !== 'user') throw new Error('User message not found on active branch');
-    return source;
   }
 
   async navigateForRevision(id: string, sourceEntryId: string, expectedLeafId: string | null) {
@@ -281,7 +297,7 @@ export class PiSessions {
        changed?: (path: string) => void; revision?: { sourceEntryId: string; expectedLeafId: string | null } }) {
     const { id } = record;
     signal.throwIfAborted();
-    const session = await this.open(id);
+    const session = await this.open(id, signal);
     this.inUse.add(id);
     try {
       signal.throwIfAborted();
@@ -306,7 +322,7 @@ export class PiSessions {
         switch (event.type) {
           case 'message_start':
             if (event.message.role === 'user') {
-              const original = first ? input : this.takeQueuedInput(id, event.message.content);
+              const original = first ? input : this.takeQueuedPresentation(id, event.message.content);
               if (first && record.titleSource === 'auto') this.registry.rename(id,
                 (original?.userText || original?.attachments[0]?.name || prompt).slice(0, 72), 'auto');
               first = false;
@@ -334,7 +350,7 @@ export class PiSessions {
             emit({ type: 'tool', id: event.toolCallId, name: event.toolName, state: 'running', arguments: event.args });
             break;
           case 'tool_execution_update':
-            emit({ type: 'tool', id: event.toolCallId, name: event.toolName, state: 'running', arguments: toolCalls.get(event.toolCallId)?.args, content: event.partialResult?.content });
+            emit({ type: 'tool', id: event.toolCallId, name: event.toolName, state: 'running', arguments: toolCalls.get(event.toolCallId)?.args, content: this.toolContent(id, event.toolName, event.partialResult?.content) });
             break;
           case 'tool_execution_end': {
             const call = toolCalls.get(event.toolCallId);
@@ -345,8 +361,9 @@ export class PiSessions {
             if (elapsedMs !== undefined) toolTimings.push({ toolCallId: event.toolCallId, elapsedMs });
             const code = event.result?.details?.exitCode;
             emit({ type: 'tool', id: event.toolCallId, name: event.toolName, state: event.isError ? 'error' : 'finished',
-              arguments: call?.args, content: event.result?.content, sessionId: event.result?.details?.sessionId,
+              arguments: call?.args, content: this.toolContent(id, event.toolName, event.result?.content), sessionId: event.result?.details?.sessionId,
               elapsedMs, exitCode: typeof code === 'number' && Number.isInteger(code) ? code : undefined });
+            this.observe?.({ type: 'tool-ended', sessionId: id, tool: event.toolName, failed: event.isError });
             break;
           }
         }
@@ -366,7 +383,7 @@ export class PiSessions {
         off();
         for (const entry of toolTimings) session.sessionManager.appendCustomEntry('mini-harness:tool-timing', entry);
         session.clearQueue();
-        this.queuedInputs.delete(id);
+        this.queuedPresentation.delete(id);
         if (session.sessionFile) this.registry.link(id, session.sessionFile);
       }
     } finally { this.inUse.delete(id); }
@@ -389,24 +406,26 @@ export class PiSessions {
     if (!session?.isStreaming) throw new Error('The agent is not streaming; send a new message');
     const input = prepareInput(text, attachments);
     if (session.getSteeringMessages().length + session.getFollowUpMessages().length >= 16) throw new Error('Queue is full');
-    const queued = this.queuedInputs.get(id) ?? [];
-    this.queuedInputs.set(id, queued);
-    const entry = { ...input.input, text: input.text, mode };
+    const queued = this.queuedPresentation.get(id) ?? [];
+    this.queuedPresentation.set(id, queued);
+    const entry = { ...input.input, digest: digest(input.text), length: input.text.length, mode };
     queued.push(entry);
-    try { await session[mode](input.text, input.images); }
-    catch (error) {
+    let delivered = false;
+    try { delivered = await session[mode](input.text, input.images) === 'queued'; }
+    finally {
       const index = queued.indexOf(entry);
-      if (index !== -1) queued.splice(index, 1);
-      throw error;
+      if (!delivered && index !== -1) queued.splice(index, 1);
     }
     return this.queue(session);
   }
 
-  private takeQueuedInput(id: string, content: ViewMessage['content']) {
-    const queue = this.queuedInputs.get(id);
+  private takeQueuedPresentation(id: string, content: ViewMessage['content']) {
+    const queue = this.queuedPresentation.get(id);
     if (!queue?.length) return;
     const text = typeof content === 'string' ? content : content.find(({ type }) => type === 'text')?.text;
-    const matches = (entry: QueuedInput) => text === entry.text || text?.startsWith(entry.text + '\n\n');
+    if (text === undefined) return;
+    const matches = (entry: QueuedPresentation) => (text.length === entry.length || text.slice(entry.length, entry.length + 2) === '\n\n') &&
+      digest(text.slice(0, entry.length)) === entry.digest;
     const steering = queue.findIndex((entry) => entry.mode === 'steer' && matches(entry));
     const index = steering === -1 ? queue.findIndex(matches) : steering;
     if (index !== -1) return queue.splice(index, 1)[0];

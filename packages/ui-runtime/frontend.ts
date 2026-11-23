@@ -1,4 +1,5 @@
 import { Context, type Fiber } from '../web/vendor/cordis.js';
+import type { BrowserPrimitives } from '../contracts/browser.js';
 import type { ComposerCommand } from '../web/contracts/commands.js';
 import type { MessageContent, ViewMessage } from '../contracts/message.js';
 import type { Attachment } from '../contracts/input.js';
@@ -46,25 +47,30 @@ export interface DraftMode {
   text: string;
   submit(input: { text: string; attachments: Attachment[]; model?: ModelChoice; thinkingLevel?: string }): Promise<unknown>;
 }
+type Release = () => void | Promise<void>;
+
 export interface FrontendApi {
+  readonly ui: BrowserPrimitives;
+  dialog(title: string, content: HTMLElement): HTMLDialogElement;
+  page(id: string, entry: { title: string; content: HTMLElement; order?: number }): Release;
   readonly slots: {
     define(name: SlotName, container: HTMLElement, kind?: SlotKind): void;
     register(name: SlotName, node: HTMLElement, order?: number): () => void;
   };
-  messageAction(action: MessageAction): void;
+  messageAction(action: MessageAction): Release;
   beginDraftMode(mode: DraftMode): void;
   cancelDraftMode(): void;
   command(command: ComposerCommand): () => void;
-  completion(trigger: string, complete: Completer): void;
-  settingsPage(title: string, node: HTMLElement): void;
-  tool(name: string, render: (tool: ToolView) => HTMLElement | undefined): void;
-  toolAction(name: string, render: (tool: ToolView) => HTMLElement | undefined): void;
-  onDispose(cleanup: () => void | Promise<void>): void;
+  completion(trigger: string, complete: Completer): Release;
+  settingsPage(title: string, node: HTMLElement): Release;
+  tool(name: string, render: (tool: ToolView) => HTMLElement | undefined): Release;
+  toolAction(name: string, render: (tool: ToolView) => HTMLElement | undefined): Release;
+  onDispose(cleanup: () => void | Promise<void>): Release;
   readonly config: Readonly<Record<string, unknown>>;
   readonly signal: AbortSignal;
   request<T>(path: string, options?: RequestInit): Promise<T>;
   insert(text: string): void;
-  rightTab(type: string, definition: RightTabType): void;
+  rightTab(type: string, definition: RightTabType): Release;
   openTab(type: string, path?: string, scope?: TabScope): void;
   inspect(title: string, content: HTMLElement): void;
 }
@@ -77,13 +83,7 @@ export interface FrontendServices {
   onConversationChange(listener: () => void, signal: AbortSignal): void;
   report(error: Error): void;
 }
-export type FrontendSetup = (api: FrontendApi, services: FrontendServices) => void | (() => void) | Promise<void | (() => void)>;
-
-export interface BrowserPlugin {
-  id: string;
-  inject?: string[];
-  setup(ctx: Context, api: FrontendApi): ReturnType<FrontendSetup>;
-}
+export type FrontendSetup = (ctx: Context, api: FrontendApi) => void | Release | Promise<void | Release>;
 
 export class FrontendHost {
   private readonly plugins = new Map<string, { fiber: Fiber; controller: AbortController }>();
@@ -97,17 +97,13 @@ export class FrontendHost {
     this.ctx.provide('harnessBrowser', services);
   }
 
-  enable(id: string, setup: FrontendSetup, config: Record<string, unknown> = {}) {
-    return this.mountPlugin({ id, inject: ['harnessBrowser'], setup: (ctx, api) => setup(api, ctx.harnessBrowser) }, config);
-  }
-
-  async mountPlugin({ id, inject = [], setup }: BrowserPlugin, config: Record<string, unknown> = {}) {
+  async mount(id: string, setup: FrontendSetup, inject: string[], config: Record<string, unknown> = {}) {
     if (this.disposed) throw new Error('Browser host is disposed');
     await this.disable(id);
     if (this.disposed) throw new Error('Browser host is disposed');
     const controller = new AbortController();
     const fiber = this.ctx.inject(inject, async (ctx) => {
-      const own = (install: () => (() => void | Promise<void>)) => {
+      const own = (install: () => Release | Iterable<Release, void, void>) => {
         if (controller.signal.aborted) return () => {};
         return ctx.effect(install);
       };
@@ -118,6 +114,25 @@ export class FrontendHost {
       });
       const cleanup = await setup(ctx, {
         signal: controller.signal,
+        get ui() { return ctx.miniPrimitives; },
+        dialog: (title, content) => {
+          const dialog = this.ctx.miniPrimitives.dialog(title, content);
+          own(() => this.ctx.miniSlots.register('dialog.root', dialog));
+          own(() => () => dialog.close());
+          return dialog;
+        },
+        page: (name, { title, content, order }) => {
+          if (!/^[a-z][a-z0-9-]{0,63}$/.test(name)) throw new Error('Invalid page ID');
+          const page = id + ':' + name;
+          const entry = this.ctx.miniPrimitives.button(title, 'quiet');
+          entry.classList.add('nav-action');
+          entry.dataset.pageLink = page;
+          entry.addEventListener('click', () => this.ctx.miniPages.open(page), { signal: controller.signal });
+          return own(function* () {
+            yield ctx.miniPages.register(page, content);
+            yield ctx.miniSlots.register('sidebar.actions', entry, order);
+          });
+        },
         slots: {
           define: (name, container, kind) => { own(() => this.ctx.miniSlots.define(name, container, kind)); },
           register: (name, node, order) => own(() => this.ctx.miniSlots.register(name, node, order))
@@ -151,8 +166,8 @@ export class FrontendHost {
         tool: (name, render) => own(() => this.ctx.miniMessages.registerTool(name, render)),
         toolAction: (name, render) => own(() => this.ctx.miniMessages.registerTool(name, render, true)),
         onDispose: (dispose) => {
-          if (controller.signal.aborted) void Promise.resolve().then(dispose).catch(this.services.report);
-          else own(() => dispose);
+          if (controller.signal.aborted) { void Promise.resolve().then(dispose).catch(this.services.report); return () => {}; }
+          return own(() => dispose);
         }
       });
       if (cleanup) {
@@ -188,6 +203,7 @@ export class FrontendHost {
 declare module 'cordis' {
   interface Context {
     harnessBrowser: FrontendServices;
+    miniPrimitives: BrowserPrimitives;
     miniComposer: {
       insert(text: string): void;
       beginDraftMode(mode: DraftMode): void;

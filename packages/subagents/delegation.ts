@@ -1,4 +1,5 @@
 import type { DelegationPort, SubagentPolicy } from '../contracts/delegation.js';
+import type { ModelCatalogPort } from '../contracts/models.js';
 import type { AgentPort, RunPort, SessionStore } from '../contracts/services.js';
 import type { SessionRecord, ModelChoice } from '../contracts/conversation.js';
 
@@ -97,14 +98,14 @@ export class Delegation implements DelegationPort {
   get activeChildren() { return this.semaphore.active; }
   private readonly leases = new Map<string, ChildLease>();
 
-  constructor(private readonly registry: SessionStore, private readonly pi: AgentPort,
+  constructor(private readonly registry: SessionStore, private readonly pi: Pick<AgentPort, 'activeModel'>, private readonly models: ModelCatalogPort,
     private readonly runs: () => RunPort, private readonly settings: () => SubagentPolicy,
     private readonly assertAvailable: (id: string) => void) {
     this.semaphore = new Semaphore(settings().maxParallel);
   }
 
   validate(settings: SubagentPolicy) {
-    if (settings.provider) this.pi.resolveModel({ provider: settings.provider, id: settings.model });
+    if (settings.provider) this.models.resolve({ provider: settings.provider, id: settings.model });
   }
 
   checkProvider(id: string, removing = false) {
@@ -138,12 +139,12 @@ export class Delegation implements DelegationPort {
     if (!parent) throw new Error('Parent conversation not found');
     this.assertAvailable(parentId);
     requireChildDepth(this.registry.depth(parentId), this.settings().maxDepth);
-    const model = this.pi.resolveModel(choice);
+    const model = this.models.resolve(choice);
     const record = this.registry.create({
       parentId, workspaceId: parent.workspaceId, title: task.slice(0, 72)
     });
     try {
-      const text = await this.runs().send(record.id, task, undefined, { signal, model: model && this.pi.modelInfo(model),
+      const text = await this.runs().send(record.id, task, undefined, { signal, model,
         schedule: (run, cancellation) => this.schedule(record, run, cancellation) });
       return { id: record.id, text };
     } catch (error) {
