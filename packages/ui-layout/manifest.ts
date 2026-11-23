@@ -1,7 +1,7 @@
 import type { PluginDescriptor } from '../contracts/plugins.js';
 
 export const manifest: PluginDescriptor = {
-  protocol: 2, scope: 'application',
+  scope: 'application',
   browserInject: ['miniSlots'],
   browserProvides: ['miniLayout', 'miniPages', 'miniHeader', 'miniTabs'],
   id: 'core:layout', title: 'Layout', description: 'Application layout', required: true,

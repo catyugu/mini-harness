@@ -18,7 +18,7 @@ test('plugin schema controls, recursive tree navigation, batch export and perman
   writeJson(paths.settings, { ...settings, pluginConfig: { subagents: { maxDepth: 2, maxParallel: 1, provider: '', model: '' } } });
   const folder = join(paths.plugins, 'example');
   mkdirSync(folder);
-  writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ protocol: 2, title: 'Example', configSchema: {
+  writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ title: 'Example', configSchema: {
     type: 'object', required: ['prefix', 'count', 'mode'], additionalProperties: false,
     properties: {
       prefix: { type: 'string', title: 'Prefix', default: 'Count' },

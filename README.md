@@ -43,7 +43,7 @@ Shell is disabled by default and requests approval for each command when enabled
 
 ## Develop
 
-Local plugins use protocol 2. Each bundle has a `plugin.json` descriptor and a server or browser setup function, or both. See the [architecture](docs/architecture.md) and [plugin development guide](docs/plugins.md).
+Each local plugin bundle has a `plugin.json` descriptor and a server or browser setup function, or both. See the [architecture](docs/architecture.md) and [plugin development guide](docs/plugins.md).
 
 ```sh
 npm ci

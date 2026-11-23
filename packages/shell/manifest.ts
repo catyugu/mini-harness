@@ -3,7 +3,7 @@ import { setup } from './host.js';
 import { Type } from 'typebox';
 
 export const manifest: PluginDescriptor = {
-  protocol: 2, scope: 'application',
+  scope: 'application',
   browserInject: ['miniApprovals', 'harnessBrowser'],
   setup, defaultEnabled: false, browserRequires: ['core:conversation'],
   id: 'shell', title: 'Shell', description: 'Run commands using the configured execution policy.',

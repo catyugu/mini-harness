@@ -1,5 +1,4 @@
 {
-  "protocol": 2,
   "title": "Scoped greeting",
   "scope": "session",
   "inject": ["exampleGreeting", "harnessTools"]

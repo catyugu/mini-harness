@@ -2,7 +2,7 @@ import type { PluginDescriptor } from '../contracts/plugins.js';
 import { Workspace } from './workspace.js';
 
 export const manifest: PluginDescriptor = {
-  protocol: 2, scope: 'application',
+  scope: 'application',
   id: 'core:file-access', title: 'File access', description: 'Access paths within registered workspaces',
   required: true, replaceable: true,
   inject: ['harnessState', 'harnessWorkspaces'], provides: ['harnessFileAccess'],

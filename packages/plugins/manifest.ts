@@ -2,7 +2,7 @@ import type { PluginDescriptor } from '../contracts/plugins.js';
 import { setup } from './host.js';
 
 export const manifest: PluginDescriptor = {
-  protocol: 2, scope: 'application',
+  scope: 'application',
   browserInject: ['miniPluginData', 'miniSettingsData', 'miniPages', 'miniSwitch'],
   id: 'core:plugins', title: 'Plugins', description: 'Plugin management', required: true,
   inject: ['harnessPluginCatalog', 'harnessSettingsStore', 'harnessState', 'harnessSettings', 'harnessRoutes', 'harnessMutations', 'harnessChanges'], provides: [], setup,

@@ -1,4 +1,3 @@
-export { pluginProtocol } from './capabilities.js';
 export type { PluginScope, ScopeSettings } from './capabilities.js';
 export type { PluginApi, PluginDescriptor } from './plugins.js';
 export type { CapabilityObservation, ToolDecision, ToolProjection } from './events.js';

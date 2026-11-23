@@ -2,7 +2,7 @@ import type { PluginDescriptor } from '../contracts/plugins.js';
 import { executeProcess } from './executor.js';
 
 export const manifest: PluginDescriptor = {
-  protocol: 2, scope: 'application',
+  scope: 'application',
   id: 'core:process', title: 'Process execution', description: 'Isolated and explicitly authorized host processes', required: true, replaceable: true,
   inject: ['harnessSandbox'], provides: ['harnessProcess'],
   setup(ctx, api) {

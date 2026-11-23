@@ -2,7 +2,7 @@ import type { PluginDescriptor } from '../contracts/plugins.js';
 import { ToolRegistry } from './registry.js';
 
 export const manifest: PluginDescriptor = {
-  protocol: 2, scope: 'application',
+  scope: 'application',
   id: 'core:tools', title: 'Tools', description: 'Tool registration and execution leases', required: true,
   inject: ['harnessScopes'], provides: ['harnessTools'],
   setup(ctx) {
