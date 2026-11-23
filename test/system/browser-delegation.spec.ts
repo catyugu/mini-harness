@@ -67,7 +67,7 @@ test('plugin schema controls, recursive tree navigation, batch export and perman
     await expect(page.locator('#conversationTitle')).toHaveText('Leaf task');
     await page.reload();
     await expect(page.locator('#conversationTitle')).toHaveText('Leaf task');
-    await page.getByRole('button', { name: 'Select', exact: true }).click();
+    await page.getByRole('button', { name: 'Select conversations' }).click();
     await page.getByRole('checkbox', { name: 'Select Parent task', exact: true }).check();
     const download = page.waitForEvent('download');
     await page.getByRole('button', { name: 'Export', exact: true }).click();
