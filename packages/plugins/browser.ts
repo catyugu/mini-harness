@@ -1,22 +1,22 @@
 import type { SettingsPatch } from '../contracts/config.js';
 import type { PluginMetadata } from '../contracts/plugins.js';
-import type { BrowserPlugin, FrontendApi } from '../web/kernel/extensions.js';
+import type { BrowserPlugin, FrontendApi } from '../ui-runtime/frontend.js';
 import type { Bootstrap } from '../web/types.js';
 import { payload } from '../web/api.js';
-import { icon } from '../web/ui/components/icons.js';
-import { button, dialog, field, fromMarkup, iconButton, saveToggle, toggle } from '../web/ui/components/primitives.js';
+import { icon } from '../ui-primitives/icons.js';
+import { button, dialog, field, fromMarkup, iconButton, saveToggle, toggle } from '../ui-primitives/primitives.js';
 import { readPluginValues, schemaFields } from './browser/fields.js';
 
 export const catalogPlugin: BrowserPlugin = {
-  id: 'core:plugins', inject: ['miniState', 'miniShell', 'miniSwitch'],
+  id: 'core:plugins', inject: ['miniState', 'miniPages', 'miniSwitch'],
   setup(ctx, api) {
-    const { miniState: state, miniShell: shell, miniSwitch: syncPlugins } = ctx;
+    const { miniState: state, miniPages: pages, miniSwitch: syncPlugins } = ctx;
     const refresh = async () => {
       await state.refresh();
       const failures = await syncPlugins(state.get());
       if (failures.size) throw new Error('Browser plugins failed: ' + [...failures.keys()].join(', '));
     };
-    const catalog = pluginCatalog(api, state.get, refresh, shell.showPage);
+    const catalog = pluginCatalog(api, state.get, refresh, pages);
     state.on('bootstrap', catalog.refresh, api.signal);
   }
 };
@@ -96,11 +96,11 @@ function installer(api: FrontendApi, installed: () => Promise<void>) {
     finally { installing = submit.disabled = choose.disabled = cancel.disabled = false; }
   };
   submit.disabled = true;
-  api.mount('dialogs', modal);
+  api.slots.register('dialog.root', modal);
   return modal;
 }
 
-function pluginCatalog(api: FrontendApi, snapshot: () => Bootstrap, refresh: () => Promise<void>, showPage: (page?: HTMLElement) => void) {
+function pluginCatalog(api: FrontendApi, snapshot: () => Bootstrap, refresh: () => Promise<void>, pages: { open(id?: string): void; register(id: string, node: HTMLElement): () => void }) {
   const entry = fromMarkup<HTMLButtonElement>('<button type="button" class="nav-action" aria-label="Browse plugins" aria-controls="pluginCatalog"><span class="nav-label">Plugins</span></button>');
   entry.prepend(icon('plugin'));
   const page = fromMarkup(`<section id="pluginCatalog" class="catalog-page" tabindex="-1" aria-label="Plugin catalog">
@@ -121,8 +121,9 @@ function pluginCatalog(api: FrontendApi, snapshot: () => Bootstrap, refresh: () 
     status.textContent = 'Plugin installed. Enable it to load it.';
   });
   openInstall.onclick = () => modal.showModal();
-  api.mount('sidebar', entry, -10);
-  api.mount('main', page);
+  entry.dataset.pageLink = 'plugins';
+  api.slots.register('sidebar.actions', entry, -10);
+  api.onDispose(pages.register('plugins', page));
 
   let editing: string | undefined;
   let busy = false;
@@ -274,7 +275,9 @@ function pluginCatalog(api: FrontendApi, snapshot: () => Bootstrap, refresh: () 
       next?.focus();
     }
   }
-  function open() { status.textContent = ''; render(); showPage(page); }
+  function open() { status.textContent = ''; render(); pages.open('plugins'); }
   entry.onclick = open;
   return { open, refresh: () => { if (!editing && !savingSwitch) render(); } };
 }
+
+export default catalogPlugin;

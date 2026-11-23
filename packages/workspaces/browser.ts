@@ -1,8 +1,8 @@
 import type { WorkspaceRecord } from '../contracts/workspace.js';
-import type { BrowserPlugin, FrontendApi } from '../web/kernel/extensions.js';
-import { button, dialog, field } from '../web/ui/components/primitives.js';
+import type { BrowserPlugin, FrontendApi } from '../ui-runtime/frontend.js';
+import { button, dialog, field } from '../ui-primitives/primitives.js';
 import { payload, workspaceRoute } from '../web/api.js';
-import { fileLabel, icon } from '../web/ui/components/icons.js';
+import { fileLabel, icon } from '../ui-primitives/icons.js';
 
 export const workspacePlugin: BrowserPlugin = {
   id: 'core:workspace', inject: ['miniState'],
@@ -44,7 +44,7 @@ function workspacePicker(api: FrontendApi, sessions: () => { workspaceId: string
   browseActions.append(up, go);
   form.append(field('Absolute directory path', path), browseActions, list, status, register);
   const picker = dialog('Add workspace', form);
-  api.mount('dialogs', picker);
+  api.slots.register('dialog.root', picker);
   let selected: (record: WorkspaceRecord) => void;
   let browsing: AbortController;
   picker.addEventListener('close', () => browsing?.abort());
@@ -109,7 +109,7 @@ function workspacePicker(api: FrontendApi, sessions: () => { workspaceId: string
   editForm.append(name, editStatus, actions);
   const editor = dialog('Rename workspace', editForm);
   editor.classList.add('workspace-rename-dialog');
-  api.mount('dialogs', editor);
+  api.slots.register('dialog.root', editor);
   let editing: WorkspaceRecord;
   cancel.onclick = () => editor.close();
   name.oninput = () => {
@@ -163,3 +163,5 @@ function workspacePicker(api: FrontendApi, sessions: () => { workspaceId: string
     }
   };
 }
+
+export default workspacePlugin;

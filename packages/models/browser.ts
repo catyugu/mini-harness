@@ -1,7 +1,7 @@
 import { payload } from '../web/api.js';
-import type { BrowserPlugin, FrontendApi } from '../web/kernel/extensions.js';
-import { icon } from '../web/ui/components/icons.js';
-import { button, field, fromMarkup } from '../web/ui/components/primitives.js';
+import type { BrowserPlugin, FrontendApi } from '../ui-runtime/frontend.js';
+import { icon } from '../ui-primitives/icons.js';
+import { button, field, fromMarkup } from '../ui-primitives/primitives.js';
 
 import type { ProviderInfo, ProviderModel } from '../web/contracts/providers.js';
 
@@ -215,3 +215,5 @@ function customEndpoint(provider?: ProviderInfo) {
     id: id.value.trim(), api: api.value, baseUrl: url.value.trim(), models: [...readModels.values()].map((read) => read())
   }) };
 }
+
+export default modelPlugin;

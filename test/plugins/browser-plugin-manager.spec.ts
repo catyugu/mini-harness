@@ -19,7 +19,7 @@ test('frontend plugins own all five slots and clean up on disable and reconfigur
       node.dataset.exampleSlot = slot; node.textContent = slot === 'sidebar' ? api.config.label : 'Plugin ' + slot;
       if (slot === 'composer') node.onclick = () => api.insert('Inserted by plugin');
       if (slot === 'inspector') node.onclick = () => {const p = document.createElement('p');p.textContent='Plugin preview';api.inspect('Example',p);};
-      api.mount(slot,node);
+      api.slots.register({sidebar:'sidebar.actions',composer:'conversation.composer',settings:'settings.extensions',inspector:'inspector.extensions'}[slot],node);
     }
     const settingsPage = document.createElement('p'); settingsPage.textContent = 'Plugin preferences';
     api.settingsPage('Example settings', settingsPage);
@@ -32,7 +32,7 @@ test('frontend plugins own all five slots and clean up on disable and reconfigur
   writeFileSync(join(dependent, 'web.js'), `export default function(api) {
     const parent = document.querySelector('[data-example-slot=sidebar]');
     if (!parent) throw new Error('Dependency must mount first');
-    const node = document.createElement('button'); node.type = 'button'; node.textContent = 'Dependent ' + parent.textContent; api.mount('sidebar', node);
+    const node = document.createElement('button'); node.type = 'button'; node.textContent = 'Dependent ' + parent.textContent; api.slots.register('sidebar.actions', node);
     api.onDispose(() => { document.documentElement.dataset.dependencyDisposal = parent.isConnected ? 'ordered' : 'incorrect'; });
   }`);
   const settings = readJson<any>(paths.settings, {}); writeJson(paths.settings, { ...settings, plugins: { 'ui-example': true, 'a-dependent': true } });
@@ -98,7 +98,7 @@ test('a failed browser plugin reports the saved state and can be retried', async
   writeFileSync(join(folder, 'web.js'), `export default (api) => {
     const node = document.createElement('button');
     node.textContent = 'Recovered UI';
-    api.mount('composer', node);
+    api.slots.register('conversation.composer', node);
     if (!api.config.ready) throw new Error('Not ready');
   };`);
   const service = await startIsolatedHost(paths);

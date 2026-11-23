@@ -1,5 +1,5 @@
-import { marked } from '../../vendor/marked.js';
-import purify from '../../vendor/purify.js';
+import { marked } from '../web/vendor/marked.js';
+import purify from '../web/vendor/purify.js';
 
 export const markdownSource = new WeakMap<HTMLElement, string>();
 

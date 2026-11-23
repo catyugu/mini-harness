@@ -1,12 +1,12 @@
-import type { FrontendSetup } from '../web/kernel/extensions.js';
+import type { FrontendSetup } from '../ui-runtime/frontend.js';
 import { workspaceRoute } from '../web/api.js';
-import { iconButton } from '../web/ui/components/primitives.js';
+import { iconButton } from '../ui-primitives/primitives.js';
 
 const setup: FrontendSetup = (api, services) => {
   const button = iconButton('Choose skill', 'skills');
   button.hidden = true;
   button.onclick = () => api.insert('/skill:');
-  api.mount('composer', button);
+  api.slots.register('conversation.composer', button);
 
   let workspaceId: string;
   let request: AbortController;

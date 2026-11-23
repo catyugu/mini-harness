@@ -1,17 +1,25 @@
-import type { BrowserPlugin } from '../../../web/kernel/extensions.js';
+import type {} from '../../../ui-slots/registry.js';
+import type { BrowserPlugin } from '../../../ui-runtime/frontend.js';
 import { conversationView } from './view.js';
 
+declare module '../../../ui-slots/registry.js' {
+  interface SlotMap {
+    'conversation.composer': { kind: 'list' };
+    'conversation.approvals': { kind: 'list' };
+  }
+}
+
 export const conversationPlugin: BrowserPlugin = {
-  id: 'core:conversation', inject: ['miniState', 'miniShell', 'miniWorkspace', 'miniHost'],
+  id: 'core:conversation', inject: ['miniState', 'miniLayout', 'miniPages', 'miniHeader', 'miniWorkspace', 'miniHost'],
   setup(ctx, api) {
-    const { miniState: state, miniShell: shell, miniWorkspace: workspace, miniHost: host } = ctx;
+    const { miniState: state, miniLayout: layout, miniPages: pages, miniHeader: header, miniWorkspace: workspace, miniHost: host } = ctx;
     const conversation = conversationView(api, state, {
-      closeDrawer: shell.closeDrawer,
+      closeDrawer: layout.closeDrawer,
       placeWorkspace(welcome) {
         if (welcome) welcome.append(workspace.current);
-        else shell.placeWorkspace(workspace.current);
+        else header.placeWorkspace(workspace.current);
       },
-      setTitle: shell.setTitle, renderTool: (tool, action) => host.render(tool, action),
+      setTitle: header.setTitle, renderTool: (tool, action) => host.render(tool, action),
       messageActions: () => host.messageActions()
     });
     ctx.provide('miniConversation', conversation);
@@ -23,15 +31,21 @@ export const conversationPlugin: BrowserPlugin = {
       completion: conversation.completion,
       refreshTools: conversation.refreshTools
     });
-    api.outlet('composer', conversation.outlets.composer);
-    api.outlet('approvals', conversation.outlets.approvals);
+    api.slots.define('conversation.composer', conversation.outlets.composer);
+    api.slots.define('conversation.approvals', conversation.outlets.approvals);
     conversation.attach();
     api.onDispose(host.onMessageActionsChanged(conversation.refreshActions));
     state.on('settings', conversation.updateModelControls, api.signal);
     state.addEventListener('plugins', conversation.refreshTools, { signal: api.signal });
-    shell.bindNew(() => { shell.showPage(); conversation.clear(true); }, api.signal);
+    const newSession = document.createElement('button');
+    newSession.type = 'button';
+    newSession.className = 'new-session';
+    newSession.setAttribute('aria-label', 'New conversation');
+    newSession.innerHTML = '<span data-icon="plus"></span><span class="nav-label">New conversation</span>';
+    newSession.onclick = () => { pages.open(); conversation.clear(true); };
+    api.slots.register('sidebar.primary', newSession);
     state.addEventListener('open', (event: CustomEvent<string>) => {
-      shell.showPage(); void conversation.activate(event.detail);
+      pages.open(); void conversation.activate(event.detail);
     }, { signal: api.signal });
     state.addEventListener('clear', () => conversation.clear(), { signal: api.signal });
     state.addEventListener('draft', () => conversation.clear(true), { signal: api.signal });
@@ -42,3 +56,5 @@ export const conversationPlugin: BrowserPlugin = {
   }
 };
 
+
+export default conversationPlugin;

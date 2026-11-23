@@ -97,7 +97,7 @@ Run states are queued, running, completed, failed, cancelled and interrupted. Ev
 
 ## Browser extensions
 
-A local plugin may include a self-contained ESM `web.js` beside `plugin.js`. Its default export receives the browser API below. Bundle browser dependencies into this one file; relative imports and Node APIs are unavailable. The browser fetches it through the authenticated API and only loads enabled plugins. It runs as trusted page code and can access the same interface as the user.
+A local plugin may include a self-contained ESM `web.js` beside `plugin.js`. Its default export receives the browser API below. Bundle browser dependencies into this one file; relative imports and Node APIs are unavailable. The browser fetches it through the authenticated API and only loads enabled plugins. Browser UI entrypoints mount under the same lifecycle as the built-in browser graph. There is no deprecated single-app entrypoint or old `mount` API. It runs as trusted page code and can access the same interface as the user.
 
 ```js
 export default function setup(api) {
@@ -109,7 +109,7 @@ export default function setup(api) {
     text.textContent = 'Notes for the current task';
     api.inspect('Task notes', text);
   };
-  api.mount('sidebar', open);
+  api.slots.register('sidebar.actions', open);
   api.tool('conversation_count', (result) => {
     const output = document.createElement('p');
     output.textContent = typeof result.content === 'string' ? result.content :
@@ -121,22 +121,22 @@ export default function setup(api) {
 
 | API | Behavior |
 | - | - |
-| `mount('sidebar', node, order?)` | Add a sidebar entry. Lower orders appear first. |
+| `slots.register('sidebar.actions', node, order?)` | Add a sidebar entry. Lower orders appear first. |
 | `command({name, description, group?, run?})` | Register a slash suggestion. Omit the leading slash from the name. With no callback the command is inserted into the draft. |
-| `mount('composer', node)` | Add an input toolbar control |
+| `slots.register('conversation.composer', node)` | Add an input toolbar control |
 | `completion(trigger, complete)` | Register a punctuation-triggered input completion. The callback receives `{query, signal, show, replace}`. |
 | `toolAction(name, render)` | Add a control to a tool result while keeping its normal output. |
 | `tool(name, render)` | Register one renderer for a tool name; returning `undefined` uses the generic result view |
 | `settingsPage(title, node)` | Register a settings category and its content |
-| `mount('settings', node)` | Add content to the shared Extensions category |
-| `mount('inspector', node)` | Add a right-panel entry; use `inspect(title, node)` to show its content |
+| `slots.register('settings.extensions', node)` | Add content to the shared Extensions category |
+| `slots.register('inspector.extensions', node)` | Add a right-panel entry; use `inspect(title, node)` to show its content |
 | `insert(text)` | Insert text at the input selection |
 | `request(path, options?)` | Request authenticated JSON from `/api` using a path such as `/sessions` |
 | `signal` | Aborts when the browser plugin scope unloads. Requests made through the API use it automatically. |
 | `config` | Same validated configuration and schema defaults as the server plugin |
 | `onDispose(cleanup)` / returned cleanup | Release listeners, timers and other browser resources |
 
-The browser runs each plugin in a Cordis scope and disposes its slots, completions, settings pages, tool registrations and inspector content when the scope unloads. Pass `api.signal` to document or window listeners or release them with `onDispose`. Dependencies mount first and dispose last; configuration changes also rebuild dependent browser extensions. Setup failures remove partial contributions and leave ordinary chat available. The catalog reports which browser plugins failed after the server saved a change. The backend and UI share one plugin switch; attachments, file inspection and Skills use these same extension interfaces.
+The browser runs each plugin in a Cordis scope and disposes its slot contributions, completions, settings pages, tool registrations and inspector content when the scope unloads. Pass `api.signal` to document or window listeners or release them with `onDispose`. Dependencies mount first and dispose last; configuration changes also rebuild dependent browser extensions. Setup failures remove partial contributions and leave ordinary chat available. The catalog reports which browser plugins failed after the server saved a change. The backend and UI share one plugin switch; attachments, file inspection and Skills use these same extension interfaces.
 
 The Plugins page can install a local bundle containing `plugin.js`, `web.js` or both, with optional `plugin.json` (at most 1 MiB combined). New installations stay disabled. Disable the plugin before uninstalling; uninstall permanently removes its directory and its entries in the plugin switch/configuration maps. Larger development plugins can still be placed in the local plugins directory manually.
 
@@ -180,6 +180,6 @@ The `session-helper` plugin submits to its authenticated route `POST /api/extens
 
 ## Built-in capabilities and tests
 
-Add capabilities under `packages/<id>/`, register server setup in `packages/host/composition.ts` and browser setup in `packages/web-app/application.ts`. Optional plugin entrypoints use their own manifest and lifecycle.
+Add capabilities under `packages/<id>/`, register server setup in `packages/host/composition.ts` and the built-in browser entry in `packages/ui/manifest.ts`. Optional plugin entrypoints use their own manifest and lifecycle.
 
 See [architecture](architecture.md) for package boundaries, browser asset exposure, test ownership and verification commands.

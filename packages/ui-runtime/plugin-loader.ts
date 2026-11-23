@@ -1,22 +1,29 @@
-import type { FrontendHost, FrontendSetup } from './extensions.js';
-import type { Bootstrap } from '../types.js';
-import { data } from '../api.js';
+import type { FrontendHost, FrontendSetup } from './frontend.js';
+import type { Bootstrap } from '../web/types.js';
+import type { BrowserEntry } from '../contracts/browser.js';
+import type { PluginMetadata } from '../contracts/plugins.js';
+import { data } from '../web/api.js';
 
 export type BrowserPluginFailures = ReadonlyMap<string, unknown>;
 
-export function createPluginLoader(host: FrontendHost) {
+export function createBrowserGraphLoader(host: FrontendHost) {
   const mounted = new Map<string, string>();
   let work = Promise.resolve();
 
   async function sync(snapshot: Bootstrap): Promise<BrowserPluginFailures> {
-    const enabled = new Map(snapshot.plugins.filter(({ id }) => snapshot.settings.plugins[id]).map((plugin) => [plugin.id, plugin]));
+    const enabled = new Map<string, BrowserEntry | PluginMetadata>([
+      ...snapshot.ui.map((entry) => [entry.id, entry] as const),
+      ...snapshot.plugins.filter(({ id }) => snapshot.settings.plugins[id]).map((entry) => [entry.id, entry] as const)
+    ]);
+    if (enabled.size !== snapshot.ui.length + snapshot.plugins.filter(({ id }) => snapshot.settings.plugins[id]).length)
+      throw new Error('Duplicate browser plugin ID in composed graph');
     const signatures = new Map<string, string>();
     const ordered: string[] = [];
     const signature = (id: string, visiting = new Set<string>()): string => {
       if (signatures.has(id)) return signatures.get(id);
       if (visiting.has(id) || !enabled.has(id)) throw new Error('Invalid browser plugin dependency: ' + id);
       visiting.add(id);
-      const { requires } = enabled.get(id);
+      const { requires } = enabled.get(id)!;
       const key = JSON.stringify([snapshot.settings.pluginConfig[id] ?? {}, ...(requires ?? []).map((parent) => signature(parent, visiting))]);
       visiting.delete(id);
       signatures.set(id, key);
@@ -33,12 +40,12 @@ export function createPluginLoader(host: FrontendHost) {
     }
     for (const id of ordered) {
       const key = signatures.get(id);
-      const plugin = enabled.get(id);
-      if ((!plugin.browser && !plugin.web) || mounted.has(id)) continue;
+      const plugin = enabled.get(id)!;
+      if ((!plugin.browser && !('web' in plugin && plugin.web)) || mounted.has(id)) continue;
       try {
         if (failed.has(id) || plugin.requires?.some((parent) => failed.has(parent)))
           throw failed.get(id) ?? new Error('Browser dependency failed');
-        let setup: FrontendSetup;
+        let setup: FrontendSetup | import('./frontend.js').BrowserPlugin;
         let config = snapshot.settings.pluginConfig[id];
         if (plugin.browser) setup = (await import(plugin.browser)).default;
         else {
@@ -48,8 +55,10 @@ export function createPluginLoader(host: FrontendHost) {
           try { setup = (await import(url)).default; }
           finally { URL.revokeObjectURL(url); }
         }
-        if (typeof setup !== 'function') throw new Error('Plugin UI must export a default setup function: ' + id);
-        await host.enable(id, setup, config);
+        if (typeof setup === 'function') await host.enable(id, setup, config);
+        else if (setup && typeof setup === 'object' && typeof setup.setup === 'function' && setup.id === id)
+          await host.mountPlugin(setup, config);
+        else throw new Error('Invalid browser plugin entry: ' + id);
         mounted.set(id, key);
       } catch (error) {
         failed.set(id, error);

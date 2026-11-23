@@ -1,4 +1,4 @@
-import type { FrontendSetup, ToolView } from '../web/kernel/extensions.js';
+import type { FrontendSetup, ToolView } from '../ui-runtime/frontend.js';
 import { payload } from '../web/api.js';
 
 interface Approval { id: string; sessionId: string; command: string }
@@ -17,7 +17,7 @@ function renderResult(tool: ToolView) {
 const setup: FrontendSetup = (api, services) => {
   api.tool('sandbox_shell', renderResult);
   const list = document.createElement('div');
-  api.mount('approvals', list);
+  api.slots.register('conversation.approvals', list);
   let pending = false;
   let previous = '';
   const poll = async () => {

@@ -1,0 +1,9 @@
+{
+  "name": "@mini-harness/ui-theme",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@mini-harness/ui-runtime": "file:../ui-runtime"
+  }
+}

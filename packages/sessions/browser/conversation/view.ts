@@ -12,8 +12,8 @@ import { CommandRegistry } from './commands.js';
 import type { ComposerCommand } from '../../../web/contracts/commands.js';
 import { createComposer } from './composer.js';
 import { createModelPicker } from './model-picker.js';
-import type { FrontendApi, FrontendHost, DraftMode } from '../../../web/kernel/extensions.js';
-import { fromMarkup } from '../../../web/ui/components/primitives.js';
+import type { FrontendApi, FrontendHost, DraftMode } from '../../../ui-runtime/frontend.js';
+import { fromMarkup } from '../../../ui-primitives/primitives.js';
 
 type Queue = ConversationView['queue'];
 
@@ -60,7 +60,7 @@ export function conversationView(api: FrontendApi, state: BrowserState, options:
         </form>
       </div>
     </div>`);
-  api.mount('conversation', view);
+  api.slots.register('conversation.body', view);
   const { element, value } = scopedElements(view);
   const outlets = { composer: element('composerExtensions'), approvals: element('approvalRequests') };
 

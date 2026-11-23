@@ -1,9 +1,9 @@
 import { scopedElements } from '../../../web/api.js';
-import { icon } from '../../../web/ui/components/icons.js';
+import { icon } from '../../../ui-primitives/icons.js';
 import type { CommandRegistry } from './commands.js';
 import type { ComposerCommand } from '../../../web/contracts/commands.js';
 import type { Attachment } from '../../../contracts/input.js';
-import type { Completer, FrontendApi, Suggestion } from '../../../web/kernel/extensions.js';
+import type { Completer, FrontendApi, Suggestion } from '../../../ui-runtime/frontend.js';
 export function createComposer(root: HTMLElement, report: (error: Error) => void, commands: CommandRegistry, signal: AbortSignal) {
   const { element } = scopedElements(root);
   const prompt = element<'textarea'>('prompt'), form = element<'form'>('composer');
@@ -237,7 +237,7 @@ export function createComposer(root: HTMLElement, report: (error: Error) => void
     clear: () => { files = []; ++draftGeneration; render(); hide(); },
     attach(api: FrontendApi) {
       const button = document.createElement('button'); button.type = 'button'; button.className = 'icon-button';
-      button.setAttribute('aria-label', 'Attach files'); button.append(icon('attach')); button.onclick = () => input.click(); api.mount('composer', button);
+      button.setAttribute('aria-label', 'Attach files'); button.append(icon('attach')); button.onclick = () => input.click(); api.slots.register('conversation.composer', button);
     },
     refresh,
     completion(trigger: string, complete: Completer) {

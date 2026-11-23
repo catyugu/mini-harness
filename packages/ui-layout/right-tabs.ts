@@ -1,7 +1,7 @@
-import { button, iconButton } from './primitives.js';
-import type { createLayout } from '../shell/layout.js';
+import { button, iconButton } from '../ui-primitives/primitives.js';
+import type { createLayout } from './layout.js';
 
-import type { TabScope, TabAddress, RightTabType } from '../../contracts/tabs.js';
+import type { TabScope, TabAddress, RightTabType } from '../web/contracts/tabs.js';
 
 type Tab = {
   key: string;
@@ -155,7 +155,11 @@ export function createRightTabs(view: {
     register(type: string, definition: RightTabType) {
       if (types.has(type)) throw new Error('Duplicate right panel tab type: ' + type);
       types.set(type, definition);
-      render();
+      // A plugin can register after a user has opened the empty right panel.
+      // Materialize its default tab when the scope is already selected.
+      if (definition.default && layout.panelOpen() && !current.tabs.length && current.scope)
+        open(type);
+      else render();
       return () => {
         types.delete(type);
         for (const target of states.values()) for (const tab of [...target.tabs]) {
