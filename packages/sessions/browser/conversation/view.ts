@@ -15,6 +15,7 @@ import { CommandRegistry } from './commands.js';
 import type { ComposerCommand } from '@mini-harness/web/contracts/commands';
 import { createComposer } from './composer.js';
 import { createModelPicker } from './model-picker.js';
+import { createThinkingPicker } from './thinking-picker.js';
 import type { FrontendApi, ToolView, MessageAction, DraftMode } from '@mini-harness/ui-runtime/frontend';
 import { fromMarkup, required } from '@mini-harness/ui-primitives/primitives';
 import { createRunSummary } from './run-summary.js';
@@ -61,7 +62,8 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
               <div id="modelResults" role="listbox" aria-label="Configured models"></div>
               <p id="modelEmpty" class="hint" role="status" hidden></p>
             </div>
-            <select id="thinkingLevel" aria-label="Thinking level" hidden></select>
+            <button id="thinkingLevel" class="model-select" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="thinkingResults" hidden>Default</button>
+            <div id="thinkingPicker" class="model-picker thinking-picker" popover="auto"><div id="thinkingResults" role="listbox" aria-label="Thinking levels"></div></div>
             <select id="queueMode" aria-label="While running" hidden><option value="steer">Add instruction</option><option value="followUp">Follow up</option></select>
             <button id="queueSend" class="small-button" type="button" hidden>Queue</button>
             <button id="stop" type="button" aria-label="Stop response" hidden data-icon="stop"></button>
@@ -81,7 +83,6 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
   const showRunSummary = createRunSummary(element('runSummary'), api.onDispose);
   const composer = element<'form'>('composer');
   const prompt = element<'textarea'>('prompt');
-  const thinkingSelect = element<'select'>('thinkingLevel');
 
   let sending = false;
   let visit = new AbortController();
@@ -91,7 +92,7 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
   let conversationModel: ModelChoice | undefined;
   let conversationThinking: ThinkingLevel | undefined;
   let thinkingDraft: ThinkingLevel | null | undefined;
-  thinkingSelect.onchange = () => { thinkingDraft = (thinkingSelect.value || null) as ThinkingLevel | null; };
+  const thinkingPicker = createThinkingPicker(view, (level) => { thinkingDraft = level; updateModelControls(); }, api.signal);
   let activeLeaf: string | null | undefined;
   let draftMode: DraftMode | undefined;
   function setDraftMode(mode?: DraftMode) {
@@ -316,12 +317,9 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
     const advertised = selected?.thinkingLevels ?? [];
     const levels: ThinkingLevel[] = advertised.length ? ['off', ...advertised.filter((level) => level !== 'off')] : [];
     const sameModel = selected && selected.provider === conversationModel?.provider && selected.id === conversationModel.id;
-    thinkingSelect.replaceChildren(new Option('Default', ''), ...levels.map((level) =>
-      new Option(level === 'xhigh' ? 'Extra high' : level[0].toUpperCase() + level.slice(1), level)));
     const inherited = sameModel ? conversationThinking : undefined;
     const desired = thinkingDraft === undefined ? inherited : thinkingDraft;
-    thinkingSelect.value = desired && levels.includes(desired) ? desired : '';
-    thinkingSelect.hidden = levels.length < 2;
+    thinkingPicker.update(levels, desired);
   }
   async function compactConversation() {
     const id = active();
