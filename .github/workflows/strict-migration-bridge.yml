@@ -1,0 +1,24 @@
+name: Temporary coding workspace bridge
+on:
+  push:
+    branches: [fix/pack-shell-auth-run-ui]
+permissions:
+  contents: read
+jobs:
+  bridge:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Archive complete workspace for offline strict migration
+        run: tar -czf /tmp/mini-harness-workspace.tar.gz --exclude=.git --exclude=test-results --exclude=dist .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: strict-migration-workspace
+          path: /tmp/mini-harness-workspace.tar.gz
+          retention-days: 1
