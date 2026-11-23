@@ -1,6 +1,6 @@
 import { join } from 'node:path';
-import { readJson, writeJson, type Settings, type SettingsPatch } from '../../src/config.js';
-import type { AgentPort } from '../../src/contracts/services.js';
+import { readJson, writeJson, type Settings, type SettingsPatch } from '../platform/config.js';
+import type { AgentPort } from '../contracts/services.js';
 
 type ProviderHost = {
   paths: { home: string };

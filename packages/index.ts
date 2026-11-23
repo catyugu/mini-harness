@@ -1,4 +1,4 @@
-import type { BuiltinPlugin } from '../src/contracts/plugins.js';
+import type { BuiltinPlugin } from './contracts/plugins.js';
 import { setup as workspaceServices } from './workspaces/host.js';
 import { setup as sessionServices } from './sessions/host.js';
 import { setup as agentServices } from './agent/host.js';

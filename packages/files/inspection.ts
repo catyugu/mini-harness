@@ -3,7 +3,7 @@ import { realpath } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { resolve, relative } from 'node:path';
 import { Workspace } from './workspace.js';
-import { containsPath } from '../../src/platform/paths.js';
+import { containsPath } from '../platform/paths.js';
 const exec = promisify(execFile);
 export class Inspection {
   readonly files: Workspace;
