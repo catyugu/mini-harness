@@ -1,3 +1,4 @@
+import type {} from '../../../ui-slots/registry.js';
 import type { BrowserPlugin } from '../../../ui-runtime/frontend.js';
 import { conversationView } from './view.js';
 

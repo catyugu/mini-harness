@@ -1,3 +1,4 @@
+import type {} from '../ui-slots/registry.js';
 import type { Settings } from '../contracts/config.js';
 import { payload, scopedElements } from '../web/api.js';
 import type { BrowserPlugin, FrontendApi } from '../ui-runtime/frontend.js';

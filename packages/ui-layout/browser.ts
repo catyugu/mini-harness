@@ -1,3 +1,4 @@
+import type {} from '../ui-slots/registry.js';
 import { scopedElements } from '../web/api.js';
 import { fromMarkup } from '../ui-primitives/primitives.js';
 import type { BrowserPlugin } from '../ui-runtime/frontend.js';
