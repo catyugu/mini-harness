@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createBrowserGraphLoader } from '@mini-harness/ui-runtime/plugin-loader';
-import type { FrontendHost } from '@mini-harness/ui-runtime/frontend';
+import { createBrowserGraphLoader } from '../../packages/ui-runtime/plugin-loader.js';
+import type { FrontendHost } from '../../packages/ui-runtime/frontend.js';
 
 const browser = 'data:text/javascript,' + encodeURIComponent('export default () => {}');
 const preload = (version: string) => 'data:text/javascript,' + encodeURIComponent(
