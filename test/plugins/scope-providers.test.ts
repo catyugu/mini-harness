@@ -11,6 +11,13 @@ import type { PluginDescriptor } from '../../packages/contracts/plugins.js';
 import type { SessionRecord } from '../../packages/contracts/conversation.js';
 import { DEFAULTS, mergeSettings, validateSettings } from '../../packages/platform/config.js';
 
+declare module '../../packages/contracts/plugin-sdk.js' {
+  interface ServiceMap {
+    greeting: string;
+    extra: string;
+  }
+}
+
 test('explicit scoped provider choice shadows inherited service only in the child graph', () => {
   const parent = new Map([['greeting', 'global'], ['harnessRoutes', 'application']]);
   const plugins = [
@@ -94,7 +101,7 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
       setup(_ctx, api) {
         api.onDispose(() => { released.push(String(api.config.value)); });
         if (api.config.fail) throw new Error('Scoped setup failed');
-        api.provide('greeting', api.config.value);
+        api.provide('greeting', String(api.config.value));
       } }
   ];
   let settings = structuredClone(DEFAULTS);

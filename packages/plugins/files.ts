@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { writeJson } from '../platform/config.js';
 import type { Settings } from '../contracts/config.js';
+import { isRegularFile, pluginBundle, pluginIdPattern } from './source.js';
 import type { PluginMetadata } from '../contracts/plugins.js';
 
 type PluginFilesHost = {
@@ -10,9 +11,8 @@ type PluginFilesHost = {
   settings: Pick<Settings, 'plugins' | 'scopes' | 'providers'>;
   plugins: { metadata(): PluginMetadata[]; reserved(id: string): boolean };
 };
-const idPattern = /^[a-z][a-z0-9-]{0,63}$/;
 export function installPlugin(runtime: PluginFilesHost, input: any) {
-  if (!input || !idPattern.test(input.id) || (runtime.plugins.reserved(input.id) || runtime.plugins.metadata().some(({ id }) => id === input.id))) throw new Error('Invalid or existing plugin ID');
+  if (!input || !pluginIdPattern.test(input.id) || (runtime.plugins.reserved(input.id) || runtime.plugins.metadata().some(({ id }) => id === input.id))) throw new Error('Invalid or existing plugin ID');
   if (!Array.isArray(input.files) || input.files.length > 3 || !input.files.some((f) => f.name === 'plugin.js' || f.name === 'web.js')) throw new Error('Provide plugin.js, web.js or both');
   const seen = new Set(); let size = 0;
   for (const file of input.files) {
@@ -44,19 +44,23 @@ export function installPlugin(runtime: PluginFilesHost, input: any) {
 }
 export async function uninstallPlugin(runtime: PluginFilesHost, id: string) {
   const plugin = runtime.plugins.metadata().find((item) => item.id === id && item.trustedCode);
-  if (!plugin || !idPattern.test(id)) throw new Error('Unknown local plugin');
-  if (runtime.settings.plugins[id] || Object.values(runtime.settings.scopes).some((scope) =>
-    scope.plugins?.[id] || Object.values(scope.providers ?? {}).includes(id)) ||
-      Object.values(runtime.settings.providers).includes(id)) throw new Error('Disable and save this plugin before uninstalling');
+  if (!plugin || !pluginIdPattern.test(id)) throw new Error('Unknown local plugin');
+  assertDisabled(runtime.settings, id);
   const folder = join(runtime.paths.plugins, id);
   if (lstatSync(folder).isSymbolicLink()) throw new Error('Linked plugins must be removed locally');
   rmSync(folder, { recursive: true });
   return runtime.plugins.metadata();
 }
+export function assertDisabled(settings: PluginFilesHost['settings'], id: string) {
+  if (settings.plugins[id] === true || Object.values(settings.scopes).some((scope) =>
+    scope.plugins?.[id] === true || Object.values(scope.providers ?? {}).includes(id)) ||
+      Object.values(settings.providers).includes(id)) throw new Error('Disable and save this plugin before changing its files');
+}
 export function frontendSource(runtime: PluginFilesHost, id: string) {
-  if (!idPattern.test(id) || !runtime.plugins.metadata().some((p) => p.id === id && p.web && p.state === 'ready')) throw new Error('Plugin UI is unavailable');
-  const folder = join(runtime.paths.plugins, id), file = join(folder, 'web.js');
-  if (lstatSync(folder).isSymbolicLink() || !lstatSync(file).isFile() || lstatSync(file).isSymbolicLink() || lstatSync(file).size > 1024 * 1024)
-    throw new Error('Invalid plugin UI file');
-  return readFileSync(file, 'utf8');
+  if (!pluginIdPattern.test(id) || !runtime.plugins.metadata().some((p) => p.id === id && p.web && p.state === 'ready')) throw new Error('Plugin UI is unavailable');
+  const folder = join(runtime.paths.plugins, id);
+  if (!lstatSync(folder).isDirectory()) throw new Error('Invalid plugin folder');
+  const path = join(pluginBundle(folder).folder, 'web.js');
+  if (!isRegularFile(path) || lstatSync(path).size > 1024 * 1024) throw new Error('Invalid plugin UI file');
+  return readFileSync(path, 'utf8');
 }

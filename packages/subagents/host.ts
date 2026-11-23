@@ -27,6 +27,7 @@ export function setup(ctx: Context, { config }: PluginApi) {
       provider: Type.Optional(Type.String({ maxLength: 160 })),
       model: Type.Optional(Type.String({ maxLength: 160 }))
     }),
+    isConcurrencySafe: () => true,
     execute: async (_callId, args, signal) => {
       const child = await delegation.delegate(id, args, signal);
       return { content: [{ type: 'text', text: child.text }], details: { sessionId: child.id } };

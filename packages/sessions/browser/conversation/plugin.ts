@@ -28,13 +28,15 @@ const setup: FrontendSetup = (ctx, api) => {
   settings.subscribe(conversation.updateModelControls, api.signal);
   models.subscribe(conversation.updateModelControls, api.signal);
   extensions.subscribeToTools(conversation.refreshTools, api.signal);
-  const newSession = document.createElement('button');
-  newSession.type = 'button';
-  newSession.className = 'new-session';
-  newSession.setAttribute('aria-label', 'New conversation');
-  newSession.innerHTML = '<span data-icon="plus"></span><span class="nav-label">New conversation</span>';
-  newSession.onclick = () => { pages.open(); conversation.clear(true); };
-  api.slots.register('sidebar.primary', newSession);
+  api.slots.registerKeyed('sidebar.primary', 'new-conversation', (signal) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'new-session';
+    button.setAttribute('aria-label', 'New conversation');
+    button.innerHTML = '<span data-icon="plus"></span><span class="nav-label">New conversation</span>';
+    button.addEventListener('click', () => { pages.open(); conversation.clear(true); }, { signal });
+    return button;
+  });
   state.addEventListener('open', (event: CustomEvent<string>) => {
     pages.open(); void conversation.activate(event.detail);
   }, { signal: api.signal });

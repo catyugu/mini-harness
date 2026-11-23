@@ -8,6 +8,7 @@ import { WorkspaceCatalog } from '../../workspaces/catalog.js';
 import { ToolRegistry } from '../../tools/registry.js';
 import { defineTool } from '../../contracts/tools.js';
 import type { LlmPort, NativeAssistantMessage, ToolCallPart } from '../../contracts/llm.js';
+import type { ModelRetry } from '../../contracts/extensions.js';
 import { createFixturePaths } from '../../../test/helpers/mock-provider.js';
 
 const model = { provider: 'fixture', id: 'native' };
@@ -16,7 +17,7 @@ const answer = (text = 'Done'): NativeAssistantMessage => ({ role: 'assistant', 
 const call = (id: string, name: string, args: Record<string, unknown> = {}): ToolCallPart => ({ type: 'toolCall', id, name, arguments: args });
 const toolsAnswer = (...calls: ToolCallPart[]): NativeAssistantMessage => ({ ...answer(), content: calls, stopReason: 'toolUse' });
 
-function fixture(t: TestContext, llm: LlmPort) {
+function fixture(t: TestContext, llm: LlmPort, retryModel?: () => Promise<ModelRetry>) {
   const { root, paths } = createFixturePaths('http://127.0.0.1:1/v1');
   const sessions = new SessionRegistry(paths, new WorkspaceCatalog(paths));
   t.after(() => { sessions.dispose(); rmSync(root, { recursive: true, force: true }); });
@@ -26,7 +27,7 @@ function fixture(t: TestContext, llm: LlmPort) {
       capabilities: () => ({ id: model.id, name: 'Fixture', input: ['text', 'image'], contextWindow: 32000, maxTokens: 1024, reasoning: true }) }),
     llm: () => llm, tools: () => tools, allowsTool: () => true, prompt: () => ({ build: async () => 'Fixture' }), skills: () => undefined,
     prepare: async () => {}, defaultModel: () => model, rememberModel: () => {},
-    policy: () => ({ maxTurns: 8, autoCompact: false }), observe: () => {}, transform: ({ content }) => content
+    policy: () => ({ maxTurns: 8, autoCompact: false }), retryModel, observe: () => {}, transform: ({ content }) => content
   });
   const record = sessions.create();
   return { agent, sessions, tools, record };
@@ -137,4 +138,56 @@ test('identical queued text preserves each attachment identity and is delivered 
   assert.equal(requests, 3); assert.equal(users.length, 3);
   assert.deepEqual(users.slice(1).map(({ attachments }) => attachments[0].name), ['first.png', 'second.png']);
   assert.deepEqual(agent.read(record.id).queue, { steer: [], followUp: [] });
+});
+
+test('opted-in tools overlap, persist independently and respect serial barriers', { timeout: 5000 }, async (t) => {
+  let requests = 0;
+  const { agent, tools, record, sessions } = fixture(t, { async *stream() {
+    yield { type: 'done', message: requests++ === 0 ? toolsAnswer(
+      call('before', 'serial'), call('one', 'parallel', { wait: true }),
+      call('two', 'parallel', { wait: false }), call('after', 'serial')) : answer() };
+  } });
+  const log = () => sessions.log(record.id).projection().contextMessages.filter((message) => message.role === 'toolResult');
+  const started: string[] = [];
+  let release: () => void;
+  const waitForDurability = new Promise<void>((resolve) => { release = resolve; });
+  tools.register('parallel', () => defineTool({
+    name: 'parallel', description: 'Parallel', parameters: Type.Object({ wait: Type.Boolean() }),
+    isConcurrencySafe: ({ wait }) => typeof wait === 'boolean',
+    async execute(id, { wait }, signal) {
+      started.push(id);
+      if (wait) {
+        await Promise.race([waitForDurability, new Promise<never>((_, reject) =>
+          signal.addEventListener('abort', () => reject(signal.reason), { once: true }))]);
+      }
+      return { content: [{ type: 'text', text: id }] };
+    }
+  }));
+  tools.register('serial', () => defineTool({
+    name: 'serial', description: 'Serial', parameters: Type.Object({}),
+    async execute(id) { started.push(id); return { content: [] }; }
+  }));
+  const snapshots: string[][] = [];
+  await agent.prompt(record, 'Run batch', (event) => {
+    if (event.type === 'tool' && event.state === 'finished') {
+      snapshots.push(log().map(({ toolCallId }) => toolCallId));
+      if (event.id === 'two') release();
+    }
+  }, { signal: AbortSignal.timeout(3000) });
+  assert.deepEqual(started, ['before', 'one', 'two', 'after']);
+  assert.deepEqual(snapshots, [['before'], ['before', 'two'], ['before', 'two', 'one'], ['before', 'two', 'one', 'after']]);
+});
+
+test('the retry policy cannot replay a model attempt after output has streamed', async (t) => {
+  let requests = 0, retries = 0;
+  const { agent, record } = fixture(t, { async *stream() {
+    requests++;
+    yield { type: 'text-delta', text: 'Partial' };
+    throw new Error('Transport closed after output');
+  } }, async () => { retries++; return {}; });
+  const deltas: string[] = [];
+  await assert.rejects(agent.prompt(record, 'Generate', (event) => {
+    if (event.type === 'delta') deltas.push(event.text);
+  }, { signal: new AbortController().signal }), /Transport closed after output/);
+  assert.deepEqual({ requests, retries, deltas }, { requests: 1, retries: 0, deltas: ['Partial'] });
 });

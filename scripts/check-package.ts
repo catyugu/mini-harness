@@ -63,6 +63,26 @@ async function checkPackage() {
       "import 'mini-harness/plugin'; import 'mini-harness/browser-plugin';"], { cwd: installed });
     for (const path of ['contracts/plugin-sdk.d.ts', 'ui-runtime/plugin-sdk.d.ts'])
       assert.ok(files.some((file) => file.path === 'dist/types/packages/' + path), 'Missing SDK declarations: ' + path);
+    await writeFile(join(installed, 'plugin-types.mts'), `
+      import type { PluginApi, LlmPort } from 'mini-harness/plugin';
+      import type { FrontendApi, SlotRenderer } from 'mini-harness/browser-plugin';
+      declare module 'mini-harness/plugin' {
+        interface ServiceMap { example: { greet(name: string): string } }
+      }
+      declare const api: PluginApi;
+      const llm: LlmPort | undefined = api.service('harnessLlm');
+      api.provide('example', { greet: (name) => name.toUpperCase() });
+      api.service('example')?.greet('world');
+      // @ts-expect-error The declared service takes a string.
+      api.service('example')?.greet(1);
+      // @ts-expect-error TypeScript plugins declare their own services.
+      api.service('undeclared');
+      declare const frontend: FrontendApi, render: SlotRenderer;
+      frontend.slots.registerKeyed('sidebar.primary', 'example', render);
+    `);
+    await execFile(process.execPath, [resolve('node_modules/typescript/bin/tsc'),
+      '--strict', '--skipLibCheck', '--noEmit', '--target', 'ES2022', '--module', 'NodeNext', 'plugin-types.mts'],
+    { cwd: installed });
     assert.match((await cli('--help')).stdout, /minimal native agent harness/);
     const launch = await cli('--detached', '--cwd', paths.cwd, '--port', String(await availablePort()));
     assert.match(launch.stdout, /started independently/);

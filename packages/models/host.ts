@@ -12,6 +12,7 @@ export function setup(ctx: Context) {
     get hasActiveWork() { return (ctx.harnessRuns.size > 0 || ctx.harnessAgent.hasPending); },
     updateSettings: (patch: Parameters<typeof ctx.harnessUpdateSettings>[0]) => ctx.harnessUpdateSettings(patch)
   };
+  ctx.effect(() => ctx.harnessSettingsStore.validate((next) => { host.catalog.resolve(next.model); }));
   const add = (method: string, path: string, handler: Parameters<typeof ctx.harnessRoutes.register>[2]) =>
     ctx.effect(() => ctx.harnessRoutes.register(method, path, handler));
   const changed = () => ctx.harnessChanges.dispatchEvent(new CustomEvent('change', { detail: { domain: 'models' } }));

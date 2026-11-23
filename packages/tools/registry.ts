@@ -1,4 +1,4 @@
-import type { ToolDefinition } from '../contracts/tools.js';
+import { isToolContent, type ToolDefinition } from '../contracts/tools.js';
 import { Check, Errors } from 'typebox/value';
 import type { ToolDecision } from '../contracts/events.js';
 import type { ToolPort } from '../contracts/plugins.js';
@@ -38,14 +38,11 @@ export class ToolRegistry implements ToolPort {
               const issue = [...Errors(tool.parameters, args)][0];
               throw new Error('Invalid arguments for ' + name + (issue ? ': ' + issue.instancePath + ' ' + issue.message : ''));
             }
-            if (!allowed(id, name) || await decide?.({ sessionId: id, tool: name, signal: combined }) === 'deny')
+            if (!allowed(id, name) || await decide?.({ sessionId: id, tool: name, callId: call, arguments: structuredClone(args), signal: combined }) === 'deny')
               throw new Error('Tool denied by plugin policy: ' + name);
             combined.throwIfAborted();
             const result = await tool.execute(call, args, combined, update, context);
-            if (!result || !Array.isArray(result.content) || result.content.some((part) =>
-              part?.type === 'text' ? typeof part.text !== 'string' :
-                part?.type === 'image' ? typeof part.data !== 'string' || typeof part.mimeType !== 'string' : true))
-              throw new Error('Invalid result from tool: ' + name);
+            if (!result || !isToolContent(result.content)) throw new Error('Invalid result from tool: ' + name);
             return result;
           });
           active.add(work);

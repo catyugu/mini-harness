@@ -7,5 +7,5 @@ export const manifest: PluginDescriptor = {
   setup, defaultEnabled: true, browserRequires: ['core:conversation'],
   provides: ['harnessSkills'],
   id: 'skills', title: 'Skills', description: 'Discover Agent Skills from home and the workspace.',
-  icon: 'skills', browser: '/packages/skills/client.js', inject: ['harnessState', 'harnessRoutes', 'harnessWorkspaces', 'harnessRegistry', 'harnessTools'],
+  icon: 'skills', browser: '/packages/skills/client.js', inject: ['harnessState', 'harnessScopes', 'harnessRoutes', 'harnessWorkspaces', 'harnessRegistry', 'harnessTools'],
 };

@@ -1,13 +1,14 @@
 import type { SessionRecord, ModelChoice } from './conversation.js';
 import type { ImageInput, PreparedMessage } from './input.js';
 import type { StreamEvent } from './transport.js';
+import type { PromptContext } from './extensions.js';
 import type { ViewMessage } from './message.js';
 
 /** Native execution capabilities consumed by scheduling services. */
 export type ThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
 export interface PromptPort {
-  build(request: { sessionId: string; cwd: string; tools: import('./tools.js').ToolDefinition[] }): Promise<string>;
+  build(request: PromptContext): Promise<string>;
 }
 
 declare module 'cordis' {

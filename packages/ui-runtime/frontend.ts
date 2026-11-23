@@ -7,7 +7,7 @@ import type { ModelChoice } from '../contracts/conversation.js';
 import type { Conversation } from '../contracts/conversation.js';
 import type { RightTabType, TabScope } from '../web/contracts/tabs.js';
 import type { WorkspaceRecord } from '../contracts/workspace.js';
-import type { SlotName, SlotKind } from '../ui-slots/registry.js';
+import type { SlotName, SlotKind, SlotRenderer, SlotDecorator } from '../ui-slots/registry.js';
 
 export interface ToolView { name: string; state: string; content?: MessageContent; arguments?: unknown; sessionId?: string }
 export interface Suggestion {
@@ -56,6 +56,8 @@ export interface FrontendApi {
   readonly slots: {
     define(name: SlotName, container: HTMLElement, kind?: SlotKind): void;
     register(name: SlotName, node: HTMLElement, order?: number): () => void;
+    registerKeyed(name: SlotName, key: string, render: SlotRenderer, order?: number): Release;
+    decorate(name: SlotName, key: string | undefined, wrap: SlotDecorator, order?: number): Release;
   };
   messageAction(action: MessageAction): Release;
   beginDraftMode(mode: DraftMode): void;
@@ -134,7 +136,9 @@ export class FrontendHost {
         },
         slots: {
           define: (name, container, kind) => { own(() => this.ctx.miniSlots.define(name, container, kind)); },
-          register: (name, node, order) => own(() => this.ctx.miniSlots.register(name, node, order))
+          register: (name, node, order) => own(() => this.ctx.miniSlots.register(name, node, order)),
+          registerKeyed: (name, key, render, order) => own(() => this.ctx.miniSlots.registerKeyed(name, key, render, order)),
+          decorate: (name, key, wrap, order) => own(() => this.ctx.miniSlots.decorate(name, key, wrap, order))
         },
         request: (path, options) => this.request(path, { ...options, signal: options?.signal
           ? AbortSignal.any([controller.signal, options.signal]) : controller.signal }),

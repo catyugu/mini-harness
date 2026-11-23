@@ -18,6 +18,8 @@ Usage:
   mini-harness --no-open                 Start without opening a browser
   mini-harness status                    Show server status
   mini-harness stop                      Stop the running server
+  mini-harness plugin install <id> <package[@version-or-tag]>
+  mini-harness plugin update <id> [package[@version-or-tag]]
   mini-harness --help                    Show help
 
 Configuration: ~/.mini-harness/settings.json (or MINI_HARNESS_HOME)
@@ -127,7 +129,25 @@ async function serve(paths: ReturnType<typeof getPaths>, port?: number, open = f
 }
 
 async function main() {
-  const args = parse(process.argv.slice(2));
+  const argv = process.argv.slice(2);
+  if (argv[0] === 'plugin') {
+    const [, operation, id, spec, ...extra] = argv;
+    if ((operation !== 'install' && operation !== 'update') || !id || extra.length || (operation === 'install' && !spec))
+      throw new Error('Usage: mini-harness plugin install <id> <package> or mini-harness plugin update <id> [package]');
+    const paths = getPaths();
+    ensurePaths(paths);
+    const unlock = await lockInstance(paths.home);
+    try {
+      const [{ installNpmPlugin }, { plugins }] = await Promise.all([
+        import('../packages/plugins/npm.js'), import('../packages/host/composition.js')
+      ]);
+      const { name, version } = await installNpmPlugin(paths, operation, id, spec,
+        (id) => plugins.some((plugin) => plugin.id === id));
+      console.log(id + ': ' + name + '@' + version);
+    } finally { await unlock(); }
+    return;
+  }
+  const args = parse(argv);
   if (args.help) return help();
   const paths = getPaths(args.cwd);
   ensurePaths(paths);

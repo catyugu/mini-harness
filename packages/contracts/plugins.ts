@@ -8,6 +8,8 @@ import type { CapabilityObservation, ToolDecision, ToolProjection } from './even
 import type { MessageContent } from './message.js';
 import type { PluginScope } from './capabilities.js';
 import type { DelegationPort } from './delegation.js';
+import type { ServiceMap } from './plugin-sdk.js';
+import type { AgentStage, AgentTransform, ModelFailure, ModelRetry, PromptSection, RecordProjection } from './extensions.js';
 
 /** Host-owned capability; features consume this interface without importing a concrete registry. */
 export interface ToolPort {
@@ -24,6 +26,7 @@ export interface PluginMetadata {
   title: string;
   description: string;
   trustedCode?: boolean;
+  npm?: { name: string; version: string };
   /** An installed but unusable plugin must never prevent the host from starting. */
   error?: string;
   state?: 'discovered' | 'ready' | 'draining' | 'failed';
@@ -61,10 +64,17 @@ export interface PluginApi {
   readonly config: Readonly<Record<string, unknown>>;
   readonly scope: PluginScope;
   readonly signal: AbortSignal;
-  provide<T>(name: string, service: T): void;
-  service<T>(name: string): T | undefined;
+  provide<Name extends keyof ServiceMap & string>(name: Name, service: ServiceMap[Name]): void;
+  service<Name extends keyof ServiceMap & string>(name: Name): ServiceMap[Name] | undefined;
   observe(handler: (event: CapabilityObservation) => void | Promise<void>): () => void;
   decideTool(handler: (request: ToolDecision) => 'deny' | undefined | Promise<'deny' | undefined>): () => void;
+  promptSection(section: PromptSection): () => void;
+  waterfall<Stage extends AgentStage>(stage: Stage, handler: AgentTransform<Stage>, order?: number): () => void;
+  retryModel(handler: (failure: ModelFailure) => ModelRetry | undefined | Promise<ModelRetry | undefined>): () => void;
+  registerProjection<State>(projection: RecordProjection<State>): {
+    read(sessionId: string): Promise<State>;
+    dispose(): void;
+  };
   transformTool(handler: (projection: ToolProjection) => MessageContent): () => void;
   registerTool(tool: ToolDefinition): () => Promise<void>;
   /** Mount an authenticated route under /api/extensions/<plugin-id>/. */
@@ -85,7 +95,6 @@ declare module 'cordis' {
     harnessState: { paths: Paths };
     harnessRoutes: RoutePort;
     harnessSkills?: SkillPort;
-    harnessWorkspace: { resolve(id: string): string };
     harnessDelegation?: DelegationPort;
 
   }

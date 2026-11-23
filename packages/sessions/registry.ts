@@ -4,6 +4,7 @@ import { dirname } from 'node:path';
 import { writeJson } from '../platform/config.js';
 import type { Paths } from '../contracts/config.js';
 import type { SessionStore, WorkspacePort } from '../contracts/services.js';
+import type { SessionRecords } from '../contracts/plugins.js';
 import type { ScopePort } from '../contracts/capabilities.js';
 import type { CapabilityObservation } from '../contracts/events.js';
 import type { SessionRecord } from '../contracts/conversation.js';
@@ -119,6 +120,20 @@ export class SessionRegistry implements SessionStore {
     const log = new SessionLog(this.nativeFile(record), id, record.createdAt, () => this.notify(id));
     this.logs.set(id, log);
     return log;
+  }
+
+  records(id: string, namespace: string): SessionRecords {
+    this.assertAvailable(id);
+    const log = this.log(id);
+    return {
+      list: () => log.branch().flatMap((entry) => entry.type === 'custom' && entry.namespace === namespace
+        ? [{ id: entry.id, timestamp: entry.timestamp, data: structuredClone(entry.data) }] : []),
+      append: async (data) => {
+        this.assertAvailable(id);
+        const value = JSON.parse(JSON.stringify(data));
+        return log.append({ type: 'custom', namespace, data: value }).id;
+      }
+    };
   }
 
   workspacePath(id: string) {

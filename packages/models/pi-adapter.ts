@@ -64,8 +64,8 @@ class FileCredentials implements CredentialStore {
   async settle() { await this.writes; }
 }
 
-/** The sole boundary between native transcripts and the Pi model transport SDK. */
-export class PiModelAdapter implements ModelCatalogPort, ModelAdminPort, LlmPort {
+/** Owns provider definitions, credentials and the shared SDK provider registry. */
+export class PiModelStore implements ModelCatalogPort, ModelAdminPort {
   private runtime: MutableModels;
   private readonly credentials: FileCredentials;
   private status = new Map<string, { configured: boolean; source?: string }>();
@@ -178,13 +178,23 @@ export class PiModelAdapter implements ModelCatalogPort, ModelAdminPort, LlmPort
   async removeCredential(id: string) { await this.credentials.delete(id); this.status = await this.readStatus(); }
   async close() { await this.credentials.settle(); }
 
+  connection(choice: ModelChoice) {
+    const model = this.model(choice);
+    if (!model) throw new Error('Choose a model in Settings before sending a message');
+    return { model, runtime: this.runtime };
+  }
+}
+
+/** Converts between native messages and the model provider protocol. */
+export class PiLlm implements LlmPort {
+  constructor(private readonly store: PiModelStore) {}
+
   async *stream(request: LlmRequest): AsyncIterable<LlmEvent> {
     request.signal.throwIfAborted();
-    const model = this.model(request.model);
-    if (!model) throw new Error('Choose a model in Settings before sending a message');
+    const { model, runtime } = this.store.connection(request.model);
     if (request.messages.some((message) => Array.isArray(message.content) && message.content.some((part) => part.type === 'image')) && !model.input.includes('image'))
       throw new Error('The selected model does not support image input. Choose an image-capable model and retry.');
-    const stream = this.runtime.streamSimple(model, {
+    const stream = runtime.streamSimple(model, {
       systemPrompt: request.systemPrompt,
       messages: request.messages.map((message) => toProviderMessage(message, model)),
       tools: request.tools?.map(({ name, description, parameters }) => ({ name, description, parameters }))

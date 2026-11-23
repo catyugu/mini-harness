@@ -7,12 +7,30 @@ import type { PluginScope, ScopePort } from '../contracts/capabilities.js';
 import type { BrowserEntry } from '../contracts/browser.js';
 import { addAbortListener } from 'node:events';
 import type { SessionRecord } from '../contracts/conversation.js';
+import type { AgentStage, AgentTransform } from '../contracts/extensions.js';
+import type { ServiceMap } from '../contracts/plugin-sdk.js';
 import type { Settings } from '../contracts/config.js';
 import { resolveCapabilities } from '../kernel/composition.js';
 import { PluginMounts, type MountPlan } from '../kernel/mounts.js';
 import { PluginCatalog, type PluginPlan } from './catalog.js';
 
 const appScope: PluginScope = { kind: 'application' };
+
+async function whileActive<T>(signal: AbortSignal, work: () => T | Promise<T>): Promise<T> {
+  signal.throwIfAborted();
+  let listener: ReturnType<typeof addAbortListener>;
+  try {
+    const cancelled = new Promise<never>((_, reject) => {
+      listener = addAbortListener(signal, () => reject(signal.reason));
+    });
+    const result = await Promise.race([cancelled, Promise.resolve().then(() => {
+      signal.throwIfAborted();
+      return work();
+    })]);
+    signal.throwIfAborted();
+    return result;
+  } finally { listener?.[Symbol.dispose](); }
+}
 
 /** The descriptor and its resolved graph are the source of both server and browser mounts. */
 export class PluginHost implements ScopePort {
@@ -189,15 +207,19 @@ export class PluginHost implements ScopePort {
     return { inject: descriptor.inject ?? [], setup: async (ctx: Context, lifetime: AbortSignal) => {
       const values = Object.freeze(structuredClone(plan.config ?? {}));
       const provided = new Set<string>();
-      const use = <T>(name: string): T | undefined => {
+      const use = <Name extends keyof ServiceMap & string>(name: Name): ServiceMap[Name] | undefined => {
         if (!descriptor.inject?.includes(name) && !descriptor.optional?.includes(name))
           throw new Error('Service is not declared by ' + plan.id + ': ' + name);
-        return ctx.get(name) as T | undefined;
+        return ctx.get(name) as ServiceMap[Name] | undefined;
       };
       const inScope = (id: string) => !scopeKey || this.address(id).includes(scopeKey);
       const checkSession = (id: string) => {
+        lifetime.throwIfAborted();
         if (!inScope(id)) throw new Error('Conversation outside plugin scope');
       };
+      const recordsFor = (id: string) => this.sessionRecords(id, plan.id);
+      const sectionIds = new Set<string>();
+      const callbackSignal = (signal?: AbortSignal) => signal ? AbortSignal.any([lifetime, signal]) : lifetime;
       const cleanup = await setup(ctx, {
         scope: Object.freeze({ ...scope }), signal: lifetime, config: values, service: use,
         observe: (handler) => ctx.on('harness/observe', (event) => {
@@ -210,12 +232,73 @@ export class PluginHost implements ScopePort {
         }),
         decideTool: (handler) => ctx.on('harness/tool-decision', async (request) => {
           if (lifetime.aborted || !inScope(request.sessionId)) return;
-          const signal = AbortSignal.any([lifetime, request.signal]);
-          signal.throwIfAborted();
-          const decision = await handler({ ...request, signal });
-          signal.throwIfAborted();
+          const signal = callbackSignal(request.signal);
+          const decision = await whileActive(signal,
+            () => handler({ ...request, arguments: structuredClone(request.arguments), signal }));
+          if (decision !== undefined && decision !== 'deny') throw new Error('Invalid tool policy decision: ' + plan.id);
           return decision;
         }),
+        promptSection: (section) => {
+          const { id, order = 500, render } = section;
+          if (!/^[a-zA-Z][a-zA-Z0-9_.:-]{0,95}$/.test(id) || !Number.isFinite(order) ||
+              typeof render !== 'function' || sectionIds.has(id))
+            throw new Error('Invalid or duplicate prompt section: ' + id);
+          lifetime.throwIfAborted();
+          sectionIds.add(id);
+          let active = true;
+          const unregister = ctx.on('harness/prompt-sections', (sessionId, sections) => {
+            if (lifetime.aborted || !inScope(sessionId)) return;
+            const depth = scopeKey ? this.address(sessionId).indexOf(scopeKey) + 1 : 0;
+            sections.push({ id, order, depth, pluginId: plan.id, async render(request) {
+              if (!active) return;
+              const signal = callbackSignal(request.signal);
+              return whileActive(signal, () => render({ ...structuredClone({ ...request, signal: undefined }), signal }));
+            } });
+          });
+          return () => {
+            if (!active) return;
+            active = false;
+            sectionIds.delete(id);
+            unregister();
+          };
+        },
+        waterfall: <Stage extends AgentStage>(stage: Stage, handler: AgentTransform<Stage>, order = 0) => {
+          if (!['beforeStep', 'modelRequest', 'toolResult'].includes(stage) || typeof handler !== 'function' || !Number.isFinite(order))
+            throw new Error('Invalid agent waterfall: ' + stage);
+          return ctx.on('harness/agent-waterfall', (sessionId, current, handlers) => {
+            if (String(current) !== stage || lifetime.aborted || !inScope(sessionId)) return;
+            handlers.push({ pluginId: plan.id, order, transform: (async (value, request) => {
+              if (lifetime.aborted) return;
+              const signal = callbackSignal(request.signal);
+              const result = await whileActive(signal,
+                () => handler(structuredClone(value), { ...request, model: { ...request.model }, signal }));
+              return result === undefined ? undefined : structuredClone(result);
+            }) as typeof handlers[number]['transform'] });
+          });
+        },
+        retryModel: (handler) => ctx.on('harness/model-retry', async (failure) => {
+          if (lifetime.aborted || !inScope(failure.sessionId)) return;
+          const signal = callbackSignal(failure.signal);
+          const retry = await whileActive(signal, () => handler({ ...failure, model: { ...failure.model }, signal }));
+          if (retry !== undefined && (!retry || typeof retry !== 'object' ||
+              (retry.delayMs !== undefined && (!Number.isFinite(retry.delayMs) || retry.delayMs < 0 || retry.delayMs > 30000))))
+            throw new Error('Invalid model retry decision: ' + plan.id);
+          return retry;
+        }),
+        registerProjection: (projection) => {
+          if (typeof projection.initial !== 'function' || typeof projection.reduce !== 'function')
+            throw new Error('Invalid session record projection');
+          lifetime.throwIfAborted();
+          let active = true;
+          const dispose = () => { active = false; };
+          ctx.effect(() => dispose);
+          return { async read(sessionId) {
+            checkSession(sessionId);
+            if (!active) throw new Error('Session record projection is disposed');
+            const records = recordsFor(sessionId).list();
+            return records.reduce((state, record) => projection.reduce(state, record), projection.initial());
+          }, dispose };
+        },
         transformTool: (handler) => ctx.on('harness/tool-projection', (request, next) => {
           const content = next();
           if (lifetime.aborted || !inScope(request.sessionId)) return content;
@@ -228,18 +311,18 @@ export class PluginHost implements ScopePort {
           provided.add(name);
         },
         registerTool: (tool) => {
-          const tools = use<Context['harnessTools']>('harnessTools');
+          const tools = use('harnessTools');
           return ctx.effect(() => tools.register(tool.name, () => tool, undefined, scopeKey));
         },
         registerRoute: (method, path, handler) => {
           if (scopeKey || !['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method) ||
               !/^\/(?:[a-zA-Z0-9_-]+\/)*[a-zA-Z0-9_-]+$/.test(path)) throw new Error('Invalid plugin route');
-          const routes = use<Context['harnessRoutes']>('harnessRoutes');
+          const routes = use('harnessRoutes');
           return ctx.effect(() => routes.register(method, '/api/extensions/' + plan.id + path, handler));
         },
         records: {
-          list: async (sessionId) => { checkSession(sessionId); return this.sessionRecords(sessionId, plan.id).list(); },
-          append: async (sessionId, data) => { checkSession(sessionId); return this.sessionRecords(sessionId, plan.id).append(data); }
+          list: async (sessionId) => { checkSession(sessionId); return recordsFor(sessionId).list(); },
+          append: async (sessionId, data) => { checkSession(sessionId); return recordsFor(sessionId).append(data); }
         },
         onDispose: (dispose) => ctx.effect(() => dispose)
       } satisfies PluginApi);

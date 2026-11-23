@@ -1,6 +1,9 @@
 import type { Context } from 'cordis';
 import type { PluginApi } from '../contracts/plugins.js';
 import { registerRoutes } from './routes.js';
+import { isToolContent } from '../contracts/tools.js';
+import type { AgentStage, AgentWaterfalls } from '../contracts/extensions.js';
+import type { WaterfallHandler } from '../contracts/events.js';
 import { NativeAgent } from './agent.js';
 
 export function setup(ctx: Context, api: PluginApi) {
@@ -22,6 +25,30 @@ export function setup(ctx: Context, api: PluginApi) {
     },
     policy: () => api.config as { maxTurns: number; autoCompact: boolean },
     observe: (event) => ctx.emit('harness/observe', event),
+    async waterfall(stage, value, request) {
+      const handlers: WaterfallHandler<typeof stage>[] = [];
+      ctx.emit('harness/agent-waterfall', request.sessionId, stage, handlers);
+      handlers.sort((a, b) => a.order - b.order || a.pluginId.localeCompare(b.pluginId));
+      for (const { pluginId, transform } of handlers) {
+        request.signal.throwIfAborted();
+        try {
+          const next = await transform(value, request);
+          if (next !== undefined) {
+            if (!validWaterfall(stage, next)) throw new Error('Invalid waterfall result');
+            value = next;
+          }
+        } catch (error) {
+          if (stage !== 'toolResult') {
+            request.signal.throwIfAborted();
+            throw new Error('Plugin ' + pluginId + ' failed in ' + stage, { cause: error });
+          }
+          ctx.logger.warn('Plugin tool result transform failed: ' + pluginId);
+        }
+        if (stage === 'toolResult' && request.signal.aborted) break;
+      }
+      return value;
+    },
+    retryModel: (failure) => ctx.serial('harness/model-retry', failure),
     transform: (projection) => ctx.waterfall('harness/tool-projection', projection, () => projection.content)
   });
   ctx.provide('harnessAgent', agent);
@@ -31,4 +58,14 @@ export function setup(ctx: Context, api: PluginApi) {
     quiesce: (ids) => agent.agents.settle(ids)
   }));
   registerRoutes(ctx);
+}
+
+function validWaterfall(stage: AgentStage, value: unknown): boolean {
+  if (stage === 'beforeStep') return Array.isArray(value);
+  if (stage === 'toolResult') return isToolContent(value);
+  const request = value as AgentWaterfalls['modelRequest']['value'];
+  return Boolean(request && typeof request.systemPrompt === 'string' && Array.isArray(request.messages) &&
+    (request.maxTokens === undefined || Number.isSafeInteger(request.maxTokens) && request.maxTokens > 0) &&
+    (request.thinkingLevel === undefined ||
+      ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(request.thinkingLevel)));
 }
