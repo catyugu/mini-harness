@@ -11,9 +11,9 @@ mini-harness publishes **one npm package**. Internally, every folder under `pack
 | `packages/plugins/` | Plugin discovery, manifest and configuration validation, and adaptation onto the generic fiber mount lifecycle. |
 | `packages/host/application.ts` | Small composition root and public runtime facade. It injects service definitions but has no business algorithms. |
 | `packages/<capability>/` | The actual business rules, Cordis providers, registered routes and optional browser entry. Each feature owns its lifecycle. |
-| `packages/web/kernel/` | Generic outlet, command, tab, message-action and contribution registration with disposal. No concrete UI components. |
-| `packages/web/boot.ts` | Generic Cordis browser boot. Consumes the Host-published browser graph without importing any feature implementation. |
-| `packages/ui/manifest.ts` | Declarative browser plugin roster consumed by the bootstrap API. |
+| `packages/ui-runtime/` | Generic outlet, command, tab, message-action and contribution registration with disposal. No concrete UI components. |
+| `packages/ui-runtime/boot.ts` | Generic Cordis browser runtime, loader and boot. Consumes the Host-published browser graph without importing any feature implementation. |
+| `packages/ui/manifest.ts` | Declarative browser plugin roster consumed by the bootstrap API. Shared graph types belong to `contracts/browser.ts`. |
 | `packages/ui-slots/` | Framework-neutral, scope-owned UI slot registry. Contributions can precede owners and survive owner remounts. |
 | `packages/ui-layout/` | Composable app frame, navigation page registration and right panel geometry. |
 | `packages/ui-theme/`, `packages/ui-primitives/` | Central theme tokens and shared UI controls. |
@@ -25,7 +25,7 @@ Plugin settings are uniformly stored under `settings.pluginConfig[pluginId]` and
 
 ## Browser composition and ownership
 
-The Host bootstrap publishes a browser plugin graph (`ui`) alongside optional plugin metadata. The generic `web/boot.ts` loads enabled entries in dependency order and mounts them in Cordis scopes. Built-in browser entries export a `BrowserPlugin` object, while installed local `web.js` entries export an extension setup function; both are mounted through the same scoped lifecycle.
+The Host bootstrap publishes a browser plugin graph (`ui`) alongside optional plugin metadata. The generic `ui-runtime/boot.ts` loads enabled entries in dependency order and mounts them in Cordis scopes. Built-in browser entries export a `BrowserPlugin` object, while installed local `web.js` entries export an extension setup function; both are mounted through the same scoped lifecycle.
 
 Each feature owns its browser view and may contribute to named slots by `api.slots.register(name, element, order?)`. Slot owners call `api.slots.define(name, container, kind?)`. The registry retains contributions when an owner is not mounted, and every effect cleanup releases its own contribution or ownership declaration. The layout contributes a page registry, header service and drawer controls, without importing Session, Workspace, Settings or Plugin business modules.
 
@@ -41,7 +41,7 @@ Every private `packages/<name>/package.json` declares **only** its direct intern
 
 - The kernel may import Cordis and generic language/runtime utilities. It must not depend on configuration, transport, adapters or capabilities.
 - A feature imports shared contracts and platform primitives, **not another feature's concrete files**. Cross-feature behavior is expressed by Cordis services and ports.
-- The browser bootstrap uses the `ui` graph and never imports concrete feature entries. UI plugins register through the slot service and typed view services.
+- The `ui-runtime` bootstrap uses the Host graph and never imports concrete feature entries. UI plugins register through the slot service and typed view services.
 - Browser modules may import server **types** from contracts, never server implementation values.
 - Registration and cleanup belong to the same Cordis fiber. Publishing settings or UI events happens only after successful operations; rollback restores the previous scope set.
 
