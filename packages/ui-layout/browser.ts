@@ -44,6 +44,9 @@ export const layoutPlugin: BrowserPlugin = {
     for (const name of Object.keys(slots) as Array<keyof typeof slots>)
       api.slots.define(name, outlet(name), name === 'conversation.body' ? 'single' : 'list');
     const state = ctx.miniState;
+    // Initial scope is already available from the bootstrap snapshot.
+    // Do not depend on the next navigation event to initialize panel tabs.
+    tabs.selectScope(state.scope());
     state.on('navigation', () => {
       const { sessions, workspaces } = state.get();
       tabs.selectScope(state.scope());
