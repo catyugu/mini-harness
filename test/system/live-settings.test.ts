@@ -1,7 +1,8 @@
 import { expectPresent } from '../support/required.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { rmSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { MiniHarnessRuntime } from '@mini-harness/host/application';
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
 
@@ -23,14 +24,52 @@ test('appearance, parallelism and child defaults update without interrupting a r
   assert.strictEqual(runtime.registry.log(item.id), original);
   assert.equal(expectPresent(runtime.delegation, 'delegation service').parallelLimit, 2);
   assert.equal(runtime.runs.active(item.id), true);
-  await assert.rejects(runtime.updateSettings({ pluginConfig: { subagents: { provider: 'missing', model: 'unavailable' } } }), /Unknown child model/);
-  await assert.rejects(runtime.updateSettings({ pluginConfig: { subagents: { provider: 'local-mock', model: 'unavailable' } } }), /Unknown child model/);
-  assert.equal((runtime.settings.pluginConfig.subagents as { provider: string }).provider, '');
+  await assert.rejects(runtime.updateSettings({ pluginConfig: { subagents: { model: { provider: 'missing', id: 'unavailable' } } } }), /Unknown child model/);
+  await assert.rejects(runtime.updateSettings({ pluginConfig: { subagents: { model: { provider: 'local-mock', id: 'unavailable' } } } }), /Unknown child model/);
+  assert.equal(runtime.settings.pluginConfig.subagents.model, null);
   assert.equal(expectPresent(runtime.delegation, 'delegation service').parallelLimit, 2);
-  await runtime.updateSettings({ plugins: { files: false, 'session-helper': false } });
-  assert.equal(runtime.settings.plugins['session-helper'], false);
+  const target = 'session:' + item.id;
+  await assert.rejects(runtime.updateSettings({ plugins: { files: false } }), /Stop the affected conversations/);
+  assert.equal(runtime.settings.plugins.files, true);
+  await runtime.updateSettings({ scopes: { [target]: { disabledTools: ['shell'] } } });
   assert.equal(runtime.runs.active(item.id), true);
   release();
   assert.equal(await pending, 'Done');
+  await runtime.updateSettings({ plugins: { files: false, 'session-helper': false } });
   assert.ok(!runtime.plugins.ctx.harnessTools.forSession(item.id).map(({ name }) => name).includes('read'));
+});
+
+test('a scoped plugin transaction excludes new runs in its subtree until commit', { timeout: 10000 }, async (t) => {
+  let enter = () => {};
+  let release = () => {};
+  const entered = new Promise<void>((resolve) => { enter = resolve; });
+  const hold = new Promise<void>((resolve) => { release = resolve; });
+  const mock = await createMockProvider();
+  const { root, paths } = createFixturePaths(mock.url);
+  const runtime = new MiniHarnessRuntime(paths);
+  const key = Symbol.for('mini-harness-test-admission');
+  const shared = globalThis as typeof globalThis & Record<symbol, (() => Promise<void>) | undefined>;
+  shared[key] = () => { enter(); return hold; };
+  t.after(async () => { release(); delete shared[key]; await runtime.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
+  const folder = join(paths.plugins, 'staged');
+  mkdirSync(folder);
+  writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ scope: 'workspace' }));
+  writeFileSync(join(folder, 'plugin.js'), "export default () => globalThis[Symbol.for('mini-harness-test-admission')]();");
+  await runtime.start();
+  const target = runtime.registry.create();
+  const otherDirectory = join(root, 'other');
+  mkdirSync(otherDirectory);
+  const otherWorkspace = runtime.registry.workspaces.register(otherDirectory);
+  const other = runtime.registry.create({ workspaceId: otherWorkspace.id });
+  const updating = runtime.updateSettings({ scopes: { ['workspace:' + target.workspaceId]: { plugins: { staged: true } } } });
+  let sibling: Promise<string>;
+  try {
+    await entered;
+    assert.throws(() => runtime.runs.startRun(target.id, 'Cannot cross the transaction'), /configuration is changing/);
+    assert.equal(runtime.runs.info(target.id), undefined);
+    sibling = runtime.runs.send(other.id, 'Unaffected workspace');
+  } finally { release(); }
+  await updating;
+  assert.equal(await sibling, 'Mock response');
+  assert.equal(await runtime.runs.send(target.id, 'After commit'), 'Mock response');
 });

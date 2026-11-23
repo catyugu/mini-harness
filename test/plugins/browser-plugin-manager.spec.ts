@@ -1,7 +1,8 @@
 import { test, expect } from '@playwright/test';
-import { rmSync, mkdirSync, writeFileSync } from 'node:fs';
+import { rmSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
+import { workspaceId } from '@mini-harness/workspaces/catalog';
 import { readJson, writeJson } from '@mini-harness/platform/config';
 import { startIsolatedHost, settingsSection, suggestions } from '../support/browser.js';
 
@@ -80,7 +81,7 @@ test('frontend plugins own UI contributions and clean up on disable and reconfig
     await page.getByRole('button', { name: 'Inserted by plugin', exact: true }).click();
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('/ex');
     await expect(suggestions(page).getByRole('option', { name: /Add a plugin note/ })).toHaveCount(0);
-    await page.locator('.tool-card summary').click();
+    await expect(page.locator('.tool-card')).toHaveAttribute('open', '');
     await expect(page.getByText('Custom listing result')).toHaveCount(0);
     await expect(page.locator('.tool-content pre').first()).toBeVisible();
   } finally { await page.close(); await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
@@ -155,10 +156,13 @@ test('plugin catalog applies configuration and removes disabled browser capabili
     await catalog.getByRole('spinbutton', { name: 'Maximum child depth · subagents' }).fill('2');
     await catalog.getByRole('button', { name: 'Save configuration' }).click();
     await expect(catalog.getByText('Saved.', { exact: true })).toBeVisible();
-    // An empty but schema-required string must not block form submission or be omitted.
-    const childConfig = readJson<any>(paths.settings, {}).pluginConfig.subagents;
-    expect(childConfig.provider).toBe('');
-    expect(childConfig.model).toBe('');
+    const model = catalog.getByRole('combobox', { name: 'Child model · subagents' });
+    await expect(model).toHaveValue('null');
+    expect(readJson<any>(paths.settings, {}).pluginConfig.subagents.model).toBeNull();
+    await model.selectOption({ label: 'Mock Model · local-mock' });
+    await catalog.getByRole('button', { name: 'Save configuration' }).click();
+    await expect(catalog.getByText('Saved.', { exact: true })).toBeVisible();
+    expect(readJson<any>(paths.settings, {}).pluginConfig.subagents.model).toEqual({ provider: 'local-mock', id: 'mock-model' });
     await catalog.getByRole('button', { name: /All plugins/ }).click();
     await catalog.getByRole('button', { name: 'Subagents settings' }).click();
     await expect(catalog.getByRole('spinbutton', { name: 'Maximum child depth · subagents' })).toHaveValue('2');
@@ -166,4 +170,35 @@ test('plugin catalog applies configuration and removes disabled browser capabili
     await page.getByRole('button', { name: 'New conversation' }).click();
     await expect(page.getByRole('textbox', { name: 'Message' })).toBeVisible();
   } finally { await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+test('the Plugins page repairs an enabled workspace instance and reports setup failures after saving', async ({ page }) => {
+  const mock = await createMockProvider(), { root, paths } = createFixturePaths(mock.url);
+  const folder = join(paths.plugins, 'workspace-example');
+  mkdirSync(folder);
+  writeJson(join(folder, 'plugin.json'), { scope: 'workspace', title: 'Workspace example', configSchema: {
+    type: 'object', properties: { value: { type: 'integer', minimum: 1 } }, required: ['value']
+  } });
+  writeFileSync(join(folder, 'plugin.js'), "export default (_, api) => { if (api.config.value === 1) throw new Error('Workspace setup failed'); };");
+  const key = 'workspace:' + workspaceId(realpathSync.native(paths.cwd));
+  writeJson(paths.settings, { ...readJson<any>(paths.settings, {}), scopes: {
+    [key]: { plugins: { 'workspace-example': true }, pluginConfig: { 'workspace-example': { value: 'invalid' } } }
+  } });
+  const service = await startIsolatedHost(paths);
+  try {
+    await page.goto(service.url + '/#token=' + service.token);
+    await page.getByRole('button', { name: 'Browse plugins' }).click();
+    await expect(page.getByRole('switch', { name: 'Workspace example' })).toBeChecked();
+    await page.getByRole('button', { name: 'Workspace example settings' }).click();
+    await expect(page.getByText('Invalid configuration for plugin: workspace-example')).toBeVisible();
+    const value = page.getByRole('spinbutton', { name: 'value · workspace-example' });
+    await value.fill('1');
+    await page.getByRole('button', { name: 'Save configuration' }).click();
+    await expect(page.getByText(/Configuration saved\. Plugin failed to start: .*Workspace setup failed/)).toBeVisible();
+    await value.fill('2');
+    await page.getByRole('button', { name: 'Save configuration' }).click();
+    await expect(page.getByText('Saved.', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'All plugins' }).click();
+    await expect(page.getByRole('button', { name: 'Workspace example settings' })).toContainText('Ready');
+  } finally { await page.close(); await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
 });

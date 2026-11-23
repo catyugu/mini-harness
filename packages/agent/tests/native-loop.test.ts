@@ -27,7 +27,7 @@ function fixture(t: TestContext, llm: LlmPort, retryModel?: () => Promise<ModelR
   const tools = new ToolRegistry();
   const agent = new NativeAgent(sessions, {
     models: () => ({ list: () => [], available: async () => [], resolve: (choice) => choice,
-      capabilities: (choice) => ({ id: model.id, name: 'Fixture', input: ['text', 'image'], contextWindow: 32000, maxTokens: 1024, reasoning: true, thinkingLevels: thinkingLevels(choice.id) }) }),
+      capabilities: (choice) => ({ id: model.id, name: 'Fixture', input: choice.id === 'text-only' ? ['text'] : ['text', 'image'], contextWindow: 32000, maxTokens: 1024, reasoning: true, thinkingLevels: thinkingLevels(choice.id) }) }),
     llm: () => llm, tools: () => tools, allowsTool: () => true, prompt: () => ({ build: async () => 'Fixture' }), skills: () => undefined,
     prepare: async () => {}, defaultModel: () => model, rememberModel: () => {},
     policy: () => ({ maxTurns: 8, autoCompact: false }), retryModel, observe: () => {}, transform: ({ content }) => content
@@ -275,4 +275,24 @@ test('a queued follow-up can preselect the next model and thinking level', async
   assert.deepEqual(seen, [{ model: 'native', thinking: 'off' }, { model: 'next-model', thinking: 'medium' }]);
   assert.deepEqual(sessions.log(record.id).projection().model, { provider: 'fixture', id: 'next-model' });
   assert.deepEqual(sessions.log(record.id).inbox(), []);
+});
+
+test('text models see historical placeholders in the request and audit snapshot, while new images are rejected', async (t) => {
+  const image = { type: 'image' as const, mimeType: 'image/png', data: 'iVBORw0KGgo=' };
+  const { agent, record, sessions } = fixture(t, { async *stream(request) {
+    assert.match(JSON.stringify(request.messages), /Image unavailable to this model/);
+    assert.doesNotMatch(JSON.stringify(request.messages), /iVBORw0KGgo=/);
+    yield { type: 'done', message: answer() };
+  } });
+  const log = sessions.log(record.id);
+  log.append({ type: 'message', message: { role: 'user', content: [image], timestamp: 1 } });
+  const choice = { ...model, id: 'text-only' }, signal = new AbortController().signal;
+  await agent.prompt(record, 'Continue with text', () => {}, { signal, choice });
+  const request = expectPresent(log.entries().find(({ type }) => type === 'model-request'), 'recorded model request');
+  assert.doesNotMatch(JSON.stringify(log.requestSnapshot(request.id)), /iVBORw0KGgo=/);
+  assert.match(JSON.stringify(log.requestSnapshot(request.id)), /Image unavailable/);
+  assert.match(JSON.stringify(agent.messages(record.id)), /iVBORw0KGgo=/);
+  const previous = log.projection();
+  await assert.rejects(agent.prompt(record, 'New image', () => {}, { signal, choice, images: [image] }), /does not support image/);
+  assert.deepEqual(log.projection(), previous);
 });

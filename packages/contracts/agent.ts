@@ -1,5 +1,5 @@
 import type { SessionRecord, ModelChoice } from './conversation.js';
-import type { ImageInput, PreparedMessage } from './input.js';
+import type { Attachment, ImageInput, PreparedMessage } from './input.js';
 import type { StreamEvent } from './transport.js';
 import type { PromptContext } from './extensions.js';
 import type { ViewMessage } from './message.js';
@@ -15,10 +15,16 @@ declare module 'cordis' {
   interface Context { harnessPrompt: PromptPort }
 }
 
+export interface RevisionTarget {
+  parentId: string | null;
+  images: Attachment[];
+  textFiles: string[];
+}
+
 export interface RunAgentPort {
-  revisionTarget(id: string, sourceEntryId: string, expectedLeafId: string | null): Promise<void>;
+  revisionTarget(id: string, sourceEntryId: string, expectedLeafId: string | null): Promise<RevisionTarget>;
   prompt(record: SessionRecord, prompt: string, emit: (event: StreamEvent) => void, options: {
-    signal: AbortSignal; choice?: ModelChoice; images?: ImageInput[]; input?: PreparedMessage;
+    signal: AbortSignal; submissionId?: string; choice?: ModelChoice; images?: ImageInput[]; input?: PreparedMessage;
     thinkingLevel?: ThinkingLevel | null; changed?: (path: string) => void;
     revision?: { sourceEntryId: string; expectedLeafId: string | null };
   }): Promise<string>;

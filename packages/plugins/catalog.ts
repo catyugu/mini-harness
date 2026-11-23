@@ -85,9 +85,9 @@ export class PluginCatalog {
 
   descriptors(): DiscoveredPlugin[] { return [...this.builtins.values(), ...this.discover()]; }
 
-  metadata(): PluginMetadata[] {
-    return this.descriptors().filter(({ required }) => !required).map((item) => {
-      const { source, resources, inject, setup, provides, optional, browserRequires, browserInject, browserProvides, required, configChanges, ...metadata } = item;
+  metadata(descriptors = this.descriptors()): PluginMetadata[] {
+    return descriptors.filter(({ required }) => !required).map((item) => {
+      const { source, resources, inject, setup, optional, browserRequires, browserInject, browserProvides, required, configChanges, validateConfig, ...metadata } = item;
       return metadata;
     });
   }
@@ -101,9 +101,12 @@ export class PluginCatalog {
       if (inherited.has(service) && inherited.get(service) !== id && this.protectedServices.has(service))
         throw new HttpError('invalid_input', 'Protected service cannot be overridden: ' + service);
     const enabled: DiscoveredPlugin[] = [];
+    const configs = new Map<string, Record<string, unknown>>();
     for (const [id, active] of Object.entries(overrides?.plugins ?? {})) {
-      if (active && !descriptors.some((item) => item.id === id && item.scope === scope))
-        throw new HttpError('invalid_input', 'Plugin ' + id + ' is unavailable in ' + scope + ' scope');
+      if (active && !descriptors.some((item) => item.id === id && item.scope === scope)) {
+        const error = new HttpError('invalid_input', 'Plugin ' + id + ' is unavailable in ' + scope + ' scope');
+        if (!unavailable?.(id, error)) throw error;
+      }
     }
     if (isApp) for (const [id, active] of Object.entries(settings.plugins)) {
       if (active && descriptors.some((item) => item.id === id && item.scope !== 'application'))
@@ -115,6 +118,8 @@ export class PluginCatalog {
       try {
         if (item.error) throw new HttpError('invalid_input', 'Invalid plugin ' + id + ': ' + item.error);
         enabled.push(item);
+        const values = isApp ? settings.pluginConfig[id] : { ...settings.pluginConfig[id], ...overrides?.pluginConfig?.[id] };
+        configs.set(id, this.configValues(id, values, item.configSchema));
       } catch (error) { if (!unavailable?.(id, error)) throw error; }
     }
     const { ordered, providers } = (() => {
@@ -128,16 +133,14 @@ export class PluginCatalog {
     })();
     const plans: PluginPlan[] = [];
     for (const { descriptor, requires, services } of ordered) {
-      const { id, browser, browserRequires, source, web, configSchema } = descriptor;
-      try {
-        const config = this.configValues(id, isApp ? settings.pluginConfig[id] : { ...settings.pluginConfig[id], ...overrides?.pluginConfig?.[id] }, configSchema);
-        plans.push({ descriptor, id, source, browser, browserRequires, web, requires, services, config });
-      } catch (error) { if (!unavailable?.(id, error)) throw error; }
+      const { id, browser, browserRequires, source, web } = descriptor;
+      const config = configs.get(id);
+      if (config) plans.push({ descriptor, id, source, browser, browserRequires, web, requires, services, config });
     }
     return { plans, providers };
   }
 
-  private configValues(id: string, values: Record<string, unknown> | undefined, schema?: Record<string, any>) {
+  configValues(id: string, values: Record<string, unknown> | undefined, schema?: Record<string, any>) {
     const input = structuredClone(values && typeof values === 'object' ? values : {});
     if (!schema) return input;
     const config = configDefaults(schema, input) as Record<string, unknown>;

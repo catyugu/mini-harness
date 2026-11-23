@@ -32,13 +32,18 @@ export class Runs {
   constructor(
     private readonly registry: SessionStore,
     private readonly agent: RunAgentPort,
-    private readonly observe: (event: CapabilityObservation) => void
+    private readonly observe: (event: CapabilityObservation) => void,
+    private readonly address: (id: string) => readonly string[] = () => [],
+    private readonly admit: (scopeKeys: readonly string[]) => void = () => {}
   ) {}
 
   private changed(id: string) { this.events.dispatchEvent(new CustomEvent('change', { detail: { id } })); }
 
   get size() { return this.work.size; }
   active(id: string) { return this.work.has(id); }
+  activeInScope(scopes: ReadonlySet<string>) {
+    return [...this.work.keys()].some((id) => this.address(id).some((key) => scopes.has(key)));
+  }
   completion(id: string) { return this.work.get(id)?.done; }
 
   view(id: string) {
@@ -53,6 +58,7 @@ export class Runs {
 
   private launch(id: string, prompt: string, emit: ((event: StreamEvent) => void) | undefined, { signal, model, attachments, thinkingLevel, revision, schedule }: RunOptions) {
     this.registry.assertAvailable(id);
+    this.admit(this.address(id));
     if (this.active(id)) throw new HttpError('conflict', 'Conversation is already running');
     if (thinkingLevel !== undefined && thinkingLevel !== null && !['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(thinkingLevel))
       throw new HttpError('invalid_input', 'Invalid thinking level');
@@ -68,7 +74,6 @@ export class Runs {
     const controller = new AbortController();
     const cancellation = signal ? AbortSignal.any([controller.signal, signal]) : controller.signal;
     const log = this.registry.log(id);
-    this.registry.reserveRun(id, info);
     log.append({ type: 'run', run: info });
     const publish = (event: StreamEvent) => {
       const item = events.publish(event);
@@ -76,39 +81,50 @@ export class Runs {
     };
     const promptSession = async () => {
       cancellation.throwIfAborted();
-      info.state = 'running';
-      const running = { ...info, sequence: info.sequence + 1 };
-      this.registry.log(id).append({ type: 'run', run: running });
+      const running = { ...info, state: 'running' as const, sequence: info.sequence + 1 };
+      log.append({ type: 'run', run: running });
+      info.state = running.state;
       this.changed(id);
       publish({ type: 'run', run: running });
       this.observe({ type: 'run-started', sessionId: id, run: running });
       return this.agent.prompt(record, prepared.text, publish, {
-        signal: cancellation, choice: model, images: prepared.images, input: prepared.input, thinkingLevel, revision,
+        signal: cancellation, submissionId: info.id, choice: model, images: prepared.images, input: prepared.input, thinkingLevel, revision,
         changed: (path) => { info.changedFiles = [...new Set([...(info.changedFiles ?? []), path])]; }
       });
     };
     const activity: Activity = { controller, events };
     this.work.set(id, activity);
     this.changed(id);
+    const finish = (state: RunInfo['state'], error?: string) => {
+      for (const item of log.inbox()) {
+        if (item.mode === 'steer') log.append({ type: 'inbox-failed', inboxId: item.id,
+          reason: state === 'interrupted' ? 'The target run was interrupted before delivery' : 'The target run ended before delivery' });
+      }
+      const terminal = { ...info, state, error, finishedAt: new Date().toISOString(), sequence: info.sequence + 1 };
+      log.append({ type: 'run', run: terminal });
+      Object.assign(info, terminal, { sequence: info.sequence });
+      publish({ type: 'run', run: terminal });
+      this.observe({ type: 'run-ended', sessionId: id, run: terminal });
+    };
     const done = Promise.resolve().then(() => schedule ? schedule(promptSession, cancellation) : promptSession()).then((text) => {
-      info.state = 'completed';
+      finish('completed');
       return text;
     }, (error) => {
-      info.state = cancellation.reason instanceof RunInterrupted ? 'interrupted' : cancellation.aborted ? 'cancelled' : 'failed';
-      info.error = cancellation.aborted ? cancellation.reason?.message ?? 'Agent run cancelled' :
+      const state = cancellation.reason instanceof RunInterrupted ? 'interrupted' : cancellation.aborted ? 'cancelled' : 'failed';
+      const reason = cancellation.aborted ? cancellation.reason?.message ?? 'Agent run cancelled' :
         error instanceof Error ? error.message : String(error);
-      if (info.state === 'failed') publish({ type: 'error', error: info.error ?? 'Agent run failed' });
-      throw new Error(info.error, { cause: error });
+      if (this.registry.logError(id)) throw error;
+      if (state === 'failed') publish({ type: 'error', error: reason });
+      finish(state, reason);
+      throw new Error(reason, { cause: error });
+    }).catch((error) => {
+      const fault = this.registry.logError(id);
+      if (fault) publish({ type: 'error', error: fault });
+      throw error;
     }).finally(() => {
-      info.finishedAt = new Date().toISOString();
-      publish({ type: 'run', run: { ...info, sequence: info.sequence + 1 } });
-      try { this.registry.log(id).append({ type: 'run', run: info }); }
-      finally {
-        this.work.delete(id);
-        events.close();
-        this.changed(id);
-        this.observe({ type: 'run-ended', sessionId: id, run: info });
-      }
+      this.work.delete(id);
+      events.close();
+      this.changed(id);
     });
     // Server-owned runs may outlive every observer.
     activity.done = done;
@@ -125,12 +141,21 @@ export class Runs {
   }
 
   /** A run reservation protects branch navigation from concurrent submissions. */
-  async reviseAndStart(id: string, input: { sourceEntryId: string; expectedLeafId: string | null; message: string;
+  async reviseAndStart(id: string, input: { sourceEntryId: string; expectedLeafId: string | null; message: string; removedImages?: number[];
     attachments?: Attachment[]; model?: ModelChoice; thinkingLevel?: ThinkingLevel }) {
     if (this.active(id)) throw new HttpError('conflict', 'Conversation is already running');
-    await this.agent.revisionTarget(id, input.sourceEntryId, input.expectedLeafId);
+    this.admit(this.address(id));
+    const target = await this.agent.revisionTarget(id, input.sourceEntryId, input.expectedLeafId);
+    const removed = input.removedImages ?? [];
+    if (!Array.isArray(removed) || removed.some((index) => !Number.isInteger(index) || index < 0 || index >= target.images.length))
+      throw new HttpError('invalid_input', 'Invalid original image selection');
+    const attached = input.attachments ?? [];
+    if (!Array.isArray(attached)) throw new HttpError('invalid_input', 'Invalid attachments');
+    const missing = target.textFiles.filter((name) => !attached.some((file) => file?.name === name && typeof file.mimeType === 'string' && !/^image\/(png|jpeg|gif|webp)$/.test(file.mimeType)));
+    if (missing.length) throw new HttpError('invalid_input', 'Reattach the original text files: ' + missing.join(', '));
+    const attachments = [...target.images.filter((_, index) => !removed.includes(index)), ...attached];
     return this.launch(id, input.message, undefined, {
-      attachments: input.attachments, model: input.model, thinkingLevel: input.thinkingLevel,
+      attachments, model: input.model, thinkingLevel: input.thinkingLevel,
       revision: { sourceEntryId: input.sourceEntryId, expectedLeafId: input.expectedLeafId }
     }).info;
   }
@@ -140,14 +165,14 @@ export class Runs {
     return info && structuredClone(info);
   }
 
-  watch(id: string, runId: string, after: number, emit: (event: RunEvent) => void) {
+  watch(id: string, runId: string, after: number, emit: (event: RunEvent) => void, end?: () => void) {
     const events = this.work.get(id)?.events;
     const info = this.info(id);
     if (!info || info.id !== runId) throw new HttpError('not_found', 'Run not found');
     // A restarted run has no volatile delta cursor; its durable interrupted snapshot is authoritative.
     if (!Number.isSafeInteger(after) || after < 0 || (after > info.sequence && info.state !== 'interrupted'))
       throw new HttpError('invalid_input', 'Invalid event cursor');
-    if (events) return events.watch(after, emit, () => this.agent.messages(id));
+    if (events) return events.watch(after, emit, () => this.agent.messages(id), end);
     emit({ type: 'snapshot', messages: this.agent.messages(id), tools: [], run: info, sequence: info.sequence, runId: info.id, runSessionId: id });
     return () => {};
   }
@@ -165,6 +190,7 @@ export class Runs {
 
   async compact(id: string) {
     this.registry.assertAvailable(id);
+    this.admit(this.address(id));
     if (this.active(id)) throw new HttpError('conflict', 'Stop the open conversation before compacting it');
     const controller = new AbortController();
     const done = this.agent.compact(id, controller.signal);

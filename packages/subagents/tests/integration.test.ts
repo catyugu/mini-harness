@@ -36,7 +36,7 @@ test('Native execution honors file policy and recursive delegates can finish wit
   let app = await createMiniHarnessServer(paths);
   t.after(async () => { await app.close(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
   writeFileSync(join(root, 'outside.txt'), 'private fixture');
-  await app.runtime.updateSettings({ pluginConfig: { subagents: { maxDepth: 2, maxParallel: 1, provider: 'local-mock', model: 'mock-model' } } });
+  await app.runtime.updateSettings({ pluginConfig: { subagents: { maxDepth: 2, maxParallel: 1, model: { provider: 'local-mock', id: 'mock-model' } } } });
   const parent = app.runtime.registry.create();
   const toolEvents: Extract<import('@mini-harness/contracts/transport').StreamEvent, { type: 'tool' }>[] = [];
   await app.runtime.runs.send(parent.id, 'root task', (event) => { if (event.type === 'tool') toolEvents.push(event); });

@@ -1,4 +1,6 @@
-export function schemaFields(plugin: string, schema: Record<string, any>, values: any, path: string[] = []) {
+import type { ModelCatalog } from '@mini-harness/web/types';
+
+export function schemaFields(plugin: string, schema: Record<string, any>, values: any, models: ModelCatalog, path: string[] = []) {
   const group = document.createElement('div');
   group.className = 'plugin-fields';
   for (const [key, property] of Object.entries<Record<string, any>>(schema.properties ?? {})) {
@@ -13,12 +15,32 @@ export function schemaFields(plugin: string, schema: Record<string, any>, values
       section.className = 'plugin-config';
       const legend = document.createElement('legend');
       legend.textContent = title.textContent;
-      section.append(legend, schemaFields(plugin, property, current ?? {}, fieldPath));
+      section.append(legend, schemaFields(plugin, property, current ?? {}, models, fieldPath));
       group.append(section);
       continue;
     }
     let input: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
-    if (property.enum) {
+    if (property['x-modelChoice']) {
+      const select = document.createElement('select');
+      select.add(new Option('Inherit parent model', 'null'));
+      let selected = 'null';
+      for (const model of models.models.filter(({ configured }) => configured)) {
+        const choice = JSON.stringify({ provider: model.provider, id: model.id });
+        const provider = models.providers.find(({ id }) => id === model.provider)?.name ?? model.provider;
+        select.add(new Option(model.name + ' · ' + provider, choice));
+        if (current?.provider === model.provider && current?.id === model.id) selected = choice;
+      }
+      if (current && selected === 'null') {
+        selected = JSON.stringify(current);
+        const label = typeof current === 'object' ? current.provider + '/' + current.id : String(current);
+        const unavailable = new Option(label + ' (unavailable)', selected);
+        unavailable.disabled = true;
+        select.add(unavailable);
+      }
+      select.value = selected;
+      input = select;
+      input.dataset.kind = 'enum';
+    } else if (property.enum) {
       const select = document.createElement('select');
       if (!schema.required?.includes(key)) select.add(new Option('Default', ''));
       for (const [index, option] of property.enum.entries()) {

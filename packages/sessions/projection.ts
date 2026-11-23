@@ -40,6 +40,7 @@ export function projectLog(entries: SessionEntry[], branch: SessionEntry[]): Ses
       if (block.type === 'toolCall') calls.set(block.id, block.arguments);
     const view: ViewMessage = { id: entry.id, parentId: entry.parentId,
       role: message.role, content: message.content as MessageContent, timestamp: message.timestamp };
+    if (entry.type === 'message' && entry.submissionId) view.submissionId = entry.submissionId;
     if (entry.type === 'message' && message.role === 'user' && entry.presentation) {
       view.attachments = entry.presentation.attachments;
       view.content = typeof message.content === 'string' ? entry.presentation.userText :

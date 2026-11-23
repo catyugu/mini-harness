@@ -5,6 +5,7 @@ export interface ModelSummary extends ModelChoice {
   name: string;
   configured: boolean;
   thinkingLevels: string[];
+  input: readonly ('text' | 'image')[];
 }
 
 export interface ProviderModel {

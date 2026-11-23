@@ -1,3 +1,6 @@
+import type { ModelCatalog } from '@mini-harness/web/types';
+import type { WorkspaceRecord } from '@mini-harness/contracts/workspace';
+import type { Conversation } from '@mini-harness/contracts/conversation';
 import type { Settings, SettingsPatch } from '@mini-harness/contracts/config';
 import type { PluginMetadata } from '@mini-harness/contracts/plugins';
 import { RemoteStore } from '@mini-harness/web/models/remote-store';
@@ -8,7 +11,7 @@ import { button, field, fromMarkup, iconButton, saveToggle, toggle, confirmActio
 import { readPluginValues, schemaFields } from './browser/fields.js';
 
 const setup: FrontendSetup = async (ctx, api) => {
-  const { miniSettingsData: settings, miniPages: pages, miniSwitch: syncPlugins, miniBrowserFailures: browserFailures } = ctx;
+  const { miniSettingsData: settings, miniPages: pages, miniSwitch: syncPlugins, miniBrowserFailures: browserFailures, miniModels: models } = ctx;
   const plugins = new RemoteStore(() => api.request<PluginMetadata[]>('/plugins'));
   await plugins.refresh();
   api.onDispose(ctx.miniProjections.register('plugins', plugins));
@@ -19,7 +22,7 @@ const setup: FrontendSetup = async (ctx, api) => {
     if (failures.size) throw new Error('Browser plugins failed: ' + [...failures.keys()].join(', '));
   };
   const catalog = pluginCatalog(api, () => ({ plugins: plugins.get().map((plugin) => browserFailures.has(plugin.id)
-    ? { ...plugin, error: 'Browser setup or resource loading failed.' } : plugin), settings: settings.get() }), refresh, pages);
+    ? { ...plugin, state: 'failed' as const, error: 'Browser setup or resource loading failed.' } : plugin), settings: settings.get() }), refresh, pages, () => models.get());
   plugins.subscribe(catalog.refresh, api.signal);
   settings.subscribe(catalog.refresh, api.signal);
   browserFailures.subscribe(catalog.refresh, api.signal);
@@ -104,7 +107,7 @@ function installer(api: FrontendApi, installed: () => Promise<void>) {
   return modal;
 }
 
-function pluginCatalog(api: FrontendApi, snapshot: () => { plugins: PluginMetadata[]; settings: Settings }, refresh: () => Promise<void>, pages: { open(id?: string): void; register(id: string, node: HTMLElement): () => void }) {
+function pluginCatalog(api: FrontendApi, snapshot: () => { plugins: PluginMetadata[]; settings: Settings }, refresh: () => Promise<void>, pages: { open(id?: string): void; register(id: string, node: HTMLElement): () => void }, modelCatalog: () => ModelCatalog) {
   const entry = fromMarkup<HTMLButtonElement>('<button type="button" class="nav-action" aria-label="Browse plugins" aria-controls="pluginCatalog"><span class="nav-label">Plugins</span></button>');
   entry.prepend(icon('plugin'));
   const page = fromMarkup(`<section id="pluginCatalog" class="catalog-page" tabindex="-1" aria-label="Plugin catalog">
@@ -160,45 +163,120 @@ function pluginCatalog(api: FrontendApi, snapshot: () => { plugins: PluginMetada
     required(section.querySelector('h1')).textContent = plugin.title;
     required(section.querySelector('p')).textContent = plugin.description;
     const schema = plugin.configSchema;
-    if (schema) {
-      const form = fromMarkup<HTMLFormElement>('<form><div class="detail-fields"></div><p class="hint" role="status"></p></form>');
-      const save = button('Save configuration', 'primary');
-      save.type = 'submit';
-      form.append(save);
-      const fields = required(form.querySelector<HTMLElement>('.detail-fields'));
-      const outcome = required(form.querySelector<HTMLElement>('[role="status"]'));
-      const values = () => snapshot().settings.pluginConfig[plugin.id] ?? {};
+    const scoped = plugin.scope === 'workspace' || plugin.scope === 'session';
+    const diagnostics = document.createElement('p');
+    diagnostics.className = 'hint';
+    diagnostics.textContent = plugin.error ?? '';
+    section.append(diagnostics);
+    const form = fromMarkup<HTMLFormElement>('<form><div class="detail-fields"></div><p class="hint" role="status"></p></form>');
+    const save = button('Save configuration', 'primary');
+    save.type = 'submit';
+    form.append(save);
+    const fields = required(form.querySelector<HTMLElement>('.detail-fields'));
+    const outcome = required(form.querySelector<HTMLElement>('[role="status"]'));
+    const scopePicker = document.createElement('select');
+    const scopedControls = document.createElement('div');
+    const enabled = toggle('Enabled in this scope', false);
+    const provision = document.createElement('fieldset');
+    const services = new Map<string, HTMLInputElement>();
+    const configFields = document.createElement('div');
+    fields.append(scopedControls, configFields);
+    const currentScope = () => snapshot().settings.scopes[scopePicker.value];
+    const values = () => ({ ...snapshot().settings.pluginConfig[plugin.id], ...currentScope()?.pluginConfig?.[plugin.id] });
+    function renderFields() {
+      configFields.replaceChildren();
+      if (scoped) {
+        const instance = snapshot().plugins.find(({ id }) => id === plugin.id)?.instances?.find(({ scope }) => scope === scopePicker.value);
+        diagnostics.textContent = instance?.error ?? (instance?.state === 'inactive' ? 'Waiting for this scope to activate.' : '');
+        enabled.checked = currentScope()?.plugins?.[plugin.id] === true;
+        services.clear();
+        provision.replaceChildren();
+        const legend = document.createElement('legend');
+        legend.textContent = 'Services provided in this scope';
+        provision.append(legend);
+        const providers = currentScope()?.providers ?? {};
+        const supplied = Object.keys(providers).filter((key) => providers[key] === plugin.id);
+        for (const service of new Set([...(plugin.provides ?? []), ...supplied])) {
+          const box = toggle('Use ' + plugin.title + ' for ' + service, providers[service] === plugin.id);
+          services.set(service, box);
+          provision.append(field(service, box));
+        }
+        provision.hidden = !services.size;
+      }
+      if (!schema) return;
       if (plugin.configHint) {
         const note = document.createElement('p');
         note.className = 'hint';
         note.textContent = plugin.configHint;
-        fields.append(note);
+        configFields.append(note);
       }
       if (plugin.configGroups) {
         for (const group of plugin.configGroups) {
           const block = fromMarkup('<section class="ui-section"><h3></h3></section>');
           required(block.querySelector('h3')).textContent = group.title;
           const properties = Object.fromEntries(group.fields.map((id) => [id, schema.properties[id]]));
-          block.append(schemaFields(plugin.id, { ...schema, properties }, values()));
-          fields.append(block);
+          block.append(schemaFields(plugin.id, { ...schema, properties }, values(), modelCatalog()));
+          configFields.append(block);
         }
-      } else fields.append(schemaFields(plugin.id, schema, values()));
-      form.onsubmit = async (event) => {
-        event.preventDefault();
-        save.disabled = true;
-        outcome.textContent = '';
-        try {
-          const current = values();
-          const config = readPluginValues({ [plugin.id]: current }, fields)[plugin.id];
-          const patch: SettingsPatch = { pluginConfig: { [plugin.id]: config } };
-          const saved = await mutate(() => api.request('/settings', payload('PATCH', patch)),
-            (error) => { outcome.textContent = error.message; });
-          if (saved && !outcome.textContent) outcome.textContent = 'Saved.';
-        } catch (error) { outcome.textContent = (error instanceof Error ? error.message : String(error)); }
-        finally { save.disabled = false; }
-      };
-      section.append(form);
+      } else configFields.append(schemaFields(plugin.id, schema, values(), modelCatalog()));
     }
+    if (scoped) {
+      scopedControls.className = 'plugin-fields';
+      scopedControls.append(field(plugin.scope === 'workspace' ? 'Workspace' : 'Conversation', scopePicker),
+        field('Enabled in this scope', enabled), provision);
+      save.disabled = true;
+      scopePicker.add(new Option('Choose a scope', ''));
+      scopedControls.querySelectorAll('input').forEach((control) => { control.disabled = true; });
+      const locations = plugin.scope === 'workspace'
+        ? api.request<WorkspaceRecord[]>('/workspaces').then((items) => items.map(({ id, name }) => ({ key: 'workspace:' + id, name })))
+        : api.request<Conversation[]>('/sessions').then((items) => items.map(({ id, title }) => ({ key: 'session:' + id, name: title })));
+      void locations.then((items) => {
+        for (const { key, name } of items) scopePicker.add(new Option(name, key));
+        for (const { scope } of plugin.instances ?? [])
+          if (!items.some(({ key }) => key === scope)) scopePicker.add(new Option(scope, scope));
+        scopePicker.value = plugin.instances?.find(({ error }) => error)?.scope ?? items[0]?.key ?? plugin.instances?.[0]?.scope ?? '';
+        const sync = () => {
+          save.disabled = !scopePicker.value;
+          enabled.disabled = !scopePicker.value;
+          renderFields();
+        };
+        scopePicker.onchange = sync;
+        sync();
+      }).catch((error: Error) => { outcome.textContent = error.message; });
+    } else renderFields();
+    form.onsubmit = async (event) => {
+      event.preventDefault();
+      save.disabled = true;
+      outcome.textContent = '';
+      try {
+        const config = readPluginValues({ [plugin.id]: {} }, configFields)[plugin.id];
+        let patch: SettingsPatch = { pluginConfig: { [plugin.id]: config } };
+        const key = scopePicker.value;
+        if (scoped) {
+          const current = currentScope() ?? {};
+          const providers = { ...current.providers };
+          for (const [service, box] of services) {
+            if (box.checked && enabled.checked) providers[service] = plugin.id;
+            else if (providers[service] === plugin.id) delete providers[service];
+          }
+          patch = { scopes: { ...snapshot().settings.scopes, [key]: { ...current, providers,
+            plugins: { ...current.plugins, [plugin.id]: enabled.checked },
+            pluginConfig: { ...current.pluginConfig, [plugin.id]: config } } } };
+        }
+        const saved = await mutate(() => api.request('/settings', payload('PATCH', patch)),
+          (error) => { outcome.textContent = error.message; });
+        if (saved && !outcome.textContent) {
+          const latest = snapshot().plugins.find(({ id }) => id === plugin.id);
+          const state = scoped ? latest?.instances?.find(({ scope }) => scope === key) : latest;
+          diagnostics.textContent = state?.error ?? '';
+          outcome.textContent = state?.error && (state.state === 'failed' || state.state === 'partial')
+            ? 'Configuration saved. Plugin failed to start: ' + state.error
+            : state?.state === 'inactive' ? 'Configuration saved. Waiting for this scope to activate.' : 'Saved.';
+        }
+      } catch (error) { outcome.textContent = (error instanceof Error ? error.message : String(error)); }
+      finally { save.disabled = false; }
+    };
+    if (schema || scoped) section.append(form);
     content.replaceChildren(section);
     back.focus();
   }
@@ -233,7 +311,8 @@ function pluginCatalog(api: FrontendApi, snapshot: () => { plugins: PluginMetada
         open.onclick = () => detail(plugin);
         required(row.querySelector('.plugin-symbol')).append(icon(plugin.icon ?? 'plugin'));
         required(row.querySelector('strong')).textContent = plugin.title;
-        required(row.querySelector('small')).textContent = plugin.error ?? plugin.description;
+        const state = { ready: 'Ready', failed: 'Failed', partial: 'Partially ready', inactive: 'Inactive', disabled: 'Disabled' }[plugin.state ?? 'disabled'];
+        required(row.querySelector('small')).textContent = state + ' · ' + (plugin.error ?? plugin.description);
         const controls = required(row.querySelector('.catalog-controls'));
         const scoped = plugin.scope && plugin.scope !== 'application';
         const checked = scoped ? Object.values(settings.scopes).some((scope) => scope.plugins?.[plugin.id]) :
@@ -242,9 +321,8 @@ function pluginCatalog(api: FrontendApi, snapshot: () => { plugins: PluginMetada
         control.dataset.pluginToggle = plugin.id;
         if (scoped) {
           control.disabled = true;
-          control.title = 'Configure this plugin under scopes in settings.json';
+          control.title = 'Open plugin settings to select a scope';
         }
-        if (plugin.error && !checked) control.disabled = true;
         const remove = plugin.trustedCode ? iconButton('Uninstall ' + plugin.title, 'trash', 'icon-button danger') : undefined;
         if (remove) {
           remove.hidden = checked;
@@ -269,7 +347,12 @@ function pluginCatalog(api: FrontendApi, snapshot: () => { plugins: PluginMetada
           try {
             const saved = await mutate(() => api.request('/settings', payload('PATCH', { plugins: { [plugin.id]: next } })),
               (error) => { status.textContent = error.message; });
-            if (saved && remove) remove.hidden = next;
+            if (saved) {
+              if (remove) remove.hidden = next;
+              const state = snapshot().plugins.find(({ id }) => id === plugin.id);
+              if (next && state?.error && !status.textContent)
+                status.textContent = 'Configuration saved. Plugin failed to start: ' + state.error;
+            }
             return saved;
           } finally {
             savingSwitch = false;

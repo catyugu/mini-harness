@@ -46,10 +46,9 @@ test('operational entries keep the transcript leaf stable and revision uses comp
   log.append({ type: 'inbox-enqueued', item: { id: 'queued', mode: 'steer', text: 'later', images: [] } });
   assert.equal(log.projection().leafId, first.id);
   assert.equal(log.entries().length, 3);
-  log.select(null, first.id);
-  const second = log.append(user('revised'));
+  const second = log.revise(user('revised'), null, first.id);
   assert.deepEqual(log.projection().messages.map(({ content }) => content), ['revised']);
-  assert.throws(() => log.select(null, first.id), /Conversation changed/);
+  assert.throws(() => log.revise(user('stale revision'), null, first.id), /Conversation changed/);
   assert.equal(log.projection().leafId, second.id);
   assert.equal(log.branch(first.id)[0].id, first.id);
   assert.deepEqual(log.projection(first.id).messages.map(({ content }) => content), ['original']);
@@ -120,7 +119,7 @@ test('log writers reject symlinks, hardlinks, and replaced paths', (t) => {
   renameSync(file, join(root, 'old.jsonl'));
   writeFileSync(file, 'unrelated');
   assert.throws(() => log.append(user('late')), /replaced/);
-  assert.throws(() => log.serialize(), /replaced/);
+  assert.throws(() => log.serialize(), /closed/);
   rmSync(file); symlinkSync(join(root, 'old.jsonl'), file);
   assert.throws(() => open());
   rmSync(file); linkSync(join(root, 'old.jsonl'), file);

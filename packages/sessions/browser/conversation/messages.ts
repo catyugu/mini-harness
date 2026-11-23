@@ -9,15 +9,24 @@ import type { MessageActionContext } from '@mini-harness/ui-runtime/frontend';
 export function createMessageView(messages: HTMLElement, extensions: { render(tool: ToolView, action?: boolean): HTMLElement | undefined; messageActions(): MessageAction[] },
   current: () => { sessionId?: string; leafId?: string | null }, retryLast: () => void) {
 const toolItems = new WeakMap<HTMLDetailsElement, Parameters<typeof toolCard>[0]>();
-const toolDurations = new Map<string, number>();
-const actionContext = new Map<HTMLElement, MessageActionContext>();
+const actionContext = new WeakMap<HTMLElement, MessageActionContext>();
+const saved = new Map<string, { node: HTMLElement; signature?: string }>();
+const liveTools = new Map<string, HTMLDetailsElement>();
+const runError = 'run-error';
 
 function textOf(value?: MessageContent) {
   if (typeof value === 'string') return value;
   return value?.filter((block) => block.type === 'text').map((block) => block.text ?? '').join('\n') ?? '';
 }
 
-function addMessage(role: 'user' | 'assistant' | 'error', text: string, timestamp = Date.now(), source?: ViewMessage) {
+function updateTimestamp(time: HTMLTimeElement, timestamp: number) {
+  const date = new Date(timestamp);
+  if (!Number.isFinite(date.getTime()) || time.dateTime === date.toISOString()) return;
+  time.dateTime = date.toISOString();
+  time.textContent = date.toLocaleString(undefined, { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function addMessage(role: 'user' | 'assistant' | 'error', text: string, timestamp = Date.now(), source?: ViewMessage, target: HTMLElement = messages) {
   const item = document.createElement('article');
   item.className = 'message ' + role;
   if (role === 'assistant') renderMarkdown(item, text);
@@ -52,16 +61,12 @@ function addMessage(role: 'user' | 'assistant' | 'error', text: string, timestam
     renderMessageActions(wrapper);
   }
   if (role !== 'error' && Number.isFinite(timestamp)) {
-    const date = new Date(timestamp);
-    if (!Number.isNaN(date.getTime())) {
-      const time = document.createElement('time');
-      time.className = 'message-time';
-      time.dateTime = date.toISOString();
-      time.textContent = date.toLocaleString(undefined, { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-      actions.append(time);
-    }
+    const time = document.createElement('time');
+    time.className = 'message-time';
+    updateTimestamp(time, timestamp);
+    actions.append(time);
   }
-  messages.append(wrapper);
+  target.append(wrapper);
   return item;
 }
 
@@ -69,34 +74,43 @@ function renderMessageActions(wrapper: HTMLElement) {
   const group = wrapper.querySelector<HTMLElement>('.message-actions');
   const context = actionContext.get(wrapper);
   if (!group || !context) return;
-  // Only replace contributed buttons; preserve the timestamp and other host controls.
-  group.querySelectorAll('[data-message-action]').forEach((node) => node.remove());
+  const available = new Map([...group.querySelectorAll<HTMLButtonElement>('[data-message-action]')]
+    .map((button) => [button.dataset.messageAction, button]));
+  const at = { ...context, ...current() };
   for (const extension of extensions.messageActions()) {
-    if (!extension.visible(context)) continue;
-    const button = document.createElement('button');
+    if (!extension.visible(at)) continue;
+    const existing = available.get(extension.id);
+    const button = existing ?? document.createElement('button');
+    available.delete(extension.id);
     button.type = 'button'; button.className = 'message-action';
     button.dataset.messageAction = extension.id;
-    button.title = extension.label; button.setAttribute('aria-label', extension.label);
-    button.append(icon(extension.icon));
+    if (!existing || (button.title !== extension.successLabel && !button.disabled)) {
+      button.title = extension.label;
+      button.setAttribute('aria-label', extension.label);
+    }
+    if (!existing) button.append(icon(extension.icon));
     button.onclick = () => {
       button.disabled = true;
-      void Promise.resolve().then(() => extension.run(context)).then(() => {
+      void Promise.resolve().then(() => extension.run({ ...(actionContext.get(wrapper) ?? context), ...current() })).then(() => {
         if (extension.successLabel) { button.title = extension.successLabel; button.setAttribute('aria-label', extension.successLabel); }
       }).catch((error) => {
         button.title = error instanceof Error ? error.message : String(error);
         button.setAttribute('aria-label', 'Action failed: ' + button.title);
       }).finally(() => { button.disabled = false; });
     };
-    group.append(button);
+    if (!existing) group.append(button);
   }
+  for (const button of available.values()) button.remove();
 }
 
 function refreshActions() {
   for (const wrapper of messages.querySelectorAll<HTMLElement>('.message-row')) renderMessageActions(wrapper);
 }
 
-function toolCard(data: { name: string; state: string; content?: MessageContent; arguments?: unknown; sessionId?: string; id?: string; elapsedMs?: number; approvalMs?: number; exitCode?: number }, card?: HTMLDetailsElement) {
+function toolCard(data: { name: string; state: string; content?: MessageContent; arguments?: unknown; sessionId?: string; id?: string; elapsedMs?: number; approvalMs?: number; exitCode?: number }, card?: HTMLDetailsElement, refresh = false) {
   const item = card ?? document.createElement('details');
+  const previous = toolItems.get(item);
+  if (!refresh && previous && JSON.stringify(previous) === JSON.stringify(data)) return item;
   toolItems.set(item, data);
   item.className = 'tool-card';
   item.dataset.state = data.state;
@@ -111,14 +125,7 @@ function toolCard(data: { name: string; state: string; content?: MessageContent;
   // Errors are visible in the summary, but details stay collapsed unless the user opens them.
   item.dataset.renderedState = data.state;
   summary.append(icon('chevron'), name);
-  if (data.elapsedMs !== undefined && data.id) {
-    toolDurations.set(data.id, data.elapsedMs);
-    if (toolDurations.size > 256) {
-      const oldest = toolDurations.keys().next().value;
-      if (oldest !== undefined) toolDurations.delete(oldest);
-    }
-  }
-  const elapsed = data.elapsedMs ?? (data.id ? toolDurations.get(data.id) : undefined);
+  const elapsed = data.elapsedMs;
   if (elapsed !== undefined && Number.isFinite(elapsed)) {
     const duration = document.createElement('span');
     duration.className = 'tool-duration';
@@ -143,6 +150,7 @@ function toolCard(data: { name: string; state: string; content?: MessageContent;
     body.append(args);
   }
   const custom = extensions.render(data);
+  if (custom) custom.dataset.toolExtension = 'true';
   if (custom) body.append(custom);
   const output = custom ? '' : textOf(data.content);
   if (output) {
@@ -159,25 +167,40 @@ function toolCard(data: { name: string; state: string; content?: MessageContent;
     body.append(img);
   }
   const action = extensions.render(data, true);
-  if (action) body.append(action);
-  item.replaceChildren(summary, body);
-  if (!card) messages.append(item);
+  if (action) { action.dataset.toolExtension = 'true'; body.append(action); }
+  const oldSummary = item.firstElementChild;
+  const oldBody = item.lastElementChild;
+  if (oldSummary && oldBody) {
+    reconcileChildren(oldSummary, summary);
+    reconcileChildren(oldBody, body, refresh);
+  } else item.append(summary, body);
   return item;
 }
 
-function appendHistory(message: ViewMessage) {
-  if (message.role === 'toolResult') {
-    toolCard({ name: message.toolName ?? 'Tool', state: message.approvalDenied ? 'denied' : message.isError ? 'error' : 'finished',
-      id: message.toolCallId, content: message.content, arguments: message.arguments, sessionId: message.sessionId,
-      elapsedMs: message.elapsedMs, approvalMs: message.approvalMs, exitCode: message.exitCode });
-    return;
+function reconcileChildren(current: Element, updated: Element, refresh = false) {
+  const existing = [...current.children], desired = [...updated.children];
+  for (const [index, fresh] of desired.entries()) {
+    const old = existing[index];
+    if (!old) current.append(fresh);
+    else if (!old.isEqualNode(fresh) || refresh && fresh.hasAttribute('data-tool-extension')) old.replaceWith(fresh);
   }
+  for (const extra of existing.slice(desired.length)) extra.remove();
+}
+
+function renderEntry(message: ViewMessage, node?: HTMLElement) {
+  if (message.role === 'toolResult') {
+    return toolCard({ name: message.toolName ?? 'Tool', state: message.approvalDenied ? 'denied' : message.isError ? 'error' : 'finished',
+      id: message.toolCallId, content: message.content, arguments: message.arguments, sessionId: message.sessionId,
+      elapsedMs: message.elapsedMs, approvalMs: message.approvalMs, exitCode: message.exitCode }, node as HTMLDetailsElement | undefined);
+  }
+  const entry = document.createElement('div');
+  entry.className = 'message-entry';
   const text = textOf(message.content);
-  const bubble = text || message.attachments?.length ? addMessage(message.role, text, message.timestamp, message) : undefined;
+  const bubble = text || message.attachments?.length ? addMessage(message.role, text, message.timestamp, message, entry) : undefined;
   for (const block of typeof message.content === 'string' ? [] : message.content ?? []) {
     if (block.type !== 'image' || !/^image\/(png|jpeg|gif|webp)$/.test(block.mimeType ?? '')) continue;
     const image = document.createElement('img'); image.className = 'message-image'; image.alt = 'Attached image';
-    image.src = 'data:' + block.mimeType + ';base64,' + block.data; messages.append(image);
+    image.src = 'data:' + block.mimeType + ';base64,' + block.data; entry.append(image);
   }
   if (message.attachments?.length && bubble) {
     const list = document.createElement('ul');
@@ -190,51 +213,112 @@ function appendHistory(message: ViewMessage) {
     }
     bubble.append(list);
   }
-  if (message.error) addMessage('error', message.error);
+  if (message.error) addMessage('error', message.error, undefined, undefined, entry);
+  return entry;
 }
 
 function refreshTools() {
   for (const card of messages.querySelectorAll<HTMLDetailsElement>('details.tool-card')) {
     const tool = toolItems.get(card);
-    if (tool) toolCard(tool, card);
+    if (tool) toolCard(tool, card, true);
   }
 }
 
-function history(entries: ViewMessage[], error?: string) {
-  messages.replaceChildren();
-  actionContext.clear();
-  for (const message of entries) appendHistory(message);
-  if (error) {
-    const node = [...messages.querySelectorAll<HTMLElement>('.message.error')].at(-1) ?? addMessage('error', '');
-    node.textContent = error;
-  }
-  messages.scrollTop = messages.scrollHeight;
+function preserveScroll(update: () => void, reset = false) {
+  const pinned = messages.scrollHeight - messages.clientHeight - messages.scrollTop < 96;
+  const top = messages.getBoundingClientRect().top;
+  const visible = !reset && !pinned && [...messages.querySelectorAll<HTMLElement>('.message-row, .tool-card, .message-image')]
+    .find((node) => node.getBoundingClientRect().bottom > top);
+  const offset = visible ? visible.getBoundingClientRect().top : 0;
+  update();
+  if (reset || pinned) messages.scrollTop = messages.scrollHeight;
+  else if (visible && visible.isConnected) messages.scrollTop += visible.getBoundingClientRect().top - offset;
+}
+
+function history(entries: ViewMessage[], error?: string, reset = false) {
+  preserveScroll(() => {
+    if (reset) { messages.replaceChildren(); saved.clear(); liveTools.clear(); }
+    const nodes = entries.flatMap((message, index) => {
+      if (message.role !== 'toolResult' && !textOf(message.content) && !message.attachments?.length &&
+          !message.error && !(Array.isArray(message.content) && message.content.some((part) => part.type === 'image'))) return [];
+      const key = message.id ?? message.role + ':' + index;
+      const signature = JSON.stringify([message.role, message.content, message.attachments, message.error]);
+      const prior = saved.get(key);
+      let node = prior?.node;
+      if (message.role === 'toolResult') {
+        node = renderEntry(message, node ?? (message.toolCallId ? liveTools.get(message.toolCallId) : undefined));
+      } else if (node && prior?.signature === undefined && message.role === 'assistant' && !message.error) {
+        const bubble = node.querySelector<HTMLElement>('.message.assistant');
+        if (bubble && markdownSource.get(bubble) !== textOf(message.content)) renderMarkdown(bubble, textOf(message.content));
+      } else if (!node || prior?.signature !== signature) {
+        node = renderEntry(message);
+      }
+      if (!node) return [];
+      const row = node.querySelector<HTMLElement>('.message-row');
+      if (row && message.role !== 'toolResult') {
+        actionContext.set(row, { ...current(), message, rawText: textOf(message.content) });
+        const time = row.querySelector<HTMLTimeElement>('time');
+        if (time) updateTimestamp(time, message.timestamp);
+        renderMessageActions(row);
+      }
+      saved.set(key, { node, signature });
+      return [{ key, node }];
+    });
+    if (error && !entries.some((entry) => entry.error === error)) {
+      const node = saved.get(runError)?.node ?? errorEntry(error);
+      const bubble = node.querySelector('.message.error');
+      if (bubble && bubble.textContent !== error) bubble.textContent = error;
+      saved.set(runError, { node });
+      nodes.push({ key: runError, node });
+    }
+    const keys = new Set(nodes.map(({ key }) => key));
+    const kept = new Set(nodes.map(({ node }) => node));
+    for (const key of saved.keys()) if (!keys.has(key)) saved.delete(key);
+    for (const element of [...messages.children]) if (!kept.has(element as HTMLElement)) element.remove();
+    let next = messages.firstElementChild;
+    for (const { node } of nodes) {
+      if (node !== next) messages.insertBefore(node, next);
+      next = node.nextElementSibling;
+    }
+    liveTools.clear();
+  }, reset);
+}
+
+function errorEntry(error: string) {
+  const container = document.createElement('div');
+  const bubble = addMessage('error', error, undefined, undefined, container);
+  return bubble.parentElement!;
 }
 
 function stream(initial: ConversationView) {
-  const cards = new Map<string, HTMLDetailsElement>();
   let answer: HTMLElement | undefined;
   let text = '';
   function live({ partial, tools }: Pick<ConversationView, 'partial' | 'tools'>) {
     text = partial ?? '';
     answer = text ? addMessage('assistant', text) : undefined;
-    cards.clear();
-    for (const tool of tools ?? []) cards.set(tool.id, toolCard(tool));
+    for (const tool of tools ?? []) {
+      const card = toolCard(tool);
+      liveTools.set(tool.id, card);
+      messages.append(card);
+    }
   }
-  function finish(output = text) {
-    if (!output && !answer) return;
-    answer ??= addMessage('assistant', '');
-    renderMarkdown(answer, output);
+  function finish() {
+    if (answer && markdownSource.get(answer) !== text) renderMarkdown(answer, text);
+    else if (answer && !answer.querySelector('*') && text) renderMarkdown(answer, text);
   }
-  live(initial);
-  return (event: RunEvent) => {
-    const pinned = messages.scrollHeight - messages.clientHeight - messages.scrollTop < 96;
+  preserveScroll(() => live(initial));
+  return (event: RunEvent) => preserveScroll(() => {
     switch (event.type) {
-      case 'user':
-        appendHistory({ role: 'user', content: event.content, attachments: event.attachments, timestamp: Date.now() });
+      case 'user': {
+        const message: ViewMessage = { id: event.id, role: 'user', content: event.content, attachments: event.attachments,
+          timestamp: event.timestamp ?? Date.now() };
+        if (event.id && saved.has(event.id)) break;
+        const node = renderEntry(message);
+        if (event.id) saved.set(event.id, { node, signature: JSON.stringify([message.role, message.content, message.attachments, message.error]) });
+        messages.append(node);
         break;
+      }
       case 'assistant-start':
-        finish();
         answer = undefined;
         text = '';
         break;
@@ -242,25 +326,35 @@ function stream(initial: ConversationView) {
         answer ??= addMessage('assistant', '');
         text += event.text;
         answer.textContent = text;
-        markdownSource.set(answer, text);
+        const row = answer.parentElement;
+        const context = row && actionContext.get(row);
+        if (row && context) actionContext.set(row, { ...context, rawText: text, message: { ...context.message, content: text } });
         break;
-      case 'assistant-end': finish(); break;
-      case 'complete': finish(event.text || text); break;
-      case 'tool':
+      case 'assistant-end': {
         finish();
-        cards.set(event.id, toolCard(event, cards.get(event.id)));
+        const node = answer?.parentElement;
+        if (event.id && node) saved.set(event.id, { node });
         break;
-      case 'error':
-        finish();
-        addMessage('error', event.error);
+      }
+      case 'tool': {
+        const existing = liveTools.get(event.id);
+        const card = toolCard(event, existing);
+        liveTools.set(event.id, card);
+        if (!existing) messages.append(card);
         break;
+      }
+      case 'error': {
+        const node = errorEntry(event.error);
+        saved.set(runError, { node });
+        messages.append(node);
+        break;
+      }
       case 'snapshot':
         history(event.messages, event.run.error);
         live(event);
         break;
     }
-    if (pinned) messages.scrollTop = messages.scrollHeight;
-  };
+  });
 }
 
 return { textOf, history, stream, refreshTools, refreshActions };

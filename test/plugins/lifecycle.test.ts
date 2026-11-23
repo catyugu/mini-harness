@@ -106,9 +106,10 @@ test('server entry requires a default setup function', async (t) => {
   }
   await runtime.start();
   await runtime.updateSettings({ plugins: { 'function-entry': true } });
-  await assert.rejects(runtime.updateSettings({ plugins: { 'named-entry': true } }), /Export a default setup function/);
+  await runtime.updateSettings({ plugins: { 'named-entry': true } });
+  assert.match(runtime.plugins.metadata().find(({ id }) => id === 'named-entry')?.error ?? '', /Export a default setup function/);
   assert.equal(runtime.settings.plugins['function-entry'], true);
-  assert.equal(runtime.settings.plugins['named-entry'], undefined);
+  assert.equal(runtime.settings.plugins['named-entry'], true);
 });
 
 test('plugin JSON Schema applies defaults and rejects invalid changes before setup', async (t) => {
@@ -207,14 +208,20 @@ test('disabled optional builtins cannot block boot or reload because their confi
   const { root, paths } = createFixturePaths(mock.url);
   const runtime = new MiniHarnessRuntime(paths);
   t.after(async () => { await runtime.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
-  await runtime.start();
-  await runtime.updateSettings({ plugins: { subagents: false } });
-  assert.equal(runtime.delegation, undefined, 'no delegation implementation survives disabling its plugin');
-  await runtime.updateSettings({ pluginConfig: { subagents: { maxDepth: 100 } } });
-  const conversation = runtime.registry.create();
-  assert.equal(await runtime.runs.send(conversation.id, 'Main agent still works'), 'Mock response');
-  await assert.rejects(runtime.updateSettings({ plugins: { subagents: true } }), /Invalid configuration for plugin: subagents/);
-  assert.equal(runtime.delegation, undefined);
+  writeJson(paths.settings, { ...readSettings(paths), plugins: { subagents: false },
+    pluginConfig: { subagents: { maxDepth: 100 } } });
+  const restored = new MiniHarnessRuntime(paths);
+  t.after(() => restored.stop());
+  await restored.start();
+  assert.equal(restored.delegation, undefined);
+  assert.match(restored.plugins.metadata().find(({ id }) => id === 'subagents')?.error ?? '', /Invalid configuration/);
+  await assert.rejects(restored.updateSettings({ pluginConfig: { subagents: { maxDepth: 101 } } }), /Invalid configuration/);
+  await assert.rejects(restored.updateSettings({ pluginConfig: { subagents: { model: { provider: 'unknown', id: 'missing' } } } }), /Unknown child model/);
+  await restored.updateSettings({ appearance: 'dark' });
+  const conversation = restored.registry.create();
+  assert.equal(await restored.runs.send(conversation.id, 'Main agent still works'), 'Mock response');
+  await restored.updateSettings({ plugins: { subagents: true }, pluginConfig: { subagents: { maxDepth: 2 } } });
+  assert.ok(restored.delegation);
 });
 
 test('an optional plugin that fails at startup reports its state without blocking other capabilities', async (t) => {
@@ -236,5 +243,5 @@ test('an optional plugin that fails at startup reports its state without blockin
   await restarted.updateSettings({ appearance: 'dark' });
   assert.equal(restarted.settings.appearance, 'dark');
   await restarted.updateSettings({ plugins: { 'fails-to-start': false } });
-  assert.equal(expectPresent(restarted.plugins.metadata().find(({ id }) => id === status.id), 'disabled plugin metadata').state, 'discovered');
+  assert.equal(expectPresent(restarted.plugins.metadata().find(({ id }) => id === status.id), 'disabled plugin metadata').state, 'disabled');
 });

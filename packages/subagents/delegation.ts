@@ -1,5 +1,4 @@
 import type { DelegationPort, SubagentPolicy } from '@mini-harness/contracts/delegation';
-import { HttpError } from '@mini-harness/contracts/routes';
 import type { ModelCatalogPort } from '@mini-harness/contracts/models';
 import type { AgentPort, RunPort, SessionStore } from '@mini-harness/contracts/services';
 import type { SessionRecord, ModelChoice } from '@mini-harness/contracts/conversation';
@@ -83,13 +82,12 @@ export class Semaphore {
 export type ChildLease = Parameters<Parameters<Semaphore['run']>[0]>[0];
 
 export function selectChildModel(request: { provider?: string; model?: string },
-    defaults: { provider: string; model: string }, parent: ModelChoice): ModelChoice {
+    defaults: ModelChoice | null, parent: ModelChoice): ModelChoice {
   const provider = request.provider?.trim();
   const model = request.model?.trim();
   if (provider) return { provider, id: model ?? '' };
-  const inheritedProvider = defaults.provider.trim() || parent.provider;
-  const inheritedModel = defaults.model.trim() || (inheritedProvider === parent.provider ? parent.id : '');
-  return { provider: inheritedProvider, id: model || inheritedModel };
+  const inherited = defaults ?? parent;
+  return { provider: inherited.provider, id: model || inherited.id };
 }
 
 /** Prefer the action over an injected workspace preamble in delegated task titles. */
@@ -116,18 +114,6 @@ export class Delegation implements DelegationPort {
     this.semaphore = new Semaphore(settings().maxParallel);
   }
 
-  validate(settings: SubagentPolicy) {
-    if (settings.provider && !this.models().resolve({ provider: settings.provider, id: settings.model }))
-      throw new HttpError('invalid_input', 'Unknown child model: ' + settings.provider + '/' + settings.model);
-  }
-
-  checkProvider(id: string, removing = false) {
-    const policy = this.settings();
-    if (policy.provider !== id) return;
-    if (removing) throw new Error('Change the Subagents provider before removing this endpoint');
-    this.validate(policy);
-  }
-
   visible(id: string) { return this.registry.depth(id) < this.settings().maxDepth; }
 
   schedule(record: SessionRecord, task: () => Promise<string>, signal: AbortSignal) {
@@ -140,7 +126,7 @@ export class Delegation implements DelegationPort {
   }
 
   delegate(id: string, request: { task: string; provider?: string; model?: string }, signal?: AbortSignal) {
-    const model = selectChildModel(request, this.settings(), this.agent.activeModel(id));
+    const model = selectChildModel(request, this.settings().model, this.agent.activeModel(id));
     const task = () => this.run(id, request.task, model, this.runs().signal(id, signal));
     const lease = this.leases.get(id);
     return lease ? lease.pause(task) : task();

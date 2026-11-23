@@ -29,7 +29,9 @@ export interface PluginMetadata {
   package?: { name: string; version: string };
   /** An installed but unusable plugin must never prevent the host from starting. */
   error?: string;
-  state?: 'discovered' | 'ready' | 'draining' | 'failed';
+  state?: 'disabled' | 'inactive' | 'ready' | 'partial' | 'failed';
+  provides?: string[];
+  instances?: { scope: string; state: 'ready' | 'failed' | 'inactive' | 'disabled'; error?: string }[];
   defaultEnabled?: boolean;
   web?: boolean;
   browser?: string;
@@ -45,7 +47,7 @@ export interface PluginDescriptor extends PluginMetadata {
   required?: boolean;
   /** A mounted plugin may opt in to configuration updates without a restart. */
   configChanges?: 'live';
-  provides?: string[];
+  validateConfig?(config: Readonly<Record<string, unknown>>, models: import('./models.js').ModelCatalogPort): void;
   inject?: string[];
   optional?: string[];
   browserRequires?: string[];

@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import { Semaphore, requireChildDepth, selectChildModel } from '../delegation.js';
 
 test('model-chosen provider overrides registered defaults', () => {
-  const defaults = { provider: 'openai', model: 'gpt-x' };
+  const defaults = { provider: 'openai', id: 'gpt-x' };
   const parent = { provider: 'anthropic', id: 'claude' };
   assert.deepEqual(selectChildModel({}, defaults, parent), { provider: 'openai', id: 'gpt-x' });
   assert.deepEqual(selectChildModel({ provider: 'custom', model: 'fast' }, defaults, parent), { provider: 'custom', id: 'fast' });
-  assert.equal(selectChildModel({}, { provider: '', model: '' }, parent).provider, 'anthropic');
+  assert.equal(selectChildModel({}, null, parent).provider, 'anthropic');
 });
 
 test('child spawning is limited to one level', () => {

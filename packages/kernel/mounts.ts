@@ -53,7 +53,7 @@ export class PluginMounts {
     try { await installed.drain(); } finally { await installed.fiber.dispose(); }
   }
 
-  configure(ordered: MountPlan[], commit: () => void = () => {}, beforeChange: (ids: string[]) => void = () => {},
+  configure(ordered: MountPlan[], commit: () => void = () => {},
     unavailable?: (id: string, error: unknown) => boolean) {
     const desired = new Map(ordered.map((plan) => [plan.id, plan]));
     const affected = new Set([...this.mounted.values()]
@@ -70,11 +70,11 @@ export class PluginMounts {
         ? [{ mounted: value, previous, next: plan.config, plan }] : [];
     });
     if (!obsolete.length && !additions.length && !updates.length) { commit(); return; }
-    return this.apply(obsolete, additions, updates, commit, beforeChange, unavailable);
+    return this.apply(obsolete, additions, updates, commit, unavailable);
   }
 
   private async apply(obsolete: MountPlan[], additions: MountPlan[], updates: ConfigUpdate[], commit: () => void,
-    beforeChange: (ids: string[]) => void, unavailable?: (id: string, error: unknown) => boolean) {
+    unavailable?: (id: string, error: unknown) => boolean) {
     const prepared = new Map<string, Loaded>();
     for (const plan of additions) {
       try { prepared.set(plan.id, await plan.load()); }
@@ -84,7 +84,6 @@ export class PluginMounts {
     const loaded: string[] = [];
     const applied: ConfigUpdate[] = [];
     try {
-      beforeChange(obsolete.map(({ id }) => id));
       for (const plan of obsolete.reverse()) {
         const previous = this.mounted.get(plan.id);
         if (!previous) throw new Error('Cannot unmount missing plugin: ' + plan.id);

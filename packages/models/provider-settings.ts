@@ -9,8 +9,6 @@ type ProviderHost = {
   settings: Pick<Settings, 'model'>;
   catalog: ModelCatalogPort;
   admin: ModelAdminPort;
-  delegation?: { checkProvider(id: string, removing?: boolean): void };
-  hasActiveWork: boolean;
   updateSettings(patch: SettingsPatch): Promise<Settings>;
 };
 export function providerSettings(runtime: ProviderHost) {
@@ -28,14 +26,12 @@ export function providerSettings(runtime: ProviderHost) {
   });
 }
 export async function saveProvider(runtime: ProviderHost, input: any, remove = false) {
-  if (runtime.hasActiveWork) throw new HttpError('conflict', 'Stop active conversations before changing providers');
   if (!input || typeof input.id !== 'string' || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(input.id)) throw new HttpError('invalid_input', 'Invalid provider ID');
   const path = join(runtime.paths.home, 'models.json');
   const previous = readJson<any>(path, { providers: {} });
   const next = structuredClone(previous); next.providers ??= {};
   if (remove) {
     if (!Object.hasOwn(next.providers, input.id)) throw new HttpError('invalid_input', 'Only custom provider configurations can be removed');
-    runtime.delegation?.checkProvider(input.id, true);
     delete next.providers[input.id];
   } else {
     if (input.create && (runtime.admin.hasProvider(input.id) || Object.hasOwn(next.providers, input.id))) throw new HttpError('conflict', 'A provider with this ID already exists');
@@ -66,7 +62,6 @@ export async function saveProvider(runtime: ProviderHost, input: any, remove = f
   let clearedRecent = false;
   try {
     await runtime.admin.refresh();
-    runtime.delegation?.checkProvider(input.id);
     if (recent.provider === input.id) {
       if (!runtime.catalog.resolve(recent)) {
         await runtime.updateSettings({ model: { provider: '', id: '' } });

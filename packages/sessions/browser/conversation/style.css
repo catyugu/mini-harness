@@ -46,6 +46,7 @@
   padding: 17px max(18px, calc((100% - 960px) / 2)) 12px;
   overflow: auto; overscroll-behavior: contain;
 }
+.message-entry { display: contents; }
 .message { min-width: 0; overflow-wrap: anywhere; }
 .message.user {
   align-self: flex-end; max-width: 85%; padding: 7px 12px; border-radius: 13px;

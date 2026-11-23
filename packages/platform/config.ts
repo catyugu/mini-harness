@@ -154,8 +154,7 @@ export function mergeSettings(current: Settings, patch: unknown): Settings {
     providers: patch.providers === undefined ? current.providers : section(patch.providers, 'providers'),
     scopes: patch.scopes === undefined ? current.scopes : section(patch.scopes, 'scopes'),
     plugins: { ...current.plugins, ...plugins },
-    pluginConfig: Object.fromEntries([...new Set([...Object.keys(current.pluginConfig), ...Object.keys(pluginConfig)])]
-      .map((id) => [id, { ...(current.pluginConfig[id] ?? {}), ...section(pluginConfig[id], 'pluginConfig.' + id) }]))
+    pluginConfig: { ...current.pluginConfig, ...pluginConfig }
   };
   validateSettings(next);
   return next;

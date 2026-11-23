@@ -3,30 +3,44 @@ import { icon } from '@mini-harness/ui-primitives/icons';
 import type { CommandRegistry } from './commands.js';
 import type { ComposerCommand } from '@mini-harness/web/contracts/commands';
 import type { Attachment } from '@mini-harness/contracts/input';
-import type { Completer, FrontendApi, Suggestion } from '@mini-harness/ui-runtime/frontend';
-export function createComposer(root: HTMLElement, report: (error: Error) => void, commands: CommandRegistry, signal: AbortSignal) {
+import type { Completer, DraftMode, FrontendApi, Suggestion } from '@mini-harness/ui-runtime/frontend';
+export interface ConversationDraft {
+  text: string;
+  attachments: (Attachment & { originalIndex?: number })[];
+  revision?: DraftMode;
+  loading: number;
+  version: number;
+}
+
+export function createComposer(root: HTMLElement, draft: () => ConversationDraft, report: (error: Error) => void,
+  commands: CommandRegistry, signal: AbortSignal) {
   const { element } = scopedElements(root);
   const prompt = element<'textarea'>('prompt'), form = element<'form'>('composer');
   const attachmentList = element('attachments'), suggestions = element('suggestions');
-  let files: Attachment[] = [], loading = 0, draftGeneration = 0;
   const completions = new Map<string, Completer>();
   let completion: AbortController;
   const render = () => {
+    const current = draft(), files = current.attachments;
+    element<'button'>('send').disabled = current.loading > 0;
+    element<'button'>('queueSend').disabled = current.loading > 0;
     attachmentList.replaceChildren(...files.map((file, index) => {
       const card = document.createElement('div'); card.className = 'attachment';
       if (file.mimeType.startsWith('image/')) { const image = document.createElement('img'); image.src = 'data:' + file.mimeType + ';base64,' + file.data; image.alt = file.name; card.append(image); }
       const name = document.createElement('span'); name.textContent = file.name; card.append(name);
       const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'icon-button';
       remove.setAttribute('aria-label', 'Remove ' + file.name); remove.append(icon('close'));
-      remove.onclick = () => { files.splice(index, 1); render(); }; card.append(remove); return card;
+      remove.onclick = () => { current.attachments.splice(index, 1); current.version++; render(); }; card.append(remove); return card;
     }));
     attachmentList.hidden = !files.length;
     prompt.required = !files.length;
   };
   const addFiles = async (incoming: File[]) => {
-    if (files.length + loading + incoming.length > 8) { report(new Error('Attach at most eight files')); return; }
-    const current = draftGeneration; loading += incoming.length;
-    element<'button'>('send').disabled = true;
+    const current = draft();
+    const files = current.attachments;
+    if (files.length + current.loading + incoming.length > 8) { report(new Error('Attach at most eight files')); return; }
+    current.loading += incoming.length;
+    current.version++;
+    render();
     try {
       const added: Attachment[] = [];
       for (const file of incoming) {
@@ -36,12 +50,15 @@ export function createComposer(root: HTMLElement, report: (error: Error) => void
         });
         added.push({ name: file.name, mimeType: file.type || 'text/plain', data });
       }
-      if (current === draftGeneration) {
-        if ([...files, ...added].reduce((total, file) => total + file.data.length * .75, 0) > 12 * 1024 * 1024) throw new Error('Attachments exceed 12 MiB per message');
-        files.push(...added); render();
-      }
-    } catch (error) { report(error instanceof Error ? error : new Error(String(error))); }
-    finally { loading -= incoming.length; element<'button'>('send').disabled = loading > 0; }
+      if ([...files, ...added].reduce((total, file) => total + file.data.length * .75, 0) > 12 * 1024 * 1024)
+        throw new Error('Attachments exceed 12 MiB per message');
+      files.push(...added);
+    } catch (error) {
+      if (current === draft()) report(error instanceof Error ? error : new Error(String(error)));
+    } finally {
+      current.loading -= incoming.length;
+      if (current === draft()) render();
+    }
   };
   form.addEventListener('dragover', (event) => { event.preventDefault(); form.classList.add('dragging'); });
   form.addEventListener('dragleave', () => form.classList.remove('dragging'));
@@ -233,8 +250,8 @@ export function createComposer(root: HTMLElement, report: (error: Error) => void
   }, { signal });
   signal.addEventListener('abort', hide, { once: true });
   return {
-    attachments: () => { if (loading) throw new Error('Files are still loading'); return structuredClone(files); },
-    clear: () => { files = []; ++draftGeneration; render(); hide(); },
+    render,
+    resetSuggestions: hide,
     attach(api: FrontendApi) {
       const button = document.createElement('button'); button.type = 'button'; button.className = 'icon-button';
       button.setAttribute('aria-label', 'Attach files'); button.append(icon('attach')); button.onclick = () => input.click(); api.slots.register('conversation.composer', button);

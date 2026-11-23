@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
-import { rmSync } from 'node:fs';
+import { mkdirSync, realpathSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
 import { readJson, writeJson } from '@mini-harness/platform/config';
 import { startIsolatedHost } from '../support/browser.js';
@@ -15,7 +16,9 @@ test('running messages can queue follow-ups and approve shell commands from the 
   });
   const { root, paths } = createFixturePaths(mock.url);
   writeJson(paths.settings, { ...readJson<any>(paths.settings, {}), plugins: { shell: true }, pluginConfig: { shell: { mode: 'host', timeoutSeconds: 60 } } });
-  const service = await startIsolatedHost(paths);
+  const workspace = join(root, 'Workspace path with spaces ' + 'x'.repeat(100));
+  mkdirSync(workspace);
+  const service = await startIsolatedHost({ ...paths, cwd: workspace });
   try {
     await page.goto(service.url + '/#token=' + service.token);
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Wait');
@@ -53,15 +56,26 @@ test('running messages can queue follow-ups and approve shell commands from the 
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.locator('.approval-card pre')).toHaveText('echo approved');
     await expect(page.locator('.approval-card strong')).toHaveText('Shell approval');
+    await expect(page.locator('.approval-heading small')).toHaveText(realpathSync.native(workspace));
+    const viewport = page.viewportSize();
+    if (!viewport) throw new Error('Missing browser viewport');
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(page.getByRole('button', { name: 'Allow once', exact: true })).toBeInViewport();
+    expect(await page.locator('.approval-card').evaluate((node) => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
+    await page.setViewportSize(viewport);
     await expect(page.locator('.tool-state')).toHaveText('Waiting for approval');
     await page.getByRole('button', { name: 'New conversation', exact: true }).click();
     await expect(page.locator('.approval-card')).toHaveCount(0);
     await page.getByRole('button', { name: 'Wait', exact: true }).click();
     await expect(page.locator('.approval-card pre')).toHaveText('echo approved');
+    const tool = page.locator('.tool-card');
+    await tool.locator('summary').click();
+    await tool.evaluate((node) => node.setAttribute('data-before-completion', 'true'));
     await page.getByRole('button', { name: 'Allow once', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeVisible();
+    await expect(tool).toHaveAttribute('open', '');
+    await expect(tool).toHaveAttribute('data-before-completion', 'true');
     await expect(page.locator('.approval-card')).toHaveCount(0);
-    await page.locator('.tool-card summary').click();
     await expect(page.locator('.tool-arguments')).toContainText('echo approved');
     await expect(page.locator('.tool-content')).toContainText('Exit 0');
     expect(await page.locator('.tool-content').evaluate((node) =>

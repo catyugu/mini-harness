@@ -8,7 +8,7 @@ export function prepareInput(text: unknown, attachments: Attachment[] = []) {
   const images: ImageInput[] = [];
   let total = 0;
   for (const file of attachments) {
-    if (!file || typeof file.name !== 'string' || file.name.length > 200 || /[\x00-\x1f]/.test(file.name) ||
+    if (!file || typeof file.name !== 'string' || typeof file.mimeType !== 'string' || file.name.length > 200 || /[\x00-\x1f]/.test(file.name) ||
       typeof file.data !== 'string' || file.data.length > 8 * 1024 * 1024 || /[^A-Za-z0-9+/=]/.test(file.data))
       throw new HttpError('invalid_input', 'Invalid attachment');
     const bytes = Buffer.from(file.data, 'base64');

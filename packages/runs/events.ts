@@ -4,7 +4,7 @@ import type { ViewMessage } from '@mini-harness/contracts/message';
 export class RunEvents {
   private events: RunEvent[] = [];
   private bytes = 0;
-  private listeners = new Set<(event: RunEvent) => void>();
+  private listeners = new Map<(event: RunEvent) => void, () => void>();
   private tools = new Map<string, Extract<StreamEvent, { type: 'tool' }>>();
   partial = '';
 
@@ -24,22 +24,26 @@ export class RunEvents {
     this.bytes += JSON.stringify(item).length;
     while (this.events.length > 2048 || (this.bytes > 1024 * 1024 && this.events.length > 1))
       this.bytes -= JSON.stringify(this.events.shift()).length;
-    for (const listener of this.listeners) {
+    for (const listener of this.listeners.keys()) {
       try { listener(structuredClone(item)); } catch { this.listeners.delete(listener); }
     }
     return item;
   }
 
-  watch(after: number, emit: (event: RunEvent) => void, history: () => ViewMessage[]) {
+  watch(after: number, emit: (event: RunEvent) => void, history: () => ViewMessage[], end = () => {}) {
     if (after < (this.events[0]?.sequence ?? 1) - 1) {
       emit({ type: 'snapshot', messages: history(), partial: this.partial, tools: this.activeTools,
         run: { ...this.info }, sequence: this.info.sequence, runId: this.info.id, runSessionId: this.info.sessionId });
     } else {
       for (const event of this.events) if (event.sequence > after) emit(structuredClone(event));
     }
-    if (isRunning(this.info)) this.listeners.add(emit);
+    if (isRunning(this.info)) this.listeners.set(emit, end);
     return () => { this.listeners.delete(emit); };
   }
 
-  close() { this.listeners.clear(); }
+  close() {
+    const remaining = [...this.listeners.values()];
+    this.listeners.clear();
+    for (const end of remaining) end();
+  }
 }

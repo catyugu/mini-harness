@@ -95,7 +95,7 @@ test('full access bypasses Shell prompts only for its conversation and applies t
   assert.equal(app.runtime.plugins.ctx.harnessScopes.allowsTool(child.id, 'sandbox_shell'), false);
 });
 
-test('disabling Shell drains its pending approval and preserves an unrelated run', { timeout: 15000 }, async (t) => {
+test('disabling Shell waits until conversations using its tools have finished', { timeout: 15000 }, async (t) => {
   let entered: () => void;
   let release: () => void = () => { throw new Error('Not started'); };
   const running = new Promise<void>((resolve) => { entered = resolve; });
@@ -118,17 +118,20 @@ test('disabling Shell drains its pending approval and preserves an unrelated run
     await running;
     await request('/sessions/' + shell.id + '/runs', 'POST', { message: 'Run Shell' });
     await waitUntil(() => request('/approvals'), (result) => result.body.length === 1);
-    assert.equal((await request('/settings', 'PATCH', { plugins: { shell: false } })).status, 200);
-    assert.deepEqual((await request('/approvals')).body, []);
-    const graph = (await request('/bootstrap')).body.ui;
-    assert.ok(!graph.some(({ id }: { id: string }) => id === 'shell'));
+    assert.equal((await request('/settings', 'PATCH', { plugins: { shell: false } })).status, 409);
+    const approval = (await request('/approvals')).body[0];
+    assert.equal((await request('/approvals', 'POST', { id: approval.id, allow: false })).status, 200);
     assert.ok(app.runtime.runs.active(other.id));
     assert.equal((await finish(shell.id)).body.run.state, 'completed');
     const tool = expectPresent(app.runtime.agent.messages(shell.id).find(({ role }) => role === 'toolResult'), 'shell tool result');
     assert.equal(tool.isError, true);
-    assert.ok(!app.runtime.plugins.ctx.harnessTools.forSession(shell.id).map(({ name }) => name).includes('sandbox_shell'));
   } finally { release(); }
   assert.equal(await pending, 'Unrelated task completed');
+  assert.equal((await request('/settings', 'PATCH', { plugins: { shell: false } })).status, 200);
+  assert.deepEqual((await request('/approvals')).body, []);
+  const graph = (await request('/bootstrap')).body.ui;
+  assert.ok(!graph.some(({ id }: { id: string }) => id === 'shell'));
+  assert.ok(!app.runtime.plugins.ctx.harnessTools.forSession(shell.id).some(({ name }) => name === 'sandbox_shell'));
 });
 
 test('Shell defaults to host only when isolation is unavailable', () => {
