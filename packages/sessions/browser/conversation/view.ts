@@ -1,6 +1,6 @@
 import type { BrowserProjectionPort } from '@mini-harness/contracts/browser';
 import type { Attachment } from '@mini-harness/contracts/input';
-import type { Conversation, ModelChoice } from '@mini-harness/contracts/conversation';
+import type { Conversation, ConversationPermission, ModelChoice } from '@mini-harness/contracts/conversation';
 import type { MessageContent } from '@mini-harness/contracts/message';
 import type { RunEvent } from '@mini-harness/contracts/transport';
 import type { ConversationView, ThinkingLevel, ModelCatalog } from '@mini-harness/web/types';
@@ -18,6 +18,7 @@ import { createModelPicker } from './model-picker.js';
 import { createThinkingPicker } from './thinking-picker.js';
 import type { FrontendApi, ToolView, MessageAction, DraftMode } from '@mini-harness/ui-runtime/frontend';
 import { fromMarkup, required } from '@mini-harness/ui-primitives/primitives';
+import { icon } from '@mini-harness/ui-primitives/icons';
 import { createRunSummary } from './run-summary.js';
 import { renderQueue } from './queue-view.js';
 
@@ -56,7 +57,12 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
           <div id="draftMode" class="draft-mode" hidden><span></span><button type="button" aria-label="Cancel editing">Cancel</button></div>
           <textarea id="prompt" rows="2" placeholder="Ask anything…" aria-label="Message" aria-controls="suggestions" aria-autocomplete="list" required></textarea>
           <div class="composer-footer">
-            <div id="composerExtensions" class="composer-tools"></div><button id="modelSelect" class="model-select" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="modelResults">Choose model</button>
+            <div id="composerExtensions" class="composer-tools"></div>
+            <button id="permissionSelect" class="permission-select" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="permissionResults"></button>
+            <div id="permissionPicker" class="model-picker permission-picker" popover="auto">
+              <div id="permissionResults" role="listbox" aria-label="Conversation permissions"></div>
+            </div>
+            <button id="modelSelect" class="model-select" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="modelResults">Choose model</button>
             <div id="modelPicker" class="model-picker" popover="auto">
               <input id="modelSearch" type="search" role="combobox" aria-label="Search models" aria-controls="modelResults" aria-autocomplete="list" aria-expanded="true" placeholder="Search models">
               <div id="modelResults" role="listbox" aria-label="Configured models"></div>
@@ -64,7 +70,6 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
             </div>
             <button id="thinkingLevel" class="model-select" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="thinkingResults" hidden>Default</button>
             <div id="thinkingPicker" class="model-picker thinking-picker" popover="auto"><div id="thinkingResults" role="listbox" aria-label="Thinking levels"></div></div>
-            <select id="queueMode" aria-label="While running" hidden><option value="steer">Add instruction</option><option value="followUp">Follow up</option></select>
             <button id="queueSend" class="small-button" type="button" hidden>Queue</button>
             <button id="stop" type="button" aria-label="Stop response" hidden data-icon="stop"></button>
             <button id="send" type="submit" aria-label="Send" data-icon="send"></button>
@@ -73,7 +78,7 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
       </div>
     </div>`);
   api.slots.register('conversation.body', view);
-  const { element, value } = scopedElements(view);
+  const { element } = scopedElements(view);
   const outlets = {
     composer: element('composerExtensions'), approvals: element('approvalRequests'), workspace: element('workspaceWelcome')
   };
@@ -85,6 +90,71 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
   const prompt = element<'textarea'>('prompt');
 
   let sending = false;
+  let conversationPermission: ConversationPermission = 'standard';
+  const permissionButton = element<'button'>('permissionSelect');
+  const permissionPopup = element('permissionPicker');
+  const permissionResults = element('permissionResults');
+  const permissionLabels: Record<ConversationPermission, string> = { standard: 'Standard', readOnly: 'Read-only' };
+  const permissionOptions: Array<{ value: ConversationPermission; description: string }> = [
+    { value: 'standard', description: 'Allow tools subject to existing approvals and policies' },
+    { value: 'readOnly', description: 'Only built-in read, search and skill tools are available' }
+  ];
+  function renderPermission() {
+    const current = conversationPermission;
+    const label = permissionLabels[current];
+    permissionButton.replaceChildren(icon(current === 'readOnly' ? 'lock' : 'shield'), document.createTextNode(label), icon('chevron'));
+    permissionButton.setAttribute('aria-label', 'Permissions: ' + label);
+    permissionButton.title = 'Conversation permissions: ' + label;
+    permissionResults.replaceChildren(...permissionOptions.map(({ value, description }) => {
+      const option = document.createElement('button');
+      option.type = 'button';
+      option.className = 'suggestion permission-option';
+      option.setAttribute('role', 'option');
+      option.setAttribute('aria-selected', String(value === current));
+      const name = document.createElement('strong');
+      name.textContent = permissionLabels[value];
+      const details = document.createElement('small');
+      details.textContent = description;
+      option.append(name, details);
+      option.onclick = async () => {
+        permissionPopup.hidePopover();
+        permissionButton.focus();
+        if (value === conversationPermission) return;
+        const id = active();
+        if (!id) {
+          draftEntry.permission = value;
+          conversationPermission = value;
+          renderPermission();
+          return;
+        }
+        permissionButton.disabled = true;
+        try {
+          const updated = await controller.setPermission(id, value);
+          if (active() !== id) return;
+          conversationPermission = updated.permission ?? 'standard';
+          renderPermission();
+          await options.sessions.refresh();
+        } catch (error) {
+          if (active() === id) report(error instanceof Error ? error : new Error(String(error)));
+        } finally { permissionButton.disabled = false; }
+      };
+      return option;
+    }));
+  }
+  permissionButton.onclick = () => {
+    if (permissionPopup.matches(':popover-open')) permissionPopup.hidePopover();
+    else {
+      permissionPopup.showPopover();
+      const bounds = permissionButton.getBoundingClientRect();
+      const width = Math.min(290, innerWidth - 16);
+      permissionPopup.style.width = width + 'px';
+      permissionPopup.style.left = Math.max(8, Math.min(bounds.left, innerWidth - width - 8)) + 'px';
+      permissionPopup.style.top = Math.max(8, bounds.top - permissionPopup.offsetHeight - 6) + 'px';
+      permissionResults.querySelector<HTMLButtonElement>('[aria-selected="true"]')?.focus();
+    }
+  };
+  permissionPopup.addEventListener('toggle', () => permissionButton.setAttribute('aria-expanded', String(permissionPopup.matches(':popover-open'))), { signal: api.signal });
+  renderPermission();
   let visit = new AbortController();
   let pending = false;
   let queueRevision = 0;
@@ -98,7 +168,7 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
   const submitted = new Map<string, { runId: string; clear: () => void }>();
   const lastInputs = new Map<string, { message: string; attachments: Attachment[] }>();
   const blankDraft = (): ConversationDraft => ({ text: '', attachments: [], version: 0, loading: 0 });
-  const drafts = new Map<string, { input: ConversationDraft; edit?: ConversationDraft }>();
+  const drafts = new Map<string, { input: ConversationDraft; edit?: ConversationDraft; permission?: ConversationPermission }>();
   const ensureDraft = (key: string) => {
     let entry = drafts.get(key);
     if (!entry) { entry = { input: blankDraft() }; drafts.set(key, entry); }
@@ -190,6 +260,8 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
     activeLeaf = view?.leafId;
     const switched = item?.id !== active();
     switchDraft(item?.id);
+    conversationPermission = item?.permission ?? (item ? 'standard' : draftEntry.permission ?? 'standard');
+    renderPermission();
     if (item && !lastInputs.has(item.id)) {
       const previous = history.filter((message) => message.role === 'user').at(-1);
       if (previous) rememberInput(item.id, previous.content);
@@ -239,7 +311,6 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
   function setSending(value: boolean) {
     sending = value;
     element<'button'>('send').hidden = value;
-    element('queueMode').hidden = !value;
     element('queueSend').hidden = !value;
     element<'button'>('stop').hidden = !value;
     element<'button'>('stop').disabled = false;
@@ -286,7 +357,7 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
       let id = active();
       if (!id) {
         if (!workspace) throw new Error('Add a workspace before starting a conversation.');
-        const item = await controller.create(workspace);
+        const item = await controller.create(workspace, entry.permission ?? 'standard');
         id = item.id;
         drafts.set(id, entry);
         if (drafts.get('workspace:' + workspace) === entry) drafts.delete('workspace:' + workspace);
@@ -389,7 +460,7 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
       const snapshot = snapshotDraft();
       if (snapshot.revision) throw new Error('Finish editing before queuing a message');
       const queued = await controller.queue(id, {
-        message: commands.prepare(prompt.value), mode: value('queueMode') as 'steer' | 'followUp',
+        message: commands.prepare(prompt.value), mode: options.settings.get().queueMode,
         attachments: snapshot.attachments, model: modelDraft, thinkingLevel: thinkingDraft
       });
       snapshot.clear();

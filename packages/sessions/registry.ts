@@ -10,7 +10,7 @@ import type { SessionStore, WorkspacePort } from '@mini-harness/contracts/servic
 import type { SessionRecords } from '@mini-harness/contracts/plugins';
 import type { ScopePort } from '@mini-harness/contracts/capabilities';
 import type { CapabilityObservation } from '@mini-harness/contracts/events';
-import type { SessionRecord } from '@mini-harness/contracts/conversation';
+import type { ConversationPermission, SessionRecord } from '@mini-harness/contracts/conversation';
 import { SessionLog, syncDirectory } from './log.js';
 import { loadCatalog, type CatalogState } from './catalog.js';
 import { missing, nativeFile } from './storage.js';
@@ -79,7 +79,7 @@ export class SessionRegistry implements SessionStore {
     this.logs.clear();
   }
 
-  create({ parentId = null, title, workspaceId }: Parameters<SessionStore['create']>[0] = {}) {
+  create({ parentId = null, title, workspaceId, permission = 'standard' }: Parameters<SessionStore['create']>[0] = {}) {
     const parent = parentId ? this.get(parentId) : undefined;
     if (parentId && !parent) throw new HttpError('not_found', 'Parent conversation not found');
     if (parent && workspaceId !== undefined && workspaceId !== parent.workspaceId)
@@ -90,7 +90,8 @@ export class SessionRegistry implements SessionStore {
     this.assertAvailable(parentId ?? undefined, workspace.id);
     this.workspaces.resolveRoot(workspace.path, workspace.id);
     const session: SessionRecord = { id: randomUUID(), title: title?.slice(0, 140) || 'New conversation',
-      titleSource: title ? 'manual' : 'auto', workspaceId: workspace.id, parentId, createdAt: new Date().toISOString() };
+      titleSource: title ? 'manual' : 'auto', workspaceId: workspace.id, parentId, createdAt: new Date().toISOString(),
+      permission };
     this.commit({ ...this.state, sessions: [...this.state.sessions, session] });
     this.notify(session.id);
     this.observe?.({ type: 'session-created', sessionId: session.id });
@@ -104,6 +105,11 @@ export class SessionRegistry implements SessionStore {
     this.commit({ ...this.state, sessions: this.state.sessions.map((entry) => entry.id === id ? updated : entry) });
     this.notify(id);
     return { ...updated };
+  }
+
+  setPermission(id: string, permission: ConversationPermission) {
+    this.assertAvailable(id);
+    return this.replace(id, { permission });
   }
 
   rename(id: string, title: string, source: SessionRecord['titleSource'] = 'manual') {

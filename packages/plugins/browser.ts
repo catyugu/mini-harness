@@ -224,7 +224,6 @@ function pluginCatalog(api: FrontendApi, snapshot: () => { plugins: PluginMetada
       scopedControls.className = 'plugin-fields';
       scopedControls.append(field(plugin.scope === 'workspace' ? 'Workspace' : 'Conversation', scopePicker),
         field('Enabled in this scope', enabled), provision);
-      scopePicker.onchange = renderFields;
       save.disabled = true;
       scopePicker.add(new Option('Choose a scope', ''));
       scopedControls.querySelectorAll('input').forEach((control) => { control.disabled = true; });
@@ -235,7 +234,7 @@ function pluginCatalog(api: FrontendApi, snapshot: () => { plugins: PluginMetada
         for (const { key, name } of items) scopePicker.add(new Option(name, key));
         for (const { scope } of plugin.instances ?? [])
           if (!items.some(({ key }) => key === scope)) scopePicker.add(new Option(scope, scope));
-        scopePicker.value = plugin.instances?.find(({ state }) => state === 'failed')?.scope ?? items[0]?.key ?? plugin.instances?.[0]?.scope ?? '';
+        scopePicker.value = plugin.instances?.find(({ error }) => error)?.scope ?? items[0]?.key ?? plugin.instances?.[0]?.scope ?? '';
         const sync = () => {
           save.disabled = !scopePicker.value;
           enabled.disabled = !scopePicker.value;
@@ -269,6 +268,7 @@ function pluginCatalog(api: FrontendApi, snapshot: () => { plugins: PluginMetada
         if (saved && !outcome.textContent) {
           const latest = snapshot().plugins.find(({ id }) => id === plugin.id);
           const state = scoped ? latest?.instances?.find(({ scope }) => scope === key) : latest;
+          diagnostics.textContent = state?.error ?? '';
           outcome.textContent = state?.error && (state.state === 'failed' || state.state === 'partial')
             ? 'Configuration saved. Plugin failed to start: ' + state.error
             : state?.state === 'inactive' ? 'Configuration saved. Waiting for this scope to activate.' : 'Saved.';

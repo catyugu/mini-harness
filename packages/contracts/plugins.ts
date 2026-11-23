@@ -31,7 +31,7 @@ export interface PluginMetadata {
   error?: string;
   state?: 'disabled' | 'inactive' | 'ready' | 'partial' | 'failed';
   provides?: string[];
-  instances?: { scope: string; state: 'ready' | 'failed' | 'inactive'; error?: string }[];
+  instances?: { scope: string; state: 'ready' | 'failed' | 'inactive' | 'disabled'; error?: string }[];
   defaultEnabled?: boolean;
   web?: boolean;
   browser?: string;

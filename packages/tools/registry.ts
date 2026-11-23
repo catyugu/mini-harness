@@ -39,8 +39,10 @@ export class ToolRegistry implements ToolPort {
               throw new Error('Invalid arguments for ' + name + (issue ? ': ' + issue.instancePath + ' ' + issue.message : ''));
             }
             if (!allowed(id, name) || await decide?.({ sessionId: id, tool: name, callId: call, arguments: structuredClone(args), signal: combined }) === 'deny')
-              throw new Error('Tool denied by plugin policy: ' + name);
+              throw new Error('Tool denied by conversation or plugin policy: ' + name);
             combined.throwIfAborted();
+            // The permission may have changed while a tool decision hook was pending.
+            if (!allowed(id, name)) throw new Error('Tool denied by conversation or plugin policy: ' + name);
             const result = await tool.execute(call, args, combined, update, context);
             if (!result || !isToolContent(result.content)) throw new Error('Invalid result from tool: ' + name);
             return result;

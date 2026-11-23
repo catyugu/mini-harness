@@ -24,6 +24,7 @@ test('desktop and mobile: send, navigate, settings and bulk select', async ({ br
           return composer.getBoundingClientRect().top - title.getBoundingClientRect().top;
         }), { message: 'Welcome heading stays close to the composer at ' + viewport.width + 'px' }).toBeLessThan(145);
         await expect(modelButton(page)).toHaveText('Mock Model');
+        await expect(page.getByRole('button', { name: 'Permissions: Standard' })).toBeVisible();
         await modelButton(page).click();
         await expect(modelSearch(page)).toBeFocused();
         const modelPop = expectPresent(await page.locator('#modelPicker').boundingBox(), 'model picker bounds');

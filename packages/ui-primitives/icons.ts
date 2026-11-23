@@ -10,6 +10,8 @@ const paths = {
   plugin: 'M5 8H8V5a2 2 0 1 1 4 0v3h5v4h2a2 2 0 0 1 0 4h-2v4h-5v-2a2 2 0 0 0-4 0v2H5z',
   model: 'M6 6h12v12H6zM9 9h6v6H9zM9 3v3m6-3v3M9 18v3m6-3v3M3 9h3m-3 6h3m12-6h3m-3 6h3',
   theme: 'M12 3a9 9 0 1 0 9 9A7 7 0 0 1 12 3z',
+  shield: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z',
+  lock: 'M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4',
   delegate: 'M12 3v6M5 14v-2h14v2M5 14a3 3 0 1 0 0 6 3 3 0 0 0 0-6Zm14 0a3 3 0 1 0 0 6 3 3 0 0 0 0-6ZM10 2h4v5h-4z',
   terminal: 'M3 5h18v14H3zM7 9l3 3-3 3m6 0h4',
   search: 'M16 10a6 6 0 1 0-12 0 6 6 0 0 0 12 0m-2 5 5 5',

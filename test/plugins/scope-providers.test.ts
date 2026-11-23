@@ -129,7 +129,8 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
   const broken = { ...parent, pluginConfig: { layer: { fail: true } } };
   await configure({ [workspaceKey]: workspace, 'session:parent': parent, 'session:child': child, 'session:sibling': broken });
   assert.equal(host.metadata().find(({ id }) => id === 'layer')?.state, 'inactive');
-  await Promise.all([host.prepare('child'), host.prepare('sibling')]);
+  await host.prepare('child');
+  assert.equal(host.metadata().find(({ id }) => id === 'layer')?.state, 'partial', 'unprepared peer scopes remain visible');
   assert.equal(host.require('parent', 'greeting'), 'parent');
   assert.equal(host.require('child', 'greeting'), 'child');
   await host.prepare('sibling');

@@ -19,6 +19,9 @@ import { PluginCatalog, type PluginPlan } from './catalog.js';
 
 type MountedScope = { ctx: Context; parent: Context; scope: PluginScope; isolates: string[] };
 
+// Unknown plugin tools are not assumed to be safe in a read-only conversation.
+const readOnlyTools = new Set(['read', 'ls', 'find', 'grep', 'load_skill']);
+
 const appScope: PluginScope = { kind: 'application' };
 
 /** The descriptor and its resolved graph are the source of both server and browser mounts. */
@@ -70,18 +73,24 @@ export class PluginHost implements ScopePort {
         } catch (error) { return error instanceof Error ? error.message : String(error); }
       };
       const scopes = metadata.scope === 'application'
-        ? settings.plugins[id] === true ? ['application'] : []
-        : Object.entries(settings.scopes).flatMap(([key, scope]) =>
-          scope.plugins?.[id] || Object.values(scope.providers ?? {}).includes(id) ? [key] : []);
-      const instances = scopes.map((scope): NonNullable<PluginMetadata['instances']>[number] => {
+        ? [{ scope: 'application', enabled: settings.plugins[id] === true }]
+        : Object.entries(settings.scopes).flatMap(([scope, value]) => {
+          if (!scope.startsWith(metadata.scope + ':')) return [];
+          const enabled = value.plugins?.[id] === true || Object.values(value.providers ?? {}).includes(id);
+          return enabled || Object.hasOwn(value.pluginConfig ?? {}, id) ? [{ scope, enabled }] : [];
+        });
+      const instances = scopes.map(({ scope, enabled }): NonNullable<PluginMetadata['instances']>[number] => {
         const key = scope === 'application' ? id : scope + '/' + id;
         const error = this.failures.get(key) ?? metadata.error ?? configurationError(scope === 'application' ? undefined : scope);
-        return { scope, error, state: error ? 'failed' : this.mounts.plan(key) ? 'ready' : 'inactive' };
+        const state = !enabled ? 'disabled' : error ? 'failed' : this.mounts.plan(key) ? 'ready' : 'inactive';
+        return { scope, error, state };
       });
-      const failed = instances.filter(({ state }) => state === 'failed');
-      const ready = instances.some(({ state }) => state === 'ready');
-      return { ...metadata, instances, error: failed[0]?.error ?? metadata.error ?? (metadata.scope === 'application' ? configurationError() : undefined),
-        state: failed.length ? ready ? 'partial' : 'failed' : ready ? 'ready' : scopes.length ? 'inactive' : 'disabled' };
+      const enabled = instances.filter(({ state }) => state !== 'disabled');
+      const failed = enabled.find(({ state }) => state === 'failed');
+      const ready = enabled.filter(({ state }) => state === 'ready').length;
+      const state = ready ? ready === enabled.length ? 'ready' : 'partial' : failed ? 'failed' : enabled.length ? 'inactive' : 'disabled';
+      return { ...metadata, instances, state,
+        error: failed?.error ?? instances.find(({ error }) => error)?.error ?? metadata.error };
     });
   }
   reserved(id: string) { return this.catalog.reserved(id); }
@@ -127,6 +136,7 @@ export class PluginHost implements ScopePort {
   }
 
   allowsTool(id: string, tool: string) {
+    if (this.lineage(id).some((record) => record.permission === 'readOnly') && !readOnlyTools.has(tool)) return false;
     if (!this.started) return true;
     const { scopes } = this.settings();
     return this.address(id).every((key) => !scopes[key]?.disabledTools?.includes(tool));

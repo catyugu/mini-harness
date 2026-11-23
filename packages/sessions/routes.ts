@@ -1,5 +1,5 @@
 import { scheduler } from 'node:timers/promises';
-import type { SessionSearchResult } from '@mini-harness/contracts/conversation';
+import type { ConversationPermission, SessionSearchResult } from '@mini-harness/contracts/conversation';
 import type { Context } from 'cordis';
 import { HttpError, HttpReply } from '@mini-harness/contracts/routes';
 import { projectSession } from './navigation.js';
@@ -14,6 +14,11 @@ export function registerSessionRoutes(ctx: Context) {
   const session = (id: string) => {
     if (!validSession.test(id) || !ctx.harnessRegistry.get(id)) throw new HttpError('not_found', 'Conversation not found');
     return id;
+  };
+  const permission = (value: unknown): ConversationPermission => {
+    if (value !== 'standard' && value !== 'readOnly')
+      throw new HttpError('invalid_input', 'Choose Standard or Read-only permission');
+    return value;
   };
   const workspace = (id: string) => {
     if (!validWorkspace.test(id)) throw new HttpError('not_found', 'Workspace not found');
@@ -70,18 +75,26 @@ export function registerSessionRoutes(ctx: Context) {
     const input = await body();
     if (input?.workspaceId !== undefined && typeof input.workspaceId !== 'string')
       throw new HttpError('invalid_input', 'Invalid workspace ID');
-    return new HttpReply(201, projectSession(ctx, ctx.harnessRegistry.create({ workspaceId: input?.workspaceId })));
+    return new HttpReply(201, projectSession(ctx, ctx.harnessRegistry.create({ workspaceId: input?.workspaceId,
+      permission: input?.permission === undefined ? undefined : permission(input.permission) })));
   });
   add('GET', '/api/workspaces/:id/sessions', ({ params }) =>
     ctx.harnessRegistry.list(workspace(params.id)).map((record) => projectSession(ctx, record)));
-  add('POST', '/api/workspaces/:id/sessions', ({ params }) =>
-    new HttpReply(201, projectSession(ctx, ctx.harnessRegistry.create({ workspaceId: workspace(params.id) }))));
+  add('POST', '/api/workspaces/:id/sessions', async ({ params, body }) => {
+    const input = await body();
+    return new HttpReply(201, projectSession(ctx, ctx.harnessRegistry.create({ workspaceId: workspace(params.id),
+      permission: input?.permission === undefined ? undefined : permission(input.permission) })));
+  });
   add('GET', '/api/sessions/:id', ({ params }) => ctx.harnessConversationView.read(session(params.id)));
   add('PATCH', '/api/sessions/:id', async ({ params, body }) => {
     const id = session(params.id), input = await body();
     if (typeof input.title !== 'string' || !input.title.trim() || input.title.length > 140)
       throw new HttpError('invalid_input', 'Title must contain 1–140 characters');
     return projectSession(ctx, ctx.harnessRegistry.rename(id, input.title.trim()));
+  });
+  add('PATCH', '/api/sessions/:id/permissions', async ({ params, body }) => {
+    const id = session(params.id), input = await body();
+    return projectSession(ctx, ctx.harnessRegistry.setPermission(id, permission(input?.permission)));
   });
   add('DELETE', '/api/workspaces/:id', ({ params }) => ctx.harnessRegistry.deleteWorkspace(workspace(params.id)));
   add('POST', '/api/sessions/delete', async ({ body }) => {

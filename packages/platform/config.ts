@@ -12,7 +12,8 @@ export const DEFAULTS = Object.freeze({
   pluginConfig: {},
   providers: {},
   scopes: {},
-  appearance: 'system'
+  appearance: 'system',
+  queueMode: 'steer'
 });
 
 export function getPaths(cwd: string = process.cwd(), env: NodeJS.ProcessEnv = process.env): Paths {
@@ -76,7 +77,7 @@ function validateModel(model: Record<string, unknown>, partial: boolean) {
 
 export function validateSettings(input: unknown): asserts input is Settings {
   if (!isObject(input)) throw new HttpError('invalid_input', 'Invalid settings object');
-  const { model, plugins, pluginConfig, providers, scopes, appearance, port } = input;
+  const { model, plugins, pluginConfig, providers, scopes, appearance, queueMode, port } = input;
   validateModel(section(model, 'model'), false);
   for (const [key, value] of Object.entries({ plugins, pluginConfig, providers, scopes }))
     if (!isObject(value)) throw new HttpError('invalid_input', 'Invalid settings section: ' + key);
@@ -95,6 +96,8 @@ export function validateSettings(input: unknown): asserts input is Settings {
   }
   if (appearance !== 'system' && appearance !== 'light' && appearance !== 'dark')
     throw new HttpError('invalid_input', 'Invalid appearance');
+  if (queueMode !== 'steer' && queueMode !== 'followUp')
+    throw new HttpError('invalid_input', 'Invalid queue mode');
   if (typeof port !== 'number' || !Number.isInteger(port) || port < 1024 || port > 65535)
     throw new HttpError('invalid_input', 'Invalid port');
 }
@@ -128,7 +131,8 @@ export function readSettings(paths: Paths): Settings {
     pluginConfig: section(input.pluginConfig, 'pluginConfig'),
     providers: section(input.providers, 'providers'),
     scopes: section(input.scopes, 'scopes'),
-    appearance: input.appearance === undefined ? DEFAULTS.appearance : input.appearance
+    appearance: input.appearance === undefined ? DEFAULTS.appearance : input.appearance,
+    queueMode: input.queueMode === undefined ? DEFAULTS.queueMode : input.queueMode
   };
   validateSettings(settings);
   return settings;

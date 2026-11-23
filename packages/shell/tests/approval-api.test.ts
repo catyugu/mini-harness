@@ -31,6 +31,26 @@ test('shell approval gates execution, handles rejection and cancellation', async
       assert.ok(Number.isFinite(restored.elapsedMs) && restored.elapsedMs >= 0);
     }
   }
+  const other = (await request('/sessions', 'POST', {})).body;
+  assert.equal(other.permission, 'standard');
+  assert.equal((await request('/sessions/' + session.id + '/permissions', 'PATCH', { permission: 'readOnly' })).status, 200);
+  assert.equal((await request('/sessions/' + session.id)).body.permission, 'readOnly');
+  assert.equal((await request('/sessions/' + other.id)).body.permission, 'standard');
+  const tools = app.runtime.plugins.ctx.harnessTools;
+  assert.ok(tools.forSession(session.id).some(({ name }) => name === 'read'));
+  assert.ok(!tools.forSession(session.id).some(({ name }) => name === 'sandbox_shell' || name === 'write'));
+  assert.ok(tools.forSession(other.id).some(({ name }) => name === 'sandbox_shell'));
+  assert.equal((await request('/sessions/' + session.id + '/permissions', 'PATCH', { permission: 'invalid' })).status, 400);
+  assert.equal((await request('/sessions/' + session.id + '/permissions', 'PATCH', { permission: 'standard' })).status, 200);
+  await request('/sessions/' + session.id + '/runs', 'POST', { message: 'Permission changed while awaiting approval' });
+  const pendingApproval = await waitUntil(() => request('/approvals'), (r) => r.body.length > 0);
+  assert.equal((await request('/sessions/' + session.id + '/permissions', 'PATCH', { permission: 'readOnly' })).status, 200);
+  assert.equal((await request('/approvals', 'POST', { id: pendingApproval.body[0].id, allow: true })).status, 200);
+  await finish(session.id);
+  const denied = (await request('/sessions/' + session.id)).body.messages.filter((m: { role: string }) => m.role === 'toolResult').at(-1);
+  assert.equal(denied.isError, true);
+  assert.match(JSON.stringify(denied.content), /conversation permissions/);
+  assert.equal((await request('/sessions/' + session.id + '/permissions', 'PATCH', { permission: 'standard' })).status, 200);
   await request('/sessions/' + session.id + '/runs', 'POST', { message: 'Cancel pending approval' });
   await waitUntil(() => request('/approvals'), (r) => r.body.length > 0);
   await request('/sessions/' + session.id + '/cancel', 'POST', {}); await finish(session.id);

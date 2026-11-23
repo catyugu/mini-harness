@@ -1,6 +1,7 @@
 import type { RunInfo } from './transport.js';
 
 export interface ModelChoice { provider: string; id: string }
+export type ConversationPermission = 'standard' | 'readOnly';
 
 export interface SessionRecord {
   id: string;
@@ -9,6 +10,7 @@ export interface SessionRecord {
   title: string;
   titleSource: 'auto' | 'manual';
   createdAt: string;
+  permission?: ConversationPermission;
 }
 
 export interface Conversation extends SessionRecord {
