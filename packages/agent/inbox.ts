@@ -8,14 +8,8 @@ import type { SessionLogPort, InboxItem, QueueEntry } from '@mini-harness/contra
 export class Inbox {
   constructor(private readonly log: SessionLogPort) {}
 
-  list() { return this.log.projection().inbox; }
-  view(): QueueEntry[] {
-    const { inbox, inboxFailures } = this.log.projection();
-    return [...inbox.map((item): QueueEntry => ({
-      id: item.id, mode: item.mode, state: 'pending',
-      summary: (item.input?.userText || item.input?.attachments[0]?.name || item.text).slice(0, 180)
-    })), ...inboxFailures];
-  }
+  list() { return this.log.inbox(); }
+  view(): QueueEntry[] { return this.log.queue(); }
 
   enqueue(text: string, mode: InboxItem['mode'], attachments?: Attachment[],
     options: Pick<InboxItem, 'model' | 'thinkingLevel'> = {}) {

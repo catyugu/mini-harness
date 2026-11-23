@@ -7,6 +7,7 @@
     "@mini-harness/contracts": "workspace:*"
   },
   "exports": {
+    "./local-secret": "./local-secret.ts",
     "./config": "./config.ts",
     "./content-delta": "./content-delta.ts",
     "./input": "./input.ts",

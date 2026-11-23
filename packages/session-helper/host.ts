@@ -12,7 +12,7 @@ export function setup(ctx: Context) {
         sourceEntryId: input.sourceEntryId, expectedLeafId: input.expectedLeafId as string | null,
         message: input.message, attachments: input.attachments as import('@mini-harness/contracts/input').Attachment[],
         model: input.model as import('@mini-harness/contracts/conversation').ModelChoice,
-        thinkingLevel: input.thinkingLevel as import('@mini-harness/contracts/agent').ThinkingLevel
+        thinkingLevel: input.thinkingLevel as import('@mini-harness/contracts/agent').ThinkingLevel | null
       });
     }));
 }

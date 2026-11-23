@@ -75,3 +75,31 @@ test('file inspection, responsive themes and reduced viewport height keep contro
     }
   } finally { await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
 });
+
+test('an open file preview and diff refresh after an agent write', async ({ page }) => {
+  const mock = await createMockProvider(({ messages }) => messages.at(-1)?.role === 'tool' ? 'Done' :
+    { tool: 'write', args: { path: 'update.js', content: 'const updated = 2;\n' } });
+  const { root, paths } = createFixturePaths(mock.url);
+  const file = join(paths.cwd, 'update.js');
+  writeFileSync(file, 'const updated = 1;\n');
+  const service = await startIsolatedHost(paths);
+  try {
+    await page.goto(service.url + '/#token=' + service.token);
+    await page.getByRole('button', { name: 'Open workspace panel', exact: true }).click();
+    const panel = page.getByRole('complementary', { name: 'Workspace panel' });
+    await panel.getByRole('button', { name: 'update.js', exact: true }).click();
+    await expect(panel.locator('.file-preview')).toContainText('const updated = 1;');
+    await expect(panel.locator('.file-preview')).toHaveAttribute('aria-hidden', 'true');
+    await expect(panel.locator('.file-accessible-source')).toHaveText('const updated = 1;');
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Update the file');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(panel.locator('.file-preview')).toContainText('const updated = 2;');
+    await panel.getByRole('button', { name: 'Diff', exact: true }).click();
+    await expect(panel.getByRole('tab', { name: 'update.js', exact: true })).toHaveCount(1);
+  } finally {
+    await page.close();
+    await service.stop();
+    await mock.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});

@@ -42,7 +42,7 @@ export function describePlugin(id: string, folder: string): DiscoveredPlugin {
   if (!hasWeb && (browserRequires.length || browserInject.length || browserProvides.length))
     throw new Error('Browser dependencies require web.js');
   if (!hasHost && (provides.length || inject.length || optional.length)) throw new Error('Server services require plugin.js');
-  if (scope !== 'application' && (hasWeb || inject.includes('harnessRoutes'))) throw new Error('Scoped plugins require a server entry without routes');
+  if (scope !== 'application' && (hasWeb || [...inject, ...optional].some((name) => name === 'harnessRoutes' || name === 'harnessNetwork'))) throw new Error('Scoped plugins require a server entry without routes');
   if (inject.some((service) => optional.includes(service) || provides.includes(service))) throw new Error('Conflicting service declarations');
   if (!hasWeb && (manifest.browserAssets !== undefined || manifest.browserPreload !== undefined))
     throw new Error('Browser assets require web.js');

@@ -32,7 +32,7 @@ export async function pluginDev(input: string, executable: string) {
     throw new Error('Use a plugin directory with a lowercase ID and a plugin.json file');
   const selected = await port();
   const home = mkdtempSync(join(realpathSync(tmpdir()), 'mini-harness-dev-'));
-  const env = { ...process.env, MINI_HARNESS_HOME: home, MINI_HARNESS_DEV_PLUGIN: folder };
+  const env: NodeJS.ProcessEnv = { ...process.env, MINI_HARNESS_HOME: home, MINI_HARNESS_DEV_PLUGIN: folder };
   const paths = getPaths(process.cwd(), env);
   ensurePaths(paths);
   writeJson(paths.settings, { plugins: { [id]: true } });

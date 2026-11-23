@@ -75,13 +75,13 @@ export interface RunPort {
   send(id: string, prompt: string, emit?: (event: StreamEvent) => void, options?: {
     signal?: AbortSignal; model?: ModelChoice; attachments?: Attachment[];
     schedule?: (task: () => Promise<string>, signal: AbortSignal) => Promise<string>;
-    thinkingLevel?: ThinkingLevel;
+    thinkingLevel?: ThinkingLevel | null;
   }): Promise<string>;
   startRun(id: string, prompt: string, options?: {
-    model?: ModelChoice; attachments?: Attachment[]; thinkingLevel?: ThinkingLevel;
+    model?: ModelChoice; attachments?: Attachment[]; thinkingLevel?: ThinkingLevel | null;
   }): RunInfo;
   reviseAndStart(id: string, input: { sourceEntryId: string; expectedLeafId: string | null; message: string;
-    attachments?: Attachment[]; model?: ModelChoice; thinkingLevel?: ThinkingLevel }): Promise<RunInfo>;
+    attachments?: Attachment[]; model?: ModelChoice; thinkingLevel?: ThinkingLevel | null }): Promise<RunInfo>;
   info(id: string): RunInfo | undefined;
   watch(id: string, runId: string, after: number, emit: (event: RunEvent) => void): () => void;
   cancel(id: string): boolean;

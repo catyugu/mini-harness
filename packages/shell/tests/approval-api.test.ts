@@ -20,6 +20,8 @@ test('shell approval gates execution, handles rejection and cancellation', async
     const history = (await request('/sessions/' + session.id)).body.messages;
     const tool = history.filter((m: { role: string }) => m.role === 'toolResult').at(-1);
     assert.equal(tool.isError, !allow); assert.deepEqual(tool.arguments, { command: 'echo approved' });
+    assert.ok(Number.isFinite(tool.approvalMs) && tool.approvalMs >= 0);
+    if (!allow) { assert.equal(tool.approvalDenied, true); assert.equal(tool.elapsedMs, 0); }
     if (allow) {
       assert.match(JSON.stringify(tool.content), /approved/);
       assert.equal(tool.exitCode, 0);
@@ -73,4 +75,20 @@ test('disabling Shell drains its pending approval and preserves an unrelated run
 
 test('Shell defaults to host only when isolation is unavailable', () => {
   assert.equal(defaultShellMode, supportsIsolation() ? 'isolated' : 'host');
+});
+
+test('repeating a denied command in the same run does not open a new approval', async (t) => {
+  const { app, request, finish } = await fixture(t, ({ messages }) =>
+    messages.filter(({ role }) => role === 'tool').length === 2 ? 'Done' : { tool: 'sandbox_shell', args: { command: 'echo repeated' } });
+  await app.runtime.updateSettings({ plugins: { shell: true }, pluginConfig: { shell: { mode: 'host' } } });
+  const { body: session } = await request('/sessions', 'POST', {});
+  const url = '/sessions/' + session.id;
+  await request(url + '/runs', 'POST', { message: 'Try twice' });
+  const pending = await waitUntil(() => request('/approvals'), (result) => result.body.length === 1);
+  await request('/approvals', 'POST', { id: pending.body[0].id, allow: false });
+  assert.equal((await finish(session.id)).body.run.state, 'completed');
+  assert.deepEqual((await request('/approvals')).body, []);
+  const history = (await request(url)).body.messages;
+  assert.deepEqual(history.filter((message: { role: string }) => message.role === 'toolResult')
+    .map((message: { approvalDenied: boolean }) => message.approvalDenied), [true, true]);
 });

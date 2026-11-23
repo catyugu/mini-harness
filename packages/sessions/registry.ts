@@ -3,7 +3,7 @@ import { isRunning, type RunInfo } from '@mini-harness/contracts/transport';
 import type { SessionEntry } from '@mini-harness/contracts/session-log';
 import { HttpError } from '@mini-harness/contracts/routes';
 import { randomUUID } from 'node:crypto';
-import { existsSync, lstatSync, unlinkSync } from 'node:fs';
+import { lstatSync, unlinkSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { writeJson } from '@mini-harness/platform/config';
 import type { Paths } from '@mini-harness/contracts/config';
@@ -33,7 +33,6 @@ export class SessionRegistry implements SessionStore {
     private readonly forgetScopes?: (keys: string[]) => void) {
     this.state = loadCatalog(paths, workspaces);
     this.finishDeletion();
-
   }
 
   private commit(state: CatalogState) {
@@ -133,7 +132,7 @@ export class SessionRegistry implements SessionStore {
 
   diagnostics() { return [...this.logErrors].map(([id, message]) => ({ id, message })); }
 
-  private openLog(id: string, record: SessionRecord, file: string) {
+  private openLog(id: string, record: SessionRecord, readOnly = false) {
     const onChange = (entry: SessionEntry) => {
       if (entry.type === 'run') {
         try { this.storeRun(id, entry.run); }
@@ -145,13 +144,17 @@ export class SessionRegistry implements SessionStore {
     };
     let log: SessionLog | undefined;
     try {
-      log = new SessionLog(file, id, record.createdAt, onChange);
-      log.recover();
-      this.storeRun(id, log.latestRun);
+      const file = this.nativeFile(record);
+      log = new SessionLog(file, id, record.createdAt, readOnly ? undefined : onChange, readOnly);
+      if (!readOnly) {
+        log.recover();
+        this.storeRun(id, log.latestRun);
+      }
       if (this.logErrors.delete(id)) this.notify(id);
       return log;
     } catch (error) {
       log?.close();
+      if (readOnly && missing(error)) return;
       const detail = error instanceof Error ? error.message : String(error);
       if (this.logErrors.get(id) !== detail) {
         this.logErrors.set(id, detail);
@@ -172,7 +175,8 @@ export class SessionRegistry implements SessionStore {
     this.assertAvailable(id);
     const record = this.get(id);
     if (!record) throw new HttpError('not_found', 'Conversation not found');
-    const log = this.openLog(id, record, this.nativeFile(record));
+    const log = this.openLog(id, record);
+    if (!log) throw new Error('Could not open conversation log');
     this.logs.set(id, log);
     for (const [key, candidate] of this.logs) {
       if (this.logs.size <= 32) break;
@@ -189,12 +193,14 @@ export class SessionRegistry implements SessionStore {
     const record = this.get(id);
     if (!record) return;
     try {
-      const file = this.nativeFile(record);
-      if (!existsSync(file)) return;
-      const log = this.openLog(id, record, file);
+      const log = this.openLog(id, record, true);
+      if (!log) return;
       try { return read(log); }
       finally { log.close(); }
-    } catch { return undefined; }
+    } catch (error) {
+      if (error instanceof HttpError && error.code === 'unavailable') return;
+      throw error;
+    }
   }
 
   records(id: string, namespace: string): SessionRecords {

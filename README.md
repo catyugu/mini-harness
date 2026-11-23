@@ -23,7 +23,7 @@ mini-harness status
 mini-harness stop
 ```
 
-One process owns each configuration directory. Detached processes write to `server.log`; both that log and `server.json` contain the access token. `stop` requests graceful shutdown.
+One process owns each configuration directory. An open tab reconnects after a restart on the same port and configuration directory. Run `mini-harness reset-token` to stop the instance and revoke its browser credential. `mini-harness status` lists conversation-log errors discovered when a conversation is opened or searched.
 
 ## Use
 

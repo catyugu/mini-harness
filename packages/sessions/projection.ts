@@ -1,6 +1,6 @@
 import type { NativeMessage, NativeToolMessage } from '@mini-harness/contracts/llm';
 import type { MessageContent, ViewMessage } from '@mini-harness/contracts/message';
-import type { InboxItem, SessionEntry, SessionProjection } from '@mini-harness/contracts/session-log';
+import type { SessionEntry, SessionProjection } from '@mini-harness/contracts/session-log';
 import { applyContentDelta } from '@mini-harness/platform/content-delta';
 
 export function projectMessage(entry: SessionEntry, execution: (id: string) => NativeToolMessage | undefined): NativeMessage | undefined {
@@ -17,24 +17,8 @@ export function projectMessage(entry: SessionEntry, execution: (id: string) => N
 /** Read projections are pure and never write synthetic history back into the transcript. */
 export function projectLog(entries: SessionEntry[], branch: SessionEntry[]): SessionProjection {
   const state: SessionProjection = { leafId: branch.at(-1)?.id ?? null, messages: [], contextMessages: [], contextEntryIds: [],
-    inbox: [], inboxFailures: [] };
-  const inbox = new Map<string, InboxItem>();
-  for (const entry of entries) {
-    if (entry.type === 'run') state.run = entry.run;
-    if (entry.type === 'inbox-enqueued') inbox.set(entry.item.id, entry.item);
-    if (entry.type === 'inbox-consumed' || entry.type === 'inbox-cancelled') for (const id of entry.ids) inbox.delete(id);
-    if (entry.type === 'inbox-failed') {
-      const item = inbox.get(entry.id);
-      if (item) {
-        const summary = (item.input?.userText || item.input?.attachments[0]?.name || item.text).slice(0, 180);
-        if (state.inboxFailures.length === 5) state.inboxFailures.shift();
-        state.inboxFailures.push({ id: entry.id, mode: item.mode, summary, state: 'failed', reason: entry.reason });
-        inbox.delete(entry.id);
-      }
-    }
-    if (entry.type === 'message' && entry.inboxId) inbox.delete(entry.inboxId);
-  }
-  state.inbox = [...inbox.values()];
+  };
+  for (const entry of entries) if (entry.type === 'run') state.run = entry.run;
   const raw = new Map(entries.flatMap((entry) => entry.type === 'tool-execution'
     ? [[entry.id, entry.result] as const] : []));
   const messageOf = (entry: SessionEntry) => projectMessage(entry, (id) => raw.get(id));

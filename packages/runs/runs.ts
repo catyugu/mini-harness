@@ -5,7 +5,7 @@ import type { Attachment } from '@mini-harness/contracts/input';
 import type { CapabilityObservation } from '@mini-harness/contracts/events';
 import type { RunAgentPort, ThinkingLevel } from '@mini-harness/contracts/agent';
 import type { ModelChoice } from '@mini-harness/contracts/conversation';
-import type { StreamEvent, RunEvent, RunInfo } from '@mini-harness/contracts/transport';
+import { RunInterrupted, type StreamEvent, type RunEvent, type RunInfo } from '@mini-harness/contracts/transport';
 import { RunEvents } from './events.js';
 import type { SessionStore } from '@mini-harness/contracts/services';
 
@@ -14,7 +14,7 @@ interface RunOptions {
   signal?: AbortSignal;
   model?: ModelChoice;
   attachments?: Attachment[];
-  thinkingLevel?: ThinkingLevel;
+  thinkingLevel?: ThinkingLevel | null;
   schedule?: (task: () => Promise<string>, signal: AbortSignal) => Promise<string>;
   revision?: { sourceEntryId: string; expectedLeafId: string | null };
 }
@@ -54,7 +54,7 @@ export class Runs {
   private launch(id: string, prompt: string, emit: ((event: StreamEvent) => void) | undefined, { signal, model, attachments, thinkingLevel, revision, schedule }: RunOptions) {
     this.registry.assertAvailable(id);
     if (this.active(id)) throw new HttpError('conflict', 'Conversation is already running');
-    if (thinkingLevel !== undefined && !['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(thinkingLevel))
+    if (thinkingLevel !== undefined && thinkingLevel !== null && !['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(thinkingLevel))
       throw new HttpError('invalid_input', 'Invalid thinking level');
     const prepared = prepareInput(prompt, attachments);
     const record = this.registry.get(id);
@@ -94,8 +94,8 @@ export class Runs {
       info.state = 'completed';
       return text;
     }, (error) => {
-      info.state = cancellation.aborted ? 'cancelled' : 'failed';
-      info.error = cancellation.aborted ? controller.signal.reason?.message ?? 'Agent run cancelled' :
+      info.state = cancellation.reason instanceof RunInterrupted ? 'interrupted' : cancellation.aborted ? 'cancelled' : 'failed';
+      info.error = cancellation.aborted ? cancellation.reason?.message ?? 'Agent run cancelled' :
         error instanceof Error ? error.message : String(error);
       if (info.state === 'failed') publish({ type: 'error', error: info.error ?? 'Agent run failed' });
       throw new Error(info.error, { cause: error });
@@ -175,7 +175,7 @@ export class Runs {
 
   async stop() {
     const active = [...this.work.values()];
-    for (const { controller } of active) controller.abort(new Error('Agent service is shutting down'));
+    for (const { controller } of active) controller.abort(new RunInterrupted());
     await Promise.allSettled(active.map(({ done }) => done));
   }
 }

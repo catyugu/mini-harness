@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
-import { HttpError, type PluginApi } from 'mini-harness/plugin';
+import type { PluginApi } from 'mini-harness/plugin';
 import QRCode from 'qrcode';
 
 interface Device { id: string; expiresAt: number; digest: string }
@@ -13,7 +13,7 @@ function config(value: Readonly<Record<string, unknown>>): Options {
   const address = String(value.publicOrigin);
   const origin = address ? new URL(address) : new URL('http://127.0.0.1:' + port);
   if (address && (origin.protocol !== 'https:' || origin.origin !== address))
-    throw new HttpError('invalid_input', 'Use an HTTPS origin without a path');
+    throw new Error('Use an HTTPS origin without a path');
   return { port, origin: origin.origin, lifetimeMinutes: Number(value.lifetimeMinutes) };
 }
 

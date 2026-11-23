@@ -11,7 +11,8 @@ function supportsThinking(level: ThinkingLevel, capabilities: Capabilities) {
     capabilities?.reasoning && (!capabilities.thinkingLevels || capabilities.thinkingLevels.includes(level));
 }
 
-export function resolveThinking(capabilities: Capabilities, explicit?: ThinkingLevel, inherited?: ThinkingLevel) {
+export function resolveThinking(capabilities: Capabilities, explicit?: ThinkingLevel | null, inherited?: ThinkingLevel) {
+  if (explicit === null) return undefined;
   if (explicit !== undefined) {
     if (!supportsThinking(explicit, capabilities))
       throw new HttpError('invalid_input', 'The selected model does not support thinking level: ' + explicit);

@@ -28,23 +28,23 @@ export function providerSettings(runtime: ProviderHost) {
   });
 }
 export async function saveProvider(runtime: ProviderHost, input: any, remove = false) {
-  if (runtime.hasActiveWork) throw new Error('Stop active conversations before changing providers');
+  if (runtime.hasActiveWork) throw new HttpError('conflict', 'Stop active conversations before changing providers');
   if (!input || typeof input.id !== 'string' || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(input.id)) throw new HttpError('invalid_input', 'Invalid provider ID');
   const path = join(runtime.paths.home, 'models.json');
   const previous = readJson<any>(path, { providers: {} });
   const next = structuredClone(previous); next.providers ??= {};
   if (remove) {
-    if (!Object.hasOwn(next.providers, input.id)) throw new Error('Only custom provider configurations can be removed');
+    if (!Object.hasOwn(next.providers, input.id)) throw new HttpError('invalid_input', 'Only custom provider configurations can be removed');
     runtime.delegation?.checkProvider(input.id, true);
     delete next.providers[input.id];
   } else {
-    if (input.create && (runtime.admin.hasProvider(input.id) || Object.hasOwn(next.providers, input.id))) throw new Error('A provider with this ID already exists');
+    if (input.create && (runtime.admin.hasProvider(input.id) || Object.hasOwn(next.providers, input.id))) throw new HttpError('conflict', 'A provider with this ID already exists');
     if (input.key !== undefined && typeof input.key !== 'string') throw new HttpError('invalid_input', 'Invalid credential');
-    if (!['openai-completions', 'openai-responses', 'anthropic-messages', 'google-generative-ai'].includes(input.api)) throw new Error('Unsupported API type');
+    if (!['openai-completions', 'openai-responses', 'anthropic-messages', 'google-generative-ai'].includes(input.api)) throw new HttpError('invalid_input', 'Unsupported API type');
     let url: URL;
     try { url = new URL(input.baseUrl); } catch { throw new HttpError('invalid_input', 'Invalid API endpoint'); }
     if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.hash) throw new HttpError('invalid_input', 'Invalid API endpoint');
-    if (!Array.isArray(input.models) || !input.models.length || input.models.length > 50) throw new Error('Provide 1–50 models');
+    if (!Array.isArray(input.models) || !input.models.length || input.models.length > 50) throw new HttpError('invalid_input', 'Provide 1–50 models');
     const ids = new Set<string>();
     const models = input.models.map((model: { id?: unknown; name?: unknown; reasoning?: unknown; input?: string[]; contextWindow?: number; maxTokens?: number }) => {
       const id = typeof model?.id === 'string' ? model.id.trim() : '';

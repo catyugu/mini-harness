@@ -1,5 +1,9 @@
 import type { MessageContent, ViewMessage } from './message.js';
 
+export class RunInterrupted extends Error {
+  constructor() { super('The service stopped before the run finished'); }
+}
+
 export interface RunInfo {
   id: string;
   sessionId: string;

@@ -5,10 +5,10 @@ import type { AgentPort, SessionStore } from '@mini-harness/contracts/services';
 import type { ModelChoice, SessionRecord } from '@mini-harness/contracts/conversation';
 import type { ModelCatalogPort } from '@mini-harness/contracts/models';
 import { validateRequestSnapshot, type LlmPort, type LlmRequest, type NativeAssistantMessage, type NativeMessage, type NativeToolMessage, type ToolCallPart } from '@mini-harness/contracts/llm';
-import type { PromptPort } from '@mini-harness/contracts/agent';
+import type { PromptPort, ThinkingLevel } from '@mini-harness/contracts/agent';
 import type { ToolPort } from '@mini-harness/contracts/plugins';
 import type { SkillPort } from '@mini-harness/contracts/skills';
-import type { StreamEvent } from '@mini-harness/contracts/transport';
+import { RunInterrupted, type StreamEvent } from '@mini-harness/contracts/transport';
 import type { Attachment, ImageInput, PreparedMessage } from '@mini-harness/contracts/input';
 import type { SessionLogPort, MessagePatch } from '@mini-harness/contracts/session-log';
 import type { CapabilityObservation, OrderedHook, ToolProjection } from '@mini-harness/contracts/events';
@@ -132,7 +132,7 @@ export class NativeAgent implements AgentPort {
   }
 
   private user(log: SessionLogPort, expanded: string, images: ImageInput[], input: PreparedMessage | undefined,
-    emit: (event: StreamEvent) => void, delivery?: { inboxId: string; selection: { model: ModelChoice; thinkingLevel?: InboxItem['thinkingLevel'] } }) {
+    emit: (event: StreamEvent) => void, delivery?: { inboxId: string; selection: { model: ModelChoice; thinkingLevel?: ThinkingLevel } }) {
     const content: Extract<NativeMessage, { role: 'user' }>['content'] = [{ type: 'text', text: expanded }, ...images];
     log.append({ type: 'message', message: { role: 'user', content, timestamp: Date.now() }, presentation: input, ...delivery });
     const displayed = input ? input.userText ? [{ type: 'text', text: input.userText }, ...images] : images : content;
@@ -212,7 +212,7 @@ export class NativeAgent implements AgentPort {
           if (item.mode !== mode) continue;
           const selection = queuedSelection(item);
           if (!selection.ok) {
-            log.append({ type: 'inbox-failed', id: item.id, reason: selection.failure });
+            log.append({ type: 'inbox-failed', inboxId: item.id, reason: selection.failure });
           } else return { item, ...selection };
         }
       };
@@ -334,7 +334,7 @@ export class NativeAgent implements AgentPort {
       }
       throw new Error('Agent reached the configured turn limit (' + maxTurns + ')');
     } finally {
-      try { if (runLog && signal.aborted) new Inbox(runLog).cancel('Run cancelled'); }
+      try { if (runLog && signal.aborted && !(signal.reason instanceof RunInterrupted)) new Inbox(runLog).cancel('Run cancelled'); }
       finally { leave(); }
     }
   }

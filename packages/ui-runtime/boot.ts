@@ -14,6 +14,10 @@ declare module 'cordis' {
     miniSlots: SlotRegistry;
     miniMessages: MessageExtensions;
     miniSwitch: () => Promise<BrowserPluginFailures>;
+    miniBrowserFailures: {
+      has(id: string): boolean;
+      subscribe(listener: () => void, signal: AbortSignal): void;
+    };
   }
 }
 
@@ -55,8 +59,21 @@ async function boot() {
   });
   const host = new FrontendHost(ctx, data, report);
   const sync = createBrowserGraphLoader(host);
-  const applyGraph = () => sync(graph.get());
+  const failuresChanged = new EventTarget();
+  let currentFailures: BrowserPluginFailures = new Map();
+  const applyGraph = async () => {
+    const failures = await sync(graph.get());
+    const changed = [...failures.keys()].some((id) => !currentFailures.has(id)) || failures.size !== currentFailures.size;
+    if (changed) for (const [id, error] of failures) console.warn('Browser plugin ' + id, error);
+    currentFailures = failures;
+    if (changed) failuresChanged.dispatchEvent(new Event('change'));
+    return failures;
+  };
   ctx.provide('miniProjections', projections);
+  ctx.provide('miniBrowserFailures', {
+    has: (id: string) => currentFailures.has(id),
+    subscribe: (listener: () => void, signal: AbortSignal) => failuresChanged.addEventListener('change', listener, { signal })
+  });
   ctx.provide('miniSwitch', async () => { await graph.refresh(); return applyGraph(); });
   try {
     await graph.refresh();

@@ -14,7 +14,7 @@ export function requestBody(req: IncomingMessage, max = 1024 * 1024, signal?: Ab
     const cancel = () => { fail(signal?.reason ?? new Error('Request aborted')); req.resume(); };
     const receive = (data: Buffer) => {
       size += data.length;
-      if (size > max) { fail(new HttpError('payload_too_large', 'Request too large')); req.destroy(); return; }
+      if (size > max) { fail(new HttpError('payload_too_large', 'Request too large')); req.resume(); return; }
       chunks.push(data);
     };
     const finish = () => {
@@ -96,7 +96,9 @@ export class RouteRegistry implements RoutePort {
     if (!matching) return;
     const { route, match } = matching;
     if (!match) return;
-    const params = Object.fromEntries(route.names.map((name, i) => [name, decodeURIComponent(match[i + 1])]));
+    let params: Record<string, string>;
+    try { params = Object.fromEntries(route.names.map((name, i) => [name, decodeURIComponent(match[i + 1])])); }
+    catch { throw new HttpError('invalid_input', 'Invalid URL encoding'); }
     const disconnect = new AbortController();
     const signal = AbortSignal.any([route.controller.signal, disconnect.signal]);
     const close = () => { if (res.headersSent) res.end(); };

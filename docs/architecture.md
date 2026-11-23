@@ -55,7 +55,7 @@ Session deletion records a durable journal after descendant runs have drained. C
 
 The server publishes successful browser entries from the same descriptors at `/api/bootstrap`. Browser boot owns only generic graph mounting, projection registration and the selected view switch. Domain stores belong to feature descriptors for sessions, workspaces, settings, models, plugins and approvals; the runtime contains no domain endpoint list or domain service whitelist.
 
-The browser runs its own Cordis graph. Feature plugins contribute pages, navigation, tabs, composer controls and message actions. Keyed slot entries can replace a specific contribution and compose decorators around it. Each rendered entry and decorator has its own disposal signal. Plugin disposal also removes dialogs, subscriptions and pending requests. Slots, primitives, theme and responsive layout retain the existing desktop and mobile UI behavior.
+The browser runs its own Cordis graph. Feature plugins contribute pages, navigation, tabs, composer controls and message actions. Keyed slot entries can replace a specific contribution. Each renderer has its own disposal signal. Plugin disposal also removes dialogs, subscriptions and pending requests. Slots, primitives, theme and responsive layout retain the existing desktop and mobile UI behavior.
 
 The authenticated `/api/changes` stream publishes revisions and scoped invalidations. Registered domain owners fetch authoritative projections on change and reconnect. A failed owner is reported without preventing unrelated projections from refreshing. The selected conversation loads native history and run replay; presentation state stays local to its browser feature.
 
@@ -67,3 +67,13 @@ Private packages use pnpm workspace dependencies and named exports. Strict TypeS
 - `pnpm run check:deps` runs architecture checks.
 - `pnpm run test:browser` runs desktop, tablet and mobile Playwright journeys.
 - `pnpm run pack:check` installs the tarball in an empty project and checks exports, assets, detached CLI and native execution against a local mock model provider.
+
+Session navigation reads the last-run summary in the conversation catalog. The Session Log remains the audit source. Older logs reconcile their summary at first open. Search uses temporary read-only handles for cold logs and never creates a transcript for an unopened conversation. Corrupt logs are isolated and remain visible for deletion. Diagnostics report the session ID and validation failure. The live log cache is bounded and active runs retain their writer.
+
+The files capability publishes workspace invalidations after a write or a shell command completes. File views fetch the current file or Git state. A single file tab holds its preview or diff mode and cancels superseded reads.
+
+Run the Session Log recovery benchmark after a build.
+
+    node dist/packages/sessions/tests/recovery-benchmark.js
+
+It measures log opening on growing transcripts with branches, compaction, model requests and accepted tool results. It also checks sampled request snapshots. Recovery reuses validation state for linear request contexts and reconstructs the full context for branch changes, compaction and message patches.

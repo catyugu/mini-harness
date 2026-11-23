@@ -82,6 +82,12 @@ export interface PluginApi {
     write(name: string, value: unknown): void;
     remove(name: string): void;
   };
+  /** Use OS-backed private storage for values that must never enter browser configuration. */
+  readonly secrets: {
+    read(name: string): string | undefined;
+    write(name: string, value: string): void;
+    remove(name: string): void;
+  };
   registerProjection<State>(projection: RecordProjection<State>): {
     read(sessionId: string): Promise<State>;
     dispose(): void;

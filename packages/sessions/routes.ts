@@ -1,3 +1,4 @@
+import { scheduler } from 'node:timers/promises';
 import type { SessionSearchResult } from '@mini-harness/contracts/conversation';
 import type { Context } from 'cordis';
 import { HttpError, HttpReply } from '@mini-harness/contracts/routes';
@@ -30,7 +31,7 @@ export function registerSessionRoutes(ctx: Context) {
     return records.map((record) => projectSession(ctx, record));
   });
   add('GET', '/api/sessions/diagnostics', () => ctx.harnessRegistry.diagnostics());
-  add('GET', '/api/sessions/search', ({ url }) => {
+  add('GET', '/api/sessions/search', async ({ url, signal }) => {
     const query = (url.searchParams.get('q') ?? '').trim();
     if (query.length > 120) throw new HttpError('invalid_input', 'Search query is too long');
     if (query.length < 2) return [];
@@ -46,7 +47,9 @@ export function registerSessionRoutes(ctx: Context) {
         match: [match.index - left + prefix.length, end - left + prefix.length] };
     }
     const hits: SessionSearchResult[] = [];
-    for (const { id, title } of ctx.harnessRegistry.list().slice(0, 1000)) {
+    const candidates = ctx.harnessRegistry.list().slice(-500).reverse();
+    for (const [index, { id, title }] of candidates.entries()) {
+      if (index % 10 === 0) { await scheduler.yield(); signal.throwIfAborted(); }
       let hit = find(id, 'title', title);
       if (!hit) {
         const messages = ctx.harnessRegistry.inspectLog(id, (log) => log.projection().messages.slice(-500)) ?? [];

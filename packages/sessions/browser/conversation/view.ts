@@ -120,8 +120,8 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
   let modelDraft: ModelChoice | undefined;
   let conversationModel: ModelChoice | undefined;
   let conversationThinking: ThinkingLevel | undefined;
-  let thinkingDraft: ThinkingLevel | undefined;
-  thinkingSelect.onchange = () => { thinkingDraft = (thinkingSelect.value || undefined) as ThinkingLevel | undefined; };
+  let thinkingDraft: ThinkingLevel | null | undefined;
+  thinkingSelect.onchange = () => { thinkingDraft = (thinkingSelect.value || null) as ThinkingLevel | null; };
   let activeLeaf: string | null | undefined;
   let draftMode: DraftMode | undefined;
   function setDraftMode(mode?: DraftMode) {
@@ -349,7 +349,7 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
     thinkingSelect.replaceChildren(new Option('Default', ''), ...levels.map((level) =>
       new Option(level === 'xhigh' ? 'Extra high' : level[0].toUpperCase() + level.slice(1), level)));
     const inherited = sameModel ? conversationThinking : undefined;
-    const desired = thinkingDraft ?? inherited;
+    const desired = thinkingDraft === undefined ? inherited : thinkingDraft;
     thinkingSelect.value = desired && levels.includes(desired) ? desired : '';
     thinkingSelect.hidden = levels.length < 2;
   }

@@ -22,6 +22,11 @@ test('Git inspection includes staged, unstaged and untracked files and refuses l
   assert.equal((await new Inspection(alias, new Workspace(cwd, paths.home)).changes()).available, true, 'Directory aliases must resolve to the same repository root');
   const diff = await inspection.diff('file.txt'); assert.match(diff.content, /Staged/); assert.match(diff.content, /Working tree/);
   assert.match((await inspection.diff('new.txt')).content, /new/);
+  writeFileSync(join(paths.cwd, 'file.txt'), 'modified change\n'.repeat(140000));
+  const bounded = await inspection.diff('file.txt');
+  assert.equal(bounded.truncated, true);
+  assert.match(bounded.content, /\+modified change/);
+  assert.ok(Buffer.byteLength(bounded.content) < 2 * 1024 * 1024);
   await assert.rejects(inspection.preview('../home/settings.json'));
   const nestedState = join(paths.cwd, 'private'); mkdirSync(nestedState); writeFileSync(join(nestedState, 'secret.txt'), 'private contents');
   git('add', '.'); git('commit', '-qm', 'track state for denial test'); rmSync(join(nestedState, 'secret.txt'));

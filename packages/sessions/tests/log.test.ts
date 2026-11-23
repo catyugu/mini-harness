@@ -68,11 +68,11 @@ test('a durable message acknowledges inbox delivery exactly once and restart ret
   log.close();
   log = open(); log.recover();
   assert.equal(log.projection().run?.state, 'interrupted');
-  assert.deepEqual(log.projection().inbox.map(({ id }) => id), ['pending']);
+  assert.deepEqual(log.inbox().map(({ id }) => id), ['pending']);
   const count = log.entries().length; log.recover();
   assert.equal(log.entries().length, count);
   log.append({ type: 'inbox-cancelled', ids: ['pending'], reason: 'User cancelled' });
-  assert.deepEqual(log.projection().inbox, []);
+  assert.deepEqual(log.inbox(), []);
 });
 
 test('recovery discards only a torn final record and preserves every acknowledged record', (t) => {

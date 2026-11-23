@@ -6,7 +6,7 @@ import { dirname } from 'node:path';
 import { RequestMessages, validateNativeMessage, validateRequestSnapshot } from '@mini-harness/contracts/llm';
 import type { ModelRequestSnapshot } from '@mini-harness/contracts/llm';
 import type { ToolSchema } from '@mini-harness/contracts/tools';
-import type { SessionEntry, SessionEvent, SessionLogPort, SessionProjection } from '@mini-harness/contracts/session-log';
+import type { InboxItem, QueueEntry, SessionEntry, SessionEvent, SessionLogPort, SessionProjection } from '@mini-harness/contracts/session-log';
 import { projectLog, projectMessage } from './projection.js';
 import { applyContentDelta } from '@mini-harness/platform/content-delta';
 
@@ -21,7 +21,8 @@ export class SessionLog implements SessionLogPort {
   private readonly byId = new Map<string, SessionEntry>();
   private readonly schemas = new Map<string, ToolSchema[]>();
   private readonly inboxIds = new Set<string>();
-  private readonly pendingInbox = new Set<string>();
+  private readonly pendingInbox = new Map<string, InboxItem>();
+  private readonly inboxFailures: QueueEntry[] = [];
   private run?: RunInfo;
   private currentLeafId: string | null = null;
   private cachedProjection?: SessionProjection;
@@ -30,17 +31,18 @@ export class SessionLog implements SessionLogPort {
   private length = 0;
 
   constructor(readonly file: string, readonly sessionId: string, createdAt = new Date().toISOString(),
-    private readonly changed?: (entry: SessionEntry) => void) {
+    private readonly changed?: (entry: SessionEntry) => void, private readonly readOnly = false) {
     // Windows append handles lack FILE_WRITE_DATA and cannot truncate a torn tail.
     // A single validated writer uses explicit positions at its verified end instead.
     this.header = { type: 'session', version: 1, id: sessionId, createdAt };
-    this.handle = openSync(file, constants.O_RDWR | constants.O_CREAT | (constants.O_NOFOLLOW ?? 0), 0o600);
+    const flags = readOnly ? constants.O_RDONLY : constants.O_RDWR | constants.O_CREAT;
+    this.handle = openSync(file, flags | (constants.O_NOFOLLOW ?? 0), 0o600);
     try {
       this.checkFile();
       const bytes = readFileSync(this.handle);
       this.length = bytes.length;
       this.checkFile(this.length);
-      if (!bytes.length) {
+      if (!bytes.length && !readOnly) {
         this.write(this.header);
         syncDirectory(dirname(file));
       } else this.load(bytes);
@@ -78,7 +80,7 @@ export class SessionLog implements SessionLogPort {
       this.remember(entry as SessionEntry);
     }
     // An incomplete, unacknowledged final write can be discarded; complete corrupt records cannot.
-    if (end < bytes.length) {
+    if (!this.readOnly && end < bytes.length) {
       this.checkFile(bytes.length);
       ftruncateSync(this.handle, end);
       fsyncSync(this.handle);
@@ -112,7 +114,7 @@ export class SessionLog implements SessionLogPort {
         throw new Error('Tool acceptance does not belong to the execution branch');
     }
     if (entry.type === 'inbox-enqueued' && this.inboxIds.has(entry.item.id)) throw new Error('Inbox delivery ID already exists');
-    if (entry.type === 'inbox-failed' && !this.pendingInbox.has(entry.id)) throw new Error('Inbox input is not pending');
+    if (entry.type === 'inbox-failed' && !this.pendingInbox.has(entry.inboxId)) throw new Error('Inbox input is not pending');
     if (entry.type === 'message' && entry.inboxId &&
         (entry.message.role !== 'user' || !this.pendingInbox.has(entry.inboxId))) throw new Error('Inbox input is not pending');
     if (entry.type === 'run' && entry.run.sessionId !== this.sessionId) throw new Error('Session run belongs to another conversation');
@@ -133,9 +135,16 @@ export class SessionLog implements SessionLogPort {
     this.records.push(entry);
     this.byId.set(entry.id, entry);
     if (!operational(entry)) this.currentLeafId = entry.id;
-    if (entry.type === 'inbox-enqueued') { this.inboxIds.add(entry.item.id); this.pendingInbox.add(entry.item.id); }
+    if (entry.type === 'inbox-enqueued') { this.inboxIds.add(entry.item.id); this.pendingInbox.set(entry.item.id, entry.item); }
     if (entry.type === 'inbox-consumed' || entry.type === 'inbox-cancelled') for (const id of entry.ids) this.pendingInbox.delete(id);
-    if (entry.type === 'inbox-failed') this.pendingInbox.delete(entry.id);
+    if (entry.type === 'inbox-failed') {
+      const item = this.pendingInbox.get(entry.inboxId);
+      if (item) {
+        if (this.inboxFailures.length === 5) this.inboxFailures.shift();
+        this.inboxFailures.push({ ...queueEntry(item), state: 'failed', reason: entry.reason });
+        this.pendingInbox.delete(entry.inboxId);
+      }
+    }
     if (entry.type === 'message' && entry.inboxId) this.pendingInbox.delete(entry.inboxId);
   }
 
@@ -155,6 +164,10 @@ export class SessionLog implements SessionLogPort {
 
   entries() { return structuredClone(this.records); }
 
+  inbox() { return structuredClone([...this.pendingInbox.values()]); }
+
+  queue() { return [...Array.from(this.pendingInbox.values(), queueEntry), ...structuredClone(this.inboxFailures)]; }
+
   private branchEntries(leafId: string | null = this.leafId) {
     if (leafId !== null && !this.byId.has(leafId)) throw new Error('Unknown session branch');
     const entries: SessionEntry[] = [];
@@ -167,6 +180,7 @@ export class SessionLog implements SessionLogPort {
 
   private persist(event: SessionEvent, parentId: string | null, expectedLeafId?: string | null) {
     if (this.closed) throw new Error('Session log is closed');
+    if (this.readOnly) throw new Error('Session log is read-only');
     if (expectedLeafId !== undefined && expectedLeafId !== this.leafId)
       throw new HttpError('conflict', 'Conversation changed; refresh before editing');
     this.checkFile();
@@ -275,6 +289,11 @@ export class SessionLog implements SessionLogPort {
   }
 }
 
+function queueEntry(item: InboxItem): QueueEntry {
+  return { id: item.id, mode: item.mode, state: 'pending',
+    summary: (item.input?.userText || item.input?.attachments[0]?.name || item.text).slice(0, 180) };
+}
+
 function validateEvent(event: SessionEvent) {
   switch (event.type) {
     case 'message':
@@ -327,7 +346,7 @@ function validateEvent(event: SessionEvent) {
       if (!Array.isArray(event.ids) || event.ids.some((id) => typeof id !== 'string')) throw new Error('Invalid session inbox acknowledgement');
       return;
     case 'inbox-failed':
-      if (typeof event.id !== 'string' || !event.id || typeof event.reason !== 'string' || !event.reason)
+      if (typeof event.inboxId !== 'string' || !event.inboxId || typeof event.reason !== 'string' || !event.reason)
         throw new Error('Invalid inbox failure');
       return;
     case 'run':

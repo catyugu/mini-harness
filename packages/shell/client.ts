@@ -19,7 +19,8 @@ const setup: FrontendSetup = (ctx, api) => {
   api.slots.register('conversation.approvals', list);
   function render() {
     const session = services.session();
-    list.replaceChildren(...approvals.get().filter(({ sessionId }) => sessionId === session?.id).map((approval) => {
+    if (!session) { list.replaceChildren(); return; }
+    list.replaceChildren(...approvals.get().filter(({ sessionId }) => sessionId === session.id).map((approval) => {
       const card = document.createElement('section');
       card.className = 'approval-card';
       const title = document.createElement('strong');
@@ -27,7 +28,7 @@ const setup: FrontendSetup = (ctx, api) => {
       const command = document.createElement('pre');
       command.textContent = approval.command;
       const origin = document.createElement('small');
-      origin.textContent = services.workspaceRecord(session!.workspaceId)?.path ?? session!.title;
+      origin.textContent = services.workspaceRecord(session.workspaceId)?.path ?? session.title;
       card.append(title, origin, command);
       for (const allow of [false, true]) {
         const button = document.createElement('button');

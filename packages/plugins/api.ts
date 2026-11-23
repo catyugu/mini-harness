@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { lstatSync, mkdirSync, realpathSync, rmSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { protectLocal } from '@mini-harness/platform/local-secret';
 import { readJson, writeJson } from '@mini-harness/platform/config';
 import type { Context } from 'cordis';
 import type { PluginScope } from '@mini-harness/contracts/capabilities';
@@ -16,6 +17,7 @@ export interface PluginLifetime {
   records(id: string): SessionRecords;
   dataRoot: string;
   invalidate(): void;
+  routes?: Context['harnessRoutes'];
   upgrade?(path: string, handler: import('@mini-harness/contracts/routes').UpgradeHandler): () => void;
 }
 
@@ -31,15 +33,17 @@ export function createPluginApi(ctx: Context, { id, descriptor, config }: { id: 
   };
   const hooks = executionHooks(ctx, id, state, inScope);
   const instance = scopeKey ? createHash('sha256').update(scopeKey).digest('hex') : 'application';
-  const storagePath = (name: string) => {
+  const windows = process.platform === 'win32';
+  const storagePath = (name: string, privateValue = false) => {
     lifetime.throwIfAborted();
     if (!/^[a-z][a-z0-9-]{0,63}$/.test(name)) throw new Error('Invalid private data name');
     const root = join(state.dataRoot, id, instance);
     mkdirSync(root, { recursive: true, mode: 0o700 });
     if (relative(root, realpathSync(root))) throw new Error('Plugin data directory was redirected');
-    const file = join(root, name + '.json');
+    const file = join(root, (privateValue ? '.' : '') + name + '.json');
     const entry = lstatSync(file, { throwIfNoEntry: false });
-    if (entry && (!entry.isFile() || entry.nlink !== 1)) throw new Error('Invalid plugin data file');
+    if (entry && (!entry.isFile() || entry.nlink !== 1 || (privateValue && !windows &&
+        (entry.uid !== process.getuid?.() || (entry.mode & 0o077) !== 0)))) throw new Error('Invalid plugin data file');
     return file;
   };
   const api: PluginApi = {
@@ -56,6 +60,19 @@ export function createPluginApi(ctx: Context, { id, descriptor, config }: { id: 
       read: (name, fallback) => readJson(storagePath(name), fallback),
       write: (name, value) => writeJson(storagePath(name), value),
       remove: (name) => rmSync(storagePath(name), { force: true })
+    },
+    secrets: {
+      read(name) {
+        const value = readJson<unknown>(storagePath(name, true), undefined);
+        if (value === undefined) return;
+        if (typeof value !== 'string') throw new Error('Invalid protected plugin data');
+        return windows ? protectLocal('Unprotect', Buffer.from(value, 'base64')).toString('utf8') : value;
+      },
+      write(name, value) {
+        if (typeof value !== 'string' || Buffer.byteLength(value) > 16384) throw new Error('Invalid protected plugin data');
+        writeJson(storagePath(name, true), windows ? protectLocal('Protect', Buffer.from(value)).toString('base64') : value);
+      },
+      remove: (name) => rmSync(storagePath(name, true), { force: true })
     },
     provide(name, service) {
       if (!descriptor.provides?.includes(name) || provided.has(name))
@@ -80,7 +97,8 @@ export function createPluginApi(ctx: Context, { id, descriptor, config }: { id: 
     registerRoute(method, path, handler) {
       if (scopeKey || !['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method) ||
           !/^\/(?:[a-zA-Z0-9_-]+\/)*[a-zA-Z0-9_-]+$/.test(path)) throw new Error('Invalid plugin route');
-      const routes = api.service('harnessRoutes');
+      const routes = state.routes;
+      if (!routes) throw new Error('HTTP routes are unavailable');
       return ctx.effect(() => routes.register(method, '/api/extensions/' + id + path, handler));
     },
     registerUpgrade(path, handler) {

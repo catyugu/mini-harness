@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { createReadStream, lstatSync, readdirSync, realpathSync, statSync } from 'node:fs';
+import { closeSync, constants, createReadStream, fstatSync, openSync, lstatSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { dirname, join, resolve, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
@@ -71,6 +71,21 @@ export function authorize(request: IncomingMessage, token: string) {
   return supplied.length === expected.length && timingSafeEqual(supplied, expected);
 }
 
+function openAsset(path: string) {
+  const before = lstatSync(path, { throwIfNoEntry: false });
+  if (!before?.isFile() || before.nlink !== 1 || before.size > 1024 * 1024 || relative(path, realpathSync(path)))
+    throw new HttpError('not_found', 'Not found');
+  const fd = openSync(path, constants.O_RDONLY | (process.platform === 'win32' ? 0 : constants.O_NOFOLLOW));
+  try {
+    const opened = fstatSync(fd);
+    const after = lstatSync(path);
+    if (!after.isFile() || opened.ino !== after.ino || opened.dev !== after.dev ||
+        opened.ino !== before.ino || opened.dev !== before.dev || opened.size !== before.size ||
+        relative(path, realpathSync(path))) throw new HttpError('not_found', 'Not found');
+    return { fd, size: opened.size };
+  } catch (error) { closeSync(fd); throw error; }
+}
+
 function remoteRoute(method: string | undefined, path: string) {
   if (method !== 'GET') return false;
   const basic = ['/api/bootstrap', '/api/changes', '/api/settings', '/api/providers', '/api/models', '/api/plugins',
@@ -107,26 +122,26 @@ export async function createMiniHarnessServer(paths: Paths, options: { token?: s
       }
       if (!pathname.startsWith('/api/')) {
         if (req.method !== 'GET' && req.method !== 'HEAD') return json(res, 405, { error: 'Method not allowed' });
-        const requested = pathname === '/' ? 'index.html' : decodeURIComponent(pathname.slice(1));
+        let requested: string;
+        try { requested = pathname === '/' ? 'index.html' : decodeURIComponent(pathname.slice(1)); }
+        catch { throw new HttpError('invalid_input', 'Invalid URL encoding'); }
         const extension = runtime.plugins.browserAsset(pathname);
         const mime = extension?.mime ?? assets.get(requested);
         if (!mime) throw new HttpError('not_found', 'Not found');
         const path = extension?.path ?? (requested.startsWith('packages/') ? join(FEATURE_DIR, requested.slice('packages/'.length)) : join(WEB_DIR, requested));
-        if (extension) {
-          const info = lstatSync(path, { throwIfNoEntry: false });
-          if (!info?.isFile() || info.nlink !== 1 || info.size > 1024 * 1024 || relative(path, realpathSync(path)))
-            throw new HttpError('not_found', 'Not found');
-        }
-        const size = statSync(path).size;
+        const opened = extension ? openAsset(path) : undefined;
+        const size = opened?.size ?? statSync(path).size;
+        const stream = req.method === 'HEAD' ? undefined : createReadStream(path, { fd: opened?.fd });
+        if (stream) {
+          stream.on('error', (error) => res.destroy(error));
+          res.once('close', () => stream.destroy());
+        } else if (opened) closeSync(opened.fd);
         res.writeHead(200, { 'Content-Type': mime + '; charset=utf-8',
           'Content-Length': size, 'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff',
-          'Content-Security-Policy': "default-src 'self'; script-src 'self' blob:; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'",
+          'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'",
           'Referrer-Policy': 'no-referrer' });
-        if (req.method === 'HEAD') { res.end(); return; }
-        const stream = createReadStream(path);
-        stream.on('error', (error) => res.destroy(error));
-        res.once('close', () => stream.destroy());
-        stream.pipe(res);
+        if (stream) stream.pipe(res);
+        else res.end();
         return;
       }
       if (!remote && !authorize(req, token)) throw new HttpError('unauthorized', 'Unauthorized');
@@ -147,10 +162,6 @@ export async function createMiniHarnessServer(paths: Paths, options: { token?: s
       if (error instanceof HttpError) {
         if (res.headersSent) { res.end(); return; }
         return json(res, error.status, { code: error.code, error: error.message });
-      }
-      if (error instanceof URIError) {
-        if (res.headersSent) { res.end(); return; }
-        return json(res, 400, { code: 'invalid_input', error: 'Invalid URL encoding' });
       }
       runtime.plugins.ctx.logger.error('HTTP %s failed: %s', req.method, error instanceof Error ? error.stack ?? error.message : String(error));
       if (res.headersSent) { res.end(); return; }

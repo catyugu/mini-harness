@@ -1,5 +1,5 @@
 {
-  "name": "mini-harness-remote-web-example",
+  "name": "@mini-harness-examples/remote-web",
   "version": "0.1.0",
   "description": "An independently installable read-only pairing gateway for mini-harness",
   "type": "module",

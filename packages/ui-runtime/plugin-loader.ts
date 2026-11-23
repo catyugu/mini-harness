@@ -1,3 +1,15 @@
+async function loadStyle(href: string, link: HTMLLinkElement) {
+  link.rel = 'stylesheet';
+  link.href = href;
+  const timeout = AbortSignal.timeout(8000);
+  await new Promise<void>((resolve, reject) => {
+    const fail = () => reject(new Error('Could not load browser stylesheet'));
+    timeout.addEventListener('abort', fail, { once: true });
+    link.onload = () => { timeout.removeEventListener('abort', fail); resolve(); };
+    link.onerror = () => { timeout.removeEventListener('abort', fail); fail(); };
+    document.head.append(link);
+  });
+}
 import type { FrontendHost, FrontendSetup } from './frontend.js';
 import type { Bootstrap } from '@mini-harness/web/types';
 import type { BrowserEntry } from '@mini-harness/contracts/browser';
@@ -69,18 +81,16 @@ export function createBrowserGraphLoader(host: FrontendHost) {
       try {
         if (failed.has(id) || plugin.requires?.some((parent) => failed.has(parent)))
           throw failed.get(id) ?? new Error('Browser dependency failed');
+        const links = (plugin.styles ?? []).map(() => document.createElement('link'));
+        styles.set(id, links);
+        await Promise.all((plugin.styles ?? []).map((href, index) => loadStyle(href, links[index])));
         const setup: FrontendSetup = (await import(plugin.browser)).default;
         if (typeof setup !== 'function') throw new Error('Expected a default browser setup function: ' + id);
         await host.mount(id, setup, plugin.inject ?? [], plugin.config);
-        styles.set(id, (plugin.styles ?? []).map((href) => {
-          const link = document.createElement('link');
-          link.rel = 'stylesheet';
-          link.href = href;
-          document.head.append(link);
-          return link;
-        }));
         mounted.set(id, key);
       } catch (error) {
+        for (const link of styles.get(id) ?? []) link.remove();
+        styles.delete(id);
         failed.set(id, error);
       }
     }

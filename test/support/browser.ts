@@ -14,10 +14,10 @@ async function availablePort(): Promise<number> {
   return address.port;
 }
 
-export async function startIsolatedHost(paths: ReturnType<typeof createFixturePaths>['paths']) {
-  const port = await availablePort();
+export async function startIsolatedHost(paths: ReturnType<typeof createFixturePaths>['paths'], port?: number) {
+  const selected = port ?? await availablePort();
   const child: ChildProcess = spawn(process.execPath, [
-    resolve('dist/bin/mini-harness.js'), '--no-open', '--cwd', paths.cwd, '--port', String(port)
+    resolve('dist/bin/mini-harness.js'), '--no-open', '--cwd', paths.cwd, '--port', String(selected)
   ], {
     env: { ...process.env, MINI_HARNESS_HOME: paths.home },
     stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true

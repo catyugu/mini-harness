@@ -13,7 +13,7 @@ export interface InboxItem {
   images: ImageInput[];
   input?: PreparedMessage;
   model?: ModelChoice;
-  thinkingLevel?: ThinkingLevel;
+  thinkingLevel?: ThinkingLevel | null;
 }
 
 export interface QueueEntry {
@@ -60,7 +60,7 @@ export type SessionEvent =
   | { type: 'context-edit'; targetId: string; replacement: NativeMessage['content'] | null }
   | { type: 'inbox-enqueued'; item: InboxItem }
   | { type: 'inbox-consumed' | 'inbox-cancelled'; ids: string[]; reason?: string }
-  | { type: 'inbox-failed'; id: string; reason: string }
+  | { type: 'inbox-failed'; inboxId: string; reason: string }
   | { type: 'run'; run: RunInfo }
   | { type: 'branch' };
 
@@ -81,8 +81,6 @@ export interface SessionProjection {
   contextEntryIds: string[];
   model?: ModelChoice;
   thinkingLevel?: ThinkingLevel;
-  inbox: InboxItem[];
-  inboxFailures: QueueEntry[];
   run?: RunInfo;
 }
 
@@ -90,6 +88,8 @@ export interface SessionLogPort {
   readonly file: string;
   readonly sessionId: string;
   entries(): SessionEntry[];
+  inbox(): InboxItem[];
+  queue(): QueueEntry[];
   branch(leafId?: string | null): SessionEntry[];
   /** Returns only after the complete record has been flushed to durable storage. */
   append(event: SessionEvent, expectedLeafId?: string | null): SessionEntry;

@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process';
+import { protectLocal } from '@mini-harness/platform/local-secret';
 import { randomBytes } from 'node:crypto';
 import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync, realpathSync } from 'node:fs';
 import { join, relative } from 'node:path';
@@ -6,20 +6,6 @@ import { writeJson } from '@mini-harness/platform/config';
 
 const windows = process.platform === 'win32';
 const format = /^[a-f0-9]{64}$/;
-
-function protect(operation: 'Protect' | 'Unprotect', value: Buffer) {
-  const script = '$ErrorActionPreference = "Stop"; Add-Type -AssemblyName System.Security; ' +
-    '$bytes = [Convert]::FromBase64String([Console]::In.ReadToEnd()); ' +
-    '$result = [System.Security.Cryptography.ProtectedData]::' + operation +
-    '($bytes, $null, [System.Security.Cryptography.DataProtectionScope]::CurrentUser); ' +
-    '[Console]::Out.Write([Convert]::ToBase64String($result))';
-  const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {
-    input: value.toString('base64'), encoding: 'utf8', timeout: 10000, windowsHide: true
-  });
-  if (result.status !== 0 || !result.stdout?.length)
-    throw new Error('Windows could not access the mini-harness instance credential for the current user');
-  return Buffer.from(result.stdout, 'base64');
-}
 
 function credentialPath(home: string) {
   const directory = lstatSync(home);
@@ -43,7 +29,7 @@ export function readInstanceCredential(home: string) {
         relative(file, realpathSync(file))) throw new Error('Instance credential file changed while opening');
     const stored: unknown = JSON.parse(readFileSync(handle, 'utf8'));
     if (typeof stored !== 'string') throw new Error('Invalid instance credential');
-    const token = windows ? protect('Unprotect', Buffer.from(stored, 'base64')).toString('utf8') : stored;
+    const token = windows ? protectLocal('Unprotect', Buffer.from(stored, 'base64')).toString('utf8') : stored;
     if (!format.test(token)) throw new Error('Invalid instance credential');
     return token;
   } finally { closeSync(handle); }
@@ -54,6 +40,6 @@ export function instanceCredential(home: string, reset = false) {
   const current = readInstanceCredential(home);
   if (current && !reset) return current;
   const token = randomBytes(32).toString('hex');
-  writeJson(credentialPath(home), windows ? protect('Protect', Buffer.from(token)).toString('base64') : token);
+  writeJson(credentialPath(home), windows ? protectLocal('Protect', Buffer.from(token)).toString('base64') : token);
   return token;
 }

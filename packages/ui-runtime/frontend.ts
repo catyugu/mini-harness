@@ -45,7 +45,7 @@ export interface MessageAction {
 export interface DraftMode {
   title: string;
   text: string;
-  submit(input: { text: string; attachments: Attachment[]; model?: ModelChoice; thinkingLevel?: string }): Promise<unknown>;
+  submit(input: { text: string; attachments: Attachment[]; model?: ModelChoice; thinkingLevel?: string | null }): Promise<unknown>;
 }
 type Release = () => void | Promise<void>;
 

@@ -39,6 +39,10 @@ jobs:
       - run: pnpm run pack:check
 
   browser-linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ["22", "24"]
     runs-on: ubuntu-24.04
     container:
       image: mcr.microsoft.com/playwright:v1.56.0-noble
@@ -48,34 +52,44 @@ jobs:
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "24"
+          node-version: ${{ matrix.node }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       # The pinned official image contains Chromium Headless Shell and system dependencies.
       - run: pnpm run test:browser
+      - run: node dist/scripts/check-package.js
+        env:
+          MINI_HARNESS_PACK_BROWSER: '1'
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: browser-failure-details-ubuntu-24.04
+          name: browser-failure-details-ubuntu-node-${{ matrix.node }}
           path: test-results/
           retention-days: 7
 
   browser-windows:
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ["22", "24"]
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "24"
+          node-version: ${{ matrix.node }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       # Do not enable Media Foundation: the Chromium Headless Shell tests do not use media APIs.
       - run: pnpm exec playwright install chromium --only-shell
       - run: pnpm run test:browser
+      - run: node dist/scripts/check-package.js
+        env:
+          MINI_HARNESS_PACK_BROWSER: '1'
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: browser-failure-details-windows-latest
+          name: browser-failure-details-windows-node-${{ matrix.node }}
           path: test-results/
           retention-days: 7

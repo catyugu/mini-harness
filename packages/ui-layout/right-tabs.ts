@@ -10,7 +10,7 @@ type Tab = {
   view?: { node: HTMLElement; controller: AbortController };
 };
 type ScopeTabs = { scope?: TabScope; open: boolean; active?: Tab; tabs: Tab[] };
-const scopeKey = (scope?: TabScope) => JSON.stringify([scope?.workspaceId, scope?.sessionId]);
+const scopeKey = (scope?: TabScope) => scope?.workspaceId ?? '';
 
 export function createRightTabs(view: {
   root: HTMLElement; bar: HTMLElement; body: HTMLElement; toggle: HTMLButtonElement;
@@ -69,13 +69,15 @@ export function createRightTabs(view: {
   }
 
   function selectScope(scope?: TabScope) {
-    if (scopeKey(scope) === scopeKey(current.scope)) return;
+    if (scopeKey(scope) === scopeKey(current.scope) && scope?.sessionId === current.scope?.sessionId) return;
     current.open = layout.panelOpen();
     for (const tab of [...current.tabs]) {
       if (tab.address) unmount(tab);
       else remove(current, tab);
     }
     current = state(scope);
+    current.scope = scope;
+    for (const tab of current.tabs) if (tab.address) tab.address.sessionId = scope?.sessionId;
     render();
     layout.setPanel(current.open);
   }
@@ -135,7 +137,11 @@ export function createRightTabs(view: {
   function prune(sessions: ReadonlySet<string>, workspaces: ReadonlySet<string>) {
     for (const [key, target] of states) {
       const scope = target.scope;
-      if (!scope || (workspaces.has(scope.workspaceId) && (!scope.sessionId || sessions.has(scope.sessionId)))) continue;
+      if (!scope) continue;
+      if (workspaces.has(scope.workspaceId)) {
+        if (target === current && scope.sessionId && !sessions.has(scope.sessionId)) selectScope({ workspaceId: scope.workspaceId });
+        continue;
+      }
       for (const tab of target.tabs) unmount(tab);
       states.delete(key);
       if (target === current) selectScope();
@@ -147,7 +153,9 @@ export function createRightTabs(view: {
       const entry = [...types].find(([, type]) => type.default);
       if (entry) { open(entry[0]); return; }
     }
-    layout.setPanel(!layout.panelOpen(), true);
+    const opening = !layout.panelOpen();
+    layout.setPanel(opening, true);
+    if (opening) current.active?.view?.node.dispatchEvent(new Event('tab-activate'));
   };
   view.bar.addEventListener('keydown', (event) => {
     if (!(event.target as HTMLElement).matches('[role=tab]')) return;
