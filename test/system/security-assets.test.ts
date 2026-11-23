@@ -16,8 +16,8 @@ test('compiled browser tests and host-only feature code are not public static as
   const port = await app.listen(0);
   const base = 'http://127.0.0.1:' + port;
   for (const asset of [
-    '/ui/tests/settings-layout.spec.js',
-    '/ui/tests/conversation-navigation.spec.js',
+    '/packages/settings/tests/browser-layout.spec.js',
+    '/packages/sessions/tests/browser-navigation.spec.js',
     '/packages/agent/pi-sessions.js',
     '/packages/shell/host.js',
     '/packages/subagents/delegation.js'
@@ -25,6 +25,6 @@ test('compiled browser tests and host-only feature code are not public static as
     const response = await fetch(base + asset);
     assert.equal(response.status, 404, asset);
   }
-  const publicAsset = await fetch(base + '/ui/components/primitives.js');
+  const publicAsset = await fetch(base + '/packages/web/ui/components/primitives.js');
   assert.equal(publicAsset.status, 200);
 });

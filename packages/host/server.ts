@@ -23,7 +23,7 @@ for (const entry of readdirSync(WEB_DIR, { recursive: true, withFileTypes: true 
     const path = relative(WEB_DIR, join(entry.parentPath, entry.name)).split(sep).join('/');
     // Co-located browser tests are compiled for Playwright but must never be web assets.
     if (path.split('/').includes('tests') || /\.(?:spec|test)\.js$/.test(path)) continue;
-    assets.set(path, 'text/javascript');
+    assets.set('packages/web/' + path, 'text/javascript');
   }
 }
 
@@ -33,6 +33,21 @@ for (const entry of readdirSync(FEATURE_DIR, { withFileTypes: true })) {
   const client = join(FEATURE_DIR, entry.name, 'client.js');
   try { if (statSync(client).isFile()) assets.set('packages/' + entry.name + '/client.js', 'text/javascript'); }
   catch { /* Server-only capability. */ }
+  const browserEntry = join(FEATURE_DIR, entry.name, 'browser.js');
+  try { if (statSync(browserEntry).isFile()) assets.set('packages/' + entry.name + '/browser.js', 'text/javascript'); }
+  catch { /* No standalone browser entry. */ }
+  const browserDir = join(FEATURE_DIR, entry.name, 'browser');
+  try {
+    if (!statSync(browserDir).isDirectory()) continue;
+    for (const file of readdirSync(browserDir, { recursive: true, withFileTypes: true })) {
+      if (!file.isFile() || !file.name.endsWith('.js')) continue;
+      const path = relative(FEATURE_DIR, join(file.parentPath, file.name)).split(sep).join('/');
+      if (path.split('/').includes('tests') || /\\.(?:test|spec)\\.js$/.test(path)) continue;
+      assets.set('packages/' + path, 'text/javascript');
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
 }
 
 export function authorize(request: IncomingMessage, token: string) {
@@ -56,12 +71,6 @@ export async function createMiniHarnessServer(paths: ReturnType<typeof getPaths>
       if (!pathname.startsWith('/api/')) {
         if (req.method !== 'GET' && req.method !== 'HEAD') return json(res, 405, { error: 'Method not allowed' });
         const requested = pathname === '/' ? 'index.html' : decodeURIComponent(pathname.slice(1));
-        // Browser plugin clients import ../web/ paths from sibling package directories. Redirect to
-        // canonical app-module URLs so modules have one identity across UI and plugins.
-        if (requested.startsWith('packages/web/') && assets.has(requested.slice('packages/web/'.length))) {
-          res.writeHead(307, { Location: '/' + requested.slice('packages/web/'.length), 'Cache-Control': 'no-store' });
-          return res.end();
-        }
         const mime = assets.get(requested);
         if (!mime) return json(res, 404, { error: 'Not found' });
         const path = requested.startsWith('packages/') ? join(FEATURE_DIR, requested.slice('packages/'.length)) : join(WEB_DIR, requested);

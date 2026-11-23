@@ -71,7 +71,10 @@ test('the kernel remains independent of product runtime', () => {
       assert.equal(dep.target.startsWith(join(packages,name) + sep), false, file + ' depends on feature');
 });
 test('browser values never load host-only modules', () => {
-  const clients = capabilityNames.map(name=>join(packages,name,'client.ts')).filter(existsSync);
+  const clients = capabilityNames.flatMap(name => [
+    ...[join(packages,name,'client.ts'), join(packages,name,'browser.ts')].filter(existsSync),
+    ...(existsSync(join(packages,name,'browser')) ? files(join(packages,name,'browser')).filter(production) : [])
+  ]);
   for (const file of [...files(web).filter(production),...clients]) for (const dep of dependencies(file)) {
     if (dep.typeOnly) continue;
     for (const name of ['host','platform','transport','kernel']) {
