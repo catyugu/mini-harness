@@ -215,3 +215,5 @@ function customEndpoint(provider?: ProviderInfo) {
     id: id.value.trim(), api: api.value, baseUrl: url.value.trim(), models: [...readModels.values()].map((read) => read())
   }) };
 }
+
+export default modelPlugin;

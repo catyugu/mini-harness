@@ -163,3 +163,5 @@ function workspacePicker(api: FrontendApi, sessions: () => { workspaceId: string
     }
   };
 }
+
+export default workspacePlugin;
