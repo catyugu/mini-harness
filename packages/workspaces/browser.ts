@@ -1,8 +1,8 @@
-import type { WorkspaceRecord } from '#mini-harness/contracts/workspace.js';
-import type { FrontendSetup, FrontendApi } from '#mini-harness/ui-runtime/frontend.js';
-import { button, field, confirmAction } from '#mini-harness/ui-primitives/primitives.js';
-import { payload, workspaceRoute } from '#mini-harness/web/api.js';
-import { fileLabel, icon } from '#mini-harness/ui-primitives/icons.js';
+import type { WorkspaceRecord } from '@mini-harness/contracts/workspace';
+import type { FrontendSetup, FrontendApi } from '@mini-harness/ui-runtime/frontend';
+import { button, field, confirmAction } from '@mini-harness/ui-primitives/primitives';
+import { payload, workspaceRoute } from '@mini-harness/web/api';
+import { fileLabel, icon } from '@mini-harness/ui-primitives/icons';
 
 const setup: FrontendSetup = (ctx, api) => {
   const { miniSelection: select, miniSessions: sessions, miniWorkspaces: workspaces, miniTabs: tabs } = ctx;

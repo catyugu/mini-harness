@@ -9,9 +9,9 @@ export function setup(ctx: Context) {
         throw new Error('Invalid revision request');
       return ctx.harnessRuns.reviseAndStart(input.sessionId, {
         sourceEntryId: input.sourceEntryId, expectedLeafId: input.expectedLeafId as string | null,
-        message: input.message, attachments: input.attachments as import('#mini-harness/contracts/input.js').Attachment[],
-        model: input.model as import('#mini-harness/contracts/conversation.js').ModelChoice,
-        thinkingLevel: input.thinkingLevel as import('#mini-harness/contracts/agent.js').ThinkingLevel
+        message: input.message, attachments: input.attachments as import('@mini-harness/contracts/input').Attachment[],
+        model: input.model as import('@mini-harness/contracts/conversation').ModelChoice,
+        thinkingLevel: input.thinkingLevel as import('@mini-harness/contracts/agent').ThinkingLevel
       });
     }));
 }

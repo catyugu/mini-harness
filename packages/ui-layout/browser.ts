@@ -1,6 +1,6 @@
-import { scopedElements } from '#mini-harness/web/api.js';
-import { fromMarkup } from '#mini-harness/ui-primitives/primitives.js';
-import type { FrontendSetup } from '#mini-harness/ui-runtime/frontend.js';
+import { scopedElements } from '@mini-harness/web/api';
+import { fromMarkup } from '@mini-harness/ui-primitives/primitives';
+import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend';
 import { createLayout } from './layout.js';
 import { createRightTabs } from './right-tabs.js';
 

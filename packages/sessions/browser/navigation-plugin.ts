@@ -1,4 +1,4 @@
-import type { FrontendSetup } from '#mini-harness/ui-runtime/frontend.js';
+import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend';
 import { sessionNavigation } from './navigation.js';
 
 const setup: FrontendSetup = (ctx, api) => {

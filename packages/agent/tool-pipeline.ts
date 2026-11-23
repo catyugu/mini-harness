@@ -1,6 +1,6 @@
 import { Check } from 'typebox/value';
-import type { ToolCallPart, NativeToolMessage } from '#mini-harness/contracts/llm.js';
-import { isToolContent, type ToolDefinition, type ToolResult } from '#mini-harness/contracts/tools.js';
+import type { ToolCallPart, NativeToolMessage } from '@mini-harness/contracts/llm';
+import { isToolContent, type ToolDefinition, type ToolResult } from '@mini-harness/contracts/tools';
 
 const parallelLimit = 16;
 

@@ -1,9 +1,9 @@
-import type { FrontendApi, FrontendServices, FrontendSetup, Suggestion } from '#mini-harness/ui-runtime/frontend.js';
-import type { TabAddress, TabScope } from '#mini-harness/web/contracts/tabs.js';
-import { icon } from '#mini-harness/ui-primitives/icons.js';
-import { button as control, iconButton } from '#mini-harness/ui-primitives/primitives.js';
-import { workspaceRoute, wait } from '#mini-harness/web/api.js';
-import { renderMarkdown } from '#mini-harness/ui-primitives/markdown.js';
+import type { FrontendApi, FrontendServices, FrontendSetup, Suggestion } from '@mini-harness/ui-runtime/frontend';
+import type { TabAddress, TabScope } from '@mini-harness/web/contracts/tabs';
+import { icon } from '@mini-harness/ui-primitives/icons';
+import { button as control, iconButton } from '@mini-harness/ui-primitives/primitives';
+import { workspaceRoute, wait } from '@mini-harness/web/api';
+import { renderMarkdown } from '@mini-harness/ui-primitives/markdown';
 
 interface FileEntry { name: string; directory: boolean }
 interface FileChange { path: string; status: string }

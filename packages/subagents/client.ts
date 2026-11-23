@@ -1,5 +1,5 @@
-import type { FrontendSetup } from '#mini-harness/ui-runtime/frontend.js';
-import { icon } from '#mini-harness/ui-primitives/icons.js';
+import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend';
+import { icon } from '@mini-harness/ui-primitives/icons';
 
 const setup: FrontendSetup = (ctx, api) => {
   const services = ctx.harnessBrowser;

@@ -1,11 +1,11 @@
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { Check } from 'typebox/value';
-import type { Settings } from '#mini-harness/contracts/config.js';
-import type { PluginScope, ScopeSettings } from '#mini-harness/contracts/capabilities.js';
-import { resolveCapabilities } from '#mini-harness/kernel/composition.js';
+import type { Settings } from '@mini-harness/contracts/config';
+import type { PluginScope, ScopeSettings } from '@mini-harness/contracts/capabilities';
+import { resolveCapabilities } from '@mini-harness/kernel/composition';
 import { isRegularFile, pluginBundle, pluginIdPattern } from './source.js';
-import type { PluginDescriptor, PluginMetadata } from '#mini-harness/contracts/plugins.js';
+import type { PluginDescriptor, PluginMetadata } from '@mini-harness/contracts/plugins';
 import { describePlugin, type DiscoveredPlugin } from './descriptor.js';
 
 function configDefaults(schema: Record<string, any>, value: any): any {

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { createMiniHarnessServer } from '#mini-harness/host/server.js';
+import { createMiniHarnessServer } from '@mini-harness/host/server';
 import { createMockProvider, createFixturePaths } from '../../../test/helpers/mock-provider.js';
 
 test('subagent tool is mounted in parent only, with an explicit concurrency limit', { timeout: 30000 }, async (t) => {
@@ -38,7 +38,7 @@ test('Native execution honors file policy and recursive delegates can finish wit
   writeFileSync(join(root, 'outside.txt'), 'private fixture');
   await app.runtime.updateSettings({ pluginConfig: { subagents: { maxDepth: 2, maxParallel: 1, provider: 'local-mock', model: 'mock-model' } } });
   const parent = app.runtime.registry.create();
-  const toolEvents: Extract<import('#mini-harness/contracts/transport.js').StreamEvent, { type: 'tool' }>[] = [];
+  const toolEvents: Extract<import('@mini-harness/contracts/transport').StreamEvent, { type: 'tool' }>[] = [];
   await app.runtime.runs.send(parent.id, 'root task', (event) => { if (event.type === 'tool') toolEvents.push(event); });
   const records = app.runtime.registry.descendants([parent.id]).map((id) => app.runtime.registry.get(id));
   assert.deepEqual(records.map((record) => { assert.ok(record); return record.title; }), ['root task', 'child task', 'leaf task']);

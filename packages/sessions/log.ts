@@ -1,11 +1,11 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { closeSync, constants, fstatSync, fsyncSync, ftruncateSync, lstatSync, openSync, readFileSync, writeSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { validateNativeMessage, validateRequestSnapshot } from '#mini-harness/contracts/llm.js';
-import type { ModelRequestSnapshot } from '#mini-harness/contracts/llm.js';
-import type { SessionEntry, SessionEvent, SessionLogPort, SessionProjection } from '#mini-harness/contracts/session-log.js';
+import { validateNativeMessage, validateRequestSnapshot } from '@mini-harness/contracts/llm';
+import type { ModelRequestSnapshot } from '@mini-harness/contracts/llm';
+import type { SessionEntry, SessionEvent, SessionLogPort, SessionProjection } from '@mini-harness/contracts/session-log';
 import { projectLog } from './projection.js';
-import { applyContentDelta } from '#mini-harness/platform/content-delta.js';
+import { applyContentDelta } from '@mini-harness/platform/content-delta';
 
 export interface SessionHeader { type: 'session'; version: 1; id: string; createdAt: string; importedFrom?: string }
 const entryId = /^[a-f0-9]{8,64}$/i;
@@ -201,7 +201,7 @@ export class SessionLog implements SessionLogPort {
     return snapshot;
   }
 
-  requestSnapshot(id: string): ModelRequestSnapshot & { messages: import('#mini-harness/contracts/llm.js').NativeMessage[] } {
+  requestSnapshot(id: string): ModelRequestSnapshot & { messages: import('@mini-harness/contracts/llm').NativeMessage[] } {
     const entry = this.byId.get(id);
     if (entry?.type !== 'model-request') throw new Error('Model request not found');
     return structuredClone(this.materializeRequest(entry));

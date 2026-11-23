@@ -1,7 +1,7 @@
-import { defineTool } from '#mini-harness/contracts/tools.js';
+import { defineTool } from '@mini-harness/contracts/tools';
 import type { Context } from 'cordis';
 import { Type } from 'typebox';
-import type { PluginApi } from '#mini-harness/contracts/plugins.js';
+import type { PluginApi } from '@mini-harness/contracts/plugins';
 
 export function setup(ctx: Context, { config }: PluginApi) {
   const { harnessApprovals: approvals, harnessRegistry: workspace, harnessRuns: runs, harnessScopes: scopes } = ctx;

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { BrowserProjections } from '#mini-harness/ui-runtime/projections.js';
+import { BrowserProjections } from '@mini-harness/ui-runtime/projections';
 
 test('browser invalidations reach only registered feature owners and dispose independently', async () => {
   const registry = new BrowserProjections();

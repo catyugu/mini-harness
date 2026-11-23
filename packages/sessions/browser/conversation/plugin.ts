@@ -1,5 +1,5 @@
-import type { FrontendSetup } from '#mini-harness/ui-runtime/frontend.js';
-import { MessageExtensions } from '#mini-harness/ui-runtime/message-extensions.js';
+import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend';
+import { MessageExtensions } from '@mini-harness/ui-runtime/message-extensions';
 import { conversationView } from './view.js';
 
 const setup: FrontendSetup = (ctx, api) => {

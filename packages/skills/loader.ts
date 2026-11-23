@@ -1,7 +1,7 @@
 import { constants } from 'node:fs';
 import { lstat, open, opendir, realpath } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative, sep } from 'node:path';
-import type { Skill, SkillPort } from '#mini-harness/contracts/skills.js';
+import type { Skill, SkillPort } from '@mini-harness/contracts/skills';
 
 const maximumSize = 128 * 1024;
 const maximumEntries = 8192;

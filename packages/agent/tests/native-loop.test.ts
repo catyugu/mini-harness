@@ -5,12 +5,12 @@ import { rmSync } from 'node:fs';
 import { Type } from 'typebox';
 import { NativeAgent } from '../agent.js';
 import { scheduleTools } from '../tool-pipeline.js';
-import { SessionRegistry } from '#mini-harness/sessions/registry.js';
-import { WorkspaceCatalog } from '#mini-harness/workspaces/catalog.js';
-import { ToolRegistry } from '#mini-harness/tools/registry.js';
-import { defineTool } from '#mini-harness/contracts/tools.js';
-import type { LlmPort, NativeAssistantMessage, ToolCallPart } from '#mini-harness/contracts/llm.js';
-import type { ModelRetry } from '#mini-harness/contracts/extensions.js';
+import { SessionRegistry } from '@mini-harness/sessions/registry';
+import { WorkspaceCatalog } from '@mini-harness/workspaces/catalog';
+import { ToolRegistry } from '@mini-harness/tools/registry';
+import { defineTool } from '@mini-harness/contracts/tools';
+import type { LlmPort, NativeAssistantMessage, ToolCallPart } from '@mini-harness/contracts/llm';
+import type { ModelRetry } from '@mini-harness/contracts/extensions';
 import { createFixturePaths } from '../../../test/helpers/mock-provider.js';
 
 const model = { provider: 'fixture', id: 'native' };

@@ -1,5 +1,5 @@
 import type { Context } from 'cordis';
-import { HttpReply } from '#mini-harness/contracts/routes.js';
+import { HttpReply } from '@mini-harness/contracts/routes';
 import { installPlugin, uninstallPlugin, frontendSource } from './files.js';
 
 /** All local plugin filesystem mutations and browser source delivery belong to Plugins. */

@@ -1,5 +1,5 @@
-import type { FrontendSetup } from '#mini-harness/ui-runtime/frontend.js';
-import { payload } from '#mini-harness/web/api.js';
+import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend';
+import { payload } from '@mini-harness/web/api';
 
 /** One Cordis scope owns both message actions and the branch revision draft. */
 const setup: FrontendSetup = (_ctx, api) => {

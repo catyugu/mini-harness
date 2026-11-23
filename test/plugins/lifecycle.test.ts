@@ -3,9 +3,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { MiniHarnessRuntime } from '#mini-harness/host/application.js';
+import { MiniHarnessRuntime } from '@mini-harness/host/application';
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
-import { mergeSettings, readSettings, writeJson } from '#mini-harness/platform/config.js';
+import { mergeSettings, readSettings, writeJson } from '@mini-harness/platform/config';
 
 test('an installed Cordis plugin can use services, configure a tool, and release resources', async (t) => {
   const mock = await createMockProvider();

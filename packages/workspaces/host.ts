@@ -1,6 +1,6 @@
 import type { Context } from 'cordis';
 import { WorkspaceCatalog } from './catalog.js';
-import { HttpReply } from '#mini-harness/contracts/routes.js';
+import { HttpReply } from '@mini-harness/contracts/routes';
 const validId = /^[a-f0-9]{32}$/;
 
 /** Workspace identity, mutations and registered HTTP routes have one owner. */

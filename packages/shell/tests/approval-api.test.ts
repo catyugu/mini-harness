@@ -1,6 +1,6 @@
 import { expectPresent } from '../../../test/support/required.js';
 import { defaultShellMode } from '../manifest.js';
-import { supportsIsolation } from '#mini-harness/platform/isolation.js';
+import { supportsIsolation } from '@mini-harness/platform/isolation';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 

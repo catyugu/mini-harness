@@ -1,4 +1,4 @@
-import type { PluginDescriptor } from '#mini-harness/contracts/plugins.js';
+import type { PluginDescriptor } from '@mini-harness/contracts/plugins';
 import { executeProcess } from './executor.js';
 
 export const manifest: PluginDescriptor = {

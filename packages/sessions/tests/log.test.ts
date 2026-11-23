@@ -4,7 +4,7 @@ import { appendFileSync, linkSync, mkdtempSync, readFileSync, renameSync, rmSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import type { NativeAssistantMessage } from '#mini-harness/contracts/llm.js';
+import type { NativeAssistantMessage } from '@mini-harness/contracts/llm';
 import { SessionLog } from '../log.js';
 
 function fixture(t: test.TestContext) {

@@ -1,8 +1,8 @@
 import type { ServerResponse } from 'node:http';
-import { isRunning } from '#mini-harness/contracts/transport.js';
-import { eventStream } from '#mini-harness/transport/http.js';
+import { isRunning } from '@mini-harness/contracts/transport';
+import { eventStream } from '@mini-harness/transport/http';
 import type { Context } from 'cordis';
-import { HttpReply } from '#mini-harness/contracts/routes.js';
+import { HttpReply } from '@mini-harness/contracts/routes';
 
 export function registerRoutes(ctx: Context) {
   const add = (method: string, path: string, handler: Parameters<typeof ctx.harnessRoutes.register>[2]) =>

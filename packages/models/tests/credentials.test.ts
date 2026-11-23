@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { createMiniHarnessServer } from '#mini-harness/host/server.js';
+import { createMiniHarnessServer } from '@mini-harness/host/server';
 import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.js';
 
 test('credential settings persist atomically and do not return secrets', async (t) => {

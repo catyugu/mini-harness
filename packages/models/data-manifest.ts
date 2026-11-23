@@ -1,4 +1,4 @@
-import type { PluginDescriptor } from '#mini-harness/contracts/plugins.js';
+import type { PluginDescriptor } from '@mini-harness/contracts/plugins';
 
 export const manifest: PluginDescriptor = {
   scope: 'application', id: 'core:models-data', title: 'Model data',

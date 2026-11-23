@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.js';
-import { readJson, writeJson } from '#mini-harness/platform/config.js';
+import { readJson, writeJson } from '@mini-harness/platform/config';
 import { startIsolatedHost, chooseModel } from '../../../test/support/browser.js';
 
 test('retry retains image attachments after selecting an image-capable model', async ({ page }) => {

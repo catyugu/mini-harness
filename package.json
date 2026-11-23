@@ -30,7 +30,7 @@
   },
   "scripts": {
     "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
-    "build": "pnpm run clean && tsc -p tsconfig.json && node dist/scripts/copy-assets.js",
+    "build": "pnpm run clean && tsc -p tsconfig.json && node scripts/resolve-imports.mjs && node dist/scripts/copy-assets.js",
     "start": "pnpm run build && node dist/bin/mini-harness.js",
     "test": "pnpm run build && node dist/scripts/run-node-tests.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -74,11 +74,5 @@
       "default": "./dist/packages/ui-runtime/plugin-sdk.js"
     }
   },
-  "packageManager": "pnpm@10.34.9",
-  "imports": {
-    "#mini-harness/*": {
-      "types": "./dist/types/packages/*",
-      "default": "./dist/packages/*"
-    }
-  }
+  "packageManager": "pnpm@10.34.9"
 }

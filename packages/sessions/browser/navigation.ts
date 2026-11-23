@@ -1,14 +1,14 @@
-import type { Conversation } from '#mini-harness/contracts/conversation.js';
-import type { WorkspaceRecord } from '#mini-harness/contracts/workspace.js';
-import { exportSessions } from '#mini-harness/web/transport/session-client.js';
-import type { Selection } from '#mini-harness/web/models/selection.js';
-import type { RemoteStore } from '#mini-harness/web/models/remote-store.js';
-import type { FrontendApi } from '#mini-harness/ui-runtime/frontend.js';
-import { scopedElements, payload } from '#mini-harness/web/api.js';
+import type { Conversation } from '@mini-harness/contracts/conversation';
+import type { WorkspaceRecord } from '@mini-harness/contracts/workspace';
+import { exportSessions } from '@mini-harness/web/transport/session-client';
+import type { Selection } from '@mini-harness/web/models/selection';
+import type { RemoteStore } from '@mini-harness/web/models/remote-store';
+import type { FrontendApi } from '@mini-harness/ui-runtime/frontend';
+import { scopedElements, payload } from '@mini-harness/web/api';
 import { workspaceTree } from './navigation-tree.js';
 import { sessionTree } from './sessions.js';
-import { button, dialog, field, fromMarkup, iconButton, confirmAction } from '#mini-harness/ui-primitives/primitives.js';
-import { fileLabel, icon } from '#mini-harness/ui-primitives/icons.js';
+import { button, dialog, field, fromMarkup, iconButton, confirmAction } from '@mini-harness/ui-primitives/primitives';
+import { fileLabel, icon } from '@mini-harness/ui-primitives/icons';
 
 interface NavigationServices {
   state: Selection;

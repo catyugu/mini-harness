@@ -5,7 +5,7 @@ import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
-import { readServerInfo } from '#mini-harness/host/process.js';
+import { readServerInfo } from '@mini-harness/host/process';
 import { parseNpmPackResult } from './npm-pack.js';
 import { createFixturePaths, createMockProvider } from '../test/helpers/mock-provider.js';
 

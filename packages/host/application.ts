@@ -1,12 +1,12 @@
 import { Context } from 'cordis';
-import type { NativeAgent } from '#mini-harness/agent/agent.js';
+import type { NativeAgent } from '@mini-harness/agent/agent';
 import { plugins } from './composition.js';
-import { SettingsManager } from '#mini-harness/settings/manager.js';
-import { PluginHost } from '#mini-harness/plugins/manager.js';
-import { RouteRegistry } from '#mini-harness/transport/http.js';
-import { MutationGate } from '#mini-harness/transport/mutations.js';
-import type { ScopePort } from '#mini-harness/contracts/capabilities.js';
-import type { Paths, SettingsPatch } from '#mini-harness/contracts/config.js';
+import { SettingsManager } from '@mini-harness/settings/manager';
+import { PluginHost } from '@mini-harness/plugins/manager';
+import { RouteRegistry } from '@mini-harness/transport/http';
+import { MutationGate } from '@mini-harness/transport/mutations';
+import type { ScopePort } from '@mini-harness/contracts/capabilities';
+import type { Paths, SettingsPatch } from '@mini-harness/contracts/config';
 
 export class MiniHarnessRuntime {
   readonly plugins: PluginHost;

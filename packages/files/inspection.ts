@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import { realpath } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { resolve, relative } from 'node:path';
-import type { WorkspaceFileAccess } from '#mini-harness/contracts/files.js';
+import type { WorkspaceFileAccess } from '@mini-harness/contracts/files';
 const exec = promisify(execFile);
 export class Inspection {
   constructor(private readonly cwd: string, readonly files: WorkspaceFileAccess) {}

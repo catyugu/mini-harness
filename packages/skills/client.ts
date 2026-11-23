@@ -1,6 +1,6 @@
-import type { FrontendSetup } from '#mini-harness/ui-runtime/frontend.js';
-import { workspaceRoute } from '#mini-harness/web/api.js';
-import { iconButton } from '#mini-harness/ui-primitives/primitives.js';
+import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend';
+import { workspaceRoute } from '@mini-harness/web/api';
+import { iconButton } from '@mini-harness/ui-primitives/primitives';
 
 const setup: FrontendSetup = (ctx, api) => {
   const services = ctx.harnessBrowser;

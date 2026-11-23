@@ -1,6 +1,6 @@
-import type { Settings } from '#mini-harness/contracts/config.js';
-import type { FrontendSetup } from '#mini-harness/ui-runtime/frontend.js';
-import { RemoteStore } from '#mini-harness/web/models/remote-store.js';
+import type { Settings } from '@mini-harness/contracts/config';
+import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend';
+import { RemoteStore } from '@mini-harness/web/models/remote-store';
 
 const setup: FrontendSetup = async (ctx, api) => {
   const store = new RemoteStore(() => api.request<Settings>('/settings'));

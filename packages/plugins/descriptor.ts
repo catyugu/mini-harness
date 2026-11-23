@@ -1,7 +1,7 @@
 import { lstatSync } from 'node:fs';
 import { join } from 'node:path';
-import { readJson } from '#mini-harness/platform/config.js';
-import type { PluginDescriptor } from '#mini-harness/contracts/plugins.js';
+import { readJson } from '@mini-harness/platform/config';
+import type { PluginDescriptor } from '@mini-harness/contracts/plugins';
 import { isRegularFile } from './source.js';
 
 export interface DiscoveredPlugin extends PluginDescriptor {

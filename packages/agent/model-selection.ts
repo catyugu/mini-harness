@@ -1,5 +1,5 @@
-import type { ModelChoice } from '#mini-harness/contracts/conversation.js';
-import type { ModelCatalogPort } from '#mini-harness/contracts/models.js';
+import type { ModelChoice } from '@mini-harness/contracts/conversation';
+import type { ModelCatalogPort } from '@mini-harness/contracts/models';
 
 export function selectModel(catalog: ModelCatalogPort, options: {
   explicit?: ModelChoice;

@@ -1,7 +1,7 @@
-import type { NativeMessage } from '#mini-harness/contracts/llm.js';
-import type { MessageContent, ViewMessage } from '#mini-harness/contracts/message.js';
-import type { InboxItem, SessionEntry, SessionProjection } from '#mini-harness/contracts/session-log.js';
-import { applyContentDelta } from '#mini-harness/platform/content-delta.js';
+import type { NativeMessage } from '@mini-harness/contracts/llm';
+import type { MessageContent, ViewMessage } from '@mini-harness/contracts/message';
+import type { InboxItem, SessionEntry, SessionProjection } from '@mini-harness/contracts/session-log';
+import { applyContentDelta } from '@mini-harness/platform/content-delta';
 
 /** Read projections are pure and never write synthetic history back into the transcript. */
 export function projectLog(entries: SessionEntry[], branch: SessionEntry[]): SessionProjection {

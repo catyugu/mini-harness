@@ -1,6 +1,6 @@
 import { setTimeout as sleep } from 'node:timers/promises';
-import type { LlmPort, LlmRequest, NativeAssistantMessage } from '#mini-harness/contracts/llm.js';
-import type { ModelFailure, ModelRetry } from '#mini-harness/contracts/extensions.js';
+import type { LlmPort, LlmRequest, NativeAssistantMessage } from '@mini-harness/contracts/llm';
+import type { ModelFailure, ModelRetry } from '@mini-harness/contracts/extensions';
 
 function failedMessage({ model, signal }: LlmRequest, error: unknown, partial = ''): NativeAssistantMessage {
   return { role: 'assistant', content: partial ? [{ type: 'text', text: partial }] : [], timestamp: Date.now(),

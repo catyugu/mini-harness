@@ -1,8 +1,8 @@
 import { dirname, resolve } from 'node:path';
 import { TextDecoder } from 'node:util';
 import { Type } from 'typebox';
-import { defineTool, type ToolDefinition, type ToolResult } from '#mini-harness/contracts/tools.js';
-import type { WorkspaceFileAccess } from '#mini-harness/contracts/files.js';
+import { defineTool, type ToolDefinition, type ToolResult } from '@mini-harness/contracts/tools';
+import type { WorkspaceFileAccess } from '@mini-harness/contracts/files';
 
 export const fileToolNames = ['read', 'write', 'edit', 'ls', 'find', 'grep'] as const;
 const outputLimit = 48 * 1024;

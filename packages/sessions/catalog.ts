@@ -1,7 +1,7 @@
-import type { Paths } from '#mini-harness/contracts/config.js';
-import type { SessionRecord } from '#mini-harness/contracts/conversation.js';
-import type { WorkspacePort } from '#mini-harness/contracts/services.js';
-import { readJson } from '#mini-harness/platform/config.js';
+import type { Paths } from '@mini-harness/contracts/config';
+import type { SessionRecord } from '@mini-harness/contracts/conversation';
+import type { WorkspacePort } from '@mini-harness/contracts/services';
+import { readJson } from '@mini-harness/platform/config';
 
 export type StoredSession = Pick<SessionRecord, 'id' | 'workspaceId'>;
 export interface CatalogState {

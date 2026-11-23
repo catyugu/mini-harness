@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { getPaths } from '#mini-harness/platform/config.js';
+import { getPaths } from '@mini-harness/platform/config';
 import { loadCatalog } from '../catalog.js';
-import { WorkspaceCatalog } from '#mini-harness/workspaces/catalog.js';
+import { WorkspaceCatalog } from '@mini-harness/workspaces/catalog';
 
 function fixture(t: test.TestContext) {
   const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'mini-harness-catalog-')));

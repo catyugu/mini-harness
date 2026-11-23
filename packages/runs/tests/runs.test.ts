@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
-import { createMiniHarnessServer } from '#mini-harness/host/server.js';
-import { SessionRegistry } from '#mini-harness/sessions/registry.js';
-import { WorkspaceCatalog } from '#mini-harness/workspaces/catalog.js';
-import type { RunEvent } from '#mini-harness/contracts/transport.js';
+import { createMiniHarnessServer } from '@mini-harness/host/server';
+import { SessionRegistry } from '@mini-harness/sessions/registry';
+import { WorkspaceCatalog } from '@mini-harness/workspaces/catalog';
+import type { RunEvent } from '@mini-harness/contracts/transport';
 import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.js';
 
 function gate() {

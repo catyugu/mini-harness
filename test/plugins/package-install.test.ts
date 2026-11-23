@@ -7,8 +7,8 @@ import { mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSyn
 import { createServer } from 'node:http';
 import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
-import { readSettings, writeJson } from '#mini-harness/platform/config.js';
-import { createMiniHarnessServer } from '#mini-harness/host/server.js';
+import { readSettings, writeJson } from '@mini-harness/platform/config';
+import { createMiniHarnessServer } from '@mini-harness/host/server';
 import { createFixturePaths } from '../helpers/mock-provider.js';
 import { parseNpmPackResult } from '../../scripts/npm-pack.js';
 

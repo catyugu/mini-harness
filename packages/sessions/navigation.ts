@@ -1,5 +1,5 @@
 import type { Context } from 'cordis';
-import type { SessionRecord, Conversation } from '#mini-harness/contracts/conversation.js';
+import type { SessionRecord, Conversation } from '@mini-harness/contracts/conversation';
 
 export function projectSession(ctx: Pick<Context, 'harnessRegistry' | 'harnessRuns' | 'harnessApprovals'>, record: SessionRecord): Conversation {
   const run = ctx.harnessRuns.info(record.id);

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { prepareInput } from '#mini-harness/platform/input.js';
+import { prepareInput } from '@mini-harness/platform/input';
 
 test('attachments enforce encoding, format and byte limits without creating files', () => {
   const png = 'iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAFElEQVR4nGPUCIhigAEmBiSAmwMAKdYA2gR3lpgAAAAASUVORK5CYII=';

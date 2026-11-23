@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
-import { plugins } from '#mini-harness/host/composition.js';
+import { plugins } from '@mini-harness/host/composition';
 import { fixture } from '../support/api-fixture.js';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));

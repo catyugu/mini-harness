@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
-import { readJson, writeJson } from '#mini-harness/platform/config.js';
+import { readJson, writeJson } from '@mini-harness/platform/config';
 import { startIsolatedHost, settingsSection, suggestions } from '../support/browser.js';
 
 test('frontend plugins own all five slots and clean up on disable and reconfiguration', async ({ page }) => {

@@ -1,5 +1,5 @@
-import type { Conversation } from '#mini-harness/contracts/conversation.js';
-import type { WorkspaceRecord } from '#mini-harness/contracts/workspace.js';
+import type { Conversation } from '@mini-harness/contracts/conversation';
+import type { WorkspaceRecord } from '@mini-harness/contracts/workspace';
 
 function workspacePath(path: string) {
   return /^(?:[a-z]:|\\\\)/i.test(path) ? path.replaceAll('\\', '/').toLowerCase() : path;

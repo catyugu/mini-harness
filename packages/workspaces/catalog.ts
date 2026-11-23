@@ -2,10 +2,10 @@ import { createHash } from 'node:crypto';
 import { lstatSync, mkdirSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
-import { readJson, writeJson, type getPaths } from '#mini-harness/platform/config.js';
-import { containsPath } from '#mini-harness/platform/paths.js';
+import { readJson, writeJson, type getPaths } from '@mini-harness/platform/config';
+import { containsPath } from '@mini-harness/platform/paths';
 
-import type { WorkspaceRecord } from '#mini-harness/contracts/workspace.js';
+import type { WorkspaceRecord } from '@mini-harness/contracts/workspace';
 interface CatalogState { records: WorkspaceRecord[] }
 
 // Use the same native resolver as fs/promises.realpath, including Windows long path names.
