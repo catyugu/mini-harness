@@ -218,7 +218,7 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
   };
   const commands = new CommandRegistry();
   const composerUi = createComposer(view, draft, report, commands, api.signal);
-  const messageView = createMessageView(messages, {
+  const messageView = createMessageView(api, messages, {
     render: options.renderTool, messageActions: options.messageActions
   }, () => ({ sessionId: active(), leafId: activeLeaf }), () => {
     const id = active();
