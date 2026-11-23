@@ -1,5 +1,5 @@
 import type {} from 'cordis';
-import type { Conversation, ModelChoice, SessionRecord } from './conversation.js';
+import type { Conversation, ConversationPermission, ModelChoice, SessionRecord } from './conversation.js';
 import type { WorkspaceRecord } from './workspace.js';
 import type { RunAgentPort, ThinkingLevel } from './agent.js';
 import type { RunEvent, RunInfo, StreamEvent } from './transport.js';
@@ -33,7 +33,8 @@ export interface SessionStore {
   readonly workspaces: WorkspacePort;
   get(id: string): SessionRecord | undefined;
   list(workspaceId?: string): SessionRecord[];
-  create(input?: { parentId?: string | null; title?: string; workspaceId?: string }): SessionRecord;
+  create(input?: { parentId?: string | null; title?: string; workspaceId?: string; permission?: ConversationPermission }): SessionRecord;
+  setPermission(id: string, permission: ConversationPermission): SessionRecord;
   rename(id: string, title: string, source?: SessionRecord['titleSource']): SessionRecord;
   records(id: string, pluginId: string): SessionRecords;
   log(id: string): import('./session-log.js').SessionLogPort;

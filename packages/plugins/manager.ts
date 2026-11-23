@@ -18,6 +18,9 @@ import { PluginCatalog, type PluginPlan } from './catalog.js';
 
 type MountedScope = { ctx: Context; parent: Context; scope: PluginScope; isolates: string[] };
 
+// Unknown plugin tools are not assumed to be safe in a read-only conversation.
+const readOnlyTools = new Set(['read', 'ls', 'find', 'grep', 'load_skill']);
+
 const appScope: PluginScope = { kind: 'application' };
 
 /** The descriptor and its resolved graph are the source of both server and browser mounts. */
@@ -100,6 +103,7 @@ export class PluginHost implements ScopePort {
   }
 
   allowsTool(id: string, tool: string) {
+    if (this.lineage(id).some((record) => record.permission === 'readOnly') && !readOnlyTools.has(tool)) return false;
     if (!this.started) return true;
     const { scopes } = this.settings();
     return this.address(id).every((key) => !scopes[key]?.disabledTools?.includes(tool));

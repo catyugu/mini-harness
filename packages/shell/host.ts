@@ -17,6 +17,8 @@ export function setup(ctx: Context, { config }: PluginApi) {
       const approval = () => approvals.request(sessionId, runId, args.command, signal, JSON.stringify([cwd, options]));
       if (context?.waitForApproval) await context.waitForApproval(approval);
       else await approval();
+      // Permission changes also apply while a Shell command is awaiting approval.
+      if (!scopes.allowsTool(sessionId, 'sandbox_shell')) throw new Error('Shell denied by conversation permissions');
       const execution = scopes.require(sessionId, 'harnessProcess');
       try {
         const output = await execution.run({ command: args.command, cwd, ...options, signal, sessionId });
