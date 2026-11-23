@@ -12,6 +12,7 @@ const paths = {
   theme: 'M12 3a9 9 0 1 0 9 9A7 7 0 0 1 12 3z',
   shield: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z',
   lock: 'M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4',
+  unlock: 'M5 11h14v10H5zM8 11V7a4 4 0 0 1 7.3-2.2',
   delegate: 'M12 3v6M5 14v-2h14v2M5 14a3 3 0 1 0 0 6 3 3 0 0 0 0-6Zm14 0a3 3 0 1 0 0 6 3 3 0 0 0 0-6ZM10 2h4v5h-4z',
   terminal: 'M3 5h18v14H3zM7 9l3 3-3 3m6 0h4',
   search: 'M16 10a6 6 0 1 0-12 0 6 6 0 0 0 12 0m-2 5 5 5',
