@@ -24,7 +24,27 @@ test('desktop and mobile: send, navigate, settings and bulk select', async ({ br
           return composer.getBoundingClientRect().top - title.getBoundingClientRect().top;
         }), { message: 'Welcome heading stays close to the composer at ' + viewport.width + 'px' }).toBeLessThan(145);
         await expect(modelButton(page)).toHaveText('Mock Model');
-        await expect(page.getByRole('button', { name: 'Permissions: Standard' })).toBeVisible();
+        const permissions = page.getByRole('button', { name: 'Permissions: Standard' });
+        await expect(permissions).toBeVisible();
+        await permissions.click();
+        const permissionPicker = page.locator('#permissionPicker');
+        await expect(permissionPicker.getByRole('option')).toHaveCount(3);
+        const pickerBounds = expectPresent(await permissionPicker.boundingBox(), 'permission picker bounds');
+        expect(pickerBounds.x).toBeGreaterThanOrEqual(0);
+        expect(pickerBounds.x + pickerBounds.width).toBeLessThanOrEqual(viewport.width);
+        for (const option of await permissionPicker.getByRole('option').all()) {
+          const gap = await option.evaluate((node) => {
+            const name = node.querySelector('strong');
+            const description = node.querySelector('small');
+            if (!name || !description) throw new Error('Missing permission title or description');
+            return description.getBoundingClientRect().top - name.getBoundingClientRect().bottom;
+          });
+          expect(gap).toBeGreaterThanOrEqual(3);
+        }
+        await permissionPicker.getByRole('option', { name: /Full access/ }).click();
+        await expect(page.getByRole('button', { name: 'Permissions: Full access' })).toBeVisible();
+        await page.getByRole('button', { name: 'Permissions: Full access' }).click();
+        await permissionPicker.getByRole('option', { name: /Standard/ }).click();
         await modelButton(page).click();
         await expect(modelSearch(page)).toBeFocused();
         const modelPop = expectPresent(await page.locator('#modelPicker').boundingBox(), 'model picker bounds');

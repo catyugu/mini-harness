@@ -16,8 +16,8 @@ export function registerSessionRoutes(ctx: Context) {
     return id;
   };
   const permission = (value: unknown): ConversationPermission => {
-    if (value !== 'standard' && value !== 'readOnly')
-      throw new HttpError('invalid_input', 'Choose Standard or Read-only permission');
+    if (value !== 'standard' && value !== 'readOnly' && value !== 'fullAccess')
+      throw new HttpError('invalid_input', 'Choose Standard, Read-only or Full access permission');
     return value;
   };
   const workspace = (id: string) => {
@@ -94,7 +94,9 @@ export function registerSessionRoutes(ctx: Context) {
   });
   add('PATCH', '/api/sessions/:id/permissions', async ({ params, body }) => {
     const id = session(params.id), input = await body();
-    return projectSession(ctx, ctx.harnessRegistry.setPermission(id, permission(input?.permission)));
+    const updated = ctx.harnessRegistry.setPermission(id, permission(input?.permission));
+    if (updated.permission === 'fullAccess') ctx.harnessApprovals.approveSession(id);
+    return projectSession(ctx, updated);
   });
   add('DELETE', '/api/workspaces/:id', ({ params }) => ctx.harnessRegistry.deleteWorkspace(workspace(params.id)));
   add('POST', '/api/sessions/delete', async ({ body }) => {

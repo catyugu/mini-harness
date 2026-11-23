@@ -1,22 +1,24 @@
 import { randomUUID } from 'node:crypto';
 import { ApprovalDenied, type Approval } from '@mini-harness/contracts/approval';
+type Decision = 'allow' | 'automatic' | 'deny' | 'expired' | 'cancelled';
+
 export class Approvals {
-  private pending = new Map<string, { info: Approval; settle: (decision: 'allow' | 'deny' | 'expired' | 'cancelled') => void }>();
+  private pending = new Map<string, { info: Approval; settle: (decision: Decision) => void }>();
   private readonly denials = new Map<string, Set<string>>();
   readonly events = new EventTarget();
   private changed(id: string) { this.events.dispatchEvent(new CustomEvent('change', { detail: { id } })); }
   has(sessionId: string) { return [...this.pending.values()].some(({ info }) => info.sessionId === sessionId); }
   list() { return [...this.pending.values()].map(({ info }) => ({ ...info })); }
-  request(sessionId: string, runId: string | undefined, command: string, signal?: AbortSignal, context?: string): Promise<void> {
+  request(sessionId: string, runId: string | undefined, command: string, signal?: AbortSignal, context?: string): Promise<boolean> {
     signal?.throwIfAborted();
     const key = context === undefined ? undefined : JSON.stringify([sessionId, context, command]);
     if (runId && key && this.denials.get(runId)?.has(key)) return Promise.reject(new ApprovalDenied());
-    return new Promise<void>((resolve, reject) => {
+    return new Promise<boolean>((resolve, reject) => {
       const info = { id: randomUUID(), sessionId, runId, command, createdAt: new Date().toISOString() };
-      const finish = (decision: 'allow' | 'deny' | 'expired' | 'cancelled') => {
+      const finish = (decision: Decision) => {
         this.pending.delete(info.id); clearTimeout(timer); signal?.removeEventListener('abort', abort);
         this.changed(sessionId);
-        if (decision === 'allow') resolve();
+        if (decision === 'allow' || decision === 'automatic') resolve(decision === 'automatic');
         else if (decision === 'deny') {
           if (runId && key) {
             const previous = this.denials.get(runId) ?? new Set();
@@ -37,6 +39,11 @@ export class Approvals {
     const request = this.pending.get(id);
     if (!request) throw new Error('Approval is no longer pending');
     request.settle(allowed ? 'allow' : 'deny');
+  }
+  /** An explicit Full access selection releases this conversation's pending approvals. */
+  approveSession(sessionId: string) {
+    for (const { info, settle } of [...this.pending.values()])
+      if (info.sessionId === sessionId) settle('automatic');
   }
   finishRun(runId: string) { this.denials.delete(runId); }
   close() {
