@@ -6,8 +6,8 @@ import type { ModelChoice } from '../../contracts/conversation.js';
 import type { Conversation } from '../../contracts/conversation.js';
 import type { RightTabType, TabScope, RightTabsPort } from '../contracts/tabs.js';
 import type { Bootstrap } from '../types.js';
+import { SlotRegistry, type SlotName, type SlotKind } from '../../ui-slots/registry.js';
 
-export type Slot = 'sidebar' | 'composer' | 'settings' | 'inspector' | 'approvals' | 'session-navigation' | 'conversation' | 'dialogs' | 'main' | 'conversation-header';
 export interface ToolView { name: string; state: string; content?: MessageContent; arguments?: unknown; sessionId?: string }
 export interface Suggestion {
   label: string;
@@ -47,8 +47,10 @@ export interface DraftMode {
   submit(input: { text: string; attachments: Attachment[]; model?: ModelChoice; thinkingLevel?: string }): Promise<unknown>;
 }
 export interface FrontendApi {
-  outlet(slot: Slot, container: HTMLElement): void;
-  mount(slot: Slot, node: HTMLElement, order?: number): void;
+  readonly slots: {
+    define(name: SlotName, container: HTMLElement, kind?: SlotKind): void;
+    register(name: SlotName, node: HTMLElement, order?: number): () => void;
+  };
   messageAction(action: MessageAction): void;
   beginDraftMode(mode: DraftMode): void;
   cancelDraftMode(): void;
@@ -87,7 +89,7 @@ export class FrontendHost {
   private readonly plugins = new Map<string, { fiber: Fiber; controller: AbortController }>();
   private disposed = false;
   private draftOwner?: string;
-  private readonly contributions = new WeakMap<HTMLElement, number>();
+  private readonly slots = new SlotRegistry();
   private readonly renderers = new Map<string, (tool: ToolView) => HTMLElement | undefined>();
   private readonly actions = new Map<string, (tool: ToolView) => HTMLElement | undefined>();
   private readonly messageContributions = new Map<string, MessageAction>();
@@ -100,20 +102,12 @@ export class FrontendHost {
   }
   private changedMessages() { for (const listener of this.messageListeners) listener(); }
 
-  private readonly outlets = new Map<Slot, HTMLElement>();
-
   constructor(
     private readonly ctx: Context,
     private readonly request: <T>(path: string, options?: RequestInit) => Promise<T>,
     private readonly services: FrontendServices
   ) {
     this.ctx.provide('harnessBrowser', services);
-  }
-
-  private outlet(slot: Slot, node: HTMLElement) {
-    if (this.outlets.has(slot)) throw new Error('Duplicate browser outlet: ' + slot);
-    this.outlets.set(slot, node);
-    return () => { if (this.outlets.get(slot) === node) this.outlets.delete(slot); };
   }
 
   enable(id: string, setup: FrontendSetup, config: Record<string, unknown> = {}) {
@@ -144,7 +138,10 @@ export class FrontendHost {
       });
       const cleanup = await setup(ctx, {
         signal: controller.signal,
-        outlet: (slot, container) => own(() => this.outlet(slot, container)),
+        slots: {
+          define: (name, container, kind) => { own(() => this.slots.define(name, container, kind)); },
+          register: (name, node, order) => own(() => this.slots.register(name, node, order))
+        },
         request: (path, options) => this.request(path, { ...options, signal: options?.signal
           ? AbortSignal.any([controller.signal, options.signal]) : controller.signal }),
         insert: (value) => { if (!controller.signal.aborted) this.ctx.miniComposer.insert(value); },
@@ -173,14 +170,6 @@ export class FrontendHost {
           if (!controller.signal.aborted) this.ctx.miniTabs.inspect(id, title, content, controller.signal);
         },
         config: Object.freeze(structuredClone(config)),
-        mount: (slot, node, order = 0) => own(() => {
-          const container = this.outlets.get(slot);
-          if (!container) throw new Error('Browser outlet unavailable: ' + slot);
-          const before = [...container.children].find((child) => (this.contributions.get(child as HTMLElement) ?? 0) > order);
-          this.contributions.set(node, order);
-          container.insertBefore(node, before ?? null);
-          return () => node.remove();
-        }),
         command: (command) => own(() => this.ctx.miniComposer.command(command)),
         completion: (trigger, complete) => own(() => this.ctx.miniComposer.completion(trigger, complete)),
         settingsPage: (title, node) => own(() => this.ctx.miniSettingsPages.addPage(title, node)),

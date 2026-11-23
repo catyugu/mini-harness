@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@mini-harness/contracts": "file:../contracts"
+    "@mini-harness/contracts": "file:../contracts",
+    "@mini-harness/ui-slots": "file:../ui-slots",
+    "@mini-harness/ui": "file:../ui"
   }
 }

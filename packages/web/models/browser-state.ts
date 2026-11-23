@@ -72,7 +72,6 @@ export class BrowserState extends EventTarget {
 
   apply = (settings: Settings) => {
     this.snapshot.settings = settings;
-    document.documentElement.dataset.theme = settings.appearance;
     this.dispatchEvent(new Event('settings'));
   };
 
