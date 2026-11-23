@@ -12,7 +12,7 @@ mini-harness plugin update my-tools
 mini-harness plugin update my-tools @example/harness-tools@1.2.0
 ```
 
-The first argument is the local plugin ID used in settings and routes. An unversioned name follows the registry's default tag. An explicit version stays pinned until you supply a new version or tag on update. Installation uses the bundled, pinned pnpm with your registry configuration. It installs production dependencies, records an exact version and a lockfile, and disables lifecycle scripts and pnpmfile hooks. Stop the server before installing or updating. For an update, disable the plugin in every scope and clear its provider selections first. The CLI validates the staged package before publishing it and keeps existing plugin configuration. Enable the installed plugin in Settings or select it at its declared scope.
+The first argument is the local plugin ID used in settings and routes. An unversioned name follows the registry's default tag. An explicit version stays pinned until you supply a new version or tag on update. Installation uses the npm CLI included with Node (or `MINI_HARNESS_NPM_CLI` for custom Node installations). There is no bundled package manager at runtime. It installs production dependencies, records an exact version and a `package-lock.json`, and disables lifecycle scripts. Stop the server before installing or updating. For an update, disable the plugin in every scope and clear its provider selections first. The CLI validates the staged package before publishing it and keeps existing plugin configuration. Enable the installed plugin in Settings or select it at its declared scope.
 
 ## Descriptor and entrypoints
 

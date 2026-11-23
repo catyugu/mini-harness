@@ -17,9 +17,6 @@ importers:
       ignore:
         specifier: 7.0.8
         version: 7.0.8
-      pnpm:
-        specifier: 10.34.9
-        version: 10.34.9
       re2-wasm:
         specifier: 1.0.2
         version: 1.0.2
@@ -1344,8 +1341,6 @@ snapshots:
       playwright-core: 1.56.0
     optionalDependencies:
       fsevents: 2.3.2
-
-  pnpm@10.34.9: {}
 
   protobufjs@7.6.6:
     dependencies:

@@ -27,7 +27,7 @@ test('npm pack output accepts both array and npm 12 keyed objects', () => {
     /Unexpected npm pack output/);
 });
 
-test('pnpm distribution resolves dependencies, updates atomically and serves both entrypoints', { timeout: 45000 }, async (t) => {
+test('npm registry installation resolves dependencies, updates atomically and serves both entrypoints', { timeout: 45000 }, async (t) => {
   const { paths, root } = createFixturePaths('http://127.0.0.1:1/v1');
   const packages = new Map<string, { version: string; bytes: Buffer; manifest: object }[]>();
   const tarballs = new Map<string, Buffer>();
@@ -97,8 +97,8 @@ test('pnpm distribution resolves dependencies, updates atomically and serves bot
   const directory = join(paths.plugins, id);
   const installed = readdirSync(directory);
   const source = JSON.parse(readFileSync(join(directory, '.package-source.json'), 'utf8'));
-  const lock = readFileSync(join(directory, source.generation, 'pnpm-lock.yaml'), 'utf8');
-  assert.match(lock, /mini-setup-helper@1\.0\.0/);
+  const lock = JSON.parse(readFileSync(join(directory, source.generation, 'package-lock.json'), 'utf8'));
+  assert.equal(lock.packages['node_modules/mini-setup-helper'].version, '1.0.0');
   assert.equal(installed.length, 2);
 
   const settings = readSettings(paths);

@@ -33,7 +33,7 @@ export function packageBundle(directory: string, spec: string) {
   const location = relative(root, folder);
   if (!location || location === '..' || location.startsWith('..' + sep) || isAbsolute(location))
     throw new Error('Plugin package resolves outside its installation directory');
-  if (!isRegularFile(join(root, 'pnpm-lock.yaml'))) throw new Error('Missing plugin dependency lockfile');
+  if (!isRegularFile(join(root, 'package-lock.json'))) throw new Error('Missing plugin dependency lockfile');
   const manifestPath = join(folder, 'package.json');
   if (!isRegularFile(manifestPath)) throw new Error('Missing plugin package.json');
   const manifest = readJson<{ name?: string; version?: string; type?: string }>(manifestPath, {});
