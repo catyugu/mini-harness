@@ -1,0 +1,30 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { rmSync } from 'node:fs';
+import { MiniHarnessRuntime } from '../../packages/host/application.js';
+import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
+
+test('appearance, parallelism and child defaults update without interrupting a running session', async (t) => {
+  let entered: () => void;
+  let release: () => void;
+  const waiting = new Promise<void>((done) => { entered = done; });
+  const held = new Promise<void>((done) => { release = done; });
+  const mock = await createMockProvider(async () => { entered(); await held; return 'Done'; });
+  const { root, paths } = createFixturePaths(mock.url);
+  const runtime = new MiniHarnessRuntime(paths);
+  t.after(async () => { release(); await runtime.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
+  await runtime.start();
+  const item = runtime.registry.create();
+  const pending = runtime.runs.send(item.id, 'Hold');
+  await waiting;
+  const original = await runtime.pi.open(item.id);
+  await runtime.updateSettings({ appearance: 'dark', pluginConfig: { subagents: { maxParallel: 2 } } });
+  assert.strictEqual(await runtime.pi.open(item.id), original);
+  assert.equal(runtime.delegation.parallelLimit, 2);
+  assert.equal(runtime.runs.active(item.id), true);
+  await assert.rejects(runtime.updateSettings({ plugins: { files: false } }), /Stop active/);
+  await assert.rejects(runtime.updateSettings({ plugins: { 'session-helper': false } }), /Stop active/);
+  assert.equal(runtime.settings.plugins['session-helper'], true);
+  release();
+  assert.equal(await pending, 'Done');
+});

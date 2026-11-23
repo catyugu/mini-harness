@@ -1,0 +1,31 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { rmSync } from 'node:fs';
+import { MiniHarnessRuntime } from '../../host/application.js';
+import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.js';
+
+test('tool availability changes rebuild affected sessions and preserve unrelated sessions', async (t) => {
+  const mock = await createMockProvider();
+  const { root, paths } = createFixturePaths(mock.url);
+  const runtime = new MiniHarnessRuntime(paths);
+  t.after(async () => { await runtime.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
+  await runtime.start();
+  const parent = runtime.registry.create();
+  const child = runtime.registry.create({ parentId: parent.id });
+  const leaf = runtime.registry.create({ parentId: child.id });
+  const originalParent = await runtime.pi.open(parent.id);
+  const originalChild = await runtime.pi.open(child.id);
+  const originalLeaf = await runtime.pi.open(leaf.id);
+  await runtime.updateSettings({ pluginConfig: { subagents: { maxDepth: 2 } } });
+  assert.strictEqual(await runtime.pi.open(parent.id), originalParent);
+  assert.notStrictEqual(await runtime.pi.open(child.id), originalChild);
+  assert.ok((await runtime.pi.open(child.id)).getActiveToolNames().includes('delegate'));
+  assert.strictEqual(await runtime.pi.open(leaf.id), originalLeaf);
+  await runtime.updateSettings({ plugins: { subagents: false } });
+  assert.notStrictEqual(await runtime.pi.open(parent.id), originalParent);
+  assert.ok(!(await runtime.pi.open(parent.id)).getActiveToolNames().includes('delegate'));
+  assert.strictEqual(await runtime.pi.open(leaf.id), originalLeaf);
+  await runtime.updateSettings({ plugins: { skills: false } });
+  assert.equal(runtime.plugins.ctx.harnessSkills, undefined);
+  assert.notStrictEqual(await runtime.pi.open(leaf.id), originalLeaf);
+});

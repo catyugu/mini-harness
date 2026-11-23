@@ -5,7 +5,7 @@ import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
-import { readServerInfo } from '../src/process.js';
+import { readServerInfo } from '../packages/host/process.js';
 import { createFixturePaths, createMockProvider } from '../test/helpers/mock-provider.js';
 
 const execFile = promisify(exec);
@@ -33,7 +33,11 @@ async function checkPackage() {
   try {
     const packed = await npm(['pack', '--json', '--pack-destination', work], { cwd: resolve('.') });
     const [{ name, filename, integrity, files }] = JSON.parse(packed.stdout);
-    assert.ok(files.every(({ path }: { path: string }) => !/^dist\/(?:scripts|test)\//.test(path)));
+    assert.ok(files.every(({ path }: { path: string }) =>
+      !/^dist\/(?:scripts|test)\//.test(path) &&
+      !/^dist\/packages\/[^/]+\/package\.json$/.test(path) &&
+      !/^dist\/.*\/tests\//.test(path) &&
+      !/\.(?:test|spec)\.js$/.test(path)), 'Published package must exclude test artifacts');
     await mkdir(installed);
     const source = JSON.parse(await readFile('package-lock.json', 'utf8'));
     const tarball = 'file:../' + filename;
@@ -63,13 +67,13 @@ async function checkPackage() {
     assert.ok(info);
     const headers = { Authorization: 'Bearer ' + info.token, 'Content-Type': 'application/json' };
     const get = (path: string) => fetch(info.url + path, { headers });
-    for (const asset of ['/', '/app.js', '/markdown.js', '/vendor/marked.js', '/vendor/purify.js', '/logo.svg', '/manifest.webmanifest', '/style.css', '/icon-192.png', '/icon-512.png', '/favicon.ico']) {
+    for (const asset of ['/', '/packages/web-app/app.js', '/packages/web/ui/components/markdown.js', '/packages/session-helper/client.js', '/packages/settings/browser.js', '/packages/sessions/browser/conversation/view.js', '/packages/web/ui/components/primitives.js', '/packages/web/vendor/marked.js', '/packages/web/vendor/purify.js', '/logo.svg', '/manifest.webmanifest', '/style.css', '/icon-192.png', '/icon-512.png', '/favicon.ico']) {
       const response = await get(asset);
       assert.equal(response.status, 200, asset);
       await response.arrayBuffer();
     }
     const bootstrap = await (await get('/api/bootstrap')).json();
-    assert.deepEqual(bootstrap.plugins.map(({ id }) => id), ['files', 'skills', 'subagents', 'shell']);
+    assert.deepEqual(bootstrap.plugins.map(({ id }) => id), ['files', 'skills', 'subagents', 'shell', 'session-helper']);
     const item = await (await fetch(info.url + '/api/sessions', { method: 'POST', headers, body: '{}' })).json();
     const url = info.url + '/api/sessions/' + item.id;
     const startedRun = await fetch(url + '/runs', { method: 'POST', headers, body: JSON.stringify({ message: 'Pack smoke test' }) });

@@ -1,0 +1,24 @@
+{
+  "name": "@mini-harness/host",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@mini-harness/agent": "file:../agent",
+    "@mini-harness/contracts": "file:../contracts",
+    "@mini-harness/files": "file:../files",
+    "@mini-harness/models": "file:../models",
+    "@mini-harness/platform": "file:../platform",
+    "@mini-harness/plugins": "file:../plugins",
+    "@mini-harness/runs": "file:../runs",
+    "@mini-harness/session-helper": "file:../session-helper",
+    "@mini-harness/sessions": "file:../sessions",
+    "@mini-harness/settings": "file:../settings",
+    "@mini-harness/shell": "file:../shell",
+    "@mini-harness/skills": "file:../skills",
+    "@mini-harness/subagents": "file:../subagents",
+    "@mini-harness/transport": "file:../transport",
+    "@mini-harness/ui": "file:../ui",
+    "@mini-harness/workspaces": "file:../workspaces"
+  }
+}

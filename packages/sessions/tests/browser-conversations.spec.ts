@@ -1,0 +1,78 @@
+import { test, expect } from '@playwright/test';
+import { rmSync, mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.js';
+import { readJson } from '../../platform/config.js';
+import { startIsolatedHost, modelSearch, suggestions } from '../../../test/support/browser.js';
+
+test('drafts, search, rename, single deletion, attachment and input discovery', async ({ page }) => {
+  const mock = await createMockProvider(), { root, paths } = createFixturePaths(mock.url);
+  writeFileSync(join(paths.cwd, 'notes.md'), '# Notes\nTask details');
+  mkdirSync(join(paths.cwd, 'task files'));
+  writeFileSync(join(paths.cwd, 'task files', 'draft.md'), '# Draft');
+  const skill = join(paths.skills, 'review'); mkdirSync(skill); writeFileSync(join(skill, 'SKILL.md'), '---\nname: review\ndescription: Review the work\n---\n\nReview carefully.');
+  const service = await startIsolatedHost(paths);
+  try {
+    await page.goto(service.url + '/#token=' + service.token);
+    for (let i = 0; i < 3; i++) await page.getByRole('button', { name: 'New conversation', exact: true }).click();
+    await expect(page.locator('#sessions .session-row')).toHaveCount(0);
+    const index = readJson<any>(paths.registry, { sessions: [] }); expect(index.sessions).toHaveLength(0);
+    const draft = page.getByRole('textbox', { name: 'Message', exact: true });
+    await draft.fill('@');
+    await suggestions(page).getByRole('option', { name: 'task files, expand folder' }).click();
+    await suggestions(page).getByRole('option', { name: 'draft.md', exact: true }).click();
+    await expect(draft).toHaveValue('@"task files/draft.md" ');
+    await draft.fill('@');
+    await suggestions(page).getByRole('option', { name: 'task files, expand folder' }).click();
+    await suggestions(page).getByRole('option', { name: 'Reference task files/', exact: true }).click();
+    await expect(draft).toHaveValue('@"task files/" ');
+    await draft.fill('@notes');
+    await suggestions(page).getByRole('option', { name: 'notes.md', exact: true }).click();
+    await expect(draft).toHaveValue('@"notes.md" ');
+
+    await draft.fill('Read this attachment  and keep this text');
+    await draft.evaluate((input: HTMLTextAreaElement) => input.setSelectionRange(21, 21));
+    await draft.press('/'); await draft.press('m'); await draft.press('o');
+    await expect(suggestions(page).getByRole('option', { name: /Choose a configured model/ })).toBeVisible();
+    await draft.press('Tab');
+    await expect(draft).toHaveValue('Read this attachment /model and keep this text');
+    await draft.press('Enter');
+    await expect(modelSearch(page)).toBeFocused();
+    await modelSearch(page).press('Escape');
+    await expect(draft).toHaveValue('Read this attachment  and keep this text');
+
+    await draft.fill('Open https://example.test/model and /home/model');
+    await expect(suggestions(page)).toBeHidden();
+    await draft.fill('Read this attachment  and keep this text');
+    await draft.evaluate((input: HTMLTextAreaElement) => input.setSelectionRange(21, 21));
+    await draft.press('/'); await draft.press('r'); await draft.press('e'); await draft.press('v');
+    await expect(suggestions(page).getByRole('option', { name: /Review the work/ })).toBeVisible();
+    await draft.press('Enter');
+    await expect(draft).toHaveValue('Read this attachment /skill:review and keep this text');
+    await page.locator('#composer input[type=file]').setInputFiles({ name: 'task.txt', mimeType: 'text/plain', buffer: Buffer.from('ATTACHED TASK') });
+    await expect(page.getByRole('button', { name: 'Remove task.txt' })).toBeVisible();
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.locator('.message.assistant')).toHaveText('Mock response');
+    expect(JSON.stringify(mock.requests[0])).toContain('ATTACHED TASK');
+    expect(JSON.stringify(mock.requests[0])).toContain('Review carefully.');
+    expect(JSON.stringify(mock.requests[0])).toContain('Read this attachment and keep this text');
+    await draft.fill('/export');
+    const exported = page.waitForEvent('download');
+    await draft.press('Enter');
+    expect((await exported).suggestedFilename()).toBe('mini-harness-sessions.json');
+    await expect(page.locator('.attachment')).toHaveCount(0);
+    await page.locator('.session-row').hover();
+    await page.getByRole('button', { name: /^Rename .*Read this attachment|^Rename \/skill:review/ }).click();
+    await page.getByRole('textbox', { name: 'Title', exact: true }).fill('Project review');
+    await page.getByRole('button', { name: 'Rename', exact: true }).click();
+    await expect(page.locator('#conversationTitle')).toHaveText('Project review');
+    await page.getByRole('searchbox', { name: 'Search workspaces and conversations' }).fill('absent');
+    await expect(page.locator('#sessions .session-row')).toHaveCount(0);
+    await page.getByRole('searchbox', { name: 'Search workspaces and conversations' }).fill('review');
+    await expect(page.locator('#sessions .session-row')).toHaveCount(1);
+    page.once('dialog', (dialog) => dialog.accept());
+    await page.getByRole('button', { name: 'Delete Project review', exact: true }).click();
+    await expect(page.locator('#sessions .session-row')).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'What are we working on?' })).toBeVisible();
+  } finally { await page.close(); await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
+});

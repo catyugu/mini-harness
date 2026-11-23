@@ -28,7 +28,9 @@ Install reviewed ESM code in `~/.mini-harness/plugins/<id>/plugin.js`. IDs start
 }
 ```
 
-Dependencies must be enabled; cycles and missing dependencies reject the configuration before unloading anything. Built-in IDs are `files`, `skills`, `subagents` and `shell`.
+The optional `icon` field accepts a symbolic icon name or an inline SVG path object such as `{"path":"M2 2h20v20H2z","viewBox":"0 0 24 24"}`. Custom vector data is rendered as an SVG `<path>` without interpreting HTML; unknown symbolic names fall back to the generic plugin icon. No fixed list of icon names is imposed by the plugin contract.
+
+Dependencies must be enabled; cycles and missing dependencies reject the configuration before unloading anything. Built-in IDs are `files`, `skills`, `subagents`, `shell` and `session-helper`.
 
 The GUI renders strings, booleans, numbers, integers, enums and nested objects from the schema. Other values use JSON input. Use `title`, `description`, `default`, `required`, bounds and `additionalProperties` to describe the accepted configuration. Keep schemas self-contained; external references are unsupported. Defaults apply recursively to object properties, then TypeBox validates the resulting value. Store configuration in `settings.json` under `pluginConfig.<id>`; it is ordinary local configuration, so use Pi credential storage for model secrets.
 
@@ -57,7 +59,7 @@ export default function setup(ctx, api) {
 }
 ```
 
-The default export can also be a Cordis component with `apply` and `inject`. Declare service names with `inject`; declare plugin IDs with manifest `requires`. Register tools during setup and honor cancellation in tool execution.
+`plugin.js` must have a default export: a setup function or a Cordis component with `apply` and `inject`. Declare service names with `inject`; declare plugin IDs with manifest `requires`. Register tools during setup and honor cancellation in tool execution.
 
 | API | Purpose |
 | - | - |
@@ -77,7 +79,7 @@ Public metadata services are `harnessModels.list()` and `harnessSessions.get(id)
 
 Built-in and local setup functions run in Cordis scopes. Dependencies mount first and unload last. Disabling a required plugin also requires disabling its dependents. Reconfiguring a dependency restarts its enabled dependents. Unchanged plugin scopes stay mounted. A route handler receives `{ url, body(maxBytes?), signal }`. The signal aborts when its route unloads. Read JSON with `await body()` and return a JSON-serializable result.
 
-Schema validation precedes setup. If setup or settings persistence fails, the host unloads new scopes and restores the previous plugin configuration. Cleanup handlers must release their resources and tolerate partial setup; failure to restore is reported explicitly. Changes affecting active tools or Skills require idle conversations, and invalidate Pi sessions so their next open gets the current tool definitions. Theme, scheduling, execution policy and model-selection changes preserve running sessions. Changes to child depth refresh tool availability when a session is next idle.
+Schema validation precedes setup. If setup or settings persistence fails, the host unloads new scopes and restores the previous plugin configuration. Cleanup handlers must release their resources and tolerate partial setup; failure to restore is reported explicitly. Plugin enable/disable and tool, Skill or Shell reconfiguration require idle conversations. Subagent depth, concurrency and child-model defaults use a live configuration service and may change without interrupting runs; newly eligible tools become available when the session is next idle. Appearance and model selection updates also preserve active runs. Pi reconciles tool and Skill resources after lifecycle changes.
 
 ## Run API
 
@@ -136,19 +138,19 @@ export default function setup(api) {
 
 The browser runs each plugin in a Cordis scope and disposes its slots, completions, settings pages, tool registrations and inspector content when the scope unloads. Pass `api.signal` to document or window listeners or release them with `onDispose`. Dependencies mount first and dispose last; configuration changes also rebuild dependent browser extensions. Setup failures remove partial contributions and leave ordinary chat available. The catalog reports which browser plugins failed after the server saved a change. The backend and UI share one plugin switch; attachments, file inspection and Skills use these same extension interfaces.
 
-The Plugins page can install a local bundle containing `plugin.js`, optional `plugin.json` and `web.js` (at most 1 MiB combined). New installations stay disabled. Disable the plugin before uninstalling; uninstall removes the local plugin directory permanently. Larger development plugins can still be placed in the local plugins directory manually.
+The Plugins page can install a local bundle containing `plugin.js`, `web.js` or both, with optional `plugin.json` (at most 1 MiB combined). New installations stay disabled. Disable the plugin before uninstalling; uninstall permanently removes its directory and its entries in the plugin switch/configuration maps. Larger development plugins can still be placed in the local plugins directory manually.
 
 Register a right-panel tab with `api.rightTab(type, { title, create })`. Both callbacks receive an address with `workspaceId`, optional `sessionId`, and optional `path`. `create(address, signal)` returns the tab's element and receives an abort signal for any in-flight work. Call `api.openTab(type, path?)` to open or focus the tab in the current conversation or workspace. Changing conversations aborts and releases the outgoing tab views. Registered tabs keep their address and selection, and recreate their views on return. Inspector content added with `inspect` lasts for the current scope. Disabling a plugin closes its tabs.
 
-## GUI API additions
+## Workspace and GUI API
 
-The server runs one Runtime for all registered workspaces. Each conversation has a stable Workspace ID. A request can address a conversation by ID or scope file and Skills requests to a registered Workspace ID.
+The server runs one Runtime for all registered workspaces. Each conversation has a stable Workspace ID. A request can address a conversation by ID or scope file and Skills requests to a registered Workspace ID. Deleting a Workspace permanently deletes all associated conversations and Pi session files, including subagent descendants; it leaves the project directory and its files untouched.
 
 | Request | Result |
 | - | - |
 | `GET /api/workspaces`, `POST /api/workspaces` with `{path, name?}` | List or register local directories |
 | `GET /api/workspaces/directories?path=...` | Browse local subdirectories for registration |
-| `PATCH /api/workspaces/:id` with `{name}`, `DELETE /api/workspaces/:id` | Rename or remove a workspace entry |
+| `PATCH /api/workspaces/:id` with `{name}`, `DELETE /api/workspaces/:id` | Rename a workspace or permanently delete its conversations and descendants while leaving the project directory intact |
 | `PUT /api/workspaces` with `{ids}` | Reorder registered workspaces |
 | `GET /api/navigation/events` | NDJSON snapshot followed by workspace and conversation updates |
 | `GET /api/workspaces/:id/sessions`, `POST /api/workspaces/:id/sessions` | List or create conversations in a workspace |
@@ -165,3 +167,19 @@ The server runs one Runtime for all registered workspaces. Each conversation has
 Images (PNG/JPEG/GIF/WebP) go through Pi's image input and require an image-capable model. UTF-8 text attachments become message text. Limits: eight files, 6 MiB per image, 1 MiB per text file, 12 MiB total. Binary documents such as PDF/Office files are not parsed. Attachment content lives in the Pi conversation; there is no independent upload store. Git inspection requires the selected workspace to be the repository root and caps output at 512 KiB. “Files written this turn” lists successful built-in `write`/`edit` paths; Git changes show the entire working tree, including earlier edits and shell changes.
 
 The file, Skill and approval endpoints return 404 when their corresponding plugin is disabled. Every enabled built-in Shell call requires approval. Requests expire after five minutes; stopping the run or server cancels pending approval. Approval permits the command under the existing shell policy. Reviewed local plugins remain trusted code; this is not a general-purpose containment mechanism.
+
+## Message action and composer extensions
+
+Browser-only local plugins may contain only `web.js` (optionally `plugin.json`). The built-in `session-helper` feature demonstrates a shared capability boundary: one manifest, one on/off switch and one Cordis lifecycle provide both Copy message and Edit & resend. Its backend registers the edit route, while both message actions are browser contributions.
+
+The browser API exposes `messageAction({ id, label, icon, order?, visible(context), run(context) })`. `context.message` contains the Pi entry ID and the unmodified message content; `context.rawText` contains the original text. `context.leafId` identifies the active Pi branch. The host owns button styling, placement, ordering, error rendering and cleanup. A plugin must not mutate message DOM or inspect private conversation components. Actions are removed automatically when its Cordis scope is disposed.
+
+Use `beginDraftMode({ title, text, submit(input) })` for a custom composer operation and `cancelDraftMode()` to leave it. The input contains text, attachments, chosen model and thinking level. An active mode intercepts the normal submit only while enabled. Disabling a plugin cancels its outstanding mode. The host owns the editor, cancel control and responsive layout.
+
+The `session-helper` plugin submits to its authenticated route `POST /api/extensions/session-helper/revise`, passing `sessionId`, `sourceEntryId`, `expectedLeafId`, `message` and optional send parameters. The host checks an optimistic Pi leaf token, navigates the AgentSession tree and starts a run. Earlier branches remain in Pi JSONL. This does **not** roll back files written to the workspace. Existing branch selection/navigation UX is a separate concern.
+
+## Built-in capabilities and tests
+
+Add capabilities under `packages/<id>/`, register server setup in `packages/host/composition.ts` and browser setup in `packages/web-app/application.ts`. Optional plugin entrypoints use their own manifest and lifecycle.
+
+See [architecture](architecture.md) for package boundaries, browser asset exposure, test ownership and verification commands.
