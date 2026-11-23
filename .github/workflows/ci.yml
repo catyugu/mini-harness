@@ -38,12 +38,11 @@ jobs:
           MINI_HARNESS_REQUIRE_ISOLATION: ${{ runner.os == 'Linux' && '1' || '0' }}
       - run: pnpm run pack:check
 
-  browser:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-24.04, windows-latest]
+  browser-linux:
+    runs-on: ubuntu-24.04
+    container:
+      image: mcr.microsoft.com/playwright:v1.56.0-noble
+      options: --ipc=host
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -52,15 +51,31 @@ jobs:
           node-version: "24"
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - uses: actions/cache@v4
-        with:
-          path: ${{ runner.os == 'Windows' && '~/AppData/Local/ms-playwright' || '~/.cache/ms-playwright' }}
-          key: playwright-chromium-1.56.0-${{ runner.os }}
-      - run: pnpm exec playwright install --with-deps chromium --only-shell
+      # The pinned official image contains Chromium Headless Shell and system dependencies.
       - run: pnpm run test:browser
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: browser-failure-details-${{ matrix.os }}
+          name: browser-failure-details-ubuntu-24.04
+          path: test-results/
+          retention-days: 7
+
+  browser-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Do not enable Media Foundation: the Chromium Headless Shell tests do not use media APIs.
+      - run: pnpm exec playwright install chromium --only-shell
+      - run: pnpm run test:browser
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: browser-failure-details-windows-latest
           path: test-results/
           retention-days: 7
