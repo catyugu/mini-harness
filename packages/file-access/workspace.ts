@@ -26,14 +26,14 @@ const denied = () => new Error('Path is outside the permitted workspace or is a 
 const missing = (error: unknown) => (error as NodeJS.ErrnoException).code === 'ENOENT';
 
 export class Workspace implements WorkspaceFileAccess {
-  constructor(private readonly cwd: string, private readonly state: string, private readonly canonicalRoot = true) {}
+  constructor(private readonly cwd: string, private readonly state: string) {}
 
   private async location(path: string) {
     const from = resolve(this.cwd);
     const requested = resolve(from, path);
     if (!containsPath(from, requested)) throw denied();
     const root = await realpath(from);
-    if (this.canonicalRoot && !samePath(root, from)) throw denied();
+    if (!samePath(root, from)) throw denied();
     const state = await realpath(this.state);
     const parts = relative(from, requested).split(sep).filter(Boolean);
     parts.forEach(checkName);
@@ -107,7 +107,7 @@ export class Workspace implements WorkspaceFileAccess {
         const actual = await handle.stat({ bigint: true });
         if (!actual.isFile() || actual.nlink !== 1n ||
             (before && (before.dev !== actual.dev || before.ino !== actual.ino))) throw denied();
-        if (linux && !samePath(await realpath(descriptor(handle)), path) && this.canonicalRoot) throw denied();
+        if (linux && !samePath(await realpath(descriptor(handle)), path)) throw denied();
         if (!linux) {
           const current = await lstat(target, { bigint: true });
           if (!samePath(await realpath(target), target) || current.dev !== actual.dev || current.ino !== actual.ino) throw denied();
