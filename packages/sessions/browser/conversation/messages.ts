@@ -1,12 +1,13 @@
 import type { MessageContent, ViewMessage } from '@mini-harness/contracts/message';
 import type { RunEvent } from '@mini-harness/contracts/transport';
 import type { ConversationView } from '@mini-harness/web/types';
-import type { ToolView, MessageAction } from '@mini-harness/ui-runtime/frontend';
+import type { FrontendApi, ToolView, MessageAction, MessageActionContext } from '@mini-harness/ui-runtime/frontend';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { renderMarkdown, markdownSource } from '@mini-harness/ui-primitives/markdown';
-import type { MessageActionContext } from '@mini-harness/ui-runtime/frontend';
+import { button } from '@mini-harness/ui-primitives/primitives';
 
-export function createMessageView(messages: HTMLElement, extensions: { render(tool: ToolView, action?: boolean): HTMLElement | undefined; messageActions(): MessageAction[] },
+export function createMessageView(api: Pick<FrontendApi, 'dialog' | 'signal'>, messages: HTMLElement,
+  extensions: { render(tool: ToolView, action?: boolean): HTMLElement | undefined; messageActions(): MessageAction[] },
   current: () => { sessionId?: string; leafId?: string | null }, retryLast: () => void) {
 const toolItems = new WeakMap<HTMLDetailsElement, Parameters<typeof toolCard>[0]>();
 const actionContext = new WeakMap<HTMLElement, MessageActionContext>();
@@ -14,6 +15,41 @@ const saved = new Map<string, { node: HTMLElement; signature?: string }>();
 const liveTools = new Map<string, HTMLDetailsElement>();
 const runError = 'run-error';
 const imageMime = /^image\/(?:png|jpeg|gif|webp)$/;
+
+const preview = document.createElement('figure');
+preview.className = 'message-image-preview';
+const previewViewport = document.createElement('div');
+previewViewport.className = 'message-image-viewport';
+previewViewport.setAttribute('role', 'region');
+previewViewport.setAttribute('aria-label', 'Image');
+const previewImage = document.createElement('img');
+previewViewport.append(previewImage);
+const caption = document.createElement('figcaption');
+const filename = document.createElement('span');
+const actualSize = button('Actual size', 'quiet');
+caption.append(filename, actualSize);
+preview.append(previewViewport, caption);
+const previewDialog = api.dialog('Image preview', preview);
+previewDialog.classList.add('message-image-dialog');
+
+function setActualSize(enabled: boolean) {
+  actualSize.setAttribute('aria-pressed', String(enabled));
+  previewViewport.classList.toggle('actual-size', enabled);
+  previewViewport.tabIndex = enabled ? 0 : -1;
+  previewViewport.scrollTo(0, 0);
+}
+
+actualSize.onclick = () => setActualSize(actualSize.getAttribute('aria-pressed') !== 'true');
+previewDialog.addEventListener('close', () => {
+  if (!previewDialog.open) previewImage.removeAttribute('src');
+}, { signal: api.signal });
+
+function openImage(thumbnail: HTMLImageElement) {
+  previewImage.alt = filename.textContent = thumbnail.alt;
+  previewImage.src = thumbnail.src;
+  if (!previewDialog.open) previewDialog.showModal();
+  setActualSize(false);
+}
 
 function textOf(value?: MessageContent) {
   if (typeof value === 'string') return value;
@@ -211,10 +247,17 @@ function renderEntry(message: ViewMessage, node?: HTMLElement) {
         const attachment = imageFiles[index];
         const image = document.createElement('img');
         image.alt = attachment?.name ?? 'Attached image ' + (index + 1);
-        image.title = image.alt;
         image.loading = 'lazy';
         image.src = 'data:' + block.mimeType + ';base64,' + block.data;
-        thumbnails.append(image);
+        const trigger = document.createElement('button');
+        trigger.type = 'button';
+        trigger.className = 'message-image-trigger';
+        trigger.setAttribute('aria-label', 'Preview ' + image.alt);
+        trigger.setAttribute('aria-haspopup', 'dialog');
+        trigger.title = 'Preview ' + image.alt;
+        trigger.append(image);
+        trigger.onclick = () => openImage(image);
+        thumbnails.append(trigger);
         if (attachment) files.delete(attachment);
       }
       if (text || files.size) thumbnails.classList.add('with-content');
@@ -256,7 +299,7 @@ function preserveScroll(update: () => void, reset = false) {
 
 function history(entries: ViewMessage[], error?: string, reset = false) {
   preserveScroll(() => {
-    if (reset) { messages.replaceChildren(); saved.clear(); liveTools.clear(); }
+    if (reset) { previewDialog.close(); messages.replaceChildren(); saved.clear(); liveTools.clear(); }
     const nodes = entries.flatMap((message, index) => {
       if (message.role !== 'toolResult' && !textOf(message.content) && !message.attachments?.length &&
           !message.error && !(Array.isArray(message.content) && message.content.some((part) => part.type === 'image'))) return [];

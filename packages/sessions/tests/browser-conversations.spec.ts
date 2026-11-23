@@ -3,7 +3,7 @@ import { rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.js';
 import { readJson } from '@mini-harness/platform/config';
-import { startIsolatedHost, modelSearch, suggestions } from '../../../test/support/browser.js';
+import { startIsolatedHost, modelSearch, suggestions, expectInViewport } from '../../../test/support/browser.js';
 
 test('drafts, search, rename, single deletion, attachment and input discovery', async ({ page }) => {
   const mock = await createMockProvider(), { root, paths } = createFixturePaths(mock.url);
@@ -53,11 +53,19 @@ test('drafts, search, rename, single deletion, attachment and input discovery', 
     await expect(suggestions(page).getByRole('option', { name: /Review the work/ })).toBeVisible();
     await draft.press('Enter');
     await expect(draft).toHaveValue('Read this attachment /skill:review and keep this text');
-    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAFElEQVR4nGPUCIhigAEmBiSAmwMAKdYA2gR3lpgAAAAASUVORK5CYII=', 'base64');
+    const images = await page.evaluate(() => [240, 480].map((width) => {
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = width * 7 / 12;
+      const context = canvas.getContext('2d')!;
+      context.fillStyle = '#137';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL('image/png').split(',')[1];
+    }));
     await page.locator('#composer input[type=file]').setInputFiles([
       { name: 'task.txt', mimeType: 'text/plain', buffer: Buffer.from('ATTACHED TASK') },
-      { name: 'blue.png', mimeType: 'image/png', buffer: png },
-      { name: 'reference.png', mimeType: 'image/png', buffer: png }
+      { name: 'blue.png', mimeType: 'image/png', buffer: Buffer.from(images[0], 'base64') },
+      { name: 'reference.png', mimeType: 'image/png', buffer: Buffer.from(images[1], 'base64') }
     ]);
     await expect(page.getByRole('button', { name: 'Remove task.txt' })).toBeVisible();
     await page.getByRole('button', { name: 'Send', exact: true }).click();
@@ -70,11 +78,22 @@ test('drafts, search, rename, single deletion, attachment and input discovery', 
     await expect(bubble.getByRole('list', { name: 'Attachments' })).toHaveText('task.txt');
     const desktop = page.viewportSize();
     if (!desktop) throw new Error('Expected a browser viewport');
+    const blue = bubble.getByRole('button', { name: 'Preview blue.png' });
+    const reference = bubble.getByRole('button', { name: 'Preview reference.png' });
+    const preview = page.getByRole('dialog', { name: 'Image preview' });
+    await blue.focus();
+    await page.keyboard.press('Enter');
+    const fullBlue = preview.getByRole('img', { name: 'blue.png' });
+    await expect(fullBlue).toHaveCSS('width', '240px');
+    await expect(fullBlue).toHaveCSS('height', '140px');
+    await page.keyboard.press('Escape');
+    await expect(preview).toBeHidden();
+    await expect(blue).toBeFocused();
     for (const viewport of [desktop, { width: 320, height: 568 }]) {
       await page.setViewportSize(viewport);
       const layout = await bubble.evaluate((node) => {
         const images = [...node.querySelectorAll<HTMLImageElement>('.message-images img')];
-        const gallery = images[0].parentElement!.getBoundingClientRect();
+        const gallery = images[0].closest('.message-images')!.getBoundingClientRect();
         const last = images.at(-1)!.getBoundingClientRect();
         return { widths: images.map((image) => image.getBoundingClientRect().width),
           offset: Math.abs(gallery.right - last.right), overflow: node.scrollWidth - node.clientWidth };
@@ -83,6 +102,20 @@ test('drafts, search, rename, single deletion, attachment and input discovery', 
       expect(layout.offset).toBeLessThan(1);
       expect(layout.overflow).toBeLessThanOrEqual(1);
     }
+    await reference.click();
+    const fullReference = preview.getByRole('img', { name: 'reference.png' });
+    const actualSize = preview.getByRole('button', { name: 'Actual size' });
+    await expectInViewport(preview, { width: 320, height: 568 });
+    await expect(actualSize).toHaveAttribute('aria-pressed', 'false');
+    const fitted = (await fullReference.boundingBox())!;
+    expect(fitted.width).toBeLessThan(320);
+    expect(fitted.width / fitted.height).toBeCloseTo(12 / 7, 2);
+    await actualSize.click();
+    await expect(fullReference).toHaveCSS('width', '480px');
+    await expect(fullReference).toHaveCSS('height', '280px');
+    await expect(preview.getByRole('region', { name: 'Image', exact: true })).toHaveJSProperty('scrollWidth', 480);
+    await preview.getByRole('button', { name: 'Close image preview' }).click();
+    await expect(preview).toBeHidden();
     await page.setViewportSize(desktop);
     expect(JSON.stringify(mock.requests[0])).toContain('image_url');
     expect(JSON.stringify(mock.requests[0])).toContain('ATTACHED TASK');
