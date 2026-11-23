@@ -15,7 +15,7 @@ test('the composed browser graph is derived from the mounted capability descript
   const mounted = new Map<string, { browser?: string }>(body.ui.map((entry) => [entry.id, entry]));
   assert.equal(mounted.size, body.ui.length);
   assert.deepEqual(Object.keys(body), ['ui']);
-  const browser = new Set(plugins.filter(({ browser }) => browser).map(({ id }) => id));
+  const browser = new Map(plugins.filter(({ browser }) => browser).map((plugin) => [plugin.id, plugin]));
   for (const entry of plugins.filter(({ browser }) => browser)) {
     assert.match(entry.browser, /^\/packages\/[a-z-]+(?:\/[a-z-]+)*\.js$/);
     const source = resolve(root, entry.browser.slice(1).replace(/\.js$/, '.ts'));
@@ -24,6 +24,14 @@ test('the composed browser graph is derived from the mounted capability descript
     assert.ok(ast.statements.some((statement) => ts.isExportAssignment(statement) && !statement.isExportEquals),
       'Missing default browser plugin export: ' + entry.browser);
     for (const required of entry.browserRequires ?? []) assert.ok(browser.has(required));
+    const dependencies = new Set(entry.browserRequires ?? []);
+    for (const dependency of dependencies)
+      for (const transitive of browser.get(dependency)?.browserRequires ?? []) dependencies.add(transitive);
+    const code = ast.getFullText();
+    if (/api\.(?:insert|command|completion|beginDraftMode|cancelDraftMode)\(/.test(code))
+      assert.ok(dependencies.has('core:conversation'), entry.id + ' must declare the composer provider');
+    if (/api\.(?:rightTab|openTab|inspect)\(/.test(code))
+      assert.ok(dependencies.has('core:layout'), entry.id + ' must declare the right-tab provider');
     if (entry.required || entry.defaultEnabled) assert.equal(mounted.get(entry.id)?.browser, entry.browser);
   }
   await request('/settings', 'PATCH', { plugins: { files: false, shell: true } });
