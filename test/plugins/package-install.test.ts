@@ -9,11 +9,21 @@ import { promisify } from 'node:util';
 import { readSettings, writeJson } from '@mini-harness/platform/config';
 import { createMiniHarnessServer } from '@mini-harness/host/server';
 import { createFixturePaths } from '../helpers/mock-provider.js';
+import { parseNpmPackResult } from '../../scripts/npm-pack.js';
 
 const execFile = promisify(exec);
 const npmCli = process.env.MINI_HARNESS_NPM_CLI ?? resolve(dirname(process.execPath),
   process.platform === 'win32' ? 'node_modules/npm/bin/npm-cli.js' : '../lib/node_modules/npm/bin/npm-cli.js');
 const cli = resolve('dist/bin/mini-harness.js');
+
+test('npm pack output accepts both array and npm 12 keyed objects', () => {
+  const result = { name: 'probe-pkg', filename: 'probe-pkg-1.0.0.tgz', files: [{ path: 'package.json' }] };
+  assert.deepEqual(parseNpmPackResult(JSON.stringify([result])), result);
+  assert.deepEqual(parseNpmPackResult(JSON.stringify({ 'probe-pkg': result })), result);
+  assert.throws(() => parseNpmPackResult('{}'), /Unexpected npm pack output/);
+  assert.throws(() => parseNpmPackResult(JSON.stringify({ probe: { filename: '../unsafe.tgz' } })),
+    /Unexpected npm pack output/);
+});
 
 test('pnpm distribution resolves dependencies, updates atomically and serves both entrypoints', { timeout: 45000 }, async (t) => {
   const { paths, root } = createFixturePaths('http://127.0.0.1:1/v1');
@@ -60,7 +70,7 @@ test('pnpm distribution resolves dependencies, updates atomically and serves bot
     for (const [file, source] of Object.entries(files)) writeFileSync(join(cwd, file), source);
     const args = ['pack', '--ignore-scripts', '--json'];
     const result = await execFile(process.execPath, [npmCli, ...args], { cwd, env });
-    const [{ filename }] = JSON.parse(result.stdout);
+    const { filename } = parseNpmPackResult(result.stdout);
     const bytes = readFileSync(join(cwd, filename));
     tarballs.set('/' + name + '/-/' + version + '.tgz', bytes);
     packages.set(name, [...(packages.get(name) ?? []), { version, bytes, manifest }]);
