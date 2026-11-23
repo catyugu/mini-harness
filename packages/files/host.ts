@@ -2,7 +2,7 @@ import type { ToolDefinition } from '@earendil-works/pi-coding-agent';
 import { relative, resolve, sep } from 'node:path';
 import type { Context } from 'cordis';
 import { Inspection } from './inspection.js';
-import type { RouteRequest } from '../../src/contracts/routes.js';
+import type { RouteRequest } from '../contracts/routes.js';
 
 
 export function setup(ctx: Context) {

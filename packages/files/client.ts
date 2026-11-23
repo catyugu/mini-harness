@@ -1,9 +1,9 @@
-import type { FrontendApi, FrontendServices, FrontendSetup, Suggestion } from '../../web/kernel/extensions.js';
-import type { TabAddress, TabScope } from '../../web/contracts/tabs.js';
-import { icon } from '../../web/ui/components/icons.js';
-import { button as control, iconButton } from '../../web/ui/components/primitives.js';
-import { workspaceRoute, wait } from '../../web/api.js';
-import { renderMarkdown } from '../../web/ui/components/markdown.js';
+import type { FrontendApi, FrontendServices, FrontendSetup, Suggestion } from '../web/kernel/extensions.js';
+import type { TabAddress, TabScope } from '../web/contracts/tabs.js';
+import { icon } from '../web/ui/components/icons.js';
+import { button as control, iconButton } from '../web/ui/components/primitives.js';
+import { workspaceRoute, wait } from '../web/api.js';
+import { renderMarkdown } from '../web/ui/components/markdown.js';
 
 interface FileEntry { name: string; directory: boolean }
 interface FileChange { path: string; status: string }

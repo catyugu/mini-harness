@@ -5,15 +5,15 @@ import {
   type AgentSession, type CustomEntry
 } from '@earendil-works/pi-coding-agent';
 import { getSupportedThinkingLevels } from '@earendil-works/pi-ai/compat';
-import { getPaths, type Paths } from '../../src/config.js';
-import { prepareInput } from '../../src/input.js';
-import type { Attachment, ImageInput } from '../../src/contracts/input.js';
-import type { SessionStore } from '../../src/contracts/services.js';
-import type { Conversation, ModelChoice } from '../../src/contracts/conversation.js';
+import { getPaths, type Paths } from '../platform/config.js';
+import { prepareInput } from '../platform/input.js';
+import type { Attachment, ImageInput } from '../contracts/input.js';
+import type { SessionStore } from '../contracts/services.js';
+import type { Conversation, ModelChoice } from '../contracts/conversation.js';
 import type { Context } from 'cordis';
-import type { SessionRecords, ToolPort } from '../../src/contracts/plugins.js';
-import type { StreamEvent } from '../../src/contracts/transport.js';
-import type { ViewMessage } from '../../src/contracts/message.js';
+import type { SessionRecords, ToolPort } from '../contracts/plugins.js';
+import type { StreamEvent } from '../contracts/transport.js';
+import type { ViewMessage } from '../contracts/message.js';
 
 export type ThinkingLevel = AgentSession['thinkingLevel'];
 
