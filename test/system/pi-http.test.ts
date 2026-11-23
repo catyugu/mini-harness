@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { createMiniHarnessServer } from '../../src/server.js';
+import { createMiniHarnessServer } from '../../packages/host/server.js';
 import { createMockProvider, createFixturePaths } from '../helpers/mock-provider.js';
 
 test('real Pi SDK through HTTP: streaming, persistence, Skills, export and permanent delete', { timeout: 60000 }, async (t) => {

@@ -1,4 +1,4 @@
-import type { RunEvent, RunInfo } from '../../src/contracts/transport.js';
+import type { RunEvent, RunInfo } from '../../contracts/transport.js';
 import { api, data, payload, readEvents, wait } from '../api.js';
 import type { ConversationView } from '../types.js';
 

@@ -1,9 +1,9 @@
-import type { WorkspaceRecord } from '../src/contracts/workspace.js';
-import type { Settings } from '../src/config.js';
-import type { Conversation, ModelChoice } from '../src/contracts/conversation.js';
-import type { StreamEvent } from '../src/contracts/transport.js';
-import type { ViewMessage } from '../src/contracts/message.js';
-import type { PluginMetadata } from '../src/contracts/plugins.js';
+import type { WorkspaceRecord } from '../contracts/workspace.js';
+import type { Settings } from '../platform/config.js';
+import type { Conversation, ModelChoice } from '../contracts/conversation.js';
+import type { StreamEvent } from '../contracts/transport.js';
+import type { ViewMessage } from '../contracts/message.js';
+import type { PluginMetadata } from '../contracts/plugins.js';
 import type { ProviderInfo } from './contracts/providers.js';
 export type ThinkingLevel = import('@earendil-works/pi-coding-agent').AgentSession['thinkingLevel'];
 export interface ModelInfo { provider: string; id: string; name: string; configured: boolean; thinkingLevels: ThinkingLevel[] }

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { rmSync } from 'node:fs';
-import { createMiniHarnessServer } from '../../src/server.js';
+import { createMiniHarnessServer } from '../../packages/host/server.js';
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
 
 test('compiled browser tests and host-only feature code are not public static assets', async (t) => {
@@ -18,9 +18,9 @@ test('compiled browser tests and host-only feature code are not public static as
   for (const asset of [
     '/ui/tests/settings-layout.spec.js',
     '/ui/tests/conversation-navigation.spec.js',
-    '/features/agent/pi-sessions.js',
-    '/features/shell/host.js',
-    '/features/subagents/delegation.js'
+    '/packages/agent/pi-sessions.js',
+    '/packages/shell/host.js',
+    '/packages/subagents/delegation.js'
   ]) {
     const response = await fetch(base + asset);
     assert.equal(response.status, 404, asset);
