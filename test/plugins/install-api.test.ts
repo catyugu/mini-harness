@@ -27,7 +27,7 @@ test('local plugins install disabled, load UI only when enabled, and uninstall p
   assert.equal((await request(route, 'POST', { value: 2 })).status, 404);
   assert.equal((await request('/plugins/gui-plugin', 'DELETE')).status, 200);
   assert.equal(existsSync(join(paths.plugins, 'gui-plugin')), false);
-  const after = (await request('/bootstrap')).body.settings;
+  const after = (await request('/settings')).body;
   assert.equal(after.plugins['gui-plugin'], undefined);
   assert.equal(after.pluginConfig['gui-plugin'], undefined);
   assert.equal((await request('/plugins/install', 'POST', { ...bundle, files: [{ name: '../escape.js', content: '' }] })).status, 400);

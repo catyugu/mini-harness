@@ -19,7 +19,7 @@ export class RunEvents {
       if (event.state === 'running') this.tools.set(event.id, event);
       else this.tools.delete(event.id);
     }
-    const item = { ...event, sequence: ++this.info.sequence };
+    const item: RunEvent = { ...event, runId: this.info.id, runSessionId: this.info.sessionId, sequence: ++this.info.sequence };
     this.events.push(item);
     this.bytes += JSON.stringify(item).length;
     while (this.events.length > 2048 || (this.bytes > 1024 * 1024 && this.events.length > 1))
@@ -33,7 +33,7 @@ export class RunEvents {
   watch(after: number, emit: (event: RunEvent) => void, history: () => ViewMessage[]) {
     if (after < (this.events[0]?.sequence ?? 1) - 1) {
       emit({ type: 'snapshot', messages: history(), partial: this.partial, tools: this.activeTools,
-        run: { ...this.info }, sequence: this.info.sequence });
+        run: { ...this.info }, sequence: this.info.sequence, runId: this.info.id, runSessionId: this.info.sessionId });
     } else {
       for (const event of this.events) if (event.sequence > after) emit(structuredClone(event));
     }

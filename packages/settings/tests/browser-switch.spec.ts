@@ -10,6 +10,7 @@ test('switch transitions respect reduced motion and roll back a failed setting o
     let requests = 0, release: () => void;
     const held = new Promise<void>((done) => { release = done; });
     await page.route('**/api/settings', async (route) => {
+      if (route.request().method() !== 'PATCH') return route.continue();
       requests++;
       await held;
       await route.fulfill({ status: 400, json: { error: 'The switch could not be saved' } });
@@ -18,7 +19,7 @@ test('switch transitions respect reduced motion and roll back a failed setting o
     await page.getByRole('button', { name: 'Browse plugins' }).click();
     const files = page.getByRole('switch', { name: 'Workspace files', exact: true });
     const duration = () => files.evaluate((node) => getComputedStyle(node, '::after').transitionDuration);
-    expect(await duration()).toBe('0.16s, 0.16s');
+    await expect.poll(duration).toBe('0.16s, 0.16s');
     await files.uncheck();
     await expect(files).toHaveAttribute('aria-busy', 'true');
     await expect(files).toBeDisabled();
@@ -29,6 +30,6 @@ test('switch transitions respect reduced motion and roll back a failed setting o
     await expect(files).toBeEnabled();
     expect(requests).toBe(1);
     await page.emulateMedia({ reducedMotion: 'reduce' });
-    expect(await duration()).toBe('0s, 0s');
+    await expect.poll(duration).toBe('0s, 0s');
   } finally { await page.close(); await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
 });

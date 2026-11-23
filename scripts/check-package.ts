@@ -72,8 +72,11 @@ async function checkPackage() {
       assert.equal(response.status, 200, asset);
       await response.arrayBuffer();
     }
+    const plugins = await (await get('/api/plugins')).json();
+    assert.deepEqual(plugins.map(({ id }) => id), ['files', 'skills', 'subagents', 'shell', 'session-helper']);
     const bootstrap = await (await get('/api/bootstrap')).json();
-    assert.deepEqual(bootstrap.plugins.map(({ id }) => id), ['files', 'skills', 'subagents', 'shell', 'session-helper']);
+    assert.ok(bootstrap.ui.some(({ id }) => id === 'core:conversation'));
+    assert.ok(!bootstrap.ui.some(({ id }) => id === 'shell'));
     const item = await (await fetch(info.url + '/api/sessions', { method: 'POST', headers, body: '{}' })).json();
     const url = info.url + '/api/sessions/' + item.id;
     const startedRun = await fetch(url + '/runs', { method: 'POST', headers, body: JSON.stringify({ message: 'Pack smoke test' }) });

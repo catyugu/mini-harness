@@ -1,6 +1,6 @@
 import type { DelegationPort, SubagentPolicy } from '../contracts/delegation.js';
 import type { AgentPort, RunPort, SessionStore } from '../contracts/services.js';
-import type { Conversation, ModelChoice } from '../contracts/conversation.js';
+import type { SessionRecord, ModelChoice } from '../contracts/conversation.js';
 
 interface Waiter {
   cancel(): void;
@@ -107,8 +107,6 @@ export class Delegation implements DelegationPort {
     if (settings.provider) this.pi.resolveModel({ provider: settings.provider, id: settings.model });
   }
 
-  configure() { this.semaphore.setLimit(this.settings().maxParallel); }
-
   checkProvider(id: string, removing = false) {
     const policy = this.settings();
     if (policy.provider !== id) return;
@@ -118,7 +116,7 @@ export class Delegation implements DelegationPort {
 
   visible(id: string) { return this.registry.depth(id) < this.settings().maxDepth; }
 
-  schedule(record: Conversation, task: () => Promise<string>, signal: AbortSignal) {
+  schedule(record: SessionRecord, task: () => Promise<string>, signal: AbortSignal) {
     if (!record.parentId) return task();
     return this.semaphore.run(async (lease) => {
       this.leases.set(record.id, lease);
@@ -142,15 +140,15 @@ export class Delegation implements DelegationPort {
     requireChildDepth(this.registry.depth(parentId), this.settings().maxDepth);
     const model = this.pi.resolveModel(choice);
     const record = this.registry.create({
-      parentId, workspaceId: parent.workspaceId, title: task.slice(0, 72), model: model && this.pi.modelInfo(model)
+      parentId, workspaceId: parent.workspaceId, title: task.slice(0, 72)
     });
     try {
-      const text = await this.runs().send(record.id, task, undefined, { signal });
+      const text = await this.runs().send(record.id, task, undefined, { signal, model: model && this.pi.modelInfo(model),
+        schedule: (run, cancellation) => this.schedule(record, run, cancellation) });
       return { id: record.id, text };
     } catch (error) {
-      if (this.registry.get(record.id)) this.registry.update(record.id, {
-        title: (signal?.aborted || this.runs().info(record.id)?.state === 'cancelled' ? '[Cancelled] ' : '[Failed] ') + task.slice(0, 60)
-      });
+      if (this.registry.get(record.id)) this.registry.rename(record.id,
+        (signal?.aborted || this.runs().info(record.id)?.state === 'cancelled' ? '[Cancelled] ' : '[Failed] ') + task.slice(0, 60));
       throw error;
     }
   }

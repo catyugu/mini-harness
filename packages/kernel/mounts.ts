@@ -37,7 +37,8 @@ export class PluginMounts {
     await installed.fiber.dispose();
   }
 
-  configure(ordered: MountPlan[], commit: () => void = () => {}, beforeChange: () => void = () => {}) {
+  configure(ordered: MountPlan[], commit: () => void = () => {}, beforeChange: (ids: string[]) => void = () => {},
+    unavailable?: (id: string, error: unknown) => boolean) {
     const desired = new Map(ordered.map((plan) => [plan.id, plan]));
     const affected = new Set([...this.mounted.values()]
       .filter(({ plan }) => !isDeepStrictEqual(plan.signature, desired.get(plan.id)?.signature))
@@ -46,11 +47,12 @@ export class PluginMounts {
     const obsolete = [...this.mounted.values()].map(({ plan }) => plan).filter((plan) => affected.has(plan.id));
     const additions = ordered.filter((plan) => affected.has(plan.id) || !this.mounted.has(plan.id));
     if (!obsolete.length && !additions.length) { commit(); return; }
-    beforeChange();
-    return this.apply(obsolete, additions, commit);
+    beforeChange(obsolete.map(({ id }) => id));
+    return this.apply(obsolete, additions, commit, unavailable);
   }
 
-  private async apply(obsolete: MountPlan[], additions: MountPlan[], commit: () => void) {
+  private async apply(obsolete: MountPlan[], additions: MountPlan[], commit: () => void,
+    unavailable?: (id: string, error: unknown) => boolean) {
     const unloaded: MountPlan[] = [];
     const loaded: string[] = [];
     try {
@@ -59,8 +61,12 @@ export class PluginMounts {
         await this.unmount(plan.id);
       }
       for (const plan of additions) {
-        await this.mount(plan);
-        loaded.push(plan.id);
+        try {
+          const missing = plan.requires.find((id) => !this.mounted.has(id));
+          if (missing) throw new Error('Required plugin is unavailable: ' + missing);
+          await this.mount(plan);
+          loaded.push(plan.id);
+        } catch (error) { if (!unavailable?.(plan.id, error)) throw error; }
       }
       commit();
     } catch (error) {

@@ -40,7 +40,7 @@ test('Pi honors file policy and recursive delegates can finish with one slot', {
   await app.runtime.runs.send(parent.id, 'root task', (event) => { if (event.type === 'tool') toolEvents.push(event); });
   const records = app.runtime.registry.descendants([parent.id]).map((id) => app.runtime.registry.get(id));
   assert.deepEqual(records.map(({ title }) => title), ['root task', 'child task', 'leaf task']);
-  assert.deepEqual(app.runtime.registry.get(records[2].id).model, { provider: 'local-mock', id: 'mock-model' });
+  assert.deepEqual(app.runtime.pi.read(records[2].id).model, { provider: 'local-mock', id: 'mock-model' });
   assert.equal((await app.runtime.pi.open(records[2].id)).getActiveToolNames().includes('delegate'), false);
   assert.ok(toolEvents.some((event) => event.state === 'finished' && event.sessionId === records[1].id));
   const check = app.runtime.registry.create();

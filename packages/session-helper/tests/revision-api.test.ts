@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { fixture } from '../../../test/support/api-fixture.js';
 test('session-helper edits branch the Pi session instead of appending and enforces the active leaf', async (t) => {
   const { request, finish, app } = await fixture(t, ({ messages }) => 'Reply to ' + messages.filter((item) => item.role === 'user').at(-1)?.content);
-  const pluginIds = (await request('/bootstrap')).body.plugins.map((plugin) => plugin.id);
+  const pluginIds = (await request('/plugins')).body.map((plugin) => plugin.id);
   assert.equal(pluginIds.filter((id) => id === 'session-helper').length, 1);
   assert.equal(pluginIds.includes('message-copy') || pluginIds.includes('edit-resend'), false);
   const session = (await request('/sessions', 'POST', {})).body;

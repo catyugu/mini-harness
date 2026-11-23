@@ -34,7 +34,6 @@ const slots = {
 
 export const layoutPlugin: BrowserPlugin = {
   id: 'core:layout',
-  inject: ['miniState'],
   setup(ctx, api) {
     const { layout, pages, header, tabs, outlet } = createAppFrame(api.signal);
     ctx.provide('miniLayout', layout);
@@ -43,15 +42,7 @@ export const layoutPlugin: BrowserPlugin = {
     ctx.provide('miniTabs', tabs);
     for (const name of Object.keys(slots) as Array<keyof typeof slots>)
       api.slots.define(name, outlet(name), name === 'conversation.body' ? 'single' : 'list');
-    const state = ctx.miniState;
-    // Initial scope is already available from the bootstrap snapshot.
-    // Do not depend on the next navigation event to initialize panel tabs.
-    tabs.selectScope(state.scope());
-    state.on('navigation', () => {
-      const { sessions, workspaces } = state.get();
-      tabs.selectScope(state.scope());
-      tabs.prune(new Set(sessions.map(({ id }) => id)), new Set(workspaces.map(({ id }) => id)));
-    }, api.signal);
+
   }
 };
 export default layoutPlugin;
@@ -60,6 +51,7 @@ declare module 'cordis' {
   interface Context {
     miniLayout: ReturnType<typeof createAppFrame>['layout'];
     miniPages: ReturnType<typeof createAppFrame>['pages'];
+    miniTabs: ReturnType<typeof createAppFrame>['tabs'];
     miniHeader: ReturnType<typeof createAppFrame>['header'];
   }
 }

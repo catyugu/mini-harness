@@ -46,7 +46,7 @@ function breadcrumbs(api: FrontendApi, services: FrontendServices, address: TabA
   const node = document.createElement('nav');
   node.className = 'file-breadcrumbs';
   node.setAttribute('aria-label', 'File path');
-  const name = services.bootstrap().workspaces.find(({ id }) => id === address.workspaceId)?.name ?? 'Workspace';
+  const name = services.workspaceRecord(address.workspaceId)?.name ?? 'Workspace';
   const crumbs = path === '.' ? [] : path.split('/');
   const root = control(name, 'quiet');
   const open = (path?: string) => api.openTab('files', path, address);

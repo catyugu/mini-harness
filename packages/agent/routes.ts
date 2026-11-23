@@ -1,0 +1,16 @@
+import type { Context } from 'cordis';
+import { HttpReply } from '../contracts/routes.js';
+
+export function registerRoutes(ctx: Context) {
+  const add = (method: string, path: string, handler: Parameters<typeof ctx.harnessRoutes.register>[2]) =>
+    ctx.effect(() => ctx.harnessRoutes.register(method, path, handler));
+  const session = (id: string) => {
+    if (!ctx.harnessRegistry.get(id)) throw new Error('Conversation not found');
+    return id;
+  };
+  add('POST', '/api/sessions/:id/queue', async ({ params, body }) => {
+    const id = session(params.id), input = await body(20 * 1024 * 1024);
+    return new HttpReply(202, await ctx.harnessPi.queueInput(id, input.message, input.mode, input.attachments));
+  });
+  add('GET', '/api/sessions/:id/queue', ({ params }) => ctx.harnessPi.read(session(params.id)).queue);
+}

@@ -33,16 +33,18 @@ test('workspace registration, session navigation and scoped tools leave an activ
     assert.ok(directories.body.directories.some(({ path }) => path === realpathSync.native(next)));
     assert.ok(!directories.body.directories.some(({ path }) => path === realpathSync.native(paths.home)));
     assert.ok(!(await request(first + '/skills')).body.some(({ name }) => name === 'second-project'));
-    const stream = await fetch(base + '/api/navigation/events', { headers: { Authorization: 'Bearer ' + app.token } });
+    const stream = await fetch(base + '/api/changes', { headers: { Authorization: 'Bearer ' + app.token } });
     const events = stream.body.pipeThrough(new TextDecoderStream()).getReader();
     try {
       const snapshot = JSON.parse((await events.read()).value.trim());
       assert.equal(snapshot.type, 'snapshot');
-      assert.equal(snapshot.sessions[0].id, session.id);
+      assert.ok(Number.isInteger(snapshot.revisions.sessions));
       const { body: other } = await request(second + '/sessions', 'POST');
       const event = JSON.parse((await events.read()).value.trim());
-      assert.equal(event.type, 'session');
-      assert.equal(event.session.id, other.id);
+      assert.equal(event.type, 'change');
+      assert.equal(event.domain, 'sessions');
+      assert.ok(event.revision > snapshot.revisions.sessions);
+      assert.equal(event.sessionId, other.id);
       assert.equal(other.workspaceId, workspace.id);
       assert.equal(app.runtime.registry.create({ parentId: other.id }).workspaceId, workspace.id);
       assert.throws(() => app.runtime.registry.create({ parentId: other.id, workspaceId: session.workspaceId }), /parent/);

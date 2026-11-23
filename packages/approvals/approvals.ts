@@ -1,25 +1,25 @@
 import { randomUUID } from 'node:crypto';
-export interface Approval { id: string; sessionId: string; command: string; createdAt: string }
+import type { Approval } from '../contracts/approval.js';
 export class Approvals {
   private pending = new Map<string, { info: Approval; settle: (allowed: boolean) => void }>();
-  constructor(private readonly changed: (id: string) => void) {}
+  readonly events = new EventTarget();
+  private changed(id: string) { this.events.dispatchEvent(new CustomEvent('change', { detail: { id } })); }
   has(sessionId: string) { return [...this.pending.values()].some(({ info }) => info.sessionId === sessionId); }
   list() { return [...this.pending.values()].map(({ info }) => ({ ...info })); }
-  request(sessionId: string, command: string, signal?: AbortSignal): Promise<void> {
+  request(sessionId: string, runId: string | undefined, command: string, signal?: AbortSignal): Promise<void> {
     signal?.throwIfAborted();
     return new Promise<void>((resolve, reject) => {
-      const info = { id: randomUUID(), sessionId, command, createdAt: new Date().toISOString() };
+      const info = { id: randomUUID(), sessionId, runId, command, createdAt: new Date().toISOString() };
       const finish = (allowed: boolean) => {
         this.pending.delete(info.id); clearTimeout(timer); signal?.removeEventListener('abort', abort);
-        if (!this.has(sessionId)) this.changed(sessionId);
+        this.changed(sessionId);
         if (allowed) resolve(); else reject(new Error(signal?.aborted ? 'Operation cancelled' : 'Shell operation denied or approval expired'));
       };
       const abort = () => finish(false);
       const timer = setTimeout(() => finish(false), 5 * 60 * 1000); timer.unref();
       signal?.addEventListener('abort', abort, { once: true });
-      const waiting = this.has(sessionId);
       this.pending.set(info.id, { info, settle: finish });
-      if (!waiting) this.changed(sessionId);
+      this.changed(sessionId);
     });
   }
   decide(id: string, allowed: boolean) {

@@ -1,11 +1,14 @@
 import type { BuiltinPlugin } from '../contracts/plugins.js';
+import { setup } from './host.js';
 import { Type } from 'typebox';
 
 /** One self-contained plugin schema. Changes to child limits are safe during active runs. */
-export const manifest: Omit<BuiltinPlugin, 'setup'> = {
+export const manifest: BuiltinPlugin = {
+  setup, defaultEnabled: true, browserRequires: ['core:conversation'],
+  configChanges: 'read-on-use',
+  provides: ['harnessDelegation'],
   id: 'subagents', title: 'Subagents', description: 'Delegate tasks to child conversations.',
   icon: 'delegate', browser: '/packages/subagents/client.js',
-  liveConfig: true,
   configGroups: [
     { title: 'Run limits', fields: ['maxDepth', 'maxParallel'] },
     { title: 'Model selection', fields: ['provider', 'model'] }
@@ -16,5 +19,5 @@ export const manifest: Omit<BuiltinPlugin, 'setup'> = {
     provider: Type.String({ title: 'Child provider', maxLength: 160, default: '' }),
     model: Type.String({ title: 'Child model', maxLength: 160, default: '' })
   }, { additionalProperties: false }) },
-  inject: ['harnessTools', 'harnessRegistry', 'harnessPi', 'harnessRuns', 'harnessSettings', 'harnessSettingsStore', 'harnessOperations']
+  inject: ['harnessTools', 'harnessRegistry', 'harnessPi', 'harnessRuns', 'harnessSettingsStore']
 };

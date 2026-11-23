@@ -32,3 +32,39 @@ test('shell approval gates execution, handles rejection and cancellation', async
   await request('/sessions/' + session.id + '/cancel', 'POST', {}); await finish(session.id);
   assert.deepEqual((await request('/approvals')).body, []);
 });
+
+test('disabling Shell drains its pending approval and preserves an unrelated run', { timeout: 15000 }, async (t) => {
+  let entered: () => void;
+  let release: () => void;
+  const running = new Promise<void>((resolve) => { entered = resolve; });
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  const { app, request, finish } = await fixture(t, async ({ messages }) => {
+    const last = messages.at(-1);
+    if (last.role === 'tool') return 'Shell request settled';
+    if (last.content === 'Unrelated task') {
+      entered();
+      await held;
+      return 'Unrelated task completed';
+    }
+    return { tool: 'sandbox_shell', args: { command: 'echo must-not-run' } };
+  });
+  await app.runtime.updateSettings({ plugins: { shell: true }, pluginConfig: { shell: { mode: 'host' } } });
+  const shell = app.runtime.registry.create();
+  const other = app.runtime.registry.create();
+  const pending = app.runtime.runs.send(other.id, 'Unrelated task');
+  try {
+    await running;
+    await request('/sessions/' + shell.id + '/runs', 'POST', { message: 'Run Shell' });
+    await waitUntil(() => request('/approvals'), (result) => result.body.length === 1);
+    assert.equal((await request('/settings', 'PATCH', { plugins: { shell: false } })).status, 200);
+    assert.deepEqual((await request('/approvals')).body, []);
+    const graph = (await request('/bootstrap')).body.ui;
+    assert.ok(!graph.some(({ id }) => id === 'shell'));
+    assert.ok(app.runtime.runs.active(other.id));
+    assert.equal((await finish(shell.id)).body.run.state, 'completed');
+    const tool = app.runtime.pi.messages(shell.id).find(({ role }) => role === 'toolResult');
+    assert.equal(tool.isError, true);
+    assert.ok(!(await app.runtime.pi.open(shell.id)).getActiveToolNames().includes('sandbox_shell'));
+  } finally { release(); }
+  assert.equal(await pending, 'Unrelated task completed');
+});

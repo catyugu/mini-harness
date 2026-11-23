@@ -1,17 +1,21 @@
 import { defineTool } from '@earendil-works/pi-coding-agent';
 import type { Context } from 'cordis';
+import type { PluginApi } from '../contracts/plugins.js';
 import { Type } from 'typebox';
 import { Delegation } from './delegation.js';
 import type { SubagentPolicy } from '../contracts/delegation.js';
 
 /** Optional plugin: delegation, scheduling and child-model rules exist only while mounted. */
-export function setup(ctx: Context) {
-  const delegation = new Delegation(ctx.harnessRegistry, ctx.harnessPi, () => ctx.harnessRuns,
-    () => ctx.harnessSettings().pluginConfig.subagents as unknown as SubagentPolicy, (id) => ctx.harnessOperations.assertAvailable(id));
-  delegation.validate(ctx.harnessSettings().pluginConfig.subagents as unknown as SubagentPolicy);
+export function setup(ctx: Context, { config }: PluginApi) {
+  const { harnessRegistry: catalog, harnessPi: pi, harnessRuns: runs, harnessSettingsStore: settings } = ctx;
+  const policy = () => settings.settings.pluginConfig.subagents as unknown as SubagentPolicy;
+  const delegation = new Delegation(catalog, pi, () => runs, policy, (id) => catalog.assertAvailable(id));
+  delegation.validate(config as unknown as SubagentPolicy);
+  ctx.effect(() => settings.validate((next) => {
+    if (next.plugins.subagents) delegation.validate(next.pluginConfig.subagents as unknown as SubagentPolicy);
+  }));
+  ctx.effect(() => settings.subscribe(() => delegation.semaphore.setLimit(policy().maxParallel)));
   ctx.provide('harnessDelegation', delegation);
-  ctx.effect(() => ctx.harnessSettingsStore.validate((next) => delegation.validate(next.pluginConfig.subagents as unknown as SubagentPolicy)));
-  ctx.effect(() => ctx.harnessSettingsStore.subscribe(() => delegation.configure()));
   const tool = (id: string) => defineTool({
     name: 'delegate', label: 'Delegate',
     description: 'Create a child agent for a specific task. Set provider/model to override the default.',

@@ -3,8 +3,9 @@ import { prepareInput } from '../platform/input.js';
 import type { Attachment } from '../contracts/input.js';
 import type { RunAgentPort } from '../contracts/agent.js';
 import type { AgentSession } from '@earendil-works/pi-coding-agent';
-import type { Conversation, ModelChoice } from '../contracts/conversation.js';
+import type { ModelChoice } from '../contracts/conversation.js';
 import type { StreamEvent, RunEvent, RunInfo } from '../contracts/transport.js';
+import type { Checkpoints } from './checkpoints.js';
 import { RunEvents } from './events.js';
 type ThinkingLevel = AgentSession['thinkingLevel'];
 import type { SessionStore } from '../contracts/services.js';
@@ -15,6 +16,7 @@ interface RunOptions {
   model?: ModelChoice;
   attachments?: Attachment[];
   thinkingLevel?: ThinkingLevel;
+  schedule?: (task: () => Promise<string>, signal: AbortSignal) => Promise<string>;
   revision?: { sourceEntryId: string; expectedLeafId: string | null };
 }
 
@@ -25,15 +27,17 @@ interface Activity {
 }
 
 export class Runs {
+  readonly events = new EventTarget();
   private readonly work = new Map<string, Activity>();
 
   constructor(
     private readonly registry: SessionStore,
     private readonly pi: RunAgentPort,
-    private readonly defaultModel: () => ModelChoice,
-    private readonly assertAvailable: (id: string) => void,
-    private readonly schedule: (record: Conversation, task: () => Promise<string>, signal: AbortSignal) => Promise<string>
+    private readonly checkpoints: Checkpoints,
+    private readonly defaultModel: () => ModelChoice
   ) {}
+
+  private changed(id: string) { this.events.dispatchEvent(new CustomEvent('change', { detail: { id } })); }
 
   get size() { return this.work.size; }
   active(id: string) { return this.work.has(id); }
@@ -49,8 +53,8 @@ export class Runs {
     return owner && signal ? AbortSignal.any([owner, signal]) : owner ?? signal;
   }
 
-  private launch(id: string, prompt: string, emit: (event: StreamEvent) => void, { signal, model, attachments, thinkingLevel, revision }: RunOptions) {
-    this.assertAvailable(id);
+  private launch(id: string, prompt: string, emit: (event: StreamEvent) => void, { signal, model, attachments, thinkingLevel, revision, schedule }: RunOptions) {
+    this.registry.assertAvailable(id);
     if (this.active(id)) throw new Error('Conversation is already running');
     if (thinkingLevel !== undefined && !['off', 'minimal', 'low', 'medium', 'high', 'xhigh'].includes(thinkingLevel))
       throw new Error('Invalid thinking level');
@@ -62,13 +66,12 @@ export class Runs {
           model.provider.length > 160 || model.id.length > 160) throw new Error('Invalid model choice');
       this.pi.resolveModel(model);
     }
-    const choice = model ?? (record.parentId ? record.model : this.defaultModel());
-    this.pi.reopenStale(id);
+    const choice = model ?? (record.parentId ? undefined : this.defaultModel());
     const info: RunInfo = { id: randomUUID(), sessionId: id, state: 'queued', startedAt: new Date().toISOString(), sequence: 0 };
     const events = new RunEvents(info);
     const controller = new AbortController();
     const cancellation = signal ? AbortSignal.any([controller.signal, signal]) : controller.signal;
-    this.registry.update(id, { run: { ...info } });
+    this.checkpoints.save(info);
     const publish = (event: StreamEvent) => {
       const item = events.publish(event);
       try { emit?.(item); } catch { /* An observer cannot terminate the run. */ }
@@ -77,16 +80,18 @@ export class Runs {
       cancellation.throwIfAborted();
       info.state = 'running';
       const running = { ...info, sequence: info.sequence + 1 };
-      this.registry.update(id, { run: running });
+      this.checkpoints.save(running);
+      this.changed(id);
       publish({ type: 'run', run: running });
       return this.pi.prompt(record, prepared.text, publish, {
-        signal: cancellation, choice, images: prepared.images, thinkingLevel, revision,
+        signal: cancellation, choice, images: prepared.images, input: prepared.input, thinkingLevel, revision,
         changed: (path) => { info.changedFiles = [...new Set([...(info.changedFiles ?? []), path])]; }
       });
     };
     const activity: Activity = { controller, events };
     this.work.set(id, activity);
-    const done = this.schedule(record, promptSession, cancellation).then((text) => {
+    this.changed(id);
+    const done = Promise.resolve().then(() => schedule ? schedule(promptSession, cancellation) : promptSession()).then((text) => {
       info.state = 'completed';
       return text;
     }, (error) => {
@@ -97,8 +102,8 @@ export class Runs {
     }).finally(() => {
       info.finishedAt = new Date().toISOString();
       publish({ type: 'run', run: { ...info, sequence: info.sequence + 1 } });
-      try { this.registry.update(id, { run: { ...info } }); }
-      finally { this.work.delete(id); events.close(); }
+      try { this.checkpoints.save(info); }
+      finally { this.work.delete(id); events.close(); this.changed(id); }
     });
     // Server-owned runs may outlive every observer.
     activity.done = done;
@@ -126,8 +131,8 @@ export class Runs {
   }
 
   info(id: string): RunInfo | undefined {
-    const info = this.work.get(id)?.events?.info ?? this.registry.get(id)?.run;
-    return info && { ...info };
+    const info = this.work.get(id)?.events?.info ?? this.checkpoints.get(id);
+    return info && structuredClone(info);
   }
 
   watch(id: string, runId: string, after: number, emit: (event: RunEvent) => void) {
@@ -136,7 +141,7 @@ export class Runs {
     if (!info || info.id !== runId) throw new Error('Run not found');
     if (!Number.isSafeInteger(after) || after < 0 || after > info.sequence) throw new Error('Invalid event cursor');
     if (events) return events.watch(after, emit, () => this.pi.messages(id));
-    emit({ type: 'snapshot', messages: this.pi.messages(id), tools: [], run: info, sequence: info.sequence });
+    emit({ type: 'snapshot', messages: this.pi.messages(id), tools: [], run: info, sequence: info.sequence, runId: info.id, runSessionId: id });
     return () => {};
   }
 
@@ -152,6 +157,7 @@ export class Runs {
   }
 
   async compact(id: string) {
+    this.registry.assertAvailable(id);
     if (this.active(id)) throw new Error('Stop the open conversation before compacting it');
     const controller = new AbortController();
     const done = this.pi.compact(id, controller.signal);

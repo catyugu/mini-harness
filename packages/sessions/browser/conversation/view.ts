@@ -2,30 +2,35 @@ import type { Attachment } from '../../../contracts/input.js';
 import type { Conversation, ModelChoice } from '../../../contracts/conversation.js';
 import type { MessageContent } from '../../../contracts/message.js';
 import type { RunEvent, RunInfo } from '../../../contracts/transport.js';
-import type { ConversationView, ThinkingLevel } from '../../../web/types.js';
+import type { ConversationView, ThinkingLevel, ModelCatalog } from '../../../web/types.js';
 import { scopedElements } from '../../../web/api.js';
 import { exportSessions, isRunning } from '../../../web/transport/session-client.js';
 import { createConversationController } from '../../../web/models/conversation-controller.js';
-import type { BrowserState } from '../../../web/models/browser-state.js';
+import type { Selection } from '../../../web/models/selection.js';
+import type { RemoteStore } from '../../../web/models/remote-store.js';
+import type { Settings } from '../../../contracts/config.js';
 import { createMessageView } from './messages.js';
 import { CommandRegistry } from './commands.js';
 import type { ComposerCommand } from '../../../web/contracts/commands.js';
 import { createComposer } from './composer.js';
 import { createModelPicker } from './model-picker.js';
-import type { FrontendApi, FrontendHost, DraftMode } from '../../../ui-runtime/frontend.js';
+import type { FrontendApi, ToolView, MessageAction, DraftMode } from '../../../ui-runtime/frontend.js';
 import { fromMarkup } from '../../../ui-primitives/primitives.js';
 
 type Queue = ConversationView['queue'];
 
 interface ConversationServices {
+  sessions: RemoteStore<Conversation[]>;
+  settings: RemoteStore<Settings>;
+  models: RemoteStore<ModelCatalog>;
   closeDrawer(): void;
   placeWorkspace(welcome?: HTMLElement): void;
   setTitle(title: string): void;
-  renderTool: FrontendHost['render'];
-  messageActions: FrontendHost['messageActions'];
+  renderTool(tool: ToolView, action?: boolean): HTMLElement | undefined;
+  messageActions(): MessageAction[];
 }
 
-export function conversationView(api: FrontendApi, state: BrowserState, options: ConversationServices) {
+export function conversationView(api: FrontendApi, state: Selection, options: ConversationServices) {
   const controller = createConversationController(api.request);
   const view = fromMarkup(`
     <div class="conversation">
@@ -171,7 +176,6 @@ export function conversationView(api: FrontendApi, state: BrowserState, options:
   }
 
   function display(item: ConversationView, signal: AbortSignal, revealWorkspace: boolean) {
-    state.apply({ ...state.get().settings, model: item.selectedModel });
     showConversation(item, revealWorkspace);
     if (signal.aborted) return;
     showStatus(item.run?.error ?? '', Boolean(item.run?.error));
@@ -181,7 +185,7 @@ export function conversationView(api: FrontendApi, state: BrowserState, options:
   async function activate(id: string, revealWorkspace = true) {
     const signal = begin();
     pending = true;
-    const selected = state.session(id);
+    const selected = options.sessions.get().find((entry) => entry.id === id);
     if (selected && id !== active()) {
       showConversation(selected, revealWorkspace);
       showStatus('Loading conversation…');
@@ -240,7 +244,7 @@ export function conversationView(api: FrontendApi, state: BrowserState, options:
       if (!id) {
         if (!workspace) throw new Error('Add a workspace before starting a conversation.');
         const item = await controller.create(workspace);
-        if (!state.session(item.id)) state.applyNavigation({ type: 'session', session: item });
+        await options.sessions.refresh();
         id = item.id;
         if (!signal.aborted) { showConversation(item); setSending(true); }
       }
@@ -270,7 +274,7 @@ export function conversationView(api: FrontendApi, state: BrowserState, options:
     function accept(event: RunEvent) {
       render(event);
       switch (event.type) {
-        case 'user': rememberInput(item.id, event.content); break;
+        case 'user': if (!lastInputs.has(item.id)) rememberInput(item.id, event.content); break;
         case 'tool': showStatus(event.state === 'running' ? 'Running ' + event.name + '…' : 'Thinking…'); break;
         case 'complete':
         case 'error': showStatus(''); break;
@@ -292,10 +296,10 @@ export function conversationView(api: FrontendApi, state: BrowserState, options:
   }
 
   function updateModelControls() {
-    const bootstrap = state.get();
-    if (modelDraft && !bootstrap.models.some((model) => model.configured && model.provider === modelDraft.provider && model.id === modelDraft.id))
+    const catalog = options.models.get();
+    if (modelDraft && !catalog.models.some((model) => model.configured && model.provider === modelDraft.provider && model.id === modelDraft.id))
       modelDraft = undefined;
-    const selected = modelPicker.update(bootstrap.models, bootstrap.providers, modelDraft ?? bootstrap.settings.model);
+    const selected = modelPicker.update(catalog.models, catalog.providers, modelDraft ?? options.settings.get().model);
     const levels = selected?.thinkingLevels ?? [];
     const sameModel = selected && selected.provider === conversationModel?.provider && selected.id === conversationModel.id;
     thinkingSelect.replaceChildren(new Option('Default', ''), ...levels.map((level) =>

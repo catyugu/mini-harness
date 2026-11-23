@@ -152,7 +152,9 @@ The server runs one Runtime for all registered workspaces. Each conversation has
 | `GET /api/workspaces/directories?path=...` | Browse local subdirectories for registration |
 | `PATCH /api/workspaces/:id` with `{name}`, `DELETE /api/workspaces/:id` | Rename a workspace or permanently delete its conversations and descendants while leaving the project directory intact |
 | `PUT /api/workspaces` with `{ids}` | Reorder registered workspaces |
-| `GET /api/navigation/events` | NDJSON snapshot followed by workspace and conversation updates |
+| `GET /api/bootstrap` | Mounted browser plugin graph |
+| `GET /api/changes` | NDJSON stream with domain revisions and invalidations |
+| `GET /api/sessions`, `GET /api/settings`, `GET /api/plugins`, `GET /api/models` | Authoritative projections for the browser |
 | `GET /api/workspaces/:id/sessions`, `POST /api/workspaces/:id/sessions` | List or create conversations in a workspace |
 | `GET /api/providers`, `PUT /api/providers`, `DELETE /api/providers` | List credential status and model catalogs; save/remove custom endpoint definitions in Pi `models.json` |
 | `PATCH /api/sessions/:id` with `{title}` | Rename a conversation |
@@ -164,15 +166,15 @@ The server runs one Runtime for all registered workspaces. Each conversation has
 | `GET /api/workspaces/:id/files/preview?path=...`, `/files/changes`, `/files/diff?path=...` in the same workspace | Bounded text and image preview, repository status, staged and working-tree differences |
 | `GET /api/approvals`, `POST /api/approvals` with `{id, allow}` | Pending Shell requests; allow once or deny |
 
-Images (PNG/JPEG/GIF/WebP) go through Pi's image input and require an image-capable model. UTF-8 text attachments become message text. Limits: eight files, 6 MiB per image, 1 MiB per text file, 12 MiB total. Binary documents such as PDF/Office files are not parsed. Attachment content lives in the Pi conversation; there is no independent upload store. Git inspection requires the selected workspace to be the repository root and caps output at 512 KiB. “Files written this turn” lists successful built-in `write`/`edit` paths; Git changes show the entire working tree, including earlier edits and shell changes.
+Images (PNG/JPEG/GIF/WebP) go through Pi's image input and require an image-capable model. UTF-8 text attachments are included in the Pi model input. The conversation view displays their names alongside the original message. Limits: eight files, 6 MiB per image, 1 MiB per text file, 12 MiB total. Binary documents such as PDF/Office files are not parsed. Attachment content lives in the Pi conversation; there is no independent upload store. Git inspection requires the selected workspace to be the repository root and caps output at 512 KiB. “Files written this turn” lists successful built-in `write`/`edit` paths; Git changes show the entire working tree, including earlier edits and shell changes.
 
-The file, Skill and approval endpoints return 404 when their corresponding plugin is disabled. Every enabled built-in Shell call requires approval. Requests expire after five minutes; stopping the run or server cancels pending approval. Approval permits the command under the existing shell policy. Reviewed local plugins remain trusted code; this is not a general-purpose containment mechanism.
+The file and Skill endpoints return 404 when their plugin is disabled. The Approvals endpoint lists pending decisions from the active Shell tool. Disabling Shell cancels its pending requests. Every enabled built-in Shell call requires approval. Requests expire after five minutes; stopping the run or server cancels pending approval. Approval permits the command under the existing shell policy. Reviewed local plugins remain trusted code; this is not a general-purpose containment mechanism.
 
 ## Message action and composer extensions
 
 Browser-only local plugins may contain only `web.js` (optionally `plugin.json`). The built-in `session-helper` feature demonstrates a shared capability boundary: one manifest, one on/off switch and one Cordis lifecycle provide both Copy message and Edit & resend. Its backend registers the edit route, while both message actions are browser contributions.
 
-The browser API exposes `messageAction({ id, label, icon, order?, visible(context), run(context) })`. `context.message` contains the Pi entry ID and the unmodified message content; `context.rawText` contains the original text. `context.leafId` identifies the active Pi branch. The host owns button styling, placement, ordering, error rendering and cleanup. A plugin must not mutate message DOM or inspect private conversation components. Actions are removed automatically when its Cordis scope is disposed.
+The browser API exposes `messageAction({ id, label, icon, order?, visible(context), run(context) })`. `context.message` contains the Pi entry ID and the message's presentation content and attachment metadata; `context.rawText` contains the original text. `context.leafId` identifies the active Pi branch. The host owns button styling, placement, ordering, error rendering and cleanup. A plugin must not mutate message DOM or inspect private conversation components. Actions are removed automatically when its Cordis scope is disposed.
 
 Use `beginDraftMode({ title, text, submit(input) })` for a custom composer operation and `cancelDraftMode()` to leave it. The input contains text, attachments, chosen model and thinking level. An active mode intercepts the normal submit only while enabled. Disabling a plugin cancels its outstanding mode. The host owns the editor, cancel control and responsive layout.
 

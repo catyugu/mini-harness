@@ -4,7 +4,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { MiniHarnessRuntime } from '../../packages/host/application.js';
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
-import { mergeSettings } from '../../packages/platform/config.js';
+import { mergeSettings, readSettings, writeJson } from '../../packages/platform/config.js';
 
 test('an installed Cordis plugin can use services, configure a tool, and release resources', async (t) => {
   const mock = await createMockProvider();
@@ -209,4 +209,25 @@ test('disabled optional builtins cannot block boot or reload because their confi
   assert.equal(await runtime.runs.send(conversation.id, 'Main agent still works'), 'Mock response');
   await assert.rejects(runtime.updateSettings({ plugins: { subagents: true } }), /Invalid configuration for plugin: subagents/);
   assert.equal(runtime.delegation, undefined);
+});
+
+test('an optional plugin that fails at startup reports its state without blocking other capabilities', async (t) => {
+  const mock = await createMockProvider();
+  const { root, paths } = createFixturePaths(mock.url);
+  const folder = join(paths.plugins, 'fails-to-start');
+  mkdirSync(folder);
+  writeFileSync(join(folder, 'plugin.js'), "export default () => { throw new Error('Startup failed'); };");
+  writeFileSync(join(folder, 'web.js'), 'export default () => {};');
+  writeJson(paths.settings, { ...readSettings(paths), plugins: { 'fails-to-start': true } });
+  const restarted = new MiniHarnessRuntime(paths);
+  t.after(async () => { await restarted.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
+  await restarted.start();
+  const status = restarted.plugins.metadata().find(({ id }) => id === 'fails-to-start');
+  assert.equal(status.state, 'failed');
+  assert.match(status.error, /Startup failed/);
+  assert.ok(!restarted.plugins.browser().some(({ id }) => id === status.id));
+  await restarted.updateSettings({ appearance: 'dark' });
+  assert.equal(restarted.settings.appearance, 'dark');
+  await restarted.updateSettings({ plugins: { 'fails-to-start': false } });
+  assert.equal(restarted.plugins.metadata().find(({ id }) => id === status.id).state, 'discovered');
 });

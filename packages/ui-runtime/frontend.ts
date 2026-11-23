@@ -4,9 +4,9 @@ import type { MessageContent, ViewMessage } from '../contracts/message.js';
 import type { Attachment } from '../contracts/input.js';
 import type { ModelChoice } from '../contracts/conversation.js';
 import type { Conversation } from '../contracts/conversation.js';
-import type { RightTabType, TabScope, RightTabsPort } from '../web/contracts/tabs.js';
-import type { Bootstrap } from '../web/types.js';
-import { SlotRegistry, type SlotName, type SlotKind } from '../ui-slots/registry.js';
+import type { RightTabType, TabScope } from '../web/contracts/tabs.js';
+import type { WorkspaceRecord } from '../contracts/workspace.js';
+import type { SlotName, SlotKind } from '../ui-slots/registry.js';
 
 export interface ToolView { name: string; state: string; content?: MessageContent; arguments?: unknown; sessionId?: string }
 export interface Suggestion {
@@ -70,7 +70,7 @@ export interface FrontendApi {
 }
 
 export interface FrontendServices {
-  bootstrap(): Bootstrap;
+  workspaceRecord(id: string): WorkspaceRecord | undefined;
   openConversation(id: string): void;
   workspace(): TabScope | undefined;
   session(id?: string): Conversation | undefined;
@@ -89,19 +89,6 @@ export class FrontendHost {
   private readonly plugins = new Map<string, { fiber: Fiber; controller: AbortController }>();
   private disposed = false;
   private draftOwner?: string;
-  private readonly slots = new SlotRegistry();
-  private readonly renderers = new Map<string, (tool: ToolView) => HTMLElement | undefined>();
-  private readonly actions = new Map<string, (tool: ToolView) => HTMLElement | undefined>();
-  private readonly messageContributions = new Map<string, MessageAction>();
-  private readonly messageListeners = new Set<() => void>();
-
-  messageActions() { return [...this.messageContributions.values()].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)); }
-  onMessageActionsChanged(listener: () => void) {
-    this.messageListeners.add(listener);
-    return () => { this.messageListeners.delete(listener); };
-  }
-  private changedMessages() { for (const listener of this.messageListeners) listener(); }
-
   constructor(
     private readonly ctx: Context,
     private readonly request: <T>(path: string, options?: RequestInit) => Promise<T>,
@@ -124,13 +111,6 @@ export class FrontendHost {
         if (controller.signal.aborted) return () => {};
         return ctx.effect(install);
       };
-      const registerRenderer = (registry: typeof this.renderers, name: string, render: (tool: ToolView) => HTMLElement | undefined) =>
-        own(() => {
-          if (registry.has(name)) throw new Error('Duplicate tool contribution: ' + name);
-          registry.set(name, render);
-          return () => { registry.delete(name); };
-        });
-
       // One draft lease per plugin scope. A replacement belongs to the newest owner;
       // disposing an older plugin must not cancel somebody else's active draft.
       own(() => () => {
@@ -139,8 +119,8 @@ export class FrontendHost {
       const cleanup = await setup(ctx, {
         signal: controller.signal,
         slots: {
-          define: (name, container, kind) => { own(() => this.slots.define(name, container, kind)); },
-          register: (name, node, order) => own(() => this.slots.register(name, node, order))
+          define: (name, container, kind) => { own(() => this.ctx.miniSlots.define(name, container, kind)); },
+          register: (name, node, order) => own(() => this.ctx.miniSlots.register(name, node, order))
         },
         request: (path, options) => this.request(path, { ...options, signal: options?.signal
           ? AbortSignal.any([controller.signal, options.signal]) : controller.signal }),
@@ -156,12 +136,7 @@ export class FrontendHost {
             this.ctx.miniComposer.cancelDraftMode();
           }
         },
-        messageAction: (action) => own(() => {
-          if (this.messageContributions.has(action.id)) throw new Error('Duplicate message action: ' + action.id);
-          this.messageContributions.set(action.id, action);
-          this.changedMessages();
-          return () => { this.messageContributions.delete(action.id); this.changedMessages(); };
-        }),
+        messageAction: (action) => own(() => this.ctx.miniMessages.registerAction(action)),
         rightTab: (type, definition) => own(() => this.ctx.miniTabs.register(id + ':' + type, definition)),
         openTab: (type, path, scope) => {
           if (!controller.signal.aborted) this.ctx.miniTabs.open(id + ':' + type, path, scope);
@@ -173,8 +148,8 @@ export class FrontendHost {
         command: (command) => own(() => this.ctx.miniComposer.command(command)),
         completion: (trigger, complete) => own(() => this.ctx.miniComposer.completion(trigger, complete)),
         settingsPage: (title, node) => own(() => this.ctx.miniSettingsPages.addPage(title, node)),
-        tool: (name, render) => registerRenderer(this.renderers, name, render),
-        toolAction: (name, render) => registerRenderer(this.actions, name, render),
+        tool: (name, render) => own(() => this.ctx.miniMessages.registerTool(name, render)),
+        toolAction: (name, render) => own(() => this.ctx.miniMessages.registerTool(name, render, true)),
         onDispose: (dispose) => {
           if (controller.signal.aborted) void Promise.resolve().then(dispose).catch(this.services.report);
           else own(() => dispose);
@@ -208,11 +183,6 @@ export class FrontendHost {
       catch (error) { this.services.report(error); }
     }
   }
-
-  render(tool: ToolView, action = false) {
-    try { return (action ? this.actions : this.renderers).get(tool.name)?.(tool); }
-    catch (error) { this.services.report(error); }
-  }
 }
 
 declare module 'cordis' {
@@ -224,9 +194,7 @@ declare module 'cordis' {
       cancelDraftMode(): void;
       command(command: ComposerCommand): () => void;
       completion(trigger: string, complete: Completer): () => void;
-      refreshTools(): void;
     };
     miniSettingsPages: { addPage(title: string, node: HTMLElement): () => void };
-    miniTabs: RightTabsPort;
   }
 }

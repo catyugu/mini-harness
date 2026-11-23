@@ -15,11 +15,11 @@ export const isRunning = (run?: RunInfo) => run?.state === 'queued' || run?.stat
 
 export type StreamEvent =
   | { type: 'assistant-start' | 'assistant-end' }
-  | { type: 'user'; content: MessageContent }
+  | { type: 'user'; content: MessageContent; attachments?: import('./input.js').InputAttachment[] }
   | { type: 'delta' | 'complete'; text: string }
   | { type: 'tool'; id: string; name: string; state: 'running' | 'finished' | 'error'; arguments?: unknown; content?: MessageContent; sessionId?: string; elapsedMs?: number; exitCode?: number }
   | { type: 'error'; error: string }
   | { type: 'run'; run: RunInfo }
   | { type: 'snapshot'; messages: ViewMessage[]; partial?: string; tools?: Extract<StreamEvent, { type: 'tool' }>[]; run: RunInfo };
 
-export type RunEvent = StreamEvent & { sequence: number };
+export type RunEvent = StreamEvent & { runId: string; runSessionId: string; sequence: number };

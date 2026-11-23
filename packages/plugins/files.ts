@@ -49,7 +49,7 @@ export async function uninstallPlugin(runtime: PluginFilesHost, id: string) {
   return runtime.plugins.metadata();
 }
 export function frontendSource(runtime: PluginFilesHost, id: string) {
-  if (!idPattern.test(id) || !runtime.settings.plugins[id] || !runtime.plugins.metadata().some((p) => p.id === id && p.web)) throw new Error('Plugin UI is unavailable');
+  if (!idPattern.test(id) || !runtime.plugins.metadata().some((p) => p.id === id && p.web && p.state === 'ready')) throw new Error('Plugin UI is unavailable');
   const folder = join(runtime.paths.plugins, id), file = join(folder, 'web.js');
   if (lstatSync(folder).isSymbolicLink() || !lstatSync(file).isFile() || lstatSync(file).isSymbolicLink() || lstatSync(file).size > 1024 * 1024)
     throw new Error('Invalid plugin UI file');

@@ -56,7 +56,7 @@ test('--detached starts an independent, accessible server', { timeout: 30000 }, 
     });
     assert.equal(response.status, 200);
     const data = await response.json();
-    assert.ok(Array.isArray(data.sessions));
+    assert.ok(Array.isArray(data.ui));
     assert.match((await command('status')).stdout, new RegExp(String(state.pid)));
     const otherPort = await unusedPort();
     await assert.rejects(command('--cwd', cwd, '--port', String(otherPort)), /already running/);
