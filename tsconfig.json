@@ -22,9 +22,7 @@
   },
   "include": [
     "bin/**/*.ts",
-    "src/**/*.ts",
-    "features/**/*.ts",
-    "web/**/*.ts",
+    "packages/**/*.ts",
     "test/**/*.ts",
     "scripts/**/*.ts"
   ],

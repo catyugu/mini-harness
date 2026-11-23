@@ -10,7 +10,7 @@ function discover(directory: string): string[] {
     return entry.isFile() && entry.name.endsWith('.test.js') ? [path] : [];
   });
 }
-const tests = [...discover('dist/test'), ...discover('dist/features')].sort();
+const tests = [...discover('dist/test'), ...discover('dist/packages')].sort();
 if (!tests.length) throw new Error('No Node tests found');
 const result = spawnSync(process.execPath, ['--test', '--test-concurrency=4', ...tests], { stdio: 'inherit' });
 if (result.error) throw result.error;

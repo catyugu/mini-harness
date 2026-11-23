@@ -9,9 +9,7 @@
   },
   "files": [
     "dist/bin/",
-    "dist/src/",
-    "dist/features/",
-    "dist/web/",
+    "dist/packages/",
     "!dist/**/tests/**",
     "!dist/**/*.test.js",
     "!dist/**/*.spec.js",

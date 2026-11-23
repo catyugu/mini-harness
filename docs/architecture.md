@@ -6,16 +6,16 @@ mini-harness is **one npm package**, not an internal monorepo. Cordis owns servi
 
 | Owner | Responsibility |
 | --- | --- |
-| `src/kernel/mounts.ts` | Generic Cordis fiber mount, dependency-sensitive remount, reverse disposal and rollback. It knows nothing about Sessions, Agents, Workspaces, HTTP or app settings. |
-| `src/contracts/` | Implementation-free service, tool, route and transport ports. |
-| `src/plugins/` | Plugin discovery, manifest and configuration validation, and adaptation onto the generic fiber mount lifecycle. |
-| `src/application.ts` | Small composition root and public runtime facade. It injects service definitions but has no business algorithms. |
-| `features/<capability>/` | The actual business rules, Cordis providers, registered routes and optional browser entry. Each feature owns its lifecycle. |
-| `web/kernel/` | Generic outlet, command, tab, message-action and contribution registration with disposal. No concrete UI components. |
-| `web/application.ts` | Browser composition root. `web/ui/` owns reusable UI primitives and core browser plugins. |
-| `src/server.ts` | Local HTTP server: static assets, authorization, origin checking, process controls and registered route dispatch only. |
+| `packages/kernel/mounts.ts` | Generic Cordis fiber mount, dependency-sensitive remount, reverse disposal and rollback. It knows nothing about Sessions, Agents, Workspaces, HTTP or app settings. |
+| `packages/contracts/` | Implementation-free service, tool, route and transport ports. |
+| `packages/plugins/` | Plugin discovery, manifest and configuration validation, and adaptation onto the generic fiber mount lifecycle. |
+| `packages/host/application.ts` | Small composition root and public runtime facade. It injects service definitions but has no business algorithms. |
+| `packages/<capability>/` | The actual business rules, Cordis providers, registered routes and optional browser entry. Each feature owns its lifecycle. |
+| `packages/web/kernel/` | Generic outlet, command, tab, message-action and contribution registration with disposal. No concrete UI components. |
+| `packages/web/application.ts` | Browser composition root. `packages/web/ui/` owns reusable UI primitives and core browser plugins. |
+| `packages/host/server.ts` | Local HTTP server: static assets, authorization, origin checking, process controls and registered route dispatch only. |
 
-Essential services mount before optional user-facing plugins through `features/index.ts`. They are Cordis capabilities even though they have no on/off switches. Optional Subagents owns its semaphore and delegation provider. Runs delegates through the optional service when present, and runs directly when it is absent. No inactive subagent implementation is kept by the application.
+Essential services mount before optional user-facing plugins through `packages/index.ts`. They are Cordis capabilities even though they have no on/off switches. Optional Subagents owns its semaphore and delegation provider. Runs delegates through the optional service when present, and runs directly when it is absent. No inactive subagent implementation is kept by the application.
 
 Plugin settings are uniformly stored under `settings.pluginConfig[pluginId]` and validated through the owning feature's schema. Settings publishes committed changes; consumers own live update hooks. Lifecycle-changing edits require idle runs, while the Subagents live policy can update without a remount.
 
@@ -32,6 +32,6 @@ Deleting a registered workspace cascades through all its conversations and desce
 
 ## Test ownership and packaging
 
-Feature-owned tests live under `features/<id>/tests/`. Kernel and infrastructure tests live exclusively under `test/` (`test/plugins/` for plugin host and lifecycle tests, `test/settings/` for configuration, and `test/system/` for cross-capability journeys and architecture checks). Reusable browser UI tests live under `web/ui/tests/`. Shared fixtures live under `test/support/`. Never place test files or `tests/` directories under production `src/`. Tests must exercise real composition when service injection or disposal is the contract.
+Feature-owned tests live under `packages/<id>/tests/`. Kernel and infrastructure tests live exclusively under `test/` (`test/plugins/` for plugin host and lifecycle tests, `test/settings/` for configuration, and `test/system/` for cross-capability journeys and architecture checks). Reusable browser UI tests live under `packages/web/ui/tests/`. Shared fixtures live under `test/support/`. Never place test files or `tests/` directories under production infrastructure directories. Tests must exercise real composition when service injection or disposal is the contract.
 
 Run `npm run check` for compilation and co-located Node tests, `npm run test:browser` for all Playwright tests, and `npm run pack:check` for clean-package installation and launch. Build output is one package; the package allowlist excludes all `tests/` folders from the published tarball.
