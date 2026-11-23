@@ -22,7 +22,7 @@ export const layoutPlugin: BrowserPlugin = {
   id: 'core:layout',
   inject: ['miniState'],
   setup(ctx, api) {
-    const { layout, pages, header, tabs, root, outlet } = createAppFrame(api.signal);
+    const { layout, pages, header, tabs, outlet } = createAppFrame(api.signal);
     ctx.provide('miniLayout', layout);
     ctx.provide('miniPages', pages);
     ctx.provide('miniHeader', header);

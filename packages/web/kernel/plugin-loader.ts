@@ -1,5 +1,7 @@
 import type { FrontendHost, FrontendSetup } from './extensions.js';
 import type { Bootstrap } from '../types.js';
+import type { BrowserEntry } from '../../ui/manifest.js';
+import type { PluginMetadata } from '../../contracts/plugins.js';
 import { data } from '../api.js';
 
 export type BrowserPluginFailures = ReadonlyMap<string, unknown>;
@@ -9,7 +11,7 @@ export function createBrowserGraphLoader(host: FrontendHost) {
   let work = Promise.resolve();
 
   async function sync(snapshot: Bootstrap): Promise<BrowserPluginFailures> {
-    const enabled = new Map([
+    const enabled = new Map<string, BrowserEntry | PluginMetadata>([
       ...snapshot.ui.map((entry) => [entry.id, entry] as const),
       ...snapshot.plugins.filter(({ id }) => snapshot.settings.plugins[id]).map((entry) => [entry.id, entry] as const)
     ]);
