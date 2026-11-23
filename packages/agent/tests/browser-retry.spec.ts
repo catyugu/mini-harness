@@ -23,7 +23,7 @@ test('retry retains image attachments after selecting an image-capable model', a
     await page.getByRole('button', { name: 'Retry', exact: true }).click();
     await expect(page.locator('.message.assistant')).toHaveText('Mock response');
     expect(JSON.stringify(mock.requests.at(-1))).toContain('image_url');
-    await expect(page.locator('.message-image')).toHaveCount(1);
+    await expect(page.locator('.message.user').getByRole('img', { name: 'icon-192.png' })).toHaveCount(1);
     await expect(page.locator('.attachment')).toHaveCount(0);
   } finally { await page.close(); await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
 });
