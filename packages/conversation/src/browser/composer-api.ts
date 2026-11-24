@@ -94,7 +94,7 @@ export interface ConversationState {
 export interface ConversationController {
   get(): Readonly<ConversationState>;
   subscribe(listener: () => void, signal: AbortSignal): void;
-  activate(id: string, revealWorkspace?: boolean): Promise<void>;
+  activate(id: string, revealWorkspace?: boolean): Promise<boolean>;
   clear(): void;
   report(error: Error): void;
   submit(input: ConversationSubmission): Promise<{ sessionId: string; run: RunInfo }>;

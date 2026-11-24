@@ -93,8 +93,10 @@ export function createConversationController(ctx: Context, api: FrontendApi): Co
     if (selected && id !== active()) { select(selected, undefined, revealWorkspace); status('Loading conversation…'); }
     try {
       const item = await read(id, signal);
-      if (!signal.aborted) display(item, signal, revealWorkspace);
-    } catch (error) { if (!signal.aborted) report(error instanceof Error ? error : new Error(String(error))); }
+      if (signal.aborted) return false;
+      display(item, signal, revealWorkspace);
+      return true;
+    } catch (error) { if (!signal.aborted) report(error instanceof Error ? error : new Error(String(error))); return false; }
     finally { if (!signal.aborted) update({ pending: false }); }
   }
 
