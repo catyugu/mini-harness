@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { fixture } from '../support/api-fixture.js';
@@ -48,7 +48,18 @@ test('GUI APIs configure providers, persist keys privately, discover Skills and 
   const history = (await request('/sessions/' + session.id)).body;
   const user = history.messages.find((message: { role: string; content: unknown }) => message.role === 'user');
   assert.ok(user.content.some((block: { type: string }) => block.type === 'image'));
-  assert.deepEqual(user.attachments, [{ name: 'one.png', mimeType: 'image/png' }, { name: 'note.md', mimeType: 'text/plain' }]);
+  assert.deepEqual(user.attachments.map(({ name, mimeType }: { name: string; mimeType: string }) => ({ name, mimeType })), [
+    { name: 'one.png', mimeType: 'image/png' }, { name: 'note.md', mimeType: 'text/plain' }
+  ]);
+  const directory = join(paths.sessions, session.id, 'attachments');
+  for (const [index, file] of user.attachments.entries()) {
+    const data = index === 0 ? png : Buffer.from('ATTACHED CONTENT').toString('base64');
+    assert.equal(readFileSync(join(directory, file.id)).toString('base64'), data);
+    assert.equal(file.size, Buffer.from(data, 'base64').length);
+    assert.deepEqual((await request('/sessions/' + session.id + '/attachments/' + file.id)).body, { data });
+  }
+  const { body: sibling } = await request('/sessions', 'POST', {});
+  assert.equal((await request('/sessions/' + sibling.id + '/attachments/' + user.attachments[0].id)).status, 404);
   assert.deepEqual(user.content.filter((block: { type: string }) => block.type === 'text'), [{ type: 'text', text: 'Read the image and text' }]);
   assert.doesNotMatch(JSON.stringify(user), /ATTACHED CONTENT/);
   assert.equal(history.title, 'Read the image and text');
@@ -64,4 +75,7 @@ test('GUI APIs configure providers, persist keys privately, discover Skills and 
   const afterHistory = await request('/sessions/' + session.id);
   assert.equal(afterHistory.status, 200);
   assert.deepEqual(afterHistory.body.messages, history.messages);
+  assert.equal((await request('/sessions/delete', 'POST', { ids: [session.id] })).status, 200);
+  assert.equal(existsSync(join(paths.sessions, session.id)), false);
+  assert.equal((await request('/sessions/' + session.id + '/attachments/' + user.attachments[0].id)).status, 404);
 });

@@ -4,11 +4,11 @@ Owns durable conversation identity, history and deletion.
 
 ## Responsibilities
 
-Maintains session ancestry and permissions, the append-only log, durable inbox and run projections, read-only tool grants and recovery of interrupted deletions.
+Maintains session ancestry and permissions, the append-only log, original uploads, durable inbox and run projections, read-only tool grants and recovery of interrupted deletions.
 
 ## Structure
 
-`src/registry.ts` owns session access and cleanup. `log.ts`, `log-api.ts` and `projection.ts` implement the durable record. `src/shared/` contains read contracts used by other runtimes.
+`src/registry.ts` owns session access and cleanup; `storage.ts` owns log paths and upload files. `log.ts`, `log-api.ts` and `projection.ts` implement the durable record. `src/shared/` contains read contracts used by other runtimes.
 
 ## API
 

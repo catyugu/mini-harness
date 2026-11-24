@@ -142,6 +142,9 @@ test('identical queued text preserves each attachment identity and is delivered 
   const users = sessions.log(record.id).projection().messages.filter((message) => message.role === 'user');
   assert.equal(requests, 3); assert.equal(users.length, 3);
   assert.deepEqual(users.slice(1).map(({ attachments }) => expectPresent(attachments?.[0], 'queued attachment').name), ['first.png', 'second.png']);
+  const stored = users.slice(1).map(({ attachments }) => sessions.readAttachment(record.id,
+    expectPresent(attachments?.[0]?.id, 'queued attachment identity'))?.toString('base64'));
+  assert.deepEqual(stored, [data, data]);
   assert.deepEqual(sessions.log(record.id).queue(), []);
 });
 
@@ -324,12 +327,16 @@ test('native compaction reduces context and preserves message identities and his
 test('attachments enforce encoding, format and byte limits without creating files', () => {
   const png = 'iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAFElEQVR4nGPUCIhigAEmBiSAmwMAKdYA2gR3lpgAAAAASUVORK5CYII=';
   const prepared = prepareInput('', [{ name: 'one.png', mimeType: 'image/png', data: png }, { name: 'notes.md', mimeType: 'text/plain', data: Buffer.from('An attached note').toString('base64') }]);
-  assert.deepEqual(prepared.input, { userText: '', attachments: [
+  assert.equal(prepared.input.userText, '');
+  assert.deepEqual(prepared.input.attachments.map(({ name, mimeType }) => ({ name, mimeType })), [
     { name: 'one.png', mimeType: 'image/png' }, { name: 'notes.md', mimeType: 'text/plain' }
-  ] });
+  ]);
+  assert.deepEqual(prepared.files.map(({ id }) => id), prepared.input.attachments.map(({ id }) => id));
   assert.equal(prepared.images.length, 1); assert.match(prepared.text, /An attached note/);
   assert.throws(() => prepareInput('a', [{ name: 'fake.png', mimeType: 'image/png', data: 'eA==' }]), /Invalid image/);
   assert.throws(() => prepareInput('a', [{ name: 'b', mimeType: 'text/plain', data: '!!!' }]), /Invalid attachment/);
-  assert.throws(() => prepareInput('a', [{ name: 'b', mimeType: 'application/pdf', data: Buffer.from([0, 1, 2]).toString('base64') }]), /UTF-8/);
+  const binary = prepareInput('a', [{ name: 'b.pdf', mimeType: 'application/pdf', data: Buffer.from([0, 1, 2]).toString('base64') }]);
+  assert.match(binary.text, /Uploaded file: "b.pdf"/);
+  assert.deepEqual(binary.files[0].bytes, Buffer.from([0, 1, 2]));
   assert.throws(() => prepareInput('a', new Array(9).fill({})), /eight/);
 });

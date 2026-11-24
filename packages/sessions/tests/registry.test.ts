@@ -55,6 +55,13 @@ test('restart finishes a journaled deletion after partial cleanup', async (t) =>
   const child = registry.create({ parentId: parent.id });
   const unrelated = registry.create();
   const childFile = registry.log(child.id).file;
+  const upload = { name: 'document.pdf', mimeType: 'application/pdf', data: Buffer.from([0, 1, 2]).toString('base64') };
+  const prepared = registry.prepareInput(child.id, '', [upload]);
+  const fileId = prepared.input.attachments[0].id;
+  assert.ok(fileId);
+  const directory = registry.attachmentDirectory(child.id);
+  assert.ok(directory);
+  assert.equal(registry.readAttachment(child.id, fileId)?.toString('base64'), upload.data);
   registry.dispose();
   writeFileSync(paths.registry, JSON.stringify({ sessions: [unrelated],
     pendingDelete: [{ id: parent.id, workspaceId: parent.workspaceId }, { id: child.id, workspaceId: child.workspaceId }] }));
@@ -64,6 +71,7 @@ test('restart finishes a journaled deletion after partial cleanup', async (t) =>
   await restored.recoverDeletion();
   assert.deepEqual(restored.list().map(({ id }) => id), [unrelated.id]);
   assert.equal(existsSync(childFile), false);
+  assert.equal(existsSync(directory), false);
   assert.deepEqual(new Set(forgotten), new Set(['session:' + parent.id, 'session:' + child.id]));
 });
 
@@ -71,10 +79,13 @@ test('export includes all branches and rejects in-flight sessions', (t) => {
   const { registry } = fixture(t);
   const session = registry.create();
   const log = registry.log(session.id);
-  const first = log.append({ type: 'message', message: { role: 'user', content: 'original', timestamp: Date.now() } });
+  const data = Buffer.from([0, 1, 2]).toString('base64');
+  const prepared = registry.prepareInput(session.id, 'original', [{ name: 'document.pdf', mimeType: 'application/pdf', data }]);
+  const first = log.append({ type: 'message', message: { role: 'user', content: prepared.text, timestamp: Date.now() }, presentation: prepared.input });
   log.revise({ type: 'message', message: { role: 'user', content: 'revision', timestamp: Date.now() } }, null, first.id);
   const [exported] = registry.export([session.id]);
   assert.ok(exported.log.includes(first.id));
+  assert.deepEqual(exported.attachments, { [prepared.input.attachments[0].id]: data });
   assert.ok(exported.log.includes('original') && exported.log.includes('revision'));
   const release = registry.beforeDelete({ quiesce: async () => {}, busy: () => true });
   assert.throws(() => registry.export([session.id]), /Stop active/);

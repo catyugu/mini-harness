@@ -280,6 +280,7 @@ test('retry looks up the failed delivery by its native entry identity', async (t
   assert.equal(accepted.state, 'queued');
   await assert.rejects(expectPresent(runs.completion(session.id), 'active run'));
   assert.equal(log.projection().messages.find(({ submissionId }) => submissionId === accepted.id)?.inboxId, undefined);
-  assert.deepEqual(runs.retryInput(session.id, accepted.id)?.missing, ['fixture.txt']);
+  assert.deepEqual(runs.retryInput(session.id, accepted.id)?.missing, []);
+  assert.deepEqual(runs.retryInput(session.id, accepted.id)?.attachments, [attachment]);
   assert.throws(() => runs.retryInput(session.id, failed.id), /no longer the failed conversation run/);
 });

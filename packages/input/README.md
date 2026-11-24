@@ -12,11 +12,11 @@ Owns input source and attachment formats, size and media constraints, and the or
 
 ## API
 
-`PreparedMessage` and `InputSource` are available through the server SDK. Runs and Agent share input preparation.
+`PreparedMessage` and `InputSource` are available through the server SDK. Sessions uses the shared input preparation for Runs and Agent. It returns model-visible content, presentation metadata and validated original bytes for session-owned storage.
 
 ## Dependencies
 
-Uses [LLM](../llm/README.md) for native user content and [Platform](../platform/README.md) for domain errors.
+Uses [Platform](../platform/README.md) for domain errors.
 
 ## Testing
 

@@ -69,8 +69,13 @@ test('drafts isolate attachments and discover workspace files and skills', async
       context.fillRect(0, 0, canvas.width, canvas.height);
       return canvas.toDataURL('image/png').split(',')[1];
     }));
-    await page.locator('#composer input[type=file]').setInputFiles([
+    await draft.fill('Read this attachment /skill:review and keep this text /file');
+    await expect(suggestions(page).getByRole('option', { name: /Upload files from your device/ })).toBeVisible();
+    const chooser = page.waitForEvent('filechooser');
+    await draft.press('Enter');
+    await (await chooser).setFiles([
       { name: 'task.txt', mimeType: 'text/plain', buffer: Buffer.from('ATTACHED TASK') },
+      { name: 'document.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.7\n') },
       { name: 'blue.png', mimeType: 'image/png', buffer: Buffer.from(images[0], 'base64') },
       { name: 'reference.png', mimeType: 'image/png', buffer: Buffer.from(images[1], 'base64') }
     ]);
@@ -79,11 +84,18 @@ test('drafts isolate attachments and discover workspace files and skills', async
     await expect(page.locator('.message.assistant')).toHaveText('Mock response');
     const bubble = page.locator('.message.user').first();
     await expect(bubble).toContainText('Read this attachment /skill:review and keep this text');
-    const thumbs = bubble.locator('.message-images img');
-    await expect(thumbs).toHaveCount(2);
-    await expect(bubble.getByRole('img', { name: 'blue.png' })).toBeVisible();
-    await expect(bubble.getByRole('img', { name: 'reference.png' })).toBeVisible();
-    await expect(bubble.getByRole('list', { name: 'Attachments' })).toHaveText('task.txt');
+    const row = page.locator('.message-row.user').first();
+    const cards = row.locator('.message-attachments');
+    await expect(cards.locator('img')).toHaveCount(2);
+    await expect(cards.getByRole('img', { name: 'blue.png' })).toBeVisible();
+    await expect(cards.getByRole('img', { name: 'reference.png' })).toBeVisible();
+    await expect(cards.locator('.file-card')).toHaveCount(2);
+    await expect(cards.getByRole('button', { name: 'Download task.txt' })).toContainText('TXT · 13 B');
+    await expect(cards.getByRole('button', { name: 'Download document.pdf' })).toContainText('PDF');
+    await expect(bubble.locator('.file-card, img')).toHaveCount(0);
+    const fileDownload = page.waitForEvent('download');
+    await cards.getByRole('button', { name: 'Download task.txt' }).click();
+    expect((await fileDownload).suggestedFilename()).toBe('task.txt');
     expect(JSON.stringify(mock.requests[0])).toContain('image_url');
     expect(JSON.stringify(mock.requests[0])).toContain('ATTACHED TASK');
     expect(JSON.stringify(mock.requests[0])).toContain('Review carefully.');
@@ -106,17 +118,18 @@ test('drafts isolate attachments and discover workspace files and skills', async
     await page.locator('#composer input[type=file]').setInputFiles({ name: 'private.txt', mimeType: 'text/plain', buffer: Buffer.from('ONLY FOR PROJECT REVIEW') });
     await page.getByRole('button', { name: 'New conversation', exact: true }).click();
     await expect(draft).toHaveValue('');
-    await draft.fill('Different conversation');
+    await draft.fill('Different conversation @"notes.md"');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.locator('.message.assistant')).toHaveText('Mock response');
     expect(JSON.stringify(mock.requests.at(-1))).not.toContain('ONLY FOR PROJECT REVIEW');
+    await expect(page.locator('.message-attachments')).toHaveCount(0);
     await page.getByRole('button', { name: title, exact: true }).click();
     await expect(draft).toHaveValue('Keep this draft');
     await expect(page.getByRole('button', { name: 'Remove private.txt' })).toBeVisible();
     await page.locator('.session-row').filter({ hasText: 'Different conversation' }).hover();
-    await page.getByRole('button', { name: 'Delete Different conversation', exact: true }).click();
+    await page.getByRole('button', { name: 'Delete Different conversation @"notes.md"', exact: true }).click();
     await page.getByRole('dialog', { name: 'Delete conversation' }).getByRole('button', { name: 'Delete', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'Different conversation', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Different conversation @"notes.md"', exact: true })).toHaveCount(0);
     await page.locator('.session-row').filter({ hasText: title }).hover();
     await page.getByRole('button', { name: 'Delete ' + title, exact: true }).click();
     const confirmation = page.getByRole('dialog', { name: 'Delete conversation' });
