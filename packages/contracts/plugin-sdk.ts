@@ -7,7 +7,7 @@ export interface ServiceMap extends Pick<Context,
 
 export type { PluginScope, ScopeSettings } from './capabilities.js';
 export type { PluginApi, PluginDescriptor } from './plugins.js';
-export type { ModelFailure, ModelRequestDraft, ModelRequestTransform, ModelRetry, PromptContext, PromptSection, StepContext, ToolResultContext, ToolResultTransform } from './extensions.js';
+export type { ModelFailure, ModelRequestContent, ModelRequestTransform, ModelRetry, PromptContext, PromptSection, StepContext, ToolResultContext, ToolResultTransform } from './extensions.js';
 export type { CapabilityObservation, ToolDecision, ToolProjection } from './events.js';
 export type { FileAccessPort, WorkspaceFileAccess } from './files.js';
 export type { ProcessExecutionPort, SandboxPort } from './execution.js';

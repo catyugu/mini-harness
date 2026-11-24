@@ -1,6 +1,5 @@
-import type { ThinkingLevel } from './agent.js';
 import type { ModelChoice } from './conversation.js';
-import type { NativeMessage, TextPart, ImagePart } from './llm.js';
+import type { LlmRequest, TextPart, ImagePart } from './llm.js';
 import type { ToolDefinition } from './tools.js';
 
 export interface PromptContext {
@@ -24,12 +23,7 @@ export interface StepContext {
   readonly signal: AbortSignal;
 }
 
-export interface ModelRequestDraft {
-  messages: NativeMessage[];
-  systemPrompt: string;
-  thinkingLevel?: ThinkingLevel;
-  maxTokens?: number;
-}
+export type ModelRequestContent = Pick<LlmRequest, 'messages' | 'systemPrompt' | 'thinkingLevel' | 'maxTokens'>;
 
 export interface ToolResultContext extends StepContext {
   readonly callId: string;
@@ -40,7 +34,7 @@ export type AgentTransform<Value, Context extends StepContext> = (
   value: Value, context: Context
 ) => Value | undefined | Promise<Value | undefined>;
 
-export type ModelRequestTransform = AgentTransform<ModelRequestDraft, StepContext>;
+export type ModelRequestTransform = AgentTransform<ModelRequestContent, StepContext>;
 export type ToolResultTransform = AgentTransform<(TextPart | ImagePart)[], ToolResultContext>;
 
 export interface ModelFailure {

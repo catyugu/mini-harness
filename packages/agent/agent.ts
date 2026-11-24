@@ -16,7 +16,7 @@ import type { CapabilityObservation, ToolProjection } from '@mini-harness/contra
 import type { MessageContent } from '@mini-harness/contracts/message';
 import { AgentRegistry } from './registry.js';
 import { Inbox } from './inbox.js';
-import type { ModelFailure, ModelRequestDraft, ModelRequestTransform, ModelRetry, StepContext, ToolResultTransform } from '@mini-harness/contracts/extensions';
+import type { ModelFailure, ModelRequestContent, ModelRequestTransform, ModelRetry, StepContext, ToolResultTransform } from '@mini-harness/contracts/extensions';
 import type { InboxItem } from '@mini-harness/contracts/session-log';
 import { isToolContent } from '@mini-harness/contracts/tools';
 import { contentDelta } from '@mini-harness/platform/content-delta';
@@ -386,17 +386,18 @@ export class NativeAgent implements AgentPort {
     }
   }
 
-  private async prepareRequest(log: SessionLogPort, context: StepContext, draft: ModelRequestDraft, tools?: LlmRequest['tools']): Promise<LlmRequest> {
+  private async prepareRequest(log: SessionLogPort, context: StepContext, requestContent: ModelRequestContent, tools?: LlmRequest['tools']): Promise<LlmRequest> {
     const projected = log.projection();
     const base = { model: context.model, tools };
-    const validate = (value: ModelRequestDraft) => {
+    const capabilities = this.services.models(context.sessionId).capabilities(context.model);
+    const validate = (value: ModelRequestContent) => {
       if (!value || !Array.isArray(value.messages)) throw new Error('Invalid model request messages');
       validateRequestSnapshot({ ...value, ...base });
+      resolveThinking(capabilities, value.thinkingLevel);
     };
-    const transformed = await applyTransforms(this.services.modelRequestHooks?.(context.sessionId) ?? [], draft, context, validate);
+    const transformed = await applyTransforms(this.services.modelRequestHooks?.(context.sessionId) ?? [], requestContent, context, validate);
     context.signal.throwIfAborted();
     const { systemPrompt, thinkingLevel, maxTokens } = transformed;
-    const capabilities = this.services.models(context.sessionId).capabilities(context.model);
     const input = capabilities?.input.includes('image') ? transformed.messages : withoutImages(transformed.messages);
     const snapshot: Omit<LlmRequest, 'signal' | 'sessionId'> = JSON.parse(JSON.stringify({
       ...base, messages: input, systemPrompt, thinkingLevel, maxTokens
