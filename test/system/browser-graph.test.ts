@@ -23,6 +23,9 @@ test('the composed browser graph serves its runtime dependencies and excludes se
     '/packages/host/application.js',
     '/packages/platform/local-secret.js',
     '/packages/input/prepare.js',
+    '/packages/sdk/plugin.js',
+    '/packages/settings/manager.js',
+    '/packages/transport/router.js',
     '/packages/shell/host.js',
     '/packages/subagents/delegation.js',
     '/packages/sessions/tests/log.test.js'
