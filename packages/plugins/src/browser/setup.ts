@@ -373,10 +373,10 @@ function pluginCatalog(api: FrontendApi, snapshot: () => { plugins: PluginMetada
             const saved = await mutate(() => api.request('/settings', payload('PATCH', { plugins: { [plugin.id]: next } })),
               (error) => { status.textContent = error.message; });
             if (saved) {
-              if (remove) remove.hidden = next;
               const state = snapshot().plugins.find(({ id }) => id === plugin.id);
               if (next && state?.error && !status.textContent)
                 status.textContent = 'Configuration saved. Plugin failed to start: ' + state.error;
+              render();
             }
             return saved;
           } finally {

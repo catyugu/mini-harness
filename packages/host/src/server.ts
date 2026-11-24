@@ -142,7 +142,13 @@ export async function createMiniHarnessServer(paths: Paths, options: { token?: s
     }
   };
   await runtime.start();
-  const server = createServer((req, res) => { void route(req, res); });
+  const server = createServer((req, res) => {
+    res.once('finish', () => {
+      // A response finishing during shutdown has just left the active connection set.
+      if (!server.listening) server.closeIdleConnections();
+    });
+    void route(req, res);
+  });
   server.on('upgrade', (request, socket, head) => {
     const reject = (status: string) => socket.end('HTTP/1.1 ' + status + '\r\nConnection: close\r\n\r\n');
     if (!authorize(request, token)) { reject('401 Unauthorized'); return; }
