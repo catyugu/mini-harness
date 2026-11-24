@@ -39,11 +39,18 @@ One process owns each configuration directory. An open tab reconnects after a re
 - Expand the conversation tree to view children. Use checkboxes for bulk export or permanent deletion. Selecting a parent includes descendants. Export contains native JSONL and metadata; deletion cancels the selected trees, waits for their runs, and removes their files.
 - Toggle Files, Skills, Subagents, Shell, Session helper and installed plugins. Session helper owns message copy and edit/resend under one switch. Changes to tool availability are reflected at the next model turn. Unloading a tool revokes its outstanding calls; unrelated runs continue.
 
-Skills load from `~/.mini-harness/skills/` and `<workspace>/.mini-harness/skills/`; a workspace skill takes precedence over a global skill with the same name. `/skill:name` expands a skill explicitly, and the `load_skill` tool lets a model load listed skills even when Files is disabled. Native prompts also read `AGENTS.md` in the configuration directory and workspace root. Skill and instruction reads are bounded and reject linked files.
+Skills scans four directories in ascending priority.
+
+1. `~/.agents/skills/`
+2. `~/.mini-harness/skills/` or `$MINI_HARNESS_HOME/skills/`
+3. `<workspace>/.agents/skills/`
+4. `<workspace>/.mini-harness/skills/`
+
+The highest-priority valid skill wins when names match. Skill directories and `SKILL.md` can be links, including links to locations outside the workspace. Use `/skill:name` to attach instructions to your message. Models can use `load_skill` while Skills is enabled. Native prompts also read regular, unlinked `AGENTS.md` files in the configuration directory and workspace root. Skills discovery and all instruction reads have size and resource limits.
 
 Long conversations compact automatically. Manual compaction keeps two recent turns plus a summary for model context while preserving all message identities and history. Advanced users can set `pluginConfig["core:agent"]` with `maxTurns` (default 128) and `autoCompact` (default `true`).
 
-Conversation permissions can be changed at any time from the left side of the composer. Read-only allows only built-in file reading/search and skill loading, including for subagents; Standard keeps the existing tool and approval rules; Full access runs enabled tools (including Shell) without per-command approval prompts. Choosing Full access also releases Shell approvals already pending in that conversation. The choice persists per conversation and applies to calls that have not started. Shell starts disabled and, unless a conversation is set to Full access, asks for approval for every command. File tools restrict access to the active workspace; Linux isolated Shell requires bubblewrap and `prlimit`. Trusted host Shell and reviewed JavaScript plugins run with your user permissions. See [SECURITY.md](SECURITY.md).
+Conversation permissions can be changed at any time from the left side of the composer. Read-only admits authorized read-only tool registrations, including built-in file reading, search and skill loading. It applies to descendant conversations. Standard applies the regular tool and approval rules. Full access bypasses per-command Shell approval while inherited tool restrictions still apply. Choosing Full access also releases Shell approvals already pending in that conversation. The choice persists per conversation and applies to calls that have not started. Shell starts disabled and, unless a conversation is set to Full access, asks for approval for every command. File tools restrict access to the active workspace; Linux isolated Shell requires bubblewrap and `prlimit`. Trusted host Shell and reviewed JavaScript plugins run with your user permissions. See [SECURITY.md](SECURITY.md).
 
 ## Develop
 
