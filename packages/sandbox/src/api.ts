@@ -12,10 +12,6 @@ export interface SandboxPort {
   prepare(request: ProcessRequest): Promise<IsolatedProcess>;
 }
 
-declare module 'cordis' {
-  interface Context { harnessSandbox: SandboxPort }
-}
-
 declare module '@mini-harness/kernel/services' {
   interface ServiceMap { harnessSandbox: SandboxPort }
 }

@@ -38,10 +38,6 @@ export interface ToolPort {
   isAvailable(id: string, tool: ToolDefinition): boolean;
 }
 
-declare module 'cordis' {
-  interface Context { harnessTools: ToolPort }
-}
-
 export function isToolContent(value: unknown): value is ToolResult['content'] {
   return Array.isArray(value) && value.every((part) => part?.type === 'text' ? typeof part.text === 'string' :
     part?.type === 'image' && typeof part.data === 'string' && typeof part.mimeType === 'string');

@@ -17,7 +17,6 @@ export interface ModelPreference {
 
 declare module 'cordis' {
   interface Context {
-    harnessModels: ModelCatalogPort;
     harnessModelPreference: ModelPreference;
   }
 }

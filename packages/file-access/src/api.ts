@@ -29,10 +29,6 @@ export interface WorkspaceFileAccess {
   grep(input: SearchInput, signal?: AbortSignal): Promise<{ matches: string[]; limited: boolean }>;
 }
 
-declare module 'cordis' {
-  interface Context { harnessFileAccess: FileAccessPort }
-}
-
 declare module '@mini-harness/kernel/services' {
   interface ServiceMap { harnessFileAccess: FileAccessPort }
 }

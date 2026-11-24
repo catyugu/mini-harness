@@ -6,10 +6,6 @@ export interface ProcessExecutionPort {
 }
 
 
-declare module 'cordis' {
-  interface Context { harnessProcess: ProcessExecutionPort }
-}
-
 declare module '@mini-harness/kernel/services' {
   interface ServiceMap { harnessProcess: ProcessExecutionPort }
 }

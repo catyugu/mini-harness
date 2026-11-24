@@ -35,10 +35,6 @@ interface SessionDirectory {
   [recordsForPlugin](id: string, owner: RecordOwner): SessionRecords;
 }
 
-declare module 'cordis' {
-  interface Context { harnessSessions: SessionDirectory }
-}
-
 export const sessionExtensions = {
   access: extension((source): SessionAccess => {
     const sessions = source.service('harnessSessions')[sessionAccess];
