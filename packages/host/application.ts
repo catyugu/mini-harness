@@ -1,5 +1,5 @@
 import { Context } from 'cordis';
-import { plugins, trustedContributors } from './composition.js';
+import { authority, plugins } from './composition.js';
 import { SettingsManager } from '@mini-harness/settings/manager';
 import { PluginHost } from '@mini-harness/plugins/manager';
 import { RouteRegistry } from '@mini-harness/transport/http';
@@ -52,7 +52,7 @@ export class MiniHarnessRuntime {
     for (const [name, service] of Object.entries(root)) ctx.provide(name, service);
     this.plugins = new PluginHost(ctx, paths.plugins, plugins, Object.keys(root),
       () => this.settings, (id) => ctx.get('harnessRegistry')?.get(id), upgrade, paths.devPlugin,
-      (id, key, patch, check) => this.configuration.writePlugin(id, key, patch, this.plugins, check).then(() => {}), trustedContributors);
+      (id, key, patch, check) => this.configuration.writePlugin(id, key, patch, this.plugins, check).then(() => {}), authority);
   }
 
   get settings() { return this.configuration.settings; }

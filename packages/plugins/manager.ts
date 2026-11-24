@@ -37,8 +37,11 @@ export class PluginHost implements ScopePort {
     private readonly session: (id: string) => SessionRecord | undefined,
     private readonly upgrade?: (path: string, handler: UpgradeHandler) => () => void, devPlugin?: string,
     private readonly writePlugin?: (id: string, key: string | undefined, patch: unknown, check: () => void) => Promise<void>,
-    private readonly trustedContributors: ReadonlySet<string> = new Set()) {
-    this.catalog = new PluginCatalog(directory, builtins, rootServices, devPlugin);
+    private readonly authority: {
+      trustedContributors?: ReadonlySet<string>;
+      protectedProviders?: ReadonlyMap<string, string>;
+    } = {}) {
+    this.catalog = new PluginCatalog(directory, builtins, rootServices, devPlugin, authority.protectedProviders);
     this.mounts = new PluginMounts(ctx);
     this.root = new Map(rootServices.map((name) => [name, 'application']));
   }
@@ -221,7 +224,7 @@ export class PluginHost implements ScopePort {
       throw new Error('Export a default setup function and declare dependencies in plugin.json');
     return { inject: descriptor.inject ?? [], setup: async (ctx, lifetime, setDrain, setConfig) => {
       const runtime = createPluginApi(ctx, plan, { scope, scopeKey, lifetime,
-        trusted: !source && this.trustedContributors.has(plan.id),
+        trusted: !source && this.authority.trustedContributors?.has(plan.id) === true,
         address: (id) => this.address(id),
         routes: this.ctx.get('harnessRoutes'), upgrade: this.upgrade,
         dataRoot: join(dirname(this.directory), 'plugin-data'),

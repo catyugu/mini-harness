@@ -35,5 +35,7 @@ export const plugins = [
   ui_slots, ui_theme, ui_primitives, ui_layout, workspaces, sessions, agent, runs, settings, models, plugin_management, ui, file_access, files, skills, subagents, shell, session_helper, approvals, sandbox, process_execution, tools, conversation
 ];
 
-/** Built-ins permitted to classify their own tool contributions as read-only. */
-export const trustedContributors = new Set([files.id, skills.id]);
+export const authority = {
+  trustedContributors: new Set([files.id, skills.id]),
+  protectedProviders: new Map([['harnessTools', tools.id]])
+};

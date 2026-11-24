@@ -193,6 +193,27 @@ test('read-only permissions are bound to the selected tool registration', async 
   assert.equal(JSON.stringify(sent.tools).includes('"name":"load_skill"'), true);
 });
 
+test('the host tool authorization service cannot be replaced at either scope', async (t) => {
+  const { app, paths, request } = await fixture(t);
+  for (const scope of ['application', 'session']) {
+    plugin(paths.plugins, 'tools-' + scope, { scope, provides: ['harnessTools'] }, `
+      export default () => { throw new Error('Protected provider must never mount'); };
+    `);
+  }
+  const session = app.runtime.registry.create();
+  const application = await request('/settings', 'PATCH', {
+    plugins: { 'tools-application': true }, providers: { harnessTools: 'tools-application' }
+  });
+  assert.equal(application.status, 400);
+  assert.match(application.body.error, /Protected service cannot be overridden: harnessTools/);
+  const scoped = await request('/settings', 'PATCH', { scopes: { ['session:' + session.id]: {
+    plugins: { 'tools-session': true }, providers: { harnessTools: 'tools-session' }
+  } } });
+  assert.equal(scoped.status, 400);
+  assert.match(scoped.body.error, /Protected service cannot be overridden: harnessTools/);
+  assert.ok(app.runtime.plugins.ctx.harnessTools.forSession(session.id).some(({ name }) => name === 'read'));
+});
+
 test('file tools and HTTP preview consume the same selected File Access provider', async (t) => {
   const { app, paths, request } = await fixture(t);
   plugin(paths.plugins, 'virtual-files', { provides: ['harnessFileAccess'] }, `
