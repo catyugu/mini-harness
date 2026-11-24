@@ -42,7 +42,9 @@ test('an installed Cordis plugin can use services, configure a tool, and release
 export const inject = ["harnessSessions","harnessTools"];
 
 import { appendFileSync } from 'node:fs';
+import { Context } from 'mini-harness/cordis';
 export const apply = (ctx, config) => {
+      if (!(ctx instanceof Context)) throw new Error('Plugin loaded a different Cordis runtime');
       const sessions = ctx.harnessSessions.access();
       ctx.effect(() => () => appendFileSync(${JSON.stringify(log)}, 'dispose\\n'));
       ctx.effect(() => ctx.harnessTools.register({

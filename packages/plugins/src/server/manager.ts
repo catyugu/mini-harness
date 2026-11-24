@@ -15,6 +15,7 @@ import { addAbortListener } from 'node:events';
 import type { UpgradeHandler } from '@mini-harness/transport/routes';
 import { scopeKeys, type PluginSettings } from '@mini-harness/plugin-api/configuration';
 import { ProtectedProviderError } from './providers.js';
+import { bindPluginImports } from './module-resolution.js';
 import { pluginData, pluginSecrets } from './data.js';
 import { PluginRouteRegistry, scopeOperation } from './routes.js';
 import { pluginSettings } from './plugin-settings.js';
@@ -30,6 +31,7 @@ export class PluginHost implements ScopePort {
   private readonly entries = new EntryTree();
   private readonly root: ReadonlyMap<string, string>;
   private readonly pluginRoutes: PluginRouteRegistry;
+  private readonly imports: ReturnType<typeof bindPluginImports>;
   private scopes = new Map<ScopeKey, EntryGroup>();
   private started = false;
   private readonly scopeSources = new Map<string, { resolve: (id: string) => ScopeAddress | undefined; eager: boolean }>();
@@ -62,6 +64,7 @@ export class PluginHost implements ScopePort {
     const provided = [...rootServices, ...Object.keys(services)];
     this.catalog = new PluginCatalog(directory, builtins, provided, devPlugin, composition);
     this.root = new Map(provided.map((name) => [name, 'application']));
+    this.imports = bindPluginImports(directory, devPlugin);
   }
 
   private browserState = publishBrowser([], [], () => false);
@@ -434,6 +437,9 @@ export class PluginHost implements ScopePort {
     this.closing = true;
     await this.applying?.catch(() => {});
     try { await withMountTransaction(() => this.entries.close()); }
-    finally { this.scopes.clear(); }
+    finally {
+      this.imports.deregister();
+      this.scopes.clear();
+    }
   }
 }

@@ -14,10 +14,6 @@ import { fixture, waitUntil } from '../support/api-fixture.js';
 const examples = fileURLToPath(new URL('../../../docs/examples/', import.meta.url));
 function copyExample(directory: string, id: string) {
   cpSync(join(examples, id), join(directory, id), { recursive: true });
-  const entry = join(directory, id, 'plugin.js');
-  const source = readFileSync(entry, 'utf8');
-  const sdk = new URL('../../packages/sdk/src/plugin.js', import.meta.url).href;
-  writeFileSync(entry, source.replace("'mini-harness/plugin'", JSON.stringify(sdk)));
 }
 test('external services and their declared consumers share Cordis provider selection', async (t) => {
   const { paths, request } = await fixture(t);
