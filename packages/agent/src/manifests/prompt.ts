@@ -4,7 +4,7 @@ import type { ScopedPromptSection } from '../prompt-api.js';
 import { Prompt } from '../prompt.js';
 
 export const manifest: PluginDescriptor = {
-  scope: 'application', id: 'core:prompt', title: 'Prompt', description: 'System prompt sections and workspace instructions', required: true,
+  scope: 'application', id: 'core:prompt', title: 'Prompt', description: 'System prompt sections and workspace instructions', defaultEnabled: true,
   inject: ['harnessState'], provides: ['harnessPrompt'],
   setup(ctx) {
     ctx.provide('harnessPrompt', new Prompt(ctx.harnessState.paths.home,

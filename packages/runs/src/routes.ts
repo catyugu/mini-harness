@@ -1,7 +1,4 @@
 import type {} from '@mini-harness/sessions/store';
-import type {} from '@mini-harness/kernel/scopes';
-import type {} from '@mini-harness/agent/api';
-import type {} from '@mini-harness/models/api';
 import type { Context } from 'cordis';
 import { HttpError, HttpReply } from '@mini-harness/transport/routes';
 
@@ -12,26 +9,16 @@ export function registerRoutes(ctx: Context) {
     if (!ctx.harnessRegistry.get(id)) throw new HttpError('not_found', 'Conversation not found');
     return id;
   };
-  const agent = (id: string) => ctx.harnessScopes.require(`session:${id}`, 'harnessAgent');
-  const queue = async (id: string, signal: AbortSignal) => {
-    await ctx.harnessScopes.prepare(`session:${id}`, signal);
-    return agent(id);
-  };
-  add('POST', '/api/sessions/:id/queue', async ({ params, body, signal }) => {
+  add('POST', '/api/sessions/:id/queue', async ({ params, body }) => {
     const id = session(params.id), input = await body(20 * 1024 * 1024);
     if (!input || typeof input !== 'object' || Array.isArray(input)) throw new HttpError('invalid_input', 'Invalid queue request');
-    const fallback = ctx.harnessModelPreference.recent();
-    const execution = await queue(id, signal);
-    return new HttpReply(202, await execution.queueInput(id, input.message, input.mode, input.attachments,
-      { model: input.model, thinkingLevel: input.thinkingLevel, fallback }));
+    return new HttpReply(202, ctx.harnessRuns.queueInput(id, input));
   });
   add('DELETE', '/api/sessions/:id/queue', async ({ params, signal }) => {
-    const id = session(params.id);
-    return (await queue(id, signal)).cancelQueue(id);
+    return ctx.harnessRuns.cancelQueue(session(params.id), undefined, signal);
   });
   add('DELETE', '/api/sessions/:id/queue/:item', async ({ params, signal }) => {
-    const id = session(params.id);
-    return (await queue(id, signal)).cancelQueue(id, params.item);
+    return ctx.harnessRuns.cancelQueue(session(params.id), params.item, signal);
   });
   add('POST', '/api/sessions/:id/compact', async ({ params }) => {
     const id = session(params.id);

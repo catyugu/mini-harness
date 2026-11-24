@@ -1,6 +1,6 @@
 # @mini-harness/approvals
 
-Tracks pending shell approvals and publishes their state to the browser.
+Tracks pending user confirmations and publishes their state to the browser.
 
 ## Responsibilities
 
@@ -12,7 +12,7 @@ Owns approval creation, resolution, cancellation and conversation-level approval
 
 ## API
 
-`harnessApprovals` opens and resolves approval requests. `miniApprovals` exposes the live request list in the browser.
+`approvalExtensions.request` opens scoped confirmations. The internal `harnessApprovals` service supplies pending state to Conversation. `miniApprovals` exposes the live request list in the browser.
 
 ## Dependencies
 

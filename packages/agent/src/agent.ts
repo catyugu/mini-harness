@@ -5,7 +5,7 @@ import { DomainError } from '@mini-harness/platform/errors';
 import { isDeepStrictEqual } from 'node:util';
 import { createHash } from 'node:crypto';
 import type { AgentPort } from './api.js';
-import type { SessionStore } from '@mini-harness/sessions/store';
+import type { SessionCatalog, SessionHistory, SessionLifecycle, SessionStore } from '@mini-harness/sessions/store';
 import type { ModelChoice, ThinkingLevel } from '@mini-harness/llm/vocabulary';
 import type { SessionRecord } from '@mini-harness/sessions/identity';
 import type { ModelCatalogPort } from '@mini-harness/models/api';
@@ -16,7 +16,6 @@ import type { Attachment, ImageInput, InputSource, PreparedMessage } from '@mini
 import type { SessionLogPort, MessagePatch, InboxItem } from '@mini-harness/sessions/log-api';
 import type { OrderedHook } from '@mini-harness/kernel/contributions';
 import type { CapabilityObservation } from '@mini-harness/kernel/observations';
-import { AgentRegistry } from './registry.js';
 import { Inbox } from './inbox.js';
 import { isToolContent, type ToolPort } from '@mini-harness/tools/api';
 import { contentDelta } from '@mini-harness/sessions/content-delta';
@@ -31,7 +30,6 @@ interface AgentServices {
   tools(id: string): ToolPort;
   prompt(id: string): PromptPort;
   inputHooks?(id: string): OrderedHook<InputPreparation>[];
-  prepare(id: string, signal?: AbortSignal): Promise<void>;
   policy(): { maxTurns: number; autoCompact: boolean };
   observe(event: CapabilityObservation, signal?: AbortSignal): void;
   modelRequestHooks?(id: string): OrderedHook<ModelRequestTransform>[];
@@ -80,20 +78,13 @@ const failedTool = (call: ToolCallPart, reason: string): NativeToolMessage => ({
 
 /** The harness owns turns, inbox delivery, tool calls, cancellation and compaction. */
 export class NativeAgent implements AgentPort {
-  readonly agents = new AgentRegistry();
   private readonly recordedSchemas = new WeakMap<SessionLogPort, Set<string>>();
 
-  constructor(private readonly sessions: SessionStore, private readonly services: AgentServices) {}
+  constructor(private readonly sessions: Pick<SessionCatalog, 'workspacePath'> & Pick<SessionHistory, 'inspectLog'> &
+    Pick<SessionLifecycle, 'assertAvailable' | 'rename'> & Pick<SessionStore, 'log'>,
+    private readonly services: AgentServices) {}
 
-  private async prepare(id: string, signal?: AbortSignal) {
-    this.sessions.assertAvailable(id);
-    signal?.throwIfAborted();
-    await this.agents.prepare(id, () => this.services.prepare(id, signal));
-    signal?.throwIfAborted();
-    this.sessions.assertAvailable(id);
-  }
-
-  async revisionTarget(id: string, sourceEntryId: string, expectedLeafId: string | null) {
+  revisionTarget(id: string, sourceEntryId: string, expectedLeafId: string | null) {
     this.sessions.assertAvailable(id);
     if (typeof sourceEntryId !== 'string' || !/^[a-f0-9]{8,64}$/i.test(sourceEntryId) ||
       (expectedLeafId !== null && (typeof expectedLeafId !== 'string' || !/^[a-f0-9]{8,64}$/i.test(expectedLeafId))))
@@ -114,16 +105,14 @@ export class NativeAgent implements AgentPort {
     return target;
   }
 
-  async queueInput(id: string, text: string, mode: 'steer' | 'followUp', attachments?: Attachment[],
+  queueInput(id: string, text: string, mode: 'steer' | 'followUp', attachments?: Attachment[],
     options: Pick<InboxItem, 'model' | 'thinkingLevel'> & { fallback?: ModelChoice } = {}) {
     this.sessions.assertAvailable(id);
-    if (!this.agents.acceptsInput(id)) throw new DomainError('conflict', 'The agent is not streaming; send a new message');
     validateModelOptions(options.model, options.thinkingLevel);
     const log = this.sessions.log(id);
     const models = this.services.models(id);
-    const model = options.model ?? log.projection().model ?? options.fallback;
-    const choice = model && models.resolve(model);
-    if (!choice) throw new DomainError('invalid_input', 'Unknown queued model');
+    const choice = selectModel(models, { explicit: options.model, stored: log.projection().model,
+      fallback: options.fallback, preferStored: true });
     resolveThinking(models.capabilities(choice), options.thinkingLevel);
     return new Inbox(log).enqueue(text, mode, attachments, { model: choice, thinkingLevel: options.thinkingLevel });
   }
@@ -192,12 +181,11 @@ export class NativeAgent implements AgentPort {
   async prompt(record: SessionRecord, prompt: string, emit: (event: AgentEvent) => void | Promise<void>,
     options: Parameters<AgentPort['prompt']>[3]): Promise<string> {
     const { id } = record, { signal, choice, images = [], input = { userText: prompt, attachments: [] }, source = 'user', thinkingLevel, revision, changed, submissionId, fallback } = options;
-    const leave = this.agents.enter(id);
     let runLog: SessionLogPort | undefined;
     try {
-      await this.prepare(id, signal);
+      signal.throwIfAborted();
       const log = runLog = this.sessions.log(id);
-      const target = revision && await this.revisionTarget(id, revision.sourceEntryId, revision.expectedLeafId);
+      const target = revision && this.revisionTarget(id, revision.sourceEntryId, revision.expectedLeafId);
       let model: ModelChoice | undefined = log.projection(target?.parentId).model;
       let capabilities: ReturnType<ModelCatalogPort['capabilities']>;
       let activeThinking: ThinkingLevel | undefined;
@@ -228,7 +216,7 @@ export class NativeAgent implements AgentPort {
         }
       };
       const deliver = async (mode: InboxItem['mode']) => {
-        await this.prepare(id, signal);
+        signal.throwIfAborted();
         for (let next = nextValid(mode); next; next = nextValid(mode)) {
           const { item, chosen, nextCapabilities, level } = next;
           let prepared: Awaited<ReturnType<NativeAgent['prepareInput']>>;
@@ -258,7 +246,7 @@ export class NativeAgent implements AgentPort {
       // Drain recovered follow-ups as turns before committing the new manual input.
       let submitted = false;
       const submit = async () => {
-        await this.prepare(id, signal);
+        signal.throwIfAborted();
         const previous = log.projection(target?.parentId);
         const models = this.services.models(id);
         model = selectModel(models, { explicit: choice, stored: previous.model,
@@ -277,7 +265,6 @@ export class NativeAgent implements AgentPort {
       const maxTurns = this.services.policy().maxTurns;
       for (let turn = 0; turn < maxTurns; turn++) {
         signal.throwIfAborted();
-        await this.prepare(id, signal);
         if (!model) throw new Error('Configure a model before sending a message');
         const cwd = this.sessions.workspacePath(id);
         const step: StepContext = { sessionId: id, turn: turn + 1, phase: 'turn', cwd, model, signal };
@@ -383,8 +370,7 @@ export class NativeAgent implements AgentPort {
       }
       throw new Error('Agent reached the configured turn limit (' + maxTurns + ')');
     } finally {
-      try { if (runLog && signal.aborted && !(signal.reason instanceof RunInterrupted)) new Inbox(runLog).cancel('Run cancelled'); }
-      finally { leave(); }
+      if (runLog && signal.aborted && !(signal.reason instanceof RunInterrupted)) new Inbox(runLog).cancel('Run cancelled');
     }
   }
 
@@ -465,8 +451,8 @@ export class NativeAgent implements AgentPort {
   }
 
   async compact(id: string, signal: AbortSignal) {
-    const leave = this.agents.enter(id, 'compaction');
-    try { await this.prepare(id, signal); await this.compactLog(id, this.sessions.log(id), signal); }
-    finally { leave(); }
+    signal.throwIfAborted();
+    this.sessions.assertAvailable(id);
+    await this.compactLog(id, this.sessions.log(id), signal);
   }
 }

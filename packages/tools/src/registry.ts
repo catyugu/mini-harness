@@ -3,14 +3,10 @@ import { Check, Errors } from 'typebox/value';
 import { isTrustedContribution } from '@mini-harness/kernel/contributions';
 import { isToolContent, registerToolBinding, type ToolDefinition, type ToolPort } from './api.js';
 import type { ToolDecision } from './extensions.js';
-import type { ToolPolicy } from './policy.js';
+import type { ToolAccess, ToolPolicy } from './policy.js';
 
-interface ToolRegistration {
-  name: string;
+interface ToolRegistration extends ToolAccess {
   scope?: string;
-  readOnly: boolean;
-  pluginId?: string;
-  trusted: boolean;
   bind(id: string): ToolDefinition;
   visible(id: string): boolean;
 }
@@ -21,9 +17,7 @@ export class ToolRegistry implements ToolPort {
 
   constructor(private readonly address: (id: string) => readonly string[] = () => [],
     private readonly decide?: (request: ToolDecision) => Promise<'deny' | undefined>,
-    private readonly restrictions: ToolPolicy = () => ({
-      readOnly: false, disabledTools: []
-    })) {}
+    private readonly authorize: ToolPolicy = () => true) {}
 
   [registerToolBinding](name: string, bind: (id: string) => ToolDefinition,
     { visible, scope, source, access }: NonNullable<Parameters<ToolPort[typeof registerToolBinding]>[2]> = {}) {
@@ -92,18 +86,9 @@ export class ToolRegistry implements ToolPort {
     if (candidate?.visible(id)) return candidate;
   }
 
-  private allowed(id: string, { name, readOnly, pluginId, trusted }: ToolRegistration) {
-    const policy = this.restrictions(id);
-    if (policy.disabledTools.includes(name)) return false;
-    if (!policy.readOnly) return true;
-    const grant = pluginId && Object.hasOwn(policy.readOnlyTools ?? {}, pluginId)
-      ? policy.readOnlyTools?.[pluginId] : undefined;
-    return readOnly && (trusted || grant?.includes(name) === true);
-  }
-
   isAvailable(id: string, tool: ToolDefinition) {
     const lease = this.leases.get(tool);
-    return lease?.id === id && this.selected(id, lease.entry.name) === lease.entry && this.allowed(id, lease.entry);
+    return lease?.id === id && this.selected(id, lease.entry.name) === lease.entry && this.authorize(id, lease.entry);
   }
 
   readOnlyRegistrations(pluginId: string): string[] {
@@ -116,7 +101,7 @@ export class ToolRegistry implements ToolPort {
     const available: ToolDefinition[] = [];
     for (const name of names) {
       const selected = this.selected(id, name);
-      if (selected && this.allowed(id, selected)) available.push(selected.bind(id));
+      if (selected && this.authorize(id, selected)) available.push(selected.bind(id));
     }
     return available;
   }

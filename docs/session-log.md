@@ -98,8 +98,7 @@ through the log.
 
 ## Durable inbox
 
-Queued steering and follow-up input receives a stable delivery ID. Enqueue is
-acknowledged only after its event is durable. Delivering it appends one user
+Runs admits steering and follow-ups while Agent accepts input for the active run. Queued input receives a stable delivery ID. Enqueue is acknowledged only after Sessions makes the event durable. Delivering it appends one user
 message that also names the inbox ID; message creation and delivery
 acknowledgement therefore share one durable record. An already consumed delivery
 ID cannot create a second user message.
@@ -117,10 +116,7 @@ native JSONL string in `log`. Selecting a parent includes its descendants. Activ
 conversations must be stopped before exporting, so each export is a coherent
 snapshot.
 
-Deletion first marks the selected conversation tree as unavailable, waits for
-registered participants to stop, releases scoped plugins and closes its writers.
-It then commits catalog removal together with a deletion journal before removing
-files. Restart finishes any remaining journaled deletions. Deleting a workspace
+Deletion first marks the selected tree as unavailable, drains registered participants and closes its writers. Sessions commits catalog removal together with a deletion journal, releases scoped configurations and instances, then removes the log files. Restart finishes any remaining journaled deletions. Deleting a workspace
 cascades through its conversations while retaining the user's project files.
 There is no archive state.
 

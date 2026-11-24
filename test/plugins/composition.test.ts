@@ -66,12 +66,14 @@ test('scoped plugins inherit declared services and tool policies, and release th
     messages.at(-1)?.role === 'tool' ? 'Finished greeting' : { tool: 'scoped_greeting', args: {} });
   copyExample(paths.plugins, 'scoped-tool');
   const cleaned = join(root, 'released');
-  writePlugin(paths.plugins, 'workspace-greeting', { scope: 'workspace', provides: ['exampleGreeting'] }, `
+  writePlugin(paths.plugins, 'workspace-greeting', { scope: 'workspace', inject: ['harnessSessions'], provides: ['exampleGreeting'] }, `
     import { appendFileSync } from 'node:fs';
     export default (ctx, api) => {
       if (api.config.fail) throw new Error('Scoped setup failed');
       ctx.effect(() => () => appendFileSync(${JSON.stringify(cleaned)}, 'released\\n'));
       ctx.provide('exampleGreeting', { greet: (name) => api.scope.workspaceId + ':' + name });
+      const sessions = api.contribute(sessionExtensions.access);
+      api.registerScopeRequest('start', () => sessions.create({ title: 'Scoped root' }));
       api.registerScopeRequest('greet', (input) => {
         api.storage.write('seen', input);
         api.invalidate();
@@ -94,7 +96,11 @@ test('scoped plugins inherit declared services and tool policies, and release th
   const enabled = await request('/settings', 'PATCH', { scopes });
   assert.equal(enabled.status, 200, JSON.stringify(enabled.body));
   assert.equal(existsSync(cleaned), false);
-  const operation = (key: string) => '/plugins/workspace-greeting/scopes/' + encodeURIComponent(key) + '/greet';
+  const operation = (key: string, action = 'greet') => '/plugins/workspace-greeting/scopes/' + encodeURIComponent(key) + '/' + action;
+  const created = await request(operation(workspaceKey, 'start'), 'POST', {});
+  assert.equal(created.status, 200);
+  assert.equal(created.body.parentId, null);
+  assert.equal(created.body.workspaceId, parent.workspaceId);
   assert.deepEqual((await request(operation(workspaceKey), 'POST', { input: 'World' })).body,
     { workspaceId: parent.workspaceId, input: 'World' });
   assert.equal((await request(operation('workspace:' + workspace.id), 'POST', {})).status, 404);
@@ -123,7 +129,9 @@ test('scoped plugins inherit declared services and tool policies, and release th
   assert.equal(rejected.status, 400);
   assert.match(rejected.body.error, /workspace-greeting: Scoped setup failed/);
   assert.ok(names(child.id).includes('scoped_greeting'));
-  assert.equal((await request('/workspaces/' + parent.workspaceId, 'DELETE')).status, 200);
+  const removed = await request('/workspaces/' + parent.workspaceId, 'DELETE');
+  assert.equal(removed.status, 200);
+  assert.ok(removed.body.deleted.includes(created.body.id));
   assert.equal(readFileSync(cleaned, 'utf8'), 'released\nreleased\n');
   assert.deepEqual((await request('/settings')).body.scopes, {});
   assert.equal(existsSync(instance), false);
@@ -336,7 +344,7 @@ test('catalog computes independent scoped provider maps and rejects fixed servic
   try {
     const catalog = new PluginCatalog(folder, [
       { id: 'global', title: 'Global', description: '', scope: 'application',
-        required: true, provides: ['greeting'] },
+        defaultEnabled: true, provides: ['greeting'] },
       { id: 'local', title: 'Local', description: '', scope: 'workspace', provides: ['greeting'] }
     ], ['harnessRoutes']);
     const key = 'workspace:' + 'a'.repeat(32);

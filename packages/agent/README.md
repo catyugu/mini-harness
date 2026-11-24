@@ -4,7 +4,7 @@ Executes native Agent turns and builds their system prompts.
 
 ## Responsibilities
 
-Owns model selection for each delivery, the execution lease, request preparation, retries, inbox delivery, tool dispatch and context compaction. Sessions owns durable history and Conversation owns user-facing display.
+Owns model selection for each delivery, request preparation, retries, inbox delivery, tool dispatch and context compaction. Sessions owns durable history and Conversation owns user-facing display.
 
 ## Structure
 
@@ -20,7 +20,7 @@ Resolves scoped LLM, model, prompt and tool providers through [Kernel](../kernel
 
 ## Lifecycle
 
-`core:agent` and `core:prompt` mount at application scope. Turns acquire a session lease and carry an abort signal. Session deletion waits for Agent work to finish.
+`core:agent` and `core:prompt` mount at application scope. Runs owns the execution reservation and prepares the session scope. Agent turns carry the run’s abort signal.
 
 ## Configuration
 

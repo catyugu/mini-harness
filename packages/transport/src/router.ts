@@ -31,6 +31,7 @@ function requestBody(req: IncomingMessage, max = 1024 * 1024, signal?: AbortSign
 }
 
 export class RouteRegistry implements RoutePort {
+  private readonly admission = new AbortController();
   private readonly routes = new Map<string, { path: string; pattern: RegExp; names: string[]; literal: boolean;
     handler: RouteHandler; controller: AbortController; active: Set<Promise<unknown>> }>();
 
@@ -60,7 +61,16 @@ export class RouteRegistry implements RoutePort {
     };
   }
 
+  seal() {
+    this.admission.abort(new HttpError('unavailable', 'Application is closing'));
+  }
+
+  async drain() {
+    await Promise.allSettled([...this.routes.values()].flatMap(({ active }) => [...active]));
+  }
+
   dispatch(req: IncomingMessage, res: ServerResponse, url: URL) {
+    this.admission.signal.throwIfAborted();
     const method = req.method;
     const path = url.pathname;
     const entries = [...this.routes.entries()].filter(([key]) => key.startsWith(method + ' '));
@@ -75,12 +85,12 @@ export class RouteRegistry implements RoutePort {
     try { params = Object.fromEntries(route.names.map((name, i) => [name, decodeURIComponent(match[i + 1])])); }
     catch { throw new HttpError('invalid_input', 'Invalid URL encoding'); }
     const disconnect = new AbortController();
-    const signal = AbortSignal.any([route.controller.signal, disconnect.signal]);
+    const signal = AbortSignal.any([route.controller.signal, disconnect.signal, this.admission.signal]);
     const close = () => { if (res.headersSent) res.end(); };
-    route.controller.signal.addEventListener('abort', close, { once: true });
+    signal.addEventListener('abort', close, { once: true });
     res.once('close', () => {
+      signal.removeEventListener('abort', close);
       disconnect.abort();
-      route.controller.signal.removeEventListener('abort', close);
     });
     const active = Promise.resolve().then(() => {
       signal.throwIfAborted();

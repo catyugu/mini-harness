@@ -15,7 +15,7 @@ export function validateProviderChoices(choices: Record<string, unknown>) {
 
 export function validatePluginSettings(plugins: Record<string, unknown>, configs: Record<string, unknown>) {
   for (const [key, value] of Object.entries(plugins)) {
-    if (!localPluginIdPattern.test(key)) throw new DomainError('invalid_input', 'Invalid plugin name');
+    if (!pluginIdPattern.test(key)) throw new DomainError('invalid_input', 'Invalid plugin name');
     if (typeof value !== 'boolean') throw new DomainError('invalid_input', 'Plugin switches must be boolean');
   }
   for (const [id, config] of Object.entries(configs)) {

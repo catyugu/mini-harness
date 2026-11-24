@@ -10,7 +10,7 @@ import { Approvals } from './server/approvals.js';
 
 export const manifest: PluginDescriptor = {
   scope: 'application',
-  id: 'core:approvals', title: 'Approvals', description: 'Pending user decisions', required: true,
+  id: 'core:approvals', title: 'Approvals', description: 'Pending user decisions', defaultEnabled: true,
   inject: ['harnessChanges', 'harnessRoutes', 'harnessRuns', 'harnessRegistry'], provides: ['harnessApprovals', 'harnessApprovalRequests'],
   setup(ctx) {
     const approvals = new Approvals();

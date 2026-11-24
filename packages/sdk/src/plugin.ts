@@ -1,5 +1,4 @@
-export type {} from '@mini-harness/runs/api';
-export type {} from '@mini-harness/settings/api';
+export type {} from '@mini-harness/settings/settings';
 
 export type { Context } from 'cordis';
 export type { ServiceMap } from '@mini-harness/kernel/services';
@@ -21,7 +20,7 @@ export type { ToolDefinition, ToolResult, ToolContext, ToolRegistrationOptions }
 export type { ToolSchema } from '@mini-harness/llm/vocabulary';
 export { defineTool } from '@mini-harness/tools/api';
 export type { PromptPort } from '@mini-harness/agent/prompt-api';
-export type { ThinkingLevel } from '@mini-harness/llm/vocabulary';
+export type { ModelChoice, ThinkingLevel } from '@mini-harness/llm/vocabulary';
 
 export { HttpError, HttpReply } from '@mini-harness/transport/routes';
 export type { GatewayRequest, NetworkPort, RouteRequest, UpgradeHandler } from '@mini-harness/transport/routes';
@@ -36,6 +35,7 @@ export type { ApprovalPrompt } from '@mini-harness/approvals/api';
 export { executionExtensions } from '@mini-harness/runs/execution';
 export type { Execution, ExecutionInput, ExecutionHandle } from '@mini-harness/runs/execution';
 export type { RunInfo } from '@mini-harness/sessions/run-state';
+export type { SessionRecord } from '@mini-harness/sessions/identity';
 export type { SessionAccess } from '@mini-harness/sessions/records';
 export { sessionExtensions } from '@mini-harness/sessions/records';
 export { sessionDisplayExtensions } from '@mini-harness/conversation/display-extensions';

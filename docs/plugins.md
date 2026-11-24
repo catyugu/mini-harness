@@ -39,7 +39,7 @@ A plugin with no descriptor fields can use `{}` as its `plugin.json`.
 | - | - |
 | `scope` | `application` (default), `workspace` or `session` |
 | `provides`, `inject`, `optional` | Server services published, required, or read opportunistically |
-| `requires` | Required plugin IDs |
+| `requires` | Required server plugin IDs. Browser dependencies use `browserInject` or `browserRequires`. |
 | `browserProvides`, `browserInject`, `browserRequires` | Published and required browser services, and required browser plugin IDs |
 | `configSchema` | Self-contained JSON Schema for an object. Defaults apply before validation. |
 | `configGroups`, `configHint` | Group existing schema fields and describe configuration. |
@@ -128,7 +128,7 @@ Tool names contain 1–64 letters, digits, underscores or hyphens. Duplicate nam
 
 ## Session record projections
 
-Declare `harnessSessions` in `inject` to use `sessionExtensions.access` for a visible session directory, child creation and read-only history. Acquire a record handle through `sessionExtensions.records`. The handle reads and appends this plugin instance's records on the active branch. A projection starts with a fresh initial value on each read and folds the branch with a synchronous reducer. Pass `{ title, content }` as the third argument to `append` to publish a browser record. Keep private business data in the second argument. Display records follow the active branch and remain available when the plugin is disabled. Dispose a projection early with `dispose()` or let plugin unload release it.
+Declare `harnessSessions` in `inject` to use `sessionExtensions.access` for a visible session directory, conversation creation and read-only history. Workspace plugins can create root conversations in their own workspace. Session plugins create children under a visible parent. Acquire a record handle through `sessionExtensions.records`. The handle reads and appends this plugin instance's records on the active branch. A projection starts with a fresh initial value on each read and folds the branch with a synchronous reducer. Pass `{ title, content }` as the third argument to `append` to publish a browser record. Keep private business data in the second argument. Display records follow the active branch and remain available when the plugin is disabled. Dispose a projection early with `dispose()` or let plugin unload release it.
 
 ```js
 import { sessionExtensions } from 'mini-harness/plugin';
@@ -145,7 +145,7 @@ export default function setup(_ctx, api) {
 
 ## Provider selection and scopes
 
-In `settings.json`, `providers` maps service names to explicit enabled provider IDs. A replacement publishes the same contract. At application scope, replacing a plugin that provides multiple services requires replacements for all its services together. The LLM transport, model catalog and model administration use independent providers over the built-in model store. A workspace or session can replace one inherited service while its parent continues supplying the others. To restore the default, remove the selection and disable the replacement.
+In `settings.json`, `providers` maps service names to explicit enabled provider IDs. A replacement publishes the same contract. At application scope, replacing a plugin that provides multiple services requires replacements for all its services together. The LLM transport, model catalog and recent-model preference each have their own provider. Model administration consumes their contracts and stays mounted when a provider changes. A workspace or session can replace one inherited service while its parent continues supplying the others. To restore the default, remove the selection, disable the replacement and re-enable the built-in provider if you switched it off.
 
 ```json
 {
@@ -280,13 +280,13 @@ Mount HTTP routes with `api.registerRoute` and local WebSocket endpoints with `a
 
 Declare `harnessExecution` and acquire `api.contribute(executionExtensions.control)`. Submit a message with `submit(sessionId, input, { signal })` and await the returned handle’s `result`. Use `status(sessionId)` for visible conversation state and `handle.cancel()` to cancel only the submitted execution. A handle cannot cancel a later run. Runs owns admission, durable state and cancellation. Plugin unload cancels submissions made through this interface. Use `sessionExtensions.access` to create a child and obtain the parent’s committed model.
 
-Declare `harnessApprovalRequests` and acquire `api.contribute(approvalExtensions.request)`. Supply a conversation ID, title and message. The returned promise settles when the user decides or the request expires, and follows the supplied signal, active run and plugin lifetime.
+Declare `harnessApprovalRequests` and acquire `api.contribute(approvalExtensions.request)`. Supply a conversation ID, title and message. The promise resolves after approval and rejects on denial, expiry or cancellation. Its boolean result reports whether the user released the request by selecting Full access. The request follows the supplied signal, active run and plugin lifetime.
 
 ## Configure and develop a plugin
 
 Export a synchronous `validateConfig(values, context)` next to the default server setup to reject invalid configuration with a clear error. It runs against declared services during mount and before committing changed settings for a mounted instance. A live configuration callback runs after validation. Use an npm `peerDependencies.mini-harness` range to declare compatible releases.
 
-Copy [Task notes](examples/task-notes) into an independent directory called `task-notes`, run `npm install` and `npm run build`, then load it with `MINI_HARNESS_DEV_PLUGIN` set to the absolute directory and enable it in Plugins. The example uses both published SDKs, a tool, its own service, grouped settings, private storage, a record renderer and a controlled child execution. Inspect setup failures and scope details in Plugins.
+Copy [Task notes](examples/task-notes) into an independent directory called `task-notes`, run `npm install` and `npm run build`, then load it with `MINI_HARNESS_DEV_PLUGIN` set to the absolute directory and enable it in Plugins. The example uses both published SDKs for tools, service publication, live settings, protected credentials, branch records and an approved child execution. Plugins shows the failing instance and stage for setup, configuration and browser errors.
 
 Use `conversationExtensions.record` for display records. The renderer gets an abort signal for the current render. To replace a component, use `slotExtensions.keyed` with `conversation.history` and key `history`, or `conversation.composer-view` and key `composer`. Declare `miniMessages` or `miniComposer` for contributions to the corresponding feature, and `miniConversation` to read the shared conversation state or submit, queue, cancel and revise messages from a replacement view. The selected renderer alone owns its DOM, listeners and render signal. Keyed slots prefer higher order and then the most recent registration; removing the replacement remounts the previous renderer. Tool and record renderer registrations likewise restore the previous registration on removal. Commands and message actions reject duplicate IDs.
 

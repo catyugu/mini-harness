@@ -26,8 +26,13 @@ const setup: FrontendSetup = async (ctx, api) => {
     const failures = await syncPlugins();
     if (failures.size) throw new Error('Browser plugins failed: ' + [...failures.keys()].join(', '));
   };
-  const catalog = pluginCatalog(api, () => ({ plugins: plugins.get().map((plugin) => browserFailures.has(plugin.id)
-    ? { ...plugin, state: 'failed' as const, error: 'Browser setup or resource loading failed.' } : plugin), settings: settings.get() }), refresh, pages, () => models.get());
+  const catalog = pluginCatalog(api, () => ({
+    plugins: plugins.get().map((plugin) => {
+      const error = browserFailures.get(plugin.id);
+      return error ? { ...plugin, state: 'failed' as const, error } : plugin;
+    }),
+    settings: settings.get()
+  }), refresh, pages, () => models.get());
   plugins.subscribe(catalog.refresh, api.signal);
   settings.subscribe(catalog.refresh, api.signal);
   browserFailures.subscribe(catalog.refresh, api.signal);
@@ -368,10 +373,10 @@ function pluginCatalog(api: FrontendApi, snapshot: () => { plugins: PluginMetada
             const saved = await mutate(() => api.request('/settings', payload('PATCH', { plugins: { [plugin.id]: next } })),
               (error) => { status.textContent = error.message; });
             if (saved) {
-              if (remove) remove.hidden = next;
               const state = snapshot().plugins.find(({ id }) => id === plugin.id);
               if (next && state?.error && !status.textContent)
                 status.textContent = 'Configuration saved. Plugin failed to start: ' + state.error;
+              render();
             }
             return saved;
           } finally {

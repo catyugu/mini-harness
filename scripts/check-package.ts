@@ -8,6 +8,7 @@ import { promisify } from 'node:util';
 import { readJson, writeJson } from '@mini-harness/platform/json';
 import { readServerInfo } from '@mini-harness/host/process';
 import { parseNpmPackResult } from './npm-pack.js';
+import { waitUntil } from '../test/support/api-fixture.js';
 import { createFixturePaths, createMockProvider } from '../test/helpers/mock-provider.js';
 
 const execFile = promisify(exec);
@@ -81,6 +82,12 @@ async function checkPackage() {
       const llm: LlmPort | undefined = api.service('harnessLlm');
       ctx.provide('example', { greet: (name: string) => name.toUpperCase() });
       ctx.example.greet('world');
+      // @ts-expect-error The run scheduler is a private Cordis service.
+      ctx.harnessRuns;
+      // @ts-expect-error Plugins receive scoped session access through an extension.
+      ctx.harnessRegistry;
+      // @ts-expect-error The settings store is a private Cordis service.
+      ctx.harnessSettingsStore;
       api.service('example')?.greet('world');
       api.storage.write('state', { count: 1 });
       api.secrets.read('credential');
@@ -145,6 +152,8 @@ async function checkPackage() {
     assert.ok(token);
     const headers = { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' };
     const get = (path: string) => fetch(info.url + path, { headers });
+    const write = (path: string, method: string, body: unknown) =>
+      fetch(info.url + path, { method, headers, body: JSON.stringify(body) });
     for (const asset of ['/', '/packages/ui-runtime/src/browser/boot.js', '/packages/ui-runtime/plugin-sdk.js',
       '/packages/ui-primitives/src/browser/vendor/marked.js', '/packages/ui-primitives/src/browser/vendor/purify.js',
       '/logo.svg', '/manifest.webmanifest', '/startup.css', '/icon-192.png', '/icon-512.png', '/favicon.ico']) {
@@ -155,7 +164,18 @@ async function checkPackage() {
     const plugins = await (await get('/api/plugins')).json();
     assert.ok(plugins.some(({ id, state }: { id: string; state: string }) => id === 'task-notes' && state === 'ready'));
     assert.deepEqual(await (await get('/api/extensions/task-notes/smoke')).json(), { label: 'Task progress', ready: true, credential: false });
+    const patchLabel = (label: string) => write('/api/settings/plugins/task-notes', 'PATCH', { label });
+    assert.equal((await patchLabel('   ')).status, 400);
+    assert.equal((await patchLabel('Progress update')).status, 200);
+    const secret = 'installed-fixture-token';
+    const credential = await write('/api/extensions/task-notes/credential', 'PUT', { token: secret });
+    assert.equal(credential.status, 200);
+    assert.deepEqual(await credential.json(), { credential: true });
+    assert.deepEqual(await (await get('/api/extensions/task-notes/smoke')).json(),
+      { label: 'Progress update', ready: true, credential: true });
     const bootstrap: import('@mini-harness/ui-runtime/bootstrap').BrowserBootstrap = await (await get('/api/bootstrap')).json();
+    assert.doesNotMatch(JSON.stringify(bootstrap), new RegExp(secret));
+    assert.equal(bootstrap.ui.find(({ id }) => id === 'task-notes')?.config.label, 'Progress update');
     for (const { browser, styles } of bootstrap.ui) {
       if (browser) assert.equal((await get(browser)).status, 200, browser);
       for (const path of styles ?? []) {
@@ -179,14 +199,30 @@ async function checkPackage() {
     assert.equal(status.run.state, 'completed');
     const conversation = await (await fetch(url, { headers })).json();
     assert.deepEqual(conversation.records.map(({ title, content }: { title: string; content: string }) => ({ title, content })),
-      [{ title: 'Task progress', content: 'Installed SDK recorded progress' }]);
-    const followUp = await fetch(info.url + '/api/extensions/task-notes/follow-up', {
-      method: 'POST', headers, body: JSON.stringify({ parentId: item.id, message: 'Follow up' })
-    });
-    assert.equal(followUp.status, 200);
-    const child = await followUp.json();
+      [{ title: 'Progress update', content: 'Installed SDK recorded progress' }]);
+    const followUp = write('/api/extensions/task-notes/follow-up', 'POST',
+      { parentId: item.id, message: 'Follow up', requireApproval: true });
+    void followUp.catch(() => {});
+    const approvals = await waitUntil(async () => {
+      const response = await get('/api/approvals');
+      return await response.json() as { id: string; sessionId: string; plugin: string }[];
+    }, (pending) => pending.length === 1);
+    const [approval] = approvals;
+    assert.equal(approval.sessionId, item.id);
+    assert.equal(approval.plugin, 'task-notes');
+    assert.equal((await write('/api/approvals', 'POST', { id: approval.id, allow: true })).status, 200);
+    const response = await followUp;
+    assert.equal(response.status, 200);
+    const child = await response.json();
+    assert.equal(child.state, 'completed');
     assert.equal(child.text, 'Mock response');
     assert.equal((await (await get('/api/sessions/' + child.childId)).json()).parentId, item.id);
+
+    assert.equal((await write('/api/settings', 'PATCH', { plugins: { 'task-notes': false } })).status, 200);
+    assert.equal((await get('/api/extensions/task-notes/smoke')).status, 404);
+    const withoutPlugin = await (await get('/api/bootstrap')).json() as typeof bootstrap;
+    assert.ok(!withoutPlugin.ui.some(({ id }) => id === 'task-notes'));
+    assert.deepEqual((await (await get('/api/sessions/' + item.id)).json()).records, conversation.records);
 
     assert.match((await cli('status')).stdout, /is running/);
     assert.match((await cli('stop')).stdout, /stopped/);

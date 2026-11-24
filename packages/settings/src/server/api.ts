@@ -14,7 +14,3 @@ declare module 'cordis' {
     harnessSettingsStore: SettingsPort;
   }
 }
-
-declare module '@mini-harness/kernel/scopes' {
-  interface ScopeSettings { disabledTools?: string[] }
-}

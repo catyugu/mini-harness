@@ -20,8 +20,7 @@ Example:
 
 A local replacement must be enabled at that address. Host infrastructure
 (scope resolution, configuration, authenticated routes and mutation control)
-cannot be overridden. Feature services, including the model adapter, can be
-replaced through their declared contracts. An inherited multi-service provider
+cannot be overridden. The tool registry and inherited authorization policy are protected because they enforce the final restrictions on model calls. Feature services, including the model adapter, can be replaced through their declared contracts. The default composition checks for required capabilities after mounting the chosen providers. An inherited multi-service provider
 continues supplying its other services when a child replaces just one of them.
 
 Provider selection and isolation follow application → workspace → ancestor
@@ -46,4 +45,4 @@ The browser has its own `browserProviders` map. Select a browser service there w
 
 A user can grant specific registered tools to a trusted local plugin in that plugin’s Settings detail, or through `readOnlyTools` in `settings.json` or the settings API. For example, `{ "readOnlyTools": { "workspace-greeting": ["greet"] } }` allows its `greet` registration to be considered in read-only conversations when it declares read-only access. Update the map to revoke a grant. Descendant and workspace restrictions still apply before invocation.
 
-Setup and live configuration callbacks register and update resources; they cannot await scope preparation, submit executions or enqueue configuration writes against the graph being changed. Use those operations from normal runtime handlers. A prepared scoped service is a current provider reference, not a stable proxy: resolve it again after configuration changes. The browser graph is committed only when its required capabilities remain available after server mounting, including replacements.
+Setup and live configuration callbacks register and update plugin resources. Scope preparation, session writes, execution submission and configuration writes are available from runtime handlers after the graph commits. Use those operations from normal runtime handlers. A prepared scoped service is a current provider reference, not a stable proxy: resolve it again after configuration changes. The browser graph is committed only when its required capabilities remain available after server mounting, including replacements.

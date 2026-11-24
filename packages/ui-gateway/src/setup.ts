@@ -10,17 +10,9 @@ export function setup(ctx: Context) {
     ui: ctx.harnessPluginCatalog.browser()
   })));
   ctx.effect(() => ctx.harnessRoutes.register('GET', '/api/changes', ({ response }) => {
-    const signal = ctx.get('harnessTransportSignal');
-    signal?.throwIfAborted();
     const { send } = eventStream(response);
     const changes = ctx.harnessChanges;
-    const release = changes.subscribe(send);
-    const shutdown = () => response.end();
-    signal?.addEventListener('abort', shutdown, { once: true });
-    response.once('close', () => {
-      release();
-      signal?.removeEventListener('abort', shutdown);
-    });
+    response.once('close', changes.subscribe(send));
     send(changes.snapshot());
   }));
 }

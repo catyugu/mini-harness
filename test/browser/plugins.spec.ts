@@ -50,7 +50,7 @@ test('frontend plugins own UI contributions and clean up on disable and reconfig
   }`);
   const dependent = join(paths.plugins, 'a-dependent'); mkdirSync(dependent);
   writeFileSync(join(dependent, 'plugin.js'), 'export default function() {}');
-  writeFileSync(join(dependent, 'plugin.json'), JSON.stringify({ title: 'Dependent UI', requires: ['ui-example'], browserInject: ['miniSlots'] }));
+  writeFileSync(join(dependent, 'plugin.json'), JSON.stringify({ title: 'Dependent UI', browserRequires: ['ui-example'], browserInject: ['miniSlots'] }));
   writeFileSync(join(dependent, 'web.js'), `import { slotExtensions } from '/packages/ui-runtime/plugin-sdk.js';
   export default function(_ctx, api) {
     const parent = document.querySelector('[data-example-slot=sidebar]');
@@ -150,6 +150,7 @@ test('a failed browser plugin reports the saved state and can be retried', async
     await expect(page.getByText('Saved on the server. Browser plugins failed: retry-ui')).toBeVisible();
     await expect(control).toBeChecked();
     await expect(page.getByRole('button', { name: 'Recovered UI', includeHidden: true })).toHaveCount(0);
+    await expect(page.getByText(/Browser setup failed.*Not ready/)).toBeVisible();
     await expect(page.locator('body')).toHaveAttribute('data-retry-preload', 'released');
     await page.getByRole('button', { name: 'Retry UI settings' }).click();
     await page.getByLabel('Ready · retry-ui').check();

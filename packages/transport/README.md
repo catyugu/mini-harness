@@ -20,7 +20,7 @@ Uses Node HTTP and [Platform](../platform/README.md) errors. Features own payloa
 
 ## Lifecycle
 
-Route leases are revoked with their owner. Projection subscribers detach when the stream closes.
+Route leases are revoked with their owner. Application shutdown seals route admission, cancels request work and ends open streams. Projection subscribers detach when their stream closes.
 
 ## Testing
 

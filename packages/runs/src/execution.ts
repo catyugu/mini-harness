@@ -60,3 +60,10 @@ export const executionExtensions = {
     };
   })
 };
+
+declare module '@mini-harness/kernel/observations' {
+  interface CapabilityObservations {
+    'run-started': { type: 'run-started'; sessionId: string; run: RunInfo };
+    'run-ended': { type: 'run-ended'; sessionId: string; run: RunInfo };
+  }
+}

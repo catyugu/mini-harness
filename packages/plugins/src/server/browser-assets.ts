@@ -67,13 +67,12 @@ export function readBrowserAssets(id: string, folder: string, declared: unknown,
 }
 
 export function planBrowser(plans: PluginPlan[], choices: Record<string, string>, unavailable: (id: string, error: unknown) => boolean,
-  requiredServices: ReadonlySet<string>): BrowserEntry[] {
+  requiredServices: ReadonlySet<string>, fixedPlugins: ReadonlySet<string>): BrowserEntry[] {
   const browser = new Map(plans.filter(({ descriptor }) => descriptor.resources).map((plan) => [plan.id, plan]));
   const runtime = new Map(['miniProjections', 'miniSwitch', 'miniBrowserFailures'].map((name) => [name, 'browser-runtime']));
   const { ordered } = resolveCapabilities([...browser.values()].map(({ id, descriptor }) => ({
     id, provides: descriptor.browserProvides, inject: descriptor.browserInject,
-    requires: [...new Set([...(descriptor.browserRequires ?? []),
-      ...(descriptor.requires ?? []).filter((dependency) => browser.has(dependency))])]
+    requires: descriptor.browserRequires
   })), runtime, choices, unavailable);
   return ordered.map(({ descriptor, requires }) => {
     const plan = browser.get(descriptor.id);
@@ -81,7 +80,7 @@ export function planBrowser(plans: PluginPlan[], choices: Record<string, string>
     if (!plan || !resources) throw new Error('Composed browser capability is unavailable: ' + descriptor.id);
     return { id: plan.id, requires, inject: plan.descriptor.browserInject, provides: plan.descriptor.browserProvides, browser: resources.entry,
       styles: resources.styles, preload: resources.preload, config: plan.config ?? {},
-      liveConfig: plan.descriptor.configChanges === 'live', required: plan.descriptor.required || plan.descriptor.browserProvides?.some((name) => requiredServices.has(name)) };
+      liveConfig: plan.descriptor.configChanges === 'live', required: fixedPlugins.has(plan.id) || plan.descriptor.browserProvides?.some((name) => requiredServices.has(name)) };
   });
 }
 

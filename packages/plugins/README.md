@@ -20,7 +20,7 @@ Owns catalog discovery, installed plugin files, scoped graph planning, diagnosti
 
 ## Lifecycle
 
-Publishes the graph only when required server and browser capabilities are mounted. New required scoped provider selections are mounted before committing configuration. Optional scoped instances may remain lazy. Server cleanup drains plugin-owned work. Browser resource URLs follow the published graph.
+The application selects required capabilities and fixed features independently of descriptor defaults. PluginHost publishes the graph after the selected providers mount. New required scoped provider selections are mounted before committing configuration. Optional scoped instances may remain lazy. Server cleanup drains plugin-owned work. Browser resource URLs follow the published graph.
 
 ## Configuration
 

@@ -3,7 +3,7 @@ import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
 
 export const manifest: PluginDescriptor = {
   scope: 'application', browserProvides: ['miniAppearance'],
-  id: 'core:theme', title: 'Theme', description: 'Application theme', required: true,
+  id: 'core:theme', title: 'Theme', description: 'Application theme', defaultEnabled: true,
   configChanges: 'live',
   configSchema: Type.Object({
     appearance: Type.Union([Type.Literal('system'), Type.Literal('light'), Type.Literal('dark')], { default: 'system' }),

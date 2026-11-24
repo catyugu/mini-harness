@@ -5,7 +5,7 @@ import { executeProcess } from './executor.js';
 
 export const manifest: PluginDescriptor = {
   scope: 'application',
-  id: 'core:process', title: 'Process execution', description: 'Isolated and explicitly authorized host processes', required: true,
+  id: 'core:process', title: 'Process execution', description: 'Isolated and explicitly authorized host processes', defaultEnabled: true,
   inject: ['harnessSandbox', 'harnessScopes'], provides: ['harnessProcess'],
   setup(ctx, api) {
     const active = new Set<Promise<unknown>>();

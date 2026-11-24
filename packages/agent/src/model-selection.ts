@@ -29,7 +29,7 @@ export function selectModel(catalog: ModelCatalogPort, options: {
   const { explicit, stored, fallback, preferStored } = options;
   if (explicit) {
     const selected = catalog.resolve(explicit);
-    if (!selected) throw new Error('Unknown model: ' + explicit.provider + '/' + explicit.id);
+    if (!selected) throw new DomainError('invalid_input', 'Unknown model: ' + explicit.provider + '/' + explicit.id);
     return selected;
   }
   const choices = preferStored ? [stored, fallback] : [fallback, stored];
@@ -38,5 +38,5 @@ export function selectModel(catalog: ModelCatalogPort, options: {
     const selected = catalog.resolve(choice);
     if (selected) return selected;
   }
-  throw new Error('Configure a model before sending a message');
+  throw new DomainError('invalid_input', 'Configure a model before sending a message');
 }

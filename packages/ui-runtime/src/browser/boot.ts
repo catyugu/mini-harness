@@ -1,4 +1,3 @@
-import type { BrowserPluginFailures } from './graph-api.js';
 import { Context } from './vendor/cordis.js';
 import { api, data, readEvents, wait, AuthenticationError } from './http.js';
 import { RemoteStore } from './remote-store.js';
@@ -66,12 +65,14 @@ async function boot() {
     await sync({ ui: [] });
   };
   const failuresChanged = new EventTarget();
-  let currentFailures: BrowserPluginFailures = new Map();
+  let currentFailures = new Map<string, string>();
   const applyGraph = async () => {
     const failures = await sync(graph.get());
-    const changed = [...failures.keys()].some((id) => !currentFailures.has(id)) || failures.size !== currentFailures.size;
+    const nextFailures = new Map([...failures].map(([id, error]) => [id, error instanceof Error ? error.message : String(error)]));
+    const changed = nextFailures.size !== currentFailures.size ||
+      [...nextFailures].some(([id, message]) => currentFailures.get(id) !== message);
     if (changed) for (const [id, error] of failures) console.warn('Browser plugin ' + id, error);
-    currentFailures = failures;
+    currentFailures = nextFailures;
     const coreFailure = [...failures].find(([id]) => graph.get().ui.some((entry) => entry.id === id && entry.required));
     const status = document.getElementById('startupStatus');
     if (coreFailure && status) {
@@ -86,7 +87,7 @@ async function boot() {
   };
   ctx.provide('miniProjections', projections);
   ctx.provide('miniBrowserFailures', {
-    has: (id: string) => currentFailures.has(id),
+    get: (id: string) => currentFailures.get(id),
     subscribe: (listener: () => void, signal: AbortSignal) => failuresChanged.addEventListener('change', listener, { signal })
   });
   ctx.provide('miniSwitch', async () => { await graph.refresh(); return applyGraph(); });

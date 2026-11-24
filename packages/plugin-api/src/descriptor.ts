@@ -24,7 +24,6 @@ export interface PluginDescriptor {
   requires?: string[];
   provides?: string[];
   configSchema?: Record<string, any>;
-  required?: boolean;
   /** A mounted plugin may opt in to configuration updates without a restart. */
   configChanges?: 'live';
   validateConfig?(config: Readonly<Record<string, unknown>>, context: ConfigValidationContext): void;

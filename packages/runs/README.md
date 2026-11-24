@@ -4,7 +4,7 @@ Schedules and owns active runs and their replay streams.
 
 ## Responsibilities
 
-Owns run IDs, cancellation, compaction scheduling, current activity and bounded event replay. Sessions owns durable run state.
+Owns run IDs, task and inbox admission, cancellation, compaction scheduling, current activity and bounded event replay. Sessions owns durable run state.
 
 ## Structure
 
@@ -16,7 +16,7 @@ Owns run IDs, cancellation, compaction scheduling, current activity and bounded 
 
 ## Dependencies
 
-Resolves scoped [Agent](../agent/README.md) services and records run transitions through [Sessions](../sessions/README.md).
+Prepares session scopes and resolves [Agent](../agent/README.md) services and records run transitions through [Sessions](../sessions/README.md).
 
 ## Lifecycle
 

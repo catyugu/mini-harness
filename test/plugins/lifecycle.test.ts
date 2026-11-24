@@ -320,7 +320,7 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
   ]);
   const released: string[] = [];
   const builtins: PluginDescriptor[] = [
-    { id: 'global', scope: 'application', title: 'Global', description: '', required: true,
+    { id: 'global', scope: 'application', title: 'Global', description: '', defaultEnabled: true,
       provides: ['greeting', 'extra'], setup(ctx) { ctx.provide('greeting', 'global'); ctx.provide('extra', 'retained'); } },
     { id: 'workspace', scope: 'workspace', title: 'Workspace', description: '', provides: ['greeting'],
       configSchema: { type: 'object', properties: { value: { type: 'string' } }, required: ['value'] },
@@ -339,7 +339,8 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
   } };
   const ctx = new Context();
   ctx.provide('authority', {});
-  const host = new PluginHost(ctx, directory, builtins, ['authority'], () => settings);
+  const host = new PluginHost(ctx, directory, builtins, ['authority'], () => settings, undefined, undefined, undefined,
+    { requiredServices: new Set(['greeting', 'extra']) });
   host.register('workspace', (id) => ({ scope: { kind: 'workspace', workspaceId: id } }), true);
   host.register('session', (id) => {
     const record = records.get(id);
@@ -397,7 +398,7 @@ test('configuration validation resolves the staged scope provider and rejects in
   const key = 'workspace:' + workspaceId;
   let settings = structuredClone(DEFAULTS);
   const builtins: PluginDescriptor[] = [
-    { id: 'global', scope: 'application', title: 'Default', description: '', required: true, provides: ['greeting'],
+    { id: 'global', scope: 'application', title: 'Default', description: '', defaultEnabled: true, provides: ['greeting'],
       setup(ctx) { ctx.provide('greeting', 'global'); } },
     { id: 'local', scope: 'workspace', title: 'Local', description: '', provides: ['greeting'],
       setup(ctx) { ctx.provide('greeting', 'local'); } },
@@ -460,13 +461,14 @@ test('required browser services must survive server mounting, including replacem
   const directory = mkdtempSync(join(tmpdir(), 'mini-required-browser-'));
   const browser = '/packages/ui-runtime/src/browser/boot.js';
   const builtins: PluginDescriptor[] = [
-    { id: 'ui', scope: 'application', title: 'UI', description: '', required: true, browser, browserProvides: ['miniTest'] },
+    { id: 'ui', scope: 'application', title: 'UI', description: '', defaultEnabled: true, browser, browserProvides: ['miniTest'] },
     { id: 'replacement', scope: 'application', title: 'Replacement', description: '', browser, browserProvides: ['miniTest'],
       setup(_ctx, api) { if (api.config.fail) throw new Error('Unavailable replacement'); } }
   ];
   const settings = { ...structuredClone(DEFAULTS), plugins: { replacement: true },
     browserProviders: { miniTest: 'replacement' }, pluginConfig: { replacement: { fail: true } } };
-  const host = new PluginHost(new Context(), directory, builtins, [], () => settings);
+  const host = new PluginHost(new Context(), directory, builtins, [], () => settings, undefined, undefined, undefined,
+    { requiredBrowserServices: new Set(['miniTest']) });
   t.after(async () => { await host.close(); rmSync(directory, { recursive: true, force: true }); });
   await assert.rejects(host.start(settings), /Required browser service is unavailable: miniTest/);
 });

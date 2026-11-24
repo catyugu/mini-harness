@@ -286,13 +286,22 @@ export class SessionRegistry implements SessionStore {
   }
 
   delete(ids: string[]) {
+    this.assertAvailable();
+    return this.deleteOwnedTree(ids);
+  }
+
+  /** Workspace removal has already reserved its catalog entry. */
+  removeWorkspaceSessions(workspaceId: string) {
+    return this.deleteOwnedTree(this.list(workspaceId).map(({ id }) => id));
+  }
+
+  private deleteOwnedTree(ids: string[]) {
     const operation = this.deleteTree(ids).finally(() => this.deletions.delete(operation));
     this.deletions.add(operation);
     return operation;
   }
 
   private async deleteTree(ids: string[]) {
-    this.assertAvailable();
     const all = this.descendants(ids);
     if (all.some((id) => this.deleting.has(id))) throw new DomainError('conflict', 'Conversation is being deleted');
     for (const id of all) this.deleting.add(id);

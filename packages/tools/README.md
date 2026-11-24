@@ -1,10 +1,10 @@
 # @mini-harness/tools
 
-Owns tool registration, policy and invocation leases.
+Owns tool registration, validation and invocation leases.
 
 ## Responsibilities
 
-Resolves scoped registrations, applies restrictions and authorization decisions, and prevents revoked tools from executing.
+Resolves scoped registrations and checks them against the host’s authorization policy. The registry rechecks each lease after asynchronous authorization.
 
 ## Structure
 
