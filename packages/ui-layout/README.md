@@ -4,7 +4,7 @@ Owns the responsive application frame, sidebar, tabs and dialogs.
 
 ## Responsibilities
 
-Defines the page, header and right-panel contributions used by feature UI.
+Defines the page, header and right-panel contributions used by feature UI. Tab types can contribute a tools launcher and declare conversation-scoped ownership; workspace tabs otherwise follow the selected workspace.
 
 ## Structure
 

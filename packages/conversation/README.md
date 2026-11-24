@@ -12,7 +12,7 @@ Owns session and workspace selection, the transcript, search, composer and messa
 
 ## API
 
-`conversationExtensions` registers composer commands, completions and message actions. `sessionDisplayExtensions` transforms tool output sent to the browser. `harnessBrowser` exposes selection to plugins. `miniConversation` exposes selected history and live run state through field subscriptions. `miniComposer` owns drafts and the shared editing, attachment, model, permission and submission contract.
+`conversationExtensions` registers composer commands, completions, reference openers, attachment previews and message actions. The native editor renders workspace references as atomic inline links while keeping quoted paths in the draft and history. `sessionDisplayExtensions` transforms tool output sent to the browser. `harnessBrowser` exposes selection to plugins. `miniConversation` exposes selected history and live run state through field subscriptions. `miniComposer` owns drafts and the shared editing, attachment, model, permission and submission contract.
 
 ## Dependencies
 

@@ -117,7 +117,7 @@ test('copy, preview and revise a message with its image, and release editing dra
   const edit = user.getByRole('button', { name: 'Edit message' });
   await edit.click();
   await expect(prompt).toBeFocused();
-  await expect(prompt).toHaveValue('Original prompt');
+  await expect(prompt).toHaveText('Original prompt');
   const remove = page.getByRole('button', { name: 'Remove reference.png' });
   await expect(remove).toBeVisible();
   await prompt.fill('Revised prompt');
@@ -136,7 +136,7 @@ test('copy, preview and revise a message with its image, and release editing dra
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.getByRole('button', { name: 'Older draft', exact: true }).click();
   await page.getByRole('button', { name: 'Newer draft', exact: true }).click();
-  await expect(prompt).toHaveValue('Newer draft');
+  await expect(prompt).toHaveText('Newer draft');
   async function disablePlugin(id: string) {
     const response = await page.request.patch(host.url + '/api/settings', {
       headers: { Authorization: 'Bearer ' + host.token }, data: { plugins: { [id]: false } }
@@ -145,7 +145,7 @@ test('copy, preview and revise a message with its image, and release editing dra
   }
   await disablePlugin('old-editor');
   await expect(page.getByRole('button', { name: 'Older draft' })).toHaveCount(0);
-  await expect(prompt).toHaveValue('Newer draft');
+  await expect(prompt).toHaveText('Newer draft');
   await disablePlugin('new-editor');
   await expect(page.getByRole('button', { name: 'Cancel editing' })).toBeHidden();
 

@@ -12,6 +12,8 @@ test('drafts isolate attachments and discover workspace files and skills', async
   models.providers['local-mock'].models[0].input.push('image');
   writeFileSync(modelsPath, JSON.stringify(models));
   writeFileSync(join(paths.cwd, 'notes.md'), '# Notes\nTask details');
+  const videoBytes = Buffer.from('GkXfo59ChoEBQveBAULygQRC84EIQoKEd2VibUKHgQJChYECGFOAZwEAAAAAAAIXEU2bdLpNu4tTq4QVSalmU6yBoU27i1OrhBZUrmtTrIHWTbuMU6uEElTDZ1OsggEjTbuMU6uEHFO7a1OsggIB7AEAAAAAAABZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVSalmsCrXsYMPQkBNgIxMYXZmNjEuNy4xMDNXQYxMYXZmNjEuNy4xMDNEiYhAeQAAAAAAABZUrmvIrgEAAAAAAAA/14EBc8WIAwb2j6FP9kucgQAitZyDdW5kiIEAhoVWX1ZQOIOBASPjg4QL68IA4JCwgSC6gRiagQJVsIRVuYEBElTDZ/tzc59jwIBnyJlFo4dFTkNPREVSRIeMTGF2ZjYxLjcuMTAzc3PWY8CLY8WIAwb2j6FP9ktnyKFFo4dFTkNPREVSRIeUTGF2YzYxLjE5LjEwMSBsaWJ2cHhnyKFFo4hEVVJBVElPTkSHkzAwOjAwOjAwLjQwMDAwMDAwMAAfQ7Z12eeBAKO9gQAAgNACAJ0BKiAAGAAARwiFhYiFhIgCAgJ1qgP4AgghCD0A/v9NEv/8WFfxYV/FhX/xYV/8/M7txfzmAKOVgQDIALEBAAEQEAAYABhYL/QACHAAHFO7a5G7j7OBALeK94EB8YIBo/CBAw==', 'base64');
+  writeFileSync(join(paths.cwd, 'clip.webm'), videoBytes);
   mkdirSync(join(paths.cwd, 'task files'));
   writeFileSync(join(paths.cwd, 'task files', 'draft.md'), '# Draft');
   const skill = join(paths.home, 'skills', 'review'); mkdirSync(skill, { recursive: true }); writeFileSync(join(skill, 'SKILL.md'), '---\nname: review\ndescription: Review the work\n---\n\nReview carefully.');
@@ -25,25 +27,46 @@ test('drafts isolate attachments and discover workspace files and skills', async
     await draft.fill('@');
     await suggestions(page).getByRole('option', { name: 'task files, expand folder' }).click();
     await suggestions(page).getByRole('option', { name: 'draft.md', exact: true }).click();
-    await expect(draft).toHaveValue('@"task files/draft.md" ');
+    await expect(draft.getByRole('link', { name: 'task files/draft.md', exact: true })).toHaveAttribute('data-reference', '@"task files/draft.md"');
+    await expect(draft).toHaveText('task files/draft.md');
     await draft.fill('@');
     await suggestions(page).getByRole('option', { name: 'task files, expand folder' }).click();
     await suggestions(page).getByRole('option', { name: 'Reference task files/', exact: true }).click();
-    await expect(draft).toHaveValue('@"task files/" ');
+    await expect(draft).toHaveText('task files/');
     await draft.fill('@notes');
     await suggestions(page).getByRole('option', { name: 'notes.md', exact: true }).click();
-    await expect(draft).toHaveValue('@"notes.md" ');
+    const reference = draft.getByRole('link', { name: 'notes.md', exact: true });
+    await expect(reference).toHaveAttribute('data-reference', '@"notes.md"');
+    await expect(draft).toHaveText('notes.md');
+    await reference.hover();
+    await expect(reference).toHaveCSS('text-decoration-line', 'underline');
+    await reference.click();
+    const panel = page.getByRole('complementary', { name: 'Workspace panel' });
+    const closePanel = () => panel.getByRole('button', { name: 'Close workspace panel' }).click();
+    await expect(panel.getByRole('heading', { name: 'Notes' })).toBeVisible();
+    await closePanel();
+    await draft.fill('@"clip.webm"');
+    await draft.getByRole('link', { name: 'clip.webm' }).click();
+    await expect(panel.locator('video')).toBeVisible();
+    await expect.poll(() => panel.locator('video').evaluate((video: HTMLVideoElement) => video.videoWidth)).toBe(32);
+    await expect(page.getByRole('dialog', { name: 'Video preview' })).toHaveCount(0);
+    await closePanel();
 
     await draft.fill('Read this attachment  and keep this text');
-    await draft.evaluate((input: HTMLTextAreaElement) => input.setSelectionRange(21, 21));
+    await draft.evaluate((input) => {
+      const range = document.createRange();
+      range.setStart(input.firstChild!, 21); range.collapse(true);
+      const selection = document.getSelection()!;
+      selection.removeAllRanges(); selection.addRange(range);
+    });
     await draft.press('/'); await draft.press('m'); await draft.press('o');
     await expect(suggestions(page).getByRole('option', { name: /Choose a configured model/ })).toBeVisible();
     await draft.press('Tab');
-    await expect(draft).toHaveValue('Read this attachment /model and keep this text');
+    await expect(draft).toHaveText('Read this attachment /model and keep this text');
     await draft.press('Enter');
     await expect(modelSearch(page)).toBeFocused();
     await modelSearch(page).press('Escape');
-    await expect(draft).toHaveValue('Read this attachment  and keep this text');
+    await expect(draft).toHaveText('Read this attachment  and keep this text');
 
     await draft.fill('Open https://example.test/model and /home/model');
     await expect(suggestions(page)).toBeHidden();
@@ -55,11 +78,16 @@ test('drafts isolate attachments and discover workspace files and skills', async
     await expect(suggestions(page).getByRole('option', { name: /Added after connecting/ })).toBeVisible();
     await draft.press('Escape');
     await draft.fill('Read this attachment  and keep this text');
-    await draft.evaluate((input: HTMLTextAreaElement) => input.setSelectionRange(21, 21));
+    await draft.evaluate((input) => {
+      const range = document.createRange();
+      range.setStart(input.firstChild!, 21); range.collapse(true);
+      const selection = document.getSelection()!;
+      selection.removeAllRanges(); selection.addRange(range);
+    });
     await draft.press('/'); await draft.press('r'); await draft.press('e'); await draft.press('v');
     await expect(suggestions(page).getByRole('option', { name: /Review the work/ })).toBeVisible();
     await draft.press('Enter');
-    await expect(draft).toHaveValue('Read this attachment /skill:review and keep this text');
+    await expect(draft).toHaveText('Read this attachment /skill:review and keep this text');
     const images = await page.evaluate(() => [240, 480].map((width) => {
       const canvas = document.createElement('canvas');
       canvas.width = width;
@@ -76,6 +104,7 @@ test('drafts isolate attachments and discover workspace files and skills', async
     await (await chooser).setFiles([
       { name: 'task.txt', mimeType: 'text/plain', buffer: Buffer.from('ATTACHED TASK') },
       { name: 'document.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.7\n') },
+      { name: 'clip.webm', mimeType: 'video/webm', buffer: videoBytes },
       { name: 'blue.png', mimeType: 'image/png', buffer: Buffer.from(images[0], 'base64') },
       { name: 'reference.png', mimeType: 'image/png', buffer: Buffer.from(images[1], 'base64') }
     ]);
@@ -89,13 +118,23 @@ test('drafts isolate attachments and discover workspace files and skills', async
     await expect(cards.locator('img')).toHaveCount(2);
     await expect(cards.getByRole('img', { name: 'blue.png' })).toBeVisible();
     await expect(cards.getByRole('img', { name: 'reference.png' })).toBeVisible();
-    await expect(cards.locator('.file-card')).toHaveCount(2);
-    await expect(cards.getByRole('button', { name: 'Download task.txt' })).toContainText('TXT · 13 B');
-    await expect(cards.getByRole('button', { name: 'Download document.pdf' })).toContainText('PDF');
+    await expect(cards.locator('.file-card')).toHaveCount(3);
+    await expect(cards.getByRole('button', { name: 'Open task.txt' })).toContainText('TXT · 13 B');
+    await expect(cards.getByRole('button', { name: 'Open document.pdf' })).toContainText('PDF');
     await expect(bubble.locator('.file-card, img')).toHaveCount(0);
+    await cards.getByRole('button', { name: 'Open task.txt' }).click();
+    const uploaded = panel.getByRole('tabpanel', { name: 'task.txt', exact: true });
+    await expect(uploaded.locator('.file-preview')).toHaveText('ATTACHED TASK');
     const fileDownload = page.waitForEvent('download');
-    await cards.getByRole('button', { name: 'Download task.txt' }).click();
+    await uploaded.getByRole('button', { name: 'Download', exact: true }).click();
     expect((await fileDownload).suggestedFilename()).toBe('task.txt');
+    await closePanel();
+    await cards.getByRole('button', { name: 'Preview clip.webm' }).click();
+    const videoPreview = page.getByRole('dialog', { name: 'Video preview' });
+    await expect(videoPreview).toBeVisible();
+    await expect.poll(() => videoPreview.locator('video').evaluate((video: HTMLVideoElement) => video.videoWidth)).toBe(32);
+    await expect(videoPreview).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    await videoPreview.getByRole('button', { name: 'Close video preview' }).click();
     expect(JSON.stringify(mock.requests[0])).toContain('image_url');
     expect(JSON.stringify(mock.requests[0])).toContain('ATTACHED TASK');
     expect(JSON.stringify(mock.requests[0])).toContain('Review carefully.');
@@ -117,14 +156,22 @@ test('drafts isolate attachments and discover workspace files and skills', async
     });
     await page.locator('#composer input[type=file]').setInputFiles({ name: 'private.txt', mimeType: 'text/plain', buffer: Buffer.from('ONLY FOR PROJECT REVIEW') });
     await page.getByRole('button', { name: 'New conversation', exact: true }).click();
-    await expect(draft).toHaveValue('');
+    await expect(draft).toHaveText('');
     await draft.fill('Different conversation @"notes.md"');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.locator('.message.assistant')).toHaveText('Mock response');
     expect(JSON.stringify(mock.requests.at(-1))).not.toContain('ONLY FOR PROJECT REVIEW');
     await expect(page.locator('.message-attachments')).toHaveCount(0);
+    const sentReference = page.locator('.message.user').getByRole('link', { name: 'notes.md' });
+    await expect(sentReference).toHaveAttribute('data-reference', '@"notes.md"');
+    await expect(page.locator('.message.user')).toHaveText('Different conversation notes.md');
+    expect(JSON.stringify(mock.requests.at(-1))).toContain('@\\"notes.md\\"');
+    await sentReference.click();
+    await expect(panel.getByRole('heading', { name: 'Notes' })).toBeVisible();
+    await expect(panel.getByRole('tab', { name: 'task.txt', exact: true })).toHaveCount(0);
+    await closePanel();
     await page.getByRole('button', { name: title, exact: true }).click();
-    await expect(draft).toHaveValue('Keep this draft');
+    await expect(draft).toHaveText('Keep this draft');
     await expect(page.getByRole('button', { name: 'Remove private.txt' })).toBeVisible();
     await page.locator('.session-row').filter({ hasText: 'Different conversation' }).hover();
     await page.getByRole('button', { name: 'Delete Different conversation @"notes.md"', exact: true }).click();

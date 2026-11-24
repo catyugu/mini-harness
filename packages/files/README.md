@@ -4,7 +4,7 @@ Provides file tools and the workspace file browser.
 
 ## Responsibilities
 
-Owns text reads, writes, edits and file inspection results, including tree, search, preview and diff. Uses the file access service for policy.
+Owns text reads, writes, edits and file inspection results, including tree, search, preview and diff. Uses the file access service for policy. Its browser plugin contributes independent Workspace files and Git changes launchers, handles workspace reference links, and opens conversation-owned document attachments in the right panel.
 
 ## Structure
 
