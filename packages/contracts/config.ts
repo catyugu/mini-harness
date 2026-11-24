@@ -1,3 +1,4 @@
+import type {} from 'cordis';
 import type { ScopeSettings } from './capabilities.js';
 
 /** Types shared by all runtimes. No imports from platform or features. */
@@ -31,4 +32,18 @@ export interface PluginConfiguration {
   /** Apply a shallow field patch as one transaction. */
   patch(values: Record<string, unknown>): Promise<void>;
   subscribe<T = unknown>(key: string, listener: (value: T) => void): () => void;
+}
+
+export interface SettingsPort {
+  readonly settings: Settings;
+  forgetPlugin(id: string): void;
+  forgetScopes(keys: string[]): void;
+  subscribe(listener: () => void): () => void;
+}
+
+declare module 'cordis' {
+  interface Context {
+    harnessSettingsStore: SettingsPort;
+    harnessUpdateSettings: (patch: unknown) => Promise<Settings>;
+  }
 }

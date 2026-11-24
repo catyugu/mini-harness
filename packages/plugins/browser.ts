@@ -1,4 +1,4 @@
-import type { ModelCatalog } from '@mini-harness/web/types';
+import type { ModelCatalog } from '@mini-harness/contracts/models';
 import type { WorkspaceRecord } from '@mini-harness/contracts/workspace';
 import type { Conversation } from '@mini-harness/contracts/conversation';
 import type { Settings, SettingsPatch } from '@mini-harness/contracts/config';

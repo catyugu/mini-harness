@@ -3,11 +3,11 @@ import { randomUUID } from 'node:crypto';
 import { prepareInput } from '@mini-harness/platform/input';
 import type { Attachment, InputSource } from '@mini-harness/contracts/input';
 import type { CapabilityObservation } from '@mini-harness/contracts/events';
-import type { RunAgentPort, ThinkingLevel } from '@mini-harness/contracts/agent';
+import type { AgentPort, ThinkingLevel } from '@mini-harness/contracts/agent';
 import type { ModelChoice } from '@mini-harness/contracts/conversation';
 import { RunInterrupted, type StreamEvent, type RunEvent, type RunInfo } from '@mini-harness/contracts/transport';
 import { RunEvents } from './events.js';
-import type { SessionStore } from '@mini-harness/contracts/services';
+import type { SessionStore } from '@mini-harness/contracts/session-store';
 
 
 interface RunOptions {
@@ -32,7 +32,7 @@ export class Runs {
 
   constructor(
     private readonly registry: SessionStore,
-    private readonly agent: RunAgentPort,
+    private readonly agent: Pick<AgentPort, 'prompt' | 'revisionTarget' | 'messages' | 'compact'>,
     private readonly observe: (event: CapabilityObservation, signal?: AbortSignal) => void,
     private readonly address: (id: string) => readonly string[] = () => [],
     private readonly admit: (scopeKeys: readonly string[]) => void = () => {}

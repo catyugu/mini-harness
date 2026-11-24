@@ -1,6 +1,6 @@
 import type { MessageContent, ViewMessage } from '@mini-harness/contracts/message';
 import type { RunEvent } from '@mini-harness/contracts/transport';
-import type { ConversationView } from '@mini-harness/web/types';
+import type { ConversationView } from '@mini-harness/contracts/conversation';
 import type { FrontendApi, ToolView, MessageAction, MessageActionContext } from '@mini-harness/ui-runtime/frontend';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { renderMarkdown, markdownSource } from '@mini-harness/ui-primitives/markdown';
@@ -355,7 +355,7 @@ function errorEntry(error: string) {
 function stream(initial: ConversationView) {
   let answer: HTMLElement | undefined;
   let text = '';
-  function live({ partial, tools }: Pick<ConversationView, 'partial' | 'tools'>) {
+  function live({ partial, tools }: Pick<Extract<RunEvent, { type: 'snapshot' }>, 'partial' | 'tools'>) {
     text = partial ?? '';
     answer = text ? addMessage('assistant', text) : undefined;
     for (const tool of tools ?? []) {

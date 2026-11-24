@@ -1,10 +1,11 @@
 import type {} from 'cordis';
+import type { ThinkingLevel } from './agent.js';
 import type { ModelChoice } from './conversation.js';
 
 export interface ModelSummary extends ModelChoice {
   name: string;
   configured: boolean;
-  thinkingLevels: string[];
+  thinkingLevels: ThinkingLevel[];
   input: readonly ('text' | 'image')[];
 }
 
@@ -15,8 +16,22 @@ export interface ProviderModel {
   contextWindow: number;
   maxTokens: number;
   reasoning: boolean;
-  thinkingLevels?: string[];
+  thinkingLevels?: ThinkingLevel[];
 }
+
+export interface ProviderInfo {
+  id: string;
+  name: string;
+  configured: boolean;
+  storedCredential: boolean;
+  canSetKey: boolean;
+  custom: boolean;
+  baseUrl: string;
+  api: string;
+  models: ProviderModel[];
+}
+
+export interface ModelCatalog { models: ModelSummary[]; providers: ProviderInfo[] }
 
 export interface ModelCatalogPort {
   list(): ModelSummary[];

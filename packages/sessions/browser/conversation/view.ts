@@ -1,9 +1,10 @@
 import type { BrowserProjectionPort } from '@mini-harness/contracts/browser';
 import type { Attachment } from '@mini-harness/contracts/input';
-import type { Conversation, ConversationPermission, ModelChoice } from '@mini-harness/contracts/conversation';
+import type { Conversation, ConversationPermission, ConversationView, ModelChoice } from '@mini-harness/contracts/conversation';
 import type { MessageContent } from '@mini-harness/contracts/message';
 import type { RunEvent } from '@mini-harness/contracts/transport';
-import type { ConversationView, ThinkingLevel, ModelCatalog } from '@mini-harness/web/types';
+import type { ThinkingLevel } from '@mini-harness/contracts/agent';
+import type { ModelCatalog } from '@mini-harness/contracts/models';
 import { scopedElements } from '@mini-harness/web/api';
 import { exportSessions, isRunning } from '@mini-harness/web/transport/session-client';
 import { createConversationController } from '@mini-harness/web/models/conversation-controller';

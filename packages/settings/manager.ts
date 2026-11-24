@@ -2,7 +2,8 @@ import { HttpError } from '@mini-harness/contracts/routes';
 import { isDeepStrictEqual } from 'node:util';
 import { mergeSettings, parseSettings, readJson, writeJson } from '@mini-harness/platform/config';
 import type { Paths, Settings } from '@mini-harness/contracts/config';
-import type { SettingsPort, PluginConfigurationPort } from '@mini-harness/contracts/services';
+import type { SettingsPort } from '@mini-harness/contracts/config';
+import type { PluginConfigurationPort } from '@mini-harness/contracts/plugins';
 
 export class SettingsManager implements SettingsPort {
   private stored: Settings;

@@ -2,7 +2,8 @@ import type { ToolProjection, ToolResultTransform } from '@mini-harness/contract
 import { HttpError } from '@mini-harness/contracts/routes';
 import { isDeepStrictEqual } from 'node:util';
 import { createHash } from 'node:crypto';
-import type { AgentPort, SessionStore } from '@mini-harness/contracts/services';
+import type { AgentPort } from '@mini-harness/contracts/agent';
+import type { SessionStore } from '@mini-harness/contracts/session-store';
 import type { ModelChoice, SessionRecord } from '@mini-harness/contracts/conversation';
 import type { ModelCatalogPort } from '@mini-harness/contracts/models';
 import { validateNativeMessage, validateRequestSnapshot, type LlmPort, type LlmRequest, type NativeAssistantMessage, type NativeMessage, type NativeUserMessage, type NativeToolMessage, type ToolCallPart } from '@mini-harness/contracts/llm';

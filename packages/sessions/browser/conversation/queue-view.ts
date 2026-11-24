@@ -1,4 +1,4 @@
-import type { ConversationView } from '@mini-harness/web/types';
+import type { ConversationView } from '@mini-harness/contracts/conversation';
 
 export function renderQueue(panel: HTMLElement, queue: ConversationView['queue'] = [],
   cancel: (id?: string) => void | Promise<void>) {

@@ -1,5 +1,7 @@
 import type { ModelCatalogPort } from '@mini-harness/contracts/models';
-import type { AgentPort, RunPort, SessionStore } from '@mini-harness/contracts/services';
+import type { AgentPort } from '@mini-harness/contracts/agent';
+import type { RunPort } from '@mini-harness/contracts/runs';
+import type { SessionStore } from '@mini-harness/contracts/session-store';
 import type { SessionRecord, ModelChoice } from '@mini-harness/contracts/conversation';
 
 export interface SubagentPolicy { maxDepth: number; maxParallel: number; model: ModelChoice | null }

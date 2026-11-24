@@ -1,3 +1,4 @@
+import type { ThinkingLevel } from '@mini-harness/contracts/agent';
 import { expectPresent } from '../../../test/support/required.js';
 import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
@@ -20,7 +21,7 @@ const call = (id: string, name: string, args: Record<string, unknown> = {}): Too
 const toolsAnswer = (...calls: ToolCallPart[]): NativeAssistantMessage => ({ ...answer(), content: calls, stopReason: 'toolUse' });
 
 function fixture(t: TestContext, llm: LlmPort, retryModel?: () => Promise<ModelRetry>,
-  thinkingLevels: (id: string) => string[] | undefined = () => undefined) {
+  thinkingLevels: (id: string) => ThinkingLevel[] | undefined = () => undefined) {
   const { root, paths } = createFixturePaths('http://127.0.0.1:1/v1');
   const sessions = new SessionRegistry(paths, new WorkspaceCatalog(paths));
   t.after(() => { sessions.dispose(); rmSync(root, { recursive: true, force: true }); });

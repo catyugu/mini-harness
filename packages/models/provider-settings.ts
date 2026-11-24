@@ -2,7 +2,7 @@ import { HttpError } from '@mini-harness/contracts/routes';
 import { join } from 'node:path';
 import { readJson, writeJson } from '@mini-harness/platform/config';
 import type { ModelChoice } from '@mini-harness/contracts/conversation';
-import type { ModelAdminPort, ModelCatalogPort } from '@mini-harness/contracts/models';
+import type { ModelAdminPort, ModelCatalogPort, ProviderInfo } from '@mini-harness/contracts/models';
 
 type ProviderHost = {
   paths: { home: string };
@@ -11,7 +11,7 @@ type ProviderHost = {
   catalog: ModelCatalogPort;
   admin: ModelAdminPort;
 };
-export function providerSettings(runtime: ProviderHost) {
+export function providerSettings(runtime: ProviderHost): ProviderInfo[] {
   const config = readJson<any>(join(runtime.paths.home, 'models.json'), { providers: {} });
   return runtime.admin.providers().map((provider) => {
     const auth = runtime.admin.authStatus(provider.id);

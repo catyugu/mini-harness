@@ -2,15 +2,15 @@ import type { ModelChoice } from '@mini-harness/contracts/conversation';
 import { scopedElements } from '@mini-harness/web/api';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { positionPicker } from './picker-position.js';
-import type { ModelInfo } from '@mini-harness/web/types';
+import type { ModelSummary } from '@mini-harness/contracts/models';
 
 export function createModelPicker(root: HTMLElement, onSelect: (model: ModelChoice) => void, signal: AbortSignal) {
   const { element } = scopedElements(root);
   const button = element<'button'>('modelSelect'), popup = element('modelPicker');
   const search = element<'input'>('modelSearch'), results = element('modelResults'), empty = element('modelEmpty');
-  let models: ModelInfo[] = [];
+  let models: ModelSummary[] = [];
   let providers = new Map<string, string>();
-  let selected: ModelInfo | undefined;
+  let selected: ModelSummary | undefined;
   let options: HTMLButtonElement[] = [];
   let cursor = -1;
 
@@ -134,7 +134,7 @@ export function createModelPicker(root: HTMLElement, onSelect: (model: ModelChoi
   return {
     open,
     selected: () => selected,
-    update(catalog: ModelInfo[], names: { id: string; name: string }[], choice: ModelChoice) {
+    update(catalog: ModelSummary[], names: { id: string; name: string }[], choice: ModelChoice) {
       providers = new Map(names.map(({ id, name }) => [id, name]));
       models = catalog.filter((model) => model.configured).sort((a, b) =>
         providerName(a.provider).localeCompare(providerName(b.provider)) || a.provider.localeCompare(b.provider) || a.name.localeCompare(b.name));

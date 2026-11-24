@@ -1,3 +1,4 @@
+import type { BrowserEntry } from './browser.js';
 import type { Extension } from './contributions.js';
 import type { Context } from 'cordis';
 import type { Paths, PluginConfiguration, Settings } from './config.js';
@@ -88,6 +89,17 @@ declare module 'cordis' {
     harnessSettings: () => Settings;
     harnessState: { paths: Paths };
     harnessRoutes: RoutePort;
+    harnessWriteBrowserConfig: (id: string, patch: unknown, signal: AbortSignal) => Promise<void>;
+    harnessPluginCatalog: {
+      metadata(): PluginMetadata[];
+      reserved(id: string): boolean;
+      diagnostics(): unknown;
+      browser(): BrowserEntry[];
+    };
   }
 }
 
+export interface PluginConfigurationPort {
+  effective(settings: Settings): Settings;
+  configure(settings: Settings, commit?: () => void): Promise<void>;
+}

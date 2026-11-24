@@ -10,6 +10,8 @@ export type CapabilityObservation =
   | { type: 'tool-ended'; sessionId: string; tool: string; callId: string; failed: boolean; elapsedMs?: number };
 
 declare module 'cordis' {
+  interface Context { harnessChanges: EventTarget }
+
   interface Events {
     'harness/observe'(event: CapabilityObservation, signal?: AbortSignal): void;
   }

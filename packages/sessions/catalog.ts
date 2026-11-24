@@ -1,6 +1,6 @@
 import type { Paths } from '@mini-harness/contracts/config';
 import type { SessionRecord } from '@mini-harness/contracts/conversation';
-import type { WorkspacePort } from '@mini-harness/contracts/services';
+import type { WorkspacePort } from '@mini-harness/contracts/workspace';
 import { readJson } from '@mini-harness/platform/config';
 
 export type StoredSession = Pick<SessionRecord, 'id' | 'workspaceId'>;

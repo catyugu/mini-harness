@@ -1,7 +1,7 @@
 import type { Attachment } from '@mini-harness/contracts/input';
 import type { Conversation, ConversationPermission, ModelChoice } from '@mini-harness/contracts/conversation';
 import type { RunEvent, RunInfo } from '@mini-harness/contracts/transport';
-import type { ConversationView } from '../types.js';
+import type { ConversationView } from '@mini-harness/contracts/conversation';
 import { payload, workspaceRoute } from '../api.js';
 import { readConversation, observeRun } from '../transport/session-client.js';
 type BrowserRequest = <T>(path: string, options?: RequestInit) => Promise<T>;
