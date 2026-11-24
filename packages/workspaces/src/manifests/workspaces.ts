@@ -4,5 +4,5 @@ import { setup } from '../server/setup.js';
 export const manifest: PluginDescriptor = {
   scope: 'application',
   id: 'core:workspace', title: 'Workspaces', description: 'Workspace identity and registry', required: true,
-  inject: ['harnessChanges', 'harnessState', 'harnessRoutes'], provides: ['harnessWorkspaces'], setup,
+  inject: ['harnessChanges', 'harnessState', 'harnessRoutes', 'harnessSettingsStore'], provides: ['harnessWorkspaces'], setup,
 };

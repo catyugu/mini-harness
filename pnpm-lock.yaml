@@ -840,6 +840,12 @@ importers:
 
   packages/workspaces:
     dependencies:
+      '@mini-harness/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@mini-harness/settings':
+        specifier: workspace:*
+        version: link:../settings
       '@mini-harness/platform':
         specifier: workspace:*
         version: link:../platform

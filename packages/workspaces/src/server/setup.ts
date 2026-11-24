@@ -1,4 +1,6 @@
 import type {} from '@mini-harness/platform/runtime-paths';
+import type {} from '@mini-harness/settings/api';
+import type {} from '@mini-harness/kernel/observations';
 import type {} from '@mini-harness/transport/projection-api';
 import type { Context } from 'cordis';
 import { WorkspaceCatalog } from './catalog.js';
@@ -7,7 +9,8 @@ const validId = /^[a-f0-9]{32}$/;
 
 /** Workspace identity, mutations and registered HTTP routes have one owner. */
 export function setup(ctx: Context) {
-  const catalog = new WorkspaceCatalog(ctx.harnessState.paths);
+  const catalog = new WorkspaceCatalog(ctx.harnessState.paths, (key) => ctx.harnessSettingsStore.forgetScopes([key]));
+  ctx.on('harness/quiesce', (pending) => { pending.push(catalog.close()); });
   const changes = ctx.harnessChanges;
   ctx.effect(() => changes.register('workspaces'));
   ctx.effect(() => {
@@ -30,6 +33,7 @@ export function setup(ctx: Context) {
     const input = await body();
     return new HttpReply(201, catalog.register(input?.path, input?.name));
   });
+  add('DELETE', '/api/workspaces/:id', ({ params }) => catalog.remove(requireId(params.id)));
   add('PATCH', '/api/workspaces/:id', async ({ params, body }) =>
     catalog.rename(requireId(params.id), (await body())?.name));
 }

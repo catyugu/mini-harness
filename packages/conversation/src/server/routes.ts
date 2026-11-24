@@ -126,7 +126,6 @@ export function registerSessionRoutes(ctx: Context, read: (id: string) => Conver
     if (updated.permission === 'fullAccess') ctx.harnessApprovals.approveSession(id);
     return projectSession(ctx, updated);
   });
-  add('DELETE', '/api/workspaces/:id', ({ params }) => ctx.harnessRegistry.deleteWorkspace(workspace(params.id)));
   add('POST', '/api/sessions/delete', async ({ body }) => {
     const input = await body();
     return { deleted: await ctx.harnessRegistry.delete(input.ids) };

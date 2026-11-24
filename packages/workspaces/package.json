@@ -21,6 +21,8 @@
     ]
   },
   "dependencies": {
+    "@mini-harness/kernel": "workspace:*",
+    "@mini-harness/settings": "workspace:*",
     "@mini-harness/platform": "workspace:*",
     "@mini-harness/plugin-api": "workspace:*",
     "@mini-harness/transport": "workspace:*",

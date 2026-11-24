@@ -16,6 +16,8 @@ export function setup(ctx: Context) {
   ctx.provide('harnessSessions', {
     [bindSessionAccess]: (source) => sessionAccess(registry, source, (id, pluginId) => registry.records(id, pluginId))
   });
+  ctx.effect(() => ctx.harnessWorkspaces.beforeRemove((id) => registry.delete(registry.list(id).map((record) => record.id))));
+  ctx.on('harness/status', (status) => { status.sessionDiagnostics = registry.diagnostics(); });
   ctx.on('harness/startup', (pending) => { pending.push(registry.recoverDeletion()); });
   ctx.on('harness/quiesce', (pending) => { pending.push(registry.close()); });
   ctx.effect(() => () => registry.dispose());

@@ -1,6 +1,6 @@
 # @mini-harness/approvals
 
-Tracks pending shell approvals and publishes their state to the browser.
+Tracks pending user approvals and publishes their state to the browser.
 
 ## Responsibilities
 
@@ -12,7 +12,7 @@ Owns approval creation, resolution, cancellation and conversation-level approval
 
 ## API
 
-`harnessApprovals` opens and resolves approval requests. `miniApprovals` exposes the live request list in the browser.
+`approvalExtensions.access` opens scoped, plugin-owned approval requests. The private `harnessApprovals` service resolves decisions. `miniApprovals` exposes the live request list in the browser.
 
 ## Dependencies
 
@@ -20,7 +20,7 @@ Uses [Transport](../transport/README.md) to publish changes. Shell consumes appr
 
 ## Lifecycle
 
-`core:approvals` mounts at application scope. Run cancellation and plugin disposal release pending requests and listeners.
+`core:approvals` mounts at application scope. Run cancellation, session deletion and plugin disposal release pending requests and listeners. Full access only releases requests that explicitly opt in.
 
 ## Testing
 

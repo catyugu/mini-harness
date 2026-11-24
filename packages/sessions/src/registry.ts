@@ -21,7 +21,6 @@ type Participant = Parameters<SessionStore['beforeDelete']>[0];
 export class SessionRegistry implements SessionStore {
   private state: CatalogState;
   private readonly deleting = new Set<string>();
-  private readonly deletingWorkspaces = new Set<string>();
   private readonly participants = new Set<Participant>();
   private readonly logs = new Map<string, SessionLog>();
   private readonly latestRuns = new Map<string, RunInfo>();
@@ -64,7 +63,7 @@ export class SessionRegistry implements SessionStore {
   assertAvailable(id?: string, workspaceId = id && this.get(id)?.workspaceId) {
     if (this.closing) throw new DomainError('unavailable', 'Agent service is unavailable during shutdown');
     if (id && this.deleting.has(id)) throw new DomainError('conflict', 'Conversation is being deleted');
-    if (workspaceId && this.deletingWorkspaces.has(workspaceId)) throw new DomainError('conflict', 'Workspace is being deleted');
+    if (workspaceId) this.workspaces.assertAvailable(workspaceId);
   }
 
   beforeDelete(handler: Participant) {
@@ -300,20 +299,6 @@ export class SessionRegistry implements SessionStore {
       const log = this.log(id);
       return { ...record, log: log.serialize() };
     });
-  }
-
-  async deleteWorkspace(id: string) {
-    this.assertAvailable(undefined, id);
-    this.workspaces.get(id);
-    this.deletingWorkspaces.add(id);
-    return this.trackDeletion((async () => {
-      try {
-        const deleted = await this.delete(this.list(id).map((record) => record.id));
-        await this.forgetScopes?.(['workspace:' + id]);
-        this.workspaces.remove(id);
-        return { removed: id, deleted };
-      } finally { this.deletingWorkspaces.delete(id); }
-    })());
   }
 
   async delete(ids: string[]) {

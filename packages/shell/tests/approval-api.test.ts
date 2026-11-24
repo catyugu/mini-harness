@@ -12,7 +12,9 @@ test('shell approval gates execution, handles rejection and cancellation', async
   for (const allow of [false, true]) {
     await request('/sessions/' + session.id + '/runs', 'POST', { message: 'Run a shell command' });
     const pending = await waitUntil(() => request('/approvals'), (r) => r.body.length > 0);
-    assert.equal(pending.body[0].command, 'echo approved');
+    assert.equal(pending.body[0].message, 'echo approved');
+    assert.equal(pending.body[0].pluginId, 'shell');
+    assert.equal(pending.body[0].title, 'Shell approval');
     assert.equal((await request('/approvals', 'POST', { id: pending.body[0].id, allow })).status, 200);
     await finish(session.id);
     const history = (await request('/sessions/' + session.id)).body.messages;

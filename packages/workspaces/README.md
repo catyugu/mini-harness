@@ -18,6 +18,8 @@ Maintains the workspace catalog, manages directory browsing and provides the bro
 
 Uses [Platform](../platform/README.md) for canonical paths and [Transport](../transport/README.md) for projection updates.
 
+Workspace removal blocks new session work, drains deletion participants and clears workspace settings before removing the registry entry. The workspace directory is never deleted.
+
 ## Lifecycle
 
 `core:workspace` owns the native catalog and `core:workspaces-data` owns its browser subscription.

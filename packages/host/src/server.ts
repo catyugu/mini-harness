@@ -126,8 +126,11 @@ export async function createMiniHarnessServer(paths: Paths, options: { token?: s
         throw new HttpError('forbidden', 'Origin not allowed');
       }
       if (!runtime.accepting) throw new HttpError('unavailable', 'Application is closing');
-      if (pathname === '/api/status' && req.method === 'GET')
-        return json(res, 200, { pid: process.pid, sessionDiagnostics: runtime.registry.diagnostics() });
+      if (pathname === '/api/status' && req.method === 'GET') {
+        const status: Record<string, unknown> = { pid: process.pid };
+        runtime.plugins.ctx.emit('harness/status', status);
+        return json(res, 200, status);
+      }
       if (pathname === '/api/shutdown' && req.method === 'POST' && options.shutdown) {
         res.once('finish', options.shutdown);
         return json(res, 202, { pid: process.pid });
