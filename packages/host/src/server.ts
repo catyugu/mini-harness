@@ -113,7 +113,7 @@ export async function createMiniHarnessServer(paths: Paths, options: { token?: s
         } else if (opened) closeSync(opened.fd);
         res.writeHead(200, { 'Content-Type': mime + '; charset=utf-8',
           'Content-Length': size, 'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff',
-          'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'",
+          'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'",
           'Referrer-Policy': 'no-referrer' });
         if (stream) stream.pipe(res);
         else res.end();

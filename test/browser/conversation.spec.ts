@@ -76,6 +76,7 @@ test('drafts isolate attachments and discover workspace files and skills', async
     await (await chooser).setFiles([
       { name: 'task.txt', mimeType: 'text/plain', buffer: Buffer.from('ATTACHED TASK') },
       { name: 'document.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.7\n') },
+      { name: 'clip.webm', mimeType: 'video/webm', buffer: Buffer.from('GkXfo59ChoEBQveBAULygQRC84EIQoKEd2VibUKHgQJChYECGFOAZwEAAAAAAAIXEU2bdLpNu4tTq4QVSalmU6yBoU27i1OrhBZUrmtTrIHWTbuMU6uEElTDZ1OsggEjTbuMU6uEHFO7a1OsggIB7AEAAAAAAABZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVSalmsCrXsYMPQkBNgIxMYXZmNjEuNy4xMDNXQYxMYXZmNjEuNy4xMDNEiYhAj0AAAAAAABZUrmvIrgEAAAAAAAA/14EBc8WISfgtD6OZU7+cgQAitZyDdW5kiIEAhoVWX1ZQOIOBASPjg4QdzWUA4JCwgSC6gRiagQJVsIRVuYEBElTDZ/tzc59jwIBnyJlFo4dFTkNPREVSRIeMTGF2ZjYxLjcuMTAzc3PWY8CLY8WISfgtD6OZU79nyKFFo4dFTkNPREVSRIeUTGF2YzYxLjE5LjEwMSBsaWJ2cHhnyKFFo4hEVVJBVElPTkSHkzAwOjAwOjAxLjAwMDAwMDAwMAAfQ7Z12eeBAKO9gQAAgNACAJ0BKiAAGAAARwiFhYiFhIgCAgJ1qgP4AgghCD0A/v9NEv/8WFfxYV/FhX/xYV/8/M7txfzmAKOVgQH0ALEBAAEQEAAYABhYL/QACHAAHFO7a5G7j7OBALeK94EB8YIBo/CBAw==', 'base64') },
       { name: 'blue.png', mimeType: 'image/png', buffer: Buffer.from(images[0], 'base64') },
       { name: 'reference.png', mimeType: 'image/png', buffer: Buffer.from(images[1], 'base64') }
     ]);
@@ -89,13 +90,25 @@ test('drafts isolate attachments and discover workspace files and skills', async
     await expect(cards.locator('img')).toHaveCount(2);
     await expect(cards.getByRole('img', { name: 'blue.png' })).toBeVisible();
     await expect(cards.getByRole('img', { name: 'reference.png' })).toBeVisible();
-    await expect(cards.locator('.file-card')).toHaveCount(2);
-    await expect(cards.getByRole('button', { name: 'Download task.txt' })).toContainText('TXT · 13 B');
-    await expect(cards.getByRole('button', { name: 'Download document.pdf' })).toContainText('PDF');
+    await expect(cards.locator('.file-card')).toHaveCount(3);
+    await expect(cards.getByRole('button', { name: 'Preview task.txt' })).toContainText('TXT · 13 B');
+    await expect(cards.getByRole('button', { name: 'Preview document.pdf' })).toContainText('PDF');
     await expect(bubble.locator('.file-card, img')).toHaveCount(0);
+    await cards.getByRole('button', { name: 'Preview task.txt' }).click();
+    const panel = page.locator('#inspector');
+    await expect(panel.getByRole('tab', { name: 'task.txt', exact: true })).toHaveAttribute('aria-selected', 'true');
+    await expect(panel.locator('.file-preview')).toHaveText('ATTACHED TASK');
     const fileDownload = page.waitForEvent('download');
-    await cards.getByRole('button', { name: 'Download task.txt' }).click();
+    await panel.getByRole('button', { name: 'Download', exact: true }).click();
     expect((await fileDownload).suggestedFilename()).toBe('task.txt');
+    await panel.getByRole('button', { name: 'Close workspace panel' }).click();
+    await cards.getByRole('button', { name: 'Preview clip.webm' }).click();
+    const video = page.getByRole('dialog', { name: 'Video preview' });
+    await expect(video).toBeVisible();
+    await expect(video.locator('video')).toHaveJSProperty('videoWidth', 32);
+    await expect(video.locator('video')).toHaveJSProperty('controls', true);
+    await page.keyboard.press('Escape');
+    await expect(video).toBeHidden();
     expect(JSON.stringify(mock.requests[0])).toContain('image_url');
     expect(JSON.stringify(mock.requests[0])).toContain('ATTACHED TASK');
     expect(JSON.stringify(mock.requests[0])).toContain('Review carefully.');
@@ -123,6 +136,15 @@ test('drafts isolate attachments and discover workspace files and skills', async
     await expect(page.locator('.message.assistant')).toHaveText('Mock response');
     expect(JSON.stringify(mock.requests.at(-1))).not.toContain('ONLY FOR PROJECT REVIEW');
     await expect(page.locator('.message-attachments')).toHaveCount(0);
+    const reference = page.locator('.message.user').getByRole('button', { name: 'notes.md', exact: true });
+    await expect(reference).toBeVisible();
+    await reference.hover();
+    await expect(reference).toHaveCSS('text-decoration-line', 'underline');
+    await reference.click();
+    await expect(panel.getByRole('tab', { name: 'notes.md', exact: true })).toHaveAttribute('aria-selected', 'true');
+    await expect(panel.getByRole('tab', { name: 'task.txt', exact: true })).toHaveCount(0);
+    await expect(panel.locator('.file-markdown')).toBeVisible();
+    await panel.getByRole('button', { name: 'Close workspace panel' }).click();
     await page.getByRole('button', { name: title, exact: true }).click();
     await expect(draft).toHaveValue('Keep this draft');
     await expect(page.getByRole('button', { name: 'Remove private.txt' })).toBeVisible();

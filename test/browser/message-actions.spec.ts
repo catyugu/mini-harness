@@ -90,6 +90,8 @@ test('copy, preview and revise a message with its image, and release editing dra
   await page.keyboard.press('Enter');
   const preview = page.getByRole('dialog', { name: 'Image preview' });
   await expectInViewport(preview, mobile);
+  await expect(preview).toHaveCSS('border-top-width', '0px');
+  await expect(preview.locator('.ui-dialog-body')).toHaveCSS('padding-top', '0px');
   const image = preview.getByRole('img', { name: 'reference.png' });
   await expect(image).toHaveJSProperty('naturalWidth', 480);
   const toggleSize = preview.getByRole('button', { name: 'Actual size' });

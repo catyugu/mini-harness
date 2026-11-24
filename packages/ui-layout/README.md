@@ -4,7 +4,7 @@ Owns the responsive application frame, sidebar, tabs and dialogs.
 
 ## Responsibilities
 
-Defines the page, header and right-panel contributions used by feature UI.
+Defines the page, header and right-panel contributions used by feature UI. Root tab types can contribute a launcher on the Start screen. Session-scoped tabs are removed when leaving their owning conversation; workspace tabs persist independently.
 
 ## Structure
 

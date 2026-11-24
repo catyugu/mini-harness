@@ -45,7 +45,7 @@ export function createRightTabs(view: {
       select.setAttribute('role', 'tab');
       select.setAttribute('aria-selected', String(tab === active));
       select.setAttribute('aria-controls', tab.key);
-      select.tabIndex = tab === active ? 0 : -1;
+      select.tabIndex = tab === (active ?? tabs[0]) ? 0 : -1;
       select.onclick = () => activate(tab);
       const close = iconButton('Close tab ' + tab.title, 'close');
       close.onclick = () => { remove(current, tab); render(true); };
@@ -74,6 +74,7 @@ export function createRightTabs(view: {
         const { title, description, icon: symbol } = definition.launcher!;
         const entry = button('', 'quiet');
         entry.classList.add('right-launcher-action');
+        entry.setAttribute('aria-label', title);
         entry.disabled = !current.scope;
         const label = document.createElement('span');
         const name = document.createElement('strong'); name.textContent = title;
@@ -100,7 +101,7 @@ export function createRightTabs(view: {
   function selectScope(scope?: TabScope) {
     if (scopeKey(scope) === scopeKey(current.scope) && scope?.sessionId === current.scope?.sessionId) return;
     current.open = layout.panelOpen();
-    // The frame can open before workspace selection and the default tab provider are ready.
+    // The frame can open before workspace selection and the launcher providers are ready.
     const openedBeforeSelection = !current.scope && Boolean(scope) && current.open;
     for (const tab of [...current.tabs]) {
       if (!tab.address || types.get(tab.address.type)?.sessionScoped) remove(current, tab);

@@ -40,7 +40,7 @@ preview.append(previewViewport, caption);
 const { node: previewDialog, dispose } = dialogs.create('Image preview', preview);
 signal.addEventListener('abort', dispose, { once: true });
 previewDialog.classList.add('message-media-dialog');
-let videoUrl: string | undefined;
+let mediaUrl: string | undefined;
 
 function setActualSize(enabled: boolean) {
   actualSize.setAttribute('aria-pressed', String(enabled));
@@ -55,7 +55,7 @@ function clearMedia() {
   previewVideo.pause();
   previewVideo.removeAttribute('src');
   previewVideo.load();
-  if (videoUrl) { URL.revokeObjectURL(videoUrl); videoUrl = undefined; }
+  if (mediaUrl) { URL.revokeObjectURL(mediaUrl); mediaUrl = undefined; }
 }
 previewDialog.addEventListener('close', () => { if (!previewDialog.open) clearMedia(); }, { signal });
 signal.addEventListener('abort', clearMedia, { once: true });
@@ -326,14 +326,13 @@ function renderEntry(message: ViewMessage, node?: HTMLElement) {
             const bytes = await readUpload(sessionId, attachmentId, signal);
             if (signal.aborted || current().sessionId !== sessionId) return;
             clearMedia();
+            mediaUrl = URL.createObjectURL(new Blob([bytes], { type: media }));
             if (media.startsWith('video/')) {
-              videoUrl = URL.createObjectURL(new Blob([bytes], { type: media }));
-              previewVideo.src = videoUrl;
+              previewVideo.src = mediaUrl;
               showMedia(file.name, 'Video');
             } else {
               previewImage.alt = file.name;
-              videoUrl = URL.createObjectURL(new Blob([bytes], { type: media }));
-              previewImage.src = videoUrl;
+              previewImage.src = mediaUrl;
               showMedia(file.name, 'Image');
             }
           } catch (error) { if (!signal.aborted) extensions.report(error); }

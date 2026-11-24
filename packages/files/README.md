@@ -4,11 +4,11 @@ Provides file tools and the workspace file browser.
 
 ## Responsibilities
 
-Owns text reads, writes, edits and file inspection results, including tree, search, preview and diff. Uses the file access service for policy.
+Owns text reads, writes, edits and file inspection results, including tree, search, preview, Git status and diff. Uses the file access service for policy.
 
 ## Structure
 
-`src/server/` contains the tools, routes and inspection logic. `src/browser/setup.ts` contributes the file panel and file-path completions.
+`src/server/` contains the tools, routes and inspection logic. `src/browser/setup.ts` contributes separate Workspace files and Git changes tabs, file-path completions and inline workspace references.
 
 ## API
 
