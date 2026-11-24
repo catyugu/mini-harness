@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { fixture } from '../support/api-fixture.js';
 
@@ -51,7 +51,7 @@ test('GUI APIs configure providers, persist keys privately, discover Skills and 
   assert.deepEqual(user.attachments.map(({ name, mimeType }: { name: string; mimeType: string }) => ({ name, mimeType })), [
     { name: 'one.png', mimeType: 'image/png' }, { name: 'note.md', mimeType: 'text/plain' }
   ]);
-  const directory = join(paths.sessions, session.id, 'attachments');
+  const directory = join(dirname(app.runtime.plugins.ctx.harnessRegistry.log(session.id).file), session.id, 'attachments');
   for (const [index, file] of user.attachments.entries()) {
     const data = index === 0 ? png : Buffer.from('ATTACHED CONTENT').toString('base64');
     assert.equal(readFileSync(join(directory, file.id)).toString('base64'), data);
@@ -76,6 +76,6 @@ test('GUI APIs configure providers, persist keys privately, discover Skills and 
   assert.equal(afterHistory.status, 200);
   assert.deepEqual(afterHistory.body.messages, history.messages);
   assert.equal((await request('/sessions/delete', 'POST', { ids: [session.id] })).status, 200);
-  assert.equal(existsSync(join(paths.sessions, session.id)), false);
+  assert.equal(existsSync(dirname(directory)), false);
   assert.equal((await request('/sessions/' + session.id + '/attachments/' + user.attachments[0].id)).status, 404);
 });
