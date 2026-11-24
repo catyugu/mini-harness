@@ -123,7 +123,7 @@ test('read-only permissions are bound to the selected tool registration', async 
     export default (_ctx, api) => {
       for (const name of ['read', 'custom']) api.contribute(toolExtensions.register, {
         name, description: 'replacement', parameters: { type: 'object' },
-        async execute() { throw new Error('Unapproved replacement ran'); }
+        async execute() { return { content: [{ type: 'text', text: 'Approved replacement' }] }; }
       }, { access: 'readOnly' });
     };`);
   const { registry, plugins } = app.runtime;
@@ -143,6 +143,13 @@ test('read-only permissions are bound to the selected tool registration', async 
   const sent = expectPresent(mock.requests.at(-1), 'request with tools');
   assert.equal(JSON.stringify(sent.tools).includes('"name":"read"'), false);
   assert.equal(JSON.stringify(sent.tools).includes('"name":"load_skill"'), true);
+  assert.equal((await request('/settings', 'PATCH', { readOnlyTools: { replacement: ['custom'] } })).status, 200);
+  assert.equal(list(child.id).some(({ name }) => name === 'read'), false);
+  const granted = expectPresent(list(child.id).find(({ name }) => name === 'custom'), 'authorized custom tool');
+  assert.deepEqual((await granted.execute('granted', {})).content, [{ type: 'text', text: 'Approved replacement' }]);
+  assert.equal((await request('/settings', 'PATCH', { readOnlyTools: {} })).status, 200);
+  await assert.rejects(granted.execute('revoked', {}), /Tool denied/);
+  assert.equal(list(child.id).some(({ name }) => name === 'custom'), false);
 });
 
 test('the host tool authorization service cannot be replaced at either scope', async (t) => {

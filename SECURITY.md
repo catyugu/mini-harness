@@ -22,3 +22,5 @@ Session messages and inbox acknowledgments are flushed before completion is repo
 The conversation catalog is validated at startup: invalid identities, unknown workspaces and broken ancestry are rejected instead of loading a partial index.
 
 A trusted gateway plugin may expose a separately authenticated viewer. The host limits this path to read-only UI and workspace inspection routes. Pairing credentials and listener lifecycle belong to the gateway.
+
+Read-only tool grants for installed plugins are explicit local settings, checked against the host-bound registration on every invocation. A read-only declaration alone is not trusted. Revocation affects subsequent authorization checks; this is a model-tool policy, not a JavaScript process sandbox.

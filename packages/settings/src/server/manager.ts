@@ -45,6 +45,8 @@ export class SettingsManager implements SettingsPort {
       const pluginConfig = { ...this.stored.pluginConfig };
       delete plugins[id];
       delete pluginConfig[id];
+      const readOnlyTools = { ...this.stored.readOnlyTools };
+      delete readOnlyTools[id];
       const scopes = Object.fromEntries(Object.entries(this.stored.scopes).map(([key, entry]) => {
         const scopedPlugins = { ...entry.plugins };
         const scopedConfig = { ...entry.pluginConfig };
@@ -53,7 +55,7 @@ export class SettingsManager implements SettingsPort {
         return [key, { ...entry, plugins: scopedPlugins, pluginConfig: scopedConfig }];
       }));
       const result = uninstall();
-      this.save({ ...this.stored, plugins, pluginConfig, scopes });
+      this.save({ ...this.stored, plugins, pluginConfig, scopes, readOnlyTools });
       this.publish();
       return result;
     });

@@ -13,16 +13,17 @@ export interface ContributionSource {
   run<T>(stage: string, work: (signal: AbortSignal) => T | Promise<T>, signal?: AbortSignal): Promise<T>;
 }
 
-const trustedSources = new WeakSet<ContributionSource>();
+const toolGrants = new WeakMap<ContributionSource, (name: string) => boolean>();
 
-export function bindContributionSource(source: ContributionSource, trusted: boolean): ContributionSource {
+export function bindContributionSource(source: ContributionSource, readOnlyGrant: (name: string) => boolean): ContributionSource {
   Object.freeze(source);
-  if (trusted) trustedSources.add(source);
+  toolGrants.set(source, readOnlyGrant);
   return source;
 }
 
-export function isTrustedContribution(source: ContributionSource): boolean {
-  return trustedSources.has(source);
+/** Grants belong to host-bound live instances, not to tool declarations or caller-supplied IDs. */
+export function isReadOnlyAuthorized(source: ContributionSource, name: string): boolean {
+  return !source.signal.aborted && toolGrants.get(source)?.(name) === true;
 }
 
 const register = Symbol.for('mini-harness.extension');

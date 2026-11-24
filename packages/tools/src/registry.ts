@@ -1,13 +1,13 @@
 import { toolNamePattern } from '@mini-harness/llm/vocabulary';
 import { Check, Errors } from 'typebox/value';
-import { isTrustedContribution } from '@mini-harness/kernel/contributions';
+import { isReadOnlyAuthorized } from '@mini-harness/kernel/contributions';
 import { isToolContent, registerToolBinding, type ToolDefinition, type ToolPort } from './api.js';
 import type { ToolDecision } from './extensions.js';
 
 interface ToolRegistration {
   name: string;
   scope?: string;
-  readOnly: boolean;
+  readOnly(): boolean;
   bind(id: string): ToolDefinition;
   visible(id: string): boolean;
 }
@@ -31,7 +31,7 @@ export class ToolRegistry implements ToolPort {
     const registry = this;
     const active = new Set<Promise<unknown>>();
     const expired = () => lifetime.signal.aborted || source?.signal.aborted === true;
-    const entry: ToolRegistration = { name, scope, readOnly: access === 'readOnly' && !!source && isTrustedContribution(source),
+    const entry: ToolRegistration = { name, scope, readOnly: () => access === 'readOnly' && !!source && isReadOnlyAuthorized(source, name),
       visible: (id) => !expired() && (source?.visible(id) ?? true) && (visible?.(id) ?? true),
       bind(id) {
         const tool = bind(id);
@@ -90,7 +90,7 @@ export class ToolRegistry implements ToolPort {
 
   private allowed(id: string, { name, readOnly }: ToolRegistration) {
     const policy = this.restrictions(id);
-    return !policy.disabledTools.includes(name) && (!policy.readOnly || readOnly);
+    return !policy.disabledTools.includes(name) && (!policy.readOnly || readOnly());
   }
 
   isAvailable(id: string, tool: ToolDefinition) {

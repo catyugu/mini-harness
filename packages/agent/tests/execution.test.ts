@@ -218,7 +218,7 @@ test('opted-in tools overlap, persist independently and respect serial barriers'
       snapshots.push(log().map(({ toolCallId }) => toolCallId));
       if (event.id === 'two') release();
     }
-  }, { signal: AbortSignal.timeout(3000) });
+  }, { choice: model, signal: AbortSignal.timeout(3000) });
   assert.deepEqual(started, ['before', 'one', 'two', 'after']);
   assert.deepEqual(snapshots, [['before'], ['before', 'two'], ['before', 'two', 'one'], ['before', 'two', 'one', 'after']]);
 });

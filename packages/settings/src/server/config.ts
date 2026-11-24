@@ -1,7 +1,7 @@
 import { DomainError } from '@mini-harness/platform/errors';
 import type { Paths } from '@mini-harness/platform/runtime-paths';
 import type { Settings } from '../shared/settings.js';
-import { scopeSettingsPattern, validatePluginSettings, validateProviderChoices } from '@mini-harness/plugin-api/selection';
+import { localPluginIdPattern, scopeSettingsPattern, validatePluginSettings, validateProviderChoices } from '@mini-harness/plugin-api/selection';
 import { toolNamePattern } from '@mini-harness/llm/vocabulary';
 import { readJson } from '@mini-harness/platform/json';
 
@@ -10,7 +10,8 @@ export const DEFAULTS = Object.freeze({
   plugins: {},
   pluginConfig: {},
   providers: {},
-  scopes: {}
+  scopes: {},
+  readOnlyTools: {}
 });
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -30,6 +31,11 @@ export function validateSettings(input: unknown): asserts input is Settings {
     if (!isObject(value)) throw new DomainError('invalid_input', 'Invalid settings section: ' + key);
   validatePluginSettings(section(plugins, 'plugins'), section(pluginConfig, 'pluginConfig'));
   validateProviderChoices(section(providers, 'providers'));
+  for (const [id, names] of Object.entries(section(input.readOnlyTools, 'readOnlyTools'))) {
+    if (!localPluginIdPattern.test(id) || !Array.isArray(names) ||
+        names.some((name: unknown) => typeof name !== 'string' || !toolNamePattern.test(name)) || new Set(names).size !== names.length)
+      throw new DomainError('invalid_input', 'Invalid read-only tool grant: ' + id);
+  }
   for (const [key, scope] of Object.entries(section(scopes, 'scopes'))) {
     if (!scopeSettingsPattern.test(key) || !isObject(scope) ||
         Object.keys(scope).some((field) => !['plugins', 'pluginConfig', 'disabledTools', 'providers'].includes(field)))
@@ -55,7 +61,8 @@ export function parseSettings(input: unknown): Settings {
     plugins: section(input.plugins, 'plugins'),
     pluginConfig: section(input.pluginConfig, 'pluginConfig'),
     providers: section(input.providers, 'providers'),
-    scopes: section(input.scopes, 'scopes')
+    scopes: section(input.scopes, 'scopes'),
+    readOnlyTools: section(input.readOnlyTools, 'readOnlyTools')
   };
   validateSettings(settings);
   return settings;
@@ -73,6 +80,7 @@ export function mergeSettings(current: Settings, patch: unknown): Settings {
     ...patch,
     providers: patch.providers === undefined ? current.providers : section(patch.providers, 'providers'),
     scopes: patch.scopes === undefined ? current.scopes : section(patch.scopes, 'scopes'),
+    readOnlyTools: patch.readOnlyTools === undefined ? current.readOnlyTools : section(patch.readOnlyTools, 'readOnlyTools'),
     plugins: { ...current.plugins, ...plugins },
     pluginConfig: { ...current.pluginConfig, ...pluginConfig }
   };

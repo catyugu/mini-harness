@@ -29,3 +29,5 @@ Scoped `disabledTools` can restrict tools through an entire descendant tree.
 ## Testing
 
 `tests/registry.test.ts` covers visibility and leases. [Agent tests](../agent/tests/) cover dispatch and scheduling.
+
+Session restrictions are resolved by the protected Sessions permission capability. Read-only authorization is evaluated on each call using the actual host-bound contributor and exact tool name; user grants are set in `readOnlyTools` and may be revoked without remounting.

@@ -17,7 +17,7 @@ export interface PluginLifetime {
   scope: PluginScope;
   scopeKey?: string;
   lifetime: AbortSignal;
-  trusted: boolean;
+  readOnlyGrant(name: string): boolean;
   address(id: string): readonly string[];
   dataRoot: string;
   invalidate(): void;
@@ -42,7 +42,7 @@ export function createPluginApi(ctx: Context, { id, descriptor, config }: { id: 
     visible: (sessionId: string) => !lifetime.aborted && inScope(sessionId),
     depth: (sessionId: string) => scopeKey ? address(sessionId).indexOf(scopeKey) + 1 : 0,
     service: <Name extends keyof ServiceMap & string>(name: Name) => api.service(name)
-  }, state.trusted);
+  }, state.readOnlyGrant);
   const instance = scopeKey ? createHash('sha256').update(scopeKey).digest('hex') : 'application';
   const windows = process.platform === 'win32';
   const storagePath = (name: string, privateValue = false) => {

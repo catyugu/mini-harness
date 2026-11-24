@@ -38,7 +38,7 @@ export class PluginHost implements ScopePort {
     private readonly upgrade?: (path: string, handler: UpgradeHandler) => () => void, devPlugin?: string,
     private readonly writePlugin?: (id: string, key: string | undefined, patch: unknown, check: () => void) => Promise<void>,
     private readonly authority: {
-      trustedContributors?: ReadonlySet<string>;
+      defaultReadOnlyTools?: ReadonlyMap<string, ReadonlySet<string>>;
       protectedProviders?: ReadonlyMap<string, string>;
     } = {}) {
     this.catalog = new PluginCatalog(directory, builtins, rootServices, devPlugin, authority.protectedProviders);
@@ -169,7 +169,9 @@ export class PluginHost implements ScopePort {
       const domain = 'plugin:' + plan.id;
       if (changes) ctx.effect(() => changes.register(domain));
       const runtime = createPluginApi(ctx, plan, { scope, scopeKey, lifetime,
-        trusted: !source && this.authority.trustedContributors?.has(plan.id) === true,
+        readOnlyGrant: (name) => source
+          ? this.settings().readOnlyTools?.[plan.id]?.includes(name) === true
+          : this.authority.defaultReadOnlyTools?.get(plan.id)?.has(name) === true,
         address: (id) => this.address(id),
         routes: this.ctx.get('harnessRoutes'), upgrade: this.upgrade,
         dataRoot: join(dirname(this.directory), 'plugin-data'),

@@ -4,6 +4,7 @@ import { manifest as ui_primitives } from '@mini-harness/ui-primitives/manifest'
 import { manifest as ui_layout } from '@mini-harness/ui-layout/manifest';
 import { manifest as workspaces } from '@mini-harness/workspaces/manifests/workspaces';
 import { manifest as sessions } from '@mini-harness/sessions/manifest';
+import { manifest as permissions } from '@mini-harness/sessions/permissions';
 import { manifest as agent } from '@mini-harness/agent/manifests/agent';
 import { manifest as prompt } from '@mini-harness/agent/manifests/prompt';
 import { manifest as model_store } from '@mini-harness/models/manifests/store';
@@ -32,10 +33,10 @@ import { manifest as conversation } from '@mini-harness/conversation/manifests/c
 
 export const plugins = [
   workspaces_data, sessions_data, workspace_navigation, navigation, model_store, model_catalog, llm, prompt,
-  ui_slots, ui_theme, ui_primitives, ui_layout, workspaces, sessions, agent, runs, settings, models, plugin_management, ui, file_access, files, skills, subagents, shell, session_helper, approvals, sandbox, process_execution, tools, conversation
+  ui_slots, ui_theme, ui_primitives, ui_layout, workspaces, sessions, permissions, agent, runs, settings, models, plugin_management, ui, file_access, files, skills, subagents, shell, session_helper, approvals, sandbox, process_execution, tools, conversation
 ];
 
 export const authority = {
-  trustedContributors: new Set([files.id, skills.id]),
-  protectedProviders: new Map([['harnessTools', tools.id]])
+  defaultReadOnlyTools: new Map([[files.id, new Set(['read', 'ls', 'find', 'grep'])], [skills.id, new Set(['load_skill'])]]),
+  protectedProviders: new Map([['harnessTools', tools.id], ['harnessSessionPermissions', permissions.id], ['harnessScopeDirectory', sessions.id]])
 };

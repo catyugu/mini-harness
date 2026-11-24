@@ -759,9 +759,6 @@ importers:
       '@mini-harness/sessions':
         specifier: workspace:*
         version: link:../sessions
-      '@mini-harness/settings':
-        specifier: workspace:*
-        version: link:../settings
 
   packages/transport:
     dependencies:
