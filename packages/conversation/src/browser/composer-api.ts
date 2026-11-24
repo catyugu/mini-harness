@@ -2,6 +2,7 @@ import type {} from 'cordis';
 import type { ConversationPermission } from '@mini-harness/sessions/identity';
 import type { ModelChoice, ThinkingLevel } from '@mini-harness/llm/vocabulary';
 import type { Attachment } from '@mini-harness/input/message';
+import type { ConversationRevision } from './conversation-api.js';
 
 export interface ComposerCommand {
   name: string;
@@ -34,7 +35,7 @@ export interface DraftMode {
   title: string;
   text: string;
   images?: Attachment[];
-  revision: { sourceEntryId: string; expectedLeafId: string | null };
+  revision: ConversationRevision;
 }
 
 export interface ComposerDraft {
@@ -44,6 +45,7 @@ export interface ComposerDraft {
   readonly thinkingLevel?: ThinkingLevel | null;
   readonly editTitle?: string;
   readonly loading: boolean;
+  readonly awaitingAcceptance: boolean;
 }
 
 export interface ComposerModel {

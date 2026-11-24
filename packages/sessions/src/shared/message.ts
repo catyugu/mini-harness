@@ -15,6 +15,7 @@ export interface ViewMessage {
   /** Stable Session Log entry identity (absent for stream previews). */
   id?: string;
   submissionId?: string;
+  inboxId?: string;
   parentId?: string | null;
   role: 'user' | 'assistant' | 'toolResult';
   content: MessageContent;

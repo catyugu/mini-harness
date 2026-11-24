@@ -93,14 +93,11 @@ export class Runs implements RunPort {
       log = this.registry.log(id);
       log.append({ type: 'run', run: info });
     } catch (error) { this.work.delete(id); throw error; }
-    let confirm: (accepted: boolean) => void = () => {};
-    const acceptance = new Promise<boolean>((resolve) => { confirm = resolve; });
     const publish = (event: StreamEvent) => {
       if (event.type === 'user') info.inputEntryId = event.id;
       const item = events.publish(event);
       try { emit?.(item); } catch { /* An observer cannot terminate the run. */ }
       if (event.type === 'user') {
-        if (event.submissionId === info.id && !event.inboxId) confirm(true);
         this.observe({ type: 'input-accepted', sessionId: id, parentId: record.parentId,
           source: event.source, runSource: source ?? 'user', model: event.model });
       }
@@ -155,7 +152,6 @@ export class Runs implements RunPort {
       if (fault) publish({ type: 'error', error: fault });
       throw error;
     }).finally(() => {
-      confirm(false);
       this.work.delete(id);
       events.close();
       this.changed(id);
@@ -164,7 +160,7 @@ export class Runs implements RunPort {
     activity.done = done;
     this.changed(id);
     void done.catch(() => {});
-    return { info, accepted: acceptance.then((accepted) => ({ ...info, accepted })), done, cancel: () => {
+    return { info, done, cancel: () => {
       if (this.work.get(id) !== activity || cancellation.aborted) return false;
       controller.abort(new Error('Agent run cancelled'));
       return true;
@@ -182,7 +178,7 @@ export class Runs implements RunPort {
   }
 
   startRun(id: string, prompt: string, { model, attachments, thinkingLevel }: Pick<RunOptions, 'model' | 'attachments' | 'thinkingLevel'> = {}) {
-    return this.launch(id, prompt, undefined, { model, attachments, thinkingLevel }).accepted;
+    return { ...this.launch(id, prompt, undefined, { model, attachments, thinkingLevel }).info };
   }
 
   /** A run reservation protects branch navigation from concurrent submissions. */
@@ -203,10 +199,10 @@ export class Runs implements RunPort {
       const missing = target.textFiles.filter((name) => !attached.some((file) => file?.name === name && typeof file.mimeType === 'string' && !imageMimeType.test(file.mimeType)));
       if (missing.length) throw new DomainError('invalid_input', 'Reattach the original text files: ' + missing.join(', '));
       const attachments = [...target.images.filter((_, index) => !removed.includes(index)), ...attached];
-      return this.launch(id, input.message, undefined, {
+      return { ...this.launch(id, input.message, undefined, {
         attachments, model: input.model, thinkingLevel: input.thinkingLevel,
         revision: { parentId: target.parentId, expectedLeafId: input.expectedLeafId }
-      }, reservation).accepted;
+      }, reservation).info };
     } catch (error) { this.work.delete(id); throw error; }
   }
 

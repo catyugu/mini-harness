@@ -1,7 +1,7 @@
 import type { Context } from 'cordis';
 import type { FrontendApi } from '@mini-harness/ui-runtime/frontend-api';
 import type { Conversation, ConversationView } from '../../shared/api.js';
-import type { ConversationController, ConversationState, ConversationSubmission } from '../conversation-api.js';
+import type { ConversationController, ConversationState, ConversationSubmission, RetryInput } from '../conversation-api.js';
 import type { RunEvent } from '@mini-harness/runs/stream';
 import type { RunInfo } from '@mini-harness/sessions/run-state';
 import type { ViewMessage } from '@mini-harness/sessions/message';
@@ -67,8 +67,8 @@ export function createConversationController(ctx: Context, api: FrontendApi): Co
       switch (event.type) {
         case 'user': {
           if (state.history.messages.some(({ id }) => id === event.id)) break;
-          const { id, parentId, submissionId, timestamp, content, attachments, model, thinkingLevel } = event;
-          append({ id, parentId, submissionId, timestamp, content, attachments, role: 'user' },
+          const { id, parentId, submissionId, inboxId, timestamp, content, attachments, model, thinkingLevel } = event;
+          append({ id, parentId, submissionId, inboxId, timestamp, content, attachments, role: 'user' },
             { session: state.session && { ...state.session, model, thinkingLevel } });
           break;
         }
@@ -112,8 +112,8 @@ export function createConversationController(ctx: Context, api: FrontendApi): Co
   async function activate(id: string, revealWorkspace = true) {
     const signal = begin();
     const selected = sessions.get().find((entry) => entry.id === id);
-    if (id !== active()) select(selected, revealWorkspace);
     interact({ operation: 'open', status: 'Loading conversation…', error: false, cancelling: false });
+    if (id !== active()) select(selected, revealWorkspace);
     try {
       const item = await readConversation(id, signal);
       if (signal.aborted) return false;
@@ -139,9 +139,12 @@ export function createConversationController(ctx: Context, api: FrontendApi): Co
         if (!signal.aborted) select(item);
       }
       const { permission: _permission, revision, ...message } = input;
-      const run = await api.request<RunInfo & { accepted: boolean }>(path(id, revision ? '/revise' : '/runs'),
+      const run = await api.request<RunInfo>(path(id, revision ? '/revise' : '/runs'),
         payload('POST', revision ? { ...message, ...revision } : message));
-      if (!signal.aborted) void activate(id);
+      if (!signal.aborted) {
+        update({ run });
+        void activate(id);
+      }
       return run;
     } finally { if (!signal.aborted) interact({ operation: undefined }); }
   }
@@ -161,8 +164,11 @@ export function createConversationController(ctx: Context, api: FrontendApi): Co
       const id = active(), signal = visit.signal;
       if (!id || (!reconnect && changedId && id !== changedId)) return;
       try {
-        const records = await api.request<ConversationView['records']>(path(id, '/records'), { signal });
-        if (!signal.aborted) update({ history: { ...state.history, records } });
+        const history = state.history;
+        const branch = await api.request<Pick<ConversationView, 'records' | 'leafId'>>(path(id, '/records'), { signal });
+        if (!signal.aborted && (isRunning(state.run) || state.history === history)) {
+          update({ history: { ...state.history, ...branch } });
+        }
       } catch (error) { if (!signal.aborted) throw error; }
     }
   }));
@@ -188,6 +194,11 @@ export function createConversationController(ctx: Context, api: FrontendApi): Co
       signal.addEventListener('abort', () => { subscriptions.delete(entry); }, { once: true });
     },
     activate, report, submit, queue,
+    retryInput() {
+      const { session, run } = state;
+      if (!session || run?.state !== 'failed') throw new Error('No failed run to retry.');
+      return api.request<RetryInput | null>(path(session.id, '/runs/' + run.id + '/input'));
+    },
     clear() { begin(); select(); update({ interaction: { status: '' } }); },
     async cancel() {
       const id = active(), signal = visit.signal;

@@ -32,9 +32,17 @@ export class MessageExtensions {
 
   recordRenderer(plugin: string) { return this.records.get(plugin); }
 
+  private renderWithLifetime(parent: AbortSignal, render: (signal: AbortSignal) => HTMLElement | undefined) {
+    const lifetime = new AbortController();
+    try {
+      const node = render(AbortSignal.any([parent, lifetime.signal]));
+      if (node) return node;
+    } catch (error) { this.report(error); }
+    lifetime.abort();
+  }
+
   renderRecord(render: RecordRenderer | undefined, record: SessionDisplayRecord, context: { sessionId: string; signal: AbortSignal }) {
-    try { return render?.(structuredClone(record), context); }
-    catch (error) { this.report(error); }
+    if (render) return this.renderWithLifetime(context.signal, (signal) => render(structuredClone(record), { ...context, signal }));
   }
 
   actionsForMessage() { return [...this.actions.values()].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)); }
@@ -60,7 +68,7 @@ export class MessageExtensions {
   }
 
   render(tool: ToolView, signal: AbortSignal, action = false) {
-    try { return (action ? this.toolActions : this.renderers).get(tool.name)?.(tool, signal); }
-    catch (error) { this.report(error); }
+    const render = (action ? this.toolActions : this.renderers).get(tool.name);
+    if (render) return this.renderWithLifetime(signal, (lifetime) => render(tool, lifetime));
   }
 }
