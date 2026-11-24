@@ -84,11 +84,7 @@ export class PluginHost implements ScopePort {
   reserved(id: string) { return this.catalog.reserved(id); }
 
   private scopeAddress(key: string) {
-    const address = this.resolveAddress(key);
-    // Workspace addresses are roots and can be planned before application providers mount.
-    if (!this.started && !address.length && key.startsWith('workspace:'))
-      return [{ key, scope: { kind: 'workspace' as const, workspaceId: key.slice('workspace:'.length) } }];
-    return address;
+    return this.resolveAddress(key);
   }
 
   address(id: string) {
@@ -283,7 +279,11 @@ export class PluginHost implements ScopePort {
 
   browserAsset(url: string) { return this.browserState.assets.get(url); }
 
-  start(settings: PluginSettings) { return this.apply(settings, () => {}, true); }
+  async start(settings: PluginSettings) {
+    // The application graph publishes the scope directory; only then plan scoped mounts.
+    await this.apply({ ...settings, scopes: {} }, () => {}, true);
+    if (Object.keys(settings.scopes).length) await this.apply(settings, () => {}, true);
+  }
 
   async configure(settings: PluginSettings, commit = () => {}, released?: ReadonlySet<string>) {
     while (this.applying) await this.applying.catch(() => {});

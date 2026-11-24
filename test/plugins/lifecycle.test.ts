@@ -319,6 +319,8 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
     ({ key: 'session:' + sessionId, scope: { kind: 'session', sessionId, workspaceId } });
   const parentAddress = [workspaceAddress(workspaceId), sessionAddress('parent', workspaceId)];
   const addresses = new Map<string, ScopeIdentity[]>([
+    ['workspace:' + workspaceId, [workspaceAddress(workspaceId)]],
+    ['workspace:' + otherWorkspace, [workspaceAddress(otherWorkspace)]],
     ['session:parent', parentAddress],
     ['session:child', [...parentAddress, sessionAddress('child', workspaceId)]],
     ['session:sibling', [workspaceAddress(workspaceId), sessionAddress('sibling', workspaceId)]],
@@ -410,7 +412,7 @@ test('configuration validation resolves the staged scope provider and rejects in
         if (config.expected !== service('greeting')) throw new Error('Wrong scoped greeting during ' + operation);
       } }
   ];
-  const host = new PluginHost(new Context(), directory, builtins, [], () => settings, () => []);
+  const host = new PluginHost(new Context(), directory, builtins, [], () => settings, (target) => target === key ? [{ key, scope: { kind: 'workspace', workspaceId } }] : []);
   t.after(async () => { await host.close(); rmSync(directory, { recursive: true, force: true }); });
   await host.start(settings);
   const configure = (expected: string) => {

@@ -269,8 +269,7 @@ export function conversationView(api: FrontendApi, state: ConversationSelection,
     updateModelControls();
     options.setTitle(item?.title ?? 'New conversation');
     state.selectConversation(item, revealWorkspace);
-    messageView.records(view?.records ?? []);
-    messageView.history(history, item?.run?.state === 'failed' ? item.run.error : undefined, switched);
+    messageView.history(history, item?.run?.state === 'failed' ? item.run.error : undefined, switched, view?.records ?? []);
     showWelcome(!messages.childElementCount && !isRunning(item?.run));
   }
 
@@ -503,7 +502,10 @@ export function conversationView(api: FrontendApi, state: ConversationSelection,
     const revision = ++recordsRevision;
     try {
       const records = await api.request<BusinessRecord[]>('/sessions/' + id + '/records', { signal });
-      if (!signal.aborted && revision === recordsRevision) messageView.records(records);
+      if (!signal.aborted && revision === recordsRevision) {
+        messageView.records(records);
+        showWelcome(!messages.childElementCount && !sending);
+      }
     } catch (error) { if (!signal.aborted && revision === recordsRevision) throw error; }
   };
   api.onDispose(options.projections.register('records', { sync: refreshRecords }));

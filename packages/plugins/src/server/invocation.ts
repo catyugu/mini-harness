@@ -1,3 +1,5 @@
+import { DomainError } from '@mini-harness/platform/errors';
+
 export function pluginInvocation(lifetime: AbortSignal, instanceId: string) {
   const active = new Set<Promise<unknown>>();
 
@@ -16,7 +18,9 @@ export function pluginInvocation(lifetime: AbortSignal, instanceId: string) {
       } catch (error) {
         request?.throwIfAborted();
         const message = error instanceof Error ? error.message : String(error);
-        throw new Error('Plugin ' + instanceId + ' failed during ' + stage + ': ' + message, { cause: error });
+        const detail = 'Plugin ' + instanceId + ' failed during ' + stage + ': ' + message;
+        if (error instanceof DomainError) throw new DomainError(error.code, detail, { cause: error });
+        throw new Error(detail, { cause: error });
       } finally { active.delete(pending); }
     },
     async drain() { await Promise.allSettled(active); }

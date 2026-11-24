@@ -573,9 +573,6 @@ importers:
       '@mini-harness/sessions':
         specifier: workspace:*
         version: link:../sessions
-      '@mini-harness/transport':
-        specifier: workspace:*
-        version: link:../transport
       '@mini-harness/ui-runtime':
         specifier: workspace:*
         version: link:../ui-runtime

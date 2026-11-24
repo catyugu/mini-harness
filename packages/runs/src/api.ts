@@ -15,7 +15,21 @@ export interface ExecutionOptions {
   acquire?(signal: AbortSignal): Promise<() => void>;
 }
 
+export interface RevisionRequest {
+  sourceEntryId: string;
+  expectedLeafId: string | null;
+  message: string;
+  removedImages?: number[];
+  attachments?: Attachment[];
+  model?: ModelChoice;
+  thinkingLevel?: ThinkingLevel | null;
+}
+
 export interface ExecutionAccess {
+  /** Replaces a user message through the normal revision and run admission boundary.
+   * Set userInitiated only for an explicit user-facing edit/resend action.
+   */
+  revise(id: string, input: RevisionRequest, options?: { userInitiated?: boolean; signal?: AbortSignal }): Promise<RunInfo>;
   send(id: string, prompt: string, options?: ExecutionOptions): Promise<string>;
   info(id: string): RunInfo | undefined;
   model(id: string): ModelChoice;
@@ -52,8 +66,6 @@ export interface RunPort extends ExecutionProvider {
   startRun(id: string, prompt: string, options?: {
     model?: ModelChoice; attachments?: Attachment[]; thinkingLevel?: ThinkingLevel | null;
   }): RunInfo;
-  reviseAndStart(id: string, input: { sourceEntryId: string; expectedLeafId: string | null; message: string; removedImages?: number[];
-    attachments?: Attachment[]; model?: ModelChoice; thinkingLevel?: ThinkingLevel | null }): Promise<RunInfo>;
   info(id: string): RunInfo | undefined;
   watch(id: string, runId: string, after: number, emit: (event: RunEvent) => void, end?: () => void): () => void;
   cancel(id: string): boolean;

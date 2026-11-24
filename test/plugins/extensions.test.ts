@@ -80,10 +80,11 @@ test('input contributions run at delivery in stable order and keep the submitted
     [{ type: 'text', text: 'Recovered' }], [{ type: 'text', text: 'Manual' }]
   ]);
 
-  const edit = await plugins.ctx.harnessRuns.reviseAndStart(session.id, {
-    sourceEntryId: expectPresent(messages.at(-1)?.id, 'edited message'), expectedLeafId: log.projection().leafId, message: 'Edited'
+  const edit = await request('/extensions/session-helper/revise', 'POST', {
+    sessionId: session.id, sourceEntryId: expectPresent(messages.at(-1)?.id, 'edited message'), expectedLeafId: log.projection().leafId, message: 'Edited'
   });
-  await plugins.ctx.harnessRuns.completion(edit.sessionId);
+  assert.equal(edit.status, 200, JSON.stringify(edit.body));
+  await plugins.ctx.harnessRuns.completion(session.id);
   assert.match(readFileSync(trace, 'utf8'), /prepare Edited\nmodel Edited\[a\]\[z\]\n$/);
   const before = mock.requests.length;
   await assert.rejects(plugins.ctx.harnessRuns.send(session.id, 'Blocked'), /fixture input denied/);

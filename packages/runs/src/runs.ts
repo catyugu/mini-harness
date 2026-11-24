@@ -1,7 +1,7 @@
 import type {} from '@mini-harness/agent/api';
 import type { ModelCatalogPort } from '@mini-harness/models/api';
 import type { ContributionSource } from '@mini-harness/kernel/contributions';
-import { bindExecution, type ExecutionAccess } from './api.js';
+import { bindExecution, type ExecutionAccess, type RevisionRequest } from './api.js';
 import type { Context } from 'cordis';
 import type { ThinkingLevel, ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { ScopePort } from '@mini-harness/kernel/scopes';
@@ -93,6 +93,13 @@ export class Runs {
       if (!this.registry.get(id)) throw new DomainError('not_found', 'Conversation not found');
     };
     return {
+      revise: (id, input, options = {}) => source.run('conversation revision', () => {
+        check(id);
+        return this.reviseAndStart(id, input, {
+          signal: source.signal,
+          source: options.userInitiated ? 'user' : 'plugin'
+        });
+      }, options.signal),
       send: (id, prompt, options = {}) => source.run('conversation execution', (signal) => {
         check(id);
         return this.send(id, prompt, undefined, {
@@ -205,11 +212,13 @@ export class Runs {
   }
 
   /** A run reservation protects branch navigation from concurrent submissions. */
-  async reviseAndStart(id: string, input: { sourceEntryId: string; expectedLeafId: string | null; message: string; removedImages?: number[];
-    attachments?: Attachment[]; model?: ModelChoice; thinkingLevel?: ThinkingLevel | null }) {
+  private async reviseAndStart(id: string, input: RevisionRequest, options: Pick<RunOptions, 'signal' | 'source'>) {
+    this.registry.assertAvailable(id);
+    options.signal?.throwIfAborted();
     if (this.active(id)) throw new DomainError('conflict', 'Conversation is already running');
     this.mutations.admit(this.scopes.address(id));
-    await this.scopes.prepare(id);
+    await this.scopes.prepare(id, options.signal);
+    options.signal?.throwIfAborted();
     const target = await this.agent(id).revisionTarget(id, input.sourceEntryId, input.expectedLeafId);
     const removed = input.removedImages ?? [];
     if (!Array.isArray(removed) || removed.some((index) => !Number.isInteger(index) || index < 0 || index >= target.images.length))
@@ -220,7 +229,7 @@ export class Runs {
     if (missing.length) throw new DomainError('invalid_input', 'Reattach the original text files: ' + missing.join(', '));
     const attachments = [...target.images.filter((_, index) => !removed.includes(index)), ...attached];
     return this.launch(id, input.message, undefined, {
-      attachments, model: input.model, thinkingLevel: input.thinkingLevel,
+      ...options, attachments, model: input.model, thinkingLevel: input.thinkingLevel,
       revision: { sourceEntryId: input.sourceEntryId, expectedLeafId: input.expectedLeafId }
     }).info;
   }

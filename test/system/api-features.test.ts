@@ -29,7 +29,7 @@ test('GUI APIs configure providers, persist keys privately, discover Skills and 
   const credentials = await request('/credentials', 'POST', { provider: 'gui-test', key: 'gui-private-key' });
   assert.equal(credentials.status, 200);
   assert.doesNotMatch(JSON.stringify(credentials.body), /gui-private-key/);
-  assert.equal((await request('/settings/plugins/core%3Amodels', 'PATCH', { model: { provider: 'gui-test', id: 'gui-model' } })).status, 200);
+  assert.equal((await request('/settings', 'PATCH', { pluginConfig: { 'core:models': { model: { provider: 'gui-test', id: 'gui-model' } } } })).status, 200);
   assert.equal((await request('/settings/plugins/core%3Atheme', 'PATCH', { appearance: 'lavender' })).status, 400);
   assert.equal((await request('/settings/plugins/core%3Atheme', 'PATCH', { model: { provider: '', id: '' } })).status, 400);
   assert.equal((await request('/settings/plugins/files', 'PATCH', {})).status, 404);

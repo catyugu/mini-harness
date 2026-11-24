@@ -353,7 +353,8 @@ function preserveScroll(update: () => void, reset = false) {
   else if (visible && visible.isConnected) messages.scrollTop += visible.getBoundingClientRect().top - offset;
 }
 
-function history(entries: ViewMessage[], error?: string, reset = false) {
+function history(entries: ViewMessage[], error?: string, reset = false, nextRecords = records) {
+  records = nextRecords;
   preserveScroll(() => {
     if (reset) { previewDialog.close(); releaseRecords(); messages.replaceChildren(); saved.clear(); liveTools.clear(); }
     const nodes = entries.flatMap((message, index) => {
