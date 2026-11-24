@@ -38,3 +38,4 @@ export { sessionDisplayExtensions } from '@mini-harness/conversation/display-ext
 export type { RecordProjection, SessionRecords, SessionAccess } from '@mini-harness/sessions/records';
 export { extension } from '@mini-harness/kernel/contributions';
 export type { Extension } from '@mini-harness/kernel/contributions';
+export type { WorkspaceAccess } from '@mini-harness/workspaces/api';

@@ -546,6 +546,9 @@ importers:
       '@mini-harness/ui-slots':
         specifier: workspace:*
         version: link:../ui-slots
+      '@mini-harness/workspaces':
+        specifier: workspace:*
+        version: link:../workspaces
 
   packages/session-helper:
     dependencies:
@@ -642,9 +645,6 @@ importers:
       '@mini-harness/conversation':
         specifier: workspace:*
         version: link:../conversation
-      '@mini-harness/kernel':
-        specifier: workspace:*
-        version: link:../kernel
       '@mini-harness/platform':
         specifier: workspace:*
         version: link:../platform
@@ -675,9 +675,6 @@ importers:
       '@mini-harness/conversation':
         specifier: workspace:*
         version: link:../conversation
-      '@mini-harness/kernel':
-        specifier: workspace:*
-        version: link:../kernel
       '@mini-harness/platform':
         specifier: workspace:*
         version: link:../platform
@@ -711,9 +708,6 @@ importers:
       '@mini-harness/conversation':
         specifier: workspace:*
         version: link:../conversation
-      '@mini-harness/kernel':
-        specifier: workspace:*
-        version: link:../kernel
       '@mini-harness/llm':
         specifier: workspace:*
         version: link:../llm

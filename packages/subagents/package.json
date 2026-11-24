@@ -8,7 +8,6 @@
   },
   "dependencies": {
     "@mini-harness/conversation": "workspace:*",
-    "@mini-harness/kernel": "workspace:*",
     "@mini-harness/llm": "workspace:*",
     "@mini-harness/models": "workspace:*",
     "@mini-harness/platform": "workspace:*",
