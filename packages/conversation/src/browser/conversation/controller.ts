@@ -22,8 +22,11 @@ export function createConversationController(ctx: Context, api: FrontendApi): Co
   function update(patch: Partial<ConversationState>) {
     const previous = state;
     state = { ...previous, ...patch };
-    for (const { parts, listener } of subscriptions)
-      if (parts.some((part) => state[part] !== previous[part])) listener();
+    for (const { parts, listener } of subscriptions) {
+      if (!parts.some((part) => state[part] !== previous[part])) continue;
+      try { listener(); }
+      catch (error) { console.error('Conversation subscriber failed', error); }
+    }
   }
   const interact = (patch: Partial<ConversationState['interaction']>) => update({ interaction: { ...state.interaction, ...patch } });
   const status = (text: string, error = false) => {
@@ -136,14 +139,11 @@ export function createConversationController(ctx: Context, api: FrontendApi): Co
         if (!signal.aborted) select(item);
       }
       const { permission: _permission, revision, ...message } = input;
-      return await api.request<RunInfo & { accepted: boolean }>(path(id, revision ? '/revise' : '/runs'),
+      const run = await api.request<RunInfo & { accepted: boolean }>(path(id, revision ? '/revise' : '/runs'),
         payload('POST', revision ? { ...message, ...revision } : message));
-    } finally {
-      if (!signal.aborted) {
-        interact({ operation: undefined });
-        if (id) void activate(id);
-      }
-    }
+      if (!signal.aborted) void activate(id);
+      return run;
+    } finally { if (!signal.aborted) interact({ operation: undefined }); }
   }
 
   async function queue(input: Omit<ConversationSubmission, 'revision' | 'permission'>, mode = api.configuration.get<'steer' | 'followUp'>('queueMode')) {

@@ -87,6 +87,9 @@ test('a long response updates only its view and restores from current state when
   writeJson(join(folder, 'plugin.json'), { browserInject: ['miniConversation', 'miniSlots'] });
   writeFileSync(join(folder, 'web.js'), `import { slotExtensions } from '/packages/ui-runtime/plugin-sdk.js';
     export default ({ miniConversation }, api) => {
+      miniConversation.subscribe(['history'], () => {
+        if (miniConversation.get().history.messages.length) throw new Error('broken history subscriber');
+      }, api.signal);
       const remove = api.contribute(slotExtensions.keyed, 'conversation.history', 'history', (signal) => {
         const node = document.createElement('div');
         node.id = 'replacement-stream';
@@ -103,6 +106,8 @@ test('a long response updates only its view and restores from current state when
       window.addEventListener('restore-history', remove, { once: true, signal: api.signal });
     };`);
   writeJson(paths.settings, { ...readJson(paths.settings, {}), plugins: { 'stream-observer': true } });
+  const reported: string[] = [];
+  page.on('console', (message) => { if (message.type() === 'error' && message.text().includes('broken history subscriber')) reported.push(message.text()); });
   const service = await startIsolatedHost(paths);
   try {
     await page.goto(service.url + '/#token=' + service.token);
@@ -110,6 +115,7 @@ test('a long response updates only its view and restores from current state when
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     const streamed = page.locator('#replacement-stream');
     await expect(streamed).toContainText('Beginning');
+    expect(reported.length).toBeGreaterThan(0);
     await page.evaluate(() => {
       document.body.dataset.unrelatedUpdates = '0';
       const observer = new MutationObserver((records) => {
