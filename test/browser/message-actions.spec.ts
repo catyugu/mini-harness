@@ -184,6 +184,6 @@ test('retry keeps the attachment when switching to an image-capable model', asyn
   await page.getByRole('button', { name: 'Retry', exact: true }).click();
   await expect(page.locator('.message.assistant')).toHaveText('Mock response');
   expect(JSON.stringify(mock.requests.at(-1))).toContain('image_url');
-  await expect(page.locator('.message.user').getByRole('img', { name: 'icon-192.png' })).toHaveCount(1);
+  await expect(page.locator('.message-row.user .message-attachments').getByRole('img', { name: 'icon-192.png' })).toHaveCount(1);
   await expect(attachment).toHaveCount(0);
 });
