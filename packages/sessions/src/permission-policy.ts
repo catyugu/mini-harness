@@ -10,7 +10,7 @@ export const manifest: PluginDescriptor = {
   inject: ['harnessRegistry', 'harnessScopes', 'harnessSettingsStore'], provides: ['harnessToolPolicy'],
   setup(ctx) {
     ctx.provide('harnessToolPolicy', (id: string) => {
-      const address = ctx.harnessScopes.address(id);
+      const address = ctx.harnessScopes.address(`session:${id}`);
       const settings = ctx.harnessSettingsStore.settings;
       return {
         readOnly: address.some((key) => key.startsWith('session:') &&

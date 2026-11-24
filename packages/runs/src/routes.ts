@@ -12,9 +12,9 @@ export function registerRoutes(ctx: Context) {
     if (!ctx.harnessRegistry.get(id)) throw new HttpError('not_found', 'Conversation not found');
     return id;
   };
-  const agent = (id: string) => ctx.harnessScopes.require(id, 'harnessAgent');
+  const agent = (id: string) => ctx.harnessScopes.require(`session:${id}`, 'harnessAgent');
   const queue = async (id: string, signal: AbortSignal) => {
-    await ctx.harnessScopes.prepare(id, signal);
+    await ctx.harnessScopes.prepare(`session:${id}`, signal);
     return agent(id);
   };
   add('POST', '/api/sessions/:id/queue', async ({ params, body, signal }) => {

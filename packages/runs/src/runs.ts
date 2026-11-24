@@ -49,7 +49,7 @@ export class Runs {
   get size() { return this.work.size; }
   active(id: string) { return this.work.has(id); }
   activeInScope(scopes: ReadonlySet<string>) {
-    return [...this.work.keys()].some((id) => this.scopes.address(id).some((key) => scopes.has(key)));
+    return [...this.work.keys()].some((id) => this.scopes.address(`session:${id}`).some((key) => scopes.has(key)));
   }
   completion(id: string) { return this.work.get(id)?.done; }
 
@@ -65,7 +65,7 @@ export class Runs {
 
   private launch(id: string, prompt: string, emit: ((event: StreamEvent) => void) | undefined, { signal, source, model, attachments, thinkingLevel, revision, acquire }: RunOptions) {
     this.registry.assertAvailable(id);
-    this.mutations.admit(this.scopes.address(id));
+    this.mutations.admit(this.scopes.address(`session:${id}`));
     if (this.active(id)) throw new DomainError('conflict', 'Conversation is already running');
     validateModelOptions(model, thinkingLevel);
     const fallback = this.preference.recent();
@@ -92,7 +92,7 @@ export class Runs {
       this.changed(id);
       publish({ type: 'run', run: running });
       this.observe({ type: 'run-started', sessionId: id, run: running }, cancellation);
-      await this.scopes.prepare(id, cancellation);
+      await this.scopes.prepare(`session:${id}`, cancellation);
       return this.agent(id).prompt(record, prepared.text, publish, {
         fallback,
         signal: cancellation, source, submissionId: info.id, choice: model, images: prepared.images, input: prepared.input, thinkingLevel, revision,
@@ -165,8 +165,8 @@ export class Runs {
   async reviseAndStart(id: string, input: { sourceEntryId: string; expectedLeafId: string | null; message: string; removedImages?: number[];
     attachments?: Attachment[]; model?: ModelChoice; thinkingLevel?: ThinkingLevel | null }) {
     if (this.active(id)) throw new DomainError('conflict', 'Conversation is already running');
-    this.mutations.admit(this.scopes.address(id));
-    await this.scopes.prepare(id);
+    this.mutations.admit(this.scopes.address(`session:${id}`));
+    await this.scopes.prepare(`session:${id}`);
     const target = await this.agent(id).revisionTarget(id, input.sourceEntryId, input.expectedLeafId);
     const removed = input.removedImages ?? [];
     if (!Array.isArray(removed) || removed.some((index) => !Number.isInteger(index) || index < 0 || index >= target.images.length))
@@ -213,16 +213,16 @@ export class Runs {
 
   async compact(id: string) {
     this.registry.assertAvailable(id);
-    this.mutations.admit(this.scopes.address(id));
+    this.mutations.admit(this.scopes.address(`session:${id}`));
     if (this.active(id)) throw new DomainError('conflict', 'Stop the open conversation before compacting it');
     const controller = new AbortController();
-    const done = this.scopes.prepare(id, controller.signal).then(() => this.agent(id).compact(id, controller.signal));
+    const done = this.scopes.prepare(`session:${id}`, controller.signal).then(() => this.agent(id).compact(id, controller.signal));
     this.work.set(id, { done, controller });
     try { await done; }
     finally { this.work.delete(id); }
   }
 
-  private agent(id: string) { return this.scopes.require(id, 'harnessAgent'); }
+  private agent(id: string) { return this.scopes.require(`session:${id}`, 'harnessAgent'); }
 
   async stop() {
     const active = [...this.work.values()];

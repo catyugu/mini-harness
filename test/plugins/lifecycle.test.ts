@@ -59,7 +59,7 @@ test('an installed Cordis plugin can use services, configure a tool, and release
   assert.deepEqual(runtime.plugins.metadata().find(({ id }) => id === 'example')?.icon,
     { path: 'M2 2h20v20H2z', viewBox: '0 0 24 24' });
   await runtime.configuration.update({ plugins: { example: true }, pluginConfig: { example: { prefix: 'Total' } } });
-  await runtime.plugins.prepare(item.id);
+  await runtime.plugins.prepare(`session:${item.id}`);
   const activeNames = () => runtime.plugins.ctx.harnessTools.forSession(item.id).map(({ name }) => name);
   assert.ok(activeNames().includes('example_count'));
   const tool = expectPresent(runtime.plugins.ctx.harnessTools.forSession(item.id).find(({ name }) => name === 'example_count'), 'example count tool');
@@ -67,7 +67,7 @@ test('an installed Cordis plugin can use services, configure a tool, and release
   assert.match(JSON.stringify(await tool.execute('test', {}, undefined, undefined, undefined)), /Total: 1/);
   await assert.rejects(runtime.configuration.update({ pluginConfig: { example: { prefix: 12 } } }), /Invalid configuration/);
   assert.equal(runtime.settings.pluginConfig.example.prefix, 'Total');
-  await runtime.plugins.prepare(item.id);
+  await runtime.plugins.prepare(`session:${item.id}`);
   assert.match(JSON.stringify(await tool.execute('after-invalid-config', {}, undefined, undefined, undefined)), /Total: 1/);
   assert.equal(activeNames().filter((name) => name === 'example_count').length, 1);
   await runtime.configuration.update({ plugins: { shell: true } });
@@ -95,7 +95,7 @@ export default (ctx, api) => {
   };`);
   await runtime.start();
   const item = runtime.plugins.ctx.harnessRegistry.create();
-  await runtime.plugins.prepare(item.id);
+  await runtime.plugins.prepare(`session:${item.id}`);
   const activeNames = () => runtime.plugins.ctx.harnessTools.forSession(item.id).map(({ name }) => name);
   assert.ok(activeNames().includes('read'));
   await runtime.configuration.update({ plugins: { files: false } });
@@ -340,7 +340,7 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
   const ctx = new Context();
   ctx.provide('authority', {});
   const host = new PluginHost(ctx, directory, builtins, ['authority'], () => settings);
-  host.register('workspace', (id) => ({ scope: { kind: 'workspace', workspaceId: id } }));
+  host.register('workspace', (id) => ({ scope: { kind: 'workspace', workspaceId: id } }), true);
   host.register('session', (id) => {
     const record = records.get(id);
     return record && { scope: { kind: 'session', sessionId: id, workspaceId: record.workspaceId },
@@ -349,8 +349,8 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
   t.after(async () => { await host.close(); rmSync(directory, { recursive: true, force: true }); });
   await host.start(settings);
   assert.equal(host.metadata().find(({ id }) => id === 'workspace')?.state, 'failed');
-  assert.throws(() => host.require('sibling', 'greeting'), /Invalid configuration/);
-  assert.equal(host.require('independent', 'greeting'), 'global');
+  assert.throws(() => host.require('session:sibling', 'greeting'), /Invalid configuration/);
+  assert.equal(host.require('session:independent', 'greeting'), 'global');
   const configure = (scopes: typeof settings.scopes) => {
     const next = { ...settings, scopes };
     return host.configure(next, () => { settings = next; });
@@ -360,37 +360,37 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
   const broken = { ...parent, pluginConfig: { layer: { fail: true } } };
   await configure({ [workspaceKey]: workspace, 'session:parent': parent, 'session:child': child, 'session:sibling': broken });
   assert.equal(host.metadata().find(({ id }) => id === 'layer')?.state, 'inactive');
-  await host.prepare('child');
+  await host.prepare('session:child');
   assert.equal(host.metadata().find(({ id }) => id === 'layer')?.state, 'partial', 'unprepared peer scopes remain visible');
-  assert.equal(host.require('parent', 'greeting'), 'parent');
-  assert.equal(host.require('child', 'greeting'), 'child');
-  await host.prepare('sibling');
-  assert.throws(() => host.require('sibling', 'greeting'), /Scoped setup failed/);
-  assert.equal(host.require('independent', 'greeting'), 'global');
+  assert.equal(host.require('session:parent', 'greeting'), 'parent');
+  assert.equal(host.require('session:child', 'greeting'), 'child');
+  await host.prepare('session:sibling');
+  assert.throws(() => host.require('session:sibling', 'greeting'), /Scoped setup failed/);
+  assert.equal(host.require('session:independent', 'greeting'), 'global');
   assert.equal(host.metadata().find(({ id }) => id === 'layer')?.state, 'partial');
   await configure({ ...settings.scopes, 'session:sibling': { ...parent, pluginConfig: { layer: { value: 'fixed' } } } });
-  assert.equal(host.require('sibling', 'greeting'), 'fixed');
+  assert.equal(host.require('session:sibling', 'greeting'), 'fixed');
   assert.equal(host.metadata().find(({ id }) => id === 'layer')?.state, 'ready');
-  assert.equal(host.require('child', 'extra'), 'retained');
+  assert.equal(host.require('session:child', 'extra'), 'retained');
   await assert.rejects(configure({ ...settings.scopes, 'session:parent': {
     ...parent, pluginConfig: { layer: { value: 'broken', fail: true } }
   } }), /Scoped setup failed/);
-  assert.equal(host.require('child', 'greeting'), 'child');
-  assert.equal(host.require('parent', 'greeting'), 'parent');
+  assert.equal(host.require('session:child', 'greeting'), 'child');
+  assert.equal(host.require('session:parent', 'greeting'), 'parent');
   assert.ok(released.includes('broken'));
 
   // Keep the scope alive for policy but remove its service; a stale isolate must not mask the parent.
   await configure({ 'session:parent': parent, 'session:child': { disabledTools: ['shell'] } });
-  assert.equal(host.require('child', 'greeting'), 'parent');
+  assert.equal(host.require('session:child', 'greeting'), 'parent');
 
   // Adding a configured ancestor of an already mounted child must mount that ancestor immediately.
   await configure({ [workspaceKey]: workspace,
     'session:child': { disabledTools: ['shell'] } });
-  assert.equal(host.require('child', 'greeting'), 'workspace');
-  assert.equal(host.require('sibling', 'greeting'), 'workspace');
+  assert.equal(host.require('session:child', 'greeting'), 'workspace');
+  assert.equal(host.require('session:sibling', 'greeting'), 'workspace');
   assert.equal(ctx.get('greeting'), 'global');
   await configure({});
-  assert.equal(host.require('child', 'greeting'), 'global');
+  assert.equal(host.require('session:child', 'greeting'), 'global');
 });
 
 test('configuration validation resolves the staged scope provider and rejects invalid writes atomically', async (t) => {
@@ -410,7 +410,7 @@ test('configuration validation resolves the staged scope provider and rejects in
       } }
   ];
   const host = new PluginHost(new Context(), directory, builtins, [], () => settings);
-  host.register('workspace', (id) => ({ scope: { kind: 'workspace', workspaceId: id } }));
+  host.register('workspace', (id) => ({ scope: { kind: 'workspace', workspaceId: id } }), true);
   t.after(async () => { await host.close(); rmSync(directory, { recursive: true, force: true }); });
   await host.start(settings);
   const configure = (expected: string) => {
@@ -455,7 +455,7 @@ test('setup and live configuration cannot await their own graph transaction', as
   const committed = settings;
   await assert.rejects(configure(true), /during plugin setup, configuration or teardown/);
   assert.strictEqual(settings, committed);
-  await host.prepare('session');
+  await host.prepare('session:session');
 });
 
 test('required browser services must survive server mounting, including replacement providers', async (t) => {

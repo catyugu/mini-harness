@@ -31,8 +31,8 @@ A selected provider that fails to mount remains unavailable in its subtree until
 repaired. A second instance of the same provider ID needs an explicit choice to
 shadow its ancestor.
 
-Consumers call `harnessScopes.prepare(sessionId, signal)` before reading
-`harnessScopes.require(sessionId, serviceName)` or `harnessScopes.optional(sessionId, serviceName)`. This resolves the nearest live
+Consumers call `harnessScopes.prepare(scopeKey, signal)` before reading
+`harnessScopes.require(scopeKey, serviceName)` or `harnessScopes.optional(scopeKey, serviceName)`. Use a full address such as `session:<id>` or `workspace:<id>`, not a bare ID. This resolves the nearest live
 Cordis service, so the native agent executes through the selected LLM, tool and
 environment services. Plugins declaring `inject` receive services from their own
 scope's context.

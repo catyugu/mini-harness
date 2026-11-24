@@ -100,7 +100,7 @@ test('scoped plugins inherit declared services and tool policies, and release th
   assert.equal((await request(operation('workspace:' + workspace.id), 'POST', {})).status, 404);
   const instance = join(paths.home, 'plugin-data', 'workspace-greeting', createHash('sha256').update(workspaceKey).digest('hex'));
   assert.ok(existsSync(join(instance, 'seen.json')));
-  for (const id of [parent.id, child.id, sibling.id, outside.id]) await app.runtime.plugins.prepare(id);
+  for (const id of [parent.id, child.id, sibling.id, outside.id]) await app.runtime.plugins.prepare(`session:${id}`);
   const tools = app.runtime.plugins.ctx.harnessTools;
   const names = (id: string) => tools.forSession(id).map(({ name }) => name);
   assert.ok(names(parent.id).includes('scoped_greeting'));
@@ -150,7 +150,7 @@ test('read-only permissions are bound to the selected tool registration', async 
   assert.equal((await request('/settings', 'PATCH', {
     scopes: { ['session:' + child.id]: { plugins: { replacement: true } } }
   })).status, 200);
-  await plugins.prepare(child.id);
+  await plugins.prepare(`session:${child.id}`);
   assert.equal(list(child.id).some(({ name }) => name === 'read' || name === 'custom'), false);
   assert.ok(list(parent.id).some(({ name }) => name === 'read'));
   await assert.rejects(original.execute('old', { path: 'README.md' }), /Tool denied/);
@@ -231,7 +231,7 @@ test('native runs use the nearest scoped LLM provider while siblings retain the 
   assert.equal(await app.runtime.plugins.ctx.harnessRuns.send(child.id, 'Child task'), 'Child adapter');
   assert.equal(await app.runtime.plugins.ctx.harnessRuns.send(sibling.id, 'Sibling task'), 'Mock response');
   assert.equal(mock.requests.length, 1);
-  assert.strictEqual(app.runtime.plugins.require(child.id, 'harnessModels'), app.runtime.plugins.ctx.harnessModels);
+  assert.strictEqual(app.runtime.plugins.require(`session:${child.id}`, 'harnessModels'), app.runtime.plugins.ctx.harnessModels);
   assert.equal((await request('/settings', 'PATCH', { scopes: {
     ['session:' + parent.id]: scopes['session:' + parent.id], ['session:' + child.id]: { disabledTools: ['sandbox_shell'] }
   } })).status, 200);

@@ -326,7 +326,7 @@ export class SessionRegistry implements SessionStore {
       return { id, workspaceId: record.workspaceId };
     });
     if (all.length) {
-      const locations = all.map((id) => ({ id, keys: this.scopes?.address(id) ?? [] }));
+      const locations = all.map((id) => ({ id, keys: this.scopes?.address(`session:${id}`) ?? [] }));
       this.commit({ ...this.state, sessions: this.state.sessions.filter((entry) => !chosen.has(entry.id)), pendingDelete });
       await this.recoverDeletion();
       for (const { id, keys } of locations) {

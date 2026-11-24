@@ -15,11 +15,11 @@ import { NativeAgent } from './agent.js';
 export function setup(ctx: Context, api: PluginApi) {
   const { harnessRegistry: catalog, harnessScopes: scopes } = ctx;
   const agent = new NativeAgent(catalog, {
-    models: (id) => scopes.require(id, 'harnessModels'),
-    llm: (id) => scopes.require(id, 'harnessLlm'),
-    tools: (id) => scopes.require(id, 'harnessTools'),
-    prompt: (id) => scopes.require(id, 'harnessPrompt'),
-    prepare: (id, signal) => scopes.prepare(id, signal),
+    models: (id) => scopes.require(`session:${id}`, 'harnessModels'),
+    llm: (id) => scopes.require(`session:${id}`, 'harnessLlm'),
+    tools: (id) => scopes.require(`session:${id}`, 'harnessTools'),
+    prompt: (id) => scopes.require(`session:${id}`, 'harnessPrompt'),
+    prepare: (id, signal) => scopes.prepare(`session:${id}`, signal),
     policy: () => api.config as { maxTurns: number; autoCompact: boolean },
     observe: (event, signal) => ctx.emit('harness/observe', event, signal),
     inputHooks(id) {
@@ -46,7 +46,7 @@ export function setup(ctx: Context, api: PluginApi) {
   ctx.provide('harnessAgent', agent);
   ctx.effect(() => () => agent.agents.settle());
   ctx.effect(() => ctx.harnessMutations.guard((keys) => {
-    if (agent.agents.pendingInScope(keys, (id) => scopes.address(id)))
+    if (agent.agents.pendingInScope(keys, (id) => scopes.address(`session:${id}`)))
       throw new DomainError('conflict', 'Stop the affected conversations before changing their providers or plugins');
   }));
   ctx.effect(() => catalog.beforeDelete({

@@ -10,7 +10,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { lstatSync, readdirSync, realpathSync, rmSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
-import type { HostServices, PluginScope, ScopeAddress, ScopePort } from '@mini-harness/kernel/scopes';
+import type { HostServices, PluginScope, ScopeAddress, ScopeKey, ScopePort } from '@mini-harness/kernel/scopes';
 import { planBrowser, publishBrowser } from './browser-assets.js';
 import { addAbortListener } from 'node:events';
 import type { UpgradeHandler } from '@mini-harness/transport/routes';
@@ -33,7 +33,7 @@ export class PluginHost implements ScopePort {
   private readonly requests = new Map<string, (input: unknown, signal: AbortSignal) => Promise<unknown>>();
   private scopes = new Map<string, MountedScope>();
   private started = false;
-  private readonly scopeSources = new Map<string, (id: string) => ScopeAddress | undefined>();
+  private readonly scopeSources = new Map<string, { resolve: (id: string) => ScopeAddress | undefined; eager: boolean }>();
   private applying?: Promise<void>;
   private closing = false;
 
@@ -85,15 +85,15 @@ export class PluginHost implements ScopePort {
   }
   reserved(id: string) { return this.catalog.reserved(id); }
 
-  register(kind: ScopeAddress['scope']['kind'], resolve: (id: string) => ScopeAddress | undefined) {
+  register(kind: ScopeAddress['scope']['kind'], resolve: (id: string) => ScopeAddress | undefined, eager = false) {
     if (this.scopeSources.has(kind)) throw new Error('Scope source already registered: ' + kind);
-    this.scopeSources.set(kind, resolve);
+    this.scopeSources.set(kind, { resolve, eager });
     return () => { this.scopeSources.delete(kind); };
   }
 
   private lookup(key: string) {
     const separator = key.indexOf(':');
-    return this.scopeSources.get(key.slice(0, separator))?.(key.slice(separator + 1));
+    return this.scopeSources.get(key.slice(0, separator))?.resolve(key.slice(separator + 1));
   }
 
   private ancestry(key: string) {
@@ -108,32 +108,28 @@ export class PluginHost implements ScopePort {
     return [...ancestors].reverse();
   }
 
-  address(id: string) { return this.ancestry('session:' + id); }
+  address(key: ScopeKey) { return this.ancestry(key); }
 
-  require<Name extends keyof HostServices & string>(id: string | null | undefined, service: Name): NonNullable<HostServices[Name]> {
-    const value = this.optional(id, service);
+  require<Name extends keyof HostServices & string>(key: ScopeKey | null | undefined, service: Name): NonNullable<HostServices[Name]> {
+    const value = this.optional(key, service);
     if (value == null) {
       const settings = this.settings();
-      for (const key of id ? [...this.address(id)].reverse() : []) {
-        const provider = settings.scopes[key]?.providers?.[service];
-        const failure = provider && this.failures.get(key + '/' + provider);
-        if (failure) throw new DomainError('unavailable', 'Provider ' + provider + ' failed in ' + key + ': ' + failure);
+      for (const ancestor of key ? [...this.address(key)].reverse() : []) {
+        const provider = settings.scopes[ancestor]?.providers?.[service];
+        const failure = provider && this.failures.get(ancestor + '/' + provider);
+        if (failure) throw new DomainError('unavailable', 'Provider ' + provider + ' failed in ' + ancestor + ': ' + failure);
       }
-      throw new Error('Required service is unavailable: ' + service + (id ? ' in session ' + id : ''));
+      throw new Error('Required service is unavailable: ' + service + (key ? ' in ' + key : ''));
     }
     return value;
   }
 
-  optional<Name extends keyof HostServices & string>(id: string | null | undefined, service: Name): HostServices[Name] | undefined {
-    const scope = id && this.address(id).reverse().map((key) => this.scopes.get(key)).find(Boolean);
+  optional<Name extends keyof HostServices & string>(key: ScopeKey | null | undefined, service: Name): HostServices[Name] | undefined {
+    const scope = key && this.address(key).reverse().map((ancestor) => this.scopes.get(ancestor)).find(Boolean);
     return ((scope || undefined)?.ctx ?? this.ctx).get(service) as HostServices[Name] | undefined;
   }
 
-  prepare(id: string, signal?: AbortSignal) {
-    return this.prepareScope('session:' + id, signal);
-  }
-
-  private async prepareScope(key: string, signal?: AbortSignal) {
+  async prepare(key: ScopeKey, signal?: AbortSignal) {
     assertOutsideMountTransaction();
     if (this.closing) throw new Error('Plugin host is closing');
     signal?.throwIfAborted();
@@ -159,8 +155,8 @@ export class PluginHost implements ScopePort {
     const scopes = new Map<string, MountedScope>();
     const mounts: MountPlan[] = [];
     const diagnostics: ReturnType<PluginHost['describe']>[] = [];
-    const active = new Set([...Object.keys(settings.scopes).filter((key) => key.startsWith('workspace:')), ...this.scopes.keys(), ...validating, ...(preparing ? this.ancestry(preparing) : [])]);
-    for (const key of active) if (key.startsWith('session:'))
+    const active = new Set([...Object.keys(settings.scopes).filter((key) => this.scopeSources.get(key.slice(0, key.indexOf(':')))?.eager), ...this.scopes.keys(), ...validating, ...(preparing ? this.ancestry(preparing) : [])]);
+    for (const key of active)
       for (const ancestor of this.ancestry(key)) if (!released.has(ancestor)) active.add(ancestor);
     const graph = resolveScopes(settings, this.catalog.plans.bind(this.catalog), (key) => this.lookup(key),
       descriptors, appPlans, appProviders, active, released, unavailable);
@@ -253,7 +249,7 @@ export class PluginHost implements ScopePort {
         !/^[a-z][a-z0-9-]{0,63}$/.test(operation))
       throw new DomainError('invalid_input', 'Invalid scoped plugin request');
     if (!this.lookup(key)) throw new DomainError('not_found', 'Plugin scope not found');
-    await this.prepareScope(key, signal);
+    await this.prepare(key as ScopeKey, signal);
     const instance = key + '/' + plugin;
     const handler = this.requests.get(instance + '/' + operation);
     if (!this.lookup(key) || !this.mounts.plan(instance) || !handler) {

@@ -265,7 +265,7 @@ test('a decision hook can deny an inherited tool and is removed with its owner',
   const child = app.runtime.plugins.ctx.harnessRegistry.create({ parentId: selected.id });
   const toggle = (scopes: unknown) => request('/settings', 'PATCH', { scopes });
   assert.equal((await toggle({ ['session:' + selected.id]: { plugins: { policy: true } } })).status, 200);
-  await app.runtime.plugins.prepare(child.id);
+  await app.runtime.plugins.prepare(`session:${child.id}`);
   const tools = app.runtime.plugins.ctx.harnessTools;
   const call = (id: string) => expectPresent(tools.forSession(id).find(({ name }) => name === 'ls'), 'ls tool')
     .execute('policy', { path: '.' }, undefined, undefined, undefined);
