@@ -66,14 +66,14 @@ export function readBrowserAssets(id: string, folder: string, declared: unknown,
     styles: files.filter((file) => extname(file) === '.css').map((file) => prefix + file), urls };
 }
 
-export function planBrowser(plans: PluginPlan[], unavailable: (id: string, error: unknown) => boolean): BrowserEntry[] {
+export function planBrowser(plans: PluginPlan[], choices: Record<string, string>, unavailable: (id: string, error: unknown) => boolean): BrowserEntry[] {
   const browser = new Map(plans.filter(({ descriptor }) => descriptor.resources).map((plan) => [plan.id, plan]));
   const runtime = new Map(['miniProjections', 'miniSwitch', 'miniBrowserFailures'].map((name) => [name, 'browser-runtime']));
   const { ordered } = resolveCapabilities([...browser.values()].map(({ id, descriptor }) => ({
     id, provides: descriptor.browserProvides, inject: descriptor.browserInject,
     requires: [...new Set([...(descriptor.browserRequires ?? []),
       ...(descriptor.requires ?? []).filter((dependency) => browser.has(dependency))])]
-  })), runtime, {}, unavailable);
+  })), runtime, choices, unavailable);
   return ordered.map(({ descriptor, requires }) => {
     const plan = browser.get(descriptor.id);
     const resources = plan?.descriptor.resources;

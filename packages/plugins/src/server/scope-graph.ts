@@ -1,12 +1,6 @@
-import type { PluginScope } from '@mini-harness/kernel/scopes';
+import type { PluginScope, ScopeAddress } from '@mini-harness/kernel/scopes';
 import type { PluginSettings } from '@mini-harness/plugin-api/configuration';
 import type { PluginCatalog, PluginPlan } from './catalog.js';
-
-export interface ScopeSession {
-  id: string;
-  workspaceId: string;
-  parentId: string | null;
-}
 
 interface Parent {
   key?: string;
@@ -23,7 +17,7 @@ interface ScopedNode {
   plugins: { plan: PluginPlan; id: string; needs: string[] }[];
 }
 
-export function resolveScopes(settings: PluginSettings, describe: PluginCatalog['plans'], session: (id: string) => ScopeSession | undefined,
+export function resolveScopes(settings: PluginSettings, describe: PluginCatalog['plans'], lookup: (key: string) => ScopeAddress | undefined,
   descriptors: ReturnType<PluginCatalog['descriptors']>, application: PluginPlan[], providers: ReadonlyMap<string, string>,
   active: ReadonlySet<string>, released: ReadonlySet<string>,
   unavailable: (id: string, error: unknown) => boolean) {
@@ -36,12 +30,9 @@ export function resolveScopes(settings: PluginSettings, describe: PluginCatalog[
     if (cached) return cached;
     if (visiting.has(key)) throw new Error('Cyclic scope ancestry: ' + key);
     visiting.add(key);
-    const [kind, id] = key.split(':');
-    const record = kind === 'session' ? session(id) : undefined;
-    if (kind === 'session' && !record) { visiting.delete(key); return root; }
-    const scope: PluginScope = record ? { kind: 'session', workspaceId: record.workspaceId, sessionId: id } :
-      { kind: 'workspace', workspaceId: id };
-    const parentKey = record && (record.parentId ? 'session:' + record.parentId : 'workspace:' + record.workspaceId);
+    const address = lookup(key);
+    if (!address) { visiting.delete(key); return root; }
+    const { scope, parent: parentKey } = address;
     const parent = parentKey ? visit(parentKey) : root;
     visiting.delete(key);
     const overrides = settings.scopes[key];

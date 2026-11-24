@@ -26,6 +26,8 @@ Uses [Kernel](../kernel/README.md) for plugin lifetimes and scope selection. Age
 
 Scoped `disabledTools` can restrict tools through an entire descendant tree.
 
+The registry receives the mandatory tool policy through `harnessToolPolicy`. Sessions interprets inherited permissions and user grants, and the registry checks the selected registration again before execution.
+
 ## Testing
 
 `tests/registry.test.ts` covers visibility and leases. [Agent tests](../agent/tests/) cover dispatch and scheduling.

@@ -19,8 +19,11 @@ export interface PluginLifetime {
   lifetime: AbortSignal;
   trusted: boolean;
   address(id: string): readonly string[];
+  prepare(id: string, signal: AbortSignal): Promise<void>;
+  scopedService<Name extends keyof ServiceMap & string>(id: string, name: Name): NonNullable<ServiceMap[Name]>;
   dataRoot: string;
   invalidate(): void;
+  registerScopeRequest?(name: string, handler: (input: unknown, signal: AbortSignal) => Promise<unknown>): () => void;
   readConfig?(): Record<string, unknown>;
   subscribeConfig?(listener: () => void): () => void;
   writeConfig?(patch: Record<string, unknown>, check: () => void): Promise<void>;
@@ -35,6 +38,10 @@ export function createPluginApi(ctx: Context, { id, descriptor, config }: { id: 
   let applyingConfig = false;
   let applyConfig: Parameters<PluginApi['onConfigChange']>[0] | undefined;
   const inScope = (sessionId: string) => !scopeKey || address(sessionId).includes(scopeKey);
+  const assertVisible = (id: string) => {
+    lifetime.throwIfAborted();
+    if (!address(id).length || !inScope(id)) throw new Error('Conversation outside plugin scope');
+  };
   const instanceId = scopeKey ? scopeKey + '/' + id : id;
   const { run, drain } = pluginInvocation(lifetime, instanceId);
   const source = bindContributionSource({
@@ -130,6 +137,15 @@ export function createPluginApi(ctx: Context, { id, descriptor, config }: { id: 
       if (value == null) throw new Error('Required service is unavailable to ' + id + ': ' + name);
       return value;
     },
+    scopedService(id, name) {
+      assertVisible(id);
+      if (!descriptor.inject?.includes(name)) throw new Error('Required service is not declared by ' + descriptor.id + ': ' + name);
+      return state.scopedService(id, name);
+    },
+    prepareSession(id, signal) {
+      assertVisible(id);
+      return state.prepare(id, signal ? AbortSignal.any([lifetime, signal]) : lifetime);
+    },
     optionalService<Name extends keyof ServiceMap & string>(name: Name): ServiceMap[Name] | undefined {
       if (!descriptor.optional?.includes(name)) throw new Error('Optional service is not declared by ' + id + ': ' + name);
       return ctx.get(name) as ServiceMap[Name] | undefined;
@@ -140,6 +156,13 @@ export function createPluginApi(ctx: Context, { id, descriptor, config }: { id: 
       const routes = state.routes;
       if (!routes) throw new Error('HTTP routes are unavailable');
       return ctx.effect(() => routes.register(method, '/api/extensions/' + id + path, handler));
+    },
+    registerScopeRequest(name, handler) {
+      const register = state.registerScopeRequest;
+      if (!register || !/^[a-z][a-z0-9-]{0,63}$/.test(name) || typeof handler !== 'function')
+        throw new Error('Invalid scoped plugin request');
+      return ctx.effect(() => register(name, (input, signal) =>
+        run('scoped request ' + name, (request) => handler(input, request), signal)));
     },
     registerUpgrade(path, handler) {
       if (scopeKey || !state.upgrade || !/^\/(?:[a-zA-Z0-9_-]+\/)*[a-zA-Z0-9_-]+$/.test(path))

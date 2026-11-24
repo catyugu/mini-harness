@@ -37,23 +37,24 @@ test('an installed Cordis plugin can use services, configure a tool, and release
   }, title: 'Example plugin', icon: {
     path: 'M2 2h20v20H2z', viewBox: '0 0 24 24'
   } }));
-  writeFileSync(join(folder, 'plugin.js'), `import { toolExtensions } from "${pluginSdkUrl}";
+  writeFileSync(join(folder, 'plugin.js'), `import { sessionExtensions, toolExtensions } from "${pluginSdkUrl}";
 
     import { appendFileSync } from 'node:fs';
     export default (ctx, api) => {
       const { config } = api;
+      const sessions = api.contribute(sessionExtensions.access);
       api.onDispose(() => appendFileSync(${JSON.stringify(log)}, 'dispose\\n'));
       api.contribute(toolExtensions.register, {
         name: 'example_count', label: 'Count', description: 'Count sessions',
         parameters: { type: 'object', properties: {} },
         async execute() {
-          return { content: [{ type: 'text', text: config.prefix + ': ' + ctx.harnessSessions.list().length }] };
+          return { content: [{ type: 'text', text: config.prefix + ': ' + sessions.list().length }] };
         }
       });
     };
   `);
   await runtime.start();
-  const item = runtime.registry.create();
+  const item = runtime.plugins.ctx.harnessRegistry.create();
   assert.equal(runtime.plugins.metadata().find(({ id }) => id === 'example')?.title, 'Example plugin');
   assert.deepEqual(runtime.plugins.metadata().find(({ id }) => id === 'example')?.icon,
     { path: 'M2 2h20v20H2z', viewBox: '0 0 24 24' });
@@ -87,13 +88,13 @@ test('file tools have a plugin lifecycle and required plugins cannot be disabled
   const folder = join(paths.plugins, 'dependent');
   mkdirSync(folder);
   writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ inject: ['harnessTools'], requires: ['files'] }));
-  writeFileSync(join(folder, 'plugin.js'), `import { toolExtensions } from "${pluginSdkUrl}";
+  writeFileSync(join(folder, 'plugin.js'), `import { sessionExtensions, toolExtensions } from "${pluginSdkUrl}";
 export default (ctx, api) => {
     api.contribute(toolExtensions.register, { name: 'dependent_tool', description: 'Fixture', parameters: { type: 'object', properties: {} },
       execute: async () => ({ content: [{ type: 'text', text: 'ok' }] }) });
   };`);
   await runtime.start();
-  const item = runtime.registry.create();
+  const item = runtime.plugins.ctx.harnessRegistry.create();
   await runtime.plugins.ctx.harnessAgent.prepare(item.id);
   const activeNames = () => runtime.plugins.ctx.harnessTools.forSession(item.id).map(({ name }) => name);
   assert.ok(activeNames().includes('read'));
@@ -113,8 +114,9 @@ test('server entry requires a default setup function', async (t) => {
   const runtime = new MiniHarnessRuntime(paths);
   t.after(async () => { await runtime.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
   for (const [id, source] of [
-    ['function-entry', `export default function(ctx) {
-      if (ctx.harnessSessions.list().length !== 0) throw new Error('Unexpected sessions');
+    ['function-entry', `import { sessionExtensions } from "${pluginSdkUrl}";
+    export default function(_ctx, api) {
+      if (api.contribute(sessionExtensions.access).list().length !== 0) throw new Error('Unexpected sessions');
     }`],
     ['named-entry', 'export default { apply() {} }']
   ]) {
@@ -142,7 +144,7 @@ test('plugin JSON Schema applies defaults and rejects invalid changes before set
     properties: { count: { type: 'integer', minimum: 1, maximum: 10, default: 3 },
       options: { type: 'object', default: {}, properties: { enabled: { type: 'boolean', default: true } } } }
   } }));
-  writeFileSync(join(folder, 'plugin.js'), `import { toolExtensions } from "${pluginSdkUrl}";
+  writeFileSync(join(folder, 'plugin.js'), `import { sessionExtensions, toolExtensions } from "${pluginSdkUrl}";
 export default (ctx, api) => {
     const changes = [];
     api.configuration.subscribe('count', (value) => changes.push(value));
@@ -156,7 +158,7 @@ export default (ctx, api) => {
   };`);
   await runtime.start();
   await runtime.configuration.update({ plugins: { schema: true } });
-  const item = runtime.registry.create();
+  const item = runtime.plugins.ctx.harnessRegistry.create();
   const tool = expectPresent(runtime.plugins.ctx.harnessTools.forSession(item.id).find(({ name }) => name === 'schema_value'), 'schema tool');
   assert.match(JSON.stringify(await tool.execute('test', {}, undefined, undefined, undefined)), /3:true/);
   await Promise.all([
@@ -182,7 +184,7 @@ test('dependent plugins restart in order and partial setup or persistence failur
     const folder = join(paths.plugins, id);
     mkdirSync(folder);
     writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ inject: ['harnessTools'], requires: id === 'dependent' ? ['base'] : [] }));
-    writeFileSync(join(folder, 'plugin.js'), `import { toolExtensions } from "${pluginSdkUrl}";
+    writeFileSync(join(folder, 'plugin.js'), `import { sessionExtensions, toolExtensions } from "${pluginSdkUrl}";
 
       import { appendFileSync } from 'node:fs';
       export default (ctx, api) => {
@@ -197,7 +199,7 @@ test('dependent plugins restart in order and partial setup or persistence failur
   await runtime.configuration.update({ plugins: { base: true, dependent: true } });
   await assert.rejects(runtime.configuration.update({ pluginConfig: { base: { fail: true } } }), /Partial setup failed/);
   assert.match(readFileSync(log, 'utf8'), /stop dependent\nstop base\nstart base\nstop base\nstart base\nstart dependent/);
-  const item = runtime.registry.create();
+  const item = runtime.plugins.ctx.harnessRegistry.create();
   assert.equal(runtime.plugins.ctx.harnessTools.forSession(item.id).filter(({ name }) => name === 'base_tool').length, 1);
   const next = mergeSettings(runtime.settings, { pluginConfig: { base: { value: 'replacement' } } });
   await assert.rejects(runtime.plugins.configure(next, () => { throw new Error('Persistence failed'); }), /Persistence failed/);
@@ -252,7 +254,7 @@ test('disabled optional builtins cannot block boot or reload because their confi
   await assert.rejects(restored.configuration.update({ pluginConfig: { subagents: { maxDepth: 101 } } }), /Invalid configuration/);
   await assert.rejects(restored.configuration.update({ pluginConfig: { subagents: { model: { provider: 'unknown', id: 'missing' } } } }), /Unknown child model/);
   await restored.configuration.update({ pluginConfig: { 'core:theme': { appearance: 'dark' } } });
-  const conversation = restored.registry.create();
+  const conversation = restored.plugins.ctx.harnessRegistry.create();
   assert.equal(await restored.plugins.ctx.harnessRuns.send(conversation.id, 'Main agent still works'), 'Mock response');
   await restored.configuration.update({ plugins: { subagents: true }, pluginConfig: { subagents: { maxDepth: 2 } } });
   assert.ok(restored.plugins.ctx.harnessTools.forSession(conversation.id).some(({ name }) => name === 'delegate'));
@@ -332,8 +334,13 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
   } };
   const ctx = new Context();
   ctx.provide('authority', {});
-  const host = new PluginHost(ctx, directory, builtins, ['authority'], () => settings,
-    (id) => records.get(id));
+  const host = new PluginHost(ctx, directory, builtins, ['authority'], () => settings);
+  host.register('workspace', (id) => ({ scope: { kind: 'workspace', workspaceId: id } }));
+  host.register('session', (id) => {
+    const record = records.get(id);
+    return record && { scope: { kind: 'session', sessionId: id, workspaceId: record.workspaceId },
+      parent: record.parentId ? 'session:' + record.parentId : 'workspace:' + record.workspaceId };
+  });
   t.after(async () => { await host.close(); rmSync(directory, { recursive: true, force: true }); });
   await host.start(settings);
   assert.equal(host.metadata().find(({ id }) => id === 'workspace')?.state, 'failed');
@@ -397,7 +404,8 @@ test('configuration validation resolves the staged scope provider and rejects in
         if (config.expected !== service('greeting')) throw new Error('Wrong scoped greeting during ' + operation);
       } }
   ];
-  const host = new PluginHost(new Context(), directory, builtins, [], () => settings, () => undefined);
+  const host = new PluginHost(new Context(), directory, builtins, [], () => settings);
+  host.register('workspace', (id) => ({ scope: { kind: 'workspace', workspaceId: id } }));
   t.after(async () => { await host.close(); rmSync(directory, { recursive: true, force: true }); });
   await host.start(settings);
   const configure = (expected: string) => {

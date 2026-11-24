@@ -7,19 +7,19 @@
     "./api": "./src/api.ts",
     "./extensions": "./src/extensions.ts",
     "./manifest": "./src/manifest.ts",
-    "./registry": "./src/registry.ts"
+    "./registry": "./src/registry.ts",
+    "./policy": "./src/policy.ts"
   },
   "miniHarness": {
     "api": [
       "./api",
-      "./extensions"
+      "./extensions",
+      "./policy"
     ]
   },
   "dependencies": {
     "@mini-harness/kernel": "workspace:*",
     "@mini-harness/llm": "workspace:*",
-    "@mini-harness/plugin-api": "workspace:*",
-    "@mini-harness/sessions": "workspace:*",
-    "@mini-harness/settings": "workspace:*"
+    "@mini-harness/plugin-api": "workspace:*"
   }
 }

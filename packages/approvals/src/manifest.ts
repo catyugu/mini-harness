@@ -1,6 +1,9 @@
 import type {} from '@mini-harness/transport/projection-api';
 import type {} from '@mini-harness/runs/api';
 import type {} from '@mini-harness/transport/routes';
+import type {} from '@mini-harness/sessions/store';
+import { requestApproval } from './server/api.js';
+import { isRunning } from '@mini-harness/sessions/run-state';
 import { DomainError } from '@mini-harness/platform/errors';
 import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
 import { Approvals } from './server/approvals.js';
@@ -8,7 +11,7 @@ import { Approvals } from './server/approvals.js';
 export const manifest: PluginDescriptor = {
   scope: 'application',
   id: 'core:approvals', title: 'Approvals', description: 'Pending user decisions', required: true,
-  inject: ['harnessChanges', 'harnessRoutes', 'harnessRuns'], provides: ['harnessApprovals'],
+  inject: ['harnessChanges', 'harnessRoutes', 'harnessRuns', 'harnessRegistry'], provides: ['harnessApprovals', 'harnessApprovalRequests'],
   browser: '/packages/approvals/src/browser/setup.js', browserInject: ['miniProjections'], browserProvides: ['miniApprovals'],
   setup(ctx) {
     const approvals = new Approvals();
@@ -22,6 +25,18 @@ export const manifest: PluginDescriptor = {
       return () => approvals.events.removeEventListener('change', changed);
     });
     ctx.provide('harnessApprovals', approvals);
+    ctx.provide('harnessApprovalRequests', {
+      [requestApproval](id: string, plugin: string, prompt: import('./server/api.js').ApprovalPrompt, signal: AbortSignal) {
+        ctx.harnessRegistry.assertAvailable(id);
+        if (!ctx.harnessRegistry.get(id)) throw new DomainError('not_found', 'Conversation not found');
+        const run = ctx.harnessRuns.info(id);
+        return approvals.request(id, isRunning(run) ? run?.id : undefined, plugin, prompt,
+          ctx.harnessRuns.signal(id, signal) ?? signal);
+      }
+    });
+    ctx.effect(() => ctx.harnessRegistry.beforeDelete({
+      async quiesce(ids) { for (const id of ids) approvals.cancelSession(id); }
+    }));
     ctx.effect(() => {
       const runs = ctx.harnessRuns;
       const changed = (event: Event) => {

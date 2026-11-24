@@ -14,7 +14,10 @@ export interface ScopeSettings {
 
 export type HostServices = ServiceMap & Pick<Context, Extract<keyof Context, `harness${string}`>>;
 
+export type ScopeAddress = { scope: Exclude<PluginScope, { kind: 'application' }>; parent?: string };
+
 export interface ScopePort {
+  register(kind: ScopeAddress['scope']['kind'], resolve: (id: string) => ScopeAddress | undefined): () => void;
   prepare(sessionId: string, signal?: AbortSignal): Promise<void>;
   /** Read the nearest prepared Cordis service without changing a parent or sibling scope. */
   require<Name extends keyof HostServices & string>(sessionId: string | null | undefined, service: Name): NonNullable<HostServices[Name]>;

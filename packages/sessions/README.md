@@ -12,7 +12,7 @@ Maintains session ancestry and permissions, the append-only log, durable inbox a
 
 ## API
 
-`harnessRegistry` supports internal session operations. `harnessSessions` and `sessionExtensions.records` expose identity and namespaced plugin records through the server SDK.
+`harnessRegistry` groups internal catalog, history and lifecycle operations. The server SDK exposes scoped conversations and history through `sessionExtensions.access`, and branch-owned records through `sessionExtensions.records`.
 
 ## Dependencies
 

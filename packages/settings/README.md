@@ -26,6 +26,8 @@ Uses [Plugin API](../plugin-api/README.md) for selection contracts and [Platform
 
 `settings.json` stores the port, plugin flags and namespaced config, provider selections and scopes. Defaults come from the parser and each plugin manifest.
 
+`readOnlyTools` holds user grants indexed by plugin ID. `browserProviders` selects application-level browser services independently of server providers.
+
 ## Testing
 
 `tests/config.test.ts` covers validation. [Lifecycle tests](../../test/plugins/lifecycle.test.ts) cover rollback and live config.

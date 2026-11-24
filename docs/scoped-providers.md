@@ -41,3 +41,8 @@ The graph is validated before setup. Provider changes restart their dependent
 plugins in dependency order and await cleanup. A failed configuration update restores the previously committed settings and mounts. Deleting a session or workspace removes its overrides through the same settings queue. A failed optional instance is
 shown in the Plugins page, where its scope configuration can be repaired. Application replacements must replace a
 multi-service plugin as a unit; scoped replacements leave the parent mounted.
+
+
+The browser has its own `browserProviders` map. Select a browser service there without changing its server companion. The selected plugin declares the capability in `browserProvides` and must be enabled at application scope.
+
+A user can grant specific registered tools to a trusted local plugin through `readOnlyTools` in `settings.json` or the settings API. For example, `{ "readOnlyTools": { "workspace-greeting": ["greet"] } }` allows its `greet` registration to be considered in read-only conversations when it declares read-only access. Update the map to revoke a grant. Descendant and workspace restrictions still apply before invocation.

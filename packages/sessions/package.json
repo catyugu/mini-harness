@@ -13,7 +13,9 @@
     "./records": "./src/records.ts",
     "./registry": "./src/registry.ts",
     "./run-state": "./src/shared/run-state.ts",
-    "./store": "./src/store.ts"
+    "./store": "./src/store.ts",
+    "./manifests/tool-policy": "./src/permission-policy.ts",
+    "./display-record": "./src/shared/display-record.ts"
   },
   "miniHarness": {
     "api": [
@@ -24,7 +26,8 @@
       "./queue",
       "./records",
       "./run-state",
-      "./store"
+      "./store",
+      "./display-record"
     ]
   },
   "dependencies": {
@@ -34,6 +37,8 @@
     "@mini-harness/platform": "workspace:*",
     "@mini-harness/plugin-api": "workspace:*",
     "@mini-harness/settings": "workspace:*",
+    "@mini-harness/tools": "workspace:*",
+    "@mini-harness/transport": "workspace:*",
     "@mini-harness/workspaces": "workspace:*"
   }
 }

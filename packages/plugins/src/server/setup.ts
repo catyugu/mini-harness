@@ -28,6 +28,8 @@ export function setup(ctx: Context) {
       return { ok: true };
     });
   });
+  add('POST', '/api/plugins/:id/scopes/:scope/:operation', async ({ params, body, signal }) =>
+    ctx.harnessPluginCatalog.requestScope(params.id, params.scope, params.operation, (await body())?.input, signal));
   add('GET', '/api/plugins/diagnostics', () => ctx.harnessPluginCatalog.diagnostics());
   add('GET', '/api/plugins', () => ctx.harnessPluginCatalog.metadata());
   add('POST', '/api/plugins/install', async ({ body }) => {

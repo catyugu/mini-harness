@@ -19,9 +19,9 @@ test('prompt contributions coexist, override within a session tree and are remov
   writePlugin(paths.plugins, 'child-prompt', { scope: 'session' }, `export default (_ctx, api) => {
     api.contribute(promptExtensions.section, { id: 'workspace-status', order: 600, render: () => '[Child status]' });
   };`);
-  const parent = app.runtime.registry.create();
-  const child = app.runtime.registry.create({ parentId: parent.id });
-  const sibling = app.runtime.registry.create();
+  const parent = app.runtime.plugins.ctx.harnessRegistry.create();
+  const child = app.runtime.plugins.ctx.harnessRegistry.create({ parentId: parent.id });
+  const sibling = app.runtime.plugins.ctx.harnessRegistry.create();
   async function prompt(id: string) {
     await app.runtime.plugins.ctx.harnessRuns.send(id, 'Continue');
     const request = expectPresent(mock.requests.at(-1), 'recorded model request');
@@ -64,7 +64,8 @@ test('input contributions run at delivery in stable order and keep the submitted
       api.contribute(agentExtensions.prepareInput, (content) => [...content, { type: 'text', text: '[a]' }]);
     };`);
   assert.equal((await request('/settings', 'PATCH', { plugins: { 'input-z': true, 'input-a': true } })).status, 200);
-  const { registry, plugins } = app.runtime;
+  const { plugins } = app.runtime;
+  const registry = plugins.ctx.harnessRegistry;
   const session = registry.create();
   const log = registry.log(session.id);
   log.append({ type: 'inbox-enqueued', item: { id: 'blocked', mode: 'followUp', text: 'Blocked', images: [] } });
@@ -142,11 +143,11 @@ test('an application plugin replaces only LLM and composes execution hooks witho
   assert.equal(configured.status, 200, JSON.stringify(configured.body));
   assert.equal(app.runtime.plugins.ctx.harnessModels, models);
   assert.equal(app.runtime.plugins.ctx.harnessModelStore, store);
-  const session = app.runtime.registry.create();
+  const session = app.runtime.plugins.ctx.harnessRegistry.create();
   assert.equal(await app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Use the alternate LLM'), 'Alternate response');
-  const log = app.runtime.registry.log(session.id).projection();
+  const log = app.runtime.plugins.ctx.harnessRegistry.log(session.id).projection();
   assert.equal(log.contextMessages.filter(({ role }) => role === 'user').length, 1);
-  const sessionLog = app.runtime.registry.log(session.id);
+  const sessionLog = app.runtime.plugins.ctx.harnessRegistry.log(session.id);
   const visible = await request('/sessions/' + session.id);
   assert.match(JSON.stringify(visible.body.messages), /Display value/);
   assert.doesNotMatch(JSON.stringify(log), /Display value/);
@@ -189,10 +190,10 @@ test('a failed model-visible transform preserves the execution and never sends t
     });
   };`);
   assert.equal((await request('/settings', 'PATCH', { plugins: { redaction: true } })).status, 200);
-  const session = app.runtime.registry.create();
+  const session = app.runtime.plugins.ctx.harnessRegistry.create();
   const events: unknown[] = [];
   await assert.rejects(app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Use the tool', (event) => events.push(event)), /Could not transform/);
-  const log = app.runtime.registry.log(session.id);
+  const log = app.runtime.plugins.ctx.harnessRegistry.log(session.id);
   assert.equal(mock.requests.length, 1);
   assert.equal(log.entries().filter((entry) => entry.type === 'tool-execution').length, 1);
   assert.match(JSON.stringify(log.entries().find((entry) => entry.type === 'tool-execution')), /private value/);
@@ -207,10 +208,10 @@ test('an invalid transformed request fails before the provider is invoked', asyn
       toolName: 'example', timestamp: Date.now(), isError: false, content: [] }] }));
   };`);
   assert.equal((await request('/settings', 'PATCH', { plugins: { 'invalid-request': true } })).status, 200);
-  const session = app.runtime.registry.create();
+  const session = app.runtime.plugins.ctx.harnessRegistry.create();
   await assert.rejects(app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Use this request'), /could not prepare transformed data/);
   assert.equal(mock.requests.length, 0);
-  assert.equal(app.runtime.registry.log(session.id).entries().some((entry) => entry.type === 'model-request'), false);
+  assert.equal(app.runtime.plugins.ctx.harnessRegistry.log(session.id).entries().some((entry) => entry.type === 'model-request'), false);
 });
 
 test('configuration cannot unmount an active request hook and can retry after the run', { timeout: 5000 }, async (t) => {
@@ -237,7 +238,7 @@ test('configuration cannot unmount an active request hook and can retry after th
     api.onDispose(() => { state.cleaned = true; });
   };`);
   assert.equal((await request('/settings', 'PATCH', { plugins: { 'slow-transform': true } })).status, 200);
-  const session = app.runtime.registry.create();
+  const session = app.runtime.plugins.ctx.harnessRegistry.create();
   const run = app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Keep the active hook');
   await started;
   try {
@@ -259,9 +260,9 @@ test('a decision hook can deny an inherited tool and is removed with its owner',
         return tool === 'ls' ? 'deny' : undefined;
       });
     }`);
-  const selected = app.runtime.registry.create();
-  const other = app.runtime.registry.create();
-  const child = app.runtime.registry.create({ parentId: selected.id });
+  const selected = app.runtime.plugins.ctx.harnessRegistry.create();
+  const other = app.runtime.plugins.ctx.harnessRegistry.create();
+  const child = app.runtime.plugins.ctx.harnessRegistry.create({ parentId: selected.id });
   const toggle = (scopes: unknown) => request('/settings', 'PATCH', { scopes });
   assert.equal((await toggle({ ['session:' + selected.id]: { plugins: { policy: true } } })).status, 200);
   await app.runtime.plugins.ctx.harnessAgent.prepare(child.id);

@@ -6,5 +6,5 @@ export const manifest: PluginDescriptor = {
   scope: 'application', browserInject: ['harnessBrowser', 'miniProjections', 'miniComposer', 'miniSlots'],
   setup, defaultEnabled: true,
   id: 'skills', title: 'Skills', description: 'Discover Agent Skills from home and the workspace.',
-  icon: 'skills', browser: '/packages/skills/src/browser/setup.js', inject: ['harnessState', 'harnessScopes', 'harnessRoutes', 'harnessWorkspaces', 'harnessRegistry', 'harnessTools'],
+  icon: 'skills', browser: '/packages/skills/src/browser/setup.js', inject: ['harnessState', 'harnessRoutes', 'harnessWorkspaces', 'harnessSessions', 'harnessTools'],
 };

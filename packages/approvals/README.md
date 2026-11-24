@@ -22,6 +22,8 @@ Uses [Transport](../transport/README.md) to publish changes. Shell consumes appr
 
 `core:approvals` mounts at application scope. Run cancellation and plugin disposal release pending requests and listeners.
 
+Native and installed plugins use `approvalExtensions.request`. Requests carry the plugin identity, session, current run and cancellation signal. Conversation owns the shared approval panel.
+
 ## Testing
 
 [Shell approval tests](../shell/tests/approval-api.test.ts) exercise command approval and cancellation.

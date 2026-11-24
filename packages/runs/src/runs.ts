@@ -12,6 +12,8 @@ import { RunInterrupted } from '@mini-harness/agent/stream';
 import type { StreamEvent, RunEvent } from './stream.js';
 import type { RunInfo } from '@mini-harness/sessions/run-state';
 import { RunEvents } from './events.js';
+import type { RunSelection } from './api.js';
+import { launchExecution, type ExecutionInput } from './execution.js';
 import type { SessionStore } from '@mini-harness/sessions/store';
 
 interface RunOptions {
@@ -20,7 +22,7 @@ interface RunOptions {
   model?: ModelChoice;
   attachments?: Attachment[];
   thinkingLevel?: ThinkingLevel | null;
-  schedule?: (task: () => Promise<string>, signal: AbortSignal) => Promise<string>;
+  acquire?: (signal: AbortSignal) => Promise<() => void>;
   revision?: { sourceEntryId: string; expectedLeafId: string | null };
 }
 
@@ -38,7 +40,8 @@ export class Runs {
     private readonly registry: SessionStore,
     private readonly scopes: ScopePort,
     private readonly mutations: MutationPort,
-    private readonly observe: (event: CapabilityObservation, signal?: AbortSignal) => void
+    private readonly observe: (event: CapabilityObservation, signal?: AbortSignal) => void,
+    private readonly selection: (source: InputSource) => RunSelection | undefined
   ) {}
 
   private changed(id: string) { this.events.dispatchEvent(new CustomEvent('change', { detail: { id } })); }
@@ -60,7 +63,7 @@ export class Runs {
     return owner && signal ? AbortSignal.any([owner, signal]) : owner ?? signal;
   }
 
-  private launch(id: string, prompt: string, emit: ((event: StreamEvent) => void) | undefined, { signal, source, model, attachments, thinkingLevel, revision, schedule }: RunOptions) {
+  private launch(id: string, prompt: string, emit: ((event: StreamEvent) => void) | undefined, { signal, source, model, attachments, thinkingLevel, revision, acquire }: RunOptions) {
     this.registry.assertAvailable(id);
     this.mutations.admit(this.scopes.address(id));
     if (this.active(id)) throw new DomainError('conflict', 'Conversation is already running');
@@ -87,7 +90,9 @@ export class Runs {
       publish({ type: 'run', run: running });
       this.observe({ type: 'run-started', sessionId: id, run: running }, cancellation);
       await this.scopes.prepare(id, cancellation);
+      const selection = this.selection(source ?? 'user');
       return this.agent(id).prompt(record, prepared.text, publish, {
+        ...selection,
         signal: cancellation, source, submissionId: info.id, choice: model, images: prepared.images, input: prepared.input, thinkingLevel, revision,
         changed: (path) => { info.changedFiles = [...new Set([...(info.changedFiles ?? []), path])]; }
       });
@@ -106,7 +111,11 @@ export class Runs {
       publish({ type: 'run', run: terminal });
       this.observe({ type: 'run-ended', sessionId: id, run: terminal });
     };
-    const done = Promise.resolve().then(() => schedule ? schedule(promptSession, cancellation) : promptSession()).then((text) => {
+    const done = Promise.resolve().then(async () => {
+      const release = await acquire?.(cancellation);
+      try { return await promptSession(); }
+      finally { release?.(); }
+    }).then((text) => {
       finish('completed');
       return text;
     }, (error) => {
@@ -130,6 +139,12 @@ export class Runs {
     activity.done = done;
     void done.catch(() => {});
     return { info, done };
+  }
+
+  [launchExecution](id: string, { message, model, attachments, thinkingLevel }: ExecutionInput,
+    signal: AbortSignal, acquire?: RunOptions['acquire']) {
+    const { info, done } = this.launch(id, message, undefined, { model, attachments, thinkingLevel, source: 'plugin', signal, acquire });
+    return { id: info.id, result: done };
   }
 
   async send(id: string, prompt: string, emit?: (event: StreamEvent) => void, options: RunOptions = {}) {

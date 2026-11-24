@@ -3,7 +3,10 @@ export class AgentRegistry {
   private readonly active = new Map<string, 'run' | 'compaction'>();
   private readonly preparing = new Map<string, Promise<void>>();
 
-  get hasPending() { return this.preparing.size > 0; }
+  pendingInScope(keys: ReadonlySet<string> | undefined, address: (id: string) => readonly string[]) {
+    if (!keys) return this.preparing.size > 0;
+    return [...this.preparing.keys()].some((id) => address(id).some((key) => keys.has(key)));
+  }
   has(id: string) { return this.active.has(id); }
   acceptsInput(id: string) { return this.active.get(id) === 'run'; }
 

@@ -7,10 +7,17 @@ export class MutationGate implements MutationPort {
   private closing = false;
   private readonly structural = new Set<{ scopes?: ReadonlySet<string> }>();
 
-  constructor(private readonly hasWork: (scopes?: ReadonlySet<string>) => boolean) {}
+  private readonly guards = new Set<(scopes?: ReadonlySet<string>) => boolean>();
+
+  guard(isBusy: (scopes?: ReadonlySet<string>) => boolean) {
+    this.guards.add(isBusy);
+    return () => { this.guards.delete(isBusy); };
+  }
+
+  seal() { this.closing = true; }
 
   protect(scopes?: ReadonlySet<string>) {
-    if (this.hasWork(scopes)) throw new DomainError('conflict', 'Stop the affected conversations before changing their providers or plugins');
+    if ([...this.guards].some((isBusy) => isBusy(scopes))) throw new DomainError('conflict', 'Stop the affected conversations before changing their providers or plugins');
     const guard = { scopes };
     this.structural.add(guard);
     return () => { this.structural.delete(guard); };
@@ -31,7 +38,7 @@ export class MutationGate implements MutationPort {
   }
 
   close() {
-    this.closing = true;
+    this.seal();
     return Promise.allSettled(this.active ? [this.active] : []);
   }
 }

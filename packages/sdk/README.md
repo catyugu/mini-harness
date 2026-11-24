@@ -18,6 +18,8 @@ Install `mini-harness` and import `mini-harness/plugin` or `mini-harness/browser
 
 References capability-owned APIs. Runtime implementations and installed plugin management stay with those capabilities.
 
+The [Task notes example](../../docs/examples/task-notes) compiles against the installed SDK and exercises session access, managed execution, approvals, records and browser contributions.
+
 ## Testing
 
 `pnpm run pack:verify` compiles and runs consumers against an independent npm installation.

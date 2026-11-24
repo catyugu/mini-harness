@@ -1,8 +1,5 @@
-import type { ModelCatalogPort } from '@mini-harness/models/api';
-import type { AgentPort } from '@mini-harness/agent/api';
-import type { RunPort } from '@mini-harness/runs/api';
-import type { SessionStore } from '@mini-harness/sessions/store';
-import type { SessionRecord } from '@mini-harness/sessions/identity';
+import type { Execution } from '@mini-harness/runs/execution';
+import type { SessionAccess } from '@mini-harness/sessions/records';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 
 export interface SubagentPolicy { maxDepth: number; maxParallel: number; model: ModelChoice | null }
@@ -59,12 +56,13 @@ export class Semaphore {
     });
   }
 
-  async run<T>(work: (lease: { pause<R>(task: () => Promise<R>): Promise<R> }) => Promise<T>, signal?: AbortSignal) {
+  async lease(signal?: AbortSignal) {
     let release: (() => void) | undefined = await this.acquire(signal);
     let waiting = 0;
-    try {
-      return await work({
-        pause: async (task) => {
+    const semaphore = this;
+    return {
+      release: () => { release?.(); },
+      async pause<T>(task: () => Promise<T>) {
           waiting++;
           release?.();
           release = undefined;
@@ -72,25 +70,25 @@ export class Semaphore {
           finally {
             waiting--;
             if (!waiting && !signal?.aborted) {
-              const next = await this.acquire(signal);
+              const next = await semaphore.acquire(signal);
               if (waiting) next();
               else release = next;
             }
           }
-        }
-      });
-    } finally { release?.(); }
+      }
+    };
   }
 }
 
-type ChildLease = Parameters<Parameters<Semaphore['run']>[0]>[0];
+type ChildLease = Awaited<ReturnType<Semaphore['lease']>>;
 
 export function selectChildModel(request: { provider?: string; model?: string },
-    defaults: ModelChoice | null, parent: ModelChoice): ModelChoice {
+    defaults: ModelChoice | null, parent?: ModelChoice): ModelChoice {
   const provider = request.provider?.trim();
   const model = request.model?.trim();
   if (provider) return { provider, id: model ?? '' };
   const inherited = defaults ?? parent;
+  if (!inherited) throw new Error('Configure a model before delegating');
   return { provider: inherited.provider, id: model || inherited.id };
 }
 
@@ -110,48 +108,47 @@ export class Delegation {
   readonly semaphore: Semaphore;
   private readonly leases = new Map<string, ChildLease>();
 
-  constructor(private readonly registry: SessionStore, private readonly agent: Pick<AgentPort, 'activeModel'>, private readonly models: (id?: string) => ModelCatalogPort,
-    private readonly runs: () => RunPort, private readonly settings: () => SubagentPolicy,
-    private readonly assertAvailable: (id: string) => void) {
+  constructor(private readonly sessions: SessionAccess,
+    private readonly execution: Execution, private readonly settings: () => SubagentPolicy) {
     this.semaphore = new Semaphore(settings().maxParallel);
   }
 
-  visible(id: string) { return this.registry.depth(id) < this.settings().maxDepth; }
+  visible(id: string) { return this.sessions.depth(id) < this.settings().maxDepth; }
 
-  private schedule(record: SessionRecord, task: () => Promise<string>, signal: AbortSignal) {
-    if (!record.parentId) return task();
-    return this.semaphore.run(async (lease) => {
-      this.leases.set(record.id, lease);
-      try { return await task(); }
-      finally { this.leases.delete(record.id); }
-    }, signal);
+  private async acquire(id: string, signal: AbortSignal) {
+    const lease = await this.semaphore.lease(signal);
+    this.leases.set(id, lease);
+    return () => {
+      this.leases.delete(id);
+      lease.release();
+    };
   }
 
   delegate(id: string, request: { task: string; provider?: string; model?: string }, signal?: AbortSignal) {
-    const model = selectChildModel(request, this.settings().model, this.agent.activeModel(id));
-    const task = () => this.run(id, request.task, model, this.runs().signal(id, signal));
+    const model = selectChildModel(request, this.settings().model, this.sessions.history(id).model);
+    const task = () => this.run(id, request.task, model, signal);
     const lease = this.leases.get(id);
     return lease ? lease.pause(task) : task();
   }
 
   private async run(parentId: string, task: string, choice: ModelChoice, signal?: AbortSignal) {
     signal?.throwIfAborted();
-    const parent = this.registry.get(parentId);
+    const parent = this.sessions.get(parentId);
     if (!parent) throw new Error('Parent conversation not found');
-    this.assertAvailable(parentId);
-    requireChildDepth(this.registry.depth(parentId), this.settings().maxDepth);
-    const model = this.models(parentId).resolve(choice);
-    if (!model) throw new Error('Unknown child model: ' + choice.provider + '/' + choice.id);
-    const record = this.registry.create({
+    requireChildDepth(this.sessions.depth(parentId), this.settings().maxDepth);
+    const record = this.sessions.create({
       parentId, workspaceId: parent.workspaceId, title: childTitle(task)
     });
     try {
-      const text = await this.runs().send(record.id, task, undefined, { signal, model, source: 'agent',
-        schedule: (run, cancellation) => this.schedule(record, run, cancellation) });
+      const { result } = this.execution.submit(record.id, { message: task, model: choice }, {
+        signal,
+        acquire: (cancellation) => this.acquire(record.id, cancellation)
+      });
+      const text = await result;
       return { id: record.id, text };
     } catch (error) {
-      if (this.registry.get(record.id)) this.registry.rename(record.id,
-        (signal?.aborted || this.runs().info(record.id)?.state === 'cancelled' ? '[Cancelled] ' : '[Failed] ') + childTitle(task).slice(0, 60));
+      if (this.sessions.get(record.id)) this.sessions.rename(record.id,
+        (signal?.aborted || this.execution.status(record.id)?.state === 'cancelled' ? '[Cancelled] ' : '[Failed] ') + childTitle(task).slice(0, 60));
       throw error;
     }
   }

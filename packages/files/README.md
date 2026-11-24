@@ -26,6 +26,8 @@ The `files` application plugin owns tool and route registrations, its projection
 
 Enable or disable `files` in Plugins. Workspace file policy comes from the selected conversation and its provider.
 
+File tool bindings read visible session information and resolve the selected File Access provider via the public server SDK.
+
 ## Testing
 
 `tests/` covers inspection, access policy and writes. The [Files browser suite](../../test/browser/files.spec.ts) exercises the panel.

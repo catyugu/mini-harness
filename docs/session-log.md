@@ -124,3 +124,6 @@ It then commits catalog removal together with a deletion journal before removing
 files. Restart finishes any remaining journaled deletions. Deleting a workspace
 cascades through its conversations while retaining the user's project files.
 There is no archive state.
+
+
+Plugin records use the existing custom record envelope. New scoped writes include the instance address in the namespace. A display record includes a separate title and optional browser payload. The browser receives only the explicitly supplied display data, and model context omits these records. Deleting its owning conversation removes both the records and private data for that session’s plugin instances.

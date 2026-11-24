@@ -7,5 +7,5 @@ export const manifest: PluginDescriptor = {
   setup, defaultEnabled: true,
   id: 'files', title: 'Workspace files', description: 'Read, search and edit files within the workspace.',
   browserStyles: ['/packages/files/src/browser/style.css'],
-  icon: 'files', browser: '/packages/files/src/browser/setup.js', inject: ['harnessFileAccess', 'harnessWorkspaces', 'harnessRegistry', 'harnessTools', 'harnessRoutes', 'harnessScopes', 'harnessChanges'],
+  icon: 'files', browser: '/packages/files/src/browser/setup.js', inject: ['harnessFileAccess', 'harnessWorkspaces', 'harnessSessions', 'harnessTools', 'harnessRoutes', 'harnessChanges'],
 };

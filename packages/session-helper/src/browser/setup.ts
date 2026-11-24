@@ -29,8 +29,8 @@ const setup: FrontendSetup = (_ctx, api) => {
           : 'Editing message · creates a new conversation branch',
         text: rawText, images,
         submit: async ({ text, attachments, removedImages, model, thinkingLevel }) => {
-          return api.request<import('@mini-harness/sessions/run-state').RunInfo>('/extensions/session-helper/revise', payload('POST', {
-            sessionId, sourceEntryId, expectedLeafId, message: text, attachments, removedImages, model, thinkingLevel
+          return api.request<import('@mini-harness/sessions/run-state').RunInfo>('/sessions/' + sessionId + '/revise', payload('POST', {
+            sourceEntryId, expectedLeafId, message: text, attachments, removedImages, model, thinkingLevel
           }));
         }
       });

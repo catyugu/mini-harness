@@ -10,6 +10,9 @@ export interface FrontendApi {
   readonly signal: AbortSignal;
   /** Refresh a plugin-owned snapshot when this plugin invalidates its state. */
   watch(refresh: () => void | Promise<void>): BrowserRelease;
+  watchScope(pluginId: string, target: { kind: 'workspace' | 'session'; id: string }, refresh: () => void | Promise<void>): BrowserRelease;
+  scopeRequest<T>(pluginId: string, target: { kind: 'workspace' | 'session'; id: string }, operation: string,
+    input?: unknown, signal?: AbortSignal): Promise<T>;
   readonly locale: {
     current(): string;
     subscribe(listener: (language: string) => void): BrowserRelease;

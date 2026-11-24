@@ -125,8 +125,6 @@ export async function createMiniHarnessServer(paths: Paths, options: { token?: s
       if (!remote && req.method !== 'GET' && req.headers.origin && req.headers.origin !== 'http://' + req.headers.host) {
         throw new HttpError('forbidden', 'Origin not allowed');
       }
-      if (pathname === '/api/status' && req.method === 'GET')
-        return json(res, 200, { pid: process.pid, sessionDiagnostics: runtime.registry.diagnostics() });
       if (pathname === '/api/shutdown' && req.method === 'POST' && options.shutdown) {
         res.once('finish', options.shutdown);
         return json(res, 202, { pid: process.pid });

@@ -1,6 +1,6 @@
 # @mini-harness/shell
 
-Provides the shell tool, approval presentation and command results.
+Provides the shell tool and command result rendering.
 
 ## Responsibilities
 
@@ -8,11 +8,11 @@ Owns the shell tool and its UI. Uses Approvals for decisions and Process Executi
 
 ## Structure
 
-`src/server/setup.ts` registers the tool and approval-facing routes. `src/browser/` renders approvals and command details.
+`src/server/setup.ts` registers the tool and requests confirmation through the public Approvals interface. `src/browser/` renders command details.
 
 ## API
 
-Contributes the `shell` tool, approval controls and the Conversation tool renderer.
+Contributes the `sandbox_shell` tool and the Conversation tool renderer.
 
 ## Dependencies
 
@@ -20,7 +20,7 @@ Depends on [Approvals](../approvals/README.md), [Process Execution](../process-e
 
 ## Lifecycle
 
-The `shell` application plugin owns the tool lease, browser contribution and stylesheet. Cancellation follows the run lifetime.
+The `shell` application plugin owns the tool lease and browser contribution. Cancellation follows the run lifetime.
 
 ## Configuration
 

@@ -51,7 +51,7 @@ test('Shell delegates to a selected external process provider and still requires
     plugins: { shell: true, 'process-preview': true }, providers: { harnessProcess: 'process-preview' }
   });
   assert.equal(result.status, 200, JSON.stringify(result.body));
-  const { id } = app.runtime.registry.create();
+  const { id } = app.runtime.plugins.ctx.harnessRegistry.create();
   const tool = expectPresent(app.runtime.plugins.ctx.harnessTools.forSession(id).find(({ name }) => name === 'sandbox_shell'), 'shell tool');
   const execution = tool.execute('preview', { command: 'Preview command' }, undefined, undefined, undefined);
   const pending = await waitUntil(() => request('/approvals'), ({ body }) => body.length === 1);
@@ -75,10 +75,10 @@ test('scoped plugins inherit declared services and tool policies, and release th
   const secondWorkspace = join(root, 'other');
   mkdirSync(secondWorkspace);
   const workspace = (await request('/workspaces', 'POST', { path: secondWorkspace })).body;
-  const parent = app.runtime.registry.create();
-  const child = app.runtime.registry.create({ parentId: parent.id });
-  const sibling = app.runtime.registry.create();
-  const outside = app.runtime.registry.create({ workspaceId: workspace.id });
+  const parent = app.runtime.plugins.ctx.harnessRegistry.create();
+  const child = app.runtime.plugins.ctx.harnessRegistry.create({ parentId: parent.id });
+  const sibling = app.runtime.plugins.ctx.harnessRegistry.create();
+  const outside = app.runtime.plugins.ctx.harnessRegistry.create({ workspaceId: workspace.id });
   const workspaceKey = 'workspace:' + parent.workspaceId;
   const sessionKey = 'session:' + parent.id;
   const scopes = {
@@ -126,7 +126,8 @@ test('read-only permissions are bound to the selected tool registration', async 
         async execute() { throw new Error('Unapproved replacement ran'); }
       }, { access: 'readOnly' });
     };`);
-  const { registry, plugins } = app.runtime;
+  const { plugins } = app.runtime;
+  const registry = plugins.ctx.harnessRegistry;
   const parent = registry.create({ permission: 'readOnly' });
   const child = registry.create({ parentId: parent.id, permission: 'fullAccess' });
   const list = (id: string) => plugins.ctx.harnessTools.forSession(id);
@@ -152,7 +153,7 @@ test('the host tool authorization service cannot be replaced at either scope', a
       export default () => { throw new Error('Protected provider must never mount'); };
     `);
   }
-  const session = app.runtime.registry.create();
+  const session = app.runtime.plugins.ctx.harnessRegistry.create();
   const application = await request('/settings', 'PATCH', {
     plugins: { 'tools-application': true }, providers: { harnessTools: 'tools-application' }
   });
@@ -180,7 +181,7 @@ test('file tools and HTTP preview consume the same selected File Access provider
     }`);
   const selection = { plugins: { 'virtual-files': true }, providers: { harnessFileAccess: 'virtual-files' } };
   assert.equal((await request('/settings', 'PATCH', selection)).status, 200);
-  const session = app.runtime.registry.create();
+  const session = app.runtime.plugins.ctx.harnessRegistry.create();
   const preview = await request('/workspaces/' + session.workspaceId + '/files/preview?path=virtual.txt');
   assert.equal(preview.body.content, 'Provided file content');
   const tool = expectPresent(app.runtime.plugins.ctx.harnessTools.forSession(session.id).find(({ name }) => name === 'read'), 'read tool');
@@ -198,9 +199,9 @@ test('native runs use the nearest scoped LLM provider while siblings retain the 
           content: [{ type: 'text', text: api.config.answer }], stopReason: 'stop' } };
       }
     });`);
-  const parent = app.runtime.registry.create();
-  const child = app.runtime.registry.create({ parentId: parent.id });
-  const sibling = app.runtime.registry.create();
+  const parent = app.runtime.plugins.ctx.harnessRegistry.create();
+  const child = app.runtime.plugins.ctx.harnessRegistry.create({ parentId: parent.id });
+  const sibling = app.runtime.plugins.ctx.harnessRegistry.create();
   const scope = (answer: string) => ({ plugins: { 'scoped-llm': true }, providers: { harnessLlm: 'scoped-llm' },
     pluginConfig: { 'scoped-llm': { answer } } });
   const scopes = { ['session:' + parent.id]: scope('Parent adapter'), ['session:' + child.id]: scope('Child adapter') };
@@ -248,9 +249,9 @@ test('native file and shell tools use scoped file, process and sandbox services 
         return { code: 0, signal: null, stdout: 'scoped process', stderr: '', truncated: false };
       }
     });`);
-  const parent = app.runtime.registry.create();
-  const child = app.runtime.registry.create({ parentId: parent.id });
-  const sibling = app.runtime.registry.create();
+  const parent = app.runtime.plugins.ctx.harnessRegistry.create();
+  const child = app.runtime.plugins.ctx.harnessRegistry.create({ parentId: parent.id });
+  const sibling = app.runtime.plugins.ctx.harnessRegistry.create();
   const configured = await request('/settings', 'PATCH', {
     plugins: { shell: true, 'application-sandbox': true },
     pluginConfig: { shell: { mode: 'isolated' } }, providers: { harnessSandbox: 'application-sandbox' },
@@ -264,7 +265,7 @@ test('native file and shell tools use scoped file, process and sandbox services 
   const preview = (id: string) => request('/workspaces/' + parent.workspaceId + '/files/preview?path=note.txt&sessionId=' + id);
   assert.equal((await preview(parent.id)).body.content, 'scoped file', 'HTTP inspection prepares the lazy scope');
   assert.equal((await preview(sibling.id)).body.content, 'application file');
-  const lastTool = (id: string) => expectPresent(app.runtime.registry.log(id).projection().messages.filter(({ role }) => role === 'toolResult').at(-1), 'tool result');
+  const lastTool = (id: string) => expectPresent(app.runtime.plugins.ctx.harnessRegistry.log(id).projection().messages.filter(({ role }) => role === 'toolResult').at(-1), 'tool result');
   await app.runtime.plugins.ctx.harnessRuns.send(child.id, 'read in inherited scope');
   assert.match(JSON.stringify(lastTool(child.id).content), /scoped file/);
   await app.runtime.plugins.ctx.harnessRuns.send(sibling.id, 'read in sibling');
@@ -383,8 +384,8 @@ test('scoped model catalogs govern explicit runs and inherited or model-selected
       });
     };
   `);
-  const parent = app.runtime.registry.create();
-  const sibling = app.runtime.registry.create();
+  const parent = app.runtime.plugins.ctx.harnessRegistry.create();
+  const sibling = app.runtime.plugins.ctx.harnessRegistry.create();
   const scopedChoice = { provider: 'scoped-only', id: 'parent-model' };
   const applicationChoice = { ...app.runtime.plugins.ctx.harnessModelPreference.recent() };
   assert.equal(app.runtime.plugins.ctx.harnessModels.resolve(scopedChoice), undefined);
@@ -398,18 +399,18 @@ test('scoped model catalogs govern explicit runs and inherited or model-selected
   assert.deepEqual(app.runtime.plugins.ctx.harnessModelPreference.recent(), applicationChoice);
   assert.equal(await app.runtime.plugins.ctx.harnessRuns.send(parent.id, 'Delegate explicit', undefined, { model: scopedChoice }), 'Scoped parent-model');
   assert.equal(await app.runtime.plugins.ctx.harnessRuns.send(parent.id, 'Continue without an explicit model'), 'Scoped parent-model');
-  const children = app.runtime.registry.list().filter(({ parentId }) => parentId === parent.id);
+  const children = app.runtime.plugins.ctx.harnessRegistry.list().filter(({ parentId }) => parentId === parent.id);
   assert.equal(children.length, 2);
   const inherited = children.find(({ title }) => title === 'Inherited child task');
   const explicit = children.find(({ title }) => title === 'Explicit child task');
   assert.ok(inherited); assert.ok(explicit);
-  assert.deepEqual(app.runtime.registry.log(inherited.id).projection().model, scopedChoice);
-  assert.deepEqual(app.runtime.registry.log(explicit.id).projection().model, { provider: 'scoped-only', id: 'child-model' });
+  assert.deepEqual(app.runtime.plugins.ctx.harnessRegistry.log(inherited.id).projection().model, scopedChoice);
+  assert.deepEqual(app.runtime.plugins.ctx.harnessRegistry.log(explicit.id).projection().model, { provider: 'scoped-only', id: 'child-model' });
   assert.equal(app.runtime.plugins.ctx.harnessRuns.info(inherited.id)?.state, 'completed');
   assert.equal(app.runtime.plugins.ctx.harnessRuns.info(explicit.id)?.state, 'completed');
-  assert.ok(app.runtime.registry.log(parent.id).projection().messages.filter(({ role }) => role === 'toolResult').every(({ isError }) => !isError));
+  assert.ok(app.runtime.plugins.ctx.harnessRegistry.log(parent.id).projection().messages.filter(({ role }) => role === 'toolResult').every(({ isError }) => !isError));
   assert.deepEqual(app.runtime.plugins.ctx.harnessModelPreference.recent(), applicationChoice);
   assert.equal(await app.runtime.plugins.ctx.harnessRuns.send(sibling.id, 'Use the application model'), 'Mock response');
-  assert.deepEqual(app.runtime.registry.log(sibling.id).projection().model, applicationChoice);
+  assert.deepEqual(app.runtime.plugins.ctx.harnessRegistry.log(sibling.id).projection().model, applicationChoice);
   assert.equal(mock.requests.length, 1);
 });

@@ -16,7 +16,7 @@ Contributes the `delegate` tool and a Conversation tool-rendering extension.
 
 ## Dependencies
 
-Uses [Sessions](../sessions/README.md) for ancestry and [Runs](../runs/README.md) for actual child executions.
+Uses [Sessions](../sessions/README.md) for ancestry and [Runs](../runs/README.md) for child executions through the same scoped extensions offered to third-party plugins.
 
 ## Lifecycle
 

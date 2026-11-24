@@ -1,12 +1,35 @@
-import type { MessageAction, ToolView } from '../composer-api.js';
+import type { SessionDisplayRecord } from '@mini-harness/sessions/display-record';
+import type { MessageAction, RecordRenderer, ToolView } from '../composer-api.js';
 
 export class MessageExtensions {
   private readonly actions = new Map<string, MessageAction>();
   private readonly renderers = new Map<string, (tool: ToolView) => HTMLElement | undefined>();
   private readonly toolActions = new Map<string, (tool: ToolView) => HTMLElement | undefined>();
+  private readonly records = new Map<string, RecordRenderer[]>();
   private readonly events = new EventTarget();
 
   constructor(private readonly report: (error: Error) => void) {}
+
+  registerRecord(plugin: string, render: RecordRenderer) {
+    const stack = this.records.get(plugin) ?? [];
+    this.records.set(plugin, stack);
+    stack.push(render);
+    this.events.dispatchEvent(new Event('records'));
+    return () => {
+      stack.splice(stack.indexOf(render), 1);
+      if (!stack.length) this.records.delete(plugin);
+      this.events.dispatchEvent(new Event('records'));
+    };
+  }
+
+  subscribeToRecords(listener: () => void, signal: AbortSignal) {
+    this.events.addEventListener('records', listener, { signal });
+  }
+
+  renderRecord(record: SessionDisplayRecord, context: { sessionId: string; signal: AbortSignal }) {
+    try { return this.records.get(record.plugin)?.at(-1)?.(structuredClone(record), context); }
+    catch (error) { this.report(error instanceof Error ? error : new Error(String(error))); }
+  }
 
   actionsForMessage() { return [...this.actions.values()].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)); }
 

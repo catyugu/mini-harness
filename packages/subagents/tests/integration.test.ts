@@ -22,30 +22,30 @@ test('Native execution honors file policy and recursive delegates can finish wit
   t.after(async () => { await app.close(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
   writeFileSync(join(root, 'outside.txt'), 'private fixture');
   await app.runtime.configuration.update({ pluginConfig: { subagents: { maxDepth: 2, maxParallel: 1, model: { provider: 'local-mock', id: 'mock-model' } } } });
-  const parent = app.runtime.registry.create();
+  const parent = app.runtime.plugins.ctx.harnessRegistry.create();
   const toolEvents: Extract<import('@mini-harness/runs/stream').StreamEvent, { type: 'tool' }>[] = [];
   await app.runtime.plugins.ctx.harnessRuns.send(parent.id, 'root task', (event) => { if (event.type === 'tool') toolEvents.push(event); });
-  const records = app.runtime.registry.descendants([parent.id]).map((id) => app.runtime.registry.get(id));
+  const records = app.runtime.plugins.ctx.harnessRegistry.descendants([parent.id]).map((id) => app.runtime.plugins.ctx.harnessRegistry.get(id));
   assert.deepEqual(records.map((record) => { assert.ok(record); return record.title; }), ['root task', 'child task', 'leaf task']);
   const childRecord = records[1], leafRecord = records[2];
   assert.ok(childRecord && leafRecord);
-  assert.deepEqual(app.runtime.registry.log(leafRecord.id).projection().model, { provider: 'local-mock', id: 'mock-model' });
+  assert.deepEqual(app.runtime.plugins.ctx.harnessRegistry.log(leafRecord.id).projection().model, { provider: 'local-mock', id: 'mock-model' });
   assert.equal(app.runtime.plugins.ctx.harnessTools.forSession(leafRecord.id).map(({ name }) => name).includes('delegate'), false);
   assert.ok(toolEvents.some((event) => event.state === 'finished' && event.sessionId === childRecord.id));
-  const check = app.runtime.registry.create();
+  const check = app.runtime.plugins.ctx.harnessRegistry.create();
   await app.runtime.plugins.ctx.harnessRuns.send(check.id, 'read policy');
-  const failure = app.runtime.registry.log(check.id).projection().messages.find((message) => message.role === 'toolResult');
+  const failure = app.runtime.plugins.ctx.harnessRegistry.log(check.id).projection().messages.find((message) => message.role === 'toolResult');
   assert.ok(failure);
   assert.equal(failure.isError, true);
   assert.match(JSON.stringify(failure.content), /permitted workspace/);
   assert.doesNotMatch(JSON.stringify(failure.content), /private fixture/);
   await app.close();
   app = await createMiniHarnessServer(paths);
-  const exported = app.runtime.registry.export([parent.id, childRecord.id]);
+  const exported = app.runtime.plugins.ctx.harnessRegistry.export([parent.id, childRecord.id]);
   assert.deepEqual(exported.map(({ id, parentId }) => ({ id, parentId })),
     records.map((record) => { assert.ok(record); return { id: record.id, parentId: record.parentId }; }));
   assert.ok(exported.every(({ log }) => log?.includes('"type":"session"')));
-  assert.equal(app.runtime.registry.log(leafRecord.id).projection().model?.id, 'mock-model');
+  assert.equal(app.runtime.plugins.ctx.harnessRegistry.log(leafRecord.id).projection().model?.id, 'mock-model');
 });
 
 test('cancelling a root aborts its active child and preserves indexed history', { timeout: 15000 }, async (t) => {
@@ -62,7 +62,7 @@ test('cancelling a root aborts its active child and preserves indexed history', 
   const { root, paths } = createFixturePaths(mock.url);
   const app = await createMiniHarnessServer(paths);
   t.after(async () => { release(); await app.close(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
-  const parent = app.runtime.registry.create();
+  const parent = app.runtime.plugins.ctx.harnessRegistry.create();
   const pending = app.runtime.plugins.ctx.harnessRuns.send(parent.id, 'start child');
   const aborted = assert.rejects(pending, /cancelled/);
   await waiting;
@@ -70,7 +70,7 @@ test('cancelling a root aborts its active child and preserves indexed history', 
   assert.equal(app.runtime.plugins.ctx.harnessRuns.cancel(parent.id), true);
   await aborted;
   assert.equal(app.runtime.plugins.ctx.harnessRuns.size, 0);
-  const child = app.runtime.registry.export([parent.id])[1];
+  const child = app.runtime.plugins.ctx.harnessRegistry.export([parent.id])[1];
   assert.ok(child);
   assert.equal(child.title, '[Cancelled] hold child');
   assert.ok(child.log?.includes('hold child'));
@@ -96,7 +96,7 @@ test('child queues honor live limits, explicit cancellation, and depth restricti
     return 'Done';
   });
   await app.runtime.configuration.update({ pluginConfig: { subagents: { maxParallel: 1 } } });
-  const parent = app.runtime.registry.create();
+  const parent = app.runtime.plugins.ctx.harnessRegistry.create();
   const tools = app.runtime.plugins.ctx.harnessTools;
   const delegate = expectPresent(tools.forSession(parent.id).find(({ name }) => name === 'delegate'), 'delegate tool');
   const start = (task: string) => delegate.execute(task, { task, provider: 'local-mock', model: 'mock-model' });
@@ -106,7 +106,7 @@ test('child queues honor live limits, explicit cancellation, and depth restricti
   const second = start('Second child');
   const third = start('Cancelled queued child');
   const aborted = assert.rejects(third, /cancelled/);
-  const queued = await waitUntil(() => app.runtime.registry.list().find(({ title }) => title === 'Cancelled queued child'), Boolean);
+  const queued = await waitUntil(() => app.runtime.plugins.ctx.harnessRegistry.list().find(({ title }) => title === 'Cancelled queued child'), Boolean);
   assert.ok(queued);
   assert.equal(app.runtime.plugins.ctx.harnessRuns.info(queued.id)?.state, 'queued');
   app.runtime.plugins.ctx.harnessRuns.cancel(queued.id);
@@ -117,7 +117,7 @@ test('child queues honor live limits, explicit cancellation, and depth restricti
   await entered[1].promise;
   await app.runtime.configuration.update({ pluginConfig: { subagents: { maxParallel: 1 } } });
   assert.equal(app.runtime.plugins.ctx.harnessRuns.size, 2, 'Lowering the limit preserves existing executions');
-  const child = app.runtime.registry.list().find(({ title }) => title === 'First child');
+  const child = app.runtime.plugins.ctx.harnessRegistry.list().find(({ title }) => title === 'First child');
   assert.ok(child);
   assert.equal(tools.forSession(child.id).some(({ name }) => name === 'delegate'), false);
   assert.ok(held[0] && held[1]);

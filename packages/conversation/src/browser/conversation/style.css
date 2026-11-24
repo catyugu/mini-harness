@@ -255,3 +255,25 @@
   .parent-conversations .link-button { min-height: 32px; }
 }
 .model-picker:popover-open { animation: popup-in var(--motion-popup) ease-out; }
+
+.approval-card {
+  padding: 10px;
+  border: 1px solid var(--focus);
+  border-radius: var(--radius);
+  background: var(--surface);
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+.approval-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+}
+.approval-heading strong { flex: 0 0 auto; }
+.approval-heading small { min-width: 0; overflow-wrap: anywhere; }
+.approval-card pre { max-height: 100px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.approval-actions { display: flex; flex-wrap: wrap; gap: 7px; }
+
+#conversationHistory:not([hidden]) { display: flex; flex: 1; min-height: 0; flex-direction: column; }
+.conversation-records { padding: 8px max(18px, calc((100% - 960px) / 2)); overflow-wrap: anywhere; }

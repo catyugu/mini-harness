@@ -29,7 +29,7 @@ export default (_ctx, api) => {
   await app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Persist this conversation');
   const route = '/extensions/records/entries';
   const value = { note: 'stored by the plugin' };
-  const beforePluginRecords = app.runtime.registry.log(session.id).projection().leafId;
+  const beforePluginRecords = app.runtime.plugins.ctx.harnessRegistry.log(session.id).projection().leafId;
   const notes = '/extensions/records/notes?id=' + session.id;
   const added = await request(route, 'POST', { id: session.id, value });
   assert.equal(added.status, 200);
@@ -41,13 +41,12 @@ export default (_ctx, api) => {
   const { body: entries } = await request(route + '?id=' + session.id);
   assert.deepEqual(entries.map(({ id, data }: { id: string; data: unknown }) => ({ id, data })), [{ id: added.body, data: value }]);
   assert.equal(app.runtime.plugins.ctx.harnessRuns.size, 0);
-  assert.equal(app.runtime.plugins.ctx.harnessAgent.hasPending, false);
-  const saved = app.runtime.registry.export([session.id])[0].log;
+  const saved = app.runtime.plugins.ctx.harnessRegistry.export([session.id])[0].log;
   assert.ok(saved.split('\n').filter(Boolean).map((line) => JSON.parse(line))
     .some((entry) => entry.type === 'custom' && entry.namespace === 'records' && entry.data.note === value.note));
   const fetched = (await request('/sessions/' + session.id)).body;
   assert.equal(fetched.messages.some((message: { content: unknown }) => JSON.stringify(message).includes(value.note)), false);
-  const log = app.runtime.registry.log(session.id);
+  const log = app.runtime.plugins.ctx.harnessRegistry.log(session.id);
   log.revise({ type: 'message', message: { role: 'user', content: 'New branch', timestamp: Date.now() } },
     beforePluginRecords, log.projection().leafId);
   assert.deepEqual((await request(notes)).body, []);

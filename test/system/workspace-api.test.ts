@@ -48,8 +48,8 @@ test('workspace registration, session navigation and scoped tools leave an activ
       assert.ok(event.revision > snapshot.revisions.sessions);
       assert.equal(event.sessionId, other.id);
       assert.equal(other.workspaceId, workspace.id);
-      assert.equal(app.runtime.registry.create({ parentId: other.id }).workspaceId, workspace.id);
-      assert.throws(() => app.runtime.registry.create({ parentId: other.id, workspaceId: session.workspaceId }), /parent/);
+      assert.equal(app.runtime.plugins.ctx.harnessRegistry.create({ parentId: other.id }).workspaceId, workspace.id);
+      assert.throws(() => app.runtime.plugins.ctx.harnessRegistry.create({ parentId: other.id, workspaceId: session.workspaceId }), /parent/);
       assert.deepEqual((await request(first + '/sessions')).body.map(({ id }: { id: string }) => id), [session.id]);
       assert.equal((await request(second + '/files/preview?path=note.txt&sessionId=' + session.id)).status, 404);
       const preview = await request(second + '/files/preview?path=note.txt&sessionId=' + other.id);

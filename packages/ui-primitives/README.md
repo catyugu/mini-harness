@@ -22,6 +22,8 @@ Uses [UI Theme](../ui-theme/README.md) for visual tokens and the pinned Marked a
 
 `core:primitives` mounts after the theme and cleans up browser resources when disposed.
 
+Browser plugins can use `miniPrimitives.icon` with a symbolic name or a custom SVG path, including for conversation message actions.
+
 ## Testing
 
 [Rendering browser tests](../../test/browser/rendering.spec.ts) exercise Markdown and unsafe input.

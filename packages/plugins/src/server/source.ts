@@ -1,5 +1,7 @@
 import { lstatSync, realpathSync } from 'node:fs';
 import { isAbsolute, join, relative, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { satisfies, validRange } from 'semver';
 import { readJson } from '@mini-harness/platform/json';
 
 export const packageSpecPattern = /^((?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*)(?:@[a-zA-Z0-9][a-zA-Z0-9.+_-]*)?$/;
@@ -21,6 +23,17 @@ export function packageSource(folder: string): PackageSource | undefined {
       typeof source.generation !== 'string' || !generationPattern.test(source.generation))
     throw new Error('Invalid plugin package source');
   return source;
+}
+
+export function assertPeerCompatibility(folder: string) {
+  const path = join(folder, 'package.json');
+  if (!isRegularFile(path)) return;
+  const manifest = readJson<{ peerDependencies?: { 'mini-harness'?: unknown } }>(path, {});
+  const range = manifest?.peerDependencies?.['mini-harness'];
+  if (range === undefined) return;
+  if (typeof range !== 'string' || !validRange(range)) throw new Error('Invalid mini-harness peer dependency range');
+  const version = readJson<{ version: string }>(fileURLToPath(new URL('../../../../../package.json', import.meta.url)), { version: '' }).version;
+  if (!satisfies(version, range)) throw new Error('Plugin requires mini-harness ' + range + ' (running ' + version + ')');
 }
 
 export function packageBundle(directory: string, spec: string) {

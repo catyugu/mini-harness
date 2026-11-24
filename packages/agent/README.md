@@ -24,7 +24,7 @@ Resolves scoped LLM, model, prompt and tool providers through [Kernel](../kernel
 
 ## Configuration
 
-`core:agent` declares `maxTurns` and `autoCompact` in its manifest. Model capabilities and the recent model come from [Models](../models/README.md).
+`core:agent` declares `maxTurns` and `autoCompact` in its manifest. The caller supplies a model selection and fallback. Agent validates the choice against the scoped model catalog.
 
 ## Testing
 

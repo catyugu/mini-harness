@@ -113,6 +113,13 @@ export function registerSessionRoutes(ctx: Context, read: (id: string) => Conver
     response.once('close', detach);
     stream.start();
   });
+  add('POST', '/api/sessions/:id/revise', async ({ params, body }) => {
+    const id = session(params.id);
+    const input = await body(20 * 1024 * 1024);
+    if (!input || typeof input.sourceEntryId !== 'string' || !Object.hasOwn(input, 'expectedLeafId') ||
+        typeof input.message !== 'string') throw new HttpError('invalid_input', 'Invalid revision request');
+    return ctx.harnessRuns.reviseAndStart(id, input);
+  });
   add('GET', '/api/sessions/:id', ({ params }) => read(session(params.id)));
   add('PATCH', '/api/sessions/:id', async ({ params, body }) => {
     const id = session(params.id), input = await body();
@@ -126,7 +133,6 @@ export function registerSessionRoutes(ctx: Context, read: (id: string) => Conver
     if (updated.permission === 'fullAccess') ctx.harnessApprovals.approveSession(id);
     return projectSession(ctx, updated);
   });
-  add('DELETE', '/api/workspaces/:id', ({ params }) => ctx.harnessRegistry.deleteWorkspace(workspace(params.id)));
   add('POST', '/api/sessions/delete', async ({ body }) => {
     const input = await body();
     return { deleted: await ctx.harnessRegistry.delete(input.ids) };

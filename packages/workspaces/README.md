@@ -4,7 +4,7 @@ Owns workspace identities, canonical roots, labels and ordering.
 
 ## Responsibilities
 
-Maintains the workspace catalog, manages directory browsing and provides the browser workspace projection. Conversation owns navigation and selection.
+Maintains the workspace catalog, registers workspace scope addresses and owns removal. The session deletion participant drains conversation trees before scope cleanup and removal. Project directories remain on disk. Conversation owns navigation and selection.
 
 ## Structure
 

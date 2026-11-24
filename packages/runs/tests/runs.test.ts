@@ -23,7 +23,7 @@ test('HTTP disconnect keeps the native run alive and reconnect replays from a cu
   const port = await app.listen(0);
   const base = 'http://127.0.0.1:' + port;
   const headers = { Authorization: 'Bearer ' + app.token, 'Content-Type': 'application/json' };
-  const item = app.runtime.registry.create();
+  const item = app.runtime.plugins.ctx.harnessRegistry.create();
   const controller = new AbortController();
   const start = await fetch(base + '/api/sessions/' + item.id + '/runs', {
     method: 'POST', headers, body: JSON.stringify({ message: 'Keep working' })
@@ -56,7 +56,7 @@ test('HTTP disconnect keeps the native run alive and reconnect replays from a cu
   const finishedRun = app.runtime.plugins.ctx.harnessRuns.info(item.id);
   assert.ok(finishedRun);
   assert.equal(finishedRun.state, 'completed');
-  const durable = readFileSync(app.runtime.registry.log(item.id).file, 'utf8').trim().split('\n').map((line) => JSON.parse(line));
+  const durable = readFileSync(app.runtime.plugins.ctx.harnessRegistry.log(item.id).file, 'utf8').trim().split('\n').map((line) => JSON.parse(line));
   const persistedRun = durable.filter((entry) => entry.type === 'run').at(-1);
   assert.ok(persistedRun);
   assert.equal(persistedRun.run.state, 'completed');
@@ -70,25 +70,24 @@ test('independent roots run concurrently and deleting a running tree cancels all
   const { root, paths } = createFixturePaths(mock.url);
   const app = await createMiniHarnessServer(paths);
   t.after(async () => { held.release(); await app.close(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
-  const parent = app.runtime.registry.create(), other = app.runtime.registry.create();
+  const parent = app.runtime.plugins.ctx.harnessRegistry.create(), other = app.runtime.plugins.ctx.harnessRegistry.create();
   const first = app.runtime.plugins.ctx.harnessRuns.send(parent.id, 'Root one');
   const cancelled = assert.rejects(first, /cancelled/);
   const second = app.runtime.plugins.ctx.harnessRuns.send(other.id, 'Root two');
   await entered.promise;
   assert.equal(app.runtime.plugins.ctx.harnessRuns.size, 2);
   await assert.rejects(app.runtime.plugins.ctx.harnessRuns.send(parent.id, 'Duplicate'), /already running/);
-  const child = app.runtime.registry.create({ parentId: parent.id });
+  const child = app.runtime.plugins.ctx.harnessRegistry.create({ parentId: parent.id });
   const childWork = app.runtime.plugins.ctx.harnessRuns.send(child.id, 'Child');
   const childCancelled = assert.rejects(childWork, /cancelled/);
-  const deleted = await app.runtime.registry.delete([parent.id]);
+  const deleted = await app.runtime.plugins.ctx.harnessRegistry.delete([parent.id]);
   await Promise.all([cancelled, childCancelled]);
   assert.deepEqual(new Set(deleted), new Set([parent.id, child.id]));
-  assert.equal(app.runtime.registry.get(parent.id), undefined);
+  assert.equal(app.runtime.plugins.ctx.harnessRegistry.get(parent.id), undefined);
   assert.equal(app.runtime.plugins.ctx.harnessRuns.active(other.id), true);
   held.release();
   assert.equal(await second, 'Done');
   assert.equal(app.runtime.plugins.ctx.harnessRuns.size, 0);
-  assert.equal(app.runtime.plugins.ctx.harnessAgent.hasPending, false);
   assert.equal(app.runtime.plugins.ctx.harnessRuns.size, 0);
 });
 
@@ -125,7 +124,7 @@ test('startup durably interrupts runs, fails stale steering, and recovers idempo
       return Array.isArray(content) ? content.map(({ text }) => text).join('') : content;
     });
     assert.deepEqual(prompts, ['Recovered follow-up', 'New manual input']);
-    assert.deepEqual(restarted.runtime.registry.log(child.id).queue().map(({ id, state }) => [id, state]), [['steer', 'failed']]);
+    assert.deepEqual(restarted.runtime.plugins.ctx.harnessRegistry.log(child.id).queue().map(({ id, state }) => [id, state]), [['steer', 'failed']]);
   } finally { await restarted.close(); }
 });
 
@@ -134,7 +133,7 @@ test('late observers receive a saved snapshot and stale cursors cannot attach to
   const { root, paths } = createFixturePaths(mock.url);
   const app = await createMiniHarnessServer(paths);
   t.after(async () => { await app.close(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
-  const item = app.runtime.registry.create();
+  const item = app.runtime.plugins.ctx.harnessRegistry.create();
   await app.runtime.plugins.ctx.harnessRuns.send(item.id, 'First');
   const first = app.runtime.plugins.ctx.harnessRuns.info(item.id);
   const events: RunEvent[] = [];
@@ -158,7 +157,7 @@ test('append, torn write and fsync failures evict the writer without acknowledgi
   t.after(async () => { await app.close(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
   const base = 'http://127.0.0.1:' + await app.listen(0);
   const headers = { Authorization: 'Bearer ' + app.token };
-  const rejected = app.runtime.registry.create();
+  const rejected = app.runtime.plugins.ctx.harnessRegistry.create();
   for (const invalid of [null, { message: 'Bad model', model: { provider: 42, id: 'invalid' } },
     { message: 'Bad thinking', thinkingLevel: 'invalid' }, { message: 'Bad file', attachments: [{}] }]) {
     const response = await fetch(base + '/api/sessions/' + rejected.id + '/runs', {
@@ -167,10 +166,10 @@ test('append, torn write and fsync failures evict the writer without acknowledgi
     assert.equal(response.status, 400);
   }
   assert.equal(app.runtime.plugins.ctx.harnessRuns.info(rejected.id), undefined);
-  const healthy = app.runtime.registry.create();
+  const healthy = app.runtime.plugins.ctx.harnessRegistry.create();
   for (const fault of ['append', 'torn', 'sync']) {
-    const session = app.runtime.registry.create();
-    const log = app.runtime.registry.log(session.id);
+    const session = app.runtime.plugins.ctx.harnessRegistry.create();
+    const log = app.runtime.plugins.ctx.harnessRegistry.log(session.id);
     const original = readFileSync(log.file);
     const write = fs.writeSync;
     let shortened = false;
@@ -202,13 +201,13 @@ test('append, torn write and fsync failures evict the writer without acknowledgi
     assert.ok(status.sessionDiagnostics.some(({ id }: { id: string }) => id === session.id));
     assert.deepEqual(readFileSync(log.file), damaged, 'GET must leave even a torn tail intact');
     assert.equal(await app.runtime.plugins.ctx.harnessRuns.send(healthy.id, 'Healthy session'), 'Mock response');
-    const reopened = app.runtime.registry.log(session.id);
+    const reopened = app.runtime.plugins.ctx.harnessRegistry.log(session.id);
     assert.notStrictEqual(reopened, log);
     assert.equal(app.runtime.plugins.ctx.harnessRuns.info(session.id)?.state, fault === 'sync' ? 'interrupted' : undefined);
     if (fault === 'torn') assert.deepEqual(readFileSync(log.file), original);
     assert.equal(await app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Accepted retry'), 'Mock response');
-    assert.deepEqual(app.runtime.registry.log(session.id).projection().messages.filter(({ role }) => role === 'user').map(({ content }) =>
+    assert.deepEqual(app.runtime.plugins.ctx.harnessRegistry.log(session.id).projection().messages.filter(({ role }) => role === 'user').map(({ content }) =>
       Array.isArray(content) ? content[0]?.text : content), ['Accepted retry']);
-    assert.equal(app.runtime.registry.logError(session.id), undefined);
+    assert.equal(app.runtime.plugins.ctx.harnessRegistry.logError(session.id), undefined);
   }
 });

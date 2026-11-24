@@ -10,7 +10,8 @@ export interface WorkspacePort {
   register(path: string, name?: string): WorkspaceRecord;
   rename(id: string, name: string): WorkspaceRecord;
   reorder(ids: string[]): WorkspaceRecord[];
-  remove(id: string): void;
+  assertAvailable(id: string): void;
+  beforeRemove(handler: (id: string) => Promise<string[]>): () => void;
   browse(path: string): { path: string; parent: string | null; directories: { name: string; path: string }[] };
 }
 

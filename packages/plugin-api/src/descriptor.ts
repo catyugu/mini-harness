@@ -52,6 +52,10 @@ export interface PluginApi {
   readonly signal: AbortSignal;
   provide<Name extends keyof ServiceMap & string>(name: Name, service: ServiceMap[Name]): void;
   service<Name extends keyof ServiceMap & string>(name: Name): NonNullable<ServiceMap[Name]>;
+  /** Read a declared service for a prepared conversation visible to this instance. */
+  scopedService<Name extends keyof ServiceMap & string>(sessionId: string, name: Name): NonNullable<ServiceMap[Name]>;
+  /** Prepare the conversation's providers before serving work outside an existing run. */
+  prepareSession(sessionId: string, signal?: AbortSignal): Promise<void>;
   optionalService<Name extends keyof ServiceMap & string>(name: Name): ServiceMap[Name] | undefined;
   contribute<Args extends unknown[], Result>(point: Extension<Args, Result>, ...args: Args): Result;
   /** Invalidate this plugin's application-wide state for its live browser clients. */
@@ -70,6 +74,8 @@ export interface PluginApi {
   };
   /** Mount an authenticated route under /api/extensions/<plugin-id>/. */
   registerRoute(method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string, handler: RouteHandler): () => Promise<void>;
+  /** Register a request handled only by this mounted workspace or session instance. */
+  registerScopeRequest(name: string, handler: (input: unknown, signal: AbortSignal) => unknown | Promise<unknown>): () => Promise<void>;
   /** Mount a local authenticated WebSocket endpoint under /api/extensions/<plugin-id>/. */
   registerUpgrade(path: string, handler: UpgradeHandler): () => Promise<void>;
   onDispose(cleanup: () => void | Promise<void>): () => Promise<void>;

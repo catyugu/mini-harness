@@ -26,6 +26,8 @@ Publishes the graph after a successful commit. Scoped providers mount where sele
 
 `settings.json` selects plugins and providers by scope. Installed plugins declare dependencies, schema and browser assets in `plugin.json`.
 
+Scoped requests target a mounted plugin address and use its invocation lease. Discovery checks npm peer ranges, and mounted plugins may export a synchronous semantic validator.
+
 ## Testing
 
 [Plugin integration tests](../../test/plugins/) cover installation, precedence, runtime failures and cleanup.

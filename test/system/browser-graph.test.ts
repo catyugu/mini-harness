@@ -55,15 +55,16 @@ test('the composed browser graph serves its runtime dependencies and excludes se
   assert.equal(changed.ui.some(({ id }) => id === 'files'), false);
   const dependencies = changed.ui.find(({ id }) => id === 'shell')?.requires ?? [];
   assert.ok(dependencies.includes('core:conversation'), 'Shell needs the conversation tool renderer');
-  assert.ok(dependencies.includes('core:approvals'), 'Shell needs the approval projection');
-  const shellStyles = changed.ui.find(({ id }) => id === 'shell')?.styles ?? [];
-  assert.equal(shellStyles.length, 1);
-  const sheet = await fetch(base + shellStyles[0]);
+  const conversation = changed.ui.find(({ id }) => id === 'core:conversation');
+  assert.ok(conversation?.requires?.includes('core:approvals'), 'Conversation needs the approval projection');
+  const conversationStyle = conversation?.styles?.[0];
+  assert.ok(conversationStyle);
+  const sheet = await fetch(base + conversationStyle);
   assert.equal(sheet.status, 200);
   assert.match(sheet.headers.get('content-type') ?? '', /^text\/css/);
   assert.match(await sheet.text(), /\.approval-heading/);
   assert.equal((await request('/settings', 'PATCH', { plugins: { shell: false } })).status, 200);
-  assert.equal((await fetch(base + shellStyles[0])).status, 404);
+  assert.equal((await fetch(base + conversationStyle)).status, 200);
   assert.ok(changed.ui.findIndex(({ id }) => id === 'core:theme') <
     changed.ui.findIndex(({ id }) => id === 'core:primitives'));
 });

@@ -7,6 +7,7 @@ import { settingsExtensions } from '@mini-harness/settings/browser/api';
 import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend-api';
 import { MessageExtensions } from './message-extensions.js';
 import { fromMarkup, required, toggle } from '@mini-harness/ui-primitives/primitives';
+import { mountApprovals } from './approval-panel.js';
 import { conversationView } from './view.js';
 
 const setup: FrontendSetup = (ctx, api) => {
@@ -32,7 +33,8 @@ const setup: FrontendSetup = (ctx, api) => {
     closeDrawer: layout.closeDrawer,
     showWorkspaceInHeader: header.showWorkspace,
     setTitle: header.setTitle, renderTool: (tool, action) => extensions.render(tool, action),
-    messageActions: () => extensions.actionsForMessage()
+    messageActions: () => extensions.actionsForMessage(),
+    renderRecord: (record, context) => extensions.renderRecord(record, context)
   });
   ctx.provide('miniComposer', {
     insert: conversation.insert,
@@ -43,9 +45,11 @@ const setup: FrontendSetup = (ctx, api) => {
   api.contribute(slotExtensions.define, 'conversation.composer', conversation.outlets.composer);
   api.contribute(slotExtensions.define, 'conversation.approvals', conversation.outlets.approvals);
   api.contribute(slotExtensions.define, 'workspace.welcome', conversation.outlets.workspace, 'single');
+  mountApprovals(ctx, api);
   conversation.attach();
   extensions.subscribe(conversation.refreshActions, api.signal);
   models.subscribe(conversation.updateModelControls, api.signal);
+  extensions.subscribeToRecords(conversation.refreshRecords, api.signal);
   extensions.subscribeToTools(conversation.refreshTools, api.signal);
   api.contribute(slotExtensions.keyed, 'sidebar.primary', 'new-conversation', (signal) => {
     const button = document.createElement('button');
