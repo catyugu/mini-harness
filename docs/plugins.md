@@ -181,23 +181,27 @@ Settings contributions use a section title such as `General`, `Model`, or `Exten
 Declare the settings fields and defaults in the plugin’s `configSchema`. For example, declare `showDetails` as a boolean with a default, then register its control from `web.js` with `miniSettingsRegistry` and `miniPrimitives` in `browserInject`.
 
 ```js
-api.contribute(settingsExtensions.register, {
-  id: 'show-details',
-  section: 'General',
-  order: 50,
-  render({ bind }) {
-    const control = document.createElement('input');
-    control.type = 'checkbox';
-    const label = ctx.miniPrimitives.field('Show details', control);
-    const status = bind(control, 'showDetails', {
-      read: (value) => { control.checked = value; },
-      write: () => control.checked
-    });
-    const row = document.createElement('div');
-    row.append(label, status);
-    return row;
-  }
-});
+import { settingsExtensions } from '/packages/ui-runtime/plugin-sdk.js';
+
+export default function setup(ctx, api) {
+  api.contribute(settingsExtensions.register, {
+    id: 'show-details',
+    section: 'General',
+    order: 50,
+    render({ bind }) {
+      const control = document.createElement('input');
+      control.type = 'checkbox';
+      const label = ctx.miniPrimitives.field('Show details', control);
+      const status = bind(control, 'showDetails', {
+        read: (value) => { control.checked = value; },
+        write: () => control.checked
+      });
+      const row = document.createElement('div');
+      row.append(label, status);
+      return row;
+    }
+  });
+}
 ```
 
 `bind` handles committed values, pending state, error feedback and rollback. Custom controls can use `configuration` from the render context and the render signal to release their subscriptions. A write patches only the calling plugin’s namespace. Browser writes target the application scope. Native workspace and session plugins write that instance’s overrides. The server SDK permits writes after setup and outside configuration callbacks. Live plugins can use `onConfigChange` to stage updates and restore previous values on rollback. Subscribers see changes after commit. A section title affects layout only.
