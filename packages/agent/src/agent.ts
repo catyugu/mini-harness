@@ -85,16 +85,12 @@ export class NativeAgent implements AgentPort {
 
   constructor(private readonly sessions: SessionStore, private readonly services: AgentServices) {}
 
-  async prepare(id: string, signal?: AbortSignal) {
+  private async prepare(id: string, signal?: AbortSignal) {
     this.sessions.assertAvailable(id);
     signal?.throwIfAborted();
     await this.agents.prepare(id, () => this.services.prepare(id, signal));
     signal?.throwIfAborted();
     this.sessions.assertAvailable(id);
-  }
-
-  activeModel(id: string) {
-    return this.sessions.inspectLog(id, (log) => log.projection().model, true);
   }
 
   async revisionTarget(id: string, sourceEntryId: string, expectedLeafId: string | null) {
@@ -119,14 +115,17 @@ export class NativeAgent implements AgentPort {
   }
 
   async queueInput(id: string, text: string, mode: 'steer' | 'followUp', attachments?: Attachment[],
-    options: Pick<InboxItem, 'model' | 'thinkingLevel'> = {}) {
+    options: Pick<InboxItem, 'model' | 'thinkingLevel'> & { fallback?: ModelChoice } = {}) {
     this.sessions.assertAvailable(id);
     if (!this.agents.acceptsInput(id)) throw new DomainError('conflict', 'The agent is not streaming; send a new message');
     validateModelOptions(options.model, options.thinkingLevel);
-    const choice = options.model ? this.services.models(id).resolve(options.model) : this.activeModel(id);
+    const log = this.sessions.log(id);
+    const models = this.services.models(id);
+    const model = options.model ?? log.projection().model ?? options.fallback;
+    const choice = model && models.resolve(model);
     if (!choice) throw new DomainError('invalid_input', 'Unknown queued model');
-    resolveThinking(this.services.models(id).capabilities(choice), options.thinkingLevel);
-    return new Inbox(this.sessions.log(id)).enqueue(text, mode, attachments, { ...options, model: choice });
+    resolveThinking(models.capabilities(choice), options.thinkingLevel);
+    return new Inbox(log).enqueue(text, mode, attachments, { model: choice, thinkingLevel: options.thinkingLevel });
   }
 
   cancelQueue(id: string, itemId?: string) {

@@ -340,6 +340,14 @@ export class PluginHost implements ScopePort {
           .filter(({ id }) => this.mounts.plan(id));
         this.ctx.get('harnessChanges')?.invalidate('plugins');
       }, unavailable, () => {
+        for (const service of this.catalog.requiredServices) {
+          const provider = providers.get(service);
+          if (!provider || !this.mounts.plan(provider)) {
+            const diagnostic = provider && failures.get(provider);
+            throw new DomainError('unavailable', 'Required service ' + service + ' is unavailable' +
+              (diagnostic ? ': ' + provider + ': ' + diagnostic : ''));
+          }
+        }
         for (const { descriptor, config, key } of validations)
           this.catalog.validateConfig(descriptor, config, 'write', this.configurationContext(key, scoped.scopes),
             this.validators.get(key ? key + '/' + descriptor.id : descriptor.id));

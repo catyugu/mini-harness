@@ -2,6 +2,7 @@ import { expectPresent } from '../support/required.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { resolveCapabilities } from '@mini-harness/kernel/composition';
 import { PluginCatalog } from '@mini-harness/plugins/catalog';
@@ -71,6 +72,11 @@ test('scoped plugins inherit declared services and tool policies, and release th
       if (api.config.fail) throw new Error('Scoped setup failed');
       api.onDispose(() => appendFileSync(${JSON.stringify(cleaned)}, 'released\\n'));
       api.provide('exampleGreeting', { greet: (name) => api.scope.workspaceId + ':' + name });
+      api.registerScopeRequest('greet', (input) => {
+        api.storage.write('seen', input);
+        api.invalidate();
+        return { workspaceId: api.scope.workspaceId, input };
+      });
     };`);
   const secondWorkspace = join(root, 'other');
   mkdirSync(secondWorkspace);
@@ -88,7 +94,13 @@ test('scoped plugins inherit declared services and tool policies, and release th
   const enabled = await request('/settings', 'PATCH', { scopes });
   assert.equal(enabled.status, 200, JSON.stringify(enabled.body));
   assert.equal(existsSync(cleaned), false);
-  for (const id of [parent.id, child.id, sibling.id, outside.id]) await app.runtime.plugins.ctx.harnessAgent.prepare(id);
+  const operation = (key: string) => '/plugins/workspace-greeting/scopes/' + encodeURIComponent(key) + '/greet';
+  assert.deepEqual((await request(operation(workspaceKey), 'POST', { input: 'World' })).body,
+    { workspaceId: parent.workspaceId, input: 'World' });
+  assert.equal((await request(operation('workspace:' + workspace.id), 'POST', {})).status, 404);
+  const instance = join(paths.home, 'plugin-data', 'workspace-greeting', createHash('sha256').update(workspaceKey).digest('hex'));
+  assert.ok(existsSync(join(instance, 'seen.json')));
+  for (const id of [parent.id, child.id, sibling.id, outside.id]) await app.runtime.plugins.prepare(id);
   const tools = app.runtime.plugins.ctx.harnessTools;
   const names = (id: string) => tools.forSession(id).map(({ name }) => name);
   assert.ok(names(parent.id).includes('scoped_greeting'));
@@ -114,6 +126,8 @@ test('scoped plugins inherit declared services and tool policies, and release th
   assert.equal((await request('/workspaces/' + parent.workspaceId, 'DELETE')).status, 200);
   assert.equal(readFileSync(cleaned, 'utf8'), 'released\nreleased\n');
   assert.deepEqual((await request('/settings')).body.scopes, {});
+  assert.equal(existsSync(instance), false);
+  assert.equal((await request(operation(workspaceKey), 'POST', {})).status, 404);
   assert.ok(names(outside.id).includes('read'));
 });
 
@@ -123,7 +137,7 @@ test('read-only permissions are bound to the selected tool registration', async 
     export default (_ctx, api) => {
       for (const name of ['read', 'custom']) api.contribute(toolExtensions.register, {
         name, description: 'replacement', parameters: { type: 'object' },
-        async execute() { throw new Error('Unapproved replacement ran'); }
+        async execute() { return { content: [{ type: 'text', text: 'Authorized local read' }] }; }
       }, { access: 'readOnly' });
     };`);
   const { plugins } = app.runtime;
@@ -144,6 +158,12 @@ test('read-only permissions are bound to the selected tool registration', async 
   const sent = expectPresent(mock.requests.at(-1), 'request with tools');
   assert.equal(JSON.stringify(sent.tools).includes('"name":"read"'), false);
   assert.equal(JSON.stringify(sent.tools).includes('"name":"load_skill"'), true);
+  assert.equal((await request('/settings', 'PATCH', { readOnlyTools: { replacement: ['custom'] } })).status, 200);
+  const granted = expectPresent(list(child.id).find(({ name }) => name === 'custom'), 'granted registration');
+  assert.match(JSON.stringify(await granted.execute('granted', {})), /Authorized local read/);
+  assert.ok(!list(child.id).some(({ name }) => name === 'read'));
+  assert.equal((await request('/settings', 'PATCH', { readOnlyTools: {} })).status, 200);
+  await assert.rejects(granted.execute('revoked', {}), /Tool denied/);
 });
 
 test('the host tool authorization service cannot be replaced at either scope', async (t) => {

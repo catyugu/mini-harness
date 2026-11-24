@@ -12,7 +12,6 @@ export const manifest: PluginDescriptor = {
   scope: 'application',
   id: 'core:approvals', title: 'Approvals', description: 'Pending user decisions', required: true,
   inject: ['harnessChanges', 'harnessRoutes', 'harnessRuns', 'harnessRegistry'], provides: ['harnessApprovals', 'harnessApprovalRequests'],
-  browser: '/packages/approvals/src/browser/setup.js', browserInject: ['miniProjections'], browserProvides: ['miniApprovals'],
   setup(ctx) {
     const approvals = new Approvals();
     const changes = ctx.harnessChanges;

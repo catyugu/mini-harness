@@ -63,18 +63,18 @@ export class Semaphore {
     return {
       release: () => { release?.(); },
       async pause<T>(task: () => Promise<T>) {
-          waiting++;
-          release?.();
-          release = undefined;
-          try { return await task(); }
-          finally {
-            waiting--;
-            if (!waiting && !signal?.aborted) {
-              const next = await semaphore.acquire(signal);
-              if (waiting) next();
-              else release = next;
-            }
+        waiting++;
+        release?.();
+        release = undefined;
+        try { return await task(); }
+        finally {
+          waiting--;
+          if (!waiting && !signal?.aborted) {
+            const next = await semaphore.acquire(signal);
+            if (waiting) next();
+            else release = next;
           }
+        }
       }
     };
   }

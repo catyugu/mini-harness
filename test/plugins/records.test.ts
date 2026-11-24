@@ -14,7 +14,7 @@ export default (_ctx, api) => {
     const records = api.contribute(sessionExtensions.records);
     api.registerRoute('POST', '/entries', async ({ body }) => {
       const { id, value } = await body();
-      return records.append(id, value);
+      return records.append(id, value, { title: 'Progress', content: 'Browser summary' });
     });
     api.registerRoute('GET', '/entries', ({ url }) => records.list(url.searchParams.get('id')));
     const notes = records.projection({
@@ -36,6 +36,8 @@ export default (_ctx, api) => {
   assert.deepEqual((await request(notes)).body, [value.note]);
   assert.equal((await toggle(false)).status, 200);
   assert.equal((await request(route + '?id=' + session.id)).status, 404);
+  assert.deepEqual((await request('/sessions/' + session.id)).body.records,
+    [{ id: added.body, plugin: 'records', title: 'Progress', content: 'Browser summary' }]);
 
   assert.equal((await toggle(true)).status, 200);
   const { body: entries } = await request(route + '?id=' + session.id);
@@ -43,12 +45,13 @@ export default (_ctx, api) => {
   assert.equal(app.runtime.plugins.ctx.harnessRuns.size, 0);
   const saved = app.runtime.plugins.ctx.harnessRegistry.export([session.id])[0].log;
   assert.ok(saved.split('\n').filter(Boolean).map((line) => JSON.parse(line))
-    .some((entry) => entry.type === 'custom' && entry.namespace === 'records' && entry.data.note === value.note));
+    .some((entry) => entry.type === 'custom' && entry.namespace === 'display:records' && entry.data.data.note === value.note));
   const fetched = (await request('/sessions/' + session.id)).body;
   assert.equal(fetched.messages.some((message: { content: unknown }) => JSON.stringify(message).includes(value.note)), false);
   const log = app.runtime.plugins.ctx.harnessRegistry.log(session.id);
   log.revise({ type: 'message', message: { role: 'user', content: 'New branch', timestamp: Date.now() } },
     beforePluginRecords, log.projection().leafId);
   assert.deepEqual((await request(notes)).body, []);
+  assert.deepEqual((await request('/sessions/' + session.id)).body.records, []);
   assert.ok(log.entries().some(({ id }) => id === added.body));
 });

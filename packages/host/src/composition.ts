@@ -23,6 +23,7 @@ import { manifest as skills } from '@mini-harness/skills/manifest';
 import { manifest as subagents } from '@mini-harness/subagents/manifest';
 import { manifest as shell } from '@mini-harness/shell/manifest';
 import { manifest as session_helper } from '@mini-harness/session-helper/manifest';
+import { manifest as approval_data } from '@mini-harness/approvals/browser/manifest';
 import { manifest as approvals } from '@mini-harness/approvals/manifest';
 import { manifest as sandbox } from '@mini-harness/sandbox/manifest';
 import { manifest as process_execution } from '@mini-harness/process-execution/manifest';
@@ -33,7 +34,7 @@ import { manifest as conversation } from '@mini-harness/conversation/manifests/c
 
 export const plugins = [
   workspaces_data, sessions_data, workspace_navigation, navigation, model_store, model_catalog, llm, prompt,
-  ui_slots, ui_theme, ui_primitives, ui_layout, workspaces, sessions, agent, runs, settings, models, plugin_management, ui, file_access, files, skills, subagents, shell, session_helper, approvals, sandbox, process_execution, tool_policy, tools, conversation
+  ui_slots, ui_theme, ui_primitives, ui_layout, workspaces, sessions, agent, runs, settings, models, plugin_management, ui, file_access, files, skills, subagents, shell, session_helper, approvals, approval_data, sandbox, process_execution, tool_policy, tools, conversation
 ];
 
 export const authority = {

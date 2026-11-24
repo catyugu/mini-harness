@@ -8,7 +8,7 @@ Owns model selection for each delivery, the execution lease, request preparation
 
 ## Structure
 
-`src/manifests/` declares the Agent and Prompt plugins. `src/setup.ts` binds the Agent routes and service. `agent.ts`, `model-request.ts`, `tool-pipeline.ts` and `prompt.ts` implement the execution stages.
+`src/manifests/` declares the Agent and Prompt plugins. `src/setup.ts` binds the Agent service. `agent.ts`, `model-request.ts`, `tool-pipeline.ts` and `prompt.ts` implement the execution stages.
 
 ## API
 

@@ -117,9 +117,6 @@ importers:
       '@mini-harness/tools':
         specifier: workspace:*
         version: link:../tools
-      '@mini-harness/transport':
-        specifier: workspace:*
-        version: link:../transport
 
   packages/approvals:
     dependencies:

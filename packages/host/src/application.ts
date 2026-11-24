@@ -39,7 +39,11 @@ export class MiniHarnessRuntime {
   get settings() { return this.configuration.settings; }
   async start() {
     try { await this.plugins.start(this.settings); }
-    catch (error) { await this.stop(); throw error; }
+    catch (error) {
+      try { await this.stop(); }
+      catch (cleanup) { throw new AggregateError([error, cleanup], 'Application startup and cleanup failed'); }
+      throw error;
+    }
   }
 
   stop() {

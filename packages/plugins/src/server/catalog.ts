@@ -38,10 +38,13 @@ export interface PluginPlan {
 
 export class PluginCatalog {
   readonly builtins: Map<string, DiscoveredPlugin>;
+  readonly requiredServices: ReadonlySet<string>;
   private readonly protectedServices: Set<string>;
   constructor(private readonly directory: string, builtins: PluginDescriptor[], rootServices: string[],
     private readonly devPlugin?: string, private readonly protectedProviders: ReadonlyMap<string, string> = new Map()) {
     this.builtins = new Map(builtins.map((plugin) => [plugin.id, { ...plugin, resources: builtinBrowserAssets(plugin) }]));
+    this.requiredServices = new Set(builtins.filter(({ required, scope }) => required && scope === 'application')
+      .flatMap(({ provides }) => provides ?? []));
     this.protectedServices = new Set([...rootServices, ...protectedProviders.keys()]);
     if (this.builtins.size !== builtins.length) throw new Error('Duplicate builtin plugin ID');
     const services = new Set(builtins.flatMap(({ provides }) => provides ?? []));
@@ -125,7 +128,7 @@ export class PluginCatalog {
 
   validateConfig(descriptor: PluginDescriptor, config: Record<string, unknown>,
     operation: ConfigValidationContext['operation'], ctx: Context, validator = descriptor.validateConfig) {
-    validator?.(Object.freeze(structuredClone(config)), {
+    const result: unknown = validator?.(Object.freeze(structuredClone(config)), {
       operation,
       service<Name extends keyof ServiceMap & string>(name: Name): NonNullable<ServiceMap[Name]> {
         if (!descriptor.inject?.includes(name) && !descriptor.optional?.includes(name))
@@ -135,6 +138,10 @@ export class PluginCatalog {
         return service;
       }
     });
+    if (result instanceof Promise) {
+      void result.catch(() => {});
+      throw new Error('Plugin configuration validators must be synchronous');
+    }
   }
 
   changedConfig(descriptors: DiscoveredPlugin[], previous: PluginSettings, settings: PluginSettings) {

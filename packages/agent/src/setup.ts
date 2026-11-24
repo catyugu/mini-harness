@@ -8,7 +8,6 @@ import type {} from '@mini-harness/tools/api';
 import type { ToolResultTransform, InputPreparation, ModelRequestTransform, ModelRetryHandler } from './extensions.js';
 import type { Context } from 'cordis';
 import type { PluginApi } from '@mini-harness/plugin-api/descriptor';
-import { registerRoutes } from './routes.js';
 import { firstDecision, type OrderedHook } from '@mini-harness/kernel/contributions';
 import { NativeAgent } from './agent.js';
 
@@ -50,5 +49,4 @@ export function setup(ctx: Context, api: PluginApi) {
     busy: (id) => agent.agents.has(id),
     quiesce: (ids) => agent.agents.settle(ids)
   }));
-  registerRoutes(ctx);
 }

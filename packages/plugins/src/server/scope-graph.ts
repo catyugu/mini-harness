@@ -31,7 +31,16 @@ export function resolveScopes(settings: PluginSettings, describe: PluginCatalog[
     if (visiting.has(key)) throw new Error('Cyclic scope ancestry: ' + key);
     visiting.add(key);
     const address = lookup(key);
-    if (!address) { visiting.delete(key); return root; }
+    if (!address) {
+      visiting.delete(key);
+      const config = settings.scopes[key];
+      const configured = Object.entries(config?.plugins ?? {}).filter(([, enabled]) => enabled).map(([id]) => id);
+      for (const id of new Set([...configured, ...Object.values(config?.providers ?? {})])) {
+        const error = new Error('Configured scope does not exist: ' + key);
+        if (!unavailable(key + '/' + id, error)) throw error;
+      }
+      return root;
+    }
     const { scope, parent: parentKey } = address;
     const parent = parentKey ? visit(parentKey) : root;
     visiting.delete(key);

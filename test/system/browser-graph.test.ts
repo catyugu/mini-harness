@@ -56,7 +56,7 @@ test('the composed browser graph serves its runtime dependencies and excludes se
   const dependencies = changed.ui.find(({ id }) => id === 'shell')?.requires ?? [];
   assert.ok(dependencies.includes('core:conversation'), 'Shell needs the conversation tool renderer');
   const conversation = changed.ui.find(({ id }) => id === 'core:conversation');
-  assert.ok(conversation?.requires?.includes('core:approvals'), 'Conversation needs the approval projection');
+  assert.ok(conversation?.requires?.includes('core:approval-data'), 'Conversation needs the approval projection');
   const conversationStyle = conversation?.styles?.[0];
   assert.ok(conversationStyle);
   const sheet = await fetch(base + conversationStyle);

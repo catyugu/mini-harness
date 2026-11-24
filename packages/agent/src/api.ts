@@ -21,10 +21,8 @@ export interface AgentPort {
     revision?: { sourceEntryId: string; expectedLeafId: string | null };
   }): Promise<string>;
   compact(id: string, signal: AbortSignal): Promise<void>;
-  prepare(id: string, signal?: AbortSignal): Promise<void>;
-  activeModel(id: string): ModelChoice | undefined;
   queueInput(id: string, text: string, mode: 'steer' | 'followUp', attachments?: Attachment[],
-    options?: Pick<InboxItem, 'model' | 'thinkingLevel'>): Promise<QueueEntry[]>;
+    options?: Pick<InboxItem, 'model' | 'thinkingLevel'> & { fallback?: ModelChoice }): Promise<QueueEntry[]>;
   cancelQueue(id: string, itemId?: string): QueueEntry[];
 }
 
