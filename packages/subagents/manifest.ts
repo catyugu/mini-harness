@@ -8,7 +8,6 @@ export const manifest: PluginDescriptor = {
   scope: 'application', browserInject: ['harnessBrowser'],
   setup, defaultEnabled: true, browserRequires: ['core:conversation'],
   configChanges: 'live',
-  provides: ['harnessDelegation'],
   id: 'subagents', title: 'Subagents', description: 'Delegate tasks to child conversations.',
   icon: 'delegate', browser: '/packages/subagents/client.js',
   configGroups: [

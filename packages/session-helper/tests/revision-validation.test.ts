@@ -8,8 +8,8 @@ const png = 'iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAFElEQVR4nGPUCIhigAE
 test('rejected revision input never changes the selected conversation branch', async (t) => {
   const { request, finish, app } = await fixture(t);
   const session = app.runtime.registry.create();
-  await app.runtime.runs.send(session.id, 'Original first');
-  await app.runtime.runs.send(session.id, 'Original second');
+  await app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Original first');
+  await app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Original second');
   const before = app.runtime.registry.log(session.id).projection();
   const source = before.messages.find((message) => message.role === 'user');
   const invalid = [

@@ -29,7 +29,7 @@ test('prompt contributions coexist, override within a session tree and are remov
   const child = app.runtime.registry.create({ parentId: parent.id });
   const sibling = app.runtime.registry.create();
   async function prompt(id: string) {
-    await app.runtime.runs.send(id, 'Continue');
+    await app.runtime.plugins.ctx.harnessRuns.send(id, 'Continue');
     const request = expectPresent(mock.requests.at(-1), 'recorded model request');
     const system = (request.messages as { role: string; content: string }[]).find(({ role }) => role === 'system');
     return expectPresent(system, 'system message').content;
@@ -94,7 +94,7 @@ test('an application plugin replaces only LLM and composes execution hooks witho
   assert.equal(app.runtime.plugins.ctx.harnessModels, models);
   assert.equal(app.runtime.plugins.ctx.harnessModelAdmin, admin);
   const session = app.runtime.registry.create();
-  assert.equal(await app.runtime.runs.send(session.id, 'Use the alternate LLM'), 'Alternate response');
+  assert.equal(await app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Use the alternate LLM'), 'Alternate response');
   const log = app.runtime.registry.log(session.id).projection();
   assert.equal(log.contextMessages.filter(({ role }) => role === 'user').length, 1);
   const sessionLog = app.runtime.registry.log(session.id);
@@ -116,7 +116,7 @@ test('an application plugin replaces only LLM and composes execution hooks witho
   assert.equal(accepted.executionId, execution.id);
   assert.ok(JSON.stringify(accepted).length < JSON.stringify(execution).length);
   assert.equal((await request('/settings', 'PATCH', { plugins: { transport: false, pipeline: false }, providers: {} })).status, 200);
-  assert.equal(await app.runtime.runs.send(session.id, 'Restore the built-in LLM'), 'Mock response');
+  assert.equal(await app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Restore the built-in LLM'), 'Mock response');
 });
 
 test('a failed model-visible transform preserves the execution and never sends the raw result', async (t) => {
@@ -136,7 +136,7 @@ test('a failed model-visible transform preserves the execution and never sends t
   assert.equal((await request('/settings', 'PATCH', { plugins: { redaction: true } })).status, 200);
   const session = app.runtime.registry.create();
   const events: unknown[] = [];
-  await assert.rejects(app.runtime.runs.send(session.id, 'Use the tool', (event) => events.push(event)), /Could not transform/);
+  await assert.rejects(app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Use the tool', (event) => events.push(event)), /Could not transform/);
   const log = app.runtime.registry.log(session.id);
   assert.equal(mock.requests.length, 1);
   assert.equal(log.entries().filter((entry) => entry.type === 'tool-execution').length, 1);
@@ -153,7 +153,7 @@ test('an invalid transformed request fails before the provider is invoked', asyn
   };`);
   assert.equal((await request('/settings', 'PATCH', { plugins: { 'invalid-request': true } })).status, 200);
   const session = app.runtime.registry.create();
-  await assert.rejects(app.runtime.runs.send(session.id, 'Use this request'), /returned invalid transformed data/);
+  await assert.rejects(app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Use this request'), /could not prepare transformed data/);
   assert.equal(mock.requests.length, 0);
   assert.equal(app.runtime.registry.log(session.id).entries().some((entry) => entry.type === 'model-request'), false);
 });
@@ -183,7 +183,7 @@ test('configuration cannot unmount an active request hook and can retry after th
   };`);
   assert.equal((await request('/settings', 'PATCH', { plugins: { 'slow-transform': true } })).status, 200);
   const session = app.runtime.registry.create();
-  const run = app.runtime.runs.send(session.id, 'Keep the active hook');
+  const run = app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Keep the active hook');
   await started;
   try {
     assert.equal((await request('/settings', 'PATCH', { plugins: { 'slow-transform': false } })).status, 409);

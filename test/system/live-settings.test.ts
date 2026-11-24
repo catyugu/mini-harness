@@ -1,4 +1,3 @@
-import { expectPresent } from '../support/required.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -17,23 +16,23 @@ test('appearance, parallelism and child defaults update without interrupting a r
   t.after(async () => { release(); await runtime.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
   await runtime.start();
   const item = runtime.registry.create();
-  const pending = runtime.runs.send(item.id, 'Hold');
+  const pending = runtime.plugins.ctx.harnessRuns.send(item.id, 'Hold');
   await waiting;
   const original = runtime.registry.log(item.id);
   await runtime.updateSettings({ pluginConfig: { 'core:theme': { appearance: 'dark' }, subagents: { maxParallel: 2 } } });
   assert.equal(runtime.settings.pluginConfig['core:theme'].appearance, 'dark');
   assert.strictEqual(runtime.registry.log(item.id), original);
-  assert.equal(expectPresent(runtime.delegation, 'delegation service').parallelLimit, 2);
-  assert.equal(runtime.runs.active(item.id), true);
+  assert.equal(runtime.settings.pluginConfig.subagents.maxParallel, 2);
+  assert.equal(runtime.plugins.ctx.harnessRuns.active(item.id), true);
   await assert.rejects(runtime.updateSettings({ pluginConfig: { subagents: { model: { provider: 'missing', id: 'unavailable' } } } }), /Unknown child model/);
   await assert.rejects(runtime.updateSettings({ pluginConfig: { subagents: { model: { provider: 'local-mock', id: 'unavailable' } } } }), /Unknown child model/);
   assert.equal(runtime.settings.pluginConfig.subagents.model, null);
-  assert.equal(expectPresent(runtime.delegation, 'delegation service').parallelLimit, 2);
+  assert.equal(runtime.settings.pluginConfig.subagents.maxParallel, 2);
   const target = 'session:' + item.id;
   await assert.rejects(runtime.updateSettings({ plugins: { files: false } }), /Stop the affected conversations/);
   assert.equal(runtime.settings.plugins.files, true);
   await runtime.updateSettings({ scopes: { [target]: { disabledTools: ['shell'] } } });
-  assert.equal(runtime.runs.active(item.id), true);
+  assert.equal(runtime.plugins.ctx.harnessRuns.active(item.id), true);
   release();
   assert.equal(await pending, 'Done');
   await runtime.updateSettings({ plugins: { files: false, 'session-helper': false } });
@@ -66,11 +65,11 @@ test('a scoped plugin transaction excludes new runs in its subtree until commit'
   let sibling: Promise<string>;
   try {
     await entered;
-    assert.throws(() => runtime.runs.startRun(target.id, 'Cannot cross the transaction'), /configuration is changing/);
-    assert.equal(runtime.runs.info(target.id), undefined);
-    sibling = runtime.runs.send(other.id, 'Unaffected workspace');
+    assert.throws(() => runtime.plugins.ctx.harnessRuns.startRun(target.id, 'Cannot cross the transaction'), /configuration is changing/);
+    assert.equal(runtime.plugins.ctx.harnessRuns.info(target.id), undefined);
+    sibling = runtime.plugins.ctx.harnessRuns.send(other.id, 'Unaffected workspace');
   } finally { release(); }
   await updating;
   assert.equal(await sibling, 'Mock response');
-  assert.equal(await runtime.runs.send(target.id, 'After commit'), 'Mock response');
+  assert.equal(await runtime.plugins.ctx.harnessRuns.send(target.id, 'After commit'), 'Mock response');
 });

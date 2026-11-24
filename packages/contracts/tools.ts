@@ -26,8 +26,10 @@ export interface ToolRegistrationOptions {
   visible?(sessionId: string): boolean;
 }
 
+export const registerToolBinding = Symbol.for('mini-harness.toolBinding');
+
 export interface ToolPort {
-  register(name: string, bind: (sessionId: string) => ToolDefinition,
+  [registerToolBinding](name: string, bind: (sessionId: string) => ToolDefinition,
     options?: ToolRegistrationOptions & { source?: ContributionSource; scope?: string }): () => Promise<void>;
   forSession(id: string): ToolDefinition[];
   isAvailable(id: string, tool: ToolDefinition): boolean;

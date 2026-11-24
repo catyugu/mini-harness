@@ -2,7 +2,7 @@ import { constants } from 'node:fs';
 import { lstat, open } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { PromptPort } from '@mini-harness/contracts/agent';
-import type { PromptContext } from '@mini-harness/contracts/extensions';
+import type { PromptContext } from '@mini-harness/contracts/prompt-extensions';
 import type { ScopedPromptSection } from '@mini-harness/contracts/prompt-extensions';
 
 async function instructions(file: string) {

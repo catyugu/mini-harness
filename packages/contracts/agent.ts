@@ -1,7 +1,7 @@
 import type { SessionRecord, ModelChoice } from './conversation.js';
 import type { Attachment, ImageInput, InputSource, PreparedMessage } from './input.js';
 import type { StreamEvent } from './transport.js';
-import type { PromptContext } from './extensions.js';
+import type { PromptContext } from './prompt-extensions.js';
 import type { ViewMessage } from './message.js';
 
 /** Native execution capabilities consumed by scheduling services. */

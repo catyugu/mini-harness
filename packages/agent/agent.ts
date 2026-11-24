@@ -1,3 +1,4 @@
+import type { ToolProjection, ToolResultTransform } from '@mini-harness/contracts/tool-extensions';
 import { HttpError } from '@mini-harness/contracts/routes';
 import { isDeepStrictEqual } from 'node:util';
 import { createHash } from 'node:crypto';
@@ -9,13 +10,12 @@ import type { PromptPort, ThinkingLevel } from '@mini-harness/contracts/agent';
 import { RunInterrupted, type StreamEvent } from '@mini-harness/contracts/transport';
 import type { Attachment, ImageInput, InputSource, PreparedMessage } from '@mini-harness/contracts/input';
 import type { SessionLogPort, MessagePatch } from '@mini-harness/contracts/session-log';
-import type { InputContext, InputPreparation } from '@mini-harness/contracts/agent-extensions';
-import { orderHooks, type OrderedHook } from '@mini-harness/contracts/contributions';
-import type { CapabilityObservation, ToolProjection } from '@mini-harness/contracts/events';
+import type { InputContext, InputPreparation, ModelFailure, ModelRequestContent, ModelRequestTransform, ModelRetry, StepContext } from '@mini-harness/contracts/agent-extensions';
+import { type OrderedHook } from '@mini-harness/contracts/contributions';
+import type { CapabilityObservation } from '@mini-harness/contracts/events';
 import type { MessageContent } from '@mini-harness/contracts/message';
 import { AgentRegistry } from './registry.js';
 import { Inbox } from './inbox.js';
-import type { ModelFailure, ModelRequestContent, ModelRequestTransform, ModelRetry, StepContext, ToolResultTransform } from '@mini-harness/contracts/extensions';
 import type { InboxItem } from '@mini-harness/contracts/session-log';
 import { isToolContent, type ToolPort } from '@mini-harness/contracts/tools';
 import { contentDelta } from '@mini-harness/platform/content-delta';
@@ -34,7 +34,7 @@ interface AgentServices {
   defaultModel(): ModelChoice;
   rememberModel(model: ModelChoice, sessionId: string): void | Promise<void>;
   policy(): { maxTurns: number; autoCompact: boolean };
-  observe(event: CapabilityObservation): void;
+  observe(event: CapabilityObservation, signal?: AbortSignal): void;
   modelRequestHooks?(id: string): OrderedHook<ModelRequestTransform>[];
   toolResultHooks?(id: string): OrderedHook<ToolResultTransform>[];
   retryModel?(failure: ModelFailure): Promise<ModelRetry | undefined>;
@@ -88,7 +88,6 @@ export class NativeAgent implements AgentPort {
   constructor(private readonly sessions: SessionStore, private readonly services: AgentServices) {}
 
   get hasPending() { return this.agents.hasPending; }
-  get size() { return this.agents.size; }
 
   async prepare(id: string, signal?: AbortSignal) {
     this.sessions.assertAvailable(id);
@@ -163,21 +162,18 @@ export class NativeAgent implements AgentPort {
 
   private async prepareInput(sessionId: string, model: ModelChoice, source: InputSource, text: string,
     images: ImageInput[], input: PreparedMessage, signal: AbortSignal) {
-    const hooks = orderHooks(this.services.inputHooks?.(sessionId) ?? []);
-    const context: InputContext = { sessionId, model, source, signal, original: input, cwd: this.sessions.workspacePath(sessionId) };
-    let content: NativeUserMessage['content'] = [{ type: 'text', text }, ...images];
-    for (const hook of hooks) {
-      signal.throwIfAborted();
-      const result = await hook.transform(content, context);
-      if (result === undefined) continue;
-      if (result && typeof result === 'object' && 'reject' in result && typeof result.reject === 'string' && result.reject.trim())
-        throw new Error('Plugin ' + hook.instanceId + ' rejected input: ' + result.reject);
-      if (typeof result !== 'string' && !Array.isArray(result))
-        throw new Error('Plugin ' + hook.instanceId + ' returned invalid input content');
-      try { validateNativeMessage({ role: 'user', content: result, timestamp: 0 }); }
-      catch (error) { throw new Error('Plugin ' + hook.instanceId + ' returned invalid input content', { cause: error }); }
-      content = result;
-    }
+    const hooks = this.services.inputHooks?.(sessionId) ?? [];
+    const context: InputContext = { sessionId, model, source, signal, original: { ...input, images },
+      cwd: this.sessions.workspacePath(sessionId) };
+    const initial: NativeUserMessage['content'] = [{ type: 'text', text }, ...images];
+    const content = await applyTransforms<NativeUserMessage['content'], InputContext, Awaited<ReturnType<InputPreparation>>>(
+      hooks, initial, context, (result) => {
+        if (result && typeof result === 'object' && 'reject' in result && typeof result.reject === 'string' && result.reject.trim())
+          throw new Error('Input rejected: ' + result.reject);
+        if (typeof result !== 'string' && !Array.isArray(result)) throw new Error('Invalid input content');
+        validateNativeMessage({ role: 'user', content: result, timestamp: 0 });
+        return result;
+      });
     const preparedImages = typeof content === 'string' ? [] : content.filter((part) => part.type === 'image');
     if (preparedImages.length && !this.services.models(sessionId).capabilities(model)?.input.includes('image'))
       throw new Error('The selected model does not support image input. Choose an image-capable model and retry.');
@@ -314,7 +310,7 @@ export class NativeAgent implements AgentPort {
         await this.prepare(id, signal);
         const cwd = this.sessions.workspacePath(id);
         const step: StepContext = { sessionId: id, turn: turn + 1, phase: 'turn', cwd, model, signal };
-        this.services.observe({ type: 'step-started', sessionId: id, turn: step.turn });
+        this.services.observe({ type: 'step-started', sessionId: id, turn: step.turn }, signal);
         if (this.services.policy().autoCompact && capabilities &&
             transcript(log.projection().contextMessages).length / 4 > Math.max(1024, capabilities.contextWindow * .8 - capabilities.maxTokens))
           await this.compactLog(id, log, signal, true);
@@ -376,13 +372,16 @@ export class NativeAgent implements AgentPort {
               originalContent = output.content;
               try {
                 const content = await applyTransforms(hooks, output.content, { ...step, signal: toolSignal, tool: call.name, callId: call.id },
-                  (value) => { if (!isToolContent(value)) throw new Error('Invalid tool result content'); });
+                  (value) => {
+                    if (!isToolContent(value)) throw new Error('Invalid tool result content');
+                    return value;
+                  });
                 output = { ...output, content };
               } catch (error) {
                 const failure = failedTool(call, 'Tool execution completed, but the model-visible result transformation failed.');
                 log.append({ type: 'message', message: failure });
                 emit({ type: 'tool', id: call.id, name: call.name, state: 'error', arguments: call.arguments, content: failure.content });
-                this.services.observe({ type: 'tool-ended', sessionId: id, tool: call.name, callId: call.id, failed: true, elapsedMs: output.elapsedMs });
+                this.services.observe({ type: 'tool-ended', sessionId: id, tool: call.name, callId: call.id, failed: true, elapsedMs: output.elapsedMs }, toolSignal);
                 throw new Error('Could not transform the result of ' + call.name, { cause: error });
               }
             }
@@ -400,7 +399,7 @@ export class NativeAgent implements AgentPort {
             elapsedMs: output.elapsedMs, approvalMs: typeof details?.approvalMs === 'number' ? details.approvalMs : undefined,
             sessionId: typeof details?.sessionId === 'string' ? details.sessionId : undefined,
             exitCode: typeof details?.exitCode === 'number' ? details.exitCode : undefined });
-          this.services.observe({ type: 'tool-ended', sessionId: id, tool: call.name, callId: call.id, failed: output.isError, elapsedMs: output.elapsedMs });
+          this.services.observe({ type: 'tool-ended', sessionId: id, tool: call.name, callId: call.id, failed: output.isError, elapsedMs: output.elapsedMs }, toolSignal);
         });
         signal.throwIfAborted();
         if (await deliver('steer')) continue;
@@ -426,6 +425,7 @@ export class NativeAgent implements AgentPort {
       if (!value || !Array.isArray(value.messages)) throw new Error('Invalid model request messages');
       validateRequestSnapshot({ ...value, ...base });
       resolveThinking(capabilities, value.thinkingLevel);
+      return value;
     };
     const transformed = await applyTransforms(this.services.modelRequestHooks?.(context.sessionId) ?? [], requestContent, context, validate);
     context.signal.throwIfAborted();
@@ -455,7 +455,7 @@ export class NativeAgent implements AgentPort {
   private request(id: string, request: Parameters<LlmPort['stream']>[0], delta = (_text: string) => {}) {
     return requestModel(this.services.llm(id), request, {
       delta,
-      ended: (attempt, failed) => this.services.observe({ type: 'model-attempt-ended', sessionId: id, attempt, failed }),
+      ended: (attempt, failed) => this.services.observe({ type: 'model-attempt-ended', sessionId: id, attempt, failed }, request.signal),
       retry: this.services.retryModel
     });
   }

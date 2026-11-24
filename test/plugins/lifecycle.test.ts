@@ -42,7 +42,7 @@ test('an installed Cordis plugin can use services, configure a tool, and release
   assert.deepEqual(runtime.plugins.metadata().find(({ id }) => id === 'example')?.icon,
     { path: 'M2 2h20v20H2z', viewBox: '0 0 24 24' });
   await runtime.updateSettings({ plugins: { example: true }, pluginConfig: { example: { prefix: 'Total' } } });
-  await runtime.agent.prepare(item.id);
+  await runtime.plugins.ctx.harnessAgent.prepare(item.id);
   const activeNames = () => runtime.plugins.ctx.harnessTools.forSession(item.id).map(({ name }) => name);
   assert.ok(activeNames().includes('example_count'));
   const tool = expectPresent(runtime.plugins.ctx.harnessTools.forSession(item.id).find(({ name }) => name === 'example_count'), 'example count tool');
@@ -50,7 +50,7 @@ test('an installed Cordis plugin can use services, configure a tool, and release
   assert.match(JSON.stringify(await tool.execute('test', {}, undefined, undefined, undefined)), /Total: 1/);
   await assert.rejects(runtime.updateSettings({ pluginConfig: { example: { prefix: 12 } } }), /Invalid configuration/);
   assert.equal(runtime.settings.pluginConfig.example.prefix, 'Total');
-  await runtime.agent.prepare(item.id);
+  await runtime.plugins.ctx.harnessAgent.prepare(item.id);
   assert.match(JSON.stringify(await tool.execute('after-invalid-config', {}, undefined, undefined, undefined)), /Total: 1/);
   assert.equal(activeNames().filter((name) => name === 'example_count').length, 1);
   await runtime.updateSettings({ plugins: { shell: true } });
@@ -78,7 +78,7 @@ export default (ctx, api) => {
   };`);
   await runtime.start();
   const item = runtime.registry.create();
-  await runtime.agent.prepare(item.id);
+  await runtime.plugins.ctx.harnessAgent.prepare(item.id);
   const activeNames = () => runtime.plugins.ctx.harnessTools.forSession(item.id).map(({ name }) => name);
   assert.ok(activeNames().includes('read'));
   await runtime.updateSettings({ plugins: { files: false } });
@@ -232,15 +232,14 @@ test('disabled optional builtins cannot block boot or reload because their confi
   const restored = new MiniHarnessRuntime(paths);
   t.after(() => restored.stop());
   await restored.start();
-  assert.equal(restored.delegation, undefined);
   assert.match(restored.plugins.metadata().find(({ id }) => id === 'subagents')?.error ?? '', /Invalid configuration/);
   await assert.rejects(restored.updateSettings({ pluginConfig: { subagents: { maxDepth: 101 } } }), /Invalid configuration/);
   await assert.rejects(restored.updateSettings({ pluginConfig: { subagents: { model: { provider: 'unknown', id: 'missing' } } } }), /Unknown child model/);
   await restored.updateSettings({ pluginConfig: { 'core:theme': { appearance: 'dark' } } });
   const conversation = restored.registry.create();
-  assert.equal(await restored.runs.send(conversation.id, 'Main agent still works'), 'Mock response');
+  assert.equal(await restored.plugins.ctx.harnessRuns.send(conversation.id, 'Main agent still works'), 'Mock response');
   await restored.updateSettings({ plugins: { subagents: true }, pluginConfig: { subagents: { maxDepth: 2 } } });
-  assert.ok(restored.delegation);
+  assert.ok(restored.plugins.ctx.harnessTools.forSession(conversation.id).some(({ name }) => name === 'delegate'));
 });
 
 test('an optional plugin that fails at startup reports its state without blocking other capabilities', async (t) => {

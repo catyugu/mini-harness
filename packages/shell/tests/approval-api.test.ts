@@ -113,7 +113,7 @@ test('disabling Shell waits until conversations using its tools have finished', 
   await app.runtime.updateSettings({ plugins: { shell: true }, pluginConfig: { shell: { mode: 'host' } } });
   const shell = app.runtime.registry.create();
   const other = app.runtime.registry.create();
-  const pending = app.runtime.runs.send(other.id, 'Unrelated task');
+  const pending = app.runtime.plugins.ctx.harnessRuns.send(other.id, 'Unrelated task');
   try {
     await running;
     await request('/sessions/' + shell.id + '/runs', 'POST', { message: 'Run Shell' });
@@ -121,9 +121,9 @@ test('disabling Shell waits until conversations using its tools have finished', 
     assert.equal((await request('/settings', 'PATCH', { plugins: { shell: false } })).status, 409);
     const approval = (await request('/approvals')).body[0];
     assert.equal((await request('/approvals', 'POST', { id: approval.id, allow: false })).status, 200);
-    assert.ok(app.runtime.runs.active(other.id));
+    assert.ok(app.runtime.plugins.ctx.harnessRuns.active(other.id));
     assert.equal((await finish(shell.id)).body.run.state, 'completed');
-    const tool = expectPresent(app.runtime.agent.messages(shell.id).find(({ role }) => role === 'toolResult'), 'shell tool result');
+    const tool = expectPresent(app.runtime.plugins.ctx.harnessAgent.messages(shell.id).find(({ role }) => role === 'toolResult'), 'shell tool result');
     assert.equal(tool.isError, true);
   } finally { release(); }
   assert.equal(await pending, 'Unrelated task completed');

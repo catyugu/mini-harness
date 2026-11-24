@@ -8,7 +8,7 @@ test('an extension owns its authenticated routes and native branch records witho
   const { app, paths, request } = await fixture(t);
   const folder = join(paths.plugins, 'records');
   mkdirSync(folder);
-  writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ inject: ['harnessRegistry'] }));
+  writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ inject: ['harnessSessions'] }));
   writeFileSync(join(folder, 'plugin.js'), `import { sessionExtensions } from "${new URL('../../packages/contracts/plugin-sdk.js', import.meta.url).href}";
 export default (_ctx, api) => {
     const records = api.contribute(sessionExtensions.records);
@@ -26,7 +26,7 @@ export default (_ctx, api) => {
   const toggle = (enabled: boolean) => request('/settings', 'PATCH', { plugins: { records: enabled } });
   assert.equal((await toggle(true)).status, 200);
   const { body: session } = await request('/sessions', 'POST', {});
-  await app.runtime.runs.send(session.id, 'Persist this conversation');
+  await app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Persist this conversation');
   const route = '/extensions/records/entries';
   const value = { note: 'stored by the plugin' };
   const beforePluginRecords = app.runtime.registry.log(session.id).projection().leafId;
@@ -40,9 +40,9 @@ export default (_ctx, api) => {
   assert.equal((await toggle(true)).status, 200);
   const { body: entries } = await request(route + '?id=' + session.id);
   assert.deepEqual(entries.map(({ id, data }: { id: string; data: unknown }) => ({ id, data })), [{ id: added.body, data: value }]);
-  assert.equal(app.runtime.agent.size, 0);
-  assert.equal(app.runtime.agent.hasPending, false);
-  const saved = app.runtime.export([session.id])[0].log;
+  assert.equal(app.runtime.plugins.ctx.harnessRuns.size, 0);
+  assert.equal(app.runtime.plugins.ctx.harnessAgent.hasPending, false);
+  const saved = app.runtime.registry.export([session.id])[0].log;
   assert.ok(saved.split('\n').filter(Boolean).map((line) => JSON.parse(line))
     .some((entry) => entry.type === 'custom' && entry.namespace === 'records' && entry.data.note === value.note));
   const fetched = (await request('/sessions/' + session.id)).body;

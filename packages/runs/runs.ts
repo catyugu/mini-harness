@@ -33,7 +33,7 @@ export class Runs {
   constructor(
     private readonly registry: SessionStore,
     private readonly agent: RunAgentPort,
-    private readonly observe: (event: CapabilityObservation) => void,
+    private readonly observe: (event: CapabilityObservation, signal?: AbortSignal) => void,
     private readonly address: (id: string) => readonly string[] = () => [],
     private readonly admit: (scopeKeys: readonly string[]) => void = () => {}
   ) {}
@@ -87,7 +87,7 @@ export class Runs {
       info.state = running.state;
       this.changed(id);
       publish({ type: 'run', run: running });
-      this.observe({ type: 'run-started', sessionId: id, run: running });
+      this.observe({ type: 'run-started', sessionId: id, run: running }, cancellation);
       return this.agent.prompt(record, prepared.text, publish, {
         signal: cancellation, source, submissionId: info.id, choice: model, images: prepared.images, input: prepared.input, thinkingLevel, revision,
         changed: (path) => { info.changedFiles = [...new Set([...(info.changedFiles ?? []), path])]; }

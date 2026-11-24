@@ -1,5 +1,4 @@
 import { Context } from 'cordis';
-import type { NativeAgent } from '@mini-harness/agent/agent';
 import { plugins, trustedContributors } from './composition.js';
 import { SettingsManager } from '@mini-harness/settings/manager';
 import { PluginHost } from '@mini-harness/plugins/manager';
@@ -59,16 +58,7 @@ export class MiniHarnessRuntime {
 
   get settings() { return this.configuration.settings; }
   get registry() { return this.plugins.ctx.harnessRegistry; }
-  get agent() { return this.plugins.ctx.harnessAgent as NativeAgent; }
-  get runs() { return this.plugins.ctx.harnessRuns; }
-  get delegation() { return this.plugins.ctx.harnessDelegation; }
-  get hasActiveWork() { return this.runs.size > 0 || this.agent.hasPending; }
-
   start() { return this.plugins.start(this.settings); }
-  createConversation(input: { workspaceId?: string } = {}) { return this.registry.create(input); }
-  getConversation(id: string) { return this.plugins.ctx.harnessConversationView.read(id); }
-  export(ids: string[]) { return this.registry.export(ids); }
-  delete(ids: string[]) { return this.registry.delete(ids); }
   async updateSettings(patch: unknown) {
     try { return await this.configuration.update(patch, this.plugins); }
     finally {

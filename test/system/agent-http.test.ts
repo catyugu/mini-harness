@@ -76,7 +76,7 @@ test('native agent through HTTP: streaming, persistence, Skills, export and perm
   open = false;
   app = await createMiniHarnessServer(paths);
   open = true;
-  const restored = await app.runtime.getConversation(session.id);
+  const restored = await app.runtime.plugins.ctx.harnessConversationView.read(session.id);
   assert.equal(restored.title, 'Test native integration');
   assert.ok(restored.messages.some((m: {role: string}) => m.role === 'assistant'));
 

@@ -45,10 +45,12 @@ export function contribute<Args extends unknown[], Result>(
   return point[register](source, ...args);
 }
 
+export type Transform<Value, Context> = (value: Value, context: Context) => Value | undefined | Promise<Value | undefined>;
+
 export interface OrderedHook<Handler> {
   instanceId: string;
   order: number;
-  transform: Handler;
+  invoke: Handler;
   assertActive?(sessionId: string): void;
 }
 
@@ -56,22 +58,55 @@ export function orderHooks<T>(hooks: OrderedHook<T>[]) {
   return hooks.sort((a, b) => a.order - b.order || (a.instanceId < b.instanceId ? -1 : a.instanceId > b.instanceId ? 1 : 0));
 }
 
+export function scopedHook<Handler>(
+  source: ContributionSource, stage: string, order: number,
+  bind: (assertActive: (sessionId: string) => void) => Handler,
+  listen: (hook: OrderedHook<Handler>, visible: (sessionId: string) => boolean) => () => void
+) {
+  if (!Number.isFinite(order)) throw new Error('Invalid contribution order for ' + stage);
+  let registered = true;
+  const visible = (id: string) => registered && source.visible(id);
+  const assertActive = (id: string) => {
+    if (!visible(id)) throw new Error('Plugin ' + source.instanceId + ' contribution is no longer available during ' + stage);
+  };
+  const dispose = listen({ instanceId: source.instanceId, order, assertActive, invoke: bind(assertActive) }, visible);
+  return () => { registered = false; dispose(); };
+}
+
 export function orderedHook<Value, Context extends { sessionId: string; signal: AbortSignal }, Result>(
   source: ContributionSource, stage: string, handler: (value: Value, context: Context) => Result | undefined | Promise<Result | undefined>,
-  order: number, listen: (hook: OrderedHook<typeof handler>, active: (sessionId: string) => boolean) => () => void
+  order: number, listen: (hook: OrderedHook<typeof handler>, visible: (sessionId: string) => boolean) => () => void
 ) {
-  if (typeof handler !== 'function' || !Number.isFinite(order)) throw new Error('Invalid ' + stage + ' contribution');
-  let registered = true;
-  const assertActive = (id: string) => {
-    if (!registered || !source.visible(id)) throw new Error('Plugin ' + source.instanceId + ' contribution is no longer available during ' + stage);
-  };
-  const dispose = listen({ instanceId: source.instanceId, order, assertActive, transform(value, { signal, ...context }) {
-    return source.run(stage, async (signal) => {
+  if (typeof handler !== 'function') throw new Error('Invalid ' + stage + ' contribution');
+  return scopedHook(source, stage, order, (assertActive) => (value, { signal, ...context }) =>
+    source.run(stage, async (signal) => {
       assertActive(context.sessionId);
       const result = await handler(structuredClone(value), { ...structuredClone(context), signal } as Context);
       assertActive(context.sessionId);
       return result === undefined ? undefined : JSON.parse(JSON.stringify(result)) as Result;
-    }, signal);
-  } }, (id) => registered && source.visible(id));
-  return () => { registered = false; dispose(); };
+    }, signal), listen);
+}
+
+export function decisionHook<Request extends { sessionId: string; signal: AbortSignal }, Result>(
+  source: ContributionSource, stage: string, handler: (request: Request) => Result | undefined | Promise<Result | undefined>,
+  order: number, listen: (hook: OrderedHook<typeof handler>, visible: (sessionId: string) => boolean) => () => void,
+  validate: (decision: Result) => Result
+) {
+  if (typeof handler !== 'function') throw new Error('Invalid ' + stage + ' contribution');
+  return scopedHook(source, stage, order, (assertActive) => ({ signal, ...request }) =>
+    source.run(stage, async (signal) => {
+      assertActive(request.sessionId);
+      const decision = await handler({ ...structuredClone(request), signal } as Request);
+      assertActive(request.sessionId);
+      return decision === undefined ? undefined : validate(decision);
+    }, signal), listen);
+}
+
+export async function firstDecision<Request, Result>(
+  hooks: OrderedHook<(request: Request) => Result | undefined | Promise<Result | undefined>>[], request: Request
+) {
+  for (const { invoke } of orderHooks(hooks)) {
+    const decision = await invoke(request);
+    if (decision !== undefined) return decision;
+  }
 }

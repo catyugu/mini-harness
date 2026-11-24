@@ -1,5 +1,17 @@
 import { extension, type ContributionSource } from './contributions.js';
-import type { PromptSection } from './extensions.js';
+import type { ToolDefinition } from './tools.js';
+
+export interface PromptContext {
+  sessionId: string;
+  cwd: string;
+  signal: AbortSignal;
+  tools: readonly Omit<ToolDefinition, 'execute' | 'isConcurrencySafe'>[];
+}
+export interface PromptSection {
+  id: string;
+  order?: number;
+  render(context: PromptContext): string | undefined | Promise<string | undefined>;
+}
 
 export interface ScopedPromptSection extends PromptSection {
   depth: number;

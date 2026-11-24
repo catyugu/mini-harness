@@ -2,9 +2,7 @@ import type { Extension } from './contributions.js';
 import type { Context } from 'cordis';
 import type { Paths, PluginConfiguration, Settings } from './config.js';
 import type { RouteHandler, RoutePort, UpgradeHandler } from './routes.js';
-import type { SessionRecord } from './conversation.js';
 import type { PluginScope } from './capabilities.js';
-import type { DelegationPort } from './delegation.js';
 import type { ServiceMap } from './plugin-sdk.js';
 
 /** A symbolic icon name or an inline SVG path for plugin-defined artwork. */
@@ -87,12 +85,9 @@ export interface PluginApi {
 
 declare module 'cordis' {
   interface Context {
-    harnessSessions: { get(id: string): SessionRecord | undefined; list(workspaceId?: string): SessionRecord[] };
     harnessSettings: () => Settings;
     harnessState: { paths: Paths };
     harnessRoutes: RoutePort;
-    harnessDelegation?: DelegationPort;
-
   }
 }
 
