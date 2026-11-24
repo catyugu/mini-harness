@@ -11,6 +11,8 @@ export interface BrowserEntry {
   inject?: string[];
 }
 
+export interface BrowserBootstrap { ui: BrowserEntry[] }
+
 export interface BrowserPrimitives {
   button(label: string, variant?: 'primary' | 'secondary' | 'quiet' | 'danger'): HTMLButtonElement;
   field(label: string, control: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement): HTMLElement;

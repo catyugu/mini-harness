@@ -11,7 +11,7 @@ async function loadStyle(href: string, link: HTMLLinkElement) {
   });
 }
 import type { FrontendHost, FrontendSetup } from './frontend.js';
-import type { Bootstrap } from '@mini-harness/web/types';
+import type { BrowserBootstrap } from '@mini-harness/contracts/browser';
 import type { BrowserEntry } from '@mini-harness/contracts/browser';
 
 export type BrowserPluginFailures = ReadonlyMap<string, unknown>;
@@ -22,7 +22,7 @@ export function createBrowserGraphLoader(host: FrontendHost) {
   const preloads = new Map<string, { url: string; lifetime: AbortController; dispose?: () => void | Promise<void> }>();
   let work = Promise.resolve();
 
-  async function sync(snapshot: Bootstrap): Promise<BrowserPluginFailures> {
+  async function sync(snapshot: BrowserBootstrap): Promise<BrowserPluginFailures> {
     const enabled = new Map<string, BrowserEntry>(snapshot.ui.map((entry) => [entry.id, entry]));
     if (enabled.size !== snapshot.ui.length) throw new Error('Duplicate browser plugin ID in composed graph');
     const signatures = new Map<string, string>();
@@ -101,7 +101,7 @@ export function createBrowserGraphLoader(host: FrontendHost) {
     return failed;
   }
 
-  return (snapshot: Bootstrap) => {
+  return (snapshot: BrowserBootstrap) => {
     const update = work.then(() => sync(snapshot));
     work = update.then(() => {}, () => {});
     return update;

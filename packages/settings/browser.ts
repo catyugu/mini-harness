@@ -1,4 +1,4 @@
-import { scopedElements } from '@mini-harness/web/api';
+import { scopedElements } from '@mini-harness/ui-primitives/primitives';
 import type { FrontendSetup, FrontendApi } from '@mini-harness/ui-runtime/frontend';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { closeOnBackdrop, fromMarkup, required } from '@mini-harness/ui-primitives/primitives';

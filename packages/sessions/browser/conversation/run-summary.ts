@@ -1,5 +1,5 @@
 import type { RunInfo } from '@mini-harness/contracts/transport';
-import { isRunning } from '@mini-harness/web/transport/session-client';
+import { isRunning } from '../session-client.js';
 import { required } from '@mini-harness/ui-primitives/primitives';
 
 export function createRunSummary(root: HTMLElement, onDispose: (cleanup: () => void) => void) {

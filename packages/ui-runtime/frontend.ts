@@ -2,12 +2,12 @@ import type { PluginConfiguration } from '@mini-harness/contracts/config';
 import { SettingsRegistry, type SettingsContribution } from './settings.js';
 import { Context, type Fiber } from '@mini-harness/web/vendor/cordis';
 import type { BrowserPrimitives, BrowserProjectionPort } from '@mini-harness/contracts/browser';
-import type { ComposerCommand } from '@mini-harness/web/contracts/commands';
+import type { ComposerCommand } from '@mini-harness/contracts/composer';
 import type { MessageContent, ViewMessage } from '@mini-harness/contracts/message';
 import type { Attachment } from '@mini-harness/contracts/input';
 import type { ModelChoice } from '@mini-harness/contracts/conversation';
 import type { Conversation } from '@mini-harness/contracts/conversation';
-import type { RightTabType, TabScope } from '@mini-harness/web/contracts/tabs';
+import type { RightTabType, TabScope } from '@mini-harness/contracts/layout';
 import type { WorkspaceRecord } from '@mini-harness/contracts/workspace';
 import type { SlotName, SlotKind, SlotRenderer, KeyedSlotOptions } from '@mini-harness/ui-slots/registry';
 

@@ -1,9 +1,10 @@
 import type { FrontendApi, FrontendServices, FrontendSetup, Suggestion } from '@mini-harness/ui-runtime/frontend';
 import type { BrowserProjectionPort } from '@mini-harness/contracts/browser';
-import type { TabAddress, TabScope } from '@mini-harness/web/contracts/tabs';
+import type { TabAddress, TabScope } from '@mini-harness/contracts/layout';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { button as control, iconButton } from '@mini-harness/ui-primitives/primitives';
-import { workspaceRoute, wait } from '@mini-harness/web/api';
+import { workspaceRoute } from '@mini-harness/contracts/workspace';
+import { wait } from '@mini-harness/ui-runtime/http';
 import { renderMarkdown } from '@mini-harness/ui-primitives/markdown';
 
 interface FileEntry { name: string; directory: boolean }

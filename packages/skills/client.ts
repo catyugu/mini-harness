@@ -1,5 +1,5 @@
 import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend';
-import { workspaceRoute } from '@mini-harness/web/api';
+import { workspaceRoute } from '@mini-harness/contracts/workspace';
 import { iconButton } from '@mini-harness/ui-primitives/primitives';
 
 const setup: FrontendSetup = (ctx, api) => {

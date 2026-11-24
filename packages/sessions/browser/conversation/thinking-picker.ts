@@ -1,5 +1,5 @@
 import type { ThinkingLevel } from '@mini-harness/contracts/agent';
-import { scopedElements } from '@mini-harness/web/api';
+import { scopedElements } from '@mini-harness/ui-primitives/primitives';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { positionPicker } from './picker-position.js';
 

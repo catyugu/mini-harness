@@ -10,7 +10,9 @@
   },
   "exports": {
     "./frontend": "./frontend.ts",
+    "./http": "./http.ts",
     "./message-extensions": "./message-extensions.ts",
-    "./projections": "./projections.ts"
+    "./projections": "./projections.ts",
+    "./remote-store": "./remote-store.ts"
   }
 }

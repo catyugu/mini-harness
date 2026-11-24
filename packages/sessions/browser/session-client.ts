@@ -1,5 +1,5 @@
 import type { RunEvent, RunInfo } from '@mini-harness/contracts/transport';
-import { api, AuthenticationError, data, payload, readEvents, wait } from '../api.js';
+import { api, AuthenticationError, data, payload, readEvents, wait } from '@mini-harness/ui-runtime/http';
 import type { ConversationView } from '@mini-harness/contracts/conversation';
 
 export const isRunning = (run?: RunInfo) => run?.state === 'queued' || run?.state === 'running';

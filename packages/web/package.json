@@ -3,18 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "dependencies": {
-    "@mini-harness/contracts": "workspace:*"
-  },
   "exports": {
-    "./api": "./api.ts",
-    "./contracts/commands": "./contracts/commands.ts",
-    "./contracts/tabs": "./contracts/tabs.ts",
-    "./models/conversation-controller": "./models/conversation-controller.ts",
-    "./models/remote-store": "./models/remote-store.ts",
-    "./models/selection": "./models/selection.ts",
-    "./transport/session-client": "./transport/session-client.ts",
-    "./types": "./types.ts",
     "./vendor/cordis": "./vendor/cordis.d.ts",
     "./vendor/marked": "./vendor/marked.d.ts",
     "./vendor/purify": "./vendor/purify.d.ts"

@@ -57,9 +57,6 @@ importers:
       '@mini-harness/ui-runtime':
         specifier: workspace:*
         version: link:../ui-runtime
-      '@mini-harness/web':
-        specifier: workspace:*
-        version: link:../web
 
   packages/contracts: {}
 
@@ -83,9 +80,6 @@ importers:
       '@mini-harness/ui-runtime':
         specifier: workspace:*
         version: link:../ui-runtime
-      '@mini-harness/web':
-        specifier: workspace:*
-        version: link:../web
 
   packages/host:
     dependencies:
@@ -181,9 +175,6 @@ importers:
       '@mini-harness/ui-runtime':
         specifier: workspace:*
         version: link:../ui-runtime
-      '@mini-harness/web':
-        specifier: workspace:*
-        version: link:../web
 
   packages/platform:
     dependencies:
@@ -208,9 +199,6 @@ importers:
       '@mini-harness/ui-runtime':
         specifier: workspace:*
         version: link:../ui-runtime
-      '@mini-harness/web':
-        specifier: workspace:*
-        version: link:../web
 
   packages/process-execution:
     dependencies:
@@ -247,9 +235,6 @@ importers:
       '@mini-harness/ui-runtime':
         specifier: workspace:*
         version: link:../ui-runtime
-      '@mini-harness/web':
-        specifier: workspace:*
-        version: link:../web
 
   packages/sessions:
     dependencies:
@@ -265,9 +250,6 @@ importers:
       '@mini-harness/ui-runtime':
         specifier: workspace:*
         version: link:../ui-runtime
-      '@mini-harness/web':
-        specifier: workspace:*
-        version: link:../web
 
   packages/settings:
     dependencies:
@@ -283,9 +265,6 @@ importers:
       '@mini-harness/ui-runtime':
         specifier: workspace:*
         version: link:../ui-runtime
-      '@mini-harness/web':
-        specifier: workspace:*
-        version: link:../web
 
   packages/shell:
     dependencies:
@@ -298,9 +277,6 @@ importers:
       '@mini-harness/ui-runtime':
         specifier: workspace:*
         version: link:../ui-runtime
-      '@mini-harness/web':
-        specifier: workspace:*
-        version: link:../web
 
   packages/skills:
     dependencies:
@@ -313,9 +289,6 @@ importers:
       '@mini-harness/ui-runtime':
         specifier: workspace:*
         version: link:../ui-runtime
-      '@mini-harness/web':
-        specifier: workspace:*
-        version: link:../web
 
   packages/subagents:
     dependencies:
@@ -361,9 +334,6 @@ importers:
       '@mini-harness/ui-runtime':
         specifier: workspace:*
         version: link:../ui-runtime
-      '@mini-harness/web':
-        specifier: workspace:*
-        version: link:../web
 
   packages/ui-primitives:
     dependencies:
@@ -404,11 +374,7 @@ importers:
         specifier: workspace:*
         version: link:../ui-runtime
 
-  packages/web:
-    dependencies:
-      '@mini-harness/contracts':
-        specifier: workspace:*
-        version: link:../contracts
+  packages/web: {}
 
   packages/workspaces:
     dependencies:
@@ -424,9 +390,6 @@ importers:
       '@mini-harness/ui-runtime':
         specifier: workspace:*
         version: link:../ui-runtime
-      '@mini-harness/web':
-        specifier: workspace:*
-        version: link:../web
 
 packages:
 
@@ -806,11 +769,6 @@ packages:
   playwright@1.56.0:
     resolution: {integrity: sha512-X5Q1b8lOdWIE4KAoHpW3SE8HvUB+ZZsUoN64ZhjnN8dOb1UpujxBtENGiZFE+9F/yhzJwYa+ca3u43FeLbboHA==}
     engines: {node: '>=18'}
-    hasBin: true
-
-  pnpm@10.34.9:
-    resolution: {integrity: sha512-9JtajqD97bRLs8DB1ldQkqU8KVDZW3rRXfEfF5dId6LeOgHAfpNOmyjOcW5RwJqUlixzBtCb4uHksYqMh2L9Mg==}
-    engines: {node: '>=18.12'}
     hasBin: true
 
   protobufjs@7.6.6:

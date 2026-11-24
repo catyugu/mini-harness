@@ -93,7 +93,7 @@ test('frontend API preserves caller headers and retains host authorization', asy
       await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
     });
     await page.evaluate(async () => {
-      const { api } = await import(String('/packages/web/api.js')) as { api: (path: string, options: RequestInit) => Promise<Response> };
+      const { api } = await import(String('/packages/ui-runtime/http.js')) as { api: (path: string, options: RequestInit) => Promise<Response> };
       await api('/settings', {
         method: 'PATCH',
         headers: new Headers({ 'X-Plugin-Request': 'present', 'Content-Type': 'application/merge-patch+json', Authorization: 'Bearer stale' }),

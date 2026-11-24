@@ -1,5 +1,5 @@
 import type { FrontendSetup, ToolView } from '@mini-harness/ui-runtime/frontend';
-import { payload } from '@mini-harness/web/api';
+import { payload } from '@mini-harness/ui-runtime/http';
 
 function renderResult(tool: ToolView) {
   const result = typeof tool.content === 'string' ? tool.content : tool.content?.filter((b) => b.type === 'text').map((b) => b.text).join('\n');

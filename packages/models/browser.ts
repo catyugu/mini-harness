@@ -1,7 +1,7 @@
 import type { ModelChoice } from '@mini-harness/contracts/conversation';
-import { payload } from '@mini-harness/web/api';
+import { payload } from '@mini-harness/ui-runtime/http';
 import type { ModelCatalog, ProviderInfo, ProviderModel } from '@mini-harness/contracts/models';
-import { RemoteStore } from '@mini-harness/web/models/remote-store';
+import { RemoteStore } from '@mini-harness/ui-runtime/remote-store';
 import type { FrontendSetup, FrontendApi } from '@mini-harness/ui-runtime/frontend';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { button, field, fromMarkup, confirmAction, required } from '@mini-harness/ui-primitives/primitives';

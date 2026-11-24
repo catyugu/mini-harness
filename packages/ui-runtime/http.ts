@@ -1,23 +1,3 @@
-export function scopedElements(root: HTMLElement) {
-  function element<K extends keyof HTMLElementTagNameMap = 'div'>(id: string): HTMLElementTagNameMap[K] {
-    return (root.id === id ? root : root.querySelector('#' + id)) as HTMLElementTagNameMap[K];
-  }
-  return { element, value: (id: string) => element<'input'>(id).value.trim() };
-}
-/** A hash-only navigation does not reload ESM modules. Recover by reloading with the new credential. */
-function acceptTokenFromUrl() {
-  const token = new URLSearchParams(location.hash.slice(1)).get('token');
-  if (!token) return false;
-  const changed = sessionStorage.getItem('mini-harness-token') !== token;
-  sessionStorage.setItem('mini-harness-token', token);
-  history.replaceState(null, '', location.pathname + location.search);
-  return changed;
-}
-acceptTokenFromUrl();
-window.addEventListener('hashchange', () => {
-  if (acceptTokenFromUrl()) location.reload();
-});
-
 export class AuthenticationError extends Error {
   constructor() { super('Session authorization expired. Open the current URL printed by mini-harness.'); }
 }
@@ -37,8 +17,6 @@ export async function api(path: string, options: RequestInit = {}) {
 }
 export async function data<T>(path: string, options?: RequestInit): Promise<T> { return (await api(path, options)).json(); }
 export const payload = (method: string, body: unknown) => ({ method, body: JSON.stringify(body) });
-
-export const workspaceRoute = (id: string, resource = '') => '/workspaces/' + encodeURIComponent(id) + resource;
 
 export async function readEvents<T>(response: Response, accept: (event: T) => void) {
   if (!response.body) throw new Error('No response stream');

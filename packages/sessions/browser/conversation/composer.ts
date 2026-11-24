@@ -1,7 +1,7 @@
-import { scopedElements } from '@mini-harness/web/api';
+import { scopedElements } from '@mini-harness/ui-primitives/primitives';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import type { CommandRegistry } from './commands.js';
-import type { ComposerCommand } from '@mini-harness/web/contracts/commands';
+import type { ComposerCommand } from '@mini-harness/contracts/composer';
 import type { Attachment } from '@mini-harness/contracts/input';
 import type { Completer, DraftMode, FrontendApi, Suggestion } from '@mini-harness/ui-runtime/frontend';
 export interface ConversationDraft {

@@ -18,3 +18,5 @@ export interface WorkspacePort {
 declare module 'cordis' {
   interface Context { harnessWorkspaces: WorkspacePort }
 }
+
+export const workspaceRoute = (id: string, resource = '') => '/workspaces/' + encodeURIComponent(id) + resource;

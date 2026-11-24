@@ -1,7 +1,8 @@
 import type { WorkspaceRecord } from '@mini-harness/contracts/workspace';
 import type { FrontendSetup, FrontendApi } from '@mini-harness/ui-runtime/frontend';
 import { button, field, confirmAction } from '@mini-harness/ui-primitives/primitives';
-import { payload, workspaceRoute } from '@mini-harness/web/api';
+import { payload } from '@mini-harness/ui-runtime/http';
+import { workspaceRoute } from '@mini-harness/contracts/workspace';
 import { fileLabel, icon } from '@mini-harness/ui-primitives/icons';
 
 const setup: FrontendSetup = (ctx, api) => {

@@ -127,3 +127,10 @@ export function required<T>(value: T | null | undefined): T {
   if (value === null || value === undefined) throw new Error('Required UI element is missing');
   return value;
 }
+
+export function scopedElements(root: HTMLElement) {
+  function element<K extends keyof HTMLElementTagNameMap = 'div'>(id: string): HTMLElementTagNameMap[K] {
+    return (root.id === id ? root : root.querySelector('#' + id)) as HTMLElementTagNameMap[K];
+  }
+  return { element, value: (id: string) => element<'input'>(id).value.trim() };
+}

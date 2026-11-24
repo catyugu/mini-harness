@@ -19,15 +19,10 @@ const assets = new Map([
   ['icon-192.png', 'image/png'], ['icon-512.png', 'image/png'], ['favicon.ico', 'image/x-icon']
 ]);
 
-// Browser modules are built under dist/packages/web. Local plugin source stays behind the authenticated API.
-for (const entry of readdirSync(WEB_DIR, { recursive: true, withFileTypes: true })) {
-  if (entry.isFile() && entry.name.endsWith('.js')) {
-    const path = relative(WEB_DIR, join(entry.parentPath, entry.name)).split(sep).join('/');
-    // Co-located browser tests are compiled for Playwright but must never be web assets.
-    if (path.split('/').includes('tests') || /\.(?:spec|test)\.js$/.test(path)) continue;
-    assets.set('packages/web/' + path, 'text/javascript');
-  }
-}
+// Vendor modules and shared browser-safe route construction are public.
+for (const name of ['cordis', 'cosmokit', 'marked', 'purify'])
+  assets.set('packages/web/vendor/' + name + '.js', 'text/javascript');
+assets.set('packages/contracts/workspace.js', 'text/javascript');
 
 // Only client modules from UI foundations may be served.
 for (const name of ['ui-runtime', 'ui-slots', 'ui-theme', 'ui-primitives', 'ui-layout']) {

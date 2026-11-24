@@ -1,5 +1,5 @@
 import type { ModelChoice } from '@mini-harness/contracts/conversation';
-import { scopedElements } from '@mini-harness/web/api';
+import { scopedElements } from '@mini-harness/ui-primitives/primitives';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { positionPicker } from './picker-position.js';
 import type { ModelSummary } from '@mini-harness/contracts/models';
