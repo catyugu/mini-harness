@@ -140,12 +140,15 @@ test('plugin JSON Schema applies defaults and rejects invalid changes before set
   t.after(async () => { await runtime.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
   const folder = join(paths.plugins, 'schema');
   mkdirSync(folder);
-  writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ inject: ['harnessTools'], configChanges: 'live', configSchema: {
+  writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ inject: ['harnessTools'], configChanges: 'live', configGroups: [{ title: 'Values', fields: ['count', 'options'] }], configHint: 'Choose a count', configSchema: {
     type: 'object', additionalProperties: false, required: ['count'],
     properties: { count: { type: 'integer', minimum: 1, maximum: 10, default: 3 },
       options: { type: 'object', default: {}, properties: { enabled: { type: 'boolean', default: true } } } }
   } }));
   writeFileSync(join(folder, 'plugin.js'), `import { toolExtensions } from "${pluginSdkUrl}";
+export function validateConfig(config, { operation }) {
+    if (config.count === 9) throw new Error('Count 9 rejected during ' + operation);
+}
 export default (ctx, api) => {
     const changes = [];
     api.configuration.subscribe('count', (value) => changes.push(value));
@@ -168,6 +171,8 @@ export default (ctx, api) => {
   ]);
   assert.deepEqual(readSettings(paths).pluginConfig.schema, { count: 7, options: { enabled: false } });
   await assert.rejects(tool.execute('invalid-count', { count: 0 }, undefined, undefined, undefined), /Invalid configuration/);
+  await assert.rejects(runtime.configuration.update({ pluginConfig: { schema: { count: 9 } } }), /Count 9 rejected during write/);
+  assert.equal(readSettings(paths).pluginConfig.schema.count, 7);
   assert.match(JSON.stringify(await tool.execute('committed', {}, undefined, undefined, undefined)), /7:false:7/);
   await assert.rejects(runtime.configuration.update({ pluginConfig: { schema: { count: 0 } } }), /Invalid configuration/);
   assert.deepEqual(await tool.execute('test', {}, undefined, undefined, undefined),

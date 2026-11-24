@@ -2,10 +2,11 @@ import type {} from '@mini-harness/transport/projection-api';
 import type {} from '@mini-harness/settings/api';
 import type {} from '@mini-harness/kernel/mutation-api';
 import { DomainError } from '@mini-harness/platform/errors';
-import { dirname, join } from 'node:path';
+import { dirname, join, relative } from 'node:path';
+import { createHash } from 'node:crypto';
 import { Context } from 'cordis';
 import { isDeepStrictEqual } from 'node:util';
-import { lstatSync } from 'node:fs';
+import { lstatSync, readdirSync, realpathSync, rmSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import type { PluginDescriptor, ScopedRequestHandler } from '@mini-harness/plugin-api/descriptor';
 import type { HostServices, PluginScope, ScopePort, ScopeDirectory, ScopeTarget } from '@mini-harness/kernel/scopes';
@@ -85,7 +86,7 @@ export class PluginHost implements ScopePort {
   private scopeAddress(key: string) {
     const address = this.resolveAddress(key);
     // Workspace addresses are roots and can be planned before application providers mount.
-    if (!address.length && key.startsWith('workspace:'))
+    if (!this.started && !address.length && key.startsWith('workspace:'))
       return [{ key, scope: { kind: 'workspace' as const, workspaceId: key.slice('workspace:'.length) } }];
     return address;
   }
@@ -200,9 +201,34 @@ export class PluginHost implements ScopePort {
     return { scopes, mounts, diagnostics };
   }
 
+  private async module(source?: string) {
+    return source ? await import(pathToFileURL(source).href + '?v=' + lstatSync(source).mtimeMs) : undefined;
+  }
+
+  private validator(descriptor: PluginDescriptor, module: { validateConfig?: unknown } | undefined): PluginDescriptor {
+    const validate = module?.validateConfig;
+    if (validate !== undefined && typeof validate !== 'function') throw new Error('Export validateConfig as a function');
+    return validate ? { ...descriptor, validateConfig: validate as PluginDescriptor['validateConfig'] } : descriptor;
+  }
+
+  private forgetData(keys: ReadonlySet<string>) {
+    const root = join(dirname(this.directory), 'plugin-data');
+    const entry = lstatSync(root, { throwIfNoEntry: false });
+    if (!entry) return;
+    if (!entry.isDirectory() || relative(root, realpathSync(root))) throw new Error('Plugin data directory was redirected');
+    const hashes = [...keys].map((key) => createHash('sha256').update(key).digest('hex'));
+    for (const folder of readdirSync(root, { withFileTypes: true })) {
+      if (!folder.isDirectory()) continue;
+      const path = join(root, folder.name);
+      if (relative(path, realpathSync(path))) throw new Error('Plugin data directory was redirected');
+      for (const hash of hashes) rmSync(join(path, hash), { recursive: true, force: true });
+    }
+  }
+
   private async load(plan: PluginPlan, scope: PluginScope, scopeKey?: string): ReturnType<MountPlan['load']> {
     const { descriptor, source } = plan;
-    const mod = source ? await import(pathToFileURL(source).href + '?v=' + lstatSync(source).mtimeMs) : undefined;
+    const mod = await this.module(source);
+    const validated = this.validator(descriptor, mod);
     const setup = source ? mod.default : descriptor.setup ?? (() => {});
     if (typeof setup !== 'function' || mod?.inject !== undefined || (source && setup.inject !== undefined))
       throw new Error('Export a default setup function and declare dependencies in plugin.json');
@@ -236,7 +262,7 @@ export class PluginHost implements ScopePort {
           scope.kind === 'workspace' ? { workspaceId: scope.workspaceId } : {})
       });
       setDrain(runtime.drain);
-      if (descriptor.validateConfig) this.catalog.validateConfig(descriptor, runtime.api.config, 'mount', ctx);
+      if (validated.validateConfig) this.catalog.validateConfig(validated, runtime.api.config, 'mount', ctx);
       const cleanup = await setup(ctx, runtime.api);
       if (typeof cleanup === 'function') ctx.effect(() => cleanup);
       runtime.checkPublications();
@@ -281,7 +307,7 @@ export class PluginHost implements ScopePort {
       const message = error instanceof Error ? error.message : String(error);
       if (updating && changedSelection(id, previous, settings))
         throw error instanceof DomainError ? error : new DomainError('invalid_input', message, { cause: error });
-      if (this.catalog.builtins.get(id)?.required || this.mounts.plan(id)) return false;
+      if (this.catalog.requiredProvider(id, settings) || this.mounts.plan(id)) return false;
       failures.set(id, message);
       return true;
     };
@@ -306,6 +332,7 @@ export class PluginHost implements ScopePort {
       ? this.ctx.get('harnessMutations')?.protect(appChanged ? undefined : scopeChanges) : undefined;
     try {
       await this.mounts.configure(mounts, () => {
+        if (released?.size) this.forgetData(released);
         commit();
         this.started = true;
         this.scopes = scoped.scopes;
@@ -314,9 +341,11 @@ export class PluginHost implements ScopePort {
         this.graph = [...plans.map((plan) => this.describe(plan)), ...scoped.diagnostics]
           .filter(({ id }) => this.mounts.plan(id));
         this.ctx.get('harnessChanges')?.invalidate('plugins');
-      }, unavailable, () => {
-        for (const { descriptor, config, key } of validations)
-          this.catalog.validateConfig(descriptor, config, 'write', this.configurationContext(key, scoped.scopes));
+      }, unavailable, async () => {
+        for (const { descriptor, config, key } of validations) {
+          const validated = this.validator(descriptor, await this.module(descriptor.source));
+          this.catalog.validateConfig(validated, config, 'write', this.configurationContext(key, scoped.scopes));
+        }
       });
     } finally { release?.(); }
   }

@@ -66,6 +66,13 @@ export class PluginCatalog {
 
   reserved(id: string) { return this.builtins.has(id); }
 
+  requiredProvider(id: string, settings: PluginSettings) {
+    return [...this.builtins.values()].some((descriptor) => descriptor.required &&
+      (descriptor.provides?.length
+        ? descriptor.provides.some((service) => (settings.providers[service] ?? descriptor.id) === id)
+        : descriptor.id === id));
+  }
+
   private discover(): DiscoveredPlugin[] {
     if (this.devPlugin) {
       const id = basename(this.devPlugin);
@@ -138,13 +145,14 @@ export class PluginCatalog {
   }
 
   changedConfig(descriptors: DiscoveredPlugin[], previous: PluginSettings, settings: PluginSettings) {
-    const validations: { descriptor: PluginDescriptor; config: Record<string, unknown>; key?: string }[] = [];
+    const validations: { descriptor: DiscoveredPlugin; config: Record<string, unknown>; key?: string }[] = [];
     for (const descriptor of descriptors) {
       const { id, configSchema, scope } = descriptor;
       const validate = (values: Record<string, unknown> | undefined, before: Record<string, unknown> | undefined, key?: string) => {
         if (isDeepStrictEqual(values, before)) return;
         const config = this.configValues(id, values, configSchema);
-        if (descriptor.validateConfig) validations.push({ descriptor, config, key });
+        const selected = key ? settings.scopes[key]?.plugins?.[id] === true : scope === 'application' && settings.plugins[id] === true;
+        if (descriptor.validateConfig || (descriptor.source && selected)) validations.push({ descriptor, config, key });
       };
       if (scope === 'application') validate(settings.pluginConfig[id], previous.pluginConfig[id]);
       else {

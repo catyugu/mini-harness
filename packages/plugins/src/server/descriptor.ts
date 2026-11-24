@@ -53,6 +53,19 @@ export function describePlugin(id: string, folder: string): DiscoveredPlugin {
   const configSchema = manifest.configSchema;
   if (configSchema && (configSchema.type !== 'object' || !configSchema.properties || typeof configSchema.properties !== 'object'))
     throw new Error('Expected an object configSchema for plugin: ' + id);
+  const configGroups = manifest.configGroups;
+  if (configGroups !== undefined) {
+    if (!configSchema || !Array.isArray(configGroups) || configGroups.some((group) =>
+      !group || typeof group.title !== 'string' || !group.title.trim() ||
+      !Array.isArray(group.fields) || !group.fields.length ||
+      group.fields.some((field) => typeof field !== 'string' || !Object.hasOwn(configSchema.properties, field))))
+      throw new Error('Invalid plugin configuration groups: ' + id);
+    const fields = configGroups.flatMap((group) => group.fields);
+    if (fields.length !== new Set(fields).size) throw new Error('Duplicate plugin configuration field: ' + id);
+  }
+  const configHint = manifest.configHint;
+  if (configHint !== undefined && (typeof configHint !== 'string' || configHint.length > 4096))
+    throw new Error('Invalid plugin configuration hint: ' + id);
   const icon = manifest.icon;
   if (icon !== undefined && !(
     typeof icon === 'string' && icon.length > 0 && icon.length <= 128 ||
@@ -61,5 +74,5 @@ export function describePlugin(id: string, folder: string): DiscoveredPlugin {
     (icon.viewBox === undefined || typeof icon.viewBox === 'string' && icon.viewBox.length <= 100)
   )) throw new Error('Invalid plugin icon: ' + id);
   return { source: hasHost ? source : undefined, resources, scope, id, title, description,
-    requires, provides, inject, optional, browserRequires, browserInject, browserProvides, configSchema, configChanges: manifest.configChanges, icon, web: hasWeb, trustedCode: true };
+    requires, provides, inject, optional, browserRequires, browserInject, browserProvides, configSchema, configGroups, configHint, configChanges: manifest.configChanges, icon, web: hasWeb, trustedCode: true };
 }

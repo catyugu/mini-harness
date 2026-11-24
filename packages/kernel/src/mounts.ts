@@ -53,8 +53,8 @@ export class PluginMounts {
     try { await installed.drain(); } finally { await installed.fiber.dispose(); }
   }
 
-  configure(ordered: MountPlan[], commit: () => void = () => {},
-    unavailable?: (id: string, error: unknown) => boolean, validate = () => {}) {
+  async configure(ordered: MountPlan[], commit: () => void = () => {},
+    unavailable?: (id: string, error: unknown) => boolean, validate: () => void | Promise<void> = () => {}) {
     const desired = new Map(ordered.map((plan) => [plan.id, plan]));
     const affected = new Set([...this.mounted.values()]
       .filter(({ plan }) => plan.context !== desired.get(plan.id)?.context ||
@@ -69,11 +69,11 @@ export class PluginMounts {
       return value && previous && plan.config && !affected.has(plan.id) && !isDeepStrictEqual(previous, plan.config)
         ? [{ mounted: value, previous, next: plan.config, plan }] : [];
     });
-    if (!obsolete.length && !additions.length && !updates.length) { validate(); commit(); return; }
+    if (!obsolete.length && !additions.length && !updates.length) { await validate(); commit(); return; }
     return this.apply(obsolete, additions, updates, commit, validate, unavailable);
   }
 
-  private async apply(obsolete: MountPlan[], additions: MountPlan[], updates: ConfigUpdate[], commit: () => void, validate: () => void,
+  private async apply(obsolete: MountPlan[], additions: MountPlan[], updates: ConfigUpdate[], commit: () => void, validate: () => void | Promise<void>,
     unavailable?: (id: string, error: unknown) => boolean) {
     const prepared = new Map<string, Loaded>();
     for (const plan of additions) {
@@ -101,7 +101,7 @@ export class PluginMounts {
           loaded.push(plan.id);
         } catch (error) { if (!unavailable?.(plan.id, error)) throw error; }
       }
-      validate();
+      await validate();
       for (const update of updates) {
         if (!update.mounted.updateConfig) throw new Error('Missing live configuration handler: ' + update.plan.id);
         applied.push(update);
