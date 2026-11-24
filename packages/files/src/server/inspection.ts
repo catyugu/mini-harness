@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { realpath } from 'node:fs/promises';
 import { DomainError } from '@mini-harness/platform/errors';
-import { resolve, relative } from 'node:path';
+import { resolve, relative, extname } from 'node:path';
 import type { WorkspaceFileAccess } from '@mini-harness/file-access/api';
 
 const diffLimit = 1024 * 1024;
@@ -14,11 +14,21 @@ export class Inspection {
   }
   async preview(path: string) {
     const bytes = await this.files.readFile(path);
-    if (bytes.length > 512 * 1024) throw new DomainError('invalid_input', 'Preview is limited to 512 KiB');
     const image = await this.files.imageType(path);
     if (image) return { path, content: bytes.toString('base64'), image };
-    if (bytes.includes(0)) throw new DomainError('invalid_input', 'Binary file: attach or open it in a local application');
-    return { path, content: bytes.toString('utf8') };
+    const mediaTypes: Record<string, string> = {
+      '.mp4': 'video/mp4', '.webm': 'video/webm', '.ogv': 'video/ogg', '.mov': 'video/quicktime',
+      '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg', '.m4a': 'audio/mp4'
+    };
+    const media = bytes.subarray(0, 5).toString('ascii') === '%PDF-' ? 'application/pdf' : mediaTypes[extname(path).toLowerCase()];
+    if (media) return { path, content: bytes.toString('base64'), media };
+    if (!bytes.includes(0)) {
+      try {
+        const content = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+        return { path, content: content.slice(0, 512 * 1024), truncated: content.length > 512 * 1024 || undefined };
+      } catch { /* Binary files are available without interpreting them as source. */ }
+    }
+    return { path, content: bytes.toString('base64'), media: 'application/octet-stream' };
   }
 
   private async git(args: string[], limit: number) {
@@ -67,7 +77,7 @@ export class Inspection {
     const reason = await this.repository();
     if (reason) return { available: false, files: [], reason };
     try {
-      const { content, truncated } = await this.git(['status', '--porcelain=v1', '-z', '--untracked-files=normal'], statusLimit);
+      const { content, truncated } = await this.git(['status', '--porcelain=v1', '-z', '--untracked-files=all'], statusLimit);
       const records = content.split('\0');
       records.pop();
       const files: { path: string; status: string }[] = [];

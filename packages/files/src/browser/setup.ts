@@ -13,7 +13,8 @@ import { renderMarkdown } from '@mini-harness/ui-primitives/markdown';
 interface FileEntry { name: string; directory: boolean }
 interface FileChange { path: string; status: string }
 interface GitChanges { available: boolean; files: FileChange[]; truncated?: boolean; reason?: string }
-interface Preview { content: string; image?: string; truncated?: boolean }
+interface Preview { content: string; image?: string; media?: string; truncated?: boolean }
+interface Upload { name: string; mimeType: string; id: string }
 
 function fileRoute(scope: TabScope, action: string, query: Record<string, string> = {}) {
   const params = new URLSearchParams(query);
@@ -81,7 +82,7 @@ function fileEntry(api: FrontendApi, scope: TabScope, path: string, label: strin
   row.type = 'button';
   row.className = 'file-entry';
   row.title = path;
-  row.onclick = () => api.contribute(layoutExtensions.openTab, 'file', path, scope, diff ? 'diff' : 'preview');
+  row.onclick = () => api.contribute(layoutExtensions.openTab, diff ? 'diff' : 'file', path, scope);
   row.append(icon(fileIcon(path)));
   const name = document.createElement('span');
   name.textContent = label;
@@ -123,13 +124,12 @@ function fileTree(projections: BrowserProjectionPort, api: FrontendApi, services
   const content = document.createElement('div');
   root.append(toolbar, content);
   let loading: AbortController;
-  const groups = new Map<string, string>();
   async function tree(path: string, loadSignal: AbortSignal) {
     const list = document.createElement('div');
     list.className = 'file-tree';
     for (const entry of await readDirectory(api, address, path, loadSignal)) {
       if (!entry.directory) {
-        list.append(fileEntry(api, address, entry.path, entry.name, groups.get(entry.path)));
+        list.append(fileEntry(api, address, entry.path, entry.name));
         continue;
       }
       const details = document.createElement('details');
@@ -168,15 +168,8 @@ function fileTree(projections: BrowserProjectionPort, api: FrontendApi, services
     content.setAttribute('aria-busy', 'true');
     if (!content.firstChild) content.append(hint('Loading files…'));
     try {
-      const changes = await api.request<GitChanges>(fileRoute(address, 'changes'), { signal: loadSignal });
-      loadSignal.throwIfAborted();
-      groups.clear();
-      for (const change of changes.files) groups.set(change.path, change.status);
       const listing = await tree(path, loadSignal);
-      if (!loadSignal.aborted) {
-        content.replaceChildren(listing);
-        if (changes.truncated) content.append(hint('Git status is truncated.'));
-      }
+      if (!loadSignal.aborted) content.replaceChildren(listing);
     } catch (error) { if (!loadSignal.aborted) content.replaceChildren(hint((error instanceof Error ? error.message : String(error)))); }
     finally { if (!loadSignal.aborted) content.removeAttribute('aria-busy'); }
   }
@@ -220,81 +213,177 @@ function source(content: string, highlight: boolean) {
   return wrapper;
 }
 
+function bytesOf(content: string) {
+  return Uint8Array.from(atob(content), (char) => char.charCodeAt(0));
+}
+
+const inlineMedia = /^(?:image\/(?:png|jpeg|gif|webp)|video\/(?:mp4|webm|ogg|quicktime)|audio\/(?:mpeg|wav|ogg|mp4)|application\/pdf)$/;
+
+function uploadPreview(file: Upload, data: string): Preview {
+  if (inlineMedia.test(file.mimeType)) return { content: data, media: file.mimeType };
+  const bytes = bytesOf(data);
+  if (!bytes.includes(0)) {
+    try { return { content: new TextDecoder('utf-8', { fatal: true }).decode(bytes) }; }
+    catch { /* Binary data is not interpreted as text. */ }
+  }
+  return { content: data, media: 'application/octet-stream' };
+}
+
+/** Text, Markdown and media use the same viewer for workspace and uploaded files. */
+function previewBody(path: string, raw: HTMLButtonElement, body: HTMLElement, signal: AbortSignal) {
+  let showSource = false;
+  let objectUrl: string | undefined;
+  const release = () => { if (objectUrl) URL.revokeObjectURL(objectUrl); objectUrl = undefined; };
+  signal.addEventListener('abort', release, { once: true });
+  return ({ content, image, media, truncated }: Preview) => {
+    release();
+    raw.hidden = true;
+    let view: HTMLElement;
+    const mime = image ?? media;
+    if (mime) {
+      const bytes = bytesOf(content);
+      const safeType = inlineMedia.test(mime) ? mime : 'application/octet-stream';
+      objectUrl = URL.createObjectURL(new Blob([bytes], { type: safeType }));
+      const download = control('Download', 'quiet');
+      download.onclick = () => {
+        const link = document.createElement('a'); link.href = objectUrl!; link.download = base(path); link.click();
+      };
+      view = document.createElement('div');
+      const label = hint(safeType === 'application/octet-stream' ? 'No inline preview for this file type.' : base(path));
+      if (safeType.startsWith('image/')) {
+        const element = document.createElement('img');
+        element.className = 'file-image'; element.alt = base(path);
+        element.src = 'data:' + safeType + ';base64,' + content;
+        view.append(element);
+      } else if (safeType.startsWith('video/') || safeType.startsWith('audio/')) {
+        const element = document.createElement(safeType.startsWith('video/') ? 'video' : 'audio');
+        element.className = 'file-media'; element.controls = true; element.preload = 'metadata'; element.src = objectUrl;
+        element.setAttribute('aria-label', base(path));
+        view.append(element);
+      } else if (safeType === 'application/pdf') {
+        const frame = document.createElement('iframe');
+        frame.className = 'file-pdf'; frame.title = base(path); frame.src = objectUrl;
+        view.append(frame);
+      } else view.append(label);
+      view.append(download);
+    } else if (['md', 'markdown'].includes(extension(path))) {
+      const markdown = document.createElement('div');
+      markdown.className = 'markdown file-markdown'; renderMarkdown(markdown, content);
+      const text = source(content, false);
+      const displaySource = () => {
+        text.hidden = !showSource; markdown.hidden = showSource;
+        raw.setAttribute('aria-pressed', String(showSource));
+      };
+      raw.hidden = false;
+      raw.onclick = () => { showSource = !showSource; displaySource(); };
+      displaySource();
+      view = document.createElement('div'); view.append(markdown, text);
+    } else view = source(content, code.has(extension(path)));
+    body.replaceChildren(view);
+    if (truncated) body.append(hint('Preview is truncated.'));
+  };
+}
+
 function fileView(projections: BrowserProjectionPort, api: FrontendApi, services: ConversationBrowserPort, address: TabAddress, signal: AbortSignal) {
   if (!address.path) throw new Error('A file preview requires a file path');
   const path = address.path;
   const root = document.createElement('section');
-  const toolbar = document.createElement('div');
-  toolbar.className = 'file-toolbar';
-  const alternate = control('', 'quiet');
+  const toolbar = document.createElement('div'); toolbar.className = 'file-toolbar';
   const refresh = iconButton('Refresh file', 'refresh');
-  const raw = control('Source', 'quiet');
-  raw.hidden = true;
-  toolbar.append(breadcrumbs(api, services, address, path, true), alternate, raw, refresh);
-  const body = document.createElement('div');
-  body.append(hint('Loading file…'));
+  const raw = control('Source', 'quiet'); raw.hidden = true;
+  toolbar.append(breadcrumbs(api, services, address, path, true), raw, refresh);
+  const body = document.createElement('div'); body.append(hint('Loading file…'));
   root.append(toolbar, body);
+  const render = previewBody(path, raw, body, signal);
   let loading: AbortController | undefined;
-  let showSource = false;
   async function load() {
-    loading?.abort();
-    loading = new AbortController();
+    loading?.abort(); loading = new AbortController();
     const loadSignal = AbortSignal.any([signal, loading.signal]);
-    const diff = address.mode === 'diff';
-    alternate.textContent = diff ? 'Preview' : 'Diff';
     try {
-      const { content, image, truncated } = await api.request<Preview>(fileRoute(address, diff ? 'diff' : 'preview', { path }), { signal: loadSignal });
-      if (loadSignal.aborted) return;
-      raw.hidden = true;
-      let view: HTMLElement;
-      if (image && !diff) {
-        const element = document.createElement('img');
-        element.className = 'file-image';
-        element.alt = base(path);
-        element.src = 'data:' + image + ';base64,' + content;
-        view = element;
-      } else if (diff) {
-        const pre = document.createElement('pre');
-        pre.className = 'diff';
-        const lines = (image ? 'Binary image' : content).trimEnd().split('\n');
-        for (const line of lines.slice(0, 5000)) {
-          const span = document.createElement('span');
-          span.className = line.startsWith('@@') ? 'diff-hunk' : /^(?:diff |index |--- |\+\+\+ )/.test(line) ? 'diff-header' :
-            line.startsWith('+') ? 'added' : line.startsWith('-') ? 'removed' : '';
-          span.textContent = line + '\n';
-          pre.append(span);
-        }
-        if (lines.length > 5000) pre.append('… Diff shows the first 5,000 lines.');
-        view = pre;
-      } else if (['md', 'markdown'].includes(extension(path))) {
-        const markdown = document.createElement('div');
-        markdown.className = 'markdown file-markdown';
-        renderMarkdown(markdown, content);
-        const code = source(content, false);
-        const displaySource = () => {
-          code.hidden = !showSource;
-          markdown.hidden = showSource;
-          raw.setAttribute('aria-pressed', String(showSource));
-        };
-        raw.hidden = false;
-        raw.onclick = () => { showSource = !showSource; displaySource(); };
-        displaySource();
-        view = document.createElement('div');
-        view.append(markdown, code);
-      } else view = source(content, code.has(extension(path)));
-      body.replaceChildren(view);
-      if (truncated) body.append(hint('Diff is truncated. Open the file locally to see the full change.'));
+      const result = await api.request<Preview>(fileRoute(address, 'preview', { path }), { signal: loadSignal });
+      if (!loadSignal.aborted) render(result);
     } catch (error) {
-      if (!loadSignal.aborted) {
-        raw.hidden = true;
-        body.replaceChildren(hint(error instanceof Error ? error.message : String(error)));
-      }
+      if (!loadSignal.aborted) { raw.hidden = true; body.replaceChildren(hint(error instanceof Error ? error.message : String(error))); }
     }
   }
-  alternate.onclick = () => {
-    address.mode = address.mode === 'diff' ? 'preview' : 'diff';
-    void load();
-  };
+  refresh.onclick = () => void load();
+  refreshFiles(projections, address, root, signal, load);
+  return root;
+}
+
+function attachmentView(api: FrontendApi, address: TabAddress, signal: AbortSignal) {
+  const file: Upload = JSON.parse(address.path!);
+  const root = document.createElement('section');
+  const toolbar = document.createElement('div'); toolbar.className = 'file-toolbar';
+  const label = document.createElement('span'); label.className = 'file-breadcrumbs'; label.textContent = file.name;
+  const raw = control('Source', 'quiet'); raw.hidden = true;
+  const download = control('Download', 'quiet'); download.hidden = true;
+  toolbar.append(label, raw, download);
+  const body = document.createElement('div'); body.append(hint('Loading attachment…')); root.append(toolbar, body);
+  const render = previewBody(file.name, raw, body, signal);
+  void api.request<{ data: string }>('/sessions/' + address.sessionId + '/attachments/' + file.id, { signal }).then(({ data }) => {
+    if (signal.aborted) return;
+    render(uploadPreview(file, data));
+    const url = URL.createObjectURL(new Blob([bytesOf(data)], { type: 'application/octet-stream' }));
+    signal.addEventListener('abort', () => URL.revokeObjectURL(url), { once: true });
+    download.hidden = false;
+    download.onclick = () => { const link = document.createElement('a'); link.href = url; link.download = file.name; link.click(); };
+  }).catch((error) => { if (!signal.aborted) body.replaceChildren(hint(error.message)); });
+  return root;
+}
+
+function changesView(projections: BrowserProjectionPort, api: FrontendApi, address: TabAddress, signal: AbortSignal) {
+  const root = document.createElement('section');
+  const toolbar = document.createElement('div'); toolbar.className = 'file-toolbar';
+  const title = document.createElement('span'); title.className = 'file-breadcrumbs'; title.textContent = 'Git changes';
+  const refresh = iconButton('Refresh changes', 'refresh'); toolbar.append(title, refresh);
+  const body = document.createElement('div'); body.append(hint('Loading changes…')); root.append(toolbar, body);
+  let loading: AbortController | undefined;
+  async function load() {
+    loading?.abort(); loading = new AbortController();
+    const loadSignal = AbortSignal.any([signal, loading.signal]);
+    try {
+      const result = await api.request<GitChanges>(fileRoute(address, 'changes'), { signal: loadSignal });
+      if (loadSignal.aborted) return;
+      body.replaceChildren(...result.files.map(({ path, status }) => fileEntry(api, address, path, path, status, true)));
+      if (!result.files.length) body.append(hint(result.reason ?? 'No Git changes.'));
+      if (result.truncated) body.append(hint('Git status is truncated.'));
+    } catch (error) { if (!loadSignal.aborted) body.replaceChildren(hint(error instanceof Error ? error.message : String(error))); }
+  }
+  refresh.onclick = () => void load();
+  refreshFiles(projections, address, root, signal, load);
+  return root;
+}
+
+function diffView(projections: BrowserProjectionPort, api: FrontendApi, address: TabAddress, signal: AbortSignal) {
+  if (!address.path) throw new Error('A diff requires a file path');
+  const path = address.path;
+  const root = document.createElement('section');
+  const toolbar = document.createElement('div'); toolbar.className = 'file-toolbar';
+  const back = control('Git changes', 'quiet'); back.onclick = () => api.contribute(layoutExtensions.openTab, 'changes', undefined, address);
+  const title = document.createElement('span'); title.className = 'file-breadcrumbs'; title.textContent = path;
+  const refresh = iconButton('Refresh diff', 'refresh'); toolbar.append(back, title, refresh);
+  const body = document.createElement('div'); body.append(hint('Loading diff…')); root.append(toolbar, body);
+  let loading: AbortController | undefined;
+  async function load() {
+    loading?.abort(); loading = new AbortController();
+    const loadSignal = AbortSignal.any([signal, loading.signal]);
+    try {
+      const { content, truncated } = await api.request<Preview>(fileRoute(address, 'diff', { path }), { signal: loadSignal });
+      if (loadSignal.aborted) return;
+      const pre = document.createElement('pre'); pre.className = 'diff';
+      const lines = content.trimEnd().split('\n');
+      for (const line of lines.slice(0, 5000)) {
+        const span = document.createElement('span');
+        span.className = line.startsWith('@@') ? 'diff-hunk' : /^(?:diff |index |--- |\+\+\+ )/.test(line) ? 'diff-header' :
+          line.startsWith('+') ? 'added' : line.startsWith('-') ? 'removed' : '';
+        span.textContent = line + '\n'; pre.append(span);
+      }
+      if (lines.length > 5000) pre.append('… Diff shows the first 5,000 lines.');
+      body.replaceChildren(pre);
+      if (truncated) body.append(hint('Diff is truncated. Open the file locally to see the full change.'));
+    } catch (error) { if (!loadSignal.aborted) body.replaceChildren(hint(error instanceof Error ? error.message : String(error))); }
+  }
   refresh.onclick = () => void load();
   refreshFiles(projections, address, root, signal, load);
   return root;
@@ -305,7 +394,7 @@ const setup: FrontendSetup = (ctx, api) => {
   const expanded = new WeakMap<TabAddress, Set<string>>();
   api.contribute(layoutExtensions.tab, 'files', {
     title: ({ path }) => path ? base(path) : 'Files',
-    default: true,
+    launcher: { title: 'Workspace files', description: 'Browse and preview files in this workspace', icon: 'folder' },
     create(address, signal) {
       let open = expanded.get(address);
       if (!open) { open = new Set<string>(); expanded.set(address, open); }
@@ -315,6 +404,30 @@ const setup: FrontendSetup = (ctx, api) => {
   api.contribute(layoutExtensions.tab, 'file', {
     title: ({ path }) => path ? base(path) : 'File',
     create: (address, signal) => fileView(ctx.miniProjections, api, services, address, signal)
+  });
+  api.contribute(layoutExtensions.tab, 'changes', {
+    title: () => 'Git changes',
+    launcher: { title: 'Git changes', description: 'Review staged and working tree changes', icon: 'file-code' },
+    create: (address, signal) => changesView(ctx.miniProjections, api, address, signal)
+  });
+  api.contribute(layoutExtensions.tab, 'diff', {
+    title: ({ path }) => 'Diff: ' + base(path ?? ''),
+    create: (address, signal) => diffView(ctx.miniProjections, api, address, signal)
+  });
+  api.contribute(layoutExtensions.tab, 'attachment', {
+    title: ({ path }) => (JSON.parse(path!) as Upload).name, sessionScoped: true,
+    create: (address, signal) => attachmentView(api, address, signal)
+  });
+  api.contribute(conversationExtensions.reference, (path) => {
+    const scope = services.workspace();
+    if (!scope) return;
+    const directory = path.endsWith('/');
+    api.contribute(layoutExtensions.openTab, directory ? 'files' : 'file', directory ? path.slice(0, -1) || '.' : path, scope);
+  });
+  api.contribute(conversationExtensions.attachmentPreview, (file, sessionId) => {
+    const scope = services.workspace();
+    if (!scope || !file.id || scope.sessionId !== sessionId) return;
+    api.contribute(layoutExtensions.openTab, 'attachment', JSON.stringify({ name: file.name, mimeType: file.mimeType, id: file.id }), scope);
   });
   api.contribute(conversationExtensions.completion, '@', async ({ query, signal, show, replace }) => {
     const scope = services.workspace();
