@@ -3,9 +3,8 @@ import { setup } from './host.js';
 
 /** One metadata definition for the host, settings, and browser loader. */
 export const manifest: PluginDescriptor = {
-  scope: 'application', browserInject: ['harnessBrowser'],
+  scope: 'application', browserInject: ['harnessBrowser', 'miniProjections'],
   setup, defaultEnabled: true, browserRequires: ['core:conversation'],
-  provides: ['harnessSkills'],
   id: 'skills', title: 'Skills', description: 'Discover Agent Skills from home and the workspace.',
   icon: 'skills', browser: '/packages/skills/client.js', inject: ['harnessState', 'harnessScopes', 'harnessRoutes', 'harnessWorkspaces', 'harnessRegistry', 'harnessTools'],
 };

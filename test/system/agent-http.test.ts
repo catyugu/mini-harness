@@ -11,7 +11,7 @@ test('native agent through HTTP: streaming, persistence, Skills, export and perm
   t.after(() => mock.close());
   const { root, paths } = createFixturePaths(mock.url);
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  const skillDir = join(paths.skills, 'verification');
+  const skillDir = join(paths.home, 'skills', 'verification');
   mkdirSync(skillDir, { recursive: true });
   writeFileSync(join(skillDir, 'SKILL.md'),
     '---\nname: verification\ndescription: Verify the test harness on request.\n---\n\n# Verification\n\nMention the verification skill when asked.\n');

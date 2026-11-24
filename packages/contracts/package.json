@@ -29,7 +29,6 @@
     "./services": "./services.ts",
     "./session-log": "./session-log.ts",
     "./session-records": "./session-records.ts",
-    "./skills": "./skills.ts",
     "./tool-extensions": "./tool-extensions.ts",
     "./tools": "./tools.ts",
     "./transport": "./transport.ts",

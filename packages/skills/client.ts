@@ -5,33 +5,46 @@ import { iconButton } from '@mini-harness/ui-primitives/primitives';
 const setup: FrontendSetup = (ctx, api) => {
   const services = ctx.harnessBrowser;
   const button = iconButton('Choose skill', 'skills');
-  button.hidden = true;
-  button.onclick = () => api.insert('/skill:');
-  api.slots.register('conversation.composer', button);
-
   let workspaceId: string | undefined;
-  let request: AbortController;
-  let commands: (() => void)[] = [];
-  async function update() {
-    const next = services.workspace()?.workspaceId;
-    if (workspaceId === next) return;
-    workspaceId = next;
+  let sessionId: string | undefined;
+  let request: AbortController | undefined;
+  let commands: (() => void | Promise<void>)[] = [];
+
+  async function update(force = false) {
+    const workspace = services.workspace()?.workspaceId;
+    const session = services.session();
+    const conversation = session?.workspaceId === workspace ? session?.id : undefined;
+    if (!force && workspaceId === workspace && sessionId === conversation) return;
+    workspaceId = workspace;
+    sessionId = conversation;
     request?.abort();
-    button.hidden = true;
+    const controller = request = new AbortController();
     const previous = commands;
     commands = [];
+    button.hidden = !workspace;
     await Promise.all(previous.map((dispose) => dispose()));
-    if (!next || workspaceId !== next) return;
-    const controller = request = new AbortController();
+    if (!workspace || controller.signal.aborted || api.signal.aborted) return;
     try {
-      const skills = await api.request<{ name: string; description: string }[]>(workspaceRoute(next, '/skills'), { signal: controller.signal });
+      const query = sessionId ? '?' + new URLSearchParams({ sessionId }) : '';
+      const skills = await api.request<{ name: string; description: string }[]>(workspaceRoute(workspace, '/skills') + query, { signal: controller.signal });
       if (controller.signal.aborted || api.signal.aborted) return;
-      for (const skill of skills) commands.push(api.command({ name: 'skill:' + skill.name, description: skill.description, group: 'Skill' }));
-      button.hidden = !skills.length;
+      for (const skill of skills)
+        commands.push(api.command({ name: 'skill:' + skill.name, description: skill.description, group: 'Skill' }));
     } catch (error) {
       if (!controller.signal.aborted && !api.signal.aborted) services.report(error instanceof Error ? error : new Error(String(error)));
     }
   }
+
+  button.hidden = true;
+  button.onclick = () => {
+    const refreshed = update(true);
+    const current = request;
+    void refreshed.then(() => {
+      if (current === request && !api.signal.aborted) api.insert('/skill:');
+    });
+  };
+  api.slots.register('conversation.composer', button);
+  api.onDispose(ctx.miniProjections.register('plugins', { sync: () => update(true) }));
   services.onConversationChange(() => void update(), api.signal);
   void update();
 };

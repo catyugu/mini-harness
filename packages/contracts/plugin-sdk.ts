@@ -3,7 +3,7 @@ import type { Context } from 'cordis';
 /** Augment this interface in mini-harness/plugin to declare plugin-owned services. */
 export interface ServiceMap extends Pick<Context,
   | 'harnessFileAccess' | 'harnessLlm' | 'harnessModels' | 'harnessNetwork'
-  | 'harnessRegistry' | 'harnessPrompt' | 'harnessSessions' | 'harnessSkills' | 'harnessTools'> {}
+  | 'harnessRegistry' | 'harnessPrompt' | 'harnessSessions' | 'harnessTools'> {}
 
 export type { PluginScope, ScopeSettings } from './capabilities.js';
 export type { PluginApi, PluginDescriptor } from './plugins.js';
@@ -15,7 +15,6 @@ export type { ModelCatalogPort, ModelAdminPort } from './models.js';
 export type { LlmPort, LlmRequest, LlmEvent, NativeMessage, NativeAssistantMessage, ToolCallPart } from './llm.js';
 export type { ToolDefinition, ToolSchema, ToolResult, ToolContext } from './tools.js';
 export { defineTool } from './tools.js';
-export type { SkillPort, Skill } from './skills.js';
 export type { AgentPort, RunPort, SessionStore } from './services.js';
 export type { PromptPort, RunAgentPort, ThinkingLevel } from './agent.js';
 export type { SessionLogPort, SessionEntry, SessionEvent, SessionProjection, InboxItem } from './session-log.js';

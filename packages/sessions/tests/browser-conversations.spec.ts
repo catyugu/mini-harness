@@ -14,7 +14,7 @@ test('drafts, search, rename, single deletion, attachment and input discovery', 
   writeFileSync(join(paths.cwd, 'notes.md'), '# Notes\nTask details');
   mkdirSync(join(paths.cwd, 'task files'));
   writeFileSync(join(paths.cwd, 'task files', 'draft.md'), '# Draft');
-  const skill = join(paths.skills, 'review'); mkdirSync(skill); writeFileSync(join(skill, 'SKILL.md'), '---\nname: review\ndescription: Review the work\n---\n\nReview carefully.');
+  const skill = join(paths.home, 'skills', 'review'); mkdirSync(skill, { recursive: true }); writeFileSync(join(skill, 'SKILL.md'), '---\nname: review\ndescription: Review the work\n---\n\nReview carefully.');
   const service = await startIsolatedHost(paths);
   try {
     await page.goto(service.url + '/#token=' + service.token);

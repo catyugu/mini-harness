@@ -1,6 +1,5 @@
 import type { Extension } from './contributions.js';
 import type { ToolDefinition } from './tools.js';
-import type { SkillPort } from './skills.js';
 import type { Context } from 'cordis';
 import type { Paths, PluginConfiguration, Settings } from './config.js';
 import type { RouteHandler, RoutePort, UpgradeHandler } from './routes.js';
@@ -98,7 +97,6 @@ declare module 'cordis' {
     harnessTools: ToolPort;
     harnessState: { paths: Paths };
     harnessRoutes: RoutePort;
-    harnessSkills?: SkillPort;
     harnessDelegation?: DelegationPort;
 
   }

@@ -21,14 +21,14 @@ export function getPaths(cwd: string = process.cwd(), env: NodeJS.ProcessEnv = p
     home, cwd: project, settings: join(home, 'settings.json'),
     registry: join(home, 'sessions.json'), sessions: join(home, 'sessions', key),
     pid: join(home, 'server.json'), log: join(home, 'server.log'),
-    plugins: join(home, 'plugins'), skills: join(home, 'skills'),
+    plugins: join(home, 'plugins'),
     ...(env.MINI_HARNESS_DEV_PLUGIN ? { devPlugin: resolve(env.MINI_HARNESS_DEV_PLUGIN) } : {})
   };
 }
 
 
 export function ensurePaths(paths: Paths) {
-  for (const path of [paths.home, paths.sessions, paths.skills, paths.plugins]) {
+  for (const path of [paths.home, paths.sessions, paths.plugins]) {
     mkdirSync(path, { recursive: true, mode: 0o700 });
   }
 }
