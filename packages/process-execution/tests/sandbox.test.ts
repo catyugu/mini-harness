@@ -4,6 +4,8 @@ import { executeProcess } from '../src/executor.js';
 import { LinuxSandbox } from '@mini-harness/sandbox/linux';
 import { supportsIsolation } from '@mini-harness/platform/isolation';
 import { tmpdir } from 'node:os';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 const sandbox = new LinuxSandbox(tmpdir());
 const run = (command: string, mode: 'host' | 'isolated', timeoutSeconds = 60, signal?: AbortSignal) =>
@@ -37,3 +39,15 @@ test('isolated shell runs without provider process environment', { skip: process
   assert.equal(shell.code, 0);
   assert.equal(shell.stdout, '/workspace|/tmp');
 });
+
+test('conversation uploads are visible to Shell but mounted read-only in isolated mode',
+  { skip: process.env.MINI_HARNESS_REQUIRE_ISOLATION !== '1' && !supportsIsolation() }, async (t) => {
+    const directory = mkdtempSync(join(tmpdir(), 'mini-harness-uploads-'));
+    t.after(() => rmSync(directory, { recursive: true, force: true }));
+    writeFileSync(join(directory, 'upload'), 'original');
+    const request = { command: 'cat "$MINI_HARNESS_ATTACHMENTS/upload"; printf modified > "$MINI_HARNESS_ATTACHMENTS/upload"', cwd: process.cwd(),
+      mode: 'isolated' as const, timeoutSeconds: 10 };
+    const result = await executeProcess(request, sandbox, directory);
+    assert.equal(result.stdout, 'original');
+    assert.notEqual(result.code, 0);
+  });

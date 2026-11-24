@@ -5,7 +5,9 @@ import type { ProcessRequest, ProcessResult } from '@mini-harness/execution/requ
 
 async function hostCommand(command: string, cwd: string, attachments?: string): Promise<IsolatedProcess> {
   const root = await realpath(cwd);
-  const env = { ...process.env, MINI_HARNESS_ATTACHMENTS: attachments };
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  if (attachments) env.MINI_HARNESS_ATTACHMENTS = attachments;
+  else delete env.MINI_HARNESS_ATTACHMENTS;
   return process.platform === 'win32'
     ? { file: env.ComSpec || 'cmd.exe', args: ['/d', '/s', '/c', '"' + command + '"'], cwd: root, env }
     : { file: '/bin/sh', args: ['-c', command], cwd: root, env };

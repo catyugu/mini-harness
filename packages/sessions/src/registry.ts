@@ -360,7 +360,7 @@ export class SessionRegistry implements SessionStore {
     const pendingDelete = all.map((id) => {
       const record = this.get(id);
       if (!record) throw new Error('Conversation disappeared during deletion');
-      this.nativeFile(record);
+      attachmentDirectory(this.nativeFile(record));
       this.logs.get(id)?.close();
       this.logs.delete(id);
       this.logErrors.delete(id);
