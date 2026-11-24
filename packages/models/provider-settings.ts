@@ -1,8 +1,8 @@
 import { DomainError } from '@mini-harness/platform/errors';
 import { join } from 'node:path';
 import { readJson, writeJson } from '@mini-harness/platform/json';
-import type { ModelChoice } from '@mini-harness/contracts/conversation';
-import type { ModelCatalogPort, ProviderInfo } from '@mini-harness/contracts/models';
+import type { ModelChoice } from '@mini-harness/llm/vocabulary';
+import type { ModelCatalogPort, ProviderInfo } from './api.js';
 
 import type { PiModelStore } from './pi-adapter.js';
 

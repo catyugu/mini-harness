@@ -1,4 +1,4 @@
-import type { PluginDescriptor } from '@mini-harness/contracts/plugins';
+import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
 import { setup } from './host.js';
 import { Type } from 'typebox';
 import { supportsIsolation } from '@mini-harness/platform/isolation';

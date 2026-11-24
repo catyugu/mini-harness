@@ -1,5 +1,6 @@
-import type { WorkspaceRecord } from '@mini-harness/contracts/workspace';
-import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend';
+import type {} from '@mini-harness/ui-runtime/projection-api';
+import type { WorkspaceRecord } from '../api.js';
+import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend-api';
 import { RemoteStore } from '@mini-harness/ui-runtime/remote-store';
 
 const setup: FrontendSetup = async (ctx, api) => {
@@ -8,9 +9,5 @@ const setup: FrontendSetup = async (ctx, api) => {
   api.onDispose(ctx.miniProjections.register('workspaces', store));
   ctx.provide('miniWorkspaces', store);
 };
-
-declare module 'cordis' {
-  interface Context { miniWorkspaces: RemoteStore<WorkspaceRecord[]> }
-}
 
 export default setup;

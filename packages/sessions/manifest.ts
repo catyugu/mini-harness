@@ -1,4 +1,4 @@
-import type { PluginDescriptor } from '@mini-harness/contracts/plugins';
+import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
 import { setup } from './host.js';
 
 export const manifest: PluginDescriptor = {
@@ -6,5 +6,5 @@ export const manifest: PluginDescriptor = {
   browserInject: ['miniSelection', 'miniSessions', 'miniWorkspaces', 'miniLayout', 'miniPages', 'miniHeader', 'miniWorkspace', 'miniSlots'],
   id: 'core:navigation', title: 'Sessions', description: 'Session identity and navigation', required: true,
   inject: ['harnessScopes', 'harnessSettingsStore', 'harnessState', 'harnessWorkspaces'], provides: ['harnessRegistry', 'harnessSessions'], setup,
-  browser: '/packages/sessions/browser/navigation-plugin.js',
+  browser: '/packages/conversation/browser/navigation-plugin.js',
 };

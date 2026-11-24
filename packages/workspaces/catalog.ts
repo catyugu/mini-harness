@@ -4,10 +4,9 @@ import { lstatSync, mkdirSync, readdirSync, realpathSync, statSync } from 'node:
 import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { readJson, writeJson } from '@mini-harness/platform/json';
-import { type getPaths } from '@mini-harness/platform/paths';
-import { containsPath } from '@mini-harness/platform/paths';
+import { type getPaths, containsPath } from '@mini-harness/platform/paths';
 
-import type { WorkspaceRecord } from '@mini-harness/contracts/workspace';
+import type { WorkspaceRecord } from './api.js';
 interface CatalogState { records: WorkspaceRecord[] }
 
 // Use the same native resolver as fs/promises.realpath, including Windows long path names.

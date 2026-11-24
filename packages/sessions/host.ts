@@ -1,4 +1,9 @@
-import { recordsForPlugin } from '@mini-harness/contracts/session-records';
+import type {} from '@mini-harness/kernel/observations';
+import type {} from '@mini-harness/platform/runtime-paths';
+import type {} from '@mini-harness/workspaces/api';
+import type {} from '@mini-harness/kernel/scopes';
+import type {} from '@mini-harness/settings/api';
+import { recordsForPlugin } from './records.js';
 import type { Context } from 'cordis';
 import { SessionRegistry } from './registry.js';
 

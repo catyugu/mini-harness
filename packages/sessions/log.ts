@@ -1,13 +1,11 @@
-import { isThinkingLevel } from '@mini-harness/contracts/agent';
+import { isThinkingLevel, type ToolSchema } from '@mini-harness/llm/vocabulary';
 import { DomainError } from '@mini-harness/platform/errors';
-import { isRunning, type RunInfo } from '@mini-harness/contracts/transport';
+import { isRunning, type RunInfo } from './run-state.browser.js';
 import { createHash, randomBytes } from 'node:crypto';
 import { closeSync, constants, fstatSync, fsyncSync, ftruncateSync, lstatSync, openSync, readFileSync, writeSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { RequestMessages, validateNativeMessage, validateRequestSnapshot } from '@mini-harness/contracts/llm';
-import type { ModelRequestSnapshot } from '@mini-harness/contracts/llm';
-import type { ToolSchema } from '@mini-harness/contracts/tools';
-import type { InboxItem, QueueEntry, SessionEntry, SessionEvent, SessionLogPort, SessionProjection } from '@mini-harness/contracts/session-log';
+import { RequestMessages, validateNativeMessage, validateRequestSnapshot, type ModelRequestSnapshot } from '@mini-harness/llm/api';
+import type { InboxItem, QueueEntry, SessionEntry, SessionEvent, SessionLogPort, SessionProjection } from './log-api.js';
 import { projectLog, projectMessage } from './projection.js';
 import { applyContentDelta } from '@mini-harness/platform/content-delta';
 
@@ -264,7 +262,7 @@ export class SessionLog implements SessionLogPort {
     return snapshot;
   }
 
-  requestSnapshot(id: string): ModelRequestSnapshot & { messages: import('@mini-harness/contracts/llm').NativeMessage[] } {
+  requestSnapshot(id: string): ModelRequestSnapshot & { messages: import('@mini-harness/llm/api').NativeMessage[] } {
     const entry = this.byId.get(id);
     if (entry?.type !== 'model-request') throw new Error('Model request not found');
     return structuredClone(this.materializeRequest(entry));

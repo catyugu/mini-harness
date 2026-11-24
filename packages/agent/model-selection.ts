@@ -1,8 +1,6 @@
-import { isThinkingLevel } from '@mini-harness/contracts/agent';
+import { isThinkingLevel, type ThinkingLevel, type ModelChoice } from '@mini-harness/llm/vocabulary';
 import { DomainError } from '@mini-harness/platform/errors';
-import type { ThinkingLevel } from '@mini-harness/contracts/agent';
-import type { ModelChoice } from '@mini-harness/contracts/conversation';
-import type { ModelCatalogPort } from '@mini-harness/contracts/models';
+import type { ModelCatalogPort } from '@mini-harness/models/api';
 
 type Capabilities = ReturnType<ModelCatalogPort['capabilities']>;
 

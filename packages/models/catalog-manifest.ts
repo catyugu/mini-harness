@@ -1,4 +1,4 @@
-import type { PluginDescriptor } from '@mini-harness/contracts/plugins';
+import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
 
 export const manifest: PluginDescriptor = {
   id: 'core:model-catalog', scope: 'application', required: true,

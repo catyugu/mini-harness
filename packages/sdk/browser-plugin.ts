@@ -1,0 +1,14 @@
+export type { FrontendApi, FrontendSetup } from '@mini-harness/ui-runtime/frontend-api';
+export type { BrowserContribution, BrowserContributionSource } from '@mini-harness/ui-runtime/contribution';
+export type { BrowserPrimitives } from '@mini-harness/ui-primitives/api';
+export type { BrowserProjection, BrowserProjectionPort } from '@mini-harness/ui-runtime/projection-api';
+export type { ConversationBrowserPort } from '@mini-harness/conversation/browser/navigation-api';
+export { conversationExtensions } from '@mini-harness/conversation/browser/composer-api';
+export type { Completer, Completion, ComposerCommand, DraftMode, MessageAction, MessageActionContext, Suggestion, ToolView } from '@mini-harness/conversation/browser/composer-api';
+export { layoutExtensions } from '@mini-harness/ui-layout/browser/api';
+export type { PageContribution, RightTabType, TabAddress, TabScope } from '@mini-harness/ui-layout/browser/api';
+export { settingsExtensions } from '@mini-harness/settings/browser/api';
+export type { SettingsContext, SettingsContribution, SettingsSection } from '@mini-harness/settings/browser/api';
+export { slotExtensions } from '@mini-harness/ui-slots/browser/api';
+export type { KeyedSlotOptions, SlotMap, SlotName, SlotKind, SlotMount, SlotRenderer } from '@mini-harness/ui-slots/browser/api';
+export type { PluginConfiguration } from '@mini-harness/kernel/configuration';

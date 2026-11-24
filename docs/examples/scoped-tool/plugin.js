@@ -1,4 +1,4 @@
-import { toolExtensions } from 'mini-harness/plugin';
+import { sessionDisplayExtensions, toolExtensions } from 'mini-harness/plugin';
 
 export default function setup(_ctx, api) {
   const greeting = api.service('exampleGreeting');
@@ -11,6 +11,6 @@ export default function setup(_ctx, api) {
       return { content: [{ type: 'text', text: greeting.greet(api.scope.sessionId) }] };
     }
   });
-  api.contribute(toolExtensions.project, ({ tool, content }) => tool === 'scoped_greeting'
+  api.contribute(sessionDisplayExtensions.project, ({ tool, content }) => tool === 'scoped_greeting'
     ? [{ type: 'text', text: 'Greeting returned.' }] : content);
 }

@@ -129,7 +129,7 @@ test('an application plugin replaces only LLM and composes execution hooks witho
         return { content: [{ type: 'text', text: 'Value' }] };
       }
     });
-    api.contribute(toolExtensions.result,  (content, { tool }) => tool === 'check'
+    api.contribute(agentExtensions.toolResult,  (content, { tool }) => tool === 'check'
       ? [{ type: 'text', text: content[0].text + ' transformed' }] : undefined);
   };`);
   const { harnessModels: models, harnessModelStore: store } = app.runtime.plugins.ctx;
@@ -174,7 +174,7 @@ test('a failed model-visible transform preserves the execution and never sends t
         return { content: [{ type: 'text', text: 'private value' }] };
       }
     });
-    api.contribute(toolExtensions.result, (content, { tool }) => {
+    api.contribute(agentExtensions.toolResult, (content, { tool }) => {
       if (tool === 'sensitive') throw new Error('broken redactor');
       return content;
     });

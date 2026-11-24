@@ -3,8 +3,8 @@ import { isDeepStrictEqual } from 'node:util';
 import { mergeSettings, readSettings } from './config.js';
 import { writeJson } from '@mini-harness/platform/json';
 import type { Paths } from '@mini-harness/platform/runtime-paths';
-import type { Settings, SettingsPort } from '@mini-harness/contracts/config';
-import type { PluginConfigurationPort } from '@mini-harness/contracts/plugins';
+import type { Settings, SettingsPort } from './api.js';
+import type { PluginConfigurationPort } from '@mini-harness/plugin-api/configuration';
 
 export class SettingsManager implements SettingsPort {
   private stored: Settings;

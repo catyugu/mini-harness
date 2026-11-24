@@ -1,25 +1,26 @@
-import { imageMimeType, validateModelOptions } from '@mini-harness/contracts/input-node';
-import type { ToolProjection, ToolResultTransform } from '@mini-harness/contracts/tool-extensions';
+import { imageMimeType } from '@mini-harness/input/prepare';
+import { validateModelOptions } from '@mini-harness/llm/options';
+import type { ToolProjection } from '@mini-harness/sessions/display-extensions';
+import type { ToolResultTransform, InputContext, InputPreparation, ModelFailure, ModelRequestContent, ModelRequestTransform, ModelRetry, StepContext } from './extensions.js';
 import { DomainError } from '@mini-harness/platform/errors';
 import { isDeepStrictEqual } from 'node:util';
 import { createHash } from 'node:crypto';
-import type { AgentPort } from '@mini-harness/contracts/agent';
-import type { SessionStore } from '@mini-harness/contracts/session-store';
-import type { ModelChoice, SessionRecord } from '@mini-harness/contracts/conversation';
-import type { ModelCatalogPort } from '@mini-harness/contracts/models';
-import { validateNativeMessage, validateRequestSnapshot, type LlmPort, type LlmRequest, type NativeAssistantMessage, type NativeMessage, type NativeUserMessage, type NativeToolMessage, type ToolCallPart } from '@mini-harness/contracts/llm';
-import type { PromptPort, ThinkingLevel } from '@mini-harness/contracts/agent';
-import { RunInterrupted, type StreamEvent } from '@mini-harness/contracts/transport';
-import type { Attachment, ImageInput, InputSource, PreparedMessage } from '@mini-harness/contracts/input';
-import type { SessionLogPort, MessagePatch } from '@mini-harness/contracts/session-log';
-import type { InputContext, InputPreparation, ModelFailure, ModelRequestContent, ModelRequestTransform, ModelRetry, StepContext } from '@mini-harness/contracts/agent-extensions';
-import { type OrderedHook } from '@mini-harness/contracts/contributions';
-import type { CapabilityObservation } from '@mini-harness/contracts/events';
-import type { MessageContent } from '@mini-harness/contracts/message';
+import type { AgentPort } from './api.js';
+import type { SessionStore } from '@mini-harness/sessions/store';
+import type { ModelChoice, ThinkingLevel } from '@mini-harness/llm/vocabulary';
+import type { SessionRecord } from '@mini-harness/sessions/identity';
+import type { ModelCatalogPort } from '@mini-harness/models/api';
+import { validateNativeMessage, validateRequestSnapshot, type LlmPort, type LlmRequest, type NativeAssistantMessage, type NativeMessage, type NativeUserMessage, type NativeToolMessage, type ToolCallPart } from '@mini-harness/llm/api';
+import type { PromptPort } from './prompt-api.js';
+import { RunInterrupted, type AgentEvent } from './stream.js';
+import type { Attachment, ImageInput, InputSource, PreparedMessage } from '@mini-harness/input/message';
+import type { SessionLogPort, MessagePatch, InboxItem } from '@mini-harness/sessions/log-api';
+import type { OrderedHook } from '@mini-harness/kernel/contributions';
+import type { CapabilityObservation } from '@mini-harness/kernel/observations';
+import type { MessageContent } from '@mini-harness/sessions/message';
 import { AgentRegistry } from './registry.js';
 import { Inbox } from './inbox.js';
-import type { InboxItem } from '@mini-harness/contracts/session-log';
-import { isToolContent, type ToolPort } from '@mini-harness/contracts/tools';
+import { isToolContent, type ToolPort } from '@mini-harness/tools/api';
 import { contentDelta } from '@mini-harness/platform/content-delta';
 import { applyTransforms } from './transforms.js';
 import { executeTool, scheduleTools } from './tool-pipeline.js';
@@ -192,7 +193,7 @@ export class NativeAgent implements AgentPort {
   }
 
   private user(log: SessionLogPort, prepared: Awaited<ReturnType<NativeAgent['prepareInput']>>, images: ImageInput[],
-    emit: (event: StreamEvent) => void, delivery: { submissionId?: string; inboxId?: string; selection: { model: ModelChoice; thinkingLevel?: ThinkingLevel } },
+    emit: (event: AgentEvent) => void, delivery: { submissionId?: string; inboxId?: string; selection: { model: ModelChoice; thinkingLevel?: ThinkingLevel } },
     revision?: { parentId: string | null; expectedLeafId: string | null }) {
     prepared.assertActive();
     const { content, presentation: input } = prepared;
@@ -219,7 +220,7 @@ export class NativeAgent implements AgentPort {
       : 'Execution was interrupted before a durable result was recorded. The tool was not retried.') });
   }
 
-  async prompt(record: SessionRecord, prompt: string, emit: (event: StreamEvent) => void,
+  async prompt(record: SessionRecord, prompt: string, emit: (event: AgentEvent) => void,
     options: Parameters<AgentPort['prompt']>[3]): Promise<string> {
     const { id } = record, { signal, choice, images = [], input = { userText: prompt, attachments: [] }, source = 'user', thinkingLevel, revision, changed, submissionId } = options;
     const leave = this.agents.enter(id);

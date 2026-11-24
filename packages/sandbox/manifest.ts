@@ -1,4 +1,5 @@
-import type { PluginDescriptor } from '@mini-harness/contracts/plugins';
+import type {} from '@mini-harness/platform/runtime-paths';
+import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
 import { LinuxSandbox } from './linux.js';
 
 export const manifest: PluginDescriptor = {

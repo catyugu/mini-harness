@@ -1,7 +1,9 @@
-import { slotExtensions } from '@mini-harness/contracts/slots';
-import { conversationExtensions } from '@mini-harness/contracts/composer';
-import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend';
-import { workspaceRoute } from '@mini-harness/contracts/workspace';
+import type {} from '@mini-harness/conversation/browser/navigation-api';
+import type {} from '@mini-harness/ui-runtime/projection-api';
+import { slotExtensions } from '@mini-harness/ui-slots/browser/api';
+import { conversationExtensions } from '@mini-harness/conversation/browser/composer-api';
+import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend-api';
+import { workspaceRoute } from '@mini-harness/workspaces/browser/route';
 import { iconButton } from '@mini-harness/ui-primitives/primitives';
 
 const setup: FrontendSetup = (ctx, api) => {

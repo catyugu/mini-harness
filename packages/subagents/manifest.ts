@@ -1,4 +1,4 @@
-import type { PluginDescriptor } from '@mini-harness/contracts/plugins';
+import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
 import { setup } from './host.js';
 import { Type } from 'typebox';
 import { DomainError } from '@mini-harness/platform/errors';
@@ -23,8 +23,8 @@ export const manifest: PluginDescriptor = {
     }, { additionalProperties: false })], { title: 'Child model', default: null, 'x-modelChoice': true })
   }, { additionalProperties: false }) },
   validateConfig({ model }, { service }) {
-    if (model && !service('harnessModels').resolve(model as import('@mini-harness/contracts/conversation').ModelChoice)) {
-      const { provider, id } = model as import('@mini-harness/contracts/conversation').ModelChoice;
+    if (model && !service('harnessModels').resolve(model as import('@mini-harness/llm/vocabulary').ModelChoice)) {
+      const { provider, id } = model as import('@mini-harness/llm/vocabulary').ModelChoice;
       throw new DomainError('invalid_input', 'Unknown child model: ' + provider + '/' + id);
     }
   },

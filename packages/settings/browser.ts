@@ -1,7 +1,9 @@
-import type { Settings } from '@mini-harness/contracts/config';
+import type {} from '@mini-harness/ui-runtime/projection-api';
+import type {} from '@mini-harness/ui-layout/browser/api';
+import type { Settings } from './api.js';
 import { RemoteStore } from '@mini-harness/ui-runtime/remote-store';
-import { slotExtensions } from '@mini-harness/contracts/slots';
-import type { FrontendSetup, FrontendApi } from '@mini-harness/ui-runtime/frontend';
+import { slotExtensions } from '@mini-harness/ui-slots/browser/api';
+import type { FrontendSetup, FrontendApi } from '@mini-harness/ui-runtime/frontend-api';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { closeOnBackdrop, fromMarkup, required, scopedElements } from '@mini-harness/ui-primitives/primitives';
 
@@ -122,13 +124,6 @@ function mountSettings(api: FrontendApi, registry: SettingsRegistry) {
     },
     onClose: (listener: () => void, signal: AbortSignal) => panel.addEventListener('close', listener, { signal }),
   };
-}
-
-declare module 'cordis' {
-  interface Context {
-    miniSettings: ReturnType<typeof mountSettings>;
-    miniSettingsData: RemoteStore<Settings>;
-  }
 }
 
 export default setup;

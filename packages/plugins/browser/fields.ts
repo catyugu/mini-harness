@@ -1,4 +1,4 @@
-import type { ModelCatalog } from '@mini-harness/contracts/models';
+import type { ModelCatalog } from '@mini-harness/models/api';
 
 export function schemaFields(plugin: string, schema: Record<string, any>, values: any, models: ModelCatalog, path: string[] = []) {
   const group = document.createElement('div');

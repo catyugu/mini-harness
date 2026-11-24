@@ -1,7 +1,8 @@
-import { slotExtensions } from '@mini-harness/contracts/slots';
-import { conversationExtensions } from '@mini-harness/contracts/composer';
-import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend';
-import type { ToolView } from '@mini-harness/contracts/composer';
+import type {} from '@mini-harness/approvals/browser/api';
+import type {} from '@mini-harness/conversation/browser/navigation-api';
+import { slotExtensions } from '@mini-harness/ui-slots/browser/api';
+import { conversationExtensions, type ToolView } from '@mini-harness/conversation/browser/composer-api';
+import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend-api';
 import { payload } from '@mini-harness/ui-runtime/http';
 
 function renderResult(tool: ToolView) {

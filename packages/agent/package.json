@@ -4,12 +4,30 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@mini-harness/contracts": "workspace:*",
-    "@mini-harness/platform": "workspace:*"
+    "@mini-harness/input": "workspace:*",
+    "@mini-harness/kernel": "workspace:*",
+    "@mini-harness/llm": "workspace:*",
+    "@mini-harness/models": "workspace:*",
+    "@mini-harness/platform": "workspace:*",
+    "@mini-harness/plugin-api": "workspace:*",
+    "@mini-harness/sessions": "workspace:*",
+    "@mini-harness/tools": "workspace:*",
+    "@mini-harness/transport": "workspace:*"
   },
   "exports": {
-    "./agent": "./agent.ts",
+    "./api": "./api.ts",
+    "./extensions": "./extensions.ts",
     "./manifest": "./manifest.ts",
-    "./prompt-manifest": "./prompt-manifest.ts"
+    "./prompt-api": "./prompt-api.ts",
+    "./prompt-manifest": "./prompt-manifest.ts",
+    "./stream": "./stream.ts"
+  },
+  "miniHarness": {
+    "api": [
+      "./api",
+      "./extensions",
+      "./prompt-api",
+      "./stream"
+    ]
   }
 }

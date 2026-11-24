@@ -13,7 +13,7 @@ writeFileSync('dist/packages/ui-runtime/assets/theme.css', [
   readFileSync('packages/ui-theme/style.css', 'utf8'),
   readFileSync('packages/ui-primitives/style.css', 'utf8'),
   readFileSync('packages/ui-layout/frame.css', 'utf8'),
-  readFileSync('packages/sessions/browser/conversation/style.css', 'utf8'),
+  readFileSync('packages/conversation/browser/conversation/style.css', 'utf8'),
   readFileSync('packages/settings/browser.css', 'utf8'),
   readFileSync('packages/ui-layout/responsive.css', 'utf8'),
   readFileSync('packages/plugins/browser.css', 'utf8'),

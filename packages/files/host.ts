@@ -1,15 +1,21 @@
+import type {} from '@mini-harness/sessions/store';
+import type {} from '@mini-harness/workspaces/api';
+import type {} from '@mini-harness/kernel/scopes';
+import type {} from '@mini-harness/transport/projection-api';
+import type {} from '@mini-harness/file-access/api';
 import { DomainError } from '@mini-harness/platform/errors';
 import { relative, resolve, sep } from 'node:path';
-import { toolExtensions } from '@mini-harness/contracts/tool-extensions';
-import type { PluginApi } from '@mini-harness/contracts/plugins';
+import { toolExtensions } from '@mini-harness/tools/extensions';
+import type { PluginApi } from '@mini-harness/plugin-api/descriptor';
 import type { Context } from 'cordis';
 import { Inspection } from './inspection.js';
 import { fileTools, fileToolNames } from './tools.js';
-import type { RouteRequest } from '@mini-harness/contracts/routes';
+import type { RouteRequest } from '@mini-harness/transport/routes';
 
 export function setup(ctx: Context, api: PluginApi) {
   const { harnessRegistry: sessions, harnessWorkspaces: workspaces,
     harnessRoutes: routes, harnessScopes: scopes, harnessChanges: changes } = ctx;
+  ctx.effect(() => changes.register('files'));
 
   for (const [index, name] of fileToolNames.entries()) {
     const writes = name === 'edit' || name === 'write';
@@ -26,7 +32,7 @@ export function setup(ctx: Context, api: PluginApi) {
           const result = await tool.execute(...args);
           const path = (args[1] as { path?: unknown })?.path;
           if (typeof path !== 'string') return result;
-          changes.dispatchEvent(new CustomEvent('change', { detail: { domain: 'files', workspaceId: session.workspaceId } }));
+          changes.invalidate('files', { workspaceId: session.workspaceId });
           const changedPath = relative(root, resolve(root, path)).split(sep).join('/');
           const details = typeof result.details === 'object' ? result.details : undefined;
           return { ...result, details: { ...details, changedPath } };

@@ -1,14 +1,26 @@
+import type {} from '@mini-harness/transport/projection-api';
+import type {} from '@mini-harness/runs/api';
+import type {} from '@mini-harness/transport/routes';
 import { DomainError } from '@mini-harness/platform/errors';
-import type { PluginDescriptor } from '@mini-harness/contracts/plugins';
+import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
 import { Approvals } from './approvals.js';
 
 export const manifest: PluginDescriptor = {
   scope: 'application',
   id: 'core:approvals', title: 'Approvals', description: 'Pending user decisions', required: true,
-  inject: ['harnessRoutes', 'harnessRuns'], provides: ['harnessApprovals'],
+  inject: ['harnessChanges', 'harnessRoutes', 'harnessRuns'], provides: ['harnessApprovals'],
   browser: '/packages/approvals/browser/data.js', browserInject: ['miniProjections'], browserProvides: ['miniApprovals'],
   setup(ctx) {
     const approvals = new Approvals();
+    const changes = ctx.harnessChanges;
+    ctx.effect(() => changes.register('approvals'));
+    ctx.effect(() => {
+      const changed = (event: Event) => {
+        if (event instanceof CustomEvent) changes.invalidate('approvals', { sessionId: event.detail.id });
+      };
+      approvals.events.addEventListener('change', changed);
+      return () => approvals.events.removeEventListener('change', changed);
+    });
     ctx.provide('harnessApprovals', approvals);
     ctx.effect(() => {
       const runs = ctx.harnessRuns;

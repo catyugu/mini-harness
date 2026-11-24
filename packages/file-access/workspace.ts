@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
 import { link, lstat, mkdir, open, opendir, realpath, rename, stat, unlink, type FileHandle } from 'node:fs/promises';
 import { basename, dirname, matchesGlob, parse, relative, resolve, sep } from 'node:path';
-import type { SearchInput, WorkspaceFileAccess } from '@mini-harness/contracts/files';
+import type { SearchInput, WorkspaceFileAccess } from './api.js';
 import { RE2 } from 're2-wasm';
 import ignore from 'ignore';
 

@@ -10,10 +10,7 @@
   "files": [
     "dist/bin/",
     "dist/packages/",
-    "dist/types/packages/contracts/",
-    "dist/types/packages/ui-runtime/frontend.d.ts",
-    "dist/types/packages/ui-runtime/plugin-sdk.d.ts",
-    "dist/types/packages/ui-runtime/vendor/cordis.d.ts",
+    "dist/types/packages/",
     "!dist/**/tests/**",
     "!dist/**/*.test.js",
     "!dist/**/*.spec.js",
@@ -67,12 +64,12 @@
   ],
   "exports": {
     "./plugin": {
-      "types": "./dist/types/packages/contracts/plugin-sdk.d.ts",
-      "default": "./dist/packages/contracts/plugin-sdk.js"
+      "types": "./dist/types/packages/sdk/plugin.d.ts",
+      "default": "./dist/packages/sdk/plugin.js"
     },
     "./browser-plugin": {
-      "types": "./dist/types/packages/ui-runtime/plugin-sdk.d.ts",
-      "default": "./dist/packages/ui-runtime/plugin-sdk.js"
+      "types": "./dist/types/packages/sdk/browser-plugin.d.ts",
+      "default": "./dist/packages/sdk/browser-plugin.js"
     }
   },
   "packageManager": "pnpm@10.34.9"

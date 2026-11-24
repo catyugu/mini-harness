@@ -1,6 +1,10 @@
+import type {} from '@mini-harness/platform/runtime-paths';
+import type {} from '@mini-harness/transport/routes';
+import type {} from '@mini-harness/transport/projection-api';
+import type {} from '@mini-harness/plugin-api/mutation-api';
 import { DomainError } from '@mini-harness/platform/errors';
-import type { PluginApi } from '@mini-harness/contracts/plugins';
-import type { ModelChoice } from '@mini-harness/contracts/conversation';
+import type { PluginApi } from '@mini-harness/plugin-api/descriptor';
+import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { Context } from 'cordis';
 import { providerSettings, saveProvider } from './provider-settings.js';
 
@@ -23,7 +27,9 @@ export function setup(ctx: Context, api: PluginApi) {
   };
   const add = (method: string, path: string, handler: Parameters<typeof ctx.harnessRoutes.register>[2]) =>
     ctx.effect(() => ctx.harnessRoutes.register(method, path, handler));
-  const changed = () => ctx.harnessChanges.dispatchEvent(new CustomEvent('change', { detail: { domain: 'models' } }));
+  const changes = ctx.harnessChanges;
+  ctx.effect(() => changes.register('models'));
+  const changed = () => changes.invalidate('models');
   add('GET', '/api/providers', () => providerSettings(host));
   for (const method of ['PUT', 'DELETE']) {
     add(method, '/api/providers', async ({ body }) => {

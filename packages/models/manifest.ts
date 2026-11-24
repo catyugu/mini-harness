@@ -1,7 +1,7 @@
 import { Type } from 'typebox';
 import { DomainError } from '@mini-harness/platform/errors';
-import type { ModelChoice } from '@mini-harness/contracts/conversation';
-import type { PluginDescriptor } from '@mini-harness/contracts/plugins';
+import type { ModelChoice } from '@mini-harness/llm/vocabulary';
+import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
 import { setup } from './host.js';
 
 export const manifest: PluginDescriptor = {

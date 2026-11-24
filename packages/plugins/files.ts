@@ -1,15 +1,15 @@
-import { localPluginIdPattern } from '@mini-harness/contracts/plugins';
+import { localPluginIdPattern } from '@mini-harness/plugin-api/selection';
 import { DomainError } from '@mini-harness/platform/errors';
 import { mkdirSync, renameSync, rmSync, lstatSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { writeJson } from '@mini-harness/platform/json';
-import type { Settings } from '@mini-harness/contracts/config';
-import type { PluginMetadata } from '@mini-harness/contracts/plugins';
+import type { PluginSettings } from '@mini-harness/plugin-api/configuration';
+import type { PluginMetadata } from './api-types.js';
 
 type PluginFilesHost = {
   paths: { plugins: string };
-  settings: Pick<Settings, 'plugins' | 'scopes' | 'providers'>;
+  settings: Pick<PluginSettings, 'plugins' | 'scopes' | 'providers'>;
   plugins: { metadata(): PluginMetadata[]; reserved(id: string): boolean };
 };
 export function installPlugin(runtime: PluginFilesHost, input: any) {

@@ -5,11 +5,22 @@
   "type": "module",
   "exports": {
     "./content-delta": "./content-delta.ts",
+    "./errors": "./errors.ts",
     "./isolation": "./isolation.ts",
     "./json": "./json.ts",
     "./local-secret": "./local-secret.ts",
     "./paths": "./paths.ts",
-    "./runtime-paths": "./runtime-paths.ts",
-    "./errors": "./errors.ts"
+    "./runtime-paths": "./runtime-paths.ts"
+  },
+  "miniHarness": {
+    "api": [
+      "./content-delta",
+      "./errors",
+      "./isolation",
+      "./json",
+      "./local-secret",
+      "./paths",
+      "./runtime-paths"
+    ]
   }
 }

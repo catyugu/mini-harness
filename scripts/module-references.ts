@@ -19,6 +19,9 @@ export function moduleReferences(source: ts.SourceFile) {
     } else if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument)) {
       literal = node.argument.literal;
       typeOnly = true;
+    } else if (ts.isModuleDeclaration(node) && ts.isStringLiteral(node.name)) {
+      literal = node.name;
+      typeOnly = true;
     } else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
       literal = node.arguments[0];
     }

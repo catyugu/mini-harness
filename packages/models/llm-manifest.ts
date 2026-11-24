@@ -1,4 +1,4 @@
-import type { PluginDescriptor } from '@mini-harness/contracts/plugins';
+import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
 import { PiLlm } from './pi-adapter.js';
 
 export const manifest: PluginDescriptor = {

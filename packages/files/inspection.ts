@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { realpath } from 'node:fs/promises';
 import { DomainError } from '@mini-harness/platform/errors';
 import { resolve, relative } from 'node:path';
-import type { WorkspaceFileAccess } from '@mini-harness/contracts/files';
+import type { WorkspaceFileAccess } from '@mini-harness/file-access/api';
 
 const diffLimit = 1024 * 1024;
 const statusLimit = 8 * 1024 * 1024;

@@ -1,8 +1,8 @@
 import { DomainError } from '@mini-harness/platform/errors';
 import { randomBytes } from 'node:crypto';
-import { prepareInput } from '@mini-harness/contracts/input-node';
-import type { Attachment } from '@mini-harness/contracts/input';
-import type { SessionLogPort, InboxItem, QueueEntry } from '@mini-harness/contracts/session-log';
+import { prepareInput } from '@mini-harness/input/prepare';
+import type { Attachment } from '@mini-harness/input/message';
+import type { SessionLogPort, InboxItem, QueueEntry } from '@mini-harness/sessions/log-api';
 
 /** Inbox acknowledgments and deliveries are committed to the same session log. */
 export class Inbox {

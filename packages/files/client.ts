@@ -1,13 +1,11 @@
-import { conversationExtensions } from '@mini-harness/contracts/composer';
-import { layoutExtensions } from '@mini-harness/contracts/layout';
-import type { FrontendApi, FrontendSetup } from '@mini-harness/ui-runtime/frontend';
-import type { ConversationBrowserPort } from '@mini-harness/contracts/conversation';
-import type { Suggestion } from '@mini-harness/contracts/composer';
-import type { BrowserProjectionPort } from '@mini-harness/contracts/browser';
-import type { TabAddress, TabScope } from '@mini-harness/contracts/layout';
+import { conversationExtensions, type Suggestion } from '@mini-harness/conversation/browser/composer-api';
+import { layoutExtensions, type TabAddress, type TabScope } from '@mini-harness/ui-layout/browser/api';
+import type { FrontendApi, FrontendSetup } from '@mini-harness/ui-runtime/frontend-api';
+import type { ConversationBrowserPort } from '@mini-harness/conversation/browser/navigation-api';
+import type { BrowserProjectionPort } from '@mini-harness/ui-runtime/projection-api';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { button as control, iconButton } from '@mini-harness/ui-primitives/primitives';
-import { workspaceRoute } from '@mini-harness/contracts/workspace';
+import { workspaceRoute } from '@mini-harness/workspaces/browser/route';
 import { wait } from '@mini-harness/ui-runtime/http';
 import { renderMarkdown } from '@mini-harness/ui-primitives/markdown';
 

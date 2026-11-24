@@ -1,16 +1,18 @@
-import type { ThinkingLevel } from '@mini-harness/contracts/agent';
-import type { ScopePort } from '@mini-harness/contracts/capabilities';
+import type {} from '@mini-harness/agent/api';
+import type { ThinkingLevel, ModelChoice } from '@mini-harness/llm/vocabulary';
+import type { ScopePort } from '@mini-harness/kernel/scopes';
 import { DomainError } from '@mini-harness/platform/errors';
-import { type MutationPort } from '@mini-harness/contracts/routes';
+import type { MutationPort } from '@mini-harness/plugin-api/mutation-api';
 import { randomUUID } from 'node:crypto';
-import { imageMimeType, prepareInput, validateModelOptions } from '@mini-harness/contracts/input-node';
-import type { Attachment, InputSource } from '@mini-harness/contracts/input';
-import type { CapabilityObservation } from '@mini-harness/contracts/events';
-import type { ModelChoice } from '@mini-harness/contracts/conversation';
-import { RunInterrupted, type StreamEvent, type RunEvent, type RunInfo } from '@mini-harness/contracts/transport';
+import { imageMimeType, prepareInput } from '@mini-harness/input/prepare';
+import { validateModelOptions } from '@mini-harness/llm/options';
+import type { Attachment, InputSource } from '@mini-harness/input/message';
+import type { CapabilityObservation } from '@mini-harness/kernel/observations';
+import { RunInterrupted } from '@mini-harness/agent/stream';
+import type { StreamEvent, RunEvent } from './stream.js';
+import type { RunInfo } from '@mini-harness/sessions/run-state.browser';
 import { RunEvents } from './events.js';
-import type { SessionStore } from '@mini-harness/contracts/session-store';
-
+import type { SessionStore } from '@mini-harness/sessions/store';
 
 interface RunOptions {
   signal?: AbortSignal;

@@ -4,13 +4,22 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@mini-harness/contracts": "workspace:*",
+    "@mini-harness/plugin-api": "workspace:*",
     "@mini-harness/ui-runtime": "workspace:*"
   },
   "exports": {
+    "./api": "./api.ts",
     "./icons": "./icons.ts",
     "./manifest": "./manifest.ts",
     "./markdown": "./markdown.ts",
     "./primitives": "./primitives.ts"
+  },
+  "miniHarness": {
+    "api": [
+      "./api",
+      "./icons",
+      "./markdown",
+      "./primitives"
+    ]
   }
 }

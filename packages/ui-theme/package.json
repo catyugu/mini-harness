@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@mini-harness/contracts": "workspace:*",
+    "@mini-harness/plugin-api": "workspace:*",
+    "@mini-harness/settings": "workspace:*",
     "@mini-harness/ui-runtime": "workspace:*"
   },
   "exports": {

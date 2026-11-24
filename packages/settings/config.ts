@@ -1,8 +1,8 @@
 import { DomainError } from '@mini-harness/platform/errors';
 import type { Paths } from '@mini-harness/platform/runtime-paths';
-import type { Settings } from '@mini-harness/contracts/config';
-import { scopeSettingsPattern, validatePluginSettings, validateProviderChoices } from '@mini-harness/contracts/plugins';
-import { validToolRestrictions } from '@mini-harness/contracts/tools';
+import type { Settings } from './api.js';
+import { scopeSettingsPattern, validatePluginSettings, validateProviderChoices } from '@mini-harness/plugin-api/selection';
+import { toolNamePattern } from '@mini-harness/llm/vocabulary';
 import { readJson } from '@mini-harness/platform/json';
 
 export const DEFAULTS = Object.freeze({
@@ -35,7 +35,7 @@ export function validateSettings(input: unknown): asserts input is Settings {
         Object.keys(scope).some((field) => !['plugins', 'pluginConfig', 'disabledTools', 'providers'].includes(field)))
       throw new DomainError('invalid_input', 'Invalid plugin scope: ' + key);
     const { disabledTools } = scope;
-    if (disabledTools !== undefined && !validToolRestrictions(disabledTools))
+    if (disabledTools !== undefined && (!Array.isArray(disabledTools) || !disabledTools.every((name: unknown) => typeof name === 'string' && toolNamePattern.test(name))))
       throw new DomainError('invalid_input', 'Invalid scoped tool restriction: ' + key);
     validatePluginSettings(section(scope.plugins, key + '.plugins'), section(scope.pluginConfig, key + '.pluginConfig'));
     validateProviderChoices(section(scope.providers, key + '.providers'));

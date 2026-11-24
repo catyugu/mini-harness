@@ -1,5 +1,5 @@
-import { conversationExtensions } from '@mini-harness/contracts/composer';
-import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend';
+import { conversationExtensions } from '@mini-harness/conversation/browser/composer-api';
+import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend-api';
 import { payload } from '@mini-harness/ui-runtime/http';
 
 /** One Cordis scope owns both message actions and the branch revision draft. */
@@ -29,7 +29,7 @@ const setup: FrontendSetup = (_ctx, api) => {
           : 'Editing message · creates a new conversation branch',
         text: rawText, images,
         submit: async ({ text, attachments, removedImages, model, thinkingLevel }) => {
-          return api.request<import('@mini-harness/contracts/transport').RunInfo>('/extensions/session-helper/revise', payload('POST', {
+          return api.request<import('@mini-harness/sessions/run-state.browser').RunInfo>('/extensions/session-helper/revise', payload('POST', {
             sessionId, sourceEntryId, expectedLeafId, message: text, attachments, removedImages, model, thinkingLevel
           }));
         }

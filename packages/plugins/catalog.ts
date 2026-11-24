@@ -1,13 +1,14 @@
-import { localPluginIdPattern } from '@mini-harness/contracts/plugins';
+import type { PluginMetadata } from './api-types.js';
+import { localPluginIdPattern } from '@mini-harness/plugin-api/selection';
 import { DomainError } from '@mini-harness/platform/errors';
 import { readdirSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { Check } from 'typebox/value';
-import type { Settings } from '@mini-harness/contracts/config';
-import type { PluginScope, ScopeSettings } from '@mini-harness/contracts/capabilities';
+import type { PluginSettings } from '@mini-harness/plugin-api/configuration';
+import type { PluginScope, ScopeSettings } from '@mini-harness/kernel/scopes';
 import { resolveCapabilities } from '@mini-harness/kernel/composition';
 import { isRegularFile, pluginBundle } from './source.js';
-import type { PluginDescriptor, PluginMetadata } from '@mini-harness/contracts/plugins';
+import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
 import { describePlugin, type DiscoveredPlugin } from './descriptor.js';
 
 function configDefaults(schema: Record<string, any>, value: any): any {
@@ -52,7 +53,7 @@ export class PluginCatalog {
     }
   }
 
-  effective(settings: Settings): Settings {
+  effective<Settings extends PluginSettings>(settings: Settings): Settings {
     const plugins = { ...settings.plugins };
     const pluginConfig = { ...settings.pluginConfig };
     for (const { id, required, configSchema, defaultEnabled } of this.builtins.values()) {
@@ -94,7 +95,7 @@ export class PluginCatalog {
     });
   }
 
-  plans(settings: Settings, descriptors: DiscoveredPlugin[], scope: PluginScope['kind'],
+  plans(settings: PluginSettings, descriptors: DiscoveredPlugin[], scope: PluginScope['kind'],
     inherited: ReadonlyMap<string, string>, parentIds: ReadonlySet<string>,
     overrides?: ScopeSettings, unavailable?: (id: string, error: unknown) => boolean) {
     const isApp = scope === 'application';

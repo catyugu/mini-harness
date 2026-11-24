@@ -59,7 +59,7 @@ async function checkPackage() {
     }
     await execFile(process.execPath, ['--input-type=module', '-e',
       "import 'mini-harness/plugin'; import 'mini-harness/browser-plugin';"], { cwd: installed });
-    for (const path of ['contracts/plugin-sdk.d.ts', 'ui-runtime/plugin-sdk.d.ts'])
+    for (const path of ['sdk/plugin.d.ts', 'sdk/browser-plugin.d.ts'])
       assert.ok(files.some((file) => file.path === 'dist/types/packages/' + path), 'Missing SDK declarations: ' + path);
     await writeFile(join(installed, 'plugin-types.mts'), `
       import { agentExtensions, promptExtensions, sessionExtensions, toolExtensions, type PluginApi, type LlmPort } from 'mini-harness/plugin';
@@ -125,7 +125,7 @@ async function checkPackage() {
     assert.ok(token);
     const headers = { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' };
     const get = (path: string) => fetch(info.url + path, { headers });
-    for (const asset of ['/', '/packages/ui-runtime/boot.js', '/packages/ui-runtime/plugin-sdk.js', '/packages/ui-primitives/markdown.js', '/packages/session-helper/client.js', '/packages/shell/client.js', '/packages/settings/browser.js', '/packages/sessions/browser/conversation/view.js', '/packages/ui-primitives/primitives.js', '/packages/ui-primitives/vendor/marked.js', '/packages/ui-primitives/vendor/purify.js', '/logo.svg', '/manifest.webmanifest', '/theme.css', '/icon-192.png', '/icon-512.png', '/favicon.ico']) {
+    for (const asset of ['/', '/packages/ui-runtime/boot.js', '/packages/ui-runtime/plugin-sdk.js', '/packages/ui-primitives/markdown.js', '/packages/session-helper/client.js', '/packages/shell/client.js', '/packages/settings/browser.js', '/packages/conversation/browser/conversation/view.js', '/packages/ui-primitives/primitives.js', '/packages/ui-primitives/vendor/marked.js', '/packages/ui-primitives/vendor/purify.js', '/logo.svg', '/manifest.webmanifest', '/theme.css', '/icon-192.png', '/icon-512.png', '/favicon.ico']) {
       const response = await get(asset);
       assert.equal(response.status, 200, asset);
       await response.arrayBuffer();

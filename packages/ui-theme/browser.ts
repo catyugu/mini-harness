@@ -1,5 +1,5 @@
-import { settingsExtensions } from '@mini-harness/contracts/settings-browser';
-import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend';
+import { settingsExtensions } from '@mini-harness/settings/browser/api';
+import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend-api';
 
 const setup: FrontendSetup = (_ctx, api) => {
   const apply = (theme: string) => { document.documentElement.dataset.theme = theme; };

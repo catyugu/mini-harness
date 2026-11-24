@@ -1,9 +1,9 @@
-import { slotExtensions } from '@mini-harness/contracts/slots';
+import { slotExtensions } from '@mini-harness/ui-slots/browser/api';
 import { fromMarkup, required, scopedElements } from '@mini-harness/ui-primitives/primitives';
-import type { BrowserPrimitives } from '@mini-harness/contracts/browser';
-import type { PageContribution } from '@mini-harness/contracts/layout';
+import type { BrowserPrimitives } from '@mini-harness/ui-primitives/api';
+import type { PageContribution } from './browser/api.js';
 import type { Context } from 'cordis';
-import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend';
+import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend-api';
 import { createLayout } from './layout.js';
 import { createRightTabs } from './right-tabs.js';
 
@@ -31,13 +31,6 @@ const setup: FrontendSetup = (ctx, api) => {
 
 };
 export default setup;
-
-declare module 'cordis' {
-  interface Context {
-    miniLayout: ReturnType<typeof createAppFrame>['layout'];
-    miniHeader: ReturnType<typeof createAppFrame>['header'];
-  }
-}
 
 function createAppFrame(primitives: BrowserPrimitives, slotRegistry: Context['miniSlots'], signal: AbortSignal) {
   const root = fromMarkup(`<div id="app" class="app">

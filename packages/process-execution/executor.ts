@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { realpath } from 'node:fs/promises';
-import type { IsolatedProcess, ProcessRequest, ProcessResult, SandboxPort } from '@mini-harness/contracts/execution';
+import type { IsolatedProcess, SandboxPort } from '@mini-harness/sandbox/api';
+import type { ProcessRequest, ProcessResult } from '@mini-harness/execution/request';
 
 async function hostCommand(command: string, cwd: string): Promise<IsolatedProcess> {
   const root = await realpath(cwd);

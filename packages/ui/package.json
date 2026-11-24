@@ -4,8 +4,10 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@mini-harness/contracts": "workspace:*",
-    "@mini-harness/transport": "workspace:*"
+    "@mini-harness/plugin-api": "workspace:*",
+    "@mini-harness/plugins": "workspace:*",
+    "@mini-harness/transport": "workspace:*",
+    "@mini-harness/ui-runtime": "workspace:*"
   },
   "exports": {
     "./descriptor": "./descriptor.ts"

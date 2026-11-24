@@ -1,8 +1,14 @@
-import { toolExtensions } from '@mini-harness/contracts/tool-extensions';
-import { defineTool } from '@mini-harness/contracts/tools';
+import type {} from '@mini-harness/approvals/api';
+import type {} from '@mini-harness/sessions/store';
+import type {} from '@mini-harness/runs/api';
+import type {} from '@mini-harness/kernel/scopes';
+import type {} from '@mini-harness/process-execution/api';
+import type {} from '@mini-harness/transport/projection-api';
+import { toolExtensions } from '@mini-harness/tools/extensions';
+import { defineTool } from '@mini-harness/tools/api';
 import type { Context } from 'cordis';
 import { Type } from 'typebox';
-import type { PluginApi } from '@mini-harness/contracts/plugins';
+import type { PluginApi } from '@mini-harness/plugin-api/descriptor';
 
 export function setup(ctx: Context, api: PluginApi) {
   const { harnessApprovals: approvals, harnessRegistry: workspace, harnessRuns: runs, harnessScopes: scopes } = ctx;
@@ -34,7 +40,7 @@ export function setup(ctx: Context, api: PluginApi) {
         return { content: [{ type: 'text', text: JSON.stringify(output) }], details: { ...output, exitCode: output.code } };
       } finally {
         const workspaceId = workspace.get(sessionId)?.workspaceId;
-        if (workspaceId) ctx.harnessChanges.dispatchEvent(new CustomEvent('change', { detail: { domain: 'files', workspaceId } }));
+        if (workspaceId) ctx.harnessChanges.invalidate('files', { workspaceId });
       }
     }
   });

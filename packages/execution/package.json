@@ -1,0 +1,14 @@
+{
+  "name": "@mini-harness/execution",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./request": "./request.ts"
+  },
+  "miniHarness": {
+    "api": [
+      "./request"
+    ]
+  }
+}

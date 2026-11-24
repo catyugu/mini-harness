@@ -1,9 +1,15 @@
-import type { ToolProjectionHandler, ToolResultTransform } from '@mini-harness/contracts/tool-extensions';
+import type {} from '@mini-harness/kernel/observations';
+import type {} from '@mini-harness/sessions/store';
+import type {} from '@mini-harness/kernel/scopes';
+import type {} from '@mini-harness/models/api';
+import type {} from '@mini-harness/llm/api';
+import type {} from '@mini-harness/tools/api';
+import type { ToolProjectionHandler } from '@mini-harness/sessions/display-extensions';
+import type { ToolResultTransform, InputPreparation, ModelRequestTransform, ModelRetryHandler } from './extensions.js';
 import type { Context } from 'cordis';
-import type { InputPreparation, ModelRequestTransform, ModelRetryHandler } from '@mini-harness/contracts/agent-extensions';
-import type { PluginApi } from '@mini-harness/contracts/plugins';
+import type { PluginApi } from '@mini-harness/plugin-api/descriptor';
 import { registerRoutes } from './routes.js';
-import { firstDecision, orderHooks, type OrderedHook } from '@mini-harness/contracts/contributions';
+import { firstDecision, orderHooks, type OrderedHook } from '@mini-harness/kernel/contributions';
 import { NativeAgent } from './agent.js';
 
 export function setup(ctx: Context, api: PluginApi) {

@@ -1,4 +1,6 @@
-import type { PluginDescriptor } from '@mini-harness/contracts/plugins';
+import type {} from '@mini-harness/platform/runtime-paths';
+import type {} from '@mini-harness/workspaces/api';
+import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
 import { Workspace } from './workspace.js';
 
 export const manifest: PluginDescriptor = {

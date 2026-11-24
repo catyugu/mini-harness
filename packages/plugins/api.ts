@@ -6,10 +6,11 @@ import { protectLocal } from '@mini-harness/platform/local-secret';
 import { readJson, writeJson } from '@mini-harness/platform/json';
 import { isDeepStrictEqual } from 'node:util';
 import type { Context } from 'cordis';
-import type { PluginScope } from '@mini-harness/contracts/capabilities';
-import type { ServiceMap } from '@mini-harness/contracts/plugin-sdk';
-import type { PluginApi, PluginDescriptor } from '@mini-harness/contracts/plugins';
-import { bindContributionSource, contribute } from '@mini-harness/contracts/contributions';
+import type { PluginScope } from '@mini-harness/kernel/scopes';
+import type { ServiceMap } from '@mini-harness/kernel/services';
+import type { PluginApi } from '@mini-harness/plugin-api/descriptor';
+import type { DiscoveredPlugin } from './descriptor.js';
+import { bindContributionSource, contribute } from '@mini-harness/kernel/contributions';
 import { pluginInvocation } from './invocation.js';
 
 export interface PluginLifetime {
@@ -24,10 +25,10 @@ export interface PluginLifetime {
   subscribeConfig?(listener: () => void): () => void;
   writeConfig?(patch: Record<string, unknown>, check: () => void): Promise<void>;
   routes?: Context['harnessRoutes'];
-  upgrade?(path: string, handler: import('@mini-harness/contracts/routes').UpgradeHandler): () => void;
+  upgrade?(path: string, handler: import('@mini-harness/transport/routes').UpgradeHandler): () => void;
 }
 
-export function createPluginApi(ctx: Context, { id, descriptor, config }: { id: string; descriptor: PluginDescriptor; config?: Record<string, unknown> }, state: PluginLifetime) {
+export function createPluginApi(ctx: Context, { id, descriptor, config }: { id: string; descriptor: DiscoveredPlugin; config?: Record<string, unknown> }, state: PluginLifetime) {
   const { scope, scopeKey, lifetime, address } = state;
   const provided = new Set<string>();
   let currentConfig = Object.freeze(structuredClone(config ?? {}));

@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const sdk = new URL('../../packages/contracts/plugin-sdk.js', import.meta.url).href;
+const sdk = new URL('../../packages/sdk/plugin.js', import.meta.url).href;
 
 export function writePlugin(directory: string, id: string, descriptor: object, source: string) {
   const folder = join(directory, id);

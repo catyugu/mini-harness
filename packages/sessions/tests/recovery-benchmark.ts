@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { SessionEntry, SessionEvent } from '@mini-harness/contracts/session-log';
+import type { SessionEntry, SessionEvent } from '../log-api.js';
 import { encodeLog, SessionLog } from '../log.js';
 
 const root = mkdtempSync(join(tmpdir(), 'mini-harness-recovery-bench-'));

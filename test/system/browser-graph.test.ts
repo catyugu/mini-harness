@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import ts from 'typescript';
-import type { BrowserBootstrap } from '@mini-harness/contracts/browser';
+import type { BrowserBootstrap } from '@mini-harness/ui-runtime/bootstrap';
 import { plugins } from '@mini-harness/host/composition';
 import { moduleReferences } from '../../scripts/module-references.js';
 import { fixture } from '../support/api-fixture.js';
@@ -22,7 +22,7 @@ test('the composed browser graph serves its runtime dependencies and excludes se
   for (const asset of [
     '/packages/host/application.js',
     '/packages/platform/local-secret.js',
-    '/packages/contracts/input-node.js',
+    '/packages/input/prepare.js',
     '/packages/shell/host.js',
     '/packages/subagents/delegation.js',
     '/packages/sessions/tests/log.test.js'

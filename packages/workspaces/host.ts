@@ -1,11 +1,20 @@
+import type {} from '@mini-harness/platform/runtime-paths';
+import type {} from '@mini-harness/transport/projection-api';
 import type { Context } from 'cordis';
 import { WorkspaceCatalog } from './catalog.js';
-import { HttpError, HttpReply } from '@mini-harness/contracts/routes';
+import { HttpError, HttpReply } from '@mini-harness/transport/routes';
 const validId = /^[a-f0-9]{32}$/;
 
 /** Workspace identity, mutations and registered HTTP routes have one owner. */
 export function setup(ctx: Context) {
   const catalog = new WorkspaceCatalog(ctx.harnessState.paths);
+  const changes = ctx.harnessChanges;
+  ctx.effect(() => changes.register('workspaces'));
+  ctx.effect(() => {
+    const changed = () => changes.invalidate('workspaces');
+    catalog.events.addEventListener('change', changed);
+    return () => catalog.events.removeEventListener('change', changed);
+  });
   ctx.provide('harnessWorkspaces', catalog);
   const add = (method: string, path: string, handler: Parameters<typeof ctx.harnessRoutes.register>[2]) =>
     ctx.effect(() => ctx.harnessRoutes.register(method, path, handler));

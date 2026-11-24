@@ -1,7 +1,12 @@
-import { toolExtensions } from '@mini-harness/contracts/tool-extensions';
-import { defineTool } from '@mini-harness/contracts/tools';
+import type {} from '@mini-harness/sessions/store';
+import type {} from '@mini-harness/kernel/scopes';
+import type {} from '@mini-harness/runs/api';
+import type {} from '@mini-harness/agent/api';
+import type {} from '@mini-harness/models/api';
+import { toolExtensions } from '@mini-harness/tools/extensions';
+import { defineTool } from '@mini-harness/tools/api';
 import type { Context } from 'cordis';
-import type { PluginApi } from '@mini-harness/contracts/plugins';
+import type { PluginApi } from '@mini-harness/plugin-api/descriptor';
 import { Type } from 'typebox';
 import { Delegation, type SubagentPolicy } from './delegation.js';
 

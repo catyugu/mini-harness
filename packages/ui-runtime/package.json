@@ -4,12 +4,29 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@mini-harness/contracts": "workspace:*"
+    "@mini-harness/kernel": "workspace:*"
   },
   "exports": {
-    "./frontend": "./frontend.ts",
+    "./bootstrap": "./bootstrap.ts",
+    "./contribution": "./contribution.ts",
+    "./frontend-api": "./frontend-api.ts",
+    "./graph-api": "./graph-api.ts",
     "./http": "./http.ts",
+    "./projection-api": "./projection-api.ts",
+    "./projection-notice": "./projection-notice.ts",
     "./projections": "./projections.ts",
     "./remote-store": "./remote-store.ts"
+  },
+  "miniHarness": {
+    "api": [
+      "./bootstrap",
+      "./contribution",
+      "./frontend-api",
+      "./graph-api",
+      "./http",
+      "./projection-api",
+      "./projection-notice",
+      "./remote-store"
+    ]
   }
 }
