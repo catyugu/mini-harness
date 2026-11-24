@@ -46,7 +46,7 @@ const setup: FrontendSetup = (ctx, api) => {
   });
   state.addEventListener('open', (event: Event) => {
     if (!(event instanceof CustomEvent) || typeof event.detail !== 'string') return;
-    pages.open(); void conversation.activate(event.detail);
+    pages.open(); layout.closeDrawer(); void conversation.activate(event.detail);
   }, { signal: api.signal });
   state.addEventListener('clear', () => conversation.clear(), { signal: api.signal });
   state.addEventListener('draft', () => clearDraft(), { signal: api.signal });

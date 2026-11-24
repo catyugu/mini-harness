@@ -173,7 +173,7 @@ export class PluginHost implements ScopePort {
         diagnostics.push(this.describe(plan, id, needs));
       }
     }
-    return { scopes, mounts, diagnostics };
+    return { scopes, mounts, diagnostics, graph };
   }
 
   private async load(plan: PluginPlan, scope: PluginScope, scopeKey?: string): ReturnType<MountPlan['load']> {
@@ -310,7 +310,12 @@ export class PluginHost implements ScopePort {
       return true;
     };
     const { plans, providers } = this.catalog.plans(settings, descriptors, 'application', this.root, new Set(), undefined, unavailable);
-    const scoped = this.scopedMounts(settings, descriptors, plans, providers, unavailable, preparing, released, validations.flatMap(({ key }) => key ? [key] : []));
+    const requiredScopes = new Set(updating ? Object.entries(settings.scopes).filter(([key, scope]) =>
+      Object.entries(scope.providers ?? {}).some(([service, provider]) =>
+        this.catalog.requiredServices.has(service) && changedSelection(key + '/' + provider, previous, settings)))
+      .map(([key]) => key) : []);
+    const scoped = this.scopedMounts(settings, descriptors, plans, providers, unavailable, preparing, released,
+      [...requiredScopes, ...validations.flatMap(({ key }) => key ? [key] : [])]);
     const browser = planBrowser(plans, settings.browserProviders ?? {}, unavailable, this.catalog.requiredBrowserServices);
     const mounts = [...plans.filter(({ id }) => !failures.has(id)).map((plan) => this.mountPlan(plan, appScope)), ...scoped.mounts];
     const appChanged = !isDeepStrictEqual(previous.providers, settings.providers) ||
@@ -351,6 +356,13 @@ export class PluginHost implements ScopePort {
               (diagnostic ? ': ' + provider + ': ' + diagnostic : ''));
           }
         }
+        for (const node of scoped.graph) if (requiredScopes.has(node.key)) {
+          for (const service of this.catalog.requiredServices) {
+            const owner = node.owners.get(service);
+            if (!owner || !this.mounts.plan(owner))
+              throw new DomainError('unavailable', 'Required service ' + service + ' is unavailable in ' + node.key);
+          }
+        }
         for (const { descriptor, config, key } of validations)
           this.catalog.validateConfig(descriptor, config, 'write', this.configurationContext(key, scoped.scopes),
             this.validators.get(key ? key + '/' + descriptor.id : descriptor.id));
@@ -361,7 +373,7 @@ export class PluginHost implements ScopePort {
   async close() {
     this.closing = true;
     await this.applying?.catch(() => {});
-    try { await this.mounts.close(); }
+    try { await withMountTransaction(() => this.mounts.close()); }
     finally { this.scopes.clear(); }
   }
 }

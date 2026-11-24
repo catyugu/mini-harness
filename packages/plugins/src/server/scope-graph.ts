@@ -14,6 +14,7 @@ interface ScopedNode {
   parent?: string;
   scope: PluginScope;
   isolates: string[];
+  owners: ReadonlyMap<string, string>;
   plugins: { plan: PluginPlan; id: string; needs: string[] }[];
 }
 
@@ -78,7 +79,7 @@ export function resolveScopes(settings: PluginSettings, describe: PluginCatalog[
     const current = { key, ids, owners, providers };
     graph.set(key, current);
     if (active.has(key)) nodes.push({
-      key, parent: parent.key, scope, isolates: [...isolates].sort(),
+      key, parent: parent.key, scope, isolates: [...isolates].sort(), owners,
       plugins: plans.map((plan) => {
         const needs = new Set<string>();
         for (const dependency of plan.descriptor.requires ?? []) {
