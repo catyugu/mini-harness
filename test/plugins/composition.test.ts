@@ -158,11 +158,13 @@ test('read-only permissions are bound to the selected tool registration', async 
   const sent = expectPresent(mock.requests.at(-1), 'request with tools');
   assert.equal(JSON.stringify(sent.tools).includes('"name":"read"'), false);
   assert.equal(JSON.stringify(sent.tools).includes('"name":"load_skill"'), true);
-  assert.equal((await request('/settings', 'PATCH', { readOnlyTools: { replacement: ['custom'] } })).status, 200);
+  assert.deepEqual((await request('/plugins')).body.find((plugin: { id: string }) => plugin.id === 'replacement').readOnlyTools, ['custom', 'read']);
+  assert.equal((await request('/plugins/replacement/read-only', 'PATCH', { tool: 'unknown', allowed: true })).status, 400);
+  assert.equal((await request('/plugins/replacement/read-only', 'PATCH', { tool: 'custom', allowed: true })).status, 200);
   const granted = expectPresent(list(child.id).find(({ name }) => name === 'custom'), 'granted registration');
   assert.match(JSON.stringify(await granted.execute('granted', {})), /Authorized local read/);
   assert.ok(!list(child.id).some(({ name }) => name === 'read'));
-  assert.equal((await request('/settings', 'PATCH', { readOnlyTools: {} })).status, 200);
+  assert.equal((await request('/plugins/replacement/read-only', 'PATCH', { tool: 'custom', allowed: false })).status, 200);
   await assert.rejects(granted.execute('revoked', {}), /Tool denied/);
 });
 

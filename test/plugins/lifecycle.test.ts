@@ -321,7 +321,7 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
   const released: string[] = [];
   const builtins: PluginDescriptor[] = [
     { id: 'global', scope: 'application', title: 'Global', description: '', required: true,
-      provides: ['greeting', 'extra'], setup(ctx, api) { ctx.provide('greeting', 'global'); ctx.provide('extra', 'retained'); } },
+      provides: ['greeting', 'extra'], setup(ctx) { ctx.provide('greeting', 'global'); ctx.provide('extra', 'retained'); } },
     { id: 'workspace', scope: 'workspace', title: 'Workspace', description: '', provides: ['greeting'],
       configSchema: { type: 'object', properties: { value: { type: 'string' } }, required: ['value'] },
       setup(ctx, api) { ctx.provide('greeting', String(api.config.value)); } },
@@ -344,7 +344,7 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
   host.register('session', (id) => {
     const record = records.get(id);
     return record && { scope: { kind: 'session', sessionId: id, workspaceId: record.workspaceId },
-      parent: record.parentId ? 'session:' + record.parentId : 'workspace:' + record.workspaceId };
+      parent: record.parentId ? `session:${record.parentId}` : `workspace:${record.workspaceId}` };
   });
   t.after(async () => { await host.close(); rmSync(directory, { recursive: true, force: true }); });
   await host.start(settings);
@@ -400,9 +400,9 @@ test('configuration validation resolves the staged scope provider and rejects in
   let settings = structuredClone(DEFAULTS);
   const builtins: PluginDescriptor[] = [
     { id: 'global', scope: 'application', title: 'Default', description: '', required: true, provides: ['greeting'],
-      setup(ctx, api) { ctx.provide('greeting', 'global'); } },
+      setup(ctx) { ctx.provide('greeting', 'global'); } },
     { id: 'local', scope: 'workspace', title: 'Local', description: '', provides: ['greeting'],
-      setup(ctx, api) { ctx.provide('greeting', 'local'); } },
+      setup(ctx) { ctx.provide('greeting', 'local'); } },
     { id: 'consumer', scope: 'workspace', title: 'Consumer', description: '', inject: ['greeting'],
       configSchema: { type: 'object', properties: { expected: { type: 'string' } }, required: ['expected'] },
       validateConfig(config, { operation, service }) {

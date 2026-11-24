@@ -17,7 +17,7 @@ export function setup(ctx: Context) {
     const record = registry.get(id);
     return record && {
       scope: { kind: 'session', sessionId: id, workspaceId: record.workspaceId },
-      parent: record.parentId ? 'session:' + record.parentId : 'workspace:' + record.workspaceId
+      parent: record.parentId ? `session:${record.parentId}` : `workspace:${record.workspaceId}`
     };
   }));
   ctx.effect(() => ctx.harnessWorkspaces.beforeRemove((id) => registry.delete(registry.list(id).map((record) => record.id))));
