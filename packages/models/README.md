@@ -12,7 +12,7 @@ Maintains one credential and provider store. Publishes independent catalog and L
 
 ## API
 
-`harnessModels` and `harnessLlm` are replaceable capabilities. `harnessModelStore` and `harnessModelPreference` are internal.
+`harnessModels`, `harnessLlm`, and `harnessModelPreference` are independently replaceable capabilities. `harnessModelStore` owns internal provider administration. `core:model-management` consumes the capabilities to supply provider routes and browser settings independently of the preference provider.
 
 ## Dependencies
 

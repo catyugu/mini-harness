@@ -16,7 +16,7 @@ export type { CapabilityObservation, CapabilityObservations } from '@mini-harnes
 export type { FileAccessPort, WorkspaceFileAccess } from '@mini-harness/file-access/api';
 export type { ProcessExecutionPort } from '@mini-harness/process-execution/api';
 export type { SandboxPort } from '@mini-harness/sandbox/api';
-export type { ModelCatalogPort } from '@mini-harness/models/api';
+export type { ModelCatalogPort, ModelPreferencePort } from '@mini-harness/models/api';
 export type { ModelSummary, ProviderModel } from '@mini-harness/models/catalog';
 export type { LlmPort, LlmRequest, LlmEvent, NativeMessage, NativeAssistantMessage, ToolCallPart } from '@mini-harness/llm/api';
 export type { ToolDefinition, ToolResult, ToolContext, ToolRegistrationOptions } from '@mini-harness/tools/api';

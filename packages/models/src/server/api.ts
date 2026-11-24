@@ -10,16 +10,19 @@ export interface ModelCatalogPort {
   capabilities(choice: ModelChoice): ProviderModel | undefined;
 }
 
+export interface ModelPreferencePort {
+  recent(): ModelChoice;
+  remember(model: ModelChoice): Promise<void>;
+  subscribe(listener: () => void): () => void | Promise<void>;
+}
+
 declare module 'cordis' {
   interface Context {
     harnessModels: ModelCatalogPort;
-    harnessModelPreference: {
-      recent(): ModelChoice;
-      remember(model: ModelChoice): Promise<void>;
-    };
+    harnessModelPreference: ModelPreferencePort;
   }
 }
 
 declare module '@mini-harness/kernel/services' {
-  interface ServiceMap { harnessModels: ModelCatalogPort }
+  interface ServiceMap { harnessModels: ModelCatalogPort; harnessModelPreference: ModelPreferencePort }
 }

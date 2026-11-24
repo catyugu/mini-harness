@@ -148,7 +148,7 @@ export class Runs {
       });
       return agent.prompt(record, prepared.text, publish, {
         signal: cancellation, source, submissionId: info.id, choice,
-        onModelAccepted: !record.parentId && (!source || source === 'user') ? this.preference.remember : undefined, images: prepared.images, input: prepared.input, thinkingLevel, revision,
+        onModelAccepted: !record.parentId && (!source || source === 'user') ? (model) => this.preference.remember(model) : undefined, images: prepared.images, input: prepared.input, thinkingLevel, revision,
         changed: (path) => { info.changedFiles = [...new Set([...(info.changedFiles ?? []), path])]; }
       });
     };

@@ -14,6 +14,7 @@ import { manifest as workspaces_data } from '@mini-harness/workspaces/manifests/
 import { manifest as sessions_data } from '@mini-harness/conversation/manifests/session-data';
 import { manifest as runs } from '@mini-harness/runs/manifest';
 import { manifest as settings } from '@mini-harness/settings/manifest';
+import { manifest as model_management } from '@mini-harness/models/manifests/management';
 import { manifest as models } from '@mini-harness/models/manifests/models';
 import { manifest as plugin_management } from '@mini-harness/plugins/manifest';
 import { manifest as ui } from '@mini-harness/ui-gateway/manifest';
@@ -33,7 +34,7 @@ import { manifest as conversation } from '@mini-harness/conversation/manifests/c
 
 export const plugins = [
   workspaces_data, sessions_data, workspace_navigation, navigation, model_store, model_catalog, llm, prompt,
-  ui_slots, ui_theme, ui_primitives, ui_layout, workspaces, sessions, permissions, agent, runs, settings, models, plugin_management, ui, file_access, files, skills, subagents, shell, session_helper, approvals, sandbox, process_execution, tools, conversation
+  ui_slots, ui_theme, ui_primitives, ui_layout, workspaces, sessions, permissions, agent, runs, settings, models, model_management, plugin_management, ui, file_access, files, skills, subagents, shell, session_helper, approvals, sandbox, process_execution, tools, conversation
 ];
 
 export const authority = {

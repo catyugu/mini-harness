@@ -3,25 +3,16 @@ import type {} from '@mini-harness/transport/routes';
 import type {} from '@mini-harness/transport/projection-api';
 import type {} from '@mini-harness/kernel/mutation-api';
 import { DomainError } from '@mini-harness/platform/errors';
-import type { PluginApi } from '@mini-harness/plugin-api/descriptor';
-import type { ModelChoice } from '@mini-harness/llm/vocabulary';
+import type {} from './api.js';
 import type { Context } from 'cordis';
 import { providerSettings, saveProvider } from './provider-settings.js';
 
-/** Provider discovery, credentials and model selection have one capability owner. */
-export function setup(ctx: Context, api: PluginApi) {
-  const recent = () => api.configuration.get<ModelChoice>('model');
-  const remember = (model: ModelChoice) => api.configuration.set('model', model);
-  ctx.provide('harnessModelPreference', {
-    recent,
-    remember: async (model) => {
-      // Scoped-only models must not become an unusable application default.
-      if (ctx.harnessModels.resolve(model)) await remember(model);
-    }
-  });
+/** Routes and presentation are consumers of independently replaceable providers. */
+export function setup(ctx: Context) {
+  const preference = ctx.harnessModelPreference;
   const host = {
     paths: ctx.harnessState.paths,
-    recent, remember,
+    recent: () => preference.recent(), remember: (model: ReturnType<typeof preference.recent>) => preference.remember(model),
     catalog: ctx.harnessModels,
     admin: ctx.harnessModelStore
   };
@@ -30,6 +21,7 @@ export function setup(ctx: Context, api: PluginApi) {
   const changes = ctx.harnessChanges;
   ctx.effect(() => changes.register('models'));
   const changed = () => changes.invalidate('models');
+  ctx.effect(() => preference.subscribe(changed));
   add('GET', '/api/providers', () => providerSettings(host));
   for (const method of ['PUT', 'DELETE']) {
     add(method, '/api/providers', async ({ body }) => {
@@ -62,5 +54,5 @@ export function setup(ctx: Context, api: PluginApi) {
       });
     });
   }
-  add('GET', '/api/models', async () => ({ models: await host.catalog.available() }));
+  add('GET', '/api/models', async () => ({ models: await host.catalog.available(), recent: preference.recent() }));
 }

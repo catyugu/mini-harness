@@ -9,6 +9,7 @@
     "./catalog": "./src/shared/catalog.ts",
     "./manifests/catalog": "./src/manifests/catalog.ts",
     "./manifests/llm": "./src/manifests/llm.ts",
+    "./manifests/management": "./src/manifests/management.ts",
     "./manifests/models": "./src/manifests/models.ts",
     "./manifests/store": "./src/manifests/store.ts"
   },
