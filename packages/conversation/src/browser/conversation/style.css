@@ -255,3 +255,5 @@
   .parent-conversations .link-button { min-height: 32px; }
 }
 .model-picker:popover-open { animation: popup-in var(--motion-popup) ease-out; }
+
+.business-record { flex-shrink: 0; min-width: 0; overflow-wrap: anywhere; }

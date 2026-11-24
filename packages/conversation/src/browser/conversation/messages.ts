@@ -1,21 +1,75 @@
 import { layoutExtensions } from '@mini-harness/ui-layout/browser/api';
 import type { MessageContent, ViewMessage } from '@mini-harness/sessions/message';
 import type { RunEvent } from '@mini-harness/runs/stream';
-import type { ConversationView } from '../../shared/api.js';
+import type { BusinessRecord, ConversationView } from '../../shared/api.js';
 import type { FrontendApi } from '@mini-harness/ui-runtime/frontend-api';
-import type { ToolView, MessageAction, MessageActionContext } from '../composer-api.js';
+import type { ToolView, MessageAction, MessageActionContext, BusinessRecordRenderer } from '../composer-api.js';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { renderMarkdown, markdownSource } from '@mini-harness/ui-primitives/markdown';
 import { button } from '@mini-harness/ui-primitives/primitives';
 
 export function createMessageView(api: Pick<FrontendApi, 'contribute' | 'signal'>, messages: HTMLElement,
-  extensions: { render(tool: ToolView, action?: boolean): HTMLElement | undefined; messageActions(): MessageAction[] },
+  extensions: { render(tool: ToolView, action?: boolean): HTMLElement | undefined; messageActions(): MessageAction[]; recordRenderer(record: BusinessRecord): BusinessRecordRenderer | undefined },
   current: () => { sessionId?: string; leafId?: string | null }, retryLast: () => void) {
 const toolItems = new WeakMap<HTMLDetailsElement, Parameters<typeof toolCard>[0]>();
 const actionContext = new WeakMap<HTMLElement, MessageActionContext>();
 const saved = new Map<string, { node: HTMLElement; signature?: string }>();
 const liveTools = new Map<string, HTMLDetailsElement>();
+const recordNodes = new Map<string, { node: HTMLElement; dispose(): void; signature: string; renderer?: BusinessRecordRenderer }>();
+let records: BusinessRecord[] = [];
 const runError = 'run-error';
+
+function releaseRecords() {
+  for (const value of recordNodes.values()) value.dispose();
+  recordNodes.clear();
+}
+api.signal.addEventListener('abort', releaseRecords, { once: true });
+
+function renderRecords(next: BusinessRecord[] = records) {
+  records = next;
+  const ids = new Set(records.map(({ id }) => id));
+  for (const [id, mounted] of recordNodes) if (!ids.has(id)) {
+    mounted.dispose();
+    recordNodes.delete(id);
+  }
+  const anchors = new Map<string | undefined, HTMLElement>();
+  for (const record of records) {
+    const signature = JSON.stringify(record), renderer = extensions.recordRenderer(record);
+    let mounted = recordNodes.get(record.id);
+    if (!mounted || signature !== mounted.signature || renderer !== mounted.renderer) {
+      mounted?.dispose();
+      const node = document.createElement('section');
+      node.className = 'business-record ui-card';
+      node.dataset.recordId = record.id;
+      const lifetime = new AbortController();
+      let cleanup: (() => void) | undefined;
+      try {
+        const view = renderer?.(structuredClone(record), lifetime.signal);
+        if (view) {
+          if ('node' in view) { node.append(view.node); cleanup = view.dispose; }
+          else node.append(view);
+        }
+      } catch (error) { console.warn('Record renderer failed', error); lifetime.abort(); }
+      if (!node.childElementCount) {
+        const hint = document.createElement('small');
+        hint.className = 'hint';
+        hint.textContent = record.pluginId + ' · ' + (record.presentation?.kind ?? 'Business record');
+        node.append(hint);
+      }
+      mounted = { node, signature, renderer, dispose() {
+        lifetime.abort();
+        try { cleanup?.(); } catch (error) { console.warn('Record cleanup failed', error); }
+        finally { node.remove(); }
+      } };
+      recordNodes.set(record.id, mounted);
+    }
+    const anchor = anchors.get(record.afterMessageId) ?? (record.afterMessageId ? saved.get(record.afterMessageId)?.node : undefined);
+    if (anchor?.parentElement === messages) anchor.after(mounted.node);
+    else messages.append(mounted.node);
+    anchors.set(record.afterMessageId, mounted.node);
+  }
+}
+
 const imageMime = /^image\/(?:png|jpeg|gif|webp)$/;
 
 const preview = document.createElement('figure');
@@ -301,7 +355,7 @@ function preserveScroll(update: () => void, reset = false) {
 
 function history(entries: ViewMessage[], error?: string, reset = false) {
   preserveScroll(() => {
-    if (reset) { previewDialog.close(); messages.replaceChildren(); saved.clear(); liveTools.clear(); }
+    if (reset) { previewDialog.close(); releaseRecords(); messages.replaceChildren(); saved.clear(); liveTools.clear(); }
     const nodes = entries.flatMap((message, index) => {
       if (message.role !== 'toolResult' && !textOf(message.content) && !message.attachments?.length &&
           !message.error && !(Array.isArray(message.content) && message.content.some((part) => part.type === 'image'))) return [];
@@ -345,6 +399,7 @@ function history(entries: ViewMessage[], error?: string, reset = false) {
       next = node.nextElementSibling;
     }
     liveTools.clear();
+    renderRecords();
   }, reset);
 }
 
@@ -421,5 +476,7 @@ function stream(initial: ConversationView) {
   });
 }
 
-return { textOf, history, stream, refreshTools, refreshActions };
+return { textOf, history, stream, refreshTools, refreshActions,
+  records: (next: BusinessRecord[]) => preserveScroll(() => renderRecords(next)),
+  refreshRecords: () => preserveScroll(() => renderRecords()) };
 }

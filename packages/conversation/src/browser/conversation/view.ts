@@ -1,7 +1,7 @@
 import { slotExtensions } from '@mini-harness/ui-slots/browser/api';
 import type { BrowserProjectionPort } from '@mini-harness/ui-runtime/projection-api';
 import type { Attachment } from '@mini-harness/input/message';
-import type { Conversation, ConversationView } from '../../shared/api.js';
+import type { BusinessRecord, Conversation, ConversationView } from '../../shared/api.js';
 import type { ConversationPermission } from '@mini-harness/sessions/identity';
 import type { ModelChoice, ThinkingLevel } from '@mini-harness/llm/vocabulary';
 import type { MessageContent } from '@mini-harness/sessions/message';
@@ -14,7 +14,7 @@ import { createConversationController } from './controller.js';
 import type { ConversationSelection, ConversationSessions } from '../session-data/api.js';
 import { createMessageView } from './messages.js';
 import { CommandRegistry } from './commands.js';
-import type { ComposerCommand, ToolView, MessageAction, DraftMode } from '../composer-api.js';
+import type { ComposerCommand, ToolView, MessageAction, DraftMode, BusinessRecordRenderer } from '../composer-api.js';
 import { createComposer, type ConversationDraft } from './composer.js';
 import { createModelPicker } from './model-picker.js';
 import { createThinkingPicker } from './thinking-picker.js';
@@ -34,6 +34,7 @@ interface ConversationServices {
   setTitle(title: string): void;
   renderTool(tool: ToolView, action?: boolean): HTMLElement | undefined;
   messageActions(): MessageAction[];
+  recordRenderer(record: BusinessRecord): BusinessRecordRenderer | undefined;
 }
 
 export function conversationView(api: FrontendApi, state: ConversationSelection, options: ConversationServices) {
@@ -217,7 +218,7 @@ export function conversationView(api: FrontendApi, state: ConversationSelection,
   const commands = new CommandRegistry();
   const composerUi = createComposer(view, draft, report, commands, api.signal);
   const messageView = createMessageView(api, messages, {
-    render: options.renderTool, messageActions: options.messageActions
+    render: options.renderTool, messageActions: options.messageActions, recordRenderer: options.recordRenderer
   }, () => ({ sessionId: active(), leafId: activeLeaf }), () => {
     const id = active();
     const last = id ? lastInputs.get(id) : undefined;
@@ -268,6 +269,7 @@ export function conversationView(api: FrontendApi, state: ConversationSelection,
     updateModelControls();
     options.setTitle(item?.title ?? 'New conversation');
     state.selectConversation(item, revealWorkspace);
+    messageView.records(view?.records ?? []);
     messageView.history(history, item?.run?.state === 'failed' ? item.run.error : undefined, switched);
     showWelcome(!messages.childElementCount && !isRunning(item?.run));
   }
@@ -494,6 +496,18 @@ export function conversationView(api: FrontendApi, state: ConversationSelection,
       }
     }
   }));
+  let recordsRevision = 0;
+  const refreshRecords = async (_revision: number, reconnect: boolean, changedId?: string) => {
+    const id = active(), signal = visit.signal;
+    if (!id || (!reconnect && changedId && changedId !== id)) return;
+    const revision = ++recordsRevision;
+    try {
+      const records = await api.request<BusinessRecord[]>('/sessions/' + id + '/records', { signal });
+      if (!signal.aborted && revision === recordsRevision) messageView.records(records);
+    } catch (error) { if (!signal.aborted && revision === recordsRevision) throw error; }
+  };
+  api.onDispose(options.projections.register('records', { sync: refreshRecords }));
+  api.onDispose(options.projections.register('plugins', { sync: (revision, reconnect) => refreshRecords(revision, reconnect) }));
   api.onDispose(() => visit.abort());
   element<'button'>('stop').onclick = async () => {
     const id = active(), signal = visit.signal;
@@ -527,6 +541,7 @@ export function conversationView(api: FrontendApi, state: ConversationSelection,
     outlets, activate, showConversation, clear, updateModelControls, report,
     refreshTools: messageView.refreshTools,
     refreshActions: messageView.refreshActions,
+    refreshRecords: messageView.refreshRecords,
     beginDraftMode(mode: DraftMode) {
       if (sending || pending || !active()) return () => {};
       const entry = draftEntry;

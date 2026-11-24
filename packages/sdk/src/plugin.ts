@@ -10,7 +10,7 @@ export type { PluginApi, PluginDescriptor, ConfigValidationContext, ScopedReques
 export type { InputContext, InputPreparation, ModelFailure, ModelRequestContent, ModelRequestTransform, ModelRetry, StepContext } from '@mini-harness/agent/extensions';
 export type { PromptContext, PromptSection } from '@mini-harness/agent/prompt-api';
 export type { ToolDecision } from '@mini-harness/tools/extensions';
-export type { ToolProjection } from '@mini-harness/conversation/display-extensions';
+export type { ToolProjection, BusinessRecordContext, BusinessRecordHandler } from '@mini-harness/conversation/display-extensions';
 export type { ToolResultContext, ToolResultTransform } from '@mini-harness/agent/extensions';
 export type { CapabilityObservation, CapabilityObservations } from '@mini-harness/kernel/observations';
 export type { FileAccessPort, WorkspaceFileAccess } from '@mini-harness/file-access/api';

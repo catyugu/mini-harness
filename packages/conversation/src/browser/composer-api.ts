@@ -1,4 +1,7 @@
 import type {} from 'cordis';
+import type { PluginIcon } from '@mini-harness/plugin-api/descriptor';
+import type { BusinessRecord } from '../shared/api.js';
+import type { SlotMount } from '@mini-harness/ui-slots/browser/api';
 import type { BrowserContributionSource } from '@mini-harness/ui-runtime/contribution';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { Attachment } from '@mini-harness/input/message';
@@ -44,11 +47,12 @@ export interface MessageAction {
   id: string;
   label: string;
   successLabel?: string;
-  icon: 'copy' | 'edit' | 'refresh';
+  icon: PluginIcon;
   order?: number;
   visible(context: MessageActionContext): boolean;
   run(context: MessageActionContext): void | Promise<void>;
 }
+export type BusinessRecordRenderer = (record: BusinessRecord, signal: AbortSignal) => HTMLElement | SlotMount;
 export interface DraftMode {
   title: string;
   text: string;
@@ -65,6 +69,7 @@ declare module 'cordis' {
       completion(trigger: string, complete: Completer): () => void;
     };
     miniMessages: {
+      registerRecord(pluginId: string, kind: string, render: BusinessRecordRenderer): () => void;
       registerAction(action: MessageAction): () => void;
       registerTool(name: string, render: (tool: ToolView) => HTMLElement | undefined, action?: boolean): () => void;
     };
@@ -72,6 +77,9 @@ declare module 'cordis' {
 }
 
 export const conversationExtensions = {
+  record(source: BrowserContributionSource, pluginId: string, kind: string, render: BusinessRecordRenderer) {
+    return source.effect(() => source.service('miniMessages').registerRecord(pluginId, kind, render));
+  },
   command(source: BrowserContributionSource, command: ComposerCommand) {
     return source.effect(() => source.service('miniComposer').command(command));
   },

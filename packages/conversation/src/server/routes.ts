@@ -113,6 +113,7 @@ export function registerSessionRoutes(ctx: Context, read: (id: string) => Conver
     response.once('close', detach);
     stream.start();
   });
+  add('GET', '/api/sessions/:id/records', ({ params }) => read(session(params.id)).records);
   add('GET', '/api/sessions/:id', ({ params }) => read(session(params.id)));
   add('PATCH', '/api/sessions/:id', async ({ params, body }) => {
     const id = session(params.id), input = await body();

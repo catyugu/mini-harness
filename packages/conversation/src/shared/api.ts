@@ -20,7 +20,17 @@ export interface SessionSearchResult {
   match: [start: number, end: number];
 }
 
+/** User-facing projection of a durable plugin record, never a model-visible message. */
+export interface BusinessRecord {
+  id: string;
+  pluginId: string;
+  timestamp: string;
+  afterMessageId?: string;
+  presentation?: { kind: string; data: unknown };
+}
+
 export interface ConversationView extends Conversation {
+  records: BusinessRecord[];
   messages: ViewMessage[];
   leafId: string | null;
   model: ModelChoice;

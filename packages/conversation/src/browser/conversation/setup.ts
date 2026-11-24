@@ -33,7 +33,7 @@ const setup: FrontendSetup = (ctx, api) => {
     closeDrawer: layout.closeDrawer,
     showWorkspaceInHeader: header.showWorkspace,
     setTitle: header.setTitle, renderTool: (tool, action) => extensions.render(tool, action),
-    messageActions: () => extensions.actionsForMessage()
+    messageActions: () => extensions.actionsForMessage(), recordRenderer: (record) => extensions.recordRenderer(record)
   });
   ctx.provide('miniComposer', {
     insert: conversation.insert,
@@ -49,6 +49,7 @@ const setup: FrontendSetup = (ctx, api) => {
   extensions.subscribe(conversation.refreshActions, api.signal);
   models.subscribe(conversation.updateModelControls, api.signal);
   extensions.subscribeToTools(conversation.refreshTools, api.signal);
+  extensions.subscribeToRecords(conversation.refreshRecords, api.signal);
   api.contribute(slotExtensions.keyed, 'sidebar.primary', 'new-conversation', (signal) => {
     const button = document.createElement('button');
     button.type = 'button';

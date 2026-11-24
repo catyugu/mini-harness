@@ -46,8 +46,8 @@ export class SessionRegistry implements SessionStore {
     this.state = state;
   }
 
-  private notify(id: string, deleted = false, queue = false) {
-    this.events.dispatchEvent(new CustomEvent('change', { detail: { id, deleted, queue } }));
+  private notify(id: string, deleted = false, queue = false, records = false) {
+    this.events.dispatchEvent(new CustomEvent('change', { detail: { id, deleted, queue, records } }));
   }
 
   list(workspaceId?: string) {
@@ -154,7 +154,7 @@ export class SessionRegistry implements SessionStore {
       if (entry.type === 'run') this.latestRuns.set(id, entry.run);
       const inbox = entry.type.startsWith('inbox-');
       if (inbox || entry.type === 'message' && entry.inboxId) this.notify(id, false, true);
-      if (!inbox && entry.type !== 'model-request' && entry.type !== 'tool-schema') this.notify(id);
+      if (!inbox && entry.type !== 'model-request' && entry.type !== 'tool-schema') this.notify(id, false, false, entry.type === 'custom' || entry.type === 'message' || entry.type === 'branch');
     };
     let log: SessionLog | undefined;
     try {

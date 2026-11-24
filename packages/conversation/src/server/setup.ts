@@ -5,7 +5,7 @@ import type {} from '@mini-harness/approvals/api';
 import type {} from '@mini-harness/models/api';
 import type { ConversationView } from '../shared/api.js';
 import type { Context } from 'cordis';
-import { projectHistory, projectToolEvent } from './display-extensions.js';
+import { projectHistory, projectToolEvent, projectRecords } from './display-extensions.js';
 import { projectSession } from './navigation.js';
 import { registerSessionRoutes } from './routes.js';
 
@@ -13,9 +13,13 @@ export function setup(ctx: Context) {
   const changes = ctx.harnessChanges;
   ctx.effect(() => changes.register('sessions'));
   ctx.effect(() => changes.register('queue'));
+  ctx.effect(() => changes.register('records'));
   const track = (source: EventTarget, domain: (event: CustomEvent) => string) => {
     const listener = (event: Event) => {
-      if (event instanceof CustomEvent) changes.invalidate(domain(event), { sessionId: event.detail.id });
+      if (event instanceof CustomEvent) {
+        changes.invalidate(domain(event), { sessionId: event.detail.id });
+        if (event.detail.records) changes.invalidate('records', { sessionId: event.detail.id });
+      }
     };
     ctx.effect(() => {
       source.addEventListener('change', listener);
@@ -30,10 +34,10 @@ export function setup(ctx: Context) {
     if (!record) throw new Error('Conversation not found');
     const { harnessRegistry: sessions, harnessModelPreference, harnessRuns } = ctx;
     sessions.assertAvailable(id);
-    const history = sessions.inspectLog(id, (log) => ({ ...log.projection(), queue: log.queue() }));
+    const history = sessions.inspectLog(id, (log) => ({ ...log.projection(), queue: log.queue(), records: projectRecords(ctx, id, log.branch()) }));
     const { partial, tools } = harnessRuns.activity(id);
     return { ...projectSession(ctx, record),
-      messages: projectHistory(ctx, id, history?.messages ?? []), leafId: history?.leafId ?? null,
+      records: history?.records ?? [], messages: projectHistory(ctx, id, history?.messages ?? []), leafId: history?.leafId ?? null,
       model: history?.model ?? harnessModelPreference.recent(), thinkingLevel: history?.thinkingLevel,
       queue: history?.queue ?? [], partial, tools: tools.map((tool) => projectToolEvent(ctx, id, tool)),
       logError: sessions.logError(id) };
