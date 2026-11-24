@@ -14,9 +14,13 @@ export class Inspection {
   }
   async preview(path: string) {
     const bytes = await this.files.readFile(path);
-    if (bytes.length > 512 * 1024) throw new DomainError('invalid_input', 'Preview is limited to 512 KiB');
     const image = await this.files.imageType(path);
-    if (image) return { path, content: bytes.toString('base64'), image };
+    const video = /\.(?:mp4|m4v)$/i.test(path) ? 'video/mp4' : /\.webm$/i.test(path) ? 'video/webm' : /\.og[gv]$/i.test(path) ? 'video/ogg' : undefined;
+    if (image || video) {
+      if (bytes.length > 6 * 1024 * 1024) throw new DomainError('invalid_input', 'Media preview is limited to 6 MiB');
+      return { path, content: bytes.toString('base64'), ...(image ? { image } : { video }) };
+    }
+    if (bytes.length > 512 * 1024) throw new DomainError('invalid_input', 'Text preview is limited to 512 KiB');
     if (bytes.includes(0)) throw new DomainError('invalid_input', 'Binary file: attach or open it in a local application');
     return { path, content: bytes.toString('utf8') };
   }
@@ -67,7 +71,7 @@ export class Inspection {
     const reason = await this.repository();
     if (reason) return { available: false, files: [], reason };
     try {
-      const { content, truncated } = await this.git(['status', '--porcelain=v1', '-z', '--untracked-files=normal'], statusLimit);
+      const { content, truncated } = await this.git(['status', '--porcelain=v1', '-z', '--untracked-files=all'], statusLimit);
       const records = content.split('\0');
       records.pop();
       const files: { path: string; status: string }[] = [];

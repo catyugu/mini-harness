@@ -3,16 +3,17 @@ import type { SessionDisplayRecord } from '@mini-harness/sessions/display-record
 import type { MessageExtensions } from './message-extensions.js';
 import { createMessageView } from './messages.js';
 
-export function mountHistory(ctx: Context, extensions: MessageExtensions, signal: AbortSignal) {
+export function mountHistory(ctx: Context, extensions: MessageExtensions, signal: AbortSignal, openAttachment: (path: string) => void) {
   const control = ctx.miniConversation;
   const messages = document.createElement('section');
   messages.id = 'messages'; messages.className = 'messages'; messages.setAttribute('aria-label', 'Messages');
   const view = createMessageView(ctx.miniDialogs, signal, messages, {
     render: (tool, lifetime, action) => extensions.render(tool, lifetime, action),
     messageActions: () => extensions.actionsForMessage(),
+    userText: (text) => extensions.renderUserText(text),
     report: extensions.report
   }, () => ({ sessionId: control.get().session?.id, leafId: control.get().history.leafId }),
-  () => void ctx.miniComposer.retry().catch(control.report));
+  () => void ctx.miniComposer.retry().catch(control.report), openAttachment);
   const records = new Map<string, { record: SessionDisplayRecord; render?: ReturnType<typeof extensions.recordRenderer>;
     node: HTMLElement; lifetime: AbortController }>();
   signal.addEventListener('abort', () => { for (const item of records.values()) item.lifetime.abort(); records.clear(); }, { once: true });
@@ -42,6 +43,7 @@ export function mountHistory(ctx: Context, extensions: MessageExtensions, signal
     view.history(history.messages, nodes, run?.state === 'failed' ? run.error : undefined, reset);
   }
   extensions.subscribe(view.refreshActions, signal);
+  extensions.subscribeToUserText(view.refreshUserText, signal);
   extensions.subscribeToTools(view.refreshTools, signal);
   extensions.subscribeToRecords(render, signal);
   control.subscribe(['session', 'history', 'run'], render, signal);

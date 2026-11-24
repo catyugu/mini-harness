@@ -24,6 +24,6 @@ export const composerManifest: PluginDescriptor = {
 
 export const historyManifest: PluginDescriptor = {
   scope: 'application', id: 'core:history', title: 'History', description: 'Conversation messages and record contributions', defaultEnabled: true,
-  browserProvides: ['miniMessages'], browserInject: ['miniConversation', 'miniComposer', 'miniSlots', 'miniDialogs'],
+  browserProvides: ['miniMessages'], browserInject: ['miniConversation', 'miniComposer', 'miniSlots', 'miniDialogs', 'miniTabs'],
   browser: '/packages/conversation/src/browser/conversation/history-setup.js',
 };

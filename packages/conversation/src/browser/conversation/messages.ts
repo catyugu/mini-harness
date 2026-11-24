@@ -7,12 +7,12 @@ import type { ToolView, MessageAction, MessageActionContext } from '../history-a
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { renderMarkdown } from '@mini-harness/ui-primitives/markdown';
 import { button } from '@mini-harness/ui-primitives/primitives';
-import { data } from '@mini-harness/ui-runtime/http';
+import { readUpload, mediaType } from './attachment-preview.js';
 import { fileCard, imageMime } from './attachment-card.js';
 
 export function createMessageView(dialogs: Context['miniDialogs'], signal: AbortSignal, messages: HTMLElement,
-  extensions: { render(tool: ToolView, signal: AbortSignal, action?: boolean): HTMLElement | undefined; messageActions(): MessageAction[]; report(error: unknown): void },
-  current: () => { sessionId?: string; leafId?: string | null }, retryLast: () => void) {
+  extensions: { render(tool: ToolView, signal: AbortSignal, action?: boolean): HTMLElement | undefined; messageActions(): MessageAction[]; userText(text: string): Node; report(error: unknown): void },
+  current: () => { sessionId?: string; leafId?: string | null }, retryLast: () => void, openAttachment: (path: string) => void) {
 const toolItems = new WeakMap<HTMLDetailsElement, Parameters<typeof toolCard>[0]>();
 const resources = new Map<HTMLElement, AbortController>();
 signal.addEventListener('abort', () => { for (const resource of resources.values()) resource.abort(); resources.clear(); }, { once: true });
@@ -29,7 +29,9 @@ previewViewport.className = 'message-image-viewport';
 previewViewport.setAttribute('role', 'region');
 previewViewport.setAttribute('aria-label', 'Image');
 const previewImage = document.createElement('img');
-previewViewport.append(previewImage);
+const previewVideo = document.createElement('video');
+previewVideo.controls = true; previewVideo.preload = 'metadata'; previewVideo.hidden = true;
+previewViewport.append(previewImage, previewVideo);
 const caption = document.createElement('figcaption');
 const filename = document.createElement('span');
 const actualSize = button('Actual size', 'quiet');
@@ -37,7 +39,8 @@ caption.append(filename, actualSize);
 preview.append(previewViewport, caption);
 const { node: previewDialog, dispose } = dialogs.create('Image preview', preview);
 signal.addEventListener('abort', dispose, { once: true });
-previewDialog.classList.add('message-image-dialog');
+previewDialog.classList.add('message-media-dialog');
+let videoUrl: string | undefined;
 
 function setActualSize(enabled: boolean) {
   actualSize.setAttribute('aria-pressed', String(enabled));
@@ -47,15 +50,33 @@ function setActualSize(enabled: boolean) {
 }
 
 actualSize.onclick = () => setActualSize(actualSize.getAttribute('aria-pressed') !== 'true');
-previewDialog.addEventListener('close', () => {
-  if (!previewDialog.open) previewImage.removeAttribute('src');
-}, { signal: signal });
+function clearMedia() {
+  previewImage.removeAttribute('src');
+  previewVideo.pause();
+  previewVideo.removeAttribute('src');
+  previewVideo.load();
+  if (videoUrl) { URL.revokeObjectURL(videoUrl); videoUrl = undefined; }
+}
+previewDialog.addEventListener('close', () => { if (!previewDialog.open) clearMedia(); }, { signal });
+signal.addEventListener('abort', clearMedia, { once: true });
 
-function openImage(thumbnail: HTMLImageElement) {
-  previewImage.alt = filename.textContent = thumbnail.alt;
-  previewImage.src = thumbnail.src;
+function showMedia(name: string, type: 'Image' | 'Video') {
+  filename.textContent = name;
+  previewDialog.setAttribute('aria-label', type + ' preview');
+  previewDialog.querySelector('button')?.setAttribute('aria-label', 'Close ' + type.toLowerCase() + ' preview');
+  previewViewport.setAttribute('aria-label', type);
+  previewImage.hidden = type !== 'Image';
+  previewVideo.hidden = type !== 'Video';
+  actualSize.hidden = type !== 'Image';
   if (!previewDialog.open) previewDialog.showModal();
   setActualSize(false);
+}
+
+function openImage(thumbnail: HTMLImageElement) {
+  clearMedia();
+  previewImage.alt = thumbnail.alt;
+  previewImage.src = thumbnail.src;
+  showMedia(thumbnail.alt, 'Image');
 }
 
 function textOf(value?: MessageContent) {
@@ -74,6 +95,7 @@ function addMessage(role: 'user' | 'assistant' | 'error', text: string, timestam
   const item = document.createElement('article');
   item.className = 'message ' + role;
   if (role === 'assistant') renderMarkdown(item, text);
+  else if (role === 'user') item.append(extensions.userText(text));
   else item.textContent = text;
   const wrapper = document.createElement('div');
   wrapper.className = 'message-row ' + role;
@@ -156,6 +178,13 @@ function renderMessageActions(wrapper: HTMLElement) {
   }
   for (const button of available.values()) remove(button);
 
+}
+
+function refreshUserText() {
+  for (const wrapper of messages.querySelectorAll<HTMLElement>('.message-row.user')) {
+    const context = actionContext.get(wrapper);
+    if (context) wrapper.querySelector('.message.user')?.replaceChildren(extensions.userText(context.rawText));
+  }
 }
 
 function refreshActions() {
@@ -287,16 +316,26 @@ function renderEntry(message: ViewMessage, node?: HTMLElement) {
       const attachmentId = file.id;
       const card = fileCard(file, Boolean(attachmentId && sessionId));
       if (card instanceof HTMLButtonElement && attachmentId && sessionId) {
-        card.setAttribute('aria-label', 'Download ' + file.name);
+        const media = mediaType(file);
+        card.setAttribute('aria-label', 'Preview ' + file.name);
+        if (media) card.setAttribute('aria-haspopup', 'dialog');
         card.onclick = async () => {
+          if (!media) { openAttachment(attachmentId + '/' + file.name); return; }
           card.disabled = true;
           try {
-            const upload = await data<{ data: string }>('/sessions/' + sessionId + '/attachments/' + attachmentId, { signal });
-            const bytes = Uint8Array.from(atob(upload.data), (char) => char.charCodeAt(0));
-            const url = URL.createObjectURL(new Blob([bytes], { type: 'application/octet-stream' }));
-            const link = document.createElement('a');
-            link.href = url; link.download = file.name; link.click();
-            setTimeout(() => URL.revokeObjectURL(url), 2000);
+            const bytes = await readUpload(sessionId, attachmentId, signal);
+            if (signal.aborted || current().sessionId !== sessionId) return;
+            clearMedia();
+            if (media.startsWith('video/')) {
+              videoUrl = URL.createObjectURL(new Blob([bytes], { type: media }));
+              previewVideo.src = videoUrl;
+              showMedia(file.name, 'Video');
+            } else {
+              previewImage.alt = file.name;
+              videoUrl = URL.createObjectURL(new Blob([bytes], { type: media }));
+              previewImage.src = videoUrl;
+              showMedia(file.name, 'Image');
+            }
           } catch (error) { if (!signal.aborted) extensions.report(error); }
           finally { card.disabled = false; }
         };
@@ -444,5 +483,5 @@ function activity(tools: readonly Extract<StreamEvent, { type: 'tool' }>[]) {
   });
 }
 
-return { history, partial, activity, refreshTools, refreshActions };
+return { history, partial, activity, refreshTools, refreshActions, refreshUserText };
 }
