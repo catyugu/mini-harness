@@ -13,7 +13,7 @@ export interface RevisionTarget {
 }
 
 export interface AgentPort {
-  revisionTarget(id: string, sourceEntryId: string, expectedLeafId: string | null): Promise<RevisionTarget>;
+  revisionTarget(id: string, sourceEntryId: string, expectedLeafId: string | null): RevisionTarget;
   prompt(record: SessionRecord, prompt: string, emit: (event: AgentEvent) => void | Promise<void>, options: {
     signal: AbortSignal; source?: InputSource; submissionId?: string; choice?: ModelChoice; images?: ImageInput[]; input?: PreparedMessage;
     fallback?: ModelChoice;
@@ -22,7 +22,7 @@ export interface AgentPort {
   }): Promise<string>;
   compact(id: string, signal: AbortSignal): Promise<void>;
   queueInput(id: string, text: string, mode: 'steer' | 'followUp', attachments?: Attachment[],
-    options?: Pick<InboxItem, 'model' | 'thinkingLevel'> & { fallback?: ModelChoice }): Promise<QueueEntry[]>;
+    options?: Pick<InboxItem, 'model' | 'thinkingLevel'> & { fallback?: ModelChoice }): QueueEntry[];
   cancelQueue(id: string, itemId?: string): QueueEntry[];
 }
 

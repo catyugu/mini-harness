@@ -1,5 +1,4 @@
 import { fixture as httpFixture } from '../../../test/support/api-fixture.js';
-import { AgentRegistry } from '../src/registry.js';
 import { prepareInput } from '@mini-harness/input/prepare';
 import type { ThinkingLevel } from '@mini-harness/llm/vocabulary';
 import { expectPresent } from '../../../test/support/required.js';
@@ -33,7 +32,6 @@ function fixture(t: TestContext, llm: LlmPort, retryModel?: () => Promise<ModelR
     models: () => ({ list: () => [], available: async () => [], resolve: (choice) => choice,
       capabilities: (choice) => ({ id: model.id, name: 'Fixture', input: choice.id === 'text-only' ? ['text'] : ['text', 'image'], contextWindow: 32000, maxTokens: 1024, reasoning: true, thinkingLevels: thinkingLevels(choice.id) }) }),
     llm: () => llm, tools: () => tools, prompt: () => ({ build: async () => 'Fixture' }),
-    prepare: async () => {},
     policy: () => ({ maxTurns: 8, autoCompact: false }), retryModel, observe: () => {}
   });
   const record = sessions.create();
@@ -49,7 +47,6 @@ test('duplicate tool call identities fail before executing any side effect', asy
     async execute() { executions++; return { content: [{ type: 'text', text: 'changed' }] }; } }));
   await assert.rejects(agent.prompt(record, 'Change it', () => {}, { fallback: model, signal: new AbortController().signal }), /duplicate.*tool|tool.*duplicate/i);
   assert.equal(executions, 0);
-  assert.equal(agent.agents.has(record.id), false);
 });
 
 test('tool execution uses the advertised registration and does not execute a hot replacement', async (t) => {
@@ -109,7 +106,6 @@ test('cancellation closes the whole tool batch durably and never executes later 
   const results = sessions.log(record.id).projection().messages.filter((message) => message.role === 'toolResult');
   assert.equal(ranFirst, 1); assert.equal(ranSecond, 0);
   assert.deepEqual(results.map(({ toolCallId, isError }) => [toolCallId, isError]), [['one', true], ['two', true]]);
-  assert.equal(agent.agents.has(record.id), false);
 });
 
 test('interrupted calls receive an error record before the next prompt and are not retried', async (t) => {
@@ -336,16 +332,4 @@ test('attachments enforce encoding, format and byte limits without creating file
   assert.throws(() => prepareInput('a', [{ name: 'b', mimeType: 'text/plain', data: '!!!' }]), /Invalid attachment/);
   assert.throws(() => prepareInput('a', [{ name: 'b', mimeType: 'application/pdf', data: Buffer.from([0, 1, 2]).toString('base64') }]), /UTF-8/);
   assert.throws(() => prepareInput('a', new Array(9).fill({})), /eight/);
-});
-
-test('concurrent scope preparation shares work and releases a failed reservation', async () => {
-  const registry = new AgentRegistry();
-  let calls = 0;
-  const prepare = async () => { calls++; throw new Error('setup failed'); };
-  const result = await Promise.allSettled([registry.prepare('one', prepare), registry.prepare('one', prepare)]);
-  assert.equal(calls, 1);
-  assert.ok(result.every(({ status }) => status === 'rejected'));
-  assert.equal(registry.pendingInScope(undefined, () => []), false);
-  await registry.prepare('one', async () => { calls++; });
-  assert.equal(calls, 2);
 });

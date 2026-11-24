@@ -138,7 +138,7 @@ test('an application plugin replaces only LLM and composes execution hooks witho
   };`);
   const { harnessModels: models, harnessModelStore: store } = app.runtime.plugins.ctx;
   const configured = await request('/settings', 'PATCH', {
-    plugins: { transport: true, pipeline: true }, providers: { harnessLlm: 'transport' }
+    plugins: { 'core:llm': false, transport: true, pipeline: true }, providers: { harnessLlm: 'transport' }
   });
   assert.equal(configured.status, 200, JSON.stringify(configured.body));
   assert.equal(app.runtime.plugins.ctx.harnessModels, models);
@@ -171,7 +171,13 @@ test('an application plugin replaces only LLM and composes execution hooks witho
   assert.ok(execution && accepted);
   assert.equal(accepted.executionId, execution.id);
   assert.ok(JSON.stringify(accepted).length < JSON.stringify(execution).length);
-  assert.equal((await request('/settings', 'PATCH', { plugins: { transport: false, pipeline: false }, providers: {} })).status, 200);
+  const missing = await request('/settings', 'PATCH', { plugins: { transport: false }, providers: {} });
+  assert.equal(missing.status, 400);
+  assert.match(missing.body.error, /harnessLlm/);
+  assert.equal(app.runtime.settings.providers.harnessLlm, 'transport');
+  assert.equal((await request('/settings', 'PATCH', {
+    plugins: { 'core:llm': true, transport: false, pipeline: false }, providers: {}
+  })).status, 200);
   assert.equal(await app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Restore the built-in LLM'), 'Mock response');
 });
 

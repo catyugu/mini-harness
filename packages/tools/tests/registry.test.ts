@@ -48,7 +48,7 @@ test('file-tool names follow the same scoped registration, restriction and lifet
   let allowed = true, denied = false;
   const registry = new ToolRegistry((id) => id === 'outside' ? ['workspace:other'] :
     ['workspace:one', ...(id === 'child' ? ['session:child'] : [])],
-  async () => denied ? 'deny' : undefined, () => ({ readOnly: false, disabledTools: allowed ? [] : ['read'] }));
+  async () => denied ? 'deny' : undefined, (_id, { name }) => allowed || name !== 'read');
   const bind = (text: string) => () => defineTool({ name: 'read', description: text, parameters: Type.Object({}),
     async execute() { return { content: [{ type: 'text', text }] }; } });
   registry[registerToolBinding]('read', bind('application'));
@@ -85,7 +85,7 @@ test('a permission change while awaiting a tool decision prevents execution', as
     entered();
     await hold;
     return undefined;
-  }, () => ({ readOnly, disabledTools: [] }));
+  }, (_id, tool) => !readOnly || tool.readOnly);
   registry[registerToolBinding]('modify', () => defineTool({ name: 'modify', description: 'Change a value',
     parameters: Type.Object({}), async execute() { assert.fail('A denied tool executed'); } }));
   const tool = registry.forSession('session')[0];

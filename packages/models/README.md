@@ -8,11 +8,11 @@ Maintains one credential and provider store. Publishes independent catalog and L
 
 ## Structure
 
-`src/manifests/` assembles the store, catalog, LLM and settings. `src/server/` contains provider administration and the Pi adapter. `src/shared/` holds catalog data. `src/browser/` implements the provider settings page.
+`src/manifests/` assembles the store, catalog, LLM transport, preference and administration. `src/server/` contains provider administration and the Pi adapter. `src/shared/` holds catalog data. `src/browser/` implements the provider settings page.
 
 ## API
 
-`harnessModels` and `harnessLlm` are replaceable capabilities. `harnessModelStore` and `harnessModelPreference` are internal.
+`harnessModels` and `harnessLlm` are replaceable capabilities. `harnessModelStore` and `harnessModelPreference` are internal. `core:model-admin` serves provider settings and the browser catalog by consuming those capabilities.
 
 ## Dependencies
 

@@ -12,21 +12,14 @@ import { button, field, fromMarkup, confirmAction, required } from '@mini-harnes
 const setup: FrontendSetup = async (ctx, api) => {
   const { miniSettings: settings } = ctx;
   const state = new RemoteStore(async () => {
-    const [{ models }, providers] = await Promise.all([
-      api.request<Pick<ModelCatalog, 'models'>>('/models'), api.request<ModelCatalog['providers']>('/providers')
+    const [{ models, recent }, providers] = await Promise.all([
+      api.request<Pick<ModelCatalog, 'models'> & { recent: ModelChoice }>('/models'), api.request<ModelCatalog['providers']>('/providers')
     ]);
-    return { models, providers };
+    return { models, providers, recent };
   });
   await state.refresh();
   api.onDispose(ctx.miniProjections.register('models', state));
-  ctx.provide('miniModels', {
-    get: () => ({ ...state.get(), recent: api.configuration.get<ModelChoice>('model') }),
-    subscribe(listener, signal) {
-      state.subscribe(listener, signal);
-      const release = api.configuration.subscribe('model', listener);
-      signal.addEventListener('abort', release, { once: true });
-    }
-  });
+  ctx.provide('miniModels', state);
   api.contribute(settingsExtensions.register, {
     id: 'providers',
     section: { title: 'Model', icon: 'model', order: 10 },

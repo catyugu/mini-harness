@@ -8,7 +8,7 @@ import { Check } from 'typebox/value';
 import type { PluginSettings } from '@mini-harness/plugin-api/configuration';
 import type { PluginScope, ScopeSettings } from '@mini-harness/kernel/scopes';
 import { resolveCapabilities } from '@mini-harness/kernel/composition';
-import { isRegularFile, pluginBundle } from './source.js';
+import { pluginBundle } from './source.js';
 import type { Context } from 'cordis';
 import type { ServiceMap } from '@mini-harness/kernel/services';
 import type { ConfigValidationContext, PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
@@ -36,19 +36,28 @@ export interface PluginPlan {
   requires: string[];
 }
 
+export interface ApplicationRequirements {
+  fixedPlugins?: ReadonlySet<string>;
+  requiredServices?: ReadonlySet<string>;
+  requiredBrowserServices?: ReadonlySet<string>;
+  protectedProviders?: ReadonlyMap<string, string>;
+}
+
 export class PluginCatalog {
-  readonly builtins: Map<string, DiscoveredPlugin>;
+  private readonly builtins: Map<string, DiscoveredPlugin>;
+  readonly fixedPlugins: ReadonlySet<string>;
   readonly requiredServices: ReadonlySet<string>;
   readonly requiredBrowserServices: ReadonlySet<string>;
   private readonly protectedServices: Set<string>;
+  private readonly protectedProviders: ReadonlyMap<string, string>;
   constructor(private readonly directory: string, builtins: PluginDescriptor[], rootServices: string[],
-    private readonly devPlugin?: string, private readonly protectedProviders: ReadonlyMap<string, string> = new Map()) {
+    private readonly devPlugin?: string, requirements: ApplicationRequirements = {}) {
     this.builtins = new Map(builtins.map((plugin) => [plugin.id, { ...plugin, resources: builtinBrowserAssets(plugin) }]));
-    this.requiredServices = new Set(builtins.filter(({ required, scope }) => required && scope === 'application')
-      .flatMap(({ provides }) => provides ?? []));
-    this.requiredBrowserServices = new Set(builtins.filter(({ required, scope }) => required && scope === 'application')
-      .flatMap(({ browserProvides }) => browserProvides ?? []));
-    this.protectedServices = new Set([...rootServices, ...protectedProviders.keys()]);
+    this.fixedPlugins = requirements.fixedPlugins ?? new Set();
+    this.requiredServices = requirements.requiredServices ?? new Set();
+    this.requiredBrowserServices = requirements.requiredBrowserServices ?? new Set();
+    this.protectedProviders = requirements.protectedProviders ?? new Map();
+    this.protectedServices = new Set([...rootServices, ...this.protectedProviders.keys()]);
     if (this.builtins.size !== builtins.length) throw new Error('Duplicate builtin plugin ID');
     const services = new Set(builtins.flatMap(({ provides }) => provides ?? []));
     for (const service of rootServices) if (services.has(service)) throw new Error('Duplicate provider for ' + service);
@@ -63,11 +72,15 @@ export class PluginCatalog {
   effective<Settings extends PluginSettings>(settings: Settings): Settings {
     const plugins = { ...settings.plugins };
     const pluginConfig = { ...settings.pluginConfig };
-    for (const { id, required, configSchema, defaultEnabled } of this.builtins.values()) {
-      if (!required) plugins[id] ??= defaultEnabled ?? false;
+    for (const { id, scope, configSchema, defaultEnabled } of this.builtins.values()) {
+      if (scope === 'application' && !this.fixedPlugins.has(id)) plugins[id] ??= defaultEnabled ?? false;
       if (configSchema) pluginConfig[id] = configDefaults(configSchema, structuredClone(pluginConfig[id] ?? {}));
     }
     return { ...settings, plugins, pluginConfig };
+  }
+
+  enabled(descriptor: PluginDescriptor, settings: PluginSettings) {
+    return this.fixedPlugins.has(descriptor.id) || (settings.plugins[descriptor.id] ?? descriptor.defaultEnabled) === true;
   }
 
   reserved(id: string) { return this.builtins.has(id); }
@@ -76,39 +89,41 @@ export class PluginCatalog {
     if (this.devPlugin) {
       const id = basename(this.devPlugin);
       if (!localPluginIdPattern.test(id) || this.builtins.has(id)) throw new Error('Invalid development plugin ID');
-      return [describePlugin(id, this.devPlugin)];
+      return [this.describe(id, this.devPlugin)];
     }
     return readdirSync(this.directory, { withFileTypes: true }).flatMap((entry): DiscoveredPlugin[] => {
       const id = entry.name;
       if (!entry.isDirectory() || !localPluginIdPattern.test(id) || this.builtins.has(id)) return [];
-      try {
-        const { folder, package: installedPackage } = pluginBundle(join(this.directory, id));
-        if (!installedPackage && !isRegularFile(join(folder, 'plugin.js')) && !isRegularFile(join(folder, 'web.js'))) return [];
-        return [{ ...describePlugin(id, folder), package: installedPackage }];
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        return [{ scope: 'application', id, title: id, description: 'Plugin manifest cannot be loaded.',
-          trustedCode: true, error: message, web: false }];
-      }
+      return [this.describe(id, join(this.directory, id))];
     });
+  }
+
+  private describe(id: string, directory: string): DiscoveredPlugin {
+    try {
+      const { folder, package: installedPackage } = pluginBundle(directory);
+      return { ...describePlugin(id, folder), package: installedPackage };
+    } catch (error) {
+      return { scope: 'application', id, title: id, description: 'Plugin manifest cannot be loaded.',
+        trustedCode: true, error: error instanceof Error ? error.message : String(error), web: false };
+    }
   }
 
   descriptors(): DiscoveredPlugin[] { return [...this.builtins.values(), ...this.discover()]; }
 
   metadata(settings: PluginSettings, failures: ReadonlyMap<string, string>,
     mounted: (id: string) => boolean, context: (scope?: string) => Context): PluginMetadata[] {
-    return this.descriptors().filter(({ required }) => !required).map((descriptor) => {
+    return this.descriptors().filter(({ id }) => !this.fixedPlugins.has(id) && localPluginIdPattern.test(id)).map((descriptor) => {
       const { id, source, resources, inject, setup, optional, browserStyles, browserRequires, browserInject,
-        browserProvides, required, configChanges, validateConfig, ...metadata } = descriptor;
+        browserProvides, configChanges, validateConfig, ...metadata } = descriptor;
       const configurationError = (key?: string) => {
         try {
           const values = key ? { ...settings.pluginConfig[id], ...settings.scopes[key]?.pluginConfig?.[id] } : settings.pluginConfig[id];
           const config = this.configValues(id, values, descriptor.configSchema);
-          if (descriptor.validateConfig) this.validateConfig(descriptor, config, 'inspect', context(key));
+          this.validateConfig(descriptor, config, 'inspect', context(key), descriptor.validateConfig, key ? key + '/' + id : id);
         } catch (error) { return error instanceof Error ? error.message : String(error); }
       };
       const scopes = metadata.scope === 'application'
-        ? [{ scope: 'application', enabled: settings.plugins[id] === true }]
+        ? [{ scope: 'application', enabled: this.enabled(descriptor, settings) }]
         : Object.entries(settings.scopes).flatMap(([scope, value]) => {
           if (!scope.startsWith(metadata.scope + ':')) return [];
           const enabled = value.plugins?.[id] === true || Object.values(value.providers ?? {}).includes(id);
@@ -130,20 +145,27 @@ export class PluginCatalog {
   }
 
   validateConfig(descriptor: PluginDescriptor, config: Record<string, unknown>,
-    operation: ConfigValidationContext['operation'], ctx: Context, validator = descriptor.validateConfig) {
-    const result: unknown = validator?.(Object.freeze(structuredClone(config)), {
-      operation,
-      service<Name extends keyof ServiceMap & string>(name: Name): NonNullable<ServiceMap[Name]> {
-        if (!descriptor.inject?.includes(name) && !descriptor.optional?.includes(name))
-          throw new Error('Configuration dependency is not declared by ' + descriptor.id + ': ' + name);
-        const service = ctx.get(name) as ServiceMap[Name] | undefined;
-        if (service == null) throw new DomainError('unavailable', 'Configuration dependency is unavailable to ' + descriptor.id + ': ' + name);
-        return service;
+    operation: ConfigValidationContext['operation'], ctx: Context, validator = descriptor.validateConfig, instance = descriptor.id) {
+    if (!validator) return;
+    try {
+      const result: unknown = validator(Object.freeze(structuredClone(config)), {
+        operation,
+        service<Name extends keyof ServiceMap & string>(name: Name): NonNullable<ServiceMap[Name]> {
+          if (!descriptor.inject?.includes(name) && !descriptor.optional?.includes(name))
+            throw new Error('Configuration dependency is not declared: ' + name);
+          const service = ctx.get(name) as ServiceMap[Name] | undefined;
+          if (service == null) throw new DomainError('unavailable', 'Configuration dependency is unavailable: ' + name);
+          return service;
+        }
+      });
+      if (result instanceof Promise) {
+        void result.catch(() => {});
+        throw new Error('Plugin configuration validators must be synchronous');
       }
-    });
-    if (result instanceof Promise) {
-      void result.catch(() => {});
-      throw new Error('Plugin configuration validators must be synchronous');
+    } catch (error) {
+      throw new DomainError(error instanceof DomainError ? error.code : 'invalid_input',
+        'Plugin ' + instance + ' configuration ' + operation + ' failed: ' +
+        (error instanceof Error ? error.message : String(error)), { cause: error });
     }
   }
 
@@ -194,7 +216,7 @@ export class PluginCatalog {
     }
     for (const item of descriptors) {
       const { id, scope: kind } = item;
-      if (kind !== scope || !(isApp ? item.required || settings.plugins[id] === true : overrides?.plugins?.[id] === true)) continue;
+      if (kind !== scope || !(isApp ? this.enabled(item, settings) : overrides?.plugins?.[id] === true)) continue;
       try {
         if (item.error) throw new DomainError('invalid_input', 'Invalid plugin ' + id + ': ' + item.error);
         enabled.push(item);

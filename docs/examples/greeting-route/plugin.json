@@ -1,5 +1,5 @@
 {
   "title": "Greeting route",
-  "inject": ["harnessRoutes", "exampleGreeting"],
+  "inject": ["exampleGreeting"],
   "optional": ["exampleSuffix"]
 }

@@ -36,7 +36,6 @@ export interface RoutePort {
 declare module 'cordis' {
   interface Context {
     harnessRoutes: RoutePort;
-    harnessTransportSignal?: AbortSignal;
   }
 }
 

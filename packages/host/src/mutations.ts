@@ -39,8 +39,7 @@ export class MutationGate implements MutationPort {
     finally { this.active = undefined; }
   }
 
-  close() {
-    this.seal();
+  drain() {
     return Promise.allSettled(this.active ? [this.active] : []);
   }
 }

@@ -6,7 +6,7 @@ export const manifest: PluginDescriptor = {
   scope: 'application',
   browserProvides: ['miniConversation'],
   browserInject: ['miniSelection', 'miniApprovals', 'harnessBrowser', 'miniSessions', 'miniWorkspaces', 'miniLayout', 'miniPages', 'miniHeader', 'miniProjections', 'miniSlots', 'miniSettingsRegistry'],
-  id: 'core:conversation', title: 'Conversation', description: 'Conversation interface', required: true,
+  id: 'core:conversation', title: 'Conversation', description: 'Conversation interface', defaultEnabled: true,
   configChanges: 'live',
   configSchema: Type.Object({
     queueMode: Type.Union([Type.Literal('steer'), Type.Literal('followUp')], { default: 'steer' }),
@@ -17,13 +17,13 @@ export const manifest: PluginDescriptor = {
 };
 
 export const composerManifest: PluginDescriptor = {
-  scope: 'application', id: 'core:composer', title: 'Composer', description: 'Conversation input and draft contributions', required: true,
+  scope: 'application', id: 'core:composer', title: 'Composer', description: 'Conversation input and draft contributions', defaultEnabled: true,
   browserProvides: ['miniComposer'], browserInject: ['miniConversation', 'miniSelection', 'miniModels', 'miniSlots'],
   browser: '/packages/conversation/src/browser/conversation/composer-setup.js',
 };
 
 export const historyManifest: PluginDescriptor = {
-  scope: 'application', id: 'core:history', title: 'History', description: 'Conversation messages and record contributions', required: true,
+  scope: 'application', id: 'core:history', title: 'History', description: 'Conversation messages and record contributions', defaultEnabled: true,
   browserProvides: ['miniMessages'], browserInject: ['miniConversation', 'miniSlots', 'miniDialogs'],
   browser: '/packages/conversation/src/browser/conversation/history-setup.js',
 };

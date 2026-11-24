@@ -78,8 +78,6 @@ export async function createMiniHarnessServer(paths: Paths, options: { token?: s
       await route(req, res, access);
     }
   }, (path, handler) => upgrades.register(path, handler));
-  const navigation = new AbortController();
-  runtime.plugins.ctx.provide('harnessTransportSignal', navigation.signal);
   const token = options.token ?? randomBytes(32).toString('hex');
   const route = async (req: IncomingMessage, res: ServerResponse, remote?: GatewayRequest): Promise<void> => {
     try {
@@ -163,10 +161,10 @@ export async function createMiniHarnessServer(paths: Paths, options: { token?: s
       return (server.address() as AddressInfo).port;
     },
     close() {
-      navigation.abort();
       closing ??= Promise.all([
         new Promise<void>((done) => server.close(() => done())), runtime.stop()
       ]).then(() => {});
+      upgrades.close();
       return closing;
     }
   };

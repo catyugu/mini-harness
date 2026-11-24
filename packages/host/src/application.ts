@@ -1,5 +1,5 @@
 import { Context } from 'cordis';
-import { authority, plugins } from './composition.js';
+import { composition, plugins } from './composition.js';
 import { SettingsManager } from '@mini-harness/settings/manager';
 import { PluginHost } from '@mini-harness/plugins/manager';
 import { RouteRegistry } from '@mini-harness/transport/router';
@@ -11,7 +11,8 @@ import type { Paths } from '@mini-harness/platform/runtime-paths';
 export class MiniHarnessRuntime {
   readonly plugins: PluginHost;
   readonly configuration: SettingsManager;
-  private readonly mutations: MutationGate;
+  private readonly mutations = new MutationGate();
+  private readonly routes = new RouteRegistry();
   private stopping?: Promise<void>;
 
   constructor(readonly paths: Paths, network?: NetworkPort,
@@ -19,11 +20,10 @@ export class MiniHarnessRuntime {
     const ctx = new Context();
     this.configuration = new SettingsManager(paths, () => this.plugins);
     const changes = new ProjectionChanges();
-    this.mutations = new MutationGate();
     const root = {
       harnessState: { paths },
       harnessSettingsStore: this.configuration,
-      harnessRoutes: new RouteRegistry(),
+      harnessRoutes: this.routes,
       ...(network ? { harnessNetwork: network } : {}),
       harnessMutations: this.mutations,
       harnessChanges: changes
@@ -31,7 +31,7 @@ export class MiniHarnessRuntime {
     for (const [name, service] of Object.entries(root)) ctx.provide(name, service);
     this.plugins = new PluginHost(ctx, paths.plugins, plugins, [...Object.keys(root), 'harnessScopes', 'harnessPluginCatalog'],
       () => this.settings, upgrade, paths.devPlugin,
-      (id, key, patch, check) => this.configuration.writePlugin(id, key, patch, check).then(() => {}), authority);
+      (id, key, patch, check) => this.configuration.writePlugin(id, key, patch, check).then(() => {}), composition);
     ctx.provide('harnessScopes', this.plugins);
     ctx.provide('harnessPluginCatalog', this.plugins);
   }
@@ -52,10 +52,11 @@ export class MiniHarnessRuntime {
 
   private async shutdown() {
     this.mutations.seal();
+    this.routes.seal();
     try {
       await this.plugins.ctx.parallel('harness/quiesce');
     } finally {
-      await this.mutations.close();
+      await Promise.all([this.mutations.drain(), this.routes.drain()]);
       await this.configuration.close();
       await this.plugins.close();
     }

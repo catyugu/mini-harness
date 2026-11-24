@@ -14,6 +14,7 @@ import type { RunInfo } from '@mini-harness/sessions/run-state';
 import { RunEvents } from './events.js';
 import type { ModelPreference } from '@mini-harness/models/api';
 import type { ExecutionInput } from './execution.js';
+import type { RunPort } from './api.js';
 import type { SessionStore } from '@mini-harness/sessions/store';
 
 interface RunOptions {
@@ -30,9 +31,10 @@ interface Activity {
   controller: AbortController;
   done?: Promise<unknown>;
   events?: RunEvents;
+  inputSignal?: AbortSignal;
 }
 
-export class Runs {
+export class Runs implements RunPort {
   readonly events = new EventTarget();
   private readonly work = new Map<string, Activity>();
 
@@ -68,6 +70,7 @@ export class Runs {
     this.mutations.admit(this.scopes.address(`session:${id}`));
     if (this.active(id)) throw new DomainError('conflict', 'Conversation is already running');
     validateModelOptions(model, thinkingLevel);
+    const userSubmission = source === undefined || source === 'user';
     const fallback = this.preference.recent();
     const prepared = prepareInput(prompt, attachments);
     const record = this.registry.get(id);
@@ -76,12 +79,16 @@ export class Runs {
     const events = new RunEvents(info);
     const controller = new AbortController();
     const cancellation = signal ? AbortSignal.any([controller.signal, signal]) : controller.signal;
+    cancellation.throwIfAborted();
     const log = this.registry.log(id);
-    log.append({ type: 'run', run: info });
+    const activity: Activity = { controller, events };
+    this.work.set(id, activity);
+    try { log.append({ type: 'run', run: info }); }
+    catch (error) { this.work.delete(id); throw error; }
     const publish = (event: StreamEvent) => {
       const item = events.publish(event);
       try { emit?.(item); } catch { /* An observer cannot terminate the run. */ }
-      if (event.type === 'user' && event.source === 'user' && !record.parentId)
+      if (userSubmission && event.type === 'user' && event.source === 'user' && !record.parentId)
         return this.preference.remember(event.model);
     };
     const promptSession = async () => {
@@ -93,15 +100,16 @@ export class Runs {
       publish({ type: 'run', run: running });
       this.observe({ type: 'run-started', sessionId: id, run: running }, cancellation);
       await this.scopes.prepare(`session:${id}`, cancellation);
-      return this.agent(id).prompt(record, prepared.text, publish, {
-        fallback,
-        signal: cancellation, source, submissionId: info.id, choice: model, images: prepared.images, input: prepared.input, thinkingLevel, revision,
-        changed: (path) => { info.changedFiles = [...new Set([...(info.changedFiles ?? []), path])]; }
-      });
+      cancellation.throwIfAborted();
+      activity.inputSignal = cancellation;
+      try {
+        return await this.agent(id).prompt(record, prepared.text, publish, {
+          fallback,
+          signal: cancellation, source, submissionId: info.id, choice: model, images: prepared.images, input: prepared.input, thinkingLevel, revision,
+          changed: (path) => { info.changedFiles = [...new Set([...(info.changedFiles ?? []), path])]; }
+        });
+      } finally { activity.inputSignal = undefined; }
     };
-    const activity: Activity = { controller, events };
-    this.work.set(id, activity);
-    this.changed(id);
     const finish = (state: RunInfo['state'], error?: string) => {
       for (const item of log.inbox()) {
         if (item.mode === 'steer') log.append({ type: 'inbox-failed', inboxId: item.id,
@@ -139,6 +147,7 @@ export class Runs {
     });
     // Server-owned runs may outlive every observer.
     activity.done = done;
+    this.changed(id);
     void done.catch(() => {});
     return { info, done, cancel: () => {
       if (this.work.get(id) !== activity || cancellation.aborted) return false;
@@ -167,7 +176,7 @@ export class Runs {
     if (this.active(id)) throw new DomainError('conflict', 'Conversation is already running');
     this.mutations.admit(this.scopes.address(`session:${id}`));
     await this.scopes.prepare(`session:${id}`);
-    const target = await this.agent(id).revisionTarget(id, input.sourceEntryId, input.expectedLeafId);
+    const target = this.agent(id).revisionTarget(id, input.sourceEntryId, input.expectedLeafId);
     const removed = input.removedImages ?? [];
     if (!Array.isArray(removed) || removed.some((index) => !Number.isInteger(index) || index < 0 || index >= target.images.length))
       throw new DomainError('invalid_input', 'Invalid original image selection');
@@ -198,6 +207,22 @@ export class Runs {
     if (events) return events.watch(after, emit, history, end);
     emit({ type: 'snapshot', messages: history(), tools: [], run: info, sequence: info.sequence, runId: info.id, runSessionId: id });
     return () => {};
+  }
+
+  queueInput(id: string, { message, mode, attachments, model, thinkingLevel }: Parameters<RunPort['queueInput']>[1]) {
+    this.mutations.admit(this.scopes.address(`session:${id}`));
+    const signal = this.work.get(id)?.inputSignal;
+    if (!signal || signal.aborted)
+      throw new DomainError('conflict', 'The agent is not streaming; send a new message');
+    return this.agent(id).queueInput(id, message, mode, attachments,
+      { model, thinkingLevel, fallback: this.preference.recent() });
+  }
+
+  async cancelQueue(id: string, itemId?: string, signal?: AbortSignal) {
+    const key = `session:${id}` as const;
+    await this.scopes.prepare(key, signal);
+    this.mutations.admit(this.scopes.address(key));
+    return this.agent(id).cancelQueue(id, itemId);
   }
 
   cancel(id: string) {

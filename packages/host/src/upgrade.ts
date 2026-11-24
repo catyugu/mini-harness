@@ -3,6 +3,7 @@ import type { Duplex } from 'node:stream';
 import type { UpgradeHandler } from '@mini-harness/transport/routes';
 
 export class Upgrades {
+  private readonly admission = new AbortController();
   private readonly entries = new Map<string, { handler: UpgradeHandler; lifetime: AbortController }>();
 
   register(path: string, handler: UpgradeHandler) {
@@ -16,11 +17,13 @@ export class Upgrades {
     };
   }
 
+  close() { this.admission.abort(); }
+
   dispatch(path: string, request: IncomingMessage, socket: Duplex, head: Buffer) {
     const entry = this.entries.get(path);
-    if (!entry) return false;
+    if (!entry || this.admission.signal.aborted) return false;
     const connection = new AbortController();
-    const signal = AbortSignal.any([entry.lifetime.signal, connection.signal]);
+    const signal = AbortSignal.any([entry.lifetime.signal, connection.signal, this.admission.signal]);
     const cancel = () => { socket.destroy(); };
     signal.addEventListener('abort', cancel, { once: true });
     socket.once('close', () => {

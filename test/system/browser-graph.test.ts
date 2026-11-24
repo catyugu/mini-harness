@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import ts from 'typescript';
 import type { BrowserBootstrap } from '@mini-harness/ui-runtime/bootstrap';
-import { plugins } from '@mini-harness/host/composition';
+import { composition, plugins } from '@mini-harness/host/composition';
 import { moduleReferences } from '../../scripts/module-references.js';
 import { fixture } from '../support/api-fixture.js';
 
@@ -16,8 +16,8 @@ test('the composed browser graph serves its runtime dependencies and excludes se
     for (const dependency of entry.requires ?? []) assert.ok(seenPlugins.has(dependency), entry.id + ' requires ' + dependency);
     seenPlugins.add(entry.id);
   }
-  for (const { id, browser, required, defaultEnabled } of plugins)
-    if (browser && (required || defaultEnabled)) assert.equal(mounted.get(id)?.browser, browser);
+  for (const { id, browser, defaultEnabled } of plugins)
+    if (browser && (composition.fixedPlugins.has(id) || defaultEnabled)) assert.equal(mounted.get(id)?.browser, browser);
 
   for (const asset of [
     '/packages/host/src/application.js',

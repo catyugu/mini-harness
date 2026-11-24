@@ -14,7 +14,7 @@ import { manifest as workspaces_data } from '@mini-harness/workspaces/manifests/
 import { manifest as sessions_data } from '@mini-harness/conversation/manifests/session-data';
 import { manifest as runs } from '@mini-harness/runs/manifest';
 import { manifest as settings } from '@mini-harness/settings/manifest';
-import { manifest as models } from '@mini-harness/models/manifests/models';
+import { manifest as models, administrationManifest as model_admin } from '@mini-harness/models/manifests/models';
 import { manifest as plugin_management } from '@mini-harness/plugins/manifest';
 import { manifest as ui } from '@mini-harness/ui-gateway/manifest';
 import { manifest as file_access } from '@mini-harness/file-access/manifest';
@@ -34,10 +34,21 @@ import { manifest as conversation, composerManifest as composer, historyManifest
 
 export const plugins = [
   workspaces_data, sessions_data, workspace_navigation, navigation, model_store, model_catalog, llm, prompt,
-  ui_slots, ui_theme, ui_primitives, ui_layout, workspaces, sessions, agent, runs, settings, models, plugin_management, ui, file_access, files, skills, subagents, shell, session_helper, approvals, approval_data, sandbox, process_execution, tool_policy, tools, conversation, composer, history
+  ui_slots, ui_theme, ui_primitives, ui_layout, workspaces, sessions, agent, runs, settings, models, model_admin, plugin_management, ui, file_access, files, skills, subagents, shell, session_helper, approvals, approval_data, sandbox, process_execution, tool_policy, tools, conversation, composer, history
 ];
 
-export const authority = {
+export const composition = {
+  fixedPlugins: new Set([ui.id, settings.id, plugin_management.id, model_admin.id, conversation.id, navigation.id]),
+  requiredServices: new Set([
+    'harnessAgent', 'harnessApprovalRequests', 'harnessApprovals', 'harnessExecution', 'harnessFileAccess', 'harnessLlm',
+    'harnessModels', 'harnessModelStore', 'harnessModelPreference', 'harnessProcess', 'harnessPrompt', 'harnessRegistry',
+    'harnessRuns', 'harnessSandbox', 'harnessSessions', 'harnessToolPolicy', 'harnessTools', 'harnessWorkspaces'
+  ]),
+  requiredBrowserServices: new Set([
+    'harnessBrowser', 'miniAppearance', 'miniApprovals', 'miniComposer', 'miniConversation', 'miniDialogs', 'miniHeader',
+    'miniLayout', 'miniMessages', 'miniModels', 'miniPages', 'miniPrimitives', 'miniSelection', 'miniSessions',
+    'miniSettings', 'miniSettingsData', 'miniSettingsRegistry', 'miniSlots', 'miniTabs', 'miniWorkspace', 'miniWorkspaces'
+  ]),
   trustedContributors: new Set([files.id, skills.id]),
   protectedProviders: new Map([['harnessTools', tools.id], ['harnessToolPolicy', tool_policy.id]])
 };

@@ -5,7 +5,7 @@ declare module 'cordis' {
   interface Context {
     miniSwitch: () => Promise<BrowserPluginFailures>;
     miniBrowserFailures: {
-      has(id: string): boolean;
+      get(id: string): string | undefined;
       subscribe(listener: () => void, signal: AbortSignal): void;
     };
   }

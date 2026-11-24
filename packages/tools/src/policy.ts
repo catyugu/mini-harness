@@ -1,11 +1,14 @@
 import type {} from 'cordis';
 
-/** Evaluated when advertising a tool and again before invocation. */
-export type ToolPolicy = (sessionId: string) => {
+export interface ToolAccess {
+  name: string;
+  pluginId?: string;
   readOnly: boolean;
-  disabledTools: string[];
-  readOnlyTools?: Readonly<Record<string, string[]>>;
-};
+  trusted: boolean;
+}
+
+/** The host checks the selected registration when advertising a tool and before invocation. */
+export type ToolPolicy = (sessionId: string, tool: Readonly<ToolAccess>) => boolean;
 
 declare module 'cordis' {
   interface Context { harnessToolPolicy: ToolPolicy }

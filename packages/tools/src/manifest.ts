@@ -7,7 +7,7 @@ import { ToolRegistry } from './registry.js';
 
 export const manifest: PluginDescriptor = {
   scope: 'application',
-  id: 'core:tools', title: 'Tools', description: 'Tool registration and execution leases', required: true,
+  id: 'core:tools', title: 'Tools', description: 'Tool registration and execution leases', defaultEnabled: true,
   inject: ['harnessScopes', 'harnessToolPolicy'], provides: ['harnessTools'],
   setup(ctx) {
     const { harnessScopes: scopes, harnessToolPolicy } = ctx;

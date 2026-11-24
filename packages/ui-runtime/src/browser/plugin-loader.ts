@@ -30,6 +30,11 @@ export function createBrowserGraphLoader(host: FrontendHost) {
     await preload.dispose?.();
   }
 
+  function failure(stage: string, error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    return new Error('Browser ' + stage + ' failed: ' + message, { cause: error });
+  }
+
   async function sync(snapshot: BrowserBootstrap): Promise<BrowserPluginFailures> {
     const enabled = new Map<string, BrowserEntry>(snapshot.ui.map((entry) => [entry.id, entry]));
     if (enabled.size !== snapshot.ui.length) throw new Error('Duplicate browser plugin ID in composed graph');
@@ -58,11 +63,11 @@ export function createBrowserGraphLoader(host: FrontendHost) {
       for (const link of styles.get(id) ?? []) link.remove();
       styles.delete(id);
       try { await host.disable(id); }
-      catch (error) { failed.set(id, error); }
+      catch (error) { failed.set(id, failure('cleanup', error)); }
     }
     for (const [id, preload] of [...preloads].reverse()) {
       if (enabled.get(id)?.preload === preload.url) continue;
-      try { await releasePreload(id); } catch (error) { failed.set(id, error); }
+      try { await releasePreload(id); } catch (error) { failed.set(id, failure('cleanup', error)); }
     }
     for (const id of ordered) {
       const url = enabled.get(id)?.preload;
@@ -76,7 +81,7 @@ export function createBrowserGraphLoader(host: FrontendHost) {
         preloads.set(id, { url, lifetime, dispose: dispose as (() => void | Promise<void>) | undefined });
       } catch (error) {
         lifetime.abort();
-        failed.set(id, error);
+        failed.set(id, failure('preload', error));
       }
     }
     for (const id of ordered) {
@@ -88,14 +93,19 @@ export function createBrowserGraphLoader(host: FrontendHost) {
         if (plugin.liveConfig) host.configure(id, plugin.config);
         continue;
       }
+      let stage = 'dependency';
       try {
-        if (failed.has(id) || plugin.requires?.some((parent) => failed.has(parent)))
-          throw failed.get(id) ?? new Error('Browser dependency failed');
+        if (failed.has(id)) throw failed.get(id);
+        const dependency = plugin.requires?.find((parent) => failed.has(parent));
+        if (dependency) throw new Error(dependency, { cause: failed.get(dependency) });
+        stage = 'stylesheet load';
         const links = (plugin.styles ?? []).map(() => document.createElement('link'));
         styles.set(id, links);
         await Promise.all((plugin.styles ?? []).map((href, index) => loadStyle(href, links[index])));
+        stage = 'module load';
         const setup: FrontendSetup = (await import(plugin.browser)).default;
         if (typeof setup !== 'function') throw new Error('Expected a default browser setup function: ' + id);
+        stage = 'setup';
         await host.mount(id, setup, plugin.inject ?? [], plugin.provides ?? [], plugin.config);
         mounted.set(id, key);
       } catch (error) {
@@ -103,7 +113,7 @@ export function createBrowserGraphLoader(host: FrontendHost) {
         styles.delete(id);
         try { await releasePreload(id); }
         catch (cleanupError) { error = new AggregateError([error, cleanupError], 'Browser plugin setup and cleanup failed'); }
-        failed.set(id, error);
+        failed.set(id, failed.has(id) ? error : failure(stage, error));
       }
     }
     return failed;

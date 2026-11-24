@@ -30,6 +30,14 @@ test('recent main model survives child overrides and a restart through the nativ
   const delegate = expectPresent(runtime.plugins.ctx.harnessTools.forSession(old.id).find(({ name }) => name === 'delegate'), 'delegate tool');
   await delegate.execute('override', { task: 'Child override', provider: 'local-mock', model: 'mock-model' });
   assert.equal(runtime.plugins.ctx.harnessModelPreference.recent().id, 'second-model');
+  runtime.plugins.ctx.harnessRegistry.log(other.id).append({
+    type: 'inbox-enqueued',
+    item: { id: 'recovered', mode: 'followUp', text: 'Recovered user follow-up', images: [],
+      model: { provider: 'local-mock', id: 'mock-model' } }
+  });
+  await runtime.plugins.ctx.harnessRuns.send(other.id, 'Scheduled work', undefined, { source: 'plugin' });
+  assert.equal(mock.requests.at(-1)?.model, 'mock-model');
+  assert.equal(runtime.plugins.ctx.harnessModelPreference.recent().id, 'second-model');
   await runtime.plugins.ctx.harnessRuns.send(other.id, 'Other conversation');
   assert.equal(mock.requests.at(-1)?.model, 'second-model');
   await runtime.stop();

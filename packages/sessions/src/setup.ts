@@ -20,7 +20,7 @@ export function setup(ctx: Context) {
       parent: record.parentId ? `session:${record.parentId}` : `workspace:${record.workspaceId}`
     };
   }));
-  ctx.effect(() => ctx.harnessWorkspaces.beforeRemove((id) => registry.delete(registry.list(id).map((record) => record.id))));
+  ctx.effect(() => ctx.harnessWorkspaces.beforeRemove((id) => registry.removeWorkspaceSessions(id)));
   ctx.on('harness/ready', () => registry.recoverDeletion());
   ctx.on('harness/quiesce', () => registry.close());
   ctx.effect(() => ctx.harnessRoutes.register('GET', '/api/status', () =>
