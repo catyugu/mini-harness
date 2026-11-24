@@ -83,9 +83,17 @@ test('an open file preview and diff refresh after an agent write', async ({ page
   const file = join(paths.cwd, 'update.js');
   writeFileSync(file, 'const updated = 1;\n');
   const service = await startIsolatedHost(paths);
+  let finishSettings = () => {};
+  const settingsReady = new Promise<void>((resolve) => { finishSettings = resolve; });
+  await page.route('**/api/settings', async (route) => {
+    await settingsReady;
+    await route.continue();
+  });
   try {
     await page.goto(service.url + '/#token=' + service.token);
-    await page.getByRole('button', { name: 'Open workspace panel', exact: true }).click();
+    try {
+      await page.getByRole('button', { name: 'Open workspace panel', exact: true }).click();
+    } finally { finishSettings(); }
     const panel = page.getByRole('complementary', { name: 'Workspace panel' });
     await panel.getByRole('button', { name: 'update.js', exact: true }).click();
     await expect(panel.locator('.file-preview')).toContainText('const updated = 1;');
