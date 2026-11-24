@@ -71,6 +71,7 @@ test('a failed recent-model write does not delay accepted input or terminate exe
     assert.equal(runs.info(session.id)?.state, 'completed');
     assert.equal(mock.requests.at(-1)?.model, 'second-model');
     await runtime.stop();
+    assert.ok(runtime.plugins.ctx.logger.buffer.some(({ args }) => args[0] === 'Could not save recent model: %s'));
   } finally {
     rmSync(paths.settings, { recursive: true, force: true });
     renameSync(old, paths.settings);

@@ -331,7 +331,7 @@ test('unloading cancels and drains HTTP, scoped requests and upgrades before dis
     const request = httpRequest(base + '/api/extensions/drain/socket', {
       headers: { ...headers, Connection: 'Upgrade', Upgrade: 'websocket' }
     }, (response) => { response.resume(); reject(new Error('Unexpected upgrade response ' + response.statusCode)); });
-    request.once('error', (error) => error.message === 'socket hang up' ? resolve() : reject(error));
+    request.once('error', (error) => 'code' in error && error.code === 'ECONNRESET' ? resolve() : reject(error));
     request.end();
   });
   try {
