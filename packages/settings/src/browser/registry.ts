@@ -1,5 +1,5 @@
 import type { PluginConfiguration } from '@mini-harness/kernel/configuration';
-import type { SettingsContribution, SettingsSection } from './api.js';
+import type { PluginSettingsContribution, SettingsContribution, SettingsSection } from './api.js';
 
 interface Entry {
   section: SettingsContribution['section'];
@@ -8,6 +8,45 @@ interface Entry {
 }
 
 export class SettingsRegistry extends EventTarget {
+  private readonly details = new Map<string, PluginSettingsContribution['render']>();
+
+  registerPlugin(owner: string, { id, render }: PluginSettingsContribution) {
+    const key = owner + '/' + id;
+    if (this.details.has(key)) throw new Error('Duplicate plugin settings contribution: ' + key);
+    this.details.set(key, render);
+    this.dispatchEvent(new Event('plugin'));
+    return () => { if (this.details.delete(key)) this.dispatchEvent(new Event('plugin')); };
+  }
+
+  mountPlugin(pluginId: string, container: HTMLElement, signal: AbortSignal) {
+    const mounted = new Map<string, { lifetime: AbortController; node?: HTMLElement }>();
+    const refresh = () => {
+      for (const [key, { node, lifetime }] of mounted) if (!this.details.has(key)) {
+        lifetime.abort();
+        node?.remove();
+        mounted.delete(key);
+      }
+      for (const [key, render] of this.details) {
+        if (mounted.has(key)) continue;
+        const lifetime = new AbortController();
+        try {
+          const node = render(pluginId, lifetime.signal);
+          mounted.set(key, { lifetime, node });
+          if (node) container.append(node);
+        } catch (error) {
+          lifetime.abort();
+          console.error('Plugin settings contribution failed', error);
+        }
+      }
+    };
+    this.addEventListener('plugin', refresh, { signal });
+    signal.addEventListener('abort', () => {
+      for (const { lifetime, node } of mounted.values()) { lifetime.abort(); node?.remove(); }
+      mounted.clear();
+    }, { once: true });
+    refresh();
+  }
+
   private readonly entries = new Map<string, Entry>();
 
   register(owner: string, contribution: SettingsContribution, configuration: PluginConfiguration) {

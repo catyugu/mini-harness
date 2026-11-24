@@ -28,6 +28,11 @@ export interface SettingsContribution {
   render(context: SettingsContext): HTMLElement;
 }
 
+export interface PluginSettingsContribution {
+  id: string;
+  render(pluginId: string, signal: AbortSignal): HTMLElement | undefined;
+}
+
 declare module 'cordis' {
   interface Context {
     miniSettings: {
@@ -37,11 +42,16 @@ declare module 'cordis' {
     miniSettingsData: RemoteStore<Settings>;
     miniSettingsRegistry: {
       register(owner: string, contribution: SettingsContribution, configuration: PluginConfiguration): () => void;
+      registerPlugin(owner: string, contribution: PluginSettingsContribution): () => void;
+      mountPlugin(pluginId: string, container: HTMLElement, signal: AbortSignal): void;
     };
   }
 }
 
 export const settingsExtensions = {
+  plugin(source: BrowserContributionSource, contribution: PluginSettingsContribution) {
+    return source.effect(() => source.service('miniSettingsRegistry').registerPlugin(source.id, contribution));
+  },
   register(source: BrowserContributionSource, contribution: SettingsContribution) {
     return source.effect(() => source.service('miniSettingsRegistry').register(source.id, contribution, source.configuration));
   }

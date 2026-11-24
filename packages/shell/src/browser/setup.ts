@@ -1,4 +1,5 @@
-import { conversationExtensions, type ToolView } from '@mini-harness/conversation/browser/composer-api';
+import type { ToolView } from '@mini-harness/conversation/browser/history-api';
+import { conversationExtensions } from '@mini-harness/conversation/browser/extensions';
 import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend-api';
 
 function renderResult(tool: ToolView) {

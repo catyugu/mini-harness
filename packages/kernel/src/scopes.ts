@@ -24,7 +24,7 @@ export interface ScopePort {
   /** Read the nearest prepared Cordis service without changing a parent or sibling scope. */
   require<Name extends keyof HostServices & string>(key: ScopeKey | null | undefined, service: Name): NonNullable<HostServices[Name]>;
   optional<Name extends keyof HostServices & string>(key: ScopeKey | null | undefined, service: Name): HostServices[Name] | undefined;
-  address(key: ScopeKey): readonly string[];
+  address(key: ScopeKey): readonly ScopeKey[];
 }
 
 declare module 'cordis' {

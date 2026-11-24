@@ -11,7 +11,7 @@ export const manifest: PluginDescriptor = {
   configSchema: Type.Object({
     queueMode: Type.Union([Type.Literal('steer'), Type.Literal('followUp')], { default: 'steer' }),
   }, { additionalProperties: false }),
-  inject: ['harnessChanges', 'harnessRegistry', 'harnessModelPreference', 'harnessRuns', 'harnessWorkspaces', 'harnessRoutes', 'harnessApprovals'], setup,
+  inject: ['harnessChanges', 'harnessRegistry', 'harnessRuns', 'harnessWorkspaces', 'harnessRoutes', 'harnessApprovals'], setup,
   browserStyles: ['/packages/conversation/src/browser/conversation/style.css'],
   browser: '/packages/conversation/src/browser/conversation/setup.js',
 };
@@ -24,6 +24,6 @@ export const composerManifest: PluginDescriptor = {
 
 export const historyManifest: PluginDescriptor = {
   scope: 'application', id: 'core:history', title: 'History', description: 'Conversation messages and record contributions', defaultEnabled: true,
-  browserProvides: ['miniMessages'], browserInject: ['miniConversation', 'miniSlots', 'miniDialogs'],
+  browserProvides: ['miniMessages'], browserInject: ['miniConversation', 'miniComposer', 'miniSlots', 'miniDialogs'],
   browser: '/packages/conversation/src/browser/conversation/history-setup.js',
 };

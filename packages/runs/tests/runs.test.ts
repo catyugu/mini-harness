@@ -186,7 +186,7 @@ test('append, torn write and fsync failures evict the writer without acknowledgi
     syncBuiltinESMExports();
     try { assert.throws(() => app.runtime.plugins.ctx.harnessRuns.startRun(session.id, 'Unacknowledged'), /Could not write/); }
     finally { mocked.mock.restore(); syncBuiltinESMExports(); }
-    assert.throws(() => log.append({ type: 'custom', namespace: 'test', data: null }), /closed/);
+    assert.throws(() => log.append({ type: 'branch' }), /closed/);
     assert.equal(app.runtime.plugins.ctx.harnessRuns.active(session.id), false);
     const damaged = readFileSync(log.file);
     if (fault === 'append') assert.deepEqual(damaged, original);
@@ -239,4 +239,32 @@ test('execution handles cancel only their own run and cannot cancel a later run 
   held.release();
   await cancelled;
   assert.equal(execution.info(session.id)?.state, 'cancelled');
+});
+
+test('retry looks up the failed delivery by its native entry identity', async (t) => {
+  const mock = await createMockProvider(({ messages }) => {
+    if (messages.at(-1)?.content.includes('fail this')) throw new Error('Provider rejected this request');
+    return 'Earlier response';
+  });
+  const { root, paths } = createFixturePaths(mock.url);
+  const app = await createMiniHarnessServer(paths);
+  t.after(async () => { await app.close(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
+  const { harnessRegistry: registry, harnessRuns: runs } = app.runtime.plugins.ctx;
+  const session = registry.create();
+  await runs.send(session.id, 'Earlier user message');
+  const log = registry.log(session.id);
+  log.append({ type: 'inbox-enqueued', item: { id: 'recover-this', mode: 'followUp', text: 'fail this queued input', images: [] } });
+  const failed = await runs.startRun(session.id, 'Manual input waiting for delivery');
+  assert.equal(failed.accepted, false);
+  assert.equal(failed.state, 'failed');
+  assert.ok(failed.inputEntryId);
+  assert.deepEqual(runs.retryInput(session.id, failed.id), {
+    message: 'fail this queued input', attachments: [], missing: [], model: { provider: 'local-mock', id: 'mock-model' }, thinkingLevel: undefined
+  });
+  const attachment = { name: 'fixture.txt', mimeType: 'text/plain', data: Buffer.from('private text').toString('base64') };
+  const accepted = await runs.startRun(session.id, 'fail this user input', { attachments: [attachment] });
+  assert.equal(accepted.accepted, true);
+  await assert.rejects(runs.completion(session.id) ?? Promise.resolve());
+  assert.deepEqual(runs.retryInput(session.id, accepted.id)?.missing, ['fixture.txt']);
+  assert.throws(() => runs.retryInput(session.id, failed.id), /no longer the failed conversation run/);
 });

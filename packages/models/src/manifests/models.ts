@@ -4,6 +4,8 @@ import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
 import { setupAdministration } from '../server/administration.js';
 import type {} from '../server/api.js';
+import type {} from '@mini-harness/kernel/observations';
+import type {} from '@mini-harness/kernel/mutation-api';
 
 export const manifest: PluginDescriptor = {
   scope: 'application',
@@ -22,12 +24,21 @@ export const manifest: PluginDescriptor = {
   },
   inject: ['harnessModels'], provides: ['harnessModelPreference'],
   setup(ctx, api) {
-    ctx.provide('harnessModelPreference', {
-      recent: () => api.configuration.get<ModelChoice>('model'),
-      async remember(model: ModelChoice) {
+    let pending = Promise.resolve();
+    const remember = (model: ModelChoice) => {
+      const write = pending.then(async () => {
         if ((!model.provider && !model.id) || ctx.harnessModels.resolve(model)) await api.configuration.set('model', model);
+      });
+      pending = write.catch((error) => { ctx.logger.warn('Could not save recent model: %s', String(error)); });
+      return write;
+    };
+    ctx.provide('harnessModelPreference', { recent: () => api.configuration.get<ModelChoice>('model'), remember });
+    ctx.on('harness/observe', (event) => {
+      if (event.type === 'input-accepted' && event.source === 'user' && event.runSource === 'user' && !event.parentId) {
+        void remember(event.model).catch(() => { /* The preference owner reports failed writes. */ });
       }
     });
+    ctx.on('harness/quiesce', () => pending);
   }
 };
 

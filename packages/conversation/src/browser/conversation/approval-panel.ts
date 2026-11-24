@@ -20,7 +20,7 @@ export const mountApprovals: FrontendSetup = (ctx, api) => {
       command.textContent = approval.message;
       const origin = document.createElement('small');
       const workspace = services.workspaceRecord(session.workspaceId)?.path ?? session.title;
-      origin.textContent = approval.plugin === 'shell' ? workspace : approval.plugin + ' · ' + workspace;
+      origin.textContent = approval.plugin + ' · ' + workspace;
       const heading = document.createElement('header');
       heading.className = 'approval-heading';
       heading.append(title, origin);

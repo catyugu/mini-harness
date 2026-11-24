@@ -1,63 +1,36 @@
 import { scopedElements } from '@mini-harness/ui-primitives/primitives';
 import { icon } from '@mini-harness/ui-primitives/icons';
-import type { CommandRegistry } from './commands.js';
-import type { ComposerCommand, Completer, DraftMode, Suggestion } from '../composer-api.js';
-import type { Attachment } from '@mini-harness/input/message';
-export interface ConversationDraft {
-  text: string;
-  attachments: (Attachment & { originalIndex?: number })[];
-  revision?: DraftMode;
-  loading: number;
-  version: number;
-}
+import type { ComposerCommand, ComposerModel, Suggestion } from '../composer-api.js';
 
-export function createComposer(root: HTMLElement, draft: () => ConversationDraft, report: (error: Error) => void,
-  commands: CommandRegistry, completions: ReadonlyMap<string, Completer>, signal: AbortSignal) {
+export function createComposer(root: HTMLElement, model: ComposerModel, report: (error: Error) => void, signal: AbortSignal) {
   const { element } = scopedElements(root);
   const prompt = element<'textarea'>('prompt'), form = element<'form'>('composer');
   const attachmentList = element('attachments'), suggestions = element('suggestions');
   let completion: AbortController;
-  const render = () => {
-    const current = draft(), files = current.attachments;
-    element<'button'>('send').disabled = current.loading > 0;
-    element<'button'>('queueSend').disabled = current.loading > 0;
+  let files: ReturnType<ComposerModel['draft']>['attachments'] | undefined;
+  const render = (pending: boolean) => {
+    const current = model.draft();
+    element<'button'>('send').disabled = current.loading || pending;
+    element<'button'>('queueSend').disabled = current.loading || pending;
+    if (files?.length === current.attachments.length && files.every((file, index) => {
+      const next = current.attachments[index];
+      return file.name === next.name && file.mimeType === next.mimeType && file.data === next.data;
+    })) return;
+    files = current.attachments;
     attachmentList.replaceChildren(...files.map((file, index) => {
       const card = document.createElement('div'); card.className = 'attachment';
       if (file.mimeType.startsWith('image/')) { const image = document.createElement('img'); image.src = 'data:' + file.mimeType + ';base64,' + file.data; image.alt = file.name; card.append(image); }
       const name = document.createElement('span'); name.textContent = file.name; card.append(name);
       const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'icon-button';
       remove.setAttribute('aria-label', 'Remove ' + file.name); remove.append(icon('close'));
-      remove.onclick = () => { current.attachments.splice(index, 1); current.version++; render(); }; card.append(remove); return card;
+      remove.onclick = () => model.removeAttachment(index); card.append(remove); return card;
     }));
     attachmentList.hidden = !files.length;
     prompt.required = !files.length;
   };
-  const addFiles = async (incoming: File[]) => {
-    const current = draft();
-    const files = current.attachments;
-    if (files.length + current.loading + incoming.length > 8) { report(new Error('Attach at most eight files')); return; }
-    current.loading += incoming.length;
-    current.version++;
-    render();
-    try {
-      const added: Attachment[] = [];
-      for (const file of incoming) {
-        if (file.size > 6 * 1024 * 1024 || (!file.type.startsWith('image/') && file.size > 1024 * 1024)) throw new Error('Images: up to 6 MiB; UTF-8 text: up to 1 MiB');
-        const data = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(',')[1]); reader.onerror = () => reject(new Error('Could not read ' + file.name)); reader.readAsDataURL(file);
-        });
-        added.push({ name: file.name, mimeType: file.type || 'text/plain', data });
-      }
-      if ([...files, ...added].reduce((total, file) => total + file.data.length * .75, 0) > 12 * 1024 * 1024)
-        throw new Error('Attachments exceed 12 MiB per message');
-      files.push(...added);
-    } catch (error) {
-      if (!signal.aborted && current === draft()) report(error instanceof Error ? error : new Error(String(error)));
-    } finally {
-      current.loading -= incoming.length;
-      if (!signal.aborted && current === draft()) render();
-    }
-  };
+  const addFiles = (files: File[]) => model.addFiles(files).catch((error) => {
+    if (!signal.aborted) report(error instanceof Error ? error : new Error(String(error)));
+  });
   form.addEventListener('dragover', (event) => { event.preventDefault(); form.classList.add('dragging'); });
   form.addEventListener('dragleave', () => form.classList.remove('dragging'));
   form.addEventListener('drop', (event) => { event.preventDefault(); form.classList.remove('dragging'); void addFiles([...(event.dataTransfer?.files ?? [])]); });
@@ -80,7 +53,7 @@ export function createComposer(root: HTMLElement, draft: () => ConversationDraft
     const match = /(?:^|\s)([^\s\p{L}\p{N}])([^\s]*)$/u.exec(prompt.value.slice(0, cursor));
     if (!match) return;
     const [, marker, query] = match;
-    if (marker !== '/' && !completions.has(marker)) return;
+    if (marker !== '/' && !model.completer(marker)) return;
     const tail = /^\S*/.exec(prompt.value.slice(cursor))?.[0] ?? '';
     if (marker === '/' && !/^[\w:-]*$/.test(query + tail)) return;
 
@@ -200,12 +173,12 @@ export function createComposer(root: HTMLElement, draft: () => ConversationDraft
     if (!match) return;
     token = match;
     if (match.kind === '/') {
-      renderOptions(commands.match(match.query).map((command) => ({
+      renderOptions(model.matchCommands(match.query).map((command) => ({
         label: '/' + command.name, group: command.group ?? 'Plugin', description: command.description,
         run: (complete) => useCommand(command, match, complete)
       })));
     } else {
-      const provider = completions.get(match.kind);
+      const provider = model.completer(match.kind);
       if (!provider) return;
       const controller = new AbortController();
       completion = controller;

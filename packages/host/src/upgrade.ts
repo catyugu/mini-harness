@@ -4,16 +4,16 @@ import type { UpgradeHandler } from '@mini-harness/transport/routes';
 
 export class Upgrades {
   private readonly admission = new AbortController();
-  private readonly entries = new Map<string, { handler: UpgradeHandler; lifetime: AbortController }>();
+  private readonly entries = new Map<string, { handler: UpgradeHandler; lifetime: AbortController; active: Set<Promise<void>> }>();
 
   register(path: string, handler: UpgradeHandler) {
     if (this.entries.has(path)) throw new Error('Duplicate WebSocket path: ' + path);
-    const entry = { handler, lifetime: new AbortController() };
+    const entry = { handler, lifetime: new AbortController(), active: new Set<Promise<void>>() };
     this.entries.set(path, entry);
-    return () => {
-      if (this.entries.get(path) !== entry) return;
-      this.entries.delete(path);
+    return async () => {
+      if (this.entries.get(path) === entry) this.entries.delete(path);
       entry.lifetime.abort();
+      await Promise.allSettled(entry.active);
     };
   }
 
@@ -31,10 +31,11 @@ export class Upgrades {
       connection.abort();
     });
     socket.on('error', () => socket.destroy());
-    void Promise.resolve().then(() => {
+    const active = Promise.resolve().then(() => {
       signal.throwIfAborted();
       return entry.handler(request, socket, head, signal);
-    }).catch(() => socket.destroy());
+    }).catch(() => { socket.destroy(); }).finally(() => { entry.active.delete(active); });
+    entry.active.add(active);
     return true;
   }
 }

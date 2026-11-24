@@ -1,3 +1,4 @@
+import { setupPermissionSettings } from './permission-settings.js';
 import type { ToolPolicy } from '@mini-harness/tools/policy';
 import type {} from '@mini-harness/settings/api';
 import type {} from '@mini-harness/kernel/scopes';
@@ -21,4 +22,13 @@ export const manifest: PluginDescriptor = {
     };
     ctx.provide('harnessToolPolicy', authorize);
   }
+};
+
+export const permissionSettingsManifest: PluginDescriptor = {
+  id: 'core:permission-settings', scope: 'application', title: 'Tool grants',
+  description: 'Manage read-only tool grants from a plugin’s settings',
+  inject: ['harnessTools', 'harnessSettingsStore', 'harnessRoutes', 'harnessMutations'],
+  setup: setupPermissionSettings,
+  browserInject: ['miniSettingsRegistry'],
+  browser: '/packages/sessions/src/browser/permission-settings.js'
 };

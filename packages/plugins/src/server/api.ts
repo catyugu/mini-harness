@@ -6,7 +6,7 @@ import { protectLocal } from '@mini-harness/platform/local-secret';
 import { readJson, writeJson } from '@mini-harness/platform/json';
 import { isDeepStrictEqual } from 'node:util';
 import type { Context } from 'cordis';
-import { assertOutsideMountTransaction } from '@mini-harness/kernel/mutation-api';
+import { assertOutsideMountTransaction, pluginRequestSignal, withPluginRequest } from '@mini-harness/kernel/mutation-api';
 import type { PluginScope, ScopeKey } from '@mini-harness/kernel/scopes';
 import type { ServiceMap } from '@mini-harness/kernel/services';
 import type { PluginApi } from '@mini-harness/plugin-api/descriptor';
@@ -16,10 +16,10 @@ import { pluginInvocation } from './invocation.js';
 
 export interface PluginLifetime {
   scope: PluginScope;
-  scopeKey?: string;
+  scopeKey?: ScopeKey;
   lifetime: AbortSignal;
   trusted: boolean;
-  address(key: ScopeKey): readonly string[];
+  address(key: ScopeKey): readonly ScopeKey[];
   prepare(key: ScopeKey, signal: AbortSignal): Promise<void>;
   scopedService<Name extends keyof ServiceMap & string>(key: ScopeKey, name: Name): NonNullable<ServiceMap[Name]>;
   dataRoot: string;
@@ -29,7 +29,7 @@ export interface PluginLifetime {
   subscribeConfig?(listener: () => void): () => void;
   writeConfig?(patch: Record<string, unknown>, check: () => void): Promise<void>;
   routes?: Context['harnessRoutes'];
-  upgrade?(path: string, handler: import('@mini-harness/transport/routes').UpgradeHandler): () => void;
+  upgrade?(path: string, handler: import('@mini-harness/transport/routes').UpgradeHandler): () => Promise<void>;
 }
 
 export function createPluginApi(ctx: Context, { id, descriptor, config }: { id: string; descriptor: DiscoveredPlugin; config?: Record<string, unknown> }, state: PluginLifetime) {
@@ -46,12 +46,28 @@ export function createPluginApi(ctx: Context, { id, descriptor, config }: { id: 
     if (!address(id).length || !inScope(id)) throw new Error('Conversation outside plugin scope');
   };
   const instanceId = scopeKey ? scopeKey + '/' + id : id;
-  const { run, drain } = pluginInvocation(lifetime, instanceId);
+  const invocation = pluginInvocation(lifetime, instanceId);
+  const network = new Set<() => Promise<void>>();
+  function registerNetwork(register: () => () => Promise<void>) {
+    return ctx.effect(() => {
+      const close = register();
+      let closing: Promise<void> | undefined;
+      const release = () => closing ??= close();
+      network.add(release);
+      return async () => { await release(); network.delete(release); };
+    });
+  }
+  const { run } = invocation;
   const source = bindContributionSource({
     context: ctx, pluginId: id, instanceId, scopeKey, signal: lifetime, run,
     visible: (sessionId: string) => !lifetime.aborted && inScope(sessionId),
     depth: (sessionId: string) => scopeKey ? address(sessionId).indexOf(scopeKey) + 1 : 0,
-    service: <Name extends keyof ServiceMap & string>(name: Name) => api.service(name)
+    service<Name extends keyof ServiceMap & string>(name: Name): NonNullable<ServiceMap[Name]> {
+      if (!descriptor.inject?.includes(name)) throw new Error('Contribution dependency is not declared by ' + id + ': ' + name);
+      const value = ctx.get(name) as ServiceMap[Name] | undefined;
+      if (value == null) throw new Error('Contribution dependency is unavailable to ' + id + ': ' + name);
+      return value;
+    }
   }, state.trusted);
   const instance = scopeKey ? createHash('sha256').update(scopeKey).digest('hex') : 'application';
   const windows = process.platform === 'win32';
@@ -73,8 +89,10 @@ export function createPluginApi(ctx: Context, { id, descriptor, config }: { id: 
     return (Object.hasOwn(values, key) ? structuredClone(values[key]) : undefined) as T;
   }
   async function write(values: Record<string, unknown>) {
+    const request = pluginRequestSignal();
+    const signal = request ? AbortSignal.any([lifetime, request]) : lifetime;
     const check = () => {
-      lifetime.throwIfAborted();
+      signal.throwIfAborted();
       if (!installed || applyingConfig) throw new Error('Plugin settings cannot be written during setup or configuration callbacks');
     };
     check();
@@ -82,7 +100,7 @@ export function createPluginApi(ctx: Context, { id, descriptor, config }: { id: 
       throw new Error('Server plugin configuration writes require live configuration');
     let listener: ReturnType<typeof addAbortListener> | undefined;
     const aborted = new Promise<never>((_, reject) => {
-      listener = addAbortListener(lifetime, () => reject(lifetime.reason));
+      listener = addAbortListener(signal, () => reject(signal.reason));
     });
     try { await Promise.race([state.writeConfig(structuredClone(values), check), aborted]); }
     finally { listener?.[Symbol.dispose](); }
@@ -130,12 +148,6 @@ export function createPluginApi(ctx: Context, { id, descriptor, config }: { id: 
       },
       remove: (name) => rmSync(storagePath(name, true), { force: true })
     },
-    service<Name extends keyof ServiceMap & string>(name: Name): NonNullable<ServiceMap[Name]> {
-      if (!descriptor.inject?.includes(name)) throw new Error('Required service is not declared by ' + id + ': ' + name);
-      const value = ctx.get(name) as ServiceMap[Name] | undefined;
-      if (value == null) throw new Error('Required service is unavailable to ' + id + ': ' + name);
-      return value;
-    },
     scopedService(id, name) {
       assertOutsideMountTransaction();
       assertVisible(id);
@@ -146,37 +158,33 @@ export function createPluginApi(ctx: Context, { id, descriptor, config }: { id: 
       assertVisible(id);
       return state.prepare(sessionKey(id), signal ? AbortSignal.any([lifetime, signal]) : lifetime);
     },
-    optionalService<Name extends keyof ServiceMap & string>(name: Name): ServiceMap[Name] | undefined {
-      if (!descriptor.optional?.includes(name)) throw new Error('Optional service is not declared by ' + id + ': ' + name);
-      return ctx.get(name) as ServiceMap[Name] | undefined;
-    },
     registerRoute(method, path, handler) {
       if (scopeKey || !['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method) ||
           !/^\/(?:[a-zA-Z0-9_-]+\/)*[a-zA-Z0-9_-]+$/.test(path)) throw new Error('Invalid plugin route');
       const routes = state.routes;
       if (!routes) throw new Error('HTTP routes are unavailable');
-      return ctx.effect(() => routes.register(method, '/api/extensions/' + id + path, handler));
+      return registerNetwork(() => routes.register(method, '/api/extensions/' + id + path, (request) =>
+        withPluginRequest(request.signal, () => handler(request))));
     },
     registerScopeRequest(name, handler) {
       const register = state.registerScopeRequest;
       if (!register || !/^[a-z][a-z0-9-]{0,63}$/.test(name) || typeof handler !== 'function')
         throw new Error('Invalid scoped plugin request');
       return ctx.effect(() => register(name, (input, signal) =>
-        run('scoped request ' + name, (request) => handler(input, request), signal)));
+        run('scoped request ' + name, (request) => withPluginRequest(request, () => handler(input, request)), signal)));
     },
     registerUpgrade(path, handler) {
       if (scopeKey || !state.upgrade || !/^\/(?:[a-zA-Z0-9_-]+\/)*[a-zA-Z0-9_-]+$/.test(path))
         throw new Error('Invalid WebSocket route');
       lifetime.throwIfAborted();
       const register = state.upgrade;
-      return ctx.effect(() => {
-        const release = register('/api/extensions/' + id + path, handler);
-        lifetime.addEventListener('abort', release, { once: true });
-        return () => { lifetime.removeEventListener('abort', release); release(); };
-      });
+      return registerNetwork(() => register('/api/extensions/' + id + path, (request, socket, head, signal) =>
+        withPluginRequest(signal, () => handler(request, socket, head, signal))));
     }
   };
-  return { api, drain, async updateConfig(next: Record<string, unknown>) {
+  return { api, async drain() {
+    await Promise.all([invocation.drain(), ...[...network].map((release) => release())]);
+  }, async updateConfig(next: Record<string, unknown>) {
     const config = Object.freeze(structuredClone(next));
     applyingConfig = true;
     try {

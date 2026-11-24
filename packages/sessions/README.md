@@ -4,7 +4,7 @@ Owns durable conversation identity, history and deletion.
 
 ## Responsibilities
 
-Maintains session ancestry and permissions, the append-only log, durable inbox and run projections, and recovery of interrupted deletions.
+Maintains session ancestry and permissions, the append-only log, durable inbox and run projections, read-only tool grants and recovery of interrupted deletions.
 
 ## Structure
 
@@ -20,7 +20,7 @@ Uses [Workspaces](../workspaces/README.md) to own storage beneath managed worksp
 
 ## Lifecycle
 
-`core:sessions` mounts at application scope. Deletion drains affected work, journals the records and removes their scoped settings and files. Startup finishes any committed journal.
+`core:sessions` mounts at application scope. Deletion drains affected work, journals the records and removes their scoped settings and files. Startup finishes any committed journal. Historical record envelopes are decoded after checksum validation.
 
 ## Testing
 

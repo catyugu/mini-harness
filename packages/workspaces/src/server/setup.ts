@@ -41,6 +41,6 @@ export function setup(ctx: Context) {
     catalog.rename(requireId(params.id), (await body())?.name));
   add('DELETE', '/api/workspaces/:id', ({ params }) => {
     const id = requireId(params.id);
-    return catalog.remove(id, () => ctx.harnessSettingsStore.forgetScopes(['workspace:' + id]));
+    return catalog.remove(id, () => ctx.harnessSettingsStore.forgetScopes([`workspace:${id}`]));
   });
 }

@@ -32,14 +32,14 @@ export function setup(ctx: Context) {
   registerSessionRoutes(ctx, (id): ConversationView => {
     const record = ctx.harnessRegistry.get(id);
     if (!record) throw new Error('Conversation not found');
-    const { harnessRegistry: sessions, harnessModelPreference, harnessRuns } = ctx;
+    const { harnessRegistry: sessions, harnessRuns } = ctx;
     sessions.assertAvailable(id);
     const history = sessions.inspectLog(id, (log) => ({ ...log.projection(), queue: log.queue() }));
     const { partial, tools } = harnessRuns.activity(id);
     return { ...projectSession(ctx, record),
       messages: projectHistory(ctx, id, history?.messages ?? []), leafId: history?.leafId ?? null,
       records: history?.records ?? [],
-      model: history?.model ?? harnessModelPreference.recent(), thinkingLevel: history?.thinkingLevel,
+      model: history?.model, thinkingLevel: history?.thinkingLevel,
       queue: history?.queue ?? [], partial, tools: tools.map((tool) => projectToolEvent(ctx, id, tool)),
       logError: sessions.logError(id) };
   });

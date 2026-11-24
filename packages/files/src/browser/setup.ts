@@ -1,4 +1,5 @@
-import { conversationExtensions, type Suggestion } from '@mini-harness/conversation/browser/composer-api';
+import type { Suggestion } from '@mini-harness/conversation/browser/composer-api';
+import { conversationExtensions } from '@mini-harness/conversation/browser/extensions';
 import { layoutExtensions, type TabAddress, type TabScope } from '@mini-harness/ui-layout/browser/api';
 import type { FrontendApi, FrontendSetup } from '@mini-harness/ui-runtime/frontend-api';
 import type { ConversationBrowserPort } from '@mini-harness/conversation/browser/navigation-api';

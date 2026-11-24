@@ -20,7 +20,7 @@ test('tool registry validates native JSON schemas before executing a plugin', as
 });
 
 test('scoped tools inherit locally and disposal aborts and drains active execution', async () => {
-  const registry = new ToolRegistry((id) => ['workspace:a', ...(id === 'child' ? ['session:child'] : [])]);
+  const registry = new ToolRegistry((id) => ['workspace:a', ...(id === 'child' ? ['session:child'] as const : [])]);
   const make = (text: string) => defineTool({ name: 'inspect', description: text, parameters: Type.Object({}),
     async execute() { return { content: [{ type: 'text', text }] }; } });
   registry[registerToolBinding]('inspect', () => make('root'));
@@ -47,7 +47,7 @@ test('scoped tools inherit locally and disposal aborts and drains active executi
 test('file-tool names follow the same scoped registration, restriction and lifetime rules as plugins', async () => {
   let allowed = true, denied = false;
   const registry = new ToolRegistry((id) => id === 'outside' ? ['workspace:other'] :
-    ['workspace:one', ...(id === 'child' ? ['session:child'] : [])],
+    ['workspace:one', ...(id === 'child' ? ['session:child'] as const : [])],
   async () => denied ? 'deny' : undefined, (_id, { name }) => allowed || name !== 'read');
   const bind = (text: string) => () => defineTool({ name: 'read', description: text, parameters: Type.Object({}),
     async execute() { return { content: [{ type: 'text', text }] }; } });

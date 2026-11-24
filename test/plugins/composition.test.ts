@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { resolveCapabilities } from '@mini-harness/kernel/composition';
 import { PluginCatalog } from '@mini-harness/plugins/catalog';
-import { DEFAULTS, mergeSettings, validateSettings } from '@mini-harness/settings/config';
+import { DEFAULTS, readSettings, mergeSettings, validateSettings } from '@mini-harness/settings/config';
 import { writePlugin } from '../support/plugin-fixture.js';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -166,13 +166,13 @@ test('read-only permissions are bound to the selected tool registration', async 
   const sent = expectPresent(mock.requests.at(-1), 'request with tools');
   assert.equal(JSON.stringify(sent.tools).includes('"name":"read"'), false);
   assert.equal(JSON.stringify(sent.tools).includes('"name":"load_skill"'), true);
-  assert.deepEqual((await request('/plugins')).body.find((plugin: { id: string }) => plugin.id === 'replacement').readOnlyTools, ['custom', 'read']);
-  assert.equal((await request('/plugins/replacement/read-only', 'PATCH', { tool: 'unknown', allowed: true })).status, 400);
-  assert.equal((await request('/plugins/replacement/read-only', 'PATCH', { tool: 'custom', allowed: true })).status, 200);
+  assert.deepEqual((await request('/permissions/plugins/replacement')).body.tools, ['custom', 'read']);
+  assert.equal((await request('/permissions/plugins/replacement', 'PATCH', { tool: 'unknown', allowed: true })).status, 400);
+  assert.equal((await request('/permissions/plugins/replacement', 'PATCH', { tool: 'custom', allowed: true })).status, 200);
   const granted = expectPresent(list(child.id).find(({ name }) => name === 'custom'), 'granted registration');
   assert.match(JSON.stringify(await granted.execute('granted', {})), /Authorized local read/);
   assert.ok(!list(child.id).some(({ name }) => name === 'read'));
-  assert.equal((await request('/plugins/replacement/read-only', 'PATCH', { tool: 'custom', allowed: false })).status, 200);
+  assert.equal((await request('/permissions/plugins/replacement', 'PATCH', { tool: 'custom', allowed: false })).status, 200);
   await assert.rejects(granted.execute('revoked', {}), /Tool denied/);
 });
 
@@ -189,6 +189,15 @@ test('the host tool authorization service cannot be replaced at either scope', a
   });
   assert.equal(application.status, 400);
   assert.match(application.body.error, /Protected service cannot be overridden: harnessTools/);
+  const implicit = await request('/settings', 'PATCH', {
+    plugins: { 'core:tools': false, 'tools-application': true }
+  });
+  assert.equal(implicit.status, 400);
+  assert.match(implicit.body.error, /Protected service cannot be overridden: harnessTools/);
+  assert.equal(app.runtime.settings.plugins['core:tools'], true);
+  assert.equal(app.runtime.settings.plugins['tools-application'], undefined);
+  assert.equal(readSettings(paths).plugins['core:tools'], undefined);
+  assert.equal(readSettings(paths).plugins['tools-application'], undefined);
   const scoped = await request('/settings', 'PATCH', { scopes: { ['session:' + session.id]: {
     plugins: { 'tools-session': true }, providers: { harnessTools: 'tools-session' }
   } } });
@@ -327,7 +336,7 @@ test('explicit scoped provider choice shadows inherited service only in the chil
     .ordered[0].services.greeting, 'global');
   assert.throws(() => resolveCapabilities(
     [{ id: 'fake', provides: ['harnessRoutes'] }], parent, { harnessRoutes: 'fake' },
-    undefined, new Set(['harnessRoutes'])), /Protected service/);
+    undefined, new Map([['harnessRoutes', 'application']])), /Protected service/);
   assert.throws(() => resolveCapabilities(
     [{ id: 'consumer', inject: ['greeting'] }], parent, { greeting: 'missing' }
   ), /Selected provider/);
@@ -336,7 +345,7 @@ test('explicit scoped provider choice shadows inherited service only in the chil
   assert.throws(() => resolveCapabilities(descriptor, inherited), /Multiple enabled providers/);
   assert.equal(resolveCapabilities(descriptor, inherited, { greeting: 'local' }).providers.get('greeting'), 'local');
   assert.throws(() => resolveCapabilities(descriptor, inherited, { greeting: 'local' }, undefined,
-    new Set(['greeting'])), /Protected service/);
+    new Map([['greeting', 'local']])), /Protected service/);
 });
 
 test('catalog computes independent scoped provider maps and rejects fixed service shadows', () => {
@@ -347,7 +356,7 @@ test('catalog computes independent scoped provider maps and rejects fixed servic
         defaultEnabled: true, provides: ['greeting'] },
       { id: 'local', title: 'Local', description: '', scope: 'workspace', provides: ['greeting'] }
     ], ['harnessRoutes']);
-    const key = 'workspace:' + 'a'.repeat(32);
+    const key = `workspace:${'a'.repeat(32)}` as const;
     const settings = mergeSettings(DEFAULTS as any, {
       scopes: { [key]: { plugins: { local: true }, providers: { greeting: 'local' } } }
     });

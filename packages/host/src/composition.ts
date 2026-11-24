@@ -3,7 +3,7 @@ import { manifest as ui_theme } from '@mini-harness/ui-theme/manifest';
 import { manifest as ui_primitives } from '@mini-harness/ui-primitives/manifest';
 import { manifest as ui_layout } from '@mini-harness/ui-layout/manifest';
 import { manifest as workspaces } from '@mini-harness/workspaces/manifests/workspaces';
-import { manifest as tool_policy } from '@mini-harness/sessions/manifests/tool-policy';
+import { manifest as tool_policy, permissionSettingsManifest as permission_settings } from '@mini-harness/sessions/manifests/tool-policy';
 import { manifest as sessions } from '@mini-harness/sessions/manifest';
 import { manifest as agent } from '@mini-harness/agent/manifests/agent';
 import { manifest as prompt } from '@mini-harness/agent/manifests/prompt';
@@ -34,11 +34,11 @@ import { manifest as conversation, composerManifest as composer, historyManifest
 
 export const plugins = [
   workspaces_data, sessions_data, workspace_navigation, navigation, model_store, model_catalog, llm, prompt,
-  ui_slots, ui_theme, ui_primitives, ui_layout, workspaces, sessions, agent, runs, settings, models, model_admin, plugin_management, ui, file_access, files, skills, subagents, shell, session_helper, approvals, approval_data, sandbox, process_execution, tool_policy, tools, conversation, composer, history
+  ui_slots, ui_theme, ui_primitives, ui_layout, workspaces, sessions, agent, runs, settings, models, model_admin, plugin_management, ui, file_access, files, skills, subagents, shell, session_helper, approvals, approval_data, sandbox, process_execution, tool_policy, tools, permission_settings, conversation, composer, history
 ];
 
 export const composition = {
-  fixedPlugins: new Set([ui.id, settings.id, plugin_management.id, model_admin.id, conversation.id, navigation.id]),
+  fixedPlugins: new Set([ui.id, settings.id, plugin_management.id, model_admin.id, conversation.id, navigation.id, permission_settings.id]),
   requiredServices: new Set([
     'harnessAgent', 'harnessApprovalRequests', 'harnessApprovals', 'harnessExecution', 'harnessFileAccess', 'harnessLlm',
     'harnessModels', 'harnessModelStore', 'harnessModelPreference', 'harnessProcess', 'harnessPrompt', 'harnessRegistry',

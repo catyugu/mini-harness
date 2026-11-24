@@ -1,6 +1,6 @@
 import type { ConversationView } from '../../shared/api.js';
 
-export function renderQueue(panel: HTMLElement, queue: ConversationView['queue'] = [],
+export function renderQueue(panel: HTMLElement, queue: readonly ConversationView['queue'][number][] = [],
   cancel: (id?: string) => void | Promise<void>) {
   panel.replaceChildren();
   let pendingCount = 0;

@@ -45,7 +45,7 @@ export function setup(ctx: Context, api: PluginApi) {
     const sessionId = url.searchParams.get('sessionId');
     if (sessionId && sessions.get(sessionId)?.workspaceId !== workspace.id) throw new DomainError('not_found', 'Conversation not found');
     if (sessionId) await api.prepareSession(sessionId, signal);
-    const access = sessionId ? api.scopedService(sessionId, 'harnessFileAccess') : api.service('harnessFileAccess');
+    const access = sessionId ? api.scopedService(sessionId, 'harnessFileAccess') : ctx.harnessFileAccess;
     return new Inspection(workspaces.resolveRoot(workspace.path, workspace.id), access.open(workspace.id), signal);
   };
   const path = ({ url }: RouteRequest) => url.searchParams.get('path') ?? '.';

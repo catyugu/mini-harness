@@ -2,18 +2,31 @@ import type { Context } from 'cordis';
 import type { FrontendApi } from '@mini-harness/ui-runtime/frontend-api';
 import type { Attachment } from '@mini-harness/input/message';
 import type { ConversationPermission } from '@mini-harness/sessions/identity';
-import type { ComposerCommand, Completer, DraftMode } from '../composer-api.js';
-import type { ConversationDraft } from './composer.js';
+import type { ModelChoice, ThinkingLevel } from '@mini-harness/llm/vocabulary';
+import { isRunning } from '@mini-harness/sessions/run-state';
+import type { Completer, ComposerDraft, ComposerModel, DraftMode } from '../composer-api.js';
 import { CommandRegistry } from './commands.js';
 import { exportSessions } from '../session-client.js';
 
-export function createComposerModel(ctx: Context, api: FrontendApi) {
+interface Draft {
+  text: string;
+  attachments: (Attachment & { originalIndex?: number })[];
+  model?: ModelChoice;
+  thinkingLevel?: ThinkingLevel | null;
+  revision?: DraftMode;
+  cursor?: { start: number; end: number };
+  version: number;
+  loading: number;
+  failedRun?: string;
+}
+
+export function createComposerModel(ctx: Context, api: FrontendApi): ComposerModel {
   const control = ctx.miniConversation, selection = ctx.miniSelection;
   const changes = new EventTarget();
   const commands = new CommandRegistry(), completions = new Map<string, Completer>();
-  const blank = (): ConversationDraft => ({ text: '', attachments: [], version: 0, loading: 0 });
-  const drafts = new Map<string, { input: ConversationDraft; edit?: ConversationDraft; permission?: ConversationPermission }>();
-  const key = () => control.get().conversation?.id ?? 'workspace:' + selection.selectedWorkspace;
+  const blank = (): Draft => ({ text: '', attachments: [], version: 0, loading: 0 });
+  const drafts = new Map<string, { input: Draft; edit?: Draft; permission?: ConversationPermission }>();
+  const key = () => control.get().session?.id ?? 'workspace:' + selection.selectedWorkspace;
   function entryFor(key: string) {
     let entry = drafts.get(key);
     if (!entry) { entry = { input: blank() }; drafts.set(key, entry); }
@@ -21,76 +34,140 @@ export function createComposerModel(ctx: Context, api: FrontendApi) {
   }
   const entry = () => entryFor(key());
   const draft = () => entry().edit ?? entry().input;
-  const change = (focus = false) => changes.dispatchEvent(new CustomEvent('change', { detail: { focus } }));
-  let cursor: { draft: ConversationDraft; start: number; end: number } | undefined;
-  const submissions = new Map<string, { runId: string; clear: () => void }>();
-  let previousRetry: ReturnType<typeof control.get>['retrySubmission'];
-  control.subscribe(() => {
-    const { conversation, view, events, run, retrySubmission } = control.get();
-    if (retrySubmission && previousRetry !== retrySubmission) {
-      previousRetry = retrySubmission;
-      const owner = entryFor(retrySubmission.sessionId), current = owner.input;
-      if (current.text === retrySubmission.input.message && JSON.stringify(current.attachments) === JSON.stringify(retrySubmission.input.attachments ?? [])) {
-        const version = current.version;
-        submissions.set(retrySubmission.sessionId, { runId: retrySubmission.run.id, clear() {
-          if (owner.input === current && current.version === version) { owner.input = blank(); if (owner === entry()) change(); }
-        } });
-      }
-    }
-    if (!conversation) return;
-    const submitted = submissions.get(conversation.id);
-    if (!submitted) return;
-    if (view?.messages.some(({ submissionId }) => submissionId === submitted.runId) ||
-        events.some((event) => event.type === 'user' && event.submissionId === submitted.runId)) {
-      submissions.delete(conversation.id); submitted.clear();
-    } else if (run && run.id === submitted.runId && !control.get().sending) submissions.delete(conversation.id);
+  let snapshot: { owner: Draft; version: number; value: ComposerDraft } | undefined;
+  const change = (focus = false) => changes.dispatchEvent(new CustomEvent('change', { detail: focus }));
+  function edited(current: Draft, focus = false, inputChanged = true) {
+    current.version++;
+    if (inputChanged) delete current.failedRun;
+    if (current === draft()) change(focus);
+  }
+  let selected = key();
+  selection.subscribe(() => {
+    const next = key();
+    if (next !== selected) { selected = next; change(); }
   }, api.signal);
-  const register = (command: ComposerCommand) => {
+  const register: ComposerModel['command'] = (command) => {
     const dispose = commands.register(command); change();
     return () => { dispose(); change(); };
   };
   api.onDispose(register({ name: 'export', group: 'Conversation', description: 'Export the current conversation', run: () => {
-    const id = control.get().conversation?.id;
+    const id = control.get().session?.id;
     if (!id) throw new Error('Open a conversation to export it.');
     return exportSessions([id], api.signal);
   } }));
   api.onDispose(register({ name: 'compact', group: 'Conversation', description: 'Summarize earlier messages to free context', run: control.compact }));
+
+  async function send(queued = false) {
+    const origin = key(), owner = entry(), current = draft();
+    if (current.loading) throw new Error('Files are still loading');
+    if (queued && current.revision) throw new Error('Finish editing before queuing a message');
+    const { revision, version, text } = current;
+    const attachments = current.attachments.filter(({ originalIndex }) => originalIndex === undefined)
+      .map(({ name, mimeType, data }) => ({ name, mimeType, data }));
+    const originalImages = current.attachments.flatMap(({ originalIndex }) => originalIndex === undefined ? [] : [originalIndex]);
+    const removedImages = revision?.images?.flatMap((_, index) => originalImages.includes(index) ? [] : [index]) ?? [];
+    if (!text.trim() && !attachments.length && (revision?.images?.length ?? 0) === removedImages.length) return;
+    const input = { message: text, attachments, model: current.model, thinkingLevel: current.thinkingLevel };
+    if (queued) await control.queue(input);
+    else {
+      const run = await control.submit({ ...input, permission: owner.permission, revision: revision && { ...revision.revision, removedImages } }, (id) => {
+        drafts.set(id, owner); drafts.delete(origin);
+      });
+      if (!run.accepted) {
+        const sameInput = current.text === text && current.attachments.length === originalImages.length + attachments.length &&
+          current.attachments.every(({ name, mimeType, data, originalIndex }) => originalIndex === undefined
+            ? attachments.some((file) => file.name === name && file.mimeType === mimeType && file.data === data)
+            : originalImages.includes(originalIndex));
+        if (sameInput) current.failedRun = run.id;
+        return;
+      }
+    }
+    if (current.version !== version) return;
+    if (revision) { if (owner.edit === current) delete owner.edit; }
+    else if (owner.input === current) owner.input = blank();
+    if (entry() === owner) change();
+  }
+
   return {
-    draft, commands, completions,
-    subscribe(listener: (focus: boolean) => void, signal: AbortSignal) {
-      changes.addEventListener('change', (event) => listener((event as CustomEvent<{ focus: boolean }>).detail.focus), { signal });
+    draft(): ComposerDraft {
+      const current = draft();
+      if (snapshot?.owner === current && snapshot.version === current.version) return snapshot.value;
+      const value = Object.freeze({
+        text: current.text, editTitle: current.revision?.title, loading: current.loading > 0,
+        model: current.model && Object.freeze({ ...current.model }), thinkingLevel: current.thinkingLevel,
+        attachments: Object.freeze(current.attachments.map(({ name, mimeType, data }) => Object.freeze({ name, mimeType, data })))
+      });
+      snapshot = { owner: current, version: current.version, value };
+      return value;
     },
-    permission: () => control.get().conversation?.permission ?? (control.get().conversation ? 'standard' : entry().permission ?? 'standard'),
-    async setPermission(value: ConversationPermission) {
-      if (control.get().conversation) await control.setPermission(value);
+    subscribe(listener, signal) {
+      changes.addEventListener('change', (event) => { if (event instanceof CustomEvent) listener(event.detail === true); }, { signal });
+    },
+    permission: () => control.get().session?.permission ?? entry().permission ?? 'standard',
+    async setPermission(value) {
+      if (control.get().session) await control.setPermission(value);
       else { entry().permission = value; change(); }
     },
-    choice: () => control.get().modelDraft,
-    thinking: () => control.get().thinkingDraft,
-    choose: control.chooseModel,
-    chooseThinking: control.chooseThinking,
-    setText(text: string, start = text.length, end = start) {
+    choose(model) {
       const current = draft();
-      const changed = current.text !== text;
-      if (changed) { current.text = text; current.version++; }
-      cursor = { draft: current, start, end };
-      if (changed) change();
+      if (current.model?.provider === model?.provider && current.model?.id === model?.id) return;
+      current.model = model && { ...model }; current.thinkingLevel = undefined; edited(current, false, false);
     },
-    insert(text: string) {
-      const current = draft(), position = cursor?.draft === current ? cursor : { start: current.text.length, end: current.text.length };
+    chooseThinking(level) {
+      const current = draft();
+      if (current.thinkingLevel !== level) { current.thinkingLevel = level; edited(current, false, false); }
+    },
+    setText(text, start = text.length, end = start) {
+      const current = draft();
+      current.cursor = { start, end };
+      if (current.text !== text) { current.text = text; edited(current); }
+    },
+    insert(text) {
+      const current = draft(), position = current.cursor ?? { start: current.text.length, end: current.text.length };
       const before = current.text.slice(0, position.start);
       if (text.startsWith('/') && /\S$/.test(before)) text = ' ' + text;
       current.text = before + text + current.text.slice(position.end);
-      current.version++;
-      cursor = { draft: current, start: before.length + text.length, end: before.length + text.length };
-      change(true);
+      const cursor = before.length + text.length;
+      current.cursor = { start: cursor, end: cursor };
+      edited(current, true);
     },
-    cursor() { return cursor?.draft === draft() ? cursor.start : draft().text.length; },
+    cursor() { const current = draft(); return current.cursor?.start ?? current.text.length; },
+    async addFiles(incoming) {
+      if (!incoming.length) return;
+      const current = draft();
+      if (current.attachments.length + current.loading + incoming.length > 8) throw new Error('Attach at most eight files');
+      current.loading += incoming.length;
+      edited(current);
+      try {
+        const added = await Promise.all(incoming.map(async (file) => {
+          if (file.size > (file.type.startsWith('image/') ? 6 : 1) * 1024 * 1024)
+            throw new Error('Images: up to 6 MiB; UTF-8 text: up to 1 MiB');
+          const data = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result).split(',')[1]);
+            reader.onerror = () => reject(new Error('Could not read ' + file.name));
+            reader.readAsDataURL(file);
+          });
+          api.signal.throwIfAborted();
+          return { name: file.name, mimeType: file.type || 'text/plain', data };
+        }));
+        if ([...current.attachments, ...added].reduce((total, file) => total + file.data.length * .75, 0) > 12 * 1024 * 1024)
+          throw new Error('Attachments exceed 12 MiB per message');
+        current.attachments.push(...added);
+      } finally {
+        current.loading -= incoming.length;
+        if (!api.signal.aborted) edited(current);
+      }
+    },
+    removeAttachment(index) {
+      const current = draft();
+      if (Number.isInteger(index) && index >= 0 && index < current.attachments.length) { current.attachments.splice(index, 1); edited(current); }
+    },
     cancelEdit() { delete entry().edit; change(true); },
-    beginDraftMode(mode: DraftMode) {
-      if (control.get().sending || control.get().pending || !control.get().conversation) return () => {};
+    beginDraftMode(mode) {
+      if (isRunning(control.get().run) || control.get().interaction.operation || !control.get().session) return () => {};
       const owner = entry();
-      const edit: ConversationDraft = { ...blank(), text: mode.text, revision: mode,
+      const edit: Draft = { ...blank(), text: mode.text, revision: structuredClone(mode),
         attachments: (mode.images ?? []).map((file, originalIndex) => ({ ...file, originalIndex })) };
       owner.edit = edit; change(true);
       return () => {
@@ -99,34 +176,34 @@ export function createComposerModel(ctx: Context, api: FrontendApi) {
         if (owner === entry() && !api.signal.aborted) change();
       };
     },
+    matchCommands: (query) => commands.match(query),
+    completer: (trigger) => completions.get(trigger),
     command: register,
-    completion(trigger: string, complete: Completer) {
+    completion(trigger, complete) {
       if (trigger === '/' || !/^[!#$%&*?@^~]$/.test(trigger) || completions.has(trigger)) throw new Error('Invalid or duplicate completion trigger: ' + trigger);
       completions.set(trigger, complete); change();
       return () => { completions.delete(trigger); change(); };
     },
-    async send(queued = false) {
-      const origin = key(), owner = entry(), current = draft();
-      if (current.loading) throw new Error('Files are still loading');
-      if (queued && current.revision) throw new Error('Finish editing before queuing a message');
-      const { revision, version, text } = current;
-      const attachments: Attachment[] = structuredClone(current.attachments.filter(({ originalIndex }) => originalIndex === undefined).map(({ name, mimeType, data }) => ({ name, mimeType, data })));
-      const removedImages = revision?.images?.flatMap((_, index) => current.attachments.some(({ originalIndex }) => index === originalIndex) ? [] : [index]) ?? [];
-      if (!text.trim() && !attachments.length && (revision?.images?.length ?? 0) === removedImages.length) return;
-      const input = { message: text, attachments, model: control.get().modelDraft, thinkingLevel: control.get().thinkingDraft };
-      const clear = () => {
-        if (current.version !== version) return;
-        if (revision) { if (owner.edit === current) delete owner.edit; }
-        else if (owner.input === current) owner.input = blank();
-        if (owner === entry()) change();
-      };
-      if (queued) { await control.queue(input); clear(); }
-      else {
-        const { sessionId, run } = await control.submit({ ...input, permission: owner.permission, revision: revision && { ...revision.revision, removedImages } });
-        if (origin !== sessionId) { drafts.set(sessionId, owner); drafts.delete(origin); }
-        submissions.set(sessionId, { runId: run.id, clear });
+    send,
+    async retry() {
+      const { session, run, interaction } = control.get();
+      if (!session || run?.state !== 'failed' || interaction.operation) return;
+      const current = draft();
+      if (run.inputEntryId === null && current.failedRun === run.id) return send();
+      const input = await api.request<{ message: string; attachments: Attachment[]; missing: string[]; model?: ModelChoice; thinkingLevel?: ThinkingLevel } | null>(
+        '/sessions/' + session.id + '/runs/' + run.id + '/input');
+      if (control.get().run?.id !== run.id || control.get().interaction.operation) return;
+      if (!input) throw new Error('This run did not accept a message. Check the draft and send it again.');
+      const { missing, ...submission } = input;
+      if (missing.length) {
+        if (current === draft() && !current.text && !current.attachments.length && !current.revision) {
+          current.text = submission.message; current.attachments = submission.attachments;
+          current.model ??= submission.model;
+          if (current.thinkingLevel === undefined) current.thinkingLevel = submission.thinkingLevel; edited(current, true);
+        }
+        throw new Error('Reattach ' + missing.join(', ') + ' before sending this message again.');
       }
-      change();
+      await control.submit({ ...submission, model: current.model ?? submission.model, thinkingLevel: current.thinkingLevel === undefined ? submission.thinkingLevel : current.thinkingLevel });
     }
   };
 }

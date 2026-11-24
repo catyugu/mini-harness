@@ -1,3 +1,4 @@
+import type { ScopeKey } from '@mini-harness/kernel/scopes';
 import { toolNamePattern } from '@mini-harness/llm/vocabulary';
 import { Check, Errors } from 'typebox/value';
 import { isTrustedContribution } from '@mini-harness/kernel/contributions';
@@ -6,7 +7,7 @@ import type { ToolDecision } from './extensions.js';
 import type { ToolAccess, ToolPolicy } from './policy.js';
 
 interface ToolRegistration extends ToolAccess {
-  scope?: string;
+  scope?: ScopeKey;
   bind(id: string): ToolDefinition;
   visible(id: string): boolean;
 }
@@ -15,7 +16,7 @@ export class ToolRegistry implements ToolPort {
   private readonly tools = new Map<string, ToolRegistration>();
   private readonly leases = new WeakMap<ToolDefinition, { id: string; entry: ToolRegistration }>();
 
-  constructor(private readonly address: (id: string) => readonly string[] = () => [],
+  constructor(private readonly address: (id: string) => readonly ScopeKey[] = () => [],
     private readonly decide?: (request: ToolDecision) => Promise<'deny' | undefined>,
     private readonly authorize: ToolPolicy = () => true) {}
 

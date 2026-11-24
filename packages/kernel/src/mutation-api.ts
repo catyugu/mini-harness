@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type {} from 'cordis';
+import type { ScopeKey } from './scopes.js';
 
 // The marker follows only work initiated inside a graph transaction; unrelated requests may wait.
 const mountTransaction = new AsyncLocalStorage<{ active: boolean }>();
@@ -15,10 +16,28 @@ export function assertOutsideMountTransaction() {
     throw new Error('Operation is unavailable during plugin setup, configuration or teardown');
 }
 
+const pluginRequest = new AsyncLocalStorage<{ signal: AbortSignal; active: boolean }>();
+
+export async function withPluginRequest<T>(signal: AbortSignal, work: () => T | Promise<T>): Promise<T> {
+  const request = { signal, active: true };
+  try { return await pluginRequest.run(request, work); }
+  finally { request.active = false; }
+}
+
+export function pluginRequestSignal() {
+  const request = pluginRequest.getStore();
+  return request?.active ? request.signal : undefined;
+}
+
+export function assertOutsidePluginRequest() {
+  if (pluginRequestSignal())
+    throw new Error('Structural settings cannot be changed during a plugin request');
+}
+
 export interface MutationPort {
-  guard(check: (scopes?: ReadonlySet<string>) => void): () => void;
-  protect(scopes?: ReadonlySet<string>): () => void;
-  admit(scopeKeys: readonly string[]): void;
+  guard(check: (scopes?: ReadonlySet<ScopeKey>) => void): () => void;
+  protect(scopes?: ReadonlySet<ScopeKey>): () => void;
+  admit(scopeKeys: readonly ScopeKey[]): void;
   run<T>(operation: () => Promise<T> | T): Promise<T>;
 }
 

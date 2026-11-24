@@ -8,11 +8,11 @@ Owns run IDs, task and inbox admission, cancellation, compaction scheduling, cur
 
 ## Structure
 
-`src/runs.ts` coordinates execution. `events.ts` retains live history. `routes.ts` adapts run commands and `stream.ts` defines the event union.
+`src/runs.ts` coordinates execution. `events.ts` retains bounded server replay and the current response. `routes.ts` adapts run commands and `stream.ts` defines the event union.
 
 ## API
 
-`harnessRuns` is the internal scheduler. `executionExtensions.control` provides scoped submission, status and instance-owned cancellation to native and installed plugins. Runs reads the model preference at admission and passes committed user selections to the model preference owner; Conversation consumes replay and activity.
+`harnessRuns` is the internal scheduler. `executionExtensions.control` provides scoped submission, status and instance-owned cancellation to native and installed plugins. Runs reads the model preference at admission and publishes accepted input to capability observers; Conversation consumes replay and activity.
 
 ## Dependencies
 
@@ -20,7 +20,7 @@ Prepares session scopes and resolves [Agent](../agent/README.md) services and re
 
 ## Lifecycle
 
-`core:runs` mounts at application scope. Subscribers may disconnect without cancelling work. Shutdown aborts and drains active runs.
+`core:runs` mounts at application scope. Subscribers may disconnect without cancelling work. Shutdown aborts and drains active runs. Failed runs identify the accepted input by stable Session Log entry ID.
 
 ## Testing
 

@@ -39,6 +39,8 @@
     "@mini-harness/settings": "workspace:*",
     "@mini-harness/tools": "workspace:*",
     "@mini-harness/transport": "workspace:*",
-    "@mini-harness/workspaces": "workspace:*"
+    "@mini-harness/workspaces": "workspace:*",
+    "@mini-harness/ui-primitives": "workspace:*",
+    "@mini-harness/ui-runtime": "workspace:*"
   }
 }

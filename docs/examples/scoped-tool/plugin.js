@@ -1,7 +1,7 @@
 import { sessionDisplayExtensions, toolExtensions } from 'mini-harness/plugin';
 
-export default function setup(_ctx, api) {
-  const greeting = api.service('exampleGreeting');
+export default function setup(ctx, api) {
+  const greeting = ctx.exampleGreeting;
   api.contribute(toolExtensions.register, {
     name: 'scoped_greeting',
     label: 'Scoped greeting',

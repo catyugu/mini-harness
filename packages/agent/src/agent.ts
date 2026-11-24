@@ -158,7 +158,9 @@ export class NativeAgent implements AgentPort {
     const event = { type: 'message', message: { role: 'user', content, timestamp: Date.now() }, presentation: input, ...delivery } as const;
     const entry = revision ? log.revise(event, revision.parentId, revision.expectedLeafId) : log.append(event);
     const displayed = input.userText ? [{ type: 'text', text: input.userText }, ...images] : images;
-    await emit({ type: 'user', source, model: delivery.selection.model, id: entry.id, submissionId: delivery?.submissionId, timestamp: event.message.timestamp, content: displayed, attachments: input?.attachments });
+    await emit({ type: 'user', source, model: delivery.selection.model, thinkingLevel: delivery.selection.thinkingLevel,
+      id: entry.id, parentId: entry.parentId, revised: Boolean(revision), submissionId: delivery.submissionId, inboxId: delivery.inboxId,
+      timestamp: event.message.timestamp, content: displayed, attachments: input.attachments });
   }
 
   /** Never retry an unknown tool outcome after restart or provider failure. */
@@ -180,13 +182,12 @@ export class NativeAgent implements AgentPort {
 
   async prompt(record: SessionRecord, prompt: string, emit: (event: AgentEvent) => void | Promise<void>,
     options: Parameters<AgentPort['prompt']>[3]): Promise<string> {
-    const { id } = record, { signal, choice, images = [], input = { userText: prompt, attachments: [] }, source = 'user', thinkingLevel, revision, changed, submissionId, fallback } = options;
+    const { id } = record, { signal, choice, images = [], input = { userText: prompt, attachments: [] }, source = 'user', thinkingLevel, revision, changed, submissionId, fallback, beginSubmission } = options;
     let runLog: SessionLogPort | undefined;
     try {
       signal.throwIfAborted();
       const log = runLog = this.sessions.log(id);
-      const target = revision && this.revisionTarget(id, revision.sourceEntryId, revision.expectedLeafId);
-      let model: ModelChoice | undefined = log.projection(target?.parentId).model;
+      let model: ModelChoice | undefined = log.projection(revision?.parentId).model;
       let capabilities: ReturnType<ModelCatalogPort['capabilities']>;
       let activeThinking: ThinkingLevel | undefined;
       if (!revision) this.closeUnfinishedTools(log);
@@ -234,7 +235,7 @@ export class NativeAgent implements AgentPort {
           signal.throwIfAborted();
           if (inbox.next(mode)?.id !== item.id) continue;
           await this.user(log, prepared, item.images, emit, 'user', {
-            inboxId: item.id, selection: { model: chosen, thinkingLevel: level }
+            submissionId, inboxId: item.id, selection: { model: chosen, thinkingLevel: level }
           });
           model = chosen;
           capabilities = nextCapabilities;
@@ -247,7 +248,8 @@ export class NativeAgent implements AgentPort {
       let submitted = false;
       const submit = async () => {
         signal.throwIfAborted();
-        const previous = log.projection(target?.parentId);
+        beginSubmission?.();
+        const previous = log.projection(revision?.parentId);
         const models = this.services.models(id);
         model = selectModel(models, { explicit: choice, stored: previous.model,
           fallback, preferStored: Boolean(record.parentId) || source !== 'user' });
@@ -255,7 +257,7 @@ export class NativeAgent implements AgentPort {
         activeThinking = resolveThinking(capabilities, thinkingLevel, previous.thinkingLevel);
         const prepared = await this.prepareInput(id, model, source, prompt, images, input, signal);
         await this.user(log, prepared, images, emit, source, { submissionId, selection: { model, thinkingLevel: activeThinking } },
-          revision && target ? { parentId: target.parentId, expectedLeafId: revision.expectedLeafId } : undefined);
+          revision);
         if (record.titleSource === 'auto' && !previous.messages.some((item) => item.role === 'user'))
           this.sessions.rename(id, (input.userText || input.attachments[0]?.name || prompt).slice(0, 72), 'auto');
         if (revision) this.closeUnfinishedTools(log);
@@ -297,12 +299,14 @@ export class NativeAgent implements AgentPort {
           return false;
         });
         if (invalidCall) {
-          log.append({ type: 'custom', namespace: 'agent.invalid-tool-calls', data: result });
+          log.append({ type: 'diagnostic', code: 'invalid-tool-calls', data: result });
           result = { ...result, content: result.content.filter((part) => part.type !== 'toolCall'),
             stopReason: 'error', errorMessage: 'The model returned duplicate or invalid tool call IDs; no tools were executed.' };
         }
         const assistant = log.append({ type: 'message', message: result });
-        emit({ type: 'assistant-end', id: assistant.id });
+        emit({ type: 'assistant-end', message: { id: assistant.id, parentId: assistant.parentId,
+          role: 'assistant', content: result.content, timestamp: result.timestamp,
+          error: result.stopReason === 'aborted' ? undefined : result.errorMessage } });
         if (result.errorMessage || result.stopReason === 'error' || result.stopReason === 'aborted')
           throw new Error(result.errorMessage || (signal.aborted ? 'Agent run cancelled' : 'Model request failed'));
         signal.throwIfAborted();
@@ -337,23 +341,22 @@ export class NativeAgent implements AgentPort {
                 output = { ...output, content };
               } catch (error) {
                 const failure = failedTool(call, 'Tool execution completed, but the model-visible result transformation failed.');
-                log.append({ type: 'message', message: failure });
-                emit({ type: 'tool', id: call.id, name: call.name, state: 'error', arguments: call.arguments, content: failure.content });
+                const entry = log.append({ type: 'message', message: failure });
+                emit({ type: 'tool', id: call.id, name: call.name, state: 'error', arguments: call.arguments,
+                  content: failure.content, entry: { id: entry.id, parentId: entry.parentId, timestamp: failure.timestamp } });
                 this.services.observe({ type: 'tool-ended', sessionId: id, tool: call.name, callId: call.id, failed: true, elapsedMs: output.elapsedMs }, toolSignal);
                 throw new Error('Could not transform the result of ' + call.name, { cause: error });
               }
             }
           }
-          if (executionId) {
-            log.append({ type: 'tool-accepted', executionId,
-              contentDelta: contentDelta(JSON.stringify(originalContent), JSON.stringify(output.content)) });
-          } else {
-            log.append({ type: 'message', message: output, elapsedMs: output.elapsedMs });
-          }
+          const entry = executionId
+            ? log.append({ type: 'tool-accepted', executionId,
+                contentDelta: contentDelta(JSON.stringify(originalContent), JSON.stringify(output.content)) })
+            : log.append({ type: 'message', message: output, elapsedMs: output.elapsedMs });
           const details = output.details;
           if (!output.isError && typeof details?.changedPath === 'string') changed?.(details.changedPath);
           emit({ type: 'tool', id: call.id, name: call.name, state: details?.approvalDenied === true ? 'denied' : output.isError ? 'error' : 'finished', arguments: call.arguments,
-            content: output.content,
+            content: output.content, entry: { id: entry.id, parentId: entry.parentId, timestamp: output.timestamp },
             elapsedMs: output.elapsedMs, approvalMs: typeof details?.approvalMs === 'number' ? details.approvalMs : undefined,
             sessionId: typeof details?.sessionId === 'string' ? details.sessionId : undefined,
             exitCode: typeof details?.exitCode === 'number' ? details.exitCode : undefined });

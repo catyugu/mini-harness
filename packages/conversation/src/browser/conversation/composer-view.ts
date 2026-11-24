@@ -4,12 +4,12 @@ import type { ThinkingLevel } from '@mini-harness/llm/vocabulary';
 import { fromMarkup, required, scopedElements } from '@mini-harness/ui-primitives/primitives';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { createComposer } from './composer.js';
-import type { createComposerModel } from './composer-model.js';
+import { isRunning } from '@mini-harness/sessions/run-state';
 import { createModelPicker } from './model-picker.js';
 import { createThinkingPicker } from './thinking-picker.js';
 
-export function mountComposer(ctx: Context, model: ReturnType<typeof createComposerModel>, signal: AbortSignal) {
-  const control = ctx.miniConversation;
+export function mountComposer(ctx: Context, signal: AbortSignal) {
+  const { miniConversation: control, miniComposer: model } = ctx;
   const composer = fromMarkup(`<form id="composer" class="composer">
           <div id="attachments" class="attachments" hidden></div>
           <div id="suggestions" class="suggestions" role="listbox" aria-label="Input suggestions" hidden></div>
@@ -40,7 +40,7 @@ export function mountComposer(ctx: Context, model: ReturnType<typeof createCompo
     prompt.style.height = 'auto';
     prompt.style.height = Math.min(prompt.scrollHeight, 210) + 'px';
   };
-  const ui = createComposer(composer, model.draft, control.report, model.commands, model.completions, signal);
+  const ui = createComposer(composer, model, control.report, signal);
   const modelPicker = createModelPicker(composer, model.choose, signal);
   const thinkingPicker = createThinkingPicker(composer, model.chooseThinking, signal);
   const removeToolbar = ctx.miniSlots.define('conversation.composer', element('composerExtensions'));
@@ -55,6 +55,7 @@ export function mountComposer(ctx: Context, model: ReturnType<typeof createCompo
   const permissionLabels: Record<ConversationPermission, string> = {
     standard: 'Standard', readOnly: 'Read-only', fullAccess: 'Full access'
   };
+  let previousPermission: ConversationPermission | undefined;
   const permissionOptions: Array<{ value: ConversationPermission; description: string }> = [
     { value: 'fullAccess', description: 'Run enabled tools without approval prompts, including Shell' },
     { value: 'standard', description: 'Ask before Shell commands; follow existing tool policies' },
@@ -62,6 +63,8 @@ export function mountComposer(ctx: Context, model: ReturnType<typeof createCompo
   ];
   function renderPermission() {
     const current = model.permission();
+    if (current === previousPermission) return;
+    previousPermission = current;
     const label = permissionLabels[current];
     permissionButton.replaceChildren(icon(current === 'readOnly' ? 'lock' : current === 'fullAccess' ? 'unlock' : 'shield'), document.createTextNode(label), icon('chevron'));
     permissionButton.setAttribute('aria-label', 'Permissions: ' + label);
@@ -103,40 +106,40 @@ export function mountComposer(ctx: Context, model: ReturnType<typeof createCompo
   };
   permissionPopup.addEventListener('toggle', () => permissionButton.setAttribute('aria-expanded', String(permissionPopup.matches(':popover-open'))), { signal: signal });
 
-  let previousDraft: ReturnType<typeof model.draft> | undefined;
+  let previousCatalog: ReturnType<typeof ctx.miniModels.get> | undefined;
+  let previousModel: ReturnType<typeof model.draft>['model'], previousThinking: ThinkingLevel | null | undefined;
   function render(focus = false) {
     const current = model.draft(), state = control.get();
-    const changed = current !== previousDraft;
-    if (changed || prompt.value !== current.text) {
+    const sending = isRunning(state.run) || state.interaction.operation === 'submit';
+    if (prompt.value !== current.text) {
       prompt.value = current.text;
       ui.resetSuggestions();
       adjustPrompt();
     }
-    previousDraft = current;
     const banner = element('draftMode');
-    banner.hidden = !current.revision;
-    required(banner.querySelector('span')).textContent = current.revision?.title ?? '';
-    element<'button'>('send').hidden = state.sending;
-    element('queueSend').hidden = !state.sending;
-    element<'button'>('stop').hidden = !state.sending;
-    element<'button'>('stop').disabled = state.cancelling;
-    ui.render();
-    if (state.pending) { element<'button'>('send').disabled = true; element<'button'>('queueSend').disabled = true; }
+    banner.hidden = !current.editTitle;
+    required(banner.querySelector('span')).textContent = current.editTitle ?? '';
+    element<'button'>('send').hidden = sending;
+    element('queueSend').hidden = !sending;
+    element<'button'>('stop').hidden = !isRunning(state.run);
+    element<'button'>('stop').disabled = Boolean(state.interaction.cancelling);
+    ui.render(Boolean(state.interaction.operation));
     renderPermission();
-    const catalog = ctx.miniModels.get(), choice = model.choice();
-    if (choice && !catalog.models.some((item) => item.configured && item.provider === choice.provider && item.id === choice.id)) {
-      model.choose(undefined); return;
+    const catalog = ctx.miniModels.get();
+    const choice = current.model ?? (sending ? state.session?.model : undefined) ?? catalog.recent;
+    const same = choice.provider === state.session?.model?.provider && choice.id === state.session.model.id;
+    const thinking = current.thinkingLevel === undefined ? same ? state.session?.thinkingLevel : undefined : current.thinkingLevel;
+    if (previousCatalog !== catalog || previousModel?.provider !== choice.provider || previousModel.id !== choice.id || previousThinking !== thinking) {
+      previousCatalog = catalog; previousModel = choice; previousThinking = thinking;
+      const selected = modelPicker.update(catalog.models, catalog.providers, choice);
+      const advertised = selected?.thinkingLevels ?? [];
+      const levels: ThinkingLevel[] = advertised.length ? ['off', ...advertised.filter((level) => level !== 'off')] : [];
+      thinkingPicker.update(levels, thinking);
     }
-    const selected = modelPicker.update(catalog.models, catalog.providers, choice ?? (state.sending ? state.conversation?.model : undefined) ?? catalog.recent);
-    const advertised = selected?.thinkingLevels ?? [];
-    const levels: ThinkingLevel[] = advertised.length ? ['off', ...advertised.filter((level) => level !== 'off')] : [];
-    const same = selected && selected.provider === state.conversation?.model?.provider && selected.id === state.conversation.model.id;
-    const thinking = model.thinking();
-    thinkingPicker.update(levels, thinking === undefined ? same ? state.view?.thinkingLevel : undefined : thinking);
     if (focus) { prompt.focus(); prompt.setSelectionRange(model.cursor(), model.cursor()); ui.refresh(true); }
   }
   async function send(queued = false) {
-    if (control.get().pending) return;
+    if (control.get().interaction.operation) return;
     if (!queued && !modelPicker.selected()) { control.report(new Error('Choose a configured model before sending.')); modelPicker.open(); return; }
     try { await model.send(queued); }
     catch (error) { control.report(error instanceof Error ? error : new Error(String(error))); }
@@ -146,7 +149,7 @@ export function mountComposer(ctx: Context, model: ReturnType<typeof createCompo
   prompt.onkeydown = (event) => {
     if (!event.defaultPrevented && event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
       event.preventDefault();
-      if (control.get().sending) void send(true); else composer.requestSubmit();
+      if (isRunning(control.get().run)) void send(true); else composer.requestSubmit();
     }
   };
   const syncText = () => model.setText(prompt.value, prompt.selectionStart, prompt.selectionEnd);
@@ -156,8 +159,7 @@ export function mountComposer(ctx: Context, model: ReturnType<typeof createCompo
   element('queueSend').onclick = () => void send(true);
   element('stop').onclick = () => void control.cancel().catch(control.report);
   model.subscribe((focus) => { render(focus); ui.refresh(true); }, signal);
-  control.subscribe(() => render(), signal);
-  ctx.miniSelection.subscribe(() => render(), signal);
+  control.subscribe(['session', 'run', 'interaction'], () => render(), signal);
   ctx.miniSelection.addEventListener('focus-composer', () => prompt.focus(), { signal });
   ctx.miniModels.subscribe(() => render(), signal);
   render();

@@ -65,14 +65,14 @@ test('a scoped plugin transaction excludes new runs in its subtree until commit'
   await runtime.start();
   const target = runtime.plugins.ctx.harnessRegistry.create();
   const obsolete = runtime.plugins.ctx.harnessRegistry.create();
-  const obsoleteScope = 'session:' + obsolete.id;
+  const obsoleteScope = `session:${obsolete.id}` as const;
   const obsoleteConfig = { disabledTools: ['shell'] };
   await runtime.configuration.update({ scopes: { [obsoleteScope]: obsoleteConfig } });
   const otherDirectory = join(root, 'other');
   mkdirSync(otherDirectory);
   const otherWorkspace = runtime.plugins.ctx.harnessWorkspaces.register(otherDirectory);
   const other = runtime.plugins.ctx.harnessRegistry.create({ workspaceId: otherWorkspace.id });
-  const workspace = 'workspace:' + target.workspaceId;
+  const workspace = `workspace:${target.workspaceId}` as const;
   const updating = runtime.configuration.update({ scopes: {
     [workspace]: { plugins: { staged: true } },
     [obsoleteScope]: obsoleteConfig

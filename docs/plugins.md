@@ -64,17 +64,16 @@ export default function setup(_ctx, api) {
 | `configuration.get(key)`, `.subscribe(key, listener)` | Read a field or listen for committed changes in this instance’s namespace and scope |
 | `configuration.set(key, value)`, `.patch(values)` | Validate and save fields in one transaction. The server SDK requires `configChanges: 'live'` for writes. |
 | `ctx.provide(name, service)` | Publish a declared service directly through Cordis |
-| `service(name)` | Read a declared required service or fail with its name |
-| `optionalService(name)` | Read a service declared in `optional` |
+| `ctx.serviceName`, `ctx.get(name)` | Read services declared in `inject` or look up a service declared in `optional` through Cordis |
 | `contribute(point, ...args)` | Register through a typed extension point owned by a capability. The host binds scope, identity and lifetime. |
 | `registerRoute(method, path, handler)` | Authenticated route under `/api/extensions/<id>`. Handler receives URL, `body(maxBytes?)` and `signal`. Application scope only. |
 | `prepareSession(id, signal)`, `scopedService(id, service)` | Prepare and resolve a declared service in a visible conversation. Tool handlers already run in a prepared scope. |
 | `registerScopeRequest(name, handler)` | Registers an authenticated operation for one mounted workspace or session instance. |
 | `ctx.effect(() => cleanup)` | Bind cleanup to the Cordis setup fiber. Setup may also return cleanup. |
 
-Return JSON from route handlers and honor their cancellation signals. Use the plugin lifetime signal for other work owned by setup. Use the credential or secret store for sensitive values.
+Return JSON from route handlers and honor their cancellation signals. For WebSocket upgrades, return a promise that settles once asynchronous handler work has ended. Plugin unload stops admission, signals accepted calls, waits for their handlers to settle and then releases plugin resources. A handler can write its own live configuration through `api.configuration`. Structural configuration changes start outside plugin requests. Use the plugin lifetime signal for other work owned by setup. Use the credential or secret store for sensitive values.
 
-For TypeScript, `api.service('harnessLlm')` infers `LlmPort`. Declare your own names once in the public service map; the same augmentation types the Cordis context. Declare the same names in the plugin descriptor so the host can validate them when it mounts the plugin.
+In TypeScript, `ctx.harnessLlm` has type `LlmPort`. Declare your own names once in the public service map; the same augmentation types the Cordis context. Declare the same names in the plugin descriptor so the host can validate them when it mounts the plugin.
 
 ```ts
 import type { Context, PluginApi } from 'mini-harness/plugin';
@@ -228,8 +227,9 @@ The local API requires a bearer credential. A trusted gateway can forward authen
 
 | Request | Result |
 | - | - |
-| `POST /api/sessions/:id/runs` with `{ "message": "...", "model": { "provider": "...", "id": "..." } }` | Starts a server-owned run; responds `202` with run ID and status. Both model and `thinkingLevel` are optional. |
+| `POST /api/sessions/:id/runs` with `{ "message": "...", "model": { "provider": "...", "id": "..." } }` | Starts a server-owned run. The `202` response includes run ID, status and `accepted`. Acceptance means the user message is durable. Both model and `thinkingLevel` are optional. |
 | `GET /api/sessions/:id/runs` | Latest run status, including terminal errors |
+| `GET /api/sessions/:id/runs/:run/input` | Input identified by the latest failed run, with original attachments when available and a list of files that must be reattached |
 | `GET /api/sessions/:id/events?run=<run-id>&after=<sequence>` | NDJSON events after the cursor; disconnecting removes only this observer |
 | `POST /api/sessions/:id/compact` | Summarize earlier context while idle; preserve two complete recent turns |
 | `POST /api/sessions/:id/cancel` | Explicitly cancel that conversation and running descendants |
@@ -259,11 +259,11 @@ The server runs one Runtime for all registered workspaces. Each conversation has
 | `GET /api/workspaces/:id/skills` | Names/descriptions from native SKILL.md discovery; invoke with `/skill:name` |
 | `GET /api/workspaces/:id/files/tree?path=...`, `/files/search?q=...` in the same workspace | Workspace-scoped listing/search; search follows `.gitignore` |
 | `GET /api/workspaces/:id/files/preview?path=...`, `/files/changes`, `/files/diff?path=...` in the same workspace | Bounded text and image preview, repository status, staged and working-tree differences |
-| `GET /api/approvals`, `POST /api/approvals` with `{id, allow}` | Pending Shell requests; allow once or deny |
+| `GET /api/approvals`, `POST /api/approvals` with `{id, allow}` | Pending approval requests; allow once or deny |
 
 New images (PNG/JPEG/GIF/WebP) require an image-capable model. Text-only models receive a placeholder for earlier images. Editing a message keeps its original images unless you remove them. Reattach any original text files when editing. UTF-8 text attachments are included in the model input. The conversation view displays their names alongside the original message. Limits: eight files, 6 MiB per image, 1 MiB per text file, 12 MiB total. Binary documents such as PDF/Office files are not parsed. Attachment content lives in the native Session Log; there is no independent upload store. Git inspection requires the selected workspace to be the repository root and caps output at 512 KiB. “Files written this turn” lists successful built-in `write`/`edit` paths; Git changes show the entire working tree, including earlier edits and shell changes.
 
-The file and Skill endpoints return 404 when their plugin is disabled. The Approvals endpoint lists pending decisions from the active Shell tool. Active runs must finish before Shell can be disabled. Disabling Shell clears any remaining approval requests. Standard conversations require approval for every enabled built-in Shell call. Full access conversations skip these prompts, including pending requests after a permission change; existing plugin and sandbox policies still apply. Requests expire after five minutes; stopping the run or server cancels pending approval. Approval permits the command under the existing shell policy. Reviewed local plugins remain trusted code; this is not a general-purpose containment mechanism.
+File and Skill endpoints return 404 when their plugins are disabled. The Approvals endpoint lists pending decisions for enabled capabilities. Cancelling a run, closing the server or unloading the request owner releases its pending requests. Approval follows each capability’s execution policy. For example, the built-in Shell tool requests confirmation in Standard conversations and skips that prompt in Full access. Both modes still use the configured Shell policy and sandbox.
 
 ## External development and resources
 
@@ -275,6 +275,8 @@ Mount HTTP routes with `api.registerRoute` and local WebSocket endpoints with `a
 
 `pluginConfig` changes remount plugins by default. A plugin declaring `configChanges: "live"` registers one handler with `api.onConfigChange`. The handler receives validated configuration and can keep its services alive. A failed update to a healthy instance restores its previous configuration. A valid configuration for an inactive or failed optional instance can be saved even when the instance fails to start. Active runs block changes that would replace their configured providers or unload their plugins. Handlers should make updates reversible. Store private state with `api.storage` and keep credentials in `api.secrets`. Disabling a plugin keeps its data. Uninstall deletes its data and secrets. Each workspace or session mount has its own storage. Browser plugins can use `api.watch` to refresh their own snapshot after the server calls `api.invalidate`. `api.locale` reports the browser's language, supports change listeners and selects translations from a supplied dictionary.
 
+
+Web and server providers are selected by the application graph. The supported server capability contracts are exported from `mini-harness/plugin`. Model catalog, LLM transport and file access have third-party consumers and replaceable providers. Tool registration and tool authorization have application-owned providers. Use `toolExtensions` to contribute tools. Runs, Settings and the Session Registry are application internals.
 
 ## Execute tasks and request confirmation
 
@@ -288,6 +290,10 @@ Export a synchronous `validateConfig(values, context)` next to the default serve
 
 Copy [Task notes](examples/task-notes) into an independent directory called `task-notes`, run `npm install` and `npm run build`, then load it with `MINI_HARNESS_DEV_PLUGIN` set to the absolute directory and enable it in Plugins. The example uses both published SDKs for tools, service publication, live settings, protected credentials, branch records and an approved child execution. Plugins shows the failing instance and stage for setup, configuration and browser errors.
 
-Use `conversationExtensions.record` for display records. The renderer gets an abort signal for the current render. To replace a component, use `slotExtensions.keyed` with `conversation.history` and key `history`, or `conversation.composer-view` and key `composer`. Declare `miniMessages` or `miniComposer` for contributions to the corresponding feature, and `miniConversation` to read the shared conversation state or submit, queue, cancel and revise messages from a replacement view. The selected renderer alone owns its DOM, listeners and render signal. Keyed slots prefer higher order and then the most recent registration; removing the replacement remounts the previous renderer. Tool and record renderer registrations likewise restore the previous registration on removal. Commands and message actions reject duplicate IDs.
+Use `slotExtensions.keyed` with `conversation.history` and key `history`, or with `conversation.composer-view` and key `composer`. Outlets prefer higher order, then the most recent contribution at that order. Removing the winner mounts the previous renderer with a fresh signal. Use the render signal to release listeners and async requests.
+
+Inject `miniConversation` to read the selected session, history, active response and tool activity. Subscribe to the fields the view displays. A newly mounted History reads the current state directly. Inject `miniComposer` to read and subscribe to the draft, edit text, add or remove `File` attachments, choose model and thinking level, set permissions, start a revision, send or queue. The model retains complete drafts by session or workspace and clears a submitted draft after acceptance if it is still the same input. See the [browser panel example](examples/browser-panel) with `replaceComposer` enabled.
+
+Use `conversationExtensions.record`, `.tool` and `.toolAction` to register replaceable renderers. Renderers and message actions receive an abort signal scoped to the rendered contribution. Message action and command IDs are exclusive. Use `settingsExtensions.plugin` to contribute content to individual plugin detail pages.
 
 For scoped browser operations, call `api.scopeRequest(pluginId, { kind, id }, operation, input, signal)`. The server resolves the exact target instance. `api.watchScope(pluginId, { kind, id }, refresh)` follows invalidations for that address and refreshes on reconnect. The scoped server plugin registers handlers with `registerScopeRequest` and publishes changes with `api.invalidate()`.

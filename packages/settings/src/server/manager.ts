@@ -1,4 +1,6 @@
-import { assertOutsideMountTransaction } from '@mini-harness/kernel/mutation-api';
+import { scopeKeys } from '@mini-harness/plugin-api/configuration';
+import type { ScopeKey } from '@mini-harness/kernel/scopes';
+import { assertOutsideMountTransaction, assertOutsidePluginRequest } from '@mini-harness/kernel/mutation-api';
 import { DomainError } from '@mini-harness/platform/errors';
 import { isDeepStrictEqual } from 'node:util';
 import { mergeSettings, readSettings } from './config.js';
@@ -9,7 +11,7 @@ import type { Settings } from '../shared/settings.js';
 
 interface PluginConfigurationPort {
   effective(settings: Settings): Settings;
-  configure(settings: Settings, commit?: () => void, released?: ReadonlySet<string>): Promise<void>;
+  configure(settings: Settings, commit?: () => void, released?: ReadonlySet<ScopeKey>): Promise<void>;
 }
 
 export class SettingsManager implements SettingsPort {
@@ -41,6 +43,7 @@ export class SettingsManager implements SettingsPort {
   }
 
   forgetPlugin<T>(id: string, uninstall: () => T) {
+    assertOutsidePluginRequest();
     return this.enqueue(() => {
       const plugins = { ...this.stored.plugins };
       const pluginConfig = { ...this.stored.pluginConfig };
@@ -49,8 +52,8 @@ export class SettingsManager implements SettingsPort {
       delete pluginConfig[id];
       delete readOnlyTools[id];
       const scopes = Object.fromEntries(Object.entries(this.stored.scopes).map(([key, entry]) => {
-        const scopedPlugins = { ...entry.plugins };
-        const scopedConfig = { ...entry.pluginConfig };
+        const scopedPlugins = { ...entry?.plugins };
+        const scopedConfig = { ...entry?.pluginConfig };
         delete scopedPlugins[id];
         delete scopedConfig[id];
         return [key, { ...entry, plugins: scopedPlugins, pluginConfig: scopedConfig }];
@@ -62,10 +65,11 @@ export class SettingsManager implements SettingsPort {
     });
   }
 
-  forgetScopes(keys: string[]) {
+  forgetScopes(keys: ScopeKey[]) {
+    assertOutsidePluginRequest();
     return this.enqueue(async () => {
       const released = new Set(keys);
-      const scopes = Object.fromEntries(Object.entries(this.stored.scopes).filter(([key]) => !released.has(key)));
+      const scopes = Object.fromEntries(scopeKeys(this.stored).filter((key) => !released.has(key)).map((key) => [key, this.stored.scopes[key]]));
       const next = { ...this.stored, scopes };
       const changed = !isDeepStrictEqual(next, this.stored);
       const host = this.host();
@@ -75,10 +79,11 @@ export class SettingsManager implements SettingsPort {
   }
 
   update(patch: unknown) {
+    assertOutsidePluginRequest();
     return this.transact(() => patch);
   }
 
-  writePlugin(id: string, key: string | undefined, patch: unknown, check: () => void) {
+  writePlugin(id: string, key: ScopeKey | undefined, patch: unknown, check: () => void) {
     return this.transact(() => {
       check();
       const values = configurationPatch(patch);

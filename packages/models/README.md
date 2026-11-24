@@ -20,7 +20,7 @@ Implements [LLM](../llm/README.md) contracts. The Pi SDK is confined to the adap
 
 ## Lifecycle
 
-The application store drains credential writes at disposal. Scoped model selections remain separate from the application preference.
+The application store drains credential writes at disposal. Accepted user input from a root user run updates the application preference. Models orders and drains preference writes and reports failures independently of run execution.
 
 ## Configuration
 

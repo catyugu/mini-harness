@@ -25,7 +25,6 @@ export interface ConversationView extends Conversation {
   messages: ViewMessage[];
   records: SessionDisplayRecord[];
   leafId: string | null;
-  model: ModelChoice;
   thinkingLevel?: ThinkingLevel;
   partial?: string;
   tools: Extract<StreamEvent, { type: 'tool' }>[];

@@ -1,24 +1,24 @@
+import { KeyedContributions } from '@mini-harness/ui-runtime/contribution';
 import type { SessionDisplayRecord } from '@mini-harness/sessions/display-record';
-import type { MessageAction, RecordRenderer, ToolView } from '../composer-api.js';
+import type { MessageAction, RecordRenderer, ToolRenderer, ToolView } from '../history-api.js';
 
 export class MessageExtensions {
   private readonly actions = new Map<string, MessageAction>();
-  private readonly renderers = new Map<string, ((tool: ToolView) => HTMLElement | undefined)[]>();
-  private readonly toolActions = new Map<string, ((tool: ToolView) => HTMLElement | undefined)[]>();
-  private readonly records = new Map<string, RecordRenderer[]>();
+  private readonly renderers = new KeyedContributions<string, ToolRenderer>();
+  private readonly toolActions = new KeyedContributions<string, ToolRenderer>();
+  private readonly records = new KeyedContributions<string, RecordRenderer>();
   private readonly events = new EventTarget();
 
-  constructor(private readonly report: (error: Error) => void) {}
+  readonly report = (error: unknown) => console.error('Conversation extension failed', error);
 
-  private replace<T>(registry: Map<string, T[]>, key: string, value: T, event: string) {
-    const stack = registry.get(key) ?? [];
-    registry.set(key, stack);
-    stack.push(value);
-    this.events.dispatchEvent(new Event(event));
+  private replace<T>(registry: KeyedContributions<string, T>, key: string, value: T, event: string) {
+    const remove = registry.add(key, value);
+    const change = () => this.events.dispatchEvent(new CustomEvent(event, { detail: key }));
+    change();
     return () => {
-      stack.splice(stack.indexOf(value), 1);
-      if (!stack.length) registry.delete(key);
-      this.events.dispatchEvent(new Event(event));
+      const selected = registry.get(key);
+      remove();
+      if (selected !== registry.get(key)) change();
     };
   }
 
@@ -30,9 +30,11 @@ export class MessageExtensions {
     this.events.addEventListener('records', listener, { signal });
   }
 
-  renderRecord(record: SessionDisplayRecord, context: { sessionId: string; signal: AbortSignal }) {
-    try { return this.records.get(record.plugin)?.at(-1)?.(structuredClone(record), context); }
-    catch (error) { this.report(error instanceof Error ? error : new Error(String(error))); }
+  recordRenderer(plugin: string) { return this.records.get(plugin); }
+
+  renderRecord(render: RecordRenderer | undefined, record: SessionDisplayRecord, context: { sessionId: string; signal: AbortSignal }) {
+    try { return render?.(structuredClone(record), context); }
+    catch (error) { this.report(error); }
   }
 
   actionsForMessage() { return [...this.actions.values()].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)); }
@@ -48,17 +50,17 @@ export class MessageExtensions {
     return () => { this.actions.delete(action.id); this.events.dispatchEvent(new Event('change')); };
   }
 
-  registerTool(name: string, render: (tool: ToolView) => HTMLElement | undefined, action = false) {
+  registerTool(name: string, render: ToolRenderer, action = false) {
     const registry = action ? this.toolActions : this.renderers;
     return this.replace(registry, name, render, 'tools');
   }
 
-  subscribeToTools(listener: () => void, signal: AbortSignal) {
-    this.events.addEventListener('tools', listener, { signal });
+  subscribeToTools(listener: (name: string) => void, signal: AbortSignal) {
+    this.events.addEventListener('tools', (event) => { if (event instanceof CustomEvent && typeof event.detail === 'string') listener(event.detail); }, { signal });
   }
 
-  render(tool: ToolView, action = false) {
-    try { return (action ? this.toolActions : this.renderers).get(tool.name)?.at(-1)?.(tool); }
-    catch (error) { this.report(error instanceof Error ? error : new Error(String(error))); }
+  render(tool: ToolView, signal: AbortSignal, action = false) {
+    try { return (action ? this.toolActions : this.renderers).get(tool.name)?.(tool, signal); }
+    catch (error) { this.report(error); }
   }
 }

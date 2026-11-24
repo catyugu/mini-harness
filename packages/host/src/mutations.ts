@@ -1,29 +1,30 @@
+import type { ScopeKey } from '@mini-harness/kernel/scopes';
 import { DomainError } from '@mini-harness/platform/errors';
-import { assertOutsideMountTransaction, type MutationPort } from '@mini-harness/kernel/mutation-api';
+import { assertOutsideMountTransaction, assertOutsidePluginRequest, type MutationPort } from '@mini-harness/kernel/mutation-api';
 
 /** One transaction gate for HTTP settings and installed plugin operations. */
 export class MutationGate implements MutationPort {
   private active?: Promise<unknown>;
   private closing = false;
-  private readonly structural = new Set<{ scopes?: ReadonlySet<string> }>();
+  private readonly structural = new Set<{ scopes?: ReadonlySet<ScopeKey> }>();
 
-  private readonly guards = new Set<(scopes?: ReadonlySet<string>) => void>();
+  private readonly guards = new Set<(scopes?: ReadonlySet<ScopeKey>) => void>();
 
-  guard(check: (scopes?: ReadonlySet<string>) => void) {
+  guard(check: (scopes?: ReadonlySet<ScopeKey>) => void) {
     this.guards.add(check);
     return () => { this.guards.delete(check); };
   }
 
   seal() { this.closing = true; }
 
-  protect(scopes?: ReadonlySet<string>) {
+  protect(scopes?: ReadonlySet<ScopeKey>) {
     for (const check of this.guards) check(scopes);
     const guard = { scopes };
     this.structural.add(guard);
     return () => { this.structural.delete(guard); };
   }
 
-  admit(scopeKeys: readonly string[]) {
+  admit(scopeKeys: readonly ScopeKey[]) {
     assertOutsideMountTransaction();
     if (this.closing) throw new DomainError('unavailable', 'Application is closing');
     if ([...this.structural].some(({ scopes }) => !scopes || scopeKeys.some((key) => scopes.has(key))))
@@ -32,6 +33,7 @@ export class MutationGate implements MutationPort {
   async run<T>(operation: () => Promise<T> | T): Promise<T> {
     assertOutsideMountTransaction();
     if (this.closing) throw new DomainError('unavailable', 'Application is closing');
+    assertOutsidePluginRequest();
     if (this.active) throw new DomainError('conflict', 'Configuration is already changing');
     const work = Promise.resolve().then(operation);
     this.active = work;

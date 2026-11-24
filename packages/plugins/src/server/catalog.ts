@@ -5,9 +5,9 @@ import { DomainError } from '@mini-harness/platform/errors';
 import { readdirSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { Check } from 'typebox/value';
-import type { PluginSettings } from '@mini-harness/plugin-api/configuration';
-import type { PluginScope, ScopeSettings } from '@mini-harness/kernel/scopes';
-import { resolveCapabilities } from '@mini-harness/kernel/composition';
+import { scopeKeys, type PluginSettings } from '@mini-harness/plugin-api/configuration';
+import type { PluginScope, ScopeKey, ScopeSettings } from '@mini-harness/kernel/scopes';
+import { ProtectedProviderError, resolveCapabilities } from '@mini-harness/kernel/composition';
 import { pluginBundle } from './source.js';
 import type { Context } from 'cordis';
 import type { ServiceMap } from '@mini-harness/kernel/services';
@@ -45,10 +45,10 @@ export interface ApplicationRequirements {
 
 export class PluginCatalog {
   private readonly builtins: Map<string, DiscoveredPlugin>;
+  readonly lockedPlugins: ReadonlySet<string>;
   readonly fixedPlugins: ReadonlySet<string>;
   readonly requiredServices: ReadonlySet<string>;
   readonly requiredBrowserServices: ReadonlySet<string>;
-  private readonly protectedServices: Set<string>;
   private readonly protectedProviders: ReadonlyMap<string, string>;
   constructor(private readonly directory: string, builtins: PluginDescriptor[], rootServices: string[],
     private readonly devPlugin?: string, requirements: ApplicationRequirements = {}) {
@@ -56,8 +56,8 @@ export class PluginCatalog {
     this.fixedPlugins = requirements.fixedPlugins ?? new Set();
     this.requiredServices = requirements.requiredServices ?? new Set();
     this.requiredBrowserServices = requirements.requiredBrowserServices ?? new Set();
-    this.protectedProviders = requirements.protectedProviders ?? new Map();
-    this.protectedServices = new Set([...rootServices, ...this.protectedProviders.keys()]);
+    this.protectedProviders = new Map([...rootServices.map((name) => [name, 'application'] as const), ...requirements.protectedProviders ?? []]);
+    this.lockedPlugins = new Set(this.protectedProviders.values());
     if (this.builtins.size !== builtins.length) throw new Error('Duplicate builtin plugin ID');
     const services = new Set(builtins.flatMap(({ provides }) => provides ?? []));
     for (const service of rootServices) if (services.has(service)) throw new Error('Duplicate provider for ' + service);
@@ -111,21 +111,22 @@ export class PluginCatalog {
   descriptors(): DiscoveredPlugin[] { return [...this.builtins.values(), ...this.discover()]; }
 
   metadata(settings: PluginSettings, failures: ReadonlyMap<string, string>,
-    mounted: (id: string) => boolean, context: (scope?: string) => Context): PluginMetadata[] {
-    return this.descriptors().filter(({ id }) => !this.fixedPlugins.has(id) && localPluginIdPattern.test(id)).map((descriptor) => {
+    mounted: (id: string) => boolean, context: (scope?: ScopeKey) => Context): PluginMetadata[] {
+    return this.descriptors().filter(({ id }) => !this.fixedPlugins.has(id) && !this.lockedPlugins.has(id) && localPluginIdPattern.test(id)).map((descriptor) => {
       const { id, source, resources, inject, setup, optional, browserStyles, browserRequires, browserInject,
         browserProvides, configChanges, validateConfig, ...metadata } = descriptor;
-      const configurationError = (key?: string) => {
+      const configurationError = (key?: ScopeKey) => {
         try {
           const values = key ? { ...settings.pluginConfig[id], ...settings.scopes[key]?.pluginConfig?.[id] } : settings.pluginConfig[id];
           const config = this.configValues(id, values, descriptor.configSchema);
           this.validateConfig(descriptor, config, 'inspect', context(key), descriptor.validateConfig, key ? key + '/' + id : id);
         } catch (error) { return error instanceof Error ? error.message : String(error); }
       };
-      const scopes = metadata.scope === 'application'
+      const scopes: { scope: 'application' | ScopeKey; enabled: boolean }[] = metadata.scope === 'application'
         ? [{ scope: 'application', enabled: this.enabled(descriptor, settings) }]
-        : Object.entries(settings.scopes).flatMap(([scope, value]) => {
-          if (!scope.startsWith(metadata.scope + ':')) return [];
+        : scopeKeys(settings).flatMap((scope) => {
+          const value = settings.scopes[scope];
+          if (!value || !scope.startsWith(metadata.scope + ':')) return [];
           const enabled = value.plugins?.[id] === true || Object.values(value.providers ?? {}).includes(id);
           return enabled || Object.hasOwn(value.pluginConfig ?? {}, id) ? [{ scope, enabled }] : [];
         });
@@ -170,10 +171,10 @@ export class PluginCatalog {
   }
 
   changedConfig(descriptors: DiscoveredPlugin[], previous: PluginSettings, settings: PluginSettings) {
-    const validations: { descriptor: DiscoveredPlugin; config: Record<string, unknown>; key?: string }[] = [];
+    const validations: { descriptor: DiscoveredPlugin; config: Record<string, unknown>; key?: ScopeKey }[] = [];
     for (const descriptor of descriptors) {
       const { id, configSchema, scope } = descriptor;
-      const validate = (values: Record<string, unknown> | undefined, before: Record<string, unknown> | undefined, key?: string) => {
+      const validate = (values: Record<string, unknown> | undefined, before: Record<string, unknown> | undefined, key?: ScopeKey) => {
         if (isDeepStrictEqual(values, before)) return;
         const config = this.configValues(id, values, configSchema);
         if (descriptor.validateConfig || descriptor.source) validations.push({ descriptor, config, key });
@@ -181,12 +182,12 @@ export class PluginCatalog {
       if (scope === 'application') validate(settings.pluginConfig[id], previous.pluginConfig[id]);
       else {
         validate(settings.pluginConfig[id], previous.pluginConfig[id]);
-        for (const key of Object.keys(settings.scopes)) {
+        for (const key of scopeKeys(settings)) {
           if (!key.startsWith(scope + ':')) continue;
           const changed = settings.scopes[key]?.pluginConfig?.[id];
           const before = previous.scopes[key]?.pluginConfig?.[id];
           const selected = settings.scopes[key];
-          if (changed === undefined && !selected.plugins?.[id] && !Object.values(selected.providers ?? {}).includes(id)) continue;
+          if (changed === undefined && !selected?.plugins?.[id] && !Object.values(selected?.providers ?? {}).includes(id)) continue;
           validate({ ...settings.pluginConfig[id], ...changed }, { ...previous.pluginConfig[id], ...before }, key);
         }
       }
@@ -199,9 +200,6 @@ export class PluginCatalog {
     overrides?: ScopeSettings, unavailable?: (id: string, error: unknown) => boolean) {
     const isApp = scope === 'application';
     const choices = isApp ? settings.providers : overrides?.providers ?? {};
-    for (const [service, id] of Object.entries(choices))
-      if (this.protectedServices.has(service) && (inherited.get(service) ?? this.protectedProviders.get(service)) !== id)
-        throw new DomainError('invalid_input', 'Protected service cannot be overridden: ' + service);
     const enabled: DiscoveredPlugin[] = [];
     const configs = new Map<string, Record<string, unknown>>();
     for (const [id, active] of Object.entries(overrides?.plugins ?? {})) {
@@ -228,8 +226,9 @@ export class PluginCatalog {
       try {
         return resolveCapabilities(enabled.map((item) => ({
           ...item, requires: item.requires?.filter((id) => !parentIds.has(id))
-        })), inherited, choices, unavailable, this.protectedServices);
+        })), inherited, choices, unavailable, this.protectedProviders);
       } catch (error) {
+        if (error instanceof ProtectedProviderError && !isApp) throw error;
         throw new DomainError('invalid_input', error instanceof Error ? error.message : 'Invalid plugin dependency graph');
       }
     })();
@@ -252,13 +251,11 @@ export class PluginCatalog {
 
 }
 
-export function changedSelection(instance: string, previous: PluginSettings, settings: PluginSettings) {
-  const separator = instance.indexOf('/');
-  if (separator < 0) return settings.plugins[instance] !== previous.plugins[instance] ||
+export function changedSelection(id: string, previous: PluginSettings, settings: PluginSettings, key?: ScopeKey) {
+  if (!key) return settings.plugins[id] !== previous.plugins[id] ||
     !isDeepStrictEqual(previous.providers, settings.providers) ||
     !isDeepStrictEqual(previous.browserProviders, settings.browserProviders) ||
-    !isDeepStrictEqual(previous.pluginConfig[instance], settings.pluginConfig[instance]);
-  const key = instance.slice(0, separator), id = instance.slice(separator + 1);
+    !isDeepStrictEqual(previous.pluginConfig[id], settings.pluginConfig[id]);
   const before = previous.scopes[key], after = settings.scopes[key];
   return before?.plugins?.[id] !== after?.plugins?.[id] ||
     !isDeepStrictEqual(before?.providers, after?.providers) ||

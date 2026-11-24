@@ -12,7 +12,7 @@ Owns descriptor fields, namespaced configuration shape and plugin selection vali
 
 ## API
 
-`PluginApi`, `PluginDescriptor` and `ConfigValidationContext` are published through the server SDK.
+`PluginApi`, `PluginDescriptor` and `ConfigValidationContext` are published through the server SDK. Use the Cordis Context to read and publish container services. `scopedService` resolves the provider in a prepared conversation.
 
 ## Dependencies
 

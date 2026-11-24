@@ -24,6 +24,8 @@ Disposes consumers before providers, aborts plugin lifetimes before draining the
 
 Capability owners register workspace and session addresses. The mutation port supports guards owned by active capabilities, and Cordis events coordinate readiness and quiescence.
 
+Graph resolution enforces application-owned provider identities. Scope addresses, ancestry and mutation admission use `ScopeKey`.
+
 ## Testing
 
 [Plugin composition and lifecycle tests](../../test/plugins/) exercise selection, scope isolation, cleanup and rollback.

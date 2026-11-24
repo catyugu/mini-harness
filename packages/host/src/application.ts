@@ -16,7 +16,7 @@ export class MiniHarnessRuntime {
   private stopping?: Promise<void>;
 
   constructor(readonly paths: Paths, network?: NetworkPort,
-    upgrade?: (path: string, handler: import('@mini-harness/transport/routes').UpgradeHandler) => () => void) {
+    upgrade?: (path: string, handler: import('@mini-harness/transport/routes').UpgradeHandler) => () => Promise<void>) {
     const ctx = new Context();
     this.configuration = new SettingsManager(paths, () => this.plugins);
     const changes = new ProjectionChanges();
