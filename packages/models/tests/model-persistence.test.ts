@@ -13,18 +13,10 @@ test('recent main model survives navigation, child overrides and a restart throu
   const config = readJson<any>(join(paths.home, 'models.json'), {});
   config.providers['local-mock'].models.push({ ...config.providers['local-mock'].models[0], id: 'second-model' });
   writeJson(join(paths.home, 'models.json'), config);
-  writeJson(paths.settings, { model: { provider: 'local-mock', id: 'mock-model' }, queueMode: 'followUp', appearance: 'dark',
-    pluginConfig: { 'core:theme': { appearance: 'light' } } });
+  writeJson(paths.settings, { pluginConfig: { 'core:models': { model: { provider: 'local-mock', id: 'mock-model' } } } });
   let runtime = new MiniHarnessRuntime(paths);
   t.after(async () => { await runtime.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
   await runtime.start();
-  const migrated = readJson<any>(paths.settings, {});
-  assert.deepEqual(migrated.pluginConfig, {
-    'core:models': { model: { provider: 'local-mock', id: 'mock-model' } },
-    'core:conversation': { queueMode: 'followUp' },
-    'core:theme': { appearance: 'light' },
-  });
-  for (const key of ['model', 'queueMode', 'appearance']) assert.equal(Object.hasOwn(migrated, key), false);
   const old = runtime.registry.create();
   const other = runtime.registry.create();
   await runtime.runs.send(old.id, 'First');

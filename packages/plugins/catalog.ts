@@ -87,7 +87,7 @@ export class PluginCatalog {
 
   metadata(descriptors = this.descriptors()): PluginMetadata[] {
     return descriptors.filter(({ required }) => !required).map((item) => {
-      const { source, resources, inject, setup, optional, browserRequires, browserInject, browserProvides, required, configChanges, validateConfig, migrateConfig, ...metadata } = item;
+      const { source, resources, inject, setup, optional, browserRequires, browserInject, browserProvides, required, configChanges, validateConfig, ...metadata } = item;
       return metadata;
     });
   }

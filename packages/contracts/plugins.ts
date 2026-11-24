@@ -37,16 +37,18 @@ export interface PluginDescriptor extends PluginMetadata {
   required?: boolean;
   /** A mounted plugin may opt in to configuration updates without a restart. */
   configChanges?: 'live';
-  /** Startup migration from former root fields, keyed by the old field name. Built-ins only. */
-  migrateConfig?: Record<string, string>;
-  validateConfig?(config: Readonly<Record<string, unknown>>, models: import('./models.js').ModelCatalogPort,
-    operation: 'mount' | 'inspect' | 'write'): void;
+  validateConfig?(config: Readonly<Record<string, unknown>>, context: ConfigValidationContext): void;
   inject?: string[];
   optional?: string[];
   browserRequires?: string[];
   browserInject?: string[];
   browserProvides?: string[];
   setup?(ctx: Context, api: PluginApi): void | (() => void | Promise<void>) | Promise<void | (() => void | Promise<void>)>;
+}
+
+export interface ConfigValidationContext {
+  readonly operation: 'mount' | 'inspect' | 'write';
+  service<Name extends keyof ServiceMap & string>(name: Name): NonNullable<ServiceMap[Name]>;
 }
 
 export interface PluginApi {

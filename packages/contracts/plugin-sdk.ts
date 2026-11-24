@@ -6,7 +6,7 @@ export interface ServiceMap extends Pick<Context,
   | 'harnessRegistry' | 'harnessPrompt' | 'harnessSessions' | 'harnessTools'> {}
 
 export type { PluginScope, ScopeSettings } from './capabilities.js';
-export type { PluginApi, PluginDescriptor } from './plugins.js';
+export type { PluginApi, PluginDescriptor, ConfigValidationContext } from './plugins.js';
 export type { ModelFailure, ModelRequestContent, ModelRequestTransform, ModelRetry, PromptContext, PromptSection, StepContext, ToolResultContext, ToolResultTransform } from './extensions.js';
 export type { CapabilityObservation, ToolDecision, ToolProjection } from './events.js';
 export type { FileAccessPort, WorkspaceFileAccess } from './files.js';

@@ -8,7 +8,6 @@ export const manifest: PluginDescriptor = {
   browserInject: ['miniSelection', 'miniSessions', 'miniWorkspaces', 'miniModels', 'miniLayout', 'miniPages', 'miniHeader', 'miniProjections'],
   id: 'core:conversation', title: 'Conversation', description: 'Conversation interface', required: true,
   configChanges: 'live',
-  migrateConfig: { queueMode: 'queueMode' },
   configSchema: Type.Object({
     queueMode: Type.Union([Type.Literal('steer'), Type.Literal('followUp')], { default: 'steer' }),
   }, { additionalProperties: false }),

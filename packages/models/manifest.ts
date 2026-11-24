@@ -9,16 +9,15 @@ export const manifest: PluginDescriptor = {
   browserInject: ['miniSettings', 'miniProjections'], browserProvides: ['miniModels'],
   id: 'core:models', title: 'Models', description: 'Model endpoints and credentials', required: true,
   configChanges: 'live',
-  migrateConfig: { model: 'model' },
   configSchema: Type.Object({
     model: Type.Object({
       provider: Type.String({ maxLength: 160, default: '' }),
       id: Type.String({ maxLength: 160, default: '' }),
     }, { default: {}, additionalProperties: false }),
   }, { additionalProperties: false }),
-  validateConfig(config, models, operation) {
+  validateConfig(config, { service, operation }) {
     const model = config.model as ModelChoice;
-    if (operation === 'write' && (model.provider || model.id) && !models.resolve(model))
+    if (operation !== 'mount' && (model.provider || model.id) && !service('harnessModels').resolve(model))
       throw new HttpError('invalid_input', 'Unknown model: ' + model.provider + '/' + model.id);
   },
   inject: ['harnessModels', 'harnessModelAdmin', 'harnessState', 'harnessRoutes', 'harnessMutations', 'harnessChanges'],

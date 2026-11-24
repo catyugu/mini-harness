@@ -17,7 +17,7 @@ export class MiniHarnessRuntime {
   constructor(readonly paths: Paths, network?: NetworkPort,
     upgrade?: (path: string, handler: import('@mini-harness/contracts/routes').UpgradeHandler) => () => void) {
     const ctx = new Context();
-    this.configuration = new SettingsManager(paths, (settings) => this.plugins.effective(settings), plugins);
+    this.configuration = new SettingsManager(paths, (settings) => this.plugins.effective(settings));
     const changes = new EventTarget();
     const emit = (domain: string) => changes.dispatchEvent(new CustomEvent('change', { detail: { domain } }));
     this.unsubscribeSettings = this.configuration.subscribe(() => emit('settings'));
@@ -64,7 +64,7 @@ export class MiniHarnessRuntime {
   get delegation() { return this.plugins.ctx.harnessDelegation; }
   get hasActiveWork() { return this.runs.size > 0 || this.agent.hasPending; }
 
-  start() { return this.plugins.start(this.settings, () => this.configuration.finishMigration()); }
+  start() { return this.plugins.start(this.settings); }
   createConversation(input: { workspaceId?: string } = {}) { return this.registry.create(input); }
   getConversation(id: string) { return this.plugins.ctx.harnessConversationView.read(id); }
   export(ids: string[]) { return this.registry.export(ids); }

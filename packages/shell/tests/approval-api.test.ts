@@ -49,7 +49,7 @@ test('shell approval gates execution, handles rejection and cancellation', async
   await finish(session.id);
   const denied = (await request('/sessions/' + session.id)).body.messages.filter((m: { role: string }) => m.role === 'toolResult').at(-1);
   assert.equal(denied.isError, true);
-  assert.match(JSON.stringify(denied.content), /conversation permissions/);
+  assert.match(JSON.stringify(denied.content), /Tool denied by conversation/);
   assert.equal((await request('/sessions/' + session.id + '/permissions', 'PATCH', { permission: 'standard' })).status, 200);
   await request('/sessions/' + session.id + '/runs', 'POST', { message: 'Cancel pending approval' });
   await waitUntil(() => request('/approvals'), (r) => r.body.length > 0);
