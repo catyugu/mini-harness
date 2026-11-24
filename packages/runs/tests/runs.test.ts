@@ -254,17 +254,21 @@ test('retry looks up the failed delivery by its native entry identity', async (t
   await runs.send(session.id, 'Earlier user message');
   const log = registry.log(session.id);
   log.append({ type: 'inbox-enqueued', item: { id: 'recover-this', mode: 'followUp', text: 'fail this queued input', images: [] } });
-  const failed = await runs.startRun(session.id, 'Manual input waiting for delivery');
-  assert.equal(failed.accepted, false);
-  assert.equal(failed.state, 'failed');
-  assert.ok(failed.inputEntryId);
+  const failed = runs.startRun(session.id, 'Manual input waiting for delivery');
+  assert.equal(failed.state, 'queued');
+  await assert.rejects(expectPresent(runs.completion(session.id), 'active run'));
+  assert.equal(runs.info(session.id)?.state, 'failed');
+  assert.ok(runs.info(session.id)?.inputEntryId);
+  const delivered = log.projection().messages.find(({ submissionId }) => submissionId === failed.id);
+  assert.equal(delivered?.inboxId, 'recover-this');
   assert.deepEqual(runs.retryInput(session.id, failed.id), {
     message: 'fail this queued input', attachments: [], missing: [], model: { provider: 'local-mock', id: 'mock-model' }, thinkingLevel: undefined
   });
   const attachment = { name: 'fixture.txt', mimeType: 'text/plain', data: Buffer.from('private text').toString('base64') };
-  const accepted = await runs.startRun(session.id, 'fail this user input', { attachments: [attachment] });
-  assert.equal(accepted.accepted, true);
-  await assert.rejects(runs.completion(session.id) ?? Promise.resolve());
+  const accepted = runs.startRun(session.id, 'fail this user input', { attachments: [attachment] });
+  assert.equal(accepted.state, 'queued');
+  await assert.rejects(expectPresent(runs.completion(session.id), 'active run'));
+  assert.equal(log.projection().messages.find(({ submissionId }) => submissionId === accepted.id)?.inboxId, undefined);
   assert.deepEqual(runs.retryInput(session.id, accepted.id)?.missing, ['fixture.txt']);
   assert.throws(() => runs.retryInput(session.id, failed.id), /no longer the failed conversation run/);
 });

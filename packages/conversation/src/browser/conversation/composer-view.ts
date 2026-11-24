@@ -139,7 +139,7 @@ export function mountComposer(ctx: Context, signal: AbortSignal) {
     if (focus) { prompt.focus(); prompt.setSelectionRange(model.cursor(), model.cursor()); ui.refresh(true); }
   }
   async function send(queued = false) {
-    if (control.get().interaction.operation) return;
+    if (control.get().interaction.operation || model.draft().awaitingAcceptance) return;
     if (!queued && !modelPicker.selected()) { control.report(new Error('Choose a configured model before sending.')); modelPicker.open(); return; }
     try { await model.send(queued); }
     catch (error) { control.report(error instanceof Error ? error : new Error(String(error))); }

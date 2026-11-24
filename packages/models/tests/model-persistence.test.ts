@@ -65,9 +65,11 @@ test('a failed recent-model write does not delay accepted input or terminate exe
   renameSync(paths.settings, old);
   mkdirSync(paths.settings);
   try {
-    const run = await runs.startRun(session.id, 'Accept this despite the unwritable setting', { model: { provider: 'local-mock', id: 'second-model' } });
-    assert.equal(run.accepted, true);
+    const run = runs.startRun(session.id, 'Accept this despite the unwritable setting', { model: { provider: 'local-mock', id: 'second-model' } });
+    assert.equal(run.state, 'queued');
     await runs.completion(session.id);
+    assert.equal(runtime.plugins.ctx.harnessModelPreference.recent().id, 'second-model');
+    await runs.send(registry.create().id, 'Use the current preference despite the failed write');
     assert.equal(runs.info(session.id)?.state, 'completed');
     assert.equal(mock.requests.at(-1)?.model, 'second-model');
     await runtime.stop();

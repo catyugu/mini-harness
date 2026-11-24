@@ -17,7 +17,7 @@ export function createConversationController(ctx: Context, api: FrontendApi): Co
   const { miniSelection: selection, miniSessions: sessions } = ctx;
   const subscriptions = new Set<{ parts: readonly (keyof ConversationState)[]; listener: () => void }>();
   let state: ConversationState = { history: emptyHistory, partial: '', tools: [], queue: [], interaction: { status: '' } };
-  let visit = new AbortController(), queueRevision = 0;
+  let visit = new AbortController(), queueRevision = 0, branchRevision = 0;
   const active = () => state.session?.id;
   function update(patch: Partial<ConversationState>) {
     const previous = state;
@@ -49,6 +49,7 @@ export function createConversationController(ctx: Context, api: FrontendApi): Co
   function display(item: ConversationView, signal: AbortSignal, revealWorkspace: boolean) {
     const { run, messages, records, leafId, partial = '', tools, queue, ...session } = item;
     queueRevision++;
+    branchRevision++;
     update({ session, run, history: { messages, records, leafId }, partial, tools, queue });
     selection.selectConversation(item, revealWorkspace);
     status(item.logError ?? '', Boolean(item.logError));
@@ -163,13 +164,11 @@ export function createConversationController(ctx: Context, api: FrontendApi): Co
     async sync(_revision, reconnect, changedId) {
       const id = active(), signal = visit.signal;
       if (!id || (!reconnect && changedId && id !== changedId)) return;
+      const revision = ++branchRevision;
       try {
-        const history = state.history;
         const branch = await api.request<Pick<ConversationView, 'records' | 'leafId'>>(path(id, '/records'), { signal });
-        if (!signal.aborted && (isRunning(state.run) || state.history === history)) {
-          update({ history: { ...state.history, ...branch } });
-        }
-      } catch (error) { if (!signal.aborted) throw error; }
+        if (!signal.aborted && revision === branchRevision) update({ history: { ...state.history, ...branch } });
+      } catch (error) { if (!signal.aborted && revision === branchRevision) throw error; }
     }
   }));
   api.onDispose(ctx.miniProjections.register('queue', {

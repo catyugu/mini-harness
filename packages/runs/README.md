@@ -20,7 +20,7 @@ Prepares session scopes and resolves [Agent](../agent/README.md) services and re
 
 ## Lifecycle
 
-`core:runs` mounts at application scope. Subscribers may disconnect without cancelling work. Shutdown aborts and drains active runs. Failed runs identify the accepted input by stable Session Log entry ID.
+`core:runs` mounts at application scope. HTTP returns the admitted run without waiting for input delivery. Subscribers may disconnect without cancelling work. Shutdown aborts and drains active runs. Failed runs identify the accepted input by stable Session Log entry ID.
 
 ## Testing
 

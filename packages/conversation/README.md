@@ -26,7 +26,7 @@ Application browser plugins `core:conversation`, `core:composer`, `core:history`
 
 `core:conversation.queueMode` defaults to `steer` in the manifest and can be updated in Settings.
 
-The native composer and message history occupy keyed outlets. Replacing a renderer disposes its resources without discarding shared controller state; removing a replacement restores the previous renderer. Plugin display records project from the active log branch. Each record renderer owns a separate lifetime and uses the saved title as a fallback.
+The native composer and message history occupy keyed outlets. Replacing a renderer disposes its resources without discarding shared controller state; removing a replacement restores the previous renderer. Plugin display records project from the active log branch. Record updates carry the branch leaf identity, including private records. Each record renderer owns a separate lifetime and releases resources immediately on failure before displaying the saved title as a fallback.
 
 ## Testing
 
