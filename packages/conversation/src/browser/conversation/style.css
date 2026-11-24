@@ -98,10 +98,15 @@
   border-radius: var(--radius-lg); box-shadow: var(--shadow);
 }
 .composer:focus-within { border-color: var(--accent); }
-.composer textarea {
-  display: block; min-height: 32px; max-height: min(210px, 35vh); width: 100%; padding: 4px;
-  border: 0; outline: 0; background: transparent; resize: none; overflow: auto;
+.composer #prompt {
+  display: block; min-height: 42px; max-height: min(210px, 35vh); width: 100%; padding: 4px;
+  border: 0; outline: 0; background: transparent; overflow: auto;
+  white-space: pre-wrap; overflow-wrap: anywhere; cursor: text;
 }
+.composer #prompt:empty::before { content: attr(aria-placeholder); color: var(--muted); pointer-events: none; }
+.file-reference { color: var(--focus); cursor: pointer; text-decoration: none; overflow-wrap: anywhere; }
+.file-reference:hover, .file-reference:focus-visible { text-decoration: underline; text-underline-offset: 2px; }
+.file-reference svg { width: 12px; height: 12px; margin-inline-end: 4px; vertical-align: -1px; }
 .composer-footer { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: var(--control); padding-left: 4px; }
 #send, #stop { border: 0; background: var(--accent); color: var(--on-accent); width: var(--control); height: var(--control); border-radius: var(--control-radius); }
 

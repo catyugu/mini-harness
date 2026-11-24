@@ -1,11 +1,12 @@
 import { scopedElements } from '@mini-harness/ui-primitives/primitives';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { fileCard, decodedSize, imageMime } from './attachment-card.js';
+import type { PromptEditor } from './prompt-editor.js';
 import type { ComposerCommand, ComposerModel, Suggestion } from '../composer-api.js';
 
-export function createComposer(root: HTMLElement, model: ComposerModel, report: (error: Error) => void, signal: AbortSignal) {
+export function createComposer(root: HTMLElement, editor: PromptEditor, model: ComposerModel, report: (error: Error) => void, signal: AbortSignal) {
   const { element } = scopedElements(root);
-  const prompt = element<'textarea'>('prompt'), form = element<'form'>('composer');
+  const prompt = editor.element, form = element<'form'>('composer');
   const attachmentList = element('attachments'), suggestions = element('suggestions');
   let completion: AbortController;
   let files: ReturnType<ComposerModel['draft']>['attachments'] | undefined;
@@ -32,7 +33,6 @@ export function createComposer(root: HTMLElement, model: ComposerModel, report: 
       remove.onclick = () => model.removeAttachment(index); card.append(remove); return card;
     }));
     attachmentList.hidden = !files.length;
-    prompt.required = !files.length;
   };
   const addFiles = (files: File[]) => model.addFiles(files).catch((error) => {
     if (!signal.aborted) report(error instanceof Error ? error : new Error(String(error)));
@@ -53,13 +53,13 @@ export function createComposer(root: HTMLElement, model: ComposerModel, report: 
   let buttons: HTMLButtonElement[] = [], selected = -1;
 
   function currentToken(): Token | undefined {
-    if (prompt.selectionStart !== prompt.selectionEnd) return;
-    const cursor = prompt.selectionStart;
-    const match = /(?:^|\s)([^\s\p{L}\p{N}])([^\s]*)$/u.exec(prompt.value.slice(0, cursor));
+    if (editor.selectionStart !== editor.selectionEnd) return;
+    const cursor = editor.selectionStart;
+    const match = /(?:^|\s)([^\s\p{L}\p{N}])([^\s]*)$/u.exec(editor.value.slice(0, cursor));
     if (!match) return;
     const [, marker, query] = match;
     if (marker !== '/' && !model.completer(marker)) return;
-    const tail = /^\S*/.exec(prompt.value.slice(cursor))?.[0] ?? '';
+    const tail = /^\S*/.exec(editor.value.slice(cursor))?.[0] ?? '';
     if (marker === '/' && !/^[\w:-]*$/.test(query + tail)) return;
 
     return { start: cursor - query.length - 1, end: cursor + tail.length, query, kind: marker as Token['kind'] };
@@ -76,7 +76,7 @@ export function createComposer(root: HTMLElement, model: ComposerModel, report: 
   }
 
   function replace(text: string, match: Token) {
-    prompt.setRangeText(text, match.start, match.end, 'end');
+    editor.setRangeText(text, match.start, match.end);
     hide();
     prompt.focus();
     prompt.dispatchEvent(new Event('input'));
@@ -88,7 +88,7 @@ export function createComposer(root: HTMLElement, model: ComposerModel, report: 
       try { void Promise.resolve(command.run()).catch(report); }
       catch (error) { report(error instanceof Error ? error : new Error(String(error))); }
     } else {
-      const space = !complete && !/^\s/.test(prompt.value.slice(match.end)) ? ' ' : '';
+      const space = !complete && !/^\s/.test(editor.value.slice(match.end)) ? ' ' : '';
       replace('/' + command.name + space, match);
       if (!complete) hide();
     }
@@ -195,7 +195,7 @@ export function createComposer(root: HTMLElement, model: ComposerModel, report: 
           if (!controller.signal.aborted) renderOptions(entries, Math.max(selected, 0), emptyText);
         },
         replace: (text) => {
-          if (!controller.signal.aborted) replace(text + (/^\s/.test(prompt.value.slice(match.end)) ? '' : ' '), match);
+          if (!controller.signal.aborted) replace(text + (/^\s/.test(editor.value.slice(match.end)) ? '' : ' '), match);
         }
       })).catch((error) => { if (!controller.signal.aborted) renderOptions([], 0, error.message); });
     }
@@ -223,7 +223,7 @@ export function createComposer(root: HTMLElement, model: ComposerModel, report: 
     }
   });
   document.addEventListener('pointerdown', (event) => {
-    if (event.target !== prompt && !suggestions.contains(event.target as Node)) hide();
+    if (!prompt.contains(event.target as Node) && !suggestions.contains(event.target as Node)) hide();
   }, { signal });
   signal.addEventListener('abort', hide, { once: true });
   return {

@@ -10,7 +10,9 @@ export function mountHistory(ctx: Context, extensions: MessageExtensions, signal
   const view = createMessageView(ctx.miniDialogs, signal, messages, {
     render: (tool, lifetime, action) => extensions.render(tool, lifetime, action),
     messageActions: () => extensions.actionsForMessage(),
-    report: extensions.report
+    report: extensions.report,
+    openReference: (path) => { if (!ctx.miniComposer.openReference(path)) control.report(new Error('Enable Workspace files to open this reference.')); },
+    openAttachment: (file, sessionId) => extensions.openAttachment(file, sessionId)
   }, () => ({ sessionId: control.get().session?.id, leafId: control.get().history.leafId }),
   () => void ctx.miniComposer.retry().catch(control.report));
   const records = new Map<string, { record: SessionDisplayRecord; render?: ReturnType<typeof extensions.recordRenderer>;

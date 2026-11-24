@@ -9,9 +9,11 @@ import { renderMarkdown } from '@mini-harness/ui-primitives/markdown';
 import { button } from '@mini-harness/ui-primitives/primitives';
 import { data } from '@mini-harness/ui-runtime/http';
 import { fileCard, imageMime } from './attachment-card.js';
+import { referenceNodes } from './references.js';
 
 export function createMessageView(dialogs: Context['miniDialogs'], signal: AbortSignal, messages: HTMLElement,
-  extensions: { render(tool: ToolView, signal: AbortSignal, action?: boolean): HTMLElement | undefined; messageActions(): MessageAction[]; report(error: unknown): void },
+  extensions: { render(tool: ToolView, signal: AbortSignal, action?: boolean): HTMLElement | undefined; messageActions(): MessageAction[]; report(error: unknown): void;
+    openReference(path: string): void; openAttachment(file: NonNullable<ViewMessage['attachments']>[number], sessionId: string): boolean },
   current: () => { sessionId?: string; leafId?: string | null }, retryLast: () => void) {
 const toolItems = new WeakMap<HTMLDetailsElement, Parameters<typeof toolCard>[0]>();
 const resources = new Map<HTMLElement, AbortController>();
@@ -74,6 +76,7 @@ function addMessage(role: 'user' | 'assistant' | 'error', text: string, timestam
   const item = document.createElement('article');
   item.className = 'message ' + role;
   if (role === 'assistant') renderMarkdown(item, text);
+  else if (role === 'user') item.append(...referenceNodes(text, extensions.openReference));
   else item.textContent = text;
   const wrapper = document.createElement('div');
   wrapper.className = 'message-row ' + role;

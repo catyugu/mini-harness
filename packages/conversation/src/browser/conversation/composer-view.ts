@@ -4,6 +4,7 @@ import type { ThinkingLevel } from '@mini-harness/llm/vocabulary';
 import { fromMarkup, required, scopedElements } from '@mini-harness/ui-primitives/primitives';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { createComposer } from './composer.js';
+import { PromptEditor } from './prompt-editor.js';
 import { isRunning } from '@mini-harness/sessions/run-state';
 import { createModelPicker } from './model-picker.js';
 import { createThinkingPicker } from './thinking-picker.js';
@@ -14,7 +15,7 @@ export function mountComposer(ctx: Context, signal: AbortSignal) {
           <div id="attachments" class="attachments" hidden></div>
           <div id="suggestions" class="suggestions" role="listbox" aria-label="Input suggestions" hidden></div>
           <div id="draftMode" class="draft-mode" hidden><span></span><button type="button" aria-label="Cancel editing">Cancel</button></div>
-          <textarea id="prompt" rows="2" placeholder="Ask anything…" aria-label="Message" aria-controls="suggestions" aria-autocomplete="list" required></textarea>
+          <div id="prompt" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Message" aria-placeholder="Ask anything…" aria-controls="suggestions" aria-autocomplete="list"></div>
           <div class="composer-footer">
             <div id="composerExtensions" class="composer-tools"></div>
             <button id="permissionSelect" class="permission-select" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="permissionResults"></button>
@@ -35,12 +36,11 @@ export function mountComposer(ctx: Context, signal: AbortSignal) {
           </div>
         </form>`) as HTMLFormElement;
   const { element } = scopedElements(composer);
-  const prompt = element<'textarea'>('prompt');
-  const adjustPrompt = () => {
-    prompt.style.height = 'auto';
-    prompt.style.height = Math.min(prompt.scrollHeight, 210) + 'px';
-  };
-  const ui = createComposer(composer, model, control.report, signal);
+  const prompt = element('prompt');
+  const editor = new PromptEditor(prompt, (path) => {
+    if (!model.openReference(path)) control.report(new Error('Enable Workspace files to open this reference.'));
+  }, signal);
+  const ui = createComposer(composer, editor, model, control.report, signal);
   const modelPicker = createModelPicker(composer, model.choose, signal);
   const thinkingPicker = createThinkingPicker(composer, model.chooseThinking, signal);
   const removeToolbar = ctx.miniSlots.define('conversation.composer', element('composerExtensions'));
@@ -114,10 +114,9 @@ export function mountComposer(ctx: Context, signal: AbortSignal) {
   function render(focus = false) {
     const current = model.draft(), state = control.get();
     const sending = isRunning(state.run) || state.interaction.operation === 'submit';
-    if (prompt.value !== current.text) {
-      prompt.value = current.text;
+    if (editor.value !== current.text) {
+      editor.value = current.text;
       ui.resetSuggestions();
-      adjustPrompt();
     }
     const banner = element('draftMode');
     banner.hidden = !current.editTitle;
@@ -139,7 +138,7 @@ export function mountComposer(ctx: Context, signal: AbortSignal) {
       const levels: ThinkingLevel[] = advertised.length ? ['off', ...advertised.filter((level) => level !== 'off')] : [];
       thinkingPicker.update(levels, thinking);
     }
-    if (focus) { prompt.focus(); prompt.setSelectionRange(model.cursor(), model.cursor()); ui.refresh(true); }
+    if (focus) { prompt.focus(); editor.setSelectionRange(model.cursor(), model.cursor()); ui.refresh(true); }
   }
   async function send(queued = false) {
     if (control.get().interaction.operation || model.draft().awaitingAcceptance) return;
@@ -155,10 +154,11 @@ export function mountComposer(ctx: Context, signal: AbortSignal) {
       if (isRunning(control.get().run)) void send(true); else composer.requestSubmit();
     }
   };
-  const syncText = () => model.setText(prompt.value, prompt.selectionStart, prompt.selectionEnd);
-  prompt.oninput = () => { syncText(); adjustPrompt(); };
-  prompt.addEventListener('select', syncText, { signal });
-  prompt.addEventListener('click', syncText, { signal });
+  const syncText = () => model.setText(editor.value, editor.selectionStart, editor.selectionEnd);
+  prompt.oninput = syncText;
+  document.addEventListener('selectionchange', () => {
+    if (document.activeElement === prompt) syncText();
+  }, { signal });
   element('queueSend').onclick = () => void send(true);
   element('stop').onclick = () => void control.cancel().catch(control.report);
   model.subscribe((focus) => { render(focus); ui.refresh(true); }, signal);
