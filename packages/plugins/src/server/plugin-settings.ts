@@ -20,10 +20,10 @@ export function pluginSettings(root: Context, writer?: ConfigWriter): PluginConf
     const request = pluginRequestSignal();
     const lifetime = caller.fiber.signal;
     const signal = request ? AbortSignal.any([lifetime, request]) : lifetime;
-    const { pluginId, scopeKey } = pluginInstance(caller);
+    const { pluginId, scopeKey, writableConfig } = pluginInstance(caller);
     const check = () => signal.throwIfAborted();
     check();
-    if (!writer) throw new Error('Plugin configuration writes are unavailable');
+    if (!writer || !writableConfig) throw new Error('Plugin configuration writes require a live schema');
     let listener: ReturnType<typeof addAbortListener> | undefined;
     const aborted = new Promise<never>((_, reject) => {
       listener = addAbortListener(signal, () => reject(signal.reason));

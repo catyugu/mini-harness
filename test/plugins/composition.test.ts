@@ -63,7 +63,7 @@ test('scoped plugins inherit declared services and tool policies, and release th
   const cleaned = join(root, 'released');
   writePlugin(paths.plugins, 'workspace-greeting', { scope: 'workspace', inject: ['harnessSessions'], provides: ['exampleGreeting'] }, `
 export const provide = ["exampleGreeting"];
-export const inject = ["harnessSessions","harnessPluginRoutes","harnessPluginData","harnessPluginChanges"];
+export const inject = ["harnessSessions","harnessPluginRoutes","harnessPluginData","harnessPluginChanges","harnessTools"];
 import { pluginScope } from "${new URL("../../packages/sdk/src/plugin.js", import.meta.url).href}";
 import { appendFileSync } from 'node:fs';
 export const apply = (ctx, config) => {
@@ -72,6 +72,7 @@ export const apply = (ctx, config) => {
       ctx.provide('exampleGreeting', { greet: (name) => pluginScope(ctx).workspaceId + ':' + name });
       const sessions = ctx.harnessSessions.access();
       ctx.harnessPluginRoutes.scope('start', () => sessions.create({ title: 'Scoped root' }));
+      ctx.harnessPluginRoutes.scope('tools', (id) => ctx.harnessTools.forSession(id).map(({ name }) => name));
       ctx.harnessPluginRoutes.scope('greet', (input) => {
         ctx.harnessPluginData.write('seen', input);
         ctx.harnessPluginChanges.invalidate();
@@ -109,6 +110,8 @@ export const apply = (ctx, config) => {
   const tools = app.runtime.plugins.ctx.harnessTools;
   const names = (id: string) => tools.forSession(id).map(({ name }) => name);
   assert.ok(names(parent.id).includes('scoped_greeting'));
+  assert.ok((await request(operation(workspaceKey, 'tools'), 'POST', { input: parent.id })).body.includes('scoped_greeting'));
+  assert.deepEqual((await request(operation(workspaceKey, 'tools'), 'POST', { input: outside.id })).body, []);
   assert.ok(names(child.id).includes('scoped_greeting'));
   assert.ok(!names(child.id).includes('read'));
   for (const id of [sibling.id, outside.id]) {

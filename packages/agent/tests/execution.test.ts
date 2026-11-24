@@ -1,3 +1,4 @@
+import { Context } from 'mini-harness/cordis';
 import { fixture as httpFixture } from '../../../test/support/api-fixture.js';
 import { prepareInput } from '@mini-harness/input/prepare';
 import type { ThinkingLevel } from '@mini-harness/llm/vocabulary';
@@ -28,10 +29,12 @@ function fixture(t: TestContext, llm: LlmPort, retryModel?: () => Promise<ModelR
   const sessions = new SessionRegistry(paths, new WorkspaceCatalog(paths));
   t.after(() => { sessions.dispose(); rmSync(root, { recursive: true, force: true }); });
   const tools = new ToolRegistry();
+  const ctx = new Context();
+  ctx.provide('harnessTools', tools.service());
   const agent = new NativeAgent(sessions, {
     models: () => ({ list: () => [], available: async () => [], resolve: (choice) => choice,
       capabilities: (choice) => ({ id: model.id, name: 'Fixture', input: choice.id === 'text-only' ? ['text'] : ['text', 'image'], contextWindow: 32000, maxTokens: 1024, reasoning: true, thinkingLevels: thinkingLevels(choice.id) }) }),
-    llm: () => llm, tools: () => tools.service(), prompt: () => ({ build: async () => 'Fixture', register: () => () => {} }),
+    llm: () => llm, tools: () => ctx.harnessTools, prompt: () => ({ build: async () => 'Fixture', register: () => () => {} }),
     policy: () => ({ maxTurns: 8, autoCompact: false }), retryModel, observe: () => {}
   });
   const record = sessions.create();

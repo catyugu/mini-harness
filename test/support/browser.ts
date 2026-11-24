@@ -22,6 +22,7 @@ export async function startIsolatedHost(paths: ReturnType<typeof createFixturePa
     env: { ...process.env, MINI_HARNESS_HOME: paths.home },
     stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true
   });
+  const closed = new Promise<void>((resolve) => { child.once('close', () => resolve()); });
   let output = '';
   child.stdout?.on('data', (data) => { output += data.toString(); });
   child.stderr?.on('data', (data) => { output += data.toString(); });
@@ -35,13 +36,25 @@ export async function startIsolatedHost(paths: ReturnType<typeof createFixturePa
           url: info.url as string,
           token,
           async stop() {
-            if (child.exitCode !== null || child.signalCode !== null) return;
-            await new Promise<void>((resolve) => {
-              const done = () => { clearTimeout(timer); child.off('close', done); resolve(); };
-              const timer = setTimeout(done, 5000);
-              child.once('close', done);
+            if (child.exitCode !== null || child.signalCode !== null) return closed;
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(new Error('mini-harness shutdown timed out')), 5000);
+            try {
+              const response = await fetch(info.url + '/api/shutdown', {
+                method: 'POST', headers: { Authorization: 'Bearer ' + token }, signal: controller.signal
+              });
+              await response.arrayBuffer();
+              if (!response.ok) throw new Error('mini-harness shutdown returned ' + response.status);
+              await Promise.race([closed, new Promise<never>((_, reject) => {
+                if (controller.signal.aborted) reject(controller.signal.reason);
+                else controller.signal.addEventListener('abort', () => reject(controller.signal.reason), { once: true });
+              })]);
+            } catch (error) {
+              if (child.exitCode !== null || child.signalCode !== null) return closed;
               child.kill('SIGTERM');
-            });
+              await closed;
+              throw error;
+            } finally { clearTimeout(timer); }
           }
         };
       }

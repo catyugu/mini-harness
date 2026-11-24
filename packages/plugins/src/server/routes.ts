@@ -7,6 +7,22 @@ import type { PluginRoutes, UpgradeHandler } from '@mini-harness/transport/route
 const routePath = /^\/(?:[a-zA-Z0-9_-]+\/)*[a-zA-Z0-9_-]+$/;
 export const scopeOperation = /^[a-z][a-z0-9-]{0,63}$/;
 
+function networkEffect(ctx: Context, register: () => () => Promise<void>) {
+  const signal = ctx.fiber.signal;
+  return ctx.effect(() => {
+    const release = register();
+    let closing: Promise<void> | undefined;
+    const close = () => closing ??= release();
+    // Closing the transport also aborts body reads and WebSocket I/O.
+    const abort = () => { void close().catch(() => {}); };
+    signal.addEventListener('abort', abort, { once: true });
+    return () => {
+      signal.removeEventListener('abort', abort);
+      return close();
+    };
+  });
+}
+
 export class PluginRouteRegistry {
   private readonly requests = new Map<string, (input: unknown, signal: AbortSignal) => Promise<unknown>>();
 
@@ -23,7 +39,7 @@ export class PluginRouteRegistry {
         if (scopeKey || !routePath.test(path) || !['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method))
           throw new Error('Invalid plugin route');
         const lifetime = caller.fiber.signal;
-        return caller.effect(() => ctx.harnessRoutes.register(method, '/api/extensions/' + pluginId + path,
+        return networkEffect(caller, () => ctx.harnessRoutes.register(method, '/api/extensions/' + pluginId + path,
           request => caller.fiber.run(signal => withPluginRequest(signal, () => handler({ ...request, signal })), request.signal)
             .catch(error => {
               if (lifetime.aborted) throw new DomainError('invalid_input', 'Route is no longer available', { cause: error });
@@ -34,7 +50,7 @@ export class PluginRouteRegistry {
         const caller = Service.caller(this);
         const { pluginId, scopeKey } = pluginInstance(caller);
         if (scopeKey || !routePath.test(path) || !upgrade) throw new Error('Invalid WebSocket route');
-        return caller.effect(() => upgrade('/api/extensions/' + pluginId + path, (request, socket, head, signal) =>
+        return networkEffect(caller, () => upgrade('/api/extensions/' + pluginId + path, (request, socket, head, signal) =>
           caller.fiber.run(lifetime => withPluginRequest(lifetime, () => handler(request, socket, head, lifetime)), signal)));
       },
       scope(name, handler) {

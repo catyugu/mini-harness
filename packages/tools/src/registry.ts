@@ -2,7 +2,7 @@ import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
 import { toolNamePattern } from '@mini-harness/llm/vocabulary';
 import { Check, Errors } from 'typebox/value';
 import { Service, type Context } from 'mini-harness/cordis';
-import { pluginInstance } from '@mini-harness/plugin-api/instance';
+import { pluginInstance, sessionVisible } from '@mini-harness/plugin-api/instance';
 import { isToolContent, type ToolDefinition, type ToolPort, type ToolRegistrationOptions } from './api.js';
 import type { ToolDecision } from './events.js';
 import type { ToolAccess, ToolPolicy } from './policy.js';
@@ -23,15 +23,19 @@ export class ToolRegistry {
 
   service(): ToolPort {
     const registry = this;
-    return Service.track({
+    const visibleToCaller = (service: ToolPort, id: string) => {
+      const caller = Service.caller(service);
+      return !caller.fiber.runtime || sessionVisible(caller, id);
+    };
+    return Service.track<ToolPort>({
       register(definition, options) {
         const context = Service.caller(this);
         const { scopeKey } = pluginInstance(context);
         const bind = 'bind' in definition ? definition.bind : () => definition;
         return registry.registerBinding(definition.name, bind, { ...options, context, scope: scopeKey });
       },
-      forSession: this.forSession.bind(this),
-      isAvailable: this.isAvailable.bind(this),
+      forSession(id) { return visibleToCaller(this, id) ? registry.forSession(id) : []; },
+      isAvailable(id, tool) { return visibleToCaller(this, id) && registry.isAvailable(id, tool); },
       readOnlyRegistrations: this.readOnlyRegistrations.bind(this)
     });
   }

@@ -51,7 +51,7 @@ A service provider declares `provide = ['exampleGreeting']` and calls `ctx.provi
 | `harnessApprovalRequests` | `request(id, prompt, signal)` requests a user decision for a visible conversation. |
 | `harnessPluginRoutes` | `register()` and `upgrade()` publish authenticated routes under `/api/extensions/<id>` for application plugins. `scope()` registers a workspace or session RPC. |
 | `harnessPluginData` and `harnessPluginSecrets` | Read, write and remove data in the caller's own plugin and scope namespace. |
-| `harnessPluginSettings` | Read the current effective config, subscribe to committed changes or write this instance's configuration. |
+| `harnessPluginSettings` | Read the current effective config, subscribe to committed changes or write this instance's configuration when it declares a live schema. |
 | `harnessPluginChanges` | Invalidate the plugin's browser projection after a domain mutation. |
 
 Use `sessionContext(ctx, sessionId, signal)` to prepare a visible session's context and `scopedService(ctx, sessionId, name)` for a declared service in the prepared scope. Session writes and scope preparation belong in runtime calls after plugin setup. See [scoped providers](scoped-providers.md).

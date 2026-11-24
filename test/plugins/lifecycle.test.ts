@@ -319,6 +319,11 @@ export const inject = ["harnessPluginRoutes","harnessSettingsStore"];
 export const apply = (ctx) => {
       ctx.effect(() => () => mark('app:disposed'));
       ctx.harnessPluginRoutes.register('GET', '/wait', ({ signal }) => wait('http', signal));
+      ctx.harnessPluginRoutes.register('POST', '/body', async ({ body }) => {
+        mark('body:entered');
+        try { return await body(); }
+        finally { mark('body:drained'); }
+      });
       ctx.harnessPluginRoutes.register('POST', '/disable', async () => {
         try { await ctx.harnessSettingsStore.update({ plugins: { drain: false } }); }
         catch (error) { return { error: error.message }; }
@@ -344,6 +349,13 @@ export const apply = (ctx) => {
   assert.equal(app.runtime.settings.plugins.drain, true);
   const current = request('/extensions/drain/wait');
   const currentScope = request('/plugins/scoped-drain/scopes/' + scope + '/wait', 'POST', {});
+  const bodyStatus = new Promise<number | undefined>((resolve, reject) => {
+    const request = httpRequest(base + '/api/extensions/drain/body', {
+      method: 'POST', headers: { ...headers, 'Content-Length': '20' }
+    }, response => { response.resume(); resolve(response.statusCode); request.destroy(); });
+    request.once('error', reject);
+    request.write('{"partial":');
+  });
   const closed = new Promise<void>((resolve, reject) => {
     const request = httpRequest(base + '/api/extensions/drain/socket', {
       headers: { ...headers, Connection: 'Upgrade', Upgrade: 'websocket' }
@@ -353,15 +365,16 @@ export const apply = (ctx) => {
   });
   try {
     await waitUntil(() => existsSync(trace) ? readFileSync(trace, 'utf8') : '', (log) =>
-      ['http:entered', 'ws:entered', 'scope:entered'].every((entry) => log.includes(entry)));
+      ['http:entered', 'ws:entered', 'scope:entered', 'body:entered'].every((entry) => log.includes(entry)));
   } finally { assert.equal((await toggle(false)).status, 200); }
   const log = readFileSync(trace, 'utf8').split('\n');
-  for (const [name, disposal] of [['http', 'app'], ['ws', 'app'], ['scope', 'scope']]) {
+  for (const [name, disposal] of [['http', 'app'], ['ws', 'app'], ['scope', 'scope'], ['body', 'app']]) {
     const drained = log.indexOf(name + ':drained');
     assert.ok(drained > log.indexOf(name + ':entered') && drained < log.indexOf(disposal + ':disposed'), log.join(', '));
   }
   await closed;
   assert.equal((await current).status, 400);
+  assert.equal(await bodyStatus, 400);
   assert.equal((await currentScope).status, 503);
   assert.equal((await request('/extensions/drain/wait')).status, 404);
   assert.equal((await request('/plugins/scoped-drain/scopes/' + scope + '/wait', 'POST', {})).status, 404);

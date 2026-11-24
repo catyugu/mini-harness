@@ -1,4 +1,4 @@
-import { Context, type Entry } from 'mini-harness/cordis';
+import { Context, getTraceable, type Entry } from 'mini-harness/cordis';
 import type { HostServices, PluginScope, ScopeKey } from './scopes.js';
 
 interface PluginInstance {
@@ -6,6 +6,7 @@ interface PluginInstance {
   scope: PluginScope;
   scopeKey?: ScopeKey;
   trusted: boolean;
+  writableConfig: boolean;
 }
 
 const identities = new WeakMap<Entry, PluginInstance>();
@@ -61,12 +62,12 @@ export async function sessionContext(ctx: Context, id: string, signal?: AbortSig
   const scopes = ctx.get('harnessScopes')!;
   const key = `session:${id}` as const;
   await scopes.prepare(key, signal ? AbortSignal.any([signal, lifetime]) : lifetime);
-  return scopes.context(key);
+  return ctx.extend({ [Context.isolate]: scopes.context(key)[Context.isolate] });
 }
 
 export function scopedService<Name extends keyof HostServices & string>(ctx: Context, id: string, name: Name) {
   ctx.fiber.signal.throwIfAborted();
   if (!sessionVisible(ctx, id)) throw new Error('Conversation outside plugin scope');
   if (!(name in ctx.fiber.inject)) throw new Error('Required service is not declared: ' + name);
-  return ctx.get('harnessScopes')!.require(`session:${id}`, name);
+  return getTraceable(ctx, ctx.get('harnessScopes')!.require(`session:${id}`, name));
 }

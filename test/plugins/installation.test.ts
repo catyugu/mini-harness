@@ -97,7 +97,7 @@ export const inject = ["harnessPluginRoutes"];
 import { label } from 'mini-setup-helper';
 export const apply = (ctx) => { ctx.harnessPluginRoutes.register('GET', '/label', () => label); };
 `,
-    'web.js': "export default () => {};",
+    'web.js': "export const inject = ['miniPages']; export function apply() {}",
     'web/panel.css': '.panel { color: inherit; }',
     'web/preload.js': "export default (signal) => { signal.throwIfAborted(); };",
     'web/private.js': 'export const privateValue = "not published";'
@@ -141,7 +141,6 @@ export const apply = (ctx) => { ctx.harnessPluginRoutes.register('GET', '/label'
   assert.equal(await (await request('/extensions/' + id + '/label')).json(), 'From dependency');
   const bootstrap = await (await request('/bootstrap')).json();
   const entry = bootstrap.ui.find((entry: { id: string }) => entry.id === id);
-  assert.deepEqual(entry.inject, ['miniPages']);
   const asset = (path: string) => fetch('http://127.0.0.1:' + port + path);
   assert.equal(await (await asset(entry.browser)).text(), files['web.js']);
   const css = await asset(entry.styles[0]);

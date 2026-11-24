@@ -265,6 +265,7 @@ export class PluginHost implements ScopePort {
       load: () => descriptor.plugin ?? { apply() {} },
       prepare: (ctx) => {
         bindInstance(ctx.fiber.entry!, { pluginId: plan.id, scope, scopeKey,
+          writableConfig: descriptor.configChanges === 'live' && descriptor.configSchema !== undefined,
           trusted: !source && this.composition.trustedContributors?.has(plan.id) === true });
         ctx.provide('entry:' + plan.id, true);
         const changes = this.ctx.get('harnessChanges');
