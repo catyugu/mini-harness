@@ -1,4 +1,4 @@
-import type {} from 'cordis';
+import type {} from 'mini-harness/cordis';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import { DomainError, type ErrorCode } from '@mini-harness/platform/errors';
@@ -33,7 +33,7 @@ export interface RoutePort {
   register(method: string, path: string, handler: RouteHandler): () => Promise<void>;
   dispatch(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> | undefined;
 }
-declare module 'cordis' {
+declare module 'mini-harness/cordis' {
   interface Context {
     harnessRoutes: RoutePort;
   }
@@ -53,6 +53,16 @@ export interface NetworkPort {
   forward(request: IncomingMessage, response: ServerResponse, access: GatewayRequest): Promise<void>;
 }
 
-declare module '@mini-harness/kernel/services' {
-  interface ServiceMap { harnessNetwork: NetworkPort }
+declare module 'mini-harness/cordis' {
+  interface Context { harnessNetwork: NetworkPort }
+}
+
+export interface PluginRoutes {
+  register(method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string, handler: RouteHandler): () => Promise<void>;
+  upgrade(path: string, handler: UpgradeHandler): () => Promise<void>;
+  scope(name: string, handler: (input: unknown, signal: AbortSignal) => unknown | Promise<unknown>): () => Promise<void>;
+}
+
+declare module 'mini-harness/cordis' {
+  interface Context { harnessPluginRoutes: PluginRoutes }
 }

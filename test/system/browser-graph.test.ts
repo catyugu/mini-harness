@@ -11,11 +11,6 @@ test('the composed browser graph serves its runtime dependencies and excludes se
   const { body: snapshot }: { body: BrowserBootstrap } = await request('/bootstrap');
   const mounted = new Map(snapshot.ui.map((entry) => [entry.id, entry]));
   assert.equal(mounted.size, snapshot.ui.length);
-  const seenPlugins = new Set<string>();
-  for (const entry of snapshot.ui) {
-    for (const dependency of entry.requires ?? []) assert.ok(seenPlugins.has(dependency), entry.id + ' requires ' + dependency);
-    seenPlugins.add(entry.id);
-  }
   for (const { id, browser, defaultEnabled } of plugins)
     if (browser && (composition.fixedPlugins.has(id) || defaultEnabled)) assert.equal(mounted.get(id)?.browser, browser);
 
@@ -31,7 +26,7 @@ test('the composed browser graph serves its runtime dependencies and excludes se
     '/packages/sessions/tests/log.test.js'
   ]) assert.equal((await fetch(base + asset)).status, 404, asset);
 
-  const pending = ['/packages/ui-runtime/src/browser/boot.js', '/packages/ui-runtime/plugin-sdk.js'];
+  const pending = ['/packages/ui-runtime/src/browser/boot.js', '/packages/sdk/src/browser-plugin.js'];
   for (const { browser } of plugins) if (browser) pending.push(browser);
   const seenModules = new Set<string>();
   for (const path of pending) {
@@ -53,10 +48,9 @@ test('the composed browser graph serves its runtime dependencies and excludes se
   assert.equal((await request('/settings', 'PATCH', { plugins: { files: false, shell: true } })).status, 200);
   const { body: changed }: { body: BrowserBootstrap } = await request('/bootstrap');
   assert.equal(changed.ui.some(({ id }) => id === 'files'), false);
-  const dependencies = changed.ui.find(({ id }) => id === 'shell')?.requires ?? [];
-  assert.ok(dependencies.includes('core:history'), 'Shell needs the conversation tool renderer');
+  assert.ok(changed.ui.find(({ id }) => id === 'shell')?.inject?.includes('miniMessages'));
   const conversation = changed.ui.find(({ id }) => id === 'core:conversation');
-  assert.ok(conversation?.requires?.includes('core:approval-data'), 'Conversation needs the approval projection');
+  assert.ok(conversation?.inject?.includes('miniApprovals'));
   const conversationStyle = conversation?.styles?.[0];
   assert.ok(conversationStyle);
   const sheet = await fetch(base + conversationStyle);
@@ -65,6 +59,4 @@ test('the composed browser graph serves its runtime dependencies and excludes se
   assert.match(await sheet.text(), /\.approval-heading/);
   assert.equal((await request('/settings', 'PATCH', { plugins: { shell: false } })).status, 200);
   assert.equal((await fetch(base + conversationStyle)).status, 200);
-  assert.ok(changed.ui.findIndex(({ id }) => id === 'core:theme') <
-    changed.ui.findIndex(({ id }) => id === 'core:primitives'));
 });

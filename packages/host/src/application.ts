@@ -1,4 +1,4 @@
-import { Context } from 'cordis';
+import { Context } from 'mini-harness/cordis';
 import { composition, plugins } from './composition.js';
 import { SettingsManager } from '@mini-harness/settings/manager';
 import { PluginHost } from '@mini-harness/plugins/manager';

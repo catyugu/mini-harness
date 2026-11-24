@@ -1,10 +1,9 @@
-import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend-api';
-import { slotExtensions } from '@mini-harness/ui-slots/browser/api';
+import type { Context } from 'mini-harness/cordis';
 import { createComposerModel } from './composer-model.js';
 import { mountComposer } from './composer-view.js';
-const setup: FrontendSetup = (ctx, api) => {
-  const model = createComposerModel(ctx, api);
+const setup = (ctx: Context) => {
+  const model = createComposerModel(ctx);
   ctx.provide('miniComposer', model);
-  api.contribute(slotExtensions.keyed, 'conversation.composer-view', 'composer', (signal) => mountComposer(ctx, signal));
+  ctx.effect(() => ctx.miniSlots.registerKeyed('conversation.composer-view', 'composer', (signal) => mountComposer(ctx, signal), { order: -1 }));
 };
-export default setup;
+export default { inject: ['miniConversation','miniSelection','miniModels','miniSlots'], provide: ['miniComposer'], apply: setup };

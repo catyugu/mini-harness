@@ -11,9 +11,9 @@ import { scheduleTools } from '../src/tool-pipeline.js';
 import { SessionRegistry } from '@mini-harness/sessions/registry';
 import { WorkspaceCatalog } from '@mini-harness/workspaces/catalog';
 import { ToolRegistry } from '@mini-harness/tools/registry';
-import { defineTool, registerToolBinding } from '@mini-harness/tools/api';
+import { defineTool } from '@mini-harness/tools/api';
 import type { LlmPort, NativeAssistantMessage, ToolCallPart } from '@mini-harness/llm/api';
-import type { ModelRetry } from '../src/extensions.js';
+import type { ModelRetry } from '../src/events.js';
 import { createFixturePaths } from '../../../test/helpers/mock-provider.js';
 
 const model = { provider: 'fixture', id: 'native' };
@@ -31,7 +31,7 @@ function fixture(t: TestContext, llm: LlmPort, retryModel?: () => Promise<ModelR
   const agent = new NativeAgent(sessions, {
     models: () => ({ list: () => [], available: async () => [], resolve: (choice) => choice,
       capabilities: (choice) => ({ id: model.id, name: 'Fixture', input: choice.id === 'text-only' ? ['text'] : ['text', 'image'], contextWindow: 32000, maxTokens: 1024, reasoning: true, thinkingLevels: thinkingLevels(choice.id) }) }),
-    llm: () => llm, tools: () => tools, prompt: () => ({ build: async () => 'Fixture' }),
+    llm: () => llm, tools: () => tools.service(), prompt: () => ({ build: async () => 'Fixture', register: () => () => {} }),
     policy: () => ({ maxTurns: 8, autoCompact: false }), retryModel, observe: () => {}
   });
   const record = sessions.create();
@@ -43,7 +43,7 @@ test('duplicate tool call identities fail before executing any side effect', asy
   const { agent, tools, record } = fixture(t, { async *stream() {
     yield { type: 'done', message: requests++ === 0 ? toolsAnswer(call('duplicate', 'change'), call('duplicate', 'change')) : answer() };
   } });
-  tools[registerToolBinding]('change', () => defineTool({ name: 'change', description: 'Change', parameters: Type.Object({}),
+  tools.registerBinding('change', () => defineTool({ name: 'change', description: 'Change', parameters: Type.Object({}),
     async execute() { executions++; return { content: [{ type: 'text', text: 'changed' }] }; } }));
   await assert.rejects(agent.prompt(record, 'Change it', () => {}, { fallback: model, signal: new AbortController().signal }), /duplicate.*tool|tool.*duplicate/i);
   assert.equal(executions, 0);
@@ -58,11 +58,11 @@ test('tool execution uses the advertised registration and does not execute a hot
       yield { type: 'done', message: toolsAnswer(call('first-call', 'change')) };
     } else yield { type: 'done', message: answer() };
   } });
-  const dispose = tools[registerToolBinding]('change', () => defineTool({ name: 'change', description: 'Original', parameters: Type.Object({}),
+  const dispose = tools.registerBinding('change', () => defineTool({ name: 'change', description: 'Original', parameters: Type.Object({}),
     async execute() { executions++; return { content: [{ type: 'text', text: 'original' }] }; } }));
   replace = async () => {
     await dispose();
-    tools[registerToolBinding]('change', () => defineTool({ name: 'change', description: 'Replacement', parameters: Type.Object({}),
+    tools.registerBinding('change', () => defineTool({ name: 'change', description: 'Replacement', parameters: Type.Object({}),
       async execute() { executions++; return { content: [{ type: 'text', text: 'replacement' }] }; } }));
   };
   await agent.prompt(record, 'Change it', () => {}, { fallback: model, signal: new AbortController().signal });
@@ -80,7 +80,7 @@ test('malformed tool arguments become durable error results without invoking the
       yield { type: 'done', message: answer('Recovered') };
     }
   } });
-  tools[registerToolBinding]('inspect', () => defineTool({ name: 'inspect', description: 'Inspect', parameters: Type.Object({ path: Type.String() }),
+  tools.registerBinding('inspect', () => defineTool({ name: 'inspect', description: 'Inspect', parameters: Type.Object({ path: Type.String() }),
     async execute() { executions++; return { content: [] }; } }));
   assert.equal(await agent.prompt(record, 'Inspect', () => {}, { fallback: model, signal: new AbortController().signal }), 'Recovered');
   assert.equal(executions, 0);
@@ -93,14 +93,14 @@ test('cancellation closes the whole tool batch durably and never executes later 
   const { agent, tools, record, sessions } = fixture(t, { async *stream() {
     yield { type: 'done', message: toolsAnswer(call('one', 'first'), call('two', 'second')) };
   } });
-  tools[registerToolBinding]('first', () => defineTool({ name: 'first', description: 'First', parameters: Type.Object({}),
+  tools.registerBinding('first', () => defineTool({ name: 'first', description: 'First', parameters: Type.Object({}),
     async execute(_id, _args, signal) {
       ranFirst++;
       controller.abort(new Error('Stopped by test'));
       signal?.throwIfAborted();
       return { content: [] };
     } }));
-  tools[registerToolBinding]('second', () => defineTool({ name: 'second', description: 'Second', parameters: Type.Object({}),
+  tools.registerBinding('second', () => defineTool({ name: 'second', description: 'Second', parameters: Type.Object({}),
     async execute() { ranSecond++; return { content: [] }; } }));
   await assert.rejects(agent.prompt(record, 'Run tools', () => {}, { fallback: model, signal: controller.signal }), /Stopped by test/);
   const results = sessions.log(record.id).projection().messages.filter((message) => message.role === 'toolResult');
@@ -115,7 +115,7 @@ test('interrupted calls receive an error record before the next prompt and are n
     assert.equal(results.length, 1); assert.equal(results[0].isError, true);
     yield { type: 'done', message: answer() };
   } });
-  tools[registerToolBinding]('change', () => defineTool({ name: 'change', description: 'Change', parameters: Type.Object({}),
+  tools.registerBinding('change', () => defineTool({ name: 'change', description: 'Change', parameters: Type.Object({}),
     async execute() { executed++; return { content: [] }; } }));
   sessions.log(record.id).append({ type: 'message', message: toolsAnswer(call('interrupted', 'change')) });
   await agent.prompt(record, 'Continue', () => {}, { fallback: model, signal: new AbortController().signal });
@@ -163,7 +163,7 @@ test('steering accepts off, skips deterministic failures and resets incompatible
       yield { type: 'done', message: toolsAnswer(call('steered-call', 'first')) };
     } else yield { type: 'done', message: answer() };
   } }, undefined, (id) => id === 'new-model' ? ['low'] : ['low', 'medium', 'high', 'xhigh', 'max']);
-  tools[registerToolBinding]('first', () => defineTool({ name: 'first', description: 'Should be skipped', parameters: Type.Object({}),
+  tools.registerBinding('first', () => defineTool({ name: 'first', description: 'Should be skipped', parameters: Type.Object({}),
     async execute() { assert.fail('Steering did not skip the next tool'); } }));
   const run = agent.prompt(record, 'Initial', () => {}, { fallback: model, signal: new AbortController().signal, thinkingLevel: 'off' });
   await ready;
@@ -195,7 +195,7 @@ test('opted-in tools overlap, persist independently and respect serial barriers'
   const started: string[] = [];
   let release: () => void = () => { throw new Error('Not started'); };
   const waitForDurability = new Promise<void>((resolve) => { release = resolve; });
-  tools[registerToolBinding]('parallel', () => defineTool({
+  tools.registerBinding('parallel', () => defineTool({
     name: 'parallel', description: 'Parallel', parameters: Type.Object({ wait: Type.Boolean() }),
     isConcurrencySafe: ({ wait }) => typeof wait === 'boolean',
     async execute(id, { wait }, signal) {
@@ -207,7 +207,7 @@ test('opted-in tools overlap, persist independently and respect serial barriers'
       return { content: [{ type: 'text', text: id }] };
     }
   }));
-  tools[registerToolBinding]('serial', () => defineTool({
+  tools.registerBinding('serial', () => defineTool({
     name: 'serial', description: 'Serial', parameters: Type.Object({}),
     async execute(id) { started.push(id); return { content: [] }; }
   }));

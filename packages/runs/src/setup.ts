@@ -1,25 +1,20 @@
-import type {} from '@mini-harness/kernel/observations';
+import { observe } from '@mini-harness/plugin-api/observations';
 import type {} from '@mini-harness/models/api';
 import { DomainError } from '@mini-harness/platform/errors';
 import type {} from '@mini-harness/sessions/store';
-import type {} from '@mini-harness/kernel/scopes';
-import type {} from '@mini-harness/kernel/mutation-api';
-import type { Context } from 'cordis';
+import type {} from '@mini-harness/plugin-api/scopes';
+import type {} from '@mini-harness/plugin-api/mutation-api';
+import type { Context } from 'mini-harness/cordis';
 import { registerRoutes } from './routes.js';
-import { executionForPlugin } from './execution.js';
+import { sessionExecution } from './execution.js';
 import { Runs } from './runs.js';
 
 export function setup(ctx: Context) {
   const { harnessRegistry: catalog, harnessScopes: scopes, harnessMutations: mutations } = ctx;
-  const runs = new Runs(catalog, scopes, mutations, (event, signal) => ctx.emit('harness/observe', event, signal),
+  const runs = new Runs(catalog, scopes, mutations, (event, signal) => observe(ctx, event, signal),
     ctx.harnessModelPreference);
   ctx.provide('harnessRuns', runs);
-  ctx.provide('harnessExecution', {
-    [executionForPlugin]: {
-      launch: runs.submit.bind(runs),
-      info: (id: string) => runs.info(id)
-    }
-  });
+  ctx.provide('harnessExecution', sessionExecution(runs.submit.bind(runs), id => runs.info(id)));
   ctx.effect(() => {
     const changed = (event: Event) => {
       if (event instanceof CustomEvent && event.detail.records) runs.branchChanged(event.detail.id);

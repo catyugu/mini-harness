@@ -1,6 +1,6 @@
-import type {} from 'cordis';
-import type { PluginConfiguration } from '@mini-harness/kernel/configuration';
+import type {} from 'mini-harness/cordis';
+import type { PluginConfiguration } from '@mini-harness/plugin-api/plugin-configuration';
 
-declare module 'cordis' {
+declare module 'mini-harness/cordis' {
   interface Context { miniAppearance: PluginConfiguration }
 }

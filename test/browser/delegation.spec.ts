@@ -30,7 +30,7 @@ test('plugin schema controls, recursive tree navigation, batch export and perman
       tags: { type: 'array', title: 'Tags', items: { type: 'string' }, default: ['base'] }
     }
   } }));
-  writeFileSync(join(folder, 'plugin.js'), 'export default (ctx, api) => { if (api.config.prefix === "bad") throw new Error("Bad prefix"); };');
+  writeFileSync(join(folder, 'plugin.js'), "export const apply = (ctx, config) => { if (config.prefix === \"bad\") throw new Error(\"Bad prefix\"); };");
   const service = await startIsolatedHost(paths);
   try {
     await page.goto(service.url + '/#token=' + service.token);

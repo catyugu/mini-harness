@@ -1,4 +1,4 @@
-import type { Context } from 'cordis';
+import type { Context } from 'mini-harness/cordis';
 import type { ConversationPermission } from '@mini-harness/sessions/identity';
 import type { ThinkingLevel } from '@mini-harness/llm/vocabulary';
 import { fromMarkup, required, scopedElements } from '@mini-harness/ui-primitives/primitives';
@@ -107,7 +107,7 @@ export function mountComposer(ctx: Context, signal: AbortSignal) {
       permissionResults.querySelector<HTMLButtonElement>('[aria-selected="true"]')?.focus();
     }
   };
-  permissionPopup.addEventListener('toggle', () => permissionButton.setAttribute('aria-expanded', String(permissionPopup.matches(':popover-open'))), { signal: signal });
+  permissionPopup.addEventListener('toggle', () => permissionButton.setAttribute('aria-expanded', String(permissionPopup.matches(':popover-open'))), { signal });
 
   let previousCatalog: ReturnType<typeof ctx.miniModels.get> | undefined;
   let previousModel: ReturnType<typeof model.draft>['model'], previousThinking: ThinkingLevel | null | undefined;

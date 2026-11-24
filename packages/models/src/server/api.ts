@@ -1,5 +1,5 @@
 import type { ModelSummary, ProviderModel } from '../shared/catalog.js';
-import type {} from 'cordis';
+import type {} from 'mini-harness/cordis';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 
 export interface ModelCatalogPort {
@@ -15,12 +15,12 @@ export interface ModelPreference {
   remember(model: ModelChoice): Promise<void>;
 }
 
-declare module 'cordis' {
+declare module 'mini-harness/cordis' {
   interface Context {
     harnessModelPreference: ModelPreference;
   }
 }
 
-declare module '@mini-harness/kernel/services' {
-  interface ServiceMap { harnessModels: ModelCatalogPort }
+declare module 'mini-harness/cordis' {
+  interface Context { harnessModels: ModelCatalogPort }
 }

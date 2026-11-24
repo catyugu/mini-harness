@@ -19,40 +19,50 @@ test('copy, preview and revise a message with its image, and release editing dra
         const folder = join(paths.plugins, id);
         mkdirSync(folder);
         writeJson(join(folder, 'plugin.json'), { browserInject: ['miniComposer', 'miniSlots'] });
-        writeFileSync(join(folder, 'web.js'), `import { conversationExtensions, slotExtensions } from '/packages/ui-runtime/plugin-sdk.js';
-          export default (_ctx, api) => {
+        writeFileSync(join(folder, 'web.js'), `
+export const inject = ["miniComposer","miniSlots"];
+
+export const apply = (ctx) => {
             const label = ${JSON.stringify(label)};
             const control = document.createElement('button');
             control.textContent = label;
-            control.onclick = () => api.contribute(conversationExtensions.draft, {
+            control.onclick = () => ctx.effect(() => ctx.miniComposer.beginDraftMode({
               title: label, text: label, revision: { sourceEntryId: 'fixture', expectedLeafId: null }
-            });
-            api.contribute(slotExtensions.register, 'sidebar.actions', control);
-          };`);
+            }));
+            ctx.effect(() => ctx.miniSlots.register('sidebar.actions', control));
+          };
+`);
       }
       const records = writePlugin(paths.plugins, 'record-writer', { inject: ['harnessSessions'], browserInject: ['miniConversation', 'miniMessages'] }, `
-        export default (_ctx, api) => {
-          const records = api.contribute(sessionExtensions.records);
-          api.registerRoute('POST', '/record', async ({ body }) => {
+export const inject = ["harnessPluginRoutes","harnessSessions"];
+export const apply = (ctx) => {
+          ctx.harnessPluginRoutes.register('POST', '/record', async ({ body }) => {
             const { id, visible } = await body();
-            return records.append(id, 'fixture', visible ? { title: 'Saved record' } : undefined);
+            return ctx.harnessSessions.records(id).append( 'fixture', visible ? { title: 'Saved record' } : undefined);
           });
-        };`);
-      writeFileSync(join(records, 'web.js'), `import { conversationExtensions } from '/packages/ui-runtime/plugin-sdk.js';
-        export default ({ miniConversation }, api) => {
+        };
+`);
+      writeFileSync(join(records, 'web.js'), `
+export const inject = ["miniConversation","miniMessages"];
+import { browserPluginId } from "/packages/sdk/src/browser-plugin.js";
+
+export const apply = (ctx) => {
+    const { miniConversation } = ctx;
+    const signal = ctx.fiber.signal;
           const update = () => {
             const { session, history } = miniConversation.get();
             document.body.dataset.recordSession = session?.id ?? '';
             document.body.dataset.recordLeaf = history.leafId ?? '';
           };
-          miniConversation.subscribe(['session', 'history'], update, api.signal);
+          miniConversation.subscribe(['session', 'history'], update, signal);
           update();
-          api.contribute(conversationExtensions.record, (_record, { signal }) => {
+          ctx.effect(() => ctx.miniMessages.registerRecord(browserPluginId(ctx), (_record, { signal }) => {
             document.body.dataset.recordReleased = 'no';
             signal.addEventListener('abort', () => { document.body.dataset.recordReleased = 'yes'; }, { once: true });
             throw new Error('fixture record rendering failure');
-          });
-        };`);
+          }));
+        };
+`);
       const settings = readJson<Record<string, unknown>>(paths.settings, {});
       writeJson(paths.settings, { ...settings, plugins: { 'old-editor': true, 'new-editor': true, 'record-writer': true } });
     }

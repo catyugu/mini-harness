@@ -1,4 +1,4 @@
-import type {} from 'cordis';
+import type {} from 'mini-harness/cordis';
 import type { ProjectionNotice } from './shared/projection-notice.js';
 
 export type ChangesListener = (notice: ProjectionNotice) => void;
@@ -10,6 +10,6 @@ export interface ProjectionPort {
   subscribe(listener: ChangesListener): () => void;
 }
 
-declare module 'cordis' {
+declare module 'mini-harness/cordis' {
   interface Context { harnessChanges: ProjectionPort }
 }

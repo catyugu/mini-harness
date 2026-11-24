@@ -29,20 +29,19 @@ parent's provider. Remove the local provider selection to restore inheritance.
 New or changed required provider selections must mount successfully before settings are committed. A previously saved provider that fails during startup or lazy preparation remains unavailable in its subtree until repaired. A second instance of the same provider ID needs an explicit choice to
 shadow its ancestor.
 
-Consumers call `harnessScopes.prepare(scopeKey, signal)` before reading
-`harnessScopes.require(scopeKey, serviceName)` or `harnessScopes.optional(scopeKey, serviceName)`. Use a full address such as `session:<id>` or `workspace:<id>`, not a bare ID. This resolves the nearest live
-Cordis service, so the native agent executes through the selected LLM, tool and
-environment services. Plugins declaring `inject` receive services from their own
-scope's context.
+Plugins declare required services in their Cordis `inject` declaration. A running
+plugin can prepare a visible session with `sessionContext(ctx, sessionId, signal)`
+and use `scopedService(ctx, sessionId, name)` for a declared service. The native
+agent uses the selected LLM, tools, and environment through the session context.
 
-The graph is validated before setup. Provider changes restart their dependent
-plugins in dependency order and await cleanup. A failed configuration update restores the previously committed settings and mounts. Deleting a session or workspace removes its overrides through the same settings queue. A failed optional instance is
-shown in the Plugins page, where its scope configuration can be repaired. Application replacements must replace a
-multi-service plugin as a unit; scoped replacements leave the parent mounted.
+Cordis deactivates consumers when a required provider leaves and activates them
+with the new service. A failed settings update restores the committed entries.
+Deleting a session or workspace releases its entries and removes its overrides.
+Optional instance failures are shown in Plugins and can be repaired there.
 
-
-The browser has its own `browserProviders` map. Select a browser service there without changing its server companion. The selected plugin declares the capability in `browserProvides` and must be enabled at application scope.
+The browser's `browserProviders` map selects application-wide browser services.
+The selected plugin declares its offered services in `browserProvides`.
 
 A user can grant specific registered tools to a trusted local plugin in that plugin’s Settings detail, or through `readOnlyTools` in `settings.json` or the settings API. For example, `{ "readOnlyTools": { "workspace-greeting": ["greet"] } }` allows its `greet` registration to be considered in read-only conversations when it declares read-only access. Update the map to revoke a grant. Descendant and workspace restrictions still apply before invocation.
 
-Setup and live configuration callbacks register and update plugin resources. Scope preparation, session writes, execution submission and configuration writes are available from runtime handlers after the graph commits. Use those operations from normal runtime handlers. A prepared scoped service is a current provider reference, not a stable proxy: resolve it again after configuration changes. The browser graph is committed only when its required capabilities remain available after server mounting, including replacements.
+Setup and live configuration callbacks register and update plugin resources. Scope preparation, session writes, execution submission and configuration writes are available from runtime handlers after the configuration commits. Use those operations from normal runtime handlers. A prepared scoped service is a current provider reference, not a stable proxy: resolve it again after configuration changes. The browser bootstrap is published only when its required capabilities remain available after server mounting, including replacements.

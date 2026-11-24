@@ -1,7 +1,9 @@
+import { Service, type Context } from 'mini-harness/cordis';
+import { pluginInstance, sessionAddress } from '@mini-harness/plugin-api/instance';
 import { constants } from 'node:fs';
 import { lstat, open } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { PromptPort, PromptContext, ScopedPromptSection } from './prompt-api.js';
+import type { PromptPort, PromptContext, PromptSection, ScopedPromptSection } from './prompt-api.js';
 
 async function instructions(file: string) {
   try {
@@ -35,8 +37,9 @@ async function instructions(file: string) {
 export class Prompt implements PromptPort {
   private readonly defaults: ScopedPromptSection[];
 
-  constructor(home: string,
-    private readonly contributions: (id: string) => ScopedPromptSection[]) {
+  private readonly sections = new Map<string, { context: Context; section: PromptSection }>();
+
+  constructor(home: string) {
     this.defaults = [
       { id: 'base', order: 0, render: ({ cwd }: PromptContext) =>
         'You are mini-harness, a helpful agent working with the user in their workspace.\n' +
@@ -51,9 +54,29 @@ export class Prompt implements PromptPort {
     ].map((section) => ({ ...section, depth: -1, pluginId: 'core:prompt' }));
   }
 
+  register(section: PromptSection) {
+    const context = Service.caller(this);
+    const { instanceId } = pluginInstance(context);
+    const { id, order = 500, render } = section;
+    if (!/^[a-zA-Z][a-zA-Z0-9_.:-]{0,95}$/.test(id) || !Number.isFinite(order) || typeof render !== 'function')
+      throw new Error('Invalid prompt section: ' + id);
+    const key = instanceId + '/' + id;
+    if (this.sections.has(key)) throw new Error('Duplicate prompt section: ' + id);
+    this.sections.set(key, { context, section: { id, order, render } });
+    return () => { this.sections.delete(key); };
+  }
+
   async build(context: PromptContext) {
+    const contributed = [...this.sections.values()].flatMap(({ context: owner, section }) => {
+      const { instanceId, scopeKey } = pluginInstance(owner);
+      const address = sessionAddress(owner, context.sessionId);
+      if (owner.fiber.signal.aborted || scopeKey && !address.includes(scopeKey)) return [];
+      return [{ ...section, pluginId: instanceId, depth: scopeKey ? address.indexOf(scopeKey) + 1 : 0,
+        render: ({ signal, ...input }: PromptContext) => owner.fiber.run(
+          signal => section.render({ ...structuredClone(input), signal }), signal) }];
+    });
     const sections = new Map<string, ScopedPromptSection>();
-    for (const section of [...this.defaults, ...this.contributions(context.sessionId)]) {
+    for (const section of [...this.defaults, ...contributed]) {
       const current = sections.get(section.id);
       if (!current || section.depth > current.depth ||
           (section.depth === current.depth && section.pluginId < current.pluginId))

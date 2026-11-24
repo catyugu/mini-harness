@@ -51,7 +51,7 @@ function checkCycles(graph: Map<string, Set<string>>, kind: string) {
 }
 
 test('workspace dependencies use domain APIs and keep providers at the application boundary', () => {
-  assert.ok(!manifests.has('contracts'), 'Remove the central contracts package');
+  assert.ok(!manifests.has('kernel'), 'Business plugins must use the vendored Cordis runtime directly');
   const browserModules = new Map<string, string[]>();
   const browserRoots = [join(packages, 'sdk', 'src', 'browser-plugin.ts')];
   const runtime = new Map<string, Set<string>>();
@@ -84,6 +84,7 @@ test('workspace dependencies use domain APIs and keep providers at the applicati
             assert.ok(!relative(directory, target).split(sep).includes('server'), reason);
           continue;
         }
+        if (specifier === 'mini-harness/cordis') continue;
         assert.ok(specifier !== 'mini-harness/plugin' && specifier !== 'mini-harness/browser-plugin', reason);
         if (!specifier.startsWith(prefix)) {
           if (!typeOnly) imports.push(specifier);
@@ -157,10 +158,9 @@ test('workspace dependencies use domain APIs and keep providers at the applicati
     for (const service of browserInject ?? []) assert.ok(browserServices.has(service), id + ' injects ' + service);
   }
 
-  for (const name of ['kernel', 'platform']) assert.equal(declared.get(name)?.size, 0, name);
-  for (const name of ['plugin-api', 'transport', 'ui-runtime'])
-    for (const dependency of declared.get(name) ?? [])
-      assert.ok(['kernel', 'platform', 'transport', 'ui-runtime'].includes(dependency), name + ' depends on ' + dependency);
+  assert.equal(declared.get('platform')?.size, 0);
+  for (const dependency of declared.get('plugin-api') ?? [])
+    assert.equal(dependency, 'platform');
   checkCycles(runtime, 'Runtime dependency');
   checkCycles(declared, 'Workspace dependency');
   assert.ok(Object.keys(readManifest(join(root, 'package.json')).dependencies ?? {}).every((name) => !name.startsWith(prefix)));

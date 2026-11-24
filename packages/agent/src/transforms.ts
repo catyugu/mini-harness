@@ -1,20 +1,30 @@
-import { orderHooks, type OrderedHook } from '@mini-harness/kernel/contributions';
+import type { Context } from 'mini-harness/cordis';
+import { pluginInstance } from '@mini-harness/plugin-api/instance';
 
-export async function applyTransforms<Value, Context extends { sessionId: string; signal: AbortSignal }, Result>(
-  hooks: OrderedHook<(value: Value, context: Context) => Result | undefined | Promise<Result | undefined>>[],
-  value: Value, context: Context, validate: (result: Result) => Value
+export interface AgentListener<Handler> {
+  context: Context;
+  callback: Handler;
+}
+
+export async function applyTransforms<Value, Input extends { sessionId: string; signal: AbortSignal }, Result>(
+  hooks: AgentListener<(value: Value, context: Input) => Result | undefined | Promise<Result | undefined>>[],
+  value: Value, input: Input, validate: (result: Result) => Value
 ): Promise<Value> {
-  for (const { instanceId, invoke } of orderHooks(hooks)) {
-    context.signal.throwIfAborted();
-    const result = await invoke(value, context);
-    if (result === undefined) continue;
-    try { value = validate(result); }
-    catch (error) {
+  const { signal, ...data } = input;
+  for (const { context, callback } of hooks) {
+    signal.throwIfAborted();
+    try {
+      const result = await context.fiber.run((signal) => callback(
+        structuredClone(value), { ...structuredClone(data), signal } as Input
+      ), signal);
+      if (result !== undefined) value = validate(structuredClone(result));
+    } catch (error) {
+      signal.throwIfAborted();
+      const { instanceId } = pluginInstance(context);
       const reason = error instanceof Error ? error.message : String(error);
       throw new Error('Plugin ' + instanceId + ' could not prepare transformed data: ' + reason, { cause: error });
     }
   }
-  context.signal.throwIfAborted();
-  for (const hook of hooks) hook.assertActive?.(context.sessionId);
+  signal.throwIfAborted();
   return value;
 }

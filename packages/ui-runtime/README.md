@@ -12,7 +12,7 @@ Owns startup assets, authentication, dependency-ordered setup, stylesheet and pr
 
 ## API
 
-`FrontendSetup`, `FrontendApi` and projection and contribution types are published through the browser SDK.
+The browser SDK exposes projection contracts, authenticated requests and plugin settings.
 
 ## Dependencies
 

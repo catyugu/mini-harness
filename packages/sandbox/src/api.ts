@@ -1,4 +1,4 @@
-import type {} from 'cordis';
+import type {} from 'mini-harness/cordis';
 import type { ProcessRequest } from '@mini-harness/execution/request';
 
 export interface IsolatedProcess {
@@ -12,6 +12,6 @@ export interface SandboxPort {
   prepare(request: ProcessRequest, attachments?: string): Promise<IsolatedProcess>;
 }
 
-declare module '@mini-harness/kernel/services' {
-  interface ServiceMap { harnessSandbox: SandboxPort }
+declare module 'mini-harness/cordis' {
+  interface Context { harnessSandbox: SandboxPort }
 }

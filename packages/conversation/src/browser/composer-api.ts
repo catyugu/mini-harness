@@ -1,4 +1,4 @@
-import type {} from 'cordis';
+import type {} from 'mini-harness/cordis';
 import type { ConversationPermission } from '@mini-harness/sessions/identity';
 import type { ModelChoice, ThinkingLevel } from '@mini-harness/llm/vocabulary';
 import type { Attachment } from '@mini-harness/input/message';
@@ -71,6 +71,6 @@ export interface ComposerModel {
   completion(trigger: string, complete: Completer): () => void;
 }
 
-declare module 'cordis' {
+declare module 'mini-harness/cordis' {
   interface Context { miniComposer: ComposerModel }
 }

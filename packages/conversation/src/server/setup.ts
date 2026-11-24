@@ -4,8 +4,8 @@ import type {} from '@mini-harness/runs/api';
 import type {} from '@mini-harness/approvals/api';
 import type {} from '@mini-harness/models/api';
 import type { ConversationView } from '../shared/api.js';
-import type { Context } from 'cordis';
-import { projectHistory, projectToolEvent } from './display-extensions.js';
+import type { Context } from 'mini-harness/cordis';
+import { projectHistory, projectToolEvent } from './display-events.js';
 import { projectSession } from './navigation.js';
 import { registerSessionRoutes } from './routes.js';
 

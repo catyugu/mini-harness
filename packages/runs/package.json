@@ -19,7 +19,6 @@
   "dependencies": {
     "@mini-harness/agent": "workspace:*",
     "@mini-harness/input": "workspace:*",
-    "@mini-harness/kernel": "workspace:*",
     "@mini-harness/llm": "workspace:*",
     "@mini-harness/models": "workspace:*",
     "@mini-harness/platform": "workspace:*",

@@ -6,18 +6,28 @@
   "exports": {
     "./configuration": "./src/configuration.ts",
     "./descriptor": "./src/descriptor.ts",
-    "./selection": "./src/selection.ts"
+    "./selection": "./src/selection.ts",
+    "./services": "./src/services.ts",
+    "./plugin-configuration": "./src/plugin-configuration.ts",
+    "./instance": "./src/instance.ts",
+    "./mutation-api": "./src/mutation-api.ts",
+    "./observations": "./src/observations.ts",
+    "./scopes": "./src/scopes.ts"
   },
   "miniHarness": {
     "api": [
       "./configuration",
       "./descriptor",
-      "./selection"
+      "./selection",
+      "./services",
+      "./plugin-configuration",
+      "./instance",
+      "./mutation-api",
+      "./observations",
+      "./scopes"
     ]
   },
   "dependencies": {
-    "@mini-harness/kernel": "workspace:*",
-    "@mini-harness/platform": "workspace:*",
-    "@mini-harness/transport": "workspace:*"
+    "@mini-harness/platform": "workspace:*"
   }
 }

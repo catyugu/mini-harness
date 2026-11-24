@@ -1,5 +1,4 @@
-import type { Context } from 'cordis';
-import type { ServiceMap } from './services.js';
+import type { Context } from 'mini-harness/cordis';
 
 export type PluginScope = { kind: 'application' }
   | { kind: 'workspace'; workspaceId: string }
@@ -12,7 +11,7 @@ export interface ScopeSettings {
   pluginConfig?: Record<string, Record<string, unknown>>;
 }
 
-export type HostServices = ServiceMap & Pick<Context, Extract<keyof Context, `harness${string}`>>;
+export type HostServices = Context;
 
 export type ScopeKey = `${Exclude<PluginScope['kind'], 'application'>}:${string}`;
 
@@ -24,10 +23,11 @@ export interface ScopePort {
   /** Read the nearest prepared Cordis service without changing a parent or sibling scope. */
   require<Name extends keyof HostServices & string>(key: ScopeKey | null | undefined, service: Name): NonNullable<HostServices[Name]>;
   optional<Name extends keyof HostServices & string>(key: ScopeKey | null | undefined, service: Name): HostServices[Name] | undefined;
+  context(key?: ScopeKey | null): Context;
   address(key: ScopeKey): readonly ScopeKey[];
 }
 
-declare module 'cordis' {
+declare module 'mini-harness/cordis' {
   interface Context {
     harnessScopes: ScopePort;
   }

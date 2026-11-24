@@ -1,8 +1,8 @@
 import type { PluginMetadata } from '../shared/metadata.js';
-import type {} from 'cordis';
+import type {} from 'mini-harness/cordis';
 import type { BrowserEntry } from '@mini-harness/ui-runtime/bootstrap';
 
-declare module 'cordis' {
+declare module 'mini-harness/cordis' {
   interface Context {
     harnessPluginCatalog: {
       metadata(): PluginMetadata[];

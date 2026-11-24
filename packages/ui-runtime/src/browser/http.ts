@@ -42,3 +42,9 @@ export function wait(ms: number, signal: AbortSignal) {
     signal.addEventListener('abort', finish, { once: true });
   });
 }
+
+/** Authenticated request cancelled with both the caller and its UI plugin. */
+export function browserRequest<T>(ctx: import('mini-harness/cordis').Context, path: string, options?: RequestInit) {
+  const lifetime = ctx.fiber.signal;
+  return data<T>(path, { ...options, signal: options?.signal ? AbortSignal.any([lifetime, options.signal]) : lifetime });
+}

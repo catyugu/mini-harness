@@ -1,18 +1,18 @@
+import { browserPluginId, browserPluginSettings } from '@mini-harness/ui-runtime/plugin-settings';
+import type { Context } from 'mini-harness/cordis';
 import type {} from '@mini-harness/workspaces/browser/api';
 import type {} from '@mini-harness/models/browser/api';
 import type {} from '@mini-harness/ui-layout/browser/api';
 import type {} from '@mini-harness/ui-runtime/projection-api';
-import { slotExtensions } from '@mini-harness/ui-slots/browser/api';
-import { settingsExtensions } from '@mini-harness/settings/browser/api';
-import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend-api';
 import { createConversationController } from './controller.js';
 import { fromMarkup, required, toggle } from '@mini-harness/ui-primitives/primitives';
 import { mountApprovals } from './approval-panel.js';
 import { mountConversationLayout } from './view.js';
 
-const setup: FrontendSetup = (ctx, api) => {
+const setup = (ctx: Context) => {
+  const signal = ctx.fiber.signal;
   const { miniSelection: state, miniSessions: sessions, miniWorkspaces: workspaces, miniLayout: layout, miniPages: pages } = ctx;
-  api.contribute(settingsExtensions.register, {
+  ctx.effect(() => ctx.miniSettingsRegistry.register(browserPluginId(ctx), {
     id: 'queue-mode',
     section: { title: 'General', icon: 'settings', order: 20 },
     render({ bind }) {
@@ -25,17 +25,17 @@ const setup: FrontendSetup = (ctx, api) => {
       }));
       return content;
     }
-  });
-  const conversation = createConversationController(ctx, api);
+  }, browserPluginSettings(ctx)));
+  const conversation = createConversationController(ctx);
   ctx.provide('miniConversation', conversation);
-  mountConversationLayout(ctx, api);
-  mountApprovals(ctx, api);
+  mountConversationLayout(ctx);
+  mountApprovals(ctx);
   function clearDraft() {
     conversation.clear();
     layout.closeDrawer();
     state.dispatchEvent(new Event('focus-composer'));
   }
-  api.contribute(slotExtensions.keyed, 'sidebar.primary', 'new-conversation', (signal) => {
+  ctx.effect(() => ctx.miniSlots.registerKeyed('sidebar.primary', 'new-conversation', (signal) => {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'new-session';
@@ -43,21 +43,21 @@ const setup: FrontendSetup = (ctx, api) => {
     button.innerHTML = '<span data-icon="plus"></span><span class="nav-label">New conversation</span>';
     button.addEventListener('click', () => { pages.open(); clearDraft(); }, { signal });
     return button;
-  });
+  }, { order: -1 }));
   state.addEventListener('open', (event: Event) => {
     if (!(event instanceof CustomEvent) || typeof event.detail !== 'string') return;
     pages.open();
     void conversation.activate(event.detail).then((activated) => { if (activated) layout.closeDrawer(); });
-  }, { signal: api.signal });
-  state.addEventListener('clear', () => conversation.clear(), { signal: api.signal });
-  state.addEventListener('draft', () => clearDraft(), { signal: api.signal });
+  }, { signal });
+  state.addEventListener('clear', () => conversation.clear(), { signal });
+  state.addEventListener('draft', () => clearDraft(), { signal });
   state.addEventListener('error', (event: Event) => {
     if (event instanceof CustomEvent && event.detail instanceof Error) conversation.report(event.detail);
-  }, { signal: api.signal });
+  }, { signal });
   const initial = state.initialConversation(sessions.get(), workspaces.get());
   if (initial) void conversation.activate(initial.id, false);
   else conversation.clear();
 };
 
 
-export default setup;
+export default { inject: ['miniSelection','miniApprovals','harnessBrowser','miniSessions','miniWorkspaces','miniLayout','miniPages','miniHeader','miniProjections','miniSlots','miniSettingsRegistry'], provide: ['miniConversation'], apply: setup };

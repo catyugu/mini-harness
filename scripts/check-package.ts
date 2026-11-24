@@ -62,72 +62,71 @@ async function checkPackage() {
     const manifest = JSON.parse(await readFile(join(published, 'package.json'), 'utf8'));
     for (const section of ['dependencies', 'optionalDependencies', 'peerDependencies'])
       assert.doesNotMatch(JSON.stringify(manifest[section] ?? {}), /@mini-harness\/|workspace:\*/);
-    assert.deepEqual(Object.keys(manifest.exports).sort(), ['./browser-plugin', './plugin']);
+    assert.deepEqual(Object.keys(manifest.exports).sort(), ['./browser-plugin', './cordis', './plugin']);
     for (const { path } of files.filter(({ path }) => /\.(?:js|d\.ts)$/.test(path))) {
       const emitted = await readFile(join(published, path), 'utf8');
       assert.doesNotMatch(emitted, /['"]@mini-harness\//, path + ' depends on a private workspace');
     }
     await execFile(process.execPath, ['--input-type=module', '-e',
-      "import 'mini-harness/plugin'; import 'mini-harness/browser-plugin';"], { cwd: installed });
+      "import 'mini-harness/plugin'; import 'mini-harness/browser-plugin'; import { Context } from 'mini-harness/cordis'; new Context();"], { cwd: installed });
     for (const path of ['sdk/src/plugin.d.ts', 'sdk/src/browser-plugin.d.ts'])
       assert.ok(files.some((file) => file.path === 'dist/types/packages/' + path), 'Missing SDK declarations: ' + path);
     await writeFile(join(installed, 'plugin-types.mts'), `
-      import { agentExtensions, promptExtensions, sessionDisplayExtensions, sessionExtensions, toolExtensions, type PluginApi, type Context, type LlmPort, type ScopeSettings } from 'mini-harness/plugin';
-      declare module 'mini-harness/plugin' {
-        interface ServiceMap { example: { greet(name: string): string } }
+      import { Context, type Plugin } from 'mini-harness/cordis';
+      import { type LlmPort, type ScopeSettings, defineTool } from 'mini-harness/plugin';
+      declare module 'mini-harness/cordis' {
+        interface Context { example: { greet(name: string): string } }
       }
-      declare const api: PluginApi;
       declare const ctx: Context;
       const scope: ScopeSettings = { disabledTools: ['write'] };
       const llm: LlmPort | undefined = ctx.harnessLlm;
-      ctx.provide('example', { greet: (name: string) => name.toUpperCase() });
+      const plugin: Plugin = {
+        apply(ctx) { ctx.provide('example', { greet: (name: string) => name.toUpperCase() }); }
+      };
       ctx.example.greet('world');
-      // @ts-expect-error The run scheduler is a private Cordis service.
+      // @ts-expect-error The run scheduler is private.
       ctx.harnessRuns;
-      // @ts-expect-error Plugins receive scoped session access through an extension.
+      // @ts-expect-error The full session registry is private.
       ctx.harnessRegistry;
-      // @ts-expect-error The settings store is a private Cordis service.
-      ctx.harnessSettingsStore;
-      ctx.example.greet('world');
-      api.storage.write('state', { count: 1 });
-      api.secrets.read('credential');
-      api.onConfigChange(() => {});
-      api.contribute(agentExtensions.prepareInput, (content, context) => context.source === 'agent' ? content : undefined);
-      api.contribute(agentExtensions.modelRequest, (request) => ({ ...request, systemPrompt: request.systemPrompt.trim() }));
-      api.contribute(promptExtensions.section, { id: 'status', render: ({ cwd }) => cwd });
-      api.contribute(agentExtensions.toolResult, (content) => content);
-      api.contribute(agentExtensions.observe, (event) => {
+      ctx.harnessPluginData.write('state', { count: 1 });
+      ctx.harnessPluginSecrets.read('credential');
+      ctx.on('internal/update', () => {});
+      ctx.on('agent/prepare-input', (content, context) => context.source === 'agent' ? content : undefined);
+      ctx.on('agent/model-request', (request) => ({ ...request, systemPrompt: request.systemPrompt.trim() }));
+      ctx.effect(() => ctx.harnessPrompt.register({ id: 'status', render: ({ cwd }) => cwd }));
+      ctx.on('agent/tool-result', (content) => content);
+      ctx.on('harness/observe', (event) => {
         if (event.type === 'run-ended') void event.run.id;
       });
-      api.contribute(sessionDisplayExtensions.project, ({ content }) => content);
-      api.contribute(toolExtensions.decide, ({ tool }) => tool === 'change' ? 'deny' : undefined);
-      const records = api.contribute(sessionExtensions.records);
-      void records.append('session', { seen: true });
-      // @ts-expect-error Input contributions return native user content or a rejection.
-      api.contribute(agentExtensions.prepareInput, () => ({ arbitrary: true }));
-      void api.configuration.set('showDetails', true);
-      api.registerUpgrade('/updates', (_request, socket, _head, signal) => {
+      ctx.on('conversation/tool-projection', ({ content }) => content);
+      ctx.on('tools/decide', ({ tool }) => tool === 'change' ? 'deny' : undefined);
+      void ctx.harnessSessions.records('session').append({ seen: true });
+      // @ts-expect-error Input listeners return native user content or a rejection.
+      ctx.on('agent/prepare-input', () => ({ arbitrary: true }));
+      void ctx.harnessPluginSettings.set('showDetails', true);
+      ctx.harnessPluginRoutes.upgrade('/updates', (_request, socket, _head, signal) => {
         if (signal.aborted) socket.destroy();
       });
       // @ts-expect-error The declared service takes a string.
       ctx.example.greet(1);
       // @ts-expect-error TypeScript plugins declare their own services.
       ctx.undeclared;
-      // @ts-expect-error Plugin execution operations must use the scoped binding.
+      // @ts-expect-error Execution handles own cancellation.
       ctx.harnessExecution.cancel('session');
     `);
     await writeFile(join(installed, 'browser-types.mts'), `
-      import { settingsExtensions, slotExtensions, type FrontendSetup, type SlotRenderer } from 'mini-harness/browser-plugin';
+      import { browserPluginSettings, type SlotRenderer } from 'mini-harness/browser-plugin';
+      import type { Context } from 'mini-harness/cordis';
       declare module 'mini-harness/browser-plugin' {
         interface SlotMap { 'example.panel': { kind: 'single' } }
       }
       declare const render: SlotRenderer;
-      const setup: FrontendSetup = (ctx, frontend) => {
-        frontend.contribute(slotExtensions.keyed, 'sidebar.primary', 'example', render);
-        frontend.contribute(slotExtensions.keyed, 'example.panel', 'example', render);
-        // @ts-expect-error A keyed contribution needs a renderer.
-        frontend.contribute(slotExtensions.keyed, 'sidebar.primary', 'example', document.body);
-        frontend.watch(() => {});
+      export function apply(ctx: Context) {
+        const signal = ctx.fiber.signal;
+        ctx.effect(() => ctx.miniSlots.registerKeyed('sidebar.primary', 'example', render));
+        ctx.effect(() => ctx.miniSlots.registerKeyed('example.panel', 'example', render));
+        // @ts-expect-error A keyed registration needs a renderer.
+        ctx.effect(() => ctx.miniSlots.registerKeyed('sidebar.primary', 'example', document.body));
         const model = ctx.miniComposer;
         model.setText('Write a review');
         model.choose({ provider: 'local', id: 'example-model' });
@@ -135,15 +134,15 @@ async function checkPackage() {
         void model.setPermission('readOnly');
         void model.addFiles([new File(['text'], 'notes.txt', { type: 'text/plain' })]);
         model.removeAttachment(0);
-        model.subscribe(() => model.draft(), frontend.signal);
+        model.subscribe(() => model.draft(), signal);
         void model.send();
         // @ts-expect-error The draft snapshot cannot be edited directly.
         model.draft().text = 'Replace this';
-        ctx.miniConversation.subscribe(['partial'], () => ctx.miniConversation.get().partial, frontend.signal);
-        frontend.contribute(settingsExtensions.register, { id: 'example', section: 'General', render: ({ configuration }) =>
+        ctx.miniConversation.subscribe(['partial'], () => ctx.miniConversation.get().partial, signal);
+        ctx.effect(() => ctx.miniSettingsRegistry.register('example', { id: 'example', section: 'General', render: ({ configuration }) =>
           ctx.miniPrimitives.status(String(configuration.get<boolean>('showDetails')))
-        });
-      };
+        }, browserPluginSettings(ctx)));
+      }
     `);
     await Promise.all(['plugin-types.mts', 'browser-types.mts'].map((file) => execFile(process.execPath,
       [resolve('node_modules/typescript/bin/tsc'), '--strict', '--noEmit', '--target', 'ES2022', '--module', 'NodeNext', file],
@@ -164,7 +163,7 @@ async function checkPackage() {
     const get = (path: string) => fetch(info.url + path, { headers });
     const write = (path: string, method: string, body: unknown) =>
       fetch(info.url + path, { method, headers, body: JSON.stringify(body) });
-    for (const asset of ['/', '/packages/ui-runtime/src/browser/boot.js', '/packages/ui-runtime/plugin-sdk.js',
+    for (const asset of ['/', '/packages/ui-runtime/src/browser/boot.js', '/packages/sdk/src/browser-plugin.js',
       '/packages/ui-primitives/src/browser/vendor/marked.js', '/packages/ui-primitives/src/browser/vendor/purify.js',
       '/logo.svg', '/manifest.webmanifest', '/startup.css', '/icon-192.png', '/icon-512.png', '/favicon.ico']) {
       const response = await get(asset);

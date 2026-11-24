@@ -12,7 +12,7 @@ Owns route registration, HTTP errors and replies, event streams, and projection 
 
 ## API
 
-`harnessRoutes` and `harnessChanges` are host services. Plugin-scoped routes use `PluginApi`.
+`harnessRoutes` and `harnessChanges` are host services. `harnessPluginRoutes` registers plugin-owned authenticated endpoints.
 
 ## Dependencies
 

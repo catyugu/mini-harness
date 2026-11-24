@@ -1,5 +1,6 @@
 import type { Attachment } from '@mini-harness/input/message';
-import { extension } from '@mini-harness/kernel/contributions';
+import { Service } from 'mini-harness/cordis';
+import { sessionVisible } from '@mini-harness/plugin-api/instance';
 import type { ModelChoice, ThinkingLevel } from '@mini-harness/llm/vocabulary';
 import type { RunInfo } from '@mini-harness/sessions/run-state';
 
@@ -17,16 +18,6 @@ export interface ExecutionHandle {
   cancel(): boolean;
 }
 
-export const executionForPlugin = Symbol.for('mini-harness.executionForPlugin');
-
-export interface ExecutionPort {
-  [executionForPlugin]: {
-    launch(id: string, input: ExecutionInput, signal: AbortSignal,
-      acquire?: (signal: AbortSignal) => Promise<() => void>): ExecutionHandle;
-    info(id: string): RunInfo | undefined;
-  };
-}
-
 export interface Execution {
   /** The run starts through normal admission. A scheduler can supply a cancellation-aware slot lease. */
   submit(id: string, input: ExecutionInput, options?: {
@@ -36,32 +27,36 @@ export interface Execution {
   status(id: string): RunInfo | undefined;
 }
 
-declare module '@mini-harness/kernel/services' {
-  interface ServiceMap { harnessExecution: ExecutionPort }
+declare module 'mini-harness/cordis' {
+  interface Context { harnessExecution: Execution }
 }
 
-export const executionExtensions = {
-  control: extension((source): Execution => {
-    const execution = source.service('harnessExecution')[executionForPlugin];
-    const check = (id: string) => {
-      source.signal.throwIfAborted();
-      if (!source.visible(id)) throw new Error('Conversation outside plugin scope');
-    };
-    return {
-      submit(id, input, options = {}) {
-        check(id);
-        const signal = options.signal ? AbortSignal.any([source.signal, options.signal]) : source.signal;
-        signal.throwIfAborted();
-        const handle = execution.launch(id, input, signal, options.acquire);
-        void source.run('execute conversation', () => handle.result, options.signal).catch(() => {});
-        return handle;
-      },
-      status(id) { check(id); return execution.info(id); }
-    };
-  })
-};
+export function sessionExecution(
+  launch: (id: string, input: ExecutionInput, signal: AbortSignal, acquire?: (signal: AbortSignal) => Promise<() => void>) => ExecutionHandle,
+  info: (id: string) => RunInfo | undefined
+): Execution {
+  return Service.track({
+    submit(id, input, options = {}) {
+      const ctx = Service.caller(this);
+      const lifetime = ctx.fiber.signal;
+      lifetime.throwIfAborted();
+      if (!sessionVisible(ctx, id)) throw new Error('Conversation outside plugin scope');
+      const signal = options.signal ? AbortSignal.any([lifetime, options.signal]) : lifetime;
+      signal.throwIfAborted();
+      const handle = launch(id, input, signal, options.acquire);
+      void ctx.fiber.run(() => handle.result, signal).catch(() => {});
+      return handle;
+    },
+    status(id) {
+      const ctx = Service.caller(this);
+      ctx.fiber.signal.throwIfAborted();
+      if (!sessionVisible(ctx, id)) throw new Error('Conversation outside plugin scope');
+      return info(id);
+    }
+  });
+}
 
-declare module '@mini-harness/kernel/observations' {
+declare module '@mini-harness/plugin-api/observations' {
   interface CapabilityObservations {
     'run-started': { type: 'run-started'; sessionId: string; run: RunInfo };
     'run-ended': { type: 'run-ended'; sessionId: string; run: RunInfo };

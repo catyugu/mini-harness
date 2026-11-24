@@ -1,9 +1,10 @@
-import type { ScopeKey } from '@mini-harness/kernel/scopes';
+import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
 import { toolNamePattern } from '@mini-harness/llm/vocabulary';
 import { Check, Errors } from 'typebox/value';
-import { isTrustedContribution } from '@mini-harness/kernel/contributions';
-import { isToolContent, registerToolBinding, type ToolDefinition, type ToolPort } from './api.js';
-import type { ToolDecision } from './extensions.js';
+import { Service, type Context } from 'mini-harness/cordis';
+import { pluginInstance } from '@mini-harness/plugin-api/instance';
+import { isToolContent, type ToolDefinition, type ToolPort, type ToolRegistrationOptions } from './api.js';
+import type { ToolDecision } from './events.js';
 import type { ToolAccess, ToolPolicy } from './policy.js';
 
 interface ToolRegistration extends ToolAccess {
@@ -12,7 +13,7 @@ interface ToolRegistration extends ToolAccess {
   visible(id: string): boolean;
 }
 
-export class ToolRegistry implements ToolPort {
+export class ToolRegistry {
   private readonly tools = new Map<string, ToolRegistration>();
   private readonly leases = new WeakMap<ToolDefinition, { id: string; entry: ToolRegistration }>();
 
@@ -20,18 +21,35 @@ export class ToolRegistry implements ToolPort {
     private readonly decide?: (request: ToolDecision) => Promise<'deny' | undefined>,
     private readonly authorize: ToolPolicy = () => true) {}
 
-  [registerToolBinding](name: string, bind: (id: string) => ToolDefinition,
-    { visible, scope, source, access }: NonNullable<Parameters<ToolPort[typeof registerToolBinding]>[2]> = {}) {
+  service(): ToolPort {
+    const registry = this;
+    return Service.track({
+      register(definition, options) {
+        const context = Service.caller(this);
+        const { scopeKey } = pluginInstance(context);
+        const bind = 'bind' in definition ? definition.bind : () => definition;
+        return registry.registerBinding(definition.name, bind, { ...options, context, scope: scopeKey });
+      },
+      forSession: this.forSession.bind(this),
+      isAvailable: this.isAvailable.bind(this),
+      readOnlyRegistrations: this.readOnlyRegistrations.bind(this)
+    });
+  }
+
+  registerBinding(name: string, bind: (id: string) => ToolDefinition,
+    { visible, scope, context: owner, access }: ToolRegistrationOptions & { context?: Context; scope?: ScopeKey } = {}) {
     if (!toolNamePattern.test(name)) throw new Error('Invalid tool name: ' + name);
     const key = (scope ?? '') + '/' + name;
     if (this.tools.has(key)) throw new Error('Duplicate tool in scope: ' + name);
     const lifetime = new AbortController();
     const registry = this;
     const active = new Set<Promise<unknown>>();
-    const expired = () => lifetime.signal.aborted || source?.signal.aborted === true;
-    const entry: ToolRegistration = { name, scope, readOnly: access === 'readOnly', pluginId: source?.pluginId,
-      trusted: source !== undefined && isTrustedContribution(source),
-      visible: (id) => !expired() && (source?.visible(id) ?? true) && (visible?.(id) ?? true),
+    const signal = owner?.fiber.signal;
+    const identity = owner && pluginInstance(owner);
+    const expired = () => lifetime.signal.aborted || signal?.aborted === true;
+    const entry: ToolRegistration = { name, scope, readOnly: access === 'readOnly', pluginId: identity?.pluginId,
+      trusted: identity?.trusted ?? false,
+      visible: (id) => !expired() && (!scope || registry.address(id).includes(scope)) && (visible?.(id) ?? true),
       bind(id) {
         const tool = bind(id);
         if (tool.name !== name) throw new Error('Tool binding changed its registered name: ' + name);
@@ -60,7 +78,7 @@ export class ToolRegistry implements ToolPort {
               if (!result || !isToolContent(result.content)) throw new Error('Invalid result from tool: ' + name);
               return result;
             };
-            const work = source ? source.run('tool ' + name, execute, combined) : Promise.resolve().then(() => execute(combined));
+            const work = owner ? owner.fiber.run(execute, combined) : Promise.resolve().then(() => execute(combined));
             active.add(work);
             try { return await work; }
             finally { active.delete(work); }

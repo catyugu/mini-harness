@@ -1,4 +1,4 @@
-import type {} from 'cordis';
+import type {} from 'mini-harness/cordis';
 
 /** Feature-owned live projections subscribe without coupling the browser boot to their data. */
 export interface BrowserProjection {
@@ -9,7 +9,7 @@ export interface BrowserProjectionPort {
   register(domain: string, projection: BrowserProjection): () => void;
 }
 
-declare module 'cordis' {
+declare module 'mini-harness/cordis' {
   interface Context {
     miniProjections: BrowserProjectionPort;
   }

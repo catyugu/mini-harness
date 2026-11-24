@@ -9,6 +9,9 @@ export const manifest: PluginDescriptor = {
     maxTurns: Type.Integer({ minimum: 1, maximum: 1024, default: 128, title: 'Maximum turns per run' }),
     autoCompact: Type.Boolean({ default: true, title: 'Automatically compact long conversations' })
   }, { additionalProperties: false }),
-  inject: ['harnessScopes', 'harnessRegistry', 'harnessTools', 'harnessModels', 'harnessLlm', 'harnessPrompt'],
-  provides: ['harnessAgent'], setup,
+   plugin: {
+                                inject: ['harnessScopes', 'harnessRegistry', 'harnessTools', 'harnessModels', 'harnessLlm', 'harnessPrompt'],
+                                provide: ['harnessAgent'],
+                                apply: setup
+                              },
 };

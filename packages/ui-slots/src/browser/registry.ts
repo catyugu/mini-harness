@@ -2,7 +2,7 @@
  * Contributions can arrive before their owner and are restored when an owner remounts.
  * The registry has no knowledge of business features or Cordis.
  */
-import { KeyedContributions } from '@mini-harness/ui-runtime/contribution';
+import { KeyedRegistry } from '@mini-harness/ui-runtime/keyed-registry';
 import type { KeyedSlotOptions, SlotKind, SlotName, SlotRenderer } from './api.js';
 
 interface Entry { node?: HTMLElement; render?: SlotRenderer; order: number }
@@ -11,7 +11,7 @@ interface Outlet { container: HTMLElement; kind: SlotKind; active: Map<Entry, Mo
 
 export class SlotRegistry {
   private readonly owners = new Map<SlotName, Outlet>();
-  private readonly entries = new Map<SlotName, KeyedContributions<string | HTMLElement, Entry>>();
+  private readonly entries = new Map<SlotName, KeyedRegistry<string | HTMLElement, Entry>>();
 
   define(name: SlotName, container: HTMLElement, kind: SlotKind = 'list'): () => void {
     if (this.owners.has(name)) throw new Error('Duplicate slot owner: ' + name);
@@ -41,7 +41,7 @@ export class SlotRegistry {
   }
 
   private add(name: SlotName, key: string | HTMLElement, value: Entry) {
-    const entries = this.entries.get(name) ?? new KeyedContributions<string | HTMLElement, Entry>();
+    const entries = this.entries.get(name) ?? new KeyedRegistry<string | HTMLElement, Entry>();
     this.entries.set(name, entries);
     const remove = entries.add(key, value, value.order);
     const dispose = () => {

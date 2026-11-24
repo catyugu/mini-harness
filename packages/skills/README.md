@@ -12,7 +12,7 @@ Owns skill roots, discovery, explicit invocation, the `load_skill` tool and the 
 
 ## API
 
-Contributes to `promptExtensions`, `agentExtensions`, Tools and the Conversation composer.
+Registers a prompt section, an `agent/prepare-input` listener, a tool and composer commands.
 
 ## Dependencies
 

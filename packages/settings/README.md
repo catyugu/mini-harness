@@ -12,7 +12,7 @@ Validates settings, serializes mutations, commits atomic writes and publishes re
 
 ## API
 
-`harnessSettingsStore` exposes committed settings and transactions. `settingsExtensions.register` is available through the browser SDK.
+`harnessSettingsStore` exposes committed settings and transactions. `miniSettingsRegistry.register` is available through the browser SDK.
 
 ## Dependencies
 

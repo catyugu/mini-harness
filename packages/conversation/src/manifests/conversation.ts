@@ -11,7 +11,10 @@ export const manifest: PluginDescriptor = {
   configSchema: Type.Object({
     queueMode: Type.Union([Type.Literal('steer'), Type.Literal('followUp')], { default: 'steer' }),
   }, { additionalProperties: false }),
-  inject: ['harnessChanges', 'harnessRegistry', 'harnessRuns', 'harnessWorkspaces', 'harnessRoutes', 'harnessApprovals'], setup,
+   plugin: {
+                                                                                                                            inject: ['harnessChanges', 'harnessRegistry', 'harnessRuns', 'harnessWorkspaces', 'harnessRoutes', 'harnessApprovals'],
+                                                                                                                            apply: setup
+                                                                                                                          },
   browserStyles: ['/packages/conversation/src/browser/conversation/style.css'],
   browser: '/packages/conversation/src/browser/conversation/setup.js',
 };

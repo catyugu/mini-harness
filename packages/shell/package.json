@@ -14,7 +14,6 @@
     "@mini-harness/process-execution": "workspace:*",
     "@mini-harness/sessions": "workspace:*",
     "@mini-harness/tools": "workspace:*",
-    "@mini-harness/transport": "workspace:*",
-    "@mini-harness/ui-runtime": "workspace:*"
+    "@mini-harness/transport": "workspace:*"
   }
 }

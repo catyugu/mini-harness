@@ -1,4 +1,4 @@
-import type {} from 'cordis';
+import type {} from 'mini-harness/cordis';
 import type { PluginIcon } from '@mini-harness/plugin-api/descriptor';
 import type { SessionDisplayRecord } from '@mini-harness/sessions/display-record';
 import type { MessageContent, ViewMessage } from '@mini-harness/sessions/message';
@@ -24,7 +24,7 @@ export interface MessageAction {
 export type RecordRenderer = (record: SessionDisplayRecord, context: { sessionId: string; signal: AbortSignal }) =>
   HTMLElement | undefined;
 
-declare module 'cordis' {
+declare module 'mini-harness/cordis' {
   interface Context {
     miniMessages: {
       registerRecord(plugin: string, render: RecordRenderer): () => void;

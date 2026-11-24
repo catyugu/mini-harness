@@ -1,6 +1,6 @@
-import type { ScopeKey } from '@mini-harness/kernel/scopes';
+import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
 import type { Settings } from '../shared/settings.js';
-import type {} from 'cordis';
+import type {} from 'mini-harness/cordis';
 
 export interface SettingsPort {
   readonly settings: Settings;
@@ -10,7 +10,7 @@ export interface SettingsPort {
   subscribe(listener: () => void): () => void;
 }
 
-declare module 'cordis' {
+declare module 'mini-harness/cordis' {
   interface Context {
     harnessSettingsStore: SettingsPort;
   }

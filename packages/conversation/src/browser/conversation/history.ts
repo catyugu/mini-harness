@@ -1,4 +1,4 @@
-import type { Context } from 'cordis';
+import type { Context } from 'mini-harness/cordis';
 import type { SessionDisplayRecord } from '@mini-harness/sessions/display-record';
 import type { MessageExtensions } from './message-extensions.js';
 import { createMessageView } from './messages.js';

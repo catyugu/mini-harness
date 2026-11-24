@@ -1,13 +1,14 @@
+import { browserRequest } from '@mini-harness/ui-runtime/http';
+import type { Context } from 'mini-harness/cordis';
 import type {} from '@mini-harness/ui-runtime/projection-api';
 import type { Approval } from '../shared/request.js';
-import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend-api';
 import { RemoteStore } from '@mini-harness/ui-runtime/remote-store';
 
-const setup: FrontendSetup = async (ctx, api) => {
-  const store = new RemoteStore(() => api.request<Approval[]>('/approvals'));
+const setup = async (ctx: Context) => {
+  const store = new RemoteStore(() => browserRequest<Approval[]>(ctx, '/approvals'));
   await store.refresh();
-  api.onDispose(ctx.miniProjections.register('approvals', store));
+  ctx.effect(() => ctx.miniProjections.register('approvals', store));
   ctx.provide('miniApprovals', store);
 };
 
-export default setup;
+export default { inject: ['miniProjections'], provide: ['miniApprovals'], apply: setup };

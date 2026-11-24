@@ -1,7 +1,7 @@
 import { request as httpRequest } from 'node:http';
 import { tmpdir } from 'node:os';
 import { fixture, waitUntil } from '../support/api-fixture.js';
-import { pluginSdkUrl, writePlugin } from '../support/plugin-fixture.js';
+import { writePlugin } from '../support/plugin-fixture.js';
 import { expectPresent } from '../support/required.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -12,13 +12,13 @@ import { createFixturePaths, createMockProvider } from '../helpers/mock-provider
 import { DEFAULTS, mergeSettings, readSettings } from '@mini-harness/settings/config';
 import { writeJson } from '@mini-harness/platform/json';
 
-import { Context } from 'cordis';
+import { Context } from 'mini-harness/cordis';
 import type { SessionRecord } from '@mini-harness/sessions/identity';
 import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
 import { PluginHost } from '@mini-harness/plugins/manager';
 
-declare module '@mini-harness/kernel/services' {
-  interface ServiceMap {
+declare module 'mini-harness/cordis' {
+  interface Context {
     greeting: string;
     extra: string;
   }
@@ -38,22 +38,22 @@ test('an installed Cordis plugin can use services, configure a tool, and release
   }, title: 'Example plugin', icon: {
     path: 'M2 2h20v20H2z', viewBox: '0 0 24 24'
   } }));
-  writeFileSync(join(folder, 'plugin.js'), `import { sessionExtensions, toolExtensions } from "${pluginSdkUrl}";
+  writeFileSync(join(folder, 'plugin.js'), `
+export const inject = ["harnessSessions","harnessTools"];
 
-    import { appendFileSync } from 'node:fs';
-    export default (ctx, api) => {
-      const { config } = api;
-      const sessions = api.contribute(sessionExtensions.access);
+import { appendFileSync } from 'node:fs';
+export const apply = (ctx, config) => {
+      const sessions = ctx.harnessSessions.access();
       ctx.effect(() => () => appendFileSync(${JSON.stringify(log)}, 'dispose\\n'));
-      api.contribute(toolExtensions.register, {
+      ctx.effect(() => ctx.harnessTools.register({
         name: 'example_count', label: 'Count', description: 'Count sessions',
         parameters: { type: 'object', properties: {} },
         async execute() {
           return { content: [{ type: 'text', text: config.prefix + ': ' + sessions.list().length }] };
         }
-      });
+      }));
     };
-  `);
+`);
   await runtime.start();
   const item = runtime.plugins.ctx.harnessRegistry.create();
   assert.equal(runtime.plugins.metadata().find(({ id }) => id === 'example')?.title, 'Example plugin');
@@ -89,11 +89,14 @@ test('file tools have a plugin lifecycle and required plugins cannot be disabled
   const folder = join(paths.plugins, 'dependent');
   mkdirSync(folder);
   writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ inject: ['harnessTools'], requires: ['files'] }));
-  writeFileSync(join(folder, 'plugin.js'), `import { sessionExtensions, toolExtensions } from "${pluginSdkUrl}";
-export default (ctx, api) => {
-    api.contribute(toolExtensions.register, { name: 'dependent_tool', description: 'Fixture', parameters: { type: 'object', properties: {} },
-      execute: async () => ({ content: [{ type: 'text', text: 'ok' }] }) });
-  };`);
+  writeFileSync(join(folder, 'plugin.js'), `
+export const inject = ["harnessTools"];
+
+export const apply = (ctx) => {
+    ctx.effect(() => ctx.harnessTools.register({ name: 'dependent_tool', description: 'Fixture', parameters: { type: 'object', properties: {} },
+      execute: async () => ({ content: [{ type: 'text', text: 'ok' }] }) }));
+  };
+`);
   await runtime.start();
   const item = runtime.plugins.ctx.harnessRegistry.create();
   await runtime.plugins.prepare(`session:${item.id}`);
@@ -102,24 +105,27 @@ export default (ctx, api) => {
   await runtime.configuration.update({ plugins: { files: false } });
   assert.ok(!activeNames().includes('read'));
   await runtime.configuration.update({ plugins: { files: true, dependent: true } });
-  await assert.rejects(runtime.configuration.update({ plugins: { files: false } }), /Required plugin/);
+  await assert.rejects(runtime.configuration.update({ plugins: { files: false } }), /No enabled provider/);
   assert.equal(runtime.settings.plugins.files, true);
   assert.ok(activeNames().includes('dependent_tool'));
   await runtime.configuration.update({ plugins: { files: false, dependent: false } });
   assert.equal(runtime.plugins.ctx.harnessTools.forSession(item.id).some(({ name }) => name === 'read' || name === 'dependent_tool'), false);
 });
 
-test('server entry requires a default setup function', async (t) => {
+test('server entries support named Cordis declarations and reject an invalid module', async (t) => {
   const mock = await createMockProvider();
   const { root, paths } = createFixturePaths(mock.url);
   const runtime = new MiniHarnessRuntime(paths);
   t.after(async () => { await runtime.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
   for (const [id, source] of [
-    ['function-entry', `import { sessionExtensions } from "${pluginSdkUrl}";
-    export default function(_ctx, api) {
-      if (api.contribute(sessionExtensions.access).list().length !== 0) throw new Error('Unexpected sessions');
-    }`],
-    ['named-entry', 'export default { apply() {} }']
+    ['function-entry', `
+export const inject = ["harnessSessions"];
+
+export function apply(ctx) {
+      if (ctx.harnessSessions.access().list().length !== 0) throw new Error('Unexpected sessions');
+    }
+`],
+    ['named-entry', 'export const setup = () => {}']
   ]) {
     mkdirSync(join(paths.plugins, id));
     writeFileSync(join(paths.plugins, id, 'plugin.js'), source);
@@ -127,7 +133,7 @@ test('server entry requires a default setup function', async (t) => {
   }
   await runtime.start();
   await runtime.configuration.update({ plugins: { 'function-entry': true } });
-  await assert.rejects(runtime.configuration.update({ plugins: { 'named-entry': true } }), /Export a default setup function/);
+  await assert.rejects(runtime.configuration.update({ plugins: { 'named-entry': true } }), /must export a Cordis plugin/);
   assert.equal(runtime.settings.plugins['function-entry'], true);
   assert.equal(runtime.settings.plugins['named-entry'], undefined);
   assert.equal(readSettings(paths).plugins['named-entry'], undefined);
@@ -145,21 +151,24 @@ test('plugin JSON Schema applies defaults and rejects invalid changes before set
     properties: { count: { type: 'integer', minimum: 1, maximum: 10, default: 3 },
       options: { type: 'object', default: {}, properties: { enabled: { type: 'boolean', default: true } } } }
   } }));
-  writeFileSync(join(folder, 'plugin.js'), `import { toolExtensions } from "${pluginSdkUrl}";
+  writeFileSync(join(folder, 'plugin.js'), `
+export const inject = ["harnessPluginSettings","harnessTools"];
+
 export function validateConfig(config) {
   if (config.count === 5) throw new Error('Five is reserved');
 }
-export default (_ctx, api) => {
+export const apply = (ctx) => {
     const changes = [];
-    api.configuration.subscribe('count', (value) => changes.push(value));
-    api.contribute(toolExtensions.register, { name: 'schema_value', description: 'Fixture', parameters: { type: 'object', properties: {} },
+    ctx.harnessPluginSettings.subscribe('count', (value) => changes.push(value));
+    ctx.effect(() => ctx.harnessTools.register({ name: 'schema_value', description: 'Fixture', parameters: { type: 'object', properties: {} },
       async execute(_id, changesToSave) {
-        if (Object.keys(changesToSave).length) await api.configuration.patch(changesToSave);
-        return { content: [{ type: 'text', text: api.configuration.get('count') + ':' +
-          api.configuration.get('options').enabled + ':' + changes.join(',') }] };
+        if (Object.keys(changesToSave).length) await ctx.harnessPluginSettings.patch(changesToSave);
+        return { content: [{ type: 'text', text: ctx.harnessPluginSettings.get('count') + ':' +
+          ctx.harnessPluginSettings.get('options').enabled + ':' + changes.join(',') }] };
       }
-    });
-  };`);
+    }));
+  };
+`);
   await runtime.start();
   await runtime.configuration.update({ plugins: { schema: true } });
   const item = runtime.plugins.ctx.harnessRegistry.create();
@@ -190,16 +199,18 @@ test('dependent plugins restart in order and partial setup or persistence failur
     const folder = join(paths.plugins, id);
     mkdirSync(folder);
     writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ inject: ['harnessTools'], requires: id === 'dependent' ? ['base'] : [] }));
-    writeFileSync(join(folder, 'plugin.js'), `import { sessionExtensions, toolExtensions } from "${pluginSdkUrl}";
+    writeFileSync(join(folder, 'plugin.js'), `
+export const inject = ["harnessTools"];
 
-      import { appendFileSync } from 'node:fs';
-      export default (ctx, api) => {
+import { appendFileSync } from 'node:fs';
+export const apply = (ctx, config) => {
         appendFileSync(${JSON.stringify(log)}, 'start ${id}\\n');
         ctx.effect(() => () => appendFileSync(${JSON.stringify(log)}, 'stop ${id}\\n'));
-        api.contribute(toolExtensions.register, { name: '${id}_tool', description: 'Fixture', parameters: {type: 'object', properties: {}},
-          execute: async () => ({content: [{type: 'text', text: String(api.config.value ?? 'original')}]}) });
-        if (api.config.fail) throw new Error('Partial setup failed');
-      };`);
+        ctx.effect(() => ctx.harnessTools.register({ name: '${id}_tool', description: 'Fixture', parameters: {type: 'object', properties: {}},
+          execute: async () => ({content: [{type: 'text', text: String(config.value ?? 'original')}]}) }));
+        if (config.fail) throw new Error('Partial setup failed');
+      };
+`);
   }
   await runtime.start();
   await runtime.configuration.update({ plugins: { base: true, dependent: true } });
@@ -223,10 +234,10 @@ test('cyclic dependencies reject a configuration before mounting either plugin',
     const folder = join(paths.plugins, id);
     mkdirSync(folder);
     writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ requires: [dependency] }));
-    writeFileSync(join(folder, 'plugin.js'), 'export default () => { throw new Error("Should not mount"); };');
+    writeFileSync(join(folder, 'plugin.js'), "export default () => { throw new Error(\"Should not mount\"); };");
   }
   await runtime.start();
-  await assert.rejects(runtime.configuration.update({ plugins: { first: true, second: true } }), /Cyclic plugin/);
+  await assert.rejects(runtime.configuration.update({ plugins: { first: true, second: true } }), /No enabled provider/);
   assert.equal(runtime.settings.plugins.first, undefined);
 });
 
@@ -237,7 +248,7 @@ test('malformed plugin manifests fail discovery instead of silently dropping the
   t.after(async () => { await runtime.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
   const folder = join(paths.plugins, 'broken-manifest');
   mkdirSync(folder);
-  writeFileSync(join(folder, 'plugin.js'), 'export default () => {};');
+  writeFileSync(join(folder, 'plugin.js'), "export default () => {};");
   writeFileSync(join(folder, 'plugin.json'), '{"requires": [');
   assert.match(runtime.plugins.metadata().find(({ id }) => id === 'broken-manifest')?.error ?? '', /JSON|Unexpected|parse/i);
   await runtime.start();
@@ -272,7 +283,7 @@ test('an optional plugin that fails at startup reports its state without blockin
   const folder = join(paths.plugins, 'fails-to-start');
   mkdirSync(folder);
   writeFileSync(join(folder, 'plugin.js'), "export default () => { throw new Error('Startup failed'); };");
-  writeFileSync(join(folder, 'web.js'), 'export default () => {};');
+  writeFileSync(join(folder, 'web.js'), "export default () => {};");
   writeFileSync(join(folder, 'plugin.json'), JSON.stringify({}));
   writeJson(paths.settings, { ...readSettings(paths), plugins: { 'fails-to-start': true } });
   const restarted = new MiniHarnessRuntime(paths);
@@ -302,20 +313,24 @@ test('unloading cancels and drains HTTP, scoped requests and upgrades before dis
     };
   `;
   writePlugin(paths.plugins, 'drain', { inject: ['harnessSettingsStore'] }, lifecycle + `
-    export default (ctx, api) => {
+export const inject = ["harnessPluginRoutes","harnessSettingsStore"];
+export const apply = (ctx) => {
       ctx.effect(() => () => mark('app:disposed'));
-      api.registerRoute('GET', '/wait', ({ signal }) => wait('http', signal));
-      api.registerRoute('POST', '/disable', async () => {
+      ctx.harnessPluginRoutes.register('GET', '/wait', ({ signal }) => wait('http', signal));
+      ctx.harnessPluginRoutes.register('POST', '/disable', async () => {
         try { await ctx.harnessSettingsStore.update({ plugins: { drain: false } }); }
         catch (error) { return { error: error.message }; }
       });
-      api.registerUpgrade('/socket', async (_request, _socket, _head, signal) => wait('ws', signal));
-    };`);
+      ctx.harnessPluginRoutes.upgrade('/socket', async (_request, _socket, _head, signal) => wait('ws', signal));
+    };
+`);
   writePlugin(paths.plugins, 'scoped-drain', { scope: 'session' }, lifecycle + `
-    export default (ctx, api) => {
+export const inject = ["harnessPluginRoutes"];
+export const apply = (ctx) => {
       ctx.effect(() => () => mark('scope:disposed'));
-      api.registerScopeRequest('wait', (_input, signal) => wait('scope', signal));
-    };`);
+      ctx.harnessPluginRoutes.scope('wait', (_input, signal) => wait('scope', signal));
+    };
+`);
   const session = app.runtime.plugins.ctx.harnessRegistry.create();
   const scope = `session:${session.id}`;
   const toggle = (active: boolean) => request('/settings', 'PATCH', {
@@ -362,16 +377,16 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
   const released: string[] = [];
   const builtins: PluginDescriptor[] = [
     { id: 'global', scope: 'application', title: 'Global', description: '', defaultEnabled: true,
-      provides: ['greeting', 'extra'], setup(ctx) { ctx.provide('greeting', 'global'); ctx.provide('extra', 'retained'); } },
+      plugin: { provide: ['greeting', 'extra'], apply(ctx) { ctx.provide('greeting', 'global'); ctx.provide('extra', 'retained'); } } },
     { id: 'workspace', scope: 'workspace', title: 'Workspace', description: '', provides: ['greeting'],
       configSchema: { type: 'object', properties: { value: { type: 'string' } }, required: ['value'] },
-      setup(ctx, api) { ctx.provide('greeting', String(api.config.value)); } },
+      plugin: { provide: 'greeting', apply(ctx: Context, config: Record<string, unknown>) { ctx.provide('greeting', String(config.value)); } } },
     { id: 'layer', scope: 'session', title: 'Layer', description: '', provides: ['greeting'],
-      setup(ctx, api) {
-        ctx.effect(() => () => { released.push(String(api.config.value)); });
-        if (api.config.fail) throw new Error('Scoped setup failed');
-        ctx.provide('greeting', String(api.config.value));
-      } }
+      plugin: { provide: 'greeting', apply(ctx: Context, config: Record<string, unknown>) {
+        ctx.effect(() => () => { released.push(String(config.value)); });
+        if (config.fail) throw new Error('Scoped setup failed');
+        ctx.provide('greeting', String(config.value));
+      } } }
   ];
   const workspaceKey = 'workspace:' + workspaceId;
   const workspace = { plugins: { workspace: true }, providers: { greeting: 'workspace' }, pluginConfig: { workspace: { value: 'workspace' } } };
@@ -440,10 +455,10 @@ test('configuration validation resolves the staged scope provider and rejects in
   let settings = structuredClone(DEFAULTS);
   const builtins: PluginDescriptor[] = [
     { id: 'global', scope: 'application', title: 'Default', description: '', defaultEnabled: true, provides: ['greeting'],
-      setup(ctx) { ctx.provide('greeting', 'global'); } },
+      plugin: { provide: 'greeting', apply(ctx) { ctx.provide('greeting', 'global'); } } },
     { id: 'local', scope: 'workspace', title: 'Local', description: '', provides: ['greeting'],
-      setup(ctx) { ctx.provide('greeting', 'local'); } },
-    { id: 'consumer', scope: 'workspace', title: 'Consumer', description: '', inject: ['greeting'],
+      plugin: { provide: 'greeting', apply(ctx) { ctx.provide('greeting', 'local'); } } },
+    { id: 'consumer', scope: 'workspace', title: 'Consumer', description: '', plugin: { inject: ['greeting'], apply() {} },
       configSchema: { type: 'object', properties: { expected: { type: 'string' } }, required: ['expected'] },
       validateConfig(config, { operation, service }) {
         if (config.expected !== service('greeting')) throw new Error('Wrong scoped greeting during ' + operation);
@@ -475,14 +490,16 @@ test('setup and live configuration cannot await their own graph transaction', as
   let settings = structuredClone(DEFAULTS);
   const builtins: PluginDescriptor[] = [{
     id: 'reentrant', scope: 'application', title: 'Reentrant', description: '', configChanges: 'live',
-    async setup(_ctx, api) {
-      if (api.config.prepare) await api.prepareSession('session');
-      api.onConfigChange(async (next) => {
-        if (next.prepare) await api.prepareSession('session');
+    plugin: { async apply(ctx: Context, config: Record<string, unknown>) {
+      if (config.prepare) await ctx.harnessScopes.prepare('session:session');
+      ctx.on('internal/update', async (next) => {
+        if (next.prepare) await ctx.harnessScopes.prepare('session:session');
       });
-    }
+    } }
   }];
-  const host = new PluginHost(new Context(), directory, builtins, [], () => settings);
+  const ctx = new Context();
+  const host = new PluginHost(ctx, directory, builtins, [], () => settings);
+  ctx.provide('harnessScopes', host);
   host.register('session', (id) => ({ scope: { kind: 'session', sessionId: id, workspaceId: 'workspace' } }));
   t.after(async () => { await host.close(); rmSync(directory, { recursive: true, force: true }); });
   await host.start(settings);
@@ -504,7 +521,7 @@ test('required browser services must survive server mounting, including replacem
   const builtins: PluginDescriptor[] = [
     { id: 'ui', scope: 'application', title: 'UI', description: '', defaultEnabled: true, browser, browserProvides: ['miniTest'] },
     { id: 'replacement', scope: 'application', title: 'Replacement', description: '', browser, browserProvides: ['miniTest'],
-      setup(_ctx, api) { if (api.config.fail) throw new Error('Unavailable replacement'); } }
+      plugin: { apply(_ctx: Context, config: Record<string, unknown>) { if (config.fail) throw new Error('Unavailable replacement'); } } }
   ];
   const settings = { ...structuredClone(DEFAULTS), plugins: { replacement: true },
     browserProviders: { miniTest: 'replacement' }, pluginConfig: { replacement: { fail: true } } };

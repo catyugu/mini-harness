@@ -1,4 +1,4 @@
-import type {} from 'cordis';
+import type {} from 'mini-harness/cordis';
 
 export interface SearchInput {
   pattern: string;
@@ -29,6 +29,6 @@ export interface WorkspaceFileAccess {
   grep(input: SearchInput, signal?: AbortSignal): Promise<{ matches: string[]; limited: boolean }>;
 }
 
-declare module '@mini-harness/kernel/services' {
-  interface ServiceMap { harnessFileAccess: FileAccessPort }
+declare module 'mini-harness/cordis' {
+  interface Context { harnessFileAccess: FileAccessPort }
 }

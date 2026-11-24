@@ -19,7 +19,6 @@
     ]
   },
   "dependencies": {
-    "@mini-harness/plugin-api": "workspace:*",
-    "@mini-harness/ui-runtime": "workspace:*"
+    "@mini-harness/plugin-api": "workspace:*"
   }
 }

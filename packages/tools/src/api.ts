@@ -1,5 +1,3 @@
-import type { ScopeKey } from '@mini-harness/kernel/scopes';
-import type { ContributionSource } from '@mini-harness/kernel/contributions';
 import type { Static, TSchema } from 'typebox';
 import type { TextPart, ImagePart } from '@mini-harness/llm/api';
 
@@ -29,11 +27,8 @@ export interface ToolRegistrationOptions {
   visible?(sessionId: string): boolean;
 }
 
-export const registerToolBinding = Symbol.for('mini-harness.toolBinding');
-
 export interface ToolPort {
-  [registerToolBinding](name: string, bind: (sessionId: string) => ToolDefinition,
-    options?: ToolRegistrationOptions & { source?: ContributionSource; scope?: ScopeKey }): () => Promise<void>;
+  register(tool: ToolDefinition | { name: string; bind(sessionId: string): ToolDefinition }, options?: ToolRegistrationOptions): () => Promise<void>;
   forSession(id: string): ToolDefinition[];
   readOnlyRegistrations(pluginId: string): string[];
   isAvailable(id: string, tool: ToolDefinition): boolean;
@@ -49,6 +44,6 @@ export function defineTool<Schema extends TSchema>(definition: Omit<ToolDefiniti
   return definition;
 }
 
-declare module '@mini-harness/kernel/services' {
-  interface ServiceMap { harnessTools: ToolPort }
+declare module 'mini-harness/cordis' {
+  interface Context { harnessTools: ToolPort }
 }

@@ -12,11 +12,11 @@ Owns model selection for each delivery, request preparation, retries, inbox deli
 
 ## API
 
-`harnessAgent` is an internal execution service. `harnessPrompt`, `promptExtensions` and `agentExtensions` are available through the [server SDK](../sdk/README.md).
+`harnessAgent` is an internal execution service. Prompt registration and typed Agent events are available through the [server SDK](../sdk/README.md).
 
 ## Dependencies
 
-Resolves scoped LLM, model, prompt and tool providers through [Kernel](../kernel/README.md). Appends the accepted inputs, model requests and execution results through [Sessions](../sessions/README.md).
+Resolves scoped LLM, model, prompt and tool providers through the session’s Cordis Context. Appends the accepted inputs, model requests and execution results through [Sessions](../sessions/README.md).
 
 ## Lifecycle
 

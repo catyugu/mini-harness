@@ -1,8 +1,9 @@
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { ViewMessage } from './shared/message.js';
 import type { SessionRecord } from './shared/identity.js';
-import { assertOutsideMountTransaction } from '@mini-harness/kernel/mutation-api';
-import { extension } from '@mini-harness/kernel/contributions';
+import { assertOutsideMountTransaction } from '@mini-harness/plugin-api/mutation-api';
+import { Service, type Context } from 'mini-harness/cordis';
+import { pluginInstance, sessionVisible } from '@mini-harness/plugin-api/instance';
 
 export interface RecordDisplay { title: string; content?: unknown }
 export interface RecordOwner { pluginId: string; instanceId: string }
@@ -17,8 +18,6 @@ export interface RecordProjection<State> {
   reduce(state: State, record: ReturnType<SessionRecords['list']>[number]): State;
 }
 
-export const recordsForPlugin = Symbol.for('mini-harness.sessionRecords');
-
 export interface SessionAccess {
   get(id: string): SessionRecord | undefined;
   list(workspaceId?: string): SessionRecord[];
@@ -29,83 +28,74 @@ export interface SessionAccess {
   history(id: string): { messages: ViewMessage[]; leafId: string | null; model?: ModelChoice };
 }
 
-export const sessionAccess = Symbol.for('mini-harness.sessionAccess');
-
-interface SessionDirectory {
-  [sessionAccess]: SessionAccess;
-  [recordsForPlugin](id: string, owner: RecordOwner): SessionRecords;
+export interface SessionDirectory {
+  access(): SessionAccess;
+  records(id: string): SessionRecords;
 }
 
-export const sessionExtensions = {
-  access: extension((source): SessionAccess => {
-    const sessions = source.service('harnessSessions')[sessionAccess];
-    const check = (id: string) => {
-      source.signal.throwIfAborted();
-      if (!source.visible(id)) throw new Error('Conversation outside plugin scope');
-    };
-    return {
-      get(id) {
-        source.signal.throwIfAborted();
-        return source.visible(id) ? sessions.get(id) : undefined;
-      },
-      list(workspaceId) {
-        source.signal.throwIfAborted();
-        return sessions.list(workspaceId).filter(({ id }) => source.visible(id));
-      },
-      create({ title, workspaceId, parentId } = {}) {
-        source.signal.throwIfAborted();
-        assertOutsideMountTransaction();
-        if (source.scopeKey?.startsWith('session:') && !parentId)
-          throw new Error('A session plugin must create a child conversation');
-        if (parentId) check(parentId);
-        if (source.scopeKey?.startsWith('workspace:')) {
-          const owner = source.scopeKey.slice('workspace:'.length);
-          if (workspaceId !== undefined && workspaceId !== owner)
-            throw new Error('Workspace outside plugin scope');
-          workspaceId = owner;
+export function sessionDirectory(sessions: SessionAccess, open: (id: string, owner: RecordOwner) => SessionRecords): SessionDirectory {
+  return Service.track({
+    access() {
+      const ctx: Context = Service.caller(this);
+      const signal = ctx.fiber.signal;
+      const { scopeKey } = pluginInstance(ctx);
+      const check = (id: string) => {
+        signal.throwIfAborted();
+        if (!sessionVisible(ctx, id)) throw new Error('Conversation outside plugin scope');
+      };
+      return {
+        get(id) {
+          signal.throwIfAborted();
+          return sessionVisible(ctx, id) ? sessions.get(id) : undefined;
+        },
+        list(workspaceId) {
+          signal.throwIfAborted();
+          return sessions.list(workspaceId).filter(({ id }) => sessionVisible(ctx, id));
+        },
+        create({ title, workspaceId, parentId } = {}) {
+          signal.throwIfAborted();
+          assertOutsideMountTransaction();
+          if (scopeKey?.startsWith('session:') && !parentId)
+            throw new Error('A session plugin must create a child conversation');
+          if (parentId) check(parentId);
+          if (scopeKey?.startsWith('workspace:')) {
+            const owner = scopeKey.slice('workspace:'.length);
+            if (workspaceId !== undefined && workspaceId !== owner)
+              throw new Error('Workspace outside plugin scope');
+            workspaceId = owner;
+          }
+          return sessions.create({ title, workspaceId, parentId });
+        },
+        rename(id, title) {
+          assertOutsideMountTransaction();
+          check(id);
+          return sessions.rename(id, title);
+        },
+        depth(id) { check(id); return sessions.depth(id); },
+        workspacePath(id) { check(id); return sessions.workspacePath(id); },
+        history(id) { check(id); return sessions.history(id); }
+      };
+    },
+    records(id: string) {
+      const ctx = Service.caller(this);
+      const signal = ctx.fiber.signal;
+      const { pluginId, instanceId } = pluginInstance(ctx);
+      const records = () => {
+        signal.throwIfAborted();
+        if (!sessionVisible(ctx, id)) throw new Error('Conversation outside plugin scope');
+        return open(id, { pluginId, instanceId });
+      };
+      return {
+        list: () => records().list(),
+        append(data: unknown, display?: RecordDisplay) {
+          assertOutsideMountTransaction();
+          return ctx.fiber.run(() => records().append(data, display), signal);
         }
-        return sessions.create({ title, workspaceId, parentId });
-      },
-      rename(id, title) {
-        assertOutsideMountTransaction();
-        check(id);
-        return sessions.rename(id, title);
-      },
-      depth(id) { check(id); return sessions.depth(id); },
-      workspacePath(id) { check(id); return sessions.workspacePath(id); },
-      history(id) { check(id); return sessions.history(id); }
-    };
-  }),
-  records: extension((source) => {
-    const sessions = source.service('harnessSessions');
-    const records = (id: string) => {
-      if (!source.visible(id)) throw new Error('Conversation outside plugin scope');
-      return sessions[recordsForPlugin](id, { pluginId: source.pluginId, instanceId: source.instanceId });
-    };
-    return {
-      list: (id: string) => source.run('read session records', () => records(id).list()),
-      append: (id: string, data: unknown, display?: RecordDisplay) => {
-        assertOutsideMountTransaction();
-        return source.run('append session record', () => records(id).append(data, display));
-      },
-      projection<State>(projection: RecordProjection<State>) {
-        if (typeof projection.initial !== 'function' || typeof projection.reduce !== 'function')
-          throw new Error('Invalid session record projection');
-        source.signal.throwIfAborted();
-        let active = true;
-        const dispose = source.context.effect(() => () => { active = false; });
-        return {
-          read: (id: string) => source.run('read session record projection', () => {
-            if (!active) throw new Error('Session record projection is disposed');
-            return records(id).list().reduce(projection.reduce, projection.initial());
-          }),
-          dispose
-        };
-      }
-    };
-  })
-};
+      };
+    }
+  });
+}
 
-declare module '@mini-harness/kernel/services' {
-  interface ServiceMap { harnessSessions: SessionDirectory }
+declare module 'mini-harness/cordis' {
+  interface Context { harnessSessions: SessionDirectory }
 }

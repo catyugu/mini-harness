@@ -9,20 +9,18 @@ test('an extension owns its authenticated routes and native branch records witho
   const folder = join(paths.plugins, 'records');
   mkdirSync(folder);
   writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ inject: ['harnessSessions'] }));
-  writeFileSync(join(folder, 'plugin.js'), `import { sessionExtensions } from "${new URL('../../packages/sdk/src/plugin.js', import.meta.url).href}";
-export default (_ctx, api) => {
-    const records = api.contribute(sessionExtensions.records);
-    api.registerRoute('POST', '/entries', async ({ body }) => {
+  writeFileSync(join(folder, 'plugin.js'), `
+export const inject = ["harnessPluginRoutes","harnessSessions"];
+
+export const apply = (ctx) => {
+    ctx.harnessPluginRoutes.register('POST', '/entries', async ({ body }) => {
       const { id, value } = await body();
-      return records.append(id, value, { title: 'Progress', content: 'Browser summary' });
+      return ctx.harnessSessions.records(id).append(value, { title: 'Progress', content: 'Browser summary' });
     });
-    api.registerRoute('GET', '/entries', ({ url }) => records.list(url.searchParams.get('id')));
-    const notes = records.projection({
-      initial: () => [],
-      reduce: (state, { data }) => [...state, data.note]
-    });
-    api.registerRoute('GET', '/notes', ({ url }) => notes.read(url.searchParams.get('id')));
-  };`);
+    ctx.harnessPluginRoutes.register('GET', '/entries', ({ url }) => ctx.harnessSessions.records(url.searchParams.get('id')).list());
+        ctx.harnessPluginRoutes.register('GET', '/notes', ({ url }) => ctx.harnessSessions.records(url.searchParams.get('id')).list().map(({ data }) => data.note));
+  };
+`);
   const toggle = (enabled: boolean) => request('/settings', 'PATCH', { plugins: { records: enabled } });
   assert.equal((await toggle(true)).status, 200);
   const { body: session } = await request('/sessions', 'POST', {});

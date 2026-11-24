@@ -12,7 +12,7 @@ Owns run IDs, task and inbox admission, cancellation, compaction scheduling, cur
 
 ## API
 
-`harnessRuns` is the internal scheduler. `executionExtensions.control` provides scoped submission, status and instance-owned cancellation to native and installed plugins. Runs reads the model preference at admission and publishes accepted input to capability observers; Conversation consumes replay and activity.
+`harnessRuns` is the internal scheduler. `harnessExecution` provides scoped submission, status and instance-owned cancellation to native and installed plugins. Runs reads the model preference at admission and publishes accepted input to capability observers; Conversation consumes replay and activity.
 
 ## Dependencies
 

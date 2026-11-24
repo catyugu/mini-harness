@@ -1,23 +1,19 @@
 # @mini-harness/plugin-api
 
-Defines the server plugin descriptor and capability API.
+Defines the product plugin descriptor, settings and scope contracts.
 
 ## Responsibilities
 
-Owns descriptor fields, namespaced configuration shape and plugin selection validation.
+Validates identifiers and user selections. Associates host-issued identity and scope with Cordis entries for caller-aware product services.
 
 ## Structure
 
-`src/descriptor.ts` defines setup and plugin API contracts. `configuration.ts` defines stored selections. `selection.ts` validates identifiers and provider choices.
+`src/descriptor.ts` defines metadata. `configuration.ts` and `selection.ts` describe stored selections. `instance.ts` and `scopes.ts` connect product addresses to Context. `mutation-api.ts` supplies the settings transaction and request guards.
 
 ## API
 
-`PluginApi`, `PluginDescriptor` and `ConfigValidationContext` are published through the server SDK. Use the Cordis Context to read and publish container services. `scopedService` resolves the provider in a prepared conversation.
-
-## Dependencies
-
-Uses [Kernel](../kernel/README.md) for scopes and services and [Transport](../transport/README.md) for route types. Plugins supplies the runtime implementation.
+The SDK exposes `pluginScope`, `sessionContext`, `scopedService` and configuration validation types. Plugin registration and lifetime use Cordis directly.
 
 ## Testing
 
-[Plugin lifecycle tests](../../test/plugins/lifecycle.test.ts) and `pnpm run pack:verify` exercise the contracts.
+The [plugin suites](../../test/plugins/) and `pnpm run pack:verify` exercise the contracts.

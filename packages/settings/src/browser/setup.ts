@@ -1,24 +1,24 @@
+import { browserRequest } from '@mini-harness/ui-runtime/http';
+import type { Context } from 'mini-harness/cordis';
 import type {} from '@mini-harness/ui-theme/browser/api';
 import type {} from '@mini-harness/ui-runtime/projection-api';
 import type {} from '@mini-harness/ui-layout/browser/api';
 import type { Settings } from '../shared/settings.js';
 import { RemoteStore } from '@mini-harness/ui-runtime/remote-store';
-import { slotExtensions } from '@mini-harness/ui-slots/browser/api';
-import type { FrontendSetup, FrontendApi } from '@mini-harness/ui-runtime/frontend-api';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { closeOnBackdrop, fromMarkup, required, scopedElements } from '@mini-harness/ui-primitives/primitives';
 
 import { SettingsRegistry } from './registry.js';
 
-const setup: FrontendSetup = async (ctx, api) => {
-  const store = new RemoteStore(() => api.request<Settings>('/settings'));
+const setup = async (ctx: Context) => {
+  const store = new RemoteStore(() => browserRequest<Settings>(ctx, '/settings'));
   await store.refresh();
-  api.onDispose(ctx.miniProjections.register('settings', store));
+  ctx.effect(() => ctx.miniProjections.register('settings', store));
   ctx.provide('miniSettingsData', store);
   const registry = new SettingsRegistry();
   const layout = ctx.miniLayout;
   ctx.provide('miniSettingsRegistry', registry);
-  api.onDispose(registry.register('core:theme', {
+  ctx.effect(() => registry.register('core:theme', {
     id: 'theme',
     section: { title: 'Appearance', icon: 'theme', order: 30 },
     render({ bind }) {
@@ -38,14 +38,15 @@ const setup: FrontendSetup = async (ctx, api) => {
       return content;
     }
   }, ctx.miniAppearance));
-  const settings = mountSettings(api, registry);
+  const settings = mountSettings(ctx, registry);
   ctx.provide('miniSettings', settings);
   const launcher = fromMarkup<HTMLButtonElement>('<button type="button" aria-label="Settings"><span data-icon="settings"></span><span class="nav-label">Settings</span></button>');
   launcher.onclick = () => { layout.closeDrawer(); settings.open(); };
-  api.contribute(slotExtensions.register, 'sidebar.footer', launcher);
+  ctx.effect(() => ctx.miniSlots.register('sidebar.footer', launcher));
 };
 
-function mountSettings(api: FrontendApi, registry: SettingsRegistry) {
+function mountSettings(ctx: Context, registry: SettingsRegistry) {
+  const signal = ctx.fiber.signal;
   const panel = fromMarkup<HTMLDialogElement>(`<dialog id="settingsPanel" class="settings-panel" aria-labelledby="settingsTitle">
     <header class="settings-header">
       <h2 id="settingsTitle">Settings</h2>
@@ -68,7 +69,7 @@ function mountSettings(api: FrontendApi, registry: SettingsRegistry) {
   close.append(icon('close'));
   close.onclick = () => panel.close();
   back.prepend(icon('chevron'));
-  api.contribute(slotExtensions.register, 'dialog.root', panel);
+  ctx.effect(() => ctx.miniSlots.register('dialog.root', panel));
   closeOnBackdrop(panel);
   const pages = new Map<string, { section: HTMLElement; trigger: HTMLButtonElement; content: HTMLElement }>();
   let selected: string | undefined;
@@ -132,7 +133,7 @@ function mountSettings(api: FrontendApi, registry: SettingsRegistry) {
     if (selected === undefined || !pages.has(selected)) select();
   }
 
-  registry.addEventListener('change', render, { signal: api.signal });
+  registry.addEventListener('change', render, { signal });
   render();
   back.onclick = () => {
     body.classList.remove('settings-detail');
@@ -147,4 +148,4 @@ function mountSettings(api: FrontendApi, registry: SettingsRegistry) {
   };
 }
 
-export default setup;
+export default { inject: ['miniLayout','miniSlots','miniProjections','miniAppearance'], provide: ['miniSettings','miniSettingsData','miniSettingsRegistry'], apply: setup };

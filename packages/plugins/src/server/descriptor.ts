@@ -10,6 +10,7 @@ import type { PluginMetadata } from '../shared/metadata.js';
 
 export interface DiscoveredPlugin extends PluginDescriptor, Pick<PluginMetadata, 'trustedCode' | 'package' | 'error'> {
   source?: string;
+  module?: string;
   resources?: BrowserAssets;
 }
 

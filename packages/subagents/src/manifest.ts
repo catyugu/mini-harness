@@ -6,7 +6,10 @@ import { DomainError } from '@mini-harness/platform/errors';
 /** One self-contained plugin schema. Changes to child limits are safe during active runs. */
 export const manifest: PluginDescriptor = {
   scope: 'application', browserInject: ['harnessBrowser', 'miniMessages', 'miniSlots'],
-  setup, defaultEnabled: true,
+  plugin: {
+    inject: ['harnessTools', 'harnessSessions', 'harnessModels', 'harnessExecution'],
+    apply: setup
+  }, defaultEnabled: true,
   configChanges: 'live',
   id: 'subagents', title: 'Subagents', description: 'Delegate tasks to child conversations.',
   icon: 'delegate', browser: '/packages/subagents/src/browser/setup.js',
@@ -28,5 +31,4 @@ export const manifest: PluginDescriptor = {
       throw new DomainError('invalid_input', 'Unknown child model: ' + provider + '/' + id);
     }
   },
-  inject: ['harnessTools', 'harnessSessions', 'harnessModels', 'harnessExecution']
 };

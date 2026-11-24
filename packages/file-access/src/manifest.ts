@@ -7,15 +7,19 @@ export const manifest: PluginDescriptor = {
   scope: 'application',
   id: 'core:file-access', title: 'File access', description: 'Access paths within registered workspaces',
   defaultEnabled: true,
-  inject: ['harnessState', 'harnessWorkspaces'], provides: ['harnessFileAccess'],
-  setup(ctx) {
-    const { home } = ctx.harnessState.paths;
-    const workspaces = ctx.harnessWorkspaces;
-    ctx.provide('harnessFileAccess', {
-      open(id: string) {
-        const { path } = workspaces.get(id);
-        return new Workspace(workspaces.resolveRoot(path, id), home);
-      }
-    });
+
+  plugin: {
+    inject: ['harnessState', 'harnessWorkspaces'],
+    provide: ['harnessFileAccess'],
+    apply(ctx) {
+      const { home } = ctx.harnessState.paths;
+      const workspaces = ctx.harnessWorkspaces;
+      ctx.provide('harnessFileAccess', {
+        open(id: string) {
+          const { path } = workspaces.get(id);
+          return new Workspace(workspaces.resolveRoot(path, id), home);
+        }
+      });
+    }
   }
 };

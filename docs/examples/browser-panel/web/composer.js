@@ -1,7 +1,6 @@
-import { slotExtensions } from '/packages/ui-runtime/plugin-sdk.js';
-
-export function replaceComposer({ miniComposer: model, miniConversation: conversation }, api) {
-  api.contribute(slotExtensions.keyed, 'conversation.composer-view', 'composer', (signal) => {
+export function replaceComposer(ctx) {
+  const { miniComposer: model, miniConversation: conversation } = ctx;
+  ctx.effect(() => ctx.miniSlots.registerKeyed('conversation.composer-view', 'composer', (signal) => {
     const form = document.createElement('form');
     const prompt = document.createElement('textarea');
     prompt.setAttribute('aria-label', 'Replacement message');
@@ -40,5 +39,5 @@ export function replaceComposer({ miniComposer: model, miniConversation: convers
     conversation.subscribe(['interaction'], render, signal);
     render();
     return form;
-  });
+  }));
 }

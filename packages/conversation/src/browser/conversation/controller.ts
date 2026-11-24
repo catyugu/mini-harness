@@ -1,5 +1,6 @@
-import type { Context } from 'cordis';
-import type { FrontendApi } from '@mini-harness/ui-runtime/frontend-api';
+import { browserPluginSettings } from '@mini-harness/ui-runtime/plugin-settings';
+import { browserRequest } from '@mini-harness/ui-runtime/http';
+import type { Context } from 'mini-harness/cordis';
 import type { Conversation, ConversationView } from '../../shared/api.js';
 import type { ConversationController, ConversationState, ConversationSubmission, RetryInput } from '../conversation-api.js';
 import type { RunEvent } from '@mini-harness/runs/stream';
@@ -13,7 +14,7 @@ import { readConversation, observeRun } from '../session-client.js';
 const emptyHistory = { messages: [], records: [], leafId: null };
 const path = (id: string, suffix = '') => '/sessions/' + id + suffix;
 
-export function createConversationController(ctx: Context, api: FrontendApi): ConversationController {
+export function createConversationController(ctx: Context): ConversationController {
   const { miniSelection: selection, miniSessions: sessions } = ctx;
   const subscriptions = new Set<{ parts: readonly (keyof ConversationState)[]; listener: () => void }>();
   let state: ConversationState = { history: emptyHistory, partial: '', tools: [], queue: [], interaction: { status: '' } };
@@ -163,15 +164,14 @@ export function createConversationController(ctx: Context, api: FrontendApi): Co
     try {
       if (!id) {
         if (!workspace) throw new Error('Add a workspace before starting a conversation.');
-        const item = await api.request<Conversation>(workspaceRoute(workspace, '/sessions'), payload('POST', { permission: input.permission ?? 'standard' }));
+        const item = await browserRequest<Conversation>(ctx, workspaceRoute(workspace, '/sessions'), payload('POST', { permission: input.permission ?? 'standard' }));
         id = item.id;
         created?.(id);
         await sessions.refresh();
         if (!signal.aborted) select(item);
       }
       const { permission: _permission, revision, ...message } = input;
-      const run = await api.request<RunInfo>(path(id, revision ? '/revise' : '/runs'),
-        payload('POST', revision ? { ...message, ...revision } : message));
+      const run = await browserRequest<RunInfo>(ctx, path(id, revision ? '/revise' : '/runs'), payload('POST', revision ? { ...message, ...revision } : message));
       if (!signal.aborted) {
         update({ run });
         void activate(id);
@@ -180,17 +180,17 @@ export function createConversationController(ctx: Context, api: FrontendApi): Co
     } finally { if (!signal.aborted) interact({ operation: undefined }); }
   }
 
-  async function queue(input: Omit<ConversationSubmission, 'revision' | 'permission'>, mode = api.configuration.get<'steer' | 'followUp'>('queueMode')) {
+  async function queue(input: Omit<ConversationSubmission, 'revision' | 'permission'>, mode = browserPluginSettings(ctx).get<'steer' | 'followUp'>('queueMode')) {
     const id = active(), signal = visit.signal;
     if (!id || !isRunning(state.run) || state.interaction.operation) throw new Error('No running conversation to queue a message.');
     interact({ operation: 'queue' });
     try {
-      const entries = await api.request<ConversationView['queue']>(path(id, '/queue'), payload('POST', { ...input, mode }));
+      const entries = await browserRequest<ConversationView['queue']>(ctx, path(id, '/queue'), payload('POST', { ...input, mode }));
       if (!signal.aborted) { queueRevision++; update({ queue: entries }); }
     } finally { if (!signal.aborted) interact({ operation: undefined }); }
   }
 
-  api.onDispose(ctx.miniProjections.register('conversation-records', {
+  ctx.effect(() => ctx.miniProjections.register('conversation-records', {
     async sync(_revision, reconnect, changedId) {
       const id = active();
       if (!id || (!reconnect && changedId && id !== changedId)) return;
@@ -198,18 +198,18 @@ export function createConversationController(ctx: Context, api: FrontendApi): Co
       await refreshBranch();
     }
   }));
-  api.onDispose(ctx.miniProjections.register('queue', {
+  ctx.effect(() => ctx.miniProjections.register('queue', {
     async sync(_revision, reconnect, changedId) {
       const id = active(), signal = visit.signal;
       if (!id || (!reconnect && changedId && id !== changedId)) return;
       const revision = ++queueRevision;
       try {
-        const entries = await api.request<ConversationView['queue']>(path(id, '/queue'), { signal });
+        const entries = await browserRequest<ConversationView['queue']>(ctx, path(id, '/queue'), { signal });
         if (!signal.aborted && revision === queueRevision) update({ queue: entries });
       } catch (error) { if (!signal.aborted && revision === queueRevision) throw error; }
     }
   }));
-  api.onDispose(() => visit.abort());
+  ctx.effect(() => (() => visit.abort()));
 
   return {
     get: () => state,
@@ -223,27 +223,27 @@ export function createConversationController(ctx: Context, api: FrontendApi): Co
     retryInput() {
       const { session, run } = state;
       if (!session || run?.state !== 'failed') throw new Error('No failed run to retry.');
-      return api.request<RetryInput | null>(path(session.id, '/runs/' + run.id + '/input'));
+      return browserRequest<RetryInput | null>(ctx, path(session.id, '/runs/' + run.id + '/input'));
     },
     clear() { begin(); select(); update({ interaction: { status: '' } }); },
     async cancel() {
       const id = active(), signal = visit.signal;
       if (!id || !isRunning(state.run)) return;
       interact({ cancelling: true, status: 'Cancelling…' });
-      try { await api.request(path(id, '/cancel'), payload('POST', {})); }
+      try { await browserRequest(ctx, path(id, '/cancel'), payload('POST', {})); }
       catch (error) { if (!signal.aborted) { interact({ cancelling: false }); throw error; } }
     },
     async cancelQueue(item) {
       const id = active(), signal = visit.signal;
       if (!id) return;
       const revision = ++queueRevision;
-      const entries = await api.request<ConversationView['queue']>(path(id, '/queue' + (item ? '/' + encodeURIComponent(item) : '')), { method: 'DELETE' });
+      const entries = await browserRequest<ConversationView['queue']>(ctx, path(id, '/queue' + (item ? '/' + encodeURIComponent(item) : '')), { method: 'DELETE' });
       if (!signal.aborted && revision === queueRevision) update({ queue: entries });
     },
     async setPermission(permission) {
       const id = active(), signal = visit.signal;
       if (!id) throw new Error('Open a conversation first.');
-      const item = await api.request<Conversation>(path(id, '/permissions'), payload('PATCH', { permission }));
+      const item = await browserRequest<Conversation>(ctx, path(id, '/permissions'), payload('PATCH', { permission }));
       if (!signal.aborted && state.session) update({ session: { ...state.session, permission: item.permission } });
       await sessions.refresh();
     },
@@ -253,7 +253,7 @@ export function createConversationController(ctx: Context, api: FrontendApi): Co
       if (isRunning(state.run) || state.interaction.operation) throw new Error('Wait for the current operation to finish.');
       interact({ operation: 'compact', status: 'Compacting conversation…' });
       try {
-        await api.request(path(id, '/compact'), payload('POST', {}));
+        await browserRequest(ctx, path(id, '/compact'), payload('POST', {}));
         if (!signal.aborted && await activate(id, false)) status('Conversation compacted.');
       } finally { if (!signal.aborted) interact({ operation: undefined }); }
     }

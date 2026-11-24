@@ -1,10 +1,9 @@
-import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend-api';
-import { slotExtensions } from '@mini-harness/ui-slots/browser/api';
 import { MessageExtensions } from './message-extensions.js';
+import type { Context } from 'mini-harness/cordis';
 import { mountHistory } from './history.js';
-const setup: FrontendSetup = (ctx, api) => {
+const setup = (ctx: Context) => {
   const extensions = new MessageExtensions();
   ctx.provide('miniMessages', extensions);
-  api.contribute(slotExtensions.keyed, 'conversation.history', 'history', (signal) => mountHistory(ctx, extensions, signal));
+  ctx.effect(() => ctx.miniSlots.registerKeyed('conversation.history', 'history', (signal) => mountHistory(ctx, extensions, signal), { order: -1 }));
 };
-export default setup;
+export default { inject: ['miniConversation','miniComposer','miniSlots','miniDialogs'], provide: ['miniMessages'], apply: setup };

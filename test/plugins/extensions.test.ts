@@ -9,16 +9,25 @@ import { writePlugin } from '../support/plugin-fixture.js';
 
 test('prompt contributions coexist, override within a session tree and are removed with their plugins', async (t) => {
   const { app, paths, mock, request } = await fixture(t);
-  writePlugin(paths.plugins, 'app-prompt', {}, `export default (_ctx, api) => {
-    api.contribute(promptExtensions.section, { id: 'workspace-status', order: 600, render: () => '[App status]' });
-    api.contribute(promptExtensions.section, { id: 'plan', order: 500, render: async ({ tools }) => tools.some(({ name }) => name === 'load_skill') ? '[Plan]' : undefined });
-  };`);
-  writePlugin(paths.plugins, 'more-prompt', {}, `export default (_ctx, api) => {
-    api.contribute(promptExtensions.section, { id: 'extra', order: 550, render: () => '[Extra]' });
-  };`);
-  writePlugin(paths.plugins, 'child-prompt', { scope: 'session' }, `export default (_ctx, api) => {
-    api.contribute(promptExtensions.section, { id: 'workspace-status', order: 600, render: () => '[Child status]' });
-  };`);
+  writePlugin(paths.plugins, 'app-prompt', {}, `
+export const inject = ["harnessPrompt"];
+export const apply = (ctx) => {
+    ctx.effect(() => ctx.harnessPrompt.register({ id: 'workspace-status', order: 600, render: () => '[App status]' }));
+    ctx.effect(() => ctx.harnessPrompt.register({ id: 'plan', order: 500, render: async ({ tools }) => tools.some(({ name }) => name === 'load_skill') ? '[Plan]' : undefined }));
+  };
+`);
+  writePlugin(paths.plugins, 'more-prompt', {}, `
+export const inject = ["harnessPrompt"];
+export const apply = (ctx) => {
+    ctx.effect(() => ctx.harnessPrompt.register({ id: 'extra', order: 550, render: () => '[Extra]' }));
+  };
+`);
+  writePlugin(paths.plugins, 'child-prompt', { scope: 'session' }, `
+export const inject = ["harnessPrompt"];
+export const apply = (ctx) => {
+    ctx.effect(() => ctx.harnessPrompt.register({ id: 'workspace-status', order: 600, render: () => '[Child status]' }));
+  };
+`);
   const parent = app.runtime.plugins.ctx.harnessRegistry.create();
   const child = app.runtime.plugins.ctx.harnessRegistry.create({ parentId: parent.id });
   const sibling = app.runtime.plugins.ctx.harnessRegistry.create();
@@ -47,22 +56,24 @@ test('input contributions run at delivery in stable order and keep the submitted
   });
   const trace = join(paths.home, 'inputs.log');
   writePlugin(paths.plugins, 'input-z', {}, `
-    import { appendFileSync } from 'node:fs';
-    export default (_ctx, api) => {
-      api.contribute(agentExtensions.prepareInput, (content, { original }) => {
+import { appendFileSync } from 'node:fs';
+export const apply = (ctx) => {
+      ctx.on("agent/prepare-input", (content, { original }) => {
         appendFileSync(${JSON.stringify(trace)}, 'prepare ' + original.userText + '\\n');
         if (original.userText === 'Blocked') return { reject: 'fixture input denied' };
         return [...content, { type: 'text', text: '[z]' }];
       });
-    };`);
+    };
+`);
   writePlugin(paths.plugins, 'input-a', { requires: ['input-z'] }, `
-    export default (_ctx, api) => {
-      api.contribute(agentExtensions.prepareInput, (content, { original }) => {
+export const apply = (ctx) => {
+      ctx.on("agent/prepare-input", (content, { original }) => {
         original.userText = 'lost';
         content[0].text = 'lost';
       });
-      api.contribute(agentExtensions.prepareInput, (content) => [...content, { type: 'text', text: '[a]' }]);
-    };`);
+      ctx.on("agent/prepare-input", (content) => [...content, { type: 'text', text: '[a]' }]);
+    };
+`);
   assert.equal((await request('/settings', 'PATCH', { plugins: { 'input-z': true, 'input-a': true } })).status, 200);
   const { plugins } = app.runtime;
   const registry = plugins.ctx.harnessRegistry;
@@ -94,7 +105,10 @@ test('input contributions run at delivery in stable order and keep the submitted
 
 test('an application plugin replaces only LLM and composes execution hooks without rewriting history', async (t) => {
   const { app, paths, request, mock, base, headers } = await fixture(t);
-  writePlugin(paths.plugins, 'transport', { provides: ['harnessLlm'], inject: ['harnessModels'] }, `export default (ctx, api) => {
+  writePlugin(paths.plugins, 'transport', { provides: ['harnessLlm'], inject: ['harnessModels'] }, `
+export const provide = ["harnessLlm"];
+export const inject = ["harnessModels"];
+export const apply = (ctx) => {
     let attempts = 0;
     const modelCatalog = ctx.harnessModels;
     ctx.provide('harnessLlm', { async *stream(request) {
@@ -115,27 +129,31 @@ test('an application plugin replaces only LLM and composes execution hooks witho
         yield terminal([{ type: 'text', text: 'Alternate response' }]);
       }
     } });
-  };`);
-  writePlugin(paths.plugins, 'pipeline', { inject: ['harnessTools'] }, `export default (_ctx, api) => {
-    api.contribute(agentExtensions.modelRequest, (request) => ({ ...request, systemPrompt: request.systemPrompt + '[second]' }), 2);
-    api.contribute(agentExtensions.modelRequest, (request, { turn, phase }) => phase === 'turn' && turn === 1 ? ({
+  };
+`);
+  writePlugin(paths.plugins, 'pipeline', { inject: ['harnessTools'] }, `
+export const inject = ["harnessTools"];
+export const apply = (ctx) => {
+    ctx.on("agent/model-request", (request) => ({ ...request, systemPrompt: request.systemPrompt + '[second]' }), { order: 2 });
+    ctx.on("agent/model-request", (request, { turn, phase }) => phase === 'turn' && turn === 1 ? ({
       ...request, systemPrompt: request.systemPrompt + '[first]',
       messages: [...request.messages, { role: 'user', content: 'Temporary context', timestamp: Date.now() }]
-    }) : undefined, 1);
-    api.contribute(agentExtensions.retryModel, ({ error, attempt }) => error === 'transient transport failure' && attempt === 1 ? {} : undefined);
-    api.contribute(toolExtensions.decide, ({ tool, callId, arguments: args }) => tool === 'check' && callId === 'denied' && args.mode === 'denied' ? 'deny' : undefined);
-    api.contribute(toolExtensions.register, { name: 'check', description: 'Check mode', parameters: { type: 'object' },
+    }) : undefined, { order: 1 });
+    ctx.on("agent/model-retry", ({ error, attempt }) => error === 'transient transport failure' && attempt === 1 ? {} : undefined);
+    ctx.on("tools/decide", ({ tool, callId, arguments: args }) => tool === 'check' && callId === 'denied' && args.mode === 'denied' ? 'deny' : undefined);
+    ctx.effect(() => ctx.harnessTools.register({ name: 'check', description: 'Check mode', parameters: { type: 'object' },
       async execute(_id, { mode }) {
         if (mode !== 'allowed') throw new Error('denied invocation ran');
         return { content: [{ type: 'text', text: 'Value' }] };
       }
-    });
-    api.contribute(agentExtensions.toolResult,  (content, { tool }) => tool === 'check'
+    }));
+    ctx.on("agent/tool-result", (content, { tool }) => tool === 'check'
       ? [{ type: 'text', text: content[0].text + ' transformed' }] : undefined);
-    api.contribute(sessionDisplayExtensions.project, ({ content, tool }) =>
+    ctx.on("conversation/tool-projection", ({ content, tool }) =>
       tool === 'check' && Array.isArray(content) && content[0]?.text === 'Value transformed'
         ? [{ type: 'text', text: 'Display value' }] : undefined);
-  };`);
+  };
+`);
   const { harnessModels: models, harnessModelStore: store } = app.runtime.plugins.ctx;
   const configured = await request('/settings', 'PATCH', {
     plugins: { 'core:llm': false, transport: true, pipeline: true }, providers: { harnessLlm: 'transport' }
@@ -183,18 +201,21 @@ test('an application plugin replaces only LLM and composes execution hooks witho
 
 test('a failed model-visible transform preserves the execution and never sends the raw result', async (t) => {
   const { app, paths, mock, request } = await fixture(t, () => ({ tool: 'sensitive', args: {} }));
-  writePlugin(paths.plugins, 'redaction', { inject: ['harnessTools'] }, `export default (_ctx, api) => {
-    api.contribute(toolExtensions.register, { name: 'sensitive', description: 'Read value', parameters: { type: 'object' },
+  writePlugin(paths.plugins, 'redaction', { inject: ['harnessTools'] }, `
+export const inject = ["harnessTools"];
+export const apply = (ctx) => {
+    ctx.effect(() => ctx.harnessTools.register({ name: 'sensitive', description: 'Read value', parameters: { type: 'object' },
       async execute(_id, _args, _signal, update) {
         update({ content: [{ type: 'text', text: 'private progress' }] });
         return { content: [{ type: 'text', text: 'private value' }] };
       }
-    });
-    api.contribute(agentExtensions.toolResult, (content, { tool }) => {
+    }));
+    ctx.on("agent/tool-result", (content, { tool }) => {
       if (tool === 'sensitive') throw new Error('broken redactor');
       return content;
     });
-  };`);
+  };
+`);
   assert.equal((await request('/settings', 'PATCH', { plugins: { redaction: true } })).status, 200);
   const session = app.runtime.plugins.ctx.harnessRegistry.create();
   const events: unknown[] = [];
@@ -209,10 +230,12 @@ test('a failed model-visible transform preserves the execution and never sends t
 
 test('an invalid transformed request fails before the provider is invoked', async (t) => {
   const { app, paths, mock, request } = await fixture(t);
-  writePlugin(paths.plugins, 'invalid-request', {}, `export default (_ctx, api) => {
-    api.contribute(agentExtensions.modelRequest, (request) => ({ ...request, messages: [{ role: 'toolResult', toolCallId: 'missing',
+  writePlugin(paths.plugins, 'invalid-request', {}, `
+export const apply = (ctx) => {
+    ctx.on("agent/model-request", (request) => ({ ...request, messages: [{ role: 'toolResult', toolCallId: 'missing',
       toolName: 'example', timestamp: Date.now(), isError: false, content: [] }] }));
-  };`);
+  };
+`);
   assert.equal((await request('/settings', 'PATCH', { plugins: { 'invalid-request': true } })).status, 200);
   const session = app.runtime.plugins.ctx.harnessRegistry.create();
   await assert.rejects(app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Use this request'), /could not prepare transformed data/);
@@ -234,15 +257,17 @@ test('configuration cannot unmount an active request hook and can retry after th
   const shared = globalThis as typeof globalThis & Record<symbol, typeof state>;
   shared[key] = state;
   t.after(() => { release(); delete shared[key]; });
-  writePlugin(paths.plugins, 'slow-transform', {}, `export default (ctx, api) => {
+  writePlugin(paths.plugins, 'slow-transform', {}, `
+export const apply = (ctx) => {
     const state = globalThis[Symbol.for('mini-harness-test-hook-drain')];
-    api.contribute(agentExtensions.modelRequest, async (_request, { signal }) => {
+    ctx.on("agent/model-request", async (_request, { signal }) => {
       signal.addEventListener('abort', state.cancelled, { once: true });
       state.entered();
       await state.hold;
     });
     ctx.effect(() => () => { state.cleaned = true; });
-  };`);
+  };
+`);
   assert.equal((await request('/settings', 'PATCH', { plugins: { 'slow-transform': true } })).status, 200);
   const session = app.runtime.plugins.ctx.harnessRegistry.create();
   const run = app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Keep the active hook');
@@ -260,12 +285,13 @@ test('configuration cannot unmount an active request hook and can retry after th
 test('a decision hook can deny an inherited tool and is removed with its owner', async (t) => {
   const { app, paths, request } = await fixture(t);
   writePlugin(paths.plugins, 'policy', { scope: 'session' }, `
-    export default function(_ctx, api) {
-      api.contribute(toolExtensions.decide, async ({ tool, signal }) => {
+export function apply(ctx) {
+      ctx.on("tools/decide", async ({ tool, signal }) => {
         signal.throwIfAborted();
         return tool === 'ls' ? 'deny' : undefined;
       });
-    }`);
+    }
+`);
   const selected = app.runtime.plugins.ctx.harnessRegistry.create();
   const other = app.runtime.plugins.ctx.harnessRegistry.create();
   const child = app.runtime.plugins.ctx.harnessRegistry.create({ parentId: selected.id });

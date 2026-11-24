@@ -1,8 +1,7 @@
-import { Context } from './vendor/cordis.js';
+import { Context } from 'mini-harness/cordis';
 import { api, data, readEvents, wait, AuthenticationError } from './http.js';
 import { RemoteStore } from './remote-store.js';
-import { FrontendHost } from './frontend.js';
-import { createBrowserGraphLoader } from './plugin-loader.js';
+import { browserModules } from './modules.js';
 import { BrowserProjections } from './projections.js';
 import type { BrowserBootstrap } from '../shared/bootstrap.js';
 import type { ProjectionNotice } from '@mini-harness/transport/projection-notice';
@@ -57,11 +56,9 @@ async function boot() {
     if (error instanceof AuthenticationError) showAuthenticationError(error);
     else report(new Error('Could not refresh ' + domain + ': ' + (error instanceof Error ? error.message : String(error))));
   });
-  const host = new FrontendHost(ctx, data, report);
-  const sync = createBrowserGraphLoader(host);
+  const sync = browserModules(ctx);
   const dispose = async () => {
     lifetime.abort();
-    await host.dispose();
     await sync({ ui: [] });
   };
   const failuresChanged = new EventTarget();

@@ -1,4 +1,4 @@
-import type {} from 'cordis';
+import type {} from 'mini-harness/cordis';
 import type { ModelChoice, ThinkingLevel, ToolSchema } from './vocabulary.js';
 
 /** Harness-owned transcript. Provider details stay opaque outside the adapter. */
@@ -120,6 +120,6 @@ export function validateNativeMessage(message: NativeMessage) {
     throw new Error('Invalid tool result');
 }
 
-declare module '@mini-harness/kernel/services' {
-  interface ServiceMap { harnessLlm: LlmPort }
+declare module 'mini-harness/cordis' {
+  interface Context { harnessLlm: LlmPort }
 }

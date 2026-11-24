@@ -2,10 +2,10 @@ import { DomainError } from '@mini-harness/platform/errors';
 import type {} from '@mini-harness/platform/runtime-paths';
 import type {} from '@mini-harness/settings/api';
 import type {} from '@mini-harness/transport/projection-api';
-import type {} from '@mini-harness/kernel/mutation-api';
+import type {} from '@mini-harness/plugin-api/mutation-api';
 import { lstatSync, realpathSync, rmSync } from 'node:fs';
 import { join, relative } from 'node:path';
-import type { Context } from 'cordis';
+import type { Context } from 'mini-harness/cordis';
 import { HttpReply } from '@mini-harness/transport/routes';
 import { installPlugin, uninstallPlugin } from './files.js';
 

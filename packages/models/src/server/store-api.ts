@@ -1,4 +1,4 @@
-import type {} from 'cordis';
+import type {} from 'mini-harness/cordis';
 import type { LlmPort } from '@mini-harness/llm/api';
 import type { ModelCatalogPort } from './api.js';
 import type { ProviderInfo } from '../shared/catalog.js';
@@ -16,6 +16,6 @@ export interface ModelStorePort extends ModelCatalogPort, ProviderAdministration
   readonly llm: LlmPort;
 }
 
-declare module 'cordis' {
+declare module 'mini-harness/cordis' {
   interface Context { harnessModelStore: ModelStorePort }
 }

@@ -1,5 +1,5 @@
 import type { WorkspaceRecord } from '../shared/record.js';
-import type {} from 'cordis';
+import type {} from 'mini-harness/cordis';
 
 export interface WorkspacePort {
   readonly events: EventTarget;
@@ -15,6 +15,6 @@ export interface WorkspacePort {
   browse(path: string): { path: string; parent: string | null; directories: { name: string; path: string }[] };
 }
 
-declare module 'cordis' {
+declare module 'mini-harness/cordis' {
   interface Context { harnessWorkspaces: WorkspacePort }
 }

@@ -1,4 +1,4 @@
-import type {} from 'cordis';
+import type {} from 'mini-harness/cordis';
 import type { Conversation, ConversationView } from '../shared/api.js';
 import type { ConversationPermission } from '@mini-harness/sessions/identity';
 import type { StreamEvent } from '@mini-harness/runs/stream';
@@ -55,7 +55,7 @@ export interface ConversationController {
   compact(): Promise<void>;
 }
 
-declare module 'cordis' {
+declare module 'mini-harness/cordis' {
   interface Context { miniConversation: ConversationController }
 }
 

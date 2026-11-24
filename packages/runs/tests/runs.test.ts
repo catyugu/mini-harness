@@ -7,7 +7,6 @@ import { createMiniHarnessServer } from '@mini-harness/host/server';
 import { SessionRegistry } from '@mini-harness/sessions/registry';
 import { WorkspaceCatalog } from '@mini-harness/workspaces/catalog';
 import type { RunEvent } from '../src/stream.js';
-import { executionForPlugin } from '../src/execution.js';
 import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.js';
 
 function gate() {
@@ -234,13 +233,12 @@ test('execution handles cancel only their own run and cannot cancel a later run 
   const { root, paths } = createFixturePaths(mock.url);
   const app = await createMiniHarnessServer(paths);
   t.after(async () => { held.release(); await app.close(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
-  const { harnessRegistry: registry, harnessExecution, harnessRuns: runs } = app.runtime.plugins.ctx;
+  const { harnessRegistry: registry, harnessRuns: runs } = app.runtime.plugins.ctx;
   const session = registry.create();
-  const execution = harnessExecution[executionForPlugin];
   const signal = new AbortController();
-  const first = execution.launch(session.id, { message: 'First' }, signal.signal);
+  const first = runs.submit(session.id, { message: 'First' }, signal.signal);
   assert.equal(await first.result, 'Done');
-  const later = execution.launch(session.id, { message: 'Later' }, signal.signal);
+  const later = runs.submit(session.id, { message: 'Later' }, signal.signal);
   const cancelled = assert.rejects(later.result, /cancelled/);
   await entered.promise;
   assert.equal(first.cancel(), false);
@@ -249,7 +247,7 @@ test('execution handles cancel only their own run and cannot cancel a later run 
   assert.equal(later.cancel(), false);
   held.release();
   await cancelled;
-  assert.equal(execution.info(session.id)?.state, 'cancelled');
+  assert.equal(runs.info(session.id)?.state, 'cancelled');
 });
 
 test('retry looks up the failed delivery by its native entry identity', async (t) => {

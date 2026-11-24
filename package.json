@@ -10,6 +10,8 @@
   "files": [
     "dist/bin/",
     "dist/packages/",
+    "dist/vendor/",
+    "dist/types/vendor/",
     "dist/types/packages/",
     "!dist/**/tests/**",
     "!dist/**/*.test.js",
@@ -39,7 +41,7 @@
   },
   "dependencies": {
     "@earendil-works/pi-ai": "1.6.0",
-    "cordis": "4.0.0-rc.13",
+    "@standard-schema/spec": "1.1.0",
     "ignore": "7.0.8",
     "re2-wasm": "1.0.2",
     "semver": "7.7.4",
@@ -49,7 +51,6 @@
     "@mini-harness/file-access": "workspace:*",
     "@mini-harness/host": "workspace:*",
     "@mini-harness/input": "workspace:*",
-    "@mini-harness/kernel": "workspace:*",
     "@mini-harness/llm": "workspace:*",
     "@mini-harness/platform": "workspace:*",
     "@mini-harness/plugin-api": "workspace:*",
@@ -87,6 +88,10 @@
     "./browser-plugin": {
       "types": "./dist/types/packages/sdk/src/browser-plugin.d.ts",
       "default": "./dist/packages/sdk/src/browser-plugin.js"
+    },
+    "./cordis": {
+      "types": "./dist/types/vendor/cordis/src/index.d.ts",
+      "default": "./dist/vendor/cordis/src/index.js"
     }
   },
   "packageManager": "pnpm@10.34.9"

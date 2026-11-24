@@ -32,15 +32,14 @@
   },
   "dependencies": {
     "@mini-harness/input": "workspace:*",
-    "@mini-harness/kernel": "workspace:*",
     "@mini-harness/llm": "workspace:*",
     "@mini-harness/platform": "workspace:*",
     "@mini-harness/plugin-api": "workspace:*",
     "@mini-harness/settings": "workspace:*",
     "@mini-harness/tools": "workspace:*",
     "@mini-harness/transport": "workspace:*",
-    "@mini-harness/workspaces": "workspace:*",
     "@mini-harness/ui-primitives": "workspace:*",
-    "@mini-harness/ui-runtime": "workspace:*"
+    "@mini-harness/ui-runtime": "workspace:*",
+    "@mini-harness/workspaces": "workspace:*"
   }
 }

@@ -1,13 +1,14 @@
+import { browserRequest } from '@mini-harness/ui-runtime/http';
+import type { Context } from 'mini-harness/cordis';
 import type {} from '@mini-harness/ui-runtime/projection-api';
 import type { WorkspaceRecord } from '../shared/record.js';
-import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend-api';
 import { RemoteStore } from '@mini-harness/ui-runtime/remote-store';
 
-const setup: FrontendSetup = async (ctx, api) => {
-  const store = new RemoteStore(() => api.request<WorkspaceRecord[]>('/workspaces'));
+const setup = async (ctx: Context) => {
+  const store = new RemoteStore(() => browserRequest<WorkspaceRecord[]>(ctx, '/workspaces'));
   await store.refresh();
-  api.onDispose(ctx.miniProjections.register('workspaces', store));
+  ctx.effect(() => ctx.miniProjections.register('workspaces', store));
   ctx.provide('miniWorkspaces', store);
 };
 
-export default setup;
+export default { inject: ['miniProjections'], provide: ['miniWorkspaces'], apply: setup };

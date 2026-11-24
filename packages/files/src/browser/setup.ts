@@ -1,7 +1,8 @@
+import { browserPluginId } from '@mini-harness/ui-runtime/plugin-settings';
+import { browserRequest } from '@mini-harness/ui-runtime/http';
+import type { Context } from 'mini-harness/cordis';
 import type { Suggestion } from '@mini-harness/conversation/browser/composer-api';
-import { conversationExtensions } from '@mini-harness/conversation/browser/extensions';
-import { layoutExtensions, type TabAddress, type TabScope } from '@mini-harness/ui-layout/browser/api';
-import type { FrontendApi, FrontendSetup } from '@mini-harness/ui-runtime/frontend-api';
+import { type TabAddress, type TabScope } from '@mini-harness/ui-layout/browser/api';
 import type { ConversationBrowserPort } from '@mini-harness/conversation/browser/navigation-api';
 import type { BrowserProjectionPort } from '@mini-harness/ui-runtime/projection-api';
 import { icon } from '@mini-harness/ui-primitives/icons';
@@ -21,8 +22,8 @@ function fileRoute(scope: TabScope, action: string, query: Record<string, string
   return workspaceRoute(scope.workspaceId, '/files/' + action) + '?' + params;
 }
 
-async function readDirectory(api: FrontendApi, scope: TabScope, path: string, signal?: AbortSignal) {
-  const entries = await api.request<FileEntry[]>(fileRoute(scope, 'tree', { path }), { signal });
+async function readDirectory(ctx: Context, scope: TabScope, path: string, signal?: AbortSignal) {
+  const entries = await browserRequest<FileEntry[]>(ctx, fileRoute(scope, 'tree', { path }), { signal });
   return entries.sort((a, b) => Number(b.directory) - Number(a.directory)).map(({ name, directory }) => ({
     name, directory, path: path === '.' ? name : path + '/' + name
   }));
@@ -47,14 +48,14 @@ function hint(message: string) {
   return node;
 }
 
-function breadcrumbs(api: FrontendApi, services: ConversationBrowserPort, address: TabAddress, path: string, leaf = false) {
+function breadcrumbs(ctx: Context, services: ConversationBrowserPort, address: TabAddress, path: string, leaf = false) {
   const node = document.createElement('nav');
   node.className = 'file-breadcrumbs';
   node.setAttribute('aria-label', 'File path');
   const name = services.workspaceRecord(address.workspaceId)?.name ?? 'Workspace';
   const crumbs = path === '.' ? [] : path.split('/');
   const root = control(name, 'quiet');
-  const open = (path?: string) => api.contribute(layoutExtensions.openTab, 'files', path, address);
+  const open = (path?: string) => ctx.miniTabs.open(browserPluginId(ctx) + ':' + 'files', path, address);
   root.onclick = () => open();
   if (path === '.') root.setAttribute('aria-current', 'location');
   node.append(root);
@@ -76,12 +77,12 @@ function breadcrumbs(api: FrontendApi, services: ConversationBrowserPort, addres
   return node;
 }
 
-function fileEntry(api: FrontendApi, scope: TabScope, path: string, label: string, status?: string, diff = false) {
+function fileEntry(ctx: Context, scope: TabScope, path: string, label: string, status?: string, diff = false) {
   const row = document.createElement('button');
   row.type = 'button';
   row.className = 'file-entry';
   row.title = path;
-  row.onclick = () => api.contribute(layoutExtensions.openTab, 'file', path, scope, diff ? 'diff' : 'preview');
+  row.onclick = () => ctx.miniTabs.open(browserPluginId(ctx) + ':' + 'file', path, scope, diff ? 'diff' : 'preview');
   row.append(icon(fileIcon(path)));
   const name = document.createElement('span');
   name.textContent = label;
@@ -113,13 +114,13 @@ function refreshFiles(projections: BrowserProjectionPort, address: TabAddress, r
   schedule();
 }
 
-function fileTree(projections: BrowserProjectionPort, api: FrontendApi, services: ConversationBrowserPort, address: TabAddress, signal: AbortSignal, expanded: Set<string>) {
+function fileTree(projections: BrowserProjectionPort, ctx: Context, services: ConversationBrowserPort, address: TabAddress, signal: AbortSignal, expanded: Set<string>) {
   const path = address.path ?? '.';
   const root = document.createElement('section');
   const toolbar = document.createElement('div');
   toolbar.className = 'file-toolbar';
   const refresh = iconButton('Refresh files', 'refresh');
-  toolbar.append(breadcrumbs(api, services, address, path), refresh);
+  toolbar.append(breadcrumbs(ctx, services, address, path), refresh);
   const content = document.createElement('div');
   root.append(toolbar, content);
   let loading: AbortController;
@@ -127,9 +128,9 @@ function fileTree(projections: BrowserProjectionPort, api: FrontendApi, services
   async function tree(path: string, loadSignal: AbortSignal) {
     const list = document.createElement('div');
     list.className = 'file-tree';
-    for (const entry of await readDirectory(api, address, path, loadSignal)) {
+    for (const entry of await readDirectory(ctx, address, path, loadSignal)) {
       if (!entry.directory) {
-        list.append(fileEntry(api, address, entry.path, entry.name, groups.get(entry.path)));
+        list.append(fileEntry(ctx, address, entry.path, entry.name, groups.get(entry.path)));
         continue;
       }
       const details = document.createElement('details');
@@ -168,7 +169,7 @@ function fileTree(projections: BrowserProjectionPort, api: FrontendApi, services
     content.setAttribute('aria-busy', 'true');
     if (!content.firstChild) content.append(hint('Loading files…'));
     try {
-      const changes = await api.request<GitChanges>(fileRoute(address, 'changes'), { signal: loadSignal });
+      const changes = await browserRequest<GitChanges>(ctx, fileRoute(address, 'changes'), { signal: loadSignal });
       loadSignal.throwIfAborted();
       groups.clear();
       for (const change of changes.files) groups.set(change.path, change.status);
@@ -220,7 +221,7 @@ function source(content: string, highlight: boolean) {
   return wrapper;
 }
 
-function fileView(projections: BrowserProjectionPort, api: FrontendApi, services: ConversationBrowserPort, address: TabAddress, signal: AbortSignal) {
+function fileView(projections: BrowserProjectionPort, ctx: Context, services: ConversationBrowserPort, address: TabAddress, signal: AbortSignal) {
   if (!address.path) throw new Error('A file preview requires a file path');
   const path = address.path;
   const root = document.createElement('section');
@@ -230,7 +231,7 @@ function fileView(projections: BrowserProjectionPort, api: FrontendApi, services
   const refresh = iconButton('Refresh file', 'refresh');
   const raw = control('Source', 'quiet');
   raw.hidden = true;
-  toolbar.append(breadcrumbs(api, services, address, path, true), alternate, raw, refresh);
+  toolbar.append(breadcrumbs(ctx, services, address, path, true), alternate, raw, refresh);
   const body = document.createElement('div');
   body.append(hint('Loading file…'));
   root.append(toolbar, body);
@@ -243,7 +244,7 @@ function fileView(projections: BrowserProjectionPort, api: FrontendApi, services
     const diff = address.mode === 'diff';
     alternate.textContent = diff ? 'Preview' : 'Diff';
     try {
-      const { content, image, truncated } = await api.request<Preview>(fileRoute(address, diff ? 'diff' : 'preview', { path }), { signal: loadSignal });
+      const { content, image, truncated } = await browserRequest<Preview>(ctx, fileRoute(address, diff ? 'diff' : 'preview', { path }), { signal: loadSignal });
       if (loadSignal.aborted) return;
       raw.hidden = true;
       let view: HTMLElement;
@@ -300,23 +301,23 @@ function fileView(projections: BrowserProjectionPort, api: FrontendApi, services
   return root;
 }
 
-const setup: FrontendSetup = (ctx, api) => {
+const setup = (ctx: Context) => {
   const services = ctx.harnessBrowser;
   const expanded = new WeakMap<TabAddress, Set<string>>();
-  api.contribute(layoutExtensions.tab, 'files', {
+  ctx.effect(() => ctx.miniTabs.register(browserPluginId(ctx) + ':' + 'files', {
     title: ({ path }) => path ? base(path) : 'Files',
     default: true,
     create(address, signal) {
       let open = expanded.get(address);
       if (!open) { open = new Set<string>(); expanded.set(address, open); }
-      return fileTree(ctx.miniProjections, api, services, address, signal, open);
+      return fileTree(ctx.miniProjections, ctx, services, address, signal, open);
     }
-  });
-  api.contribute(layoutExtensions.tab, 'file', {
+  }));
+  ctx.effect(() => ctx.miniTabs.register(browserPluginId(ctx) + ':' + 'file', {
     title: ({ path }) => path ? base(path) : 'File',
-    create: (address, signal) => fileView(ctx.miniProjections, api, services, address, signal)
-  });
-  api.contribute(conversationExtensions.completion, '@', async ({ query, signal, show, replace }) => {
+    create: (address, signal) => fileView(ctx.miniProjections, ctx, services, address, signal)
+  }));
+  ctx.effect(() => ctx.miniComposer.completion('@', async ({ query, signal, show, replace }) => {
     const scope = services.workspace();
     if (!scope) return;
     if (query.startsWith('"')) return;
@@ -324,7 +325,7 @@ const setup: FrontendSetup = (ctx, api) => {
     if (query) {
       await wait(120, signal);
       if (signal.aborted) return;
-      const paths = await api.request<string[]>(fileRoute(scope, 'search', { q: query }), { signal });
+      const paths = await browserRequest<string[]>(ctx, fileRoute(scope, 'search', { q: query }), { signal });
       show(paths.map((path) => ({ label: path, icon: 'file', run: () => reference(path) })), 'No matching files.');
       return;
     }
@@ -348,12 +349,12 @@ const setup: FrontendSetup = (ctx, api) => {
     const expand = async (path: string) => {
       loading.add(path);
       try {
-        if (!listing.has(path)) listing.set(path, await readDirectory(api, scope, path, signal));
+        if (!listing.has(path)) listing.set(path, await readDirectory(ctx, scope, path, signal));
         open.add(path);
         draw();
       } finally { loading.delete(path); }
     };
     await expand('.');
-  });
+  }));
 };
-export default setup;
+export default { inject: ['harnessBrowser','miniProjections','miniTabs','miniComposer'], provide: [], apply: setup };

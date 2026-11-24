@@ -24,23 +24,27 @@ test('renders Markdown and tool results, and stops a pending reply', async ({ pa
   });
   const { root, paths } = createFixturePaths(mock.url);
   const folder = writePlugin(paths.plugins, 'bad-renderer', { browserInject: ['miniMessages'] }, `
-    export default (_ctx, api) => {
-      api.contribute(agentExtensions.prepareInput, async (_content, { original, signal }) => {
+export const apply = (ctx) => {
+      ctx.on("agent/prepare-input", async (_content, { original, signal }) => {
         if (original.userText !== 'Stop before acceptance') return;
         signal.throwIfAborted();
         await new Promise((_, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true }));
       });
-    };`);
-  writeFileSync(join(folder, 'web.js'), `import { conversationExtensions } from '/packages/ui-runtime/plugin-sdk.js';
-    export default (_ctx, api) => {
-      api.contribute(conversationExtensions.tool, 'ls', (_tool, signal) => {
+    };
+`);
+  writeFileSync(join(folder, 'web.js'), `
+export const inject = ["miniMessages"];
+
+export const apply = (ctx) => {
+      ctx.effect(() => ctx.miniMessages.registerTool('ls', (_tool, signal) => {
         document.body.dataset.activeFailedRenderers = String(Number(document.body.dataset.activeFailedRenderers ?? 0) + 1);
         signal.addEventListener('abort', () => {
           document.body.dataset.activeFailedRenderers = String(Number(document.body.dataset.activeFailedRenderers) - 1);
         }, { once: true });
         throw new Error('broken fixture tool renderer');
-      });
-    };`);
+      }));
+    };
+`);
   writeJson(paths.settings, { ...readJson(paths.settings, {}), plugins: { 'bad-renderer': true } });
   const failures: string[] = [], unhandled: string[] = [];
   page.on('console', (message) => { if (message.type() === 'error' && message.text().includes('broken fixture tool renderer')) failures.push(message.text()); });
@@ -107,12 +111,16 @@ test('a long response updates only its view and restores from current state when
   const folder = join(paths.plugins, 'stream-observer');
   mkdirSync(folder);
   writeJson(join(folder, 'plugin.json'), { browserInject: ['miniConversation', 'miniSlots'] });
-  writeFileSync(join(folder, 'web.js'), `import { slotExtensions } from '/packages/ui-runtime/plugin-sdk.js';
-    export default ({ miniConversation }, api) => {
+  writeFileSync(join(folder, 'web.js'), `
+export const inject = ["miniConversation","miniSlots"];
+
+export const apply = (ctx) => {
+    const { miniConversation } = ctx;
+    const signal = ctx.fiber.signal;
       miniConversation.subscribe(['history'], () => {
         if (miniConversation.get().history.messages.length) throw new Error('broken history subscriber');
-      }, api.signal);
-      const remove = api.contribute(slotExtensions.keyed, 'conversation.history', 'history', (signal) => {
+      }, signal);
+      const remove = ctx.effect(() => ctx.miniSlots.registerKeyed('conversation.history', 'history', (signal) => {
         const node = document.createElement('div');
         node.id = 'replacement-stream';
         const update = () => {
@@ -124,9 +132,10 @@ test('a long response updates only its view and restores from current state when
         miniConversation.subscribe(['partial', 'history'], update, signal);
         update();
         return node;
-      });
-      window.addEventListener('restore-history', remove, { once: true, signal: api.signal });
-    };`);
+      }));
+      window.addEventListener('restore-history', remove, { once: true, signal: signal });
+    };
+`);
   writeJson(paths.settings, { ...readJson(paths.settings, {}), plugins: { 'stream-observer': true } });
   const reported: string[] = [];
   page.on('console', (message) => { if (message.type() === 'error' && message.text().includes('broken history subscriber')) reported.push(message.text()); });

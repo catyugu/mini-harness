@@ -1,25 +1,19 @@
 # @mini-harness/sdk
 
-Defines the two published plugin entry points for mini-harness.
+Public entry points for installed plugins in the single mini-harness npm package.
 
 ## Responsibilities
 
-Collects the capability APIs, types and extension points that external server and browser plugins can use.
+Exports server and browser domain types and helpers. Plugin declarations and service augmentation use `mini-harness/cordis`.
 
 ## Structure
 
-`src/plugin.ts` is the server entry. `src/browser-plugin.ts` is the browser entry.
+`src/plugin.ts` exports server contracts and `src/browser-plugin.ts` exports browser contracts. The runtime is built from [vendor/cordis](../../vendor/cordis/README.md).
 
 ## API
 
-Install `mini-harness` and import `mini-harness/plugin` or `mini-harness/browser-plugin`. Publish services using Cordis `ctx.provide`; the public `ServiceMap` augmentation also types the server Context. Browser replacements use `miniComposer` for editing and `miniConversation` for current history and run state. Execution handles cancel only their own run. See the [plugin guide](../../docs/plugins.md) for examples.
-
-## Dependencies
-
-References capability-owned APIs. Runtime implementations and installed plugin management stay with those capabilities.
-
-The [Task notes example](../../docs/examples/task-notes) compiles against the installed SDK and exercises session access, managed execution, approvals, records and browser contributions.
+Import server contracts from `mini-harness/plugin` and browser contracts from `mini-harness/browser-plugin`. See the [plugin guide](../../docs/plugins.md).
 
 ## Testing
 
-`pnpm run pack:verify` compiles and runs consumers against an independent npm installation.
+`pnpm run pack:verify` compiles the SDK and runs the Task notes example in an independent npm installation.

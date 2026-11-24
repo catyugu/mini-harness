@@ -1,17 +1,18 @@
-import { sessionExtensions } from '@mini-harness/sessions/records';
-import { executionExtensions } from '@mini-harness/runs/execution';
+import type {} from '@mini-harness/plugin-api/scopes';
+import type {} from '@mini-harness/sessions/records';
+import type {} from '@mini-harness/tools/api';
+import type { Context } from 'mini-harness/cordis';
+import type {} from '@mini-harness/runs/execution';
 import type {} from '@mini-harness/models/api';
-import { toolExtensions } from '@mini-harness/tools/extensions';
 import { defineTool } from '@mini-harness/tools/api';
-import type { PluginApi } from '@mini-harness/plugin-api/descriptor';
 import { Type } from 'typebox';
 import { Delegation, type SubagentPolicy } from './delegation.js';
 
 /** Optional plugin: delegation, scheduling and child-model rules exist only while mounted. */
-export function setup(_ctx: unknown, api: PluginApi) {
-  const policy = () => api.config as unknown as SubagentPolicy;
-  const delegation = new Delegation(api.contribute(sessionExtensions.access), api.contribute(executionExtensions.control), policy);
-  api.onConfigChange((next) => {
+export function setup(ctx: Context) {
+  const policy = () => ctx.fiber.effectiveConfig as unknown as SubagentPolicy;
+  const delegation = new Delegation(ctx.harnessSessions.access(), ctx.harnessExecution, policy);
+  ctx.on('internal/update', (next) => {
     const config = next as unknown as SubagentPolicy;
     delegation.semaphore.setLimit(config.maxParallel);
   });
@@ -29,5 +30,5 @@ export function setup(_ctx: unknown, api: PluginApi) {
       return { content: [{ type: 'text', text: child.text }], details: { sessionId: child.id } };
     }
   });
-  api.contribute(toolExtensions.register, { name: 'delegate', bind: tool }, { visible: (id) => delegation.visible(id) });
+  ctx.effect(() => ctx.harnessTools.register({ name: 'delegate', bind: tool }, { visible: (id) => delegation.visible(id) }));
 }

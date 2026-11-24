@@ -7,7 +7,6 @@ export function writePlugin(directory: string, id: string, descriptor: object, s
   const folder = join(directory, id);
   mkdirSync(folder);
   writeFileSync(join(folder, 'plugin.json'), JSON.stringify(descriptor));
-  writeFileSync(join(folder, 'plugin.js'),
-    'import { agentExtensions, promptExtensions, sessionDisplayExtensions, sessionExtensions, toolExtensions } from ' + JSON.stringify(pluginSdkUrl) + ';\n' + source);
+  writeFileSync(join(folder, 'plugin.js'), source);
   return folder;
 }
