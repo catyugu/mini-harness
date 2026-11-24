@@ -1,3 +1,5 @@
+import { slotExtensions } from '@mini-harness/contracts/slots';
+import { conversationExtensions } from '@mini-harness/contracts/composer';
 import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend';
 import { icon } from '@mini-harness/ui-primitives/icons';
 
@@ -27,10 +29,10 @@ const setup: FrontendSetup = (ctx, api) => {
       return step;
     }));
   };
-  api.slots.register('conversation.header', trail);
+  api.contribute(slotExtensions.register, 'conversation.header', trail);
   services.onConversationChange(renderTrail, api.signal);
   renderTrail();
-  api.toolAction('delegate', ({ sessionId }) => {
+  api.contribute(conversationExtensions.toolAction, 'delegate', ({ sessionId }) => {
     if (!sessionId || !/^[a-f0-9-]{36}$/.test(sessionId)) return;
     const button = document.createElement('button');
     button.type = 'button';

@@ -1,9 +1,9 @@
-import { expect, type Page } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
-import type { createFixturePaths } from '../helpers/mock-provider.js';
+import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
 
 async function availablePort(): Promise<number> {
   const server = createServer();
@@ -35,11 +35,12 @@ export async function startIsolatedHost(paths: ReturnType<typeof createFixturePa
           url: info.url as string,
           token,
           async stop() {
-            if (child.exitCode === null) child.kill('SIGTERM');
+            if (child.exitCode !== null || child.signalCode !== null) return;
             await new Promise<void>((resolve) => {
-              if (child.exitCode !== null) return resolve();
-              child.once('close', () => resolve());
-              setTimeout(resolve, 5000);
+              const done = () => { clearTimeout(timer); child.off('close', done); resolve(); };
+              const timer = setTimeout(done, 5000);
+              child.once('close', done);
+              child.kill('SIGTERM');
             });
           }
         };
@@ -75,3 +76,44 @@ export async function expectInViewport(panel: ReturnType<Page['locator']>, viewp
   expect(bounds.y + bounds.height).toBeLessThanOrEqual(viewport.height + 1);
   expect(await panel.evaluate((node) => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
 }
+
+type BrowserSetup = {
+  reply?: Parameters<typeof createMockProvider>[0];
+  prepare?(paths: ReturnType<typeof createFixturePaths>['paths'], root: string): void | Promise<void>;
+};
+
+async function launchBrowser({ reply, prepare }: BrowserSetup = {}) {
+  const mock = await createMockProvider(reply);
+  let directory: string | undefined;
+  let host: Awaited<ReturnType<typeof startIsolatedHost>> | undefined;
+  const close = async () => {
+    try { await host?.stop(); }
+    finally {
+      try { await mock.close(); }
+      finally { if (directory) rmSync(directory, { recursive: true, force: true }); }
+    }
+  };
+  try {
+    const { paths, root } = createFixturePaths(mock.url);
+    directory = root;
+    await prepare?.(paths, root);
+    const server = host = await startIsolatedHost(paths);
+    return { mock, paths, root, host: server, close };
+  } catch (error) {
+    await close();
+    throw error;
+  }
+}
+
+export const browserTest = test.extend<{ launch: (setup?: BrowserSetup) => Promise<Awaited<ReturnType<typeof launchBrowser>>> }>({
+  launch: async ({}, use) => {
+    const active: Awaited<ReturnType<typeof launchBrowser>>[] = [];
+    try {
+      await use(async (setup) => {
+        const fixture = await launchBrowser(setup);
+        active.push(fixture);
+        return fixture;
+      });
+    } finally { await Promise.all(active.reverse().map((fixture) => fixture.close())); }
+  }
+});

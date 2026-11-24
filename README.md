@@ -58,12 +58,13 @@ Each local plugin bundle has a `plugin.json` descriptor and a server or browser 
 
 ```sh
 pnpm install --frozen-lockfile
-pnpm run check
+pnpm run build
+pnpm run test:node
 pnpm exec playwright install chromium --only-shell
-pnpm run test:browser
-pnpm run pack:check
+pnpm run test:playwright
+pnpm run pack:verify
 ```
 
-The test suites cover native execution and persistence, provider adapters with local HTTP mocks, plugin lifecycles, file policy, shell approval, detached CLI startup, and Chromium desktop/tablet/mobile journeys. `pack:check` installs the single tarball into a clean project and checks public exports, assets, CLI and a model/tool-independent chat roundtrip. No live model credentials are needed.
+The test suites cover native execution, persistence, plugin lifecycles, model providers, file policy, shell approval, and desktop, tablet and mobile browser workflows. Each verification command above reuses the strict build. The local shortcuts `pnpm test`, `pnpm run test:browser` and `pnpm run pack:check` include a build. Use `pnpm run typecheck` for a compile-only check. The package check installs the tarball in a clean project, exercises the plugin SDK and runs a detached server against a local mock model.
 
 MIT. See [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

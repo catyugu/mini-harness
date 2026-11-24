@@ -1,3 +1,5 @@
+import type {} from 'cordis';
+
 export interface SearchInput {
   pattern: string;
   path?: string;
@@ -25,4 +27,8 @@ export interface WorkspaceFileAccess {
   entries(path?: string): Promise<{ name: string; directory: boolean }[]>;
   find(pattern: string, root: string, limit: number): Promise<string[]>;
   grep(input: SearchInput, signal?: AbortSignal): Promise<{ matches: string[]; limited: boolean }>;
+}
+
+declare module 'cordis' {
+  interface Context { harnessFileAccess: FileAccessPort }
 }

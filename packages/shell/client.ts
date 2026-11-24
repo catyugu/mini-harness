@@ -1,5 +1,8 @@
-import type { FrontendSetup, ToolView } from '@mini-harness/ui-runtime/frontend';
-import { payload } from '@mini-harness/web/api';
+import { slotExtensions } from '@mini-harness/contracts/slots';
+import { conversationExtensions } from '@mini-harness/contracts/composer';
+import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend';
+import type { ToolView } from '@mini-harness/contracts/composer';
+import { payload } from '@mini-harness/ui-runtime/http';
 
 function renderResult(tool: ToolView) {
   const result = typeof tool.content === 'string' ? tool.content : tool.content?.filter((b) => b.type === 'text').map((b) => b.text).join('\n');
@@ -14,9 +17,9 @@ function renderResult(tool: ToolView) {
 
 const setup: FrontendSetup = (ctx, api) => {
   const { miniApprovals: approvals, harnessBrowser: services } = ctx;
-  api.tool('sandbox_shell', renderResult);
+  api.contribute(conversationExtensions.tool, 'sandbox_shell', renderResult);
   const list = document.createElement('div');
-  api.slots.register('conversation.approvals', list);
+  api.contribute(slotExtensions.register, 'conversation.approvals', list);
   function render() {
     const session = services.session();
     if (!session) { list.replaceChildren(); return; }

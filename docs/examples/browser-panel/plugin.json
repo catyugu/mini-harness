@@ -1,4 +1,4 @@
 {
   "title": "Example panel",
-  "browserRequires": ["core:layout", "core:settings", "core:conversation"]
+  "browserInject": ["miniPrimitives", "miniDialogs", "miniPages", "miniSettingsRegistry", "miniMessages", "miniComposer"]
 }

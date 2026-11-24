@@ -1,3 +1,5 @@
+import type {} from 'cordis';
+
 export type ProcessMode = 'isolated' | 'host';
 
 export interface ProcessRequest {
@@ -32,4 +34,8 @@ export interface IsolatedProcess {
 
 export interface SandboxPort {
   prepare(request: ProcessRequest): Promise<IsolatedProcess>;
+}
+
+declare module 'cordis' {
+  interface Context { harnessProcess: ProcessExecutionPort; harnessSandbox: SandboxPort }
 }

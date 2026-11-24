@@ -5,6 +5,7 @@ import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
+import { readJson, writeJson } from '@mini-harness/platform/json';
 import { readServerInfo } from '@mini-harness/host/process';
 import { parseNpmPackResult } from './npm-pack.js';
 import { createFixturePaths, createMockProvider } from '../test/helpers/mock-provider.js';
@@ -29,7 +30,8 @@ async function checkPackage() {
   const mock = await createMockProvider();
   const { root, paths } = createFixturePaths(mock.url);
   const installed = join(work, 'install');
-  const env = { ...process.env, MINI_HARNESS_HOME: paths.home };
+  const plugin = join(installed, 'sdk-consumer');
+  const env = { ...process.env, MINI_HARNESS_HOME: paths.home, MINI_HARNESS_DEV_PLUGIN: plugin };
   let started = false;
   const cli = (...args: string[]) => npm(['exec', '--offline', '--', 'mini-harness', ...args], { cwd: installed, env });
   try {
@@ -42,7 +44,7 @@ async function checkPackage() {
       !/\.(?:test|spec)\.js$/.test(path)), 'Published package must exclude test artifacts');
     await mkdir(installed);
     const tarball = 'file:../' + filename;
-    const fixture = { name: 'mini-harness-install-check', private: true, version: '0.0.0', dependencies: { [name]: tarball } };
+    const fixture = { name: 'mini-harness-install-check', private: true, type: 'module', version: '0.0.0', dependencies: { [name]: tarball } };
     await writeFile(join(installed, 'package.json'), JSON.stringify(fixture));
     console.log('Installing ' + filename + ' and its production dependencies with npm');
     await npm(['install', '--prefer-offline', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund'], {
@@ -61,7 +63,7 @@ async function checkPackage() {
       assert.ok(files.some((file) => file.path === 'dist/types/packages/' + path), 'Missing SDK declarations: ' + path);
     await writeFile(join(installed, 'plugin-types.mts'), `
       import { agentExtensions, promptExtensions, sessionExtensions, toolExtensions, type PluginApi, type LlmPort } from 'mini-harness/plugin';
-      import type { FrontendApi, SlotRenderer } from 'mini-harness/browser-plugin';
+      import { settingsExtensions, slotExtensions, type FrontendSetup, type SlotRenderer } from 'mini-harness/browser-plugin';
       declare module 'mini-harness/plugin' {
         interface ServiceMap { example: { greet(name: string): string } }
       }
@@ -88,18 +90,32 @@ async function checkPackage() {
       api.service('example')?.greet(1);
       // @ts-expect-error TypeScript plugins declare their own services.
       api.service('undeclared');
-      declare const frontend: FrontendApi, render: SlotRenderer;
-      frontend.slots.registerKeyed('sidebar.primary', 'example', render);
-      frontend.watch(() => {});
-      frontend.settings.register({ id: 'example', section: 'General', render: ({ configuration }) =>
-        frontend.ui.status(String(configuration.get<boolean>('showDetails')))
-      });
-      const language: string = frontend.locale.current();
+      declare const render: SlotRenderer;
+      const setup: FrontendSetup = (ctx, frontend) => {
+        frontend.contribute(slotExtensions.keyed, 'sidebar.primary', 'example', render);
+        // @ts-expect-error A keyed contribution needs a renderer.
+        frontend.contribute(slotExtensions.keyed, 'sidebar.primary', 'example', document.body);
+        frontend.watch(() => {});
+        frontend.contribute(settingsExtensions.register, { id: 'example', section: 'General', render: ({ configuration }) =>
+          ctx.miniPrimitives.status(String(configuration.get<boolean>('showDetails')))
+        });
+      };
     `);
     await execFile(process.execPath, [resolve('node_modules/typescript/bin/tsc'),
       '--strict', '--skipLibCheck', '--noEmit', '--target', 'ES2022', '--module', 'NodeNext', 'plugin-types.mts'],
     { cwd: installed });
     assert.match((await cli('--help')).stdout, /minimal native agent harness/);
+    await mkdir(plugin);
+    await writeFile(join(plugin, 'plugin.json'), JSON.stringify({ inject: ['harnessRoutes'] }));
+    await writeFile(join(plugin, 'plugin.js'), `
+      import { HttpReply, promptExtensions } from 'mini-harness/plugin';
+      export default (_ctx, api) => {
+        api.registerRoute('GET', '/smoke', () => new HttpReply(200, { sdk: true }));
+        api.contribute(promptExtensions.section, { id: 'installed-sdk', render: () => 'Installed SDK prompt section' });
+      };
+    `);
+    const settings = readJson<Record<string, unknown>>(paths.settings, {});
+    writeJson(paths.settings, { ...settings, plugins: { 'sdk-consumer': true } });
     const launch = await cli('--detached', '--cwd', paths.cwd, '--port', String(await availablePort()));
     assert.match(launch.stdout, /started independently/);
     started = true;
@@ -109,14 +125,15 @@ async function checkPackage() {
     assert.ok(token);
     const headers = { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' };
     const get = (path: string) => fetch(info.url + path, { headers });
-    for (const asset of ['/', '/packages/ui-runtime/boot.js', '/packages/ui-primitives/markdown.js', '/packages/session-helper/client.js', '/packages/shell/client.js', '/packages/settings/browser.js', '/packages/sessions/browser/conversation/view.js', '/packages/ui-primitives/primitives.js', '/packages/web/vendor/marked.js', '/packages/web/vendor/purify.js', '/logo.svg', '/manifest.webmanifest', '/theme.css', '/icon-192.png', '/icon-512.png', '/favicon.ico']) {
+    for (const asset of ['/', '/packages/ui-runtime/boot.js', '/packages/ui-runtime/plugin-sdk.js', '/packages/ui-primitives/markdown.js', '/packages/session-helper/client.js', '/packages/shell/client.js', '/packages/settings/browser.js', '/packages/sessions/browser/conversation/view.js', '/packages/ui-primitives/primitives.js', '/packages/ui-primitives/vendor/marked.js', '/packages/ui-primitives/vendor/purify.js', '/logo.svg', '/manifest.webmanifest', '/theme.css', '/icon-192.png', '/icon-512.png', '/favicon.ico']) {
       const response = await get(asset);
       assert.equal(response.status, 200, asset);
       await response.arrayBuffer();
     }
     assert.match(await (await get('/theme.css')).text(), /\.approval-heading/);
     const plugins = await (await get('/api/plugins')).json();
-    assert.deepEqual(plugins.map(({ id }: { id: string }) => id), ['files', 'skills', 'subagents', 'shell', 'session-helper']);
+    assert.ok(plugins.some(({ id, state }: { id: string; state: string }) => id === 'sdk-consumer' && state === 'ready'));
+    assert.deepEqual(await (await get('/api/extensions/sdk-consumer/smoke')).json(), { sdk: true });
     const bootstrap = await (await get('/api/bootstrap')).json();
     assert.ok(bootstrap.ui.some(({ id }: { id: string }) => id === 'core:conversation'));
     assert.ok(!bootstrap.ui.some(({ id }: { id: string }) => id === 'shell'));
@@ -127,6 +144,7 @@ async function checkPackage() {
     const run = await startedRun.json();
     const chat = await fetch(url + '/events?run=' + run.id, { headers });
     assert.match(await chat.text(), /Mock response/);
+    assert.match(JSON.stringify(mock.requests[0]?.messages), /Installed SDK prompt section/);
     const status = await (await fetch(url + '/runs', { headers })).json();
     assert.equal(status.run.state, 'completed');
     assert.match((await cli('status')).stdout, /is running/);

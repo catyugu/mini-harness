@@ -1,12 +1,12 @@
+import { settingsExtensions } from '@mini-harness/contracts/settings-browser';
 import type { ModelChoice } from '@mini-harness/contracts/conversation';
-import { payload } from '@mini-harness/web/api';
-import type { ModelCatalog } from '@mini-harness/web/types';
-import { RemoteStore } from '@mini-harness/web/models/remote-store';
+import { payload } from '@mini-harness/ui-runtime/http';
+import type { ModelCatalog, ProviderInfo, ProviderModel } from '@mini-harness/contracts/models';
+import { RemoteStore } from '@mini-harness/ui-runtime/remote-store';
 import type { FrontendSetup, FrontendApi } from '@mini-harness/ui-runtime/frontend';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { button, field, fromMarkup, confirmAction, required } from '@mini-harness/ui-primitives/primitives';
 
-import type { ProviderInfo, ProviderModel } from '@mini-harness/web/contracts/providers';
 
 const setup: FrontendSetup = async (ctx, api) => {
   const { miniSettings: settings } = ctx;
@@ -26,7 +26,7 @@ const setup: FrontendSetup = async (ctx, api) => {
       signal.addEventListener('abort', release, { once: true });
     }
   });
-  api.settings.register({
+  api.contribute(settingsExtensions.register, {
     id: 'providers',
     section: { title: 'Model', icon: 'model', order: 10 },
     render({ signal }) {

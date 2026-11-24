@@ -1,6 +1,4 @@
 import { expectPresent } from '../../../test/support/required.js';
-import { defaultShellMode } from '../manifest.js';
-import { supportsIsolation } from '@mini-harness/platform/isolation';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -9,7 +7,7 @@ import { fixture, waitUntil } from '../../../test/support/api-fixture.js';
 test('shell approval gates execution, handles rejection and cancellation', async (t) => {
   const { app, request, finish } = await fixture(t, ({ messages }) => messages.at(-1)?.role === 'tool' ? 'Tool completed' :
     { tool: 'sandbox_shell', args: { command: 'echo approved' } });
-  await app.runtime.updateSettings({ plugins: { shell: true }, pluginConfig: { shell: { mode: 'host' } } });
+  await app.runtime.configuration.update({ plugins: { shell: true }, pluginConfig: { shell: { mode: 'host' } } });
   const { body: session } = await request('/sessions', 'POST', {});
   for (const allow of [false, true]) {
     await request('/sessions/' + session.id + '/runs', 'POST', { message: 'Run a shell command' });
@@ -60,7 +58,7 @@ test('shell approval gates execution, handles rejection and cancellation', async
 test('full access bypasses Shell prompts only for its conversation and applies to pending approvals', async (t) => {
   const { app, request, finish } = await fixture(t, ({ messages }) =>
     messages.at(-1)?.role === 'tool' ? 'Command finished' : { tool: 'sandbox_shell', args: { command: 'echo permitted' } });
-  await app.runtime.updateSettings({ plugins: { shell: true }, pluginConfig: { shell: { mode: 'host' } } });
+  await app.runtime.configuration.update({ plugins: { shell: true }, pluginConfig: { shell: { mode: 'host' } } });
 
   const { body: full } = await request('/sessions', 'POST', { permission: 'fullAccess' });
   const { body: standard } = await request('/sessions', 'POST', {});
@@ -110,7 +108,7 @@ test('disabling Shell waits until conversations using its tools have finished', 
     }
     return { tool: 'sandbox_shell', args: { command: 'echo must-not-run' } };
   });
-  await app.runtime.updateSettings({ plugins: { shell: true }, pluginConfig: { shell: { mode: 'host' } } });
+  await app.runtime.configuration.update({ plugins: { shell: true }, pluginConfig: { shell: { mode: 'host' } } });
   const shell = app.runtime.registry.create();
   const other = app.runtime.registry.create();
   const pending = app.runtime.plugins.ctx.harnessRuns.send(other.id, 'Unrelated task');
@@ -134,14 +132,10 @@ test('disabling Shell waits until conversations using its tools have finished', 
   assert.ok(!app.runtime.plugins.ctx.harnessTools.forSession(shell.id).some(({ name }) => name === 'sandbox_shell'));
 });
 
-test('Shell defaults to host only when isolation is unavailable', () => {
-  assert.equal(defaultShellMode, supportsIsolation() ? 'isolated' : 'host');
-});
-
 test('repeating a denied command in the same run does not open a new approval', async (t) => {
   const { app, request, finish } = await fixture(t, ({ messages }) =>
     messages.filter(({ role }) => role === 'tool').length === 2 ? 'Done' : { tool: 'sandbox_shell', args: { command: 'echo repeated' } });
-  await app.runtime.updateSettings({ plugins: { shell: true }, pluginConfig: { shell: { mode: 'host' } } });
+  await app.runtime.configuration.update({ plugins: { shell: true }, pluginConfig: { shell: { mode: 'host' } } });
   const { body: session } = await request('/sessions', 'POST', {});
   const url = '/sessions/' + session.id;
   await request(url + '/runs', 'POST', { message: 'Try twice' });

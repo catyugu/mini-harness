@@ -1,7 +1,7 @@
 import { button, iconButton } from '@mini-harness/ui-primitives/primitives';
 import type { createLayout } from './layout.js';
 
-import type { TabScope, TabAddress, RightTabType } from '@mini-harness/web/contracts/tabs';
+import type { TabScope, TabAddress, RightTabType } from '@mini-harness/contracts/layout';
 
 type Tab = {
   key: string;
@@ -71,15 +71,19 @@ export function createRightTabs(view: {
   function selectScope(scope?: TabScope) {
     if (scopeKey(scope) === scopeKey(current.scope) && scope?.sessionId === current.scope?.sessionId) return;
     current.open = layout.panelOpen();
+    // The frame can open before workspace selection and the default tab provider are ready.
+    const openedBeforeSelection = !current.scope && Boolean(scope) && current.open;
     for (const tab of [...current.tabs]) {
       if (tab.address) unmount(tab);
       else remove(current, tab);
     }
     current = state(scope);
     current.scope = scope;
+    if (openedBeforeSelection) current.open = true;
     for (const tab of current.tabs) if (tab.address) tab.address.sessionId = scope?.sessionId;
     render();
     layout.setPanel(current.open);
+    if (openedBeforeSelection) openDefault();
   }
 
   function mount(tab: Tab, create: (signal: AbortSignal) => HTMLElement) {
@@ -148,11 +152,16 @@ export function createRightTabs(view: {
     }
   }
 
+  function openDefault() {
+    if (!current.scope || current.tabs.length) return false;
+    const entry = [...types].find(([, type]) => type.default);
+    if (!entry) return false;
+    open(entry[0]);
+    return true;
+  }
+
   view.toggle.onclick = () => {
-    if (!layout.panelOpen() && !current.tabs.length && current.scope) {
-      const entry = [...types].find(([, type]) => type.default);
-      if (entry) { open(entry[0]); return; }
-    }
+    if (!layout.panelOpen() && openDefault()) return;
     const opening = !layout.panelOpen();
     layout.setPanel(opening, true);
     if (opening) current.active?.view?.node.dispatchEvent(new Event('tab-activate'));

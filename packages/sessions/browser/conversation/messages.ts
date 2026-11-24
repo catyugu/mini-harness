@@ -1,12 +1,14 @@
+import { layoutExtensions } from '@mini-harness/contracts/layout';
 import type { MessageContent, ViewMessage } from '@mini-harness/contracts/message';
 import type { RunEvent } from '@mini-harness/contracts/transport';
-import type { ConversationView } from '@mini-harness/web/types';
-import type { FrontendApi, ToolView, MessageAction, MessageActionContext } from '@mini-harness/ui-runtime/frontend';
+import type { ConversationView } from '@mini-harness/contracts/conversation';
+import type { FrontendApi } from '@mini-harness/ui-runtime/frontend';
+import type { ToolView, MessageAction, MessageActionContext } from '@mini-harness/contracts/composer';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { renderMarkdown, markdownSource } from '@mini-harness/ui-primitives/markdown';
 import { button } from '@mini-harness/ui-primitives/primitives';
 
-export function createMessageView(api: Pick<FrontendApi, 'dialog' | 'signal'>, messages: HTMLElement,
+export function createMessageView(api: Pick<FrontendApi, 'contribute' | 'signal'>, messages: HTMLElement,
   extensions: { render(tool: ToolView, action?: boolean): HTMLElement | undefined; messageActions(): MessageAction[] },
   current: () => { sessionId?: string; leafId?: string | null }, retryLast: () => void) {
 const toolItems = new WeakMap<HTMLDetailsElement, Parameters<typeof toolCard>[0]>();
@@ -29,7 +31,7 @@ const filename = document.createElement('span');
 const actualSize = button('Actual size', 'quiet');
 caption.append(filename, actualSize);
 preview.append(previewViewport, caption);
-const previewDialog = api.dialog('Image preview', preview);
+const previewDialog = api.contribute(layoutExtensions.dialog, 'Image preview', preview);
 previewDialog.classList.add('message-image-dialog');
 
 function setActualSize(enabled: boolean) {
@@ -355,7 +357,7 @@ function errorEntry(error: string) {
 function stream(initial: ConversationView) {
   let answer: HTMLElement | undefined;
   let text = '';
-  function live({ partial, tools }: Pick<ConversationView, 'partial' | 'tools'>) {
+  function live({ partial, tools }: Pick<Extract<RunEvent, { type: 'snapshot' }>, 'partial' | 'tools'>) {
     text = partial ?? '';
     answer = text ? addMessage('assistant', text) : undefined;
     for (const tool of tools ?? []) {

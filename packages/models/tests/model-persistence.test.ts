@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { MiniHarnessRuntime } from '@mini-harness/host/application';
-import { readJson, writeJson } from '@mini-harness/platform/config';
+import { readJson, writeJson } from '@mini-harness/platform/json';
 import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.js';
 
 test('recent main model survives navigation, child overrides and a restart through the native agent', async (t) => {
@@ -21,7 +21,7 @@ test('recent main model survives navigation, child overrides and a restart throu
   const other = runtime.registry.create();
   await runtime.plugins.ctx.harnessRuns.send(old.id, 'First');
   const original = runtime.plugins.ctx.harnessAgent.read(old.id);
-  await runtime.updateSettings({ pluginConfig: { 'core:models': { model: { provider: 'local-mock', id: 'second-model' } } } });
+  await runtime.configuration.update({ pluginConfig: { 'core:models': { model: { provider: 'local-mock', id: 'second-model' } } } });
   await runtime.plugins.ctx.harnessConversationView.read(old.id);
   assert.equal(runtime.plugins.ctx.harnessModelPreference.recent().id, 'second-model');
   assert.deepEqual(runtime.plugins.ctx.harnessAgent.read(old.id).messages, original.messages);

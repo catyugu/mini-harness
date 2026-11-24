@@ -1,3 +1,10 @@
+import type {} from 'cordis';
+import type { ThinkingLevel } from './agent.js';
+import type { TabScope } from './layout.js';
+import type { WorkspaceRecord } from './workspace.js';
+import type { ViewMessage } from './message.js';
+import type { QueueEntry } from './session-log.js';
+import type { StreamEvent } from './transport.js';
 import type { RunInfo } from './transport.js';
 
 export interface ModelChoice { provider: string; id: string }
@@ -26,4 +33,35 @@ export interface SessionSearchResult {
   field: 'title' | 'message';
   snippet: string;
   match: [start: number, end: number];
+}
+
+export interface ConversationView extends Conversation {
+  messages: ViewMessage[];
+  leafId: string | null;
+  model: ModelChoice;
+  thinkingLevel?: ThinkingLevel;
+  partial?: string;
+  tools: Extract<StreamEvent, { type: 'tool' }>[];
+  queue: QueueEntry[];
+}
+
+export interface ConversationViewPort {
+  read(id: string): ConversationView;
+}
+
+declare module 'cordis' {
+  interface Context { harnessConversationView: ConversationViewPort }
+}
+
+export interface ConversationBrowserPort {
+  workspaceRecord(id: string): WorkspaceRecord | undefined;
+  openConversation(id: string): void;
+  workspace(): TabScope | undefined;
+  session(id?: string): Conversation | undefined;
+  onConversationChange(listener: () => void, signal: AbortSignal): void;
+  report(error: Error): void;
+}
+
+declare module 'cordis' {
+  interface Context { harnessBrowser: ConversationBrowserPort }
 }

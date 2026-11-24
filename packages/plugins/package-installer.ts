@@ -1,23 +1,25 @@
+import { localPluginIdPattern } from '@mini-harness/contracts/plugins';
 import { randomUUID } from 'node:crypto';
 import { lstatSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import type { Paths } from '@mini-harness/contracts/config';
-import { readSettings, writeJson } from '@mini-harness/platform/config';
+import type { Paths, Settings } from '@mini-harness/contracts/config';
+import { writeJson } from '@mini-harness/platform/json';
 import { describePlugin } from './descriptor.js';
 import { assertDisabled } from './files.js';
 import { installRegistryPackage } from './registry-client.js';
-import { generationPattern, packageBundle, packageMarker, packageSource, packageSpecPattern, pluginIdPattern } from './source.js';
+import { generationPattern, packageBundle, packageMarker, packageSource, packageSpecPattern } from './source.js';
 
 /** CLI holds the instance lock for all inspection, installation and publication. */
-export async function installPackagedPlugin(paths: Paths, operation: 'install' | 'update', id: string, requested: string | undefined, reserved: (id: string) => boolean, signal?: AbortSignal) {
-  if (!pluginIdPattern.test(id) || reserved(id)) throw new Error('Invalid plugin ID');
+export async function installPackagedPlugin(paths: Paths, operation: 'install' | 'update', id: string, requested: string | undefined, options: { settings: Settings; reserved(id: string): boolean; signal?: AbortSignal }) {
+  const { settings, reserved, signal } = options;
+  if (!localPluginIdPattern.test(id) || reserved(id)) throw new Error('Invalid plugin ID');
   const target = join(paths.plugins, id);
   const existing = lstatSync(target, { throwIfNoEntry: false });
   if (operation === 'install' && existing) throw new Error('Plugin already exists: ' + id);
   const previous = existing?.isDirectory() ? packageSource(target) : undefined;
   if (operation === 'update' && !previous) throw new Error('Unknown packaged plugin: ' + id);
   // A stale enabled selection can also refer to a directory the user removed manually.
-  assertDisabled(readSettings(paths), id);
+  assertDisabled(settings, id);
   const spec = requested ?? previous?.spec;
   const name = typeof spec === 'string' && packageSpecPattern.exec(spec)?.[1];
   if (!name) throw new Error('Expected an npm package name with an optional version or tag');

@@ -1,24 +1,41 @@
-
-
 import { rmSync } from 'node:fs';
-
+import type { TestContext } from 'node:test';
 import { createMiniHarnessServer } from '@mini-harness/host/server';
-
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
 
-export const waitUntil = async <T>(read: () => T | Promise<T>, accept: (value: T) => boolean) => {
-  for (let i = 0; i < 300; i++) { const value = await read(); if (accept(value)) return value; await new Promise((done) => setTimeout(done, 10)); }
+export async function waitUntil<T>(read: () => T | Promise<T>, accept: (value: T) => boolean) {
+  for (let attempt = 0; attempt < 300; attempt++) {
+    const value = await read();
+    if (accept(value)) return value;
+    await new Promise((done) => setTimeout(done, 10));
+  }
   throw new Error('Timed out waiting for operation');
-};
-export async function fixture(t: any, reply?: Parameters<typeof createMockProvider>[0]) {
-  const mock = await createMockProvider(reply), { root, paths } = createFixturePaths(mock.url);
-  const app = await createMiniHarnessServer(paths), base = 'http://127.0.0.1:' + await app.listen(0);
-  t.after(async () => { await app.close(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
-  const request = async (path: string, method = 'GET', body?: any, extra = {}) => {
-    const response = await fetch(base + '/api' + path, { method, headers: { Authorization: 'Bearer ' + app.token, 'Content-Type': 'application/json', ...extra }, body: body === undefined ? undefined : JSON.stringify(body) });
-    return { status: response.status, body: await response.json() };
-  };
-  const finish = (id: string) => waitUntil(() => request('/sessions/' + id + '/runs'), (r) => ['completed', 'failed', 'cancelled'].includes(r.body.run?.state));
-  return { mock, paths, root, app, request, finish, base };
 }
 
+export async function fixture(t: TestContext, reply?: Parameters<typeof createMockProvider>[0],
+  prepare?: (paths: ReturnType<typeof createFixturePaths>['paths']) => void | Promise<void>) {
+  const mock = await createMockProvider(reply);
+  let directory: string | undefined;
+  let app: Awaited<ReturnType<typeof createMiniHarnessServer>> | undefined;
+  t.after(async () => {
+    try { await app?.close(); }
+    finally {
+      try { await mock.close(); }
+      finally { if (directory) rmSync(directory, { recursive: true, force: true }); }
+    }
+  });
+  const { root, paths } = createFixturePaths(mock.url);
+  directory = root;
+  await prepare?.(paths);
+  const server = app = await createMiniHarnessServer(paths);
+  const base = 'http://127.0.0.1:' + await server.listen(0);
+  const headers = { Authorization: 'Bearer ' + server.token, 'Content-Type': 'application/json' };
+  const request = async (path: string, method = 'GET', body?: unknown, extra: Record<string, string> = {}) => {
+    const response = await fetch(base + '/api' + path, { method, headers: { ...headers, ...extra },
+      body: body === undefined ? undefined : JSON.stringify(body) });
+    return { status: response.status, body: await response.json() };
+  };
+  const finish = (id: string) => waitUntil(() => request('/sessions/' + id + '/runs'),
+    ({ body }) => ['completed', 'failed', 'cancelled'].includes(body.run?.state));
+  return { mock, paths, root, app: server, request, finish, base, headers };
+}

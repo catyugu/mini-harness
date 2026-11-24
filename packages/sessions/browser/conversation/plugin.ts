@@ -1,11 +1,13 @@
+import { slotExtensions } from '@mini-harness/contracts/slots';
+import { settingsExtensions } from '@mini-harness/contracts/settings-browser';
 import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend';
-import { MessageExtensions } from '@mini-harness/ui-runtime/message-extensions';
+import { MessageExtensions } from './message-extensions.js';
 import { fromMarkup, required, toggle } from '@mini-harness/ui-primitives/primitives';
 import { conversationView } from './view.js';
 
 const setup: FrontendSetup = (ctx, api) => {
   const { miniSelection: state, miniSessions: sessions, miniWorkspaces: workspaces, miniModels: models, miniLayout: layout, miniPages: pages, miniHeader: header } = ctx;
-  api.settings.register({
+  api.contribute(settingsExtensions.register, {
     id: 'queue-mode',
     section: { title: 'General', icon: 'settings', order: 20 },
     render({ bind }) {
@@ -31,18 +33,17 @@ const setup: FrontendSetup = (ctx, api) => {
   ctx.provide('miniComposer', {
     insert: conversation.insert,
     beginDraftMode: conversation.beginDraftMode,
-    cancelDraftMode: conversation.cancelDraftMode,
     command: conversation.command,
     completion: conversation.completion
   });
-  api.slots.define('conversation.composer', conversation.outlets.composer);
-  api.slots.define('conversation.approvals', conversation.outlets.approvals);
-  api.slots.define('workspace.welcome', conversation.outlets.workspace, 'single');
+  api.contribute(slotExtensions.define, 'conversation.composer', conversation.outlets.composer);
+  api.contribute(slotExtensions.define, 'conversation.approvals', conversation.outlets.approvals);
+  api.contribute(slotExtensions.define, 'workspace.welcome', conversation.outlets.workspace, 'single');
   conversation.attach();
   extensions.subscribe(conversation.refreshActions, api.signal);
   models.subscribe(conversation.updateModelControls, api.signal);
   extensions.subscribeToTools(conversation.refreshTools, api.signal);
-  api.slots.registerKeyed('sidebar.primary', 'new-conversation', (signal) => {
+  api.contribute(slotExtensions.keyed, 'sidebar.primary', 'new-conversation', (signal) => {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'new-session';

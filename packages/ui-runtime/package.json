@@ -4,13 +4,12 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@mini-harness/contracts": "workspace:*",
-    "@mini-harness/ui-slots": "workspace:*",
-    "@mini-harness/web": "workspace:*"
+    "@mini-harness/contracts": "workspace:*"
   },
   "exports": {
     "./frontend": "./frontend.ts",
-    "./message-extensions": "./message-extensions.ts",
-    "./projections": "./projections.ts"
+    "./http": "./http.ts",
+    "./projections": "./projections.ts",
+    "./remote-store": "./remote-store.ts"
   }
 }

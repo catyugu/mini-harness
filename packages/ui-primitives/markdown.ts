@@ -1,5 +1,5 @@
-import { marked } from '@mini-harness/web/vendor/marked';
-import purify from '@mini-harness/web/vendor/purify';
+import { marked } from './vendor/marked.js';
+import purify from './vendor/purify.js';
 
 export const markdownSource = new WeakMap<HTMLElement, string>();
 

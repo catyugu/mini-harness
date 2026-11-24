@@ -1,3 +1,4 @@
+import { isThinkingLevel } from '@mini-harness/contracts/agent';
 import { HttpError } from '@mini-harness/contracts/routes';
 import type { ThinkingLevel } from '@mini-harness/contracts/agent';
 import type { ModelChoice } from '@mini-harness/contracts/conversation';
@@ -7,7 +8,7 @@ type Capabilities = ReturnType<ModelCatalogPort['capabilities']>;
 
 function supportsThinking(level: ThinkingLevel, capabilities: Capabilities) {
   if (level === 'off') return true;
-  return ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(level) &&
+  return isThinkingLevel(level) &&
     capabilities?.reasoning && (!capabilities.thinkingLevels || capabilities.thinkingLevels.includes(level));
 }
 

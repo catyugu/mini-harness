@@ -31,7 +31,7 @@ test('native agent through HTTP: streaming, persistence, Skills, export and perm
   const home = await fetch(base + '/');
   assert.equal(home.status, 200);
   assert.match(await home.text(), /mini-harness/);
-  const bundle = await fetch(base + '/packages/web/api.js');
+  const bundle = await fetch(base + '/packages/ui-runtime/http.js');
   assert.equal(bundle.status, 200);
   assert.match(await bundle.text(), /mini-harness-token/);
 

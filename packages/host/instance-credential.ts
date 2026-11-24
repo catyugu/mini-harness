@@ -2,7 +2,7 @@ import { protectLocal } from '@mini-harness/platform/local-secret';
 import { randomBytes } from 'node:crypto';
 import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync, realpathSync } from 'node:fs';
 import { join, relative } from 'node:path';
-import { writeJson } from '@mini-harness/platform/config';
+import { writeJson } from '@mini-harness/platform/json';
 
 const windows = process.platform === 'win32';
 const format = /^[a-f0-9]{64}$/;

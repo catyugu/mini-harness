@@ -8,12 +8,10 @@
     "@mini-harness/kernel": "workspace:*",
     "@mini-harness/platform": "workspace:*",
     "@mini-harness/ui-primitives": "workspace:*",
-    "@mini-harness/ui-runtime": "workspace:*",
-    "@mini-harness/web": "workspace:*"
+    "@mini-harness/ui-runtime": "workspace:*"
   },
   "exports": {
     "./catalog": "./catalog.ts",
-    "./data-manifest": "./data-manifest.ts",
     "./manager": "./manager.ts",
     "./manifest": "./manifest.ts",
     "./package-installer": "./package-installer.ts"

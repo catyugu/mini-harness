@@ -1,10 +1,10 @@
+import { localPluginIdPattern } from '@mini-harness/contracts/plugins';
 import { HttpError } from '@mini-harness/contracts/routes';
 import { mkdirSync, renameSync, rmSync, lstatSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { writeJson } from '@mini-harness/platform/config';
+import { writeJson } from '@mini-harness/platform/json';
 import type { Settings } from '@mini-harness/contracts/config';
-import { pluginIdPattern } from './source.js';
 import type { PluginMetadata } from '@mini-harness/contracts/plugins';
 
 type PluginFilesHost = {
@@ -13,7 +13,7 @@ type PluginFilesHost = {
   plugins: { metadata(): PluginMetadata[]; reserved(id: string): boolean };
 };
 export function installPlugin(runtime: PluginFilesHost, input: any) {
-  if (!input || !pluginIdPattern.test(input.id) || (runtime.plugins.reserved(input.id) || runtime.plugins.metadata().some(({ id }) => id === input.id))) throw new HttpError('invalid_input', 'Invalid or existing plugin ID');
+  if (!input || !localPluginIdPattern.test(input.id) || (runtime.plugins.reserved(input.id) || runtime.plugins.metadata().some(({ id }) => id === input.id))) throw new HttpError('invalid_input', 'Invalid or existing plugin ID');
   if (!Array.isArray(input.files) || input.files.length > 3 || !input.files.some((f: { name?: unknown }) => f.name === 'plugin.js' || f.name === 'web.js')) throw new HttpError('invalid_input', 'Provide plugin.js, web.js or both');
   const seen = new Set(); let size = 0;
   for (const file of input.files) {
@@ -47,7 +47,7 @@ export function installPlugin(runtime: PluginFilesHost, input: any) {
 }
 export async function uninstallPlugin(runtime: PluginFilesHost, id: string) {
   const plugin = runtime.plugins.metadata().find((item) => item.id === id && item.trustedCode);
-  if (!plugin || !pluginIdPattern.test(id)) throw new HttpError('invalid_input', 'Unknown local plugin');
+  if (!plugin || !localPluginIdPattern.test(id)) throw new HttpError('invalid_input', 'Unknown local plugin');
   assertDisabled(runtime.settings, id);
   const folder = join(runtime.paths.plugins, id);
   if (lstatSync(folder).isSymbolicLink()) throw new HttpError('invalid_input', 'Linked plugins must be removed locally');

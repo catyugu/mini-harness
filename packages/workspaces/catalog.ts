@@ -3,7 +3,8 @@ import { createHash } from 'node:crypto';
 import { lstatSync, mkdirSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
-import { readJson, writeJson, type getPaths } from '@mini-harness/platform/config';
+import { readJson, writeJson } from '@mini-harness/platform/json';
+import { type getPaths } from '@mini-harness/platform/paths';
 import { containsPath } from '@mini-harness/platform/paths';
 
 import type { WorkspaceRecord } from '@mini-harness/contracts/workspace';

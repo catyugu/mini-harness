@@ -2,6 +2,12 @@ import type { ContributionSource } from './contributions.js';
 import type { Static, TSchema } from 'typebox';
 import type { TextPart, ImagePart } from './llm.js';
 
+export const toolNamePattern = /^[a-zA-Z0-9_-]{1,64}$/;
+
+export function validToolRestrictions(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((name) => typeof name === 'string' && toolNamePattern.test(name));
+}
+
 export interface ToolSchema { name: string; description: string; parameters: object }
 export interface ToolResult { content: (TextPart | ImagePart)[]; details?: Record<string, unknown> }
 export interface ToolContext {

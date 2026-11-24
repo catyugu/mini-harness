@@ -3,7 +3,8 @@ import { lstatSync, mkdtempSync, realpathSync, rmSync, watch } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
-import { getPaths, ensurePaths, writeJson } from '@mini-harness/platform/config';
+import { getPaths, ensurePaths } from '@mini-harness/platform/paths';
+import { writeJson } from '@mini-harness/platform/json';
 
 async function port() {
   const server = createServer();

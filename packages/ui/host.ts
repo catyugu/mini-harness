@@ -1,3 +1,4 @@
+import type { BrowserBootstrap } from '@mini-harness/contracts/browser';
 import type { Context } from 'cordis';
 import { projectionDomains, type ProjectionDomain, type ProjectionNotice } from '@mini-harness/contracts/navigation';
 import { eventStream } from '@mini-harness/transport/http';
@@ -35,7 +36,7 @@ export function setup(ctx: Context) {
     if (event instanceof CustomEvent) mark(event.detail.domain, event.detail.sessionId, event.detail.workspaceId);
   });
 
-  ctx.effect(() => ctx.harnessRoutes.register('GET', '/api/bootstrap', () => ({
+  ctx.effect(() => ctx.harnessRoutes.register('GET', '/api/bootstrap', (): BrowserBootstrap => ({
     ui: ctx.harnessPluginCatalog.browser()
   })));
   ctx.effect(() => ctx.harnessRoutes.register('GET', '/api/changes', ({ response }) => {

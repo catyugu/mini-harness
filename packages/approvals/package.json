@@ -5,8 +5,7 @@
   "type": "module",
   "dependencies": {
     "@mini-harness/contracts": "workspace:*",
-    "@mini-harness/ui-runtime": "workspace:*",
-    "@mini-harness/web": "workspace:*"
+    "@mini-harness/ui-runtime": "workspace:*"
   },
   "exports": {
     "./data-manifest": "./data-manifest.ts",

@@ -1,10 +1,12 @@
 #!/usr/bin/env node
+import { readSettings } from '@mini-harness/settings/config';
 import { spawn } from 'node:child_process';
 import { openSync, closeSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { getPaths, ensurePaths, writeJson } from '@mini-harness/platform/config';
+import { getPaths, ensurePaths } from '@mini-harness/platform/paths';
+import { writeJson } from '@mini-harness/platform/json';
 import { lockInstance, readServerInfo, requestShutdown, serverStatus } from '@mini-harness/host/process';
 
 import { instanceCredential } from '@mini-harness/host/instance-credential';
@@ -158,8 +160,9 @@ async function main() {
       const [{ installPackagedPlugin }, { plugins }] = await Promise.all([
         import('@mini-harness/plugins/package-installer'), import('@mini-harness/host/composition')
       ]);
-      const { name, version } = await installPackagedPlugin(paths, operation, id, spec,
-        (id) => plugins.some((plugin) => plugin.id === id), cancellation.signal);
+      const { name, version } = await installPackagedPlugin(paths, operation, id, spec, {
+        settings: readSettings(paths), reserved: (id) => plugins.some((plugin) => plugin.id === id), signal: cancellation.signal
+      });
       console.log(id + ': ' + name + '@' + version);
     } finally {
       process.off('SIGINT', abort);

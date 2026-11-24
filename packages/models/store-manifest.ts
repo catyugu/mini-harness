@@ -11,8 +11,8 @@ export const manifest: PluginDescriptor = {
   inject: ['harnessState'], provides: ['harnessModelStore'],
   async setup(ctx) {
     const store = new PiModelStore(ctx.harnessState.paths.home);
+    ctx.effect(() => () => store.close());
     await store.refresh();
     ctx.provide('harnessModelStore', store);
-    ctx.effect(() => () => store.close());
   }
 };

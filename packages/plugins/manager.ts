@@ -55,9 +55,13 @@ export class PluginHost implements ScopePort {
   effective(settings: Settings) { return this.catalog.effective(settings); }
   browser() { return structuredClone(this.published); }
 
-  assertBrowserConfigurable(id: string) {
-    if (!this.published.some((entry) => entry.id === id && entry.browser) || !this.configSchemas.has(id))
-      throw new HttpError('not_found', 'Plugin settings are unavailable');
+  async writeBrowserConfig(id: string, patch: unknown, signal: AbortSignal) {
+    if (!this.writePlugin) throw new HttpError('unavailable', 'Plugin settings are unavailable');
+    await this.writePlugin(id, undefined, patch, () => {
+      signal.throwIfAborted();
+      if (!this.published.some((entry) => entry.id === id && entry.browser) || !this.configSchemas.has(id))
+        throw new HttpError('not_found', 'Plugin settings are unavailable');
+    });
   }
 
   diagnostics() { return structuredClone(this.graph); }
@@ -268,7 +272,7 @@ export class PluginHost implements ScopePort {
 
   private browserPlan(candidate: PluginPlan[], unavailable: (id: string, error: unknown) => boolean) {
     const browser = new Map(candidate.filter(({ browser, web }) => browser || web).map((plan) => [plan.id, plan]));
-    const runtimeServices = ['miniProjections', 'miniSwitch', 'miniBrowserFailures', 'miniSettingsRegistry'];
+    const runtimeServices = ['miniProjections', 'miniSwitch', 'miniBrowserFailures'];
     const { ordered } = resolveCapabilities([...browser.values()].map((plan) => ({
       id: plan.id, provides: plan.descriptor.browserProvides, inject: plan.descriptor.browserInject,
       requires: [...new Set([...(plan.browserRequires ?? []),

@@ -33,6 +33,7 @@ export function registerRoutes(ctx: Context) {
   add('POST', '/api/sessions/:id/runs', async ({ params, body }) => {
     const id = session(params.id);
     const input = await body(20 * 1024 * 1024);
+    if (!input || typeof input !== 'object' || Array.isArray(input)) throw new HttpError('invalid_input', 'Invalid run request');
     return new HttpReply(202, ctx.harnessRuns.startRun(id, input.message, input));
   });
   add('GET', '/api/sessions/:id/events', async ({ params, url, response }) => {

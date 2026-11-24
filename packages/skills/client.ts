@@ -1,5 +1,7 @@
+import { slotExtensions } from '@mini-harness/contracts/slots';
+import { conversationExtensions } from '@mini-harness/contracts/composer';
 import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend';
-import { workspaceRoute } from '@mini-harness/web/api';
+import { workspaceRoute } from '@mini-harness/contracts/workspace';
 import { iconButton } from '@mini-harness/ui-primitives/primitives';
 
 const setup: FrontendSetup = (ctx, api) => {
@@ -29,7 +31,7 @@ const setup: FrontendSetup = (ctx, api) => {
       const skills = await api.request<{ name: string; description: string }[]>(workspaceRoute(workspace, '/skills') + query, { signal: controller.signal });
       if (controller.signal.aborted || api.signal.aborted) return;
       for (const skill of skills)
-        commands.push(api.command({ name: 'skill:' + skill.name, aliases: [skill.name], description: skill.description, group: 'Skill' }));
+        commands.push(api.contribute(conversationExtensions.command, { name: 'skill:' + skill.name, aliases: [skill.name], description: skill.description, group: 'Skill' }));
     } catch (error) {
       if (!controller.signal.aborted && !api.signal.aborted) services.report(error instanceof Error ? error : new Error(String(error)));
     }
@@ -40,10 +42,10 @@ const setup: FrontendSetup = (ctx, api) => {
     const refreshed = update(true);
     const current = request;
     void refreshed.then(() => {
-      if (current === request && !api.signal.aborted) api.insert('/skill:');
+      if (current === request && !api.signal.aborted) ctx.miniComposer.insert('/skill:');
     });
   };
-  api.slots.register('conversation.composer', button);
+  api.contribute(slotExtensions.register, 'conversation.composer', button);
   api.onDispose(ctx.miniProjections.register('plugins', { sync: () => update(true) }));
   services.onConversationChange(() => void update(), api.signal);
   void update();

@@ -1,11 +1,13 @@
-import type { ModelCatalog } from '@mini-harness/web/types';
+import { slotExtensions } from '@mini-harness/contracts/slots';
+import { layoutExtensions } from '@mini-harness/contracts/layout';
+import type { ModelCatalog } from '@mini-harness/contracts/models';
 import type { WorkspaceRecord } from '@mini-harness/contracts/workspace';
 import type { Conversation } from '@mini-harness/contracts/conversation';
 import type { Settings, SettingsPatch } from '@mini-harness/contracts/config';
 import type { PluginMetadata } from '@mini-harness/contracts/plugins';
-import { RemoteStore } from '@mini-harness/web/models/remote-store';
+import { RemoteStore } from '@mini-harness/ui-runtime/remote-store';
 import type { FrontendSetup, FrontendApi } from '@mini-harness/ui-runtime/frontend';
-import { payload } from '@mini-harness/web/api';
+import { payload } from '@mini-harness/ui-runtime/http';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { button, field, fromMarkup, iconButton, saveToggle, toggle, confirmAction, required } from '@mini-harness/ui-primitives/primitives';
 import { readPluginValues, schemaFields } from './browser/fields.js';
@@ -15,7 +17,6 @@ const setup: FrontendSetup = async (ctx, api) => {
   const plugins = new RemoteStore(() => api.request<PluginMetadata[]>('/plugins'));
   await plugins.refresh();
   api.onDispose(ctx.miniProjections.register('plugins', plugins));
-  ctx.provide('miniPluginData', plugins);
   const refresh = async () => {
     await Promise.all([plugins.refresh(), settings.refresh()]);
     const failures = await syncPlugins();
@@ -41,7 +42,7 @@ function installer(api: FrontendApi, installed: () => Promise<void>) {
     <p class="hint form-error" role="alert"></p>
     <div class="ui-actions"></div>
   </form>`);
-  const modal = api.dialog('Install plugin', form);
+  const modal = api.contribute(layoutExtensions.dialog, 'Install plugin', form);
   const id = fromMarkup<HTMLInputElement>('<input pattern="[a-z](?:[a-z0-9]|-){0,63}" placeholder="my-plugin" required>');
   form.prepend(field('Plugin ID', id));
   const input = required(form.querySelector<HTMLInputElement>('.bundle-input'));
@@ -129,7 +130,7 @@ function pluginCatalog(api: FrontendApi, snapshot: () => { plugins: PluginMetada
   });
   openInstall.onclick = () => modal.showModal();
   entry.dataset.pageLink = 'plugins';
-  api.slots.register('sidebar.actions', entry, -10);
+  api.contribute(slotExtensions.register, 'sidebar.actions', entry, -10);
   api.onDispose(pages.register('plugins', page));
 
   let editing: string | undefined;
@@ -374,8 +375,5 @@ function pluginCatalog(api: FrontendApi, snapshot: () => { plugins: PluginMetada
   return { open, refresh: () => { if (!editing && !savingSwitch) render(); } };
 }
 
-declare module 'cordis' {
-  interface Context { miniPluginData: RemoteStore<PluginMetadata[]> }
-}
 
 export default setup;

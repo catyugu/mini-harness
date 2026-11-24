@@ -1,24 +1,30 @@
-import { Context } from '@mini-harness/web/vendor/cordis';
-import { api, data, readEvents, wait, AuthenticationError } from '@mini-harness/web/api';
-import { RemoteStore } from '@mini-harness/web/models/remote-store';
-import type { SlotRegistry } from '@mini-harness/ui-slots/registry';
-import type { MessageExtensions } from './message-extensions.js';
+import { Context } from './vendor/cordis.js';
+import { api, data, readEvents, wait, AuthenticationError } from './http.js';
+import { RemoteStore } from './remote-store.js';
 import { FrontendHost } from './frontend.js';
 import { createBrowserGraphLoader, type BrowserPluginFailures } from './plugin-loader.js';
 import { BrowserProjections } from './projections.js';
-import type { Bootstrap } from '@mini-harness/web/types';
+import type { BrowserBootstrap } from '@mini-harness/contracts/browser';
 import type { ProjectionNotice } from '@mini-harness/contracts/navigation';
 
 declare module 'cordis' {
   interface Context {
-    miniSlots: SlotRegistry;
-    miniMessages: MessageExtensions;
     miniSwitch: () => Promise<BrowserPluginFailures>;
     miniBrowserFailures: {
       has(id: string): boolean;
       subscribe(listener: () => void, signal: AbortSignal): void;
     };
   }
+}
+
+/** A hash-only navigation does not reload ESM modules. Recover by reloading with the new credential. */
+function acceptTokenFromUrl() {
+  const token = new URLSearchParams(location.hash.slice(1)).get('token');
+  if (!token) return false;
+  const changed = sessionStorage.getItem('mini-harness-token') !== token;
+  sessionStorage.setItem('mini-harness-token', token);
+  history.replaceState(null, '', location.pathname + location.search);
+  return changed;
 }
 
 function showAuthenticationError(error: AuthenticationError) {
@@ -49,9 +55,13 @@ async function observe(projections: BrowserProjections, signal: AbortSignal) {
 }
 
 async function boot() {
-  const ctx = new Context();
   const lifetime = new AbortController();
-  const graph = new RemoteStore(() => data<Bootstrap>('/bootstrap', { signal: lifetime.signal }));
+  acceptTokenFromUrl();
+  window.addEventListener('hashchange', () => {
+    if (acceptTokenFromUrl()) location.reload();
+  });
+  const ctx = new Context();
+  const graph = new RemoteStore(() => data<BrowserBootstrap>('/bootstrap', { signal: lifetime.signal }));
   const report = (error: Error) => window.dispatchEvent(new CustomEvent('mini-harness:error', { detail: error }));
   const projections = new BrowserProjections((domain, error) => {
     if (error instanceof AuthenticationError) showAuthenticationError(error);
@@ -59,6 +69,11 @@ async function boot() {
   });
   const host = new FrontendHost(ctx, data, report);
   const sync = createBrowserGraphLoader(host);
+  const dispose = async () => {
+    lifetime.abort();
+    await host.dispose();
+    await sync({ ui: [] });
+  };
   const failuresChanged = new EventTarget();
   let currentFailures: BrowserPluginFailures = new Map();
   const applyGraph = async () => {
@@ -91,11 +106,10 @@ async function boot() {
     lifetime.signal.addEventListener('abort', release, { once: true });
     void observe(projections, lifetime.signal);
     window.addEventListener('pagehide', (event) => {
-      if (!event.persisted) { lifetime.abort(); void host.dispose(); }
+      if (!event.persisted) void dispose();
     }, { signal: lifetime.signal });
   } catch (error) {
-    lifetime.abort();
-    await host.dispose();
+    await dispose();
     throw error;
   }
 }

@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { lstatSync, mkdirSync, realpathSync, rmSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { protectLocal } from '@mini-harness/platform/local-secret';
-import { readJson, writeJson } from '@mini-harness/platform/config';
+import { readJson, writeJson } from '@mini-harness/platform/json';
 import { isDeepStrictEqual } from 'node:util';
 import type { Context } from 'cordis';
 import type { PluginScope } from '@mini-harness/contracts/capabilities';

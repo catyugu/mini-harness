@@ -8,7 +8,7 @@ export function setup(ctx: Context) {
       const record = ctx.harnessRegistry.get(id);
       if (!record) throw new Error('Conversation not found');
       return { ...projectSession(ctx, record), ...ctx.harnessAgent.read(id),
-        ...ctx.harnessRuns.view(id), logError: ctx.harnessRegistry.logError(id) };
+        ...ctx.harnessRuns.activity(id), logError: ctx.harnessRegistry.logError(id) };
     }
   });
   registerSessionRoutes(ctx);

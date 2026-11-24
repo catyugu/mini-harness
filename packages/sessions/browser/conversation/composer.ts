@@ -1,9 +1,11 @@
-import { scopedElements } from '@mini-harness/web/api';
+import { slotExtensions } from '@mini-harness/contracts/slots';
+import { scopedElements } from '@mini-harness/ui-primitives/primitives';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import type { CommandRegistry } from './commands.js';
-import type { ComposerCommand } from '@mini-harness/web/contracts/commands';
+import type { ComposerCommand } from '@mini-harness/contracts/composer';
 import type { Attachment } from '@mini-harness/contracts/input';
-import type { Completer, DraftMode, FrontendApi, Suggestion } from '@mini-harness/ui-runtime/frontend';
+import type { Completer, DraftMode, Suggestion } from '@mini-harness/contracts/composer';
+import type { FrontendApi } from '@mini-harness/ui-runtime/frontend';
 export interface ConversationDraft {
   text: string;
   attachments: (Attachment & { originalIndex?: number })[];
@@ -254,7 +256,7 @@ export function createComposer(root: HTMLElement, draft: () => ConversationDraft
     resetSuggestions: hide,
     attach(api: FrontendApi) {
       const button = document.createElement('button'); button.type = 'button'; button.className = 'icon-button';
-      button.setAttribute('aria-label', 'Attach files'); button.append(icon('attach')); button.onclick = () => input.click(); api.slots.register('conversation.composer', button);
+      button.setAttribute('aria-label', 'Attach files'); button.append(icon('attach')); button.onclick = () => input.click(); api.contribute(slotExtensions.register, 'conversation.composer', button);
     },
     refresh,
     completion(trigger: string, complete: Completer) {

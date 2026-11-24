@@ -2,8 +2,8 @@ import { lstatSync, mkdirSync, realpathSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import type { Paths } from '@mini-harness/contracts/config';
 import type { SessionRecord } from '@mini-harness/contracts/conversation';
-import type { WorkspacePort } from '@mini-harness/contracts/services';
-import { getPaths } from '@mini-harness/platform/config';
+import type { WorkspacePort } from '@mini-harness/contracts/workspace';
+import { getPaths } from '@mini-harness/platform/paths';
 
 export const missing = (error: unknown) => (error as NodeJS.ErrnoException).code === 'ENOENT';
 

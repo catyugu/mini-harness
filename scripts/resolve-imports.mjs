@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, relative, resolve, sep } from 'node:path';
 import ts from 'typescript';
+import { moduleReferences } from '../dist/scripts/module-references.js';
 
 const prefix = '@mini-harness/';
 const exportsByPackage = new Map(
@@ -15,25 +16,17 @@ function rewrite(file) {
   const output = declaration ? 'dist/types/packages' : 'dist/packages';
   const ast = ts.createSourceFile(file, original, ts.ScriptTarget.Latest, true);
   const edits = [];
-  function visit(node) {
-    let literal;
-    if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) literal = node.moduleSpecifier;
-    if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument)) literal = node.argument.literal;
-    if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) literal = node.arguments[0];
-    if (literal && ts.isStringLiteral(literal) && literal.text.startsWith(prefix)) {
-      const [name, ...subpath] = literal.text.slice(prefix.length).split('/');
-      const entry = exportsByPackage.get(name)?.['./' + subpath.join('/')];
-      if (!entry) throw new Error('Missing workspace export ' + literal.text + ' in ' + file);
-      const target = resolve(output, name, entry.replace(/(?:\.d)?\.ts$/, '.js'));
-      const emitted = declaration ? target.replace(/\.js$/, '.d.ts') : target;
-      // Browser vendor files are copied after emission.
-      if (!existsSync(emitted) && !entry.startsWith('./vendor/')) throw new Error('Missing build output ' + emitted);
-      const path = relative(dirname(file), target).split(sep).join('/');
-      edits.push({ from: literal.getStart(ast), to: literal.end, value: JSON.stringify(path.startsWith('.') ? path : './' + path) });
-    }
-    ts.forEachChild(node, visit);
+  for (const { literal } of moduleReferences(ast)) {
+    if (!literal.text.startsWith(prefix)) continue;
+    const [name, ...subpath] = literal.text.slice(prefix.length).split('/');
+    const entry = exportsByPackage.get(name)?.['./' + subpath.join('/')];
+    if (!entry) throw new Error('Missing workspace export ' + literal.text + ' in ' + file);
+    const target = resolve(output, name, entry.replace(/(?:\.d)?\.ts$/, '.js'));
+    const emitted = declaration ? target.replace(/\.js$/, '.d.ts') : target;
+    if (!existsSync(emitted)) throw new Error('Missing build output ' + emitted);
+    const path = relative(dirname(file), target).split(sep).join('/');
+    edits.push({ from: literal.getStart(ast), to: literal.end, value: JSON.stringify(path.startsWith('.') ? path : './' + path) });
   }
-  visit(ast);
   let content = original;
   for (const { from, to, value } of edits.reverse()) content = content.slice(0, from) + value + content.slice(to);
   if (edits.length) writeFileSync(file, content);

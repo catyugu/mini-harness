@@ -4,7 +4,7 @@ import { readFileSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { PiModelStore, PiLlm } from '../pi-adapter.js';
 import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.js';
-import { readJson, writeJson } from '@mini-harness/platform/config';
+import { readJson, writeJson } from '@mini-harness/platform/json';
 import type { LlmEvent, NativeMessage } from '@mini-harness/contracts/llm';
 
 test('model adapter streams native messages, tool calls and metadata through the HTTP provider', async (t) => {
@@ -110,4 +110,27 @@ test('abort reaches the model transport and yields a native terminal message wit
   assert.equal(terminal.message.stopReason, 'aborted');
   assert.equal(mock.requests.length, 1);
   release();
+});
+
+test('credential writes and removal roll back when authentication status refresh fails', async (t) => {
+  const mock = await createMockProvider();
+  const { root, paths } = createFixturePaths(mock.url);
+  const store = new PiModelStore(paths.home);
+  t.after(async () => { await store.close(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
+  await store.refresh();
+  await store.storeCredential('anthropic', 'first-secret');
+  const file = join(paths.home, 'auth.json');
+  const before = readFileSync(file, 'utf8');
+  const status = store.authStatus('anthropic');
+  const target = store as unknown as { readStatus: () => Promise<unknown> };
+  const original = target.readStatus;
+  target.readStatus = async () => { throw new Error('Injected auth-status failure'); };
+  try {
+    await assert.rejects(store.storeCredential('anthropic', 'second-secret'), /Injected auth-status failure/);
+    assert.equal(readFileSync(file, 'utf8'), before);
+    assert.deepEqual(store.authStatus('anthropic'), status);
+    await assert.rejects(store.removeCredential('anthropic'), /Injected auth-status failure/);
+    assert.equal(readFileSync(file, 'utf8'), before);
+    assert.deepEqual(store.authStatus('anthropic'), status);
+  } finally { target.readStatus = original; }
 });

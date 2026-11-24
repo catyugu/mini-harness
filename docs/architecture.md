@@ -10,7 +10,7 @@ Built-in and installed plugins use the same descriptor fields and dependency res
 
 Workspace scopes inherit application services. A session inherits its workspace and each ancestor session scope. Services are isolated on the owning Cordis context. The native execution path resolves LLM, prompt, model and tool services from the current session scope. Tool policy also inherits through the entire ancestry; a child cannot re-enable a tool denied above it. Removing a local provider rebuilds the isolation boundary so its consumers see the parent again.
 
-Platform supplies operating-system and storage primitives. Capability services own their contribution contracts, which are published through the single plugin SDK. Feature plugins own product policy, resources and routes. The composition layer selects default providers and grants read-only tool registration to the built-in Files and Skills plugins. It protects the Tools provider that enforces these grants.
+Platform supplies operating-system, path and atomic JSON file operations. Settings owns settings defaults, validation and commit. Plugin selections and tool restrictions use their capability contracts. Public server and browser extension points ship through `mini-harness/plugin` and `mini-harness/browser-plugin`. Feature plugins own product policy, resources and routes. The composition layer selects default providers and grants read-only tool registration to the built-in Files and Skills plugins. It protects the Tools provider that enforces these grants.
 
 `api.contribute` binds capability-defined registration to the actual Cordis plugin instance. Contributions and decision handlers are selected by scope and applied in ascending order, then by instance ID and registration order. Async callbacks receive the combined task and plugin lifetime signal. Unmount stops new callbacks and waits for existing work before releasing dependencies. Blocking transform failures abort their stage, while observers report failures independently.
 
@@ -21,7 +21,7 @@ Configuration validates schema and defaults before setup. Capability-owned seman
 | State | Owner |
 | --- | --- |
 | Workspace IDs, canonical roots, labels and order | Workspace Catalog, `workspaces.json` |
-| Session identity, title, workspace, parent and conversation permissions | Session Catalog v3, `sessions.json` |
+| Session identity, title, workspace, parent and conversation permissions | Session Catalog, `sessions.json` |
 | Transcript, branch selection, model, thinking, compaction and plugin records | Native Session Log |
 | Acknowledged inbox items and their delivery/cancellation | The same Session Log |
 | Durable queued/running/terminal run state | The same Session Log |
@@ -39,13 +39,13 @@ Application preferences such as theme, queue behavior and the recent model live 
 
 ## Native execution
 
-`NativeAgent` obtains one execution owner per session and prepares its scope. Before committing input it resolves the model and validates capabilities. A turn builds a prompt, takes a snapshot of available tool definitions, streams a native assistant message from `LlmPort`, and commits that message. The built-in catalog, administration and LLM providers share a single model store. The model adapter is the only module importing `@earendil-works/pi-ai`. It converts native messages and opaque provider continuation data to the provider protocol and back; it does not own files, sessions or tools.
+`NativeAgent` obtains one execution owner per session and prepares its scope. Before committing input it resolves the model and validates capabilities. A turn builds a prompt, takes a snapshot of available tool definitions, streams a native assistant message from `LlmPort`, and commits that message. One model store owns provider definitions and credentials. The Model Catalog and LLM have independent provider selections. The model adapter is the only module importing `@earendil-works/pi-ai`. It converts native messages and opaque provider continuation data to the provider protocol and back; it does not own files, sessions or tools.
 
 The tool pipeline checks call identity, JSON-schema arguments, registration lifetime and policy before execution. A duplicate call ID rejects the response before any side effect. The tool registry selects the nearest visible registration before checking inherited restrictions and any read-only grant. The model receives eligible tool definitions. Execution checks the exact advertised lease before and after asynchronous decisions. Tools are serial by default. Consecutive calls that explicitly opt in can overlap, and each result is committed before its completion event. Serial calls form barriers. An unload can revoke a lease; the resulting error is visible to the model. Approval and process execution remain separate capabilities.
 
 The durable inbox assigns every message its own ID. Delivery commits the user message and its inbox acknowledgment atomically in one record. Steering is observed after generation and before launching tool calls; unstarted calls receive explicit skipped results before the steering message is delivered. Follow-ups are consumed after a final answer. Cancellation rejects pending work and records inbox cancellation. A process restart preserves pending inbox items and marks the run interrupted. The next explicitly started run closes unknown tool outcomes with error results rather than replaying them.
 
-The Agent admits ordinary messages, edits, steering and follow-ups through the same input preparation pipeline. It resolves the current model and scope at delivery. The pipeline receives the original submission, its source and a separate copy of the proposed model-visible content. Core commits the result and verifies cancellation, the revision target and pending inbox identity. Recovered follow-ups run before preparing a new manual message. Retries, tool continuations, compaction and history reads reuse committed inputs.
+Ordinary messages, revisions, steering and follow-ups share static input validation for text, attachments and model options. Runs validates submissions before appending a queued run. At delivery Agent resolves the model and scope, validates capabilities, and invokes input contributions. The pipeline receives the original submission, its source and a separate copy of the proposed model-visible content. Core commits the result and verifies cancellation, the revision target and pending inbox identity. Recovered follow-ups run before preparing a new manual message. Retries, tool continuations, compaction and history reads reuse committed inputs.
 
 Prompt composes ordered sections for workspace identity, tool guidance, bounded `AGENTS.md` files and plugin contributions. Skills contributes a Prompt section and an Agent input preparer for explicit calls in user text. It also owns scan roots, link traversal, `load_skill`, the HTTP list and the picker. The Session Log stores the accepted model input with original presentation metadata, preserving prior skill instructions and the user's attachments.
 
@@ -61,24 +61,26 @@ Session deletion records a durable journal after descendant runs have drained. C
 
 ## Browser composition
 
-The server publishes successful browser entries from the same descriptors at `/api/bootstrap`. Browser boot owns only generic graph mounting, projection registration and the selected view switch. Domain stores belong to feature descriptors for sessions, workspaces, settings, models, plugins and approvals; the runtime contains no domain endpoint list or domain service whitelist.
+The server publishes successful browser entries from the same descriptors at `/api/bootstrap`. Browser boot owns authentication, graph mounting and projection dispatch. Each feature owns its requests and view state. Settings owns its state and extension registry. Workspace and session data are mounted separately so workspace controls can consume session selection without a dependency cycle.
 
-The browser runs its own Cordis graph. Feature plugins contribute pages, navigation, tabs, composer controls and message actions. Keyed slot entries can replace a specific contribution. Each renderer has its own disposal signal. Plugin disposal also removes dialogs, subscriptions and pending requests. Slots, primitives, theme and responsive layout retain the existing desktop and mobile UI behavior.
+The browser runs its own Cordis graph. Plugins pass capability-owned points to `api.contribute` and declare their services with `browserInject`. Layout owns pages, dialogs and right tabs. Conversation owns messages and composer contributions. Slots own keyed replacement and restoration, and each renderer has its own disposal signal. Unmount cancels plugin requests and releases contributions. Each editing draft has a cleanup tied to its instance, so an older contribution's removal leaves a replacement in place.
 
 The authenticated `/api/changes` stream publishes revisions and scoped invalidations. Registered domain owners fetch authoritative projections on change and reconnect. A failed owner is reported without preventing unrelated projections from refreshing. The selected conversation loads native history and run replay; presentation state stays local to its browser feature.
 
 ## Verification boundaries
 
-Private packages use pnpm workspace dependencies and named exports. Strict TypeScript checking covers the contracts, plugin API, and agent selection and transform policies. The build resolves workspace imports in JavaScript and declarations so the root manifest defines the sole published package. Architecture tests enforce the dependency DAG, declared services, SDK isolation, generic browser runtime and public asset boundaries.
+Private packages use pnpm workspace dependencies and named exports. Strict TypeScript checking covers the contracts, plugin API, and agent selection and transform policies. The build resolves workspace imports in JavaScript and declarations so the root manifest defines the sole published package. Architecture tests verify workspace declarations, the dependency DAG and capability boundaries. The browser graph test fetches built-in modules through HTTP and follows their static dependencies. Installed package checks exercise both SDK entrypoints and verify that the published tarball excludes workspace metadata and tests.
 
-- `pnpm run check` checks TypeScript and runs Node tests.
-- `pnpm run check:deps` runs architecture checks.
-- `pnpm run test:browser` runs desktop, tablet and mobile Playwright journeys.
-- `pnpm run pack:check` installs the tarball in an empty project and checks exports, assets, detached CLI and native execution against a local mock model provider.
+- `pnpm run build` compiles with strict TypeScript and prepares browser assets.
+- `pnpm run test:node` and `pnpm run test:playwright` run the Node and browser suites against that build.
+- `pnpm run pack:verify` installs the built tarball in an empty project and exercises its SDK, browser assets and detached CLI.
+- `pnpm run typecheck` checks types without emitting build output.
 
-Session navigation reads the last-run summary in the conversation catalog. The Session Log remains the audit source. Older logs reconcile their summary at first open. Search uses temporary read-only handles for cold logs and never creates a transcript for an unopened conversation. Corrupt logs are isolated and remain visible for deletion. Diagnostics report the session ID and validation failure. The live log cache is bounded and active runs retain their writer.
+CI builds once per job. Node jobs cover Linux and Windows on Node 22 and 24, with real workspace isolation required on Linux. Browser jobs run Chromium on Linux and Windows.
 
-The files capability publishes workspace invalidations after a write or a shell command completes. File views fetch the current file or Git state. A single file tab holds its preview or diff mode and cancels superseded reads.
+Session navigation reads the active run or the last durable run summary from the Session Log. Opening a log reconciles any interrupted run. Search uses temporary read-only handles for cold logs and never creates a transcript for an unopened conversation. Corrupt logs are isolated and remain visible for deletion. Diagnostics report the session ID and validation failure. The live log cache is bounded and active runs retain their writer.
+
+Files and Shell publish workspace invalidations after a write or a command completes. File views fetch the current file or Git state. A single file tab holds its preview or diff mode and cancels superseded reads.
 
 Run the Session Log recovery benchmark after a build.
 

@@ -1,3 +1,4 @@
+import { localPluginIdPattern } from '@mini-harness/contracts/plugins';
 import { HttpError } from '@mini-harness/contracts/routes';
 import { readdirSync } from 'node:fs';
 import { basename, join } from 'node:path';
@@ -5,7 +6,7 @@ import { Check } from 'typebox/value';
 import type { Settings } from '@mini-harness/contracts/config';
 import type { PluginScope, ScopeSettings } from '@mini-harness/contracts/capabilities';
 import { resolveCapabilities } from '@mini-harness/kernel/composition';
-import { isRegularFile, pluginBundle, pluginIdPattern } from './source.js';
+import { isRegularFile, pluginBundle } from './source.js';
 import type { PluginDescriptor, PluginMetadata } from '@mini-harness/contracts/plugins';
 import { describePlugin, type DiscoveredPlugin } from './descriptor.js';
 
@@ -66,12 +67,12 @@ export class PluginCatalog {
   private discover(): DiscoveredPlugin[] {
     if (this.devPlugin) {
       const id = basename(this.devPlugin);
-      if (!pluginIdPattern.test(id) || this.builtins.has(id)) throw new Error('Invalid development plugin ID');
+      if (!localPluginIdPattern.test(id) || this.builtins.has(id)) throw new Error('Invalid development plugin ID');
       return [describePlugin(id, this.devPlugin)];
     }
     return readdirSync(this.directory, { withFileTypes: true }).flatMap((entry): DiscoveredPlugin[] => {
       const id = entry.name;
-      if (!entry.isDirectory() || !pluginIdPattern.test(id) || this.builtins.has(id)) return [];
+      if (!entry.isDirectory() || !localPluginIdPattern.test(id) || this.builtins.has(id)) return [];
       try {
         const { folder, package: installedPackage } = pluginBundle(join(this.directory, id));
         if (!installedPackage && !isRegularFile(join(folder, 'plugin.js')) && !isRegularFile(join(folder, 'web.js'))) return [];

@@ -1,5 +1,8 @@
-import { scopedElements } from '@mini-harness/web/api';
-import { fromMarkup } from '@mini-harness/ui-primitives/primitives';
+import { slotExtensions } from '@mini-harness/contracts/slots';
+import { fromMarkup, required, scopedElements } from '@mini-harness/ui-primitives/primitives';
+import type { BrowserPrimitives } from '@mini-harness/contracts/browser';
+import type { PageContribution } from '@mini-harness/contracts/layout';
+import type { Context } from 'cordis';
 import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend';
 import { createLayout } from './layout.js';
 import { createRightTabs } from './right-tabs.js';
@@ -17,13 +20,14 @@ const slots = {
 } as const;
 
 const setup: FrontendSetup = (ctx, api) => {
-  const { layout, pages, header, tabs, outlet } = createAppFrame(api.signal);
+  const { layout, pages, header, tabs, dialogs, outlet } = createAppFrame(ctx.miniPrimitives, ctx.miniSlots, api.signal);
   ctx.provide('miniLayout', layout);
   ctx.provide('miniPages', pages);
   ctx.provide('miniHeader', header);
   ctx.provide('miniTabs', tabs);
+  ctx.provide('miniDialogs', dialogs);
   for (const name of Object.keys(slots) as Array<keyof typeof slots>)
-    api.slots.define(name, outlet(name), name === 'conversation.body' || name === 'workspace.header' ? 'single' : 'list');
+    api.contribute(slotExtensions.define, name, outlet(name), name === 'conversation.body' || name === 'workspace.header' ? 'single' : 'list');
 
 };
 export default setup;
@@ -31,13 +35,11 @@ export default setup;
 declare module 'cordis' {
   interface Context {
     miniLayout: ReturnType<typeof createAppFrame>['layout'];
-    miniPages: ReturnType<typeof createAppFrame>['pages'];
-    miniTabs: ReturnType<typeof createAppFrame>['tabs'];
     miniHeader: ReturnType<typeof createAppFrame>['header'];
   }
 }
 
-function createAppFrame(signal: AbortSignal) {
+function createAppFrame(primitives: BrowserPrimitives, slotRegistry: Context['miniSlots'], signal: AbortSignal) {
   const root = fromMarkup(`<div id="app" class="app">
   <aside id="sidebar" class="sidebar" aria-label="Conversations">
     <div class="sidebar-top">
@@ -109,6 +111,30 @@ function createAppFrame(signal: AbortSignal) {
         pageViews.delete(id);
         node.remove();
       };
+    },
+    contribute(id: string, { title, content, order }: PageContribution, lifetime: AbortSignal) {
+      const entry = primitives.button(title, 'quiet');
+      entry.classList.add('nav-action');
+      entry.dataset.pageLink = id;
+      entry.addEventListener('click', () => selectPage(id), { signal: lifetime });
+      const frame = fromMarkup('<section class="plugin-page" tabindex="-1"><header><h1></h1></header><div class="plugin-page-body"></div></section>');
+      required(frame.querySelector('h1')).textContent = title;
+      required(frame.querySelector('.plugin-page-body')).append(content);
+      const unregister = pages.register(id, frame);
+      try {
+        const release = slotRegistry.register('sidebar.actions', entry, order);
+        return () => { try { release(); } finally { unregister(); } };
+      } catch (error) {
+        unregister();
+        throw error;
+      }
+    }
+  };
+  const dialogs = {
+    create(title: string, content: HTMLElement) {
+      const node = primitives.dialog(title, content);
+      const release = slotRegistry.register('dialog.root', node);
+      return { node, dispose() { node.close(); release(); } };
     }
   };
   const header = {
@@ -118,5 +144,5 @@ function createAppFrame(signal: AbortSignal) {
   const ui = {
     closeDrawer: layout.closeDrawer
   };
-  return { layout: ui, header, pages, tabs, root, outlet: (name: keyof typeof slots) => element(slots[name]) };
+  return { layout: ui, header, pages, tabs, dialogs, outlet: (name: keyof typeof slots) => element(slots[name]) };
 }

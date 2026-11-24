@@ -7,11 +7,10 @@
     "@mini-harness/contracts": "workspace:*",
     "@mini-harness/platform": "workspace:*",
     "@mini-harness/ui-primitives": "workspace:*",
-    "@mini-harness/ui-runtime": "workspace:*",
-    "@mini-harness/web": "workspace:*"
+    "@mini-harness/ui-runtime": "workspace:*"
   },
   "exports": {
-    "./data-manifest": "./data-manifest.ts",
+    "./config": "./config.ts",
     "./manager": "./manager.ts",
     "./manifest": "./manifest.ts"
   }

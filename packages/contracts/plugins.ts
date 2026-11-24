@@ -1,7 +1,9 @@
+import { HttpError } from './routes.js';
+import type { BrowserEntry } from './browser.js';
 import type { Extension } from './contributions.js';
 import type { Context } from 'cordis';
-import type { Paths, PluginConfiguration, Settings } from './config.js';
-import type { RouteHandler, RoutePort, UpgradeHandler } from './routes.js';
+import type { PluginConfiguration, Settings } from './config.js';
+import type { RouteHandler, UpgradeHandler } from './routes.js';
 import type { PluginScope } from './capabilities.js';
 import type { ServiceMap } from './plugin-sdk.js';
 
@@ -85,9 +87,41 @@ export interface PluginApi {
 
 declare module 'cordis' {
   interface Context {
-    harnessSettings: () => Settings;
-    harnessState: { paths: Paths };
-    harnessRoutes: RoutePort;
+    harnessPluginCatalog: {
+      metadata(): PluginMetadata[];
+      reserved(id: string): boolean;
+      diagnostics(): unknown;
+      browser(): BrowserEntry[];
+      writeBrowserConfig(id: string, patch: unknown, signal: AbortSignal): Promise<void>;
+    };
   }
 }
 
+export interface PluginConfigurationPort {
+  effective(settings: Settings): Settings;
+  configure(settings: Settings, commit?: () => void): Promise<void>;
+}
+
+export const localPluginIdPattern = /^[a-z][a-z0-9-]{0,63}$/;
+export const pluginIdPattern = /^(?:core:)?[a-z][a-z0-9-]{0,63}$/;
+export const serviceNamePattern = /^[a-zA-Z][a-zA-Z0-9_.:-]{0,95}$/;
+export const scopeSettingsPattern = /^(?:workspace:[a-f0-9]{32}|session:[a-f0-9-]{36})$/;
+
+export function validateProviderChoices(choices: Record<string, unknown>) {
+  for (const [service, id] of Object.entries(choices)) {
+    if (!serviceNamePattern.test(service) ||
+        typeof id !== 'string' || !pluginIdPattern.test(id))
+      throw new HttpError('invalid_input', 'Invalid provider selection');
+  }
+}
+
+export function validatePluginSettings(plugins: Record<string, unknown>, configs: Record<string, unknown>) {
+  for (const [key, value] of Object.entries(plugins)) {
+    if (!localPluginIdPattern.test(key)) throw new HttpError('invalid_input', 'Invalid plugin name');
+    if (typeof value !== 'boolean') throw new HttpError('invalid_input', 'Plugin switches must be boolean');
+  }
+  for (const [id, config] of Object.entries(configs)) {
+    if (!pluginIdPattern.test(id) || (!config || typeof config !== 'object' || Array.isArray(config)))
+      throw new HttpError('invalid_input', 'Invalid plugin configuration for ' + id);
+  }
+}

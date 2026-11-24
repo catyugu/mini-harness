@@ -1,7 +1,8 @@
 import type { Conversation } from '@mini-harness/contracts/conversation';
-import type { FrontendSetup, FrontendServices } from '@mini-harness/ui-runtime/frontend';
-import { RemoteStore } from '@mini-harness/web/models/remote-store';
-import { Selection } from '@mini-harness/web/models/selection';
+import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend';
+import type { ConversationBrowserPort } from '@mini-harness/contracts/conversation';
+import { RemoteStore } from '@mini-harness/ui-runtime/remote-store';
+import { Selection } from './selection.js';
 
 const setup: FrontendSetup = async (ctx, api) => {
   const byRecent = (a: Conversation, b: Conversation) => b.updatedAt.localeCompare(a.updatedAt);
@@ -18,7 +19,7 @@ const setup: FrontendSetup = async (ctx, api) => {
   window.addEventListener('mini-harness:error', (event: Event) => {
     if (event instanceof CustomEvent && event.detail instanceof Error) report(event.detail);
   }, { signal: api.signal });
-  const browser: FrontendServices = {
+  const browser: ConversationBrowserPort = {
     workspace: () => selection.scope() || undefined,
     workspaceRecord: (id) => workspaces.get().find((record) => record.id === id),
     session: (id = selection.activeConversation) => sessions.get().find((item) => item.id === id),

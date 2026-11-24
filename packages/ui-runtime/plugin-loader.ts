@@ -11,8 +11,7 @@ async function loadStyle(href: string, link: HTMLLinkElement) {
   });
 }
 import type { FrontendHost, FrontendSetup } from './frontend.js';
-import type { Bootstrap } from '@mini-harness/web/types';
-import type { BrowserEntry } from '@mini-harness/contracts/browser';
+import type { BrowserBootstrap, BrowserEntry } from '@mini-harness/contracts/browser';
 
 export type BrowserPluginFailures = ReadonlyMap<string, unknown>;
 
@@ -22,7 +21,15 @@ export function createBrowserGraphLoader(host: FrontendHost) {
   const preloads = new Map<string, { url: string; lifetime: AbortController; dispose?: () => void | Promise<void> }>();
   let work = Promise.resolve();
 
-  async function sync(snapshot: Bootstrap): Promise<BrowserPluginFailures> {
+  async function releasePreload(id: string) {
+    const preload = preloads.get(id);
+    if (!preload) return;
+    preloads.delete(id);
+    preload.lifetime.abort();
+    await preload.dispose?.();
+  }
+
+  async function sync(snapshot: BrowserBootstrap): Promise<BrowserPluginFailures> {
     const enabled = new Map<string, BrowserEntry>(snapshot.ui.map((entry) => [entry.id, entry]));
     if (enabled.size !== snapshot.ui.length) throw new Error('Duplicate browser plugin ID in composed graph');
     const signatures = new Map<string, string>();
@@ -54,9 +61,7 @@ export function createBrowserGraphLoader(host: FrontendHost) {
     }
     for (const [id, preload] of [...preloads].reverse()) {
       if (enabled.get(id)?.preload === preload.url) continue;
-      preloads.delete(id);
-      preload.lifetime.abort();
-      try { await preload.dispose?.(); } catch (error) { failed.set(id, error); }
+      try { await releasePreload(id); } catch (error) { failed.set(id, error); }
     }
     for (const id of ordered) {
       const url = enabled.get(id)?.preload;
@@ -95,13 +100,15 @@ export function createBrowserGraphLoader(host: FrontendHost) {
       } catch (error) {
         for (const link of styles.get(id) ?? []) link.remove();
         styles.delete(id);
+        try { await releasePreload(id); }
+        catch (cleanupError) { error = new AggregateError([error, cleanupError], 'Browser plugin setup and cleanup failed'); }
         failed.set(id, error);
       }
     }
     return failed;
   }
 
-  return (snapshot: Bootstrap) => {
+  return (snapshot: BrowserBootstrap) => {
     const update = work.then(() => sync(snapshot));
     work = update.then(() => {}, () => {});
     return update;

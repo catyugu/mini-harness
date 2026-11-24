@@ -11,23 +11,17 @@ import { HttpError, type GatewayRequest } from '@mini-harness/contracts/routes';
 import { json } from '@mini-harness/transport/http';
 import { MiniHarnessRuntime } from './application.js';
 
-const WEB_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'web');
-const FEATURE_DIR = resolve(WEB_DIR, '..');
+const FEATURE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const WEB_DIR = join(FEATURE_DIR, 'ui-runtime', 'assets');
 const assets = new Map([
   ['index.html', 'text/html'],
   ['theme.css', 'text/css'], ['logo.svg', 'image/svg+xml'], ['manifest.webmanifest', 'application/manifest+json'],
   ['icon-192.png', 'image/png'], ['icon-512.png', 'image/png'], ['favicon.ico', 'image/x-icon']
 ]);
 
-// Browser modules are built under dist/packages/web. Local plugin source stays behind the authenticated API.
-for (const entry of readdirSync(WEB_DIR, { recursive: true, withFileTypes: true })) {
-  if (entry.isFile() && entry.name.endsWith('.js')) {
-    const path = relative(WEB_DIR, join(entry.parentPath, entry.name)).split(sep).join('/');
-    // Co-located browser tests are compiled for Playwright but must never be web assets.
-    if (path.split('/').includes('tests') || /\.(?:spec|test)\.js$/.test(path)) continue;
-    assets.set('packages/web/' + path, 'text/javascript');
-  }
-}
+// Only browser-safe shared contracts are served.
+for (const name of ['composer', 'layout', 'settings-browser', 'slots', 'transport', 'workspace'])
+  assets.set('packages/contracts/' + name + '.js', 'text/javascript');
 
 // Only client modules from UI foundations may be served.
 for (const name of ['ui-runtime', 'ui-slots', 'ui-theme', 'ui-primitives', 'ui-layout']) {

@@ -1,7 +1,7 @@
 import { lstatSync } from 'node:fs';
 import { join } from 'node:path';
-import { readJson } from '@mini-harness/platform/config';
-import type { PluginDescriptor } from '@mini-harness/contracts/plugins';
+import { readJson } from '@mini-harness/platform/json';
+import { pluginIdPattern, serviceNamePattern, type PluginDescriptor } from '@mini-harness/contracts/plugins';
 import { readBrowserAssets } from './browser-assets.js';
 import { isRegularFile } from './source.js';
 
@@ -30,15 +30,13 @@ export function describePlugin(id: string, folder: string): DiscoveredPlugin {
         new Set(input).size !== input.length) throw new Error('Invalid plugin ' + field + ': ' + id);
     return input;
   };
-  const pluginId = /^(?:core:)?[a-z][a-z0-9-]{0,63}$/;
-  const serviceName = /^[a-zA-Z][a-zA-Z0-9_.:-]{0,95}$/;
-  const requires = names('requires', pluginId);
-  const provides = names('provides', serviceName);
-  const inject = names('inject', serviceName);
-  const optional = names('optional', serviceName);
-  const browserRequires = names('browserRequires', pluginId);
-  const browserInject = names('browserInject', serviceName);
-  const browserProvides = names('browserProvides', serviceName);
+  const requires = names('requires', pluginIdPattern);
+  const provides = names('provides', serviceNamePattern);
+  const inject = names('inject', serviceNamePattern);
+  const optional = names('optional', serviceNamePattern);
+  const browserRequires = names('browserRequires', pluginIdPattern);
+  const browserInject = names('browserInject', serviceNamePattern);
+  const browserProvides = names('browserProvides', serviceNamePattern);
   if (!hasWeb && (browserRequires.length || browserInject.length || browserProvides.length))
     throw new Error('Browser dependencies require web.js');
   if (!hasHost && (provides.length || inject.length || optional.length)) throw new Error('Server services require plugin.js');

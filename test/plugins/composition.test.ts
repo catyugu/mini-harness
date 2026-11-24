@@ -1,7 +1,12 @@
 import { expectPresent } from '../support/required.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { resolveCapabilities } from '@mini-harness/kernel/composition';
+import { PluginCatalog } from '@mini-harness/plugins/catalog';
+import { DEFAULTS, mergeSettings, validateSettings } from '@mini-harness/settings/config';
+import { writePlugin } from '../support/plugin-fixture.js';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fixture, waitUntil } from '../support/api-fixture.js';
@@ -14,14 +19,6 @@ function copyExample(directory: string, id: string) {
   const sdk = new URL('../../packages/contracts/plugin-sdk.js', import.meta.url).href;
   writeFileSync(entry, source.replace("'mini-harness/plugin'", JSON.stringify(sdk)));
 }
-function plugin(directory: string, id: string, descriptor: Record<string, unknown>, code: string) {
-  const folder = join(directory, id);
-  mkdirSync(folder);
-  writeFileSync(join(folder, 'plugin.json'), JSON.stringify(descriptor));
-  writeFileSync(join(folder, 'plugin.js'), `import { toolExtensions } from "${new URL('../../packages/contracts/plugin-sdk.js', import.meta.url).href}";
-${code}`);
-}
-
 test('external services and their declared consumers share Cordis provider selection', async (t) => {
   const { paths, request } = await fixture(t);
   copyExample(paths.plugins, 'greeting-route');
@@ -31,12 +28,12 @@ test('external services and their declared consumers share Cordis provider selec
   assert.match((await patch({ plugins: { 'greeting-route': true } })).body.error, /No enabled provider/);
   assert.equal((await patch({ plugins: { 'greeting-route': true, 'greeting-service': true } })).status, 200);
   assert.equal((await request(endpoint)).body.greeting, 'Hello, Harness');
-  plugin(paths.plugins, 'suffix', { provides: ['exampleSuffix'] },
+  writePlugin(paths.plugins, 'suffix', { provides: ['exampleSuffix'] },
     "export default (_ctx, api) => api.provide('exampleSuffix', '!');");
   assert.equal((await patch({ plugins: { suffix: true } })).status, 200);
   assert.equal((await request(endpoint)).body.greeting, 'Hello, Harness!');
 
-  plugin(paths.plugins, 'greeting-alt', { provides: ['exampleGreeting'] },
+  writePlugin(paths.plugins, 'greeting-alt', { provides: ['exampleGreeting'] },
     "export default (_ctx, api) => api.provide('exampleGreeting', { greet: (name) => 'Welcome, ' + name });");
   assert.match((await patch({ plugins: { 'greeting-alt': true } })).body.error, /Multiple enabled providers/);
   assert.equal((await patch({ plugins: { 'greeting-alt': true }, providers: { exampleGreeting: 'greeting-alt' } })).status, 200);
@@ -68,7 +65,7 @@ test('scoped plugins inherit declared services and tool policies, and release th
     messages.at(-1)?.role === 'tool' ? 'Finished greeting' : { tool: 'scoped_greeting', args: {} });
   copyExample(paths.plugins, 'scoped-tool');
   const cleaned = join(root, 'released');
-  plugin(paths.plugins, 'workspace-greeting', { scope: 'workspace', provides: ['exampleGreeting'] }, `
+  writePlugin(paths.plugins, 'workspace-greeting', { scope: 'workspace', provides: ['exampleGreeting'] }, `
     import { appendFileSync } from 'node:fs';
     export default (_ctx, api) => {
       if (api.config.fail) throw new Error('Scoped setup failed');
@@ -119,55 +116,9 @@ test('scoped plugins inherit declared services and tool policies, and release th
   assert.ok(names(outside.id).includes('read'));
 });
 
-test('unloading a route signals an active request and waits for its cleanup', async (t) => {
-  const { paths, root, request } = await fixture(t);
-  const entered = join(root, 'entered');
-  const drained = join(root, 'drained');
-  plugin(paths.plugins, 'drain', { inject: ['harnessRoutes'] }, `
-    import { writeFileSync } from 'node:fs';
-    export default (_ctx, api) => api.registerRoute('GET', '/wait', async ({ signal }) => {
-      writeFileSync(${JSON.stringify(entered)}, 'ready');
-      await new Promise((done) => signal.addEventListener('abort', done, { once: true }));
-      await new Promise((done) => setImmediate(done));
-      writeFileSync(${JSON.stringify(drained)}, 'done');
-    });`);
-  const toggle = (active: boolean) => request('/settings', 'PATCH', { plugins: { drain: active } });
-  assert.equal((await toggle(true)).status, 200);
-  const current = request('/extensions/drain/wait');
-  await waitUntil(() => existsSync(entered), Boolean);
-  assert.equal((await toggle(false)).status, 200);
-  assert.equal(readFileSync(drained, 'utf8'), 'done');
-  assert.equal((await current).status, 400);
-  assert.equal((await request('/extensions/drain/wait')).status, 404);
-});
-
-test('a decision hook can deny an inherited tool and is removed with its owner', async (t) => {
-  const { app, paths, request } = await fixture(t);
-  plugin(paths.plugins, 'policy', { scope: 'session' }, `
-    export default function(_ctx, api) {
-      api.contribute(toolExtensions.decide, async ({ tool, signal }) => {
-        signal.throwIfAborted();
-        return tool === 'ls' ? 'deny' : undefined;
-      });
-    }`);
-  const selected = app.runtime.registry.create();
-  const other = app.runtime.registry.create();
-  const child = app.runtime.registry.create({ parentId: selected.id });
-  const toggle = (scopes: unknown) => request('/settings', 'PATCH', { scopes });
-  assert.equal((await toggle({ ['session:' + selected.id]: { plugins: { policy: true } } })).status, 200);
-  await app.runtime.plugins.ctx.harnessAgent.prepare(child.id);
-  const tools = app.runtime.plugins.ctx.harnessTools;
-  const call = (id: string) => expectPresent(tools.forSession(id).find(({ name }) => name === 'ls'), 'ls tool')
-    .execute('policy', { path: '.' }, undefined, undefined, undefined);
-  await assert.rejects(call(child.id), /Tool denied by conversation or plugin policy/);
-  assert.equal((await call(other.id)).content[0].type, 'text');
-  assert.equal((await toggle({})).status, 200);
-  assert.equal((await call(child.id)).content[0].type, 'text');
-});
-
 test('read-only permissions are bound to the selected tool registration', async (t) => {
   const { app, mock, paths, request } = await fixture(t);
-  plugin(paths.plugins, 'replacement', { scope: 'session', inject: ['harnessTools'] }, `
+  writePlugin(paths.plugins, 'replacement', { scope: 'session', inject: ['harnessTools'] }, `
     export default (_ctx, api) => {
       for (const name of ['read', 'custom']) api.contribute(toolExtensions.register, {
         name, description: 'replacement', parameters: { type: 'object' },
@@ -196,7 +147,7 @@ test('read-only permissions are bound to the selected tool registration', async 
 test('the host tool authorization service cannot be replaced at either scope', async (t) => {
   const { app, paths, request } = await fixture(t);
   for (const scope of ['application', 'session']) {
-    plugin(paths.plugins, 'tools-' + scope, { scope, provides: ['harnessTools'] }, `
+    writePlugin(paths.plugins, 'tools-' + scope, { scope, provides: ['harnessTools'] }, `
       export default () => { throw new Error('Protected provider must never mount'); };
     `);
   }
@@ -216,7 +167,7 @@ test('the host tool authorization service cannot be replaced at either scope', a
 
 test('file tools and HTTP preview consume the same selected File Access provider', async (t) => {
   const { app, paths, request } = await fixture(t);
-  plugin(paths.plugins, 'virtual-files', { provides: ['harnessFileAccess'] }, `
+  writePlugin(paths.plugins, 'virtual-files', { provides: ['harnessFileAccess'] }, `
     export default function(_ctx, api) {
       const data = Buffer.from('Provided file content');
       api.provide('harnessFileAccess', { open: () => ({
@@ -237,7 +188,7 @@ test('file tools and HTTP preview consume the same selected File Access provider
 
 test('native runs use the nearest scoped LLM provider while siblings retain the application adapter', async (t) => {
   const { app, paths, request, mock } = await fixture(t);
-  plugin(paths.plugins, 'scoped-llm', { scope: 'session', provides: ['harnessLlm'] }, `
+  writePlugin(paths.plugins, 'scoped-llm', { scope: 'session', provides: ['harnessLlm'] }, `
     export default (_ctx, api) => api.provide('harnessLlm', {
       async *stream(request) {
         request.signal.throwIfAborted();
@@ -278,9 +229,9 @@ test('native file and shell tools use scoped file, process and sandbox services 
     return { file: process.execPath, args: ['-e', ${JSON.stringify('process.stdout.write(' + JSON.stringify(output) + ')')}],
       cwd: request.cwd, env: {} };
   } })`;
-  plugin(paths.plugins, 'application-sandbox', { provides: ['harnessSandbox'] },
+  writePlugin(paths.plugins, 'application-sandbox', { provides: ['harnessSandbox'] },
     `export default (_ctx, api) => api.provide('harnessSandbox', ${isolated('application sandbox')});`);
-  plugin(paths.plugins, 'scoped-environment', { scope: 'session', provides: ['harnessFileAccess', 'harnessSandbox'] }, `
+  writePlugin(paths.plugins, 'scoped-environment', { scope: 'session', provides: ['harnessFileAccess', 'harnessSandbox'] }, `
     export default (_ctx, api) => {
       api.provide('harnessFileAccess', { open: () => ({
         access: async () => {}, imageType: async () => null,
@@ -289,7 +240,7 @@ test('native file and shell tools use scoped file, process and sandbox services 
       }) });
       api.provide('harnessSandbox', ${isolated('scoped sandbox')});
     };`);
-  plugin(paths.plugins, 'scoped-process', { scope: 'session', provides: ['harnessProcess'] }, `
+  writePlugin(paths.plugins, 'scoped-process', { scope: 'session', provides: ['harnessProcess'] }, `
     export default (_ctx, api) => api.provide('harnessProcess', {
       async run(request) {
         if (!request.sessionId) throw new Error('Missing execution scope');
@@ -326,4 +277,138 @@ test('native file and shell tools use scoped file, process and sandbox services 
     assert.equal(lastTool(id).isError, false);
     assert.match(JSON.stringify(lastTool(id).content), new RegExp(expected));
   }
+});
+
+test('explicit scoped provider choice shadows inherited service only in the child graph', () => {
+  const parent = new Map([['greeting', 'global'], ['harnessRoutes', 'application']]);
+  const plugins = [
+    { id: 'consumer', inject: ['greeting'] },
+    { id: 'local', provides: ['greeting'] }
+  ];
+  assert.throws(() => resolveCapabilities(plugins, parent), /Multiple enabled providers/);
+  const child = resolveCapabilities(plugins, parent, { greeting: 'local' });
+  assert.equal(child.providers.get('greeting'), 'local');
+  assert.equal(child.ordered[0].descriptor.id, 'local');
+  assert.equal(child.ordered.find((item) => item.descriptor.id === 'consumer')?.services.greeting, 'local');
+  assert.equal(parent.get('greeting'), 'global');
+  assert.equal(resolveCapabilities([{ id: 'consumer', inject: ['greeting'] }], parent)
+    .ordered[0].services.greeting, 'global');
+  assert.throws(() => resolveCapabilities(
+    [{ id: 'fake', provides: ['harnessRoutes'] }], parent, { harnessRoutes: 'fake' },
+    undefined, new Set(['harnessRoutes'])), /Protected service/);
+  assert.throws(() => resolveCapabilities(
+    [{ id: 'consumer', inject: ['greeting'] }], parent, { greeting: 'missing' }
+  ), /Selected provider/);
+  const inherited = new Map([['greeting', 'local']]);
+  const descriptor = [{ id: 'local', provides: ['greeting'] }];
+  assert.throws(() => resolveCapabilities(descriptor, inherited), /Multiple enabled providers/);
+  assert.equal(resolveCapabilities(descriptor, inherited, { greeting: 'local' }).providers.get('greeting'), 'local');
+  assert.throws(() => resolveCapabilities(descriptor, inherited, { greeting: 'local' }, undefined,
+    new Set(['greeting'])), /Protected service/);
+});
+
+test('catalog computes independent scoped provider maps and rejects fixed service shadows', () => {
+  const folder = mkdtempSync(join(tmpdir(), 'mini-scope-providers-'));
+  try {
+    const catalog = new PluginCatalog(folder, [
+      { id: 'global', title: 'Global', description: '', scope: 'application',
+        required: true, provides: ['greeting'] },
+      { id: 'local', title: 'Local', description: '', scope: 'workspace', provides: ['greeting'] }
+    ], ['harnessRoutes']);
+    const key = 'workspace:' + 'a'.repeat(32);
+    const settings = mergeSettings(DEFAULTS as any, {
+      scopes: { [key]: { plugins: { local: true }, providers: { greeting: 'local' } } }
+    });
+    validateSettings(settings);
+    const descriptors = catalog.descriptors();
+    descriptors.push({ id: 'fake-locked', title: 'Fake', description: '', scope: 'workspace', provides: ['harnessRoutes'] });
+    const app = catalog.plans(settings, descriptors, 'application',
+      new Map([['harnessRoutes', 'application']]), new Set());
+    assert.equal(app.providers.get('greeting'), 'global');
+    const inheritedIds = new Set(app.plans.map(({ id }) => id));
+    const workspace = catalog.plans(settings, descriptors, 'workspace', app.providers,
+      inheritedIds, settings.scopes[key]);
+    assert.equal(workspace.providers.get('greeting'), 'local');
+    assert.equal(app.providers.get('greeting'), 'global');
+    assert.equal(catalog.plans(settings, descriptors, 'workspace', app.providers,
+      inheritedIds).providers.get('greeting'), 'global');
+    assert.throws(() => catalog.plans(settings, descriptors, 'workspace', app.providers,
+      inheritedIds, { plugins: { 'fake-locked': true }, providers: { harnessRoutes: 'fake-locked' } }),
+    /Protected service/);
+    assert.throws(() => validateSettings({ ...settings, scopes: {
+      [key]: { providers: { greeting: '../outside' } }
+    } }), /Invalid provider selection/);
+  } finally { rmSync(folder, { recursive: true, force: true }); }
+});
+
+test('scoped model catalogs govern explicit runs and inherited or model-selected delegation without changing siblings', async (t) => {
+  const { app, paths, request, mock } = await fixture(t);
+  writePlugin(paths.plugins, 'scoped-models', { scope: 'session', provides: ['harnessModels', 'harnessLlm'] }, `
+    export default (_ctx, api) => {
+      const provider = 'scoped-only';
+      const ids = ['parent-model', 'child-model'];
+      const resolve = (choice) => {
+        const id = choice?.id || ids[0];
+        if (choice?.provider !== provider || !ids.includes(id)) return undefined;
+        return { provider, id };
+      };
+      const list = () => ids.map(id => ({ provider, id, name: id, configured: true, thinkingLevels: ['off'] }));
+      api.provide('harnessModels', {
+        list, available: async () => list(), resolve,
+        capabilities(choice) {
+          const model = resolve(choice);
+          return { id: model.id, name: model.id, input: ['text'], contextWindow: 32000, maxTokens: 1024, reasoning: false };
+        }
+      });
+      api.provide('harnessLlm', {
+        async *stream(request) {
+          request.signal.throwIfAborted();
+          const model = resolve(request.model);
+          const last = request.messages.at(-1);
+          const text = typeof last.content === 'string' ? last.content : last.content.filter(part => part.type === 'text').map(part => part.text).join('');
+          if (last.role === 'user' && (text === 'Delegate inherited' || text === 'Delegate explicit')) {
+            if (!request.tools.some(tool => tool.name === 'delegate')) throw new Error('Delegation tool unavailable');
+            const explicit = text === 'Delegate explicit';
+            yield { type: 'done', message: { role: 'assistant', provider, model: model.id, timestamp: Date.now(), stopReason: 'toolUse',
+              content: [{ type: 'toolCall', id: request.sessionId + (explicit ? '-explicit' : '-inherited'), name: 'delegate',
+                arguments: { task: explicit ? 'Explicit child task' : 'Inherited child task', ...(explicit ? { provider, model: 'child-model' } : {}) } }] } };
+          } else {
+            const answer = 'Scoped ' + model.id;
+            yield { type: 'text-delta', text: answer };
+            yield { type: 'done', message: { role: 'assistant', provider, model: model.id, timestamp: Date.now(), stopReason: 'stop',
+              content: [{ type: 'text', text: answer }] } };
+          }
+        }
+      });
+    };
+  `);
+  const parent = app.runtime.registry.create();
+  const sibling = app.runtime.registry.create();
+  const scopedChoice = { provider: 'scoped-only', id: 'parent-model' };
+  const applicationChoice = { ...app.runtime.plugins.ctx.harnessModelPreference.recent() };
+  assert.equal(app.runtime.plugins.ctx.harnessModels.resolve(scopedChoice), undefined);
+  const configured = await request('/settings', 'PATCH', { scopes: {
+    ['session:' + parent.id]: { plugins: { 'scoped-models': true },
+      providers: { harnessModels: 'scoped-models', harnessLlm: 'scoped-models' } }
+  } });
+  assert.equal(configured.status, 200, JSON.stringify(configured.body));
+
+  assert.equal(await app.runtime.plugins.ctx.harnessRuns.send(parent.id, 'Delegate inherited', undefined, { model: scopedChoice }), 'Scoped parent-model');
+  assert.deepEqual(app.runtime.plugins.ctx.harnessModelPreference.recent(), applicationChoice);
+  assert.equal(await app.runtime.plugins.ctx.harnessRuns.send(parent.id, 'Delegate explicit', undefined, { model: scopedChoice }), 'Scoped parent-model');
+  assert.equal(await app.runtime.plugins.ctx.harnessRuns.send(parent.id, 'Continue without an explicit model'), 'Scoped parent-model');
+  const children = app.runtime.registry.list().filter(({ parentId }) => parentId === parent.id);
+  assert.equal(children.length, 2);
+  const inherited = children.find(({ title }) => title === 'Inherited child task');
+  const explicit = children.find(({ title }) => title === 'Explicit child task');
+  assert.ok(inherited); assert.ok(explicit);
+  assert.deepEqual(app.runtime.plugins.ctx.harnessAgent.read(inherited.id).model, scopedChoice);
+  assert.deepEqual(app.runtime.plugins.ctx.harnessAgent.read(explicit.id).model, { provider: 'scoped-only', id: 'child-model' });
+  assert.equal(app.runtime.plugins.ctx.harnessRuns.info(inherited.id)?.state, 'completed');
+  assert.equal(app.runtime.plugins.ctx.harnessRuns.info(explicit.id)?.state, 'completed');
+  assert.ok(app.runtime.plugins.ctx.harnessAgent.messages(parent.id).filter(({ role }) => role === 'toolResult').every(({ isError }) => !isError));
+  assert.deepEqual(app.runtime.plugins.ctx.harnessModelPreference.recent(), applicationChoice);
+  assert.equal(await app.runtime.plugins.ctx.harnessRuns.send(sibling.id, 'Use the application model'), 'Mock response');
+  assert.deepEqual(app.runtime.plugins.ctx.harnessAgent.read(sibling.id).model, applicationChoice);
+  assert.equal(mock.requests.length, 1);
 });

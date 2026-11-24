@@ -6,9 +6,9 @@ import { ToolRegistry } from './registry.js';
 export const manifest: PluginDescriptor = {
   scope: 'application',
   id: 'core:tools', title: 'Tools', description: 'Tool registration and execution leases', required: true,
-  inject: ['harnessScopes', 'harnessSettings', 'harnessRegistry'], provides: ['harnessTools'],
+  inject: ['harnessScopes', 'harnessSettingsStore', 'harnessRegistry'], provides: ['harnessTools'],
   setup(ctx) {
-    const { harnessScopes: scopes, harnessRegistry: sessions, harnessSettings: settings } = ctx;
+    const { harnessScopes: scopes, harnessRegistry: sessions, harnessSettingsStore: settings } = ctx;
     ctx.provide('harnessTools', new ToolRegistry((id) => scopes.address(id),
       (request) => {
         const hooks: OrderedHook<ToolDecisionHandler>[] = [];
@@ -16,7 +16,7 @@ export const manifest: PluginDescriptor = {
         return firstDecision(hooks, request);
       }, (id) => {
         const ancestry = scopes.address(id);
-        const restrictions = settings().scopes;
+        const restrictions = settings.settings.scopes;
         return {
           readOnly: ancestry.some((key) => key.startsWith('session:') && sessions.get(key.slice('session:'.length))?.permission === 'readOnly'),
           disabledTools: ancestry.flatMap((key) => restrictions[key]?.disabledTools ?? [])

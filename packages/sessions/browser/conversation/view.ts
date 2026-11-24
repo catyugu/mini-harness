@@ -1,21 +1,24 @@
+import { slotExtensions } from '@mini-harness/contracts/slots';
 import type { BrowserProjectionPort } from '@mini-harness/contracts/browser';
 import type { Attachment } from '@mini-harness/contracts/input';
-import type { Conversation, ConversationPermission, ModelChoice } from '@mini-harness/contracts/conversation';
+import type { Conversation, ConversationPermission, ConversationView, ModelChoice } from '@mini-harness/contracts/conversation';
 import type { MessageContent } from '@mini-harness/contracts/message';
-import type { RunEvent } from '@mini-harness/contracts/transport';
-import type { ConversationView, ThinkingLevel, ModelCatalog } from '@mini-harness/web/types';
-import { scopedElements } from '@mini-harness/web/api';
-import { exportSessions, isRunning } from '@mini-harness/web/transport/session-client';
-import { createConversationController } from '@mini-harness/web/models/conversation-controller';
-import type { Selection } from '@mini-harness/web/models/selection';
-import type { RemoteStore } from '@mini-harness/web/models/remote-store';
+import { isRunning, type RunEvent } from '@mini-harness/contracts/transport';
+import type { ThinkingLevel } from '@mini-harness/contracts/agent';
+import type { ModelCatalog } from '@mini-harness/contracts/models';
+import { scopedElements } from '@mini-harness/ui-primitives/primitives';
+import { exportSessions } from '../session-client.js';
+import { createConversationController } from './controller.js';
+import type { Selection } from '../selection.js';
+import type { RemoteStore } from '@mini-harness/ui-runtime/remote-store';
 import { createMessageView } from './messages.js';
 import { CommandRegistry } from './commands.js';
-import type { ComposerCommand } from '@mini-harness/web/contracts/commands';
+import type { ComposerCommand } from '@mini-harness/contracts/composer';
 import { createComposer, type ConversationDraft } from './composer.js';
 import { createModelPicker } from './model-picker.js';
 import { createThinkingPicker } from './thinking-picker.js';
-import type { FrontendApi, ToolView, MessageAction, DraftMode } from '@mini-harness/ui-runtime/frontend';
+import type { FrontendApi } from '@mini-harness/ui-runtime/frontend';
+import type { ToolView, MessageAction, DraftMode } from '@mini-harness/contracts/composer';
 import { fromMarkup, required } from '@mini-harness/ui-primitives/primitives';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { createRunSummary } from './run-summary.js';
@@ -75,7 +78,7 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
         </form>
       </div>
     </div>`);
-  api.slots.register('conversation.body', view);
+  api.contribute(slotExtensions.register, 'conversation.body', view);
   const { element } = scopedElements(view);
   const outlets = {
     composer: element('composerExtensions'), approvals: element('approvalRequests'), workspace: element('workspaceWelcome')
@@ -191,10 +194,6 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
     const next = ensureDraft(id ?? 'workspace:' + state.selectedWorkspace);
     if (draftEntry === next) return;
     draftEntry = next;
-    renderDraft();
-  }
-  function cancelDraftMode() {
-    for (const entry of drafts.values()) delete entry.edit;
     renderDraft();
   }
   required(element('draftMode').querySelector('button')).addEventListener('click', () => {
@@ -518,33 +517,41 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
     adjustPrompt();
   };
 
+  function registerCommand(command: ComposerCommand) {
+    const dispose = commands.register(command);
+    composerUi.refresh(true);
+    return () => { dispose(); composerUi.refresh(true); };
+  }
+
   element('queueSend').onclick = () => void queueMessage();
   return {
     outlets, activate, showConversation, clear, updateModelControls, report,
     refreshTools: messageView.refreshTools,
     refreshActions: messageView.refreshActions,
     beginDraftMode(mode: DraftMode) {
-      if (sending || pending || !active()) return;
-      draftEntry.edit = { ...blankDraft(), text: mode.text, revision: mode,
+      if (sending || pending || !active()) return () => {};
+      const entry = draftEntry;
+      const edit: ConversationDraft = { ...blankDraft(), text: mode.text, revision: mode,
         attachments: (mode.images ?? []).map((file, originalIndex) => ({ ...file, originalIndex })) };
+      entry.edit = edit;
       renderDraft();
       prompt.focus();
+      return () => {
+        if (entry.edit !== edit) return;
+        delete entry.edit;
+        if (entry === draftEntry && !api.signal.aborted) renderDraft();
+      };
     },
-    cancelDraftMode,
-    command(command: ComposerCommand) {
-      const dispose = commands.register(command);
-      composerUi.refresh(true);
-      return () => { dispose(); composerUi.refresh(true); };
-    },
+    command: registerCommand,
     attach() {
       composerUi.attach(api);
-      api.command({ name: 'model', group: 'Conversation', description: 'Choose a configured model', run: () => modelPicker.open() });
-      api.command({ name: 'export', group: 'Conversation', description: 'Export the current conversation', run: () => {
+      api.onDispose(registerCommand({ name: 'model', group: 'Conversation', description: 'Choose a configured model', run: () => modelPicker.open() }));
+      api.onDispose(registerCommand({ name: 'export', group: 'Conversation', description: 'Export the current conversation', run: () => {
         const id = active();
         if (!id) throw new Error('Open a conversation to export it.');
         return exportSessions([id], api.signal);
-      } });
-      api.command({ name: 'compact', group: 'Conversation', description: 'Summarize earlier messages to free context', run: compactConversation });
+      } }));
+      api.onDispose(registerCommand({ name: 'compact', group: 'Conversation', description: 'Summarize earlier messages to free context', run: compactConversation }));
     },
     completion: composerUi.completion,
     insert(text: string) {
