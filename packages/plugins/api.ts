@@ -8,15 +8,15 @@ import { isDeepStrictEqual } from 'node:util';
 import type { Context } from 'cordis';
 import type { PluginScope } from '@mini-harness/contracts/capabilities';
 import type { ServiceMap } from '@mini-harness/contracts/plugin-sdk';
-import type { PluginApi, PluginDescriptor, SessionRecords } from '@mini-harness/contracts/plugins';
-import { executionHooks } from './execution-hooks.js';
+import type { PluginApi, PluginDescriptor } from '@mini-harness/contracts/plugins';
+import { contribute, type ContributionSource } from '@mini-harness/contracts/contributions';
+import { pluginInvocation } from './invocation.js';
 
 export interface PluginLifetime {
   scope: PluginScope;
   scopeKey?: string;
   lifetime: AbortSignal;
   address(id: string): readonly string[];
-  records(id: string): SessionRecords;
   dataRoot: string;
   invalidate(): void;
   readConfig?(): Record<string, unknown>;
@@ -27,18 +27,21 @@ export interface PluginLifetime {
 }
 
 export function createPluginApi(ctx: Context, { id, descriptor, config }: { id: string; descriptor: PluginDescriptor; config?: Record<string, unknown> }, state: PluginLifetime) {
-  const { scope, scopeKey, lifetime, records, address } = state;
+  const { scope, scopeKey, lifetime, address } = state;
   const provided = new Set<string>();
   let currentConfig = Object.freeze(structuredClone(config ?? {}));
   let installed = false;
   let applyingConfig = false;
   let applyConfig: Parameters<PluginApi['onConfigChange']>[0] | undefined;
   const inScope = (sessionId: string) => !scopeKey || address(sessionId).includes(scopeKey);
-  const checkSession = (sessionId: string) => {
-    lifetime.throwIfAborted();
-    if (!inScope(sessionId)) throw new Error('Conversation outside plugin scope');
-  };
-  const hooks = executionHooks(ctx, id, state, inScope);
+  const instanceId = scopeKey ? scopeKey + '/' + id : id;
+  const { run, drain } = pluginInvocation(lifetime, instanceId);
+  const source: ContributionSource = Object.freeze({
+    context: ctx, pluginId: id, instanceId, scopeKey, signal: lifetime, run,
+    visible: (sessionId: string) => !lifetime.aborted && inScope(sessionId),
+    depth: (sessionId: string) => scopeKey ? address(sessionId).indexOf(scopeKey) + 1 : 0,
+    service: <Name extends keyof ServiceMap & string>(name: Name) => api.service(name)
+  });
   const instance = scopeKey ? createHash('sha256').update(scopeKey).digest('hex') : 'application';
   const windows = process.platform === 'win32';
   const storagePath = (name: string, privateValue = false) => {
@@ -96,7 +99,7 @@ export function createPluginApi(ctx: Context, { id, descriptor, config }: { id: 
       if (descriptor.configChanges !== 'live' || applyConfig) throw new Error('Expected one declared configuration handler');
       applyConfig = apply;
     },
-    ...hooks.api,
+    contribute: (point, ...args) => contribute(source, point, args),
     invalidate() { lifetime.throwIfAborted(); state.invalidate(); },
     storage: {
       read: (name, fallback) => readJson(storagePath(name), fallback),
@@ -132,10 +135,6 @@ export function createPluginApi(ctx: Context, { id, descriptor, config }: { id: 
       if (!descriptor.optional?.includes(name)) throw new Error('Optional service is not declared by ' + id + ': ' + name);
       return ctx.get(name) as ServiceMap[Name] | undefined;
     },
-    registerTool(tool) {
-      const tools = api.service('harnessTools');
-      return ctx.effect(() => tools.register(tool.name, () => tool, undefined, scopeKey));
-    },
     registerRoute(method, path, handler) {
       if (scopeKey || !['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method) ||
           !/^\/(?:[a-zA-Z0-9_-]+\/)*[a-zA-Z0-9_-]+$/.test(path)) throw new Error('Invalid plugin route');
@@ -154,25 +153,9 @@ export function createPluginApi(ctx: Context, { id, descriptor, config }: { id: 
         return () => { lifetime.removeEventListener('abort', release); release(); };
       });
     },
-    records: {
-      async list(sessionId) { checkSession(sessionId); return records(sessionId).list(); },
-      async append(sessionId, data) { checkSession(sessionId); return records(sessionId).append(data); }
-    },
-    registerProjection(projection) {
-      if (typeof projection.initial !== 'function' || typeof projection.reduce !== 'function')
-        throw new Error('Invalid session record projection');
-      lifetime.throwIfAborted();
-      let active = true;
-      const dispose = ctx.effect(() => () => { active = false; });
-      return { async read(sessionId) {
-        checkSession(sessionId);
-        if (!active) throw new Error('Session record projection is disposed');
-        return records(sessionId).list().reduce((state, record) => projection.reduce(state, record), projection.initial());
-      }, dispose: () => { void dispose(); } };
-    },
     onDispose: (dispose) => ctx.effect(() => dispose)
   };
-  return { api, drain: hooks.drain, async updateConfig(next: Record<string, unknown>) {
+  return { api, drain, async updateConfig(next: Record<string, unknown>) {
     const config = Object.freeze(structuredClone(next));
     applyingConfig = true;
     try {

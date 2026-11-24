@@ -9,20 +9,21 @@ function plugin(directory: string, id: string, descriptor: object, source: strin
   const folder = join(directory, id);
   mkdirSync(folder);
   writeFileSync(join(folder, 'plugin.json'), JSON.stringify(descriptor));
-  writeFileSync(join(folder, 'plugin.js'), source);
+  writeFileSync(join(folder, 'plugin.js'), `import { agentExtensions, promptExtensions, toolExtensions } from "${new URL('../../packages/contracts/plugin-sdk.js', import.meta.url).href}";
+${source}`);
 }
 
 test('prompt contributions coexist, override within a session tree and are removed with their plugins', async (t) => {
   const { app, paths, mock, request } = await fixture(t);
   plugin(paths.plugins, 'app-prompt', {}, `export default (_ctx, api) => {
-    api.promptSection({ id: 'workspace-status', order: 600, render: () => '[App status]' });
-    api.promptSection({ id: 'plan', order: 500, render: async ({ tools }) => tools.some(({ name }) => name === 'load_skill') ? '[Plan]' : undefined });
+    api.contribute(promptExtensions.section, { id: 'workspace-status', order: 600, render: () => '[App status]' });
+    api.contribute(promptExtensions.section, { id: 'plan', order: 500, render: async ({ tools }) => tools.some(({ name }) => name === 'load_skill') ? '[Plan]' : undefined });
   };`);
   plugin(paths.plugins, 'more-prompt', {}, `export default (_ctx, api) => {
-    api.promptSection({ id: 'extra', order: 550, render: () => '[Extra]' });
+    api.contribute(promptExtensions.section, { id: 'extra', order: 550, render: () => '[Extra]' });
   };`);
   plugin(paths.plugins, 'child-prompt', { scope: 'session' }, `export default (_ctx, api) => {
-    api.promptSection({ id: 'workspace-status', order: 600, render: () => '[Child status]' });
+    api.contribute(promptExtensions.section, { id: 'workspace-status', order: 600, render: () => '[Child status]' });
   };`);
   const parent = app.runtime.registry.create();
   const child = app.runtime.registry.create({ parentId: parent.id });
@@ -69,20 +70,20 @@ test('an application plugin replaces only LLM and composes execution hooks witho
     } });
   };`);
   plugin(paths.plugins, 'pipeline', { inject: ['harnessTools'] }, `export default (_ctx, api) => {
-    api.modelRequest((request) => ({ ...request, systemPrompt: request.systemPrompt + '[second]' }), 2);
-    api.modelRequest((request, { turn, phase }) => phase === 'turn' && turn === 1 ? ({
+    api.contribute(agentExtensions.modelRequest, (request) => ({ ...request, systemPrompt: request.systemPrompt + '[second]' }), 2);
+    api.contribute(agentExtensions.modelRequest, (request, { turn, phase }) => phase === 'turn' && turn === 1 ? ({
       ...request, systemPrompt: request.systemPrompt + '[first]',
       messages: [...request.messages, { role: 'user', content: 'Temporary context', timestamp: Date.now() }]
     }) : undefined, 1);
-    api.retryModel(({ error, attempt }) => error === 'transient transport failure' && attempt === 1 ? {} : undefined);
-    api.decideTool(({ tool, callId, arguments: args }) => tool === 'check' && callId === 'denied' && args.mode === 'denied' ? 'deny' : undefined);
-    api.registerTool({ name: 'check', description: 'Check mode', parameters: { type: 'object' },
+    api.contribute(agentExtensions.retryModel, ({ error, attempt }) => error === 'transient transport failure' && attempt === 1 ? {} : undefined);
+    api.contribute(toolExtensions.decide, ({ tool, callId, arguments: args }) => tool === 'check' && callId === 'denied' && args.mode === 'denied' ? 'deny' : undefined);
+    api.contribute(toolExtensions.register, { name: 'check', description: 'Check mode', parameters: { type: 'object' },
       async execute(_id, { mode }) {
         if (mode !== 'allowed') throw new Error('denied invocation ran');
         return { content: [{ type: 'text', text: 'Value' }] };
       }
     });
-    api.toolResult( (content, { tool }) => tool === 'check'
+    api.contribute(toolExtensions.result,  (content, { tool }) => tool === 'check'
       ? [{ type: 'text', text: content[0].text + ' transformed' }] : undefined);
   };`);
   const { harnessModels: models, harnessModelAdmin: admin } = app.runtime.plugins.ctx;
@@ -121,13 +122,13 @@ test('an application plugin replaces only LLM and composes execution hooks witho
 test('a failed model-visible transform preserves the execution and never sends the raw result', async (t) => {
   const { app, paths, mock, request } = await fixture(t, () => ({ tool: 'sensitive', args: {} }));
   plugin(paths.plugins, 'redaction', { inject: ['harnessTools'] }, `export default (_ctx, api) => {
-    api.registerTool({ name: 'sensitive', description: 'Read value', parameters: { type: 'object' },
+    api.contribute(toolExtensions.register, { name: 'sensitive', description: 'Read value', parameters: { type: 'object' },
       async execute(_id, _args, _signal, update) {
         update({ content: [{ type: 'text', text: 'private progress' }] });
         return { content: [{ type: 'text', text: 'private value' }] };
       }
     });
-    api.toolResult((content, { tool }) => {
+    api.contribute(toolExtensions.result, (content, { tool }) => {
       if (tool === 'sensitive') throw new Error('broken redactor');
       return content;
     });
@@ -147,12 +148,12 @@ test('a failed model-visible transform preserves the execution and never sends t
 test('an invalid transformed request fails before the provider is invoked', async (t) => {
   const { app, paths, mock, request } = await fixture(t);
   plugin(paths.plugins, 'invalid-request', {}, `export default (_ctx, api) => {
-    api.modelRequest((request) => ({ ...request, messages: [{ role: 'toolResult', toolCallId: 'missing',
+    api.contribute(agentExtensions.modelRequest, (request) => ({ ...request, messages: [{ role: 'toolResult', toolCallId: 'missing',
       toolName: 'example', timestamp: Date.now(), isError: false, content: [] }] }));
   };`);
   assert.equal((await request('/settings', 'PATCH', { plugins: { 'invalid-request': true } })).status, 200);
   const session = app.runtime.registry.create();
-  await assert.rejects(app.runtime.runs.send(session.id, 'Use this request'), /failed to transform/);
+  await assert.rejects(app.runtime.runs.send(session.id, 'Use this request'), /returned invalid transformed data/);
   assert.equal(mock.requests.length, 0);
   assert.equal(app.runtime.registry.log(session.id).entries().some((entry) => entry.type === 'model-request'), false);
 });
@@ -173,7 +174,7 @@ test('configuration cannot unmount an active request hook and can retry after th
   t.after(() => { release(); delete shared[key]; });
   plugin(paths.plugins, 'slow-transform', {}, `export default (_ctx, api) => {
     const state = globalThis[Symbol.for('mini-harness-test-hook-drain')];
-    api.modelRequest(async (_request, { signal }) => {
+    api.contribute(agentExtensions.modelRequest, async (_request, { signal }) => {
       signal.addEventListener('abort', state.cancelled, { once: true });
       state.entered();
       await state.hold;

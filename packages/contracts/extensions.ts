@@ -2,7 +2,6 @@ import type { ThinkingLevel } from './agent.js';
 import type { ModelChoice } from './conversation.js';
 import type { NativeMessage, TextPart, ImagePart } from './llm.js';
 import type { ToolDefinition } from './tools.js';
-import type { SessionRecords } from './plugins.js';
 
 export interface PromptContext {
   sessionId: string;
@@ -52,8 +51,3 @@ export interface ModelFailure {
   readonly signal: AbortSignal;
 }
 export type ModelRetry = { delayMs?: number };
-
-export interface RecordProjection<State> {
-  initial(): State;
-  reduce(state: State, record: ReturnType<SessionRecords['list']>[number]): State;
-}

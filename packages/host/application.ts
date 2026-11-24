@@ -53,7 +53,7 @@ export class MiniHarnessRuntime {
     };
     for (const [name, service] of Object.entries(root)) ctx.provide(name, service);
     this.plugins = new PluginHost(ctx, paths.plugins, plugins, Object.keys(root),
-      () => this.settings, (id) => ctx.get('harnessRegistry')?.get(id), (id, pluginId) => ctx.harnessRegistry.records(id, pluginId), upgrade, paths.devPlugin,
+      () => this.settings, (id) => ctx.get('harnessRegistry')?.get(id), upgrade, paths.devPlugin,
       (id, key, patch, check) => this.configuration.writePlugin(id, key, patch, this.plugins, check).then(() => {}));
   }
 

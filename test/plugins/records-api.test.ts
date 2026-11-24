@@ -8,14 +8,16 @@ test('an extension owns its authenticated routes and native branch records witho
   const { app, paths, request } = await fixture(t);
   const folder = join(paths.plugins, 'records');
   mkdirSync(folder);
-  writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ inject: ['harnessRoutes'] }));
-  writeFileSync(join(folder, 'plugin.js'), `export default (_ctx, api) => {
+  writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ inject: ['harnessRegistry'] }));
+  writeFileSync(join(folder, 'plugin.js'), `import { sessionExtensions } from "${new URL('../../packages/contracts/plugin-sdk.js', import.meta.url).href}";
+export default (_ctx, api) => {
+    const records = api.contribute(sessionExtensions.records);
     api.registerRoute('POST', '/entries', async ({ body }) => {
       const { id, value } = await body();
-      return api.records.append(id, value);
+      return records.append(id, value);
     });
-    api.registerRoute('GET', '/entries', ({ url }) => api.records.list(url.searchParams.get('id')));
-    const notes = api.registerProjection({
+    api.registerRoute('GET', '/entries', ({ url }) => records.list(url.searchParams.get('id')));
+    const notes = records.projection({
       initial: () => [],
       reduce: (state, { data }) => [...state, data.note]
     });

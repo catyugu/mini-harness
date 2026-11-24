@@ -114,7 +114,7 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
   const ctx = new Context();
   ctx.provide('authority', {});
   const host = new PluginHost(ctx, directory, builtins, ['authority'], () => settings,
-    (id) => records.get(id), () => ({ list: () => [], append: async () => '' }));
+    (id) => records.get(id));
   t.after(async () => { await host.close(); rmSync(directory, { recursive: true, force: true }); });
   await host.start(settings);
   assert.equal(host.metadata().find(({ id }) => id === 'workspace')?.state, 'failed');

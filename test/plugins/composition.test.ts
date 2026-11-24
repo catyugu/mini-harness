@@ -7,12 +7,19 @@ import { fileURLToPath } from 'node:url';
 import { fixture, waitUntil } from '../support/api-fixture.js';
 
 const examples = fileURLToPath(new URL('../../../docs/examples/', import.meta.url));
-function copyExample(directory: string, id: string) { cpSync(join(examples, id), join(directory, id), { recursive: true }); }
+function copyExample(directory: string, id: string) {
+  cpSync(join(examples, id), join(directory, id), { recursive: true });
+  const entry = join(directory, id, 'plugin.js');
+  const source = readFileSync(entry, 'utf8');
+  const sdk = new URL('../../packages/contracts/plugin-sdk.js', import.meta.url).href;
+  writeFileSync(entry, source.replace("'mini-harness/plugin'", JSON.stringify(sdk)));
+}
 function plugin(directory: string, id: string, descriptor: Record<string, unknown>, code: string) {
   const folder = join(directory, id);
   mkdirSync(folder);
   writeFileSync(join(folder, 'plugin.json'), JSON.stringify(descriptor));
-  writeFileSync(join(folder, 'plugin.js'), code);
+  writeFileSync(join(folder, 'plugin.js'), `import { toolExtensions } from "${new URL('../../packages/contracts/plugin-sdk.js', import.meta.url).href}";
+${code}`);
 }
 
 test('external services and their declared consumers share Cordis provider selection', async (t) => {
@@ -138,7 +145,7 @@ test('a decision hook can deny an inherited tool and is removed with its owner',
   const { app, paths, request } = await fixture(t);
   plugin(paths.plugins, 'policy', { scope: 'session' }, `
     export default function(_ctx, api) {
-      api.decideTool(async ({ tool, signal }) => {
+      api.contribute(toolExtensions.decide, async ({ tool, signal }) => {
         signal.throwIfAborted();
         return tool === 'ls' ? 'deny' : undefined;
       });

@@ -1,3 +1,4 @@
+import type { SessionRecords } from './session-records.js';
 import type {} from 'cordis';
 import type { Conversation, ConversationPermission, ModelChoice, SessionRecord } from './conversation.js';
 import type { WorkspaceRecord } from './workspace.js';
@@ -6,7 +7,7 @@ import type { RunEvent, RunInfo, StreamEvent } from './transport.js';
 import type { ViewMessage } from './message.js';
 import type { Attachment } from './input.js';
 import type { InboxItem, QueueEntry } from './session-log.js';
-import type { PluginMetadata, SessionRecords } from './plugins.js';
+import type { PluginMetadata } from './plugins.js';
 import type { Settings } from './config.js';
 
 /** Stable, implementation-free ports for the independently mounted product capabilities. */

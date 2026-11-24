@@ -2,7 +2,7 @@ import type { Context } from 'cordis';
 import type { PluginApi } from '@mini-harness/contracts/plugins';
 import { registerRoutes } from './routes.js';
 import type { ModelRequestTransform, ToolResultTransform } from '@mini-harness/contracts/extensions';
-import type { OrderedHook } from '@mini-harness/contracts/events';
+import type { OrderedHook } from '@mini-harness/contracts/contributions';
 import { NativeAgent } from './agent.js';
 
 export function setup(ctx: Context, api: PluginApi) {

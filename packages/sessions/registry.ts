@@ -7,7 +7,7 @@ import { dirname } from 'node:path';
 import { writeJson } from '@mini-harness/platform/config';
 import type { Paths } from '@mini-harness/contracts/config';
 import type { SessionStore, WorkspacePort } from '@mini-harness/contracts/services';
-import type { SessionRecords } from '@mini-harness/contracts/plugins';
+import type { SessionRecords } from '@mini-harness/contracts/session-records';
 import type { ScopePort } from '@mini-harness/contracts/capabilities';
 import type { CapabilityObservation } from '@mini-harness/contracts/events';
 import type { ConversationPermission, SessionRecord } from '@mini-harness/contracts/conversation';

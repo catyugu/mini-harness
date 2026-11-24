@@ -4,7 +4,7 @@ import { Context } from 'cordis';
 import { isDeepStrictEqual } from 'node:util';
 import { lstatSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import type { PluginDescriptor, PluginMetadata, SessionRecords } from '@mini-harness/contracts/plugins';
+import type { PluginDescriptor, PluginMetadata } from '@mini-harness/contracts/plugins';
 import type { HostServices, PluginScope, ScopePort } from '@mini-harness/contracts/capabilities';
 import type { BrowserEntry } from '@mini-harness/contracts/browser';
 import { addAbortListener } from 'node:events';
@@ -37,7 +37,6 @@ export class PluginHost implements ScopePort {
   constructor(readonly ctx: Context, private readonly directory: string, builtins: PluginDescriptor[], rootServices: string[],
     private readonly settings: () => Settings,
     private readonly session: (id: string) => SessionRecord | undefined,
-    private readonly sessionRecords: (sessionId: string, pluginId: string) => SessionRecords,
     private readonly upgrade?: (path: string, handler: UpgradeHandler) => () => void, devPlugin?: string,
     private readonly writePlugin?: (id: string, key: string | undefined, patch: unknown, check: () => void) => Promise<void>) {
     this.catalog = new PluginCatalog(directory, builtins, rootServices, devPlugin);
@@ -211,7 +210,7 @@ export class PluginHost implements ScopePort {
       throw new Error('Export a default setup function and declare dependencies in plugin.json');
     return { inject: descriptor.inject ?? [], setup: async (ctx, lifetime, setDrain, setConfig) => {
       const runtime = createPluginApi(ctx, plan, { scope, scopeKey, lifetime,
-        address: (id) => this.address(id), records: (id) => this.sessionRecords(id, plan.id),
+        address: (id) => this.address(id),
         routes: this.ctx.get('harnessRoutes'), upgrade: this.upgrade,
         dataRoot: join(dirname(this.directory), 'plugin-data'),
         readConfig: () => {

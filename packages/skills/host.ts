@@ -1,3 +1,4 @@
+import { promptExtensions } from '@mini-harness/contracts/prompt-extensions';
 import type { Context } from 'cordis';
 import { Type } from 'typebox';
 import type { PluginApi } from '@mini-harness/contracts/plugins';
@@ -7,7 +8,7 @@ import { SkillLoader } from './loader.js';
 export function setup(ctx: Context, api: PluginApi) {
     const loader = new SkillLoader(ctx.harnessState.paths.skills);
     ctx.provide('harnessSkills', loader);
-    api.promptSection({ id: 'skills', order: 400, render: ({ sessionId, cwd }) =>
+    api.contribute(promptExtensions.section, { id: 'skills', order: 400, render: ({ sessionId, cwd }) =>
       ctx.harnessScopes.require(sessionId, 'harnessSkills').prompt(cwd) });
     ctx.effect(() => ctx.harnessRoutes.register('GET', '/api/workspaces/:id/skills', async ({ params, url }) => {
       const workspace = ctx.harnessWorkspaces.get(params.id);

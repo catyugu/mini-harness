@@ -3,11 +3,11 @@ import type { Context } from 'cordis';
 /** Augment this interface in mini-harness/plugin to declare plugin-owned services. */
 export interface ServiceMap extends Pick<Context,
   | 'harnessFileAccess' | 'harnessLlm' | 'harnessModels' | 'harnessNetwork'
-  | 'harnessPrompt' | 'harnessSessions' | 'harnessSkills' | 'harnessTools'> {}
+  | 'harnessRegistry' | 'harnessPrompt' | 'harnessSessions' | 'harnessSkills' | 'harnessTools'> {}
 
 export type { PluginScope, ScopeSettings } from './capabilities.js';
 export type { PluginApi, PluginDescriptor } from './plugins.js';
-export type { ModelFailure, ModelRequestDraft, ModelRequestTransform, ModelRetry, PromptContext, PromptSection, RecordProjection, StepContext, ToolResultContext, ToolResultTransform } from './extensions.js';
+export type { ModelFailure, ModelRequestDraft, ModelRequestTransform, ModelRetry, PromptContext, PromptSection, StepContext, ToolResultContext, ToolResultTransform } from './extensions.js';
 export type { CapabilityObservation, ToolDecision, ToolProjection } from './events.js';
 export type { FileAccessPort, WorkspaceFileAccess } from './files.js';
 export type { ProcessExecutionPort, SandboxPort } from './execution.js';
@@ -24,3 +24,11 @@ export type { BrowserPrimitives } from './browser.js';
 export { HttpError, HttpReply } from './routes.js';
 export type { GatewayRequest, NetworkPort, RouteRequest, UpgradeHandler } from './routes.js';
 export type { PluginConfiguration } from './config.js';
+
+export { agentExtensions } from './agent-extensions.js';
+export { promptExtensions } from './prompt-extensions.js';
+export { toolExtensions } from './tool-extensions.js';
+export { sessionExtensions } from './session-records.js';
+export type { RecordProjection } from './session-records.js';
+export { extension } from './contributions.js';
+export type { Extension } from './contributions.js';
