@@ -8,6 +8,7 @@ import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend-api';
 import { MessageExtensions } from './message-extensions.js';
 import { fromMarkup, required, toggle } from '@mini-harness/ui-primitives/primitives';
 import { conversationView } from './view.js';
+import { mountApprovals } from './approvals.js';
 
 const setup: FrontendSetup = (ctx, api) => {
   const { miniSelection: state, miniSessions: sessions, miniWorkspaces: workspaces, miniModels: models, miniLayout: layout, miniPages: pages, miniHeader: header } = ctx;
@@ -42,6 +43,7 @@ const setup: FrontendSetup = (ctx, api) => {
   });
   api.contribute(slotExtensions.define, 'conversation.composer', conversation.outlets.composer);
   api.contribute(slotExtensions.define, 'conversation.approvals', conversation.outlets.approvals);
+  mountApprovals(ctx, api);
   api.contribute(slotExtensions.define, 'workspace.welcome', conversation.outlets.workspace, 'single');
   conversation.attach();
   extensions.subscribe(conversation.refreshActions, api.signal);

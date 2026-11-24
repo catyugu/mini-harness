@@ -1,1 +1,4 @@
-export interface Approval { id: string; sessionId: string; runId?: string; command: string; createdAt: string }
+export interface Approval {
+  id: string; sessionId: string; runId?: string; pluginId: string;
+  title: string; message: string; createdAt: string;
+}

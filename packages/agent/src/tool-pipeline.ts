@@ -4,6 +4,16 @@ import type { ToolCallPart, NativeToolMessage } from '@mini-harness/llm/api';
 
 const parallelLimit = 16;
 
+function approvalDenied(error: unknown): boolean {
+  const seen = new Set<unknown>();
+  while (error instanceof Error && !seen.has(error)) {
+    if (error instanceof ToolApprovalDenied) return true;
+    seen.add(error);
+    error = error.cause;
+  }
+  return false;
+}
+
 function safeToRunTogether(call: ToolCallPart, tool?: ToolDefinition) {
   if (!tool?.isConcurrencySafe || call.argumentsError) return false;
   try {
@@ -80,6 +90,6 @@ export async function executeTool(call: ToolCallPart, tool: ToolDefinition | und
     return { role: 'toolResult', toolCallId: call.id, toolName: call.name,
       content: [{ type: 'text', text: error instanceof Error ? error.message : String(error) }],
       isError: true, timestamp: Date.now(), elapsedMs: inApproval ? 0 : performance.now() - start,
-      details: approvalMs === undefined ? undefined : { approvalMs, approvalDenied: error instanceof ToolApprovalDenied || (error instanceof Error && error.cause instanceof ToolApprovalDenied) } };
+      details: approvalMs === undefined ? undefined : { approvalMs, approvalDenied: approvalDenied(error) } };
   }
 }

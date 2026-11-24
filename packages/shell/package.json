@@ -13,11 +13,9 @@
     "@mini-harness/platform": "workspace:*",
     "@mini-harness/plugin-api": "workspace:*",
     "@mini-harness/process-execution": "workspace:*",
-    "@mini-harness/runs": "workspace:*",
     "@mini-harness/sessions": "workspace:*",
     "@mini-harness/tools": "workspace:*",
     "@mini-harness/transport": "workspace:*",
-    "@mini-harness/ui-runtime": "workspace:*",
-    "@mini-harness/ui-slots": "workspace:*"
+    "@mini-harness/ui-runtime": "workspace:*"
   }
 }

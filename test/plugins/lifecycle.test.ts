@@ -115,8 +115,9 @@ test('server entry requires a default setup function', async (t) => {
   const runtime = new MiniHarnessRuntime(paths);
   t.after(async () => { await runtime.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
   for (const [id, source] of [
-    ['function-entry', `export default function(ctx) {
-      if (ctx.harnessSessions.list().length !== 0) throw new Error('Unexpected sessions');
+    ['function-entry', `import { sessionExtensions } from "${pluginSdkUrl}";
+    export default function(_ctx, api) {
+      if (api.contribute(sessionExtensions.access).list().length !== 0) throw new Error('Unexpected sessions');
     }`],
     ['named-entry', 'export default { apply() {} }']
   ]) {

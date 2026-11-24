@@ -5,6 +5,7 @@
   "type": "module",
   "dependencies": {
     "@mini-harness/agent": "workspace:*",
+    "@mini-harness/approvals": "workspace:*",
     "@mini-harness/conversation": "workspace:*",
     "@mini-harness/file-access": "workspace:*",
     "@mini-harness/input": "workspace:*",

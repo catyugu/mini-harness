@@ -117,6 +117,12 @@ importers:
 
   packages/approvals:
     dependencies:
+      '@mini-harness/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@mini-harness/sessions':
+        specifier: workspace:*
+        version: link:../sessions
       '@mini-harness/platform':
         specifier: workspace:*
         version: link:../platform
@@ -480,6 +486,9 @@ importers:
 
   packages/sdk:
     dependencies:
+      '@mini-harness/approvals':
+        specifier: workspace:*
+        version: link:../approvals
       '@mini-harness/agent':
         specifier: workspace:*
         version: link:../agent
@@ -645,9 +654,6 @@ importers:
       '@mini-harness/process-execution':
         specifier: workspace:*
         version: link:../process-execution
-      '@mini-harness/runs':
-        specifier: workspace:*
-        version: link:../runs
       '@mini-harness/sessions':
         specifier: workspace:*
         version: link:../sessions
@@ -660,9 +666,6 @@ importers:
       '@mini-harness/ui-runtime':
         specifier: workspace:*
         version: link:../ui-runtime
-      '@mini-harness/ui-slots':
-        specifier: workspace:*
-        version: link:../ui-slots
 
   packages/skills:
     dependencies:

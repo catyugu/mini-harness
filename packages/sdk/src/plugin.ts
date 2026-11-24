@@ -1,3 +1,5 @@
+export { approvalExtensions } from '@mini-harness/approvals/api';
+export type { ApprovalAccess, ApprovalOptions } from '@mini-harness/approvals/api';
 export { runExtensions } from '@mini-harness/runs/api';
 export type { ExecutionAccess, ExecutionOptions } from '@mini-harness/runs/api';
 export type {} from '@mini-harness/settings/api';
