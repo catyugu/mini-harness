@@ -40,14 +40,16 @@ test('an installed Cordis plugin can use services, configure a tool, and release
   writeFileSync(join(folder, 'plugin.js'), `import { toolExtensions } from "${pluginSdkUrl}";
 
     import { appendFileSync } from 'node:fs';
+    import { sessionExtensions } from "${new URL('../../packages/sdk/src/plugin.js', import.meta.url).href}";
     export default (ctx, api) => {
+      const sessions = api.contribute(sessionExtensions.access);
       const { config } = api;
       api.onDispose(() => appendFileSync(${JSON.stringify(log)}, 'dispose\\n'));
       api.contribute(toolExtensions.register, {
         name: 'example_count', label: 'Count', description: 'Count sessions',
         parameters: { type: 'object', properties: {} },
         async execute() {
-          return { content: [{ type: 'text', text: config.prefix + ': ' + ctx.harnessSessions.list().length }] };
+          return { content: [{ type: 'text', text: config.prefix + ': ' + sessions.list().length }] };
         }
       });
     };

@@ -29,3 +29,5 @@ The manifest defines live `maxDepth`, `maxParallel` and model defaults. The tool
 ## Testing
 
 `tests/` covers queue limits, recursive execution, cancellation and inherited model visibility.
+
+Delegation uses source-bound `sessionExtensions.access` and `runExtensions.access`, the same capabilities offered to installed plugins. The semaphore lends a scheduling lease, never an agent execution callback.

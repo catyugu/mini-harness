@@ -46,8 +46,10 @@ A plugin with no descriptor fields can use `{}` as its `plugin.json`.
 | `icon` | A symbolic icon name or an SVG path object with optional `viewBox` |
 
 ```js
+import { sessionExtensions } from 'mini-harness/plugin';
+
 export default function setup(_ctx, api) {
-  const sessions = api.service('harnessSessions');
+  const sessions = api.contribute(sessionExtensions.access);
   api.registerRoute('GET', '/count', () => ({
     label: api.config.prefix,
     count: sessions.list().length
@@ -273,3 +275,7 @@ Mount HTTP routes with `api.registerRoute` and local WebSocket endpoints with `a
 ### Read-only tool grants
 
 A declaration of `access: 'readOnly'` does not confer authority. A local user can set `readOnlyTools` in settings (or the authenticated settings PATCH), for example `{"readOnlyTools":{"my-plugin":["inspect"]}}`. Grants name the installed plugin and exact registered tool; replacing the map or removing a tool revokes access even for already advertised tool leases. Removing the plugin also removes its grants. Only grant access to trusted implementations: local JavaScript already runs with your OS user privileges, and the declaration is not process isolation. Inherited disabled tools still deny execution, including in Full access.
+
+### Session and task execution
+
+Declare `harnessSessions` and `harnessRuns` in `inject`, then use `api.contribute(sessionExtensions.access)` and `api.contribute(runExtensions.access)`. Session access returns only visible identities, user-facing history, and controlled create/rename operations; a scoped plugin cannot escape its subtree. Execution access supplies `send`, `info`, `model`, `signal` and `cancel`. `send` waits for the run and is cancelled on plugin unload. It cannot impersonate a user, change the recent model, write raw log entries or manufacture a successful run. The optional `acquire` callback returns a scheduling lease; Runs alone starts and completes the execution. Native Subagents uses these same interfaces.

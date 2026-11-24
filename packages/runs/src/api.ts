@@ -1,10 +1,42 @@
 import type {} from 'cordis';
+import { extension, type ContributionSource } from '@mini-harness/kernel/contributions';
 import type { ThinkingLevel, ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { Attachment, InputSource } from '@mini-harness/input/message';
 import type { RunEvent, StreamEvent } from './stream.js';
 import type { RunInfo } from '@mini-harness/sessions/run-state';
 
-export interface RunPort {
+export interface ExecutionOptions {
+  signal?: AbortSignal;
+  source?: 'agent' | 'plugin';
+  model?: ModelChoice;
+  attachments?: Attachment[];
+  thinkingLevel?: ThinkingLevel | null;
+  /** Acquire a scheduling lease; only Runs invokes the actual execution. */
+  acquire?(signal: AbortSignal): Promise<() => void>;
+}
+
+export interface ExecutionAccess {
+  send(id: string, prompt: string, options?: ExecutionOptions): Promise<string>;
+  info(id: string): RunInfo | undefined;
+  model(id: string): ModelChoice;
+  cancel(id: string): boolean;
+  signal(id: string, signal?: AbortSignal): AbortSignal;
+}
+
+export const bindExecution = Symbol.for('mini-harness.executionAccess');
+interface ExecutionProvider {
+  [bindExecution](source: ContributionSource): ExecutionAccess;
+}
+
+export const runExtensions = {
+  access: extension((source) => source.service('harnessRuns')[bindExecution](source))
+};
+
+declare module '@mini-harness/kernel/services' {
+  interface ServiceMap { harnessRuns: ExecutionProvider }
+}
+
+export interface RunPort extends ExecutionProvider {
   readonly size: number;
   readonly events: EventTarget;
   active(id: string): boolean;
@@ -14,7 +46,7 @@ export interface RunPort {
   signal(id: string, signal?: AbortSignal): AbortSignal | undefined;
   send(id: string, prompt: string, emit?: (event: StreamEvent) => void, options?: {
     signal?: AbortSignal; source?: InputSource; model?: ModelChoice; attachments?: Attachment[];
-    schedule?: (task: () => Promise<string>, signal: AbortSignal) => Promise<string>;
+    acquire?: (signal: AbortSignal) => Promise<() => void>;
     thinkingLevel?: ThinkingLevel | null;
   }): Promise<string>;
   startRun(id: string, prompt: string, options?: {

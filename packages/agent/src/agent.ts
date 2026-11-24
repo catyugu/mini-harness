@@ -95,7 +95,7 @@ export class NativeAgent implements AgentPort {
     this.sessions.assertAvailable(id);
   }
 
-  activeModel(id: string) {
+  private activeModel(id: string) {
     return this.sessions.inspectLog(id, (log) => log.projection().model, true);
   }
 

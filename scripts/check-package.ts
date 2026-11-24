@@ -68,7 +68,7 @@ async function checkPackage() {
     for (const path of ['sdk/src/plugin.d.ts', 'sdk/src/browser-plugin.d.ts'])
       assert.ok(files.some((file) => file.path === 'dist/types/packages/' + path), 'Missing SDK declarations: ' + path);
     await writeFile(join(installed, 'plugin-types.mts'), `
-      import { agentExtensions, promptExtensions, sessionDisplayExtensions, sessionExtensions, toolExtensions, type PluginApi, type LlmPort, type ScopeSettings } from 'mini-harness/plugin';
+      import { agentExtensions, promptExtensions, runExtensions, sessionDisplayExtensions, sessionExtensions, toolExtensions, type PluginApi, type LlmPort, type ScopeSettings } from 'mini-harness/plugin';
       declare module 'mini-harness/plugin' {
         interface ServiceMap { example: { greet(name: string): string } }
       }
@@ -101,8 +101,12 @@ async function checkPackage() {
       api.service('example')?.greet(1);
       // @ts-expect-error TypeScript plugins declare their own services.
       api.service('undeclared');
-      // @ts-expect-error The run scheduler is a host service.
-      api.service('harnessRuns');
+      const sessions = api.contribute(sessionExtensions.access);
+      const runs = api.contribute(runExtensions.access);
+      const child = sessions.create({ parentId: 'session', title: 'Child' });
+      void runs.send(child.id, 'Execute task');
+      // @ts-expect-error The raw run scheduler is not part of the public interface.
+      api.service('harnessRuns').stop();
     `);
     await writeFile(join(installed, 'browser-types.mts'), `
       import { settingsExtensions, slotExtensions, type FrontendSetup, type SlotRenderer } from 'mini-harness/browser-plugin';

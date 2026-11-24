@@ -22,7 +22,6 @@ export interface AgentPort {
   compact(id: string, signal: AbortSignal): Promise<void>;
   readonly hasPending: boolean;
   prepare(id: string, signal?: AbortSignal): Promise<void>;
-  activeModel(id: string): ModelChoice | undefined;
   queueInput(id: string, text: string, mode: 'steer' | 'followUp', attachments?: Attachment[],
     options?: Pick<InboxItem, 'model' | 'thinkingLevel'>): Promise<QueueEntry[]>;
   cancelQueue(id: string, itemId?: string): QueueEntry[];

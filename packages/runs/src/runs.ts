@@ -1,5 +1,7 @@
 import type {} from '@mini-harness/agent/api';
 import type { ModelCatalogPort } from '@mini-harness/models/api';
+import type { ContributionSource } from '@mini-harness/kernel/contributions';
+import { bindExecution, type ExecutionAccess } from './api.js';
 import type { Context } from 'cordis';
 import type { ThinkingLevel, ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { ScopePort } from '@mini-harness/kernel/scopes';
@@ -43,7 +45,7 @@ interface RunOptions {
   model?: ModelChoice;
   attachments?: Attachment[];
   thinkingLevel?: ThinkingLevel | null;
-  schedule?: (task: () => Promise<string>, signal: AbortSignal) => Promise<string>;
+  acquire?: (signal: AbortSignal) => Promise<() => void>;
   revision?: { sourceEntryId: string; expectedLeafId: string | null };
 }
 
@@ -84,7 +86,34 @@ export class Runs {
     return owner && signal ? AbortSignal.any([owner, signal]) : owner ?? signal;
   }
 
-  private launch(id: string, prompt: string, emit: ((event: StreamEvent) => void) | undefined, { signal, source, model, attachments, thinkingLevel, revision, schedule }: RunOptions) {
+  [bindExecution](source: ContributionSource): ExecutionAccess {
+    const check = (id: string) => {
+      source.signal.throwIfAborted();
+      if (!source.visible(id)) throw new DomainError('forbidden', 'Conversation outside plugin scope');
+      if (!this.registry.get(id)) throw new DomainError('not_found', 'Conversation not found');
+    };
+    return {
+      send: (id, prompt, options = {}) => source.run('conversation execution', (signal) => {
+        check(id);
+        return this.send(id, prompt, undefined, {
+          signal, source: options.source === 'agent' ? 'agent' : 'plugin',
+          model: options.model, attachments: options.attachments, thinkingLevel: options.thinkingLevel, acquire: options.acquire
+        });
+      }, options.signal),
+      info: (id) => { check(id); return this.info(id); },
+      model: (id) => {
+        check(id);
+        return this.registry.inspectLog(id, (log) => log.projection().model, true) ?? this.preference.recent();
+      },
+      cancel: (id) => { check(id); return this.cancel(id); },
+      signal: (id, signal) => {
+        check(id);
+        return this.signal(id, signal ? AbortSignal.any([signal, source.signal]) : source.signal) ?? source.signal;
+      }
+    };
+  }
+
+  private launch(id: string, prompt: string, emit: ((event: StreamEvent) => void) | undefined, { signal, source, model, attachments, thinkingLevel, revision, acquire }: RunOptions) {
     this.registry.assertAvailable(id);
     this.mutations.admit(this.scopes.address(id));
     if (this.active(id)) throw new DomainError('conflict', 'Conversation is already running');
@@ -137,7 +166,11 @@ export class Runs {
       publish({ type: 'run', run: terminal });
       this.observe({ type: 'run-ended', sessionId: id, run: terminal });
     };
-    const done = Promise.resolve().then(() => schedule ? schedule(promptSession, cancellation) : promptSession()).then((text) => {
+    const done = Promise.resolve().then(async () => {
+      const release = await acquire?.(cancellation);
+      try { cancellation.throwIfAborted(); return await promptSession(); }
+      finally { release?.(); }
+    }).then((text) => {
       finish('completed');
       return text;
     }, (error) => {

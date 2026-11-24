@@ -1,7 +1,6 @@
-import type {} from '@mini-harness/sessions/store';
+import { sessionExtensions } from '@mini-harness/sessions/records';
 import type {} from '@mini-harness/kernel/scopes';
-import type {} from '@mini-harness/runs/api';
-import type {} from '@mini-harness/agent/api';
+import { runExtensions } from '@mini-harness/runs/api';
 import type {} from '@mini-harness/models/api';
 import { toolExtensions } from '@mini-harness/tools/extensions';
 import { defineTool } from '@mini-harness/tools/api';
@@ -12,10 +11,11 @@ import { Delegation, type SubagentPolicy } from './delegation.js';
 
 /** Optional plugin: delegation, scheduling and child-model rules exist only while mounted. */
 export function setup(ctx: Context, api: PluginApi) {
-  const { harnessRegistry: catalog, harnessScopes: scopes, harnessRuns: runs } = ctx;
+  const { harnessScopes: scopes } = ctx;
+  const sessions = api.contribute(sessionExtensions.access);
+  const runs = api.contribute(runExtensions.access);
   const policy = () => api.config as unknown as SubagentPolicy;
-  const delegation = new Delegation(catalog, { activeModel: (id) => scopes.require(id, 'harnessAgent').activeModel(id) ?? ctx.harnessModelPreference.recent() },
-    (id) => scopes.require(id, 'harnessModels'), () => runs, policy, (id) => catalog.assertAvailable(id));
+  const delegation = new Delegation(sessions, runs, (id) => scopes.require(id, 'harnessModels'), policy);
   api.onConfigChange((next) => {
     const config = next as unknown as SubagentPolicy;
     delegation.semaphore.setLimit(config.maxParallel);

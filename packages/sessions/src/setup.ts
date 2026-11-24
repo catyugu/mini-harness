@@ -3,7 +3,7 @@ import type {} from '@mini-harness/platform/runtime-paths';
 import type {} from '@mini-harness/workspaces/api';
 import type {} from '@mini-harness/kernel/scopes';
 import type {} from '@mini-harness/settings/api';
-import { recordsForPlugin } from './records.js';
+import { bindSessionAccess, sessionAccess } from './records.js';
 import type { Context } from 'cordis';
 import { SessionRegistry } from './registry.js';
 
@@ -14,9 +14,7 @@ export function setup(ctx: Context) {
   ctx.provide('harnessRegistry', registry);
   ctx.provide('harnessScopeDirectory', { address: (key: string) => registry.scopeAddress(key) });
   ctx.provide('harnessSessions', {
-    get: (id) => registry.get(id),
-    list: (id) => registry.list(id),
-    [recordsForPlugin]: (id, pluginId) => registry.records(id, pluginId)
+    [bindSessionAccess]: (source) => sessionAccess(registry, source, (id, pluginId) => registry.records(id, pluginId))
   });
   ctx.on('harness/startup', (pending) => { pending.push(registry.recoverDeletion()); });
   ctx.on('harness/quiesce', (pending) => { pending.push(registry.close()); });

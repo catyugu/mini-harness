@@ -705,9 +705,6 @@ importers:
 
   packages/subagents:
     dependencies:
-      '@mini-harness/agent':
-        specifier: workspace:*
-        version: link:../agent
       '@mini-harness/conversation':
         specifier: workspace:*
         version: link:../conversation
