@@ -21,6 +21,14 @@ export function createBrowserGraphLoader(host: FrontendHost) {
   const preloads = new Map<string, { url: string; lifetime: AbortController; dispose?: () => void | Promise<void> }>();
   let work = Promise.resolve();
 
+  async function releasePreload(id: string) {
+    const preload = preloads.get(id);
+    if (!preload) return;
+    preloads.delete(id);
+    preload.lifetime.abort();
+    await preload.dispose?.();
+  }
+
   async function sync(snapshot: BrowserBootstrap): Promise<BrowserPluginFailures> {
     const enabled = new Map<string, BrowserEntry>(snapshot.ui.map((entry) => [entry.id, entry]));
     if (enabled.size !== snapshot.ui.length) throw new Error('Duplicate browser plugin ID in composed graph');
@@ -53,9 +61,7 @@ export function createBrowserGraphLoader(host: FrontendHost) {
     }
     for (const [id, preload] of [...preloads].reverse()) {
       if (enabled.get(id)?.preload === preload.url) continue;
-      preloads.delete(id);
-      preload.lifetime.abort();
-      try { await preload.dispose?.(); } catch (error) { failed.set(id, error); }
+      try { await releasePreload(id); } catch (error) { failed.set(id, error); }
     }
     for (const id of ordered) {
       const url = enabled.get(id)?.preload;
@@ -94,6 +100,8 @@ export function createBrowserGraphLoader(host: FrontendHost) {
       } catch (error) {
         for (const link of styles.get(id) ?? []) link.remove();
         styles.delete(id);
+        try { await releasePreload(id); }
+        catch (cleanupError) { error = new AggregateError([error, cleanupError], 'Browser plugin setup and cleanup failed'); }
         failed.set(id, error);
       }
     }

@@ -1,10 +1,10 @@
-import { expectPresent } from '../../../test/support/required.js';
+import { expectPresent } from '../support/required.js';
 import { test, expect } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import { rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.js';
-import { startIsolatedHost, settingsSection, expectInViewport } from '../../../test/support/browser.js';
+import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
+import { startIsolatedHost, settingsSection, expectInViewport } from '../support/browser.js';
 
 test('file inspection, responsive themes and reduced viewport height keep controls reachable', async ({ browser }) => {
   const mock = await createMockProvider(), { root, paths } = createFixturePaths(mock.url);

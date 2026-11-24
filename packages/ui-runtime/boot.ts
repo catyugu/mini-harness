@@ -59,7 +59,7 @@ async function boot() {
   acceptTokenFromUrl();
   window.addEventListener('hashchange', () => {
     if (acceptTokenFromUrl()) location.reload();
-  }, { signal: lifetime.signal });
+  });
   const ctx = new Context();
   const graph = new RemoteStore(() => data<BrowserBootstrap>('/bootstrap', { signal: lifetime.signal }));
   const report = (error: Error) => window.dispatchEvent(new CustomEvent('mini-harness:error', { detail: error }));
@@ -69,6 +69,11 @@ async function boot() {
   });
   const host = new FrontendHost(ctx, data, report);
   const sync = createBrowserGraphLoader(host);
+  const dispose = async () => {
+    lifetime.abort();
+    await host.dispose();
+    await sync({ ui: [] });
+  };
   const failuresChanged = new EventTarget();
   let currentFailures: BrowserPluginFailures = new Map();
   const applyGraph = async () => {
@@ -101,11 +106,10 @@ async function boot() {
     lifetime.signal.addEventListener('abort', release, { once: true });
     void observe(projections, lifetime.signal);
     window.addEventListener('pagehide', (event) => {
-      if (!event.persisted) { lifetime.abort(); void host.dispose(); }
+      if (!event.persisted) void dispose();
     }, { signal: lifetime.signal });
   } catch (error) {
-    lifetime.abort();
-    await host.dispose();
+    await dispose();
     throw error;
   }
 }

@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
-import { rmSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { rmSync, mkdirSync, realpathSync, writeFileSync, cpSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
 import { workspaceId } from '@mini-harness/workspaces/catalog';
 import { readJson, writeJson } from '@mini-harness/platform/json';
@@ -125,9 +125,15 @@ test('a failed browser plugin reports the saved state and can be retried', async
   const folder = join(paths.plugins, 'retry-ui');
   mkdirSync(folder);
   writeFileSync(join(folder, 'plugin.js'), 'export default () => {}');
-  writeJson(join(folder, 'plugin.json'), { title: 'Retry UI', browserInject: ['miniSlots'], configSchema: {
+  writeJson(join(folder, 'plugin.json'), { title: 'Retry UI', browserInject: ['miniSlots'], browserAssets: ['web/preload.js'],
+    browserPreload: 'web/preload.js', configSchema: {
     type: 'object', properties: { ready: { type: 'boolean', title: 'Ready', default: false } }
   } });
+  mkdirSync(join(folder, 'web'));
+  writeFileSync(join(folder, 'web/preload.js'), `export default (signal) => {
+    document.body.dataset.retryPreload = 'mounted';
+    return () => { document.body.dataset.retryPreload = signal.aborted ? 'released' : 'active'; };
+  };`);
   writeFileSync(join(folder, 'web.js'), `import { slotExtensions } from '/packages/ui-runtime/plugin-sdk.js';
   export default (_ctx, api) => {
     const node = document.createElement('button');
@@ -144,12 +150,14 @@ test('a failed browser plugin reports the saved state and can be retried', async
     await expect(page.getByText('Saved on the server. Browser plugins failed: retry-ui')).toBeVisible();
     await expect(control).toBeChecked();
     await expect(page.getByRole('button', { name: 'Recovered UI', includeHidden: true })).toHaveCount(0);
+    await expect(page.locator('body')).toHaveAttribute('data-retry-preload', 'released');
     await page.getByRole('button', { name: 'Retry UI settings' }).click();
     await page.getByLabel('Ready · retry-ui').check();
     await page.getByRole('button', { name: 'Save configuration' }).click();
     await expect(page.getByText('Saved.', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'New conversation' }).click();
     await expect(page.getByRole('button', { name: 'Recovered UI' })).toHaveCount(1);
+    await expect(page.locator('body')).toHaveAttribute('data-retry-preload', 'mounted');
   } finally { await page.close(); await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
@@ -175,6 +183,30 @@ test('plugin catalog applies configuration and removes disabled browser capabili
     await page.getByRole('button', { name: 'Toggle navigation' }).click();
     await page.getByRole('button', { name: 'Browse plugins' }).click();
     await files.check();
+    await expect(files).toBeChecked();
+    await expect(files).toBeEnabled();
+    let requests = 0, release: () => void = () => { throw new Error('Not started'); };
+    const held = new Promise<void>((done) => { release = done; });
+    await page.route('**/api/settings', async (route) => {
+      if (route.request().method() !== 'PATCH') return route.continue();
+      requests++;
+      await held;
+      await route.fulfill({ status: 400, json: { error: 'The switch could not be saved' } });
+    });
+    try {
+      await files.uncheck();
+      await expect(files).toHaveAttribute('aria-busy', 'true');
+      await expect(files).toBeDisabled();
+      await files.evaluate((node: HTMLInputElement) => node.click());
+      release();
+      await expect(page.getByRole('status').filter({ hasText: 'The switch could not be saved' })).toBeVisible();
+      await expect(files).toBeChecked();
+      await expect(files).toBeEnabled();
+      expect(requests).toBe(1);
+    } finally {
+      release();
+      await page.unroute('**/api/settings');
+    }
     await catalog.getByRole('button', { name: 'Install plugin', exact: true }).click();
     const install = page.getByRole('dialog', { name: 'Install plugin' });
     await install.getByLabel('Plugin ID', { exact: true }).fill('local-example');
@@ -235,4 +267,55 @@ test('the Plugins page repairs an enabled workspace instance and reports setup f
     await page.getByRole('button', { name: 'All plugins' }).click();
     await expect(page.getByRole('button', { name: 'Workspace example settings' })).toContainText('Ready');
   } finally { await page.close(); await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+test('unmounting browser plugins releases pages and restores replaced slot contributions', async ({ page }) => {
+  const mock = await createMockProvider();
+  const { paths, root } = createFixturePaths(mock.url);
+  let server: Awaited<ReturnType<typeof startIsolatedHost>> | undefined;
+  try {
+    const folder = join(paths.plugins, 'replace-new');
+    mkdirSync(folder);
+    writeJson(join(folder, 'plugin.json'), { browserRequires: ['core:conversation'], browserInject: ['miniSlots', 'miniPrimitives'] });
+    writeFileSync(join(folder, 'web.js'), `import { slotExtensions } from '/packages/ui-runtime/plugin-sdk.js';
+    export default ({ miniPrimitives }, api) => {
+      api.contribute(slotExtensions.keyed, 'sidebar.primary', 'new-conversation', signal => {
+        const button = miniPrimitives.button('Replacement conversation', 'quiet');
+        window.addEventListener('slot-test', () => {
+          document.body.dataset.slotEvents = String(Number(document.body.dataset.slotEvents ?? 0) + 1);
+        }, { signal });
+        return { node: button, dispose() { document.body.dataset.slotDisposed = 'yes'; } };
+      });
+    };`);
+    cpSync(resolve('docs/examples/browser-panel'), join(paths.plugins, 'browser-panel'), { recursive: true });
+    writeJson(paths.settings, { pluginConfig: { 'core:models': { model: { provider: 'local-mock', id: 'mock-model' } } }, plugins: { 'replace-new': true, 'browser-panel': true } });
+    server = await startIsolatedHost(paths);
+    await page.goto(server.url + '/#token=' + server.token);
+    await expect(page.getByRole('button', { name: 'Replacement conversation' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'New conversation', exact: true })).toHaveCount(0);
+    await page.evaluate(() => window.dispatchEvent(new Event('slot-test')));
+    await expect(page.locator('body')).toHaveAttribute('data-slot-events', '1');
+
+    await page.getByRole('button', { name: 'Example panel', exact: true }).click();
+    await expect(page.getByText('Example panel is ready.')).toBeVisible();
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
+    await expect(page.getByRole('dialog', { name: 'Example preview' })).toBeVisible();
+    const settings = await fetch(server.url + '/api/settings', {
+      method: 'PATCH', headers: { Authorization: 'Bearer ' + server.token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ plugins: { 'replace-new': false, 'browser-panel': false } })
+    });
+    expect(settings.status).toBe(200);
+    await expect(page.getByRole('dialog', { name: 'Example preview' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Example panel', exact: true })).toHaveCount(0);
+    await expect(page.getByText('Example panel is ready.')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Replacement conversation' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'New conversation', exact: true })).toBeVisible();
+    await expect(page.locator('body')).toHaveAttribute('data-slot-disposed', 'yes');
+    await page.evaluate(() => window.dispatchEvent(new Event('slot-test')));
+    await expect(page.locator('body')).toHaveAttribute('data-slot-events', '1');
+  } finally {
+    await server?.stop();
+    await mock.close();
+    rmSync(root, { recursive: true, force: true });
+  }
 });

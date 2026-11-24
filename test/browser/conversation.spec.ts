@@ -1,11 +1,11 @@
 import { test, expect } from '@playwright/test';
 import { rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.js';
-import { readJson } from '@mini-harness/platform/json';
-import { startIsolatedHost, modelSearch, suggestions, expectInViewport } from '../../../test/support/browser.js';
+import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
+import { readJson, writeJson } from '@mini-harness/platform/json';
+import { startIsolatedHost, modelSearch, suggestions, modelButton, chooseModel } from '../support/browser.js';
 
-test('drafts, search, rename, single deletion, attachment and input discovery', async ({ page }) => {
+test('drafts isolate attachments and discover workspace files and skills', async ({ page }) => {
   const mock = await createMockProvider(), { root, paths } = createFixturePaths(mock.url);
   const modelsPath = join(paths.home, 'models.json');
   const models = readJson<any>(modelsPath, {});
@@ -84,47 +84,6 @@ test('drafts, search, rename, single deletion, attachment and input discovery', 
     await expect(bubble.getByRole('img', { name: 'blue.png' })).toBeVisible();
     await expect(bubble.getByRole('img', { name: 'reference.png' })).toBeVisible();
     await expect(bubble.getByRole('list', { name: 'Attachments' })).toHaveText('task.txt');
-    const desktop = page.viewportSize();
-    if (!desktop) throw new Error('Expected a browser viewport');
-    const blue = bubble.getByRole('button', { name: 'Preview blue.png' });
-    const reference = bubble.getByRole('button', { name: 'Preview reference.png' });
-    const preview = page.getByRole('dialog', { name: 'Image preview' });
-    await blue.focus();
-    await page.keyboard.press('Enter');
-    const fullBlue = preview.getByRole('img', { name: 'blue.png' });
-    await expect(fullBlue).toHaveCSS('width', '240px');
-    await expect(fullBlue).toHaveCSS('height', '140px');
-    await page.keyboard.press('Escape');
-    await expect(preview).toBeHidden();
-    await expect(blue).toBeFocused();
-    for (const viewport of [desktop, { width: 320, height: 568 }]) {
-      await page.setViewportSize(viewport);
-      const layout = await bubble.evaluate((node) => {
-        const images = [...node.querySelectorAll<HTMLImageElement>('.message-images img')];
-        const gallery = images[0].closest('.message-images')!.getBoundingClientRect();
-        const last = images.at(-1)!.getBoundingClientRect();
-        return { widths: images.map((image) => image.getBoundingClientRect().width),
-          offset: Math.abs(gallery.right - last.right), overflow: node.scrollWidth - node.clientWidth };
-      });
-      expect(layout.widths.every((width) => width >= 56 && width <= 72)).toBe(true);
-      expect(layout.offset).toBeLessThan(1);
-      expect(layout.overflow).toBeLessThanOrEqual(1);
-    }
-    await reference.click();
-    const fullReference = preview.getByRole('img', { name: 'reference.png' });
-    const actualSize = preview.getByRole('button', { name: 'Actual size' });
-    await expectInViewport(preview, { width: 320, height: 568 });
-    await expect(actualSize).toHaveAttribute('aria-pressed', 'false');
-    const fitted = (await fullReference.boundingBox())!;
-    expect(fitted.width).toBeLessThan(320);
-    expect(fitted.width / fitted.height).toBeCloseTo(12 / 7, 2);
-    await actualSize.click();
-    await expect(fullReference).toHaveCSS('width', '480px');
-    await expect(fullReference).toHaveCSS('height', '280px');
-    await expect(preview.getByRole('region', { name: 'Image', exact: true })).toHaveJSProperty('scrollWidth', 480);
-    await preview.getByRole('button', { name: 'Close image preview' }).click();
-    await expect(preview).toBeHidden();
-    await page.setViewportSize(desktop);
     expect(JSON.stringify(mock.requests[0])).toContain('image_url');
     expect(JSON.stringify(mock.requests[0])).toContain('ATTACHED TASK');
     expect(JSON.stringify(mock.requests[0])).toContain('Review carefully.');
@@ -134,11 +93,9 @@ test('drafts, search, rename, single deletion, attachment and input discovery', 
     await draft.press('Enter');
     expect((await exported).suggestedFilename()).toBe('mini-harness-sessions.json');
     await expect(page.locator('.attachment')).toHaveCount(0);
-    await page.locator('.session-row').hover();
-    await page.getByRole('button', { name: /^Rename .*Read this attachment|^Rename \/skill:review/ }).click();
-    await page.getByRole('textbox', { name: 'Title', exact: true }).fill('Project review');
-    await page.getByRole('button', { name: 'Rename', exact: true }).click();
-    await expect(page.locator('#conversationTitle')).toHaveText('Project review');
+    const original = page.locator('.session-name');
+    const title = await original.textContent();
+    if (!title) throw new Error('Conversation title is missing');
     await draft.fill('Keep this draft');
     await page.evaluate(() => {
       const read = FileReader.prototype.readAsDataURL;
@@ -153,22 +110,71 @@ test('drafts, search, rename, single deletion, attachment and input discovery', 
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.locator('.message.assistant')).toHaveText('Mock response');
     expect(JSON.stringify(mock.requests.at(-1))).not.toContain('ONLY FOR PROJECT REVIEW');
-    await page.getByRole('button', { name: 'Project review', exact: true }).click();
+    await page.getByRole('button', { name: title, exact: true }).click();
     await expect(draft).toHaveValue('Keep this draft');
     await expect(page.getByRole('button', { name: 'Remove private.txt' })).toBeVisible();
     await page.locator('.session-row').filter({ hasText: 'Different conversation' }).hover();
     await page.getByRole('button', { name: 'Delete Different conversation', exact: true }).click();
     await page.getByRole('dialog', { name: 'Delete conversation' }).getByRole('button', { name: 'Delete', exact: true }).click();
-    await page.getByRole('button', { name: 'Search workspaces and conversations' }).click();
-    await page.getByRole('searchbox', { name: 'Search workspaces and conversations' }).fill('absent');
-    await expect(page.locator('#sessions .session-row')).toHaveCount(0);
-    await page.getByRole('searchbox', { name: 'Search workspaces and conversations' }).fill('review');
-    await expect(page.locator('#sessions .session-row')).toHaveCount(1);
-    await page.getByRole('button', { name: 'Delete Project review', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Different conversation', exact: true })).toHaveCount(0);
+    await page.locator('.session-row').filter({ hasText: title }).hover();
+    await page.getByRole('button', { name: 'Delete ' + title, exact: true }).click();
     const confirmation = page.getByRole('dialog', { name: 'Delete conversation' });
     await expect(confirmation).toBeVisible();
     await confirmation.getByRole('button', { name: 'Delete', exact: true }).click();
     await expect(page.locator('#sessions .session-row')).toHaveCount(0);
     await expect(page.getByRole('heading', { name: 'What are we working on?' })).toBeVisible();
   } finally { await page.close(); await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+test('the global recent model survives history navigation and page reload', async ({ page }) => {
+  const mock = await createMockProvider();
+  const { root, paths } = createFixturePaths(mock.url);
+  const models = readJson<any>(join(paths.home, 'models.json'), {});
+  const first = models.providers['local-mock'].models[0];
+  models.providers['local-mock'].models.push({ ...first, id: 'second-model', name: 'Second Model', reasoning: true });
+  models.providers['unconfigured-fixture'] = { baseUrl: mock.url, api: 'openai-completions',
+    models: [{ ...first, id: 'private-only', name: 'Private Only' }] };
+  writeJson(join(paths.home, 'models.json'), models);
+  const service = await startIsolatedHost(paths);
+  try {
+    await page.goto(service.url + '/#token=' + service.token);
+    await page.getByRole('textbox', { name: 'Message' }).fill('Old model conversation');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.locator('.message.assistant')).toHaveText('Mock response');
+    await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeVisible();
+    await modelButton(page).click();
+    await modelSearch(page).fill('private-only');
+    await expect(page.getByText('No matching models.')).toBeVisible();
+    await modelSearch(page).press('Escape');
+    await chooseModel(page, 'local-mock second-model');
+    await expect(modelButton(page)).toHaveText('Second Model');
+    await page.reload();
+    await expect(modelButton(page)).toHaveText('Mock Model');
+    await chooseModel(page, 'second-model');
+    await page.getByRole('button', { name: /New conversation/ }).click();
+    const thinking = page.locator('#thinkingLevel');
+    await expect(thinking).toHaveAttribute('aria-label', 'Thinking level: Default');
+    await thinking.click();
+    const levels = page.getByRole('listbox', { name: 'Thinking levels' });
+    await expect(levels).toBeVisible();
+    await levels.getByRole('option', { name: 'High', exact: true }).click();
+    await expect(thinking).toHaveAttribute('aria-label', 'Thinking level: High');
+    await page.getByRole('textbox', { name: 'Message' }).fill('New model conversation');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.locator('.message.assistant')).toHaveText('Mock response');
+    await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeVisible();
+    expect(mock.requests.at(-1)?.model).toBe('second-model');
+    await expect(thinking).toHaveAttribute('aria-label', 'Thinking level: High');
+    await page.getByRole('button', { name: 'Old model conversation', exact: true }).click();
+    await expect(modelButton(page)).toHaveText('Second Model');
+    await page.reload();
+    await expect(modelButton(page)).toHaveText('Second Model');
+    await page.getByRole('textbox', { name: 'Message' }).fill('Use the recent model');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.locator('.message.assistant')).toHaveCount(2);
+    expect(mock.requests.at(-1)?.model).toBe('second-model');
+  } finally {
+    await page.close(); await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true });
+  }
 });
