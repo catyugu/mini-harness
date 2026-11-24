@@ -12,7 +12,6 @@ export function setup(ctx: Context, api: PluginApi) {
     models: (id) => scopes.require(id, 'harnessModels'),
     llm: (id) => scopes.require(id, 'harnessLlm'),
     tools: (id) => scopes.require(id, 'harnessTools'),
-    allowsTool: (id, name) => scopes.allowsTool(id, name),
     prompt: (id) => scopes.require(id, 'harnessPrompt'),
     prepare: (id, signal) => scopes.prepare(id, signal),
     defaultModel: preference.recent,

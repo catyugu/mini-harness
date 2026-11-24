@@ -2,12 +2,17 @@ import { extension, orderedHook, type OrderedHook } from './contributions.js';
 import type { ToolDecision, ToolProjection } from './events.js';
 import type { ToolResultTransform } from './extensions.js';
 import type { MessageContent } from './message.js';
-import { isToolContent, type ToolDefinition } from './tools.js';
+import { isToolContent, type ToolDefinition, type ToolRegistrationOptions } from './tools.js';
 
 export const toolExtensions = {
-  register: extension((source, tool: ToolDefinition) =>
-    source.context.effect(() => source.service('harnessTools').register(tool.name, () => tool,
-      source.visible, source.scopeKey))),
+  register: extension((source, definition: ToolDefinition | { name: string; bind(sessionId: string): ToolDefinition },
+    options?: ToolRegistrationOptions) => {
+    const tools = source.service('harnessTools');
+    const bind = 'bind' in definition ? definition.bind : () => definition;
+    return source.context.effect(() => tools.register(definition.name, bind, {
+      access: options?.access, visible: options?.visible, source, scope: source.scopeKey
+    }));
+  }),
   result: extension((source, handler: ToolResultTransform, order: number = 0) =>
     orderedHook(source, 'tool result', handler, order, (hook, active) =>
       source.context.on('harness/tool-result', (id, hooks) => { if (active(id)) hooks.push(hook); }))),

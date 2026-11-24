@@ -151,7 +151,7 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
   // Keep the scope alive for policy but remove its service; a stale isolate must not mask the parent.
   await configure({ 'session:parent': parent, 'session:child': { disabledTools: ['shell'] } });
   assert.equal(host.require('child', 'greeting'), 'parent');
-  assert.equal(host.allowsTool('child', 'shell'), false);
+  assert.ok(host.toolRestrictions('child').disabledTools.includes('shell'));
 
   // Adding a configured ancestor of an already mounted child must mount that ancestor immediately.
   await configure({ [workspaceKey]: workspace,

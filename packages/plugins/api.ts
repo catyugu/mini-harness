@@ -9,13 +9,14 @@ import type { Context } from 'cordis';
 import type { PluginScope } from '@mini-harness/contracts/capabilities';
 import type { ServiceMap } from '@mini-harness/contracts/plugin-sdk';
 import type { PluginApi, PluginDescriptor } from '@mini-harness/contracts/plugins';
-import { contribute, type ContributionSource } from '@mini-harness/contracts/contributions';
+import { bindContributionSource, contribute } from '@mini-harness/contracts/contributions';
 import { pluginInvocation } from './invocation.js';
 
 export interface PluginLifetime {
   scope: PluginScope;
   scopeKey?: string;
   lifetime: AbortSignal;
+  trusted: boolean;
   address(id: string): readonly string[];
   dataRoot: string;
   invalidate(): void;
@@ -36,12 +37,12 @@ export function createPluginApi(ctx: Context, { id, descriptor, config }: { id: 
   const inScope = (sessionId: string) => !scopeKey || address(sessionId).includes(scopeKey);
   const instanceId = scopeKey ? scopeKey + '/' + id : id;
   const { run, drain } = pluginInvocation(lifetime, instanceId);
-  const source: ContributionSource = Object.freeze({
+  const source = bindContributionSource({
     context: ctx, pluginId: id, instanceId, scopeKey, signal: lifetime, run,
     visible: (sessionId: string) => !lifetime.aborted && inScope(sessionId),
     depth: (sessionId: string) => scopeKey ? address(sessionId).indexOf(scopeKey) + 1 : 0,
     service: <Name extends keyof ServiceMap & string>(name: Name) => api.service(name)
-  });
+  }, state.trusted);
   const instance = scopeKey ? createHash('sha256').update(scopeKey).digest('hex') : 'application';
   const windows = process.platform === 'win32';
   const storagePath = (name: string, privateValue = false) => {

@@ -1,3 +1,4 @@
+import { toolExtensions } from '@mini-harness/contracts/tool-extensions';
 import { defineTool } from '@mini-harness/contracts/tools';
 import type { Context } from 'cordis';
 import type { PluginApi } from '@mini-harness/contracts/plugins';
@@ -30,5 +31,5 @@ export function setup(ctx: Context, api: PluginApi) {
       return { content: [{ type: 'text', text: child.text }], details: { sessionId: child.id } };
     }
   });
-  ctx.effect(() => ctx.harnessTools.register('delegate', tool, (id) => delegation.visible(id)));
+  api.contribute(toolExtensions.register, { name: 'delegate', bind: tool }, { visible: (id) => delegation.visible(id) });
 }

@@ -1,6 +1,6 @@
 import { Context } from 'cordis';
 import type { NativeAgent } from '@mini-harness/agent/agent';
-import { plugins } from './composition.js';
+import { plugins, trustedContributors } from './composition.js';
 import { SettingsManager } from '@mini-harness/settings/manager';
 import { PluginHost } from '@mini-harness/plugins/manager';
 import { RouteRegistry } from '@mini-harness/transport/http';
@@ -27,7 +27,7 @@ export class MiniHarnessRuntime {
         prepare: (id: string, signal?: AbortSignal) => this.plugins.prepare(id, signal),
         require: (id, service) => this.plugins.require(id, service),
         optional: (id, service) => this.plugins.optional(id, service),
-        allowsTool: (id: string, tool: string) => this.plugins.allowsTool(id, tool),
+        toolRestrictions: (id) => this.plugins.toolRestrictions(id),
         address: (id: string) => this.plugins.address(id),
         release: (ids: string[], workspaceId?: string) => this.plugins.release(ids, workspaceId)
       } satisfies ScopePort,
@@ -54,7 +54,7 @@ export class MiniHarnessRuntime {
     for (const [name, service] of Object.entries(root)) ctx.provide(name, service);
     this.plugins = new PluginHost(ctx, paths.plugins, plugins, Object.keys(root),
       () => this.settings, (id) => ctx.get('harnessRegistry')?.get(id), upgrade, paths.devPlugin,
-      (id, key, patch, check) => this.configuration.writePlugin(id, key, patch, this.plugins, check).then(() => {}));
+      (id, key, patch, check) => this.configuration.writePlugin(id, key, patch, this.plugins, check).then(() => {}), trustedContributors);
   }
 
   get settings() { return this.configuration.settings; }

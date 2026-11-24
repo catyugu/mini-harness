@@ -6,7 +6,6 @@ import type { ModelChoice, SessionRecord } from '@mini-harness/contracts/convers
 import type { ModelCatalogPort } from '@mini-harness/contracts/models';
 import { validateNativeMessage, validateRequestSnapshot, type LlmPort, type LlmRequest, type NativeAssistantMessage, type NativeMessage, type NativeUserMessage, type NativeToolMessage, type ToolCallPart } from '@mini-harness/contracts/llm';
 import type { PromptPort, ThinkingLevel } from '@mini-harness/contracts/agent';
-import type { ToolPort } from '@mini-harness/contracts/plugins';
 import { RunInterrupted, type StreamEvent } from '@mini-harness/contracts/transport';
 import type { Attachment, ImageInput, InputSource, PreparedMessage } from '@mini-harness/contracts/input';
 import type { SessionLogPort, MessagePatch } from '@mini-harness/contracts/session-log';
@@ -18,7 +17,7 @@ import { AgentRegistry } from './registry.js';
 import { Inbox } from './inbox.js';
 import type { ModelFailure, ModelRequestContent, ModelRequestTransform, ModelRetry, StepContext, ToolResultTransform } from '@mini-harness/contracts/extensions';
 import type { InboxItem } from '@mini-harness/contracts/session-log';
-import { isToolContent } from '@mini-harness/contracts/tools';
+import { isToolContent, type ToolPort } from '@mini-harness/contracts/tools';
 import { contentDelta } from '@mini-harness/platform/content-delta';
 import { applyTransforms } from './transforms.js';
 import { executeTool, scheduleTools } from './tool-pipeline.js';
@@ -29,7 +28,6 @@ interface AgentServices {
   models(id: string): ModelCatalogPort;
   llm(id: string): LlmPort;
   tools(id: string): ToolPort;
-  allowsTool(id: string, tool: string): boolean;
   prompt(id: string): PromptPort;
   inputHooks?(id: string): OrderedHook<InputPreparation>[];
   prepare(id: string, signal?: AbortSignal): Promise<void>;
@@ -321,14 +319,19 @@ export class NativeAgent implements AgentPort {
             transcript(log.projection().contextMessages).length / 4 > Math.max(1024, capabilities.contextWindow * .8 - capabilities.maxTokens))
           await this.compactLog(id, log, signal, true);
         const current = log.projection();
-        const tools = this.services.tools(id).forSession(id).filter((tool) => this.services.allowsTool(id, tool.name));
+        const registry = this.services.tools(id);
+        const tools = registry.forSession(id);
         const advertisedTools = new Map(tools.map((tool) => [tool.name, tool]));
         const toolMetadata = tools.map(({ name, description, parameters, label, promptSnippet, promptGuidelines }) =>
           ({ name, description, parameters, label, promptSnippet, promptGuidelines }));
         const systemPrompt = await this.services.prompt(id).build({ sessionId: id, cwd, tools: toolMetadata, signal });
-        const toolsForModel = toolMetadata.map(({ name, description, parameters }) => ({ name, description, parameters }));
         const request = await this.prepareRequest(log, step, { systemPrompt,
-          messages: current.contextMessages, thinkingLevel: current.thinkingLevel }, toolsForModel);
+          messages: current.contextMessages, thinkingLevel: current.thinkingLevel }, () => {
+          for (const [name, tool] of advertisedTools)
+            if (!registry.isAvailable(id, tool)) advertisedTools.delete(name);
+          return toolMetadata.filter(({ name }) => advertisedTools.has(name))
+            .map(({ name, description, parameters }) => ({ name, description, parameters }));
+        });
         emit({ type: 'assistant-start' });
         let result = await this.request(id, request, (text) => emit({ type: 'delta', text }));
         const knownCalls = new Set([...current.contextMessages, ...request.messages].flatMap((message) => message.role === 'assistant'
@@ -357,7 +360,6 @@ export class NativeAgent implements AgentPort {
           let originalContent: NativeToolMessage['content'] | undefined;
           emit({ type: 'tool', id: call.id, name: call.name, state: 'running', arguments: call.arguments });
           if (steering || toolSignal.aborted) output = failedTool(call, steering ? 'Skipped because a steering message arrived.' : 'Agent run cancelled');
-          else if (!this.services.allowsTool(id, call.name)) output = failedTool(call, 'Tool denied by inherited scope policy: ' + call.name);
           else {
             const hooks = this.services.toolResultHooks?.(id) ?? [];
             output = await executeTool(call, tool, {
@@ -416,9 +418,9 @@ export class NativeAgent implements AgentPort {
     }
   }
 
-  private async prepareRequest(log: SessionLogPort, context: StepContext, requestContent: ModelRequestContent, tools?: LlmRequest['tools']): Promise<LlmRequest> {
+  private async prepareRequest(log: SessionLogPort, context: StepContext, requestContent: ModelRequestContent, tools?: () => LlmRequest['tools']): Promise<LlmRequest> {
     const projected = log.projection();
-    const base = { model: context.model, tools };
+    const base = { model: context.model };
     const capabilities = this.services.models(context.sessionId).capabilities(context.model);
     const validate = (value: ModelRequestContent) => {
       if (!value || !Array.isArray(value.messages)) throw new Error('Invalid model request messages');
@@ -430,7 +432,7 @@ export class NativeAgent implements AgentPort {
     const { systemPrompt, thinkingLevel, maxTokens } = transformed;
     const input = capabilities?.input.includes('image') ? transformed.messages : withoutImages(transformed.messages);
     const snapshot: Omit<LlmRequest, 'signal' | 'sessionId'> = JSON.parse(JSON.stringify({
-      ...base, messages: input, systemPrompt, thinkingLevel, maxTokens
+      ...base, tools: tools?.(), messages: input, systemPrompt, thinkingLevel, maxTokens
     }));
     validate(snapshot);
     const patch = messagePatch(projected.contextMessages, snapshot.messages);

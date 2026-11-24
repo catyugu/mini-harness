@@ -24,7 +24,7 @@ export interface ScopePort {
   /** Read the nearest prepared Cordis service without changing a parent or sibling scope. */
   require<Name extends keyof HostServices & string>(sessionId: string | null | undefined, service: Name): NonNullable<HostServices[Name]>;
   optional<Name extends keyof HostServices & string>(sessionId: string | null | undefined, service: Name): HostServices[Name] | undefined;
-  allowsTool(sessionId: string, tool: string): boolean;
+  toolRestrictions(sessionId: string): { readOnly: boolean; disabledTools: string[] };
   address(sessionId: string): readonly string[];
   release(sessionIds: string[], workspaceId?: string): Promise<void>;
 }

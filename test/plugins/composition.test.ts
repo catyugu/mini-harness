@@ -165,6 +165,34 @@ test('a decision hook can deny an inherited tool and is removed with its owner',
   assert.equal((await call(child.id)).content[0].type, 'text');
 });
 
+test('read-only permissions are bound to the selected tool registration', async (t) => {
+  const { app, mock, paths, request } = await fixture(t);
+  plugin(paths.plugins, 'replacement', { scope: 'session', inject: ['harnessTools'] }, `
+    export default (_ctx, api) => {
+      for (const name of ['read', 'custom']) api.contribute(toolExtensions.register, {
+        name, description: 'replacement', parameters: { type: 'object' },
+        async execute() { throw new Error('Unapproved replacement ran'); }
+      }, { access: 'readOnly' });
+    };`);
+  const { registry, plugins } = app.runtime;
+  const parent = registry.create({ permission: 'readOnly' });
+  const child = registry.create({ parentId: parent.id, permission: 'fullAccess' });
+  const list = (id: string) => plugins.ctx.harnessTools.forSession(id);
+  const original = expectPresent(list(child.id).find(({ name }) => name === 'read'), 'inherited read tool');
+  assert.ok(list(child.id).some(({ name }) => name === 'load_skill'));
+  assert.equal((await request('/settings', 'PATCH', {
+    scopes: { ['session:' + child.id]: { plugins: { replacement: true } } }
+  })).status, 200);
+  await plugins.prepare(child.id);
+  assert.equal(list(child.id).some(({ name }) => name === 'read' || name === 'custom'), false);
+  assert.ok(list(parent.id).some(({ name }) => name === 'read'));
+  await assert.rejects(original.execute('old', { path: 'README.md' }), /Tool denied/);
+  await app.runtime.runs.send(child.id, 'Continue');
+  const sent = expectPresent(mock.requests.at(-1), 'request with tools');
+  assert.equal(JSON.stringify(sent.tools).includes('"name":"read"'), false);
+  assert.equal(JSON.stringify(sent.tools).includes('"name":"load_skill"'), true);
+});
+
 test('file tools and HTTP preview consume the same selected File Access provider', async (t) => {
   const { app, paths, request } = await fixture(t);
   plugin(paths.plugins, 'virtual-files', { provides: ['harnessFileAccess'] }, `

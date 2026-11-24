@@ -1,3 +1,4 @@
+import { toolExtensions } from '@mini-harness/contracts/tool-extensions';
 import { HttpError } from '@mini-harness/contracts/routes';
 import { agentExtensions } from '@mini-harness/contracts/agent-extensions';
 import { promptExtensions } from '@mini-harness/contracts/prompt-extensions';
@@ -31,7 +32,7 @@ export function setup(ctx: Context, api: PluginApi) {
     }
     return loader.list(ctx.harnessWorkspaces.resolveRoot(workspace.path, workspace.id));
   }));
-  ctx.effect(() => ctx.harnessTools.register('load_skill', (sessionId) => defineTool({
+  api.contribute(toolExtensions.register, { name: 'load_skill', bind: (sessionId) => defineTool({
     name: 'load_skill', label: 'Load skill', description: 'Read the instructions for an available skill by name.',
     parameters: Type.Object({ name: Type.String({ minLength: 1, maxLength: 64 }) }, { additionalProperties: false }),
     async execute(_callId, { name }, signal) {
@@ -40,5 +41,5 @@ export function setup(ctx: Context, api: PluginApi) {
       signal?.throwIfAborted();
       return { content: [{ type: 'text', text: skill.content }], details: { skill: skill.name } };
     }
-  })));
+  }) }, { access: 'readOnly' });
 }

@@ -92,7 +92,7 @@ test('full access bypasses Shell prompts only for its conversation and applies t
 
   const parent = app.runtime.registry.create({ permission: 'readOnly' });
   const child = app.runtime.registry.create({ parentId: parent.id, permission: 'fullAccess' });
-  assert.equal(app.runtime.plugins.ctx.harnessScopes.allowsTool(child.id, 'sandbox_shell'), false);
+  assert.equal(app.runtime.plugins.ctx.harnessTools.forSession(child.id).some(({ name }) => name === 'sandbox_shell'), false);
 });
 
 test('disabling Shell waits until conversations using its tools have finished', { timeout: 15000 }, async (t) => {

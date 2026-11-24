@@ -7,6 +7,6 @@ export const manifest: PluginDescriptor = {
   inject: ['harnessScopes'], provides: ['harnessTools'],
   setup(ctx) {
     ctx.provide('harnessTools', new ToolRegistry((id) => ctx.harnessScopes.address(id),
-      (request) => ctx.serial('harness/tool-decision', request), (id, name) => ctx.harnessScopes.allowsTool(id, name)));
+      (request) => ctx.serial('harness/tool-decision', request), (id) => ctx.harnessScopes.toolRestrictions(id)));
   }
 };

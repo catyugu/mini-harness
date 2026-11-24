@@ -13,6 +13,18 @@ export interface ContributionSource {
   run<T>(stage: string, work: (signal: AbortSignal) => T | Promise<T>, signal?: AbortSignal): Promise<T>;
 }
 
+const trustedSources = new WeakSet<ContributionSource>();
+
+export function bindContributionSource(source: ContributionSource, trusted: boolean): ContributionSource {
+  Object.freeze(source);
+  if (trusted) trustedSources.add(source);
+  return source;
+}
+
+export function isTrustedContribution(source: ContributionSource): boolean {
+  return trustedSources.has(source);
+}
+
 const register = Symbol.for('mini-harness.extension');
 
 export interface Extension<Args extends unknown[], Result> {

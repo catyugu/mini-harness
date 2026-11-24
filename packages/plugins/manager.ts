@@ -19,9 +19,6 @@ import { PluginCatalog, type PluginPlan } from './catalog.js';
 
 type MountedScope = { ctx: Context; parent: Context; scope: PluginScope; isolates: string[] };
 
-// Unknown plugin tools are not assumed to be safe in a read-only conversation.
-const readOnlyTools = new Set(['read', 'ls', 'find', 'grep', 'load_skill']);
-
 const appScope: PluginScope = { kind: 'application' };
 
 /** The descriptor and its resolved graph are the source of both server and browser mounts. */
@@ -38,7 +35,8 @@ export class PluginHost implements ScopePort {
     private readonly settings: () => Settings,
     private readonly session: (id: string) => SessionRecord | undefined,
     private readonly upgrade?: (path: string, handler: UpgradeHandler) => () => void, devPlugin?: string,
-    private readonly writePlugin?: (id: string, key: string | undefined, patch: unknown, check: () => void) => Promise<void>) {
+    private readonly writePlugin?: (id: string, key: string | undefined, patch: unknown, check: () => void) => Promise<void>,
+    private readonly trustedContributors: ReadonlySet<string> = new Set()) {
     this.catalog = new PluginCatalog(directory, builtins, rootServices, devPlugin);
     this.mounts = new PluginMounts(ctx);
     this.root = new Map(rootServices.map((name) => [name, 'application']));
@@ -142,11 +140,14 @@ export class PluginHost implements ScopePort {
     return ((scope || undefined)?.ctx ?? this.ctx).get(service) as HostServices[Name] | undefined;
   }
 
-  allowsTool(id: string, tool: string) {
-    if (this.lineage(id).some((record) => record.permission === 'readOnly') && !readOnlyTools.has(tool)) return false;
-    if (!this.started) return true;
+  toolRestrictions(id: string) {
+    const lineage = this.lineage(id);
     const { scopes } = this.settings();
-    return this.address(id).every((key) => !scopes[key]?.disabledTools?.includes(tool));
+    const keys = lineage.length ? ['workspace:' + lineage[0].workspaceId, ...lineage.map(({ id }) => 'session:' + id)] : [];
+    return {
+      readOnly: lineage.some(({ permission }) => permission === 'readOnly'),
+      disabledTools: keys.flatMap((key) => scopes[key]?.disabledTools ?? [])
+    };
   }
 
   async prepare(id: string, signal?: AbortSignal) {
@@ -210,6 +211,7 @@ export class PluginHost implements ScopePort {
       throw new Error('Export a default setup function and declare dependencies in plugin.json');
     return { inject: descriptor.inject ?? [], setup: async (ctx, lifetime, setDrain, setConfig) => {
       const runtime = createPluginApi(ctx, plan, { scope, scopeKey, lifetime,
+        trusted: !source && this.trustedContributors.has(plan.id),
         address: (id) => this.address(id),
         routes: this.ctx.get('harnessRoutes'), upgrade: this.upgrade,
         dataRoot: join(dirname(this.directory), 'plugin-data'),
