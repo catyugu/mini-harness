@@ -106,6 +106,8 @@ async function checkPackage() {
       api.service('undeclared');
       // @ts-expect-error The run scheduler is a host service.
       api.service('harnessRuns');
+      // @ts-expect-error Plugin execution operations must use the scoped binding.
+      api.service('harnessExecution').cancel('session');
     `);
     await writeFile(join(installed, 'browser-types.mts'), `
       import { settingsExtensions, slotExtensions, type FrontendSetup, type SlotRenderer } from 'mini-harness/browser-plugin';

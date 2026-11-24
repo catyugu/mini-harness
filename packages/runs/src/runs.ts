@@ -13,7 +13,7 @@ import type { StreamEvent, RunEvent } from './stream.js';
 import type { RunInfo } from '@mini-harness/sessions/run-state';
 import { RunEvents } from './events.js';
 import type { RunSelection } from './api.js';
-import { launchExecution, type ExecutionInput } from './execution.js';
+import type { ExecutionInput } from './execution.js';
 import type { SessionStore } from '@mini-harness/sessions/store';
 
 interface RunOptions {
@@ -141,7 +141,7 @@ export class Runs {
     return { info, done };
   }
 
-  [launchExecution](id: string, { message, model, attachments, thinkingLevel }: ExecutionInput,
+  submit(id: string, { message, model, attachments, thinkingLevel }: ExecutionInput,
     signal: AbortSignal, acquire?: RunOptions['acquire']) {
     const { info, done } = this.launch(id, message, undefined, { model, attachments, thinkingLevel, source: 'plugin', signal, acquire });
     return { id: info.id, result: done };

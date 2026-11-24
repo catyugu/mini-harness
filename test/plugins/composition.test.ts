@@ -68,9 +68,9 @@ test('scoped plugins inherit declared services and tool policies, and release th
   const cleaned = join(root, 'released');
   writePlugin(paths.plugins, 'workspace-greeting', { scope: 'workspace', provides: ['exampleGreeting'] }, `
     import { appendFileSync } from 'node:fs';
-    export default (_ctx, api) => {
+    export default (ctx, api) => {
       if (api.config.fail) throw new Error('Scoped setup failed');
-      api.onDispose(() => appendFileSync(${JSON.stringify(cleaned)}, 'released\\n'));
+      ctx.effect(() => () => appendFileSync(${JSON.stringify(cleaned)}, 'released\\n'));
       api.provide('exampleGreeting', { greet: (name) => api.scope.workspaceId + ':' + name });
       api.registerScopeRequest('greet', (input) => {
         api.storage.write('seen', input);

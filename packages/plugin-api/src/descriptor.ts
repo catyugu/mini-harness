@@ -78,5 +78,4 @@ export interface PluginApi {
   registerScopeRequest(name: string, handler: (input: unknown, signal: AbortSignal) => unknown | Promise<unknown>): () => Promise<void>;
   /** Mount a local authenticated WebSocket endpoint under /api/extensions/<plugin-id>/. */
   registerUpgrade(path: string, handler: UpgradeHandler): () => Promise<void>;
-  onDispose(cleanup: () => void | Promise<void>): () => Promise<void>;
 }

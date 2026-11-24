@@ -228,14 +228,14 @@ test('configuration cannot unmount an active request hook and can retry after th
   const shared = globalThis as typeof globalThis & Record<symbol, typeof state>;
   shared[key] = state;
   t.after(() => { release(); delete shared[key]; });
-  writePlugin(paths.plugins, 'slow-transform', {}, `export default (_ctx, api) => {
+  writePlugin(paths.plugins, 'slow-transform', {}, `export default (ctx, api) => {
     const state = globalThis[Symbol.for('mini-harness-test-hook-drain')];
     api.contribute(agentExtensions.modelRequest, async (_request, { signal }) => {
       signal.addEventListener('abort', state.cancelled, { once: true });
       state.entered();
       await state.hold;
     });
-    api.onDispose(() => { state.cleaned = true; });
+    ctx.effect(() => () => { state.cleaned = true; });
   };`);
   assert.equal((await request('/settings', 'PATCH', { plugins: { 'slow-transform': true } })).status, 200);
   const session = app.runtime.plugins.ctx.harnessRegistry.create();

@@ -15,13 +15,25 @@ export interface ExecutionHandle {
   readonly result: Promise<string>;
 }
 
-export const launchExecution = Symbol.for('mini-harness.launchExecution');
+export const executionForPlugin = Symbol.for('mini-harness.executionForPlugin');
 
 export interface ExecutionPort {
-  [launchExecution](id: string, input: ExecutionInput, signal: AbortSignal,
-    acquire?: (signal: AbortSignal) => Promise<() => void>): ExecutionHandle;
-  info(id: string): RunInfo | undefined;
-  cancel(id: string): boolean;
+  [executionForPlugin]: {
+    launch(id: string, input: ExecutionInput, signal: AbortSignal,
+      acquire?: (signal: AbortSignal) => Promise<() => void>): ExecutionHandle;
+    info(id: string): RunInfo | undefined;
+    cancel(id: string): boolean;
+  };
+}
+
+export interface Execution {
+  /** The run starts through normal admission. A scheduler can supply a cancellation-aware slot lease. */
+  submit(id: string, input: ExecutionInput, options?: {
+    signal?: AbortSignal;
+    acquire?: (signal: AbortSignal) => Promise<() => void>;
+  }): ExecutionHandle;
+  status(id: string): RunInfo | undefined;
+  cancel(id: string, runId: string): boolean;
 }
 
 declare module '@mini-harness/kernel/services' {
@@ -29,31 +41,26 @@ declare module '@mini-harness/kernel/services' {
 }
 
 export const executionExtensions = {
-  control: extension((source) => {
-    const execution = source.service('harnessExecution');
+  control: extension((source): Execution => {
+    const execution = source.service('harnessExecution')[executionForPlugin];
     const check = (id: string) => {
       source.signal.throwIfAborted();
       if (!source.visible(id)) throw new Error('Conversation outside plugin scope');
     };
     return {
-      submit(id: string, input: ExecutionInput, options: {
-        signal?: AbortSignal;
-        acquire?: (signal: AbortSignal) => Promise<() => void>;
-      } = {}): ExecutionHandle {
+      submit(id, input, options = {}) {
         check(id);
         const signal = options.signal ? AbortSignal.any([source.signal, options.signal]) : source.signal;
         signal.throwIfAborted();
-        const handle = execution[launchExecution](id, input, signal, options.acquire);
+        const handle = execution.launch(id, input, signal, options.acquire);
         void source.run('execute conversation', () => handle.result, options.signal).catch(() => {});
         return handle;
       },
-      status(id: string) { check(id); return execution.info(id); },
-      cancel(id: string, runId: string) {
+      status(id) { check(id); return execution.info(id); },
+      cancel(id, runId) {
         check(id);
         return execution.info(id)?.id === runId && execution.cancel(id);
       }
     };
   })
 };
-
-export type Execution = ReturnType<(typeof executionExtensions.control)[keyof typeof executionExtensions.control]>;

@@ -43,7 +43,7 @@ test('an installed Cordis plugin can use services, configure a tool, and release
     export default (ctx, api) => {
       const { config } = api;
       const sessions = api.contribute(sessionExtensions.access);
-      api.onDispose(() => appendFileSync(${JSON.stringify(log)}, 'dispose\\n'));
+      ctx.effect(() => () => appendFileSync(${JSON.stringify(log)}, 'dispose\\n'));
       api.contribute(toolExtensions.register, {
         name: 'example_count', label: 'Count', description: 'Count sessions',
         parameters: { type: 'object', properties: {} },
@@ -194,7 +194,7 @@ test('dependent plugins restart in order and partial setup or persistence failur
       import { appendFileSync } from 'node:fs';
       export default (ctx, api) => {
         appendFileSync(${JSON.stringify(log)}, 'start ${id}\\n');
-        api.onDispose(() => appendFileSync(${JSON.stringify(log)}, 'stop ${id}\\n'));
+        ctx.effect(() => () => appendFileSync(${JSON.stringify(log)}, 'stop ${id}\\n'));
         api.contribute(toolExtensions.register, { name: '${id}_tool', description: 'Fixture', parameters: {type: 'object', properties: {}},
           execute: async () => ({content: [{type: 'text', text: String(api.config.value ?? 'original')}]}) });
         if (api.config.fail) throw new Error('Partial setup failed');
@@ -326,8 +326,8 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
       configSchema: { type: 'object', properties: { value: { type: 'string' } }, required: ['value'] },
       setup(_ctx, api) { api.provide('greeting', String(api.config.value)); } },
     { id: 'layer', scope: 'session', title: 'Layer', description: '', provides: ['greeting'],
-      setup(_ctx, api) {
-        api.onDispose(() => { released.push(String(api.config.value)); });
+      setup(ctx, api) {
+        ctx.effect(() => () => { released.push(String(api.config.value)); });
         if (api.config.fail) throw new Error('Scoped setup failed');
         api.provide('greeting', String(api.config.value));
       } }

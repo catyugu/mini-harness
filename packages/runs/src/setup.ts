@@ -4,7 +4,7 @@ import type {} from '@mini-harness/kernel/scopes';
 import type {} from '@mini-harness/kernel/mutation-api';
 import type { Context } from 'cordis';
 import { registerRoutes } from './routes.js';
-import { launchExecution } from './execution.js';
+import { executionForPlugin } from './execution.js';
 import { Runs } from './runs.js';
 
 export function setup(ctx: Context) {
@@ -13,9 +13,11 @@ export function setup(ctx: Context) {
     (source) => ctx.bail('harness/run-selection', source));
   ctx.provide('harnessRuns', runs);
   ctx.provide('harnessExecution', {
-    [launchExecution]: runs[launchExecution].bind(runs),
-    info: (id: string) => runs.info(id),
-    cancel: (id: string) => runs.cancel(id)
+    [executionForPlugin]: {
+      launch: runs.submit.bind(runs),
+      info: (id: string) => runs.info(id),
+      cancel: (id: string) => runs.cancel(id)
+    }
   });
   ctx.effect(() => () => runs.stop());
   ctx.on('harness/quiesce', () => runs.stop());

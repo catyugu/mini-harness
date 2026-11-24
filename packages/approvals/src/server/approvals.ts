@@ -20,7 +20,7 @@ export class Approvals {
     const key = context === undefined ? undefined : JSON.stringify([sessionId, plugin, context, message]);
     if (runId && key && this.denials.get(runId)?.has(key)) return Promise.reject(new ToolApprovalDenied('Operation denied by user'));
     return new Promise<boolean>((resolve, reject) => {
-      const info = { id: randomUUID(), sessionId, runId, title, message, createdAt: new Date().toISOString() };
+      const info = { id: randomUUID(), sessionId, runId, plugin, title, message, createdAt: new Date().toISOString() };
       const finish = (decision: Decision) => {
         this.pending.delete(info.id); clearTimeout(timer); signal?.removeEventListener('abort', abort);
         this.changed(sessionId);

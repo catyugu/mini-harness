@@ -174,8 +174,7 @@ export function createPluginApi(ctx: Context, { id, descriptor, config }: { id: 
         lifetime.addEventListener('abort', release, { once: true });
         return () => { lifetime.removeEventListener('abort', release); release(); };
       });
-    },
-    onDispose: (dispose) => ctx.effect(() => dispose)
+    }
   };
   return { api, drain, async updateConfig(next: Record<string, unknown>) {
     const config = Object.freeze(structuredClone(next));

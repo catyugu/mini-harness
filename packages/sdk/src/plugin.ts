@@ -33,7 +33,7 @@ export { toolExtensions } from '@mini-harness/tools/extensions';
 export { approvalExtensions } from '@mini-harness/approvals/api';
 export type { ApprovalPrompt } from '@mini-harness/approvals/api';
 export { executionExtensions } from '@mini-harness/runs/execution';
-export type { ExecutionInput, ExecutionHandle } from '@mini-harness/runs/execution';
+export type { Execution, ExecutionInput, ExecutionHandle } from '@mini-harness/runs/execution';
 export type { RunInfo } from '@mini-harness/sessions/run-state';
 export type { SessionAccess } from '@mini-harness/sessions/records';
 export { sessionExtensions } from '@mini-harness/sessions/records';

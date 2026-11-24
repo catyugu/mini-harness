@@ -70,7 +70,7 @@ export default function setup(_ctx, api) {
 | `registerRoute(method, path, handler)` | Authenticated route under `/api/extensions/<id>`. Handler receives URL, `body(maxBytes?)` and `signal`. Application scope only. |
 | `prepareSession(id, signal)`, `scopedService(id, service)` | Prepare and resolve a declared service in a visible conversation. Tool handlers already run in a prepared scope. |
 | `registerScopeRequest(name, handler)` | Registers an authenticated operation for one mounted workspace or session instance. |
-| `onDispose(cleanup)` | Register sync or async cleanup |
+| `ctx.effect(() => cleanup)` | Bind cleanup to the Cordis setup fiber. Setup may also return cleanup. |
 
 Return JSON from route handlers and honor their cancellation signals. Use the plugin lifetime signal for other work owned by setup. Use the credential or secret store for sensitive values.
 
