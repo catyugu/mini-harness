@@ -48,7 +48,6 @@ export function conversationView(api: FrontendApi, state: ConversationSelection,
         <div id="workspaceWelcome"></div>
       </section>
       <div id="runSummary" class="run-summary" aria-label="Latest run" hidden><span></span><time></time><details id="changedFiles" hidden><summary></summary><ul></ul></details></div>
-      <div id="conversationRecords" class="conversation-records" hidden></div>
       <div id="conversationHistory" hidden><section id="messages" class="messages" aria-label="Messages"></section></div>
       <div class="composer-wrap">
         <div id="approvalRequests" class="approval-requests"></div>
@@ -96,7 +95,6 @@ export function conversationView(api: FrontendApi, state: ConversationSelection,
 
   const messages = element('messages');
   const historyOutlet = element('conversationHistory');
-  const recordOutlet = element('conversationRecords');
   messages.remove();
   api.contribute(slotExtensions.define, 'conversation.history', historyOutlet, 'single');
   api.contribute(slotExtensions.keyed, 'conversation.history', 'history', () => messages);
@@ -251,6 +249,7 @@ export function conversationView(api: FrontendApi, state: ConversationSelection,
   }
 
   let displayRecords: SessionDisplayRecord[] = [];
+  let recordHistory: ConversationView['messages'] = [];
   let recordView = new AbortController();
   api.onDispose(() => recordView.abort());
   function refreshRecords() {
@@ -258,15 +257,19 @@ export function conversationView(api: FrontendApi, state: ConversationSelection,
     recordView = new AbortController();
     const sessionId = active();
     const signal = recordView.signal;
-    recordOutlet.replaceChildren(...(sessionId ? displayRecords.map((record) => {
-      const node = options.renderRecord(record, { sessionId, signal });
-      if (node) return node;
-      const fallback = document.createElement('p');
-      fallback.className = 'hint';
-      fallback.textContent = record.title;
-      return fallback;
-    }) : []));
-    recordOutlet.hidden = !recordOutlet.childElementCount;
+    messageView.placeRecords(sessionId ? displayRecords.map((record) => {
+      const node = document.createElement('div');
+      node.className = 'conversation-record';
+      const rendered = options.renderRecord(record, { sessionId, signal });
+      if (rendered) node.append(rendered);
+      else {
+        const fallback = document.createElement('p');
+        fallback.className = 'hint';
+        fallback.textContent = record.title;
+        node.append(fallback);
+      }
+      return { record, node };
+    }) : [], recordHistory);
   }
 
   function showWelcome(show: boolean) {
@@ -304,6 +307,7 @@ export function conversationView(api: FrontendApi, state: ConversationSelection,
     state.selectConversation(item, revealWorkspace);
     messageView.history(history, item?.run?.state === 'failed' ? item.run.error : undefined, switched);
     displayRecords = view?.records ?? [];
+    recordHistory = history;
     refreshRecords();
     showWelcome(!messages.childElementCount && !displayRecords.length && !isRunning(item?.run));
   }
@@ -438,6 +442,7 @@ export function conversationView(api: FrontendApi, state: ConversationSelection,
         case 'error': showStatus(''); break;
         case 'run':
         case 'snapshot':
+          if (event.type === 'snapshot') { recordHistory = event.messages; refreshRecords(); }
           showRunSummary(event.run);
           if (!isRunning(event.run)) {
             setSending(false);
@@ -525,6 +530,7 @@ export function conversationView(api: FrontendApi, state: ConversationSelection,
         const item = await controller.read(id, signal);
         if (!signal.aborted && id === active()) {
           displayRecords = item.records;
+          recordHistory = item.messages;
           refreshRecords();
           showWelcome(!messages.childElementCount && !displayRecords.length && !isRunning(item.run));
         }

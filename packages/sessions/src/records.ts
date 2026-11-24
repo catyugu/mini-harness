@@ -4,6 +4,7 @@ import type { SessionRecord } from './shared/identity.js';
 import { extension } from '@mini-harness/kernel/contributions';
 
 export interface RecordDisplay { title: string; content?: unknown }
+export interface RecordOwner { pluginId: string; instanceId: string }
 
 export interface SessionRecords {
   list(): { id: string; timestamp: string; data: unknown }[];
@@ -31,7 +32,7 @@ export const sessionAccess = Symbol.for('mini-harness.sessionAccess');
 
 interface SessionDirectory {
   [sessionAccess]: SessionAccess;
-  [recordsForPlugin](id: string, pluginId: string, instanceId: string): SessionRecords;
+  [recordsForPlugin](id: string, owner: RecordOwner): SessionRecords;
 }
 
 declare module 'cordis' {
@@ -67,7 +68,7 @@ export const sessionExtensions = {
     const sessions = source.service('harnessSessions');
     const records = (id: string) => {
       if (!source.visible(id)) throw new Error('Conversation outside plugin scope');
-      return sessions[recordsForPlugin](id, source.pluginId, source.instanceId);
+      return sessions[recordsForPlugin](id, { pluginId: source.pluginId, instanceId: source.instanceId });
     };
     return {
       list: (id: string) => source.run('read session records', () => records(id).list()),

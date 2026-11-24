@@ -1,4 +1,5 @@
 import { layoutExtensions } from '@mini-harness/ui-layout/browser/api';
+import type { SessionDisplayRecord } from '@mini-harness/sessions/display-record';
 import type { MessageContent, ViewMessage } from '@mini-harness/sessions/message';
 import type { RunEvent } from '@mini-harness/runs/stream';
 import type { ConversationView } from '../../shared/api.js';
@@ -348,6 +349,30 @@ function history(entries: ViewMessage[], error?: string, reset = false) {
   }, reset);
 }
 
+/** Insert business nodes in the branch, without discarding the live response or tool cards. */
+function placeRecords(records: { record: SessionDisplayRecord; node: HTMLElement }[], entries: ViewMessage[]) {
+  preserveScroll(() => {
+    for (const node of messages.querySelectorAll('[data-conversation-record]')) node.remove();
+    const positions = new Map<string, HTMLElement | undefined>();
+    let previous: HTMLElement | undefined;
+    for (const { id } of entries) {
+      if (!id) continue;
+      const node = saved.get(id)?.node;
+      if (node?.parentElement === messages) previous = node;
+      positions.set(id, previous);
+    }
+    const placed = new Map<HTMLElement | undefined, HTMLElement>();
+    for (const { record, node } of records) {
+      node.dataset.conversationRecord = record.id;
+      const anchor = record.afterMessageId ? positions.get(record.afterMessageId) : undefined;
+      const tail = placed.get(anchor) ?? anchor;
+      if (tail) tail.after(node);
+      else messages.prepend(node);
+      placed.set(anchor, node);
+    }
+  });
+}
+
 function errorEntry(error: string) {
   const container = document.createElement('div');
   const bubble = addMessage('error', error, undefined, undefined, container);
@@ -421,5 +446,5 @@ function stream(initial: ConversationView) {
   });
 }
 
-return { textOf, history, stream, refreshTools, refreshActions };
+return { textOf, history, stream, placeRecords, refreshTools, refreshActions };
 }

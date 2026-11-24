@@ -5,7 +5,7 @@ import type {} from '@mini-harness/kernel/scopes';
 import type {} from '@mini-harness/kernel/mutation-api';
 import type {} from '@mini-harness/transport/routes';
 import type {} from '@mini-harness/settings/api';
-import { recordsForPlugin, sessionAccess, type SessionAccess } from './records.js';
+import { recordsForPlugin, sessionAccess, type RecordOwner, type SessionAccess } from './records.js';
 import type { Context } from 'cordis';
 import { SessionRegistry } from './registry.js';
 
@@ -43,7 +43,7 @@ export function setup(ctx: Context) {
         }, true) ?? { messages: [], leafId: null };
       }
     } satisfies SessionAccess,
-    [recordsForPlugin]: (id: string, pluginId: string, instanceId: string) => registry.records(id, pluginId, instanceId)
+    [recordsForPlugin]: (id: string, owner: RecordOwner) => registry.records(id, owner)
   });
   ctx.effect(() => () => registry.dispose());
 }
