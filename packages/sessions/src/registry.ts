@@ -8,7 +8,7 @@ import { writeJson } from '@mini-harness/platform/json';
 import type { Paths } from '@mini-harness/platform/runtime-paths';
 import type { SessionStore } from './store.js';
 import type { WorkspacePort } from '@mini-harness/workspaces/api';
-import type { RecordDisplay, SessionRecords } from './records.js';
+import type { RecordDisplay, RecordOwner, SessionRecords } from './records.js';
 import type { ScopePort } from '@mini-harness/kernel/scopes';
 import type { CapabilityObservation } from '@mini-harness/kernel/observations';
 import type { ConversationPermission, SessionRecord } from './shared/identity.js';
@@ -150,7 +150,7 @@ export class SessionRegistry implements SessionStore {
       const inbox = entry.type.startsWith('inbox-');
       if (inbox || entry.type === 'message' && entry.inboxId) this.notify(id, false, true);
       if (!inbox && entry.type !== 'model-request' && entry.type !== 'tool-schema')
-        this.notify(id, false, false, entry.type === 'custom' && entry.namespace.startsWith('display:'));
+        this.notify(id, false, false, entry.type === 'plugin-record' && entry.display !== undefined);
     };
     let log: SessionLog | undefined;
     try {
@@ -217,25 +217,19 @@ export class SessionRegistry implements SessionStore {
     }
   }
 
-  records(id: string, plugin: string, instance: string): SessionRecords {
+  records(id: string, owner: RecordOwner): SessionRecords {
     this.assertAvailable(id);
     if (!this.get(id)) throw new DomainError('not_found', 'Conversation not found');
-    const displayNamespace = 'display:' + instance;
     return {
       list: () => this.inspectLog(id, (log) => log.branch().flatMap((entry) => {
-        if (entry.type !== 'custom') return [];
-        if (entry.namespace === displayNamespace)
-          return [{ id: entry.id, timestamp: entry.timestamp, data: structuredClone((entry.data as { data: unknown })?.data) }];
-        if (entry.namespace === instance || entry.namespace === plugin)
-          return [{ id: entry.id, timestamp: entry.timestamp, data: structuredClone(entry.data) }];
-        return [];
+        return entry.type === 'plugin-record' && entry.owner.instanceId === owner.instanceId && entry.owner.pluginId === owner.pluginId
+          ? [{ id: entry.id, timestamp: entry.timestamp, data: structuredClone(entry.data) }] : [];
       }), true) ?? [],
       append: async (data, display?: RecordDisplay) => {
         this.assertAvailable(id);
         if (display && (typeof display.title !== 'string' || !display.title.trim() || display.title.length > 140))
           throw new DomainError('invalid_input', 'Invalid session display title');
-        const value: unknown = JSON.parse(JSON.stringify(display ? { data, display } : data));
-        return this.log(id).append({ type: 'custom', namespace: display ? displayNamespace : instance, data: value }).id;
+        return this.log(id).append({ type: 'plugin-record', owner, data, display }).id;
       }
     };
   }
@@ -326,7 +320,7 @@ export class SessionRegistry implements SessionStore {
       return { id, workspaceId: record.workspaceId };
     });
     if (all.length) {
-      const locations = all.map((id) => ({ id, keys: this.scopes?.address(id) ?? [] }));
+      const locations = all.map((id) => ({ id, keys: this.scopes?.address(`session:${id}`) ?? [] }));
       this.commit({ ...this.state, sessions: this.state.sessions.filter((entry) => !chosen.has(entry.id)), pendingDelete });
       await this.recoverDeletion();
       for (const { id, keys } of locations) {

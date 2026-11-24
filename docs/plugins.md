@@ -63,7 +63,7 @@ export default function setup(_ctx, api) {
 | `config`, `scope`, `signal` | Validated setup settings, scope address and lifetime signal |
 | `configuration.get(key)`, `.subscribe(key, listener)` | Read a field or listen for committed changes in this instance’s namespace and scope |
 | `configuration.set(key, value)`, `.patch(values)` | Validate and save fields in one transaction. The server SDK requires `configChanges: 'live'` for writes. |
-| `provide(name, service)` | Publish a declared service for Cordis consumers |
+| `ctx.provide(name, service)` | Publish a declared service directly through Cordis |
 | `service(name)` | Read a declared required service or fail with its name |
 | `optionalService(name)` | Read a service declared in `optional` |
 | `contribute(point, ...args)` | Register through a typed extension point owned by a capability. The host binds scope, identity and lifetime. |
@@ -74,10 +74,10 @@ export default function setup(_ctx, api) {
 
 Return JSON from route handlers and honor their cancellation signals. Use the plugin lifetime signal for other work owned by setup. Use the credential or secret store for sensitive values.
 
-For TypeScript, `api.service('harnessLlm')` infers `LlmPort`. Declare your own names in the public service map. Declare the same names in the plugin descriptor so the host can validate them when it mounts the plugin.
+For TypeScript, `api.service('harnessLlm')` infers `LlmPort`. Declare your own names once in the public service map; the same augmentation types the Cordis context. Declare the same names in the plugin descriptor so the host can validate them when it mounts the plugin.
 
 ```ts
-import type { PluginApi } from 'mini-harness/plugin';
+import type { Context, PluginApi } from 'mini-harness/plugin';
 
 declare module 'mini-harness/plugin' {
   interface ServiceMap {
@@ -85,8 +85,8 @@ declare module 'mini-harness/plugin' {
   }
 }
 
-export default function setup(_ctx: unknown, api: PluginApi) {
-  api.provide('greetings', { hello: (name) => 'Hello, ' + name });
+export default function setup(ctx: Context, _api: PluginApi) {
+  ctx.provide('greetings', { hello: (name: string) => 'Hello, ' + name });
 }
 ```
 
@@ -124,11 +124,11 @@ export default function setup(_ctx: unknown, api: PluginApi) {
 
 Ordered transforms and decisions take an optional numeric order after the handler. They run in ascending order, then by plugin instance ID and registration order. The host copies transform data before invocation. Returning `undefined` discards any edits to the copy. Async callbacks receive a signal combining task cancellation with plugin unload. Unload stops new calls and waits for existing callbacks to settle before disposal.
 
-Tool names contain 1–64 letters, digits, underscores or hyphens. Duplicate names in the same scope are rejected. A nearer registration shadows an inherited tool. Authorization checks the selected registration, including when a permission changes while a decision is pending. Tool execution is serial unless `isConcurrencySafe(args)` opts a call into parallel execution. Consecutive opted-in calls can overlap up to a limit of 16. The scheduler waits at serial boundaries and persists results before publishing completion.
+Tool names contain 1–64 letters, digits, underscores or hyphens. Duplicate names in the same scope are rejected. A nearer registration shadows an inherited tool. Authorization checks the selected registration, including when a permission changes while a decision is pending. Users can grant an installed plugin's declared read-only tools in that plugin's Settings detail and revoke grants there. Tool execution is serial unless `isConcurrencySafe(args)` opts a call into parallel execution. Consecutive opted-in calls can overlap up to a limit of 16. The scheduler waits at serial boundaries and persists results before publishing completion.
 
 ## Session record projections
 
-Declare `harnessSessions` in `inject` to use `sessionExtensions.access` for a visible session directory, child creation and read-only history. Acquire a record handle through `sessionExtensions.records`. The handle reads and appends this plugin's namespaced data on the active branch. A projection starts with a fresh initial value on each read and folds the branch with a synchronous reducer. Pass `{ title, content }` as the third argument to `append` to publish a browser record. Keep private business data in the second argument. Display records follow the active branch and remain available when the plugin is disabled. Dispose a projection early with `dispose()` or let plugin unload release it.
+Declare `harnessSessions` in `inject` to use `sessionExtensions.access` for a visible session directory, child creation and read-only history. Acquire a record handle through `sessionExtensions.records`. The handle reads and appends this plugin instance's records on the active branch. A projection starts with a fresh initial value on each read and folds the branch with a synchronous reducer. Pass `{ title, content }` as the third argument to `append` to publish a browser record. Keep private business data in the second argument. Display records follow the active branch and remain available when the plugin is disabled. Dispose a projection early with `dispose()` or let plugin unload release it.
 
 ```js
 import { sessionExtensions } from 'mini-harness/plugin';
@@ -278,7 +278,7 @@ Mount HTTP routes with `api.registerRoute` and local WebSocket endpoints with `a
 
 ## Execute tasks and request confirmation
 
-Declare `harnessExecution` and acquire `api.contribute(executionExtensions.control)`. Submit a message with `submit(sessionId, input, { signal })` and await the returned handle’s `result`. Use `status(sessionId)` and `cancel(sessionId, runId)` for the current execution. Runs owns admission, durable state and cancellation. Plugin unload cancels submissions made through this interface. Use `sessionExtensions.access` to create a child and obtain the parent’s committed model.
+Declare `harnessExecution` and acquire `api.contribute(executionExtensions.control)`. Submit a message with `submit(sessionId, input, { signal })` and await the returned handle’s `result`. Use `status(sessionId)` for visible conversation state and `handle.cancel()` to cancel only the submitted execution. A handle cannot cancel a later run. Runs owns admission, durable state and cancellation. Plugin unload cancels submissions made through this interface. Use `sessionExtensions.access` to create a child and obtain the parent’s committed model.
 
 Declare `harnessApprovalRequests` and acquire `api.contribute(approvalExtensions.request)`. Supply a conversation ID, title and message. The returned promise settles when the user decides or the request expires, and follows the supplied signal, active run and plugin lifetime.
 
@@ -288,6 +288,6 @@ Export a synchronous `validateConfig(values, context)` next to the default serve
 
 Copy [Task notes](examples/task-notes) into an independent directory called `task-notes`, run `npm install` and `npm run build`, then load it with `MINI_HARNESS_DEV_PLUGIN` set to the absolute directory and enable it in Plugins. The example uses both published SDKs, a tool, its own service, grouped settings, private storage, a record renderer and a controlled child execution. Inspect setup failures and scope details in Plugins.
 
-Use `conversationExtensions.record` for display records. The renderer gets an abort signal for the current render. To replace a component, use `slotExtensions.keyed` with `conversation.history` and key `history`, or `conversation.composer-view` and key `composer`. Declare the feature dependency through `miniMessages` or `miniComposer` so the default outlet mounts first.
+Use `conversationExtensions.record` for display records. The renderer gets an abort signal for the current render. To replace a component, use `slotExtensions.keyed` with `conversation.history` and key `history`, or `conversation.composer-view` and key `composer`. Declare `miniMessages` or `miniComposer` for contributions to the corresponding feature, and `miniConversation` to read the shared conversation state or submit, queue, cancel and revise messages from a replacement view. The selected renderer alone owns its DOM, listeners and render signal. Keyed slots prefer higher order and then the most recent registration; removing the replacement remounts the previous renderer. Tool and record renderer registrations likewise restore the previous registration on removal. Commands and message actions reject duplicate IDs.
 
 For scoped browser operations, call `api.scopeRequest(pluginId, { kind, id }, operation, input, signal)`. The server resolves the exact target instance. `api.watchScope(pluginId, { kind, id }, refresh)` follows invalidations for that address and refreshes on reconnect. The scoped server plugin registers handlers with `registerScopeRequest` and publishes changes with `api.invalidate()`.

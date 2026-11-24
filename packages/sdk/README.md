@@ -12,7 +12,7 @@ Collects the capability APIs, types and extension points that external server an
 
 ## API
 
-Install `mini-harness` and import `mini-harness/plugin` or `mini-harness/browser-plugin`. See the [plugin guide](../../docs/plugins.md) for examples.
+Install `mini-harness` and import `mini-harness/plugin` or `mini-harness/browser-plugin`. Publish services using Cordis `ctx.provide`; the public `ServiceMap` augmentation also types the server Context. Execution handles cancel only their own run. See the [plugin guide](../../docs/plugins.md) for examples.
 
 ## Dependencies
 

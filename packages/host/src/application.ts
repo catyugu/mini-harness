@@ -55,7 +55,8 @@ export class MiniHarnessRuntime {
     try {
       await this.plugins.ctx.parallel('harness/quiesce');
     } finally {
-      await Promise.all([this.mutations.close(), this.configuration.close()]);
+      await this.mutations.close();
+      await this.configuration.close();
       await this.plugins.close();
     }
   }

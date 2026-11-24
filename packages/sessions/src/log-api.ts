@@ -1,3 +1,5 @@
+import type { RecordDisplay, RecordOwner } from './records.js';
+import type { SessionDisplayRecord } from './shared/display-record.js';
 import type { QueueEntry } from './shared/queue.js';
 import type { ContentDelta } from './content-delta.js';
 import type { ThinkingLevel, ModelChoice, ToolSchema } from '@mini-harness/llm/vocabulary';
@@ -41,6 +43,7 @@ export type SessionEvent =
   | { type: 'model'; model: ModelChoice }
   | { type: 'thinking'; level: ThinkingLevel | null }
   | { type: 'custom'; namespace: string; data: unknown }
+  | { type: 'plugin-record'; owner: RecordOwner; data: unknown; display?: RecordDisplay }
   | { type: 'compaction'; summary: string; keepFromId: string | null; tokensBefore?: number }
   | { type: 'context-edit'; targetId: string; replacement: NativeMessage['content'] | null }
   | { type: 'inbox-enqueued'; item: InboxItem }
@@ -60,6 +63,7 @@ export type SessionEntry = SessionEvent & {
 export interface SessionProjection {
   leafId: string | null;
   messages: ViewMessage[];
+  records: SessionDisplayRecord[];
   /** Selected branch after the latest compaction, including its summary. */
   contextMessages: NativeMessage[];
   /** Stable source identity parallel to contextMessages; summaries use their compaction event ID. */

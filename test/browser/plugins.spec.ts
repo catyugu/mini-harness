@@ -278,11 +278,20 @@ test('unmounting browser plugins releases pages and restores replaced slot contr
   try {
     const folder = join(paths.plugins, 'replace-new');
     mkdirSync(folder);
-    writeJson(join(folder, 'plugin.json'), { browserInject: ['miniSlots', 'miniPrimitives', 'miniComposer'] });
+    writeJson(join(folder, 'plugin.json'), { browserInject: ['miniSlots', 'miniPrimitives', 'miniComposer', 'miniConversation'] });
     writeFileSync(join(folder, 'web.js'), `import { slotExtensions } from '/packages/ui-runtime/plugin-sdk.js';
-    export default ({ miniPrimitives }, api) => {
-      api.contribute(slotExtensions.keyed, 'conversation.composer-view', 'composer',
-        () => miniPrimitives.status('Replacement composer'));
+    export default ({ miniPrimitives, miniConversation }, api) => {
+      api.contribute(slotExtensions.keyed, 'conversation.composer-view', 'composer', signal => {
+        const button = miniPrimitives.button('Replacement composer', 'quiet');
+        button.addEventListener('click', () => void miniConversation.submit({ message: 'Hello from replacement' }).catch(miniConversation.report), { signal });
+        return button;
+      });
+      api.contribute(slotExtensions.keyed, 'conversation.history', 'history', signal => {
+        const node = miniPrimitives.status('Replacement history');
+        const render = () => { node.textContent = 'Replacement history: ' + (miniConversation.get().run?.state ?? 'idle'); };
+        miniConversation.subscribe(render, signal); render();
+        return node;
+      });
       api.contribute(slotExtensions.keyed, 'sidebar.primary', 'new-conversation', signal => {
         const button = miniPrimitives.button('Replacement conversation', 'quiet');
         window.addEventListener('slot-test', () => {
@@ -298,6 +307,9 @@ test('unmounting browser plugins releases pages and restores replaced slot contr
     await expect(page.getByRole('button', { name: 'Replacement conversation' })).toBeVisible();
     await expect(page.getByText('Replacement composer')).toBeVisible();
     await expect(page.getByRole('textbox', { name: 'Message' })).toHaveCount(0);
+    await expect(page.locator('.message-image-dialog')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Replacement composer' }).click();
+    await expect(page.getByText('Replacement history: completed')).toBeVisible();
     await expect(page.getByRole('button', { name: 'New conversation', exact: true })).toHaveCount(0);
     await page.evaluate(() => window.dispatchEvent(new Event('slot-test')));
     await expect(page.locator('body')).toHaveAttribute('data-slot-events', '1');
@@ -317,6 +329,8 @@ test('unmounting browser plugins releases pages and restores replaced slot contr
     await expect(page.getByRole('button', { name: 'Replacement conversation' })).toHaveCount(0);
     await expect(page.getByText('Replacement composer')).toHaveCount(0);
     await expect(page.getByRole('textbox', { name: 'Message' })).toBeVisible();
+    await expect(page.locator('.message-image-dialog')).toHaveCount(1);
+    await expect(page.locator('#messages .message.user').getByText('Hello from replacement', { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'New conversation', exact: true })).toBeVisible();
     await expect(page.locator('body')).toHaveAttribute('data-slot-disposed', 'yes');
     await page.evaluate(() => window.dispatchEvent(new Event('slot-test')));

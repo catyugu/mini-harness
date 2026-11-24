@@ -61,7 +61,7 @@ it never retries an unknown tool outcome automatically.
 ## Conversation branches and projections
 
 The event stream has one append sequence and a selected conversation branch.
-Messages, model choices, thinking settings, custom records, compactions, context
+Messages, model choices, thinking settings, plugin records, internal audit records, compactions, context
 edits and branch selections advance the conversation leaf. Run and inbox records
 advance only the sequence. Operational changes therefore cannot invalidate a
 user's edit merely because a run was reserved or another input was queued.
@@ -86,8 +86,7 @@ The read projection exposes:
 Compaction stores a summary and a retained-entry boundary. It changes model
 context without deleting or renumbering the visible conversation. Context edits
 can replace or omit a message's contribution to model context while preserving
-the original message in the conversation projection. Custom plugin records are
-namespaced and follow the selected branch.
+the original message in the conversation projection. Plugin records have a single explicit instance owner and follow the selected branch.
 
 User presentation is stored separately from the accepted model input. Preparation can
 change the model-visible content while the interface keeps the submitted text and
@@ -126,4 +125,4 @@ cascades through its conversations while retaining the user's project files.
 There is no archive state.
 
 
-Plugin records use the existing custom record envelope. New scoped writes include the instance address in the namespace. A display record includes a separate title and optional browser payload. The browser receives only the explicitly supplied display data, and model context omits these records. Deleting its owning conversation removes both the records and private data for that session’s plugin instances.
+Plugin records use a dedicated event with an explicit owner (plugin ID and instance ID), data, and optional display metadata. The storage reader converts old custom record envelopes after validating their original checksums, retaining IDs, parents and payloads; an unscoped historical record belongs only to the application instance. The browser receives the explicitly supplied display data and the preceding message identity on the selected branch. Model context omits these records. Deleting its owning conversation removes both the records and private data for that session’s plugin instances.

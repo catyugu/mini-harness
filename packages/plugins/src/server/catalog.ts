@@ -39,12 +39,15 @@ export interface PluginPlan {
 export class PluginCatalog {
   readonly builtins: Map<string, DiscoveredPlugin>;
   readonly requiredServices: ReadonlySet<string>;
+  readonly requiredBrowserServices: ReadonlySet<string>;
   private readonly protectedServices: Set<string>;
   constructor(private readonly directory: string, builtins: PluginDescriptor[], rootServices: string[],
     private readonly devPlugin?: string, private readonly protectedProviders: ReadonlyMap<string, string> = new Map()) {
     this.builtins = new Map(builtins.map((plugin) => [plugin.id, { ...plugin, resources: builtinBrowserAssets(plugin) }]));
     this.requiredServices = new Set(builtins.filter(({ required, scope }) => required && scope === 'application')
       .flatMap(({ provides }) => provides ?? []));
+    this.requiredBrowserServices = new Set(builtins.filter(({ required, scope }) => required && scope === 'application')
+      .flatMap(({ browserProvides }) => browserProvides ?? []));
     this.protectedServices = new Set([...rootServices, ...protectedProviders.keys()]);
     if (this.builtins.size !== builtins.length) throw new Error('Duplicate builtin plugin ID');
     const services = new Set(builtins.flatMap(({ provides }) => provides ?? []));

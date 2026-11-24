@@ -12,7 +12,7 @@ export const manifest: PluginDescriptor = {
     ctx.provide('harnessProcess', {
       async run(request: Parameters<typeof executeProcess>[0]) {
         const signal = request.signal ? AbortSignal.any([api.signal, request.signal]) : api.signal;
-        const environment = ctx.harnessScopes.require(request.sessionId, 'harnessSandbox');
+        const environment = ctx.harnessScopes.require(request.sessionId ? `session:${request.sessionId}` : undefined, 'harnessSandbox');
         const running = executeProcess({ ...request, signal }, environment);
         active.add(running);
         try { return await running; }

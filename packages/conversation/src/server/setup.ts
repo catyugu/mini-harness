@@ -5,16 +5,12 @@ import type {} from '@mini-harness/approvals/api';
 import type {} from '@mini-harness/models/api';
 import type { ConversationView } from '../shared/api.js';
 import type { Context } from 'cordis';
-import { projectHistory, projectRecords, projectToolEvent } from './display-extensions.js';
+import { projectHistory, projectToolEvent } from './display-extensions.js';
 import { projectSession } from './navigation.js';
 import { registerSessionRoutes } from './routes.js';
 
 export function setup(ctx: Context) {
   const changes = ctx.harnessChanges;
-  ctx.on('harness/run-selection', (source) => ({
-    fallback: ctx.harnessModelPreference.recent(),
-    acceptedModel: source === 'user' ? ctx.harnessModelPreference.remember : undefined
-  }));
   ctx.effect(() => changes.register('sessions'));
   ctx.effect(() => changes.register('queue'));
   ctx.effect(() => changes.register('conversation-records'));
@@ -38,7 +34,7 @@ export function setup(ctx: Context) {
     if (!record) throw new Error('Conversation not found');
     const { harnessRegistry: sessions, harnessModelPreference, harnessRuns } = ctx;
     sessions.assertAvailable(id);
-    const history = sessions.inspectLog(id, (log) => ({ ...log.projection(), queue: log.queue(), records: projectRecords(log.branch()) }));
+    const history = sessions.inspectLog(id, (log) => ({ ...log.projection(), queue: log.queue() }));
     const { partial, tools } = harnessRuns.activity(id);
     return { ...projectSession(ctx, record),
       messages: projectHistory(ctx, id, history?.messages ?? []), leafId: history?.leafId ?? null,

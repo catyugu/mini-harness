@@ -13,7 +13,7 @@ export function setup(ctx: Context) {
   const catalog = new WorkspaceCatalog(ctx.harnessState.paths);
   ctx.effect(() => ctx.harnessScopes.register('workspace', (id) => catalog.list().some((entry) => entry.id === id)
     ? { scope: { kind: 'workspace', workspaceId: id } }
-    : undefined));
+    : undefined, true));
   const changes = ctx.harnessChanges;
   ctx.effect(() => changes.register('workspaces'));
   ctx.effect(() => {

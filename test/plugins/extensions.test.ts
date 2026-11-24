@@ -94,10 +94,10 @@ test('input contributions run at delivery in stable order and keep the submitted
 
 test('an application plugin replaces only LLM and composes execution hooks without rewriting history', async (t) => {
   const { app, paths, request, mock, base, headers } = await fixture(t);
-  writePlugin(paths.plugins, 'transport', { provides: ['harnessLlm'], inject: ['harnessModels'] }, `export default (_ctx, api) => {
+  writePlugin(paths.plugins, 'transport', { provides: ['harnessLlm'], inject: ['harnessModels'] }, `export default (ctx, api) => {
     let attempts = 0;
     const modelCatalog = api.service('harnessModels');
-    api.provide('harnessLlm', { async *stream(request) {
+    ctx.provide('harnessLlm', { async *stream(request) {
       if (!modelCatalog.resolve(request.model)) throw new Error('missing catalog');
       const terminal = (content, stopReason = 'stop') => ({ type: 'done', message: { role: 'assistant', timestamp: Date.now(), content, stopReason } });
       if (++attempts === 1) throw new Error('transient transport failure');
@@ -265,7 +265,7 @@ test('a decision hook can deny an inherited tool and is removed with its owner',
   const child = app.runtime.plugins.ctx.harnessRegistry.create({ parentId: selected.id });
   const toggle = (scopes: unknown) => request('/settings', 'PATCH', { scopes });
   assert.equal((await toggle({ ['session:' + selected.id]: { plugins: { policy: true } } })).status, 200);
-  await app.runtime.plugins.prepare(child.id);
+  await app.runtime.plugins.prepare(`session:${child.id}`);
   const tools = app.runtime.plugins.ctx.harnessTools;
   const call = (id: string) => expectPresent(tools.forSession(id).find(({ name }) => name === 'ls'), 'ls tool')
     .execute('policy', { path: '.' }, undefined, undefined, undefined);

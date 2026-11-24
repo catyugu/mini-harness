@@ -94,10 +94,6 @@ export type LlmEvent =
   | { type: 'done'; message: NativeAssistantMessage };
 export interface LlmPort { stream(request: LlmRequest): AsyncIterable<LlmEvent> }
 
-declare module 'cordis' {
-  interface Context { harnessLlm: LlmPort }
-}
-
 export function validateNativeMessage(message: NativeMessage) {
   if (!message || !['user', 'assistant', 'toolResult'].includes(message.role) || !Number.isFinite(message.timestamp))
     throw new Error('Invalid session message');

@@ -54,10 +54,6 @@ export interface NetworkPort {
   forward(request: IncomingMessage, response: ServerResponse, access: GatewayRequest): Promise<void>;
 }
 
-declare module 'cordis' {
-  interface Context { harnessNetwork: NetworkPort }
-}
-
 declare module '@mini-harness/kernel/services' {
   interface ServiceMap { harnessNetwork: NetworkPort }
 }

@@ -6,7 +6,8 @@ import { protectLocal } from '@mini-harness/platform/local-secret';
 import { readJson, writeJson } from '@mini-harness/platform/json';
 import { isDeepStrictEqual } from 'node:util';
 import type { Context } from 'cordis';
-import type { PluginScope } from '@mini-harness/kernel/scopes';
+import { assertOutsideMountTransaction } from '@mini-harness/kernel/mutation-api';
+import type { PluginScope, ScopeKey } from '@mini-harness/kernel/scopes';
 import type { ServiceMap } from '@mini-harness/kernel/services';
 import type { PluginApi } from '@mini-harness/plugin-api/descriptor';
 import type { DiscoveredPlugin } from './descriptor.js';
@@ -18,9 +19,9 @@ export interface PluginLifetime {
   scopeKey?: string;
   lifetime: AbortSignal;
   trusted: boolean;
-  address(id: string): readonly string[];
-  prepare(id: string, signal: AbortSignal): Promise<void>;
-  scopedService<Name extends keyof ServiceMap & string>(id: string, name: Name): NonNullable<ServiceMap[Name]>;
+  address(key: ScopeKey): readonly string[];
+  prepare(key: ScopeKey, signal: AbortSignal): Promise<void>;
+  scopedService<Name extends keyof ServiceMap & string>(key: ScopeKey, name: Name): NonNullable<ServiceMap[Name]>;
   dataRoot: string;
   invalidate(): void;
   registerScopeRequest?(name: string, handler: (input: unknown, signal: AbortSignal) => Promise<unknown>): () => void;
@@ -32,7 +33,9 @@ export interface PluginLifetime {
 }
 
 export function createPluginApi(ctx: Context, { id, descriptor, config }: { id: string; descriptor: DiscoveredPlugin; config?: Record<string, unknown> }, state: PluginLifetime) {
-  const { scope, scopeKey, lifetime, address } = state;
+  const { scope, scopeKey, lifetime } = state;
+  const sessionKey = (id: string): ScopeKey => `session:${id}`;
+  const address = (id: string) => state.address(sessionKey(id));
   let currentConfig = Object.freeze(structuredClone(config ?? {}));
   let installed = false;
   let applyingConfig = false;
@@ -127,10 +130,6 @@ export function createPluginApi(ctx: Context, { id, descriptor, config }: { id: 
       },
       remove: (name) => rmSync(storagePath(name, true), { force: true })
     },
-    provide(name, service) {
-      if (!descriptor.provides?.includes(name)) throw new Error('Undeclared service: ' + name);
-      ctx.provide(name, service);
-    },
     service<Name extends keyof ServiceMap & string>(name: Name): NonNullable<ServiceMap[Name]> {
       if (!descriptor.inject?.includes(name)) throw new Error('Required service is not declared by ' + id + ': ' + name);
       const value = ctx.get(name) as ServiceMap[Name] | undefined;
@@ -138,13 +137,14 @@ export function createPluginApi(ctx: Context, { id, descriptor, config }: { id: 
       return value;
     },
     scopedService(id, name) {
+      assertOutsideMountTransaction();
       assertVisible(id);
       if (!descriptor.inject?.includes(name)) throw new Error('Required service is not declared by ' + descriptor.id + ': ' + name);
-      return state.scopedService(id, name);
+      return state.scopedService(sessionKey(id), name);
     },
     prepareSession(id, signal) {
       assertVisible(id);
-      return state.prepare(id, signal ? AbortSignal.any([lifetime, signal]) : lifetime);
+      return state.prepare(sessionKey(id), signal ? AbortSignal.any([lifetime, signal]) : lifetime);
     },
     optionalService<Name extends keyof ServiceMap & string>(name: Name): ServiceMap[Name] | undefined {
       if (!descriptor.optional?.includes(name)) throw new Error('Optional service is not declared by ' + id + ': ' + name);

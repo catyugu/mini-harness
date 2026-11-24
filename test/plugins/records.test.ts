@@ -37,7 +37,7 @@ export default (_ctx, api) => {
   assert.equal((await toggle(false)).status, 200);
   assert.equal((await request(route + '?id=' + session.id)).status, 404);
   assert.deepEqual((await request('/sessions/' + session.id)).body.records,
-    [{ id: added.body, plugin: 'records', title: 'Progress', content: 'Browser summary' }]);
+    [{ id: added.body, plugin: 'records', instanceId: 'records', afterMessageId: beforePluginRecords, title: 'Progress', content: 'Browser summary' }]);
 
   assert.equal((await toggle(true)).status, 200);
   const { body: entries } = await request(route + '?id=' + session.id);
@@ -45,7 +45,7 @@ export default (_ctx, api) => {
   assert.equal(app.runtime.plugins.ctx.harnessRuns.size, 0);
   const saved = app.runtime.plugins.ctx.harnessRegistry.export([session.id])[0].log;
   assert.ok(saved.split('\n').filter(Boolean).map((line) => JSON.parse(line))
-    .some((entry) => entry.type === 'custom' && entry.namespace === 'display:records' && entry.data.data.note === value.note));
+    .some((entry) => entry.type === 'plugin-record' && entry.owner.instanceId === 'records' && entry.data.note === value.note));
   const fetched = (await request('/sessions/' + session.id)).body;
   assert.equal(fetched.messages.some((message: { content: unknown }) => JSON.stringify(message).includes(value.note)), false);
   const log = app.runtime.plugins.ctx.harnessRegistry.log(session.id);

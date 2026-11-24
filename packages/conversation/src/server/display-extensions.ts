@@ -1,7 +1,5 @@
 import { extension, orderHooks, scopedHook, type OrderedHook } from '@mini-harness/kernel/contributions';
 import type { Context } from 'cordis';
-import type { SessionEntry } from '@mini-harness/sessions/log-api';
-import type { SessionDisplayRecord } from '@mini-harness/sessions/display-record';
 import type { MessageContent, ViewMessage } from '@mini-harness/sessions/message';
 
 export interface ToolProjection {
@@ -42,17 +40,6 @@ export function projectTool(ctx: Context, projection: ToolProjection) {
   let { content } = projection;
   for (const { invoke } of orderHooks(hooks)) content = invoke({ ...projection, content }) ?? content;
   return content;
-}
-
-export function projectRecords(entries: SessionEntry[]): SessionDisplayRecord[] {
-  return entries.flatMap((entry) => {
-    if (entry.type !== 'custom' || !entry.namespace.startsWith('display:')) return [];
-    const plugin = entry.namespace.slice('display:'.length).split('/').at(-1);
-    const data = entry.data as { display?: { title?: unknown; content?: unknown } } | null;
-    if (!plugin || typeof data?.display?.title !== 'string') return [];
-    const { title, content } = data.display;
-    return [{ id: entry.id, plugin, title, content }];
-  });
 }
 
 export function projectHistory(ctx: Context, sessionId: string, messages: ViewMessage[]) {

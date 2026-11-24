@@ -1,6 +1,5 @@
 import { conversationExtensions } from '@mini-harness/conversation/browser/composer-api';
 import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend-api';
-import { payload } from '@mini-harness/ui-runtime/http';
 
 /** One Cordis scope owns both message actions and the branch revision draft. */
 const setup: FrontendSetup = (_ctx, api) => {
@@ -15,6 +14,7 @@ const setup: FrontendSetup = (_ctx, api) => {
     id: 'session-helper:edit', label: 'Edit message', icon: 'edit', order: 20,
     visible: ({ message, sessionId, leafId }) => message.role === 'user' && !!sessionId && !!message.id && leafId !== undefined,
     run({ message, sessionId, leafId, rawText }) {
+      if (!message.id || leafId === undefined || !sessionId) return;
       const sourceEntryId = message.id;
       const expectedLeafId = leafId;
       const files = message.attachments ?? [];
@@ -28,11 +28,7 @@ const setup: FrontendSetup = (_ctx, api) => {
         title: textFiles.length ? 'Editing a new branch. Reattach: ' + textFiles.map(({ name }) => name).join(', ')
           : 'Editing message · creates a new conversation branch',
         text: rawText, images,
-        submit: async ({ text, attachments, removedImages, model, thinkingLevel }) => {
-          return api.request<import('@mini-harness/sessions/run-state').RunInfo>('/sessions/' + sessionId + '/revise', payload('POST', {
-            sourceEntryId, expectedLeafId, message: text, attachments, removedImages, model, thinkingLevel
-          }));
-        }
+        revision: { sourceEntryId, expectedLeafId }
       });
     }
   });

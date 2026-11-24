@@ -1,4 +1,5 @@
 import { isThinkingLevel, type ToolSchema } from '@mini-harness/llm/vocabulary';
+import { pluginIdPattern, scopeSettingsPattern } from '@mini-harness/plugin-api/selection';
 import { DomainError } from '@mini-harness/platform/errors';
 import { isRunning, type RunInfo } from './shared/run-state.js';
 import { createHash, randomBytes } from 'node:crypto';
@@ -77,8 +78,9 @@ export class SessionLog implements SessionLogPort {
       catch { throw new Error('Corrupt session log record'); }
       const { checksum, ...entry } = record;
       if (checksum !== digest(entry)) throw new Error('Corrupt session log checksum');
-      this.validateEntry(entry as SessionEntry, recovery);
-      this.remember(entry as SessionEntry);
+      const normalized = storedEntry(entry as SessionEntry);
+      this.validateEntry(normalized, recovery);
+      this.remember(normalized);
     }
     // An incomplete, unacknowledged final write can be discarded; complete corrupt records cannot.
     if (!this.readOnly && end < bytes.length) {
@@ -333,6 +335,14 @@ function validateEvent(event: SessionEvent) {
     case 'thinking':
       if (event.level !== null && !isThinkingLevel(event.level)) throw new Error('Invalid thinking level');
       return;
+    case 'plugin-record': {
+      const { owner, display } = event;
+      if (!owner || typeof owner.pluginId !== 'string' || typeof owner.instanceId !== 'string' ||
+          !pluginIdPattern.test(owner.pluginId) || !ownsRecord(owner.pluginId, owner.instanceId) ||
+          (display !== undefined && (!display || typeof display.title !== 'string' || !display.title.trim() || display.title.length > 140)))
+        throw new Error('Invalid plugin record');
+      return;
+    }
     case 'custom':
       if (typeof event.namespace !== 'string' || !event.namespace.length) throw new Error('Invalid session namespace');
       return;
@@ -374,6 +384,27 @@ export function syncDirectory(path: string) {
 /** Renders a complete log document for exports; live appends go through SessionLog. */
 export function encodeLog(header: SessionHeader, entries: SessionEntry[]) {
   return [JSON.stringify(header), ...entries.map((entry) => JSON.stringify({ ...entry, checksum: digest(entry) }))].join('\n') + '\n';
+}
+
+function ownsRecord(pluginId: string, instanceId: string) {
+  if (instanceId === pluginId) return true;
+  const slash = instanceId.indexOf('/');
+  return slash > 0 && scopeSettingsPattern.test(instanceId.slice(0, slash)) && instanceId.slice(slash + 1) === pluginId;
+}
+
+/** Normalize historical record envelopes only after validating the original checksum. */
+function storedEntry(entry: SessionEntry): SessionEntry {
+  if (entry.type !== 'custom' || typeof entry.namespace !== 'string') return entry;
+  const shown = entry.namespace.startsWith('display:');
+  const instanceId = shown ? entry.namespace.slice('display:'.length) : entry.namespace;
+  const pluginId = instanceId.slice(instanceId.lastIndexOf('/') + 1);
+  if (!pluginIdPattern.test(pluginId) || !ownsRecord(pluginId, instanceId)) return entry;
+  const { type: _type, namespace: _namespace, data, ...identity } = entry;
+  if (shown) {
+    const envelope = data as { data: unknown; display: { title: string; content?: unknown } };
+    return { ...identity, type: 'plugin-record', owner: { pluginId, instanceId }, data: envelope?.data, display: envelope?.display };
+  }
+  return { ...identity, type: 'plugin-record', owner: { pluginId, instanceId }, data };
 }
 
 function operational(entry: SessionEvent) { return entry.type === 'run' || entry.type === 'model-request' || entry.type === 'tool-schema' || entry.type === 'tool-execution' || entry.type.startsWith('inbox-'); }

@@ -34,11 +34,8 @@ export interface ToolPort {
   [registerToolBinding](name: string, bind: (sessionId: string) => ToolDefinition,
     options?: ToolRegistrationOptions & { source?: ContributionSource; scope?: string }): () => Promise<void>;
   forSession(id: string): ToolDefinition[];
+  readOnlyRegistrations(pluginId: string): string[];
   isAvailable(id: string, tool: ToolDefinition): boolean;
-}
-
-declare module 'cordis' {
-  interface Context { harnessTools: ToolPort }
 }
 
 export function isToolContent(value: unknown): value is ToolResult['content'] {

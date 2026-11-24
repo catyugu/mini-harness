@@ -24,15 +24,15 @@ export function selectModel(catalog: ModelCatalogPort, options: {
   explicit?: ModelChoice;
   stored?: ModelChoice;
   fallback?: ModelChoice;
-  child: boolean;
+  preferStored: boolean;
 }) {
-  const { explicit, stored, fallback, child } = options;
+  const { explicit, stored, fallback, preferStored } = options;
   if (explicit) {
     const selected = catalog.resolve(explicit);
     if (!selected) throw new Error('Unknown model: ' + explicit.provider + '/' + explicit.id);
     return selected;
   }
-  const choices = child ? [stored, fallback] : [fallback, stored];
+  const choices = preferStored ? [stored, fallback] : [fallback, stored];
   for (const choice of choices) {
     if (!choice?.provider) continue;
     const selected = catalog.resolve(choice);

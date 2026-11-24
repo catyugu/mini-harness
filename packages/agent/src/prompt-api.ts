@@ -56,11 +56,6 @@ export interface PromptPort {
   build(request: PromptContext): Promise<string>;
 }
 
-declare module 'cordis' {
-  interface Context { harnessPrompt: PromptPort }
-}
-
-
 declare module '@mini-harness/kernel/services' {
   interface ServiceMap { harnessPrompt: PromptPort }
 }

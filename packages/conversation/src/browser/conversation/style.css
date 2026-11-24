@@ -276,4 +276,4 @@
 .approval-actions { display: flex; flex-wrap: wrap; gap: 7px; }
 
 #conversationHistory:not([hidden]) { display: flex; flex: 1; min-height: 0; flex-direction: column; }
-.conversation-records { padding: 8px max(18px, calc((100% - 960px) / 2)); overflow-wrap: anywhere; }
+.conversation-record { overflow-wrap: anywhere; }

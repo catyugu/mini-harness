@@ -1,11 +1,13 @@
 import type {} from '@mini-harness/platform/runtime-paths';
 import type {} from '@mini-harness/settings/api';
+import type {} from '@mini-harness/tools/api';
 import type {} from '@mini-harness/transport/projection-api';
 import type {} from '@mini-harness/kernel/mutation-api';
 import { lstatSync, realpathSync, rmSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import type { Context } from 'cordis';
 import { DomainError } from '@mini-harness/platform/errors';
+import { localPluginIdPattern } from '@mini-harness/plugin-api/selection';
 import { HttpReply } from '@mini-harness/transport/routes';
 import { installPlugin, uninstallPlugin } from './files.js';
 
@@ -31,7 +33,29 @@ export function setup(ctx: Context) {
   add('POST', '/api/plugins/:id/scopes/:scope/:operation', async ({ params, body, signal }) =>
     ctx.harnessPluginCatalog.requestScope(params.id, params.scope, params.operation, (await body())?.input, signal));
   add('GET', '/api/plugins/diagnostics', () => ctx.harnessPluginCatalog.diagnostics());
-  add('GET', '/api/plugins', () => ctx.harnessPluginCatalog.metadata());
+  add('GET', '/api/plugins', () => ctx.harnessPluginCatalog.metadata().map((plugin) => ({
+    ...plugin, readOnlyTools: ctx.harnessTools.readOnlyRegistrations(plugin.id)
+  })));
+  add('PATCH', '/api/plugins/:id/read-only', async ({ params, body }) => {
+    const input = await body();
+    return ctx.harnessMutations.run(async () => {
+      const { tool, allowed } = input ?? {};
+      if (!localPluginIdPattern.test(params.id) || typeof tool !== 'string' || typeof allowed !== 'boolean')
+        throw new DomainError('invalid_input', 'Expected a tool name and an authorization decision');
+      const grants = { ...ctx.harnessSettingsStore.settings.readOnlyTools };
+      const selected = new Set(grants[params.id] ?? []);
+      if (allowed) {
+        if (!ctx.harnessTools.readOnlyRegistrations(params.id).includes(tool))
+          throw new DomainError('invalid_input', 'Tool is not registered for read-only access');
+        selected.add(tool);
+      } else selected.delete(tool);
+      if (selected.size) grants[params.id] = [...selected];
+      else delete grants[params.id];
+      await ctx.harnessSettingsStore.update({ readOnlyTools: grants });
+      changed();
+      return { ok: true };
+    });
+  });
   add('POST', '/api/plugins/install', async ({ body }) => {
     const bundle = await body(2 * 1024 * 1024);
     return ctx.harnessMutations.run(() => {

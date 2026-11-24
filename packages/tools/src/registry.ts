@@ -106,6 +106,11 @@ export class ToolRegistry implements ToolPort {
     return lease?.id === id && this.selected(id, lease.entry.name) === lease.entry && this.allowed(id, lease.entry);
   }
 
+  readOnlyRegistrations(pluginId: string): string[] {
+    return [...new Set([...this.tools.values()].filter((entry) =>
+      entry.pluginId === pluginId && entry.readOnly && !entry.trusted).map(({ name }) => name))].sort();
+  }
+
   forSession(id: string) {
     const names = new Set([...this.tools.values()].map(({ name }) => name));
     const available: ToolDefinition[] = [];

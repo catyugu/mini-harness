@@ -5,7 +5,7 @@ export const manifest: PluginDescriptor = {
   scope: 'application',
   browserInject: ['miniProjections', 'miniSettingsData', 'miniPages', 'miniSwitch', 'miniBrowserFailures', 'miniModels', 'miniDialogs', 'miniSlots'],
   id: 'core:plugins', title: 'Plugins', description: 'Plugin management', required: true,
-  inject: ['harnessPluginCatalog', 'harnessSettingsStore', 'harnessState', 'harnessRoutes', 'harnessMutations', 'harnessChanges'], provides: [], setup,
+  inject: ['harnessPluginCatalog', 'harnessSettingsStore', 'harnessState', 'harnessRoutes', 'harnessMutations', 'harnessChanges', 'harnessTools'], provides: [], setup,
   browserStyles: ['/packages/plugins/src/browser/style.css'],
   browser: '/packages/plugins/src/browser/setup.js',
 };

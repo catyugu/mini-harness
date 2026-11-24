@@ -11,7 +11,7 @@ export const manifest: PluginDescriptor = {
   inject: ['harnessScopes', 'harnessToolPolicy'], provides: ['harnessTools'],
   setup(ctx) {
     const { harnessScopes: scopes, harnessToolPolicy } = ctx;
-    ctx.provide('harnessTools', new ToolRegistry((id) => scopes.address(id),
+    ctx.provide('harnessTools', new ToolRegistry((id) => scopes.address(`session:${id}`),
       (request) => {
         const hooks: OrderedHook<ToolDecisionHandler>[] = [];
         ctx.emit('harness/tool-decision', request.sessionId, hooks);

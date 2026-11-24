@@ -16,7 +16,7 @@ export function projectMessage(entry: SessionEntry, execution: (id: string) => N
 
 /** Read projections are pure and never write synthetic history back into the transcript. */
 export function projectLog(entries: SessionEntry[], branch: SessionEntry[]): SessionProjection {
-  const state: SessionProjection = { leafId: branch.at(-1)?.id ?? null, messages: [], contextMessages: [], contextEntryIds: [],
+  const state: SessionProjection = { leafId: branch.at(-1)?.id ?? null, messages: [], records: [], contextMessages: [], contextEntryIds: [],
   };
   for (const entry of entries) if (entry.type === 'run') state.run = entry.run;
   const raw = new Map(entries.flatMap((entry) => entry.type === 'tool-execution'
@@ -34,6 +34,10 @@ export function projectLog(entries: SessionEntry[], branch: SessionEntry[]): Ses
     }
     if (entry.type === 'compaction') compaction = entry;
     if (entry.type === 'context-edit') edits.set(entry.targetId, entry.replacement);
+    if (entry.type === 'plugin-record' && entry.display) state.records.push({
+      id: entry.id, plugin: entry.owner.pluginId, instanceId: entry.owner.instanceId,
+      afterMessageId: state.messages.at(-1)?.id ?? null, title: entry.display.title, content: entry.display.content
+    });
     const message = messageOf(entry);
     if (!message) continue;
     if (message.role === 'assistant') for (const block of message.content)

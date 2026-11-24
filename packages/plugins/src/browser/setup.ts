@@ -282,6 +282,21 @@ function pluginCatalog(api: FrontendApi, snapshot: () => { plugins: PluginMetada
       finally { save.disabled = false; }
     };
     if (schema || scoped) section.append(form);
+    const grants = snapshot().settings.readOnlyTools[plugin.id] ?? [];
+    const tools = new Set([...(plugin.readOnlyTools ?? []), ...grants]);
+    if (tools.size) {
+      const permissions = fromMarkup('<section class="ui-section"><h3>Read-only conversation tools</h3><p class="hint">Only grant access to tools you trust not to change files or other state. Scope restrictions still apply.</p><p class="hint" role="status"></p></section>');
+      const result = required(permissions.querySelector<HTMLElement>('[role="status"]'));
+      for (const name of tools) {
+        const control = toggle('Allow ' + name + ' in read-only conversations', grants.includes(name));
+        control.disabled = !grants.includes(name) && !plugin.readOnlyTools?.includes(name);
+        saveToggle(control, (allowed) => mutate(() =>
+          api.request('/plugins/' + encodeURIComponent(plugin.id) + '/read-only', payload('PATCH', { tool: name, allowed })),
+          (error) => { result.textContent = error.message; }));
+        permissions.insertBefore(field(name, control), result);
+      }
+      section.append(permissions);
+    }
     content.replaceChildren(section);
     back.focus();
   }

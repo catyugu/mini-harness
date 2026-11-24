@@ -1,6 +1,7 @@
 export type {} from '@mini-harness/runs/api';
 export type {} from '@mini-harness/settings/api';
 
+export type { Context } from 'cordis';
 export type { ServiceMap } from '@mini-harness/kernel/services';
 export type { PluginScope, ScopeSettings } from '@mini-harness/kernel/scopes';
 export type { PluginApi, PluginDescriptor, ConfigValidationContext } from '@mini-harness/plugin-api/descriptor';

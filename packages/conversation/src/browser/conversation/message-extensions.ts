@@ -3,23 +3,27 @@ import type { MessageAction, RecordRenderer, ToolView } from '../composer-api.js
 
 export class MessageExtensions {
   private readonly actions = new Map<string, MessageAction>();
-  private readonly renderers = new Map<string, (tool: ToolView) => HTMLElement | undefined>();
-  private readonly toolActions = new Map<string, (tool: ToolView) => HTMLElement | undefined>();
+  private readonly renderers = new Map<string, ((tool: ToolView) => HTMLElement | undefined)[]>();
+  private readonly toolActions = new Map<string, ((tool: ToolView) => HTMLElement | undefined)[]>();
   private readonly records = new Map<string, RecordRenderer[]>();
   private readonly events = new EventTarget();
 
   constructor(private readonly report: (error: Error) => void) {}
 
-  registerRecord(plugin: string, render: RecordRenderer) {
-    const stack = this.records.get(plugin) ?? [];
-    this.records.set(plugin, stack);
-    stack.push(render);
-    this.events.dispatchEvent(new Event('records'));
+  private replace<T>(registry: Map<string, T[]>, key: string, value: T, event: string) {
+    const stack = registry.get(key) ?? [];
+    registry.set(key, stack);
+    stack.push(value);
+    this.events.dispatchEvent(new Event(event));
     return () => {
-      stack.splice(stack.indexOf(render), 1);
-      if (!stack.length) this.records.delete(plugin);
-      this.events.dispatchEvent(new Event('records'));
+      stack.splice(stack.indexOf(value), 1);
+      if (!stack.length) registry.delete(key);
+      this.events.dispatchEvent(new Event(event));
     };
+  }
+
+  registerRecord(plugin: string, render: RecordRenderer) {
+    return this.replace(this.records, plugin, render, 'records');
   }
 
   subscribeToRecords(listener: () => void, signal: AbortSignal) {
@@ -46,10 +50,7 @@ export class MessageExtensions {
 
   registerTool(name: string, render: (tool: ToolView) => HTMLElement | undefined, action = false) {
     const registry = action ? this.toolActions : this.renderers;
-    if (registry.has(name)) throw new Error('Duplicate tool contribution: ' + name);
-    registry.set(name, render);
-    this.events.dispatchEvent(new Event('tools'));
-    return () => { registry.delete(name); this.events.dispatchEvent(new Event('tools')); };
+    return this.replace(registry, name, render, 'tools');
   }
 
   subscribeToTools(listener: () => void, signal: AbortSignal) {
@@ -57,7 +58,7 @@ export class MessageExtensions {
   }
 
   render(tool: ToolView, action = false) {
-    try { return (action ? this.toolActions : this.renderers).get(tool.name)?.(tool); }
+    try { return (action ? this.toolActions : this.renderers).get(tool.name)?.at(-1)?.(tool); }
     catch (error) { this.report(error instanceof Error ? error : new Error(String(error))); }
   }
 }
