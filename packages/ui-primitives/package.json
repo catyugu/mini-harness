@@ -16,6 +16,7 @@
       "./api",
       "./icons",
       "./markdown",
+      "./file-preview",
       "./primitives"
     ]
   },
