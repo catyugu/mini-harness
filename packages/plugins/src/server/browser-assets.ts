@@ -77,7 +77,7 @@ export function planBrowser(plans: PluginPlan[], choices: Record<string, string>
     const plan = browser.get(descriptor.id);
     const resources = plan?.descriptor.resources;
     if (!plan || !resources) throw new Error('Composed browser capability is unavailable: ' + descriptor.id);
-    return { id: plan.id, requires: plan.descriptor.browserRequires, inject: plan.descriptor.browserInject, provides: plan.descriptor.browserProvides, browser: resources.entry,
+    return { id: plan.id, requires: plan.descriptor.browserRequires, provides: plan.descriptor.browserProvides, browser: resources.entry,
       styles: resources.styles, preload: resources.preload, config: plan.config ?? {},
       liveConfig: plan.descriptor.configChanges === 'live', required: fixedPlugins.has(plan.id) || plan.descriptor.browserProvides?.some((name) => requiredServices.has(name)) };
   });

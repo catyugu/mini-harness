@@ -72,7 +72,7 @@ export const administrationManifest: PluginDescriptor = {
     inject: ['harnessModels', 'harnessModelStore', 'harnessModelPreference', 'harnessState', 'harnessRoutes', 'harnessMutations', 'harnessChanges'],
     apply: setupAdministration
   },
-  browserInject: ['miniSettings', 'miniProjections', 'miniSettingsRegistry'], browserProvides: ['miniModels'],
+  browserProvides: ['miniModels'],
   browserStyles: ['/packages/models/src/browser/style.css'],
   browser: '/packages/models/src/browser/setup.js',
 };

@@ -89,7 +89,7 @@ test('npm registry installation resolves dependencies, updates atomically and se
   const id = 'npm-plugin';
   const files = {
     'plugin.json': JSON.stringify({
-      inject: ['harnessRoutes'], browserInject: ['miniPages'], browserAssets: ['web/panel.css', 'web/preload.js'],
+      inject: ['harnessRoutes'], browserAssets: ['web/panel.css', 'web/preload.js'],
       browserPreload: 'web/preload.js'
     }),
     'plugin.js': `
@@ -207,7 +207,7 @@ export function apply(ctx, config) {
   assert.equal(existsSync(join(paths.plugins, 'gui-plugin')), false);
 
   assert.equal((await request('/plugins/install', 'POST', {
-    id: 'browser-only', files: [{ name: 'plugin.json', content: JSON.stringify({ browserInject: ['miniComposer'] }) }, { name: 'web.js', content: "export const inject = [\"miniComposer\"];\n\nexport const apply = (ctx) => { ctx.effect(() => ctx.miniComposer.command({name:\"browser-only\",description:\"Test\"})); };" }]
+    id: 'browser-only', files: [{ name: 'plugin.json', content: JSON.stringify({}) }, { name: 'web.js', content: "export const inject = [\"miniComposer\"];\n\nexport const apply = (ctx) => { ctx.effect(() => ctx.miniComposer.command({name:\"browser-only\",description:\"Test\"})); };" }]
   })).status, 201);
   assert.ok(!(await request('/bootstrap')).body.ui.some((entry: { id: string }) => entry.id === 'browser-only'));
   assert.equal((await request('/settings', 'PATCH', { plugins: { 'browser-only': true } })).status, 200);

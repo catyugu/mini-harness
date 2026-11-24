@@ -26,7 +26,6 @@ export interface PluginDescriptor {
   inject?: string[];
   optional?: string[];
   browserRequires?: string[];
-  browserInject?: string[];
   browserProvides?: string[];
   plugin?: Plugin;
 }

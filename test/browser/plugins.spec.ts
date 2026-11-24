@@ -10,7 +10,7 @@ test('frontend plugins own UI contributions and clean up on disable and reconfig
   const mock = await createMockProvider(({ messages }) => messages.at(-1)?.role === 'tool' ? 'Done' : { tool: 'ls', args: {} });
   const { root, paths } = createFixturePaths(mock.url), folder = join(paths.plugins, 'ui-example'); mkdirSync(folder);
   writeFileSync(join(folder, 'plugin.js'), "export function apply() {}");
-  writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ browserInject: ['miniSlots', 'miniTabs', 'miniSettingsRegistry', 'miniPrimitives', 'miniComposer', 'miniMessages'], title: 'UI example', icon: {
+  writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ title: 'UI example', icon: {
     path: 'M2 2h20v20H2z', viewBox: '0 0 24 24'
   }, configSchema: { type: 'object', properties: {
     label: { type: 'string', title: 'Button label', default: 'Plugin entry' },
@@ -56,7 +56,7 @@ export function apply(ctx, config) {
 `);
   const dependent = join(paths.plugins, 'a-dependent'); mkdirSync(dependent);
   writeFileSync(join(dependent, 'plugin.js'), "export function apply() {}");
-  writeFileSync(join(dependent, 'plugin.json'), JSON.stringify({ title: 'Dependent UI', browserRequires: ['ui-example'], browserInject: ['miniSlots'] }));
+  writeFileSync(join(dependent, 'plugin.json'), JSON.stringify({ title: 'Dependent UI', browserRequires: ['ui-example'] }));
   writeFileSync(join(dependent, 'web.js'), `
 export const inject = ["miniSlots"];
 
@@ -134,7 +134,7 @@ test('a failed browser plugin reports the saved state and can be retried', async
   const folder = join(paths.plugins, 'retry-ui');
   mkdirSync(folder);
   writeFileSync(join(folder, 'plugin.js'), "export default () => {}");
-  writeJson(join(folder, 'plugin.json'), { title: 'Retry UI', browserInject: ['miniSlots'], browserAssets: ['web/preload.js'],
+  writeJson(join(folder, 'plugin.json'), { title: 'Retry UI', browserAssets: ['web/preload.js'],
     browserPreload: 'web/preload.js', configSchema: {
     type: 'object', properties: { ready: { type: 'boolean', title: 'Ready', default: false } }
   } });
@@ -293,7 +293,7 @@ test('unmounting browser plugins releases pages and restores replaced slot contr
   try {
     const folder = join(paths.plugins, 'replace-new');
     mkdirSync(folder);
-    writeJson(join(folder, 'plugin.json'), { browserInject: ['miniSlots', 'miniPrimitives', 'miniConversation'] });
+    writeJson(join(folder, 'plugin.json'), {});
     writeFileSync(join(folder, 'web.js'), `
 export const inject = ["miniPrimitives","miniConversation","miniSlots"];
 

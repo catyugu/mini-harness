@@ -35,6 +35,5 @@ export const permissionSettingsManifest: PluginDescriptor = {
     inject: ['harnessTools', 'harnessSettingsStore', 'harnessRoutes', 'harnessMutations'],
     apply: setupPermissionSettings
   },
-  browserInject: ['miniSettingsRegistry'],
   browser: '/packages/sessions/src/browser/permission-settings.js'
 };

@@ -5,8 +5,7 @@ import { DomainError } from '@mini-harness/platform/errors';
 
 /** One self-contained plugin schema. Changes to child limits are safe during active runs. */
 export const manifest: PluginDescriptor = {
-  scope: 'application', browserInject: ['harnessBrowser', 'miniMessages', 'miniSlots'],
-  plugin: {
+  scope: 'application', plugin: {
     inject: ['harnessTools', 'harnessSessions', 'harnessModels', 'harnessExecution'],
     apply: setup
   }, defaultEnabled: true,

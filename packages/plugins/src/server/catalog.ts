@@ -148,7 +148,7 @@ export class PluginCatalog {
   metadata(settings: PluginSettings, failures: ReadonlyMap<string, string>,
     mounted: (id: string) => boolean, context: (scope?: ScopeKey) => Context): PluginMetadata[] {
     return this.descriptors().filter(({ id }) => !this.fixedPlugins.has(id) && !this.lockedPlugins.has(id) && localPluginIdPattern.test(id)).map((descriptor) => {
-      const { id, source, resources, inject, plugin: _plugin, optional, browserStyles, browserRequires, browserInject,
+      const { id, source, resources, inject, plugin: _plugin, optional, browserStyles, browserRequires,
         browserProvides, configChanges, validateConfig, ...metadata } = descriptor;
       const configurationError = (key?: ScopeKey) => {
         try {

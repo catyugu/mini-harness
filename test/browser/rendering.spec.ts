@@ -23,7 +23,7 @@ test('renders Markdown and tool results, and stops a pending reply', async ({ pa
     return '### Workspace\n\n```text\nExample\n```\n\n<img src=x onerror="alert(1)">\n\n<p class="overlay">A tool note</p>';
   });
   const { root, paths } = createFixturePaths(mock.url);
-  const folder = writePlugin(paths.plugins, 'bad-renderer', { browserInject: ['miniMessages'] }, `
+  const folder = writePlugin(paths.plugins, 'bad-renderer', {}, `
 export const apply = (ctx) => {
       ctx.on("agent/prepare-input", async (_content, { original, signal }) => {
         if (original.userText !== 'Stop before acceptance') return;
@@ -110,7 +110,7 @@ test('a long response updates only its view and restores from current state when
   const { root, paths } = createFixturePaths(mock.url);
   const folder = join(paths.plugins, 'stream-observer');
   mkdirSync(folder);
-  writeJson(join(folder, 'plugin.json'), { browserInject: ['miniConversation', 'miniSlots'] });
+  writeJson(join(folder, 'plugin.json'), {});
   writeFileSync(join(folder, 'web.js'), `
 export const inject = ["miniConversation","miniSlots"];
 

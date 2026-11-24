@@ -3,8 +3,7 @@ import { setup } from './server/setup.js';
 
 /** One metadata definition for the host, settings, and browser loader. */
 export const manifest: PluginDescriptor = {
-  scope: 'application', browserInject: ['harnessBrowser', 'miniProjections', 'miniTabs', 'miniComposer'],
-  plugin: {
+  scope: 'application', plugin: {
     inject: ['harnessFileAccess', 'harnessWorkspaces', 'harnessSessions', 'harnessTools', 'harnessRoutes', 'harnessChanges', 'harnessScopes'],
     apply: setup
   }, defaultEnabled: true,

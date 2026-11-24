@@ -7,7 +7,6 @@ export const defaultShellMode = supportsIsolation() ? 'isolated' : 'host';
 
 export const manifest: PluginDescriptor = {
   scope: 'application',
-  browserInject: ['miniMessages'],
   plugin: {
     inject: ['harnessSessions', 'harnessApprovalRequests', 'harnessProcess', 'harnessTools', 'harnessChanges', 'harnessScopes'],
     apply: setup

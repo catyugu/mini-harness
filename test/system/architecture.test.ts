@@ -130,10 +130,6 @@ test('workspace dependencies use domain APIs and keep providers at the applicati
   for (const file of browserRoots) checkBrowser(file);
 
   const browserIds = new Set(plugins.filter(({ browser }) => browser).map(({ id }) => id));
-  const browserServices = new Set([
-    'miniProjections', 'miniSwitch', 'miniBrowserFailures',
-    ...plugins.flatMap(({ browserProvides }) => browserProvides ?? [])
-  ]);
   const descriptorOwners = new Map<string, string>();
   const composition = join(packages, 'host', 'src', 'composition.ts');
   const source = ts.createSourceFile(composition, readFileSync(composition, 'utf8'), ts.ScriptTarget.Latest, true);
@@ -145,7 +141,7 @@ test('workspace dependencies use domain APIs and keep providers at the applicati
     const manifest = readFileSync(join(packages, owner, entry), 'utf8');
     for (const match of manifest.matchAll(/\bid: '([^']+)'/g)) descriptorOwners.set(match[1], owner);
   }
-  for (const { id, browser, browserStyles, browserRequires, browserInject } of plugins) {
+  for (const { id, browser, browserStyles, browserRequires } of plugins) {
     if (!browser) { assert.ok(!browserStyles?.length, id + ' has styles without a browser entry'); continue; }
     const owner = descriptorOwners.get(id);
     assert.ok(owner, id + ' is missing its descriptor owner');
@@ -155,7 +151,6 @@ test('workspace dependencies use domain APIs and keep providers at the applicati
       assert.ok(existsSync(join(root, resource.slice(1).replace(/\.js$/, '.ts'))), id + ' is missing ' + resource);
     }
     for (const dependency of browserRequires ?? []) assert.ok(browserIds.has(dependency), id + ' requires ' + dependency);
-    for (const service of browserInject ?? []) assert.ok(browserServices.has(service), id + ' injects ' + service);
   }
 
   assert.equal(declared.get('platform')?.size, 0);

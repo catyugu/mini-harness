@@ -18,7 +18,7 @@ test('copy, preview and revise a message with its image, and release editing dra
       for (const [id, label] of [['old-editor', 'Older draft'], ['new-editor', 'Newer draft']]) {
         const folder = join(paths.plugins, id);
         mkdirSync(folder);
-        writeJson(join(folder, 'plugin.json'), { browserInject: ['miniComposer', 'miniSlots'] });
+        writeJson(join(folder, 'plugin.json'), {});
         writeFileSync(join(folder, 'web.js'), `
 export const inject = ["miniComposer","miniSlots"];
 
@@ -33,7 +33,7 @@ export const apply = (ctx) => {
           };
 `);
       }
-      const records = writePlugin(paths.plugins, 'record-writer', { inject: ['harnessSessions'], browserInject: ['miniConversation', 'miniMessages'] }, `
+      const records = writePlugin(paths.plugins, 'record-writer', { inject: ['harnessSessions'] }, `
 export const inject = ["harnessPluginRoutes","harnessSessions"];
 export const apply = (ctx) => {
           ctx.harnessPluginRoutes.register('POST', '/record', async ({ body }) => {

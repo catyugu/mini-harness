@@ -48,9 +48,12 @@ test('the composed browser graph serves its runtime dependencies and excludes se
   assert.equal((await request('/settings', 'PATCH', { plugins: { files: false, shell: true } })).status, 200);
   const { body: changed }: { body: BrowserBootstrap } = await request('/bootstrap');
   assert.equal(changed.ui.some(({ id }) => id === 'files'), false);
-  assert.ok(changed.ui.find(({ id }) => id === 'shell')?.inject?.includes('miniMessages'));
+  const shell = changed.ui.find(({ id }) => id === 'shell');
+  assert.ok(shell);
+  assert.match(await (await fetch(base + shell.browser)).text(), /inject: \['miniMessages'\]/);
   const conversation = changed.ui.find(({ id }) => id === 'core:conversation');
-  assert.ok(conversation?.inject?.includes('miniApprovals'));
+  assert.ok(conversation);
+  assert.match(await (await fetch(base + conversation.browser)).text(), /inject: \[[^\]]*'miniApprovals'/);
   const conversationStyle = conversation?.styles?.[0];
   assert.ok(conversationStyle);
   const sheet = await fetch(base + conversationStyle);

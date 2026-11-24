@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { execFile as exec } from 'node:child_process';
 import { access, cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
@@ -49,9 +50,14 @@ async function checkPackage() {
     await mkdir(installed);
     const tarball = 'file:../' + filename;
     const { version: nodeTypes } = JSON.parse(await readFile(resolve('node_modules/@types/node/package.json'), 'utf8'));
+    // Use the Bedrock middleware version already selected by the workspace lockfile.
+    const pi = createRequire(import.meta.resolve('@earendil-works/pi-ai'));
+    const bedrock = createRequire(pi.resolve('@aws-sdk/client-bedrock-runtime'));
+    const { version: websocketMiddleware } = bedrock('@aws-sdk/middleware-websocket/package.json');
     const fixture = {
       name: 'mini-harness-install-check', private: true, type: 'module', version: '0.0.0',
-      dependencies: { [name]: tarball }, devDependencies: { '@types/node': nodeTypes }
+      dependencies: { [name]: tarball }, devDependencies: { '@types/node': nodeTypes },
+      overrides: { '@aws-sdk/middleware-websocket': websocketMiddleware }
     };
     await writeFile(join(installed, 'package.json'), JSON.stringify(fixture));
     console.log('Installing ' + filename + ' in a standalone npm project');
