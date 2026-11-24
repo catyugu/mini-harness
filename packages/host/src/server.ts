@@ -35,6 +35,13 @@ for (const owner of readdirSync(FEATURE_DIR, { withFileTypes: true })) {
   }
 }
 
+const cordisRoot = resolve(FEATURE_DIR, '../vendor/cordis/src');
+for (const file of readdirSync(cordisRoot, { recursive: true, withFileTypes: true })) {
+  if (!file.isFile() || !file.name.endsWith('.js')) continue;
+  const path = relative(cordisRoot, join(file.parentPath, file.name)).split(sep).join('/');
+  assets.set('vendor/cordis/src/' + path, 'text/javascript');
+}
+
 export function authorize(request: IncomingMessage, token: string) {
   const auth = request.headers.authorization;
   if (!auth?.startsWith('Bearer ')) return false;
@@ -95,15 +102,11 @@ export async function createMiniHarnessServer(paths: Paths, options: { token?: s
         let requested: string;
         try { requested = pathname === '/' ? 'index.html' : decodeURIComponent(pathname.slice(1)); }
         catch { throw new HttpError('invalid_input', 'Invalid URL encoding'); }
-        if (requested === 'packages/ui-runtime/plugin-sdk.js') {
-          res.writeHead(307, { Location: '/' + browserSdk });
-          res.end();
-          return;
-        }
         const extension = runtime.plugins.browserAsset(pathname);
         const mime = extension?.mime ?? assets.get(requested);
         if (!mime) throw new HttpError('not_found', 'Not found');
-        const path = extension?.path ?? (requested.startsWith('packages/') ? join(FEATURE_DIR, requested.slice('packages/'.length)) : join(WEB_DIR, requested));
+        const path = extension?.path ?? (requested.startsWith('packages/') || requested.startsWith('vendor/')
+          ? join(FEATURE_DIR, '..', requested) : join(WEB_DIR, requested));
         const opened = extension ? openAsset(path) : undefined;
         const size = opened?.size ?? statSync(path).size;
         const stream = req.method === 'HEAD' ? undefined : createReadStream(path, { fd: opened?.fd });
@@ -142,13 +145,7 @@ export async function createMiniHarnessServer(paths: Paths, options: { token?: s
     }
   };
   await runtime.start();
-  const server = createServer((req, res) => {
-    res.once('finish', () => {
-      // A response finishing during shutdown has just left the active connection set.
-      if (!server.listening) server.closeIdleConnections();
-    });
-    void route(req, res);
-  });
+  const server = createServer((req, res) => { void route(req, res); });
   server.on('upgrade', (request, socket, head) => {
     const reject = (status: string) => socket.end('HTTP/1.1 ' + status + '\r\nConnection: close\r\n\r\n');
     if (!authorize(request, token)) { reject('401 Unauthorized'); return; }
@@ -167,10 +164,15 @@ export async function createMiniHarnessServer(paths: Paths, options: { token?: s
       return (server.address() as AddressInfo).port;
     },
     close() {
-      closing ??= Promise.all([
-        new Promise<void>((done) => server.close(() => done())), runtime.stop()
-      ]).then(() => {});
+      if (closing) return closing;
+      const closed = new Promise<void>((done) => server.close(() => done()));
       upgrades.close();
+      const drained = runtime.stop().finally(() => {
+        // Request and plugin work has drained. End any remaining HTTP connections,
+        // including streams or keep-alive sockets which finished during shutdown.
+        server.closeAllConnections();
+      });
+      closing = Promise.all([closed, drained]).then(() => {});
       return closing;
     }
   };

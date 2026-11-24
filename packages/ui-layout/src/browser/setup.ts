@@ -1,9 +1,7 @@
-import { slotExtensions } from '@mini-harness/ui-slots/browser/api';
 import { fromMarkup, required, scopedElements } from '@mini-harness/ui-primitives/primitives';
 import type { BrowserPrimitives } from '@mini-harness/ui-primitives/api';
 import type { PageContribution } from './api.js';
-import type { Context } from 'cordis';
-import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend-api';
+import type { Context } from 'mini-harness/cordis';
 import { createLayout } from './layout.js';
 import { createRightTabs } from './right-tabs.js';
 
@@ -19,18 +17,19 @@ const slots = {
   'dialog.root': 'dialogSlot'
 } as const;
 
-const setup: FrontendSetup = (ctx, api) => {
-  const { layout, pages, header, tabs, dialogs, outlet } = createAppFrame(ctx.miniPrimitives, ctx.miniSlots, api.signal);
+const setup = (ctx: Context) => {
+  const signal = ctx.fiber.signal;
+  const { layout, pages, header, tabs, dialogs, outlet } = createAppFrame(ctx.miniPrimitives, ctx.miniSlots, signal);
   ctx.provide('miniLayout', layout);
   ctx.provide('miniPages', pages);
   ctx.provide('miniHeader', header);
   ctx.provide('miniTabs', tabs);
   ctx.provide('miniDialogs', dialogs);
   for (const name of Object.keys(slots) as Array<keyof typeof slots>)
-    api.contribute(slotExtensions.define, name, outlet(name), name === 'conversation.body' || name === 'workspace.header' ? 'single' : 'list');
+    ctx.effect(() => ctx.miniSlots.define(name, outlet(name), name === 'conversation.body' || name === 'workspace.header' ? 'single' : 'list'));
 
 };
-export default setup;
+export default { inject: ['miniSlots','miniPrimitives'], provide: ['miniLayout','miniPages','miniHeader','miniTabs','miniDialogs'], apply: setup };
 
 function createAppFrame(primitives: BrowserPrimitives, slotRegistry: Context['miniSlots'], signal: AbortSignal) {
   const root = fromMarkup(`<div id="app" class="app">

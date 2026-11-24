@@ -11,4 +11,3 @@ export function supportsIsolation(platform: NodeJS.Platform = process.platform, 
     }).status === 0;
   } catch { return false; }
 }
-

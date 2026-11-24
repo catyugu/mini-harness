@@ -1,3 +1,4 @@
-export default function setup(ctx, api) {
-  ctx.provide('exampleGreeting', { greet: (name) => api.config.prefix + ', ' + name });
+export const provide = ["exampleGreeting"];
+export function apply(ctx, config) {
+  ctx.provide('exampleGreeting', { greet: (name) => config.prefix + ', ' + name });
 }

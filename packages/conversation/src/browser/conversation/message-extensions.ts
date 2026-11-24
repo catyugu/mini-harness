@@ -1,17 +1,17 @@
-import { KeyedContributions } from '@mini-harness/ui-runtime/contribution';
+import { KeyedRegistry } from '@mini-harness/ui-runtime/keyed-registry';
 import type { SessionDisplayRecord } from '@mini-harness/sessions/display-record';
 import type { MessageAction, RecordRenderer, ToolRenderer, ToolView } from '../history-api.js';
 
 export class MessageExtensions {
   private readonly actions = new Map<string, MessageAction>();
-  private readonly renderers = new KeyedContributions<string, ToolRenderer>();
-  private readonly toolActions = new KeyedContributions<string, ToolRenderer>();
-  private readonly records = new KeyedContributions<string, RecordRenderer>();
+  private readonly renderers = new KeyedRegistry<string, ToolRenderer>();
+  private readonly toolActions = new KeyedRegistry<string, ToolRenderer>();
+  private readonly records = new KeyedRegistry<string, RecordRenderer>();
   private readonly events = new EventTarget();
 
   readonly report = (error: unknown) => console.error('Conversation extension failed', error);
 
-  private replace<T>(registry: KeyedContributions<string, T>, key: string, value: T, event: string) {
+  private replace<T>(registry: KeyedRegistry<string, T>, key: string, value: T, event: string) {
     const remove = registry.add(key, value);
     const change = () => this.events.dispatchEvent(new CustomEvent(event, { detail: key }));
     change();

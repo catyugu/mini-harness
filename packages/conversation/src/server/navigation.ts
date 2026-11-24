@@ -1,7 +1,7 @@
 import type {} from '@mini-harness/runs/api';
 import type {} from '@mini-harness/sessions/store';
 import type {} from '@mini-harness/approvals/api';
-import type { Context } from 'cordis';
+import type { Context } from 'mini-harness/cordis';
 import type { SessionRecord } from '@mini-harness/sessions/identity';
 import type { Conversation } from '../shared/api.js';
 

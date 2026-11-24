@@ -10,6 +10,7 @@ import type { PluginMetadata } from '../shared/metadata.js';
 
 export interface DiscoveredPlugin extends PluginDescriptor, Pick<PluginMetadata, 'trustedCode' | 'package' | 'error'> {
   source?: string;
+  module?: string;
   resources?: BrowserAssets;
 }
 
@@ -28,7 +29,7 @@ export function describePlugin(id: string, folder: string): DiscoveredPlugin {
   const description = typeof manifest.description === 'string' ? manifest.description.slice(0, 300) : 'Runs local JavaScript with your user permissions.';
   const scope = manifest.scope ?? 'application';
   if (scope !== 'application' && scope !== 'workspace' && scope !== 'session') throw new Error('Invalid plugin scope');
-  const names = (field: 'requires' | 'inject' | 'optional' | 'provides' | 'browserRequires' | 'browserInject' | 'browserProvides', pattern: RegExp) => {
+  const names = (field: 'requires' | 'inject' | 'optional' | 'provides' | 'browserRequires' | 'browserProvides', pattern: RegExp) => {
     const input = manifest[field] ?? [];
     if (!Array.isArray(input) || input.some((name) => typeof name !== 'string' || !pattern.test(name)) ||
         new Set(input).size !== input.length) throw new Error('Invalid plugin ' + field + ': ' + id);
@@ -39,9 +40,8 @@ export function describePlugin(id: string, folder: string): DiscoveredPlugin {
   const inject = names('inject', serviceNamePattern);
   const optional = names('optional', serviceNamePattern);
   const browserRequires = names('browserRequires', pluginIdPattern);
-  const browserInject = names('browserInject', serviceNamePattern);
   const browserProvides = names('browserProvides', serviceNamePattern);
-  if (!hasWeb && (browserRequires.length || browserInject.length || browserProvides.length))
+  if (!hasWeb && (browserRequires.length || browserProvides.length))
     throw new Error('Browser dependencies require web.js');
   if (!hasHost && (provides.length || inject.length || optional.length)) throw new Error('Server services require plugin.js');
   if (scope !== 'application' && (hasWeb || [...inject, ...optional].some((name) => name === 'harnessRoutes' || name === 'harnessNetwork'))) throw new Error('Scoped plugins require a server entry without routes');
@@ -68,5 +68,5 @@ export function describePlugin(id: string, folder: string): DiscoveredPlugin {
     (icon.viewBox === undefined || typeof icon.viewBox === 'string' && icon.viewBox.length <= 100)
   )) throw new Error('Invalid plugin icon: ' + id);
   return { source: hasHost ? source : undefined, resources, scope, id, title, description,
-    requires, provides, inject, optional, browserRequires, browserInject, browserProvides, configSchema, configGroups, configHint, configChanges: manifest.configChanges, icon, web: hasWeb, trustedCode: true };
+    requires, provides, inject, optional, browserRequires, browserProvides, configSchema, configGroups, configHint, configChanges: manifest.configChanges, icon, web: hasWeb, trustedCode: true };
 }

@@ -1,15 +1,5 @@
 {
   "title": "Example panel",
-  "browserInject": [
-    "miniPrimitives",
-    "miniDialogs",
-    "miniPages",
-    "miniSettingsRegistry",
-    "miniMessages",
-    "miniComposer",
-    "miniSlots",
-    "miniConversation"
-  ],
   "browserAssets": [
     "web/composer.js"
   ],

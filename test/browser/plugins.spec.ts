@@ -9,24 +9,29 @@ import { startIsolatedHost, settingsSection, suggestions } from '../support/brow
 test('frontend plugins own UI contributions and clean up on disable and reconfiguration', async ({ page }) => {
   const mock = await createMockProvider(({ messages }) => messages.at(-1)?.role === 'tool' ? 'Done' : { tool: 'ls', args: {} });
   const { root, paths } = createFixturePaths(mock.url), folder = join(paths.plugins, 'ui-example'); mkdirSync(folder);
-  writeFileSync(join(folder, 'plugin.js'), 'export default function() {}');
-  writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ browserInject: ['miniSlots', 'miniTabs', 'miniSettingsRegistry', 'miniPrimitives', 'miniComposer', 'miniMessages'], title: 'UI example', icon: {
+  writeFileSync(join(folder, 'plugin.js'), "export function apply() {}");
+  writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ title: 'UI example', icon: {
     path: 'M2 2h20v20H2z', viewBox: '0 0 24 24'
   }, configSchema: { type: 'object', properties: {
     label: { type: 'string', title: 'Button label', default: 'Plugin entry' },
     showDetails: { type: 'boolean', default: false }
   } } }));
-  writeFileSync(join(folder, 'web.js'), `import { conversationExtensions, layoutExtensions, settingsExtensions, slotExtensions } from '/packages/ui-runtime/plugin-sdk.js';
-  export default function({ miniPrimitives, miniComposer }, api) {
+  writeFileSync(join(folder, 'web.js'), `
+export const inject = ["miniPrimitives","miniComposer","miniTabs","miniSlots","miniSettingsRegistry","miniMessages"];
+import { browserPluginId, browserPluginSettings } from "/packages/sdk/src/browser-plugin.js";
+
+export function apply(ctx, config) {
+    const signal = ctx.fiber.signal;
+    const { miniPrimitives, miniComposer } = ctx;
     for (const slot of ['sidebar','composer','inspector']) {
       const node = document.createElement('button');
       if (node.tagName === 'BUTTON') node.type = 'button';
-      node.dataset.exampleSlot = slot; node.textContent = slot === 'sidebar' ? api.config.label : 'Plugin ' + slot;
+      node.dataset.exampleSlot = slot; node.textContent = slot === 'sidebar' ? config.label : 'Plugin ' + slot;
       if (slot === 'composer') node.onclick = () => miniComposer.insert('Inserted by plugin');
-      if (slot === 'inspector') node.onclick = () => {const p = document.createElement('p');p.textContent='Plugin preview';api.contribute(layoutExtensions.inspect, 'Example',p);};
-      api.contribute(slotExtensions.register, {sidebar:'sidebar.actions',composer:'conversation.composer',inspector:'conversation.header'}[slot],node);
+      if (slot === 'inspector') node.onclick = () => {const p = document.createElement('p');p.textContent='Plugin preview';ctx.miniTabs.inspect(browserPluginId(ctx), 'Example', p, signal);};
+      ctx.effect(() => ctx.miniSlots.register({sidebar:'sidebar.actions',composer:'conversation.composer',inspector:'conversation.header'}[slot], node));
     }
-    api.contribute(settingsExtensions.register, { section: 'General', id: 'preferences', order: 10, render({ bind }) {
+    ctx.effect(() => ctx.miniSettingsRegistry.register(browserPluginId(ctx), { section: 'General', id: 'preferences', order: 10, render({ bind }) {
       const content = document.createElement('div');
       const control = document.createElement('input');
       control.type = 'checkbox';
@@ -34,30 +39,34 @@ test('frontend plugins own UI contributions and clean up on disable and reconfig
         read(value) { control.checked = value; }, write() { return control.checked; }
       }));
       return content;
-    } });
+    } }, browserPluginSettings(ctx)));
     for (const [section, id, text] of [
       ['Model', 'model', 'Plugin model preferences'],
       ['Extensions', 'extensions', 'Plugin settings']
     ]) {
-      api.contribute(settingsExtensions.register, { section, id, order: 10, render() {
+      ctx.effect(() => ctx.miniSettingsRegistry.register(browserPluginId(ctx), { section, id, order: 10, render() {
         const item = document.createElement('p');
         item.textContent = text;
         return item;
-      } });
+      } }, browserPluginSettings(ctx)));
     }
-    api.contribute(conversationExtensions.command, { name: 'example', description: 'Add a plugin note', run: () => miniComposer.insert('Plugin note') });
-    api.contribute(conversationExtensions.tool, 'ls', () => { const node = document.createElement('p'); node.textContent = 'Custom listing result'; return node; });
-  }`);
+    ctx.effect(() => ctx.miniComposer.command({ name: 'example', description: 'Add a plugin note', run: () => miniComposer.insert('Plugin note') }));
+    ctx.effect(() => ctx.miniMessages.registerTool('ls', () => { const node = document.createElement('p'); node.textContent = 'Custom listing result'; return node; }));
+  }
+`);
   const dependent = join(paths.plugins, 'a-dependent'); mkdirSync(dependent);
-  writeFileSync(join(dependent, 'plugin.js'), 'export default function() {}');
-  writeFileSync(join(dependent, 'plugin.json'), JSON.stringify({ title: 'Dependent UI', browserRequires: ['ui-example'], browserInject: ['miniSlots'] }));
-  writeFileSync(join(dependent, 'web.js'), `import { slotExtensions } from '/packages/ui-runtime/plugin-sdk.js';
-  export default function(_ctx, api) {
+  writeFileSync(join(dependent, 'plugin.js'), "export function apply() {}");
+  writeFileSync(join(dependent, 'plugin.json'), JSON.stringify({ title: 'Dependent UI', browserRequires: ['ui-example'] }));
+  writeFileSync(join(dependent, 'web.js'), `
+export const inject = ["miniSlots"];
+
+export function apply(ctx) {
     const parent = document.querySelector('[data-example-slot=sidebar]');
     if (!parent) throw new Error('Dependency must mount first');
-    const node = document.createElement('button'); node.type = 'button'; node.textContent = 'Dependent ' + parent.textContent; api.contribute(slotExtensions.register, 'sidebar.actions', node);
-    api.onDispose(() => { document.documentElement.dataset.dependencyDisposal = parent.isConnected ? 'ordered' : 'incorrect'; });
-  }`);
+    const node = document.createElement('button'); node.type = 'button'; node.textContent = 'Dependent ' + parent.textContent; ctx.effect(() => ctx.miniSlots.register('sidebar.actions', node));
+    ctx.effect(() => () => { document.documentElement.dataset.dependencyDisposal = parent.isConnected ? 'ordered' : 'incorrect'; });
+  }
+`);
   const settings = readJson<any>(paths.settings, {}); writeJson(paths.settings, { ...settings, plugins: { 'ui-example': true, 'a-dependent': true } });
   const service = await startIsolatedHost(paths);
   try {
@@ -124,23 +133,28 @@ test('a failed browser plugin reports the saved state and can be retried', async
   const mock = await createMockProvider(), { root, paths } = createFixturePaths(mock.url);
   const folder = join(paths.plugins, 'retry-ui');
   mkdirSync(folder);
-  writeFileSync(join(folder, 'plugin.js'), 'export default () => {}');
-  writeJson(join(folder, 'plugin.json'), { title: 'Retry UI', browserInject: ['miniSlots'], browserAssets: ['web/preload.js'],
+  writeFileSync(join(folder, 'plugin.js'), "export default () => {}");
+  writeJson(join(folder, 'plugin.json'), { title: 'Retry UI', browserAssets: ['web/preload.js'],
     browserPreload: 'web/preload.js', configSchema: {
     type: 'object', properties: { ready: { type: 'boolean', title: 'Ready', default: false } }
   } });
   mkdirSync(join(folder, 'web'));
-  writeFileSync(join(folder, 'web/preload.js'), `export default (signal) => {
+  writeFileSync(join(folder, 'web/preload.js'), `
+export default (signal) => {
     document.body.dataset.retryPreload = 'mounted';
     return () => { document.body.dataset.retryPreload = signal.aborted ? 'released' : 'active'; };
-  };`);
-  writeFileSync(join(folder, 'web.js'), `import { slotExtensions } from '/packages/ui-runtime/plugin-sdk.js';
-  export default (_ctx, api) => {
+  };
+`);
+  writeFileSync(join(folder, 'web.js'), `
+export const inject = ["miniSlots"];
+
+export const apply = (ctx, config) => {
     const node = document.createElement('button');
     node.textContent = 'Recovered UI';
-    api.contribute(slotExtensions.register, 'conversation.composer', node);
-    if (!api.config.ready) throw new Error('Not ready');
-  };`);
+    ctx.effect(() => ctx.miniSlots.register('conversation.composer', node));
+    if (!config.ready) throw new Error('Not ready');
+  };
+`);
   const service = await startIsolatedHost(paths);
   try {
     await page.goto(service.url + '/#token=' + service.token);
@@ -213,7 +227,7 @@ test('plugin catalog applies configuration and removes disabled browser capabili
     await install.getByLabel('Plugin ID', { exact: true }).fill('local-example');
     await expect(install.getByRole('button', { name: 'Install plugin', exact: true })).toBeDisabled();
     await install.getByLabel('Plugin bundle files').setInputFiles([{
-      name: 'plugin.js', mimeType: 'text/javascript', buffer: Buffer.from('export default function setup() {}')
+      name: 'plugin.js', mimeType: 'text/javascript', buffer: Buffer.from("export function apply() {}")
     }, { name: 'plugin.json', mimeType: 'application/json', buffer: Buffer.from('{}') }]);
     await expect(install.getByRole('list', { name: 'Selected files' }).getByRole('listitem')).toHaveText(['plugin.js', 'plugin.json']);
     await install.getByRole('button', { name: 'Install plugin', exact: true }).click();
@@ -246,7 +260,7 @@ test('the Plugins page keeps stored settings when a workspace plugin setup fails
   writeJson(join(folder, 'plugin.json'), { scope: 'workspace', title: 'Workspace example', configSchema: {
     type: 'object', properties: { value: { type: 'integer', minimum: 1 } }, required: ['value']
   } });
-  writeFileSync(join(folder, 'plugin.js'), "export default (_, api) => { if (api.config.value === 1) throw new Error('Workspace setup failed'); };");
+  writeFileSync(join(folder, 'plugin.js'), "export const apply = (ctx, config) => { if (config.value === 1) throw new Error('Workspace setup failed'); };");
   const key = 'workspace:' + workspaceId(realpathSync.native(paths.cwd));
   const initial = { ...readJson<Record<string, unknown>>(paths.settings, {}), scopes: {
     [key]: { plugins: { 'workspace-example': true }, pluginConfig: { 'workspace-example': { value: 'invalid' } } }
@@ -279,23 +293,27 @@ test('unmounting browser plugins releases pages and restores replaced slot contr
   try {
     const folder = join(paths.plugins, 'replace-new');
     mkdirSync(folder);
-    writeJson(join(folder, 'plugin.json'), { browserInject: ['miniSlots', 'miniPrimitives', 'miniConversation'] });
-    writeFileSync(join(folder, 'web.js'), `import { slotExtensions } from '/packages/ui-runtime/plugin-sdk.js';
-    export default ({ miniPrimitives, miniConversation }, api) => {
-      api.contribute(slotExtensions.keyed, 'conversation.history', 'history', signal => {
+    writeJson(join(folder, 'plugin.json'), {});
+    writeFileSync(join(folder, 'web.js'), `
+export const inject = ["miniPrimitives","miniConversation","miniSlots"];
+
+export const apply = (ctx) => {
+    const { miniPrimitives, miniConversation } = ctx;
+      ctx.effect(() => ctx.miniSlots.registerKeyed('conversation.history', 'history', signal => {
         const node = miniPrimitives.status('Replacement history');
         const render = () => { node.textContent = 'Replacement history: ' + (miniConversation.get().run?.state ?? 'idle'); };
         miniConversation.subscribe(['run'], render, signal); render();
         return node;
-      });
-      api.contribute(slotExtensions.keyed, 'sidebar.primary', 'new-conversation', signal => {
+      }));
+      ctx.effect(() => ctx.miniSlots.registerKeyed('sidebar.primary', 'new-conversation', signal => {
         const button = miniPrimitives.button('Replacement conversation', 'quiet');
         window.addEventListener('slot-test', () => {
           document.body.dataset.slotEvents = String(Number(document.body.dataset.slotEvents ?? 0) + 1);
         }, { signal });
         return { node: button, dispose() { document.body.dataset.slotDisposed = 'yes'; } };
-      });
-    };`);
+      }));
+    };
+`);
     cpSync(resolve('docs/examples/browser-panel'), join(paths.plugins, 'browser-panel'), { recursive: true });
     writeJson(paths.settings, { pluginConfig: { 'core:models': { model: { provider: 'local-mock', id: 'mock-model' } }, 'browser-panel': { replaceComposer: true } }, plugins: { 'replace-new': true, 'browser-panel': true } });
     server = await startIsolatedHost(paths);

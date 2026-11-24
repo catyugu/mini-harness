@@ -11,9 +11,9 @@ importers:
       '@earendil-works/pi-ai':
         specifier: 1.6.0
         version: 1.6.0(@aws-sdk/credential-provider-node@3.972.98)(@smithy/signature-v4@5.7.5)(google-auth-library@10.9.1)(ws@8.23.0)
-      cordis:
-        specifier: 4.0.0-rc.13
-        version: 4.0.0-rc.13
+      '@standard-schema/spec':
+        specifier: 1.1.0
+        version: 1.1.0
       ignore:
         specifier: 7.0.8
         version: 7.0.8
@@ -36,9 +36,6 @@ importers:
       '@mini-harness/input':
         specifier: workspace:*
         version: link:packages/input
-      '@mini-harness/kernel':
-        specifier: workspace:*
-        version: link:packages/kernel
       '@mini-harness/llm':
         specifier: workspace:*
         version: link:packages/llm
@@ -96,9 +93,6 @@ importers:
       '@mini-harness/input':
         specifier: workspace:*
         version: link:../input
-      '@mini-harness/kernel':
-        specifier: workspace:*
-        version: link:../kernel
       '@mini-harness/llm':
         specifier: workspace:*
         version: link:../llm
@@ -120,9 +114,6 @@ importers:
 
   packages/approvals:
     dependencies:
-      '@mini-harness/kernel':
-        specifier: workspace:*
-        version: link:../kernel
       '@mini-harness/platform':
         specifier: workspace:*
         version: link:../platform
@@ -153,9 +144,6 @@ importers:
       '@mini-harness/input':
         specifier: workspace:*
         version: link:../input
-      '@mini-harness/kernel':
-        specifier: workspace:*
-        version: link:../kernel
       '@mini-harness/llm':
         specifier: workspace:*
         version: link:../llm
@@ -171,9 +159,6 @@ importers:
       '@mini-harness/sessions':
         specifier: workspace:*
         version: link:../sessions
-      '@mini-harness/settings':
-        specifier: workspace:*
-        version: link:../settings
       '@mini-harness/transport':
         specifier: workspace:*
         version: link:../transport
@@ -197,9 +182,6 @@ importers:
 
   packages/file-access:
     dependencies:
-      '@mini-harness/kernel':
-        specifier: workspace:*
-        version: link:../kernel
       '@mini-harness/platform':
         specifier: workspace:*
         version: link:../platform
@@ -263,15 +245,15 @@ importers:
       '@mini-harness/files':
         specifier: workspace:*
         version: link:../files
-      '@mini-harness/kernel':
-        specifier: workspace:*
-        version: link:../kernel
       '@mini-harness/models':
         specifier: workspace:*
         version: link:../models
       '@mini-harness/platform':
         specifier: workspace:*
         version: link:../platform
+      '@mini-harness/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
       '@mini-harness/plugins':
         specifier: workspace:*
         version: link:../plugins
@@ -333,22 +315,14 @@ importers:
         specifier: workspace:*
         version: link:../platform
 
-  packages/kernel: {}
-
   packages/llm:
     dependencies:
-      '@mini-harness/kernel':
-        specifier: workspace:*
-        version: link:../kernel
       '@mini-harness/platform':
         specifier: workspace:*
         version: link:../platform
 
   packages/models:
     dependencies:
-      '@mini-harness/kernel':
-        specifier: workspace:*
-        version: link:../kernel
       '@mini-harness/llm':
         specifier: workspace:*
         version: link:../llm
@@ -358,9 +332,6 @@ importers:
       '@mini-harness/plugin-api':
         specifier: workspace:*
         version: link:../plugin-api
-      '@mini-harness/settings':
-        specifier: workspace:*
-        version: link:../settings
       '@mini-harness/transport':
         specifier: workspace:*
         version: link:../transport
@@ -375,24 +346,15 @@ importers:
 
   packages/plugin-api:
     dependencies:
-      '@mini-harness/kernel':
-        specifier: workspace:*
-        version: link:../kernel
       '@mini-harness/platform':
         specifier: workspace:*
         version: link:../platform
-      '@mini-harness/transport':
-        specifier: workspace:*
-        version: link:../transport
 
   packages/plugins:
     dependencies:
       '@mini-harness/conversation':
         specifier: workspace:*
         version: link:../conversation
-      '@mini-harness/kernel':
-        specifier: workspace:*
-        version: link:../kernel
       '@mini-harness/models':
         specifier: workspace:*
         version: link:../models
@@ -408,18 +370,12 @@ importers:
       '@mini-harness/transport':
         specifier: workspace:*
         version: link:../transport
-      '@mini-harness/ui-layout':
-        specifier: workspace:*
-        version: link:../ui-layout
       '@mini-harness/ui-primitives':
         specifier: workspace:*
         version: link:../ui-primitives
       '@mini-harness/ui-runtime':
         specifier: workspace:*
         version: link:../ui-runtime
-      '@mini-harness/ui-slots':
-        specifier: workspace:*
-        version: link:../ui-slots
       '@mini-harness/workspaces':
         specifier: workspace:*
         version: link:../workspaces
@@ -429,9 +385,6 @@ importers:
       '@mini-harness/execution':
         specifier: workspace:*
         version: link:../execution
-      '@mini-harness/kernel':
-        specifier: workspace:*
-        version: link:../kernel
       '@mini-harness/plugin-api':
         specifier: workspace:*
         version: link:../plugin-api
@@ -450,9 +403,6 @@ importers:
       '@mini-harness/input':
         specifier: workspace:*
         version: link:../input
-      '@mini-harness/kernel':
-        specifier: workspace:*
-        version: link:../kernel
       '@mini-harness/llm':
         specifier: workspace:*
         version: link:../llm
@@ -477,9 +427,6 @@ importers:
       '@mini-harness/execution':
         specifier: workspace:*
         version: link:../execution
-      '@mini-harness/kernel':
-        specifier: workspace:*
-        version: link:../kernel
       '@mini-harness/platform':
         specifier: workspace:*
         version: link:../platform
@@ -504,9 +451,6 @@ importers:
       '@mini-harness/input':
         specifier: workspace:*
         version: link:../input
-      '@mini-harness/kernel':
-        specifier: workspace:*
-        version: link:../kernel
       '@mini-harness/llm':
         specifier: workspace:*
         version: link:../llm
@@ -552,9 +496,6 @@ importers:
 
   packages/session-helper:
     dependencies:
-      '@mini-harness/conversation':
-        specifier: workspace:*
-        version: link:../conversation
       '@mini-harness/plugin-api':
         specifier: workspace:*
         version: link:../plugin-api
@@ -567,9 +508,6 @@ importers:
       '@mini-harness/input':
         specifier: workspace:*
         version: link:../input
-      '@mini-harness/kernel':
-        specifier: workspace:*
-        version: link:../kernel
       '@mini-harness/llm':
         specifier: workspace:*
         version: link:../llm
@@ -600,9 +538,6 @@ importers:
 
   packages/settings:
     dependencies:
-      '@mini-harness/kernel':
-        specifier: workspace:*
-        version: link:../kernel
       '@mini-harness/llm':
         specifier: workspace:*
         version: link:../llm
@@ -624,9 +559,6 @@ importers:
       '@mini-harness/ui-runtime':
         specifier: workspace:*
         version: link:../ui-runtime
-      '@mini-harness/ui-slots':
-        specifier: workspace:*
-        version: link:../ui-slots
       '@mini-harness/ui-theme':
         specifier: workspace:*
         version: link:../ui-theme
@@ -657,9 +589,6 @@ importers:
       '@mini-harness/transport':
         specifier: workspace:*
         version: link:../transport
-      '@mini-harness/ui-runtime':
-        specifier: workspace:*
-        version: link:../ui-runtime
 
   packages/skills:
     dependencies:
@@ -690,9 +619,6 @@ importers:
       '@mini-harness/ui-runtime':
         specifier: workspace:*
         version: link:../ui-runtime
-      '@mini-harness/ui-slots':
-        specifier: workspace:*
-        version: link:../ui-slots
       '@mini-harness/workspaces':
         specifier: workspace:*
         version: link:../workspaces
@@ -726,18 +652,9 @@ importers:
       '@mini-harness/ui-primitives':
         specifier: workspace:*
         version: link:../ui-primitives
-      '@mini-harness/ui-runtime':
-        specifier: workspace:*
-        version: link:../ui-runtime
-      '@mini-harness/ui-slots':
-        specifier: workspace:*
-        version: link:../ui-slots
 
   packages/tools:
     dependencies:
-      '@mini-harness/kernel':
-        specifier: workspace:*
-        version: link:../kernel
       '@mini-harness/llm':
         specifier: workspace:*
         version: link:../llm
@@ -747,9 +664,6 @@ importers:
 
   packages/transport:
     dependencies:
-      '@mini-harness/kernel':
-        specifier: workspace:*
-        version: link:../kernel
       '@mini-harness/platform':
         specifier: workspace:*
         version: link:../platform
@@ -777,9 +691,6 @@ importers:
       '@mini-harness/ui-primitives':
         specifier: workspace:*
         version: link:../ui-primitives
-      '@mini-harness/ui-runtime':
-        specifier: workspace:*
-        version: link:../ui-runtime
       '@mini-harness/ui-slots':
         specifier: workspace:*
         version: link:../ui-slots
@@ -789,15 +700,12 @@ importers:
       '@mini-harness/plugin-api':
         specifier: workspace:*
         version: link:../plugin-api
-      '@mini-harness/ui-runtime':
-        specifier: workspace:*
-        version: link:../ui-runtime
 
   packages/ui-runtime:
     dependencies:
-      '@mini-harness/kernel':
+      '@mini-harness/plugin-api':
         specifier: workspace:*
-        version: link:../kernel
+        version: link:../plugin-api
       '@mini-harness/transport':
         specifier: workspace:*
         version: link:../transport
@@ -813,9 +721,6 @@ importers:
 
   packages/ui-theme:
     dependencies:
-      '@mini-harness/kernel':
-        specifier: workspace:*
-        version: link:../kernel
       '@mini-harness/plugin-api':
         specifier: workspace:*
         version: link:../plugin-api
@@ -825,9 +730,6 @@ importers:
 
   packages/workspaces:
     dependencies:
-      '@mini-harness/kernel':
-        specifier: workspace:*
-        version: link:../kernel
       '@mini-harness/platform':
         specifier: workspace:*
         version: link:../platform
@@ -1058,27 +960,6 @@ packages:
 
   buffer-equal-constant-time@1.0.1:
     resolution: {integrity: sha512-zRpUiDwd/xk6ADqPMATG8vc9VPrkck7T07OIx0gnjmJAnHnTVXNQG3vfvWNuiZIkwu9KrKdA1iJKfsfTVxE6NA==}
-
-  cordis@4.0.0-rc.13:
-    resolution: {integrity: sha512-rYsquBfrd1U8HuaDr/1TYpdnHiuy5X2oEWJbfEveIZwysfjg3vTXJWKvTPlaPtt2VeFsAJIrzHZnymONyOr3PA==}
-    hasBin: true
-    peerDependencies:
-      '@cordisjs/fs': ^2.0.0-rc.0
-      '@cordisjs/fs-node': ^0.1.0
-      '@cordisjs/include': ^2.0.0-rc.0
-      '@cordisjs/loader': ^1.0.0-rc.10
-    peerDependenciesMeta:
-      '@cordisjs/fs':
-        optional: true
-      '@cordisjs/fs-node':
-        optional: true
-      '@cordisjs/include':
-        optional: true
-      '@cordisjs/loader':
-        optional: true
-
-  cosmokit@1.8.1:
-    resolution: {integrity: sha512-PDBv4l90xZKrUsZ0vtoycgZpO/j4iFsqJXrAxsyBDsnQRI7ZMJXIjgDJsKNjd5L8jnVnnlrDCdhkFbTncgCVjQ==}
 
   data-uri-to-buffer@4.0.1:
     resolution: {integrity: sha512-0R9ikRb668HB7QDxT1vkpuUBtqc53YyAwMwGeUFKRojY/NWKvdZ+9UYtRfGmhqNbRkTSVpMbmyhXipFFv2cb/A==}
@@ -1613,13 +1494,6 @@ snapshots:
   bowser@2.15.1: {}
 
   buffer-equal-constant-time@1.0.1: {}
-
-  cordis@4.0.0-rc.13:
-    dependencies:
-      '@standard-schema/spec': 1.1.0
-      cosmokit: 1.8.1
-
-  cosmokit@1.8.1: {}
 
   data-uri-to-buffer@4.0.1: {}
 

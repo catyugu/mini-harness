@@ -111,4 +111,3 @@ export function readPluginValues(current: Record<string, Record<string, unknown>
   }
   return config;
 }
-

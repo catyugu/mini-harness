@@ -1,4 +1,4 @@
-import type {} from 'cordis';
+import type {} from 'mini-harness/cordis';
 import type { InboxItem } from '@mini-harness/sessions/log-api';
 import type { QueueEntry } from '@mini-harness/sessions/queue';
 import type { SessionRecord } from '@mini-harness/sessions/identity';
@@ -27,6 +27,6 @@ export interface AgentPort {
   cancelQueue(id: string, itemId?: string): QueueEntry[];
 }
 
-declare module 'cordis' {
+declare module 'mini-harness/cordis' {
   interface Context { harnessAgent: AgentPort }
 }

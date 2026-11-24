@@ -1,22 +1,22 @@
+import { browserRequest } from '@mini-harness/ui-runtime/http';
+import type { Context } from 'mini-harness/cordis';
 import type {} from '@mini-harness/workspaces/browser/api';
-import { slotExtensions } from '@mini-harness/ui-slots/browser/api';
-import { layoutExtensions } from '@mini-harness/ui-layout/browser/api';
 import type { WorkspaceRecord } from '@mini-harness/workspaces/record';
-import type { FrontendSetup, FrontendApi } from '@mini-harness/ui-runtime/frontend-api';
 import { button, field, confirmAction } from '@mini-harness/ui-primitives/primitives';
 import { payload } from '@mini-harness/ui-runtime/http';
 import { workspaceRoute } from '@mini-harness/workspaces/browser/route';
 import { fileLabel, icon } from '@mini-harness/ui-primitives/icons';
 
-const setup: FrontendSetup = (ctx, api) => {
+const setup = (ctx: Context) => {
+  const signal = ctx.fiber.signal;
   const { miniSelection: select, miniSessions: sessions, miniWorkspaces: workspaces, miniTabs: tabs } = ctx;
-  const picker = workspacePicker(api, sessions.get);
+  const picker = workspacePicker(ctx, sessions.get);
   const badges = (['workspace.header', 'workspace.welcome'] as const).map((slot) => {
     const node = document.createElement('div');
     node.className = 'workspace-button';
     const label = document.createElement('small');
     node.append(icon('folder'), label);
-    api.contribute(slotExtensions.register, slot, node);
+    ctx.effect(() => ctx.miniSlots.register(slot, node));
     return { node, label };
   });
   ctx.provide('miniWorkspace', picker);
@@ -30,12 +30,12 @@ const setup: FrontendSetup = (ctx, api) => {
     tabs.selectScope(select.scope() || undefined);
     tabs.prune(new Set(sessions.get().map(({ id }) => id)), new Set(workspaces.get().map(({ id }) => id)));
   };
-  select.subscribe(update, api.signal);
-  sessions.subscribe(update, api.signal);
+  select.subscribe(update, signal);
+  sessions.subscribe(update, signal);
   update();
 };
 
-declare module 'cordis' {
+declare module 'mini-harness/cordis' {
   interface Context { miniWorkspace: ReturnType<typeof workspacePicker> }
 }
 
@@ -45,7 +45,8 @@ interface DirectoryListing {
   directories: { name: string; path: string }[];
 }
 
-function workspacePicker(api: FrontendApi, sessions: () => { workspaceId: string }[]) {
+function workspacePicker(ctx: Context, sessions: () => { workspaceId: string }[]) {
+  const signal = ctx.fiber.signal;
   const form = document.createElement('form');
   form.className = 'workspace-form';
   const path = document.createElement('input');
@@ -64,7 +65,8 @@ function workspacePicker(api: FrontendApi, sessions: () => { workspaceId: string
   browseActions.className = 'ui-actions';
   browseActions.append(up, go);
   form.append(field('Absolute directory path', path), browseActions, list, status, register);
-  const picker = api.contribute(layoutExtensions.dialog, 'Add workspace', form);
+  const { node: picker, dispose: disposePicker } = ctx.miniDialogs.create('Add workspace', form);
+  ctx.effect(() => disposePicker);
   let selected: (record: WorkspaceRecord) => void;
   let browsing: AbortController;
   picker.addEventListener('close', () => browsing?.abort());
@@ -75,7 +77,7 @@ function workspacePicker(api: FrontendApi, sessions: () => { workspaceId: string
     status.textContent = '';
     list.setAttribute('aria-busy', 'true');
     try {
-      const result = await api.request<DirectoryListing>('/workspaces/directories?path=' + encodeURIComponent(target), { signal: controller.signal });
+      const result = await browserRequest<DirectoryListing>(ctx, '/workspaces/directories?path=' + encodeURIComponent(target), { signal: controller.signal });
       if (controller.signal.aborted) return;
       path.value = result.path;
       up.disabled = !result.parent;
@@ -103,7 +105,7 @@ function workspacePicker(api: FrontendApi, sessions: () => { workspaceId: string
     if (register.disabled) return;
     register.disabled = true;
     try {
-      const record = await api.request<WorkspaceRecord>('/workspaces', payload('POST', { path: path.value.trim() }));
+      const record = await browserRequest<WorkspaceRecord>(ctx, '/workspaces', payload('POST', { path: path.value.trim() }));
       picker.close();
       selected(record);
     } catch (error) { status.textContent = (error instanceof Error ? error.message : String(error)); }
@@ -127,7 +129,8 @@ function workspacePicker(api: FrontendApi, sessions: () => { workspaceId: string
   rename.type = 'submit';
   actions.append(cancel, rename);
   editForm.append(name, editStatus, actions);
-  const editor = api.contribute(layoutExtensions.dialog, 'Rename workspace', editForm);
+  const { node: editor, dispose: disposeEditor } = ctx.miniDialogs.create('Rename workspace', editForm);
+  ctx.effect(() => disposeEditor);
   editor.classList.add('workspace-rename-dialog');
   let editing: WorkspaceRecord;
   cancel.onclick = () => editor.close();
@@ -140,7 +143,7 @@ function workspacePicker(api: FrontendApi, sessions: () => { workspaceId: string
     if (rename.disabled) return;
     rename.disabled = true;
     try {
-      await api.request(workspaceRoute(editing.id), payload('PATCH', { name: name.value.trim() }));
+      await browserRequest(ctx, workspaceRoute(editing.id), payload('PATCH', { name: name.value.trim() }));
       editor.close();
     } catch (error) { editStatus.textContent = (error instanceof Error ? error.message : String(error)); }
     finally { rename.disabled = false; }
@@ -166,10 +169,10 @@ function workspacePicker(api: FrontendApi, sessions: () => { workspaceId: string
       const count = sessions().filter((session) => session.workspaceId === record.id).length;
       if (!await confirmAction('Permanently delete workspace "' + record.name + '" and its ' + count +
         ' conversation' + (count === 1 ? '' : 's') + ' (including subagents)? Workspace files will be kept.',
-        { title: 'Delete workspace', signal: api.signal })) return;
-      await api.request(workspaceRoute(record.id), { method: 'DELETE' });
+        { title: 'Delete workspace', signal })) return;
+      await browserRequest(ctx, workspaceRoute(record.id), { method: 'DELETE' });
     }
   };
 }
 
-export default setup;
+export default { inject: ['miniSelection','miniSessions','miniWorkspaces','miniTabs','miniDialogs','miniSlots'], provide: ['miniWorkspace'], apply: setup };

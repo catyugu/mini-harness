@@ -8,7 +8,6 @@
     "./manifest": "./src/manifest.ts"
   },
   "dependencies": {
-    "@mini-harness/kernel": "workspace:*",
     "@mini-harness/plugin-api": "workspace:*",
     "@mini-harness/ui-runtime": "workspace:*"
   },

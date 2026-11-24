@@ -1,15 +1,14 @@
 export type {} from '@mini-harness/settings/settings';
 
-export type { Context } from 'cordis';
-export type { ServiceMap } from '@mini-harness/kernel/services';
-export type { PluginScope, ScopeSettings } from '@mini-harness/kernel/scopes';
-export type { PluginApi, PluginDescriptor, ConfigValidationContext } from '@mini-harness/plugin-api/descriptor';
-export type { InputContext, InputPreparation, ModelFailure, ModelRequestContent, ModelRequestTransform, ModelRetry, StepContext } from '@mini-harness/agent/extensions';
+export type { Context, Plugin } from 'mini-harness/cordis';
+export type { PluginScope, ScopeSettings } from '@mini-harness/plugin-api/scopes';
+export type { ConfigValidationContext } from '@mini-harness/plugin-api/descriptor';
+export type { InputContext, InputPreparation, ModelFailure, ModelRequestContent, ModelRequestTransform, ModelRetry, StepContext } from '@mini-harness/agent/events';
 export type { PromptContext, PromptSection } from '@mini-harness/agent/prompt-api';
-export type { ToolDecision } from '@mini-harness/tools/extensions';
-export type { ToolProjection } from '@mini-harness/conversation/display-extensions';
-export type { ToolResultContext, ToolResultTransform } from '@mini-harness/agent/extensions';
-export type { CapabilityObservation, CapabilityObservations } from '@mini-harness/kernel/observations';
+export type { ToolDecision } from '@mini-harness/tools/events';
+export type { ToolProjection } from '@mini-harness/conversation/display-events';
+export type { ToolResultContext, ToolResultTransform } from '@mini-harness/agent/events';
+export type { CapabilityObservation, CapabilityObservations } from '@mini-harness/plugin-api/observations';
 export type { FileAccessPort, WorkspaceFileAccess } from '@mini-harness/file-access/api';
 export type { ProcessExecutionPort } from '@mini-harness/process-execution/api';
 export type { SandboxPort } from '@mini-harness/sandbox/api';
@@ -23,22 +22,17 @@ export type { PromptPort } from '@mini-harness/agent/prompt-api';
 export type { ModelChoice, ThinkingLevel } from '@mini-harness/llm/vocabulary';
 
 export { HttpError, HttpReply } from '@mini-harness/transport/routes';
-export type { GatewayRequest, NetworkPort, RouteRequest, UpgradeHandler } from '@mini-harness/transport/routes';
-export type { PluginConfiguration } from '@mini-harness/kernel/configuration';
+export type { GatewayRequest, NetworkPort, RouteRequest, UpgradeHandler, PluginRoutes } from '@mini-harness/transport/routes';
+export type { PluginConfiguration } from '@mini-harness/plugin-api/plugin-configuration';
 
-export { agentExtensions } from '@mini-harness/agent/extensions';
 export type { InputSource, PreparedMessage } from '@mini-harness/input/message';
-export { promptExtensions } from '@mini-harness/agent/prompt-api';
-export { toolExtensions } from '@mini-harness/tools/extensions';
-export { approvalExtensions } from '@mini-harness/approvals/api';
 export type { ApprovalPrompt } from '@mini-harness/approvals/api';
-export { executionExtensions } from '@mini-harness/runs/execution';
 export type { Execution, ExecutionInput, ExecutionHandle } from '@mini-harness/runs/execution';
 export type { RunInfo } from '@mini-harness/sessions/run-state';
 export type { SessionRecord } from '@mini-harness/sessions/identity';
 export type { SessionAccess } from '@mini-harness/sessions/records';
-export { sessionExtensions } from '@mini-harness/sessions/records';
-export { sessionDisplayExtensions } from '@mini-harness/conversation/display-extensions';
 export type { RecordDisplay, RecordProjection, SessionRecords } from '@mini-harness/sessions/records';
-export { extension } from '@mini-harness/kernel/contributions';
-export type { Extension } from '@mini-harness/kernel/contributions';
+
+export type {} from '@mini-harness/plugin-api/services';
+export { pluginScope, sessionContext, scopedService } from '@mini-harness/plugin-api/instance';
+export type { PluginData, PluginSecrets } from '@mini-harness/plugin-api/services';

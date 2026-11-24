@@ -1,4 +1,4 @@
-import type { ScopeKey } from '@mini-harness/kernel/scopes';
+import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
 import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
 
 export interface PluginMetadata extends Pick<PluginDescriptor, 'id' | 'scope' | 'title' | 'description'

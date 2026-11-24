@@ -1,4 +1,4 @@
-import type {} from 'cordis';
+import type {} from 'mini-harness/cordis';
 import type { ProcessRequest, ProcessResult } from '@mini-harness/execution/request';
 
 export interface ProcessExecutionPort {
@@ -6,6 +6,6 @@ export interface ProcessExecutionPort {
 }
 
 
-declare module '@mini-harness/kernel/services' {
-  interface ServiceMap { harnessProcess: ProcessExecutionPort }
+declare module 'mini-harness/cordis' {
+  interface Context { harnessProcess: ProcessExecutionPort }
 }

@@ -51,7 +51,7 @@ function checkCycles(graph: Map<string, Set<string>>, kind: string) {
 }
 
 test('workspace dependencies use domain APIs and keep providers at the application boundary', () => {
-  assert.ok(!manifests.has('contracts'), 'Remove the central contracts package');
+  assert.ok(!manifests.has('kernel'), 'Business plugins must use the vendored Cordis runtime directly');
   const browserModules = new Map<string, string[]>();
   const browserRoots = [join(packages, 'sdk', 'src', 'browser-plugin.ts')];
   const runtime = new Map<string, Set<string>>();
@@ -84,6 +84,7 @@ test('workspace dependencies use domain APIs and keep providers at the applicati
             assert.ok(!relative(directory, target).split(sep).includes('server'), reason);
           continue;
         }
+        if (specifier === 'mini-harness/cordis') continue;
         assert.ok(specifier !== 'mini-harness/plugin' && specifier !== 'mini-harness/browser-plugin', reason);
         if (!specifier.startsWith(prefix)) {
           if (!typeOnly) imports.push(specifier);
@@ -129,10 +130,6 @@ test('workspace dependencies use domain APIs and keep providers at the applicati
   for (const file of browserRoots) checkBrowser(file);
 
   const browserIds = new Set(plugins.filter(({ browser }) => browser).map(({ id }) => id));
-  const browserServices = new Set([
-    'miniProjections', 'miniSwitch', 'miniBrowserFailures',
-    ...plugins.flatMap(({ browserProvides }) => browserProvides ?? [])
-  ]);
   const descriptorOwners = new Map<string, string>();
   const composition = join(packages, 'host', 'src', 'composition.ts');
   const source = ts.createSourceFile(composition, readFileSync(composition, 'utf8'), ts.ScriptTarget.Latest, true);
@@ -144,7 +141,7 @@ test('workspace dependencies use domain APIs and keep providers at the applicati
     const manifest = readFileSync(join(packages, owner, entry), 'utf8');
     for (const match of manifest.matchAll(/\bid: '([^']+)'/g)) descriptorOwners.set(match[1], owner);
   }
-  for (const { id, browser, browserStyles, browserRequires, browserInject } of plugins) {
+  for (const { id, browser, browserStyles, browserRequires } of plugins) {
     if (!browser) { assert.ok(!browserStyles?.length, id + ' has styles without a browser entry'); continue; }
     const owner = descriptorOwners.get(id);
     assert.ok(owner, id + ' is missing its descriptor owner');
@@ -154,13 +151,11 @@ test('workspace dependencies use domain APIs and keep providers at the applicati
       assert.ok(existsSync(join(root, resource.slice(1).replace(/\.js$/, '.ts'))), id + ' is missing ' + resource);
     }
     for (const dependency of browserRequires ?? []) assert.ok(browserIds.has(dependency), id + ' requires ' + dependency);
-    for (const service of browserInject ?? []) assert.ok(browserServices.has(service), id + ' injects ' + service);
   }
 
-  for (const name of ['kernel', 'platform']) assert.equal(declared.get(name)?.size, 0, name);
-  for (const name of ['plugin-api', 'transport', 'ui-runtime'])
-    for (const dependency of declared.get(name) ?? [])
-      assert.ok(['kernel', 'platform', 'transport', 'ui-runtime'].includes(dependency), name + ' depends on ' + dependency);
+  assert.equal(declared.get('platform')?.size, 0);
+  for (const dependency of declared.get('plugin-api') ?? [])
+    assert.equal(dependency, 'platform');
   checkCycles(runtime, 'Runtime dependency');
   checkCycles(declared, 'Workspace dependency');
   assert.ok(Object.keys(readManifest(join(root, 'package.json')).dependencies ?? {}).every((name) => !name.startsWith(prefix)));

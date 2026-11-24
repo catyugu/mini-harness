@@ -1,5 +1,4 @@
-import type { Context } from 'cordis';
-import type { FrontendApi } from '@mini-harness/ui-runtime/frontend-api';
+import type { Context } from 'mini-harness/cordis';
 import type { Attachment } from '@mini-harness/input/message';
 import type { ConversationPermission } from '@mini-harness/sessions/identity';
 import type { ModelChoice, ThinkingLevel } from '@mini-harness/llm/vocabulary';
@@ -27,7 +26,8 @@ interface DraftOwner {
   submission?: { draft: Draft; version: number; runId?: string; retryable: boolean };
 }
 
-export function createComposerModel(ctx: Context, api: FrontendApi): ComposerModel {
+export function createComposerModel(ctx: Context): ComposerModel {
+  const signal = ctx.fiber.signal;
   const control = ctx.miniConversation, selection = ctx.miniSelection;
   const changes = new EventTarget();
   const commands = new CommandRegistry(), completions = new Map<string, Completer>();
@@ -55,7 +55,7 @@ export function createComposerModel(ctx: Context, api: FrontendApi): ComposerMod
   selection.subscribe(() => {
     const next = key();
     if (next !== selected) { selected = next; change(); }
-  }, api.signal);
+  }, signal);
   function clearAccepted(owner: DraftOwner, current: Draft, version: number) {
     if (current.version === version) {
       if (owner.edit === current) delete owner.edit;
@@ -79,17 +79,17 @@ export function createComposerModel(ctx: Context, api: FrontendApi): ComposerMod
       change();
     }
   }
-  control.subscribe(['session', 'history', 'run', 'interaction'], reconcileSubmission, api.signal);
+  control.subscribe(['session', 'history', 'run', 'interaction'], reconcileSubmission, signal);
   const register: ComposerModel['command'] = (command) => {
     const dispose = commands.register(command); change();
     return () => { dispose(); change(); };
   };
-  api.onDispose(register({ name: 'export', group: 'Conversation', description: 'Export the current conversation', run: () => {
+  ctx.effect(() => register({ name: 'export', group: 'Conversation', description: 'Export the current conversation', run: () => {
     const id = control.get().session?.id;
     if (!id) throw new Error('Open a conversation to export it.');
-    return exportSessions([id], api.signal);
+    return exportSessions([id], signal);
   } }));
-  api.onDispose(register({ name: 'compact', group: 'Conversation', description: 'Summarize earlier messages to free context', run: control.compact }));
+  ctx.effect(() => register({ name: 'compact', group: 'Conversation', description: 'Summarize earlier messages to free context', run: control.compact }));
 
   async function send(queued = false) {
     const origin = key(), owner = entry(), current = draft();
@@ -184,7 +184,7 @@ export function createComposerModel(ctx: Context, api: FrontendApi): ComposerMod
             reader.onerror = () => reject(new Error('Could not read ' + file.name));
             reader.readAsDataURL(file);
           });
-          api.signal.throwIfAborted();
+          signal.throwIfAborted();
           return { name: file.name, mimeType: file.type || 'application/octet-stream', data };
         }));
         if ([...current.attachments, ...added].reduce((total, file) => total + file.data.length * .75, 0) > 12 * 1024 * 1024)
@@ -192,7 +192,7 @@ export function createComposerModel(ctx: Context, api: FrontendApi): ComposerMod
         current.attachments.push(...added);
       } finally {
         current.loading -= incoming.length;
-        if (!api.signal.aborted) edited(current, false, true, owner);
+        if (!signal.aborted) edited(current, false, true, owner);
       }
     },
     removeAttachment(index) {
@@ -209,7 +209,7 @@ export function createComposerModel(ctx: Context, api: FrontendApi): ComposerMod
       return () => {
         if (owner.edit !== edit) return;
         delete owner.edit;
-        if (owner === entry() && !api.signal.aborted) change();
+        if (owner === entry() && !signal.aborted) change();
       };
     },
     matchCommands: (query) => commands.match(query),

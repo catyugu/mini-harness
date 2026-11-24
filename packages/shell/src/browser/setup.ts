@@ -1,6 +1,5 @@
+import type { Context } from 'mini-harness/cordis';
 import type { ToolView } from '@mini-harness/conversation/browser/history-api';
-import { conversationExtensions } from '@mini-harness/conversation/browser/extensions';
-import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend-api';
 
 function renderResult(tool: ToolView) {
   const result = typeof tool.content === 'string' ? tool.content : tool.content?.filter((b) => b.type === 'text').map((b) => b.text).join('\n');
@@ -13,7 +12,7 @@ function renderResult(tool: ToolView) {
   return pre;
 }
 
-const setup: FrontendSetup = (_ctx, api) => {
-  api.contribute(conversationExtensions.tool, 'sandbox_shell', renderResult);
+const setup = (ctx: Context) => {
+  ctx.effect(() => ctx.miniMessages.registerTool('sandbox_shell', renderResult));
 };
-export default setup;
+export default { inject: ['miniMessages'], provide: [], apply: setup };

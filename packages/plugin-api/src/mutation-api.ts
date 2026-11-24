@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import type {} from 'cordis';
+import type {} from 'mini-harness/cordis';
 import type { ScopeKey } from './scopes.js';
 
 // The marker follows only work initiated inside a graph transaction; unrelated requests may wait.
@@ -42,7 +42,7 @@ export interface MutationPort {
 }
 
 
-declare module 'cordis' {
+declare module 'mini-harness/cordis' {
   interface Context { harnessMutations: MutationPort }
   interface Events {
     'harness/ready'(): void | Promise<void>;

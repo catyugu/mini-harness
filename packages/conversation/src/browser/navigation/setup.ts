@@ -1,11 +1,11 @@
+import type { Context } from 'mini-harness/cordis';
 import type {} from '@mini-harness/ui-layout/browser/api';
 import type {} from '@mini-harness/workspaces/browser/api';
-import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend-api';
 import { sessionNavigation } from '../navigation.js';
 
-const setup: FrontendSetup = (ctx, api) => {
+const setup = (ctx: Context) => {
   const { miniLayout: layout, miniPages: pages, miniHeader: header, miniSelection: state, miniSessions: sessions, miniWorkspaces: workspaces, miniWorkspace: workspace } = ctx;
-  sessionNavigation(api, {
+  sessionNavigation(ctx, {
     state, sessions, workspaces,
     select(id, draft) {
       const changed = state.selectedWorkspace !== id;
@@ -26,4 +26,4 @@ const setup: FrontendSetup = (ctx, api) => {
 };
 
 
-export default setup;
+export default { inject: ['miniSelection','miniSessions','miniWorkspaces','miniLayout','miniPages','miniHeader','miniWorkspace','miniSlots'], provide: [], apply: setup };

@@ -1,4 +1,4 @@
-import type { Context } from 'cordis';
+import type { Context } from 'mini-harness/cordis';
 import type {} from '@mini-harness/ui-layout/browser/api';
 import type { SessionDisplayRecord } from '@mini-harness/sessions/display-record';
 import type { MessageContent, ViewMessage } from '@mini-harness/sessions/message';
@@ -49,7 +49,7 @@ function setActualSize(enabled: boolean) {
 actualSize.onclick = () => setActualSize(actualSize.getAttribute('aria-pressed') !== 'true');
 previewDialog.addEventListener('close', () => {
   if (!previewDialog.open) previewImage.removeAttribute('src');
-}, { signal: signal });
+}, { signal });
 
 function openImage(thumbnail: HTMLImageElement) {
   previewImage.alt = filename.textContent = thumbnail.alt;

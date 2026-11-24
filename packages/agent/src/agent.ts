@@ -1,6 +1,6 @@
 import { imageMimeType } from '@mini-harness/input/prepare';
 import { validateModelOptions } from '@mini-harness/llm/options';
-import type { ToolResultTransform, InputContext, InputPreparation, ModelFailure, ModelRequestContent, ModelRequestTransform, ModelRetry, StepContext } from './extensions.js';
+import type { ToolResultTransform, InputContext, InputPreparation, ModelFailure, ModelRequestContent, ModelRequestTransform, ModelRetry, StepContext } from './events.js';
 import { DomainError } from '@mini-harness/platform/errors';
 import { isDeepStrictEqual } from 'node:util';
 import { createHash } from 'node:crypto';
@@ -14,12 +14,11 @@ import type { PromptPort } from './prompt-api.js';
 import { RunInterrupted, type AgentEvent } from './stream.js';
 import type { Attachment, ImageInput, InputSource, PreparedMessage } from '@mini-harness/input/message';
 import type { SessionLogPort, MessagePatch, InboxItem } from '@mini-harness/sessions/log-api';
-import type { OrderedHook } from '@mini-harness/kernel/contributions';
-import type { CapabilityObservation } from '@mini-harness/kernel/observations';
+import type { CapabilityObservation } from '@mini-harness/plugin-api/observations';
 import { Inbox } from './inbox.js';
 import { isToolContent, type ToolPort } from '@mini-harness/tools/api';
 import { contentDelta } from '@mini-harness/sessions/content-delta';
-import { applyTransforms } from './transforms.js';
+import { applyTransforms, type AgentListener } from './transforms.js';
 import { executeTool, scheduleTools } from './tool-pipeline.js';
 import { resolveThinking, selectModel } from './model-selection.js';
 import { requestModel } from './model-request.js';
@@ -29,11 +28,11 @@ interface AgentServices {
   llm(id: string): LlmPort;
   tools(id: string): ToolPort;
   prompt(id: string): PromptPort;
-  inputHooks?(id: string): OrderedHook<InputPreparation>[];
+  inputHooks?(id: string): AgentListener<InputPreparation>[];
   policy(): { maxTurns: number; autoCompact: boolean };
   observe(event: CapabilityObservation, signal?: AbortSignal): void;
-  modelRequestHooks?(id: string): OrderedHook<ModelRequestTransform>[];
-  toolResultHooks?(id: string): OrderedHook<ToolResultTransform>[];
+  modelRequestHooks?(id: string): AgentListener<ModelRequestTransform>[];
+  toolResultHooks?(id: string): AgentListener<ToolResultTransform>[];
   retryModel?(failure: ModelFailure): Promise<ModelRetry | undefined>;
 }
 
@@ -145,7 +144,6 @@ export class NativeAgent implements AgentPort {
       assertActive: () => {
         signal.throwIfAborted();
         this.sessions.assertAvailable(sessionId);
-        for (const hook of hooks) hook.assertActive?.(sessionId);
       }
     };
   }

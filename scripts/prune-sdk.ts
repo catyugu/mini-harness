@@ -4,7 +4,7 @@ import ts from 'typescript';
 import { moduleReferences } from './module-references.js';
 
 // Retain the two SDKs' declaration dependencies without publishing private provider types.
-const declarationRoot = resolve('dist/types/packages');
+const declarationRoot = resolve('dist/types');
 const manifest: { exports: Record<string, { types: string }> } = JSON.parse(readFileSync('package.json', 'utf8'));
 const publicDeclarations = new Set<string>();
 function includeDeclaration(file: string) {

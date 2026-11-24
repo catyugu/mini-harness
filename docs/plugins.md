@@ -1,300 +1,99 @@
-# Plugin development
+# Plugins
 
-Put a `plugin.json` descriptor and `plugin.js`, `web.js`, or both in `~/.mini-harness/plugins/<id>/`. The Plugins page installs bundles up to 1 MiB and leaves them disabled until enabled. IDs start with a lowercase letter and can contain lowercase letters, digits and hyphens, up to 64 characters. Disable a plugin in every scope and remove any provider selection before uninstalling. Uninstalling permanently removes the bundle and its configuration. Installed server plugins are trusted local JavaScript and run with the OS permissions of the mini-harness process. Service declarations and the plugin API govern composition and lifecycle.
+A plugin bundle contains `plugin.json` and at least one of `plugin.js` and `web.js`. Local and npm plugins run trusted JavaScript. Review the code, dependencies and browser assets before installing it. See [SECURITY.md](../SECURITY.md).
 
-## npm distribution
+## Install and enable
 
-Publish a standard npm package with `plugin.json` and its entries at the package root. A server entry needs `"type": "module"` in `package.json` and can import the package's npm dependencies. Bundle browser dependencies into a self-contained `web.js` of at most 1 MiB.
+Use Settings → Plugins to install local files and configure or enable a plugin. For npm packages, use:
 
 ```sh
-mini-harness plugin install my-tools @example/harness-tools
-mini-harness plugin update my-tools
-mini-harness plugin update my-tools @example/harness-tools@1.2.0
+mini-harness plugin install <id> <package>
+mini-harness plugin update <id>
+mini-harness plugin uninstall <id>
 ```
 
-The first argument is the local plugin ID used in settings and routes. An unversioned name follows the registry's default tag. An explicit version stays pinned until you supply a new version or tag on update. Installation uses the npm CLI included with Node (or `MINI_HARNESS_NPM_CLI` for custom Node installations). There is no bundled package manager at runtime. It installs production dependencies, records an exact version and a `package-lock.json`, and disables lifecycle scripts. Stop the server before installing or updating. For an update, disable the plugin in every scope and clear its provider selections first. The CLI validates the staged package before publishing it and keeps existing plugin configuration. Enable the installed plugin in Settings or select it at its declared scope.
+Disable an npm plugin and save before updating it. Installed plugins start disabled. Development mode accepts `MINI_HARNESS_DEV_PLUGIN=/absolute/path/to/plugin`. The directory name sets the plugin ID.
 
-## Descriptor and entrypoints
+The manifest supplies display information, scope (`application`, `workspace`, or `session`), and optional JSON Schema and configuration-form metadata. Use `provides` and `browserProvides` to publish service choices before the module activates. Browser styles and helper modules must be listed in `browserAssets`. Use `browserPreload` for a declared asset that exports a function receiving an activation signal and optionally returning cleanup.
 
-A plugin with no descriptor fields can use `{}` as its `plugin.json`.
+## Declare a Cordis plugin
 
-```json
-{
-  "title": "Conversation count",
-  "description": "Count registered conversations.",
-  "inject": ["harnessSessions", "harnessRoutes"],
-  "configSchema": {
-    "type": "object",
-    "additionalProperties": false,
-    "properties": {
-      "prefix": { "type": "string", "default": "Count" }
-    }
-  }
-}
-```
-
-`plugin.js` and `web.js` each export a default `setup(ctx, api)` function and may return cleanup. For TypeScript use `mini-harness/plugin` for the server API and service types, and `mini-harness/browser-plugin` for the browser API. Declare `mini-harness` as an npm dependency when the server entry imports runtime values from `mini-harness/plugin`. Local ESM bundles can install dependencies in their own plugin directory. Bundle browser dependencies into `web.js` for the authenticated browser loader.
-
-| Field | Contract |
-| - | - |
-| `scope` | `application` (default), `workspace` or `session` |
-| `provides`, `inject`, `optional` | Server services published, required, or read opportunistically |
-| `requires` | Required server plugin IDs. Browser dependencies use `browserInject` or `browserRequires`. |
-| `browserProvides`, `browserInject`, `browserRequires` | Published and required browser services, and required browser plugin IDs |
-| `configSchema` | Self-contained JSON Schema for an object. Defaults apply before validation. |
-| `configGroups`, `configHint` | Group existing schema fields and describe configuration. |
-| `configChanges` | Set to `live` to apply validated changes without remounting the plugin. |
-| `icon` | A symbolic icon name or an SVG path object with optional `viewBox` |
-
-```js
-import { sessionExtensions } from 'mini-harness/plugin';
-
-export default function setup(_ctx, api) {
-  const sessions = api.contribute(sessionExtensions.access);
-  api.registerRoute('GET', '/count', () => ({
-    label: api.config.prefix,
-    count: sessions.list().length
-  }));
-}
-```
-
-| Server API | Contract |
-| - | - |
-| `config`, `scope`, `signal` | Validated setup settings, scope address and lifetime signal |
-| `configuration.get(key)`, `.subscribe(key, listener)` | Read a field or listen for committed changes in this instance’s namespace and scope |
-| `configuration.set(key, value)`, `.patch(values)` | Validate and save fields in one transaction. The server SDK requires `configChanges: 'live'` for writes. |
-| `ctx.provide(name, service)` | Publish a declared service directly through Cordis |
-| `ctx.serviceName`, `ctx.get(name)` | Read services declared in `inject` or look up a service declared in `optional` through Cordis |
-| `contribute(point, ...args)` | Register through a typed extension point owned by a capability. The host binds scope, identity and lifetime. |
-| `registerRoute(method, path, handler)` | Authenticated route under `/api/extensions/<id>`. Handler receives URL, `body(maxBytes?)` and `signal`. Application scope only. |
-| `prepareSession(id, signal)`, `scopedService(id, service)` | Prepare and resolve a declared service in a visible conversation. Tool handlers already run in a prepared scope. |
-| `registerScopeRequest(name, handler)` | Registers an authenticated operation for one mounted workspace or session instance. |
-| `ctx.effect(() => cleanup)` | Bind cleanup to the Cordis setup fiber. Setup may also return cleanup. |
-
-Return JSON from route handlers and honor their cancellation signals. For WebSocket upgrades, return a promise that settles once asynchronous handler work has ended. Plugin unload stops admission, signals accepted calls, waits for their handlers to settle and then releases plugin resources. A handler can write its own live configuration through `api.configuration`. Structural configuration changes start outside plugin requests. Use the plugin lifetime signal for other work owned by setup. Use the credential or secret store for sensitive values.
-
-In TypeScript, `ctx.harnessLlm` has type `LlmPort`. Declare your own names once in the public service map; the same augmentation types the Cordis context. Declare the same names in the plugin descriptor so the host can validate them when it mounts the plugin.
+The CLI and browser load named `inject`, `provide` and `apply` exports or a default Cordis plugin. The host resolves `mini-harness/cordis` and `mini-harness/plugin` imports from installed server plugins to its own package. Augment the public Cordis module to type your own services. Installed plugin code written for the old setup API needs migration to these declarations. Existing settings and owned records retain their namespace.
 
 ```ts
-import type { Context, PluginApi } from 'mini-harness/plugin';
+import type { Context } from 'mini-harness/cordis';
+import { defineTool } from 'mini-harness/plugin';
 
-declare module 'mini-harness/plugin' {
-  interface ServiceMap {
-    greetings: { hello(name: string): string };
-  }
-}
+export const inject = ['harnessTools'];
 
-export default function setup(ctx: Context, _api: PluginApi) {
-  ctx.provide('greetings', { hello: (name: string) => 'Hello, ' + name });
-}
-```
-
-## Capability contributions
-
-Import an extension point from `mini-harness/plugin` and register it through `api.contribute`.
-
-```ts
-import { agentExtensions, promptExtensions, type PluginApi } from 'mini-harness/plugin';
-
-export default function setup(_ctx: unknown, api: PluginApi) {
-  api.contribute(agentExtensions.prepareInput, (_content, { source, original }) => {
-    if (source === 'user' && original.userText === '/offline') {
-      return 'Complete the task using the conversation and local workspace.';
+export function apply(ctx: Context) {
+  ctx.effect(() => ctx.harnessTools.register(defineTool({
+    name: 'hello',
+    description: 'Return a greeting.',
+    parameters: { type: 'object', properties: {} },
+    async execute() {
+      return { content: [{ type: 'text', text: 'Hello' }] };
     }
-  });
-  api.contribute(promptExtensions.section, {
-    id: 'project-style',
-    render: () => 'Use the project’s existing conventions.'
-  });
+  })));
 }
 ```
 
-| Extension point | Contract |
-| - | - |
-| `agentExtensions.prepareInput` | Receives native user content and the context at delivery. Use `original.userText` for user commands and inspect `source` to distinguish user, agent and plugin submissions. Attachments are represented separately in `original`. Return native user content, `undefined` to keep the current content, or `{ reject: reason }` to stop delivery. |
-| `agentExtensions.modelRequest` | Transforms model-visible messages, the system prompt, thinking level and output token limit for a turn or compaction. The Agent validates and records the prepared request before streaming. Automatic retries reuse it. |
-| `agentExtensions.retryModel` | Returns `{ delayMs }` before output has streamed, or `undefined` to defer. The first decision applies, with at most three attempts and 30 seconds between attempts. |
-| `agentExtensions.observe` | Receives a copy of the event and a cancellation signal. Events cover session, run, step, model attempt and completed tool activity. Observer failures are reported independently. |
-| `promptExtensions.section` | Adds `{ id, order, render }` to the prompt. Renderers receive the session ID, workspace path, tool metadata and a signal. The nearest scope wins for a shared ID. The first plugin ID wins within one scope. Sections render by order and then section ID. The native orders are 0, 100, 200 and 300 for base, tools, user instructions and workspace instructions. Skills uses 400 and other contributions default to 500. |
-| `toolExtensions.register` | Registers a definition or `{ name, bind(sessionId) }`. Declare `harnessTools` in `inject`. The optional `access: 'readOnly'` declaration is subject to a host grant on the actual plugin instance. |
-| `toolExtensions.decide` | Receives the name, call ID, validated arguments, session and signal. Return `'deny'` to stop execution or `undefined` to defer. Decisions can only restrict access. |
-| `agentExtensions.toolResult` | Transforms a successful result for model context and display. The original execution is persisted first. A transform failure records a safe error and stops the run. Raw progress content is withheld while a transform applies. |
-| `sessionDisplayExtensions.project` | Transforms tool output in Conversation history, activity and event streams. It leaves persisted tool results and model-visible context intact. Projection failures preserve the earlier display content. |
+A service provider declares `provide = ['exampleGreeting']` and calls `ctx.provide('exampleGreeting', service)`. Declare required services in `inject`. Use `ctx.get(name)` for an intentional optional lookup. Give registrations and cleanup to `ctx.effect()` and use `ctx.fiber.signal` for cancellation. Use `ctx.fiber.run(work, requestSignal)` when teardown must wait for async work.
 
-Ordered transforms and decisions take an optional numeric order after the handler. They run in ascending order, then by plugin instance ID and registration order. The host copies transform data before invocation. Returning `undefined` discards any edits to the copy. Async callbacks receive a signal combining task cancellation with plugin unload. Unload stops new calls and waits for existing callbacks to settle before disposal.
+## Server services
 
-Tool names contain 1–64 letters, digits, underscores or hyphens. Duplicate names in the same scope are rejected. A nearer registration shadows an inherited tool. Authorization checks the selected registration, including when a permission changes while a decision is pending. Users can grant an installed plugin's declared read-only tools in that plugin's Settings detail and revoke grants there. Tool execution is serial unless `isConcurrencySafe(args)` opts a call into parallel execution. Consecutive opted-in calls can overlap up to a limit of 16. The scheduler waits at serial boundaries and persists results before publishing completion.
+| Service | Contract |
+| --- | --- |
+| `harnessTools` | Register a definition or a `{ name, bind(sessionId) }` factory. Read-only access also requires authorization for the selected registration. |
+| `harnessPrompt` | Register a named section, with an optional order and a render callback. The nearest scope wins for a shared ID. |
+| `harnessSessions` | `access()` returns the caller's visible conversation directory. `records(id)` reads or appends the instance's records on the active branch. Use `append(data, { title, content })` to publish a display record. |
+| `harnessExecution` | `submit(id, input, { signal })` goes through normal admission and returns a handle with its own result and cancellation. |
+| `harnessApprovalRequests` | `request(id, prompt, signal)` requests a user decision for a visible conversation. |
+| `harnessPluginRoutes` | `register()` and `upgrade()` publish authenticated routes under `/api/extensions/<id>` for application plugins. `scope()` registers a workspace or session RPC. |
+| `harnessPluginData` and `harnessPluginSecrets` | Read, write and remove data in the caller's own plugin and scope namespace. |
+| `harnessPluginSettings` | Read the current effective config, subscribe to committed changes or write this instance's configuration when it declares a live schema. |
+| `harnessPluginChanges` | Invalidate the plugin's browser projection after a domain mutation. |
 
-## Session record projections
+Use `sessionContext(ctx, sessionId, signal)` to prepare a visible session's context and `scopedService(ctx, sessionId, name)` for a declared service in the prepared scope. Session writes and scope preparation belong in runtime calls after plugin setup. See [scoped providers](scoped-providers.md).
 
-Declare `harnessSessions` in `inject` to use `sessionExtensions.access` for a visible session directory, conversation creation and read-only history. Workspace plugins can create root conversations in their own workspace. Session plugins create children under a visible parent. Acquire a record handle through `sessionExtensions.records`. The handle reads and appends this plugin instance's records on the active branch. A projection starts with a fresh initial value on each read and folds the branch with a synchronous reducer. Pass `{ title, content }` as the third argument to `append` to publish a browser record. Keep private business data in the second argument. Display records follow the active branch and remain available when the plugin is disabled. Dispose a projection early with `dispose()` or let plugin unload release it.
+### Events
+
+Register listeners with `ctx.on(event, handler, { order })`. Listeners are owned by the Fiber and visibility follows the target session's ancestry. Pipeline order is ascending, then by plugin instance ID.
+
+| Event | Behavior |
+| --- | --- |
+| `agent/prepare-input` | Transform delivered user content or return `{ reject: reason }`. Read `original.userText` for text entered by the user. |
+| `agent/model-request` | Transform the system prompt, model-visible messages, thinking level or token limit. |
+| `agent/model-retry` | Return `{ delayMs }` to retry a model attempt before output has streamed. The first decision applies. |
+| `agent/tool-result` | Transform successful results after persistence of the original execution. |
+| `tools/decide` | Return `'deny'` to restrict a tool call or `undefined` to defer. |
+| `conversation/tool-projection` | Synchronously transform tool output in the conversation display. |
+| `harness/observe` | Observe session, run or turn events with an activation-bound cancellation signal. |
+
+### Configuration
+
+Declare a `configSchema` in `plugin.json` to validate values and supply JSON defaults. Cordis plugins may also export a synchronous Standard Schema `Config`. Use the configuration passed to `apply` for activation. For live configuration, set `"configChanges": "live"` and register `ctx.on('internal/update', next => ...)` when in-memory resources need to change. Any error rejects the candidate and restores the prior configuration. The optional `validateConfig(config, { operation, service })` export can validate product constraints with the selected services.
+
+## Browser plugins
+
+Use the same Cordis declarations. Browser JavaScript can import from `/packages/sdk/src/browser-plugin.js`. TypeScript uses types from `mini-harness/cordis` and `mini-harness/browser-plugin`.
 
 ```js
-import { sessionExtensions } from 'mini-harness/plugin';
+export const inject = ['miniSlots'];
 
-export default function setup(_ctx, api) {
-  const records = api.contribute(sessionExtensions.records);
-  const plan = records.projection({
-    initial: () => [],
-    reduce: (tasks, { data }) => [...tasks, data]
-  });
-  api.registerRoute('GET', '/tasks', ({ url }) => plan.read(url.searchParams.get('session')));
+export function apply(ctx) {
+  const button = document.createElement('button');
+  button.textContent = 'Plugin action';
+  ctx.effect(() => ctx.miniSlots.register('sidebar.actions', button));
 }
 ```
 
-## Provider selection and scopes
+Declare the services you use:
 
-In `settings.json`, `providers` maps service names to explicit enabled provider IDs. A replacement publishes the same contract. At application scope, replacing a plugin that provides multiple services requires replacements for all its services together. The LLM transport, model catalog and recent-model preference each have their own provider. Model administration consumes their contracts and stays mounted when a provider changes. A workspace or session can replace one inherited service while its parent continues supplying the others. To restore the default, remove the selection, disable the replacement and re-enable the built-in provider if you switched it off.
+- `miniSlots` defines outlets and registers elements or keyed renderers. Keyed renderers receive a signal for the view's lifetime.
+- `miniPages`, `miniDialogs`, and `miniTabs` own page, dialog and tab resources.
+- `miniComposer` handles drafts, commands and completions. `miniMessages` owns actions and renderers for history.
+- `miniSettingsRegistry` registers settings sections and plugin-specific controls. Use `browserPluginSettings(ctx)` to bind configuration.
+- `miniProjections` subscribes to state revisions. Use `browserRequest(ctx, path, options)` for authenticated requests bound to the activation.
 
-```json
-{
-  "plugins": { "process-preview": true, "shell": true },
-  "providers": { "harnessProcess": "process-preview" },
-  "scopes": {
-    "workspace:<workspaceId>": {
-      "disabledTools": ["sandbox_shell"]
-    },
-    "session:<sessionId>": {
-      "plugins": { "scoped-tool": true }
-    }
-  }
-}
-```
-
-A `scopes` entry can set `plugins`, `pluginConfig`, `providers` and `disabledTools`. Workspace and session plugins are server-only and are selected at a matching address. Registered tools and services are inherited by descendants. Tool restrictions apply transitively. An explicit `providers` selection allows a child service to shadow its ancestor within that subtree. The same provider ID at two addresses still represents two instances and requires an explicit choice. Removing the child provider restores inherited resolution; siblings remain independent. The host protects configuration, routes, scope resolution, mutation control and the Tools authorization provider. See [scoped providers](scoped-providers.md). Use the workspace and session API IDs, and keep values in `pluginConfig` only for overrides. A Settings API PATCH supplying `providers` or `scopes` replaces the corresponding map. Each entry supplied in `pluginConfig` replaces that plugin’s configuration and applies its schema defaults. Omitted plugin entries keep their saved values. The Plugins page shows the status of scoped instances and lets you repair their configuration.
-
-Setup, schema or settings persistence failures retain the previous effective graph. A failed candidate that already drained resources cannot resume a cancelled call. Routes and tools dispose cooperatively. An unsuccessful browser setup removes its partial contributions and is reported in the Plugins page.
-
-## Browser contributions
-
-Call `api.contribute(point, ...args)` with a point exported by `mini-harness/browser-plugin`. Unbundled browser entries can import these same points from `/packages/ui-runtime/plugin-sdk.js`.
-
-| Extension | Required `browserInject` services | Behavior |
-| - | - | - |
-| `layoutExtensions.dialog`, `.page` | `miniDialogs`, `miniPages` respectively | Mount a modal or a page with a sidebar entry |
-| `layoutExtensions.tab`, `.openTab`, `.inspect` | `miniTabs` | Register or open a workspace tab or show content in the inspector |
-| `slotExtensions.register`, `.keyed` | `miniSlots` | Add an element or a keyed renderer to a slot |
-| `settingsExtensions.register` | `miniSettingsRegistry` | Render a plugin-owned Settings control |
-| `conversationExtensions.command`, `.completion`, `.draft` | `miniComposer` | Register a command or completer, or open an editing draft |
-| `conversationExtensions.tool`, `.toolAction`, `.messageAction` | `miniMessages` | Register tool presentation, tool controls, or a message action |
-
-Inject `miniPrimitives` for shared controls via `ctx.miniPrimitives`, or `miniComposer` to insert text via `ctx.miniComposer.insert(text)`. Use `browserRequires` when a whole plugin must mount first, for example when replacing a specific contribution it installs. The browser API provides authenticated `request`, `configuration`, `signal`, and `onDispose`. Bind custom listeners and requests to that lifetime. Browser code runs with the page's permissions.
-
-Settings contributions use a section title such as `General`, `Model`, or `Extensions`. A plugin can introduce a section with `{ title, icon, order }`. Contributions are sorted by order and plugin-qualified ID. Sections are ordered by their declared order and title. A section appears when it has content. Disabling a plugin removes its contributions and aborts their render signals.
-
-Declare the settings fields and defaults in the plugin’s `configSchema`. For example, declare `showDetails` as a boolean with a default, then register its control from `web.js` with `miniSettingsRegistry` and `miniPrimitives` in `browserInject`.
-
-```js
-import { settingsExtensions } from '/packages/ui-runtime/plugin-sdk.js';
-
-export default function setup(ctx, api) {
-  api.contribute(settingsExtensions.register, {
-    id: 'show-details',
-    section: 'General',
-    order: 50,
-    render({ bind }) {
-      const control = document.createElement('input');
-      control.type = 'checkbox';
-      const label = ctx.miniPrimitives.field('Show details', control);
-      const status = bind(control, 'showDetails', {
-        read: (value) => { control.checked = value; },
-        write: () => control.checked
-      });
-      const row = document.createElement('div');
-      row.append(label, status);
-      return row;
-    }
-  });
-}
-```
-
-`bind` handles committed values, pending state, error feedback and rollback. Custom controls can use `configuration` from the render context and the render signal to release their subscriptions. A write patches only the calling plugin’s namespace. Browser writes target the application scope. Native workspace and session plugins write that instance’s overrides. The server SDK permits writes after setup and outside configuration callbacks. Live plugins can use `onConfigChange` to stage updates and restore previous values on rollback. Subscribers see changes after commit. A section title affects layout only.
-
-The most recent registration supplies each keyed contribution. Releasing it restores the previous contribution. A renderer receives an abort signal and returns a node or an object with a node and a cleanup function. The registry aborts its signal before cleanup on replacement or outlet removal. Declare the owner in `browserRequires` when overriding its contribution so your plugin mounts after it.
-
-A data plugin declares its services in `browserProvides`, publishes them through
-`ctx.provide`, and declares `miniProjections` in `browserInject` to follow a
-projection domain. Wrap `ctx.miniProjections.register(domain, { sync })` in
-`api.onDispose(...)`; `sync(revision, reconnect, sessionId?)` refreshes its owned
-snapshot. `BrowserProjectionPort` is exported from `mini-harness/browser-plugin`.
-Disposal removes the subscription and cancels invalidations that have not begun.
-
-[Runnable examples](examples/) cover [publishing](examples/greeting-service/), [consuming](examples/greeting-route/) and [replacing](examples/process-preview/) a service, [scoped tools](examples/scoped-tool/), and [browser pages and actions](examples/browser-panel/). The test suites install and exercise these bundles.
-
-## Run API
-
-The local API requires a bearer credential. A trusted gateway can forward authenticated read-only viewer requests without disclosing that credential.
-
-| Request | Result |
-| - | - |
-| `POST /api/sessions/:id/runs` with `{ "message": "...", "model": { "provider": "...", "id": "..." } }` | Starts a server-owned run. The `202` response returns the admitted run immediately. Acceptance is represented by a durable user message whose `submissionId` matches the run ID and has no `inboxId`. Both model and `thinkingLevel` are optional. |
-| `GET /api/sessions/:id/runs` | Latest run status, including terminal errors |
-| `GET /api/sessions/:id/runs/:run/input` | Input identified by the latest failed run, with original attachments when available and a list of files that must be reattached |
-| `GET /api/sessions/:id/events?run=<run-id>&after=<sequence>` | NDJSON events after the cursor; disconnecting removes only this observer |
-| `POST /api/sessions/:id/compact` | Summarize earlier context while idle; preserve two complete recent turns |
-| `POST /api/sessions/:id/cancel` | Explicitly cancel that conversation and running descendants |
-
-Run states are queued, running, completed, failed, cancelled and interrupted. Event replay is bounded to 2,048 events and approximately 1 MiB per active conversation. An older cursor receives the native log projection and current output, then follows live events. Completed runs use saved history snapshots. The native Session Log persists messages, model choices, branch selection, inbox delivery, compaction, plugin records and run status. Restart marks unfinished runs interrupted and does not re-execute tools whose outcome is unknown.
-
-## Workspace and GUI API
-
-The server runs one Runtime for all registered workspaces. Each conversation has a stable Workspace ID. A request can address a conversation by ID or scope file and Skills requests to a registered Workspace ID. Deleting a Workspace permanently deletes all associated conversations and native session logs, including subagent descendants; it leaves the project directory and its files untouched.
-
-| Request | Result |
-| - | - |
-| `GET /api/workspaces`, `POST /api/workspaces` with `{path, name?}` | List or register local directories |
-| `GET /api/workspaces/directories?path=...` | Browse local subdirectories for registration |
-| `PATCH /api/workspaces/:id` with `{name}`, `DELETE /api/workspaces/:id` | Rename a workspace or permanently delete its conversations and descendants while leaving the project directory intact |
-| `PUT /api/workspaces` with `{ids}` | Reorder registered workspaces |
-| `GET /api/bootstrap` | Mounted browser plugin graph |
-| `GET /api/changes` | NDJSON stream with domain revisions and invalidations |
-| `PATCH /api/settings/plugins/:id` | Patch fields in one active browser plugin’s configuration namespace |
-| `GET /api/sessions`, `GET /api/settings`, `GET /api/plugins`, `GET /api/models` | Authoritative projections for the browser |
-| `GET /api/workspaces/:id/sessions`, `POST /api/workspaces/:id/sessions` | List or create conversations in a workspace |
-| `GET /api/providers`, `PUT /api/providers`, `DELETE /api/providers` | List credential status and model catalogs; save/remove custom endpoint definitions in `models.json` |
-| `PATCH /api/sessions/:id` with `{title}` | Rename a conversation |
-| `POST /api/sessions/:id/runs` with `{message, attachments?}` | Attachments are `{name, mimeType, data}` where `data` is base64 |
-| `POST /api/sessions/:id/queue` with `{message, mode, attachments?}` | Native `steer` (at a tool boundary) or `followUp` (after the current task); maximum 16 queued messages |
-| `GET /api/sessions/:id/queue` | Undelivered instructions and follow-ups |
-| `GET /api/sessions/:id/attachments/:attachment` | Original upload as `{data}` (base64), identified by its SHA-256 within the conversation |
-| `GET /api/workspaces/:id/skills` | Names/descriptions from native SKILL.md discovery; invoke with `/skill:name` |
-| `GET /api/workspaces/:id/files/tree?path=...`, `/files/search?q=...` in the same workspace | Workspace-scoped listing/search; search follows `.gitignore` |
-| `GET /api/workspaces/:id/files/preview?path=...`, `/files/changes`, `/files/diff?path=...` in the same workspace | Bounded text and image preview, repository status, staged and working-tree differences |
-| `GET /api/approvals`, `POST /api/approvals` with `{id, allow}` | Pending approval requests; allow once or deny |
-
-New images (PNG/JPEG/GIF/WebP) require an image-capable model. Text-only models receive a placeholder for earlier images. Uploaded originals are stored with their conversation; presentation records include their content identity and byte size. Editing restores stored uploads and lets users remove them. Older text attachments without stored originals must be reattached. UTF-8 text up to 1 MiB is included in the model input. Other uploads (including PDF/Office files) are retained unchanged, not parsed; enabled Shell commands can read them from the directory identified by `MINI_HARNESS_ATTACHMENTS`, mounted read-only in isolated mode. Use `/file` or the attachment button to upload, and `@` for workspace references. Limits: eight files, 6 MiB per file, 12 MiB total. Git inspection requires the selected workspace to be the repository root and caps output at 512 KiB. “Files written this turn” lists successful built-in `write`/`edit` paths; Git changes show the entire working tree, including earlier edits and shell changes.
-
-File and Skill endpoints return 404 when their plugins are disabled. The Approvals endpoint lists pending decisions for enabled capabilities. Cancelling a run, closing the server or unloading the request owner releases its pending requests. Approval follows each capability’s execution policy. For example, the built-in Shell tool requests confirmation in Standard conversations and skips that prompt in Full access. Both modes still use the configured Shell policy and sandbox.
-
-## External development and resources
-
-Run `mini-harness plugin dev <directory>` from a directory with a valid plugin descriptor. It builds the plugin, starts an isolated instance and restarts it after source changes so both the server and browser reload against the new graph.
-
-Declare browser CSS, ESM chunks, images and fonts in `browserAssets`. Only listed files below `web/` and the entry `web.js` are served, and only while the plugin is enabled. Resources use same-origin URLs with their media types. The browser mounts styles in dependency order and removes them when the owning plugin unloads. `browserPreload` can select one listed ESM entry. Its default function receives a lifetime signal and may return cleanup. Pre-start functions run in the resolved dependency order before ordinary browser setup.
-
-Mount HTTP routes with `api.registerRoute` and local WebSocket endpoints with `api.registerUpgrade`. The host authenticates upgrades, checks the browser origin and closes owned sockets when the plugin unloads. Gateway plugins create their own listener and authenticate the viewer before calling `harnessNetwork.forward`. The host authorizes only a read-only subset of its UI, session and workspace APIs on this path. Gateway credentials must be independent of the local management credential.
-
-`pluginConfig` changes remount plugins by default. A plugin declaring `configChanges: "live"` registers one handler with `api.onConfigChange`. The handler receives validated configuration and can keep its services alive. A failed update to a healthy instance restores its previous configuration. A valid configuration for an inactive or failed optional instance can be saved even when the instance fails to start. Active runs block changes that would replace their configured providers or unload their plugins. Handlers should make updates reversible. Store private state with `api.storage` and keep credentials in `api.secrets`. Disabling a plugin keeps its data. Uninstall deletes its data and secrets. Each workspace or session mount has its own storage. Browser plugins can use `api.watch` to refresh their own snapshot after the server calls `api.invalidate`. `api.locale` reports the browser's language, supports change listeners and selects translations from a supplied dictionary.
-
-
-Web and server providers are selected by the application graph. The supported server capability contracts are exported from `mini-harness/plugin`. Model catalog, LLM transport and file access have third-party consumers and replaceable providers. Tool registration and tool authorization have application-owned providers. Use `toolExtensions` to contribute tools. Runs, Settings and the Session Registry are application internals.
-
-## Execute tasks and request confirmation
-
-Declare `harnessExecution` and acquire `api.contribute(executionExtensions.control)`. Submit a message with `submit(sessionId, input, { signal })` and await the returned handle’s `result`. Use `status(sessionId)` for visible conversation state and `handle.cancel()` to cancel only the submitted execution. A handle cannot cancel a later run. Runs owns admission, durable state and cancellation. Plugin unload cancels submissions made through this interface. Use `sessionExtensions.access` to create a child and obtain the parent’s committed model.
-
-Declare `harnessApprovalRequests` and acquire `api.contribute(approvalExtensions.request)`. Supply a conversation ID, title and message. The promise resolves after approval and rejects on denial, expiry or cancellation. Its boolean result reports whether the user released the request by selecting Full access. The request follows the supplied signal, active run and plugin lifetime.
-
-## Configure and develop a plugin
-
-Export a synchronous `validateConfig(values, context)` next to the default server setup to reject invalid configuration with a clear error. It runs against declared services during mount and before committing changed settings for a mounted instance. A live configuration callback runs after validation. Use an npm `peerDependencies.mini-harness` range to declare compatible releases.
-
-Copy [Task notes](examples/task-notes) into an independent directory called `task-notes`, run `npm install` and `npm run build`, then load it with `MINI_HARNESS_DEV_PLUGIN` set to the absolute directory and enable it in Plugins. The example uses both published SDKs for tools, service publication, live settings, protected credentials, branch records and an approved child execution. Plugins shows the failing instance and stage for setup, configuration and browser errors.
-
-Use `slotExtensions.keyed` with `conversation.history` and key `history`, or with `conversation.composer-view` and key `composer`. Outlets prefer higher order, then the most recent contribution at that order. Removing the winner mounts the previous renderer with a fresh signal. Use the render signal to release listeners and async requests.
-
-Inject `miniConversation` to read the selected session, history, active response and tool activity. Subscribe to the fields the view displays. A newly mounted History reads the current state directly. Inject `miniComposer` to read and subscribe to the draft, edit text, add or remove `File` attachments, choose model and thinking level, set permissions, start a revision, send or queue. The model retains complete drafts by session or workspace and clears a submitted draft after acceptance if it has not been edited. `draft().awaitingAcceptance` indicates that the submitted input is awaiting its durable message; keep send/queue disabled while that input is pending. See the [browser panel example](examples/browser-panel) with `replaceComposer` enabled.
-
-Use `conversationExtensions.record`, `.tool` and `.toolAction` to register replaceable renderers. Renderers and message actions receive an abort signal scoped to the rendered contribution. Message action and command IDs are exclusive. Use `settingsExtensions.plugin` to contribute content to individual plugin detail pages.
-
-For scoped browser operations, call `api.scopeRequest(pluginId, { kind, id }, operation, input, signal)`. The server resolves the exact target instance. `api.watchScope(pluginId, { kind, id }, refresh)` follows invalidations for that address and refreshes on reconnect. The scoped server plugin registers handlers with `registerScopeRequest` and publishes changes with `api.invalidate()`.
+The [Task notes example](examples/task-notes/) uses both entry points. The [browser panel](examples/browser-panel/) shows a keyed composer renderer. The [scoped examples](scoped-providers.md) show local service replacement.

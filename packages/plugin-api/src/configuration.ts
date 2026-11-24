@@ -1,4 +1,4 @@
-import type { ScopeKey, ScopeSettings } from '@mini-harness/kernel/scopes';
+import type { ScopeKey, ScopeSettings } from './scopes.js';
 
 export interface PluginSettings {
   plugins: Record<string, boolean>;

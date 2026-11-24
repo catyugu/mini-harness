@@ -1,5 +1,4 @@
-import type {} from 'cordis';
-import type { BrowserContributionSource } from '@mini-harness/ui-runtime/contribution';
+import type {} from 'mini-harness/cordis';
 
 export interface TabScope { workspaceId: string; sessionId?: string }
 export interface TabAddress extends TabScope { type: string; path?: string; mode?: string }
@@ -18,7 +17,7 @@ export interface RightTabsPort {
 
 export interface PageContribution { title: string; content: HTMLElement; order?: number }
 
-declare module 'cordis' {
+declare module 'mini-harness/cordis' {
   interface Context {
     miniLayout: { closeDrawer(restore?: boolean): void };
     miniHeader: { setTitle(title: string): void; showWorkspace(show: boolean): void };
@@ -37,26 +36,6 @@ declare module 'cordis' {
   }
 }
 
-export const layoutExtensions = {
-  dialog(source: BrowserContributionSource, title: string, content: HTMLElement) {
-    const { node, dispose } = source.service('miniDialogs').create(title, content);
-    source.effect(() => dispose);
-    return node;
-  },
-  page(source: BrowserContributionSource, name: string, entry: PageContribution) {
-    if (!/^[a-z][a-z0-9-]{0,63}$/.test(name)) throw new Error('Invalid page ID');
-    return source.effect(() => source.service('miniPages').contribute(source.id + ':' + name, entry, source.signal));
-  },
-  tab(source: BrowserContributionSource, type: string, definition: RightTabType) {
-    return source.effect(() => source.service('miniTabs').register(source.id + ':' + type, definition));
-  },
-  openTab(source: BrowserContributionSource, type: string, path?: string, scope?: TabScope, mode?: string) {
-    source.service('miniTabs').open(source.id + ':' + type, path, scope, mode);
-  },
-  inspect(source: BrowserContributionSource, title: string, content: HTMLElement) {
-    source.service('miniTabs').inspect(source.id, title, content, source.signal);
-  }
-};
 
 declare module '@mini-harness/ui-slots/browser/api' {
   interface SlotMap {

@@ -1,48 +1,47 @@
+import { browserRequest } from '@mini-harness/ui-runtime/http';
 import type {} from '@mini-harness/settings/browser/api';
-import type { ScopeKey } from '@mini-harness/kernel/scopes';
-import type { Context } from 'cordis';
+import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
+import type { Context } from 'mini-harness/cordis';
 import type {} from '@mini-harness/ui-runtime/graph-api';
 import type {} from '@mini-harness/models/browser/api';
 import type {} from '@mini-harness/ui-runtime/projection-api';
-import { slotExtensions } from '@mini-harness/ui-slots/browser/api';
-import { layoutExtensions } from '@mini-harness/ui-layout/browser/api';
 import type { ModelCatalog } from '@mini-harness/models/catalog';
 import type { WorkspaceRecord } from '@mini-harness/workspaces/record';
 import type { Conversation } from '@mini-harness/conversation/view';
 import type { Settings, SettingsPatch } from '@mini-harness/settings/settings';
 import type { PluginMetadata } from '../shared/metadata.js';
 import { RemoteStore } from '@mini-harness/ui-runtime/remote-store';
-import type { FrontendSetup, FrontendApi } from '@mini-harness/ui-runtime/frontend-api';
 import { payload } from '@mini-harness/ui-runtime/http';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { button, field, fromMarkup, iconButton, saveToggle, toggle, confirmAction, required } from '@mini-harness/ui-primitives/primitives';
 import { readPluginValues, schemaFields } from './fields.js';
 
-const setup: FrontendSetup = async (ctx, api) => {
+const setup = async (ctx: Context) => {
+  const signal = ctx.fiber.signal;
   const { miniSettingsData: settings, miniPages: pages, miniSwitch: syncPlugins, miniBrowserFailures: browserFailures, miniModels: models } = ctx;
-  const plugins = new RemoteStore(() => api.request<PluginMetadata[]>('/plugins'));
+  const plugins = new RemoteStore(() => browserRequest<PluginMetadata[]>(ctx, '/plugins'));
   await plugins.refresh();
-  api.onDispose(ctx.miniProjections.register('plugins', plugins));
+  ctx.effect(() => ctx.miniProjections.register('plugins', plugins));
   const refresh = async () => {
     await Promise.all([plugins.refresh(), settings.refresh()]);
     const failures = await syncPlugins();
     if (failures.size) throw new Error('Browser plugins failed: ' + [...failures.keys()].join(', '));
   };
-  const catalog = pluginCatalog(api, () => ({
+  const catalog = pluginCatalog(ctx, () => ({
     plugins: plugins.get().map((plugin) => {
       const error = browserFailures.get(plugin.id);
       return error ? { ...plugin, state: 'failed' as const, error } : plugin;
     }),
     settings: settings.get()
   }), refresh, pages, () => models.get(), ctx.miniSettingsRegistry);
-  plugins.subscribe(catalog.refresh, api.signal);
-  settings.subscribe(catalog.refresh, api.signal);
-  browserFailures.subscribe(catalog.refresh, api.signal);
+  plugins.subscribe(catalog.refresh, signal);
+  settings.subscribe(catalog.refresh, signal);
+  browserFailures.subscribe(catalog.refresh, signal);
 };
 
 const bundleNames = ['plugin.js', 'plugin.json', 'web.js'];
 
-function installer(api: FrontendApi, installed: () => Promise<void>) {
+function installer(ctx: Context, installed: () => Promise<void>) {
   const form = fromMarkup<HTMLFormElement>(`<form class="install-plugin">
     <input class="bundle-input" type="file" multiple accept=".js,.json" aria-label="Plugin bundle files" tabindex="-1">
     <div class="bundle-drop">
@@ -53,7 +52,8 @@ function installer(api: FrontendApi, installed: () => Promise<void>) {
     <p class="hint form-error" role="alert"></p>
     <div class="ui-actions"></div>
   </form>`);
-  const modal = api.contribute(layoutExtensions.dialog, 'Install plugin', form);
+  const { node: modal, dispose } = ctx.miniDialogs.create('Install plugin', form);
+  ctx.effect(() => dispose);
   const id = fromMarkup<HTMLInputElement>('<input pattern="[a-z](?:[a-z0-9]|-){0,63}" placeholder="my-plugin" required>');
   form.prepend(field('Plugin ID', id));
   const input = required(form.querySelector<HTMLInputElement>('.bundle-input'));
@@ -109,7 +109,7 @@ function installer(api: FrontendApi, installed: () => Promise<void>) {
     installing = submit.disabled = choose.disabled = cancel.disabled = true;
     try {
       const bundle = await Promise.all(files.map(async (file) => ({ name: file.name, content: await file.text() })));
-      await api.request('/plugins/install', payload('POST', { id: id.value.trim(), files: bundle }));
+      await browserRequest(ctx, '/plugins/install', payload('POST', { id: id.value.trim(), files: bundle }));
       await installed();
       modal.close();
     } catch (error) { outcome.textContent = (error instanceof Error ? error.message : String(error)); }
@@ -119,7 +119,8 @@ function installer(api: FrontendApi, installed: () => Promise<void>) {
   return modal;
 }
 
-function pluginCatalog(api: FrontendApi, snapshot: () => { plugins: PluginMetadata[]; settings: Settings }, refresh: () => Promise<void>, pages: { open(id?: string): void; register(id: string, node: HTMLElement): () => void }, modelCatalog: () => ModelCatalog, registry: Context['miniSettingsRegistry']) {
+function pluginCatalog(ctx: Context, snapshot: () => { plugins: PluginMetadata[]; settings: Settings }, refresh: () => Promise<void>, pages: { open(id?: string): void; register(id: string, node: HTMLElement): () => void }, modelCatalog: () => ModelCatalog, registry: Context['miniSettingsRegistry']) {
+  const signal = ctx.fiber.signal;
   const entry = fromMarkup<HTMLButtonElement>('<button type="button" class="nav-action" aria-label="Browse plugins" aria-controls="pluginCatalog"><span class="nav-label">Plugins</span></button>');
   entry.prepend(icon('plugin'));
   const page = fromMarkup(`<section id="pluginCatalog" class="catalog-page" tabindex="-1" aria-label="Plugin catalog">
@@ -135,17 +136,17 @@ function pluginCatalog(api: FrontendApi, snapshot: () => { plugins: PluginMetada
   const content = required(page.querySelector('.catalog-content'));
   const status = required(page.querySelector<HTMLElement>('.catalog-status'));
   header.append(openInstall);
-  const modal = installer(api, async () => {
+  const modal = installer(ctx, async () => {
     await refresh();
     status.textContent = 'Plugin installed. Enable it to load it.';
   });
   openInstall.onclick = () => modal.showModal();
   entry.dataset.pageLink = 'plugins';
-  api.contribute(slotExtensions.register, 'sidebar.actions', entry, -10);
-  api.onDispose(pages.register('plugins', page));
+  ctx.effect(() => ctx.miniSlots.register('sidebar.actions', entry, -10));
+  ctx.effect(() => pages.register('plugins', page));
 
   let detailLifetime: AbortController | undefined;
-  api.onDispose(() => detailLifetime?.abort());
+  ctx.effect(() => (() => detailLifetime?.abort()));
   let busy = false;
   let savingSwitch = false;
   async function mutate(operation: () => Promise<unknown>, failed: (error: Error) => void) {
@@ -244,8 +245,8 @@ function pluginCatalog(api: FrontendApi, snapshot: () => { plugins: PluginMetada
       scopePicker.add(new Option('Choose a scope', ''));
       scopedControls.querySelectorAll('input').forEach((control) => { control.disabled = true; });
       const locations: Promise<{ key: ScopeKey; name: string }[]> = plugin.scope === 'workspace'
-        ? api.request<WorkspaceRecord[]>('/workspaces').then((items) => items.map(({ id, name }) => ({ key: `workspace:${id}`, name })))
-        : api.request<Conversation[]>('/sessions').then((items) => items.map(({ id, title }) => ({ key: `session:${id}`, name: title })));
+        ? browserRequest<WorkspaceRecord[]>(ctx, '/workspaces').then((items) => items.map(({ id, name }) => ({ key: `workspace:${id}`, name })))
+        : browserRequest<Conversation[]>(ctx, '/sessions').then((items) => items.map(({ id, title }) => ({ key: `session:${id}`, name: title })));
       void locations.then((items) => {
         for (const { key, name } of items) { locationsByKey.set(key, key); scopePicker.add(new Option(name, key)); }
         for (const { scope } of plugin.instances ?? [])
@@ -283,7 +284,7 @@ function pluginCatalog(api: FrontendApi, snapshot: () => { plugins: PluginMetada
             plugins: { ...current.plugins, [plugin.id]: enabled.checked },
             pluginConfig: { ...current.pluginConfig, [plugin.id]: config } } } };
         }
-        const saved = await mutate(() => api.request('/settings', payload('PATCH', patch)),
+        const saved = await mutate(() => browserRequest(ctx, '/settings', payload('PATCH', patch)),
           (error) => { outcome.textContent = error.message; });
         if (saved && !outcome.textContent) {
           const latest = snapshot().plugins.find(({ id }) => id === plugin.id);
@@ -350,10 +351,10 @@ function pluginCatalog(api: FrontendApi, snapshot: () => { plugins: PluginMetada
           remove.hidden = checked;
           remove.onclick = async () => {
             if (!await confirmAction('Permanently uninstall ' + plugin.title + '?',
-              { title: 'Uninstall plugin', confirmLabel: 'Uninstall', signal: api.signal })) return;
+              { title: 'Uninstall plugin', confirmLabel: 'Uninstall', signal })) return;
             remove.disabled = true;
             status.textContent = '';
-            const deleted = await mutate(() => api.request('/plugins/' + plugin.id, { method: 'DELETE' }),
+            const deleted = await mutate(() => browserRequest(ctx, '/plugins/' + plugin.id, { method: 'DELETE' }),
               (error) => { status.textContent = error.message; });
             if (deleted) { status.textContent ||= 'Plugin uninstalled.'; openInstall.focus(); }
             remove.disabled = false;
@@ -367,7 +368,7 @@ function pluginCatalog(api: FrontendApi, snapshot: () => { plugins: PluginMetada
           const peers = [...content.querySelectorAll<HTMLInputElement>('input.toggle')].filter((toggle) => toggle !== control && !toggle.disabled);
           for (const peer of peers) peer.disabled = true;
           try {
-            const saved = await mutate(() => api.request('/settings', payload('PATCH', { plugins: { [plugin.id]: next } })),
+            const saved = await mutate(() => browserRequest(ctx, '/settings', payload('PATCH', { plugins: { [plugin.id]: next } })),
               (error) => { status.textContent = error.message; });
             if (saved) {
               const state = snapshot().plugins.find(({ id }) => id === plugin.id);
@@ -397,4 +398,4 @@ function pluginCatalog(api: FrontendApi, snapshot: () => { plugins: PluginMetada
 }
 
 
-export default setup;
+export default { inject: ['miniProjections','miniSettingsData','miniSettingsRegistry','miniPages','miniSwitch','miniBrowserFailures','miniModels','miniDialogs','miniSlots'], provide: [], apply: setup };

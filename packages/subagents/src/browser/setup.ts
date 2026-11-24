@@ -1,10 +1,9 @@
+import type { Context } from 'mini-harness/cordis';
 import type {} from '@mini-harness/conversation/browser/navigation-api';
-import { slotExtensions } from '@mini-harness/ui-slots/browser/api';
-import { conversationExtensions } from '@mini-harness/conversation/browser/extensions';
-import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend-api';
 import { icon } from '@mini-harness/ui-primitives/icons';
 
-const setup: FrontendSetup = (ctx, api) => {
+const setup = (ctx: Context) => {
+  const signal = ctx.fiber.signal;
   const services = ctx.harnessBrowser;
   const trail = document.createElement('nav');
   trail.className = 'parent-conversations';
@@ -30,10 +29,10 @@ const setup: FrontendSetup = (ctx, api) => {
       return step;
     }));
   };
-  api.contribute(slotExtensions.register, 'conversation.header', trail);
-  services.onConversationChange(renderTrail, api.signal);
+  ctx.effect(() => ctx.miniSlots.register('conversation.header', trail));
+  services.onConversationChange(renderTrail, signal);
   renderTrail();
-  api.contribute(conversationExtensions.toolAction, 'delegate', ({ sessionId }) => {
+  ctx.effect(() => ctx.miniMessages.registerTool('delegate', ({ sessionId }) => {
     if (!sessionId || !/^[a-f0-9-]{36}$/.test(sessionId)) return;
     const button = document.createElement('button');
     button.type = 'button';
@@ -41,6 +40,6 @@ const setup: FrontendSetup = (ctx, api) => {
     button.append(icon('chevron'), document.createTextNode(' Open child conversation'));
     button.onclick = () => services.openConversation(sessionId);
     return button;
-  });
+  }, true));
 };
-export default setup;
+export default { inject: ['harnessBrowser','miniMessages','miniSlots'], provide: [], apply: setup };

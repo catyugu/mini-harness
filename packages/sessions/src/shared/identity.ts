@@ -10,7 +10,7 @@ export interface SessionRecord {
   permission?: ConversationPermission;
 }
 
-declare module '@mini-harness/kernel/observations' {
+declare module '@mini-harness/plugin-api/observations' {
   interface CapabilityObservations {
     'session-created': { type: 'session-created'; sessionId: string };
     'session-deleted': { type: 'session-deleted'; sessionId: string; scopeKeys: readonly string[] };

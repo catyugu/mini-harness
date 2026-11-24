@@ -12,7 +12,7 @@ Owns approval creation, resolution, cancellation and conversation-level approval
 
 ## API
 
-`approvalExtensions.request` opens scoped confirmations. The internal `harnessApprovals` service supplies pending state to Conversation. `miniApprovals` exposes the live request list in the browser.
+`harnessApprovalRequests.request` opens scoped confirmations. The internal `harnessApprovals` service supplies pending state to Conversation. `miniApprovals` exposes the live request list in the browser.
 
 ## Dependencies
 
@@ -22,7 +22,7 @@ Uses [Transport](../transport/README.md) to publish changes. Shell consumes appr
 
 `core:approval-data` owns the browser projection and consumes the application approval capability. `core:approvals` mounts at application scope. Run cancellation and plugin disposal release pending requests and listeners.
 
-Native and installed plugins use `approvalExtensions.request`. Requests carry the plugin identity, session, current run and cancellation signal. Conversation owns the shared approval panel.
+Native and installed plugins use `harnessApprovalRequests.request`. Requests carry the plugin identity, session, current run and cancellation signal. Conversation owns the shared approval panel.
 
 ## Testing
 

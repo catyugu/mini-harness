@@ -5,27 +5,27 @@
   "type": "module",
   "exports": {
     "./bootstrap": "./src/shared/bootstrap.ts",
-    "./contribution": "./src/browser/contribution.ts",
-    "./frontend-api": "./src/browser/frontend-api.ts",
     "./graph-api": "./src/browser/graph-api.ts",
     "./http": "./src/browser/http.ts",
     "./projection-api": "./src/browser/projection-api.ts",
     "./projections": "./src/browser/projections.ts",
-    "./remote-store": "./src/browser/remote-store.ts"
+    "./remote-store": "./src/browser/remote-store.ts",
+    "./plugin-settings": "./src/browser/plugin-settings.ts",
+    "./keyed-registry": "./src/browser/keyed-registry.ts"
   },
   "miniHarness": {
     "api": [
       "./bootstrap",
-      "./contribution",
-      "./frontend-api",
       "./graph-api",
       "./http",
       "./projection-api",
-      "./remote-store"
+      "./remote-store",
+      "./plugin-settings",
+      "./keyed-registry"
     ]
   },
   "dependencies": {
-    "@mini-harness/kernel": "workspace:*",
+    "@mini-harness/plugin-api": "workspace:*",
     "@mini-harness/transport": "workspace:*"
   }
 }

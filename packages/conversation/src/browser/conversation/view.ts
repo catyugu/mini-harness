@@ -1,12 +1,11 @@
-import type { Context } from 'cordis';
-import type { FrontendApi } from '@mini-harness/ui-runtime/frontend-api';
-import { slotExtensions } from '@mini-harness/ui-slots/browser/api';
+import type { Context } from 'mini-harness/cordis';
 import { scopedElements, fromMarkup } from '@mini-harness/ui-primitives/primitives';
 import { createRunSummary } from './run-summary.js';
 import { renderQueue } from './queue-view.js';
 import { isRunning } from '@mini-harness/sessions/run-state';
 
-export function mountConversationLayout(ctx: Context, api: FrontendApi) {
+export function mountConversationLayout(ctx: Context) {
+  const signal = ctx.fiber.signal;
   const control = ctx.miniConversation;
   const view = fromMarkup(`
     <div class="conversation">
@@ -24,13 +23,13 @@ export function mountConversationLayout(ctx: Context, api: FrontendApi) {
         <div id="composerOutlet"></div>
       </div>
     </div>`);
-  api.contribute(slotExtensions.register, 'conversation.body', view);
+  ctx.effect(() => ctx.miniSlots.register('conversation.body', view));
   const { element } = scopedElements(view);
-  api.contribute(slotExtensions.define, 'conversation.composer-view', element('composerOutlet'), 'single');
-  api.contribute(slotExtensions.define, 'conversation.history', element('conversationHistory'), 'single');
-  api.contribute(slotExtensions.define, 'conversation.approvals', element('approvalRequests'));
-  api.contribute(slotExtensions.define, 'workspace.welcome', element('workspaceWelcome'), 'single');
-  const showRun = createRunSummary(element('runSummary'), api.onDispose);
+  ctx.effect(() => ctx.miniSlots.define('conversation.composer-view', element('composerOutlet'), 'single'));
+  ctx.effect(() => ctx.miniSlots.define('conversation.history', element('conversationHistory'), 'single'));
+  ctx.effect(() => ctx.miniSlots.define('conversation.approvals', element('approvalRequests')));
+  ctx.effect(() => ctx.miniSlots.define('workspace.welcome', element('workspaceWelcome'), 'single'));
+  const showRun = createRunSummary(element('runSummary'), (dispose) => ctx.effect(() => dispose));
   let previous: ReturnType<typeof control.get> | undefined;
   function render() {
     const state = control.get();
@@ -48,6 +47,6 @@ export function mountConversationLayout(ctx: Context, api: FrontendApi) {
     element('status').classList.toggle('error', Boolean(state.interaction.error));
     previous = state;
   }
-  control.subscribe(['session', 'history', 'run', 'queue', 'interaction'], render, api.signal);
+  control.subscribe(['session', 'history', 'run', 'queue', 'interaction'], render, signal);
   render();
 }

@@ -1,13 +1,16 @@
-import type { FrontendSetup } from 'mini-harness/browser-plugin';
+import type { Context } from 'mini-harness/cordis';
 
-const sdkUrl: string = '/packages/ui-runtime/plugin-sdk.js';
-const { conversationExtensions, settingsExtensions } = await import(sdkUrl) as typeof import('mini-harness/browser-plugin');
+const sdkUrl: string = '/packages/sdk/src/browser-plugin.js';
+const { browserPluginId, browserPluginSettings } = await import(sdkUrl) as typeof import('mini-harness/browser-plugin');
 
-const setup: FrontendSetup = ({ miniPrimitives }, api) => {
-  api.contribute(conversationExtensions.record, (record) =>
-    miniPrimitives.status(record.title + ': ' + String(record.content ?? '')));
-  api.contribute(conversationExtensions.tool, 'save_task_note', () => miniPrimitives.status('Saved to task notes'));
-  api.contribute(settingsExtensions.register, {
+export const inject = ['miniPrimitives', 'miniMessages', 'miniSettingsRegistry'];
+
+export function apply(ctx: Context) {
+  const { miniPrimitives } = ctx;
+  ctx.effect(() => ctx.miniMessages.registerRecord(browserPluginId(ctx), (record) =>
+    miniPrimitives.status(record.title + ': ' + String(record.content ?? ''))));
+  ctx.effect(() => ctx.miniMessages.registerTool('save_task_note', () => miniPrimitives.status('Saved to task notes')));
+  ctx.effect(() => ctx.miniSettingsRegistry.register(browserPluginId(ctx), {
     section: 'Extensions', id: 'task-notes',
     render({ bind }) {
       const input = document.createElement('input');
@@ -18,6 +21,5 @@ const setup: FrontendSetup = ({ miniPrimitives }, api) => {
       }));
       return field;
     }
-  });
-};
-export default setup;
+  }, browserPluginSettings(ctx)));
+}

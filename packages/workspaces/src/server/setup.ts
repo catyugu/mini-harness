@@ -1,9 +1,9 @@
 import type {} from '@mini-harness/platform/runtime-paths';
-import type {} from '@mini-harness/kernel/scopes';
-import type {} from '@mini-harness/kernel/mutation-api';
+import type {} from '@mini-harness/plugin-api/scopes';
+import type {} from '@mini-harness/plugin-api/mutation-api';
 import type {} from '@mini-harness/settings/api';
 import type {} from '@mini-harness/transport/projection-api';
-import type { Context } from 'cordis';
+import type { Context } from 'mini-harness/cordis';
 import { WorkspaceCatalog } from './catalog.js';
 import { HttpError, HttpReply } from '@mini-harness/transport/routes';
 const validId = /^[a-f0-9]{32}$/;

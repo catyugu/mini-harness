@@ -1,4 +1,4 @@
-import type {} from 'cordis';
+import type {} from 'mini-harness/cordis';
 import type { Conversation } from '../../shared/api.js';
 import type { WorkspaceRecord } from '@mini-harness/workspaces/record';
 
@@ -19,7 +19,7 @@ export interface ConversationSelection extends EventTarget {
   subscribe(listener: () => void, signal: AbortSignal): void;
 }
 
-declare module 'cordis' {
+declare module 'mini-harness/cordis' {
   interface Context {
     miniSessions: ConversationSessions;
     miniSelection: ConversationSelection;

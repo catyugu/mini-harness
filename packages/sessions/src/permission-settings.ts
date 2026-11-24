@@ -1,5 +1,5 @@
-import type { Context } from 'cordis';
-import type {} from '@mini-harness/kernel/mutation-api';
+import type { Context } from 'mini-harness/cordis';
+import type {} from '@mini-harness/plugin-api/mutation-api';
 import type {} from '@mini-harness/settings/api';
 import type {} from '@mini-harness/tools/api';
 import type {} from '@mini-harness/transport/routes';

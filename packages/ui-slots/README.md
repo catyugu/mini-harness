@@ -12,7 +12,7 @@ Owns ordered and keyed mounting, replacement, restoration and renderer disposal.
 
 ## API
 
-`slotExtensions` and `SlotMap` are available through the browser SDK.
+`miniSlots` and `SlotMap` are available through the browser SDK.
 
 ## Dependencies
 

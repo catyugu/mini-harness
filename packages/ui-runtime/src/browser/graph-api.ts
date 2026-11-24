@@ -1,7 +1,7 @@
-import type {} from 'cordis';
+import type {} from 'mini-harness/cordis';
 export type BrowserPluginFailures = ReadonlyMap<string, unknown>;
 
-declare module 'cordis' {
+declare module 'mini-harness/cordis' {
   interface Context {
     miniSwitch: () => Promise<BrowserPluginFailures>;
     miniBrowserFailures: {

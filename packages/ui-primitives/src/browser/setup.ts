@@ -1,10 +1,10 @@
-import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend-api';
+import type { Context } from 'mini-harness/cordis';
 import type { BrowserPrimitives } from './api.js';
 import { button, field, dialog } from './primitives.js';
 import { hydrateIcons, icon } from './icons.js';
 
 /** Elements contributed by plugins are hydrated without a global app-entry pass. */
-const setup: FrontendSetup = (ctx, api) => {
+const setup = (ctx: Context) => {
   const primitives: BrowserPrimitives = {
     button, field, dialog, icon,
     status(text, kind = 'status') {
@@ -29,7 +29,7 @@ const setup: FrontendSetup = (ctx, api) => {
   });
   observer.observe(document.body, { childList: true, subtree: true });
   hydrateIcons();
-  api.onDispose(() => observer.disconnect());
+  ctx.effect(() => (() => observer.disconnect()));
 };
 
-export default setup;
+export default { inject: ['miniAppearance'], provide: ['miniPrimitives'], apply: setup };

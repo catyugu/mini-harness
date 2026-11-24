@@ -1,6 +1,4 @@
-import type {} from 'cordis';
-import { ToolApprovalDenied } from '@mini-harness/tools/api';
-import { extension } from '@mini-harness/kernel/contributions';
+import type {} from 'mini-harness/cordis';
 
 export interface ApprovalPrompt {
   title: string;
@@ -11,27 +9,13 @@ export interface ApprovalPrompt {
   context?: string;
 }
 
-export const requestApproval = Symbol.for('mini-harness.requestApproval');
 export interface ApprovalRequests {
-  [requestApproval](id: string, plugin: string, prompt: ApprovalPrompt, signal: AbortSignal): Promise<boolean>;
+  request(id: string, prompt: ApprovalPrompt, signal?: AbortSignal): Promise<boolean>;
 }
 
-declare module '@mini-harness/kernel/services' {
-  interface ServiceMap { harnessApprovalRequests: ApprovalRequests }
+declare module 'mini-harness/cordis' {
+  interface Context { harnessApprovalRequests: ApprovalRequests }
 }
-
-export const approvalExtensions = {
-  request: extension((source) => {
-    const requests = source.service('harnessApprovalRequests');
-    return (id: string, prompt: ApprovalPrompt, signal?: AbortSignal) => source.run('request approval', (lifetime) => {
-      if (!source.visible(id)) throw new Error('Conversation outside plugin scope');
-      return requests[requestApproval](id, source.instanceId, prompt, lifetime);
-    }, signal).catch((error: unknown) => {
-      if (error instanceof Error && error.cause instanceof ToolApprovalDenied) throw error.cause;
-      throw error;
-    });
-  })
-};
 
 export interface ApprovalPort {
   readonly events: EventTarget;
@@ -39,6 +23,6 @@ export interface ApprovalPort {
   approveSession(id: string): void;
 }
 
-declare module 'cordis' {
+declare module 'mini-harness/cordis' {
   interface Context { harnessApprovals: ApprovalPort }
 }

@@ -89,14 +89,17 @@ test('npm registry installation resolves dependencies, updates atomically and se
   const id = 'npm-plugin';
   const files = {
     'plugin.json': JSON.stringify({
-      inject: ['harnessRoutes'], browserInject: ['miniPages'], browserAssets: ['web/panel.css', 'web/preload.js'],
+      inject: ['harnessRoutes'], browserAssets: ['web/panel.css', 'web/preload.js'],
       browserPreload: 'web/preload.js'
     }),
-    'plugin.js': `import { label } from 'mini-setup-helper';
-      export default (_ctx, api) => api.registerRoute('GET', '/label', () => label);`,
-    'web.js': 'export default () => {};',
+    'plugin.js': `
+export const inject = ["harnessPluginRoutes"];
+import { label } from 'mini-setup-helper';
+export const apply = (ctx) => { ctx.harnessPluginRoutes.register('GET', '/label', () => label); };
+`,
+    'web.js': "export const inject = ['miniPages']; export function apply() {}",
     'web/panel.css': '.panel { color: inherit; }',
-    'web/preload.js': 'export default (signal) => { signal.throwIfAborted(); };',
+    'web/preload.js': "export default (signal) => { signal.throwIfAborted(); };",
     'web/private.js': 'export const privateValue = "not published";'
   };
   await publish('mini-setup-helper', '1.0.0', {
@@ -138,7 +141,6 @@ test('npm registry installation resolves dependencies, updates atomically and se
   assert.equal(await (await request('/extensions/' + id + '/label')).json(), 'From dependency');
   const bootstrap = await (await request('/bootstrap')).json();
   const entry = bootstrap.ui.find((entry: { id: string }) => entry.id === id);
-  assert.deepEqual(entry.inject, ['miniPages']);
   const asset = (path: string) => fetch('http://127.0.0.1:' + port + path);
   assert.equal(await (await asset(entry.browser)).text(), files['web.js']);
   const css = await asset(entry.styles[0]);
@@ -165,11 +167,14 @@ test('local and browser-only plugins install disabled, mount when enabled and un
   const route = '/extensions/gui-plugin/echo';
   const bundle = { id: 'gui-plugin', files: [
     { name: 'plugin.json', content: JSON.stringify({ inject: ['harnessRoutes'] }) },
-    { name: 'plugin.js', content: `export default function(ctx, api) {
-      api.registerRoute('POST', '/echo', async ({ body }) => ({ echo: await body() }));
-      if (api.config.fail) throw new Error('Setup failed after registering a route');
-    }` },
-    { name: 'web.js', content: 'export default function(_ctx, api) {}' }
+    { name: 'plugin.js', content: `
+export const inject = ["harnessPluginRoutes"];
+export function apply(ctx, config) {
+      ctx.harnessPluginRoutes.register('POST', '/echo', async ({ body }) => ({ echo: await body() }));
+      if (config.fail) throw new Error('Setup failed after registering a route');
+    }
+` },
+    { name: 'web.js', content: "export function apply(ctx) {}" }
   ] };
   assert.equal((await request('/plugins/install', 'POST', bundle)).status, 201);
   assert.ok(!(await request('/bootstrap')).body.ui.some((entry: { id: string }) => entry.id === bundle.id));
@@ -201,7 +206,7 @@ test('local and browser-only plugins install disabled, mount when enabled and un
   assert.equal(existsSync(join(paths.plugins, 'gui-plugin')), false);
 
   assert.equal((await request('/plugins/install', 'POST', {
-    id: 'browser-only', files: [{ name: 'plugin.json', content: JSON.stringify({ browserInject: ['miniComposer'] }) }, { name: 'web.js', content: 'import { conversationExtensions } from "/packages/ui-runtime/plugin-sdk.js"; export default (_ctx, api) => { api.contribute(conversationExtensions.command, {name:"browser-only",description:"Test"}); };' }]
+    id: 'browser-only', files: [{ name: 'plugin.json', content: JSON.stringify({}) }, { name: 'web.js', content: "export const inject = [\"miniComposer\"];\n\nexport const apply = (ctx) => { ctx.effect(() => ctx.miniComposer.command({name:\"browser-only\",description:\"Test\"})); };" }]
   })).status, 201);
   assert.ok(!(await request('/bootstrap')).body.ui.some((entry: { id: string }) => entry.id === 'browser-only'));
   assert.equal((await request('/settings', 'PATCH', { plugins: { 'browser-only': true } })).status, 200);
@@ -222,16 +227,18 @@ test('plugin file writes wait for an in-flight plugin configuration', async (t) 
   const release = join(folder, 'release');
   mkdirSync(folder);
   writeFileSync(join(folder, 'plugin.json'), JSON.stringify({}));
-  writeFileSync(join(folder, 'plugin.js'), `import { existsSync, writeFileSync } from 'node:fs';
-    export default async () => {
+  writeFileSync(join(folder, 'plugin.js'), `
+import { existsSync, writeFileSync } from 'node:fs';
+export const apply = async () => {
       writeFileSync(${JSON.stringify(entered)}, 'ready');
       while (!existsSync(${JSON.stringify(release)})) await new Promise((done) => setTimeout(done, 10));
-    };`);
+    };
+`);
   const updating = request('/settings', 'PATCH', { plugins: { 'slow-plugin': true } });
   try {
     await waitUntil(() => existsSync(entered), Boolean);
     const installation = await request('/plugins/install', 'POST', {
-      id: 'another-plugin', files: [{ name: 'plugin.js', content: 'export default () => {};' }]
+      id: 'another-plugin', files: [{ name: 'plugin.js', content: "export default () => {};" }]
     });
     assert.equal(installation.status, 409);
     assert.match(installation.body.error, /Configuration is already changing/);

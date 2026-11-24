@@ -1,13 +1,13 @@
 import type {} from '@mini-harness/agent/api';
 import type { ThinkingLevel, ModelChoice } from '@mini-harness/llm/vocabulary';
-import type { ScopeKey, ScopePort } from '@mini-harness/kernel/scopes';
+import type { ScopeKey, ScopePort } from '@mini-harness/plugin-api/scopes';
 import { DomainError } from '@mini-harness/platform/errors';
-import type { MutationPort } from '@mini-harness/kernel/mutation-api';
+import type { MutationPort } from '@mini-harness/plugin-api/mutation-api';
 import { randomUUID } from 'node:crypto';
 import { imageMimeType } from '@mini-harness/input/prepare';
 import { validateModelOptions } from '@mini-harness/llm/options';
 import type { Attachment, InputSource } from '@mini-harness/input/message';
-import type { CapabilityObservation } from '@mini-harness/kernel/observations';
+import type { CapabilityObservation } from '@mini-harness/plugin-api/observations';
 import { RunInterrupted } from '@mini-harness/agent/stream';
 import type { StreamEvent, RunEvent } from './stream.js';
 import { isRunning, type RunInfo } from '@mini-harness/sessions/run-state';

@@ -9,7 +9,6 @@
     "@mini-harness/conversation": "workspace:*",
     "@mini-harness/file-access": "workspace:*",
     "@mini-harness/input": "workspace:*",
-    "@mini-harness/kernel": "workspace:*",
     "@mini-harness/llm": "workspace:*",
     "@mini-harness/models": "workspace:*",
     "@mini-harness/plugin-api": "workspace:*",

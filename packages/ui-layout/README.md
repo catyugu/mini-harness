@@ -12,7 +12,7 @@ Defines the page, header and right-panel contributions used by feature UI.
 
 ## API
 
-`layoutExtensions` and its page and tab contracts are exported through the browser SDK.
+`miniPages`, `miniTabs` and `miniDialogs` own pages, tabs and dialogs.
 
 ## Dependencies
 

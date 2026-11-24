@@ -1,10 +1,10 @@
-import { slotExtensions } from '@mini-harness/ui-slots/browser/api';
+import { browserRequest } from '@mini-harness/ui-runtime/http';
+import type { Context } from 'mini-harness/cordis';
 import type { SessionSearchResult, Conversation } from '../shared/api.js';
 import type { WorkspaceRecord } from '@mini-harness/workspaces/record';
 import { exportSessions } from './session-client.js';
 import type { ConversationSelection, ConversationSessions } from './session-data/api.js';
 import type { RemoteStore } from '@mini-harness/ui-runtime/remote-store';
-import type { FrontendApi } from '@mini-harness/ui-runtime/frontend-api';
 import { scopedElements, button, dialog, field, fromMarkup, iconButton, confirmAction } from '@mini-harness/ui-primitives/primitives';
 import { payload } from '@mini-harness/ui-runtime/http';
 import { workspaceTree } from './navigation-tree.js';
@@ -25,7 +25,8 @@ interface NavigationServices {
   setTitle(title: string): void;
 }
 
-export function sessionNavigation(api: FrontendApi, options: NavigationServices) {
+export function sessionNavigation(ctx: Context, options: NavigationServices) {
+  const signal = ctx.fiber.signal;
   const { state, sessions: sessionStore, workspaces: workspaceStore } = options;
   const panel = fromMarkup(`<div class="session-navigation">
     <div class="sidebar-caption">
@@ -38,7 +39,7 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
       <span id="selectedCount" aria-live="polite"></span>
     </div>
   </div>`);
-  api.contribute(slotExtensions.register, 'sidebar.navigation', panel);
+  ctx.effect(() => ctx.miniSlots.register('sidebar.navigation', panel));
   const { element, value } = scopedElements(panel);
   const title = document.createElement('input');
   title.required = true;
@@ -52,7 +53,7 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
   save.type = 'submit';
   renameForm.append(field('Title', title), status, save);
   const renameDialog = dialog('Rename conversation', renameForm);
-  api.contribute(slotExtensions.register, 'dialog.root', renameDialog);
+  ctx.effect(() => ctx.miniSlots.register('dialog.root', renameDialog));
   let renaming: string;
   const selection = new Set<string>(), expanded = new Set<string>();
   const storageKey = 'mini-harness-collapsed-workspaces';
@@ -71,7 +72,7 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
   removeAction.dataset.danger = 'true';
   removeAction.prepend(icon('trash'));
   menu.append(renameAction, removeAction);
-  api.contribute(slotExtensions.register, 'dialog.root', menu);
+  ctx.effect(() => ctx.miniSlots.register('dialog.root', menu));
   let menuTrigger: HTMLElement | undefined;
 
   function closeMenu(restoreFocus = false) {
@@ -102,12 +103,12 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
   document.addEventListener('pointerdown', (event) => {
     if (!menu.hidden && event.target instanceof Node && !menu.contains(event.target) && !menuTrigger?.contains(event.target))
       closeMenu();
-  }, { signal: api.signal });
+  }, { signal });
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && !menu.hidden) { event.preventDefault(); closeMenu(true); }
-  }, { signal: api.signal });
-  window.addEventListener('resize', () => closeMenu(), { signal: api.signal });
-  element('sessions').addEventListener('scroll', () => closeMenu(), { signal: api.signal });
+  }, { signal });
+  window.addEventListener('resize', () => closeMenu(), { signal });
+  element('sessions').addEventListener('scroll', () => closeMenu(), { signal });
 
   let draggingWorkspace: string | undefined;
   function clearDrag() {
@@ -147,7 +148,7 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
   });
 
   async function remove(ids: string[]) {
-    await api.request('/sessions/delete', payload('POST', { ids }));
+    await browserRequest(ctx, '/sessions/delete', payload('POST', { ids }));
     await sessionStore.refresh();
   }
 
@@ -163,7 +164,7 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
     if (save.disabled) return;
     save.disabled = true;
     try {
-      await api.request('/sessions/' + renaming, payload('PATCH', { title: title.value }));
+      await browserRequest(ctx, '/sessions/' + renaming, payload('PATCH', { title: title.value }));
       renameDialog.close();
     } catch (error) { status.textContent = (error instanceof Error ? error.message : String(error)); }
     finally { save.disabled = false; }
@@ -213,7 +214,7 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
       let next = 0;
       const ids = workspaces.map(({ id }) => siblingSet.has(id) ? moved[next++] : id);
       try {
-        await api.request('/workspaces', payload('PUT', { ids }));
+        await browserRequest(ctx, '/workspaces', payload('PUT', { ids }));
         await workspaceStore.refresh();
       } catch (error) { options.report(error instanceof Error ? error : new Error(String(error))); }
     }
@@ -229,7 +230,7 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
           matches: contentMatches, render, selectionChanged, activate: options.activate, rename,
           remove(item) {
             void confirmAction('Permanently delete "' + item.title + '" and all child conversations?',
-              { title: 'Delete conversation', signal: api.signal })
+              { title: 'Delete conversation', signal })
               .then((confirmed) => confirmed ? remove([item.id]) : undefined).catch(options.report);
           }
         });
@@ -342,15 +343,15 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
       render();
     }
   }
-  state.subscribe(update, api.signal);
-  sessionStore.subscribe(update, api.signal);
+  state.subscribe(update, signal);
+  sessionStore.subscribe(update, signal);
   state.addEventListener('selection', (event: Event) => {
     if (!(event instanceof CustomEvent)) return;
     const { item, revealWorkspace: workspace } = event.detail as { item?: Conversation; revealWorkspace: boolean };
     if (!item) return;
     if (workspace) revealWorkspace(item.workspaceId);
     for (let parent = item.parentId; parent && !expanded.has(parent); parent = sessionStore.get().find(({ id }) => id === parent)?.parentId ?? null) expanded.add(parent);
-  }, { signal: api.signal });
+  }, { signal });
 
   selectMode.onclick = () => toggleSelection(!selecting);
   function updateSearch() {
@@ -363,7 +364,7 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
     if (query.length < 2) return;
     searchTimer = setTimeout(() => {
       const request = searchRequest = new AbortController();
-      void api.request<SessionSearchResult[]>('/sessions/search?q=' + encodeURIComponent(query), { signal: request.signal }).then((hits) => {
+      void browserRequest<SessionSearchResult[]>(ctx, '/sessions/search?q=' + encodeURIComponent(query), { signal: request.signal }).then((hits) => {
         if (request.signal.aborted || revision !== searchRevision) return;
         contentMatches = new Map(hits.map((hit) => [hit.id, hit]));
         render();
@@ -389,14 +390,14 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
       searchToggle.focus();
     }
   };
-  api.onDispose(() => { clearTimeout(searchTimer); searchRequest?.abort(); });
+  ctx.effect(() => (() => { clearTimeout(searchTimer); searchRequest?.abort(); }));
   cancel.onclick = () => toggleSelection(false);
   selectAll.onclick = () => { for (const item of visible) selection.add(item.id); render(); };
-  exportButton.onclick = () => void exportSessions([...selection], api.signal).catch(options.report);
+  exportButton.onclick = () => void exportSessions([...selection], signal).catch(options.report);
   deleteButton.onclick = () => {
     const ids = [...selection];
     void confirmAction('Permanently delete ' + ids.length + ' selected conversations and their descendants?',
-      { title: 'Delete conversations', signal: api.signal }).then(async (confirmed) => {
+      { title: 'Delete conversations', signal }).then(async (confirmed) => {
         if (!confirmed) return;
         await remove(ids);
         toggleSelection(false);

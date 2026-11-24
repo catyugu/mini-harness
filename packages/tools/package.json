@@ -5,7 +5,7 @@
   "type": "module",
   "exports": {
     "./api": "./src/api.ts",
-    "./extensions": "./src/extensions.ts",
+    "./events": "./src/events.ts",
     "./manifest": "./src/manifest.ts",
     "./registry": "./src/registry.ts",
     "./policy": "./src/policy.ts"
@@ -13,12 +13,11 @@
   "miniHarness": {
     "api": [
       "./api",
-      "./extensions",
+      "./events",
       "./policy"
     ]
   },
   "dependencies": {
-    "@mini-harness/kernel": "workspace:*",
     "@mini-harness/llm": "workspace:*",
     "@mini-harness/plugin-api": "workspace:*"
   }

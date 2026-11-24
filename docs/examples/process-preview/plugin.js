@@ -1,4 +1,5 @@
-export default function setup(ctx) {
+export const provide = ["harnessProcess"];
+export function apply(ctx) {
   ctx.provide('harnessProcess', {
     async run({ command, cwd, signal }) {
       signal?.throwIfAborted();

@@ -1,4 +1,4 @@
-import type {} from 'cordis';
+import type {} from 'mini-harness/cordis';
 import type { WorkspaceRecord } from '@mini-harness/workspaces/record';
 import type { Conversation } from '../shared/api.js';
 
@@ -11,6 +11,6 @@ export interface ConversationBrowserPort {
   report(error: Error): void;
 }
 
-declare module 'cordis' {
+declare module 'mini-harness/cordis' {
   interface Context { harnessBrowser: ConversationBrowserPort }
 }

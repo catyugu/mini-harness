@@ -1,6 +1,6 @@
 # mini-harness
 
-A minimal local Web harness with a native agent kernel, shipped as one npm package. [Cordis](https://github.com/cordiverse/cordis) composes services, tools and plugin lifecycles. The [Pi model transport](https://github.com/earendil-works/pi) supports model providers behind a harness-owned adapter; mini-harness owns execution and conversation state.
+A minimal local Web harness with a native Agent, shipped as one npm package. Product plugins compose directly through a [vendored Cordis runtime](vendor/cordis/README.md) shared by the server and browser. The [Pi model transport](https://github.com/earendil-works/pi) supports model providers behind a harness-owned adapter; mini-harness owns execution and conversation state.
 
 ## Start
 
@@ -54,7 +54,7 @@ Conversation permissions can be changed at any time from the left side of the co
 
 ## Develop
 
-Each local plugin bundle has a `plugin.json` descriptor and a server or browser setup function, or both. Services can be selected at application, workspace and nested session scopes. Third-party plugins can register tools, record progress, run child conversations, request confirmations and add keyed browser components. The standalone [Task notes example](docs/examples/task-notes) uses both SDK entry points. Parent and sibling scopes retain their own providers. See the [architecture](docs/architecture.md), [plugin guide](docs/plugins.md), [scoped provider examples](docs/scoped-providers.md), and [session log reference](docs/session-log.md).
+Each local plugin bundle has a `plugin.json` descriptor and a server or browser Cordis entry, or both. Services can be selected at application, workspace and nested session scopes. Third-party plugins can register tools, record progress, run child conversations, request confirmations and add keyed browser components. The standalone [Task notes example](docs/examples/task-notes) uses both SDK entry points. Parent and sibling scopes retain their own providers. See the [architecture](docs/architecture.md), [plugin guide](docs/plugins.md), [scoped provider examples](docs/scoped-providers.md), and [session log reference](docs/session-log.md).
 
 ```sh
 pnpm install --frozen-lockfile

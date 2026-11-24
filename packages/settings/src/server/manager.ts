@@ -1,6 +1,6 @@
 import { scopeKeys } from '@mini-harness/plugin-api/configuration';
-import type { ScopeKey } from '@mini-harness/kernel/scopes';
-import { assertOutsideMountTransaction, assertOutsidePluginRequest } from '@mini-harness/kernel/mutation-api';
+import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
+import { assertOutsideMountTransaction, assertOutsidePluginRequest } from '@mini-harness/plugin-api/mutation-api';
 import { DomainError } from '@mini-harness/platform/errors';
 import { isDeepStrictEqual } from 'node:util';
 import { mergeSettings, readSettings } from './config.js';

@@ -1,8 +1,9 @@
-import type {} from 'cordis';
+import type {} from 'mini-harness/cordis';
 import type { ThinkingLevel, ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { Attachment, InputSource } from '@mini-harness/input/message';
 import type { RunEvent, StreamEvent } from './stream.js';
 import type { QueueEntry } from '@mini-harness/sessions/queue';
+import type { ExecutionHandle, ExecutionInput } from './execution.js';
 import type { RunInfo } from '@mini-harness/sessions/run-state';
 
 export interface RunPort {
@@ -16,6 +17,7 @@ export interface RunPort {
     signal?: AbortSignal; source?: InputSource; model?: ModelChoice; attachments?: Attachment[];
     thinkingLevel?: ThinkingLevel | null;
   }): Promise<string>;
+  submit(id: string, input: ExecutionInput, signal: AbortSignal): ExecutionHandle;
   startRun(id: string, prompt: string, options?: {
     model?: ModelChoice; attachments?: Attachment[]; thinkingLevel?: ThinkingLevel | null;
   }): RunInfo;
@@ -31,11 +33,11 @@ export interface RunPort {
   compact(id: string): Promise<void>;
 }
 
-declare module 'cordis' {
+declare module 'mini-harness/cordis' {
   interface Context { harnessRuns: RunPort }
 }
 
-declare module '@mini-harness/kernel/observations' {
+declare module '@mini-harness/plugin-api/observations' {
   interface CapabilityObservations {
     'input-accepted': { type: 'input-accepted'; sessionId: string; parentId?: string | null; source: InputSource; runSource: InputSource; model: ModelChoice };
   }

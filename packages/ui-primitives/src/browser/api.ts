@@ -1,4 +1,4 @@
-import type {} from 'cordis';
+import type {} from 'mini-harness/cordis';
 import type { PluginIcon } from '@mini-harness/plugin-api/descriptor';
 
 export interface BrowserPrimitives {
@@ -11,6 +11,6 @@ export interface BrowserPrimitives {
 }
 
 
-declare module 'cordis' {
+declare module 'mini-harness/cordis' {
   interface Context { miniPrimitives: BrowserPrimitives }
 }

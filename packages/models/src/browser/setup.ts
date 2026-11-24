@@ -1,39 +1,41 @@
+import { browserPluginId, browserPluginSettings } from '@mini-harness/ui-runtime/plugin-settings';
+import { browserRequest } from '@mini-harness/ui-runtime/http';
+import type { Context } from 'mini-harness/cordis';
 import type {} from '@mini-harness/ui-runtime/projection-api';
-import { settingsExtensions } from '@mini-harness/settings/browser/api';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 import { payload } from '@mini-harness/ui-runtime/http';
 import type { ModelCatalog, ProviderInfo, ProviderModel } from '../shared/catalog.js';
 import { RemoteStore } from '@mini-harness/ui-runtime/remote-store';
-import type { FrontendSetup, FrontendApi } from '@mini-harness/ui-runtime/frontend-api';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { button, field, fromMarkup, confirmAction, required } from '@mini-harness/ui-primitives/primitives';
 
 
-const setup: FrontendSetup = async (ctx, api) => {
+const setup = async (ctx: Context) => {
   const { miniSettings: settings } = ctx;
   const state = new RemoteStore(async () => {
     const [{ models, recent }, providers] = await Promise.all([
-      api.request<Pick<ModelCatalog, 'models'> & { recent: ModelChoice }>('/models'), api.request<ModelCatalog['providers']>('/providers')
+      browserRequest<Pick<ModelCatalog, 'models'> & { recent: ModelChoice }>(ctx, '/models'), browserRequest<ModelCatalog['providers']>(ctx, '/providers')
     ]);
     return { models, providers, recent };
   });
   await state.refresh();
-  api.onDispose(ctx.miniProjections.register('models', state));
+  ctx.effect(() => ctx.miniProjections.register('models', state));
   ctx.provide('miniModels', state);
-  api.contribute(settingsExtensions.register, {
+  ctx.effect(() => ctx.miniSettingsRegistry.register(browserPluginId(ctx), {
     id: 'providers',
     section: { title: 'Model', icon: 'model', order: 10 },
     render({ signal }) {
-      const manager = providerManager(api, () => state.get().providers, state.refresh);
+      const manager = providerManager(ctx, () => state.get().providers, state.refresh);
       settings.onClose(manager.reset, signal);
       state.subscribe(manager.render, signal);
       return manager.content;
     }
-  });
+  }, browserPluginSettings(ctx)));
   if (!state.get().models.some((model) => model.configured)) settings.open('Model');
 };
 
-function providerManager(api: FrontendApi, providers: () => ProviderInfo[], refresh: () => Promise<void>) {
+function providerManager(ctx: Context, providers: () => ProviderInfo[], refresh: () => Promise<void>) {
+  const signal = ctx.fiber.signal;
   const content = fromMarkup(`<div class="model-settings">
     <div class="provider-list"></div>
     <div class="provider-add"></div>
@@ -107,9 +109,9 @@ function providerManager(api: FrontendApi, providers: () => ProviderInfo[], refr
       try {
         const secret = key.value.trim();
         if (custom()) {
-          await api.request('/providers', payload('PUT', { ...endpoint.read(), key: secret || undefined, create: !provider }));
+          await browserRequest(ctx, '/providers', payload('PUT', { ...endpoint.read(), key: secret || undefined, create: !provider }));
         } else if (secret) {
-          await api.request('/credentials', payload('POST', { provider: provider?.id ?? picker.value, key: secret }));
+          await browserRequest(ctx, '/credentials', payload('POST', { provider: provider?.id ?? picker.value, key: secret }));
         }
         closeEditor();
         await refresh();
@@ -150,10 +152,10 @@ function providerManager(api: FrontendApi, providers: () => ProviderInfo[], refr
         remove.setAttribute('aria-label', 'Remove ' + provider.name);
         remove.onclick = async () => {
           if (!await confirmAction(provider.custom ? 'Remove endpoint ' + provider.name + '?' : 'Remove the saved credentials for ' + provider.name + '?',
-            { title: 'Remove provider', confirmLabel: 'Remove', signal: api.signal })) return;
+            { title: 'Remove provider', confirmLabel: 'Remove', signal })) return;
           remove.disabled = true;
           try {
-            await api.request(provider.custom ? '/providers' : '/credentials', payload('DELETE',
+            await browserRequest(ctx, provider.custom ? '/providers' : '/credentials', payload('DELETE',
               provider.custom ? { id: provider.id } : { provider: provider.id }));
             await refresh();
             status.textContent = 'Provider removed.';
@@ -241,4 +243,4 @@ function customEndpoint(provider?: ProviderInfo) {
   }) };
 }
 
-export default setup;
+export default { inject: ['miniSettings','miniProjections','miniSettingsRegistry'], provide: ['miniModels'], apply: setup };

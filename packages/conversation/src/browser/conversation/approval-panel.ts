@@ -1,13 +1,14 @@
+import { browserRequest } from '@mini-harness/ui-runtime/http';
+import type { Context } from 'mini-harness/cordis';
 import type {} from '@mini-harness/approvals/browser/api';
 import type {} from '../navigation-api.js';
-import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend-api';
 import { payload } from '@mini-harness/ui-runtime/http';
-import { slotExtensions } from '@mini-harness/ui-slots/browser/api';
 
-export const mountApprovals: FrontendSetup = (ctx, api) => {
+export const mountApprovals = (ctx: Context) => {
+  const signal = ctx.fiber.signal;
   const { miniApprovals: approvals, harnessBrowser: services } = ctx;
   const list = document.createElement('div');
-  api.contribute(slotExtensions.register, 'conversation.approvals', list);
+  ctx.effect(() => ctx.miniSlots.register('conversation.approvals', list));
   function render() {
     const session = services.session();
     if (!session) { list.replaceChildren(); return; }
@@ -36,10 +37,10 @@ export const mountApprovals: FrontendSetup = (ctx, api) => {
           if (services.session()?.id !== approval.sessionId) return;
           for (const action of card.querySelectorAll('button')) action.disabled = true;
           try {
-            await api.request('/approvals', payload('POST', { id: approval.id, allow }));
+            await browserRequest(ctx, '/approvals', payload('POST', { id: approval.id, allow }));
             await approvals.refresh();
           } catch (error) {
-            if (!api.signal.aborted) services.report(error instanceof Error ? error : new Error(String(error)));
+            if (!signal.aborted) services.report(error instanceof Error ? error : new Error(String(error)));
             for (const action of card.querySelectorAll('button')) action.disabled = false;
           }
         };
@@ -48,7 +49,7 @@ export const mountApprovals: FrontendSetup = (ctx, api) => {
       return card;
     }));
   }
-  approvals.subscribe(render, api.signal);
-  services.onConversationChange(render, api.signal);
+  approvals.subscribe(render, signal);
+  services.onConversationChange(render, signal);
   render();
 };

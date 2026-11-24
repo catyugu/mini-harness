@@ -1,4 +1,4 @@
-import type {} from 'cordis';
+import type {} from 'mini-harness/cordis';
 import type { ConversationPermission, SessionRecord } from './shared/identity.js';
 import type { SessionLogPort } from './log-api.js';
 import type { Attachment, ImageInput, PreparedMessage } from '@mini-harness/input/message';
@@ -39,6 +39,6 @@ export interface SessionStore extends SessionCatalog, SessionHistory, SessionLif
   attachmentDirectory(id: string): string | undefined;
 }
 
-declare module 'cordis' {
+declare module 'mini-harness/cordis' {
   interface Context { harnessRegistry: SessionStore }
 }

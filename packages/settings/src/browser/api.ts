@@ -1,8 +1,7 @@
 import type { Settings } from '../shared/settings.js';
 import type { RemoteStore } from '@mini-harness/ui-runtime/remote-store';
-import type {} from 'cordis';
-import type { BrowserContributionSource } from '@mini-harness/ui-runtime/contribution';
-import type { PluginConfiguration } from '@mini-harness/kernel/configuration';
+import type {} from 'mini-harness/cordis';
+import type { PluginConfiguration } from '@mini-harness/plugin-api/plugin-configuration';
 import type { PluginIcon } from '@mini-harness/plugin-api/descriptor';
 
 export interface SettingsSection {
@@ -33,7 +32,7 @@ export interface PluginSettingsContribution {
   render(pluginId: string, signal: AbortSignal): HTMLElement | undefined;
 }
 
-declare module 'cordis' {
+declare module 'mini-harness/cordis' {
   interface Context {
     miniSettings: {
       open(title?: string): void;
@@ -47,12 +46,3 @@ declare module 'cordis' {
     };
   }
 }
-
-export const settingsExtensions = {
-  plugin(source: BrowserContributionSource, contribution: PluginSettingsContribution) {
-    return source.effect(() => source.service('miniSettingsRegistry').registerPlugin(source.id, contribution));
-  },
-  register(source: BrowserContributionSource, contribution: SettingsContribution) {
-    return source.effect(() => source.service('miniSettingsRegistry').register(source.id, contribution, source.configuration));
-  }
-};

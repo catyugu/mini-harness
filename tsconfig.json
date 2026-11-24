@@ -23,9 +23,15 @@
     ],
     "declaration": true,
     "declarationDir": "dist/types",
-    "rewriteRelativeImportExtensions": true
+    "rewriteRelativeImportExtensions": true,
+    "paths": {
+      "mini-harness/cordis": [
+        "./vendor/cordis/src/index.ts"
+      ]
+    }
   },
   "include": [
+    "vendor/**/*.ts",
     "bin/**/*.ts",
     "packages/**/*.ts",
     "test/**/*.ts",

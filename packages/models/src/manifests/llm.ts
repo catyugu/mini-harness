@@ -4,8 +4,12 @@ import type {} from '../server/store-api.js';
 export const manifest: PluginDescriptor = {
   id: 'core:llm', scope: 'application', defaultEnabled: true,
   title: 'Model transport', description: 'Native LLM streaming via the Pi adapter',
-  inject: ['harnessModelStore'], provides: ['harnessLlm'],
-  setup(ctx) {
-    ctx.provide('harnessLlm', ctx.harnessModelStore.llm);
+
+  plugin: {
+    inject: ['harnessModelStore'],
+    provide: ['harnessLlm'],
+    apply(ctx) {
+      ctx.provide('harnessLlm', ctx.harnessModelStore.llm);
+    }
   }
 };

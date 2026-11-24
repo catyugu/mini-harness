@@ -1,12 +1,12 @@
+import { browserRequest } from '@mini-harness/ui-runtime/http';
+import type { Context } from 'mini-harness/cordis';
 import type {} from '@mini-harness/conversation/browser/navigation-api';
 import type {} from '@mini-harness/ui-runtime/projection-api';
-import { slotExtensions } from '@mini-harness/ui-slots/browser/api';
-import { conversationExtensions } from '@mini-harness/conversation/browser/extensions';
-import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend-api';
 import { workspaceRoute } from '@mini-harness/workspaces/browser/route';
 import { iconButton } from '@mini-harness/ui-primitives/primitives';
 
-const setup: FrontendSetup = (ctx, api) => {
+const setup = (ctx: Context) => {
+  const signal = ctx.fiber.signal;
   const services = ctx.harnessBrowser;
   const button = iconButton('Choose skill', 'skills');
   let workspaceId: string | undefined;
@@ -27,15 +27,15 @@ const setup: FrontendSetup = (ctx, api) => {
     commands = [];
     button.hidden = !workspace;
     await Promise.all(previous.map((dispose) => dispose()));
-    if (!workspace || controller.signal.aborted || api.signal.aborted) return;
+    if (!workspace || controller.signal.aborted || signal.aborted) return;
     try {
       const query = sessionId ? '?' + new URLSearchParams({ sessionId }) : '';
-      const skills = await api.request<{ name: string; description: string }[]>(workspaceRoute(workspace, '/skills') + query, { signal: controller.signal });
-      if (controller.signal.aborted || api.signal.aborted) return;
+      const skills = await browserRequest<{ name: string; description: string }[]>(ctx, workspaceRoute(workspace, '/skills') + query, { signal: controller.signal });
+      if (controller.signal.aborted || signal.aborted) return;
       for (const skill of skills)
-        commands.push(api.contribute(conversationExtensions.command, { name: 'skill:' + skill.name, aliases: [skill.name], description: skill.description, group: 'Skill' }));
+        commands.push(ctx.effect(() => ctx.miniComposer.command({ name: 'skill:' + skill.name, aliases: [skill.name], description: skill.description, group: 'Skill' })));
     } catch (error) {
-      if (!controller.signal.aborted && !api.signal.aborted) services.report(error instanceof Error ? error : new Error(String(error)));
+      if (!controller.signal.aborted && !signal.aborted) services.report(error instanceof Error ? error : new Error(String(error)));
     }
   }
 
@@ -44,12 +44,12 @@ const setup: FrontendSetup = (ctx, api) => {
     const refreshed = update(true);
     const current = request;
     void refreshed.then(() => {
-      if (current === request && !api.signal.aborted) ctx.miniComposer.insert('/skill:');
+      if (current === request && !signal.aborted) ctx.miniComposer.insert('/skill:');
     });
   };
-  api.contribute(slotExtensions.register, 'conversation.composer', button);
-  api.onDispose(ctx.miniProjections.register('plugins', { sync: () => update(true) }));
-  services.onConversationChange(() => void update(), api.signal);
+  ctx.effect(() => ctx.miniSlots.register('conversation.composer', button));
+  ctx.effect(() => ctx.miniProjections.register('plugins', { sync: () => update(true) }));
+  services.onConversationChange(() => void update(), signal);
   void update();
 };
-export default setup;
+export default { inject: ['harnessBrowser','miniProjections','miniComposer','miniSlots'], provide: [], apply: setup };

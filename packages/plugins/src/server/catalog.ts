@@ -2,15 +2,15 @@ import { isDeepStrictEqual } from 'node:util';
 import type { PluginMetadata } from '../shared/metadata.js';
 import { localPluginIdPattern } from '@mini-harness/plugin-api/selection';
 import { DomainError } from '@mini-harness/platform/errors';
-import { readdirSync } from 'node:fs';
+import { lstatSync, readdirSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
 import { basename, join } from 'node:path';
 import { Check } from 'typebox/value';
 import { scopeKeys, type PluginSettings } from '@mini-harness/plugin-api/configuration';
-import type { PluginScope, ScopeKey, ScopeSettings } from '@mini-harness/kernel/scopes';
-import { ProtectedProviderError, resolveCapabilities } from '@mini-harness/kernel/composition';
+import type { PluginScope, ScopeKey, ScopeSettings } from '@mini-harness/plugin-api/scopes';
+import { ProtectedProviderError, selectProviders } from './providers.js';
 import { pluginBundle } from './source.js';
-import type { Context } from 'cordis';
-import type { ServiceMap } from '@mini-harness/kernel/services';
+import { Inject, type Context, type Plugin } from 'mini-harness/cordis';
 import type { ConfigValidationContext, PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
 import { builtinBrowserAssets } from './browser-assets.js';
 import { describePlugin, type DiscoveredPlugin } from './descriptor.js';
@@ -30,10 +30,8 @@ function configDefaults(schema: Record<string, any>, value: any): any {
 export interface PluginPlan {
   descriptor: DiscoveredPlugin;
   id: string;
-  services: Record<string, string>;
   source?: string;
   config?: Record<string, unknown>;
-  requires: string[];
 }
 
 export interface ApplicationRequirements {
@@ -52,16 +50,22 @@ export class PluginCatalog {
   private readonly protectedProviders: ReadonlyMap<string, string>;
   constructor(private readonly directory: string, builtins: PluginDescriptor[], rootServices: string[],
     private readonly devPlugin?: string, requirements: ApplicationRequirements = {}) {
-    this.builtins = new Map(builtins.map((plugin) => [plugin.id, { ...plugin, resources: builtinBrowserAssets(plugin) }]));
+    this.builtins = new Map(builtins.map((descriptor) => {
+      const { plugin } = descriptor;
+      return [descriptor.id, { ...descriptor,
+        inject: plugin ? Object.keys(Inject.resolve(plugin.inject)) : descriptor.inject,
+        provides: typeof plugin?.provide === 'string' ? [plugin.provide] : plugin?.provide ?? descriptor.provides,
+        resources: builtinBrowserAssets(descriptor) }];
+    }));
     this.fixedPlugins = requirements.fixedPlugins ?? new Set();
     this.requiredServices = requirements.requiredServices ?? new Set();
     this.requiredBrowserServices = requirements.requiredBrowserServices ?? new Set();
     this.protectedProviders = new Map([...rootServices.map((name) => [name, 'application'] as const), ...requirements.protectedProviders ?? []]);
     this.lockedPlugins = new Set(this.protectedProviders.values());
     if (this.builtins.size !== builtins.length) throw new Error('Duplicate builtin plugin ID');
-    const services = new Set(builtins.flatMap(({ provides }) => provides ?? []));
+    const services = new Set([...this.builtins.values()].flatMap(({ provides }) => provides ?? []));
     for (const service of rootServices) if (services.has(service)) throw new Error('Duplicate provider for ' + service);
-    for (const { id, inject = [], browserRequires = [] } of builtins) {
+    for (const { id, inject = [], browserRequires = [] } of this.builtins.values()) {
       for (const service of inject) if (!rootServices.includes(service) && !services.has(service))
         throw new Error('Missing provider for ' + service + ' (' + id + ')');
       for (const dependency of browserRequires) if (!this.builtins.get(dependency)?.browser)
@@ -110,10 +114,41 @@ export class PluginCatalog {
 
   descriptors(): DiscoveredPlugin[] { return [...this.builtins.values(), ...this.discover()]; }
 
+  async runtimeDescriptors(settings: PluginSettings): Promise<DiscoveredPlugin[]> {
+    return Promise.all(this.descriptors().map(async descriptor => {
+      const { id, source, scope } = descriptor;
+      if (!source || descriptor.error) return descriptor;
+      const enabled = scope === 'application' ? this.enabled(descriptor, settings) :
+        scopeKeys(settings).some(key => key.startsWith(scope + ':') && settings.scopes[key]?.plugins?.[id]);
+      if (!enabled) return descriptor;
+      try {
+        const module = pathToFileURL(source).href + '?v=' + lstatSync(source).mtimeMs;
+        const exports = await import(module);
+        const plugin: Plugin = exports.default ?? exports;
+        if (typeof plugin !== 'function' && typeof plugin?.apply !== 'function')
+          throw new Error('Plugin ' + id + ' must export a Cordis plugin with apply(ctx, config)');
+        const inject = Object.keys(Inject.resolve(plugin.inject));
+        const provide = typeof plugin.provide === 'string' ? [plugin.provide] : plugin.provide;
+        if (provide && descriptor.provides?.length &&
+            !isDeepStrictEqual([...provide].sort(), [...descriptor.provides].sort()))
+          throw new Error('Service declarations disagree with the manifest for ' + id);
+        if (scope !== 'application' && inject.some(name => name === 'harnessRoutes' || name === 'harnessNetwork'))
+          throw new Error('Scoped plugins cannot register application routes');
+        const validateConfig = exports.validateConfig;
+        if (validateConfig !== undefined && (typeof validateConfig !== 'function' || !descriptor.configSchema))
+          throw new Error('Export a validateConfig function with a configSchema in plugin.json');
+        return { ...descriptor, plugin, module, inject, provides: provide ?? descriptor.provides, validateConfig };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return { ...descriptor, error: message };
+      }
+    }));
+  }
+
   metadata(settings: PluginSettings, failures: ReadonlyMap<string, string>,
     mounted: (id: string) => boolean, context: (scope?: ScopeKey) => Context): PluginMetadata[] {
     return this.descriptors().filter(({ id }) => !this.fixedPlugins.has(id) && !this.lockedPlugins.has(id) && localPluginIdPattern.test(id)).map((descriptor) => {
-      const { id, source, resources, inject, setup, optional, browserStyles, browserRequires, browserInject,
+      const { id, source, resources, inject, plugin: _plugin, optional, browserStyles, browserRequires,
         browserProvides, configChanges, validateConfig, ...metadata } = descriptor;
       const configurationError = (key?: ScopeKey) => {
         try {
@@ -151,10 +186,10 @@ export class PluginCatalog {
     try {
       const result: unknown = validator(Object.freeze(structuredClone(config)), {
         operation,
-        service<Name extends keyof ServiceMap & string>(name: Name): NonNullable<ServiceMap[Name]> {
+        service<Name extends keyof Context & string>(name: Name): NonNullable<Context[Name]> {
           if (!descriptor.inject?.includes(name) && !descriptor.optional?.includes(name))
             throw new Error('Configuration dependency is not declared: ' + name);
-          const service = ctx.get(name) as ServiceMap[Name] | undefined;
+          const service = ctx.get(name) as Context[Name] | undefined;
           if (service == null) throw new DomainError('unavailable', 'Configuration dependency is unavailable: ' + name);
           return service;
         }
@@ -196,7 +231,7 @@ export class PluginCatalog {
   }
 
   plans(settings: PluginSettings, descriptors: DiscoveredPlugin[], scope: PluginScope['kind'],
-    inherited: ReadonlyMap<string, string>, parentIds: ReadonlySet<string>,
+    inherited: ReadonlyMap<string, string>,
     overrides?: ScopeSettings, unavailable?: (id: string, error: unknown) => boolean) {
     const isApp = scope === 'application';
     const choices = isApp ? settings.providers : overrides?.providers ?? {};
@@ -222,21 +257,19 @@ export class PluginCatalog {
         configs.set(id, this.configValues(id, values, item.configSchema));
       } catch (error) { if (!unavailable?.(id, error)) throw error; }
     }
-    const { ordered, providers } = (() => {
+    const { selected, providers } = (() => {
       try {
-        return resolveCapabilities(enabled.map((item) => ({
-          ...item, requires: item.requires?.filter((id) => !parentIds.has(id))
-        })), inherited, choices, unavailable, this.protectedProviders);
+        return selectProviders(enabled, inherited, choices, this.protectedProviders);
       } catch (error) {
         if (error instanceof ProtectedProviderError && !isApp) throw error;
-        throw new DomainError('invalid_input', error instanceof Error ? error.message : 'Invalid plugin dependency graph');
+        throw new DomainError('invalid_input', error instanceof Error ? error.message : 'Invalid provider selection');
       }
     })();
     const plans: PluginPlan[] = [];
-    for (const { descriptor, requires, services } of ordered) {
+    for (const descriptor of selected) {
       const { id, source } = descriptor;
       const config = configs.get(id);
-      if (config) plans.push({ descriptor, id, source, requires, services, config });
+      if (config) plans.push({ descriptor, id, source, config });
     }
     return { plans, providers };
   }

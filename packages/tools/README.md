@@ -8,15 +8,15 @@ Resolves scoped registrations and checks them against the host’s authorization
 
 ## Structure
 
-`src/api.ts` defines tool inputs and results. `extensions.ts` exposes contributions and `registry.ts` owns leases.
+`src/api.ts` defines tool inputs and results. `events.ts` declares the tool policy event and `registry.ts` owns leases.
 
 ## API
 
-`harnessTools`, `defineTool` and `toolExtensions` define registration and execution policy. The host protects the provider.
+`harnessTools.register` owns registration and `defineTool` infers argument types. The `tools/decide` event can restrict an invocation. The host protects the provider.
 
 ## Dependencies
 
-Uses [Kernel](../kernel/README.md) for plugin lifetimes and scope selection. Agent consumes tool definitions and invocation leases.
+Uses Cordis fibers for plugin-owned calls and session ancestry for tool visibility. Agent consumes tool definitions and invocation leases.
 
 ## Lifecycle
 

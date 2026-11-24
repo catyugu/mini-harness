@@ -6,20 +6,13 @@ export interface Capability {
   requires?: string[];
 }
 
-export interface ResolvedCapability<T extends Capability> {
-  descriptor: T;
-  requires: string[];
-  services: Record<string, string>;
-}
-
 export class ProtectedProviderError extends Error {
   constructor(service: string) { super('Protected service cannot be overridden: ' + service); }
 }
 
-/** Resolve a graph before Cordis starts any user code. Optional services are live lookups. */
-export function resolveCapabilities<T extends Capability>(
+/** Select providers according to application policy. */
+export function selectProviders<T extends Capability>(
   descriptors: T[], inherited: ReadonlyMap<string, string>, choices: Readonly<Record<string, string>> = {},
-  unavailable?: (id: string, error: unknown) => boolean,
   protectedProviders: ReadonlyMap<string, string> = new Map()
 ) {
   const byId = new Map(descriptors.map((descriptor) => [descriptor.id, descriptor]));
@@ -58,31 +51,5 @@ export function resolveCapabilities<T extends Capability>(
   for (const [service, id] of Object.entries(choices))
     if (providers.get(service) !== id) throw new Error('Selected provider is unavailable: ' + id);
 
-  const ordered: ResolvedCapability<T>[] = [];
-  const visiting = new Set<string>();
-  const visited = new Set<string>();
-  const visit = (id: string) => {
-    if (visited.has(id)) return;
-    if (visiting.has(id)) throw new Error('Cyclic plugin dependency: ' + id);
-    const descriptor = byId.get(id);
-    if (!descriptor || shadowed.has(id)) throw new Error('Required plugin is not enabled: ' + id);
-    visiting.add(id);
-    try {
-      const services = Object.fromEntries((descriptor.inject ?? []).map((service) => {
-        const provider = providers.get(service);
-        if (!provider) throw new Error('No enabled provider for ' + service + ' (' + id + ')');
-        return [service, provider];
-      }));
-      const requires = [...new Set([...(descriptor.requires ?? []), ...Object.values(services).filter((provider) => byId.has(provider))])];
-      for (const dependency of requires) visit(dependency);
-      visited.add(id);
-      ordered.push({ descriptor, requires, services });
-    } finally { visiting.delete(id); }
-  };
-  for (const { id } of descriptors) {
-    if (shadowed.has(id)) continue;
-    try { visit(id); }
-    catch (error) { if (!unavailable?.(id, error)) throw error; }
-  }
-  return { ordered, providers };
+  return { selected: descriptors.filter(({ id }) => !shadowed.has(id)), providers };
 }
