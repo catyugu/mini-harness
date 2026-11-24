@@ -1,9 +1,9 @@
+import { toolExtensions } from '@mini-harness/contracts/tool-extensions';
 import { defineTool } from '@mini-harness/contracts/tools';
 import type { Context } from 'cordis';
 import type { PluginApi } from '@mini-harness/contracts/plugins';
 import { Type } from 'typebox';
-import { Delegation } from './delegation.js';
-import type { SubagentPolicy } from '@mini-harness/contracts/delegation';
+import { Delegation, type SubagentPolicy } from './delegation.js';
 
 /** Optional plugin: delegation, scheduling and child-model rules exist only while mounted. */
 export function setup(ctx: Context, api: PluginApi) {
@@ -15,7 +15,6 @@ export function setup(ctx: Context, api: PluginApi) {
     const config = next as unknown as SubagentPolicy;
     delegation.semaphore.setLimit(config.maxParallel);
   });
-  ctx.provide('harnessDelegation', delegation);
   const tool = (id: string) => defineTool({
     name: 'delegate', label: 'Delegate',
     description: 'Create a child agent for a specific task. Set provider/model to override the default.',
@@ -30,5 +29,5 @@ export function setup(ctx: Context, api: PluginApi) {
       return { content: [{ type: 'text', text: child.text }], details: { sessionId: child.id } };
     }
   });
-  ctx.effect(() => ctx.harnessTools.register('delegate', tool, (id) => delegation.visible(id)));
+  api.contribute(toolExtensions.register, { name: 'delegate', bind: tool }, { visible: (id) => delegation.visible(id) });
 }

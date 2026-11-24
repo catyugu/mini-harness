@@ -1,3 +1,4 @@
+import { recordsForPlugin } from '@mini-harness/contracts/session-records';
 import type { Context } from 'cordis';
 import { SessionRegistry } from './registry.js';
 
@@ -6,6 +7,10 @@ export function setup(ctx: Context) {
     (event) => ctx.emit('harness/observe', event),
     (keys) => ctx.harnessSettingsStore.forgetScopes(keys));
   ctx.provide('harnessRegistry', registry);
-  ctx.provide('harnessSessions', { get: (id) => registry.get(id), list: (id) => registry.list(id) });
+  ctx.provide('harnessSessions', {
+    get: (id) => registry.get(id),
+    list: (id) => registry.list(id),
+    [recordsForPlugin]: (id, pluginId) => registry.records(id, pluginId)
+  });
   ctx.effect(() => () => registry.dispose());
 }

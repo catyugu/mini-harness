@@ -81,6 +81,6 @@ export async function executeTool(call: ToolCallPart, tool: ToolDefinition | und
     return { role: 'toolResult', toolCallId: call.id, toolName: call.name,
       content: [{ type: 'text', text: error instanceof Error ? error.message : String(error) }],
       isError: true, timestamp: Date.now(), elapsedMs: inApproval ? 0 : performance.now() - start,
-      details: approvalMs === undefined ? undefined : { approvalMs, approvalDenied: error instanceof ApprovalDenied } };
+      details: approvalMs === undefined ? undefined : { approvalMs, approvalDenied: error instanceof ApprovalDenied || (error instanceof Error && error.cause instanceof ApprovalDenied) } };
   }
 }

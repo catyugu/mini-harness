@@ -2,13 +2,13 @@ import { expectPresent } from '../../../test/support/required.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Type } from 'typebox';
-import { defineTool } from '@mini-harness/contracts/tools';
+import { defineTool, registerToolBinding } from '@mini-harness/contracts/tools';
 import { ToolRegistry } from '../registry.js';
 
 test('tool registry validates native JSON schemas before executing a plugin', async () => {
   const registry = new ToolRegistry();
   let calls = 0;
-  registry.register('inspect', () => defineTool({ name: 'inspect', description: 'Inspect',
+  registry[registerToolBinding]('inspect', () => defineTool({ name: 'inspect', description: 'Inspect',
     parameters: Type.Object({ path: Type.String({ minLength: 1 }) }, { additionalProperties: false }),
     async execute(_id, args) { calls++; return { content: [{ type: 'text', text: args.path }] }; } }));
   const tool = registry.forSession('session')[0];
@@ -23,14 +23,14 @@ test('scoped tools inherit locally and disposal aborts and drains active executi
   const registry = new ToolRegistry((id) => ['workspace:a', ...(id === 'child' ? ['session:child'] : [])]);
   const make = (text: string) => defineTool({ name: 'inspect', description: text, parameters: Type.Object({}),
     async execute() { return { content: [{ type: 'text', text }] }; } });
-  registry.register('inspect', () => make('root'));
-  registry.register('inspect', () => make('workspace'), undefined, 'workspace:a');
-  registry.register('inspect', () => make('child'), undefined, 'session:child');
+  registry[registerToolBinding]('inspect', () => make('root'));
+  registry[registerToolBinding]('inspect', () => make('workspace'), { scope: 'workspace:a' });
+  registry[registerToolBinding]('inspect', () => make('child'), { scope: 'session:child' });
   assert.equal(registry.forSession('child')[0].description, 'child');
   assert.equal(registry.forSession('sibling')[0].description, 'workspace');
   let entered: () => void;
   const ready = new Promise<void>((resolve) => { entered = resolve; });
-  const dispose = registry.register('wait', () => defineTool({ name: 'wait', description: 'Wait', parameters: Type.Object({}),
+  const dispose = registry[registerToolBinding]('wait', () => defineTool({ name: 'wait', description: 'Wait', parameters: Type.Object({}),
     async execute(_id, _args, signal) {
       entered();
       await new Promise<void>((_resolve, reject) => signal?.addEventListener('abort', () => reject(signal.reason), { once: true }));
@@ -48,14 +48,14 @@ test('file-tool names follow the same scoped registration, restriction and lifet
   let allowed = true, denied = false;
   const registry = new ToolRegistry((id) => id === 'outside' ? ['workspace:other'] :
     ['workspace:one', ...(id === 'child' ? ['session:child'] : [])],
-  async () => denied ? 'deny' : undefined, () => allowed);
+  async () => denied ? 'deny' : undefined, () => ({ readOnly: false, disabledTools: allowed ? [] : ['read'] }));
   const bind = (text: string) => () => defineTool({ name: 'read', description: text, parameters: Type.Object({}),
     async execute() { return { content: [{ type: 'text', text }] }; } });
-  registry.register('read', bind('application'));
-  assert.throws(() => registry.register('read', bind('duplicate')), /Duplicate tool in scope/);
-  const releaseWorkspace = registry.register('read', bind('workspace'), undefined, 'workspace:one');
-  assert.throws(() => registry.register('read', bind('duplicate'), undefined, 'workspace:one'), /Duplicate tool in scope/);
-  const releaseChild = registry.register('read', bind('child'), undefined, 'session:child');
+  registry[registerToolBinding]('read', bind('application'));
+  assert.throws(() => registry[registerToolBinding]('read', bind('duplicate')), /Duplicate tool in scope/);
+  const releaseWorkspace = registry[registerToolBinding]('read', bind('workspace'), { scope: 'workspace:one' });
+  assert.throws(() => registry[registerToolBinding]('read', bind('duplicate'), { scope: 'workspace:one' }), /Duplicate tool in scope/);
+  const releaseChild = registry[registerToolBinding]('read', bind('child'), { scope: 'session:child' });
   const tool = registry.forSession('child')[0];
   assert.equal(tool.description, 'child');
   assert.equal(registry.forSession('sibling')[0].description, 'workspace');
@@ -73,4 +73,26 @@ test('file-tool names follow the same scoped registration, restriction and lifet
   assert.equal(registry.forSession('child')[0].description, 'workspace');
   await releaseWorkspace();
   assert.equal(registry.forSession('child')[0].description, 'application');
+});
+
+test('a permission change while awaiting a tool decision prevents execution', async () => {
+  let readOnly = false;
+  let entered = () => {};
+  let release = () => {};
+  const checking = new Promise<void>((resolve) => { entered = resolve; });
+  const hold = new Promise<void>((resolve) => { release = resolve; });
+  const registry = new ToolRegistry(() => [], async () => {
+    entered();
+    await hold;
+    return undefined;
+  }, () => ({ readOnly, disabledTools: [] }));
+  registry[registerToolBinding]('modify', () => defineTool({ name: 'modify', description: 'Change a value',
+    parameters: Type.Object({}), async execute() { assert.fail('A denied tool executed'); } }));
+  const tool = registry.forSession('session')[0];
+  const result = assert.rejects(tool.execute('call', {}), /Tool denied/);
+  await checking;
+  readOnly = true;
+  assert.deepEqual(registry.forSession('session'), []);
+  release();
+  await result;
 });

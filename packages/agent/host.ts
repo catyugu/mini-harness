@@ -1,8 +1,9 @@
+import type { ToolProjectionHandler, ToolResultTransform } from '@mini-harness/contracts/tool-extensions';
 import type { Context } from 'cordis';
+import type { InputPreparation, ModelRequestTransform, ModelRetryHandler } from '@mini-harness/contracts/agent-extensions';
 import type { PluginApi } from '@mini-harness/contracts/plugins';
 import { registerRoutes } from './routes.js';
-import type { ModelRequestTransform, ToolResultTransform } from '@mini-harness/contracts/extensions';
-import type { OrderedHook } from '@mini-harness/contracts/events';
+import { firstDecision, orderHooks, type OrderedHook } from '@mini-harness/contracts/contributions';
 import { NativeAgent } from './agent.js';
 
 export function setup(ctx: Context, api: PluginApi) {
@@ -11,14 +12,17 @@ export function setup(ctx: Context, api: PluginApi) {
     models: (id) => scopes.require(id, 'harnessModels'),
     llm: (id) => scopes.require(id, 'harnessLlm'),
     tools: (id) => scopes.require(id, 'harnessTools'),
-    allowsTool: (id, name) => scopes.allowsTool(id, name),
     prompt: (id) => scopes.require(id, 'harnessPrompt'),
-    skills: (id) => scopes.optional(id, 'harnessSkills'),
     prepare: (id, signal) => scopes.prepare(id, signal),
     defaultModel: preference.recent,
     rememberModel: preference.remember,
     policy: () => api.config as { maxTurns: number; autoCompact: boolean },
-    observe: (event) => ctx.emit('harness/observe', event),
+    observe: (event, signal) => ctx.emit('harness/observe', event, signal),
+    inputHooks(id) {
+      const hooks: OrderedHook<InputPreparation>[] = [];
+      ctx.emit('harness/prepare-input', id, hooks);
+      return hooks;
+    },
     modelRequestHooks(id) {
       const hooks: OrderedHook<ModelRequestTransform>[] = [];
       ctx.emit('harness/model-request', id, hooks);
@@ -29,8 +33,18 @@ export function setup(ctx: Context, api: PluginApi) {
       ctx.emit('harness/tool-result', id, hooks);
       return hooks;
     },
-    retryModel: (failure) => ctx.serial('harness/model-retry', failure),
-    transform: (projection) => ctx.waterfall('harness/tool-projection', projection, () => projection.content)
+    retryModel(failure) {
+      const hooks: OrderedHook<ModelRetryHandler>[] = [];
+      ctx.emit('harness/model-retry', failure.sessionId, hooks);
+      return firstDecision(hooks, failure);
+    },
+    transform(projection) {
+      const hooks: OrderedHook<ToolProjectionHandler>[] = [];
+      ctx.emit('harness/tool-projection', projection.sessionId, hooks);
+      let content = projection.content;
+      for (const { invoke } of orderHooks(hooks)) content = invoke({ ...projection, content }) ?? content;
+      return content;
+    }
   });
   ctx.provide('harnessAgent', agent);
   ctx.effect(() => () => agent.agents.settle());

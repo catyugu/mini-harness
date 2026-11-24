@@ -1,23 +1,23 @@
+import type { ToolProjection, ToolResultTransform } from '@mini-harness/contracts/tool-extensions';
 import { HttpError } from '@mini-harness/contracts/routes';
 import { isDeepStrictEqual } from 'node:util';
 import { createHash } from 'node:crypto';
 import type { AgentPort, SessionStore } from '@mini-harness/contracts/services';
 import type { ModelChoice, SessionRecord } from '@mini-harness/contracts/conversation';
 import type { ModelCatalogPort } from '@mini-harness/contracts/models';
-import { validateNativeMessage, validateRequestSnapshot, type LlmPort, type LlmRequest, type NativeAssistantMessage, type NativeMessage, type NativeToolMessage, type ToolCallPart } from '@mini-harness/contracts/llm';
+import { validateNativeMessage, validateRequestSnapshot, type LlmPort, type LlmRequest, type NativeAssistantMessage, type NativeMessage, type NativeUserMessage, type NativeToolMessage, type ToolCallPart } from '@mini-harness/contracts/llm';
 import type { PromptPort, ThinkingLevel } from '@mini-harness/contracts/agent';
-import type { ToolPort } from '@mini-harness/contracts/plugins';
-import type { SkillPort } from '@mini-harness/contracts/skills';
 import { RunInterrupted, type StreamEvent } from '@mini-harness/contracts/transport';
-import type { Attachment, ImageInput, PreparedMessage } from '@mini-harness/contracts/input';
+import type { Attachment, ImageInput, InputSource, PreparedMessage } from '@mini-harness/contracts/input';
 import type { SessionLogPort, MessagePatch } from '@mini-harness/contracts/session-log';
-import type { CapabilityObservation, OrderedHook, ToolProjection } from '@mini-harness/contracts/events';
+import type { InputContext, InputPreparation, ModelFailure, ModelRequestContent, ModelRequestTransform, ModelRetry, StepContext } from '@mini-harness/contracts/agent-extensions';
+import { type OrderedHook } from '@mini-harness/contracts/contributions';
+import type { CapabilityObservation } from '@mini-harness/contracts/events';
 import type { MessageContent } from '@mini-harness/contracts/message';
 import { AgentRegistry } from './registry.js';
 import { Inbox } from './inbox.js';
-import type { ModelFailure, ModelRequestDraft, ModelRequestTransform, ModelRetry, StepContext, ToolResultTransform } from '@mini-harness/contracts/extensions';
 import type { InboxItem } from '@mini-harness/contracts/session-log';
-import { isToolContent } from '@mini-harness/contracts/tools';
+import { isToolContent, type ToolPort } from '@mini-harness/contracts/tools';
 import { contentDelta } from '@mini-harness/platform/content-delta';
 import { applyTransforms } from './transforms.js';
 import { executeTool, scheduleTools } from './tool-pipeline.js';
@@ -28,14 +28,13 @@ interface AgentServices {
   models(id: string): ModelCatalogPort;
   llm(id: string): LlmPort;
   tools(id: string): ToolPort;
-  allowsTool(id: string, tool: string): boolean;
   prompt(id: string): PromptPort;
-  skills(id: string): SkillPort | undefined;
+  inputHooks?(id: string): OrderedHook<InputPreparation>[];
   prepare(id: string, signal?: AbortSignal): Promise<void>;
   defaultModel(): ModelChoice;
   rememberModel(model: ModelChoice, sessionId: string): void | Promise<void>;
   policy(): { maxTurns: number; autoCompact: boolean };
-  observe(event: CapabilityObservation): void;
+  observe(event: CapabilityObservation, signal?: AbortSignal): void;
   modelRequestHooks?(id: string): OrderedHook<ModelRequestTransform>[];
   toolResultHooks?(id: string): OrderedHook<ToolResultTransform>[];
   retryModel?(failure: ModelFailure): Promise<ModelRetry | undefined>;
@@ -89,7 +88,6 @@ export class NativeAgent implements AgentPort {
   constructor(private readonly sessions: SessionStore, private readonly services: AgentServices) {}
 
   get hasPending() { return this.agents.hasPending; }
-  get size() { return this.agents.size; }
 
   async prepare(id: string, signal?: AbortSignal) {
     this.sessions.assertAvailable(id);
@@ -133,7 +131,7 @@ export class NativeAgent implements AgentPort {
       const files = source.presentation?.attachments ?? [];
       const imageNames = files.filter((file) => /^image\/(png|jpeg|gif|webp)$/.test(file.mimeType));
       const content = source.message.content;
-      const images = typeof content === 'string' ? [] : content.filter((part) => part.type === 'image')
+      const images = (source.presentation?.images ?? (typeof content === 'string' ? [] : content.filter((part) => part.type === 'image')))
         .map(({ data, mimeType }, index) => ({ data, mimeType, name: imageNames[index]?.name ?? 'Image ' + (index + 1) }));
       return { parentId: source.parentId, images,
         textFiles: files.filter((file) => !/^image\/(png|jpeg|gif|webp)$/.test(file.mimeType)).map(({ name }) => name) };
@@ -162,18 +160,42 @@ export class NativeAgent implements AgentPort {
     return new Inbox(this.sessions.log(id)).cancel('User cancelled', itemId);
   }
 
-  private async expand(id: string, text: string) {
-    const skills = this.services.skills(id);
-    return skills ? skills.expand(this.sessions.workspacePath(id), text) : text;
+  private async prepareInput(sessionId: string, model: ModelChoice, source: InputSource, text: string,
+    images: ImageInput[], input: PreparedMessage, signal: AbortSignal) {
+    const hooks = this.services.inputHooks?.(sessionId) ?? [];
+    const context: InputContext = { sessionId, model, source, signal, original: { ...input, images },
+      cwd: this.sessions.workspacePath(sessionId) };
+    const initial: NativeUserMessage['content'] = [{ type: 'text', text }, ...images];
+    const content = await applyTransforms<NativeUserMessage['content'], InputContext, Awaited<ReturnType<InputPreparation>>>(
+      hooks, initial, context, (result) => {
+        if (result && typeof result === 'object' && 'reject' in result && typeof result.reject === 'string' && result.reject.trim())
+          throw new Error('Input rejected: ' + result.reject);
+        if (typeof result !== 'string' && !Array.isArray(result)) throw new Error('Invalid input content');
+        validateNativeMessage({ role: 'user', content: result, timestamp: 0 });
+        return result;
+      });
+    const preparedImages = typeof content === 'string' ? [] : content.filter((part) => part.type === 'image');
+    if (preparedImages.length && !this.services.models(sessionId).capabilities(model)?.input.includes('image'))
+      throw new Error('The selected model does not support image input. Choose an image-capable model and retry.');
+    return {
+      content,
+      presentation: isDeepStrictEqual(images, preparedImages) ? input : { ...input, images },
+      assertActive: () => {
+        signal.throwIfAborted();
+        this.sessions.assertAvailable(sessionId);
+        for (const hook of hooks) hook.assertActive?.(sessionId);
+      }
+    };
   }
 
-  private user(log: SessionLogPort, expanded: string, images: ImageInput[], input: PreparedMessage | undefined,
-    emit: (event: StreamEvent) => void, delivery?: { submissionId?: string; inboxId?: string; selection: { model: ModelChoice; thinkingLevel?: ThinkingLevel } },
+  private user(log: SessionLogPort, prepared: Awaited<ReturnType<NativeAgent['prepareInput']>>, images: ImageInput[],
+    emit: (event: StreamEvent) => void, delivery: { submissionId?: string; inboxId?: string; selection: { model: ModelChoice; thinkingLevel?: ThinkingLevel } },
     revision?: { parentId: string | null; expectedLeafId: string | null }) {
-    const content: Extract<NativeMessage, { role: 'user' }>['content'] = [{ type: 'text', text: expanded }, ...images];
+    prepared.assertActive();
+    const { content, presentation: input } = prepared;
     const event = { type: 'message', message: { role: 'user', content, timestamp: Date.now() }, presentation: input, ...delivery } as const;
     const entry = revision ? log.revise(event, revision.parentId, revision.expectedLeafId) : log.append(event);
-    const displayed = input ? input.userText ? [{ type: 'text', text: input.userText }, ...images] : images : content;
+    const displayed = input.userText ? [{ type: 'text', text: input.userText }, ...images] : images;
     emit({ type: 'user', id: entry.id, submissionId: delivery?.submissionId, timestamp: event.message.timestamp, content: displayed, attachments: input?.attachments });
   }
 
@@ -196,37 +218,29 @@ export class NativeAgent implements AgentPort {
 
   async prompt(record: SessionRecord, prompt: string, emit: (event: StreamEvent) => void,
     options: Parameters<AgentPort['prompt']>[3]): Promise<string> {
-    const { id } = record, { signal, choice, images = [], input, thinkingLevel, revision, changed, submissionId } = options;
+    const { id } = record, { signal, choice, images = [], input = { userText: prompt, attachments: [] }, source = 'user', thinkingLevel, revision, changed, submissionId } = options;
     const leave = this.agents.enter(id);
     let runLog: SessionLogPort | undefined;
     try {
       await this.prepare(id, signal);
       const log = runLog = this.sessions.log(id);
       const target = revision && await this.revisionTarget(id, revision.sourceEntryId, revision.expectedLeafId);
-      const previous = log.projection(target?.parentId);
-      const models = this.services.models(id);
-      let model = selectModel(models, { explicit: choice, stored: previous.model,
-        global: this.services.defaultModel(), child: Boolean(record.parentId) });
-      let capabilities = models.capabilities(model);
-      if (images.length && !capabilities?.input.includes('image'))
-        throw new Error('The selected model does not support image input. Choose an image-capable model and retry.');
-      const nextThinking = resolveThinking(capabilities, thinkingLevel, previous.thinkingLevel);
-      let activeThinking = nextThinking;
-      const expanded = await this.expand(id, prompt);
-      signal.throwIfAborted();
+      let model = log.projection(target?.parentId).model ?? this.services.defaultModel();
+      let capabilities: ReturnType<ModelCatalogPort['capabilities']>;
+      let activeThinking: ThinkingLevel | undefined;
       if (!revision) this.closeUnfinishedTools(log);
-      if (record.titleSource === 'auto' && !log.projection().messages.some((item) => item.role === 'user'))
-        this.sessions.rename(id, (input?.userText || input?.attachments[0]?.name || prompt).slice(0, 72), 'auto');
       const inbox = new Inbox(log);
       const queuedSelection = (item: InboxItem) => {
-        const chosen = models.resolve(item.model ?? model);
+        const models = this.services.models(id);
+        const choice = item.model ?? log.projection().model ?? this.services.defaultModel();
+        const chosen = models.resolve(choice);
         if (!chosen) return { ok: false, failure: 'The queued model is no longer available' } as const;
         const nextCapabilities = models.capabilities(chosen);
         if (item.images.length && !nextCapabilities?.input.includes('image'))
           return { ok: false, failure: 'The selected model does not support queued image input' } as const;
         try {
           validateNativeMessage({ role: 'user', content: [{ type: 'text', text: item.text }, ...item.images], timestamp: 0 });
-          return { ok: true, chosen, nextCapabilities, level: resolveThinking(nextCapabilities, item.thinkingLevel, activeThinking) } as const;
+          return { ok: true, chosen, nextCapabilities, level: resolveThinking(nextCapabilities, item.thinkingLevel, log.projection().thinkingLevel) } as const;
         } catch (error) {
           return { ok: false, failure: error instanceof Error ? error.message : String(error) } as const;
         }
@@ -241,10 +255,15 @@ export class NativeAgent implements AgentPort {
         }
       };
       const deliver = async (mode: InboxItem['mode']) => {
+        await this.prepare(id, signal);
         for (let next = nextValid(mode); next; next = nextValid(mode)) {
           const { item, chosen, nextCapabilities, level } = next;
-          let text: string;
-          try { text = await this.expand(id, item.text); }
+          let prepared: Awaited<ReturnType<NativeAgent['prepareInput']>>;
+          try {
+            prepared = await this.prepareInput(id, chosen, 'user', item.text, item.images,
+              item.input ?? { userText: item.text, attachments: [] }, signal);
+            prepared.assertActive();
+          }
           catch (error) {
             signal.throwIfAborted();
             if (inbox.next(mode)?.id === item.id)
@@ -253,10 +272,10 @@ export class NativeAgent implements AgentPort {
           }
           signal.throwIfAborted();
           if (inbox.next(mode)?.id !== item.id) continue;
-          this.user(log, text, item.images, item.input, emit, {
+          this.user(log, prepared, item.images, emit, {
             inboxId: item.id, selection: { model: chosen, thinkingLevel: level }
           });
-          if ((model.provider !== chosen.provider || model.id !== chosen.id) && !record.parentId)
+          if (!record.parentId && (model.provider !== chosen.provider || model.id !== chosen.id))
             await this.services.rememberModel(chosen, id);
           model = chosen;
           capabilities = nextCapabilities;
@@ -268,16 +287,22 @@ export class NativeAgent implements AgentPort {
       // Drain recovered follow-ups as turns before committing the new manual input.
       let submitted = false;
       const submit = async () => {
-        model = manualModel;
+        await this.prepare(id, signal);
+        const previous = log.projection(target?.parentId);
+        const models = this.services.models(id);
+        model = selectModel(models, { explicit: choice, stored: previous.model,
+          global: this.services.defaultModel(), child: Boolean(record.parentId) });
         capabilities = models.capabilities(model);
-        activeThinking = nextThinking;
-        this.user(log, expanded, images, input, emit, { submissionId, selection: { model, thinkingLevel: nextThinking } },
+        activeThinking = resolveThinking(capabilities, thinkingLevel, previous.thinkingLevel);
+        const prepared = await this.prepareInput(id, model, source, prompt, images, input, signal);
+        this.user(log, prepared, images, emit, { submissionId, selection: { model, thinkingLevel: activeThinking } },
           revision && target ? { parentId: target.parentId, expectedLeafId: revision.expectedLeafId } : undefined);
+        if (record.titleSource === 'auto' && !previous.messages.some((item) => item.role === 'user'))
+          this.sessions.rename(id, (input.userText || input.attachments[0]?.name || prompt).slice(0, 72), 'auto');
         if (revision) this.closeUnfinishedTools(log);
         if (!record.parentId) await this.services.rememberModel(model, id);
         submitted = true;
       };
-      const manualModel = model;
       if (revision || !await deliver('followUp')) await submit();
       const maxTurns = this.services.policy().maxTurns;
       for (let turn = 0; turn < maxTurns; turn++) {
@@ -285,19 +310,24 @@ export class NativeAgent implements AgentPort {
         await this.prepare(id, signal);
         const cwd = this.sessions.workspacePath(id);
         const step: StepContext = { sessionId: id, turn: turn + 1, phase: 'turn', cwd, model, signal };
-        this.services.observe({ type: 'step-started', sessionId: id, turn: step.turn });
+        this.services.observe({ type: 'step-started', sessionId: id, turn: step.turn }, signal);
         if (this.services.policy().autoCompact && capabilities &&
             transcript(log.projection().contextMessages).length / 4 > Math.max(1024, capabilities.contextWindow * .8 - capabilities.maxTokens))
           await this.compactLog(id, log, signal, true);
         const current = log.projection();
-        const tools = this.services.tools(id).forSession(id).filter((tool) => this.services.allowsTool(id, tool.name));
+        const registry = this.services.tools(id);
+        const tools = registry.forSession(id);
         const advertisedTools = new Map(tools.map((tool) => [tool.name, tool]));
         const toolMetadata = tools.map(({ name, description, parameters, label, promptSnippet, promptGuidelines }) =>
           ({ name, description, parameters, label, promptSnippet, promptGuidelines }));
         const systemPrompt = await this.services.prompt(id).build({ sessionId: id, cwd, tools: toolMetadata, signal });
-        const toolsForModel = toolMetadata.map(({ name, description, parameters }) => ({ name, description, parameters }));
         const request = await this.prepareRequest(log, step, { systemPrompt,
-          messages: current.contextMessages, thinkingLevel: current.thinkingLevel }, toolsForModel);
+          messages: current.contextMessages, thinkingLevel: current.thinkingLevel }, () => {
+          for (const [name, tool] of advertisedTools)
+            if (!registry.isAvailable(id, tool)) advertisedTools.delete(name);
+          return toolMetadata.filter(({ name }) => advertisedTools.has(name))
+            .map(({ name, description, parameters }) => ({ name, description, parameters }));
+        });
         emit({ type: 'assistant-start' });
         let result = await this.request(id, request, (text) => emit({ type: 'delta', text }));
         const knownCalls = new Set([...current.contextMessages, ...request.messages].flatMap((message) => message.role === 'assistant'
@@ -326,7 +356,6 @@ export class NativeAgent implements AgentPort {
           let originalContent: NativeToolMessage['content'] | undefined;
           emit({ type: 'tool', id: call.id, name: call.name, state: 'running', arguments: call.arguments });
           if (steering || toolSignal.aborted) output = failedTool(call, steering ? 'Skipped because a steering message arrived.' : 'Agent run cancelled');
-          else if (!this.services.allowsTool(id, call.name)) output = failedTool(call, 'Tool denied by inherited scope policy: ' + call.name);
           else {
             const hooks = this.services.toolResultHooks?.(id) ?? [];
             output = await executeTool(call, tool, {
@@ -343,13 +372,16 @@ export class NativeAgent implements AgentPort {
               originalContent = output.content;
               try {
                 const content = await applyTransforms(hooks, output.content, { ...step, signal: toolSignal, tool: call.name, callId: call.id },
-                  (value) => { if (!isToolContent(value)) throw new Error('Invalid tool result content'); });
+                  (value) => {
+                    if (!isToolContent(value)) throw new Error('Invalid tool result content');
+                    return value;
+                  });
                 output = { ...output, content };
               } catch (error) {
                 const failure = failedTool(call, 'Tool execution completed, but the model-visible result transformation failed.');
                 log.append({ type: 'message', message: failure });
                 emit({ type: 'tool', id: call.id, name: call.name, state: 'error', arguments: call.arguments, content: failure.content });
-                this.services.observe({ type: 'tool-ended', sessionId: id, tool: call.name, callId: call.id, failed: true, elapsedMs: output.elapsedMs });
+                this.services.observe({ type: 'tool-ended', sessionId: id, tool: call.name, callId: call.id, failed: true, elapsedMs: output.elapsedMs }, toolSignal);
                 throw new Error('Could not transform the result of ' + call.name, { cause: error });
               }
             }
@@ -367,7 +399,7 @@ export class NativeAgent implements AgentPort {
             elapsedMs: output.elapsedMs, approvalMs: typeof details?.approvalMs === 'number' ? details.approvalMs : undefined,
             sessionId: typeof details?.sessionId === 'string' ? details.sessionId : undefined,
             exitCode: typeof details?.exitCode === 'number' ? details.exitCode : undefined });
-          this.services.observe({ type: 'tool-ended', sessionId: id, tool: call.name, callId: call.id, failed: output.isError, elapsedMs: output.elapsedMs });
+          this.services.observe({ type: 'tool-ended', sessionId: id, tool: call.name, callId: call.id, failed: output.isError, elapsedMs: output.elapsedMs }, toolSignal);
         });
         signal.throwIfAborted();
         if (await deliver('steer')) continue;
@@ -385,20 +417,22 @@ export class NativeAgent implements AgentPort {
     }
   }
 
-  private async prepareRequest(log: SessionLogPort, context: StepContext, draft: ModelRequestDraft, tools?: LlmRequest['tools']): Promise<LlmRequest> {
+  private async prepareRequest(log: SessionLogPort, context: StepContext, requestContent: ModelRequestContent, tools?: () => LlmRequest['tools']): Promise<LlmRequest> {
     const projected = log.projection();
-    const base = { model: context.model, tools };
-    const validate = (value: ModelRequestDraft) => {
+    const base = { model: context.model };
+    const capabilities = this.services.models(context.sessionId).capabilities(context.model);
+    const validate = (value: ModelRequestContent) => {
       if (!value || !Array.isArray(value.messages)) throw new Error('Invalid model request messages');
       validateRequestSnapshot({ ...value, ...base });
+      resolveThinking(capabilities, value.thinkingLevel);
+      return value;
     };
-    const transformed = await applyTransforms(this.services.modelRequestHooks?.(context.sessionId) ?? [], draft, context, validate);
+    const transformed = await applyTransforms(this.services.modelRequestHooks?.(context.sessionId) ?? [], requestContent, context, validate);
     context.signal.throwIfAborted();
     const { systemPrompt, thinkingLevel, maxTokens } = transformed;
-    const capabilities = this.services.models(context.sessionId).capabilities(context.model);
     const input = capabilities?.input.includes('image') ? transformed.messages : withoutImages(transformed.messages);
     const snapshot: Omit<LlmRequest, 'signal' | 'sessionId'> = JSON.parse(JSON.stringify({
-      ...base, messages: input, systemPrompt, thinkingLevel, maxTokens
+      ...base, tools: tools?.(), messages: input, systemPrompt, thinkingLevel, maxTokens
     }));
     validate(snapshot);
     const patch = messagePatch(projected.contextMessages, snapshot.messages);
@@ -421,7 +455,7 @@ export class NativeAgent implements AgentPort {
   private request(id: string, request: Parameters<LlmPort['stream']>[0], delta = (_text: string) => {}) {
     return requestModel(this.services.llm(id), request, {
       delta,
-      ended: (attempt, failed) => this.services.observe({ type: 'model-attempt-ended', sessionId: id, attempt, failed }),
+      ended: (attempt, failed) => this.services.observe({ type: 'model-attempt-ended', sessionId: id, attempt, failed }, request.signal),
       retry: this.services.retryModel
     });
   }

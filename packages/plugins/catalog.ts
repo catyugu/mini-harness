@@ -36,9 +36,10 @@ export interface PluginPlan {
 export class PluginCatalog {
   readonly builtins: Map<string, PluginDescriptor>;
   private readonly protectedServices: Set<string>;
-  constructor(private readonly directory: string, builtins: PluginDescriptor[], rootServices: string[], private readonly devPlugin?: string) {
+  constructor(private readonly directory: string, builtins: PluginDescriptor[], rootServices: string[],
+    private readonly devPlugin?: string, private readonly protectedProviders: ReadonlyMap<string, string> = new Map()) {
     this.builtins = new Map(builtins.map((plugin) => [plugin.id, plugin]));
-    this.protectedServices = new Set(rootServices);
+    this.protectedServices = new Set([...rootServices, ...protectedProviders.keys()]);
     if (this.builtins.size !== builtins.length) throw new Error('Duplicate builtin plugin ID');
     const services = new Set(builtins.flatMap(({ provides }) => provides ?? []));
     for (const service of rootServices) if (services.has(service)) throw new Error('Duplicate provider for ' + service);
@@ -87,7 +88,7 @@ export class PluginCatalog {
 
   metadata(descriptors = this.descriptors()): PluginMetadata[] {
     return descriptors.filter(({ required }) => !required).map((item) => {
-      const { source, resources, inject, setup, optional, browserRequires, browserInject, browserProvides, required, configChanges, validateConfig, migrateConfig, ...metadata } = item;
+      const { source, resources, inject, setup, optional, browserRequires, browserInject, browserProvides, required, configChanges, validateConfig, ...metadata } = item;
       return metadata;
     });
   }
@@ -98,7 +99,7 @@ export class PluginCatalog {
     const isApp = scope === 'application';
     const choices = isApp ? settings.providers : overrides?.providers ?? {};
     for (const [service, id] of Object.entries(choices))
-      if (inherited.has(service) && inherited.get(service) !== id && this.protectedServices.has(service))
+      if (this.protectedServices.has(service) && (inherited.get(service) ?? this.protectedProviders.get(service)) !== id)
         throw new HttpError('invalid_input', 'Protected service cannot be overridden: ' + service);
     const enabled: DiscoveredPlugin[] = [];
     const configs = new Map<string, Record<string, unknown>>();

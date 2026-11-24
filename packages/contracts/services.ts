@@ -1,12 +1,13 @@
+import type { SessionRecords } from './session-records.js';
 import type {} from 'cordis';
 import type { Conversation, ConversationPermission, ModelChoice, SessionRecord } from './conversation.js';
 import type { WorkspaceRecord } from './workspace.js';
 import type { RunAgentPort, ThinkingLevel } from './agent.js';
 import type { RunEvent, RunInfo, StreamEvent } from './transport.js';
 import type { ViewMessage } from './message.js';
-import type { Attachment } from './input.js';
+import type { Attachment, InputSource } from './input.js';
 import type { InboxItem, QueueEntry } from './session-log.js';
-import type { PluginMetadata, SessionRecords } from './plugins.js';
+import type { PluginMetadata } from './plugins.js';
 import type { Settings } from './config.js';
 
 /** Stable, implementation-free ports for the independently mounted product capabilities. */
@@ -75,7 +76,7 @@ export interface RunPort {
   view(id: string): { run?: RunInfo; partial?: string; tools: Extract<StreamEvent, { type: 'tool' }>[] };
   signal(id: string, signal?: AbortSignal): AbortSignal | undefined;
   send(id: string, prompt: string, emit?: (event: StreamEvent) => void, options?: {
-    signal?: AbortSignal; model?: ModelChoice; attachments?: Attachment[];
+    signal?: AbortSignal; source?: InputSource; model?: ModelChoice; attachments?: Attachment[];
     schedule?: (task: () => Promise<string>, signal: AbortSignal) => Promise<string>;
     thinkingLevel?: ThinkingLevel | null;
   }): Promise<string>;

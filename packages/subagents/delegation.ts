@@ -1,7 +1,8 @@
-import type { DelegationPort, SubagentPolicy } from '@mini-harness/contracts/delegation';
 import type { ModelCatalogPort } from '@mini-harness/contracts/models';
 import type { AgentPort, RunPort, SessionStore } from '@mini-harness/contracts/services';
 import type { SessionRecord, ModelChoice } from '@mini-harness/contracts/conversation';
+
+export interface SubagentPolicy { maxDepth: number; maxParallel: number; model: ModelChoice | null }
 
 interface Waiter {
   cancel(): void;
@@ -79,7 +80,7 @@ export class Semaphore {
   }
 }
 
-export type ChildLease = Parameters<Parameters<Semaphore['run']>[0]>[0];
+type ChildLease = Parameters<Parameters<Semaphore['run']>[0]>[0];
 
 export function selectChildModel(request: { provider?: string; model?: string },
     defaults: ModelChoice | null, parent: ModelChoice): ModelChoice {
@@ -102,10 +103,8 @@ export function requireChildDepth(parentDepth: number, maxDepth = 1): void {
 }
 
 
-export class Delegation implements DelegationPort {
+export class Delegation {
   readonly semaphore: Semaphore;
-  get parallelLimit() { return this.semaphore.limit; }
-  get activeChildren() { return this.semaphore.active; }
   private readonly leases = new Map<string, ChildLease>();
 
   constructor(private readonly registry: SessionStore, private readonly agent: Pick<AgentPort, 'activeModel'>, private readonly models: (id?: string) => ModelCatalogPort,
@@ -116,7 +115,7 @@ export class Delegation implements DelegationPort {
 
   visible(id: string) { return this.registry.depth(id) < this.settings().maxDepth; }
 
-  schedule(record: SessionRecord, task: () => Promise<string>, signal: AbortSignal) {
+  private schedule(record: SessionRecord, task: () => Promise<string>, signal: AbortSignal) {
     if (!record.parentId) return task();
     return this.semaphore.run(async (lease) => {
       this.leases.set(record.id, lease);
@@ -132,7 +131,7 @@ export class Delegation implements DelegationPort {
     return lease ? lease.pause(task) : task();
   }
 
-  async run(parentId: string, task: string, choice: ModelChoice, signal?: AbortSignal) {
+  private async run(parentId: string, task: string, choice: ModelChoice, signal?: AbortSignal) {
     signal?.throwIfAborted();
     const parent = this.registry.get(parentId);
     if (!parent) throw new Error('Parent conversation not found');
@@ -144,7 +143,7 @@ export class Delegation implements DelegationPort {
       parentId, workspaceId: parent.workspaceId, title: childTitle(task)
     });
     try {
-      const text = await this.runs().send(record.id, task, undefined, { signal, model,
+      const text = await this.runs().send(record.id, task, undefined, { signal, model, source: 'agent',
         schedule: (run, cancellation) => this.schedule(record, run, cancellation) });
       return { id: record.id, text };
     } catch (error) {

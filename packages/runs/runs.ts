@@ -1,7 +1,7 @@
 import { HttpError } from '@mini-harness/contracts/routes';
 import { randomUUID } from 'node:crypto';
 import { prepareInput } from '@mini-harness/platform/input';
-import type { Attachment } from '@mini-harness/contracts/input';
+import type { Attachment, InputSource } from '@mini-harness/contracts/input';
 import type { CapabilityObservation } from '@mini-harness/contracts/events';
 import type { RunAgentPort, ThinkingLevel } from '@mini-harness/contracts/agent';
 import type { ModelChoice } from '@mini-harness/contracts/conversation';
@@ -12,6 +12,7 @@ import type { SessionStore } from '@mini-harness/contracts/services';
 
 interface RunOptions {
   signal?: AbortSignal;
+  source?: InputSource;
   model?: ModelChoice;
   attachments?: Attachment[];
   thinkingLevel?: ThinkingLevel | null;
@@ -32,7 +33,7 @@ export class Runs {
   constructor(
     private readonly registry: SessionStore,
     private readonly agent: RunAgentPort,
-    private readonly observe: (event: CapabilityObservation) => void,
+    private readonly observe: (event: CapabilityObservation, signal?: AbortSignal) => void,
     private readonly address: (id: string) => readonly string[] = () => [],
     private readonly admit: (scopeKeys: readonly string[]) => void = () => {}
   ) {}
@@ -56,7 +57,7 @@ export class Runs {
     return owner && signal ? AbortSignal.any([owner, signal]) : owner ?? signal;
   }
 
-  private launch(id: string, prompt: string, emit: ((event: StreamEvent) => void) | undefined, { signal, model, attachments, thinkingLevel, revision, schedule }: RunOptions) {
+  private launch(id: string, prompt: string, emit: ((event: StreamEvent) => void) | undefined, { signal, source, model, attachments, thinkingLevel, revision, schedule }: RunOptions) {
     this.registry.assertAvailable(id);
     this.admit(this.address(id));
     if (this.active(id)) throw new HttpError('conflict', 'Conversation is already running');
@@ -86,9 +87,9 @@ export class Runs {
       info.state = running.state;
       this.changed(id);
       publish({ type: 'run', run: running });
-      this.observe({ type: 'run-started', sessionId: id, run: running });
+      this.observe({ type: 'run-started', sessionId: id, run: running }, cancellation);
       return this.agent.prompt(record, prepared.text, publish, {
-        signal: cancellation, submissionId: info.id, choice: model, images: prepared.images, input: prepared.input, thinkingLevel, revision,
+        signal: cancellation, source, submissionId: info.id, choice: model, images: prepared.images, input: prepared.input, thinkingLevel, revision,
         changed: (path) => { info.changedFiles = [...new Set([...(info.changedFiles ?? []), path])]; }
       });
     };

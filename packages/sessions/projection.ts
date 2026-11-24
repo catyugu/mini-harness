@@ -43,9 +43,11 @@ export function projectLog(entries: SessionEntry[], branch: SessionEntry[]): Ses
     if (entry.type === 'message' && entry.submissionId) view.submissionId = entry.submissionId;
     if (entry.type === 'message' && message.role === 'user' && entry.presentation) {
       view.attachments = entry.presentation.attachments;
-      view.content = typeof message.content === 'string' ? entry.presentation.userText :
-        [...(entry.presentation.userText ? [{ type: 'text', text: entry.presentation.userText }] : []),
-          ...message.content.filter((block) => block.type === 'image')];
+      const { userText, images } = entry.presentation;
+      view.content = typeof message.content === 'string' && !images?.length ? userText : [
+        ...(userText ? [{ type: 'text', text: userText }] : []),
+        ...(images ?? (typeof message.content === 'string' ? [] : message.content.filter((block) => block.type === 'image')))
+      ];
     }
     if (message.role === 'assistant' && message.stopReason !== 'aborted') view.error = message.errorMessage;
     if (message.role === 'toolResult') {

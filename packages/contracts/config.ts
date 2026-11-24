@@ -21,7 +21,6 @@ export interface Paths {
   pid: string;
   log: string;
   plugins: string;
-  skills: string;
   devPlugin?: string;
 }
 

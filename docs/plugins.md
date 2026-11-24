@@ -33,7 +33,7 @@ A plugin with no descriptor fields can use `{}` as its `plugin.json`.
 }
 ```
 
-`plugin.js` and `web.js` each export a default `setup(ctx, api)` function and may return cleanup. For TypeScript use `mini-harness/plugin` for the server API and service types, and `mini-harness/browser-plugin` for the browser API. Exported SDK types compile away. Bundles can use their own local ESM dependencies on the server. Bundle browser dependencies into `web.js` for the authenticated browser loader.
+`plugin.js` and `web.js` each export a default `setup(ctx, api)` function and may return cleanup. For TypeScript use `mini-harness/plugin` for the server API and service types, and `mini-harness/browser-plugin` for the browser API. Declare `mini-harness` as an npm dependency when the server entry imports runtime values from `mini-harness/plugin`. Local ESM bundles can install dependencies in their own plugin directory. Bundle browser dependencies into `web.js` for the authenticated browser loader.
 
 | Field | Contract |
 | - | - |
@@ -63,13 +63,11 @@ export default function setup(_ctx, api) {
 | `provide(name, service)` | Publish a declared service for Cordis consumers |
 | `service(name)` | Read a declared required service or fail with its name |
 | `optionalService(name)` | Read a service declared in `optional` |
-| `registerTool(tool)` | Register a native tool definition. Its signal aborts when the registration drains. |
+| `contribute(point, ...args)` | Register through a typed extension point owned by a capability. The host binds scope, identity and lifetime. |
 | `registerRoute(method, path, handler)` | Authenticated route under `/api/extensions/<id>`. Handler receives URL, `body(maxBytes?)` and `signal`. Application scope only. |
-| `records.list(id)` / `records.append(id, data)` | Namespaced custom records on the active native Session Log branch |
-| `registerProjection({ initial, reduce })` | Build a computed view of this plugin's records on the active branch |
 | `onDispose(cleanup)` | Register sync or async cleanup |
 
-Declare `harnessRoutes` and `harnessTools` when using their registration methods. Return JSON from route handlers and honor their cancellation signals. Tool names contain 1–64 letters, digits, underscores or hyphens. Duplicate names at the same scope are rejected. A nearer scoped registration can replace an inherited tool, including a file tool; unloading it restores the inherited tool. All selected tools still pass inherited restrictions and policy decisions. Use the plugin lifetime signal for other work owned by setup. Use the model credential service for credentials; plugin configuration is not a secret store.
+Return JSON from route handlers and honor their cancellation signals. Use the plugin lifetime signal for other work owned by setup. Use the credential or secret store for sensitive values.
 
 For TypeScript, `api.service('harnessLlm')` infers `LlmPort`. Declare your own names in the public service map. Declare the same names in the plugin descriptor so the host can validate them when it mounts the plugin.
 
@@ -87,31 +85,57 @@ export default function setup(_ctx: unknown, api: PluginApi) {
 }
 ```
 
-## Agent extensions
+## Capability contributions
 
-- `api.promptSection({ id, order, render })` adds a section rendered for every model turn. The renderer receives the session ID, workspace path, advertised tool metadata and a cancellation signal. The nearest scope wins for a shared ID. In the same scope, the alphabetically first plugin ID wins. Sections render in ascending order, then by section ID. Built-in sections use orders 0, 100, 200 and 300 for `base`, `tools`, `user-instructions` and `workspace-instructions`. Skills registers `skills` at 400. Plugin contributions default to 500.
-- `api.modelRequest(handler, order?)` transforms the system prompt, messages, thinking level and output token limit before a turn or compaction request. Each resulting request is validated and written to the Session Log before transmission. Use a Prompt Section for additional system instructions.
-- `api.toolResult(handler, order?)` transforms successful tool content for the model and conversation view. The original execution is written before the transform runs. A failed transform records a safe error and stops execution before sending another model request. Raw tool updates are withheld while a result transform is installed.
-- Both transforms apply in ascending order, then by plugin ID. Return `undefined` to keep the previous value.
-- `api.retryModel(handler)` can return `{ delayMs }` after a failed generation or compaction request and before any content has streamed. The first decision wins, with a limit of three attempts and a maximum delay of 30 seconds. Without a decision, the failure is returned immediately.
-- `api.decideTool(handler)` receives the tool name, call ID, validated arguments, session ID and cancellation signal. Return `'deny'` to deny execution or `undefined` to defer to other handlers. A policy can await a confirmation before deciding. A rejection prevents execution. Shell follows the conversation permission: Standard requires approval, Full access bypasses it.
-- `api.observe(handler)` receives copies of session, run, step, model-attempt and completed-tool events. Handler failures are reported independently of the operation. The executor continues while observers run.
-- `api.transformTool(handler)` synchronously transforms displayed tool content in reverse registration order. It applies to live and saved views. A failed transform leaves the earlier display content in place.
+Import an extension point from `mini-harness/plugin` and register it through `api.contribute`.
 
-Extensions follow scope ancestry and unregister with their owning plugin. Blocking handlers receive cancellation when the run stops or their owner unloads. Unload waits for in-flight callbacks to settle before running disposal. Callbacks should honor their signal and avoid waiting on their own plugin reconfiguration.
+```ts
+import { agentExtensions, promptExtensions, type PluginApi } from 'mini-harness/plugin';
 
-Tools execute serially by default. `isConcurrencySafe(args)` may opt a validated call into parallel execution with other opted-in calls. Keep it pure and return true only when the call can run alongside any other opted-in tool. A serial call waits for prior work to drain and completes before the following calls begin. The scheduler starts at most 16 calls from one turn at a time. A pipeline failure stops dispatch, signals in-flight calls and waits for them to settle. Ordinary tool errors are reported as durable results. Each result is persisted before its completion event.
+export default function setup(_ctx: unknown, api: PluginApi) {
+  api.contribute(agentExtensions.prepareInput, (_content, { source, original }) => {
+    if (source === 'user' && original.userText === '/offline') {
+      return 'Complete the task using the conversation and local workspace.';
+    }
+  });
+  api.contribute(promptExtensions.section, {
+    id: 'project-style',
+    render: () => 'Use the project’s existing conventions.'
+  });
+}
+```
+
+| Extension point | Contract |
+| - | - |
+| `agentExtensions.prepareInput` | Receives native user content and the context at delivery. Use `original.userText` for user commands and inspect `source` to distinguish user, agent and plugin submissions. Attachments are represented separately in `original`. Return native user content, `undefined` to keep the current content, or `{ reject: reason }` to stop delivery. |
+| `agentExtensions.modelRequest` | Transforms model-visible messages, the system prompt, thinking level and output token limit for a turn or compaction. The Agent validates and records the prepared request before streaming. Automatic retries reuse it. |
+| `agentExtensions.retryModel` | Returns `{ delayMs }` before output has streamed, or `undefined` to defer. The first decision applies, with at most three attempts and 30 seconds between attempts. |
+| `agentExtensions.observe` | Receives a copy of the event and a cancellation signal. Events cover session, run, step, model attempt and completed tool activity. Observer failures are reported independently. |
+| `promptExtensions.section` | Adds `{ id, order, render }` to the prompt. Renderers receive the session ID, workspace path, tool metadata and a signal. The nearest scope wins for a shared ID. The first plugin ID wins within one scope. Sections render by order and then section ID. The native orders are 0, 100, 200 and 300 for base, tools, user instructions and workspace instructions. Skills uses 400 and other contributions default to 500. |
+| `toolExtensions.register` | Registers a definition or `{ name, bind(sessionId) }`. Declare `harnessTools` in `inject`. The optional `access: 'readOnly'` declaration is subject to a host grant on the actual plugin instance. |
+| `toolExtensions.decide` | Receives the name, call ID, validated arguments, session and signal. Return `'deny'` to stop execution or `undefined` to defer. Decisions can only restrict access. |
+| `toolExtensions.result` | Transforms a successful result for model context and display. The original execution is persisted first. A transform failure records a safe error and stops the run. Raw progress content is withheld while a transform applies. |
+| `toolExtensions.project` | Synchronously transforms tool display content in live and saved views. Projection failures preserve the earlier display content. |
+
+Ordered transforms and decisions take an optional numeric order after the handler. They run in ascending order, then by plugin instance ID and registration order. The host copies transform data before invocation. Returning `undefined` discards any edits to the copy. Async callbacks receive a signal combining task cancellation with plugin unload. Unload stops new calls and waits for existing callbacks to settle before disposal.
+
+Tool names contain 1–64 letters, digits, underscores or hyphens. Duplicate names in the same scope are rejected. A nearer registration shadows an inherited tool. Authorization checks the selected registration, including when a permission changes while a decision is pending. Tool execution is serial unless `isConcurrencySafe(args)` opts a call into parallel execution. Consecutive opted-in calls can overlap up to a limit of 16. The scheduler waits at serial boundaries and persists results before publishing completion.
 
 ## Session record projections
 
-A projection computes state from the plugin's records on the current branch in log order. Each `read(sessionId)` starts with a fresh `initial()` value and uses a synchronous, deterministic reducer. Branch changes immediately affect subsequent reads. The returned handle belongs to the plugin lifetime and can also be released via `dispose()`.
+Declare `harnessSessions` in `inject` and acquire a record handle through `sessionExtensions.records`. The handle reads and appends this plugin's namespaced data on the active branch. A projection starts with a fresh initial value on each read and folds the branch with a synchronous reducer. Dispose a projection early with `dispose()` or let plugin unload release it.
 
 ```js
-const plan = api.registerProjection({
-  initial: () => [],
-  reduce: (tasks, { data }) => [...tasks, data]
-});
-const tasks = await plan.read(sessionId);
+import { sessionExtensions } from 'mini-harness/plugin';
+
+export default function setup(_ctx, api) {
+  const records = api.contribute(sessionExtensions.records);
+  const plan = records.projection({
+    initial: () => [],
+    reduce: (tasks, { data }) => [...tasks, data]
+  });
+  api.registerRoute('GET', '/tasks', ({ url }) => plan.read(url.searchParams.get('session')));
+}
 ```
 
 ## Provider selection and scopes
@@ -133,7 +157,7 @@ In `settings.json`, `providers` maps service names to explicit enabled provider 
 }
 ```
 
-A `scopes` entry can set `plugins`, `pluginConfig`, `providers` and `disabledTools`. Workspace and session plugins are server-only and are selected at a matching address. Registered tools and services are inherited by descendants. Tool restrictions apply transitively. An explicit `providers` selection allows a child service to shadow its ancestor within that subtree. The same provider ID at two addresses still represents two instances and requires an explicit choice. Removing the child provider restores inherited resolution; siblings remain independent. Host configuration, routes, scope resolution and mutation control cannot be replaced. See [scoped providers](scoped-providers.md). Use the workspace and session API IDs, and keep values in `pluginConfig` only for overrides. A Settings API PATCH supplying `providers` or `scopes` replaces the corresponding map. Each entry supplied in `pluginConfig` replaces that plugin’s configuration and applies its schema defaults. Omitted plugin entries keep their saved values. The Plugins page shows the status of scoped instances and lets you repair their configuration.
+A `scopes` entry can set `plugins`, `pluginConfig`, `providers` and `disabledTools`. Workspace and session plugins are server-only and are selected at a matching address. Registered tools and services are inherited by descendants. Tool restrictions apply transitively. An explicit `providers` selection allows a child service to shadow its ancestor within that subtree. The same provider ID at two addresses still represents two instances and requires an explicit choice. Removing the child provider restores inherited resolution; siblings remain independent. The host protects configuration, routes, scope resolution, mutation control and the Tools authorization provider. See [scoped providers](scoped-providers.md). Use the workspace and session API IDs, and keep values in `pluginConfig` only for overrides. A Settings API PATCH supplying `providers` or `scopes` replaces the corresponding map. Each entry supplied in `pluginConfig` replaces that plugin’s configuration and applies its schema defaults. Omitted plugin entries keep their saved values. The Plugins page shows the status of scoped instances and lets you repair their configuration.
 
 Setup, schema or settings persistence failures retain the previous effective graph. A failed candidate that already drained resources cannot resume a cancelled call. Routes and tools dispose cooperatively. An unsuccessful browser setup removes its partial contributions and is reported in the Plugins page.
 

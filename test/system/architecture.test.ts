@@ -80,6 +80,10 @@ test('capabilities do not import other capabilities concrete source', () => {
 test('the kernel remains independent of product runtime', () => {
   for (const file of files(join(packages,'kernel'))) for (const dep of dependencies(file))
     assert.equal(dep.target.startsWith(packages + sep), false, file + ' depends on product code');
+  for (const file of files(join(packages, 'platform')).filter(production)) for (const dep of dependencies(file))
+    for (const capability of capabilityNames)
+      assert.equal(dep.target.startsWith(join(packages, capability) + sep), false,
+        file + ' depends on the ' + capability + ' capability');
   for (const file of files(join(packages,'ui-runtime')).filter(production)) for (const dep of dependencies(file))
     for (const feature of capabilityNames)
       assert.equal(dep.target.startsWith(join(packages,feature) + sep), false, file + ' depends on a feature');

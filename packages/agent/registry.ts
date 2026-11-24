@@ -3,7 +3,6 @@ export class AgentRegistry {
   private readonly active = new Map<string, 'run' | 'compaction'>();
   private readonly preparing = new Map<string, Promise<void>>();
 
-  get size() { return this.active.size; }
   get hasPending() { return this.preparing.size > 0; }
   has(id: string) { return this.active.has(id); }
   acceptsInput(id: string) { return this.active.get(id) === 'run'; }

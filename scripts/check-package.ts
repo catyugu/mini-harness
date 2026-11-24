@@ -60,7 +60,7 @@ async function checkPackage() {
     for (const path of ['contracts/plugin-sdk.d.ts', 'ui-runtime/plugin-sdk.d.ts'])
       assert.ok(files.some((file) => file.path === 'dist/types/packages/' + path), 'Missing SDK declarations: ' + path);
     await writeFile(join(installed, 'plugin-types.mts'), `
-      import type { PluginApi, LlmPort } from 'mini-harness/plugin';
+      import { agentExtensions, promptExtensions, sessionExtensions, toolExtensions, type PluginApi, type LlmPort } from 'mini-harness/plugin';
       import type { FrontendApi, SlotRenderer } from 'mini-harness/browser-plugin';
       declare module 'mini-harness/plugin' {
         interface ServiceMap { example: { greet(name: string): string } }
@@ -72,6 +72,14 @@ async function checkPackage() {
       api.storage.write('state', { count: 1 });
       api.secrets.read('credential');
       api.onConfigChange(() => {});
+      api.contribute(agentExtensions.prepareInput, (content, context) => context.source === 'agent' ? content : undefined);
+      api.contribute(agentExtensions.modelRequest, (request) => ({ ...request, systemPrompt: request.systemPrompt.trim() }));
+      api.contribute(promptExtensions.section, { id: 'status', render: ({ cwd }) => cwd });
+      api.contribute(toolExtensions.decide, ({ tool }) => tool === 'change' ? 'deny' : undefined);
+      const records = api.contribute(sessionExtensions.records);
+      void records.append('session', { seen: true });
+      // @ts-expect-error Input contributions return native user content or a rejection.
+      api.contribute(agentExtensions.prepareInput, () => ({ arbitrary: true }));
       void api.configuration.set('showDetails', true);
       api.registerUpgrade('/updates', (_request, socket, _head, signal) => {
         if (signal.aborted) socket.destroy();

@@ -1,22 +1,25 @@
 import { HttpError } from '@mini-harness/contracts/routes';
 import { relative, resolve, sep } from 'node:path';
+import { toolExtensions } from '@mini-harness/contracts/tool-extensions';
+import type { PluginApi } from '@mini-harness/contracts/plugins';
 import type { Context } from 'cordis';
 import { Inspection } from './inspection.js';
 import { fileTools, fileToolNames } from './tools.js';
 import type { RouteRequest } from '@mini-harness/contracts/routes';
 
-export function setup(ctx: Context) {
+export function setup(ctx: Context, api: PluginApi) {
   const { harnessRegistry: sessions, harnessWorkspaces: workspaces,
-    harnessTools: tools, harnessRoutes: routes, harnessScopes: scopes, harnessChanges: changes } = ctx;
+    harnessRoutes: routes, harnessScopes: scopes, harnessChanges: changes } = ctx;
 
   for (const [index, name] of fileToolNames.entries()) {
-    ctx.effect(() => tools.register(name, (id) => {
+    const writes = name === 'edit' || name === 'write';
+    api.contribute(toolExtensions.register, { name, bind(id) {
       const root = sessions.workspacePath(id);
       const access = scopes.require(id, 'harnessFileAccess');
       const session = sessions.get(id);
       if (!session) throw new HttpError('not_found', 'Conversation not found');
       const tool = fileTools(root, access.open(session.workspaceId))[index];
-      if (name !== 'edit' && name !== 'write') return tool;
+      if (!writes) return tool;
       return {
         ...tool,
         async execute(...args: Parameters<typeof tool.execute>) {
@@ -29,7 +32,7 @@ export function setup(ctx: Context) {
           return { ...result, details: { ...details, changedPath } };
         }
       };
-    }));
+    } }, { access: writes ? 'standard' : 'readOnly' });
   }
 
   const inspection = async ({ params, url, signal }: RouteRequest) => {

@@ -1,31 +1,52 @@
+import { toolExtensions } from '@mini-harness/contracts/tool-extensions';
+import { HttpError } from '@mini-harness/contracts/routes';
+import { agentExtensions } from '@mini-harness/contracts/agent-extensions';
+import { promptExtensions } from '@mini-harness/contracts/prompt-extensions';
 import type { Context } from 'cordis';
 import { Type } from 'typebox';
 import type { PluginApi } from '@mini-harness/contracts/plugins';
 import { defineTool } from '@mini-harness/contracts/tools';
-import { SkillLoader } from './loader.js';
+import { SkillLoader, defaultSkillRoots } from './loader.js';
 
 export function setup(ctx: Context, api: PluginApi) {
-    const loader = new SkillLoader(ctx.harnessState.paths.skills);
-    ctx.provide('harnessSkills', loader);
-    api.promptSection({ id: 'skills', order: 400, render: ({ sessionId, cwd }) =>
-      ctx.harnessScopes.require(sessionId, 'harnessSkills').prompt(cwd) });
-    ctx.effect(() => ctx.harnessRoutes.register('GET', '/api/workspaces/:id/skills', async ({ params, url }) => {
-      const workspace = ctx.harnessWorkspaces.get(params.id);
-      const sessionId = url.searchParams.get('sessionId');
-      if (sessionId && ctx.harnessRegistry.get(sessionId)?.workspaceId !== workspace.id)
-        throw new Error('Conversation not found');
-      const cwd = ctx.harnessWorkspaces.resolveRoot(workspace.path, workspace.id);
-      return (await loader.discover(cwd)).map(({ name, description }) => ({ name, description }));
-    }));
-    ctx.effect(() => ctx.harnessTools.register('load_skill', (sessionId) => defineTool({
-      name: 'load_skill', label: 'Load skill', description: 'Read the instructions for an available skill by name.',
-      parameters: Type.Object({ name: Type.String({ minLength: 1, maxLength: 64 }) }, { additionalProperties: false }),
-      async execute(_callId, { name }, signal) {
-        signal?.throwIfAborted();
-        const skill = (await loader.discover(ctx.harnessRegistry.workspacePath(sessionId))).find((item) => item.name === name);
-        signal?.throwIfAborted();
-        if (!skill) throw new Error('Unknown skill: ' + name);
-        return { content: [{ type: 'text', text: skill.content }], details: { skill: skill.name } };
-      }
-    })));
+  const loader = new SkillLoader(defaultSkillRoots(ctx.harnessState.paths.home),
+    (path, error) => ctx.logger.warn('Could not discover skill at %s: %s', path, String(error)));
+  api.contribute(agentExtensions.prepareInput, async (content, { source, original, cwd, signal }) => {
+    if (source !== 'user') return;
+    const invocation = await loader.invocation(cwd, original.userText);
+    signal.throwIfAborted();
+    if (!invocation) return;
+    const parts = typeof content === 'string' ? [{ type: 'text' as const, text: content }] : content;
+    const first = parts[0];
+    // Remove the invocation from the original text when it is still the first model-visible block.
+    // Keep the suffix intact, including any text attachments added during input normalization.
+    if (first?.type === 'text' && first.text.startsWith(original.userText)) {
+      first.text = invocation.task + first.text.slice(original.userText.length);
+      if (!first.text) parts.shift();
+    }
+    return [...parts, { type: 'text', text: invocation.instruction }];
+  });
+  api.contribute(promptExtensions.section, { id: 'skills', order: 400, render: ({ cwd }) => loader.prompt(cwd) });
+  ctx.effect(() => ctx.harnessRoutes.register('GET', '/api/workspaces/:id/skills', async ({ params, url, signal }) => {
+    const workspace = ctx.harnessWorkspaces.get(params.id);
+    const sessionId = url.searchParams.get('sessionId');
+    if (sessionId) {
+      if (ctx.harnessRegistry.get(sessionId)?.workspaceId !== workspace.id)
+        throw new HttpError('not_found', 'Conversation not found');
+      await ctx.harnessScopes.prepare(sessionId, signal);
+      if (api.signal.aborted) return [];
+      return loader.list(ctx.harnessRegistry.workspacePath(sessionId));
+    }
+    return loader.list(ctx.harnessWorkspaces.resolveRoot(workspace.path, workspace.id));
+  }));
+  api.contribute(toolExtensions.register, { name: 'load_skill', bind: (sessionId) => defineTool({
+    name: 'load_skill', label: 'Load skill', description: 'Read the instructions for an available skill by name.',
+    parameters: Type.Object({ name: Type.String({ minLength: 1, maxLength: 64 }) }, { additionalProperties: false }),
+    async execute(_callId, { name }, signal) {
+      signal?.throwIfAborted();
+      const skill = await loader.load(ctx.harnessRegistry.workspacePath(sessionId), name);
+      signal?.throwIfAborted();
+      return { content: [{ type: 'text', text: skill.content }], details: { skill: skill.name } };
+    }
+  }) }, { access: 'readOnly' });
 }

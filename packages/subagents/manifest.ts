@@ -8,7 +8,6 @@ export const manifest: PluginDescriptor = {
   scope: 'application', browserInject: ['harnessBrowser'],
   setup, defaultEnabled: true, browserRequires: ['core:conversation'],
   configChanges: 'live',
-  provides: ['harnessDelegation'],
   id: 'subagents', title: 'Subagents', description: 'Delegate tasks to child conversations.',
   icon: 'delegate', browser: '/packages/subagents/client.js',
   configGroups: [
@@ -23,8 +22,8 @@ export const manifest: PluginDescriptor = {
       id: Type.String({ minLength: 1, maxLength: 160 })
     }, { additionalProperties: false })], { title: 'Child model', default: null, 'x-modelChoice': true })
   }, { additionalProperties: false }) },
-  validateConfig({ model }, catalog) {
-    if (model && !catalog.resolve(model as import('@mini-harness/contracts/conversation').ModelChoice)) {
+  validateConfig({ model }, { service }) {
+    if (model && !service('harnessModels').resolve(model as import('@mini-harness/contracts/conversation').ModelChoice)) {
       const { provider, id } = model as import('@mini-harness/contracts/conversation').ModelChoice;
       throw new HttpError('invalid_input', 'Unknown child model: ' + provider + '/' + id);
     }

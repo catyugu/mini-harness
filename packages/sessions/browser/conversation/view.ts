@@ -348,7 +348,6 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
     }
     const choice = modelDraft;
     const thinkingLevel = thinkingDraft;
-    const message = commands.prepare(text);
     const signal = begin();
     const workspace = state.selectedWorkspace;
     const entry = draftEntry;
@@ -368,7 +367,7 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
       }
       const run = revision && !attached
         ? await revision.submit({ text, attachments, removedImages, model: choice, thinkingLevel })
-        : await controller.start(id, { message, attachments, model: choice, thinkingLevel });
+        : await controller.start(id, { message: text, attachments, model: choice, thinkingLevel });
       lastInputs.set(id, { message: text, attachments });
       submitted.set(id, { runId: run.id, clear: snapshot.clear });
       if (!signal.aborted) {
@@ -461,7 +460,7 @@ export function conversationView(api: FrontendApi, state: Selection, options: Co
       const snapshot = snapshotDraft();
       if (snapshot.revision) throw new Error('Finish editing before queuing a message');
       const queued = await controller.queue(id, {
-        message: commands.prepare(prompt.value), mode: api.configuration.get<'steer' | 'followUp'>('queueMode'),
+        message: prompt.value, mode: api.configuration.get<'steer' | 'followUp'>('queueMode'),
         attachments: snapshot.attachments, model: modelDraft, thinkingLevel: thinkingDraft
       });
       snapshot.clear();

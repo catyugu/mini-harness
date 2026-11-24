@@ -11,7 +11,7 @@ test('native agent through HTTP: streaming, persistence, Skills, export and perm
   t.after(() => mock.close());
   const { root, paths } = createFixturePaths(mock.url);
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  const skillDir = join(paths.skills, 'verification');
+  const skillDir = join(paths.home, 'skills', 'verification');
   mkdirSync(skillDir, { recursive: true });
   writeFileSync(join(skillDir, 'SKILL.md'),
     '---\nname: verification\ndescription: Verify the test harness on request.\n---\n\n# Verification\n\nMention the verification skill when asked.\n');
@@ -76,7 +76,21 @@ test('native agent through HTTP: streaming, persistence, Skills, export and perm
   open = false;
   app = await createMiniHarnessServer(paths);
   open = true;
-  const restored = await app.runtime.getConversation(session.id);
+  writeFileSync(join(skillDir, 'SKILL.md'), '---\nname: verification\ndescription: New description\n---\nChanged skill body');
+  const { harnessRuns: runs } = app.runtime.plugins.ctx;
+  await runs.send(session.id, '', undefined, { attachments: [
+    { name: 'instruction.txt', mimeType: 'text/plain', data: Buffer.from('/skill:unavailable').toString('base64') }
+  ] });
+  const sentAfterChange = JSON.stringify(mock.requests.at(-1));
+  assert.match(sentAfterChange, /Mention the verification skill/);
+  assert.match(sentAfterChange, /\/skill:unavailable/);
+  assert.doesNotMatch(sentAfterChange, /Changed skill body/);
+  const child = app.runtime.registry.create({ parentId: session.id });
+  await runs.send(child.id, '/skill:unavailable', undefined, { source: 'agent' });
+  await assert.rejects(runs.send(child.id, '/skill:unavailable'), /Unknown skill: unavailable/);
+  await app.runtime.registry.delete([child.id]);
+
+  const restored = await app.runtime.plugins.ctx.harnessConversationView.read(session.id);
   assert.equal(restored.title, 'Test native integration');
   assert.ok(restored.messages.some((m: {role: string}) => m.role === 'assistant'));
 

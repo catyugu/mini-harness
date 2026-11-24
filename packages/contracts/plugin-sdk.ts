@@ -3,19 +3,20 @@ import type { Context } from 'cordis';
 /** Augment this interface in mini-harness/plugin to declare plugin-owned services. */
 export interface ServiceMap extends Pick<Context,
   | 'harnessFileAccess' | 'harnessLlm' | 'harnessModels' | 'harnessNetwork'
-  | 'harnessPrompt' | 'harnessSessions' | 'harnessSkills' | 'harnessTools'> {}
+  | 'harnessPrompt' | 'harnessSessions' | 'harnessTools'> {}
 
 export type { PluginScope, ScopeSettings } from './capabilities.js';
-export type { PluginApi, PluginDescriptor } from './plugins.js';
-export type { ModelFailure, ModelRequestDraft, ModelRequestTransform, ModelRetry, PromptContext, PromptSection, RecordProjection, StepContext, ToolResultContext, ToolResultTransform } from './extensions.js';
-export type { CapabilityObservation, ToolDecision, ToolProjection } from './events.js';
+export type { PluginApi, PluginDescriptor, ConfigValidationContext } from './plugins.js';
+export type { InputContext, InputPreparation, ModelFailure, ModelRequestContent, ModelRequestTransform, ModelRetry, StepContext } from './agent-extensions.js';
+export type { PromptContext, PromptSection } from './prompt-extensions.js';
+export type { ToolDecision, ToolProjection, ToolResultContext, ToolResultTransform } from './tool-extensions.js';
+export type { CapabilityObservation } from './events.js';
 export type { FileAccessPort, WorkspaceFileAccess } from './files.js';
 export type { ProcessExecutionPort, SandboxPort } from './execution.js';
 export type { ModelCatalogPort, ModelAdminPort } from './models.js';
 export type { LlmPort, LlmRequest, LlmEvent, NativeMessage, NativeAssistantMessage, ToolCallPart } from './llm.js';
-export type { ToolDefinition, ToolSchema, ToolResult, ToolContext } from './tools.js';
+export type { ToolDefinition, ToolSchema, ToolResult, ToolContext, ToolRegistrationOptions } from './tools.js';
 export { defineTool } from './tools.js';
-export type { SkillPort, Skill } from './skills.js';
 export type { AgentPort, RunPort, SessionStore } from './services.js';
 export type { PromptPort, RunAgentPort, ThinkingLevel } from './agent.js';
 export type { SessionLogPort, SessionEntry, SessionEvent, SessionProjection, InboxItem } from './session-log.js';
@@ -24,3 +25,12 @@ export type { BrowserPrimitives } from './browser.js';
 export { HttpError, HttpReply } from './routes.js';
 export type { GatewayRequest, NetworkPort, RouteRequest, UpgradeHandler } from './routes.js';
 export type { PluginConfiguration } from './config.js';
+
+export { agentExtensions } from './agent-extensions.js';
+export type { InputSource, PreparedMessage } from './input.js';
+export { promptExtensions } from './prompt-extensions.js';
+export { toolExtensions } from './tool-extensions.js';
+export { sessionExtensions } from './session-records.js';
+export type { RecordProjection } from './session-records.js';
+export { extension } from './contributions.js';
+export type { Extension } from './contributions.js';

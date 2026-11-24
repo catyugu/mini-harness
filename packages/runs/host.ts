@@ -19,7 +19,7 @@ export function setup(ctx: Context) {
     async compact(id, signal) { await scopes.prepare(id, signal); return selected(id).compact(id, signal); }
   };
   const runs = new Runs(catalog, agent,
-    (event) => ctx.emit('harness/observe', event),
+    (event, signal) => ctx.emit('harness/observe', event, signal),
     (id) => scopes.address(id), (keys) => ctx.harnessMutations.admit(keys));
   ctx.provide('harnessRuns', runs);
   ctx.effect(() => () => runs.stop());

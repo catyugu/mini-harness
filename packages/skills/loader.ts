@@ -1,41 +1,32 @@
-import { constants } from 'node:fs';
-import { lstat, open, opendir, realpath } from 'node:fs/promises';
-import { basename, dirname, isAbsolute, join, relative, sep } from 'node:path';
-import type { Skill, SkillPort } from '@mini-harness/contracts/skills';
+import { constants, type Stats } from 'node:fs';
+import { open, opendir, realpath, stat } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import { basename, dirname, join } from 'node:path';
+
+type Skill = { name: string; description: string; content: string; file: string; root: string };
+export type SkillRoots = (cwd: string) => readonly string[];
+
+export function defaultSkillRoots(appHome: string, userHome = homedir()): SkillRoots {
+  return (cwd) => [join(userHome, '.agents', 'skills'), join(appHome, 'skills'),
+    join(cwd, '.agents', 'skills'), join(cwd, '.mini-harness', 'skills')];
+}
 
 const maximumSize = 128 * 1024;
 const maximumEntries = 8192;
 const maximumDirectories = 1024;
 const maximumSkills = 256;
 const unavailable = (error: unknown) => ['ENOENT', 'ENOTDIR', 'ELOOP', 'EACCES', 'EPERM'].includes((error as NodeJS.ErrnoException).code ?? '');
-const inside = (root: string, path: string) => {
-  const rel = relative(root, path);
-  return !isAbsolute(rel) && rel !== '..' && !rel.startsWith('..' + sep);
-};
+const sameFile = (before: Stats, after: Stats) => before.dev === after.dev && before.ino === after.ino;
 
-async function configuredRoot(path: string) {
+async function readSkill(file: string) {
   try {
-    const [root, parent] = await Promise.all([lstat(path), lstat(dirname(path))]);
-    if (!root.isDirectory() || root.isSymbolicLink() || !parent.isDirectory() || parent.isSymbolicLink()) return;
-    const [actual, parentPath] = await Promise.all([realpath(path), realpath(dirname(path))]);
-    if (relative(join(parentPath, basename(path)), actual)) return;
-    const [checked, checkedParent] = await Promise.all([lstat(path), lstat(dirname(path))]);
-    if (checked.isSymbolicLink() || checked.dev !== root.dev || checked.ino !== root.ino ||
-        checkedParent.isSymbolicLink() || checkedParent.dev !== parent.dev || checkedParent.ino !== parent.ino) return;
-    return actual;
-  } catch (error) { if (!unavailable(error)) throw error; }
-}
-
-async function readSkill(root: string, file: string) {
-  try {
-    const stat = await lstat(file);
-    if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || stat.size > maximumSize) return;
     const actual = await realpath(file);
-    if (!inside(root, actual) || relative(file, actual)) return;
-    const handle = await open(file, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+    const before = await stat(actual);
+    if (!before.isFile() || before.nlink !== 1 || before.size > maximumSize) return;
+    const handle = await open(actual, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0));
     try {
       const opened = await handle.stat();
-      if (!opened.isFile() || opened.nlink !== 1 || opened.dev !== stat.dev || opened.ino !== stat.ino || opened.size > maximumSize) return;
+      if (!opened.isFile() || opened.nlink !== 1 || !sameFile(before, opened) || opened.size > maximumSize) return;
       // Read at most one byte beyond the limit, even if the file grows after stat.
       const buffer = Buffer.alloc(maximumSize + 1);
       let bytes = 0;
@@ -44,73 +35,97 @@ async function readSkill(root: string, file: string) {
         if (!result.bytesRead) break;
         bytes += result.bytesRead;
       }
-      if (bytes > maximumSize) return;
-      const parsed = parseSkill(buffer.subarray(0, bytes).toString('utf8'), basename(dirname(actual)));
+      if (bytes > maximumSize || await realpath(file) !== actual) return;
+      const after = await stat(actual);
+      if (!after.isFile() || after.nlink !== 1 || !sameFile(opened, after) || after.size !== bytes) return;
+      const parsed = parseSkill(buffer.subarray(0, bytes).toString('utf8'), basename(dirname(file)));
       return parsed && { ...parsed, file: actual };
     } finally { await handle.close(); }
   } catch (error) { if (!unavailable(error)) throw error; }
 }
 const xml = (text: string) => text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
 
-/** Read only known skill roots, in a stable order; workspace names override home names. */
-export class SkillLoader implements SkillPort {
-  constructor(private readonly home: string) {}
-  private paths(cwd: string) { return [this.home, join(cwd, '.mini-harness', 'skills')]; }
+/** Roots are ordered from lowest to highest priority. Each scan shares a single budget. */
+export class SkillLoader {
+  constructor(private readonly roots: SkillRoots, private readonly diagnose: (path: string, error: unknown) => void) {}
+
   async discover(cwd: string): Promise<Skill[]> {
     const skills = new Map<string, Skill>();
-    for (const path of this.paths(cwd)) {
-      const root = await configuredRoot(path);
-      if (!root) continue;
-      const files: string[] = [];
-      let visited = 0, remaining = maximumEntries;
-      const visit = async (directory: string, depth: number) => {
-        if (depth > 6 || visited >= maximumDirectories || remaining <= 0 || files.length >= maximumSkills) return;
-        visited++;
+    const files = new Set<string>();
+    let entriesLeft = maximumEntries;
+    let directoriesLeft = maximumDirectories;
+    let skillsLeft = maximumSkills;
+    for (const root of [...this.roots(cwd)].reverse()) {
+      const visited = new Set<string>();
+      const visit = async (path: string, depth: number) => {
+        if (depth > 6 || directoriesLeft <= 0 || entriesLeft <= 0 || skillsLeft <= 0) return;
+        directoriesLeft--;
         try {
-          const stat = await lstat(directory);
-          if (!stat.isDirectory() || stat.isSymbolicLink()) return;
-          const actual = await realpath(directory);
-          if (!inside(root, actual) || relative(directory, actual)) return;
+          const directory = await realpath(path);
+          if (visited.has(directory)) return;
+          const before = await stat(directory);
+          if (!before.isDirectory()) return;
+          visited.add(directory);
           const entries = [];
           for await (const entry of await opendir(directory)) {
             entries.push(entry);
-            if (--remaining <= 0) break;
+            if (--entriesLeft === 0) break;
           }
-          for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
-            if (entry.isSymbolicLink() || entry.name.startsWith('.')) continue;
-            const file = join(directory, entry.name);
-            if (entry.isFile() && entry.name === 'SKILL.md') files.push(file);
-            else if (entry.isDirectory()) await visit(file, depth + 1);
-            if (files.length >= maximumSkills) break;
+          if (await realpath(path) !== directory || !sameFile(before, await stat(directory))) return;
+          for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name, 'en'))) {
+            if (skillsLeft <= 0) break;
+            if (entry.name.startsWith('.')) continue;
+            const child = join(directory, entry.name);
+            if (entry.name === 'SKILL.md' && (entry.isFile() || entry.isSymbolicLink())) {
+              skillsLeft--;
+              try {
+                const skill = await readSkill(child);
+                if (!skill || files.has(skill.file)) continue;
+                files.add(skill.file);
+                if (!skills.has(skill.name)) skills.set(skill.name, { ...skill, root });
+              } catch (error) { this.diagnose(child, error); }
+            } else if (entry.isDirectory() || entry.isSymbolicLink()) {
+              await visit(child, depth + 1);
+            }
           }
-        } catch (error) { if (!unavailable(error)) throw error; }
+        } catch (error) { if (!unavailable(error)) this.diagnose(path, error); }
       };
       await visit(root, 0);
-      for (const file of files) {
-        const skill = await readSkill(root, file);
-        if (skill) skills.set(skill.name, skill);
-      }
     }
-    return [...skills.values()].sort((a, b) => a.name.localeCompare(b.name));
+    return [...skills.values()].sort((a, b) => a.name.localeCompare(b.name, 'en'));
   }
+
+  async list(cwd: string) {
+    return (await this.discover(cwd)).map(({ name, description }) => ({ name, description }));
+  }
+
+  async load(cwd: string, name: string) {
+    const skill = (await this.discover(cwd)).find((item) => item.name === name);
+    if (!skill) throw new Error('Unknown skill: ' + name);
+    return skill;
+  }
+
   async prompt(cwd: string) {
-    const skills = await this.discover(cwd);
+    const skills = await this.list(cwd);
     if (!skills.length) return '';
     return 'Available skills describe task-specific instructions. When a skill matches the task, call load_skill with its name and follow its instructions.\n' +
       '<available_skills>\n' + skills.map((skill) => `  <skill name="${xml(skill.name)}">${xml(skill.description)}</skill>`).join('\n') + '\n</available_skills>';
   }
-  async expand(cwd: string, text: string) {
-    const match = text.match(/^\/skill:([a-z0-9-]+)(?:\s+([\s\S]*))?$/);
-    if (!match) return text;
-    const skill = (await this.discover(cwd)).find(({ name }) => name === match[1]);
-    if (!skill) throw new Error('Unknown skill: ' + match[1]);
-    return `<skill name="${xml(skill.name)}" source="${xml(skill.file)}">\n${skill.content}\n</skill>` +
-      (match[2] ? '\n\n' + match[2] : '');
+  async invocation(cwd: string, text: string) {
+    const match = /(?<!\S)\/skill:([a-z0-9-]+)(?=\s|$)/.exec(text);
+    if (!match) return;
+    const skill = await this.load(cwd, match[1]);
+    const before = text.slice(0, match.index).trimEnd();
+    const after = text.slice(match.index + match[0].length).trimStart();
+    return {
+      task: [before, after].filter(Boolean).join(' '),
+      instruction: `<skill name="${xml(skill.name)}" source="${xml(skill.file)}">\n${skill.content}\n</skill>`
+    };
   }
 }
 
 /** Deliberately narrow frontmatter: no executable tags, aliases or object coercion. */
-export function parseSkill(source: string, fallback: string): Omit<Skill, 'file'> | undefined {
+export function parseSkill(source: string, fallback: string): Pick<Skill, 'name' | 'description' | 'content'> | undefined {
   const match = source.replace(/^\uFEFF/, '').match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)([\s\S]*)$/);
   if (!match) return;
   const fields: Record<string, string> = {};

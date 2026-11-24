@@ -1,11 +1,12 @@
+import { toolExtensions } from '@mini-harness/contracts/tool-extensions';
 import { defineTool } from '@mini-harness/contracts/tools';
 import type { Context } from 'cordis';
 import { Type } from 'typebox';
 import type { PluginApi } from '@mini-harness/contracts/plugins';
 
-export function setup(ctx: Context, { config }: PluginApi) {
+export function setup(ctx: Context, api: PluginApi) {
   const { harnessApprovals: approvals, harnessRegistry: workspace, harnessRuns: runs, harnessScopes: scopes } = ctx;
-  const options = config as { mode: 'isolated' | 'host'; timeoutSeconds: number };
+  const options = api.config as { mode: 'isolated' | 'host'; timeoutSeconds: number };
   const tool = (sessionId: string) => defineTool({
     name: 'sandbox_shell', label: 'Shell',
     description: 'Run a shell command in the workspace. Standard requires approval; Full access skips the approval prompt.',
@@ -26,7 +27,7 @@ export function setup(ctx: Context, { config }: PluginApi) {
         if (!automaticallyApproved) break;
       }
       // Permission changes also apply while a Shell command is awaiting approval.
-      if (!scopes.allowsTool(sessionId, 'sandbox_shell')) throw new Error('Shell denied by conversation permissions');
+      context?.assertAuthorized?.();
       const execution = scopes.require(sessionId, 'harnessProcess');
       try {
         const output = await execution.run({ command: args.command, cwd, ...options, signal, sessionId });
@@ -37,5 +38,5 @@ export function setup(ctx: Context, { config }: PluginApi) {
       }
     }
   });
-  ctx.effect(() => ctx.harnessTools.register('sandbox_shell', tool));
+  api.contribute(toolExtensions.register, { name: 'sandbox_shell', bind: tool });
 }

@@ -1,3 +1,5 @@
+import { expectPresent } from '../../../test/support/required.js';
+import { waitUntil } from '../../../test/support/api-fixture.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs, { existsSync, readFileSync, rmSync } from 'node:fs';
@@ -43,17 +45,17 @@ test('HTTP disconnect keeps the native run alive and reconnect replays from a cu
   const cursor = firstEvent.sequence;
   controller.abort();
   await reader.cancel().catch(() => {});
-  assert.equal(app.runtime.runs.active(item.id), true);
+  assert.equal(app.runtime.plugins.ctx.harnessRuns.active(item.id), true);
   const status = await (await fetch(base + '/api/sessions/' + item.id + '/runs', { headers })).json();
   assert.equal(status.run.state, 'running');
-  const pending = app.runtime.runs.completion(item.id);
+  const pending = app.runtime.plugins.ctx.harnessRuns.completion(item.id);
   const replay = fetch(base + '/api/sessions/' + item.id + '/events?run=' + status.run.id + '&after=' + cursor, { headers });
   held.release();
   await pending;
   const events = (await (await replay).text()).trim().split('\n').map((line) => JSON.parse(line));
   assert.ok(events.every((event) => event.sequence > cursor));
   assert.ok(events.some((event) => event.type === 'complete' || event.type === 'snapshot'));
-  const finishedRun = app.runtime.runs.info(item.id);
+  const finishedRun = app.runtime.plugins.ctx.harnessRuns.info(item.id);
   assert.ok(finishedRun);
   assert.equal(finishedRun.state, 'completed');
   const durable = readFileSync(app.runtime.registry.nativeFile(item), 'utf8').trim().split('\n').map((line) => JSON.parse(line));
@@ -71,23 +73,22 @@ test('independent roots run concurrently and deleting a running tree cancels all
   const app = await createMiniHarnessServer(paths);
   t.after(async () => { held.release(); await app.close(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
   const parent = app.runtime.registry.create(), other = app.runtime.registry.create();
-  const first = app.runtime.runs.send(parent.id, 'Root one');
+  const first = app.runtime.plugins.ctx.harnessRuns.send(parent.id, 'Root one');
   const cancelled = assert.rejects(first, /cancelled/);
-  const second = app.runtime.runs.send(other.id, 'Root two');
+  const second = app.runtime.plugins.ctx.harnessRuns.send(other.id, 'Root two');
   await entered.promise;
-  assert.equal(app.runtime.runs.size, 2);
+  assert.equal(app.runtime.plugins.ctx.harnessRuns.size, 2);
   const child = app.runtime.registry.create({ parentId: parent.id });
-  const childWork = app.runtime.runs.send(child.id, 'Child');
+  const childWork = app.runtime.plugins.ctx.harnessRuns.send(child.id, 'Child');
   const childCancelled = assert.rejects(childWork, /cancelled/);
-  const deleted = await app.runtime.delete([parent.id]);
+  const deleted = await app.runtime.registry.delete([parent.id]);
   await Promise.all([cancelled, childCancelled]);
   assert.deepEqual(new Set(deleted), new Set([parent.id, child.id]));
   assert.equal(app.runtime.registry.get(parent.id), undefined);
-  assert.equal(app.runtime.runs.active(other.id), true);
+  assert.equal(app.runtime.plugins.ctx.harnessRuns.active(other.id), true);
   held.release();
   assert.equal(await second, 'Done');
-  assert.ok(app.runtime.delegation);
-  assert.equal(app.runtime.delegation.activeChildren, 0);
+  assert.equal(app.runtime.plugins.ctx.harnessRuns.size, 0);
 });
 
 test('startup durably interrupts runs, fails stale steering, and recovers idempotently', async (t) => {
@@ -117,13 +118,13 @@ test('startup durably interrupts runs, fails stale steering, and recovers idempo
   const restarted = await createMiniHarnessServer(paths);
   try {
     assert.deepEqual(readFileSync(file), bytes);
-    assert.equal(await restarted.runtime.runs.send(child.id, 'New manual input'), 'Mock response');
+    assert.equal(await restarted.runtime.plugins.ctx.harnessRuns.send(child.id, 'New manual input'), 'Mock response');
     const prompts = mock.requests.map(({ messages }) => {
       const content = (messages as { role: string; content: string | { text: string }[] }[]).at(-1)?.content;
       return Array.isArray(content) ? content.map(({ text }) => text).join('') : content;
     });
     assert.deepEqual(prompts, ['Recovered follow-up', 'New manual input']);
-    assert.deepEqual(restarted.runtime.agent.queue(child.id).map(({ id, state }) => [id, state]), [['steer', 'failed']]);
+    assert.deepEqual(restarted.runtime.plugins.ctx.harnessAgent.queue(child.id).map(({ id, state }) => [id, state]), [['steer', 'failed']]);
   } finally { await restarted.close(); }
 });
 
@@ -144,35 +145,33 @@ test('child queues honor live limits, explicit cancellation, and depth restricti
   t.after(async () => { for (const gate of held) gate.release(); await app.close(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
   await app.runtime.updateSettings({ pluginConfig: { subagents: { maxParallel: 1 } } });
   const parent = app.runtime.registry.create();
-  const choice = { provider: 'local-mock', id: 'mock-model' };
-  const delegation = app.runtime.delegation;
-  assert.ok(delegation);
-  const first = delegation.run(parent.id, 'First child', choice);
+  const tools = app.runtime.plugins.ctx.harnessTools;
+  const delegate = expectPresent(tools.forSession(parent.id).find(({ name }) => name === 'delegate'), 'delegate tool');
+  const start = (task: string) => delegate.execute(task, { task, provider: 'local-mock', model: 'mock-model' });
+  const first = start('First child');
   assert.ok(entered[0] && entered[1]);
   await entered[0].promise;
-  const second = delegation.run(parent.id, 'Second child', choice);
-  const third = delegation.run(parent.id, 'Cancelled queued child', choice);
+  const second = start('Second child');
+  const third = start('Cancelled queued child');
   const aborted = assert.rejects(third, /cancelled/);
-  const records = app.runtime.registry.list();
-  const queued = records.find(({ title }) => title === 'Cancelled queued child');
+  const queued = await waitUntil(() => app.runtime.registry.list().find(({ title }) => title === 'Cancelled queued child'), Boolean);
   assert.ok(queued);
-  assert.equal(app.runtime.runs.info(queued.id)?.state, 'queued');
-  app.runtime.runs.cancel(queued.id);
+  assert.equal(app.runtime.plugins.ctx.harnessRuns.info(queued.id)?.state, 'queued');
+  app.runtime.plugins.ctx.harnessRuns.cancel(queued.id);
   await aborted;
-  assert.equal(app.runtime.runs.info(queued.id)?.state, 'cancelled');
+  assert.equal(app.runtime.plugins.ctx.harnessRuns.info(queued.id)?.state, 'cancelled');
   assert.equal(requests, 1);
   await app.runtime.updateSettings({ pluginConfig: { subagents: { maxParallel: 2 } } });
   await entered[1].promise;
-  assert.equal(delegation.activeChildren, 2);
   await app.runtime.updateSettings({ pluginConfig: { subagents: { maxParallel: 1 } } });
-  assert.equal(app.runtime.runs.size, 2, 'Lowering the limit preserves existing executions');
+  assert.equal(app.runtime.plugins.ctx.harnessRuns.size, 2, 'Lowering the limit preserves existing executions');
   const child = app.runtime.registry.list().find(({ title }) => title === 'First child');
   assert.ok(child);
-  await assert.rejects(delegation.run(child.id, 'Too deep', choice), /depth limit/);
+  assert.equal(tools.forSession(child.id).some(({ name }) => name === 'delegate'), false);
   assert.ok(held[0] && held[1]);
   held[0].release(); held[1].release();
   await Promise.all([first, second]);
-  assert.equal(delegation.activeChildren, 0);
+  assert.equal(app.runtime.plugins.ctx.harnessRuns.size, 0);
   assert.equal(requests, 2, 'Cancelled queued children never reach the provider');
 });
 
@@ -182,20 +181,20 @@ test('late observers receive a saved snapshot and stale cursors cannot attach to
   const app = await createMiniHarnessServer(paths);
   t.after(async () => { await app.close(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
   const item = app.runtime.registry.create();
-  await app.runtime.runs.send(item.id, 'First');
-  const first = app.runtime.runs.info(item.id);
+  await app.runtime.plugins.ctx.harnessRuns.send(item.id, 'First');
+  const first = app.runtime.plugins.ctx.harnessRuns.info(item.id);
   const events: RunEvent[] = [];
   assert.ok(first);
-  app.runtime.runs.watch(item.id, first.id, 0, (event) => events.push(event));
+  app.runtime.plugins.ctx.harnessRuns.watch(item.id, first.id, 0, (event) => events.push(event));
   assert.equal(events.length, 1);
   assert.ok(events[0]);
   assert.equal(events[0].type, 'snapshot');
   assert.ok(events[0].type === 'snapshot' && events[0].messages.some(({ role }) => role === 'assistant'));
-  await app.runtime.runs.send(item.id, 'Second');
-  assert.throws(() => app.runtime.runs.watch(item.id, first.id, 0, () => {}), /Run not found/);
-  const latest = app.runtime.runs.info(item.id);
+  await app.runtime.plugins.ctx.harnessRuns.send(item.id, 'Second');
+  assert.throws(() => app.runtime.plugins.ctx.harnessRuns.watch(item.id, first.id, 0, () => {}), /Run not found/);
+  const latest = app.runtime.plugins.ctx.harnessRuns.info(item.id);
   assert.ok(latest);
-  assert.throws(() => app.runtime.runs.watch(item.id, latest.id, Number.NaN, () => {}), /Invalid event cursor/);
+  assert.throws(() => app.runtime.plugins.ctx.harnessRuns.watch(item.id, latest.id, Number.NaN, () => {}), /Invalid event cursor/);
 });
 
 test('append, torn write and fsync failures evict the writer without acknowledging a queued run', async (t) => {
@@ -222,10 +221,10 @@ test('append, torn write and fsync failures evict the writer without acknowledgi
         throw new Error('Injected append failure');
       }) as typeof fs.writeSync);
     syncBuiltinESMExports();
-    try { assert.throws(() => app.runtime.runs.startRun(session.id, 'Unacknowledged'), /Could not write/); }
+    try { assert.throws(() => app.runtime.plugins.ctx.harnessRuns.startRun(session.id, 'Unacknowledged'), /Could not write/); }
     finally { mocked.mock.restore(); syncBuiltinESMExports(); }
     assert.throws(() => log.append({ type: 'custom', namespace: 'test', data: null }), /closed/);
-    assert.equal(app.runtime.runs.active(session.id), false);
+    assert.equal(app.runtime.plugins.ctx.harnessRuns.active(session.id), false);
     const damaged = readFileSync(log.file);
     if (fault === 'append') assert.deepEqual(damaged, original);
     if (fault === 'torn') {
@@ -239,13 +238,13 @@ test('append, torn write and fsync failures evict the writer without acknowledgi
     assert.match(details.logError, /Injected/);
     assert.ok(status.sessionDiagnostics.some(({ id }: { id: string }) => id === session.id));
     assert.deepEqual(readFileSync(log.file), damaged, 'GET must leave even a torn tail intact');
-    assert.equal(await app.runtime.runs.send(healthy.id, 'Healthy session'), 'Mock response');
+    assert.equal(await app.runtime.plugins.ctx.harnessRuns.send(healthy.id, 'Healthy session'), 'Mock response');
     const reopened = app.runtime.registry.log(session.id);
     assert.notStrictEqual(reopened, log);
-    assert.equal(app.runtime.runs.info(session.id)?.state, fault === 'sync' ? 'interrupted' : undefined);
+    assert.equal(app.runtime.plugins.ctx.harnessRuns.info(session.id)?.state, fault === 'sync' ? 'interrupted' : undefined);
     if (fault === 'torn') assert.deepEqual(readFileSync(log.file), original);
-    assert.equal(await app.runtime.runs.send(session.id, 'Accepted retry'), 'Mock response');
-    assert.deepEqual(app.runtime.agent.messages(session.id).filter(({ role }) => role === 'user').map(({ content }) =>
+    assert.equal(await app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Accepted retry'), 'Mock response');
+    assert.deepEqual(app.runtime.plugins.ctx.harnessAgent.messages(session.id).filter(({ role }) => role === 'user').map(({ content }) =>
       Array.isArray(content) ? content[0]?.text : content), ['Accepted retry']);
     assert.equal(app.runtime.registry.logError(session.id), undefined);
   }

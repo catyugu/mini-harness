@@ -1,3 +1,4 @@
+import type { ContributionSource } from './contributions.js';
 import type { Static, TSchema } from 'typebox';
 import type { TextPart, ImagePart } from './llm.js';
 
@@ -6,6 +7,7 @@ export interface ToolResult { content: (TextPart | ImagePart)[]; details?: Recor
 export interface ToolContext {
   sessionId: string;
   cwd: string;
+  assertAuthorized?(): void;
   waitForApproval?(request: () => Promise<void>): Promise<void>;
 }
 export interface ToolDefinition<Arguments = Record<string, any>> extends ToolSchema {
@@ -16,6 +18,25 @@ export interface ToolDefinition<Arguments = Record<string, any>> extends ToolSch
   isConcurrencySafe?(args: Arguments): boolean;
   execute(callId: string, args: Arguments, signal?: AbortSignal,
     onUpdate?: (result: ToolResult) => void, context?: ToolContext): Promise<ToolResult>;
+}
+
+export interface ToolRegistrationOptions {
+  /** The host only honors a read-only declaration from an authorized source. */
+  access?: 'readOnly' | 'standard';
+  visible?(sessionId: string): boolean;
+}
+
+export const registerToolBinding = Symbol.for('mini-harness.toolBinding');
+
+export interface ToolPort {
+  [registerToolBinding](name: string, bind: (sessionId: string) => ToolDefinition,
+    options?: ToolRegistrationOptions & { source?: ContributionSource; scope?: string }): () => Promise<void>;
+  forSession(id: string): ToolDefinition[];
+  isAvailable(id: string, tool: ToolDefinition): boolean;
+}
+
+declare module 'cordis' {
+  interface Context { harnessTools: ToolPort }
 }
 
 export function isToolContent(value: unknown): value is ToolResult['content'] {

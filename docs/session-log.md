@@ -89,9 +89,11 @@ can replace or omit a message's contribution to model context while preserving
 the original message in the conversation projection. Custom plugin records are
 namespaced and follow the selected branch.
 
-User presentation is stored separately from model input. A text attachment or
-expanded skill remains available to the model, while the interface shows the
-submitted text and attachment labels. Assistant reasoning signatures, tool call
+User presentation is stored separately from the accepted model input. Preparation can
+change the model-visible content while the interface keeps the submitted text and
+attachment labels. When preparation changes images, the presentation retains the
+original images for display and editing. Accepted skill instructions are stored with
+the model-visible input, so changing a skill file leaves prior turns intact. Assistant reasoning signatures, tool call
 signatures, usage and opaque provider continuation metadata survive round trips
 through the log.
 

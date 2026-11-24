@@ -34,7 +34,7 @@ test('session-helper edits branch the native session instead of appending and en
   assert.equal(after.messages.some((message: { role: string; content: unknown }) => message.role === 'user' && textOf(message) === 'Original first'), false);
   assert.equal(after.messages.some((message: { role: string; content: unknown }) => message.role === 'user' && textOf(message) === 'Original second'), false);
   assert.notEqual(after.leafId, before.leafId);
-  const exportFile = app.runtime.export([session.id])[0].log;
+  const exportFile = app.runtime.registry.export([session.id])[0].log;
   for (const message of ['Original first', 'Original second', 'Revised first']) assert.ok(exportFile.includes(message));
   assert.equal((await request('/extensions/session-helper/revise', 'POST', {
     sessionId: session.id, sourceEntryId: first.id, expectedLeafId: before.leafId, message: 'Stale overwrite'

@@ -4,8 +4,9 @@ import { Context } from 'cordis';
 import { isDeepStrictEqual } from 'node:util';
 import { lstatSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import type { PluginDescriptor, PluginMetadata, SessionRecords } from '@mini-harness/contracts/plugins';
+import type { ConfigValidationContext, PluginDescriptor, PluginMetadata } from '@mini-harness/contracts/plugins';
 import type { HostServices, PluginScope, ScopePort } from '@mini-harness/contracts/capabilities';
+import type { ServiceMap } from '@mini-harness/contracts/plugin-sdk';
 import type { BrowserEntry } from '@mini-harness/contracts/browser';
 import { addAbortListener } from 'node:events';
 import type { SessionRecord } from '@mini-harness/contracts/conversation';
@@ -18,9 +19,6 @@ import { createPluginApi } from './api.js';
 import { PluginCatalog, type PluginPlan } from './catalog.js';
 
 type MountedScope = { ctx: Context; parent: Context; scope: PluginScope; isolates: string[] };
-
-// Unknown plugin tools are not assumed to be safe in a read-only conversation.
-const readOnlyTools = new Set(['read', 'ls', 'find', 'grep', 'load_skill']);
 
 const appScope: PluginScope = { kind: 'application' };
 
@@ -37,10 +35,13 @@ export class PluginHost implements ScopePort {
   constructor(readonly ctx: Context, private readonly directory: string, builtins: PluginDescriptor[], rootServices: string[],
     private readonly settings: () => Settings,
     private readonly session: (id: string) => SessionRecord | undefined,
-    private readonly sessionRecords: (sessionId: string, pluginId: string) => SessionRecords,
     private readonly upgrade?: (path: string, handler: UpgradeHandler) => () => void, devPlugin?: string,
-    private readonly writePlugin?: (id: string, key: string | undefined, patch: unknown, check: () => void) => Promise<void>) {
-    this.catalog = new PluginCatalog(directory, builtins, rootServices, devPlugin);
+    private readonly writePlugin?: (id: string, key: string | undefined, patch: unknown, check: () => void) => Promise<void>,
+    private readonly authority: {
+      trustedContributors?: ReadonlySet<string>;
+      protectedProviders?: ReadonlyMap<string, string>;
+    } = {}) {
+    this.catalog = new PluginCatalog(directory, builtins, rootServices, devPlugin, authority.protectedProviders);
     this.mounts = new PluginMounts(ctx);
     this.root = new Map(rootServices.map((name) => [name, 'application']));
   }
@@ -66,10 +67,29 @@ export class PluginHost implements ScopePort {
       scope: descriptor.scope, source: descriptor.trustedCode ? 'local' : 'built-in' };
   }
 
+  private configurationContext(key?: string, scopes = this.scopes) {
+    if (!key) return this.ctx;
+    const keys = key.startsWith('session:') ? this.address(key.slice('session:'.length)) : [key];
+    return keys.reverse().map((item) => scopes.get(item)).find(Boolean)?.ctx ?? this.ctx;
+  }
+
+  private validateConfig(descriptor: PluginDescriptor, config: Record<string, unknown>,
+    operation: ConfigValidationContext['operation'], ctx: Context) {
+    descriptor.validateConfig?.(Object.freeze(structuredClone(config)), {
+      operation,
+      service<Name extends keyof ServiceMap & string>(name: Name): NonNullable<ServiceMap[Name]> {
+        if (!descriptor.inject?.includes(name) && !descriptor.optional?.includes(name))
+          throw new Error('Configuration dependency is not declared by ' + descriptor.id + ': ' + name);
+        const service = ctx.get(name) as ServiceMap[Name] | undefined;
+        if (service == null) throw new HttpError('unavailable', 'Configuration dependency is unavailable to ' + descriptor.id + ': ' + name);
+        return service;
+      }
+    });
+  }
+
   metadata() {
     const settings = this.settings();
     const descriptors = new Map(this.catalog.descriptors().map((item) => [item.id, item]));
-    const models = this.ctx.get('harnessModels');
     return this.catalog.metadata([...descriptors.values()]).map((metadata): PluginMetadata => {
       const { id } = metadata;
       const descriptor = descriptors.get(id);
@@ -77,7 +97,7 @@ export class PluginHost implements ScopePort {
         try {
           const values = key ? { ...settings.pluginConfig[id], ...settings.scopes[key]?.pluginConfig?.[id] } : settings.pluginConfig[id];
           const config = this.catalog.configValues(id, values, descriptor?.configSchema);
-          if (models) descriptor?.validateConfig?.(config, models, 'inspect');
+          if (descriptor?.validateConfig) this.validateConfig(descriptor, config, 'inspect', this.configurationContext(key));
         } catch (error) { return error instanceof Error ? error.message : String(error); }
       };
       const scopes = metadata.scope === 'application'
@@ -143,13 +163,6 @@ export class PluginHost implements ScopePort {
     return ((scope || undefined)?.ctx ?? this.ctx).get(service) as HostServices[Name] | undefined;
   }
 
-  allowsTool(id: string, tool: string) {
-    if (this.lineage(id).some((record) => record.permission === 'readOnly') && !readOnlyTools.has(tool)) return false;
-    if (!this.started) return true;
-    const { scopes } = this.settings();
-    return this.address(id).every((key) => !scopes[key]?.disabledTools?.includes(tool));
-  }
-
   async prepare(id: string, signal?: AbortSignal) {
     if (this.closing) throw new Error('Plugin host is closing');
     signal?.throwIfAborted();
@@ -178,11 +191,11 @@ export class PluginHost implements ScopePort {
 
   private scopedMounts(settings: Settings, descriptors: ReturnType<PluginCatalog['descriptors']>,
     appPlans: PluginPlan[], appProviders: ReadonlyMap<string, string>, unavailable: (id: string, error: unknown) => boolean,
-    preparing?: string, released = new Set<string>()) {
+    preparing?: string, released = new Set<string>(), validating: readonly string[] = []) {
     const scopes = new Map<string, MountedScope>();
     const mounts: MountPlan[] = [];
     const diagnostics: ReturnType<PluginHost['describe']>[] = [];
-    const active = new Set([...Object.keys(settings.scopes).filter((key) => key.startsWith('workspace:')), ...this.scopes.keys(), ...(preparing ? this.address(preparing) : [])]);
+    const active = new Set([...Object.keys(settings.scopes).filter((key) => key.startsWith('workspace:')), ...this.scopes.keys(), ...validating, ...(preparing ? this.address(preparing) : [])]);
     for (const key of active) if (key.startsWith('session:'))
       for (const ancestor of this.address(key.slice('session:'.length))) if (!released.has(ancestor)) active.add(ancestor);
     const graph = resolveScopes(settings, this.catalog.plans.bind(this.catalog), this.session,
@@ -211,7 +224,8 @@ export class PluginHost implements ScopePort {
       throw new Error('Export a default setup function and declare dependencies in plugin.json');
     return { inject: descriptor.inject ?? [], setup: async (ctx, lifetime, setDrain, setConfig) => {
       const runtime = createPluginApi(ctx, plan, { scope, scopeKey, lifetime,
-        address: (id) => this.address(id), records: (id) => this.sessionRecords(id, plan.id),
+        trusted: !source && this.authority.trustedContributors?.has(plan.id) === true,
+        address: (id) => this.address(id),
         routes: this.ctx.get('harnessRoutes'), upgrade: this.upgrade,
         dataRoot: join(dirname(this.directory), 'plugin-data'),
         readConfig: () => {
@@ -231,8 +245,7 @@ export class PluginHost implements ScopePort {
         }))
       });
       setDrain(runtime.drain);
-      const models = ctx.get('harnessModels');
-      if (models) descriptor.validateConfig?.(runtime.api.config, models, 'mount');
+      if (descriptor.validateConfig) this.validateConfig(descriptor, runtime.api.config, 'mount', ctx);
       const cleanup = await setup(ctx, runtime.api);
       if (typeof cleanup === 'function') ctx.effect(() => cleanup);
       runtime.checkPublications();
@@ -288,21 +301,26 @@ export class PluginHost implements ScopePort {
     const failures = new Map<string, string>();
     const previous = this.settings();
     const descriptors = this.catalog.descriptors();
-    const models = this.ctx.get('harnessModels');
+    const validations: { descriptor: PluginDescriptor; config: Record<string, unknown>; key?: string }[] = [];
     if (!starting && !preparing && !released) {
       for (const descriptor of descriptors) {
-        const { id, configSchema, validateConfig, scope } = descriptor;
-        const validate = (values: Record<string, unknown> | undefined, before: Record<string, unknown> | undefined) => {
+        const { id, configSchema, scope } = descriptor;
+        const validate = (values: Record<string, unknown> | undefined, before: Record<string, unknown> | undefined, key?: string) => {
           if (isDeepStrictEqual(values, before)) return;
           const config = this.catalog.configValues(id, values, configSchema);
-          if (models) validateConfig?.(config, models, 'write');
+          if (descriptor.validateConfig) validations.push({ descriptor, config, key });
         };
-        validate(settings.pluginConfig[id], previous.pluginConfig[id]);
-        if (scope === 'application') continue;
-        for (const [key, next] of Object.entries(settings.scopes)) {
-          const changed = next.pluginConfig?.[id];
-          if (!isDeepStrictEqual(changed, previous.scopes[key]?.pluginConfig?.[id]))
-            validate({ ...settings.pluginConfig[id], ...changed }, undefined);
+        if (scope === 'application') validate(settings.pluginConfig[id], previous.pluginConfig[id]);
+        else {
+          validate(settings.pluginConfig[id], previous.pluginConfig[id]);
+          for (const key of Object.keys(settings.scopes)) {
+            if (!key.startsWith(scope + ':')) continue;
+            const changed = settings.scopes[key]?.pluginConfig?.[id];
+            const before = previous.scopes[key]?.pluginConfig?.[id];
+            const selected = settings.scopes[key];
+            if (changed === undefined && !selected.plugins?.[id] && !Object.values(selected.providers ?? {}).includes(id)) continue;
+            validate({ ...settings.pluginConfig[id], ...changed }, { ...previous.pluginConfig[id], ...before }, key);
+          }
         }
       }
     }
@@ -327,7 +345,7 @@ export class PluginHost implements ScopePort {
       return unavailable(id, error);
     };
     const { plans, providers } = this.catalog.plans(settings, descriptors, 'application', this.root, new Set(), undefined, planningUnavailable);
-    const scoped = this.scopedMounts(settings, descriptors, plans, providers, planningUnavailable, preparing, released);
+    const scoped = this.scopedMounts(settings, descriptors, plans, providers, planningUnavailable, preparing, released, validations.flatMap(({ key }) => key ? [key] : []));
     const browser = this.browserPlan(plans, planningUnavailable);
     const mounts = [...plans.filter(({ id }) => !failures.has(id)).map((plan) => this.mountPlan(plan, appScope)), ...scoped.mounts];
     for (const { id } of mounts) if (this.mounts.plan(id)) healthy.add(id);
@@ -366,7 +384,10 @@ export class PluginHost implements ScopePort {
         this.graph = [...plans.map((plan) => this.describe(plan)), ...scoped.diagnostics]
           .filter(({ id }) => this.mounts.plan(id));
         this.ctx.get('harnessChanges')?.dispatchEvent(new CustomEvent('change', { detail: { domain: 'plugins' } }));
-      }, unavailable);
+      }, unavailable, () => {
+        for (const { descriptor, config, key } of validations)
+          this.validateConfig(descriptor, config, 'write', this.configurationContext(key, scoped.scopes));
+      });
     } finally { release?.(); }
   }
 

@@ -114,7 +114,7 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
   const ctx = new Context();
   ctx.provide('authority', {});
   const host = new PluginHost(ctx, directory, builtins, ['authority'], () => settings,
-    (id) => records.get(id), () => ({ list: () => [], append: async () => '' }));
+    (id) => records.get(id));
   t.after(async () => { await host.close(); rmSync(directory, { recursive: true, force: true }); });
   await host.start(settings);
   assert.equal(host.metadata().find(({ id }) => id === 'workspace')?.state, 'failed');
@@ -151,7 +151,6 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
   // Keep the scope alive for policy but remove its service; a stale isolate must not mask the parent.
   await configure({ 'session:parent': parent, 'session:child': { disabledTools: ['shell'] } });
   assert.equal(host.require('child', 'greeting'), 'parent');
-  assert.equal(host.allowsTool('child', 'shell'), false);
 
   // Adding a configured ancestor of an already mounted child must mount that ancestor immediately.
   await configure({ [workspaceKey]: workspace,
@@ -161,4 +160,39 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
   assert.equal(ctx.get('greeting'), 'global');
   await configure({});
   assert.equal(host.require('child', 'greeting'), 'global');
+});
+
+test('configuration validation resolves the staged scope provider and rejects invalid writes atomically', async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'mini-validate-scope-'));
+  const workspaceId = 'a'.repeat(32);
+  const key = 'workspace:' + workspaceId;
+  let settings = structuredClone(DEFAULTS);
+  const builtins: PluginDescriptor[] = [
+    { id: 'global', scope: 'application', title: 'Default', description: '', required: true, provides: ['greeting'],
+      setup(_ctx, api) { api.provide('greeting', 'global'); } },
+    { id: 'local', scope: 'workspace', title: 'Local', description: '', provides: ['greeting'],
+      setup(_ctx, api) { api.provide('greeting', 'local'); } },
+    { id: 'consumer', scope: 'workspace', title: 'Consumer', description: '', inject: ['greeting'],
+      configSchema: { type: 'object', properties: { expected: { type: 'string' } }, required: ['expected'] },
+      validateConfig(config, { operation, service }) {
+        if (config.expected !== service('greeting')) throw new Error('Wrong scoped greeting during ' + operation);
+      } }
+  ];
+  const host = new PluginHost(new Context(), directory, builtins, [], () => settings, () => undefined);
+  t.after(async () => { await host.close(); rmSync(directory, { recursive: true, force: true }); });
+  await host.start(settings);
+  const configure = (expected: string) => {
+    const next = { ...settings, scopes: { [key]: {
+      plugins: { consumer: true, local: true },
+      providers: { greeting: 'local' },
+      pluginConfig: { consumer: { expected } }
+    } } };
+    return host.configure(next, () => { settings = next; });
+  };
+  await configure('local');
+  assert.equal(host.metadata().find(({ id }) => id === 'consumer')?.state, 'ready');
+  const committed = settings;
+  await assert.rejects(configure('global'), /Wrong scoped greeting/);
+  assert.strictEqual(settings, committed);
+  assert.equal(host.metadata().find(({ id }) => id === 'consumer')?.state, 'ready');
 });

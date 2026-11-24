@@ -7,12 +7,19 @@ import { fileURLToPath } from 'node:url';
 import { fixture, waitUntil } from '../support/api-fixture.js';
 
 const examples = fileURLToPath(new URL('../../../docs/examples/', import.meta.url));
-function copyExample(directory: string, id: string) { cpSync(join(examples, id), join(directory, id), { recursive: true }); }
+function copyExample(directory: string, id: string) {
+  cpSync(join(examples, id), join(directory, id), { recursive: true });
+  const entry = join(directory, id, 'plugin.js');
+  const source = readFileSync(entry, 'utf8');
+  const sdk = new URL('../../packages/contracts/plugin-sdk.js', import.meta.url).href;
+  writeFileSync(entry, source.replace("'mini-harness/plugin'", JSON.stringify(sdk)));
+}
 function plugin(directory: string, id: string, descriptor: Record<string, unknown>, code: string) {
   const folder = join(directory, id);
   mkdirSync(folder);
   writeFileSync(join(folder, 'plugin.json'), JSON.stringify(descriptor));
-  writeFileSync(join(folder, 'plugin.js'), code);
+  writeFileSync(join(folder, 'plugin.js'), `import { toolExtensions } from "${new URL('../../packages/contracts/plugin-sdk.js', import.meta.url).href}";
+${code}`);
 }
 
 test('external services and their declared consumers share Cordis provider selection', async (t) => {
@@ -84,7 +91,7 @@ test('scoped plugins inherit declared services and tool policies, and release th
   const enabled = await request('/settings', 'PATCH', { scopes });
   assert.equal(enabled.status, 200, JSON.stringify(enabled.body));
   assert.equal(existsSync(cleaned), false);
-  for (const id of [parent.id, child.id, sibling.id, outside.id]) await app.runtime.agent.prepare(id);
+  for (const id of [parent.id, child.id, sibling.id, outside.id]) await app.runtime.plugins.ctx.harnessAgent.prepare(id);
   const tools = app.runtime.plugins.ctx.harnessTools;
   const names = (id: string) => tools.forSession(id).map(({ name }) => name);
   assert.ok(names(parent.id).includes('scoped_greeting'));
@@ -96,7 +103,7 @@ test('scoped plugins inherit declared services and tool policies, and release th
   }
   const tool = expectPresent(tools.forSession(child.id).find(({ name }) => name === 'scoped_greeting'), 'scoped greeting tool');
   assert.match(JSON.stringify(await tool.execute('scope', {}, undefined, undefined, undefined)), new RegExp(parent.id));
-  assert.equal(await app.runtime.runs.send(parent.id, 'Run scoped greeting'), 'Finished greeting');
+  assert.equal(await app.runtime.plugins.ctx.harnessRuns.send(parent.id, 'Run scoped greeting'), 'Finished greeting');
   const saved = (await request('/sessions/' + parent.id)).body;
   assert.equal(expectPresent(saved.messages.find((message: { role: string; content: { text?: string }[] }) => message.role === 'toolResult'), 'persisted tool result').content[0]?.text, 'Greeting returned.');
   assert.ok(JSON.stringify(mock.requests).includes(parent.workspaceId + ':' + parent.id));
@@ -138,7 +145,7 @@ test('a decision hook can deny an inherited tool and is removed with its owner',
   const { app, paths, request } = await fixture(t);
   plugin(paths.plugins, 'policy', { scope: 'session' }, `
     export default function(_ctx, api) {
-      api.decideTool(async ({ tool, signal }) => {
+      api.contribute(toolExtensions.decide, async ({ tool, signal }) => {
         signal.throwIfAborted();
         return tool === 'ls' ? 'deny' : undefined;
       });
@@ -148,7 +155,7 @@ test('a decision hook can deny an inherited tool and is removed with its owner',
   const child = app.runtime.registry.create({ parentId: selected.id });
   const toggle = (scopes: unknown) => request('/settings', 'PATCH', { scopes });
   assert.equal((await toggle({ ['session:' + selected.id]: { plugins: { policy: true } } })).status, 200);
-  await app.runtime.agent.prepare(child.id);
+  await app.runtime.plugins.ctx.harnessAgent.prepare(child.id);
   const tools = app.runtime.plugins.ctx.harnessTools;
   const call = (id: string) => expectPresent(tools.forSession(id).find(({ name }) => name === 'ls'), 'ls tool')
     .execute('policy', { path: '.' }, undefined, undefined, undefined);
@@ -156,6 +163,55 @@ test('a decision hook can deny an inherited tool and is removed with its owner',
   assert.equal((await call(other.id)).content[0].type, 'text');
   assert.equal((await toggle({})).status, 200);
   assert.equal((await call(child.id)).content[0].type, 'text');
+});
+
+test('read-only permissions are bound to the selected tool registration', async (t) => {
+  const { app, mock, paths, request } = await fixture(t);
+  plugin(paths.plugins, 'replacement', { scope: 'session', inject: ['harnessTools'] }, `
+    export default (_ctx, api) => {
+      for (const name of ['read', 'custom']) api.contribute(toolExtensions.register, {
+        name, description: 'replacement', parameters: { type: 'object' },
+        async execute() { throw new Error('Unapproved replacement ran'); }
+      }, { access: 'readOnly' });
+    };`);
+  const { registry, plugins } = app.runtime;
+  const parent = registry.create({ permission: 'readOnly' });
+  const child = registry.create({ parentId: parent.id, permission: 'fullAccess' });
+  const list = (id: string) => plugins.ctx.harnessTools.forSession(id);
+  const original = expectPresent(list(child.id).find(({ name }) => name === 'read'), 'inherited read tool');
+  assert.ok(list(child.id).some(({ name }) => name === 'load_skill'));
+  assert.equal((await request('/settings', 'PATCH', {
+    scopes: { ['session:' + child.id]: { plugins: { replacement: true } } }
+  })).status, 200);
+  await plugins.prepare(child.id);
+  assert.equal(list(child.id).some(({ name }) => name === 'read' || name === 'custom'), false);
+  assert.ok(list(parent.id).some(({ name }) => name === 'read'));
+  await assert.rejects(original.execute('old', { path: 'README.md' }), /Tool denied/);
+  await app.runtime.plugins.ctx.harnessRuns.send(child.id, 'Continue');
+  const sent = expectPresent(mock.requests.at(-1), 'request with tools');
+  assert.equal(JSON.stringify(sent.tools).includes('"name":"read"'), false);
+  assert.equal(JSON.stringify(sent.tools).includes('"name":"load_skill"'), true);
+});
+
+test('the host tool authorization service cannot be replaced at either scope', async (t) => {
+  const { app, paths, request } = await fixture(t);
+  for (const scope of ['application', 'session']) {
+    plugin(paths.plugins, 'tools-' + scope, { scope, provides: ['harnessTools'] }, `
+      export default () => { throw new Error('Protected provider must never mount'); };
+    `);
+  }
+  const session = app.runtime.registry.create();
+  const application = await request('/settings', 'PATCH', {
+    plugins: { 'tools-application': true }, providers: { harnessTools: 'tools-application' }
+  });
+  assert.equal(application.status, 400);
+  assert.match(application.body.error, /Protected service cannot be overridden: harnessTools/);
+  const scoped = await request('/settings', 'PATCH', { scopes: { ['session:' + session.id]: {
+    plugins: { 'tools-session': true }, providers: { harnessTools: 'tools-session' }
+  } } });
+  assert.equal(scoped.status, 400);
+  assert.match(scoped.body.error, /Protected service cannot be overridden: harnessTools/);
+  assert.ok(app.runtime.plugins.ctx.harnessTools.forSession(session.id).some(({ name }) => name === 'read'));
 });
 
 test('file tools and HTTP preview consume the same selected File Access provider', async (t) => {
@@ -198,15 +254,15 @@ test('native runs use the nearest scoped LLM provider while siblings retain the 
   const scopes = { ['session:' + parent.id]: scope('Parent adapter'), ['session:' + child.id]: scope('Child adapter') };
   const configured = await request('/settings', 'PATCH', { scopes });
   assert.equal(configured.status, 200, JSON.stringify(configured.body));
-  assert.equal(await app.runtime.runs.send(parent.id, 'Parent task'), 'Parent adapter');
-  assert.equal(await app.runtime.runs.send(child.id, 'Child task'), 'Child adapter');
-  assert.equal(await app.runtime.runs.send(sibling.id, 'Sibling task'), 'Mock response');
+  assert.equal(await app.runtime.plugins.ctx.harnessRuns.send(parent.id, 'Parent task'), 'Parent adapter');
+  assert.equal(await app.runtime.plugins.ctx.harnessRuns.send(child.id, 'Child task'), 'Child adapter');
+  assert.equal(await app.runtime.plugins.ctx.harnessRuns.send(sibling.id, 'Sibling task'), 'Mock response');
   assert.equal(mock.requests.length, 1);
   assert.strictEqual(app.runtime.plugins.require(child.id, 'harnessModels'), app.runtime.plugins.ctx.harnessModels);
   assert.equal((await request('/settings', 'PATCH', { scopes: {
     ['session:' + parent.id]: scopes['session:' + parent.id], ['session:' + child.id]: { disabledTools: ['sandbox_shell'] }
   } })).status, 200);
-  assert.equal(await app.runtime.runs.send(child.id, 'Use inherited adapter'), 'Parent adapter');
+  assert.equal(await app.runtime.plugins.ctx.harnessRuns.send(child.id, 'Use inherited adapter'), 'Parent adapter');
   assert.equal(mock.requests.length, 1);
 });
 
@@ -256,13 +312,13 @@ test('native file and shell tools use scoped file, process and sandbox services 
   const preview = (id: string) => request('/workspaces/' + parent.workspaceId + '/files/preview?path=note.txt&sessionId=' + id);
   assert.equal((await preview(parent.id)).body.content, 'scoped file', 'HTTP inspection prepares the lazy scope');
   assert.equal((await preview(sibling.id)).body.content, 'application file');
-  const lastTool = (id: string) => expectPresent(app.runtime.agent.messages(id).filter(({ role }) => role === 'toolResult').at(-1), 'tool result');
-  await app.runtime.runs.send(child.id, 'read in inherited scope');
+  const lastTool = (id: string) => expectPresent(app.runtime.plugins.ctx.harnessAgent.messages(id).filter(({ role }) => role === 'toolResult').at(-1), 'tool result');
+  await app.runtime.plugins.ctx.harnessRuns.send(child.id, 'read in inherited scope');
   assert.match(JSON.stringify(lastTool(child.id).content), /scoped file/);
-  await app.runtime.runs.send(sibling.id, 'read in sibling');
+  await app.runtime.plugins.ctx.harnessRuns.send(sibling.id, 'read in sibling');
   assert.match(JSON.stringify(lastTool(sibling.id).content), /application file/);
   for (const [id, expected] of [[parent.id, 'scoped sandbox'], [child.id, 'scoped process'], [sibling.id, 'application sandbox']]) {
-    const running = app.runtime.runs.send(id, 'shell execution');
+    const running = app.runtime.plugins.ctx.harnessRuns.send(id, 'shell execution');
     const pending = await waitUntil(() => request('/approvals'), ({ body }) => body.some((item: { sessionId: string }) => item.sessionId === id));
     const approval = expectPresent(pending.body.find((item: { sessionId: string }) => item.sessionId === id), 'pending approval');
     assert.equal((await request('/approvals', 'POST', { id: approval.id, allow: true })).status, 200);

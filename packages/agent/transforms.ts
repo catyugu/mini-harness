@@ -1,22 +1,20 @@
-import type { AgentTransform, StepContext } from '@mini-harness/contracts/extensions';
-import type { OrderedHook } from '@mini-harness/contracts/events';
+import { orderHooks, type OrderedHook } from '@mini-harness/contracts/contributions';
 
-export async function applyTransforms<Value, Context extends StepContext>(
-  hooks: OrderedHook<AgentTransform<Value, Context>>[], value: Value, context: Context,
-  validate: (value: Value) => void
+export async function applyTransforms<Value, Context extends { sessionId: string; signal: AbortSignal }, Result>(
+  hooks: OrderedHook<(value: Value, context: Context) => Result | undefined | Promise<Result | undefined>>[],
+  value: Value, context: Context, validate: (result: Result) => Value
 ): Promise<Value> {
-  for (const { pluginId, transform } of hooks.sort((a, b) => a.order - b.order || a.pluginId.localeCompare(b.pluginId))) {
+  for (const { instanceId, invoke } of orderHooks(hooks)) {
     context.signal.throwIfAborted();
-    try {
-      const result = await transform(value, context);
-      if (result === undefined) continue;
-      const snapshot: Value = JSON.parse(JSON.stringify(result));
-      validate(snapshot);
-      value = snapshot;
-    } catch (error) {
-      context.signal.throwIfAborted();
-      throw new Error('Plugin ' + pluginId + ' failed to transform agent data', { cause: error });
+    const result = await invoke(value, context);
+    if (result === undefined) continue;
+    try { value = validate(result); }
+    catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new Error('Plugin ' + instanceId + ' could not prepare transformed data: ' + reason, { cause: error });
     }
   }
+  context.signal.throwIfAborted();
+  for (const hook of hooks) hook.assertActive?.(context.sessionId);
   return value;
 }
