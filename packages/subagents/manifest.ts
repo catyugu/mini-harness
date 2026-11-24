@@ -5,8 +5,8 @@ import { HttpError } from '@mini-harness/contracts/routes';
 
 /** One self-contained plugin schema. Changes to child limits are safe during active runs. */
 export const manifest: PluginDescriptor = {
-  scope: 'application', browserInject: ['harnessBrowser'],
-  setup, defaultEnabled: true, browserRequires: ['core:conversation'],
+  scope: 'application', browserInject: ['harnessBrowser', 'miniMessages', 'miniSlots'],
+  setup, defaultEnabled: true,
   configChanges: 'live',
   id: 'subagents', title: 'Subagents', description: 'Delegate tasks to child conversations.',
   icon: 'delegate', browser: '/packages/subagents/client.js',

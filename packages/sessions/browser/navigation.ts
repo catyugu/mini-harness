@@ -1,3 +1,4 @@
+import { slotExtensions } from '@mini-harness/contracts/slots';
 import type { SessionSearchResult, Conversation } from '@mini-harness/contracts/conversation';
 import type { WorkspaceRecord } from '@mini-harness/contracts/workspace';
 import { exportSessions } from './session-client.js';
@@ -37,7 +38,7 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
       <span id="selectedCount" aria-live="polite"></span>
     </div>
   </div>`);
-  api.slots.register('sidebar.navigation', panel);
+  api.contribute(slotExtensions.register, 'sidebar.navigation', panel);
   const { element, value } = scopedElements(panel);
   const title = document.createElement('input');
   title.required = true;
@@ -51,7 +52,7 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
   save.type = 'submit';
   renameForm.append(field('Title', title), status, save);
   const renameDialog = dialog('Rename conversation', renameForm);
-  api.slots.register('dialog.root', renameDialog);
+  api.contribute(slotExtensions.register, 'dialog.root', renameDialog);
   let renaming: string;
   const selection = new Set<string>(), expanded = new Set<string>();
   const storageKey = 'mini-harness-collapsed-workspaces';
@@ -70,7 +71,7 @@ export function sessionNavigation(api: FrontendApi, options: NavigationServices)
   removeAction.dataset.danger = 'true';
   removeAction.prepend(icon('trash'));
   menu.append(renameAction, removeAction);
-  api.slots.register('dialog.root', menu);
+  api.contribute(slotExtensions.register, 'dialog.root', menu);
   let menuTrigger: HTMLElement | undefined;
 
   function closeMenu(restoreFocus = false) {

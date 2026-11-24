@@ -5,13 +5,11 @@
   "type": "module",
   "dependencies": {
     "@mini-harness/contracts": "workspace:*",
-    "@mini-harness/ui-slots": "workspace:*",
     "@mini-harness/web": "workspace:*"
   },
   "exports": {
     "./frontend": "./frontend.ts",
     "./http": "./http.ts",
-    "./message-extensions": "./message-extensions.ts",
     "./projections": "./projections.ts",
     "./remote-store": "./remote-store.ts"
   }

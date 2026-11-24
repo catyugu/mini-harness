@@ -11,8 +11,7 @@ async function loadStyle(href: string, link: HTMLLinkElement) {
   });
 }
 import type { FrontendHost, FrontendSetup } from './frontend.js';
-import type { BrowserBootstrap } from '@mini-harness/contracts/browser';
-import type { BrowserEntry } from '@mini-harness/contracts/browser';
+import type { BrowserBootstrap, BrowserEntry } from '@mini-harness/contracts/browser';
 
 export type BrowserPluginFailures = ReadonlyMap<string, unknown>;
 

@@ -1,4 +1,8 @@
-import type { FrontendApi, FrontendServices, FrontendSetup, Suggestion } from '@mini-harness/ui-runtime/frontend';
+import { conversationExtensions } from '@mini-harness/contracts/composer';
+import { layoutExtensions } from '@mini-harness/contracts/layout';
+import type { FrontendApi, FrontendSetup } from '@mini-harness/ui-runtime/frontend';
+import type { ConversationBrowserPort } from '@mini-harness/contracts/conversation';
+import type { Suggestion } from '@mini-harness/contracts/composer';
 import type { BrowserProjectionPort } from '@mini-harness/contracts/browser';
 import type { TabAddress, TabScope } from '@mini-harness/contracts/layout';
 import { icon } from '@mini-harness/ui-primitives/icons';
@@ -44,14 +48,14 @@ function hint(message: string) {
   return node;
 }
 
-function breadcrumbs(api: FrontendApi, services: FrontendServices, address: TabAddress, path: string, leaf = false) {
+function breadcrumbs(api: FrontendApi, services: ConversationBrowserPort, address: TabAddress, path: string, leaf = false) {
   const node = document.createElement('nav');
   node.className = 'file-breadcrumbs';
   node.setAttribute('aria-label', 'File path');
   const name = services.workspaceRecord(address.workspaceId)?.name ?? 'Workspace';
   const crumbs = path === '.' ? [] : path.split('/');
   const root = control(name, 'quiet');
-  const open = (path?: string) => api.openTab('files', path, address);
+  const open = (path?: string) => api.contribute(layoutExtensions.openTab, 'files', path, address);
   root.onclick = () => open();
   if (path === '.') root.setAttribute('aria-current', 'location');
   node.append(root);
@@ -78,7 +82,7 @@ function fileEntry(api: FrontendApi, scope: TabScope, path: string, label: strin
   row.type = 'button';
   row.className = 'file-entry';
   row.title = path;
-  row.onclick = () => api.openTab('file', path, scope, diff ? 'diff' : 'preview');
+  row.onclick = () => api.contribute(layoutExtensions.openTab, 'file', path, scope, diff ? 'diff' : 'preview');
   row.append(icon(fileIcon(path)));
   const name = document.createElement('span');
   name.textContent = label;
@@ -110,7 +114,7 @@ function refreshFiles(projections: BrowserProjectionPort, address: TabAddress, r
   schedule();
 }
 
-function fileTree(projections: BrowserProjectionPort, api: FrontendApi, services: FrontendServices, address: TabAddress, signal: AbortSignal, expanded: Set<string>) {
+function fileTree(projections: BrowserProjectionPort, api: FrontendApi, services: ConversationBrowserPort, address: TabAddress, signal: AbortSignal, expanded: Set<string>) {
   const path = address.path ?? '.';
   const root = document.createElement('section');
   const toolbar = document.createElement('div');
@@ -217,7 +221,7 @@ function source(content: string, highlight: boolean) {
   return wrapper;
 }
 
-function fileView(projections: BrowserProjectionPort, api: FrontendApi, services: FrontendServices, address: TabAddress, signal: AbortSignal) {
+function fileView(projections: BrowserProjectionPort, api: FrontendApi, services: ConversationBrowserPort, address: TabAddress, signal: AbortSignal) {
   if (!address.path) throw new Error('A file preview requires a file path');
   const path = address.path;
   const root = document.createElement('section');
@@ -300,7 +304,7 @@ function fileView(projections: BrowserProjectionPort, api: FrontendApi, services
 const setup: FrontendSetup = (ctx, api) => {
   const services = ctx.harnessBrowser;
   const expanded = new WeakMap<TabAddress, Set<string>>();
-  api.rightTab('files', {
+  api.contribute(layoutExtensions.tab, 'files', {
     title: ({ path }) => path ? base(path) : 'Files',
     default: true,
     create(address, signal) {
@@ -309,11 +313,11 @@ const setup: FrontendSetup = (ctx, api) => {
       return fileTree(ctx.miniProjections, api, services, address, signal, open);
     }
   });
-  api.rightTab('file', {
+  api.contribute(layoutExtensions.tab, 'file', {
     title: ({ path }) => path ? base(path) : 'File',
     create: (address, signal) => fileView(ctx.miniProjections, api, services, address, signal)
   });
-  api.completion('@', async ({ query, signal, show, replace }) => {
+  api.contribute(conversationExtensions.completion, '@', async ({ query, signal, show, replace }) => {
     const scope = services.workspace();
     if (!scope) return;
     if (query.startsWith('"')) return;

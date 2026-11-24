@@ -1,5 +1,7 @@
 import type {} from 'cordis';
 import type { ThinkingLevel } from './agent.js';
+import type { TabScope } from './layout.js';
+import type { WorkspaceRecord } from './workspace.js';
 import type { ViewMessage } from './message.js';
 import type { QueueEntry } from './session-log.js';
 import type { StreamEvent } from './transport.js';
@@ -49,4 +51,17 @@ export interface ConversationViewPort {
 
 declare module 'cordis' {
   interface Context { harnessConversationView: ConversationViewPort }
+}
+
+export interface ConversationBrowserPort {
+  workspaceRecord(id: string): WorkspaceRecord | undefined;
+  openConversation(id: string): void;
+  workspace(): TabScope | undefined;
+  session(id?: string): Conversation | undefined;
+  onConversationChange(listener: () => void, signal: AbortSignal): void;
+  report(error: Error): void;
+}
+
+declare module 'cordis' {
+  interface Context { harnessBrowser: ConversationBrowserPort }
 }

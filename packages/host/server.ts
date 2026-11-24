@@ -22,7 +22,8 @@ const assets = new Map([
 // Vendor modules and shared browser-safe route construction are public.
 for (const name of ['cordis', 'cosmokit', 'marked', 'purify'])
   assets.set('packages/web/vendor/' + name + '.js', 'text/javascript');
-assets.set('packages/contracts/workspace.js', 'text/javascript');
+for (const name of ['composer', 'layout', 'settings-browser', 'slots', 'workspace'])
+  assets.set('packages/contracts/' + name + '.js', 'text/javascript');
 
 // Only client modules from UI foundations may be served.
 for (const name of ['ui-runtime', 'ui-slots', 'ui-theme', 'ui-primitives', 'ui-layout']) {

@@ -1,18 +1,22 @@
-import { scopedElements } from '@mini-harness/ui-primitives/primitives';
+import { slotExtensions } from '@mini-harness/contracts/slots';
 import type { FrontendSetup, FrontendApi } from '@mini-harness/ui-runtime/frontend';
 import { icon } from '@mini-harness/ui-primitives/icons';
-import { closeOnBackdrop, fromMarkup, required } from '@mini-harness/ui-primitives/primitives';
+import { closeOnBackdrop, fromMarkup, required, scopedElements } from '@mini-harness/ui-primitives/primitives';
+
+import { SettingsRegistry } from './browser/registry.js';
 
 const setup: FrontendSetup = (ctx, api) => {
-  const { miniLayout: layout, miniSettingsRegistry: registry } = ctx;
+  const registry = new SettingsRegistry();
+  const layout = ctx.miniLayout;
+  ctx.provide('miniSettingsRegistry', registry);
   const settings = mountSettings(api, registry);
   ctx.provide('miniSettings', settings);
   const launcher = fromMarkup<HTMLButtonElement>('<button type="button" aria-label="Settings"><span data-icon="settings"></span><span class="nav-label">Settings</span></button>');
   launcher.onclick = () => { layout.closeDrawer(); settings.open(); };
-  api.slots.register('sidebar.footer', launcher);
+  api.contribute(slotExtensions.register, 'sidebar.footer', launcher);
 };
 
-function mountSettings(api: FrontendApi, registry: import('cordis').Context['miniSettingsRegistry']) {
+function mountSettings(api: FrontendApi, registry: SettingsRegistry) {
   const panel = fromMarkup<HTMLDialogElement>(`<dialog id="settingsPanel" class="settings-panel" aria-labelledby="settingsTitle">
     <header class="settings-header">
       <h2 id="settingsTitle">Settings</h2>
@@ -35,7 +39,7 @@ function mountSettings(api: FrontendApi, registry: import('cordis').Context['min
   close.append(icon('close'));
   close.onclick = () => panel.close();
   back.prepend(icon('chevron'));
-  api.slots.register('dialog.root', panel);
+  api.contribute(slotExtensions.register, 'dialog.root', panel);
   closeOnBackdrop(panel);
   const pages = new Map<string, { section: HTMLElement; trigger: HTMLButtonElement; content: HTMLElement }>();
   let selected: string | undefined;

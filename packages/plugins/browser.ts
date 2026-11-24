@@ -1,3 +1,5 @@
+import { slotExtensions } from '@mini-harness/contracts/slots';
+import { layoutExtensions } from '@mini-harness/contracts/layout';
 import type { ModelCatalog } from '@mini-harness/contracts/models';
 import type { WorkspaceRecord } from '@mini-harness/contracts/workspace';
 import type { Conversation } from '@mini-harness/contracts/conversation';
@@ -41,7 +43,7 @@ function installer(api: FrontendApi, installed: () => Promise<void>) {
     <p class="hint form-error" role="alert"></p>
     <div class="ui-actions"></div>
   </form>`);
-  const modal = api.dialog('Install plugin', form);
+  const modal = api.contribute(layoutExtensions.dialog, 'Install plugin', form);
   const id = fromMarkup<HTMLInputElement>('<input pattern="[a-z](?:[a-z0-9]|-){0,63}" placeholder="my-plugin" required>');
   form.prepend(field('Plugin ID', id));
   const input = required(form.querySelector<HTMLInputElement>('.bundle-input'));
@@ -129,7 +131,7 @@ function pluginCatalog(api: FrontendApi, snapshot: () => { plugins: PluginMetada
   });
   openInstall.onclick = () => modal.showModal();
   entry.dataset.pageLink = 'plugins';
-  api.slots.register('sidebar.actions', entry, -10);
+  api.contribute(slotExtensions.register, 'sidebar.actions', entry, -10);
   api.onDispose(pages.register('plugins', page));
 
   let editing: string | undefined;

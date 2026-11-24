@@ -1,4 +1,4 @@
-import type { MessageAction, ToolView } from './frontend.js';
+import type { MessageAction, ToolView } from '@mini-harness/contracts/composer';
 
 export class MessageExtensions {
   private readonly actions = new Map<string, MessageAction>();

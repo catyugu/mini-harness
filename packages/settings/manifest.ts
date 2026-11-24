@@ -3,9 +3,9 @@ import { setup } from './host.js';
 
 export const manifest: PluginDescriptor = {
   scope: 'application',
-  browserProvides: ['miniSettings'],
-  browserInject: ['miniSettingsRegistry', 'miniLayout'],
+  browserProvides: ['miniSettings', 'miniSettingsRegistry'],
+  browserInject: ['miniLayout', 'miniSlots'],
   id: 'core:settings', title: 'Settings', description: 'Application settings', required: true,
   inject: ['harnessSettings', 'harnessUpdateSettings', 'harnessWriteBrowserConfig', 'harnessRoutes', 'harnessMutations'], provides: [], setup,
-  browser: '/packages/settings/browser.js', browserRequires: ['core:layout'],
+  browser: '/packages/settings/browser.js',
 };

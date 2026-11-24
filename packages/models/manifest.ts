@@ -6,7 +6,7 @@ import { setup } from './host.js';
 
 export const manifest: PluginDescriptor = {
   scope: 'application',
-  browserInject: ['miniSettings', 'miniProjections'], browserProvides: ['miniModels'],
+  browserInject: ['miniSettings', 'miniProjections', 'miniSettingsRegistry'], browserProvides: ['miniModels'],
   id: 'core:models', title: 'Models', description: 'Model endpoints and credentials', required: true,
   configChanges: 'live',
   configSchema: Type.Object({
@@ -22,5 +22,5 @@ export const manifest: PluginDescriptor = {
   },
   inject: ['harnessModels', 'harnessModelAdmin', 'harnessState', 'harnessRoutes', 'harnessMutations', 'harnessChanges'],
   provides: ['harnessModelPreference'], setup,
-  browser: '/packages/models/browser.js', browserRequires: ['core:settings'],
+  browser: '/packages/models/browser.js',
 };

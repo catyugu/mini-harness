@@ -2,29 +2,7 @@
  * Contributions can arrive before their owner and are restored when an owner remounts.
  * The registry has no knowledge of business features or Cordis.
  */
-/** Plugins declare their own slot names via TypeScript module augmentation. */
-export interface SlotMap {
-  'sidebar.primary': { kind: 'list' };
-  'sidebar.actions': { kind: 'list' };
-  'sidebar.navigation': { kind: 'list' };
-  'sidebar.footer': { kind: 'list' };
-  'conversation.header': { kind: 'list' };
-  'workspace.header': { kind: 'single' };
-  'workspace.welcome': { kind: 'single' };
-  'conversation.body': { kind: 'single' };
-  'conversation.composer': { kind: 'list' };
-  'conversation.approvals': { kind: 'list' };
-  'dialog.root': { kind: 'list' };
-}
-export type SlotName = keyof SlotMap & string;
-export type SlotKind = 'single' | 'list';
-export interface SlotMount {
-  node: HTMLElement;
-  dispose?(): void;
-}
-export type SlotRenderer = (signal: AbortSignal) => HTMLElement | SlotMount;
-
-export interface KeyedSlotOptions { order?: number }
+import type { KeyedSlotOptions, SlotKind, SlotName, SlotRenderer } from '@mini-harness/contracts/slots';
 
 interface Entry { key?: string; node?: HTMLElement; render?: SlotRenderer; order: number }
 interface Mounted { node: HTMLElement; release(): void }

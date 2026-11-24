@@ -40,10 +40,11 @@ test('a keyed browser contribution cleans up its listener and restores the built
   try {
     const folder = join(paths.plugins, 'replace-new');
     mkdirSync(folder);
-    writeJson(join(folder, 'plugin.json'), { browserRequires: ['core:conversation'] });
-    writeFileSync(join(folder, 'web.js'), `export default (_ctx, api) => {
-      api.slots.registerKeyed('sidebar.primary', 'new-conversation', signal => {
-        const button = api.ui.button('Replacement conversation', 'quiet');
+    writeJson(join(folder, 'plugin.json'), { browserRequires: ['core:conversation'], browserInject: ['miniSlots', 'miniPrimitives'] });
+    writeFileSync(join(folder, 'web.js'), `import { slotExtensions } from '/packages/ui-runtime/plugin-sdk.js';
+    export default ({ miniPrimitives }, api) => {
+      api.contribute(slotExtensions.keyed, 'sidebar.primary', 'new-conversation', signal => {
+        const button = miniPrimitives.button('Replacement conversation', 'quiet');
         window.addEventListener('slot-test', () => {
           document.body.dataset.slotEvents = String(Number(document.body.dataset.slotEvents ?? 0) + 1);
         }, { signal });

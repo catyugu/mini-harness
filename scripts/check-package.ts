@@ -61,7 +61,7 @@ async function checkPackage() {
       assert.ok(files.some((file) => file.path === 'dist/types/packages/' + path), 'Missing SDK declarations: ' + path);
     await writeFile(join(installed, 'plugin-types.mts'), `
       import { agentExtensions, promptExtensions, sessionExtensions, toolExtensions, type PluginApi, type LlmPort } from 'mini-harness/plugin';
-      import type { FrontendApi, SlotRenderer } from 'mini-harness/browser-plugin';
+      import { settingsExtensions, slotExtensions, type FrontendSetup, type SlotRenderer } from 'mini-harness/browser-plugin';
       declare module 'mini-harness/plugin' {
         interface ServiceMap { example: { greet(name: string): string } }
       }
@@ -88,13 +88,16 @@ async function checkPackage() {
       api.service('example')?.greet(1);
       // @ts-expect-error TypeScript plugins declare their own services.
       api.service('undeclared');
-      declare const frontend: FrontendApi, render: SlotRenderer;
-      frontend.slots.registerKeyed('sidebar.primary', 'example', render);
-      frontend.watch(() => {});
-      frontend.settings.register({ id: 'example', section: 'General', render: ({ configuration }) =>
-        frontend.ui.status(String(configuration.get<boolean>('showDetails')))
-      });
-      const language: string = frontend.locale.current();
+      declare const render: SlotRenderer;
+      const setup: FrontendSetup = (ctx, frontend) => {
+        frontend.contribute(slotExtensions.keyed, 'sidebar.primary', 'example', render);
+        // @ts-expect-error A keyed contribution needs a renderer.
+        frontend.contribute(slotExtensions.keyed, 'sidebar.primary', 'example', document.body);
+        frontend.watch(() => {});
+        frontend.contribute(settingsExtensions.register, { id: 'example', section: 'General', render: ({ configuration }) =>
+          ctx.miniPrimitives.status(String(configuration.get<boolean>('showDetails')))
+        });
+      };
     `);
     await execFile(process.execPath, [resolve('node_modules/typescript/bin/tsc'),
       '--strict', '--skipLibCheck', '--noEmit', '--target', 'ES2022', '--module', 'NodeNext', 'plugin-types.mts'],

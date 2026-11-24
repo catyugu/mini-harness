@@ -268,7 +268,7 @@ export class PluginHost implements ScopePort {
 
   private browserPlan(candidate: PluginPlan[], unavailable: (id: string, error: unknown) => boolean) {
     const browser = new Map(candidate.filter(({ browser, web }) => browser || web).map((plan) => [plan.id, plan]));
-    const runtimeServices = ['miniProjections', 'miniSwitch', 'miniBrowserFailures', 'miniSettingsRegistry'];
+    const runtimeServices = ['miniProjections', 'miniSwitch', 'miniBrowserFailures'];
     const { ordered } = resolveCapabilities([...browser.values()].map((plan) => ({
       id: plan.id, provides: plan.descriptor.browserProvides, inject: plan.descriptor.browserInject,
       requires: [...new Set([...(plan.browserRequires ?? []),

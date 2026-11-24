@@ -1,28 +1,5 @@
 import type { PluginConfiguration } from '@mini-harness/contracts/config';
-import type { PluginIcon } from '@mini-harness/contracts/plugins';
-
-export interface SettingsSection {
-  title: string;
-  icon?: PluginIcon;
-  order?: number;
-}
-
-export interface SettingsContext {
-  readonly signal: AbortSignal;
-  readonly configuration: PluginConfiguration;
-  /** Keep a control synchronized and return its inline error status. */
-  bind<T>(control: HTMLInputElement | HTMLSelectElement, key: string, binding: {
-    read(value: T): void;
-    write(): T;
-  }): HTMLElement;
-}
-
-export interface SettingsContribution {
-  id: string;
-  section: string | SettingsSection;
-  order?: number;
-  render(context: SettingsContext): HTMLElement;
-}
+import type { SettingsContribution, SettingsSection } from '@mini-harness/contracts/settings-browser';
 
 interface Entry {
   section: SettingsContribution['section'];

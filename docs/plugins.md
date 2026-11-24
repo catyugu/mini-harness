@@ -163,38 +163,32 @@ Setup, schema or settings persistence failures retain the previous effective gra
 
 ## Browser contributions
 
-| API | Contract |
-| - | - |
-| `ui.button`, `ui.field`, `ui.menu`, `ui.status` | Shared visual primitives |
-| `dialog(title, content)` | A shared modal registered under the plugin lifetime |
-| `page(id, {title, content, order?})` | Register a page and sidebar entry |
-| `slots.register(name, node, order?)` | Contribute to a layout or feature slot |
-| `slots.registerKeyed(name, key, render, { order? }?)` | Contribute or override a keyed slot entry with a render lifetime |
-| `settings.register({ id, section, order?, render })` | Add a control or panel to a Settings section |
-| `configuration.get`, `.set`, `.patch`, `.subscribe` | Read, write or follow the browser plugin’s own application configuration |
-| `rightTab(type, {title, create})`, `openTab(type, path?)` | Register or open a scoped workspace tab. Creation receives its address and an abort signal. |
-| `inspect(title, node)` | Show content in the workspace inspector |
-| `command({name, description, group?, run?})`, `completion(trigger, complete)` | Slash commands and punctuation-triggered suggestions |
-| `tool(name, render)`, `toolAction(name, render)` | Register tool result presentation or controls |
-| `messageAction({id, label, icon, visible, run})` | Register an action on the eligible messages |
-| `beginDraftMode({title, text, submit})`, `cancelDraftMode()`, `insert(text)` | Own an editing flow or insert content into the composer |
-| `request(path, options?)`, `signal`, `onDispose(cleanup)` | Authenticated requests and lifetime management |
+Call `api.contribute(point, ...args)` with a point exported by `mini-harness/browser-plugin`. Unbundled browser entries can import these same points from `/packages/ui-runtime/plugin-sdk.js`.
 
-Page, dialog, tab and inspector contributions depend on `core:layout`. Tools, message actions and composer operations depend on `core:conversation`. The theme and primitives are shared. Declare the corresponding dependencies in `browserRequires` or declare the service in `browserInject`. Domain snapshots are provided by the owning feature's browser data plugin. The browser runtime routes revision notices and mounts the declared graph; it does not initialize sessions, settings, models or other feature state. Browser code runs with the page's permissions. Put custom UI listeners and requests under the plugin's lifetime and use contribution APIs to interact with another feature.
+| Extension | Required `browserInject` services | Behavior |
+| - | - | - |
+| `layoutExtensions.dialog`, `.page` | `miniDialogs`, `miniPages` respectively | Mount a modal or a page with a sidebar entry |
+| `layoutExtensions.tab`, `.openTab`, `.inspect` | `miniTabs` | Register or open a workspace tab or show content in the inspector |
+| `slotExtensions.register`, `.keyed` | `miniSlots` | Add an element or a keyed renderer to a slot |
+| `settingsExtensions.register` | `miniSettingsRegistry` | Render a plugin-owned Settings control |
+| `conversationExtensions.command`, `.completion`, `.draft` | `miniComposer` | Register a command or completer, or open an editing draft |
+| `conversationExtensions.tool`, `.toolAction`, `.messageAction` | `miniMessages` | Register tool presentation, tool controls, or a message action |
+
+Inject `miniPrimitives` for shared controls via `ctx.miniPrimitives`, or `miniComposer` to insert text via `ctx.miniComposer.insert(text)`. Use `browserRequires` when a whole plugin must mount first, for example when replacing a specific contribution it installs. The browser API provides authenticated `request`, `configuration`, `signal`, and `onDispose`. Bind custom listeners and requests to that lifetime. Browser code runs with the page's permissions.
 
 Settings contributions use a section title such as `General`, `Model`, or `Extensions`. A plugin can introduce a section with `{ title, icon, order }`. Contributions are sorted by order and plugin-qualified ID. Sections are ordered by their declared order and title. A section appears when it has content. Disabling a plugin removes its contributions and aborts their render signals.
 
-Declare the settings fields and defaults in the plugin’s `configSchema`. For example, declare `showDetails` as a boolean with a default, then register its control from `web.js`.
+Declare the settings fields and defaults in the plugin’s `configSchema`. For example, declare `showDetails` as a boolean with a default, then register its control from `web.js` with `miniSettingsRegistry` and `miniPrimitives` in `browserInject`.
 
 ```js
-api.settings.register({
+api.contribute(settingsExtensions.register, {
   id: 'show-details',
   section: 'General',
   order: 50,
   render({ bind }) {
     const control = document.createElement('input');
     control.type = 'checkbox';
-    const label = api.ui.field('Show details', control);
+    const label = ctx.miniPrimitives.field('Show details', control);
     const status = bind(control, 'showDetails', {
       read: (value) => { control.checked = value; },
       write: () => control.checked

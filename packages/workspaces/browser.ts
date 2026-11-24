@@ -1,3 +1,5 @@
+import { slotExtensions } from '@mini-harness/contracts/slots';
+import { layoutExtensions } from '@mini-harness/contracts/layout';
 import type { WorkspaceRecord } from '@mini-harness/contracts/workspace';
 import type { FrontendSetup, FrontendApi } from '@mini-harness/ui-runtime/frontend';
 import { button, field, confirmAction } from '@mini-harness/ui-primitives/primitives';
@@ -13,7 +15,7 @@ const setup: FrontendSetup = (ctx, api) => {
     node.className = 'workspace-button';
     const label = document.createElement('small');
     node.append(icon('folder'), label);
-    api.slots.register(slot, node);
+    api.contribute(slotExtensions.register, slot, node);
     return { node, label };
   });
   ctx.provide('miniWorkspace', picker);
@@ -61,7 +63,7 @@ function workspacePicker(api: FrontendApi, sessions: () => { workspaceId: string
   browseActions.className = 'ui-actions';
   browseActions.append(up, go);
   form.append(field('Absolute directory path', path), browseActions, list, status, register);
-  const picker = api.dialog('Add workspace', form);
+  const picker = api.contribute(layoutExtensions.dialog, 'Add workspace', form);
   let selected: (record: WorkspaceRecord) => void;
   let browsing: AbortController;
   picker.addEventListener('close', () => browsing?.abort());
@@ -124,7 +126,7 @@ function workspacePicker(api: FrontendApi, sessions: () => { workspaceId: string
   rename.type = 'submit';
   actions.append(cancel, rename);
   editForm.append(name, editStatus, actions);
-  const editor = api.dialog('Rename workspace', editForm);
+  const editor = api.contribute(layoutExtensions.dialog, 'Rename workspace', editForm);
   editor.classList.add('workspace-rename-dialog');
   let editing: WorkspaceRecord;
   cancel.onclick = () => editor.close();

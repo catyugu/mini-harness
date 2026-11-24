@@ -1,3 +1,4 @@
+import { settingsExtensions } from '@mini-harness/contracts/settings-browser';
 import type { ModelChoice } from '@mini-harness/contracts/conversation';
 import { payload } from '@mini-harness/ui-runtime/http';
 import type { ModelCatalog, ProviderInfo, ProviderModel } from '@mini-harness/contracts/models';
@@ -25,7 +26,7 @@ const setup: FrontendSetup = async (ctx, api) => {
       signal.addEventListener('abort', release, { once: true });
     }
   });
-  api.settings.register({
+  api.contribute(settingsExtensions.register, {
     id: 'providers',
     section: { title: 'Model', icon: 'model', order: 10 },
     render({ signal }) {

@@ -1,10 +1,11 @@
+import { settingsExtensions } from '@mini-harness/contracts/settings-browser';
 import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend';
 
 const setup: FrontendSetup = (_ctx, api) => {
   const apply = (theme: string) => { document.documentElement.dataset.theme = theme; };
   apply(api.configuration.get<string>('appearance'));
   api.configuration.subscribe<string>('appearance', apply);
-  api.settings.register({
+  api.contribute(settingsExtensions.register, {
     id: 'theme',
     section: { title: 'Appearance', icon: 'theme', order: 30 },
     render({ bind }) {

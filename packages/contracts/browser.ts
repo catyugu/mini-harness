@@ -1,3 +1,18 @@
+import type { Context } from 'cordis';
+import type { PluginConfiguration } from './config.js';
+
+export type BrowserRelease = () => void | Promise<void>;
+
+export interface BrowserContributionSource {
+  readonly id: string;
+  readonly signal: AbortSignal;
+  readonly configuration: PluginConfiguration;
+  service<Name extends keyof Context & string>(name: Name): NonNullable<Context[Name]>;
+  effect(install: () => BrowserRelease): BrowserRelease;
+}
+export type BrowserContribution<Args extends unknown[], Result> =
+  (source: BrowserContributionSource, ...args: Args) => Result;
+
 /** Browser plugin graph wire contract; independent of any UI renderer or Host implementation. */
 export interface BrowserEntry {
   id: string;
@@ -28,4 +43,11 @@ export interface BrowserProjection {
 
 export interface BrowserProjectionPort {
   register(domain: string, projection: BrowserProjection): () => void;
+}
+
+declare module 'cordis' {
+  interface Context {
+    miniPrimitives: BrowserPrimitives;
+    miniProjections: BrowserProjectionPort;
+  }
 }

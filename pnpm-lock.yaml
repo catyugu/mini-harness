@@ -352,9 +352,6 @@ importers:
       '@mini-harness/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@mini-harness/ui-slots':
-        specifier: workspace:*
-        version: link:../ui-slots
       '@mini-harness/web':
         specifier: workspace:*
         version: link:../web

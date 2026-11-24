@@ -30,6 +30,8 @@
     "./session-log": "./session-log.ts",
     "./session-records": "./session-records.ts",
     "./session-store": "./session-store.ts",
+    "./settings-browser": "./settings-browser.ts",
+    "./slots": "./slots.ts",
     "./tool-extensions": "./tool-extensions.ts",
     "./tools": "./tools.ts",
     "./transport": "./transport.ts",
