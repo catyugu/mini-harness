@@ -2,7 +2,10 @@ import type {} from 'cordis';
 import type { BrowserContributionSource } from '@mini-harness/ui-runtime/contribution';
 import type { PluginIcon } from '@mini-harness/plugin-api/descriptor';
 import type { SessionDisplayRecord } from '@mini-harness/sessions/display-record';
-import type { ModelChoice } from '@mini-harness/llm/vocabulary';
+import type { Conversation, ConversationView } from '../shared/api.js';
+import type { ConversationPermission } from '@mini-harness/sessions/identity';
+import type { RunEvent } from '@mini-harness/runs/stream';
+import type { ModelChoice, ThinkingLevel } from '@mini-harness/llm/vocabulary';
 import type { Attachment } from '@mini-harness/input/message';
 import type { MessageContent, ViewMessage } from '@mini-harness/sessions/message';
 import type { RunInfo } from '@mini-harness/sessions/run-state';
@@ -58,13 +61,56 @@ export interface DraftMode {
   title: string;
   text: string;
   images?: Attachment[];
-  submit(input: { text: string; attachments: Attachment[]; removedImages: number[]; model?: ModelChoice; thinkingLevel?: string | null }): Promise<RunInfo>;
+  revision: { sourceEntryId: string; expectedLeafId: string | null };
+}
+
+export interface ConversationSubmission {
+  message: string;
+  attachments?: Attachment[];
+  model?: ModelChoice;
+  thinkingLevel?: ThinkingLevel | null;
+  permission?: ConversationPermission;
+  revision?: DraftMode['revision'] & { removedImages: number[] };
+}
+
+export interface ConversationState {
+  conversation?: Conversation;
+  view?: ConversationView;
+  run?: RunInfo;
+  events: readonly RunEvent[];
+  records: SessionDisplayRecord[];
+  recordMessages: ViewMessage[];
+  queue: ConversationView['queue'];
+  pending: boolean;
+  sending: boolean;
+  cancelling: boolean;
+  status: string;
+  error: boolean;
+}
+
+export interface ConversationController {
+  get(): Readonly<ConversationState>;
+  subscribe(listener: () => void, signal: AbortSignal): void;
+  activate(id: string, revealWorkspace?: boolean): Promise<void>;
+  clear(): void;
+  report(error: Error): void;
+  submit(input: ConversationSubmission): Promise<{ sessionId: string; run: RunInfo }>;
+  queue(input: Omit<ConversationSubmission, 'revision' | 'permission'>, mode?: 'steer' | 'followUp'): Promise<void>;
+  cancel(): Promise<void>;
+  cancelQueue(id?: string): Promise<void>;
+  setPermission(permission: ConversationPermission): Promise<void>;
+  retry(): Promise<void>;
+  compact(): Promise<void>;
 }
 
 declare module 'cordis' {
   interface Context {
+    miniConversation: ConversationController;
     miniComposer: {
       insert(text: string): void;
+      setText(text: string, start?: number, end?: number): void;
+      draft(): Readonly<{ text: string; attachments: readonly Attachment[]; revision?: DraftMode }>;
+      subscribe(listener: (focus: boolean) => void, signal: AbortSignal): void;
       beginDraftMode(mode: DraftMode): () => void;
       command(command: ComposerCommand): () => void;
       completion(trigger: string, complete: Completer): () => void;

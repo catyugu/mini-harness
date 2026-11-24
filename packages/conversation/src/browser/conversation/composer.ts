@@ -1,10 +1,8 @@
-import { slotExtensions } from '@mini-harness/ui-slots/browser/api';
 import { scopedElements } from '@mini-harness/ui-primitives/primitives';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import type { CommandRegistry } from './commands.js';
 import type { ComposerCommand, Completer, DraftMode, Suggestion } from '../composer-api.js';
 import type { Attachment } from '@mini-harness/input/message';
-import type { FrontendApi } from '@mini-harness/ui-runtime/frontend-api';
 export interface ConversationDraft {
   text: string;
   attachments: (Attachment & { originalIndex?: number })[];
@@ -14,11 +12,10 @@ export interface ConversationDraft {
 }
 
 export function createComposer(root: HTMLElement, draft: () => ConversationDraft, report: (error: Error) => void,
-  commands: CommandRegistry, signal: AbortSignal) {
+  commands: CommandRegistry, completions: ReadonlyMap<string, Completer>, signal: AbortSignal) {
   const { element } = scopedElements(root);
   const prompt = element<'textarea'>('prompt'), form = element<'form'>('composer');
   const attachmentList = element('attachments'), suggestions = element('suggestions');
-  const completions = new Map<string, Completer>();
   let completion: AbortController;
   const render = () => {
     const current = draft(), files = current.attachments;
@@ -55,10 +52,10 @@ export function createComposer(root: HTMLElement, draft: () => ConversationDraft
         throw new Error('Attachments exceed 12 MiB per message');
       files.push(...added);
     } catch (error) {
-      if (current === draft()) report(error instanceof Error ? error : new Error(String(error)));
+      if (!signal.aborted && current === draft()) report(error instanceof Error ? error : new Error(String(error)));
     } finally {
       current.loading -= incoming.length;
-      if (current === draft()) render();
+      if (!signal.aborted && current === draft()) render();
     }
   };
   form.addEventListener('dragover', (event) => { event.preventDefault(); form.classList.add('dragging'); });
@@ -253,16 +250,11 @@ export function createComposer(root: HTMLElement, draft: () => ConversationDraft
   return {
     render,
     resetSuggestions: hide,
-    attach(api: FrontendApi) {
+    attachmentButton() {
       const button = document.createElement('button'); button.type = 'button'; button.className = 'icon-button';
-      button.setAttribute('aria-label', 'Attach files'); button.append(icon('attach')); button.onclick = () => input.click(); api.contribute(slotExtensions.register, 'conversation.composer', button);
+      button.setAttribute('aria-label', 'Attach files'); button.append(icon('attach')); button.onclick = () => input.click();
+      return button;
     },
-    refresh,
-    completion(trigger: string, complete: Completer) {
-      if (trigger === '/' || !/^[!#$%&*?@^~]$/.test(trigger) || completions.has(trigger)) throw new Error('Invalid or duplicate completion trigger: ' + trigger);
-      completions.set(trigger, complete);
-      refresh(true);
-      return () => { completions.delete(trigger); refresh(true); };
-    }
+    refresh
   };
 }

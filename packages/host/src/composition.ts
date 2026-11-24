@@ -30,11 +30,11 @@ import { manifest as process_execution } from '@mini-harness/process-execution/m
 import { manifest as tools } from '@mini-harness/tools/manifest';
 import { manifest as navigation } from '@mini-harness/conversation/manifests/navigation';
 import { manifest as workspace_navigation } from '@mini-harness/conversation/manifests/workspace';
-import { manifest as conversation } from '@mini-harness/conversation/manifests/conversation';
+import { manifest as conversation, composerManifest as composer, historyManifest as history } from '@mini-harness/conversation/manifests/conversation';
 
 export const plugins = [
   workspaces_data, sessions_data, workspace_navigation, navigation, model_store, model_catalog, llm, prompt,
-  ui_slots, ui_theme, ui_primitives, ui_layout, workspaces, sessions, agent, runs, settings, models, plugin_management, ui, file_access, files, skills, subagents, shell, session_helper, approvals, approval_data, sandbox, process_execution, tool_policy, tools, conversation
+  ui_slots, ui_theme, ui_primitives, ui_layout, workspaces, sessions, agent, runs, settings, models, plugin_management, ui, file_access, files, skills, subagents, shell, session_helper, approvals, approval_data, sandbox, process_execution, tool_policy, tools, conversation, composer, history
 ];
 
 export const authority = {

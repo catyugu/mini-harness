@@ -1,15 +1,15 @@
-import { layoutExtensions } from '@mini-harness/ui-layout/browser/api';
+import type { Context } from 'cordis';
+import type {} from '@mini-harness/ui-layout/browser/api';
 import type { SessionDisplayRecord } from '@mini-harness/sessions/display-record';
 import type { MessageContent, ViewMessage } from '@mini-harness/sessions/message';
 import type { RunEvent } from '@mini-harness/runs/stream';
 import type { ConversationView } from '../../shared/api.js';
-import type { FrontendApi } from '@mini-harness/ui-runtime/frontend-api';
 import type { ToolView, MessageAction, MessageActionContext } from '../composer-api.js';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { renderMarkdown, markdownSource } from '@mini-harness/ui-primitives/markdown';
 import { button } from '@mini-harness/ui-primitives/primitives';
 
-export function createMessageView(api: Pick<FrontendApi, 'contribute' | 'signal'>, messages: HTMLElement,
+export function createMessageView(dialogs: Context['miniDialogs'], signal: AbortSignal, messages: HTMLElement,
   extensions: { render(tool: ToolView, action?: boolean): HTMLElement | undefined; messageActions(): MessageAction[] },
   current: () => { sessionId?: string; leafId?: string | null }, retryLast: () => void) {
 const toolItems = new WeakMap<HTMLDetailsElement, Parameters<typeof toolCard>[0]>();
@@ -32,7 +32,8 @@ const filename = document.createElement('span');
 const actualSize = button('Actual size', 'quiet');
 caption.append(filename, actualSize);
 preview.append(previewViewport, caption);
-const previewDialog = api.contribute(layoutExtensions.dialog, 'Image preview', preview);
+const { node: previewDialog, dispose } = dialogs.create('Image preview', preview);
+signal.addEventListener('abort', dispose, { once: true });
 previewDialog.classList.add('message-image-dialog');
 
 function setActualSize(enabled: boolean) {
@@ -45,7 +46,7 @@ function setActualSize(enabled: boolean) {
 actualSize.onclick = () => setActualSize(actualSize.getAttribute('aria-pressed') !== 'true');
 previewDialog.addEventListener('close', () => {
   if (!previewDialog.open) previewImage.removeAttribute('src');
-}, { signal: api.signal });
+}, { signal: signal });
 
 function openImage(thumbnail: HTMLImageElement) {
   previewImage.alt = filename.textContent = thumbnail.alt;
