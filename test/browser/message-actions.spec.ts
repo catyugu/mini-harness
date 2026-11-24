@@ -3,6 +3,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { readJson, writeJson } from '@mini-harness/platform/json';
 import { browserTest as test, chooseModel, expectInViewport } from '../support/browser.js';
+import { writePlugin } from '../support/plugin-fixture.js';
 
 test('copy, preview and revise a message with its image, and release editing drafts by owner', async ({ page, launch }) => {
   const { host, mock } = await launch({
@@ -29,8 +30,31 @@ test('copy, preview and revise a message with its image, and release editing dra
             api.contribute(slotExtensions.register, 'sidebar.actions', control);
           };`);
       }
+      const records = writePlugin(paths.plugins, 'record-writer', { inject: ['harnessSessions'], browserInject: ['miniConversation', 'miniMessages'] }, `
+        export default (_ctx, api) => {
+          const records = api.contribute(sessionExtensions.records);
+          api.registerRoute('POST', '/record', async ({ body }) => {
+            const { id, visible } = await body();
+            return records.append(id, 'fixture', visible ? { title: 'Saved record' } : undefined);
+          });
+        };`);
+      writeFileSync(join(records, 'web.js'), `import { conversationExtensions } from '/packages/ui-runtime/plugin-sdk.js';
+        export default ({ miniConversation }, api) => {
+          const update = () => {
+            const { session, history } = miniConversation.get();
+            document.body.dataset.recordSession = session?.id ?? '';
+            document.body.dataset.recordLeaf = history.leafId ?? '';
+          };
+          miniConversation.subscribe(['session', 'history'], update, api.signal);
+          update();
+          api.contribute(conversationExtensions.record, 'record-writer', (_record, { signal }) => {
+            document.body.dataset.recordReleased = 'no';
+            signal.addEventListener('abort', () => { document.body.dataset.recordReleased = 'yes'; }, { once: true });
+            throw new Error('fixture record rendering failure');
+          });
+        };`);
       const settings = readJson<Record<string, unknown>>(paths.settings, {});
-      writeJson(paths.settings, { ...settings, plugins: { 'old-editor': true, 'new-editor': true } });
+      writeJson(paths.settings, { ...settings, plugins: { 'old-editor': true, 'new-editor': true, 'record-writer': true } });
     }
   });
   const mobile = { width: 390, height: 844 };
@@ -76,6 +100,20 @@ test('copy, preview and revise a message with its image, and release editing dra
   await expect(preview).toBeHidden();
   await expect(thumbnail).toBeFocused();
 
+  await expect(page.getByLabel('Latest run')).toHaveAttribute('data-state', 'completed');
+  const body = page.locator('body');
+  const sessionId = await body.getAttribute('data-record-session');
+  expect(sessionId).toBeTruthy();
+  for (const visible of [true, false]) {
+    const response = await page.request.post(host.url + '/api/extensions/record-writer/record', {
+      headers: { Authorization: 'Bearer ' + host.token }, data: { id: sessionId, visible }
+    });
+    expect(response.ok()).toBe(true);
+    const leaf: string = await response.json();
+    await expect(body).toHaveAttribute('data-record-leaf', leaf);
+    await expect(page.getByText('Saved record', { exact: true })).toBeVisible();
+    await expect(body).toHaveAttribute('data-record-released', 'yes');
+  }
   const edit = user.getByRole('button', { name: 'Edit message' });
   await edit.click();
   await expect(prompt).toBeFocused();

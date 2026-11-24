@@ -49,7 +49,6 @@ export function createConversationController(ctx: Context, api: FrontendApi): Co
   function display(item: ConversationView, signal: AbortSignal, revealWorkspace: boolean) {
     const { run, messages, records, leafId, partial = '', tools, queue, ...session } = item;
     queueRevision++;
-    branchRevision++;
     update({ session, run, history: { messages, records, leafId }, partial, tools, queue });
     selection.selectConversation(item, revealWorkspace);
     status(item.logError ?? '', Boolean(item.logError));
@@ -61,7 +60,18 @@ export function createConversationController(ctx: Context, api: FrontendApi): Co
     update({ ...patch, history: { ...history, leafId: message.id ?? history.leafId, messages: [...history.messages, message] } });
   }
 
+  async function refreshBranch() {
+    const id = active(), signal = visit.signal, revision = branchRevision;
+    if (!id || isRunning(state.run) || state.interaction.operation) return;
+    try {
+      const item = await readConversation(id, signal);
+      if (!signal.aborted && revision === branchRevision && !isRunning(state.run) && !state.interaction.operation)
+        display(item, signal, false);
+    } catch (error) { if (!signal.aborted && revision === branchRevision) throw error; }
+  }
+
   async function observe(item: ConversationView, signal: AbortSignal) {
+    let terminal: RunInfo | undefined, revision = branchRevision;
     status(item.run?.state === 'queued' ? 'Queued…' : 'Thinking…');
     function accept(event: RunEvent) {
       if (signal.aborted) return;
@@ -92,22 +102,39 @@ export function createConversationController(ctx: Context, api: FrontendApi): Co
           status(event.state === 'approval' ? 'Waiting for approval…' : event.state === 'running' ? 'Running ' + event.name + '…' : 'Thinking…');
           break;
         }
+        case 'branch':
+          update({ history: { ...state.history, records: event.records, leafId: event.leafId } });
+          break;
         case 'snapshot':
-          update({ run: event.run, history: { ...state.history, messages: event.messages, records: event.records, leafId: event.leafId },
+          if (!isRunning(event.run)) { terminal = event.run; revision = branchRevision; }
+          update({ run: terminal ? state.run : event.run, history: { ...state.history, messages: event.messages, records: event.records, leafId: event.leafId },
             partial: event.partial ?? '', tools: event.tools ?? [],
             session: state.session && { ...state.session, model: event.model, thinkingLevel: event.thinkingLevel } });
           if (!isRunning(event.run)) interact({ cancelling: false, status: '' });
           break;
         case 'run':
-          update({ run: event.run, ...(!isRunning(event.run) ? { partial: '', tools: [] } : {}) });
-          if (!isRunning(event.run)) interact({ cancelling: false, status: '' });
+          if (isRunning(event.run)) update({ run: event.run });
+          else {
+            // Keep observation active until the final authoritative conversation snapshot arrives.
+            terminal = event.run; revision = branchRevision;
+            update({ partial: '', tools: [] });
+            interact({ cancelling: false, status: '' });
+          }
           break;
       }
     }
     try {
       const latest = await observeRun(item, signal, accept, () => status('Reconnecting…'));
-      if (latest && !signal.aborted) display(latest, signal, false);
-    } catch (error) { if (!signal.aborted) report(error instanceof Error ? error : new Error(String(error))); }
+      if (latest && !signal.aborted) {
+        display(latest, signal, false);
+        if (!isRunning(latest.run) && revision !== branchRevision) await refreshBranch();
+      }
+    } catch (error) {
+      if (!signal.aborted) {
+        if (terminal) update({ run: terminal });
+        report(error instanceof Error ? error : new Error(String(error)));
+      }
+    }
   }
 
   async function activate(id: string, revealWorkspace = true) {
@@ -115,13 +142,16 @@ export function createConversationController(ctx: Context, api: FrontendApi): Co
     const selected = sessions.get().find((entry) => entry.id === id);
     interact({ operation: 'open', status: 'Loading conversation…', error: false, cancelling: false });
     if (id !== active()) select(selected, revealWorkspace);
+    const revision = branchRevision;
     try {
       const item = await readConversation(id, signal);
       if (signal.aborted) return false;
       display(item, signal, revealWorkspace);
-      return true;
+      interact({ operation: undefined });
+      if (!isRunning(item.run) && revision !== branchRevision) await refreshBranch();
+      return !signal.aborted;
     } catch (error) { if (!signal.aborted) report(error instanceof Error ? error : new Error(String(error))); return false; }
-    finally { if (!signal.aborted) interact({ operation: undefined }); }
+    finally { if (!signal.aborted && state.interaction.operation === 'open') interact({ operation: undefined }); }
   }
 
   async function submit(input: ConversationSubmission, created?: (sessionId: string) => void) {
@@ -162,13 +192,10 @@ export function createConversationController(ctx: Context, api: FrontendApi): Co
 
   api.onDispose(ctx.miniProjections.register('conversation-records', {
     async sync(_revision, reconnect, changedId) {
-      const id = active(), signal = visit.signal;
+      const id = active();
       if (!id || (!reconnect && changedId && id !== changedId)) return;
-      const revision = ++branchRevision;
-      try {
-        const branch = await api.request<Pick<ConversationView, 'records' | 'leafId'>>(path(id, '/records'), { signal });
-        if (!signal.aborted && revision === branchRevision) update({ history: { ...state.history, ...branch } });
-      } catch (error) { if (!signal.aborted && revision === branchRevision) throw error; }
+      branchRevision++;
+      await refreshBranch();
     }
   }));
   api.onDispose(ctx.miniProjections.register('queue', {

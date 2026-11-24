@@ -10,7 +10,7 @@ import type { Attachment, InputSource } from '@mini-harness/input/message';
 import type { CapabilityObservation } from '@mini-harness/kernel/observations';
 import { RunInterrupted } from '@mini-harness/agent/stream';
 import type { StreamEvent, RunEvent } from './stream.js';
-import type { RunInfo } from '@mini-harness/sessions/run-state';
+import { isRunning, type RunInfo } from '@mini-harness/sessions/run-state';
 import { RunEvents } from './events.js';
 import type { ModelPreference } from '@mini-harness/models/api';
 import type { ExecutionInput } from './execution.js';
@@ -63,6 +63,13 @@ export class Runs implements RunPort {
   signal(id: string, signal?: AbortSignal) {
     const owner = this.work.get(id)?.controller.signal;
     return owner && signal ? AbortSignal.any([owner, signal]) : owner ?? signal;
+  }
+
+  branchChanged(id: string) {
+    const events = this.work.get(id)?.events;
+    if (!events || !isRunning(events.info)) return;
+    const { records, leafId } = this.registry.log(id).projection();
+    events.publish({ type: 'branch', records, leafId });
   }
 
   private reserve(id: string): Activity {

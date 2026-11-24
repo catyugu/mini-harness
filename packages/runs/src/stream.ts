@@ -4,6 +4,7 @@ import type { RunInfo } from '@mini-harness/sessions/run-state';
 
 export type StreamEvent = AgentEvent
   | { type: 'run'; run: RunInfo }
+  | ({ type: 'branch' } & Pick<SessionProjection, 'records' | 'leafId'>)
   | ({ type: 'snapshot'; partial?: string; tools?: Extract<StreamEvent, { type: 'tool' }>[]; run: RunInfo }
     & Pick<SessionProjection, 'messages' | 'records' | 'model' | 'thinkingLevel' | 'leafId'>);
 

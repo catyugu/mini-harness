@@ -43,13 +43,11 @@ export function createComposerModel(ctx: Context, api: FrontendApi): ComposerMod
   const draft = () => entry().edit ?? entry().input;
   let snapshot: { owner: Draft; version: number; value: ComposerDraft } | undefined;
   const change = (focus = false) => changes.dispatchEvent(new CustomEvent('change', { detail: focus }));
-  function edited(current: Draft, focus = false, inputChanged = true) {
+  function edited(current: Draft, focus = false, inputChanged = true, owner = entry()) {
     current.version++;
     if (inputChanged) {
       delete current.failedRun;
-      for (const owner of drafts.values()) {
-        if (owner.submission?.draft === current) owner.submission.retryable = false;
-      }
+      if (owner.submission?.draft === current) owner.submission.retryable = false;
     }
     if (current === draft()) change(focus);
   }
@@ -173,7 +171,7 @@ export function createComposerModel(ctx: Context, api: FrontendApi): ComposerMod
     cursor() { const current = draft(); return current.cursor?.start ?? current.text.length; },
     async addFiles(incoming) {
       if (!incoming.length) return;
-      const current = draft();
+      const owner = entry(), current = owner.edit ?? owner.input;
       if (current.attachments.length + current.loading + incoming.length > 8) throw new Error('Attach at most eight files');
       current.loading += incoming.length;
       edited(current);
@@ -195,7 +193,7 @@ export function createComposerModel(ctx: Context, api: FrontendApi): ComposerMod
         current.attachments.push(...added);
       } finally {
         current.loading -= incoming.length;
-        if (!api.signal.aborted) edited(current);
+        if (!api.signal.aborted) edited(current, false, true, owner);
       }
     },
     removeAttachment(index) {

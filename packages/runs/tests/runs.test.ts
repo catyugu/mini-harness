@@ -1,3 +1,4 @@
+import { expectPresent } from '../../../test/support/required.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs, { readFileSync, rmSync } from 'node:fs';
@@ -47,7 +48,17 @@ test('HTTP disconnect keeps the native run alive and reconnect replays from a cu
   assert.equal(app.runtime.plugins.ctx.harnessRuns.active(item.id), true);
   const status = await (await fetch(base + '/api/sessions/' + item.id + '/runs', { headers })).json();
   assert.equal(status.run.state, 'running');
-  const pending = app.runtime.plugins.ctx.harnessRuns.completion(item.id);
+  const runs = app.runtime.plugins.ctx.harnessRuns;
+  const pending = runs.completion(item.id);
+  const observed: RunEvent[] = [];
+  const detach = runs.watch(item.id, runId, status.run.sequence, (event) => observed.push(event));
+  const record = app.runtime.plugins.ctx.harnessRegistry.log(item.id).append({
+    type: 'plugin-record', owner: { pluginId: 'fixture', instanceId: 'fixture' }, data: 'private record'
+  });
+  const branch = observed.find((event) => event.type === 'branch');
+  assert.equal(branch?.leafId, record.id);
+  assert.deepEqual(branch?.records, []);
+  detach();
   const replay = fetch(base + '/api/sessions/' + item.id + '/events?run=' + status.run.id + '&after=' + cursor, { headers });
   held.release();
   await pending;
