@@ -12,6 +12,8 @@ function discover(directory: string): string[] {
 }
 const tests = [...discover('dist/test'), ...discover('dist/packages')].sort();
 if (!tests.length) throw new Error('No Node tests found');
-const result = spawnSync(process.execPath, ['--test', '--test-concurrency=4', ...tests], { stdio: 'inherit' });
+// npm and detached CLI fixtures also start subprocesses on the Windows runner.
+const concurrency = process.platform === 'win32' ? '2' : '4';
+const result = spawnSync(process.execPath, ['--test', '--test-concurrency=' + concurrency, ...tests], { stdio: 'inherit' });
 if (result.error) throw result.error;
 process.exit(result.status ?? 1);
