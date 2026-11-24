@@ -1,3 +1,6 @@
+import { fixture as httpFixture } from '../../../test/support/api-fixture.js';
+import { AgentRegistry } from '../registry.js';
+import { prepareInput } from '@mini-harness/contracts/input-node';
 import type { ThinkingLevel } from '@mini-harness/contracts/agent';
 import { expectPresent } from '../../../test/support/required.js';
 import test, { type TestContext } from 'node:test';
@@ -296,4 +299,54 @@ test('text models see historical placeholders in the request and audit snapshot,
   const previous = log.projection();
   await assert.rejects(agent.prompt(record, 'New image', () => {}, { signal, choice, images: [image] }), /does not support image/);
   assert.deepEqual(log.projection(), previous);
+});
+
+test('native compaction reduces context and preserves message identities and history', async (t) => {
+  const { app, mock, request } = await httpFixture(t);
+  await app.runtime.configuration.update({ pluginConfig: { 'core:agent': { autoCompact: false } } });
+  const { body: session } = await request('/sessions', 'POST', {});
+  const compact = () => request('/sessions/' + session.id + '/compact', 'POST');
+  const small = await compact();
+  assert.equal(small.status, 400);
+  assert.match(small.body.error, /Nothing to compact/);
+  const log = app.runtime.registry.log(session.id);
+  const image = { type: 'image' as const, mimeType: 'image/png', data: 'iVBORw0KGgo=' };
+  log.append({ type: 'message', message: { role: 'user', content: [image], timestamp: 1 } });
+  for (let turn = 0; turn < 6; turn++) await app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Turn ' + turn + ' ' + 'more context '.repeat(100));
+  const before = app.runtime.plugins.ctx.harnessAgent.messages(session.id);
+  const compacted = await compact();
+  assert.equal(compacted.status, 200, JSON.stringify(compacted.body));
+  assert.equal(mock.requests.length, 7);
+  assert.match(JSON.stringify(mock.requests.at(-1)), /Image unavailable/);
+  assert.doesNotMatch(JSON.stringify(mock.requests.at(-1)), /iVBORw0KGgo=/);
+  assert.ok(log.entries().some((entry) => entry.type === 'compaction'));
+  assert.deepEqual(app.runtime.plugins.ctx.harnessAgent.messages(session.id), before);
+  assert.equal(log.projection().contextMessages.length, 5);
+  assert.match(JSON.stringify(log.projection().contextMessages[0]), /Summary of earlier conversation/);
+  assert.equal(app.runtime.plugins.ctx.harnessAgent.hasPending, false);
+});
+
+test('attachments enforce encoding, format and byte limits without creating files', () => {
+  const png = 'iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAFElEQVR4nGPUCIhigAEmBiSAmwMAKdYA2gR3lpgAAAAASUVORK5CYII=';
+  const prepared = prepareInput('', [{ name: 'one.png', mimeType: 'image/png', data: png }, { name: 'notes.md', mimeType: 'text/plain', data: Buffer.from('An attached note').toString('base64') }]);
+  assert.deepEqual(prepared.input, { userText: '', attachments: [
+    { name: 'one.png', mimeType: 'image/png' }, { name: 'notes.md', mimeType: 'text/plain' }
+  ] });
+  assert.equal(prepared.images.length, 1); assert.match(prepared.text, /An attached note/);
+  assert.throws(() => prepareInput('a', [{ name: 'fake.png', mimeType: 'image/png', data: 'eA==' }]), /Invalid image/);
+  assert.throws(() => prepareInput('a', [{ name: 'b', mimeType: 'text/plain', data: '!!!' }]), /Invalid attachment/);
+  assert.throws(() => prepareInput('a', [{ name: 'b', mimeType: 'application/pdf', data: Buffer.from([0, 1, 2]).toString('base64') }]), /UTF-8/);
+  assert.throws(() => prepareInput('a', new Array(9).fill({})), /eight/);
+});
+
+test('concurrent scope preparation shares work and releases a failed reservation', async () => {
+  const registry = new AgentRegistry();
+  let calls = 0;
+  const prepare = async () => { calls++; throw new Error('setup failed'); };
+  const result = await Promise.allSettled([registry.prepare('one', prepare), registry.prepare('one', prepare)]);
+  assert.equal(calls, 1);
+  assert.ok(result.every(({ status }) => status === 'rejected'));
+  assert.equal(registry.hasPending, false);
+  await registry.prepare('one', async () => { calls++; });
+  assert.equal(calls, 2);
 });

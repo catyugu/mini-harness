@@ -4,6 +4,7 @@ import { appendFileSync, mkdtempSync, rmSync, existsSync, writeFileSync, realpat
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getPaths } from '@mini-harness/platform/paths';
+import { loadCatalog } from '../catalog.js';
 import { SessionRegistry } from '../registry.js';
 import { WorkspaceCatalog } from '@mini-harness/workspaces/catalog';
 
@@ -98,4 +99,39 @@ test('a corrupt log is isolated, remains deletable and never creates a log for a
   assert.deepEqual(await restored.delete([damaged.id]), [damaged.id]);
   assert.equal(existsSync(invalid), false);
   assert.deepEqual(restored.diagnostics(), []);
+});
+
+const record = (workspaceId: string, overrides: Record<string, unknown> = {}) => ({
+  id: '11111111-1111-4111-8111-111111111111', workspaceId, parentId: null,
+  title: 'Conversation', titleSource: 'manual', createdAt: '2026-01-01T00:00:00.000Z', ...overrides
+});
+
+test('catalog startup rejects records that cannot resolve a workspace or ancestry', (t) => {
+  const { paths, registry } = fixture(t);
+  const { workspaces } = registry;
+  registry.dispose();
+  const workspace = workspaces.defaultId;
+  assert.ok(workspace);
+  writeFileSync(paths.registry, JSON.stringify({ sessions: [record('f'.repeat(32))] }));
+  assert.throws(() => loadCatalog(paths, workspaces), /Workspace not found/);
+  writeFileSync(paths.registry, JSON.stringify({ sessions: [record(workspace), record(workspace)] }));
+  assert.throws(() => loadCatalog(paths, workspaces), /Invalid conversation index/);
+  writeFileSync(paths.registry, JSON.stringify({ sessions: [record(workspace, {
+    id: '22222222-2222-4222-8222-222222222222', parentId: '33333333-3333-4333-8333-333333333333'
+  })] }));
+  assert.throws(() => loadCatalog(paths, workspaces), /Invalid conversation ancestry/);
+});
+
+test('a valid catalog keeps the deletion journal and rejects a partial one', (t) => {
+  const { paths, registry } = fixture(t);
+  const { workspaces } = registry;
+  registry.dispose();
+  const workspace = workspaces.defaultId;
+  assert.ok(workspace);
+  const session = record(workspace);
+  const pendingDelete = [{ id: session.id, workspaceId: workspace }];
+  writeFileSync(paths.registry, JSON.stringify({ sessions: [], pendingDelete }));
+  assert.deepEqual(loadCatalog(paths, workspaces), { sessions: [], pendingDelete });
+  writeFileSync(paths.registry, JSON.stringify({ sessions: [], pendingDelete: { id: session.id } }));
+  assert.throws(() => loadCatalog(paths, workspaces), /Invalid deletion journal/);
 });

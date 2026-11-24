@@ -1,12 +1,27 @@
+import { tmpdir } from 'node:os';
+import { fixture, waitUntil } from '../support/api-fixture.js';
+import { writePlugin } from '../support/plugin-fixture.js';
 import { expectPresent } from '../support/required.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { MiniHarnessRuntime } from '@mini-harness/host/application';
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
-import { mergeSettings, readSettings } from '@mini-harness/settings/config';
+import { DEFAULTS, mergeSettings, readSettings } from '@mini-harness/settings/config';
 import { writeJson } from '@mini-harness/platform/json';
+
+import { Context } from 'cordis';
+import type { SessionRecord } from '@mini-harness/contracts/conversation';
+import type { PluginDescriptor } from '@mini-harness/contracts/plugins';
+import { PluginHost } from '@mini-harness/plugins/manager';
+
+declare module '../../packages/contracts/plugin-sdk.js' {
+  interface ServiceMap {
+    greeting: string;
+    extra: string;
+  }
+}
 
 test('an installed Cordis plugin can use services, configure a tool, and release resources', async (t) => {
   const mock = await createMockProvider();
@@ -263,4 +278,140 @@ test('an optional plugin that fails at startup reports its state without blockin
   assert.equal(restarted.settings.pluginConfig['core:theme'].appearance, 'dark');
   await restarted.configuration.update({ plugins: { 'fails-to-start': false } });
   assert.equal(expectPresent(restarted.plugins.metadata().find(({ id }) => id === status.id), 'disabled plugin metadata').state, 'disabled');
+});
+
+test('unloading a route signals an active request and waits for its cleanup', async (t) => {
+  const { paths, root, request } = await fixture(t);
+  const entered = join(root, 'entered');
+  const drained = join(root, 'drained');
+  writePlugin(paths.plugins, 'drain', { inject: ['harnessRoutes'] }, `
+    import { writeFileSync } from 'node:fs';
+    export default (_ctx, api) => api.registerRoute('GET', '/wait', async ({ signal }) => {
+      writeFileSync(${JSON.stringify(entered)}, 'ready');
+      await new Promise((done) => signal.addEventListener('abort', done, { once: true }));
+      await new Promise((done) => setImmediate(done));
+      writeFileSync(${JSON.stringify(drained)}, 'done');
+    });`);
+  const toggle = (active: boolean) => request('/settings', 'PATCH', { plugins: { drain: active } });
+  assert.equal((await toggle(true)).status, 200);
+  const current = request('/extensions/drain/wait');
+  await waitUntil(() => existsSync(entered), Boolean);
+  assert.equal((await toggle(false)).status, 200);
+  assert.equal(readFileSync(drained, 'utf8'), 'done');
+  assert.equal((await current).status, 400);
+  assert.equal((await request('/extensions/drain/wait')).status, 404);
+});
+
+test('live scoped providers isolate siblings, restore inheritance and roll back failed setup', async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'mini-live-scopes-'));
+  const workspaceId = 'a'.repeat(32), otherWorkspace = 'b'.repeat(32);
+  const records = new Map<string, SessionRecord>([
+    ['parent', { id: 'parent', workspaceId, parentId: null } as SessionRecord],
+    ['child', { id: 'child', workspaceId, parentId: 'parent' } as SessionRecord],
+    ['sibling', { id: 'sibling', workspaceId, parentId: null } as SessionRecord],
+    ['independent', { id: 'independent', workspaceId: otherWorkspace, parentId: null } as SessionRecord]
+  ]);
+  const released: string[] = [];
+  const builtins: PluginDescriptor[] = [
+    { id: 'global', scope: 'application', title: 'Global', description: '', required: true,
+      provides: ['greeting', 'extra'], setup(_ctx, api) { api.provide('greeting', 'global'); api.provide('extra', 'retained'); } },
+    { id: 'workspace', scope: 'workspace', title: 'Workspace', description: '', provides: ['greeting'],
+      configSchema: { type: 'object', properties: { value: { type: 'string' } }, required: ['value'] },
+      setup(_ctx, api) { api.provide('greeting', String(api.config.value)); } },
+    { id: 'layer', scope: 'session', title: 'Layer', description: '', provides: ['greeting'],
+      setup(_ctx, api) {
+        api.onDispose(() => { released.push(String(api.config.value)); });
+        if (api.config.fail) throw new Error('Scoped setup failed');
+        api.provide('greeting', String(api.config.value));
+      } }
+  ];
+  const workspaceKey = 'workspace:' + workspaceId;
+  const workspace = { plugins: { workspace: true }, providers: { greeting: 'workspace' }, pluginConfig: { workspace: { value: 'workspace' } } };
+  let settings: typeof DEFAULTS = { ...structuredClone(DEFAULTS), scopes: {
+    [workspaceKey]: { ...workspace, pluginConfig: { workspace: { value: 42 } } }
+  } };
+  const ctx = new Context();
+  ctx.provide('authority', {});
+  const host = new PluginHost(ctx, directory, builtins, ['authority'], () => settings,
+    (id) => records.get(id));
+  t.after(async () => { await host.close(); rmSync(directory, { recursive: true, force: true }); });
+  await host.start(settings);
+  assert.equal(host.metadata().find(({ id }) => id === 'workspace')?.state, 'failed');
+  assert.throws(() => host.require('sibling', 'greeting'), /Invalid configuration/);
+  assert.equal(host.require('independent', 'greeting'), 'global');
+  const configure = (scopes: typeof settings.scopes) => {
+    const next = { ...settings, scopes };
+    return host.configure(next, () => { settings = next; });
+  };
+  const parent = { plugins: { layer: true }, providers: { greeting: 'layer' }, pluginConfig: { layer: { value: 'parent' } } };
+  const child = { plugins: { layer: true }, providers: { greeting: 'layer' }, pluginConfig: { layer: { value: 'child' } } };
+  const broken = { ...parent, pluginConfig: { layer: { fail: true } } };
+  await configure({ [workspaceKey]: workspace, 'session:parent': parent, 'session:child': child, 'session:sibling': broken });
+  assert.equal(host.metadata().find(({ id }) => id === 'layer')?.state, 'inactive');
+  await host.prepare('child');
+  assert.equal(host.metadata().find(({ id }) => id === 'layer')?.state, 'partial', 'unprepared peer scopes remain visible');
+  assert.equal(host.require('parent', 'greeting'), 'parent');
+  assert.equal(host.require('child', 'greeting'), 'child');
+  await host.prepare('sibling');
+  assert.throws(() => host.require('sibling', 'greeting'), /Scoped setup failed/);
+  assert.equal(host.require('independent', 'greeting'), 'global');
+  assert.equal(host.metadata().find(({ id }) => id === 'layer')?.state, 'partial');
+  await configure({ ...settings.scopes, 'session:sibling': { ...parent, pluginConfig: { layer: { value: 'fixed' } } } });
+  assert.equal(host.require('sibling', 'greeting'), 'fixed');
+  assert.equal(host.metadata().find(({ id }) => id === 'layer')?.state, 'ready');
+  assert.equal(host.require('child', 'extra'), 'retained');
+  await assert.rejects(configure({ ...settings.scopes, 'session:parent': {
+    ...parent, pluginConfig: { layer: { value: 'broken', fail: true } }
+  } }), /Scoped setup failed/);
+  assert.equal(host.require('child', 'greeting'), 'child');
+  assert.equal(host.require('parent', 'greeting'), 'parent');
+  assert.ok(released.includes('broken'));
+
+  // Keep the scope alive for policy but remove its service; a stale isolate must not mask the parent.
+  await configure({ 'session:parent': parent, 'session:child': { disabledTools: ['shell'] } });
+  assert.equal(host.require('child', 'greeting'), 'parent');
+
+  // Adding a configured ancestor of an already mounted child must mount that ancestor immediately.
+  await configure({ [workspaceKey]: workspace,
+    'session:child': { disabledTools: ['shell'] } });
+  assert.equal(host.require('child', 'greeting'), 'workspace');
+  assert.equal(host.require('sibling', 'greeting'), 'workspace');
+  assert.equal(ctx.get('greeting'), 'global');
+  await configure({});
+  assert.equal(host.require('child', 'greeting'), 'global');
+});
+
+test('configuration validation resolves the staged scope provider and rejects invalid writes atomically', async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'mini-validate-scope-'));
+  const workspaceId = 'a'.repeat(32);
+  const key = 'workspace:' + workspaceId;
+  let settings = structuredClone(DEFAULTS);
+  const builtins: PluginDescriptor[] = [
+    { id: 'global', scope: 'application', title: 'Default', description: '', required: true, provides: ['greeting'],
+      setup(_ctx, api) { api.provide('greeting', 'global'); } },
+    { id: 'local', scope: 'workspace', title: 'Local', description: '', provides: ['greeting'],
+      setup(_ctx, api) { api.provide('greeting', 'local'); } },
+    { id: 'consumer', scope: 'workspace', title: 'Consumer', description: '', inject: ['greeting'],
+      configSchema: { type: 'object', properties: { expected: { type: 'string' } }, required: ['expected'] },
+      validateConfig(config, { operation, service }) {
+        if (config.expected !== service('greeting')) throw new Error('Wrong scoped greeting during ' + operation);
+      } }
+  ];
+  const host = new PluginHost(new Context(), directory, builtins, [], () => settings, () => undefined);
+  t.after(async () => { await host.close(); rmSync(directory, { recursive: true, force: true }); });
+  await host.start(settings);
+  const configure = (expected: string) => {
+    const next = { ...settings, scopes: { [key]: {
+      plugins: { consumer: true, local: true },
+      providers: { greeting: 'local' },
+      pluginConfig: { consumer: { expected } }
+    } } };
+    return host.configure(next, () => { settings = next; });
+  };
+  await configure('local');
+  assert.equal(host.metadata().find(({ id }) => id === 'consumer')?.state, 'ready');
+  const committed = settings;
+  await assert.rejects(configure('global'), /Wrong scoped greeting/);
+  assert.strictEqual(settings, committed);
+  assert.equal(host.metadata().find(({ id }) => id === 'consumer')?.state, 'ready');
 });

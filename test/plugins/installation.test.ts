@@ -1,9 +1,10 @@
+import { fixture, waitUntil } from '../support/api-fixture.js';
 import { expectPresent } from '../support/required.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile as exec } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
@@ -157,4 +158,90 @@ test('npm registry installation resolves dependencies, updates atomically and se
   assert.match(invalid.error, /outside its installation directory/);
   assert.equal((await request('/plugins/' + id, 'DELETE')).status, 200);
   assert.ok(!readdirSync(paths.plugins).includes(id));
+});
+
+test('local and browser-only plugins install disabled, mount when enabled and uninstall permanently', async (t) => {
+  const { paths, request, base } = await fixture(t);
+  const route = '/extensions/gui-plugin/echo';
+  const bundle = { id: 'gui-plugin', files: [
+    { name: 'plugin.json', content: JSON.stringify({ inject: ['harnessRoutes'] }) },
+    { name: 'plugin.js', content: `export default function(ctx, api) {
+      api.registerRoute('POST', '/echo', async ({ body }) => ({ echo: await body() }));
+      if (api.config.fail) throw new Error('Setup failed after registering a route');
+    }` },
+    { name: 'web.js', content: 'export default function(_ctx, api) {}' }
+  ] };
+  assert.equal((await request('/plugins/install', 'POST', bundle)).status, 201);
+  assert.ok(!(await request('/bootstrap')).body.ui.some((entry: { id: string }) => entry.id === bundle.id));
+  assert.equal((await request(route, 'POST', { value: 1 })).status, 404);
+  assert.equal((await request('/settings', 'PATCH', { plugins: { 'gui-plugin': true } })).status, 200);
+  const browser = (await request('/bootstrap')).body.ui.find((entry: { id: string }) => entry.id === bundle.id).browser;
+  assert.match(await (await fetch(base + browser)).text(), /function/);
+  assert.deepEqual((await request(route, 'POST', { value: 1 })).body, { echo: { value: 1 } });
+  assert.equal((await request('/settings', 'PATCH', { pluginConfig: { 'gui-plugin': { fail: true } } })).status, 500);
+  assert.deepEqual((await request(route, 'POST', { value: 2 })).body, { echo: { value: 2 } });
+  assert.equal((await request('/plugins/gui-plugin', 'DELETE')).status, 409);
+  await request('/settings', 'PATCH', { plugins: { 'gui-plugin': false } });
+  assert.equal((await request(route, 'POST', { value: 2 })).status, 404);
+  assert.equal((await request('/plugins/gui-plugin', 'DELETE')).status, 200);
+  assert.equal(existsSync(join(paths.plugins, 'gui-plugin')), false);
+  const after = (await request('/settings')).body;
+  assert.equal(after.plugins['gui-plugin'], undefined);
+  assert.equal(after.pluginConfig['gui-plugin'], undefined);
+  assert.equal((await request('/plugins/install', 'POST', { ...bundle, files: [{ name: '../escape.js', content: '' }] })).status, 400);
+  const installWithManifest = (content: string) => request('/plugins/install', 'POST', {
+    ...bundle, files: [{ name: 'plugin.json', content }, ...bundle.files.slice(1)]
+  });
+  assert.match((await installWithManifest('[]')).body.error, /Expected an object in plugin.json/);
+  assert.match((await installWithManifest('{"requires":"invalid"}')).body.error, /Invalid plugin requires/);
+  assert.match((await request('/plugins/install', 'POST', { ...bundle, files: bundle.files.slice(1) })).body.error, /Include plugin.json/);
+  assert.equal((await request('/bootstrap')).status, 200);
+  assert.equal(existsSync(join(paths.plugins, 'gui-plugin')), false);
+
+  assert.equal((await request('/plugins/install', 'POST', {
+    id: 'browser-only', files: [{ name: 'plugin.json', content: JSON.stringify({ browserInject: ['miniComposer'] }) }, { name: 'web.js', content: 'import { conversationExtensions } from "/packages/ui-runtime/plugin-sdk.js"; export default (_ctx, api) => { api.contribute(conversationExtensions.command, {name:"browser-only",description:"Test"}); };' }]
+  })).status, 201);
+  assert.ok(!(await request('/bootstrap')).body.ui.some((entry: { id: string }) => entry.id === 'browser-only'));
+  assert.equal((await request('/settings', 'PATCH', { plugins: { 'browser-only': true } })).status, 200);
+  const webEntry = (await request('/bootstrap')).body.ui.find((entry: { id: string }) => entry.id === 'browser-only').browser;
+  assert.match(await (await fetch(base + webEntry)).text(), /browser-only/);
+  assert.equal((await request('/settings', 'PATCH', { plugins: { 'browser-only': false } })).status, 200);
+  assert.equal((await fetch(base + webEntry)).status, 404);
+  assert.equal((await request('/plugins/browser-only', 'DELETE')).status, 200);
+  const settings = (await request('/settings')).body;
+  assert.equal(settings.plugins['browser-only'], undefined);
+  assert.equal(settings.pluginConfig['browser-only'], undefined);
+});
+
+test('plugin file writes wait for an in-flight plugin configuration', async (t) => {
+  const { paths, request } = await fixture(t);
+  const folder = join(paths.plugins, 'slow-plugin');
+  const entered = join(folder, 'entered');
+  const release = join(folder, 'release');
+  mkdirSync(folder);
+  writeFileSync(join(folder, 'plugin.json'), JSON.stringify({}));
+  writeFileSync(join(folder, 'plugin.js'), `import { existsSync, writeFileSync } from 'node:fs';
+    export default async () => {
+      writeFileSync(${JSON.stringify(entered)}, 'ready');
+      while (!existsSync(${JSON.stringify(release)})) await new Promise((done) => setTimeout(done, 10));
+    };`);
+  const updating = request('/settings', 'PATCH', { plugins: { 'slow-plugin': true } });
+  try {
+    await waitUntil(() => existsSync(entered), Boolean);
+    const installation = await request('/plugins/install', 'POST', {
+      id: 'another-plugin', files: [{ name: 'plugin.js', content: 'export default () => {};' }]
+    });
+    assert.equal(installation.status, 409);
+    assert.match(installation.body.error, /Configuration is already changing/);
+    const removal = await request('/plugins/slow-plugin', 'DELETE');
+    assert.equal(removal.status, 409);
+    assert.match(removal.body.error, /Configuration is already changing/);
+    assert.equal(existsSync(folder), true);
+  } finally {
+    writeFileSync(release, 'done');
+    assert.equal((await updating).status, 200);
+  }
+  assert.equal((await request('/settings', 'PATCH', { plugins: { 'slow-plugin': false } })).status, 200);
+  assert.equal((await request('/plugins/slow-plugin', 'DELETE')).status, 200);
+  assert.equal(existsSync(folder), false);
 });

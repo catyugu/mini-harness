@@ -1,6 +1,4 @@
 import { expectPresent } from '../../../test/support/required.js';
-import { defaultShellMode } from '../manifest.js';
-import { supportsIsolation } from '@mini-harness/platform/isolation';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -132,10 +130,6 @@ test('disabling Shell waits until conversations using its tools have finished', 
   const graph = (await request('/bootstrap')).body.ui;
   assert.ok(!graph.some(({ id }: { id: string }) => id === 'shell'));
   assert.ok(!app.runtime.plugins.ctx.harnessTools.forSession(shell.id).some(({ name }) => name === 'sandbox_shell'));
-});
-
-test('Shell defaults to host only when isolation is unavailable', () => {
-  assert.equal(defaultShellMode, supportsIsolation() ? 'isolated' : 'host');
 });
 
 test('repeating a denied command in the same run does not open a new approval', async (t) => {

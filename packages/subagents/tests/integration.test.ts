@@ -3,23 +3,9 @@ import assert from 'node:assert/strict';
 import { rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createMiniHarnessServer } from '@mini-harness/host/server';
+import { fixture, waitUntil } from '../../../test/support/api-fixture.js';
+import { expectPresent } from '../../../test/support/required.js';
 import { createMockProvider, createFixturePaths } from '../../../test/helpers/mock-provider.js';
-
-test('subagent tool is mounted in parent only, with an explicit concurrency limit', { timeout: 30000 }, async (t) => {
-  const mock = await createMockProvider();
-  t.after(() => mock.close());
-  const { root, paths } = createFixturePaths(mock.url);
-  t.after(() => rmSync(root, { recursive: true, force: true }));
-  const app = await createMiniHarnessServer(paths);
-  t.after(() => app.close());
-  const rootSession = app.runtime.registry.create();
-  const child = app.runtime.registry.create({ parentId: rootSession.id });
-  await Promise.all([app.runtime.plugins.ctx.harnessAgent.prepare(rootSession.id), app.runtime.plugins.ctx.harnessAgent.prepare(child.id)]);
-  const names = (id: string) => app.runtime.plugins.ctx.harnessTools.forSession(id).map(({ name }) => name);
-  assert.ok(names(rootSession.id).includes('delegate'));
-  assert.ok(!names(child.id).includes('delegate'));
-  assert.equal(app.runtime.settings.pluginConfig.subagents.maxParallel, 4);
-});
 
 test('Native execution honors file policy and recursive delegates can finish with one slot', { timeout: 30000 }, async (t) => {
   const mock = await createMockProvider(({ messages }) => {
@@ -91,3 +77,53 @@ test('cancelling a root aborts its active child and preserves indexed history', 
   assert.ok(child.log?.includes('hold child'));
 });
 
+function gate() {
+  let release: () => void;
+  const promise = new Promise<void>((done) => { release = done; });
+  return { promise, release: () => release() };
+}
+
+test('child queues honor live limits, explicit cancellation, and depth restrictions', { timeout: 15000 }, async (t) => {
+  const held = [gate(), gate(), gate()];
+  const entered = [gate(), gate(), gate()];
+  let requests = 0;
+  t.after(() => { for (const gate of held) gate.release(); });
+  const { app } = await fixture(t, async () => {
+    const index = requests++;
+    const ready = entered[index], gate = held[index];
+    assert.ok(ready && gate, 'Mock received more requests than expected');
+    ready.release();
+    await gate.promise;
+    return 'Done';
+  });
+  await app.runtime.configuration.update({ pluginConfig: { subagents: { maxParallel: 1 } } });
+  const parent = app.runtime.registry.create();
+  const tools = app.runtime.plugins.ctx.harnessTools;
+  const delegate = expectPresent(tools.forSession(parent.id).find(({ name }) => name === 'delegate'), 'delegate tool');
+  const start = (task: string) => delegate.execute(task, { task, provider: 'local-mock', model: 'mock-model' });
+  const first = start('First child');
+  assert.ok(entered[0] && entered[1]);
+  await entered[0].promise;
+  const second = start('Second child');
+  const third = start('Cancelled queued child');
+  const aborted = assert.rejects(third, /cancelled/);
+  const queued = await waitUntil(() => app.runtime.registry.list().find(({ title }) => title === 'Cancelled queued child'), Boolean);
+  assert.ok(queued);
+  assert.equal(app.runtime.plugins.ctx.harnessRuns.info(queued.id)?.state, 'queued');
+  app.runtime.plugins.ctx.harnessRuns.cancel(queued.id);
+  await aborted;
+  assert.equal(app.runtime.plugins.ctx.harnessRuns.info(queued.id)?.state, 'cancelled');
+  assert.equal(requests, 1);
+  await app.runtime.configuration.update({ pluginConfig: { subagents: { maxParallel: 2 } } });
+  await entered[1].promise;
+  await app.runtime.configuration.update({ pluginConfig: { subagents: { maxParallel: 1 } } });
+  assert.equal(app.runtime.plugins.ctx.harnessRuns.size, 2, 'Lowering the limit preserves existing executions');
+  const child = app.runtime.registry.list().find(({ title }) => title === 'First child');
+  assert.ok(child);
+  assert.equal(tools.forSession(child.id).some(({ name }) => name === 'delegate'), false);
+  assert.ok(held[0] && held[1]);
+  held[0].release(); held[1].release();
+  await Promise.all([first, second]);
+  assert.equal(app.runtime.plugins.ctx.harnessRuns.size, 0);
+  assert.equal(requests, 2, 'Cancelled queued children never reach the provider');
+});

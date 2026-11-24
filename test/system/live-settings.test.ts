@@ -35,7 +35,13 @@ test('appearance, parallelism and child defaults update without interrupting a r
   assert.equal(runtime.plugins.ctx.harnessRuns.active(item.id), true);
   release();
   assert.equal(await pending, 'Done');
+  const firstMessage = runtime.plugins.ctx.harnessAgent.messages(item.id)[0].id;
   await runtime.configuration.update({ plugins: { files: false, 'session-helper': false } });
+  await runtime.plugins.ctx.harnessRuns.send(item.id, 'After the policy changes');
+  assert.equal(runtime.plugins.ctx.harnessAgent.messages(item.id)[0].id, firstMessage);
+  assert.strictEqual(runtime.registry.log(item.id), original);
+  const advertised = mock.requests.at(-1)?.tools as { function: { name: string } }[];
+  assert.equal(advertised.some(({ function: tool }) => tool.name === 'read'), false);
   assert.ok(!runtime.plugins.ctx.harnessTools.forSession(item.id).map(({ name }) => name).includes('read'));
 });
 

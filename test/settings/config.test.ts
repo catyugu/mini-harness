@@ -5,7 +5,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DEFAULTS, mergeSettings, readSettings, validateSettings } from '@mini-harness/settings/config';
 import { getPaths } from '@mini-harness/platform/paths';
-import { writeJson } from '@mini-harness/platform/json';
 
 test('config directories are independent and default safe', () => {
   const folder = mkdtempSync(join(tmpdir(), 'mini-harness-config-'));
@@ -28,22 +27,7 @@ test('settings merge preserves other sections and validates bounds', () => {
   assert.throws(() => mergeSettings(before, { queueMode: 'steer' }), /Unknown settings field/);
   assert.throws(() => mergeSettings(before, { model: { provider: 'example' } }), /Unknown settings field/);
   assert.throws(() => validateSettings({ ...before, pluginConfig: { shell: null } }), /Invalid plugin configuration/);
-  assert.throws(() => mergeSettings(before, { sandbox: { mode: 'host' } } as any), /Unknown settings field/);
-  assert.throws(() => mergeSettings(before, { bogus: true } as any), /Unknown/);
+  assert.throws(() => mergeSettings(before, { sandbox: { mode: 'host' } }), /Unknown settings field/);
+  assert.throws(() => mergeSettings(before, { bogus: true }), /Unknown/);
   assert.throws(() => validateSettings({ ...before, plugins: { shell: 'true' } }), /boolean/);
-});
-
-
-test('plugin names are not reserved for removed built-ins and never trigger rewrites', () => {
-  const root = mkdtempSync(join(tmpdir(), 'mini-harness-config-names-'));
-  try {
-    const paths = getPaths(root, { MINI_HARNESS_HOME: join(root, 'home') });
-    writeJson(paths.settings, { plugins: { 'message-copy': true, 'edit-resend': false },
-      pluginConfig: { 'message-copy': { label: 'local' } } });
-    const settings = readSettings(paths);
-    assert.equal(settings.plugins['message-copy'], true);
-    assert.equal(settings.plugins['edit-resend'], false);
-    assert.deepEqual(settings.pluginConfig['message-copy'], { label: 'local' });
-    assert.equal(mergeSettings(settings, { plugins: { 'edit-resend': true } }).plugins['edit-resend'], true);
-  } finally { rmSync(root, { recursive: true, force: true }); }
 });

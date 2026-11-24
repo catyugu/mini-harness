@@ -26,7 +26,9 @@ test('GUI APIs configure providers, persist keys privately, discover Skills and 
   assert.equal((await request(scope + '/skills')).status, 404);
   const save = await request('/providers', 'PUT', { id: 'gui-test', baseUrl: mock.url, api: 'openai-completions', models: [{ id: 'gui-model', input: ['text', 'image'] }] });
   assert.equal(save.status, 200, JSON.stringify(save.body));
-  assert.equal((await request('/credentials', 'POST', { provider: 'gui-test', key: 'gui-private-key' })).status, 200);
+  const credentials = await request('/credentials', 'POST', { provider: 'gui-test', key: 'gui-private-key' });
+  assert.equal(credentials.status, 200);
+  assert.doesNotMatch(JSON.stringify(credentials.body), /gui-private-key/);
   assert.equal((await request('/settings/plugins/core%3Amodels', 'PATCH', { model: { provider: 'gui-test', id: 'gui-model' } })).status, 200);
   assert.equal((await request('/settings/plugins/core%3Atheme', 'PATCH', { appearance: 'lavender' })).status, 400);
   assert.equal((await request('/settings/plugins/core%3Atheme', 'PATCH', { model: { provider: '', id: '' } })).status, 400);

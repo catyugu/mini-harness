@@ -1,5 +1,3 @@
-import { expectPresent } from '../../../test/support/required.js';
-import { waitUntil } from '../../../test/support/api-fixture.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs, { existsSync, readFileSync, rmSync } from 'node:fs';
@@ -78,6 +76,7 @@ test('independent roots run concurrently and deleting a running tree cancels all
   const second = app.runtime.plugins.ctx.harnessRuns.send(other.id, 'Root two');
   await entered.promise;
   assert.equal(app.runtime.plugins.ctx.harnessRuns.size, 2);
+  await assert.rejects(app.runtime.plugins.ctx.harnessRuns.send(parent.id, 'Duplicate'), /already running/);
   const child = app.runtime.registry.create({ parentId: parent.id });
   const childWork = app.runtime.plugins.ctx.harnessRuns.send(child.id, 'Child');
   const childCancelled = assert.rejects(childWork, /cancelled/);
@@ -88,6 +87,8 @@ test('independent roots run concurrently and deleting a running tree cancels all
   assert.equal(app.runtime.plugins.ctx.harnessRuns.active(other.id), true);
   held.release();
   assert.equal(await second, 'Done');
+  assert.equal(app.runtime.plugins.ctx.harnessRuns.size, 0);
+  assert.equal(app.runtime.plugins.ctx.harnessAgent.hasPending, false);
   assert.equal(app.runtime.plugins.ctx.harnessRuns.size, 0);
 });
 
@@ -126,53 +127,6 @@ test('startup durably interrupts runs, fails stale steering, and recovers idempo
     assert.deepEqual(prompts, ['Recovered follow-up', 'New manual input']);
     assert.deepEqual(restarted.runtime.plugins.ctx.harnessAgent.queue(child.id).map(({ id, state }) => [id, state]), [['steer', 'failed']]);
   } finally { await restarted.close(); }
-});
-
-test('child queues honor live limits, explicit cancellation, and depth restrictions', { timeout: 15000 }, async (t) => {
-  const held = [gate(), gate(), gate()];
-  const entered = [gate(), gate(), gate()];
-  let requests = 0;
-  const mock = await createMockProvider(async () => {
-    const index = requests++;
-    const ready = entered[index], gate = held[index];
-    assert.ok(ready && gate, 'Mock received more requests than expected');
-    ready.release();
-    await gate.promise;
-    return 'Done';
-  });
-  const { root, paths } = createFixturePaths(mock.url);
-  const app = await createMiniHarnessServer(paths);
-  t.after(async () => { for (const gate of held) gate.release(); await app.close(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
-  await app.runtime.configuration.update({ pluginConfig: { subagents: { maxParallel: 1 } } });
-  const parent = app.runtime.registry.create();
-  const tools = app.runtime.plugins.ctx.harnessTools;
-  const delegate = expectPresent(tools.forSession(parent.id).find(({ name }) => name === 'delegate'), 'delegate tool');
-  const start = (task: string) => delegate.execute(task, { task, provider: 'local-mock', model: 'mock-model' });
-  const first = start('First child');
-  assert.ok(entered[0] && entered[1]);
-  await entered[0].promise;
-  const second = start('Second child');
-  const third = start('Cancelled queued child');
-  const aborted = assert.rejects(third, /cancelled/);
-  const queued = await waitUntil(() => app.runtime.registry.list().find(({ title }) => title === 'Cancelled queued child'), Boolean);
-  assert.ok(queued);
-  assert.equal(app.runtime.plugins.ctx.harnessRuns.info(queued.id)?.state, 'queued');
-  app.runtime.plugins.ctx.harnessRuns.cancel(queued.id);
-  await aborted;
-  assert.equal(app.runtime.plugins.ctx.harnessRuns.info(queued.id)?.state, 'cancelled');
-  assert.equal(requests, 1);
-  await app.runtime.configuration.update({ pluginConfig: { subagents: { maxParallel: 2 } } });
-  await entered[1].promise;
-  await app.runtime.configuration.update({ pluginConfig: { subagents: { maxParallel: 1 } } });
-  assert.equal(app.runtime.plugins.ctx.harnessRuns.size, 2, 'Lowering the limit preserves existing executions');
-  const child = app.runtime.registry.list().find(({ title }) => title === 'First child');
-  assert.ok(child);
-  assert.equal(tools.forSession(child.id).some(({ name }) => name === 'delegate'), false);
-  assert.ok(held[0] && held[1]);
-  held[0].release(); held[1].release();
-  await Promise.all([first, second]);
-  assert.equal(app.runtime.plugins.ctx.harnessRuns.size, 0);
-  assert.equal(requests, 2, 'Cancelled queued children never reach the provider');
 });
 
 test('late observers receive a saved snapshot and stale cursors cannot attach to a newer run', async (t) => {

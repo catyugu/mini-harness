@@ -3,11 +3,10 @@ import assert from 'node:assert/strict';
 
 
 import { fixture } from '../../../test/support/api-fixture.js';
+const png = 'iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAFElEQVR4nGPUCIhigAEmBiSAmwMAKdYA2gR3lpgAAAAASUVORK5CYII=';
+
 test('session-helper edits branch the native session instead of appending and enforces the active leaf', async (t) => {
   const { request, finish, app } = await fixture(t, ({ messages }) => 'Reply to ' + messages.filter((item) => item.role === 'user').at(-1)?.content);
-  const pluginIds = (await request('/plugins')).body.map((plugin: { id: string }) => plugin.id);
-  assert.equal(pluginIds.filter((id: string) => id === 'session-helper').length, 1);
-  assert.equal(pluginIds.includes('message-copy') || pluginIds.includes('edit-resend'), false);
   const session = (await request('/sessions', 'POST', {})).body;
   const send = async (message: string) => {
     const started = await request('/sessions/' + session.id + '/runs', 'POST', { message });
@@ -23,6 +22,25 @@ test('session-helper edits branch the native session instead of appending and en
   const first = before.messages.find((message: { role: string; content: unknown; id?: string }) => message.role === 'user' && textOf(message) === 'Original first');
   assert.ok(first?.id, 'Session Log identity must be present on persisted user messages');
   assert.ok(before.leafId, 'API must expose current branch leaf');
+  const beforeProjection = app.runtime.registry.log(session.id).projection();
+  const invalid = [
+    { message: 'Invalid model', model: { provider: 'unknown-provider', id: 'unknown-model' } },
+    { message: 'Image on a text model', attachments: [{ name: 'picture.png', mimeType: 'image/png', data: png }] },
+    { message: '/skill:missing-skill' },
+    { message: 'Unsupported reasoning', thinkingLevel: 'high' }
+  ];
+  for (const input of invalid) {
+    const result = await request('/extensions/session-helper/revise', 'POST', {
+      sessionId: session.id, sourceEntryId: first.id, expectedLeafId: beforeProjection.leafId, ...input
+    });
+    if (result.status === 200) assert.equal((await finish(session.id)).body.run.state, 'failed');
+    else assert.equal(result.status, 400, JSON.stringify(result.body));
+    const unchanged = app.runtime.registry.log(session.id).projection();
+    assert.equal(unchanged.leafId, beforeProjection.leafId, 'Rejected input must not move the selected branch');
+    assert.deepEqual(unchanged.messages, beforeProjection.messages);
+    assert.deepEqual(unchanged.model, beforeProjection.model);
+    assert.equal(unchanged.thinkingLevel, beforeProjection.thinkingLevel);
+  }
   const revision = await request('/extensions/session-helper/revise', 'POST', {
     sessionId: session.id, sourceEntryId: first.id, expectedLeafId: before.leafId, message: 'Revised first'
   });
