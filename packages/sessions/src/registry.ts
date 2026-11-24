@@ -28,6 +28,7 @@ export class SessionRegistry implements SessionStore {
   private readonly logErrors = new Map<string, string>();
   private closing = false;
   private pendingDeletion = Promise.resolve();
+  private readonly deletions = new Set<Promise<unknown>>();
   readonly events = new EventTarget();
 
   constructor(private readonly paths: Paths, private readonly workspaces: WorkspacePort,
@@ -72,7 +73,15 @@ export class SessionRegistry implements SessionStore {
   }
 
   /** Stop accepting work; existing writers remain available while runs drain. */
-  close() { this.closing = true; }
+  close() {
+    this.closing = true;
+    return Promise.allSettled(this.deletions).then(() => {});
+  }
+
+  private trackDeletion<T>(work: Promise<T>): Promise<T> {
+    this.deletions.add(work);
+    return work.finally(() => { this.deletions.delete(work); });
+  }
 
   dispose() {
     this.closing = true;
@@ -281,12 +290,14 @@ export class SessionRegistry implements SessionStore {
     this.assertAvailable(undefined, id);
     this.workspaces.get(id);
     this.deletingWorkspaces.add(id);
-    try {
-      const deleted = await this.delete(this.list(id).map((record) => record.id));
-      await this.forgetScopes?.(['workspace:' + id]);
-      this.workspaces.remove(id);
-      return { removed: id, deleted };
-    } finally { this.deletingWorkspaces.delete(id); }
+    return this.trackDeletion((async () => {
+      try {
+        const deleted = await this.delete(this.list(id).map((record) => record.id));
+        await this.forgetScopes?.(['workspace:' + id]);
+        this.workspaces.remove(id);
+        return { removed: id, deleted };
+      } finally { this.deletingWorkspaces.delete(id); }
+    })());
   }
 
   async delete(ids: string[]) {
@@ -294,14 +305,16 @@ export class SessionRegistry implements SessionStore {
     const all = this.descendants(ids);
     if (all.some((id) => this.deleting.has(id))) throw new DomainError('conflict', 'Conversation is being deleted');
     for (const id of all) this.deleting.add(id);
-    try {
-      const participants = [...this.participants];
-      await Promise.all(participants.map(({ quiesce }) => quiesce(all)));
-      const operation = this.pendingDeletion.then(() => this.deleteRecords(all));
-      this.pendingDeletion = operation.catch(() => {});
-      await operation;
-      return all;
-    } finally { for (const id of all) this.deleting.delete(id); }
+    return this.trackDeletion((async () => {
+      try {
+        const participants = [...this.participants];
+        await Promise.all(participants.map(({ quiesce }) => quiesce(all)));
+        const operation = this.pendingDeletion.then(() => this.deleteRecords(all));
+        this.pendingDeletion = operation.catch(() => {});
+        await operation;
+        return all;
+      } finally { for (const id of all) this.deleting.delete(id); }
+    })());
   }
 
   private async deleteRecords(all: string[]) {

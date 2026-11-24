@@ -4,6 +4,7 @@ export class AgentRegistry {
   private readonly preparing = new Map<string, Promise<void>>();
 
   get hasPending() { return this.preparing.size > 0; }
+  preparingIn(matches: (id: string) => boolean) { return [...this.preparing.keys()].some(matches); }
   has(id: string) { return this.active.has(id); }
   acceptsInput(id: string) { return this.active.get(id) === 'run'; }
 

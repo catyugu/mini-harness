@@ -1,4 +1,5 @@
 import type {} from '@mini-harness/kernel/observations';
+import type {} from '@mini-harness/kernel/mutation-api';
 import type {} from '@mini-harness/sessions/store';
 import type {} from '@mini-harness/kernel/scopes';
 import type {} from '@mini-harness/models/api';
@@ -45,6 +46,9 @@ export function setup(ctx: Context, api: PluginApi) {
     }
   });
   ctx.provide('harnessAgent', agent);
+  ctx.effect(() => ctx.harnessMutations.registerGuard((keys) => agent.agents.preparingIn((id) =>
+    !keys || scopes.address(id).some((key) => keys.has(key)))));
+  ctx.on('harness/quiesce', (pending) => { pending.push(agent.agents.settle()); });
   ctx.effect(() => () => agent.agents.settle());
   ctx.effect(() => catalog.beforeDelete({
     busy: (id) => agent.agents.has(id),

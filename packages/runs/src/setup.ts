@@ -10,6 +10,8 @@ export function setup(ctx: Context) {
   const { harnessRegistry: catalog, harnessScopes: scopes, harnessMutations: mutations } = ctx;
   const runs = new Runs(catalog, scopes, mutations, (event, signal) => ctx.emit('harness/observe', event, signal));
   ctx.provide('harnessRuns', runs);
+  ctx.effect(() => mutations.registerGuard((keys) => keys ? runs.activeInScope(keys) : runs.size > 0));
+  ctx.on('harness/quiesce', (pending) => { pending.push(runs.stop()); });
   ctx.effect(() => () => runs.stop());
   ctx.effect(() => catalog.beforeDelete({
     busy: (id) => runs.active(id),

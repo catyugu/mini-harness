@@ -17,5 +17,7 @@ export function setup(ctx: Context) {
     list: (id) => registry.list(id),
     [recordsForPlugin]: (id, pluginId) => registry.records(id, pluginId)
   });
+  ctx.on('harness/startup', (pending) => { pending.push(registry.recoverDeletion()); });
+  ctx.on('harness/quiesce', (pending) => { pending.push(registry.close()); });
   ctx.effect(() => () => registry.dispose());
 }

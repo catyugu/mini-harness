@@ -5,6 +5,10 @@ export type CapabilityObservation = CapabilityObservations[keyof CapabilityObser
 
 declare module 'cordis' {
   interface Events {
+    /** Application graph is mounted; complete startup before admitting requests. */
+    'harness/startup'(pending: Promise<void>[]): void;
+    /** Stop admission synchronously and register outstanding resource work to drain. */
+    'harness/quiesce'(pending: Promise<void>[]): void;
     'harness/observe'(event: CapabilityObservation, signal?: AbortSignal): void;
   }
 }

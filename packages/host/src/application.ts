@@ -1,5 +1,4 @@
-import type {} from '@mini-harness/runs/api';
-import type {} from '@mini-harness/agent/api';
+import type {} from '@mini-harness/kernel/observations';
 import type {} from '@mini-harness/sessions/store';
 import { Context } from 'cordis';
 import { authority, plugins } from './composition.js';
@@ -16,14 +15,16 @@ export class MiniHarnessRuntime {
   readonly configuration: SettingsManager;
   private readonly mutations: MutationGate;
   private stopping?: Promise<void>;
+  private ready = false;
+
+  get accepting() { return this.ready && !this.stopping; }
 
   constructor(readonly paths: Paths, network?: NetworkPort,
     upgrade?: (path: string, handler: import('@mini-harness/transport/routes').UpgradeHandler) => () => void) {
     const ctx = new Context();
     this.configuration = new SettingsManager(paths, () => this.plugins);
     const changes = new ProjectionChanges();
-    this.mutations = new MutationGate((scopes) => scopes ? ctx.get('harnessRuns')?.activeInScope(scopes) === true :
-      Boolean(ctx.get('harnessRuns')?.size || ctx.get('harnessAgent')?.hasPending));
+    this.mutations = new MutationGate();
     const root = {
       harnessState: { paths },
       harnessSettingsStore: this.configuration,
@@ -43,9 +44,13 @@ export class MiniHarnessRuntime {
   get settings() { return this.configuration.settings; }
   get registry() { return this.plugins.ctx.harnessRegistry; }
   async start() {
-    await this.plugins.start(this.settings);
-    try { await this.registry.recoverDeletion(); }
-    catch (error) { await this.stop(); throw error; }
+    try {
+      await this.plugins.start(this.settings);
+      const pending: Promise<void>[] = [];
+      this.plugins.ctx.emit('harness/startup', pending);
+      await Promise.all(pending);
+      this.ready = true;
+    } catch (error) { await this.stop(); throw error; }
   }
 
   stop() {
@@ -53,13 +58,15 @@ export class MiniHarnessRuntime {
   }
 
   private async shutdown() {
-    const { harnessRuns: runs, harnessRegistry: registry } = this.plugins.ctx;
-    registry?.close();
+    this.ready = false;
     const mutations = this.mutations.close();
-    const settings = this.configuration.close();
+    const pending: Promise<void>[] = [];
     try {
-      await runs?.stop();
-      await Promise.all([mutations, settings]);
+      this.plugins.ctx.emit('harness/quiesce', pending);
+      const results = await Promise.allSettled([mutations, ...pending]);
+      await this.configuration.close();
+      const failures = results.flatMap((result) => result.status === 'rejected' ? [result.reason] : []);
+      if (failures.length) throw new AggregateError(failures, 'Application shutdown failed');
     } finally {
       await this.plugins.close();
     }

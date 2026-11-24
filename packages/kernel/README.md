@@ -20,7 +20,7 @@ Builds on Cordis. Product capabilities define their own service names and contri
 
 ## Lifecycle
 
-Disposes consumers before providers, aborts plugin lifetimes before draining them, and rolls back staged mounts or live configurations on failure.
+Disposes consumers before providers, aborts plugin lifetimes before draining them, and rolls back staged mounts or live configurations on failure. Cordis startup and quiescence events let capabilities own their asynchronous recovery and draining; mutation guards belong to active resource owners.
 
 ## Testing
 

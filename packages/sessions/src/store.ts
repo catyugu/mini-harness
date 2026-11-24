@@ -18,8 +18,6 @@ export interface SessionStore {
   diagnostics(): { id: string; message: string }[];
   assertAvailable(id?: string, workspaceId?: string): void;
   beforeDelete(handler: { quiesce(ids: string[]): Promise<void>; busy?(id: string): boolean }): () => void;
-  close(): void;
-  recoverDeletion(): Promise<void>;
   workspacePath(id: string): string;
   depth(id: string): number;
   descendants(ids: string[]): string[];

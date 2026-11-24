@@ -20,7 +20,7 @@ Combines [Plugins](../plugins/README.md), [Settings](../settings/README.md), [Tr
 
 ## Lifecycle
 
-Starts the plugin graph before serving requests. On shutdown it stops admission, drains active runs and mutations, and disposes fibers and streams.
+Starts the plugin graph, awaits capability-owned startup work, then admits requests. Shutdown stops admission, drains capability-owned resources and mutations, closes configuration, and disposes fibers and streams. Resource owners register structural mutation guards rather than exposing activity state to Host.
 
 ## Testing
 

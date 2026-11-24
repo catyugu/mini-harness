@@ -125,6 +125,7 @@ export async function createMiniHarnessServer(paths: Paths, options: { token?: s
       if (!remote && req.method !== 'GET' && req.headers.origin && req.headers.origin !== 'http://' + req.headers.host) {
         throw new HttpError('forbidden', 'Origin not allowed');
       }
+      if (!runtime.accepting) throw new HttpError('unavailable', 'Application is closing');
       if (pathname === '/api/status' && req.method === 'GET')
         return json(res, 200, { pid: process.pid, sessionDiagnostics: runtime.registry.diagnostics() });
       if (pathname === '/api/shutdown' && req.method === 'POST' && options.shutdown) {
@@ -150,6 +151,7 @@ export async function createMiniHarnessServer(paths: Paths, options: { token?: s
   server.on('upgrade', (request, socket, head) => {
     const reject = (status: string) => socket.end('HTTP/1.1 ' + status + '\r\nConnection: close\r\n\r\n');
     if (!authorize(request, token)) { reject('401 Unauthorized'); return; }
+    if (!runtime.accepting) { reject('503 Service Unavailable'); return; }
     if (request.headers.origin && request.headers.origin !== 'http://' + request.headers.host) { reject('403 Forbidden'); return; }
     if (request.method !== 'GET' || request.headers.upgrade?.toLowerCase() !== 'websocket') { reject('400 Bad Request'); return; }
     if (!upgrades.dispatch((request.url ?? '').split('?')[0], request, socket, head)) reject('404 Not Found');
