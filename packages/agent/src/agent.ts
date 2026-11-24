@@ -81,7 +81,7 @@ export class NativeAgent implements AgentPort {
   private readonly recordedSchemas = new WeakMap<SessionLogPort, Set<string>>();
 
   constructor(private readonly sessions: Pick<SessionCatalog, 'workspacePath'> & Pick<SessionHistory, 'inspectLog'> &
-    Pick<SessionLifecycle, 'assertAvailable' | 'rename'> & Pick<SessionStore, 'log'>,
+    Pick<SessionLifecycle, 'assertAvailable' | 'rename'> & Pick<SessionStore, 'log' | 'prepareInput'>,
     private readonly services: AgentServices) {}
 
   revisionTarget(id: string, sourceEntryId: string, expectedLeafId: string | null) {
@@ -99,7 +99,7 @@ export class NativeAgent implements AgentPort {
       const images = (source.presentation?.images ?? (typeof content === 'string' ? [] : content.filter((part) => part.type === 'image')))
         .map(({ data, mimeType }, index) => ({ data, mimeType, name: imageNames[index]?.name ?? 'Image ' + (index + 1) }));
       return { parentId: source.parentId, images,
-        textFiles: files.filter((file) => !imageMimeType.test(file.mimeType)).map(({ name }) => name) };
+        textFiles: files.filter((file) => !file.id && !imageMimeType.test(file.mimeType)).map(({ name }) => name) };
     }, true);
     if (!target) throw new DomainError('invalid_input', 'User message not found on active branch');
     return target;
@@ -114,7 +114,7 @@ export class NativeAgent implements AgentPort {
     const choice = selectModel(models, { explicit: options.model, stored: log.projection().model,
       fallback: options.fallback, preferStored: true });
     resolveThinking(models.capabilities(choice), options.thinkingLevel);
-    return new Inbox(log).enqueue(text, mode, attachments, { model: choice, thinkingLevel: options.thinkingLevel });
+    return new Inbox(log).enqueue(mode, () => this.sessions.prepareInput(id, text, attachments), { model: choice, thinkingLevel: options.thinkingLevel });
   }
 
   cancelQueue(id: string, itemId?: string) {

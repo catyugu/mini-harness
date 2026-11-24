@@ -1,7 +1,6 @@
 import { DomainError } from '@mini-harness/platform/errors';
 import { randomBytes } from 'node:crypto';
-import { prepareInput } from '@mini-harness/input/prepare';
-import type { Attachment } from '@mini-harness/input/message';
+import type { ImageInput, PreparedMessage } from '@mini-harness/input/message';
 import type { SessionLogPort, InboxItem } from '@mini-harness/sessions/log-api';
 import type { QueueEntry } from '@mini-harness/sessions/queue';
 
@@ -12,11 +11,11 @@ export class Inbox {
   list() { return this.log.inbox(); }
   view(): QueueEntry[] { return this.log.queue(); }
 
-  enqueue(text: string, mode: InboxItem['mode'], attachments?: Attachment[],
+  enqueue(mode: InboxItem['mode'], prepare: () => { text: string; images: ImageInput[]; input: PreparedMessage },
     options: Pick<InboxItem, 'model' | 'thinkingLevel'> = {}) {
     if (mode !== 'steer' && mode !== 'followUp') throw new DomainError('invalid_input', 'Invalid queue mode');
     if (this.list().length >= 16) throw new DomainError('conflict', 'Queue is full');
-    const prepared = prepareInput(text, attachments);
+    const prepared = prepare();
     this.log.append({ type: 'inbox-enqueued', item: {
       id: randomBytes(16).toString('hex'), mode, text: prepared.text, images: prepared.images,
       input: prepared.input, ...options

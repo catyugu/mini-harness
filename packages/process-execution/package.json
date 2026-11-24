@@ -16,6 +16,7 @@
     "@mini-harness/execution": "workspace:*",
     "@mini-harness/kernel": "workspace:*",
     "@mini-harness/plugin-api": "workspace:*",
-    "@mini-harness/sandbox": "workspace:*"
+    "@mini-harness/sandbox": "workspace:*",
+    "@mini-harness/sessions": "workspace:*"
   }
 }

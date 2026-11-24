@@ -9,7 +9,7 @@ export interface IsolatedProcess {
 }
 
 export interface SandboxPort {
-  prepare(request: ProcessRequest): Promise<IsolatedProcess>;
+  prepare(request: ProcessRequest, attachments?: string): Promise<IsolatedProcess>;
 }
 
 declare module '@mini-harness/kernel/services' {

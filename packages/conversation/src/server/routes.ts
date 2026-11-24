@@ -93,6 +93,11 @@ export function registerSessionRoutes(ctx: Context, read: (id: string) => Conver
     return new HttpReply(201, projectSession(ctx, ctx.harnessRegistry.create({ workspaceId: workspace(params.id),
       permission: input?.permission === undefined ? undefined : permission(input.permission) })));
   });
+  add('GET', '/api/sessions/:id/attachments/:attachment', ({ params }) => {
+    const bytes = ctx.harnessRegistry.readAttachment(session(params.id), params.attachment);
+    if (!bytes) throw new HttpError('not_found', 'Attachment not found');
+    return { data: bytes.toString('base64') };
+  });
   add('GET', '/api/sessions/:id/queue', ({ params }) => {
     const id = session(params.id);
     ctx.harnessRegistry.assertAvailable(id);

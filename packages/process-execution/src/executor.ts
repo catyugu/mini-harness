@@ -3,21 +3,21 @@ import { realpath } from 'node:fs/promises';
 import type { IsolatedProcess, SandboxPort } from '@mini-harness/sandbox/api';
 import type { ProcessRequest, ProcessResult } from '@mini-harness/execution/request';
 
-async function hostCommand(command: string, cwd: string): Promise<IsolatedProcess> {
+async function hostCommand(command: string, cwd: string, attachments?: string): Promise<IsolatedProcess> {
   const root = await realpath(cwd);
-  const env = process.env;
+  const env = { ...process.env, MINI_HARNESS_ATTACHMENTS: attachments };
   return process.platform === 'win32'
     ? { file: env.ComSpec || 'cmd.exe', args: ['/d', '/s', '/c', '"' + command + '"'], cwd: root, env }
     : { file: '/bin/sh', args: ['-c', command], cwd: root, env };
 }
 
-export async function executeProcess(request: ProcessRequest, sandbox: SandboxPort) {
+export async function executeProcess(request: ProcessRequest, sandbox: SandboxPort, attachments?: string) {
   const { command, cwd, mode, timeoutSeconds, signal } = request;
   signal?.throwIfAborted();
   if (typeof command !== 'string' || !command.trim() || command.length > 16000) throw new Error('Invalid command');
   if (!Number.isInteger(timeoutSeconds) || timeoutSeconds < 1 || timeoutSeconds > 300) throw new Error('Invalid shell timeout');
   if (mode !== 'host' && mode !== 'isolated') throw new Error('Unknown sandbox mode');
-  const { file, args, cwd: root, env } = mode === 'isolated' ? await sandbox.prepare(request) : await hostCommand(command, cwd);
+  const { file, args, cwd: root, env } = mode === 'isolated' ? await sandbox.prepare(request, attachments) : await hostCommand(command, cwd, attachments);
   signal?.throwIfAborted();
   const windows = process.platform === 'win32';
 
