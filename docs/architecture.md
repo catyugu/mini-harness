@@ -39,6 +39,8 @@ Application preferences such as theme, queue behavior and the recent model live 
 
 ## Native execution
 
+Runs resolves model choices at the submission boundary. Agent validates and executes the supplied choice, and reports accepted input; only main user submissions update the Models preference.
+
 `NativeAgent` obtains one execution owner per session and prepares its scope. Before committing input it resolves the model and validates capabilities. A turn builds a prompt, takes a snapshot of available tool definitions, streams a native assistant message from `LlmPort`, and commits that message. One model store owns provider definitions and credentials. The Model Catalog and LLM have independent provider selections. The model adapter is the only module importing `@earendil-works/pi-ai`. It converts native messages and opaque provider continuation data to the provider protocol and back; it does not own files, sessions or tools.
 
 The tool pipeline checks call identity, JSON-schema arguments, registration lifetime and policy before execution. A duplicate call ID rejects the response before any side effect. The tool registry selects the nearest visible registration before checking inherited restrictions and any read-only grant. The model receives eligible tool definitions. Execution checks the exact advertised lease before and after asynchronous decisions. Tools are serial by default. Consecutive calls that explicitly opt in can overlap, and each result is committed before its completion event. Serial calls form barriers. An unload can revoke a lease; the resulting error is visible to the model. Approval and process execution remain separate capabilities.

@@ -4,7 +4,7 @@ Executes native Agent turns and builds their system prompts.
 
 ## Responsibilities
 
-Owns model selection for each delivery, the execution lease, request preparation, retries, inbox delivery, tool dispatch and context compaction. Sessions owns durable history and Conversation owns user-facing display.
+Validates the selected model for each delivery and owns the execution lease, request preparation, retries, inbox delivery, tool dispatch and context compaction. Sessions owns durable history and Conversation owns user-facing display.
 
 ## Structure
 
@@ -24,7 +24,7 @@ Resolves scoped LLM, model, prompt and tool providers through [Kernel](../kernel
 
 ## Configuration
 
-`core:agent` declares `maxTurns` and `autoCompact` in its manifest. Model capabilities and the recent model come from [Models](../models/README.md).
+`core:agent` declares `maxTurns` and `autoCompact` in its manifest. Model capabilities come from [Models](../models/README.md); Runs resolves the submitted model. Agent has no application-preference dependency.
 
 ## Testing
 

@@ -1,5 +1,4 @@
 import type { ModelCatalogPort } from '@mini-harness/models/api';
-import type { AgentPort } from '@mini-harness/agent/api';
 import type { RunPort } from '@mini-harness/runs/api';
 import type { SessionStore } from '@mini-harness/sessions/store';
 import type { SessionRecord } from '@mini-harness/sessions/identity';
@@ -110,7 +109,7 @@ export class Delegation {
   readonly semaphore: Semaphore;
   private readonly leases = new Map<string, ChildLease>();
 
-  constructor(private readonly registry: SessionStore, private readonly agent: Pick<AgentPort, 'activeModel'>, private readonly models: (id?: string) => ModelCatalogPort,
+  constructor(private readonly registry: SessionStore, private readonly agent: { activeModel(id: string): ModelChoice }, private readonly models: (id?: string) => ModelCatalogPort,
     private readonly runs: () => RunPort, private readonly settings: () => SubagentPolicy,
     private readonly assertAvailable: (id: string) => void) {
     this.semaphore = new Semaphore(settings().maxParallel);

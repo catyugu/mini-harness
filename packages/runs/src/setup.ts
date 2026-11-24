@@ -1,4 +1,5 @@
 import type {} from '@mini-harness/kernel/observations';
+import type {} from '@mini-harness/models/api';
 import type {} from '@mini-harness/sessions/store';
 import type {} from '@mini-harness/kernel/scopes';
 import type {} from '@mini-harness/kernel/mutation-api';
@@ -8,7 +9,7 @@ import { Runs } from './runs.js';
 
 export function setup(ctx: Context) {
   const { harnessRegistry: catalog, harnessScopes: scopes, harnessMutations: mutations } = ctx;
-  const runs = new Runs(catalog, scopes, mutations, (event, signal) => ctx.emit('harness/observe', event, signal));
+  const runs = new Runs(catalog, scopes, mutations, (event, signal) => ctx.emit('harness/observe', event, signal), ctx.harnessModelPreference);
   ctx.provide('harnessRuns', runs);
   ctx.effect(() => mutations.registerGuard((keys) => keys ? runs.activeInScope(keys) : runs.size > 0));
   ctx.on('harness/quiesce', (pending) => { pending.push(runs.stop()); });

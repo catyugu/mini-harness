@@ -33,7 +33,7 @@ function fixture(t: TestContext, llm: LlmPort, retryModel?: () => Promise<ModelR
     models: () => ({ list: () => [], available: async () => [], resolve: (choice) => choice,
       capabilities: (choice) => ({ id: model.id, name: 'Fixture', input: choice.id === 'text-only' ? ['text'] : ['text', 'image'], contextWindow: 32000, maxTokens: 1024, reasoning: true, thinkingLevels: thinkingLevels(choice.id) }) }),
     llm: () => llm, tools: () => tools, prompt: () => ({ build: async () => 'Fixture' }),
-    prepare: async () => {}, defaultModel: () => model, rememberModel: () => {},
+    prepare: async () => {},
     policy: () => ({ maxTurns: 8, autoCompact: false }), retryModel, observe: () => {}
   });
   const record = sessions.create();
@@ -47,7 +47,7 @@ test('duplicate tool call identities fail before executing any side effect', asy
   } });
   tools[registerToolBinding]('change', () => defineTool({ name: 'change', description: 'Change', parameters: Type.Object({}),
     async execute() { executions++; return { content: [{ type: 'text', text: 'changed' }] }; } }));
-  await assert.rejects(agent.prompt(record, 'Change it', () => {}, { signal: new AbortController().signal }), /duplicate.*tool|tool.*duplicate/i);
+  await assert.rejects(agent.prompt(record, 'Change it', () => {}, { choice: model, signal: new AbortController().signal }), /duplicate.*tool|tool.*duplicate/i);
   assert.equal(executions, 0);
   assert.equal(agent.agents.has(record.id), false);
 });
@@ -68,7 +68,7 @@ test('tool execution uses the advertised registration and does not execute a hot
     tools[registerToolBinding]('change', () => defineTool({ name: 'change', description: 'Replacement', parameters: Type.Object({}),
       async execute() { executions++; return { content: [{ type: 'text', text: 'replacement' }] }; } }));
   };
-  await agent.prompt(record, 'Change it', () => {}, { signal: new AbortController().signal });
+  await agent.prompt(record, 'Change it', () => {}, { choice: model, signal: new AbortController().signal });
   assert.equal(executions, 0);
   assert.equal(sessions.log(record.id).projection().messages.find((message) => message.role === 'toolResult')?.isError, true);
 });
@@ -85,7 +85,7 @@ test('malformed tool arguments become durable error results without invoking the
   } });
   tools[registerToolBinding]('inspect', () => defineTool({ name: 'inspect', description: 'Inspect', parameters: Type.Object({ path: Type.String() }),
     async execute() { executions++; return { content: [] }; } }));
-  assert.equal(await agent.prompt(record, 'Inspect', () => {}, { signal: new AbortController().signal }), 'Recovered');
+  assert.equal(await agent.prompt(record, 'Inspect', () => {}, { choice: model, signal: new AbortController().signal }), 'Recovered');
   assert.equal(executions, 0);
   assert.equal(sessions.log(record.id).projection().messages.filter((message) => message.role === 'toolResult').length, 1);
 });
@@ -105,7 +105,7 @@ test('cancellation closes the whole tool batch durably and never executes later 
     } }));
   tools[registerToolBinding]('second', () => defineTool({ name: 'second', description: 'Second', parameters: Type.Object({}),
     async execute() { ranSecond++; return { content: [] }; } }));
-  await assert.rejects(agent.prompt(record, 'Run tools', () => {}, { signal: controller.signal }), /Stopped by test/);
+  await assert.rejects(agent.prompt(record, 'Run tools', () => {}, { choice: model, signal: controller.signal }), /Stopped by test/);
   const results = sessions.log(record.id).projection().messages.filter((message) => message.role === 'toolResult');
   assert.equal(ranFirst, 1); assert.equal(ranSecond, 0);
   assert.deepEqual(results.map(({ toolCallId, isError }) => [toolCallId, isError]), [['one', true], ['two', true]]);
@@ -122,7 +122,7 @@ test('interrupted calls receive an error record before the next prompt and are n
   tools[registerToolBinding]('change', () => defineTool({ name: 'change', description: 'Change', parameters: Type.Object({}),
     async execute() { executed++; return { content: [] }; } }));
   sessions.log(record.id).append({ type: 'message', message: toolsAnswer(call('interrupted', 'change')) });
-  await agent.prompt(record, 'Continue', () => {}, { signal: new AbortController().signal });
+  await agent.prompt(record, 'Continue', () => {}, { choice: model, signal: new AbortController().signal });
   assert.equal(executed, 0);
 });
 
@@ -137,7 +137,7 @@ test('identical queued text preserves each attachment identity and is delivered 
     if (requests++ === 0) { entered(); await hold; }
     yield { type: 'done', message: answer() };
   } });
-  const run = agent.prompt(record, 'Initial', () => {}, { signal: new AbortController().signal });
+  const run = agent.prompt(record, 'Initial', () => {}, { choice: model, signal: new AbortController().signal });
   await ready;
   const data = Buffer.from('89504e470d0a1a0a', 'hex').toString('base64');
   await agent.queueInput(record.id, 'Same text', 'followUp', [{ name: 'first.png', mimeType: 'image/png', data }]);
@@ -166,7 +166,7 @@ test('steering accepts off, skips deterministic failures and resets incompatible
   } }, undefined, (id) => id === 'new-model' ? ['low'] : ['low', 'medium', 'high', 'xhigh', 'max']);
   tools[registerToolBinding]('first', () => defineTool({ name: 'first', description: 'Should be skipped', parameters: Type.Object({}),
     async execute() { assert.fail('Steering did not skip the next tool'); } }));
-  const run = agent.prompt(record, 'Initial', () => {}, { signal: new AbortController().signal, thinkingLevel: 'off' });
+  const run = agent.prompt(record, 'Initial', () => {}, { choice: model, signal: new AbortController().signal, thinkingLevel: 'off' });
   await ready;
   const log = sessions.log(record.id);
   log.append({ type: 'inbox-enqueued', item: { id: 'stale-level', mode: 'steer', text: 'Stale instruction',
@@ -233,7 +233,7 @@ test('the retry policy cannot replay a model attempt after output has streamed',
   const deltas: string[] = [];
   await assert.rejects(agent.prompt(record, 'Generate', (event) => {
     if (event.type === 'delta') deltas.push(event.text);
-  }, { signal: new AbortController().signal }), /Transport closed after output/);
+  }, { choice: model, signal: new AbortController().signal }), /Transport closed after output/);
   assert.deepEqual({ requests, retries, deltas }, { requests: 1, retries: 0, deltas: ['Partial'] });
 });
 
@@ -269,7 +269,7 @@ test('a queued follow-up can preselect the next model and thinking level', async
     if (seen.length === 1) { entered(); await held; }
     yield { type: 'done', message: answer() };
   } });
-  const pending = agent.prompt(record, 'Initial', () => {}, { signal: new AbortController().signal });
+  const pending = agent.prompt(record, 'Initial', () => {}, { choice: model, signal: new AbortController().signal });
   await started;
   await agent.queueInput(record.id, 'Follow up', 'followUp', undefined, {
     model: { provider: 'fixture', id: 'next-model' }, thinkingLevel: 'medium'

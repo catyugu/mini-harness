@@ -15,14 +15,14 @@ export interface RevisionTarget {
 export interface AgentPort {
   revisionTarget(id: string, sourceEntryId: string, expectedLeafId: string | null): Promise<RevisionTarget>;
   prompt(record: SessionRecord, prompt: string, emit: (event: AgentEvent) => void, options: {
-    signal: AbortSignal; source?: InputSource; submissionId?: string; choice?: ModelChoice; images?: ImageInput[]; input?: PreparedMessage;
-    thinkingLevel?: ThinkingLevel | null; changed?: (path: string) => void;
+    signal: AbortSignal; source?: InputSource; submissionId?: string; choice: ModelChoice; images?: ImageInput[]; input?: PreparedMessage;
+    thinkingLevel?: ThinkingLevel | null; onModelAccepted?: (model: ModelChoice) => void | Promise<void>; changed?: (path: string) => void;
     revision?: { sourceEntryId: string; expectedLeafId: string | null };
   }): Promise<string>;
   compact(id: string, signal: AbortSignal): Promise<void>;
   readonly hasPending: boolean;
   prepare(id: string, signal?: AbortSignal): Promise<void>;
-  activeModel(id: string): ModelChoice;
+  activeModel(id: string): ModelChoice | undefined;
   queueInput(id: string, text: string, mode: 'steer' | 'followUp', attachments?: Attachment[],
     options?: Pick<InboxItem, 'model' | 'thinkingLevel'>): Promise<QueueEntry[]>;
   cancelQueue(id: string, itemId?: string): QueueEntry[];

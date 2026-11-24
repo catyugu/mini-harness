@@ -22,7 +22,7 @@ import { isToolContent, type ToolPort } from '@mini-harness/tools/api';
 import { contentDelta } from '@mini-harness/sessions/content-delta';
 import { applyTransforms } from './transforms.js';
 import { executeTool, scheduleTools } from './tool-pipeline.js';
-import { resolveThinking, selectModel } from './model-selection.js';
+import { resolveThinking } from './model-selection.js';
 import { requestModel } from './model-request.js';
 
 interface AgentServices {
@@ -32,8 +32,6 @@ interface AgentServices {
   prompt(id: string): PromptPort;
   inputHooks?(id: string): OrderedHook<InputPreparation>[];
   prepare(id: string, signal?: AbortSignal): Promise<void>;
-  defaultModel(): ModelChoice;
-  rememberModel(model: ModelChoice, sessionId: string): void | Promise<void>;
   policy(): { maxTurns: number; autoCompact: boolean };
   observe(event: CapabilityObservation, signal?: AbortSignal): void;
   modelRequestHooks?(id: string): OrderedHook<ModelRequestTransform>[];
@@ -98,7 +96,7 @@ export class NativeAgent implements AgentPort {
   }
 
   activeModel(id: string) {
-    return this.sessions.inspectLog(id, (log) => log.projection().model, true) ?? this.services.defaultModel();
+    return this.sessions.inspectLog(id, (log) => log.projection().model, true);
   }
 
   async revisionTarget(id: string, sourceEntryId: string, expectedLeafId: string | null) {
@@ -196,22 +194,21 @@ export class NativeAgent implements AgentPort {
 
   async prompt(record: SessionRecord, prompt: string, emit: (event: AgentEvent) => void,
     options: Parameters<AgentPort['prompt']>[3]): Promise<string> {
-    const { id } = record, { signal, choice, images = [], input = { userText: prompt, attachments: [] }, source = 'user', thinkingLevel, revision, changed, submissionId } = options;
+    const { id } = record, { signal, choice, images = [], input = { userText: prompt, attachments: [] }, source = 'user', thinkingLevel, revision, changed, submissionId, onModelAccepted } = options;
     const leave = this.agents.enter(id);
     let runLog: SessionLogPort | undefined;
     try {
       await this.prepare(id, signal);
       const log = runLog = this.sessions.log(id);
       const target = revision && await this.revisionTarget(id, revision.sourceEntryId, revision.expectedLeafId);
-      let model = log.projection(target?.parentId).model ?? this.services.defaultModel();
+      let model = log.projection(target?.parentId).model ?? choice;
       let capabilities: ReturnType<ModelCatalogPort['capabilities']>;
       let activeThinking: ThinkingLevel | undefined;
       if (!revision) this.closeUnfinishedTools(log);
       const inbox = new Inbox(log);
       const queuedSelection = (item: InboxItem) => {
         const models = this.services.models(id);
-        const choice = item.model ?? log.projection().model ?? this.services.defaultModel();
-        const chosen = models.resolve(choice);
+        const chosen = models.resolve(item.model ?? log.projection().model ?? choice);
         if (!chosen) return { ok: false, failure: 'The queued model is no longer available' } as const;
         const nextCapabilities = models.capabilities(chosen);
         if (item.images.length && !nextCapabilities?.input.includes('image'))
@@ -253,8 +250,7 @@ export class NativeAgent implements AgentPort {
           this.user(log, prepared, item.images, emit, {
             inboxId: item.id, selection: { model: chosen, thinkingLevel: level }
           });
-          if (!record.parentId && (model.provider !== chosen.provider || model.id !== chosen.id))
-            await this.services.rememberModel(chosen, id);
+          await onModelAccepted?.(chosen);
           model = chosen;
           capabilities = nextCapabilities;
           activeThinking = level;
@@ -268,8 +264,9 @@ export class NativeAgent implements AgentPort {
         await this.prepare(id, signal);
         const previous = log.projection(target?.parentId);
         const models = this.services.models(id);
-        model = selectModel(models, { explicit: choice, stored: previous.model,
-          global: this.services.defaultModel(), child: Boolean(record.parentId) });
+        const selected = models.resolve(choice);
+        if (!selected) throw new DomainError('invalid_input', 'Unknown model: ' + choice.provider + '/' + choice.id);
+        model = selected;
         capabilities = models.capabilities(model);
         activeThinking = resolveThinking(capabilities, thinkingLevel, previous.thinkingLevel);
         const prepared = await this.prepareInput(id, model, source, prompt, images, input, signal);
@@ -278,7 +275,7 @@ export class NativeAgent implements AgentPort {
         if (record.titleSource === 'auto' && !previous.messages.some((item) => item.role === 'user'))
           this.sessions.rename(id, (input.userText || input.attachments[0]?.name || prompt).slice(0, 72), 'auto');
         if (revision) this.closeUnfinishedTools(log);
-        if (!record.parentId) await this.services.rememberModel(model, id);
+        await onModelAccepted?.(model);
         submitted = true;
       };
       if (revision || !await deliver('followUp')) await submit();
@@ -456,7 +453,8 @@ export class NativeAgent implements AgentPort {
     const prefix = messages.slice(0, projection.contextEntryIds.indexOf(keepFromId));
     if (!prefix.length) { if (automatic) return; throw new DomainError('invalid_input', 'Nothing to compact'); }
     signal.throwIfAborted();
-    const model = this.services.models(id).resolve(log.projection().model ?? this.services.defaultModel());
+    const choice = log.projection().model;
+    const model = choice && this.services.models(id).resolve(choice);
     if (!model) throw new DomainError('invalid_input', 'Configure a model before compacting');
     const context: StepContext = { sessionId: id, cwd: this.sessions.workspacePath(id), model, turn: 0, phase: 'compaction', signal };
     const request = await this.prepareRequest(log, context, {

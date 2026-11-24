@@ -4,5 +4,5 @@ import { setup } from './setup.js';
 export const manifest: PluginDescriptor = {
   scope: 'application',
   id: 'core:runs', title: 'Runs', description: 'Run lifecycle', required: true,
-  inject: ['harnessScopes', 'harnessRoutes', 'harnessRegistry', 'harnessMutations', 'harnessAgent'], provides: ['harnessRuns'], setup,
+  inject: ['harnessScopes', 'harnessRoutes', 'harnessRegistry', 'harnessMutations', 'harnessAgent', 'harnessModelPreference', 'harnessModels'], provides: ['harnessRuns'], setup,
 };

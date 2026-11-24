@@ -4,7 +4,7 @@ Schedules and owns active runs and their replay streams.
 
 ## Responsibilities
 
-Owns run IDs, cancellation, compaction scheduling, current activity and bounded event replay. Sessions owns durable run state.
+Owns run IDs, submission-time model selection, cancellation, compaction scheduling, current activity and bounded event replay. Only accepted ordinary user inputs update the application model preference. Sessions owns durable run state.
 
 ## Structure
 

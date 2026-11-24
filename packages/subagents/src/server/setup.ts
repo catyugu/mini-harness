@@ -14,7 +14,7 @@ import { Delegation, type SubagentPolicy } from './delegation.js';
 export function setup(ctx: Context, api: PluginApi) {
   const { harnessRegistry: catalog, harnessScopes: scopes, harnessRuns: runs } = ctx;
   const policy = () => api.config as unknown as SubagentPolicy;
-  const delegation = new Delegation(catalog, { activeModel: (id) => scopes.require(id, 'harnessAgent').activeModel(id) },
+  const delegation = new Delegation(catalog, { activeModel: (id) => scopes.require(id, 'harnessAgent').activeModel(id) ?? ctx.harnessModelPreference.recent() },
     (id) => scopes.require(id, 'harnessModels'), () => runs, policy, (id) => catalog.assertAvailable(id));
   api.onConfigChange((next) => {
     const config = next as unknown as SubagentPolicy;

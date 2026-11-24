@@ -13,15 +13,13 @@ import { firstDecision, type OrderedHook } from '@mini-harness/kernel/contributi
 import { NativeAgent } from './agent.js';
 
 export function setup(ctx: Context, api: PluginApi) {
-  const { harnessRegistry: catalog, harnessScopes: scopes, harnessModelPreference: preference } = ctx;
+  const { harnessRegistry: catalog, harnessScopes: scopes } = ctx;
   const agent = new NativeAgent(catalog, {
     models: (id) => scopes.require(id, 'harnessModels'),
     llm: (id) => scopes.require(id, 'harnessLlm'),
     tools: (id) => scopes.require(id, 'harnessTools'),
     prompt: (id) => scopes.require(id, 'harnessPrompt'),
     prepare: (id, signal) => scopes.prepare(id, signal),
-    defaultModel: preference.recent,
-    rememberModel: preference.remember,
     policy: () => api.config as { maxTurns: number; autoCompact: boolean },
     observe: (event, signal) => ctx.emit('harness/observe', event, signal),
     inputHooks(id) {

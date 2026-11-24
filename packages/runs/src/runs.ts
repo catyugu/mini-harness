@@ -1,4 +1,6 @@
 import type {} from '@mini-harness/agent/api';
+import type { ModelCatalogPort } from '@mini-harness/models/api';
+import type { Context } from 'cordis';
 import type { ThinkingLevel, ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { ScopePort } from '@mini-harness/kernel/scopes';
 import { DomainError } from '@mini-harness/platform/errors';
@@ -13,6 +15,27 @@ import type { StreamEvent, RunEvent } from './stream.js';
 import type { RunInfo } from '@mini-harness/sessions/run-state';
 import { RunEvents } from './events.js';
 import type { SessionStore } from '@mini-harness/sessions/store';
+
+function selectModel(catalog: ModelCatalogPort, options: {
+  explicit?: ModelChoice;
+  stored?: ModelChoice;
+  global: ModelChoice;
+  preferStored: boolean;
+}) {
+  const { explicit, stored, global, preferStored } = options;
+  if (explicit) {
+    const selected = catalog.resolve(explicit);
+    if (!selected) throw new Error('Unknown model: ' + explicit.provider + '/' + explicit.id);
+    return selected;
+  }
+  const choices = preferStored ? [stored, global] : [global, stored];
+  for (const choice of choices) {
+    if (!choice?.provider) continue;
+    const selected = catalog.resolve(choice);
+    if (selected) return selected;
+  }
+  throw new Error('Configure a model before sending a message');
+}
 
 interface RunOptions {
   signal?: AbortSignal;
@@ -38,7 +61,8 @@ export class Runs {
     private readonly registry: SessionStore,
     private readonly scopes: ScopePort,
     private readonly mutations: MutationPort,
-    private readonly observe: (event: CapabilityObservation, signal?: AbortSignal) => void
+    private readonly observe: (event: CapabilityObservation, signal?: AbortSignal) => void,
+    private readonly preference: Context['harnessModelPreference']
   ) {}
 
   private changed(id: string) { this.events.dispatchEvent(new CustomEvent('change', { detail: { id } })); }
@@ -87,8 +111,15 @@ export class Runs {
       publish({ type: 'run', run: running });
       this.observe({ type: 'run-started', sessionId: id, run: running }, cancellation);
       await this.scopes.prepare(id, cancellation);
-      return this.agent(id).prompt(record, prepared.text, publish, {
-        signal: cancellation, source, submissionId: info.id, choice: model, images: prepared.images, input: prepared.input, thinkingLevel, revision,
+      const agent = this.agent(id);
+      const target = revision && await agent.revisionTarget(id, revision.sourceEntryId, revision.expectedLeafId);
+      const choice = selectModel(this.scopes.require(id, 'harnessModels'), {
+        explicit: model, stored: log.projection(target?.parentId).model,
+        global: this.preference.recent(), preferStored: Boolean(record.parentId) || source === 'plugin' || source === 'agent'
+      });
+      return agent.prompt(record, prepared.text, publish, {
+        signal: cancellation, source, submissionId: info.id, choice,
+        onModelAccepted: !record.parentId && (!source || source === 'user') ? this.preference.remember : undefined, images: prepared.images, input: prepared.input, thinkingLevel, revision,
         changed: (path) => { info.changedFiles = [...new Set([...(info.changedFiles ?? []), path])]; }
       });
     };

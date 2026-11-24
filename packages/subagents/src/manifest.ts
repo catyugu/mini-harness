@@ -28,5 +28,5 @@ export const manifest: PluginDescriptor = {
       throw new DomainError('invalid_input', 'Unknown child model: ' + provider + '/' + id);
     }
   },
-  inject: ['harnessScopes', 'harnessTools', 'harnessRegistry', 'harnessAgent', 'harnessModels', 'harnessRuns']
+  inject: ['harnessScopes', 'harnessTools', 'harnessRegistry', 'harnessAgent', 'harnessModelPreference', 'harnessModels', 'harnessRuns']
 };

@@ -85,7 +85,12 @@ function providerManager(api: FrontendApi, providers: () => ProviderInfo[], refr
     save.type = 'submit';
     const actions = fromMarkup('<div class="ui-actions"></div>');
     const error = fromMarkup('<p class="hint form-error" role="alert"></p>');
-    cancel.onclick = () => { closeEditor(); mount.closest('.ui-card')?.querySelector('button')?.focus(); if (!provider) add.focus(); };
+    cancel.onclick = () => {
+      closeEditor();
+      render();
+      if (provider) list.querySelector<HTMLButtonElement>('[data-provider="' + provider.id + '"]')?.focus();
+      else add.focus();
+    };
     actions.append(cancel, save);
     form.append(mode, catalog, endpoint.element, credentials, error, actions);
     const custom = () => provider?.custom ?? (form.elements.namedItem('provider-type') as RadioNodeList).value === 'custom';
@@ -133,7 +138,8 @@ function providerManager(api: FrontendApi, providers: () => ProviderInfo[], refr
   }
 
   function render() {
-    closeEditor();
+    // Initial projection sync and concurrent refreshes must not discard an open draft.
+    if (activeEditor) return;
     const configured = providers().filter(({ configured, custom }) => configured || custom)
       .sort((a, b) => a.name.localeCompare(b.name));
     list.replaceChildren(...configured.map((provider) => {
@@ -177,7 +183,7 @@ function providerManager(api: FrontendApi, providers: () => ProviderInfo[], refr
   add.onclick = () => edit(addArea);
   addArea.append(add);
   render();
-  return { content, render, reset: () => { closeEditor(); status.textContent = ''; } };
+  return { content, render, reset: () => { closeEditor(); render(); status.textContent = ''; } };
 }
 
 function customEndpoint(provider?: ProviderInfo) {
