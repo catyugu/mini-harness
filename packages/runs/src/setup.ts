@@ -1,4 +1,5 @@
 import type {} from '@mini-harness/kernel/observations';
+import { DomainError } from '@mini-harness/platform/errors';
 import type {} from '@mini-harness/sessions/store';
 import type {} from '@mini-harness/kernel/scopes';
 import type {} from '@mini-harness/kernel/mutation-api';
@@ -21,7 +22,10 @@ export function setup(ctx: Context) {
   });
   ctx.effect(() => () => runs.stop());
   ctx.on('harness/quiesce', () => runs.stop());
-  ctx.effect(() => mutations.guard((keys) => keys ? runs.activeInScope(keys) : runs.size > 0));
+  ctx.effect(() => mutations.guard((keys) => {
+    if (keys ? runs.activeInScope(keys) : runs.size > 0)
+      throw new DomainError('conflict', 'Stop the affected conversations before changing their providers or plugins');
+  }));
   ctx.effect(() => catalog.beforeDelete({
     busy: (id) => runs.active(id),
     async quiesce(ids) {

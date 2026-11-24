@@ -1,6 +1,6 @@
 import type {} from '@mini-harness/transport/projection-api';
 import type {} from '@mini-harness/settings/api';
-import type {} from '@mini-harness/kernel/mutation-api';
+import { assertOutsideMountTransaction, withMountTransaction } from '@mini-harness/kernel/mutation-api';
 import { DomainError } from '@mini-harness/platform/errors';
 import { dirname, join, relative } from 'node:path';
 import { Context } from 'cordis';
@@ -134,6 +134,7 @@ export class PluginHost implements ScopePort {
   }
 
   private async prepareScope(key: string, signal?: AbortSignal) {
+    assertOutsideMountTransaction();
     if (this.closing) throw new Error('Plugin host is closing');
     signal?.throwIfAborted();
     while (this.applying) {
@@ -284,6 +285,7 @@ export class PluginHost implements ScopePort {
   }
 
   async configure(settings: PluginSettings, commit = () => {}, released?: ReadonlySet<string>) {
+    assertOutsideMountTransaction();
     while (this.applying) await this.applying.catch(() => {});
     if (this.closing) throw new Error('Plugin host is closing');
     await this.apply(settings, commit, false, undefined, released);
@@ -291,7 +293,8 @@ export class PluginHost implements ScopePort {
   }
 
   private apply(settings: PluginSettings, commit: () => void, starting: boolean, preparing?: string, released?: ReadonlySet<string>) {
-    const work = this.configureGraph(settings, commit, starting, preparing, released);
+    const work = withMountTransaction(() => Promise.resolve().then(() =>
+      this.configureGraph(settings, commit, starting, preparing, released)));
     this.applying = work;
     return work.finally(() => { if (this.applying === work) this.applying = undefined; });
   }
@@ -312,7 +315,7 @@ export class PluginHost implements ScopePort {
     };
     const { plans, providers } = this.catalog.plans(settings, descriptors, 'application', this.root, new Set(), undefined, unavailable);
     const scoped = this.scopedMounts(settings, descriptors, plans, providers, unavailable, preparing, released, validations.flatMap(({ key }) => key ? [key] : []));
-    const browser = planBrowser(plans, settings.browserProviders ?? {}, unavailable);
+    const browser = planBrowser(plans, settings.browserProviders ?? {}, unavailable, this.catalog.requiredBrowserServices);
     const mounts = [...plans.filter(({ id }) => !failures.has(id)).map((plan) => this.mountPlan(plan, appScope)), ...scoped.mounts];
     const appChanged = !isDeepStrictEqual(previous.providers, settings.providers) ||
       descriptors.some(({ id, configChanges, scope, setup, source }) => scope === 'application' && (setup || source) &&
@@ -331,11 +334,15 @@ export class PluginHost implements ScopePort {
       ? this.ctx.get('harnessMutations')?.protect(appChanged ? undefined : scopeChanges) : undefined;
     try {
       await this.mounts.configure(mounts, () => {
+        const browserState = publishBrowser(browser, plans, (id) => Boolean(this.mounts.plan(id)));
+        const provided = new Set(browserState.entries.flatMap(({ provides }) => provides ?? []));
+        for (const service of this.catalog.requiredBrowserServices)
+          if (!provided.has(service)) throw new DomainError('unavailable', 'Required browser service is unavailable: ' + service);
         commit();
         this.started = true;
         this.scopes = scoped.scopes;
         this.failures = failures;
-        this.browserState = publishBrowser(browser, plans, (id) => Boolean(this.mounts.plan(id)));
+        this.browserState = browserState;
         this.graph = [...plans.map((plan) => this.describe(plan)), ...scoped.diagnostics]
           .filter(({ id }) => this.mounts.plan(id));
         this.ctx.get('harnessChanges')?.invalidate('plugins');

@@ -72,6 +72,12 @@ async function boot() {
     const changed = [...failures.keys()].some((id) => !currentFailures.has(id)) || failures.size !== currentFailures.size;
     if (changed) for (const [id, error] of failures) console.warn('Browser plugin ' + id, error);
     currentFailures = failures;
+    const coreFailure = [...failures].find(([id]) => graph.get().ui.some((entry) => entry.id === id && entry.required));
+    const status = document.getElementById('startupStatus');
+    if (coreFailure && status) {
+      status.hidden = false;
+      status.textContent = 'Required UI plugin failed: ' + coreFailure[0] + ': ' + String(coreFailure[1]);
+    }
     if (changed) failuresChanged.dispatchEvent(new Event('change'));
     return failures;
   };
@@ -84,8 +90,6 @@ async function boot() {
   try {
     await graph.refresh();
     const failures = await applyGraph();
-    const coreFailure = [...failures].find(([id]) => graph.get().ui.some((entry) => entry.id === id && entry.required));
-    if (coreFailure) throw new Error('Required UI plugin failed: ' + coreFailure[0] + ': ' + String(coreFailure[1]));
     if (failures.size) report(new Error('Browser plugins failed: ' + [...failures.keys()].join(', ')));
     const release = projections.register('plugins', {
       async sync(revision, reconnect) {

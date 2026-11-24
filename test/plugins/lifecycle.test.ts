@@ -428,3 +428,47 @@ test('configuration validation resolves the staged scope provider and rejects in
   assert.strictEqual(settings, committed);
   assert.equal(host.metadata().find(({ id }) => id === 'consumer')?.state, 'ready');
 });
+
+
+test('setup and live configuration cannot await their own graph transaction', async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'mini-reentrant-'));
+  let settings = structuredClone(DEFAULTS);
+  const builtins: PluginDescriptor[] = [{
+    id: 'reentrant', scope: 'application', title: 'Reentrant', description: '', configChanges: 'live',
+    async setup(_ctx, api) {
+      if (api.config.prepare) await api.prepareSession('session');
+      api.onConfigChange(async (next) => {
+        if (next.prepare) await api.prepareSession('session');
+      });
+    }
+  }];
+  const host = new PluginHost(new Context(), directory, builtins, [], () => settings);
+  host.register('session', (id) => ({ scope: { kind: 'session', sessionId: id, workspaceId: 'workspace' } }));
+  t.after(async () => { await host.close(); rmSync(directory, { recursive: true, force: true }); });
+  await host.start(settings);
+  const configure = (prepare: boolean) => {
+    const next = { ...settings, plugins: { reentrant: true }, pluginConfig: { reentrant: { prepare } } };
+    return host.configure(next, () => { settings = next; });
+  };
+  await assert.rejects(configure(true), /during plugin setup, configuration or teardown/);
+  await configure(false);
+  const committed = settings;
+  await assert.rejects(configure(true), /during plugin setup, configuration or teardown/);
+  assert.strictEqual(settings, committed);
+  await host.prepare('session');
+});
+
+test('required browser services must survive server mounting, including replacement providers', async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'mini-required-browser-'));
+  const browser = '/packages/ui-runtime/src/browser/boot.js';
+  const builtins: PluginDescriptor[] = [
+    { id: 'ui', scope: 'application', title: 'UI', description: '', required: true, browser, browserProvides: ['miniTest'] },
+    { id: 'replacement', scope: 'application', title: 'Replacement', description: '', browser, browserProvides: ['miniTest'],
+      setup(_ctx, api) { if (api.config.fail) throw new Error('Unavailable replacement'); } }
+  ];
+  const settings = { ...structuredClone(DEFAULTS), plugins: { replacement: true },
+    browserProviders: { miniTest: 'replacement' }, pluginConfig: { replacement: { fail: true } } };
+  const host = new PluginHost(new Context(), directory, builtins, [], () => settings);
+  t.after(async () => { await host.close(); rmSync(directory, { recursive: true, force: true }); });
+  await assert.rejects(host.start(settings), /Required browser service is unavailable: miniTest/);
+});

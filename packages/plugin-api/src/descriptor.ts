@@ -52,9 +52,9 @@ export interface PluginApi {
   readonly signal: AbortSignal;
   provide<Name extends keyof ServiceMap & string>(name: Name, service: ServiceMap[Name]): void;
   service<Name extends keyof ServiceMap & string>(name: Name): NonNullable<ServiceMap[Name]>;
-  /** Read a declared service for a prepared conversation visible to this instance. */
+  /** Resolve the current declared provider for a prepared conversation. Do not retain it across configuration changes. */
   scopedService<Name extends keyof ServiceMap & string>(sessionId: string, name: Name): NonNullable<ServiceMap[Name]>;
-  /** Prepare the conversation's providers before serving work outside an existing run. */
+  /** Prepare providers during normal operation. Not available from setup or configuration callbacks. */
   prepareSession(sessionId: string, signal?: AbortSignal): Promise<void>;
   optionalService<Name extends keyof ServiceMap & string>(name: Name): ServiceMap[Name] | undefined;
   contribute<Args extends unknown[], Result>(point: Extension<Args, Result>, ...args: Args): Result;

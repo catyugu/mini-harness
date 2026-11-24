@@ -1,3 +1,4 @@
+import { assertOutsideMountTransaction } from '@mini-harness/kernel/mutation-api';
 import { DomainError } from '@mini-harness/platform/errors';
 import { isDeepStrictEqual } from 'node:util';
 import { mergeSettings, readSettings } from './config.js';
@@ -105,7 +106,8 @@ export class SettingsManager implements SettingsPort {
     });
   }
 
-  private enqueue<T>(operation: () => T | Promise<T>): Promise<T> {
+  private async enqueue<T>(operation: () => T | Promise<T>): Promise<T> {
+    assertOutsideMountTransaction();
     if (this.closing) return Promise.reject(new DomainError('unavailable', 'Settings are closing'));
     const work = this.pending.then(operation);
     this.pending = work.then(() => {}, () => {});
