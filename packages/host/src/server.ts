@@ -145,13 +145,7 @@ export async function createMiniHarnessServer(paths: Paths, options: { token?: s
     }
   };
   await runtime.start();
-  const server = createServer((req, res) => {
-    res.once('finish', () => {
-      // A response finishing during shutdown has just left the active connection set.
-      if (!server.listening) server.closeIdleConnections();
-    });
-    void route(req, res);
-  });
+  const server = createServer((req, res) => { void route(req, res); });
   server.on('upgrade', (request, socket, head) => {
     const reject = (status: string) => socket.end('HTTP/1.1 ' + status + '\r\nConnection: close\r\n\r\n');
     if (!authorize(request, token)) { reject('401 Unauthorized'); return; }
@@ -170,10 +164,15 @@ export async function createMiniHarnessServer(paths: Paths, options: { token?: s
       return (server.address() as AddressInfo).port;
     },
     close() {
-      closing ??= Promise.all([
-        new Promise<void>((done) => server.close(() => done())), runtime.stop()
-      ]).then(() => {});
+      if (closing) return closing;
+      const closed = new Promise<void>((done) => server.close(() => done()));
       upgrades.close();
+      const drained = runtime.stop().finally(() => {
+        // Request and plugin work has drained. End any remaining HTTP connections,
+        // including streams or keep-alive sockets which finished during shutdown.
+        server.closeAllConnections();
+      });
+      closing = Promise.all([closed, drained]).then(() => {});
       return closing;
     }
   };
