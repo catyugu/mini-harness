@@ -1,5 +1,5 @@
 import type { SessionRecord, ModelChoice } from './conversation.js';
-import type { Attachment, ImageInput, PreparedMessage } from './input.js';
+import type { Attachment, ImageInput, InputSource, PreparedMessage } from './input.js';
 import type { StreamEvent } from './transport.js';
 import type { PromptContext } from './extensions.js';
 import type { ViewMessage } from './message.js';
@@ -24,7 +24,7 @@ export interface RevisionTarget {
 export interface RunAgentPort {
   revisionTarget(id: string, sourceEntryId: string, expectedLeafId: string | null): Promise<RevisionTarget>;
   prompt(record: SessionRecord, prompt: string, emit: (event: StreamEvent) => void, options: {
-    signal: AbortSignal; submissionId?: string; choice?: ModelChoice; images?: ImageInput[]; input?: PreparedMessage;
+    signal: AbortSignal; source?: InputSource; submissionId?: string; choice?: ModelChoice; images?: ImageInput[]; input?: PreparedMessage;
     thinkingLevel?: ThinkingLevel | null; changed?: (path: string) => void;
     revision?: { sourceEntryId: string; expectedLeafId: string | null };
   }): Promise<string>;

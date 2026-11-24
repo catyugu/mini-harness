@@ -7,5 +7,5 @@ export interface Skill {
 export interface SkillPort {
   discover(cwd: string): Promise<Skill[]>;
   prompt(cwd: string): Promise<string>;
-  expand(cwd: string, text: string): Promise<string>;
+  instruction(cwd: string, text: string): Promise<string | undefined>;
 }

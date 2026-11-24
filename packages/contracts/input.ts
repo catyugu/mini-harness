@@ -3,4 +3,11 @@ export interface Attachment { name: string; mimeType: string; data: string }
 export interface ImageInput { type: 'image'; mimeType: string; data: string }
 
 export interface InputAttachment { name: string; mimeType: string }
-export interface PreparedMessage { userText: string; attachments: InputAttachment[] }
+export interface PreparedMessage {
+  userText: string;
+  attachments: InputAttachment[];
+  /** Original images when preparation changed the model-visible images. */
+  images?: ImageInput[];
+}
+
+export type InputSource = 'user' | 'agent' | 'plugin';

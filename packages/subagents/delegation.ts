@@ -144,7 +144,7 @@ export class Delegation implements DelegationPort {
       parentId, workspaceId: parent.workspaceId, title: childTitle(task)
     });
     try {
-      const text = await this.runs().send(record.id, task, undefined, { signal, model,
+      const text = await this.runs().send(record.id, task, undefined, { signal, model, source: 'agent',
         schedule: (run, cancellation) => this.schedule(record, run, cancellation) });
       return { id: record.id, text };
     } catch (error) {

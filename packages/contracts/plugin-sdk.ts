@@ -26,6 +26,8 @@ export type { GatewayRequest, NetworkPort, RouteRequest, UpgradeHandler } from '
 export type { PluginConfiguration } from './config.js';
 
 export { agentExtensions } from './agent-extensions.js';
+export type { InputContext, InputPreparation } from './agent-extensions.js';
+export type { InputSource, PreparedMessage } from './input.js';
 export { promptExtensions } from './prompt-extensions.js';
 export { toolExtensions } from './tool-extensions.js';
 export { sessionExtensions } from './session-records.js';

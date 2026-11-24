@@ -1,3 +1,4 @@
+import { agentExtensions } from '@mini-harness/contracts/agent-extensions';
 import { promptExtensions } from '@mini-harness/contracts/prompt-extensions';
 import type { Context } from 'cordis';
 import { Type } from 'typebox';
@@ -8,6 +9,14 @@ import { SkillLoader } from './loader.js';
 export function setup(ctx: Context, api: PluginApi) {
     const loader = new SkillLoader(ctx.harnessState.paths.skills);
     ctx.provide('harnessSkills', loader);
+    api.contribute(agentExtensions.prepareInput, async (content, { source, original, cwd, signal }) => {
+      if (source !== 'user') return;
+      const instruction = await loader.instruction(cwd, original.userText);
+      signal.throwIfAborted();
+      if (!instruction) return;
+      const parts = typeof content === 'string' ? [{ type: 'text' as const, text: content }] : content;
+      return [...parts, { type: 'text', text: instruction }];
+    });
     api.contribute(promptExtensions.section, { id: 'skills', order: 400, render: ({ sessionId, cwd }) =>
       ctx.harnessScopes.require(sessionId, 'harnessSkills').prompt(cwd) });
     ctx.effect(() => ctx.harnessRoutes.register('GET', '/api/workspaces/:id/skills', async ({ params, url }) => {

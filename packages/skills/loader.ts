@@ -99,13 +99,12 @@ export class SkillLoader implements SkillPort {
     return 'Available skills describe task-specific instructions. When a skill matches the task, call load_skill with its name and follow its instructions.\n' +
       '<available_skills>\n' + skills.map((skill) => `  <skill name="${xml(skill.name)}">${xml(skill.description)}</skill>`).join('\n') + '\n</available_skills>';
   }
-  async expand(cwd: string, text: string) {
-    const match = text.match(/^\/skill:([a-z0-9-]+)(?:\s+([\s\S]*))?$/);
-    if (!match) return text;
+  async instruction(cwd: string, text: string) {
+    const match = text.match(/^\/skill:([a-z0-9-]+)(?:\s+[\s\S]*)?$/);
+    if (!match) return;
     const skill = (await this.discover(cwd)).find(({ name }) => name === match[1]);
     if (!skill) throw new Error('Unknown skill: ' + match[1]);
-    return `<skill name="${xml(skill.name)}" source="${xml(skill.file)}">\n${skill.content}\n</skill>` +
-      (match[2] ? '\n\n' + match[2] : '');
+    return `<skill name="${xml(skill.name)}" source="${xml(skill.file)}">\n${skill.content}\n</skill>`;
   }
 }
 

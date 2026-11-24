@@ -1,4 +1,5 @@
 import type { Context } from 'cordis';
+import type { InputPreparation } from '@mini-harness/contracts/agent-extensions';
 import type { PluginApi } from '@mini-harness/contracts/plugins';
 import { registerRoutes } from './routes.js';
 import type { ModelRequestTransform, ToolResultTransform } from '@mini-harness/contracts/extensions';
@@ -13,12 +14,16 @@ export function setup(ctx: Context, api: PluginApi) {
     tools: (id) => scopes.require(id, 'harnessTools'),
     allowsTool: (id, name) => scopes.allowsTool(id, name),
     prompt: (id) => scopes.require(id, 'harnessPrompt'),
-    skills: (id) => scopes.optional(id, 'harnessSkills'),
     prepare: (id, signal) => scopes.prepare(id, signal),
     defaultModel: preference.recent,
     rememberModel: preference.remember,
     policy: () => api.config as { maxTurns: number; autoCompact: boolean },
     observe: (event) => ctx.emit('harness/observe', event),
+    inputHooks(id) {
+      const hooks: OrderedHook<InputPreparation>[] = [];
+      ctx.emit('harness/prepare-input', id, hooks);
+      return hooks;
+    },
     modelRequestHooks(id) {
       const hooks: OrderedHook<ModelRequestTransform>[] = [];
       ctx.emit('harness/model-request', id, hooks);
