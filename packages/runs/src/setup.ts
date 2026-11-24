@@ -1,4 +1,5 @@
 import type {} from '@mini-harness/kernel/observations';
+import type {} from '@mini-harness/models/api';
 import { DomainError } from '@mini-harness/platform/errors';
 import type {} from '@mini-harness/sessions/store';
 import type {} from '@mini-harness/kernel/scopes';
@@ -11,13 +12,12 @@ import { Runs } from './runs.js';
 export function setup(ctx: Context) {
   const { harnessRegistry: catalog, harnessScopes: scopes, harnessMutations: mutations } = ctx;
   const runs = new Runs(catalog, scopes, mutations, (event, signal) => ctx.emit('harness/observe', event, signal),
-    (source) => ctx.bail('harness/run-selection', source));
+    ctx.harnessModelPreference);
   ctx.provide('harnessRuns', runs);
   ctx.provide('harnessExecution', {
     [executionForPlugin]: {
       launch: runs.submit.bind(runs),
-      info: (id: string) => runs.info(id),
-      cancel: (id: string) => runs.cancel(id)
+      info: (id: string) => runs.info(id)
     }
   });
   ctx.effect(() => () => runs.stop());

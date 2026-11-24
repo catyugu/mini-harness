@@ -278,7 +278,7 @@ Mount HTTP routes with `api.registerRoute` and local WebSocket endpoints with `a
 
 ## Execute tasks and request confirmation
 
-Declare `harnessExecution` and acquire `api.contribute(executionExtensions.control)`. Submit a message with `submit(sessionId, input, { signal })` and await the returned handle’s `result`. Use `status(sessionId)` and `cancel(sessionId, runId)` for the current execution. Runs owns admission, durable state and cancellation. Plugin unload cancels submissions made through this interface. Use `sessionExtensions.access` to create a child and obtain the parent’s committed model.
+Declare `harnessExecution` and acquire `api.contribute(executionExtensions.control)`. Submit a message with `submit(sessionId, input, { signal })` and await the returned handle’s `result`. Use `status(sessionId)` for visible conversation state and `handle.cancel()` to cancel only the submitted execution. A handle cannot cancel a later run. Runs owns admission, durable state and cancellation. Plugin unload cancels submissions made through this interface. Use `sessionExtensions.access` to create a child and obtain the parent’s committed model.
 
 Declare `harnessApprovalRequests` and acquire `api.contribute(approvalExtensions.request)`. Supply a conversation ID, title and message. The returned promise settles when the user decides or the request expires, and follows the supplied signal, active run and plugin lifetime.
 

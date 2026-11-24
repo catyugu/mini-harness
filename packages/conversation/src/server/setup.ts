@@ -11,10 +11,6 @@ import { registerSessionRoutes } from './routes.js';
 
 export function setup(ctx: Context) {
   const changes = ctx.harnessChanges;
-  ctx.on('harness/run-selection', (source) => ({
-    fallback: ctx.harnessModelPreference.recent(),
-    acceptedModel: source === 'user' ? ctx.harnessModelPreference.remember : undefined
-  }));
   ctx.effect(() => changes.register('sessions'));
   ctx.effect(() => changes.register('queue'));
   ctx.effect(() => changes.register('conversation-records'));

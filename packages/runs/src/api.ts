@@ -4,11 +4,6 @@ import type { Attachment, InputSource } from '@mini-harness/input/message';
 import type { RunEvent, StreamEvent } from './stream.js';
 import type { RunInfo } from '@mini-harness/sessions/run-state';
 
-export interface RunSelection {
-  fallback: ModelChoice;
-  acceptedModel?: (model: ModelChoice) => void | Promise<void>;
-}
-
 export interface RunPort {
   readonly size: number;
   readonly events: EventTarget;
@@ -33,9 +28,6 @@ export interface RunPort {
 
 declare module 'cordis' {
   interface Context { harnessRuns: RunPort }
-  interface Events {
-    'harness/run-selection'(source: InputSource): RunSelection | undefined;
-  }
 }
 
 declare module '@mini-harness/kernel/observations' {

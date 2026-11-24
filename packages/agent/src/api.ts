@@ -14,9 +14,9 @@ export interface RevisionTarget {
 
 export interface AgentPort {
   revisionTarget(id: string, sourceEntryId: string, expectedLeafId: string | null): Promise<RevisionTarget>;
-  prompt(record: SessionRecord, prompt: string, emit: (event: AgentEvent) => void, options: {
+  prompt(record: SessionRecord, prompt: string, emit: (event: AgentEvent) => void | Promise<void>, options: {
     signal: AbortSignal; source?: InputSource; submissionId?: string; choice?: ModelChoice; images?: ImageInput[]; input?: PreparedMessage;
-    fallback?: ModelChoice; acceptedModel?: (model: ModelChoice) => void | Promise<void>;
+    fallback?: ModelChoice;
     thinkingLevel?: ThinkingLevel | null; changed?: (path: string) => void;
     revision?: { sourceEntryId: string; expectedLeafId: string | null };
   }): Promise<string>;

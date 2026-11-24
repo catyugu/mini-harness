@@ -13,6 +13,8 @@ export interface ExecutionInput {
 export interface ExecutionHandle {
   readonly id: string;
   readonly result: Promise<string>;
+  /** Cancel only this execution, never a later run or another owner's work. */
+  cancel(): boolean;
 }
 
 export const executionForPlugin = Symbol.for('mini-harness.executionForPlugin');
@@ -22,7 +24,6 @@ export interface ExecutionPort {
     launch(id: string, input: ExecutionInput, signal: AbortSignal,
       acquire?: (signal: AbortSignal) => Promise<() => void>): ExecutionHandle;
     info(id: string): RunInfo | undefined;
-    cancel(id: string): boolean;
   };
 }
 
@@ -33,7 +34,6 @@ export interface Execution {
     acquire?: (signal: AbortSignal) => Promise<() => void>;
   }): ExecutionHandle;
   status(id: string): RunInfo | undefined;
-  cancel(id: string, runId: string): boolean;
 }
 
 declare module '@mini-harness/kernel/services' {
@@ -56,11 +56,7 @@ export const executionExtensions = {
         void source.run('execute conversation', () => handle.result, options.signal).catch(() => {});
         return handle;
       },
-      status(id) { check(id); return execution.info(id); },
-      cancel(id, runId) {
-        check(id);
-        return execution.info(id)?.id === runId && execution.cancel(id);
-      }
+      status(id) { check(id); return execution.info(id); }
     };
   })
 };

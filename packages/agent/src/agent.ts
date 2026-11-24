@@ -161,15 +161,15 @@ export class NativeAgent implements AgentPort {
     };
   }
 
-  private user(log: SessionLogPort, prepared: Awaited<ReturnType<NativeAgent['prepareInput']>>, images: ImageInput[],
-    emit: (event: AgentEvent) => void, delivery: { submissionId?: string; inboxId?: string; selection: { model: ModelChoice; thinkingLevel?: ThinkingLevel } },
+  private async user(log: SessionLogPort, prepared: Awaited<ReturnType<NativeAgent['prepareInput']>>, images: ImageInput[],
+    emit: (event: AgentEvent) => void | Promise<void>, source: InputSource, delivery: { submissionId?: string; inboxId?: string; selection: { model: ModelChoice; thinkingLevel?: ThinkingLevel } },
     revision?: { parentId: string | null; expectedLeafId: string | null }) {
     prepared.assertActive();
     const { content, presentation: input } = prepared;
     const event = { type: 'message', message: { role: 'user', content, timestamp: Date.now() }, presentation: input, ...delivery } as const;
     const entry = revision ? log.revise(event, revision.parentId, revision.expectedLeafId) : log.append(event);
     const displayed = input.userText ? [{ type: 'text', text: input.userText }, ...images] : images;
-    emit({ type: 'user', id: entry.id, submissionId: delivery?.submissionId, timestamp: event.message.timestamp, content: displayed, attachments: input?.attachments });
+    await emit({ type: 'user', source, model: delivery.selection.model, id: entry.id, submissionId: delivery?.submissionId, timestamp: event.message.timestamp, content: displayed, attachments: input?.attachments });
   }
 
   /** Never retry an unknown tool outcome after restart or provider failure. */
@@ -189,9 +189,9 @@ export class NativeAgent implements AgentPort {
       : 'Execution was interrupted before a durable result was recorded. The tool was not retried.') });
   }
 
-  async prompt(record: SessionRecord, prompt: string, emit: (event: AgentEvent) => void,
+  async prompt(record: SessionRecord, prompt: string, emit: (event: AgentEvent) => void | Promise<void>,
     options: Parameters<AgentPort['prompt']>[3]): Promise<string> {
-    const { id } = record, { signal, choice, images = [], input = { userText: prompt, attachments: [] }, source = 'user', thinkingLevel, revision, changed, submissionId, fallback, acceptedModel } = options;
+    const { id } = record, { signal, choice, images = [], input = { userText: prompt, attachments: [] }, source = 'user', thinkingLevel, revision, changed, submissionId, fallback } = options;
     const leave = this.agents.enter(id);
     let runLog: SessionLogPort | undefined;
     try {
@@ -245,11 +245,9 @@ export class NativeAgent implements AgentPort {
           }
           signal.throwIfAborted();
           if (inbox.next(mode)?.id !== item.id) continue;
-          this.user(log, prepared, item.images, emit, {
+          await this.user(log, prepared, item.images, emit, 'user', {
             inboxId: item.id, selection: { model: chosen, thinkingLevel: level }
           });
-          if (!record.parentId && (model?.provider !== chosen.provider || model.id !== chosen.id))
-            await acceptedModel?.(chosen);
           model = chosen;
           capabilities = nextCapabilities;
           activeThinking = level;
@@ -264,16 +262,15 @@ export class NativeAgent implements AgentPort {
         const previous = log.projection(target?.parentId);
         const models = this.services.models(id);
         model = selectModel(models, { explicit: choice, stored: previous.model,
-          fallback, child: Boolean(record.parentId) });
+          fallback, preferStored: Boolean(record.parentId) || source !== 'user' });
         capabilities = models.capabilities(model);
         activeThinking = resolveThinking(capabilities, thinkingLevel, previous.thinkingLevel);
         const prepared = await this.prepareInput(id, model, source, prompt, images, input, signal);
-        this.user(log, prepared, images, emit, { submissionId, selection: { model, thinkingLevel: activeThinking } },
+        await this.user(log, prepared, images, emit, source, { submissionId, selection: { model, thinkingLevel: activeThinking } },
           revision && target ? { parentId: target.parentId, expectedLeafId: revision.expectedLeafId } : undefined);
         if (record.titleSource === 'auto' && !previous.messages.some((item) => item.role === 'user'))
           this.sessions.rename(id, (input.userText || input.attachments[0]?.name || prompt).slice(0, 72), 'auto');
         if (revision) this.closeUnfinishedTools(log);
-        if (!record.parentId) await acceptedModel?.(model);
         submitted = true;
       };
       if (revision || !await deliver('followUp')) await submit();

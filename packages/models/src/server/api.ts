@@ -10,13 +10,15 @@ export interface ModelCatalogPort {
   capabilities(choice: ModelChoice): ProviderModel | undefined;
 }
 
+export interface ModelPreference {
+  recent(): ModelChoice;
+  remember(model: ModelChoice): Promise<void>;
+}
+
 declare module 'cordis' {
   interface Context {
     harnessModels: ModelCatalogPort;
-    harnessModelPreference: {
-      recent(): ModelChoice;
-      remember(model: ModelChoice): Promise<void>;
-    };
+    harnessModelPreference: ModelPreference;
   }
 }
 

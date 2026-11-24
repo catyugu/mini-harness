@@ -453,6 +453,9 @@ importers:
       '@mini-harness/llm':
         specifier: workspace:*
         version: link:../llm
+      '@mini-harness/models':
+        specifier: workspace:*
+        version: link:../models
       '@mini-harness/platform':
         specifier: workspace:*
         version: link:../platform
