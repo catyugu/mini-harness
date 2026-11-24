@@ -31,14 +31,17 @@ previewViewport.className = 'message-image-viewport';
 previewViewport.setAttribute('role', 'region');
 previewViewport.setAttribute('aria-label', 'Image');
 const previewImage = document.createElement('img');
-previewViewport.append(previewImage);
+const previewVideo = document.createElement('video');
+previewVideo.controls = true;
+previewVideo.preload = 'metadata';
+previewVideo.hidden = true;
+previewViewport.append(previewImage, previewVideo);
 const caption = document.createElement('figcaption');
-const filename = document.createElement('span');
 const actualSize = button('Actual size', 'quiet');
-caption.append(filename, actualSize);
+caption.append(actualSize);
 preview.append(previewViewport, caption);
 const { node: previewDialog, dispose } = dialogs.create('Image preview', preview);
-signal.addEventListener('abort', dispose, { once: true });
+signal.addEventListener('abort', () => { releaseMedia(); dispose(); }, { once: true });
 previewDialog.classList.add('message-image-dialog');
 
 function setActualSize(enabled: boolean) {
@@ -49,15 +52,44 @@ function setActualSize(enabled: boolean) {
 }
 
 actualSize.onclick = () => setActualSize(actualSize.getAttribute('aria-pressed') !== 'true');
+let videoUrl: string | undefined;
+function releaseMedia() {
+  previewImage.removeAttribute('src');
+  previewVideo.pause();
+  previewVideo.removeAttribute('src');
+  previewVideo.load();
+  if (videoUrl) URL.revokeObjectURL(videoUrl);
+  videoUrl = undefined;
+}
 previewDialog.addEventListener('close', () => {
-  if (!previewDialog.open) previewImage.removeAttribute('src');
-}, { signal: signal });
+  if (!previewDialog.open) releaseMedia();
+}, { signal });
 
-function openImage(thumbnail: HTMLImageElement) {
-  previewImage.alt = filename.textContent = thumbnail.alt;
-  previewImage.src = thumbnail.src;
+function showMedia(video: boolean) {
+  previewImage.hidden = video;
+  previewVideo.hidden = !video;
+  actualSize.hidden = video;
+  const title = video ? 'Video preview' : 'Image preview';
+  previewDialog.setAttribute('aria-label', title);
+  previewDialog.querySelector('header button')?.setAttribute('aria-label', 'Close ' + title.toLowerCase());
+  previewViewport.setAttribute('aria-label', video ? 'Video' : 'Image');
   if (!previewDialog.open) previewDialog.showModal();
   setActualSize(false);
+}
+
+function openImage(thumbnail: HTMLImageElement) {
+  releaseMedia();
+  previewImage.alt = thumbnail.alt;
+  previewImage.src = thumbnail.src;
+  showMedia(false);
+}
+
+function openVideo(name: string, mimeType: string, bytes: Uint8Array<ArrayBuffer>) {
+  releaseMedia();
+  videoUrl = URL.createObjectURL(new Blob([bytes], { type: mimeType }));
+  previewVideo.src = videoUrl;
+  previewVideo.setAttribute('aria-label', name);
+  showMedia(true);
 }
 
 function textOf(value?: MessageContent) {
@@ -290,11 +322,25 @@ function renderEntry(message: ViewMessage, node?: HTMLElement) {
       const attachmentId = file.id;
       const card = fileCard(file, Boolean(attachmentId && sessionId));
       if (card instanceof HTMLButtonElement && attachmentId && sessionId) {
-        card.setAttribute('aria-label', 'Download ' + file.name);
+        const video = /^video\/[a-z0-9.+-]+$/i.test(file.mimeType);
+        const media = video || imageMime.test(file.mimeType);
+        card.setAttribute('aria-label', (media ? 'Preview ' : 'Open ') + file.name);
+        if (media) card.setAttribute('aria-haspopup', 'dialog');
         card.onclick = async () => {
+          if (!media && extensions.openAttachment(file, sessionId)) return;
           card.disabled = true;
           try {
             const upload = await data<{ data: string }>('/sessions/' + sessionId + '/attachments/' + attachmentId, { signal });
+            if (signal.aborted || !card.isConnected || current().sessionId !== sessionId) return;
+            if (video) {
+              openVideo(file.name, file.mimeType, Uint8Array.from(atob(upload.data), (char) => char.charCodeAt(0)));
+              return;
+            }
+            if (imageMime.test(file.mimeType)) {
+              const image = document.createElement('img');
+              image.src = 'data:' + file.mimeType + ';base64,' + upload.data; image.alt = file.name;
+              openImage(image); return;
+            }
             const bytes = Uint8Array.from(atob(upload.data), (char) => char.charCodeAt(0));
             const url = URL.createObjectURL(new Blob([bytes], { type: 'application/octet-stream' }));
             const link = document.createElement('a');
