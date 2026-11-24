@@ -359,7 +359,7 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
   const child = { plugins: { layer: true }, providers: { greeting: 'layer' }, pluginConfig: { layer: { value: 'child' } } };
   const broken = { ...parent, pluginConfig: { layer: { fail: true } } };
   await assert.rejects(configure({ [workspaceKey]: workspace, 'session:parent': parent, 'session:child': child, 'session:sibling': broken }), /Scoped setup failed/);
-  assert.equal(settings.scopes['session:sibling'], undefined);
+  assert.ok(!Object.hasOwn(settings.scopes, 'session:sibling'));
   await configure({ [workspaceKey]: workspace, 'session:parent': parent, 'session:child': child });
   assert.equal(host.metadata().find(({ id }) => id === 'layer')?.state, 'ready', 'required replacements are mounted before commit');
   assert.equal(host.require('session:parent', 'greeting'), 'parent');
