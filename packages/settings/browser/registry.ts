@@ -1,5 +1,5 @@
-import type { PluginConfiguration } from '@mini-harness/contracts/config';
-import type { SettingsContribution, SettingsSection } from '@mini-harness/contracts/settings-browser';
+import type { PluginConfiguration } from '@mini-harness/kernel/configuration';
+import type { SettingsContribution, SettingsSection } from './api.js';
 
 interface Entry {
   section: SettingsContribution['section'];

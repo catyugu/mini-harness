@@ -5,6 +5,22 @@
   "type": "module",
   "exports": {
     "./composition": "./composition.ts",
-    "./mounts": "./mounts.ts"
+    "./configuration": "./configuration.ts",
+    "./contributions": "./contributions.ts",
+    "./mounts": "./mounts.ts",
+    "./observations": "./observations.ts",
+    "./scopes": "./scopes.ts",
+    "./services": "./services.ts"
+  },
+  "miniHarness": {
+    "api": [
+      "./composition",
+      "./configuration",
+      "./contributions",
+      "./mounts",
+      "./observations",
+      "./scopes",
+      "./services"
+    ]
   }
 }

@@ -1,6 +1,6 @@
 # Architecture
 
-mini-harness ships as one npm package. Cordis composes application, workspace and session capabilities. The Agent capability owns turns, queues and model context. Tools owns registration, invocation policy and leases. The model transport adapter owns the Pi dependency. Public contracts, plugins, persisted logs and browser code contain no model SDK types.
+mini-harness ships as one npm package. Cordis composes application, workspace and session capabilities. The Agent capability owns turns, queues and model context. Tools owns registration, invocation policy and leases. Each capability declares its Cordis services, events and extension points in the API it owns. Conversation combines session, run and approval state for display. The model transport adapter owns the Pi dependency. Public contracts, plugins, persisted logs and browser code contain no model SDK types.
 
 ## Composition and lifecycle
 
@@ -65,25 +65,12 @@ The server publishes successful browser entries from the same descriptors at `/a
 
 The browser runs its own Cordis graph. Plugins pass capability-owned points to `api.contribute` and declare their services with `browserInject`. Layout owns pages, dialogs and right tabs. Conversation owns messages and composer contributions. Slots own keyed replacement and restoration, and each renderer has its own disposal signal. Unmount cancels plugin requests and releases contributions. Each editing draft has a cleanup tied to its instance, so an older contribution's removal leaves a replacement in place.
 
-The authenticated `/api/changes` stream publishes revisions and scoped invalidations. Registered domain owners fetch authoritative projections on change and reconnect. A failed owner is reported without preventing unrelated projections from refreshing. The selected conversation loads native history and run replay; presentation state stays local to its browser feature.
+The authenticated `/api/changes` stream publishes revisions and scoped invalidations for domains registered by their owners. Browser subscribers fetch authoritative projections on change and reconnect. A failed owner is reported without preventing unrelated projections from refreshing. The selected conversation loads native history and run replay; presentation state stays local to its browser feature.
 
 ## Verification boundaries
 
-Private packages use pnpm workspace dependencies and named exports. Strict TypeScript checking covers the contracts, plugin API, and agent selection and transform policies. The build resolves workspace imports in JavaScript and declarations so the root manifest defines the sole published package. Architecture tests verify workspace declarations, the dependency DAG and capability boundaries. The browser graph test fetches built-in modules through HTTP and follows their static dependencies. Installed package checks exercise both SDK entrypoints and verify that the published tarball excludes workspace metadata and tests.
+Private packages declare pnpm workspace dependencies and named exports. The `miniHarness.api` field identifies the entries available to other capabilities. Host selects providers through assembly entries. Browser JavaScript is served from browser entries, browser directories, explicitly shared browser-safe modules and the browser SDK URL.
 
-- `pnpm run build` compiles with strict TypeScript and prepares browser assets.
-- `pnpm run test:node` and `pnpm run test:playwright` run the Node and browser suites against that build.
-- `pnpm run pack:verify` installs the built tarball in an empty project and exercises its SDK, browser assets and detached CLI.
-- `pnpm run typecheck` checks types without emitting build output.
+The root package publishes `mini-harness/plugin` and `mini-harness/browser-plugin`. These entrypoints gather the domain APIs for external plugins. A plugin can augment `ServiceMap` for its own services. Capability owners augment that same interface only for services they choose to expose. The mount still checks service declarations, scope and permissions.
 
-CI builds once per job. Node jobs cover Linux and Windows on Node 22 and 24, with real workspace isolation required on Linux. Browser jobs run Chromium on Linux and Windows.
-
-Session navigation reads the active run or the last durable run summary from the Session Log. Opening a log reconciles any interrupted run. Search uses temporary read-only handles for cold logs and never creates a transcript for an unopened conversation. Corrupt logs are isolated and remain visible for deletion. Diagnostics report the session ID and validation failure. The live log cache is bounded and active runs retain their writer.
-
-Files and Shell publish workspace invalidations after a write or a command completes. File views fetch the current file or Git state. A single file tab holds its preview or diff mode and cancels superseded reads.
-
-Run the Session Log recovery benchmark after a build.
-
-    node dist/packages/sessions/tests/recovery-benchmark.js
-
-It measures log opening on growing transcripts with branches, compaction, model requests and accepted tool results. It also checks sampled request snapshots. Recovery reuses validation state for linear request contexts and reconstructs the full context for branch changes, compaction and message patches.
+The build rewrites workspace imports in JavaScript and declarations and packages the declarations reachable from the two SDK entrypoints. Architecture tests verify workspace declarations and both type and runtime dependencies. The browser graph test follows the built-in modules over HTTP, and the npm package check compiles a strict TypeScript consumer in an independent installation.

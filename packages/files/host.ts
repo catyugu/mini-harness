@@ -1,15 +1,21 @@
-import { HttpError } from '@mini-harness/contracts/routes';
+import type {} from '@mini-harness/sessions/store';
+import type {} from '@mini-harness/workspaces/api';
+import type {} from '@mini-harness/kernel/scopes';
+import type {} from '@mini-harness/transport/projection-api';
+import type {} from '@mini-harness/file-access/api';
+import { DomainError } from '@mini-harness/platform/errors';
 import { relative, resolve, sep } from 'node:path';
-import { toolExtensions } from '@mini-harness/contracts/tool-extensions';
-import type { PluginApi } from '@mini-harness/contracts/plugins';
+import { toolExtensions } from '@mini-harness/tools/extensions';
+import type { PluginApi } from '@mini-harness/plugin-api/descriptor';
 import type { Context } from 'cordis';
 import { Inspection } from './inspection.js';
 import { fileTools, fileToolNames } from './tools.js';
-import type { RouteRequest } from '@mini-harness/contracts/routes';
+import type { RouteRequest } from '@mini-harness/transport/routes';
 
 export function setup(ctx: Context, api: PluginApi) {
   const { harnessRegistry: sessions, harnessWorkspaces: workspaces,
     harnessRoutes: routes, harnessScopes: scopes, harnessChanges: changes } = ctx;
+  ctx.effect(() => changes.register('files'));
 
   for (const [index, name] of fileToolNames.entries()) {
     const writes = name === 'edit' || name === 'write';
@@ -17,7 +23,7 @@ export function setup(ctx: Context, api: PluginApi) {
       const root = sessions.workspacePath(id);
       const access = scopes.require(id, 'harnessFileAccess');
       const session = sessions.get(id);
-      if (!session) throw new HttpError('not_found', 'Conversation not found');
+      if (!session) throw new DomainError('not_found', 'Conversation not found');
       const tool = fileTools(root, access.open(session.workspaceId))[index];
       if (!writes) return tool;
       return {
@@ -26,7 +32,7 @@ export function setup(ctx: Context, api: PluginApi) {
           const result = await tool.execute(...args);
           const path = (args[1] as { path?: unknown })?.path;
           if (typeof path !== 'string') return result;
-          changes.dispatchEvent(new CustomEvent('change', { detail: { domain: 'files', workspaceId: session.workspaceId } }));
+          changes.invalidate('files', { workspaceId: session.workspaceId });
           const changedPath = relative(root, resolve(root, path)).split(sep).join('/');
           const details = typeof result.details === 'object' ? result.details : undefined;
           return { ...result, details: { ...details, changedPath } };
@@ -38,7 +44,7 @@ export function setup(ctx: Context, api: PluginApi) {
   const inspection = async ({ params, url, signal }: RouteRequest) => {
     const workspace = workspaces.get(params.id);
     const sessionId = url.searchParams.get('sessionId');
-    if (sessionId && sessions.get(sessionId)?.workspaceId !== workspace.id) throw new HttpError('not_found', 'Conversation not found');
+    if (sessionId && sessions.get(sessionId)?.workspaceId !== workspace.id) throw new DomainError('not_found', 'Conversation not found');
     if (sessionId) await scopes.prepare(sessionId, signal);
     const access = scopes.require(sessionId, 'harnessFileAccess');
     return new Inspection(workspaces.resolveRoot(workspace.path, workspace.id), access.open(workspace.id), signal);

@@ -1,5 +1,6 @@
-import { isRunning, type RunEvent, type RunInfo, type StreamEvent } from '@mini-harness/contracts/transport';
-import type { ViewMessage } from '@mini-harness/contracts/message';
+import { isRunning, type RunInfo } from '@mini-harness/sessions/run-state.browser';
+import type { RunEvent, StreamEvent } from './stream.js';
+import type { ViewMessage } from '@mini-harness/sessions/message';
 
 export class RunEvents {
   private events: RunEvent[] = [];

@@ -17,7 +17,7 @@ test('config directories are independent and default safe', () => {
 });
 
 test('settings merge preserves other sections and validates bounds', () => {
-  const before = structuredClone(DEFAULTS) as import('@mini-harness/contracts/config').Settings;
+  const before = structuredClone(DEFAULTS) as import('@mini-harness/settings/api').Settings;
   before.plugins.example = true;
   const after = mergeSettings(before, { plugins: { shell: true }, pluginConfig: { subagents: { maxParallel: 4 } } });
   assert.equal(after.plugins.example, true);

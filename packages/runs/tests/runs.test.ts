@@ -5,7 +5,7 @@ import { syncBuiltinESMExports } from 'node:module';
 import { createMiniHarnessServer } from '@mini-harness/host/server';
 import { SessionRegistry } from '@mini-harness/sessions/registry';
 import { WorkspaceCatalog } from '@mini-harness/workspaces/catalog';
-import type { RunEvent } from '@mini-harness/contracts/transport';
+import type { RunEvent } from '../stream.js';
 import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.js';
 
 function gate() {

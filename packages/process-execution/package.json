@@ -4,9 +4,18 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@mini-harness/contracts": "workspace:*"
+    "@mini-harness/execution": "workspace:*",
+    "@mini-harness/kernel": "workspace:*",
+    "@mini-harness/plugin-api": "workspace:*",
+    "@mini-harness/sandbox": "workspace:*"
   },
   "exports": {
+    "./api": "./api.ts",
     "./manifest": "./manifest.ts"
+  },
+  "miniHarness": {
+    "api": [
+      "./api"
+    ]
   }
 }

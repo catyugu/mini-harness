@@ -1,7 +1,7 @@
-import type { PluginDescriptor } from '@mini-harness/contracts/plugins';
+import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
 import { setup } from './host.js';
 import { Type } from 'typebox';
-import { HttpError } from '@mini-harness/contracts/routes';
+import { DomainError } from '@mini-harness/platform/errors';
 
 /** One self-contained plugin schema. Changes to child limits are safe during active runs. */
 export const manifest: PluginDescriptor = {
@@ -23,9 +23,9 @@ export const manifest: PluginDescriptor = {
     }, { additionalProperties: false })], { title: 'Child model', default: null, 'x-modelChoice': true })
   }, { additionalProperties: false }) },
   validateConfig({ model }, { service }) {
-    if (model && !service('harnessModels').resolve(model as import('@mini-harness/contracts/conversation').ModelChoice)) {
-      const { provider, id } = model as import('@mini-harness/contracts/conversation').ModelChoice;
-      throw new HttpError('invalid_input', 'Unknown child model: ' + provider + '/' + id);
+    if (model && !service('harnessModels').resolve(model as import('@mini-harness/llm/vocabulary').ModelChoice)) {
+      const { provider, id } = model as import('@mini-harness/llm/vocabulary').ModelChoice;
+      throw new DomainError('invalid_input', 'Unknown child model: ' + provider + '/' + id);
     }
   },
   inject: ['harnessScopes', 'harnessTools', 'harnessRegistry', 'harnessAgent', 'harnessModels', 'harnessRuns']

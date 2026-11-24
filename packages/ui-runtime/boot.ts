@@ -1,21 +1,12 @@
+import type { BrowserPluginFailures } from './graph-api.js';
 import { Context } from './vendor/cordis.js';
 import { api, data, readEvents, wait, AuthenticationError } from './http.js';
 import { RemoteStore } from './remote-store.js';
 import { FrontendHost } from './frontend.js';
-import { createBrowserGraphLoader, type BrowserPluginFailures } from './plugin-loader.js';
+import { createBrowserGraphLoader } from './plugin-loader.js';
 import { BrowserProjections } from './projections.js';
-import type { BrowserBootstrap } from '@mini-harness/contracts/browser';
-import type { ProjectionNotice } from '@mini-harness/contracts/navigation';
-
-declare module 'cordis' {
-  interface Context {
-    miniSwitch: () => Promise<BrowserPluginFailures>;
-    miniBrowserFailures: {
-      has(id: string): boolean;
-      subscribe(listener: () => void, signal: AbortSignal): void;
-    };
-  }
-}
+import type { BrowserBootstrap } from './bootstrap.js';
+import type { ProjectionNotice } from './projection-notice.js';
 
 /** A hash-only navigation does not reload ESM modules. Recover by reloading with the new credential. */
 function acceptTokenFromUrl() {

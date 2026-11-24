@@ -4,15 +4,27 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@mini-harness/contracts": "workspace:*",
+    "@mini-harness/kernel": "workspace:*",
+    "@mini-harness/llm": "workspace:*",
     "@mini-harness/platform": "workspace:*",
+    "@mini-harness/plugin-api": "workspace:*",
+    "@mini-harness/settings": "workspace:*",
+    "@mini-harness/transport": "workspace:*",
     "@mini-harness/ui-primitives": "workspace:*",
     "@mini-harness/ui-runtime": "workspace:*"
   },
   "exports": {
+    "./api": "./api.ts",
+    "./browser/api": "./browser/api.ts",
     "./catalog-manifest": "./catalog-manifest.ts",
     "./llm-manifest": "./llm-manifest.ts",
     "./manifest": "./manifest.ts",
     "./store-manifest": "./store-manifest.ts"
+  },
+  "miniHarness": {
+    "api": [
+      "./api",
+      "./browser/api"
+    ]
   }
 }

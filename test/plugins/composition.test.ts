@@ -16,7 +16,7 @@ function copyExample(directory: string, id: string) {
   cpSync(join(examples, id), join(directory, id), { recursive: true });
   const entry = join(directory, id, 'plugin.js');
   const source = readFileSync(entry, 'utf8');
-  const sdk = new URL('../../packages/contracts/plugin-sdk.js', import.meta.url).href;
+  const sdk = new URL('../../packages/sdk/plugin.js', import.meta.url).href;
   writeFileSync(entry, source.replace("'mini-harness/plugin'", JSON.stringify(sdk)));
 }
 test('external services and their declared consumers share Cordis provider selection', async (t) => {

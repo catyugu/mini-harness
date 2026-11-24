@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
-import type { Paths } from '@mini-harness/contracts/config';
+import type { Paths } from './runtime-paths.js';
 import { relative, isAbsolute, join, resolve, sep } from 'node:path';
 
 export function containsPath(root: string, candidate: string) {

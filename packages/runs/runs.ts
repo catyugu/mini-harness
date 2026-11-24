@@ -1,15 +1,18 @@
-import type { ThinkingLevel } from '@mini-harness/contracts/agent';
-import type { ScopePort } from '@mini-harness/contracts/capabilities';
-import { HttpError, type MutationPort } from '@mini-harness/contracts/routes';
+import type {} from '@mini-harness/agent/api';
+import type { ThinkingLevel, ModelChoice } from '@mini-harness/llm/vocabulary';
+import type { ScopePort } from '@mini-harness/kernel/scopes';
+import { DomainError } from '@mini-harness/platform/errors';
+import type { MutationPort } from '@mini-harness/plugin-api/mutation-api';
 import { randomUUID } from 'node:crypto';
-import { imageMimeType, prepareInput, validateModelOptions } from '@mini-harness/contracts/input-node';
-import type { Attachment, InputSource } from '@mini-harness/contracts/input';
-import type { CapabilityObservation } from '@mini-harness/contracts/events';
-import type { ModelChoice } from '@mini-harness/contracts/conversation';
-import { RunInterrupted, type StreamEvent, type RunEvent, type RunInfo } from '@mini-harness/contracts/transport';
+import { imageMimeType, prepareInput } from '@mini-harness/input/prepare';
+import { validateModelOptions } from '@mini-harness/llm/options';
+import type { Attachment, InputSource } from '@mini-harness/input/message';
+import type { CapabilityObservation } from '@mini-harness/kernel/observations';
+import { RunInterrupted } from '@mini-harness/agent/stream';
+import type { StreamEvent, RunEvent } from './stream.js';
+import type { RunInfo } from '@mini-harness/sessions/run-state.browser';
 import { RunEvents } from './events.js';
-import type { SessionStore } from '@mini-harness/contracts/session-store';
-
+import type { SessionStore } from '@mini-harness/sessions/store';
 
 interface RunOptions {
   signal?: AbortSignal;
@@ -60,11 +63,11 @@ export class Runs {
   private launch(id: string, prompt: string, emit: ((event: StreamEvent) => void) | undefined, { signal, source, model, attachments, thinkingLevel, revision, schedule }: RunOptions) {
     this.registry.assertAvailable(id);
     this.mutations.admit(this.scopes.address(id));
-    if (this.active(id)) throw new HttpError('conflict', 'Conversation is already running');
+    if (this.active(id)) throw new DomainError('conflict', 'Conversation is already running');
     validateModelOptions(model, thinkingLevel);
     const prepared = prepareInput(prompt, attachments);
     const record = this.registry.get(id);
-    if (!record) throw new HttpError('not_found', 'Conversation not found');
+    if (!record) throw new DomainError('not_found', 'Conversation not found');
     const info: RunInfo = { id: randomUUID(), sessionId: id, state: 'queued', startedAt: new Date().toISOString(), sequence: 0 };
     const events = new RunEvents(info);
     const controller = new AbortController();
@@ -140,17 +143,17 @@ export class Runs {
   /** A run reservation protects branch navigation from concurrent submissions. */
   async reviseAndStart(id: string, input: { sourceEntryId: string; expectedLeafId: string | null; message: string; removedImages?: number[];
     attachments?: Attachment[]; model?: ModelChoice; thinkingLevel?: ThinkingLevel | null }) {
-    if (this.active(id)) throw new HttpError('conflict', 'Conversation is already running');
+    if (this.active(id)) throw new DomainError('conflict', 'Conversation is already running');
     this.mutations.admit(this.scopes.address(id));
     await this.scopes.prepare(id);
     const target = await this.agent(id).revisionTarget(id, input.sourceEntryId, input.expectedLeafId);
     const removed = input.removedImages ?? [];
     if (!Array.isArray(removed) || removed.some((index) => !Number.isInteger(index) || index < 0 || index >= target.images.length))
-      throw new HttpError('invalid_input', 'Invalid original image selection');
+      throw new DomainError('invalid_input', 'Invalid original image selection');
     const attached = input.attachments ?? [];
-    if (!Array.isArray(attached)) throw new HttpError('invalid_input', 'Invalid attachments');
+    if (!Array.isArray(attached)) throw new DomainError('invalid_input', 'Invalid attachments');
     const missing = target.textFiles.filter((name) => !attached.some((file) => file?.name === name && typeof file.mimeType === 'string' && !imageMimeType.test(file.mimeType)));
-    if (missing.length) throw new HttpError('invalid_input', 'Reattach the original text files: ' + missing.join(', '));
+    if (missing.length) throw new DomainError('invalid_input', 'Reattach the original text files: ' + missing.join(', '));
     const attachments = [...target.images.filter((_, index) => !removed.includes(index)), ...attached];
     return this.launch(id, input.message, undefined, {
       attachments, model: input.model, thinkingLevel: input.thinkingLevel,
@@ -166,10 +169,10 @@ export class Runs {
   watch(id: string, runId: string, after: number, emit: (event: RunEvent) => void, end?: () => void) {
     const events = this.work.get(id)?.events;
     const info = this.info(id);
-    if (!info || info.id !== runId) throw new HttpError('not_found', 'Run not found');
+    if (!info || info.id !== runId) throw new DomainError('not_found', 'Run not found');
     // A restarted run has no volatile delta cursor; its durable interrupted snapshot is authoritative.
     if (!Number.isSafeInteger(after) || after < 0 || (after > info.sequence && info.state !== 'interrupted'))
-      throw new HttpError('invalid_input', 'Invalid event cursor');
+      throw new DomainError('invalid_input', 'Invalid event cursor');
     if (events) return events.watch(after, emit, () => this.agent(id).messages(id), end);
     emit({ type: 'snapshot', messages: this.agent(id).messages(id), tools: [], run: info, sequence: info.sequence, runId: info.id, runSessionId: id });
     return () => {};
@@ -189,7 +192,7 @@ export class Runs {
   async compact(id: string) {
     this.registry.assertAvailable(id);
     this.mutations.admit(this.scopes.address(id));
-    if (this.active(id)) throw new HttpError('conflict', 'Stop the open conversation before compacting it');
+    if (this.active(id)) throw new DomainError('conflict', 'Stop the open conversation before compacting it');
     const controller = new AbortController();
     const done = this.scopes.prepare(id, controller.signal).then(() => this.agent(id).compact(id, controller.signal));
     this.work.set(id, { done, controller });

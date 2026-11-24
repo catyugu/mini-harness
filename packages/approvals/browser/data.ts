@@ -1,5 +1,6 @@
-import type { Approval } from '@mini-harness/contracts/approval';
-import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend';
+import type {} from '@mini-harness/ui-runtime/projection-api';
+import type { Approval } from '../api.js';
+import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend-api';
 import { RemoteStore } from '@mini-harness/ui-runtime/remote-store';
 
 const setup: FrontendSetup = async (ctx, api) => {
@@ -8,9 +9,5 @@ const setup: FrontendSetup = async (ctx, api) => {
   api.onDispose(ctx.miniProjections.register('approvals', store));
   ctx.provide('miniApprovals', store);
 };
-
-declare module 'cordis' {
-  interface Context { miniApprovals: RemoteStore<Approval[]> }
-}
 
 export default setup;

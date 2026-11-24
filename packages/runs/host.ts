@@ -1,3 +1,7 @@
+import type {} from '@mini-harness/kernel/observations';
+import type {} from '@mini-harness/sessions/store';
+import type {} from '@mini-harness/kernel/scopes';
+import type {} from '@mini-harness/plugin-api/mutation-api';
 import type { Context } from 'cordis';
 import { registerRoutes } from './routes.js';
 import { Runs } from './runs.js';

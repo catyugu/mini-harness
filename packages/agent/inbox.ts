@@ -1,8 +1,8 @@
-import { HttpError } from '@mini-harness/contracts/routes';
+import { DomainError } from '@mini-harness/platform/errors';
 import { randomBytes } from 'node:crypto';
-import { prepareInput } from '@mini-harness/contracts/input-node';
-import type { Attachment } from '@mini-harness/contracts/input';
-import type { SessionLogPort, InboxItem, QueueEntry } from '@mini-harness/contracts/session-log';
+import { prepareInput } from '@mini-harness/input/prepare';
+import type { Attachment } from '@mini-harness/input/message';
+import type { SessionLogPort, InboxItem, QueueEntry } from '@mini-harness/sessions/log-api';
 
 /** Inbox acknowledgments and deliveries are committed to the same session log. */
 export class Inbox {
@@ -13,8 +13,8 @@ export class Inbox {
 
   enqueue(text: string, mode: InboxItem['mode'], attachments?: Attachment[],
     options: Pick<InboxItem, 'model' | 'thinkingLevel'> = {}) {
-    if (mode !== 'steer' && mode !== 'followUp') throw new HttpError('invalid_input', 'Invalid queue mode');
-    if (this.list().length >= 16) throw new HttpError('conflict', 'Queue is full');
+    if (mode !== 'steer' && mode !== 'followUp') throw new DomainError('invalid_input', 'Invalid queue mode');
+    if (this.list().length >= 16) throw new DomainError('conflict', 'Queue is full');
     const prepared = prepareInput(text, attachments);
     this.log.append({ type: 'inbox-enqueued', item: {
       id: randomBytes(16).toString('hex'), mode, text: prepared.text, images: prepared.images,

@@ -1,7 +1,7 @@
 import { fixture as httpFixture } from '../../../test/support/api-fixture.js';
 import { AgentRegistry } from '../registry.js';
-import { prepareInput } from '@mini-harness/contracts/input-node';
-import type { ThinkingLevel } from '@mini-harness/contracts/agent';
+import { prepareInput } from '@mini-harness/input/prepare';
+import type { ThinkingLevel } from '@mini-harness/llm/vocabulary';
 import { expectPresent } from '../../../test/support/required.js';
 import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
@@ -12,9 +12,9 @@ import { scheduleTools } from '../tool-pipeline.js';
 import { SessionRegistry } from '@mini-harness/sessions/registry';
 import { WorkspaceCatalog } from '@mini-harness/workspaces/catalog';
 import { ToolRegistry } from '@mini-harness/tools/registry';
-import { defineTool, registerToolBinding } from '@mini-harness/contracts/tools';
-import type { LlmPort, NativeAssistantMessage, ToolCallPart } from '@mini-harness/contracts/llm';
-import type { ModelRetry } from '@mini-harness/contracts/agent-extensions';
+import { defineTool, registerToolBinding } from '@mini-harness/tools/api';
+import type { LlmPort, NativeAssistantMessage, ToolCallPart } from '@mini-harness/llm/api';
+import type { ModelRetry } from '../extensions.js';
 import { createFixturePaths } from '../../../test/helpers/mock-provider.js';
 
 const model = { provider: 'fixture', id: 'native' };

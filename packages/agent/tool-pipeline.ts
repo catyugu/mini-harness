@@ -1,7 +1,6 @@
-import { ApprovalDenied } from '@mini-harness/contracts/approval';
+import { ToolApprovalDenied, isToolContent, type ToolDefinition, type ToolResult } from '@mini-harness/tools/api';
 import { Check } from 'typebox/value';
-import type { ToolCallPart, NativeToolMessage } from '@mini-harness/contracts/llm';
-import { isToolContent, type ToolDefinition, type ToolResult } from '@mini-harness/contracts/tools';
+import type { ToolCallPart, NativeToolMessage } from '@mini-harness/llm/api';
 
 const parallelLimit = 16;
 
@@ -81,6 +80,6 @@ export async function executeTool(call: ToolCallPart, tool: ToolDefinition | und
     return { role: 'toolResult', toolCallId: call.id, toolName: call.name,
       content: [{ type: 'text', text: error instanceof Error ? error.message : String(error) }],
       isError: true, timestamp: Date.now(), elapsedMs: inApproval ? 0 : performance.now() - start,
-      details: approvalMs === undefined ? undefined : { approvalMs, approvalDenied: error instanceof ApprovalDenied || (error instanceof Error && error.cause instanceof ApprovalDenied) } };
+      details: approvalMs === undefined ? undefined : { approvalMs, approvalDenied: error instanceof ToolApprovalDenied || (error instanceof Error && error.cause instanceof ToolApprovalDenied) } };
   }
 }

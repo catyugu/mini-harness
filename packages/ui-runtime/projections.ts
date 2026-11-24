@@ -1,5 +1,5 @@
-import type { ProjectionNotice } from '@mini-harness/contracts/navigation';
-import type { BrowserProjection, BrowserProjectionPort } from '@mini-harness/contracts/browser';
+import type { ProjectionNotice } from './projection-notice.js';
+import type { BrowserProjection, BrowserProjectionPort } from './projection-api.js';
 
 /** Features own snapshots; the runtime only routes invalidation notices to live owners. */
 export class BrowserProjections implements BrowserProjectionPort {
@@ -23,7 +23,7 @@ export class BrowserProjections implements BrowserProjectionPort {
     const updates: Promise<void>[] = [];
     for (const [domain, listeners] of this.subscribers) {
       if (event.type === 'change' && event.domain !== domain) continue;
-      const revision = event.type === 'change' ? event.revision : Object.hasOwn(event.revisions, domain) ? event.revisions[domain as keyof typeof event.revisions] ?? 0 : 0;
+      const revision = event.type === 'change' ? event.revision : Object.hasOwn(event.revisions, domain) ? event.revisions[domain] ?? 0 : 0;
       for (const lease of [...listeners]) updates.push(Promise.resolve().then(async () => {
         if (!lease.active) return;
         try {

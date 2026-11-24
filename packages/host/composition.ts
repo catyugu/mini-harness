@@ -10,7 +10,7 @@ import { manifest as model_store } from '@mini-harness/models/store-manifest';
 import { manifest as model_catalog } from '@mini-harness/models/catalog-manifest';
 import { manifest as llm } from '@mini-harness/models/llm-manifest';
 import { manifest as workspaces_data } from '@mini-harness/workspaces/data-manifest';
-import { manifest as sessions_data } from '@mini-harness/sessions/data-manifest';
+import { manifest as sessions_data } from '@mini-harness/conversation/data-manifest';
 import { manifest as runs } from '@mini-harness/runs/manifest';
 import { manifest as settings } from '@mini-harness/settings/manifest';
 import { manifest as models } from '@mini-harness/models/manifest';
@@ -26,7 +26,7 @@ import { manifest as approvals } from '@mini-harness/approvals/manifest';
 import { manifest as sandbox } from '@mini-harness/sandbox/manifest';
 import { manifest as process_execution } from '@mini-harness/process-execution/manifest';
 import { manifest as tools } from '@mini-harness/tools/manifest';
-import { manifest as conversation } from '@mini-harness/sessions/conversation-manifest';
+import { manifest as conversation } from '@mini-harness/conversation/conversation-manifest';
 
 export const plugins = [
   workspaces_data, sessions_data, model_store, model_catalog, llm, prompt,

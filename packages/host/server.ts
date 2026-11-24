@@ -1,13 +1,13 @@
-import { createServer } from 'node:http';
+import { DomainError } from '@mini-harness/platform/errors';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { closeSync, constants, createReadStream, fstatSync, openSync, lstatSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { dirname, join, resolve, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
-import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import type { Paths } from '@mini-harness/contracts/config';
+import type { Paths } from '@mini-harness/platform/runtime-paths';
 import { Upgrades } from './upgrade.js';
-import { HttpError, type GatewayRequest } from '@mini-harness/contracts/routes';
+import { errorStatus, HttpError, type GatewayRequest } from '@mini-harness/transport/routes';
 import { json } from '@mini-harness/transport/http';
 import { MiniHarnessRuntime } from './application.js';
 
@@ -19,41 +19,33 @@ const assets = new Map([
   ['icon-192.png', 'image/png'], ['icon-512.png', 'image/png'], ['favicon.ico', 'image/x-icon']
 ]);
 
-// Only browser-safe shared contracts are served.
-for (const name of ['composer', 'layout', 'settings-browser', 'slots', 'transport', 'workspace'])
-  assets.set('packages/contracts/' + name + '.js', 'text/javascript');
+// The browser SDK keeps its public URL independently of its source package.
+const browserSdk = 'packages/ui-runtime/plugin-sdk.js';
+assets.set(browserSdk, 'text/javascript');
+for (const path of [
+  'ui-runtime/boot.js', 'ui-runtime/frontend.js', 'ui-runtime/http.js',
+  'ui-runtime/plugin-loader.js', 'ui-runtime/projections.js', 'ui-runtime/remote-store.js',
+  'ui-runtime/vendor/cordis.js', 'ui-runtime/vendor/cosmokit.js',
+  'ui-primitives/icons.js', 'ui-primitives/markdown.js', 'ui-primitives/primitives.js',
+  'ui-primitives/vendor/marked.js', 'ui-primitives/vendor/purify.js',
+  'ui-layout/layout.js', 'ui-layout/right-tabs.js', 'ui-slots/registry.js'
+]) assets.set('packages/' + path, 'text/javascript');
 
-// Only client modules from UI foundations may be served.
-for (const name of ['ui-runtime', 'ui-slots', 'ui-theme', 'ui-primitives', 'ui-layout']) {
-  const root = join(FEATURE_DIR, name);
-  for (const entry of readdirSync(root, { recursive: true, withFileTypes: true })) {
-    if (!entry.isFile() || !entry.name.endsWith('.js')) continue;
-    const path = relative(FEATURE_DIR, join(entry.parentPath, entry.name)).split(sep).join('/');
-    if (path.split('/').includes('tests') || /\.(?:spec|test)\.js$/.test(path) || entry.name === 'manifest.js') continue;
+// Packages opt in to browser delivery through their entrypoints or browser-only files.
+for (const owner of readdirSync(FEATURE_DIR, { withFileTypes: true })) {
+  if (!owner.isDirectory() || !/^[a-z][a-z0-9-]{0,63}$/.test(owner.name)) continue;
+  const root = join(FEATURE_DIR, owner.name);
+  const include = (file: string) => {
+    const path = relative(FEATURE_DIR, file).split(sep).join('/');
+    if (path.split('/').includes('tests') || /\.(?:test|spec)\.js$/.test(path)) return;
     assets.set('packages/' + path, 'text/javascript');
-  }
-}
-
-// Expose only browser entrypoints. Feature host and manifest JS never become public assets.
-for (const entry of readdirSync(FEATURE_DIR, { withFileTypes: true })) {
-  if (!entry.isDirectory() || !/^[a-z][a-z0-9-]{0,63}$/.test(entry.name)) continue;
-  const client = join(FEATURE_DIR, entry.name, 'client.js');
-  try { if (statSync(client).isFile()) assets.set('packages/' + entry.name + '/client.js', 'text/javascript'); }
-  catch { /* Server-only capability. */ }
-  const browserEntry = join(FEATURE_DIR, entry.name, 'browser.js');
-  try { if (statSync(browserEntry).isFile()) assets.set('packages/' + entry.name + '/browser.js', 'text/javascript'); }
-  catch { /* No standalone browser entry. */ }
-  const browserDir = join(FEATURE_DIR, entry.name, 'browser');
-  try {
-    if (!statSync(browserDir).isDirectory()) continue;
-    for (const file of readdirSync(browserDir, { recursive: true, withFileTypes: true })) {
-      if (!file.isFile() || !file.name.endsWith('.js')) continue;
-      const path = relative(FEATURE_DIR, join(file.parentPath, file.name)).split(sep).join('/');
-      if (path.split('/').includes('tests') || /\.(?:test|spec)\.js$/.test(path)) continue;
-      assets.set('packages/' + path, 'text/javascript');
-    }
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  };
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    if (entry.isFile() && (entry.name === 'client.js' || entry.name === 'browser.js' || entry.name.endsWith('.browser.js')))
+      include(join(root, entry.name));
+    if (!entry.isDirectory() || entry.name !== 'browser') continue;
+    for (const file of readdirSync(join(root, entry.name), { recursive: true, withFileTypes: true }))
+      if (file.isFile() && file.name.endsWith('.js')) include(join(file.parentPath, file.name));
   }
 }
 
@@ -122,7 +114,8 @@ export async function createMiniHarnessServer(paths: Paths, options: { token?: s
         const extension = runtime.plugins.browserAsset(pathname);
         const mime = extension?.mime ?? assets.get(requested);
         if (!mime) throw new HttpError('not_found', 'Not found');
-        const path = extension?.path ?? (requested.startsWith('packages/') ? join(FEATURE_DIR, requested.slice('packages/'.length)) : join(WEB_DIR, requested));
+        const asset = requested === browserSdk ? 'packages/sdk/browser-plugin.js' : requested;
+        const path = extension?.path ?? (asset.startsWith('packages/') ? join(FEATURE_DIR, asset.slice('packages/'.length)) : join(WEB_DIR, asset));
         const opened = extension ? openAsset(path) : undefined;
         const size = opened?.size ?? statSync(path).size;
         const stream = req.method === 'HEAD' ? undefined : createReadStream(path, { fd: opened?.fd });
@@ -153,9 +146,9 @@ export async function createMiniHarnessServer(paths: Paths, options: { token?: s
       throw new HttpError('not_found', 'Not found');
     } catch (error) {
       if (res.destroyed || res.writableEnded) return;
-      if (error instanceof HttpError) {
+      if (error instanceof DomainError) {
         if (res.headersSent) { res.end(); return; }
-        return json(res, error.status, { code: error.code, error: error.message });
+        return json(res, errorStatus[error.code], { code: error.code, error: error.message });
       }
       runtime.plugins.ctx.logger.error('HTTP %s failed: %s', req.method, error instanceof Error ? error.stack ?? error.message : String(error));
       if (res.headersSent) { res.end(); return; }

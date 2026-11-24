@@ -1,9 +1,10 @@
-import { settingsExtensions } from '@mini-harness/contracts/settings-browser';
-import type { ModelChoice } from '@mini-harness/contracts/conversation';
+import type {} from '@mini-harness/ui-runtime/projection-api';
+import { settingsExtensions } from '@mini-harness/settings/browser/api';
+import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 import { payload } from '@mini-harness/ui-runtime/http';
-import type { ModelCatalog, ProviderInfo, ProviderModel } from '@mini-harness/contracts/models';
+import type { ModelCatalog, ProviderInfo, ProviderModel } from './api.js';
 import { RemoteStore } from '@mini-harness/ui-runtime/remote-store';
-import type { FrontendSetup, FrontendApi } from '@mini-harness/ui-runtime/frontend';
+import type { FrontendSetup, FrontendApi } from '@mini-harness/ui-runtime/frontend-api';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { button, field, fromMarkup, confirmAction, required } from '@mini-harness/ui-primitives/primitives';
 
@@ -245,15 +246,6 @@ function customEndpoint(provider?: ProviderInfo) {
   return { element, id, url, read: () => ({
     id: id.value.trim(), api: api.value, baseUrl: url.value.trim(), models: [...readModels.values()].map((read) => read())
   }) };
-}
-
-declare module 'cordis' {
-  interface Context {
-    miniModels: {
-      get(): ModelCatalog & { recent: ModelChoice };
-      subscribe(listener: () => void, signal: AbortSignal): void;
-    };
-  }
 }
 
 export default setup;

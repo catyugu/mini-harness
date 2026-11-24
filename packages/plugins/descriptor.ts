@@ -1,11 +1,14 @@
 import { lstatSync } from 'node:fs';
 import { join } from 'node:path';
 import { readJson } from '@mini-harness/platform/json';
-import { pluginIdPattern, serviceNamePattern, type PluginDescriptor } from '@mini-harness/contracts/plugins';
+import { pluginIdPattern, serviceNamePattern } from '@mini-harness/plugin-api/selection';
+import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
 import { readBrowserAssets } from './browser-assets.js';
 import { isRegularFile } from './source.js';
 
-export interface DiscoveredPlugin extends PluginDescriptor {
+import type { PluginMetadata } from './api-types.js';
+
+export interface DiscoveredPlugin extends PluginDescriptor, Pick<PluginMetadata, 'trustedCode' | 'package' | 'error'> {
   source?: string;
   resources?: ReturnType<typeof readBrowserAssets>;
 }

@@ -2,7 +2,7 @@
  * Contributions can arrive before their owner and are restored when an owner remounts.
  * The registry has no knowledge of business features or Cordis.
  */
-import type { KeyedSlotOptions, SlotKind, SlotName, SlotRenderer } from '@mini-harness/contracts/slots';
+import type { KeyedSlotOptions, SlotKind, SlotName, SlotRenderer } from './browser/api.js';
 
 interface Entry { key?: string; node?: HTMLElement; render?: SlotRenderer; order: number }
 interface Mounted { node: HTMLElement; release(): void }

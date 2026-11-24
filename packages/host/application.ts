@@ -1,26 +1,27 @@
+import type {} from '@mini-harness/runs/api';
+import type {} from '@mini-harness/agent/api';
+import type {} from '@mini-harness/sessions/store';
 import { Context } from 'cordis';
 import { authority, plugins } from './composition.js';
 import { SettingsManager } from '@mini-harness/settings/manager';
 import { PluginHost } from '@mini-harness/plugins/manager';
-import { RouteRegistry } from '@mini-harness/transport/http';
-import { MutationGate } from '@mini-harness/transport/mutations';
-import type { NetworkPort } from '@mini-harness/contracts/routes';
-import type { Paths } from '@mini-harness/contracts/config';
+import { RouteRegistry } from '@mini-harness/transport/router';
+import { ProjectionChanges } from '@mini-harness/transport/projections';
+import { MutationGate } from '@mini-harness/plugin-api/mutations';
+import type { NetworkPort } from '@mini-harness/transport/routes';
+import type { Paths } from '@mini-harness/platform/runtime-paths';
 
 export class MiniHarnessRuntime {
   readonly plugins: PluginHost;
   readonly configuration: SettingsManager;
   private readonly mutations: MutationGate;
   private stopping?: Promise<void>;
-  private readonly unsubscribeSettings: () => void;
 
   constructor(readonly paths: Paths, network?: NetworkPort,
-    upgrade?: (path: string, handler: import('@mini-harness/contracts/routes').UpgradeHandler) => () => void) {
+    upgrade?: (path: string, handler: import('@mini-harness/transport/routes').UpgradeHandler) => () => void) {
     const ctx = new Context();
     this.configuration = new SettingsManager(paths, () => this.plugins);
-    const changes = new EventTarget();
-    const emit = (domain: string) => changes.dispatchEvent(new CustomEvent('change', { detail: { domain } }));
-    this.unsubscribeSettings = this.configuration.subscribe(() => emit('settings'));
+    const changes = new ProjectionChanges();
     this.mutations = new MutationGate((scopes) => scopes ? ctx.get('harnessRuns')?.activeInScope(scopes) === true :
       Boolean(ctx.get('harnessRuns')?.size || ctx.get('harnessAgent')?.hasPending));
     const root = {
@@ -56,8 +57,7 @@ export class MiniHarnessRuntime {
       await runs?.stop();
       await Promise.all([mutations, settings]);
     } finally {
-      try { await this.plugins.close(); }
-      finally { this.unsubscribeSettings(); }
+      await this.plugins.close();
     }
   }
 }

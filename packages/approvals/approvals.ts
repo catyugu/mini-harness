@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { ApprovalDenied, type Approval } from '@mini-harness/contracts/approval';
+import type { Approval } from './api.js';
+import { ToolApprovalDenied } from '@mini-harness/tools/api';
 type Decision = 'allow' | 'automatic' | 'deny' | 'expired' | 'cancelled';
 
 export class Approvals {
@@ -12,7 +13,7 @@ export class Approvals {
   request(sessionId: string, runId: string | undefined, command: string, signal?: AbortSignal, context?: string): Promise<boolean> {
     signal?.throwIfAborted();
     const key = context === undefined ? undefined : JSON.stringify([sessionId, context, command]);
-    if (runId && key && this.denials.get(runId)?.has(key)) return Promise.reject(new ApprovalDenied());
+    if (runId && key && this.denials.get(runId)?.has(key)) return Promise.reject(new ToolApprovalDenied('Shell operation denied'));
     return new Promise<boolean>((resolve, reject) => {
       const info = { id: randomUUID(), sessionId, runId, command, createdAt: new Date().toISOString() };
       const finish = (decision: Decision) => {
@@ -25,7 +26,7 @@ export class Approvals {
             previous.add(key);
             this.denials.set(runId, previous);
           }
-          reject(new ApprovalDenied());
+          reject(new ToolApprovalDenied('Shell operation denied'));
         } else reject(new Error(decision === 'expired' ? 'Shell approval expired' : 'Operation cancelled'));
       };
       const abort = () => finish('cancelled');

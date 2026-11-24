@@ -1,4 +1,4 @@
-import { orderHooks, type OrderedHook } from '@mini-harness/contracts/contributions';
+import { orderHooks, type OrderedHook } from '@mini-harness/kernel/contributions';
 
 export async function applyTransforms<Value, Context extends { sessionId: string; signal: AbortSignal }, Result>(
   hooks: OrderedHook<(value: Value, context: Context) => Result | undefined | Promise<Result | undefined>>[],

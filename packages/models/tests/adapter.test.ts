@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { PiModelStore, PiLlm } from '../pi-adapter.js';
 import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.js';
 import { readJson, writeJson } from '@mini-harness/platform/json';
-import type { LlmEvent, NativeMessage } from '@mini-harness/contracts/llm';
+import type { LlmEvent, NativeMessage } from '@mini-harness/llm/api';
 
 test('model adapter streams native messages, tool calls and metadata through the HTTP provider', async (t) => {
   const mock = await createMockProvider(({ messages }) => messages.at(-1)?.role === 'tool'

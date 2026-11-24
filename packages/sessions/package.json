@@ -4,15 +4,34 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@mini-harness/contracts": "workspace:*",
+    "@mini-harness/input": "workspace:*",
+    "@mini-harness/kernel": "workspace:*",
+    "@mini-harness/llm": "workspace:*",
     "@mini-harness/platform": "workspace:*",
-    "@mini-harness/ui-primitives": "workspace:*",
-    "@mini-harness/ui-runtime": "workspace:*"
+    "@mini-harness/plugin-api": "workspace:*",
+    "@mini-harness/settings": "workspace:*",
+    "@mini-harness/workspaces": "workspace:*"
   },
   "exports": {
-    "./conversation-manifest": "./conversation-manifest.ts",
-    "./data-manifest": "./data-manifest.ts",
+    "./display-extensions": "./display-extensions.ts",
+    "./identity": "./identity.ts",
+    "./log-api": "./log-api.ts",
     "./manifest": "./manifest.ts",
-    "./registry": "./registry.ts"
+    "./message": "./message.ts",
+    "./records": "./records.ts",
+    "./registry": "./registry.ts",
+    "./run-state.browser": "./run-state.browser.ts",
+    "./store": "./store.ts"
+  },
+  "miniHarness": {
+    "api": [
+      "./display-extensions",
+      "./identity",
+      "./log-api",
+      "./message",
+      "./records",
+      "./run-state.browser",
+      "./store"
+    ]
   }
 }

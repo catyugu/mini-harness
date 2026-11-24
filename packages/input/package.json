@@ -1,0 +1,19 @@
+{
+  "name": "@mini-harness/input",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@mini-harness/platform": "workspace:*"
+  },
+  "exports": {
+    "./message": "./message.ts",
+    "./prepare": "./prepare.ts"
+  },
+  "miniHarness": {
+    "api": [
+      "./message",
+      "./prepare"
+    ]
+  }
+}

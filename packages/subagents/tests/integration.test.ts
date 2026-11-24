@@ -23,7 +23,7 @@ test('Native execution honors file policy and recursive delegates can finish wit
   writeFileSync(join(root, 'outside.txt'), 'private fixture');
   await app.runtime.configuration.update({ pluginConfig: { subagents: { maxDepth: 2, maxParallel: 1, model: { provider: 'local-mock', id: 'mock-model' } } } });
   const parent = app.runtime.registry.create();
-  const toolEvents: Extract<import('@mini-harness/contracts/transport').StreamEvent, { type: 'tool' }>[] = [];
+  const toolEvents: Extract<import('@mini-harness/runs/stream').StreamEvent, { type: 'tool' }>[] = [];
   await app.runtime.plugins.ctx.harnessRuns.send(parent.id, 'root task', (event) => { if (event.type === 'tool') toolEvents.push(event); });
   const records = app.runtime.registry.descendants([parent.id]).map((id) => app.runtime.registry.get(id));
   assert.deepEqual(records.map((record) => { assert.ok(record); return record.title; }), ['root task', 'child task', 'leaf task']);

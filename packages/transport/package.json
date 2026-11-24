@@ -4,10 +4,22 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@mini-harness/contracts": "workspace:*"
+    "@mini-harness/kernel": "workspace:*",
+    "@mini-harness/platform": "workspace:*",
+    "@mini-harness/ui-runtime": "workspace:*"
   },
   "exports": {
     "./http": "./http.ts",
-    "./mutations": "./mutations.ts"
+    "./projection-api": "./projection-api.ts",
+    "./projections": "./projections.ts",
+    "./router": "./router.ts",
+    "./routes": "./routes.ts"
+  },
+  "miniHarness": {
+    "api": [
+      "./http",
+      "./projection-api",
+      "./routes"
+    ]
   }
 }

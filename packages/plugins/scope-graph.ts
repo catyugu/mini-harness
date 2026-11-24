@@ -1,7 +1,12 @@
-import type { PluginScope } from '@mini-harness/contracts/capabilities';
-import type { Settings } from '@mini-harness/contracts/config';
-import type { SessionRecord } from '@mini-harness/contracts/conversation';
+import type { PluginScope } from '@mini-harness/kernel/scopes';
+import type { PluginSettings } from '@mini-harness/plugin-api/configuration';
 import type { PluginCatalog, PluginPlan } from './catalog.js';
+
+export interface ScopeSession {
+  id: string;
+  workspaceId: string;
+  parentId: string | null;
+}
 
 interface Parent {
   key?: string;
@@ -18,7 +23,7 @@ interface ScopedNode {
   plugins: { plan: PluginPlan; id: string; needs: string[] }[];
 }
 
-export function resolveScopes(settings: Settings, describe: PluginCatalog['plans'], session: (id: string) => SessionRecord | undefined,
+export function resolveScopes(settings: PluginSettings, describe: PluginCatalog['plans'], session: (id: string) => ScopeSession | undefined,
   descriptors: ReturnType<PluginCatalog['descriptors']>, application: PluginPlan[], providers: ReadonlyMap<string, string>,
   active: ReadonlySet<string>, released: ReadonlySet<string>,
   unavailable: (id: string, error: unknown) => boolean) {

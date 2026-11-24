@@ -1,4 +1,4 @@
-import type { PluginDescriptor } from '@mini-harness/contracts/plugins';
+import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
 import { setup } from './host.js';
 
 /** One metadata definition for the host, settings, and browser loader. */

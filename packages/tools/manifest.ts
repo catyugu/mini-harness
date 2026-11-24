@@ -1,6 +1,9 @@
-import { firstDecision, type OrderedHook } from '@mini-harness/contracts/contributions';
-import type { ToolDecisionHandler } from '@mini-harness/contracts/tool-extensions';
-import type { PluginDescriptor } from '@mini-harness/contracts/plugins';
+import type {} from '@mini-harness/kernel/scopes';
+import type {} from '@mini-harness/sessions/store';
+import type {} from '@mini-harness/settings/api';
+import { firstDecision, type OrderedHook } from '@mini-harness/kernel/contributions';
+import type { ToolDecisionHandler } from './extensions.js';
+import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
 import { ToolRegistry } from './registry.js';
 
 export const manifest: PluginDescriptor = {

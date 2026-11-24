@@ -1,6 +1,6 @@
-import type { NativeMessage, NativeToolMessage } from '@mini-harness/contracts/llm';
-import type { MessageContent, ViewMessage } from '@mini-harness/contracts/message';
-import type { SessionEntry, SessionProjection } from '@mini-harness/contracts/session-log';
+import type { NativeMessage, NativeToolMessage } from '@mini-harness/llm/api';
+import type { MessageContent, ViewMessage } from './message.js';
+import type { SessionEntry, SessionProjection } from './log-api.js';
 import { applyContentDelta } from '@mini-harness/platform/content-delta';
 
 export function projectMessage(entry: SessionEntry, execution: (id: string) => NativeToolMessage | undefined): NativeMessage | undefined {

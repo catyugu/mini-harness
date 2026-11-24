@@ -1,8 +1,9 @@
-import { localPluginIdPattern } from '@mini-harness/contracts/plugins';
+import { localPluginIdPattern } from '@mini-harness/plugin-api/selection';
 import { randomUUID } from 'node:crypto';
 import { lstatSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import type { Paths, Settings } from '@mini-harness/contracts/config';
+import type { Paths } from '@mini-harness/platform/runtime-paths';
+import type { Settings } from '@mini-harness/settings/api';
 import { writeJson } from '@mini-harness/platform/json';
 import { describePlugin } from './descriptor.js';
 import { assertDisabled } from './files.js';

@@ -1,0 +1,22 @@
+{
+  "name": "@mini-harness/llm",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@mini-harness/kernel": "workspace:*",
+    "@mini-harness/platform": "workspace:*"
+  },
+  "exports": {
+    "./api": "./api.ts",
+    "./options": "./options.ts",
+    "./vocabulary": "./vocabulary.ts"
+  },
+  "miniHarness": {
+    "api": [
+      "./api",
+      "./options",
+      "./vocabulary"
+    ]
+  }
+}

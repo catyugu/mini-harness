@@ -1,13 +1,12 @@
-import { HttpError } from '@mini-harness/contracts/routes';
+import { DomainError } from '@mini-harness/platform/errors';
 import { createHash } from 'node:crypto';
 import { lstatSync, mkdirSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { readJson, writeJson } from '@mini-harness/platform/json';
-import { type getPaths } from '@mini-harness/platform/paths';
-import { containsPath } from '@mini-harness/platform/paths';
+import { type getPaths, containsPath } from '@mini-harness/platform/paths';
 
-import type { WorkspaceRecord } from '@mini-harness/contracts/workspace';
+import type { WorkspaceRecord } from './api.js';
 interface CatalogState { records: WorkspaceRecord[] }
 
 // Use the same native resolver as fs/promises.realpath, including Windows long path names.
@@ -44,10 +43,10 @@ export class WorkspaceCatalog {
   }
 
   private directory(path: string) {
-    if (typeof path !== 'string' || !isAbsolute(path)) throw new HttpError('invalid_input', 'Enter an absolute directory path');
+    if (typeof path !== 'string' || !isAbsolute(path)) throw new DomainError('invalid_input', 'Enter an absolute directory path');
     const target = canonicalWorkspacePath(path);
     if (!statSync(target).isDirectory() || containsPath(this.stateRoot, target))
-      throw new HttpError('invalid_input', 'Select a directory outside mini-harness configuration');
+      throw new DomainError('invalid_input', 'Select a directory outside mini-harness configuration');
     return target;
   }
 
@@ -59,13 +58,13 @@ export class WorkspaceCatalog {
 
   get(id: string) {
     const record = this.records.find((item) => item.id === id);
-    if (!record) throw new HttpError('not_found', 'Workspace not found');
+    if (!record) throw new DomainError('not_found', 'Workspace not found');
     return { ...record };
   }
 
   resolveRoot(root: string, id: string) {
     const target = this.directory(root);
-    if (workspaceId(target) !== id) throw new HttpError('conflict', 'Workspace directory has changed');
+    if (workspaceId(target) !== id) throw new DomainError('conflict', 'Workspace directory has changed');
     return target;
   }
 
@@ -81,7 +80,7 @@ export class WorkspaceCatalog {
 
   private name(name: string) {
     if (typeof name !== 'string' || !name.trim() || name.trim().length > 140)
-      throw new HttpError('invalid_input', 'Workspace name must contain 1–140 characters');
+      throw new DomainError('invalid_input', 'Workspace name must contain 1–140 characters');
     return name.trim();
   }
 
@@ -93,7 +92,7 @@ export class WorkspaceCatalog {
 
   reorder(ids: string[]) {
     if (!Array.isArray(ids) || ids.length !== this.records.length || new Set(ids).size !== ids.length)
-      throw new HttpError('invalid_input', 'Order must include every registered workspace');
+      throw new DomainError('invalid_input', 'Order must include every registered workspace');
     this.save(ids.map((id) => this.get(id)));
     return this.list();
   }

@@ -1,5 +1,6 @@
-import type { PluginDescriptor } from '@mini-harness/contracts/plugins';
-import type { ScopedPromptSection } from '@mini-harness/contracts/prompt-extensions';
+import type {} from '@mini-harness/platform/runtime-paths';
+import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
+import type { ScopedPromptSection } from './prompt-api.js';
 import { Prompt } from './prompt.js';
 
 export const manifest: PluginDescriptor = {

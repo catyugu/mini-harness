@@ -1,5 +1,6 @@
+import type {} from '@mini-harness/sessions/store';
 import type { Context } from 'cordis';
-import { HttpError, HttpReply } from '@mini-harness/contracts/routes';
+import { HttpError, HttpReply } from '@mini-harness/transport/routes';
 
 export function registerRoutes(ctx: Context) {
   const add = (method: string, path: string, handler: Parameters<typeof ctx.harnessRoutes.register>[2]) =>

@@ -1,9 +1,10 @@
-import { HttpError } from '@mini-harness/contracts/routes';
+import { DomainError } from '@mini-harness/platform/errors';
 import { isDeepStrictEqual } from 'node:util';
 import { mergeSettings, readSettings } from './config.js';
 import { writeJson } from '@mini-harness/platform/json';
-import type { Paths, Settings, SettingsPort } from '@mini-harness/contracts/config';
-import type { PluginConfigurationPort } from '@mini-harness/contracts/plugins';
+import type { Paths } from '@mini-harness/platform/runtime-paths';
+import type { Settings, SettingsPort } from './api.js';
+import type { PluginConfigurationPort } from '@mini-harness/plugin-api/configuration';
 
 export class SettingsManager implements SettingsPort {
   private stored: Settings;
@@ -84,7 +85,7 @@ export class SettingsManager implements SettingsPort {
   }
 
   private transact(patch: () => unknown, skipUnchanged = false) {
-    if (this.closing) return Promise.reject(new HttpError('unavailable', 'Settings are closing'));
+    if (this.closing) return Promise.reject(new DomainError('unavailable', 'Settings are closing'));
     const work = this.pending.then(async () => {
       const original = this.stored;
       const updated = mergeSettings(original, patch());
@@ -106,7 +107,7 @@ export class SettingsManager implements SettingsPort {
 
 function configurationPatch(patch: unknown): Record<string, unknown> {
   if (!patch || typeof patch !== 'object' || Array.isArray(patch))
-    throw new HttpError('invalid_input', 'Expected a plugin configuration object');
+    throw new DomainError('invalid_input', 'Expected a plugin configuration object');
   try {
     return JSON.parse(JSON.stringify(patch, (_key, value: unknown) => {
       if (typeof value === 'number' && !Number.isFinite(value) ||
@@ -114,6 +115,6 @@ function configurationPatch(patch: unknown): Record<string, unknown> {
       return value;
     }));
   } catch {
-    throw new HttpError('invalid_input', 'Plugin settings must be JSON values');
+    throw new DomainError('invalid_input', 'Plugin settings must be JSON values');
   }
 }

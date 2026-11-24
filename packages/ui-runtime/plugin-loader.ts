@@ -1,3 +1,4 @@
+import type { BrowserPluginFailures } from './graph-api.js';
 async function loadStyle(href: string, link: HTMLLinkElement) {
   link.rel = 'stylesheet';
   link.href = href;
@@ -10,10 +11,10 @@ async function loadStyle(href: string, link: HTMLLinkElement) {
     document.head.append(link);
   });
 }
-import type { FrontendHost, FrontendSetup } from './frontend.js';
-import type { BrowserBootstrap, BrowserEntry } from '@mini-harness/contracts/browser';
+import type { FrontendHost } from './frontend.js';
+import type { FrontendSetup } from './frontend-api.js';
+import type { BrowserBootstrap, BrowserEntry } from './bootstrap.js';
 
-export type BrowserPluginFailures = ReadonlyMap<string, unknown>;
 
 export function createBrowserGraphLoader(host: FrontendHost) {
   const mounted = new Map<string, string>();

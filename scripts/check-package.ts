@@ -44,30 +44,35 @@ async function checkPackage() {
       !/\.(?:test|spec)\.js$/.test(path)), 'Published package must exclude test artifacts');
     await mkdir(installed);
     const tarball = 'file:../' + filename;
-    const fixture = { name: 'mini-harness-install-check', private: true, type: 'module', version: '0.0.0', dependencies: { [name]: tarball } };
+    const { version: nodeTypes } = JSON.parse(await readFile(resolve('node_modules/@types/node/package.json'), 'utf8'));
+    const fixture = {
+      name: 'mini-harness-install-check', private: true, type: 'module', version: '0.0.0',
+      dependencies: { [name]: tarball }, devDependencies: { '@types/node': nodeTypes }
+    };
     await writeFile(join(installed, 'package.json'), JSON.stringify(fixture));
-    console.log('Installing ' + filename + ' and its production dependencies with npm');
-    await npm(['install', '--prefer-offline', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund'], {
+    console.log('Installing ' + filename + ' in a standalone npm project');
+    await npm(['install', '--prefer-offline', '--include=dev', '--ignore-scripts', '--no-audit', '--no-fund'], {
       cwd: installed, timeout: 240000
     });
     const published = join(installed, 'node_modules', name);
     const manifest = JSON.parse(await readFile(join(published, 'package.json'), 'utf8'));
     assert.doesNotMatch(JSON.stringify(manifest), /@mini-harness\/|workspace:\*/);
+    assert.deepEqual(Object.keys(manifest.exports).sort(), ['./browser-plugin', './plugin']);
     for (const { path } of files.filter(({ path }) => /\.(?:js|d\.ts)$/.test(path))) {
       const emitted = await readFile(join(published, path), 'utf8');
       assert.doesNotMatch(emitted, /['"]@mini-harness\//, path + ' depends on a private workspace');
     }
     await execFile(process.execPath, ['--input-type=module', '-e',
       "import 'mini-harness/plugin'; import 'mini-harness/browser-plugin';"], { cwd: installed });
-    for (const path of ['contracts/plugin-sdk.d.ts', 'ui-runtime/plugin-sdk.d.ts'])
+    for (const path of ['sdk/plugin.d.ts', 'sdk/browser-plugin.d.ts'])
       assert.ok(files.some((file) => file.path === 'dist/types/packages/' + path), 'Missing SDK declarations: ' + path);
     await writeFile(join(installed, 'plugin-types.mts'), `
-      import { agentExtensions, promptExtensions, sessionExtensions, toolExtensions, type PluginApi, type LlmPort } from 'mini-harness/plugin';
-      import { settingsExtensions, slotExtensions, type FrontendSetup, type SlotRenderer } from 'mini-harness/browser-plugin';
+      import { agentExtensions, promptExtensions, sessionDisplayExtensions, sessionExtensions, toolExtensions, type PluginApi, type LlmPort, type ScopeSettings } from 'mini-harness/plugin';
       declare module 'mini-harness/plugin' {
         interface ServiceMap { example: { greet(name: string): string } }
       }
       declare const api: PluginApi;
+      const scope: ScopeSettings = { disabledTools: ['write'] };
       const llm: LlmPort | undefined = api.service('harnessLlm');
       api.provide('example', { greet: (name) => name.toUpperCase() });
       api.service('example')?.greet('world');
@@ -77,6 +82,11 @@ async function checkPackage() {
       api.contribute(agentExtensions.prepareInput, (content, context) => context.source === 'agent' ? content : undefined);
       api.contribute(agentExtensions.modelRequest, (request) => ({ ...request, systemPrompt: request.systemPrompt.trim() }));
       api.contribute(promptExtensions.section, { id: 'status', render: ({ cwd }) => cwd });
+      api.contribute(agentExtensions.toolResult, (content) => content);
+      api.contribute(agentExtensions.observe, (event) => {
+        if (event.type === 'run-ended') void event.run.id;
+      });
+      api.contribute(sessionDisplayExtensions.project, ({ content }) => content);
       api.contribute(toolExtensions.decide, ({ tool }) => tool === 'change' ? 'deny' : undefined);
       const records = api.contribute(sessionExtensions.records);
       void records.append('session', { seen: true });
@@ -90,9 +100,18 @@ async function checkPackage() {
       api.service('example')?.greet(1);
       // @ts-expect-error TypeScript plugins declare their own services.
       api.service('undeclared');
+      // @ts-expect-error The run scheduler is a host service.
+      api.service('harnessRuns');
+    `);
+    await writeFile(join(installed, 'browser-types.mts'), `
+      import { settingsExtensions, slotExtensions, type FrontendSetup, type SlotRenderer } from 'mini-harness/browser-plugin';
+      declare module 'mini-harness/browser-plugin' {
+        interface SlotMap { 'example.panel': { kind: 'single' } }
+      }
       declare const render: SlotRenderer;
       const setup: FrontendSetup = (ctx, frontend) => {
         frontend.contribute(slotExtensions.keyed, 'sidebar.primary', 'example', render);
+        frontend.contribute(slotExtensions.keyed, 'example.panel', 'example', render);
         // @ts-expect-error A keyed contribution needs a renderer.
         frontend.contribute(slotExtensions.keyed, 'sidebar.primary', 'example', document.body);
         frontend.watch(() => {});
@@ -101,9 +120,9 @@ async function checkPackage() {
         });
       };
     `);
-    await execFile(process.execPath, [resolve('node_modules/typescript/bin/tsc'),
-      '--strict', '--skipLibCheck', '--noEmit', '--target', 'ES2022', '--module', 'NodeNext', 'plugin-types.mts'],
-    { cwd: installed });
+    await Promise.all(['plugin-types.mts', 'browser-types.mts'].map((file) => execFile(process.execPath,
+      [resolve('node_modules/typescript/bin/tsc'), '--strict', '--noEmit', '--target', 'ES2022', '--module', 'NodeNext', file],
+      { cwd: installed })));
     assert.match((await cli('--help')).stdout, /minimal native agent harness/);
     await mkdir(plugin);
     await writeFile(join(plugin, 'plugin.json'), JSON.stringify({ inject: ['harnessRoutes'] }));
@@ -125,7 +144,7 @@ async function checkPackage() {
     assert.ok(token);
     const headers = { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' };
     const get = (path: string) => fetch(info.url + path, { headers });
-    for (const asset of ['/', '/packages/ui-runtime/boot.js', '/packages/ui-runtime/plugin-sdk.js', '/packages/ui-primitives/markdown.js', '/packages/session-helper/client.js', '/packages/shell/client.js', '/packages/settings/browser.js', '/packages/sessions/browser/conversation/view.js', '/packages/ui-primitives/primitives.js', '/packages/ui-primitives/vendor/marked.js', '/packages/ui-primitives/vendor/purify.js', '/logo.svg', '/manifest.webmanifest', '/theme.css', '/icon-192.png', '/icon-512.png', '/favicon.ico']) {
+    for (const asset of ['/', '/packages/ui-runtime/boot.js', '/packages/ui-runtime/plugin-sdk.js', '/packages/ui-primitives/markdown.js', '/packages/session-helper/client.js', '/packages/shell/client.js', '/packages/settings/browser.js', '/packages/conversation/browser/conversation/view.js', '/packages/ui-primitives/primitives.js', '/packages/ui-primitives/vendor/marked.js', '/packages/ui-primitives/vendor/purify.js', '/logo.svg', '/manifest.webmanifest', '/theme.css', '/icon-192.png', '/icon-512.png', '/favicon.ico']) {
       const response = await get(asset);
       assert.equal(response.status, 200, asset);
       await response.arrayBuffer();

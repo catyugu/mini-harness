@@ -1,7 +1,8 @@
+import { toolNamePattern } from '@mini-harness/llm/vocabulary';
 import { Check, Errors } from 'typebox/value';
-import { isTrustedContribution } from '@mini-harness/contracts/contributions';
-import { isToolContent, registerToolBinding, toolNamePattern, type ToolDefinition, type ToolPort } from '@mini-harness/contracts/tools';
-import type { ToolDecision } from '@mini-harness/contracts/tool-extensions';
+import { isTrustedContribution } from '@mini-harness/kernel/contributions';
+import { isToolContent, registerToolBinding, type ToolDefinition, type ToolPort } from './api.js';
+import type { ToolDecision } from './extensions.js';
 
 interface ToolRegistration {
   name: string;

@@ -1,24 +1,10 @@
-import type { PluginConfiguration } from '@mini-harness/contracts/config';
-import type { BrowserContribution, BrowserContributionSource, BrowserRelease } from '@mini-harness/contracts/browser';
-import { Context, type Fiber } from './vendor/cordis.js';
+import type {} from './graph-api.js';
+import type { PluginConfiguration } from '@mini-harness/kernel/configuration';
+import type { BrowserContributionSource, BrowserRelease } from './contribution.js';
+import type { Context, Fiber } from './vendor/cordis.js';
 
-export interface FrontendApi {
-  contribute<Args extends unknown[], Result>(point: BrowserContribution<Args, Result>, ...args: Args): Result;
-  readonly configuration: PluginConfiguration;
-  onDispose(cleanup: () => void | Promise<void>): BrowserRelease;
-  readonly config: Readonly<Record<string, unknown>>;
-  readonly signal: AbortSignal;
-  /** Refresh a plugin-owned snapshot when this plugin invalidates its state. */
-  watch(refresh: () => void | Promise<void>): BrowserRelease;
-  readonly locale: {
-    current(): string;
-    subscribe(listener: (language: string) => void): BrowserRelease;
-    text(messages: Record<string, string>, fallback: string): string;
-  };
-  request<T>(path: string, options?: RequestInit): Promise<T>;
-}
-
-export type FrontendSetup = (ctx: Context, api: FrontendApi) => void | BrowserRelease | Promise<void | BrowserRelease>;
+import type { FrontendSetup } from './frontend-api.js';
+import type {} from './projection-api.js';
 
 export class FrontendHost {
   private readonly plugins = new Map<string, { fiber: Fiber; controller: AbortController; configure(config: Record<string, unknown>): void }>();
