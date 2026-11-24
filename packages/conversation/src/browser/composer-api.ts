@@ -81,6 +81,9 @@ export interface ConversationState {
   records: SessionDisplayRecord[];
   recordMessages: ViewMessage[];
   queue: ConversationView['queue'];
+  modelDraft?: ModelChoice;
+  thinkingDraft?: ThinkingLevel | null;
+  retrySubmission?: { sessionId: string; run: RunInfo; input: ConversationSubmission };
   pending: boolean;
   sending: boolean;
   cancelling: boolean;
@@ -99,6 +102,8 @@ export interface ConversationController {
   cancel(): Promise<void>;
   cancelQueue(id?: string): Promise<void>;
   setPermission(permission: ConversationPermission): Promise<void>;
+  chooseModel(model?: ModelChoice): void;
+  chooseThinking(level: ThinkingLevel | null): void;
   retry(): Promise<void>;
   compact(): Promise<void>;
 }

@@ -130,10 +130,6 @@ export function createPluginApi(ctx: Context, { id, descriptor, config }: { id: 
       },
       remove: (name) => rmSync(storagePath(name, true), { force: true })
     },
-    provide(name, service) {
-      if (!descriptor.provides?.includes(name)) throw new Error('Undeclared service: ' + name);
-      ctx.provide(name, service);
-    },
     service<Name extends keyof ServiceMap & string>(name: Name): NonNullable<ServiceMap[Name]> {
       if (!descriptor.inject?.includes(name)) throw new Error('Required service is not declared by ' + id + ': ' + name);
       const value = ctx.get(name) as ServiceMap[Name] | undefined;

@@ -321,15 +321,15 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
   const released: string[] = [];
   const builtins: PluginDescriptor[] = [
     { id: 'global', scope: 'application', title: 'Global', description: '', required: true,
-      provides: ['greeting', 'extra'], setup(_ctx, api) { api.provide('greeting', 'global'); api.provide('extra', 'retained'); } },
+      provides: ['greeting', 'extra'], setup(ctx, api) { ctx.provide('greeting', 'global'); ctx.provide('extra', 'retained'); } },
     { id: 'workspace', scope: 'workspace', title: 'Workspace', description: '', provides: ['greeting'],
       configSchema: { type: 'object', properties: { value: { type: 'string' } }, required: ['value'] },
-      setup(_ctx, api) { api.provide('greeting', String(api.config.value)); } },
+      setup(ctx, api) { ctx.provide('greeting', String(api.config.value)); } },
     { id: 'layer', scope: 'session', title: 'Layer', description: '', provides: ['greeting'],
       setup(ctx, api) {
         ctx.effect(() => () => { released.push(String(api.config.value)); });
         if (api.config.fail) throw new Error('Scoped setup failed');
-        api.provide('greeting', String(api.config.value));
+        ctx.provide('greeting', String(api.config.value));
       } }
   ];
   const workspaceKey = 'workspace:' + workspaceId;
@@ -400,9 +400,9 @@ test('configuration validation resolves the staged scope provider and rejects in
   let settings = structuredClone(DEFAULTS);
   const builtins: PluginDescriptor[] = [
     { id: 'global', scope: 'application', title: 'Default', description: '', required: true, provides: ['greeting'],
-      setup(_ctx, api) { api.provide('greeting', 'global'); } },
+      setup(ctx, api) { ctx.provide('greeting', 'global'); } },
     { id: 'local', scope: 'workspace', title: 'Local', description: '', provides: ['greeting'],
-      setup(_ctx, api) { api.provide('greeting', 'local'); } },
+      setup(ctx, api) { ctx.provide('greeting', 'local'); } },
     { id: 'consumer', scope: 'workspace', title: 'Consumer', description: '', inject: ['greeting'],
       configSchema: { type: 'object', properties: { expected: { type: 'string' } }, required: ['expected'] },
       validateConfig(config, { operation, service }) {

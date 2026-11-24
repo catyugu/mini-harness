@@ -74,10 +74,10 @@ export default function setup(_ctx, api) {
 
 Return JSON from route handlers and honor their cancellation signals. Use the plugin lifetime signal for other work owned by setup. Use the credential or secret store for sensitive values.
 
-For TypeScript, `api.service('harnessLlm')` infers `LlmPort`. Declare your own names in the public service map. Declare the same names in the plugin descriptor so the host can validate them when it mounts the plugin.
+For TypeScript, `api.service('harnessLlm')` infers `LlmPort`. Declare your own names once in the public service map; the same augmentation types the Cordis context. Declare the same names in the plugin descriptor so the host can validate them when it mounts the plugin.
 
 ```ts
-import type { PluginApi } from 'mini-harness/plugin';
+import type { Context, PluginApi } from 'mini-harness/plugin';
 
 declare module 'mini-harness/plugin' {
   interface ServiceMap {
@@ -85,8 +85,8 @@ declare module 'mini-harness/plugin' {
   }
 }
 
-export default function setup(_ctx: unknown, api: PluginApi) {
-  api.provide('greetings', { hello: (name) => 'Hello, ' + name });
+export default function setup(ctx: Context, _api: PluginApi) {
+  ctx.provide('greetings', { hello: (name: string) => 'Hello, ' + name });
 }
 ```
 

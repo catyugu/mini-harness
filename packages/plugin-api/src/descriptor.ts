@@ -50,7 +50,6 @@ export interface PluginApi {
   onConfigChange(apply: (next: Readonly<Record<string, unknown>>) => void | Promise<void>): void;
   readonly scope: PluginScope;
   readonly signal: AbortSignal;
-  provide<Name extends keyof ServiceMap & string>(name: Name, service: ServiceMap[Name]): void;
   service<Name extends keyof ServiceMap & string>(name: Name): NonNullable<ServiceMap[Name]>;
   /** Resolve the current declared provider for a prepared conversation. Do not retain it across configuration changes. */
   scopedService<Name extends keyof ServiceMap & string>(sessionId: string, name: Name): NonNullable<ServiceMap[Name]>;

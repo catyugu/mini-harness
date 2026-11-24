@@ -71,14 +71,16 @@ async function checkPackage() {
     for (const path of ['sdk/src/plugin.d.ts', 'sdk/src/browser-plugin.d.ts'])
       assert.ok(files.some((file) => file.path === 'dist/types/packages/' + path), 'Missing SDK declarations: ' + path);
     await writeFile(join(installed, 'plugin-types.mts'), `
-      import { agentExtensions, promptExtensions, sessionDisplayExtensions, sessionExtensions, toolExtensions, type PluginApi, type LlmPort, type ScopeSettings } from 'mini-harness/plugin';
+      import { agentExtensions, promptExtensions, sessionDisplayExtensions, sessionExtensions, toolExtensions, type PluginApi, type Context, type LlmPort, type ScopeSettings } from 'mini-harness/plugin';
       declare module 'mini-harness/plugin' {
         interface ServiceMap { example: { greet(name: string): string } }
       }
       declare const api: PluginApi;
+      declare const ctx: Context;
       const scope: ScopeSettings = { disabledTools: ['write'] };
       const llm: LlmPort | undefined = api.service('harnessLlm');
-      api.provide('example', { greet: (name) => name.toUpperCase() });
+      ctx.provide('example', { greet: (name: string) => name.toUpperCase() });
+      ctx.example.greet('world');
       api.service('example')?.greet('world');
       api.storage.write('state', { count: 1 });
       api.secrets.read('credential');

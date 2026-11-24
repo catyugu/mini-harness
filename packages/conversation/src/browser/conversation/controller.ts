@@ -113,8 +113,8 @@ export function createConversationController(ctx: Context, api: FrontendApi): Co
       }
       const { permission: _permission, revision, ...message } = input;
       const run = await api.request<RunInfo>(path(id, revision ? '/revise' : '/runs'), payload('POST', revision ? { ...message, ...revision } : message));
-      lastInputs.set(id, message);
-      if (!signal.aborted) { update({ pending: false }); void activate(id); }
+      lastInputs.set(id, { message: message.message, attachments: message.attachments });
+      if (!signal.aborted) { update({ pending: false, modelDraft: undefined, thinkingDraft: undefined }); void activate(id); }
       return { sessionId: id, run };
     } catch (error) {
       if (!signal.aborted) update({ pending: false, sending: false });
@@ -128,7 +128,7 @@ export function createConversationController(ctx: Context, api: FrontendApi): Co
     update({ pending: true });
     try {
       const entries = await api.request<ConversationView['queue']>(path(id, '/queue'), payload('POST', { ...input, mode }));
-      if (!signal.aborted) { queueRevision++; update({ queue: entries }); }
+      if (!signal.aborted) { queueRevision++; update({ queue: entries, modelDraft: undefined, thinkingDraft: undefined }); }
     } finally { if (!signal.aborted) update({ pending: false }); }
   }
 
@@ -181,9 +181,13 @@ export function createConversationController(ctx: Context, api: FrontendApi): Co
       if (active() === id) update({ conversation: item });
       await sessions.refresh();
     },
+    chooseModel(modelDraft) { update({ modelDraft, thinkingDraft: undefined }); },
+    chooseThinking(thinkingDraft) { update({ thinkingDraft }); },
     async retry() {
       const id = active(), input = id ? lastInputs.get(id) : undefined;
-      if (input && !state.sending && !state.pending) await submit(input);
+      if (!input || state.sending || state.pending) return;
+      const result = await submit({ ...input, model: state.modelDraft, thinkingLevel: state.thinkingDraft });
+      update({ retrySubmission: { ...result, input } });
     },
     async compact() {
       const id = active(), signal = visit.signal;

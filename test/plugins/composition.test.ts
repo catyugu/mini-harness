@@ -30,12 +30,12 @@ test('external services and their declared consumers share Cordis provider selec
   assert.equal((await patch({ plugins: { 'greeting-route': true, 'greeting-service': true } })).status, 200);
   assert.equal((await request(endpoint)).body.greeting, 'Hello, Harness');
   writePlugin(paths.plugins, 'suffix', { provides: ['exampleSuffix'] },
-    "export default (_ctx, api) => api.provide('exampleSuffix', '!');");
+    "export default (ctx, api) => ctx.provide('exampleSuffix', '!');");
   assert.equal((await patch({ plugins: { suffix: true } })).status, 200);
   assert.equal((await request(endpoint)).body.greeting, 'Hello, Harness!');
 
   writePlugin(paths.plugins, 'greeting-alt', { provides: ['exampleGreeting'] },
-    "export default (_ctx, api) => api.provide('exampleGreeting', { greet: (name) => 'Welcome, ' + name });");
+    "export default (ctx, api) => ctx.provide('exampleGreeting', { greet: (name) => 'Welcome, ' + name });");
   assert.match((await patch({ plugins: { 'greeting-alt': true } })).body.error, /Multiple enabled providers/);
   assert.equal((await patch({ plugins: { 'greeting-alt': true }, providers: { exampleGreeting: 'greeting-alt' } })).status, 200);
   assert.equal((await request(endpoint)).body.greeting, 'Welcome, Harness!');
@@ -71,7 +71,7 @@ test('scoped plugins inherit declared services and tool policies, and release th
     export default (ctx, api) => {
       if (api.config.fail) throw new Error('Scoped setup failed');
       ctx.effect(() => () => appendFileSync(${JSON.stringify(cleaned)}, 'released\\n'));
-      api.provide('exampleGreeting', { greet: (name) => api.scope.workspaceId + ':' + name });
+      ctx.provide('exampleGreeting', { greet: (name) => api.scope.workspaceId + ':' + name });
       api.registerScopeRequest('greet', (input) => {
         api.storage.write('seen', input);
         api.invalidate();
@@ -134,7 +134,7 @@ test('scoped plugins inherit declared services and tool policies, and release th
 test('read-only permissions are bound to the selected tool registration', async (t) => {
   const { app, mock, paths, request } = await fixture(t);
   writePlugin(paths.plugins, 'replacement', { scope: 'session', inject: ['harnessTools'] }, `
-    export default (_ctx, api) => {
+    export default (ctx, api) => {
       for (const name of ['read', 'custom']) api.contribute(toolExtensions.register, {
         name, description: 'replacement', parameters: { type: 'object' },
         async execute() { return { content: [{ type: 'text', text: 'Authorized local read' }] }; }
@@ -190,9 +190,9 @@ test('the host tool authorization service cannot be replaced at either scope', a
 test('file tools and HTTP preview consume the same selected File Access provider', async (t) => {
   const { app, paths, request } = await fixture(t);
   writePlugin(paths.plugins, 'virtual-files', { provides: ['harnessFileAccess'] }, `
-    export default function(_ctx, api) {
+    export default function(ctx, api) {
       const data = Buffer.from('Provided file content');
-      api.provide('harnessFileAccess', { open: () => ({
+      ctx.provide('harnessFileAccess', { open: () => ({
         access: async () => {},
         readFile: async () => data,
         imageType: async () => null,
@@ -211,7 +211,7 @@ test('file tools and HTTP preview consume the same selected File Access provider
 test('native runs use the nearest scoped LLM provider while siblings retain the application adapter', async (t) => {
   const { app, paths, request, mock } = await fixture(t);
   writePlugin(paths.plugins, 'scoped-llm', { scope: 'session', provides: ['harnessLlm'] }, `
-    export default (_ctx, api) => api.provide('harnessLlm', {
+    export default (ctx, api) => ctx.provide('harnessLlm', {
       async *stream(request) {
         request.signal.throwIfAborted();
         yield { type: 'text-delta', text: api.config.answer };
@@ -252,18 +252,18 @@ test('native file and shell tools use scoped file, process and sandbox services 
       cwd: request.cwd, env: {} };
   } })`;
   writePlugin(paths.plugins, 'application-sandbox', { provides: ['harnessSandbox'] },
-    `export default (_ctx, api) => api.provide('harnessSandbox', ${isolated('application sandbox')});`);
+    `export default (ctx, api) => ctx.provide('harnessSandbox', ${isolated('application sandbox')});`);
   writePlugin(paths.plugins, 'scoped-environment', { scope: 'session', provides: ['harnessFileAccess', 'harnessSandbox'] }, `
-    export default (_ctx, api) => {
-      api.provide('harnessFileAccess', { open: () => ({
+    export default (ctx, api) => {
+      ctx.provide('harnessFileAccess', { open: () => ({
         access: async () => {}, imageType: async () => null,
         readFile: async () => Buffer.from('scoped file'),
         async *chunks() { yield Buffer.from('scoped file'); }
       }) });
-      api.provide('harnessSandbox', ${isolated('scoped sandbox')});
+      ctx.provide('harnessSandbox', ${isolated('scoped sandbox')});
     };`);
   writePlugin(paths.plugins, 'scoped-process', { scope: 'session', provides: ['harnessProcess'] }, `
-    export default (_ctx, api) => api.provide('harnessProcess', {
+    export default (ctx, api) => ctx.provide('harnessProcess', {
       async run(request) {
         if (!request.sessionId) throw new Error('Missing execution scope');
         return { code: 0, signal: null, stdout: 'scoped process', stderr: '', truncated: false };
@@ -366,7 +366,7 @@ test('catalog computes independent scoped provider maps and rejects fixed servic
 test('scoped model catalogs govern explicit runs and inherited or model-selected delegation without changing siblings', async (t) => {
   const { app, paths, request, mock } = await fixture(t);
   writePlugin(paths.plugins, 'scoped-models', { scope: 'session', provides: ['harnessModels', 'harnessLlm'] }, `
-    export default (_ctx, api) => {
+    export default (ctx, api) => {
       const provider = 'scoped-only';
       const ids = ['parent-model', 'child-model'];
       const resolve = (choice) => {
@@ -375,14 +375,14 @@ test('scoped model catalogs govern explicit runs and inherited or model-selected
         return { provider, id };
       };
       const list = () => ids.map(id => ({ provider, id, name: id, configured: true, thinkingLevels: ['off'] }));
-      api.provide('harnessModels', {
+      ctx.provide('harnessModels', {
         list, available: async () => list(), resolve,
         capabilities(choice) {
           const model = resolve(choice);
           return { id: model.id, name: model.id, input: ['text'], contextWindow: 32000, maxTokens: 1024, reasoning: false };
         }
       });
-      api.provide('harnessLlm', {
+      ctx.provide('harnessLlm', {
         async *stream(request) {
           request.signal.throwIfAborted();
           const model = resolve(request.model);

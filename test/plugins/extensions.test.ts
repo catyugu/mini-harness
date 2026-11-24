@@ -94,10 +94,10 @@ test('input contributions run at delivery in stable order and keep the submitted
 
 test('an application plugin replaces only LLM and composes execution hooks without rewriting history', async (t) => {
   const { app, paths, request, mock, base, headers } = await fixture(t);
-  writePlugin(paths.plugins, 'transport', { provides: ['harnessLlm'], inject: ['harnessModels'] }, `export default (_ctx, api) => {
+  writePlugin(paths.plugins, 'transport', { provides: ['harnessLlm'], inject: ['harnessModels'] }, `export default (ctx, api) => {
     let attempts = 0;
     const modelCatalog = api.service('harnessModels');
-    api.provide('harnessLlm', { async *stream(request) {
+    ctx.provide('harnessLlm', { async *stream(request) {
       if (!modelCatalog.resolve(request.model)) throw new Error('missing catalog');
       const terminal = (content, stopReason = 'stop') => ({ type: 'done', message: { role: 'assistant', timestamp: Date.now(), content, stopReason } });
       if (++attempts === 1) throw new Error('transient transport failure');
