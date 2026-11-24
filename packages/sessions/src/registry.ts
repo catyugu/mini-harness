@@ -14,7 +14,9 @@ import type { CapabilityObservation } from '@mini-harness/kernel/observations';
 import type { ConversationPermission, SessionRecord } from './shared/identity.js';
 import { SessionLog, syncDirectory } from './log.js';
 import { loadCatalog, type CatalogState } from './catalog.js';
-import { missing, nativeFile } from './storage.js';
+import { attachmentDirectory, deleteAttachments, missing, nativeFile, readAttachmentFile, storeAttachments } from './storage.js';
+import { prepareInput } from '@mini-harness/input/prepare';
+import type { Attachment } from '@mini-harness/input/message';
 
 type Participant = Parameters<SessionStore['beforeDelete']>[0];
 
@@ -124,6 +126,33 @@ export class SessionRegistry implements SessionStore {
   }
 
   private nativeFile(record: Pick<SessionRecord, 'id' | 'workspaceId'>) { return nativeFile(this.paths, this.workspaces, record); }
+
+  prepareInput(id: string, text: unknown, attachments?: Attachment[]) {
+    this.assertAvailable(id);
+    const { files, ...prepared } = prepareInput(text, attachments);
+    if (files.length) {
+      const record = this.get(id);
+      if (!record) throw new DomainError('not_found', 'Conversation not found');
+      const directory = attachmentDirectory(this.nativeFile(record), true)!;
+      storeAttachments(directory, files);
+      syncDirectory(directory);
+      syncDirectory(dirname(directory));
+      syncDirectory(dirname(dirname(directory)));
+    }
+    return prepared;
+  }
+
+  attachmentDirectory(id: string) {
+    this.assertAvailable(id);
+    const record = this.get(id);
+    if (!record) throw new DomainError('not_found', 'Conversation not found');
+    return attachmentDirectory(this.nativeFile(record));
+  }
+
+  readAttachment(id: string, attachmentId: string) {
+    const directory = this.attachmentDirectory(id);
+    return directory ? readAttachmentFile(directory, attachmentId) : undefined;
+  }
 
   runSummary(id: string) {
     const run = this.latestRuns.get(id);
@@ -281,7 +310,17 @@ export class SessionRegistry implements SessionStore {
       if (!record) throw new Error('Conversation disappeared during export');
       this.nativeFile(record);
       const log = this.log(id);
-      return { ...record, log: log.serialize() };
+      const attachments: Record<string, string> = {};
+      for (const entry of log.entries()) {
+        const input = entry.type === 'message' ? entry.presentation : entry.type === 'inbox-enqueued' ? entry.item.input : undefined;
+        for (const file of input?.attachments ?? []) {
+          if (!file.id || Object.hasOwn(attachments, file.id)) continue;
+          const bytes = this.readAttachment(id, file.id);
+          if (!bytes) throw new Error('Missing uploaded attachment: ' + file.name);
+          attachments[file.id] = bytes.toString('base64');
+        }
+      }
+      return { ...record, log: log.serialize(), attachments };
     });
   }
 
@@ -346,8 +385,10 @@ export class SessionRegistry implements SessionStore {
     for (const entry of pending) {
       if (this.state.sessions.some((record) => record.id === entry.id)) throw new Error('Deletion journal includes an active conversation');
       const file = this.nativeFile(entry);
-      try { unlinkSync(file); syncDirectory(dirname(file)); }
+      deleteAttachments(file);
+      try { unlinkSync(file); }
       catch (error) { if (!missing(error)) throw error; }
+      syncDirectory(dirname(file));
     }
     this.commit({ sessions: this.state.sessions });
   }
