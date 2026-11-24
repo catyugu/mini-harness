@@ -178,7 +178,7 @@ test('tool execution stays auditable while accepted content is stored as a compa
 test('historical plugin records normalize to one owner without changing identity or the selected branch', (t) => {
   const { open } = fixture(t);
   const log = open(), first = log.append(user('before'));
-  const instanceId = 'session:' + 'a'.repeat(32) + '/notes';
+  const instanceId = 'session:aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/notes';
   const application = log.append({ type: 'custom', namespace: 'notes', data: { count: 1 } });
   const scoped = log.append({ type: 'custom', namespace: 'display:' + instanceId,
     data: { data: { count: 2 }, display: { title: 'Progress', content: 'Done' } } });

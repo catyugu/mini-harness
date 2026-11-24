@@ -37,8 +37,10 @@ export function mountHistory(ctx: Context, extensions: MessageExtensions, signal
       view.history(state.view?.messages ?? [], state.view?.run?.state === 'failed' ? state.view.run.error : undefined, switched);
       stream = state.view && isRunning(state.view.run) ? view.stream(state.view) : undefined;
     }
-    for (const event of state.events.slice(start)) stream?.(event);
-    if (reset || previous?.records !== state.records || previous?.recordMessages !== state.recordMessages) refreshRecords();
+    const events = state.events.slice(start);
+    for (const event of events) stream?.(event);
+    if (reset || previous?.records !== state.records || previous?.recordMessages !== state.recordMessages ||
+        (state.records.length && events.some(({ type }) => type === 'user' || type === 'assistant-end' || type === 'tool'))) refreshRecords();
     previous = state;
   }
   extensions.subscribe(view.refreshActions, signal);

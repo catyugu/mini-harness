@@ -71,8 +71,10 @@ export function createComposerModel(ctx: Context, api: FrontendApi) {
     chooseThinking: control.chooseThinking,
     setText(text: string, start = text.length, end = start) {
       const current = draft();
-      if (current.text !== text) { current.text = text; current.version++; }
+      const changed = current.text !== text;
+      if (changed) { current.text = text; current.version++; }
       cursor = { draft: current, start, end };
+      if (changed) change();
     },
     insert(text: string) {
       const current = draft(), position = cursor?.draft === current ? cursor : { start: current.text.length, end: current.text.length };
