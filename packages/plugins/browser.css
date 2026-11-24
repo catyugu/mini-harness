@@ -36,29 +36,6 @@
 }
 .plugin-symbol svg { width: 20px; height: 20px; }
 .catalog-controls { display: flex; align-items: center; gap: 8px; padding-right: 12px; }
-.toggle {
-  --switch-width: 38px; --switch-height: 22px; --switch-thumb: 14px; --switch-inset: 3px;
-  --switch-travel: calc(var(--switch-width) - var(--switch-thumb) - 2 * (var(--switch-inset) + 1px));
-  appearance: none; flex-shrink: 0; width: var(--switch-width); height: var(--switch-height);
-  border: 1px solid var(--border); border-radius: var(--switch-height); background: var(--hover);
-  cursor: pointer; position: relative; margin: 0 2px;
-  transition: background-color var(--motion-switch) ease-out, border-color var(--motion-switch) ease-out;
-}
-.toggle:checked { background: var(--accent); border-color: var(--accent); }
-.toggle:hover:enabled { border-color: var(--focus); }
-.toggle:disabled { cursor: default; opacity: .65; }
-.toggle[aria-busy="true"] { cursor: progress; }
-.toggle::after {
-  content: ''; position: absolute; top: var(--switch-inset); left: var(--switch-inset);
-  width: var(--switch-thumb); height: var(--switch-thumb); border-radius: 50%;
-  background: var(--surface); box-shadow: 0 1px 4px #0002; transform: translateX(0);
-  transition: transform var(--motion-switch) ease-out, background-color var(--motion-switch) ease-out;
-}
-.toggle:checked::after { transform: translateX(var(--switch-travel)); background: var(--on-accent); }
-@media (max-width: 860px) {
-  .toggle { --switch-width: 42px; --switch-height: 26px; --switch-thumb: 18px; }
-}
-
 .catalog-detail { padding: 0; overflow: visible; }
 .catalog-back.ui-button { min-height: 30px; padding: 4px 2px; gap: 6px; color: var(--muted); }
 .catalog-detail-header { display: grid; gap: 7px; margin-top: 26px; }
@@ -86,8 +63,9 @@
   grid-template-rows: auto auto; align-items: center; gap: 4px 14px; padding-block: 10px;
 }
 .catalog-detail .plugin-fields > label:has(input[type="checkbox"]) > input {
-  grid-column: 2; grid-row: 1 / span 2; margin: 0; width: 18px; height: 18px;
+  grid-column: 2; grid-row: 1 / span 2; margin: 0;
 }
+.catalog-detail .plugin-fields > label:has(input[type="checkbox"]) > input:not(.toggle) { width: 18px; height: 18px; }
 .catalog-detail .plugin-fields > label:has(input[type="checkbox"]) > small { grid-column: 1; grid-row: 2; }
 .catalog-detail .plugin-fields > .plugin-config { grid-column: 1 / -1; }
 .catalog-detail .plugin-config legend { margin-bottom: 10px; font-size: 13px; font-weight: 600; }

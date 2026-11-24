@@ -19,9 +19,8 @@
 .settings-scroll section { padding: 12px 0 15px; border-bottom: 1px solid var(--border); }
 .settings-scroll h3 { font-size: 14px; margin: 0 0 5px; }
 .settings-preference { max-width: 480px; }
-.settings-preference .switch-line { align-items: flex-start; margin: 0; cursor: pointer; }
+.settings-preference .switch-line { margin: 0; cursor: pointer; }
 .settings-preference .switch-line strong { display: block; font-weight: 550; }
-.settings-preference .switch-line input { margin-top: 4px; }
 .settings-contributions .form-error:empty { display: none; }
 .settings-scroll label { display: block; margin: 8px 0 4px; font-size: 13px; }
 .settings-scroll :is(input:not([type="checkbox"], [type="radio"]), select, textarea) {
@@ -30,7 +29,7 @@
 }
 .settings-scroll .switch-line { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .switch-line small, .hint { display: block; color: var(--muted); font-size: 12px; }
-.switch-line input { flex: 0 0 17px; height: 17px; }
+.switch-line input:not(.toggle) { flex: 0 0 17px; height: 17px; }
 .setting-columns { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; }
 .small-button { margin-top: 7px; font-size: 12px; }
 .primary { border: 0; border-radius: 8px; background: var(--accent); color: white; width: 100%; padding: 8px; }

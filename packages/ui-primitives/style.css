@@ -11,6 +11,29 @@ button:disabled { cursor: default; opacity: .55; }
 a, .link-button { color: var(--focus); }
 input[type="checkbox"] { accent-color: var(--accent); }
 
+.toggle {
+  --switch-width: 38px; --switch-height: 22px; --switch-thumb: 14px; --switch-inset: 3px;
+  --switch-travel: calc(var(--switch-width) - var(--switch-thumb) - 2 * (var(--switch-inset) + 1px));
+  appearance: none; flex-shrink: 0; width: var(--switch-width); height: var(--switch-height);
+  border: 1px solid var(--border); border-radius: var(--switch-height); background: var(--hover);
+  cursor: pointer; position: relative; margin: 0 2px;
+  transition: background-color var(--motion-switch) ease-out, border-color var(--motion-switch) ease-out;
+}
+.toggle:checked { background: var(--accent); border-color: var(--accent); }
+.toggle:hover:enabled { border-color: var(--focus); }
+.toggle:disabled { cursor: default; opacity: .65; }
+.toggle[aria-busy="true"] { cursor: progress; }
+.toggle::after {
+  content: ''; position: absolute; top: var(--switch-inset); left: var(--switch-inset);
+  width: var(--switch-thumb); height: var(--switch-thumb); border-radius: 50%;
+  background: var(--surface); box-shadow: 0 1px 4px #0002; transform: translateX(0);
+  transition: transform var(--motion-switch) ease-out, background-color var(--motion-switch) ease-out;
+}
+.toggle:checked::after { transform: translateX(var(--switch-travel)); background: var(--on-accent); }
+@media (max-width: 860px) {
+  .toggle { --switch-width: 42px; --switch-height: 26px; --switch-thumb: 18px; }
+}
+
 
 .ui-confirm { display: grid; gap: 18px; }
 .ui-confirm p { margin: 0; line-height: 1.5; overflow-wrap: anywhere; }
