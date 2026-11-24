@@ -555,9 +555,6 @@ importers:
       '@mini-harness/plugin-api':
         specifier: workspace:*
         version: link:../plugin-api
-      '@mini-harness/sessions':
-        specifier: workspace:*
-        version: link:../sessions
       '@mini-harness/ui-runtime':
         specifier: workspace:*
         version: link:../ui-runtime

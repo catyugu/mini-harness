@@ -80,11 +80,14 @@ export class SlotRegistry {
     if (!owner) return;
     const selected = new Map<string | Entry, Entry>();
     for (const entry of this.entries.get(name) ?? []) {
-      selected.set(entry.key ?? entry, entry);
+      const key = entry.key ?? entry;
+      const prior = selected.get(key);
+      if (!prior || entry.order >= prior.order) selected.set(key, entry);
     }
     if (owner.kind === 'single' && selected.size > 1) throw new Error('Multiple entries for single slot: ' + name);
     const entries = [...selected.values()].sort((a, b) => a.order - b.order);
     const visible = new Set(entries);
+    for (const [entry, active] of owner.active) if (!visible.has(entry)) this.unmount(owner, entry, active);
     const staged = new Map<Entry, Mounted>();
     try {
       for (const entry of entries) {
@@ -99,7 +102,6 @@ export class SlotRegistry {
       for (const mount of staged.values()) mount.release();
       throw error;
     }
-    for (const [entry, active] of owner.active) if (!visible.has(entry)) this.unmount(owner, entry, active);
     for (const [entry, active] of staged) owner.active.set(entry, active);
     const nodes = entries.map((entry) => {
       const active = owner.active.get(entry);

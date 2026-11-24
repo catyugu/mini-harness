@@ -77,6 +77,9 @@ async function boot() {
     if (coreFailure && status) {
       status.hidden = false;
       status.textContent = 'Required UI plugin failed: ' + coreFailure[0] + ': ' + String(coreFailure[1]);
+    } else if (status?.textContent?.startsWith('Required UI plugin failed: ')) {
+      status.hidden = true;
+      status.textContent = '';
     }
     if (changed) failuresChanged.dispatchEvent(new Event('change'));
     return failures;

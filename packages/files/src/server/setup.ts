@@ -21,15 +21,14 @@ export function setup(ctx: Context, api: PluginApi) {
     const writes = name === 'edit' || name === 'write';
     api.contribute(toolExtensions.register, { name, bind(id) {
       const root = sessions.workspacePath(id);
-      const access = api.scopedService(id, 'harnessFileAccess');
       const session = sessions.get(id);
       if (!session) throw new DomainError('not_found', 'Conversation not found');
-      const tool = fileTools(root, access.open(session.workspaceId))[index];
-      if (!writes) return tool;
+      const tool = fileTools(root, () => api.scopedService(id, 'harnessFileAccess').open(session.workspaceId))[index];
       return {
         ...tool,
         async execute(...args: Parameters<typeof tool.execute>) {
           const result = await tool.execute(...args);
+          if (!writes) return result;
           const path = (args[1] as { path?: unknown })?.path;
           if (typeof path !== 'string') return result;
           changes.invalidate('files', { workspaceId: session.workspaceId });

@@ -142,8 +142,7 @@ test('workspace dependencies use domain APIs and keep providers at the applicati
     const entry = manifests.get(owner)?.exports?.['./' + parts.join('/')];
     if (!entry) continue;
     const manifest = readFileSync(join(packages, owner, entry), 'utf8');
-    const id = /\bid: '([^']+)'/.exec(manifest)?.[1];
-    if (id) descriptorOwners.set(id, owner);
+    for (const match of manifest.matchAll(/\bid: '([^']+)'/g)) descriptorOwners.set(match[1], owner);
   }
   for (const { id, browser, browserStyles, browserRequires, browserInject } of plugins) {
     if (!browser) { assert.ok(!browserStyles?.length, id + ' has styles without a browser entry'); continue; }

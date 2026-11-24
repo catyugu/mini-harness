@@ -18,13 +18,14 @@ function textFile(bytes: Buffer) {
 }
 
 /** All file operations stay behind WorkspaceFileAccess, including metadata and searches. */
-export function fileTools(cwd: string, files: WorkspaceFileAccess): ToolDefinition[] {
+export function fileTools(cwd: string, access: () => WorkspaceFileAccess): ToolDefinition[] {
   return [
     defineTool({
       name: 'read', label: 'Read', description: 'Read a UTF-8 file or image inside the workspace. Text offsets are 1-based line numbers.',
       promptSnippet: 'Read workspace files',
       parameters: Type.Object({ path: pathSchema, offset: Type.Optional(Type.Integer({ minimum: 1 })), limit: limitSchema }, { additionalProperties: false }),
       async execute(_id, { path, offset = 1, limit = 2000 }, signal) {
+        const files = access();
         signal?.throwIfAborted();
         const imageType = await files.imageType(path);
         const bytes = await files.readFile(path);
@@ -45,6 +46,7 @@ export function fileTools(cwd: string, files: WorkspaceFileAccess): ToolDefiniti
       promptSnippet: 'Write workspace files',
       parameters: Type.Object({ path: pathSchema, content: Type.String({ maxLength: 2 * 1024 * 1024 }) }, { additionalProperties: false }),
       async execute(_id, { path, content }, signal) {
+        const files = access();
         signal?.throwIfAborted();
         await files.mkdir(dirname(resolve(cwd, path)));
         signal?.throwIfAborted();
@@ -59,6 +61,7 @@ export function fileTools(cwd: string, files: WorkspaceFileAccess): ToolDefiniti
         oldText: Type.String({ minLength: 1 }), newText: Type.String()
       }, { additionalProperties: false }), { minItems: 1, maxItems: 100 }) }, { additionalProperties: false }),
       async execute(_id, { path, edits }, signal) {
+        const files = access();
         signal?.throwIfAborted();
         let text = textFile(await files.readFile(path));
         for (const { oldText, newText } of edits) {
@@ -76,6 +79,7 @@ export function fileTools(cwd: string, files: WorkspaceFileAccess): ToolDefiniti
       name: 'ls', label: 'List', description: 'List workspace directory entries. Links and private harness state are excluded.',
       parameters: Type.Object({ path: Type.Optional(pathSchema), limit: limitSchema }, { additionalProperties: false }),
       async execute(_id, { path = '.', limit = 2000 }, signal) {
+        const files = access();
         signal?.throwIfAborted();
         const entries = await files.entries(resolve(cwd, path));
         signal?.throwIfAborted();
@@ -87,6 +91,7 @@ export function fileTools(cwd: string, files: WorkspaceFileAccess): ToolDefiniti
       promptSnippet: 'Find files by workspace glob',
       parameters: Type.Object({ pattern: Type.String({ minLength: 1, maxLength: 4096 }), path: Type.Optional(pathSchema), limit: limitSchema }, { additionalProperties: false }),
       async execute(_id, { pattern, path = '.', limit = 1000 }, signal) {
+        const files = access();
         signal?.throwIfAborted();
         const matches = await files.find(pattern, path, limit);
         signal?.throwIfAborted();
@@ -100,6 +105,7 @@ export function fileTools(cwd: string, files: WorkspaceFileAccess): ToolDefiniti
         glob: Type.Optional(Type.String({ maxLength: 4096 })), literal: Type.Optional(Type.Boolean()), ignoreCase: Type.Optional(Type.Boolean()),
         limit: limitSchema, context: Type.Optional(Type.Integer({ minimum: 0, maximum: 10 })) }, { additionalProperties: false }),
       async execute(_id, input, signal) {
+        const files = access();
         signal?.throwIfAborted();
         const { matches, limited } = await files.grep(input, signal);
         return textResult((matches.join('\n') || 'No matches found') + (limited ? '\n[Results limited]' : ''));

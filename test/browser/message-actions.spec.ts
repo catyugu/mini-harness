@@ -24,7 +24,7 @@ test('copy, preview and revise a message with its image, and release editing dra
             const control = document.createElement('button');
             control.textContent = label;
             control.onclick = () => api.contribute(conversationExtensions.draft, {
-              title: label, text: label, submit: async () => { throw new Error('Fixture draft'); }
+              title: label, text: label, revision: { sourceEntryId: 'fixture', expectedLeafId: null }
             });
             api.contribute(slotExtensions.register, 'sidebar.actions', control);
           };`);
