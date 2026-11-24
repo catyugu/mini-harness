@@ -39,7 +39,7 @@ test('file inspection, responsive themes and reduced viewport height keep contro
         await expect(panel.getByRole('button', { name: 'Git changes', exact: true })).toHaveCount(0);
         const file = panel.getByRole('button', { name: 'notes.md AM', exact: true });
         await expect(file).toBeVisible();
-        expect(await file.evaluate((node) => getComputedStyle(node).justifyContent)).toBe('flex-start');
+        await expect(file).toHaveCSS('justify-content', 'flex-start');
         expect(await file.evaluate((node) => {
           const image = node.querySelector('svg');
           if (!image) throw new Error('Missing file icon');

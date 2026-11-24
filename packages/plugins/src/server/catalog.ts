@@ -9,7 +9,9 @@ import type { PluginSettings } from '@mini-harness/plugin-api/configuration';
 import type { PluginScope, ScopeSettings } from '@mini-harness/kernel/scopes';
 import { resolveCapabilities } from '@mini-harness/kernel/composition';
 import { isRegularFile, pluginBundle } from './source.js';
-import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
+import type { Context } from 'cordis';
+import type { ServiceMap } from '@mini-harness/kernel/services';
+import type { ConfigValidationContext, PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
 import { builtinBrowserAssets } from './browser-assets.js';
 import { describePlugin, type DiscoveredPlugin } from './descriptor.js';
 
@@ -87,11 +89,77 @@ export class PluginCatalog {
 
   descriptors(): DiscoveredPlugin[] { return [...this.builtins.values(), ...this.discover()]; }
 
-  metadata(descriptors = this.descriptors()): PluginMetadata[] {
-    return descriptors.filter(({ required }) => !required).map((item) => {
-      const { source, resources, inject, setup, optional, browserStyles, browserRequires, browserInject, browserProvides, required, configChanges, validateConfig, ...metadata } = item;
-      return metadata;
+  metadata(settings: PluginSettings, failures: ReadonlyMap<string, string>,
+    mounted: (id: string) => boolean, context: (scope?: string) => Context): PluginMetadata[] {
+    return this.descriptors().filter(({ required }) => !required).map((descriptor) => {
+      const { id, source, resources, inject, setup, optional, browserStyles, browserRequires, browserInject,
+        browserProvides, required, configChanges, validateConfig, ...metadata } = descriptor;
+      const configurationError = (key?: string) => {
+        try {
+          const values = key ? { ...settings.pluginConfig[id], ...settings.scopes[key]?.pluginConfig?.[id] } : settings.pluginConfig[id];
+          const config = this.configValues(id, values, descriptor.configSchema);
+          if (descriptor.validateConfig) this.validateConfig(descriptor, config, 'inspect', context(key));
+        } catch (error) { return error instanceof Error ? error.message : String(error); }
+      };
+      const scopes = metadata.scope === 'application'
+        ? [{ scope: 'application', enabled: settings.plugins[id] === true }]
+        : Object.entries(settings.scopes).flatMap(([scope, value]) => {
+          if (!scope.startsWith(metadata.scope + ':')) return [];
+          const enabled = value.plugins?.[id] === true || Object.values(value.providers ?? {}).includes(id);
+          return enabled || Object.hasOwn(value.pluginConfig ?? {}, id) ? [{ scope, enabled }] : [];
+        });
+      const instances = scopes.map(({ scope, enabled }): NonNullable<PluginMetadata['instances']>[number] => {
+        const key = scope === 'application' ? id : scope + '/' + id;
+        const error = failures.get(key) ?? metadata.error ?? configurationError(scope === 'application' ? undefined : scope);
+        const state = !enabled ? 'disabled' : error ? 'failed' : mounted(key) ? 'ready' : 'inactive';
+        return { scope, error, state };
+      });
+      const enabled = instances.filter(({ state }) => state !== 'disabled');
+      const failed = enabled.find(({ state }) => state === 'failed');
+      const ready = enabled.filter(({ state }) => state === 'ready').length;
+      const state = ready ? ready === enabled.length ? 'ready' : 'partial' : failed ? 'failed' : enabled.length ? 'inactive' : 'disabled';
+      return { ...metadata, id, instances, state,
+        error: failed?.error ?? instances.find(({ error }) => error)?.error ?? metadata.error };
     });
+  }
+
+  validateConfig(descriptor: PluginDescriptor, config: Record<string, unknown>,
+    operation: ConfigValidationContext['operation'], ctx: Context) {
+    descriptor.validateConfig?.(Object.freeze(structuredClone(config)), {
+      operation,
+      service<Name extends keyof ServiceMap & string>(name: Name): NonNullable<ServiceMap[Name]> {
+        if (!descriptor.inject?.includes(name) && !descriptor.optional?.includes(name))
+          throw new Error('Configuration dependency is not declared by ' + descriptor.id + ': ' + name);
+        const service = ctx.get(name) as ServiceMap[Name] | undefined;
+        if (service == null) throw new DomainError('unavailable', 'Configuration dependency is unavailable to ' + descriptor.id + ': ' + name);
+        return service;
+      }
+    });
+  }
+
+  changedConfig(descriptors: DiscoveredPlugin[], previous: PluginSettings, settings: PluginSettings) {
+    const validations: { descriptor: PluginDescriptor; config: Record<string, unknown>; key?: string }[] = [];
+    for (const descriptor of descriptors) {
+      const { id, configSchema, scope } = descriptor;
+      const validate = (values: Record<string, unknown> | undefined, before: Record<string, unknown> | undefined, key?: string) => {
+        if (isDeepStrictEqual(values, before)) return;
+        const config = this.configValues(id, values, configSchema);
+        if (descriptor.validateConfig) validations.push({ descriptor, config, key });
+      };
+      if (scope === 'application') validate(settings.pluginConfig[id], previous.pluginConfig[id]);
+      else {
+        validate(settings.pluginConfig[id], previous.pluginConfig[id]);
+        for (const key of Object.keys(settings.scopes)) {
+          if (!key.startsWith(scope + ':')) continue;
+          const changed = settings.scopes[key]?.pluginConfig?.[id];
+          const before = previous.scopes[key]?.pluginConfig?.[id];
+          const selected = settings.scopes[key];
+          if (changed === undefined && !selected.plugins?.[id] && !Object.values(selected.providers ?? {}).includes(id)) continue;
+          validate({ ...settings.pluginConfig[id], ...changed }, { ...previous.pluginConfig[id], ...before }, key);
+        }
+      }
+    }
+    return validations;
   }
 
   plans(settings: PluginSettings, descriptors: DiscoveredPlugin[], scope: PluginScope['kind'],

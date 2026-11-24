@@ -70,7 +70,6 @@ test('cancelling a root aborts its active child and preserves indexed history', 
   assert.equal(app.runtime.plugins.ctx.harnessRuns.cancel(parent.id), true);
   await aborted;
   assert.equal(app.runtime.plugins.ctx.harnessRuns.size, 0);
-  assert.equal(app.runtime.plugins.ctx.harnessRuns.size, 0);
   const child = app.runtime.registry.export([parent.id])[1];
   assert.ok(child);
   assert.equal(child.title, '[Cancelled] hold child');

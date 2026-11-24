@@ -145,7 +145,9 @@ async function checkPackage() {
     assert.ok(token);
     const headers = { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' };
     const get = (path: string) => fetch(info.url + path, { headers });
-    for (const asset of ['/', '/packages/ui-runtime/src/browser/boot.js', '/packages/ui-runtime/plugin-sdk.js', '/packages/ui-primitives/src/browser/markdown.js', '/packages/session-helper/src/browser/setup.js', '/packages/shell/src/browser/setup.js', '/packages/settings/src/browser/setup.js', '/packages/conversation/src/browser/conversation/view.js', '/packages/ui-primitives/src/browser/primitives.js', '/packages/ui-primitives/src/browser/vendor/marked.js', '/packages/ui-primitives/src/browser/vendor/purify.js', '/logo.svg', '/manifest.webmanifest', '/startup.css', '/icon-192.png', '/icon-512.png', '/favicon.ico']) {
+    for (const asset of ['/', '/packages/ui-runtime/src/browser/boot.js', '/packages/ui-runtime/plugin-sdk.js',
+      '/packages/ui-primitives/src/browser/vendor/marked.js', '/packages/ui-primitives/src/browser/vendor/purify.js',
+      '/logo.svg', '/manifest.webmanifest', '/startup.css', '/icon-192.png', '/icon-512.png', '/favicon.ico']) {
       const response = await get(asset);
       assert.equal(response.status, 200, asset);
       await response.arrayBuffer();

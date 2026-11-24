@@ -1,16 +1,14 @@
 import type {} from '@mini-harness/transport/projection-api';
 import type {} from '@mini-harness/settings/api';
 import type {} from '@mini-harness/kernel/mutation-api';
-import type { PluginMetadata } from '../shared/metadata.js';
 import { DomainError } from '@mini-harness/platform/errors';
 import { dirname, join } from 'node:path';
 import { Context } from 'cordis';
 import { isDeepStrictEqual } from 'node:util';
 import { lstatSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import type { ConfigValidationContext, PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
+import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
 import type { HostServices, PluginScope, ScopePort } from '@mini-harness/kernel/scopes';
-import type { ServiceMap } from '@mini-harness/kernel/services';
 import { planBrowser, publishBrowser } from './browser-assets.js';
 import { addAbortListener } from 'node:events';
 import type { UpgradeHandler } from '@mini-harness/transport/routes';
@@ -20,7 +18,7 @@ import { resolveScopes, type ScopeSession } from './scope-graph.js';
 import { createPluginApi } from './api.js';
 import { changedSelection, PluginCatalog, type PluginPlan } from './catalog.js';
 
-type MountedScope = { ctx: Context; parent: Context; scope: PluginScope; isolates: string[] };
+type MountedScope = { ctx: Context; parent: Context; isolates: string[] };
 
 const appScope: PluginScope = { kind: 'application' };
 
@@ -29,7 +27,7 @@ export class PluginHost implements ScopePort {
   private readonly catalog: PluginCatalog;
   private readonly mounts: PluginMounts;
   private readonly root: ReadonlyMap<string, string>;
-  private readonly scopes = new Map<string, MountedScope>();
+  private scopes = new Map<string, MountedScope>();
   private started = false;
   private applying?: Promise<void>;
   private closing = false;
@@ -49,7 +47,7 @@ export class PluginHost implements ScopePort {
   }
 
   private browserState = publishBrowser([], [], () => false);
-  private readonly failures = new Map<string, string>();
+  private failures = new Map<string, string>();
   private graph: ReturnType<PluginHost['describe']>[] = [];
 
   effective<Settings extends PluginSettings>(settings: Settings) { return this.catalog.effective(settings); }
@@ -77,53 +75,9 @@ export class PluginHost implements ScopePort {
     return keys.reverse().map((item) => scopes.get(item)).find(Boolean)?.ctx ?? this.ctx;
   }
 
-  private validateConfig(descriptor: PluginDescriptor, config: Record<string, unknown>,
-    operation: ConfigValidationContext['operation'], ctx: Context) {
-    descriptor.validateConfig?.(Object.freeze(structuredClone(config)), {
-      operation,
-      service<Name extends keyof ServiceMap & string>(name: Name): NonNullable<ServiceMap[Name]> {
-        if (!descriptor.inject?.includes(name) && !descriptor.optional?.includes(name))
-          throw new Error('Configuration dependency is not declared by ' + descriptor.id + ': ' + name);
-        const service = ctx.get(name) as ServiceMap[Name] | undefined;
-        if (service == null) throw new DomainError('unavailable', 'Configuration dependency is unavailable to ' + descriptor.id + ': ' + name);
-        return service;
-      }
-    });
-  }
-
   metadata() {
-    const settings = this.settings();
-    const descriptors = new Map(this.catalog.descriptors().map((item) => [item.id, item]));
-    return this.catalog.metadata([...descriptors.values()]).map((metadata): PluginMetadata => {
-      const { id } = metadata;
-      const descriptor = descriptors.get(id);
-      const configurationError = (key?: string) => {
-        try {
-          const values = key ? { ...settings.pluginConfig[id], ...settings.scopes[key]?.pluginConfig?.[id] } : settings.pluginConfig[id];
-          const config = this.catalog.configValues(id, values, descriptor?.configSchema);
-          if (descriptor?.validateConfig) this.validateConfig(descriptor, config, 'inspect', this.configurationContext(key));
-        } catch (error) { return error instanceof Error ? error.message : String(error); }
-      };
-      const scopes = metadata.scope === 'application'
-        ? [{ scope: 'application', enabled: settings.plugins[id] === true }]
-        : Object.entries(settings.scopes).flatMap(([scope, value]) => {
-          if (!scope.startsWith(metadata.scope + ':')) return [];
-          const enabled = value.plugins?.[id] === true || Object.values(value.providers ?? {}).includes(id);
-          return enabled || Object.hasOwn(value.pluginConfig ?? {}, id) ? [{ scope, enabled }] : [];
-        });
-      const instances = scopes.map(({ scope, enabled }): NonNullable<PluginMetadata['instances']>[number] => {
-        const key = scope === 'application' ? id : scope + '/' + id;
-        const error = this.failures.get(key) ?? metadata.error ?? configurationError(scope === 'application' ? undefined : scope);
-        const state = !enabled ? 'disabled' : error ? 'failed' : this.mounts.plan(key) ? 'ready' : 'inactive';
-        return { scope, error, state };
-      });
-      const enabled = instances.filter(({ state }) => state !== 'disabled');
-      const failed = enabled.find(({ state }) => state === 'failed');
-      const ready = enabled.filter(({ state }) => state === 'ready').length;
-      const state = ready ? ready === enabled.length ? 'ready' : 'partial' : failed ? 'failed' : enabled.length ? 'inactive' : 'disabled';
-      return { ...metadata, instances, state,
-        error: failed?.error ?? instances.find(({ error }) => error)?.error ?? metadata.error };
-    });
+    return this.catalog.metadata(this.settings(), this.failures,
+      (id) => Boolean(this.mounts.plan(id)), (key) => this.configurationContext(key));
   }
   reserved(id: string) { return this.catalog.reserved(id); }
 
@@ -204,7 +158,7 @@ export class PluginHost implements ScopePort {
       const reusable = existing?.parent === parentContext && isDeepStrictEqual(existing.isolates, isolates);
       let ctx = reusable ? existing.ctx : parentContext.extend();
       if (!reusable) for (const service of isolates) ctx = ctx.isolate(service);
-      scopes.set(key, { ctx, parent: parentContext, scope, isolates });
+      scopes.set(key, { ctx, parent: parentContext, isolates });
       for (const { plan, id, needs } of plugins) {
         mounts.push(this.mountPlan(plan, scope, id, key, ctx, needs));
         diagnostics.push(this.describe(plan, id, needs));
@@ -243,7 +197,7 @@ export class PluginHost implements ScopePort {
         invalidate: () => changes?.invalidate(domain)
       });
       setDrain(runtime.drain);
-      if (descriptor.validateConfig) this.validateConfig(descriptor, runtime.api.config, 'mount', ctx);
+      if (descriptor.validateConfig) this.catalog.validateConfig(descriptor, runtime.api.config, 'mount', ctx);
       const cleanup = await setup(ctx, runtime.api);
       if (typeof cleanup === 'function') ctx.effect(() => cleanup);
       runtime.checkPublications();
@@ -282,34 +236,14 @@ export class PluginHost implements ScopePort {
     const failures = new Map<string, string>();
     const previous = this.settings();
     const descriptors = this.catalog.descriptors();
-    const validations: { descriptor: PluginDescriptor; config: Record<string, unknown>; key?: string }[] = [];
-    if (!starting && !preparing && !released) {
-      for (const descriptor of descriptors) {
-        const { id, configSchema, scope } = descriptor;
-        const validate = (values: Record<string, unknown> | undefined, before: Record<string, unknown> | undefined, key?: string) => {
-          if (isDeepStrictEqual(values, before)) return;
-          const config = this.catalog.configValues(id, values, configSchema);
-          if (descriptor.validateConfig) validations.push({ descriptor, config, key });
-        };
-        if (scope === 'application') validate(settings.pluginConfig[id], previous.pluginConfig[id]);
-        else {
-          validate(settings.pluginConfig[id], previous.pluginConfig[id]);
-          for (const key of Object.keys(settings.scopes)) {
-            if (!key.startsWith(scope + ':')) continue;
-            const changed = settings.scopes[key]?.pluginConfig?.[id];
-            const before = previous.scopes[key]?.pluginConfig?.[id];
-            const selected = settings.scopes[key];
-            if (changed === undefined && !selected.plugins?.[id] && !Object.values(selected.providers ?? {}).includes(id)) continue;
-            validate({ ...settings.pluginConfig[id], ...changed }, { ...previous.pluginConfig[id], ...before }, key);
-          }
-        }
-      }
-    }
     const updating = !starting && !preparing && !released;
+    const validations = updating ? this.catalog.changedConfig(descriptors, previous, settings) : [];
     const unavailable = (id: string, error: unknown) => {
-      if (this.catalog.builtins.get(id)?.required || this.mounts.plan(id) ||
-          updating && changedSelection(id, previous, settings)) return false;
-      failures.set(id, error instanceof Error ? error.message : String(error));
+      const message = error instanceof Error ? error.message : String(error);
+      if (updating && changedSelection(id, previous, settings))
+        throw error instanceof DomainError ? error : new DomainError('invalid_input', message, { cause: error });
+      if (this.catalog.builtins.get(id)?.required || this.mounts.plan(id)) return false;
+      failures.set(id, message);
       return true;
     };
     const { plans, providers } = this.catalog.plans(settings, descriptors, 'application', this.root, new Set(), undefined, unavailable);
@@ -335,17 +269,15 @@ export class PluginHost implements ScopePort {
       await this.mounts.configure(mounts, () => {
         commit();
         this.started = true;
-        this.scopes.clear();
-        for (const [key, state] of scoped.scopes) this.scopes.set(key, state);
-        this.failures.clear();
-        for (const [id, error] of failures) this.failures.set(id, error);
+        this.scopes = scoped.scopes;
+        this.failures = failures;
         this.browserState = publishBrowser(browser, plans, (id) => Boolean(this.mounts.plan(id)));
         this.graph = [...plans.map((plan) => this.describe(plan)), ...scoped.diagnostics]
           .filter(({ id }) => this.mounts.plan(id));
         this.ctx.get('harnessChanges')?.invalidate('plugins');
       }, unavailable, () => {
         for (const { descriptor, config, key } of validations)
-          this.validateConfig(descriptor, config, 'write', this.configurationContext(key, scoped.scopes));
+          this.catalog.validateConfig(descriptor, config, 'write', this.configurationContext(key, scoped.scopes));
       });
     } finally { release?.(); }
   }
