@@ -1,11 +1,12 @@
+import { nativeFile } from '../src/storage.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { appendFileSync, mkdtempSync, rmSync, existsSync, writeFileSync, realpathSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getPaths } from '@mini-harness/platform/paths';
-import { loadCatalog } from '../catalog.js';
-import { SessionRegistry } from '../registry.js';
+import { loadCatalog } from '../src/catalog.js';
+import { SessionRegistry } from '../src/registry.js';
 import { WorkspaceCatalog } from '@mini-harness/workspaces/catalog';
 
 function fixture(t: test.TestContext) {
@@ -48,7 +49,7 @@ test('refuses export and deletion through a symlink outside managed storage', as
   assert.ok(registry.get(item.id));
 });
 
-test('restart finishes a journaled deletion after partial cleanup', (t) => {
+test('restart finishes a journaled deletion after partial cleanup', async (t) => {
   const { paths, registry } = fixture(t);
   const parent = registry.create();
   const child = registry.create({ parentId: parent.id });
@@ -58,8 +59,9 @@ test('restart finishes a journaled deletion after partial cleanup', (t) => {
   writeFileSync(paths.registry, JSON.stringify({ sessions: [unrelated],
     pendingDelete: [{ id: parent.id, workspaceId: parent.workspaceId }, { id: child.id, workspaceId: child.workspaceId }] }));
   const forgotten: string[] = [];
-  const restored = new SessionRegistry(paths, new WorkspaceCatalog(paths), undefined, undefined, (keys) => forgotten.push(...keys));
+  const restored = new SessionRegistry(paths, new WorkspaceCatalog(paths), undefined, undefined, async (keys) => { forgotten.push(...keys); });
   t.after(() => restored.dispose());
+  await restored.recoverDeletion();
   assert.deepEqual(restored.list().map(({ id }) => id), [unrelated.id]);
   assert.equal(existsSync(childFile), false);
   assert.deepEqual(new Set(forgotten), new Set(['session:' + parent.id, 'session:' + child.id]));
@@ -92,7 +94,7 @@ test('a corrupt log is isolated, remains deletable and never creates a log for a
   t.after(() => restored.dispose());
   assert.equal(restored.list().length, 3);
   assert.equal(restored.inspectLog(unopened.id, (log) => log.entries()), undefined);
-  assert.equal(existsSync(restored.nativeFile(unopened)), false);
+  assert.equal(existsSync(nativeFile(paths, new WorkspaceCatalog(paths), unopened, false)), false);
   assert.equal(restored.log(healthy.id).projection().messages[0].content, 'intact');
   assert.throws(() => restored.log(damaged.id), /session diagnostics/);
   assert.deepEqual(restored.diagnostics(), [{ id: damaged.id, message: 'Corrupt session log checksum' }]);
@@ -108,7 +110,7 @@ const record = (workspaceId: string, overrides: Record<string, unknown> = {}) =>
 
 test('catalog startup rejects records that cannot resolve a workspace or ancestry', (t) => {
   const { paths, registry } = fixture(t);
-  const { workspaces } = registry;
+  const workspaces = new WorkspaceCatalog(paths);
   registry.dispose();
   const workspace = workspaces.defaultId;
   assert.ok(workspace);
@@ -124,7 +126,7 @@ test('catalog startup rejects records that cannot resolve a workspace or ancestr
 
 test('a valid catalog keeps the deletion journal and rejects a partial one', (t) => {
   const { paths, registry } = fixture(t);
-  const { workspaces } = registry;
+  const workspaces = new WorkspaceCatalog(paths);
   registry.dispose();
   const workspace = workspaces.defaultId;
   assert.ok(workspace);

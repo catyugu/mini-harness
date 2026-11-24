@@ -4,13 +4,14 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./composition": "./composition.ts",
-    "./configuration": "./configuration.ts",
-    "./contributions": "./contributions.ts",
-    "./mounts": "./mounts.ts",
-    "./observations": "./observations.ts",
-    "./scopes": "./scopes.ts",
-    "./services": "./services.ts"
+    "./composition": "./src/composition.ts",
+    "./configuration": "./src/configuration.ts",
+    "./contributions": "./src/contributions.ts",
+    "./mounts": "./src/mounts.ts",
+    "./mutation-api": "./src/mutation-api.ts",
+    "./observations": "./src/observations.ts",
+    "./scopes": "./src/scopes.ts",
+    "./services": "./src/services.ts"
   },
   "miniHarness": {
     "api": [
@@ -18,6 +19,7 @@
       "./configuration",
       "./contributions",
       "./mounts",
+      "./mutation-api",
       "./observations",
       "./scopes",
       "./services"

@@ -44,12 +44,12 @@ test('plugin schema controls, recursive tree navigation, batch export and perman
     await page.getByLabel('Threshold · example', { exact: true }).fill('0.75');
     await page.getByLabel('Tags · example', { exact: true }).fill('["custom"]');
     await page.getByRole('button', { name: 'Save configuration' }).click();
-    await expect(page.getByRole('region', { name: 'Plugin catalog' }).getByRole('status').filter({ hasText: /Saved|Internal server error/ })).toHaveText('Saved.');
+    await expect(page.getByRole('region', { name: 'Plugin catalog' }).getByRole('status').filter({ hasText: /Saved|Bad prefix/ })).toHaveText('Saved.');
     expect(readJson<any>(paths.settings, {}).pluginConfig.example).toEqual({ prefix: 'Total', count: 5, mode: 'full', enabled: false,
       limits: { threshold: 0.75 }, tags: ['custom'] });
     await page.getByLabel('Prefix · example', { exact: true }).fill('bad');
     await page.getByRole('button', { name: 'Save configuration' }).click();
-    await expect(page.getByRole('region', { name: 'Plugin catalog' }).getByRole('status').filter({ hasText: /Saved|Internal server error/ })).toContainText('Internal server error');
+    await expect(page.getByRole('region', { name: 'Plugin catalog' }).getByRole('status').filter({ hasText: /Saved|Bad prefix/ })).toContainText('Plugin example: Bad prefix');
     expect(readJson<any>(paths.settings, {}).pluginConfig.example.prefix).toBe('Total');
     await page.getByRole('button', { name: 'New conversation', exact: true }).click();
     await page.getByRole('textbox', { name: 'Message' }).fill('Parent task');

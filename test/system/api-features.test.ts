@@ -7,7 +7,7 @@ import { fixture } from '../support/api-fixture.js';
 
 test('GUI APIs configure providers, persist keys privately, discover Skills and scope files', async (t) => {
   const { app, paths, request, mock, finish } = await fixture(t);
-  const scope = '/workspaces/' + app.runtime.registry.workspaces.defaultId;
+  const scope = '/workspaces/' + app.runtime.plugins.ctx.harnessWorkspaces.defaultId;
   const invalidChildModel = await request('/settings', 'PATCH', { pluginConfig: { subagents: { model: { provider: 'nonexistent', id: 'missing' } } } });
   assert.equal(invalidChildModel.status, 400, JSON.stringify(invalidChildModel.body));
   assert.equal((await request('/settings')).body.pluginConfig.subagents.model, null);

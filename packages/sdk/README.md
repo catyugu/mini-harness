@@ -1,0 +1,23 @@
+# @mini-harness/sdk
+
+Defines the two published plugin entry points for mini-harness.
+
+## Responsibilities
+
+Collects the capability APIs, types and extension points that external server and browser plugins can use.
+
+## Structure
+
+`src/plugin.ts` is the server entry. `src/browser-plugin.ts` is the browser entry.
+
+## API
+
+Install `mini-harness` and import `mini-harness/plugin` or `mini-harness/browser-plugin`. See the [plugin guide](../../docs/plugins.md) for examples.
+
+## Dependencies
+
+References capability-owned APIs. Runtime implementations and installed plugin management stay with those capabilities.
+
+## Testing
+
+`pnpm run pack:verify` compiles and runs consumers against an independent npm installation.

@@ -3,10 +3,28 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "exports": {
+    "./browser/composer-api": "./src/browser/composer-api.ts",
+    "./browser/navigation-api": "./src/browser/navigation-api.ts",
+    "./display-extensions": "./src/server/display-extensions.ts",
+    "./manifests/conversation": "./src/manifests/conversation.ts",
+    "./manifests/navigation": "./src/manifests/navigation.ts",
+    "./manifests/session-data": "./src/manifests/session-data.ts",
+    "./manifests/workspace": "./src/manifests/workspace.ts",
+    "./view": "./src/shared/api.ts"
+  },
+  "miniHarness": {
+    "api": [
+      "./browser/composer-api",
+      "./browser/navigation-api",
+      "./display-extensions",
+      "./view"
+    ]
+  },
   "dependencies": {
-    "@mini-harness/agent": "workspace:*",
     "@mini-harness/approvals": "workspace:*",
     "@mini-harness/input": "workspace:*",
+    "@mini-harness/kernel": "workspace:*",
     "@mini-harness/llm": "workspace:*",
     "@mini-harness/models": "workspace:*",
     "@mini-harness/plugin-api": "workspace:*",
@@ -19,19 +37,5 @@
     "@mini-harness/ui-runtime": "workspace:*",
     "@mini-harness/ui-slots": "workspace:*",
     "@mini-harness/workspaces": "workspace:*"
-  },
-  "exports": {
-    "./browser/composer-api": "./browser/composer-api.ts",
-    "./browser/navigation-api": "./browser/navigation-api.ts",
-    "./conversation-manifest": "./conversation-manifest.ts",
-    "./data-manifest": "./data-manifest.ts",
-    "./view": "./view.ts"
-  },
-  "miniHarness": {
-    "api": [
-      "./browser/composer-api",
-      "./browser/navigation-api",
-      "./view"
-    ]
   }
 }

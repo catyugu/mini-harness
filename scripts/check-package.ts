@@ -56,7 +56,8 @@ async function checkPackage() {
     });
     const published = join(installed, 'node_modules', name);
     const manifest = JSON.parse(await readFile(join(published, 'package.json'), 'utf8'));
-    assert.doesNotMatch(JSON.stringify(manifest), /@mini-harness\/|workspace:\*/);
+    for (const section of ['dependencies', 'optionalDependencies', 'peerDependencies'])
+      assert.doesNotMatch(JSON.stringify(manifest[section] ?? {}), /@mini-harness\/|workspace:\*/);
     assert.deepEqual(Object.keys(manifest.exports).sort(), ['./browser-plugin', './plugin']);
     for (const { path } of files.filter(({ path }) => /\.(?:js|d\.ts)$/.test(path))) {
       const emitted = await readFile(join(published, path), 'utf8');
@@ -64,7 +65,7 @@ async function checkPackage() {
     }
     await execFile(process.execPath, ['--input-type=module', '-e',
       "import 'mini-harness/plugin'; import 'mini-harness/browser-plugin';"], { cwd: installed });
-    for (const path of ['sdk/plugin.d.ts', 'sdk/browser-plugin.d.ts'])
+    for (const path of ['sdk/src/plugin.d.ts', 'sdk/src/browser-plugin.d.ts'])
       assert.ok(files.some((file) => file.path === 'dist/types/packages/' + path), 'Missing SDK declarations: ' + path);
     await writeFile(join(installed, 'plugin-types.mts'), `
       import { agentExtensions, promptExtensions, sessionDisplayExtensions, sessionExtensions, toolExtensions, type PluginApi, type LlmPort, type ScopeSettings } from 'mini-harness/plugin';
@@ -144,16 +145,26 @@ async function checkPackage() {
     assert.ok(token);
     const headers = { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' };
     const get = (path: string) => fetch(info.url + path, { headers });
-    for (const asset of ['/', '/packages/ui-runtime/boot.js', '/packages/ui-runtime/plugin-sdk.js', '/packages/ui-primitives/markdown.js', '/packages/session-helper/client.js', '/packages/shell/client.js', '/packages/settings/browser.js', '/packages/conversation/browser/conversation/view.js', '/packages/ui-primitives/primitives.js', '/packages/ui-primitives/vendor/marked.js', '/packages/ui-primitives/vendor/purify.js', '/logo.svg', '/manifest.webmanifest', '/theme.css', '/icon-192.png', '/icon-512.png', '/favicon.ico']) {
+    for (const asset of ['/', '/packages/ui-runtime/src/browser/boot.js', '/packages/ui-runtime/plugin-sdk.js',
+      '/packages/ui-primitives/src/browser/vendor/marked.js', '/packages/ui-primitives/src/browser/vendor/purify.js',
+      '/logo.svg', '/manifest.webmanifest', '/startup.css', '/icon-192.png', '/icon-512.png', '/favicon.ico']) {
       const response = await get(asset);
       assert.equal(response.status, 200, asset);
       await response.arrayBuffer();
     }
-    assert.match(await (await get('/theme.css')).text(), /\.approval-heading/);
     const plugins = await (await get('/api/plugins')).json();
     assert.ok(plugins.some(({ id, state }: { id: string; state: string }) => id === 'sdk-consumer' && state === 'ready'));
     assert.deepEqual(await (await get('/api/extensions/sdk-consumer/smoke')).json(), { sdk: true });
-    const bootstrap = await (await get('/api/bootstrap')).json();
+    const bootstrap: import('@mini-harness/ui-runtime/bootstrap').BrowserBootstrap = await (await get('/api/bootstrap')).json();
+    for (const { browser, styles } of bootstrap.ui) {
+      if (browser) assert.equal((await get(browser)).status, 200, browser);
+      for (const path of styles ?? []) {
+        const css = await get(path);
+        assert.equal(css.status, 200, path);
+        assert.match(css.headers.get('content-type') ?? '', /^text\/css/);
+        await css.arrayBuffer();
+      }
+    }
     assert.ok(bootstrap.ui.some(({ id }: { id: string }) => id === 'core:conversation'));
     assert.ok(!bootstrap.ui.some(({ id }: { id: string }) => id === 'shell'));
     const item = await (await fetch(info.url + '/api/sessions', { method: 'POST', headers, body: '{}' })).json();

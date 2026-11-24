@@ -1,5 +1,5 @@
 import { fixture as httpFixture } from '../../../test/support/api-fixture.js';
-import { AgentRegistry } from '../registry.js';
+import { AgentRegistry } from '../src/registry.js';
 import { prepareInput } from '@mini-harness/input/prepare';
 import type { ThinkingLevel } from '@mini-harness/llm/vocabulary';
 import { expectPresent } from '../../../test/support/required.js';
@@ -7,14 +7,14 @@ import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { rmSync } from 'node:fs';
 import { Type } from 'typebox';
-import { NativeAgent } from '../agent.js';
-import { scheduleTools } from '../tool-pipeline.js';
+import { NativeAgent } from '../src/agent.js';
+import { scheduleTools } from '../src/tool-pipeline.js';
 import { SessionRegistry } from '@mini-harness/sessions/registry';
 import { WorkspaceCatalog } from '@mini-harness/workspaces/catalog';
 import { ToolRegistry } from '@mini-harness/tools/registry';
 import { defineTool, registerToolBinding } from '@mini-harness/tools/api';
 import type { LlmPort, NativeAssistantMessage, ToolCallPart } from '@mini-harness/llm/api';
-import type { ModelRetry } from '../extensions.js';
+import type { ModelRetry } from '../src/extensions.js';
 import { createFixturePaths } from '../../../test/helpers/mock-provider.js';
 
 const model = { provider: 'fixture', id: 'native' };
@@ -34,7 +34,7 @@ function fixture(t: TestContext, llm: LlmPort, retryModel?: () => Promise<ModelR
       capabilities: (choice) => ({ id: model.id, name: 'Fixture', input: choice.id === 'text-only' ? ['text'] : ['text', 'image'], contextWindow: 32000, maxTokens: 1024, reasoning: true, thinkingLevels: thinkingLevels(choice.id) }) }),
     llm: () => llm, tools: () => tools, prompt: () => ({ build: async () => 'Fixture' }),
     prepare: async () => {}, defaultModel: () => model, rememberModel: () => {},
-    policy: () => ({ maxTurns: 8, autoCompact: false }), retryModel, observe: () => {}, transform: ({ content }) => content
+    policy: () => ({ maxTurns: 8, autoCompact: false }), retryModel, observe: () => {}
   });
   const record = sessions.create();
   return { agent, sessions, tools, record };
@@ -146,7 +146,7 @@ test('identical queued text preserves each attachment identity and is delivered 
   const users = sessions.log(record.id).projection().messages.filter((message) => message.role === 'user');
   assert.equal(requests, 3); assert.equal(users.length, 3);
   assert.deepEqual(users.slice(1).map(({ attachments }) => expectPresent(attachments?.[0], 'queued attachment').name), ['first.png', 'second.png']);
-  assert.deepEqual(agent.read(record.id).queue, []);
+  assert.deepEqual(sessions.log(record.id).queue(), []);
 });
 
 test('steering accepts off, skips deterministic failures and resets incompatible inherited thinking for a new model', async (t) => {
@@ -295,7 +295,7 @@ test('text models see historical placeholders in the request and audit snapshot,
   const request = expectPresent(log.entries().find(({ type }) => type === 'model-request'), 'recorded model request');
   assert.doesNotMatch(JSON.stringify(log.requestSnapshot(request.id)), /iVBORw0KGgo=/);
   assert.match(JSON.stringify(log.requestSnapshot(request.id)), /Image unavailable/);
-  assert.match(JSON.stringify(agent.messages(record.id)), /iVBORw0KGgo=/);
+  assert.match(JSON.stringify(log.projection().messages), /iVBORw0KGgo=/);
   const previous = log.projection();
   await assert.rejects(agent.prompt(record, 'New image', () => {}, { signal, choice, images: [image] }), /does not support image/);
   assert.deepEqual(log.projection(), previous);
@@ -313,14 +313,14 @@ test('native compaction reduces context and preserves message identities and his
   const image = { type: 'image' as const, mimeType: 'image/png', data: 'iVBORw0KGgo=' };
   log.append({ type: 'message', message: { role: 'user', content: [image], timestamp: 1 } });
   for (let turn = 0; turn < 6; turn++) await app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Turn ' + turn + ' ' + 'more context '.repeat(100));
-  const before = app.runtime.plugins.ctx.harnessAgent.messages(session.id);
+  const before = app.runtime.registry.log(session.id).projection().messages;
   const compacted = await compact();
   assert.equal(compacted.status, 200, JSON.stringify(compacted.body));
   assert.equal(mock.requests.length, 7);
   assert.match(JSON.stringify(mock.requests.at(-1)), /Image unavailable/);
   assert.doesNotMatch(JSON.stringify(mock.requests.at(-1)), /iVBORw0KGgo=/);
   assert.ok(log.entries().some((entry) => entry.type === 'compaction'));
-  assert.deepEqual(app.runtime.plugins.ctx.harnessAgent.messages(session.id), before);
+  assert.deepEqual(app.runtime.registry.log(session.id).projection().messages, before);
   assert.equal(log.projection().contextMessages.length, 5);
   assert.match(JSON.stringify(log.projection().contextMessages[0]), /Summary of earlier conversation/);
   assert.equal(app.runtime.plugins.ctx.harnessAgent.hasPending, false);

@@ -1,0 +1,19 @@
+#workspaceHeader, #workspaceWelcome { min-width: 0; max-width: 100%; }
+.workspace-button { display: flex; align-items: center; gap: 5px; min-width: 0; max-width: 100%; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-button small { min-width: 0; overflow: hidden; text-overflow: ellipsis; font: 11px/1.4 ui-monospace, monospace; }
+.workspace-button span { display: inline-flex; flex: 0 0 auto; }
+.workspace-button svg { width: 14px; height: 14px; }
+.welcome .workspace-button { padding: 6px 9px; border: 1px solid var(--border); border-radius: var(--control-radius); background: var(--panel); }
+.workspace-rename-dialog { width: min(380px, calc(100% - 32px)); }
+.workspace-rename-form { display: grid; gap: 14px; }
+.workspace-rename-form > input {
+  box-sizing: border-box; width: 100%; min-height: 42px; padding: 8px 11px;
+  border: 1px solid var(--border); border-radius: var(--control-radius);
+  background: var(--surface);
+}
+.workspace-rename-form .form-error:empty { display: none; }
+.workspace-rename-form .ui-actions { gap: 8px; }
+.workspace-rename-form .ui-actions .ui-button { min-width: 70px; }
+.workspace-form { display: grid; gap: 10px; }
+.workspace-location { overflow-wrap: anywhere; }
+.directory-list { max-height: min(42vh, 360px); overflow: auto; overscroll-behavior: contain; }

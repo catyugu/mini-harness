@@ -1,0 +1,8 @@
+#startupStatus {
+  margin: 1rem;
+  color: #a12c39;
+  font: 15px/1.55 system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  #startupStatus { color: #fca5ae; }
+}

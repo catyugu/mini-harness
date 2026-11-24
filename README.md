@@ -65,6 +65,8 @@ pnpm run test:playwright
 pnpm run pack:verify
 ```
 
+Each private package has a README covering its purpose, interfaces, configuration and tests. Start from the [package directory](packages/) or the [application composition](packages/host/src/composition.ts).
+
 The test suites cover native execution, persistence, plugin lifecycles, model providers, file policy, shell approval, and desktop, tablet and mobile browser workflows. Each verification command above reuses the strict build. The local shortcuts `pnpm test`, `pnpm run test:browser` and `pnpm run pack:check` include a build. Use `pnpm run typecheck` for a compile-only check. The package check installs the tarball in a clean project, exercises the plugin SDK and runs a detached server against a local mock model.
 
 MIT. See [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

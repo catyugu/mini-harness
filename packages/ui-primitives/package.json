@@ -3,16 +3,12 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "dependencies": {
-    "@mini-harness/plugin-api": "workspace:*",
-    "@mini-harness/ui-runtime": "workspace:*"
-  },
   "exports": {
-    "./api": "./api.ts",
-    "./icons": "./icons.ts",
-    "./manifest": "./manifest.ts",
-    "./markdown": "./markdown.ts",
-    "./primitives": "./primitives.ts"
+    "./api": "./src/browser/api.ts",
+    "./icons": "./src/browser/icons.ts",
+    "./manifest": "./src/manifest.ts",
+    "./markdown": "./src/browser/markdown.ts",
+    "./primitives": "./src/browser/primitives.ts"
   },
   "miniHarness": {
     "api": [
@@ -21,5 +17,9 @@
       "./markdown",
       "./primitives"
     ]
+  },
+  "dependencies": {
+    "@mini-harness/plugin-api": "workspace:*",
+    "@mini-harness/ui-runtime": "workspace:*"
   }
 }

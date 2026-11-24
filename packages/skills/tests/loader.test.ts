@@ -4,7 +4,7 @@ import fs, { appendFileSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeF
 import { syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { SkillLoader, defaultSkillRoots, parseSkill } from '../loader.js';
+import { SkillLoader, defaultSkillRoots, parseSkill } from '../src/server/loader.js';
 
 const loaderFrom = (...roots: string[]) => new SkillLoader(() => roots, (path, error) => {
   assert.fail('Unexpected skill diagnostic at ' + path + ': ' + String(error));

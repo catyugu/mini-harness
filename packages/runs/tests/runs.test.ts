@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs, { existsSync, readFileSync, rmSync } from 'node:fs';
+import fs, { readFileSync, rmSync } from 'node:fs';
 import { syncBuiltinESMExports } from 'node:module';
 import { createMiniHarnessServer } from '@mini-harness/host/server';
 import { SessionRegistry } from '@mini-harness/sessions/registry';
 import { WorkspaceCatalog } from '@mini-harness/workspaces/catalog';
-import type { RunEvent } from '../stream.js';
+import type { RunEvent } from '../src/stream.js';
 import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.js';
 
 function gate() {
@@ -56,7 +56,7 @@ test('HTTP disconnect keeps the native run alive and reconnect replays from a cu
   const finishedRun = app.runtime.plugins.ctx.harnessRuns.info(item.id);
   assert.ok(finishedRun);
   assert.equal(finishedRun.state, 'completed');
-  const durable = readFileSync(app.runtime.registry.nativeFile(item), 'utf8').trim().split('\n').map((line) => JSON.parse(line));
+  const durable = readFileSync(app.runtime.registry.log(item.id).file, 'utf8').trim().split('\n').map((line) => JSON.parse(line));
   const persistedRun = durable.filter((entry) => entry.type === 'run').at(-1);
   assert.ok(persistedRun);
   assert.equal(persistedRun.run.state, 'completed');
@@ -101,7 +101,7 @@ test('startup durably interrupts runs, fails stale steering, and recovers idempo
   registry.log(child.id).append({ type: 'run', run: { id: 'fixture-run', sessionId: child.id, state: 'running', startedAt: new Date().toISOString(), sequence: 1 } });
   registry.log(child.id).append({ type: 'inbox-enqueued', item: { id: 'steer', mode: 'steer', text: 'Old instruction', images: [] } });
   registry.log(child.id).append({ type: 'inbox-enqueued', item: { id: 'follow', mode: 'followUp', text: 'Recovered follow-up', images: [] } });
-  const file = registry.nativeFile(child);
+  const file = registry.log(child.id).file;
   registry.dispose();
   const restored = new SessionRegistry(paths, new WorkspaceCatalog(paths));
   t.after(() => restored.dispose());
@@ -113,7 +113,7 @@ test('startup durably interrupts runs, fails stale steering, and recovers idempo
   assert.match(bytes.toString(), /"state":"interrupted"/);
   assert.deepEqual(restored.inspectLog(child.id, (log) => log.queue().map(({ id, state }) => [id, state])),
     [['follow', 'pending'], ['steer', 'failed']]);
-  assert.equal(existsSync(restored.nativeFile(parent)), false);
+  assert.equal(restored.inspectLog(parent.id, (log) => log.entries()) !== undefined, false);
   assert.doesNotMatch(readFileSync(paths.registry, 'utf8'), /lastRuns|fixture-run/);
   restored.dispose();
   const restarted = await createMiniHarnessServer(paths);
@@ -125,7 +125,7 @@ test('startup durably interrupts runs, fails stale steering, and recovers idempo
       return Array.isArray(content) ? content.map(({ text }) => text).join('') : content;
     });
     assert.deepEqual(prompts, ['Recovered follow-up', 'New manual input']);
-    assert.deepEqual(restarted.runtime.plugins.ctx.harnessAgent.queue(child.id).map(({ id, state }) => [id, state]), [['steer', 'failed']]);
+    assert.deepEqual(restarted.runtime.registry.log(child.id).queue().map(({ id, state }) => [id, state]), [['steer', 'failed']]);
   } finally { await restarted.close(); }
 });
 
@@ -207,7 +207,7 @@ test('append, torn write and fsync failures evict the writer without acknowledgi
     assert.equal(app.runtime.plugins.ctx.harnessRuns.info(session.id)?.state, fault === 'sync' ? 'interrupted' : undefined);
     if (fault === 'torn') assert.deepEqual(readFileSync(log.file), original);
     assert.equal(await app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Accepted retry'), 'Mock response');
-    assert.deepEqual(app.runtime.plugins.ctx.harnessAgent.messages(session.id).filter(({ role }) => role === 'user').map(({ content }) =>
+    assert.deepEqual(app.runtime.registry.log(session.id).projection().messages.filter(({ role }) => role === 'user').map(({ content }) =>
       Array.isArray(content) ? content[0]?.text : content), ['Accepted retry']);
     assert.equal(app.runtime.registry.logError(session.id), undefined);
   }

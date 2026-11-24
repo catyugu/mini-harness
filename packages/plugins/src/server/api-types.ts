@@ -1,0 +1,15 @@
+import type { PluginMetadata } from '../shared/metadata.js';
+import type {} from 'cordis';
+import type { BrowserEntry } from '@mini-harness/ui-runtime/bootstrap';
+
+declare module 'cordis' {
+  interface Context {
+    harnessPluginCatalog: {
+      metadata(): PluginMetadata[];
+      reserved(id: string): boolean;
+      diagnostics(): unknown;
+      browser(): BrowserEntry[];
+      writeBrowserConfig(id: string, patch: unknown, signal: AbortSignal): Promise<void>;
+    };
+  }
+}

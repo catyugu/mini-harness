@@ -3,24 +3,21 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "dependencies": {
-    "@mini-harness/kernel": "workspace:*",
-    "@mini-harness/platform": "workspace:*",
-    "@mini-harness/transport": "workspace:*"
-  },
   "exports": {
-    "./configuration": "./configuration.ts",
-    "./descriptor": "./descriptor.ts",
-    "./mutation-api": "./mutation-api.ts",
-    "./mutations": "./mutations.ts",
-    "./selection": "./selection.ts"
+    "./configuration": "./src/configuration.ts",
+    "./descriptor": "./src/descriptor.ts",
+    "./selection": "./src/selection.ts"
   },
   "miniHarness": {
     "api": [
       "./configuration",
       "./descriptor",
-      "./mutation-api",
       "./selection"
     ]
+  },
+  "dependencies": {
+    "@mini-harness/kernel": "workspace:*",
+    "@mini-harness/platform": "workspace:*",
+    "@mini-harness/transport": "workspace:*"
   }
 }

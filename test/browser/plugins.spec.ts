@@ -238,7 +238,7 @@ test('plugin catalog applies configuration and removes disabled browser capabili
   } finally { await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
-test('the Plugins page repairs an enabled workspace instance and reports setup failures after saving', async ({ page }) => {
+test('the Plugins page keeps stored settings when a workspace plugin setup fails and allows repair', async ({ page }) => {
   const mock = await createMockProvider(), { root, paths } = createFixturePaths(mock.url);
   const folder = join(paths.plugins, 'workspace-example');
   mkdirSync(folder);
@@ -247,9 +247,10 @@ test('the Plugins page repairs an enabled workspace instance and reports setup f
   } });
   writeFileSync(join(folder, 'plugin.js'), "export default (_, api) => { if (api.config.value === 1) throw new Error('Workspace setup failed'); };");
   const key = 'workspace:' + workspaceId(realpathSync.native(paths.cwd));
-  writeJson(paths.settings, { ...readJson<any>(paths.settings, {}), scopes: {
+  const initial = { ...readJson<Record<string, unknown>>(paths.settings, {}), scopes: {
     [key]: { plugins: { 'workspace-example': true }, pluginConfig: { 'workspace-example': { value: 'invalid' } } }
-  } });
+  } };
+  writeJson(paths.settings, initial);
   const service = await startIsolatedHost(paths);
   try {
     await page.goto(service.url + '/#token=' + service.token);
@@ -260,7 +261,8 @@ test('the Plugins page repairs an enabled workspace instance and reports setup f
     const value = page.getByRole('spinbutton', { name: 'value · workspace-example' });
     await value.fill('1');
     await page.getByRole('button', { name: 'Save configuration' }).click();
-    await expect(page.getByText(/Configuration saved\. Plugin failed to start: .*Workspace setup failed/)).toBeVisible();
+    await expect(page.getByText(/Plugin workspace:.*\/workspace-example: Workspace setup failed/)).toBeVisible();
+    expect(readJson<typeof initial>(paths.settings, initial).scopes[key].pluginConfig['workspace-example'].value).toBe('invalid');
     await value.fill('2');
     await page.getByRole('button', { name: 'Save configuration' }).click();
     await expect(page.getByText('Saved.', { exact: true })).toBeVisible();

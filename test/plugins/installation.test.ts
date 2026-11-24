@@ -178,7 +178,9 @@ test('local and browser-only plugins install disabled, mount when enabled and un
   const browser = (await request('/bootstrap')).body.ui.find((entry: { id: string }) => entry.id === bundle.id).browser;
   assert.match(await (await fetch(base + browser)).text(), /function/);
   assert.deepEqual((await request(route, 'POST', { value: 1 })).body, { echo: { value: 1 } });
-  assert.equal((await request('/settings', 'PATCH', { pluginConfig: { 'gui-plugin': { fail: true } } })).status, 500);
+  const failure = await request('/settings', 'PATCH', { pluginConfig: { 'gui-plugin': { fail: true } } });
+  assert.equal(failure.status, 400);
+  assert.match(failure.body.error, /Setup failed after registering a route/);
   assert.deepEqual((await request(route, 'POST', { value: 2 })).body, { echo: { value: 2 } });
   assert.equal((await request('/plugins/gui-plugin', 'DELETE')).status, 409);
   await request('/settings', 'PATCH', { plugins: { 'gui-plugin': false } });

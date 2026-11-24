@@ -135,7 +135,7 @@ test('retry keeps the attachment when switching to an image-capable model', asyn
     }
   });
   await page.goto(host.url + '/#token=' + host.token);
-  await page.locator('#composer input[type=file]').setInputFiles(resolve('packages/ui-runtime/assets/icon-192.png'));
+  await page.locator('#composer input[type=file]').setInputFiles(resolve('packages/ui-runtime/src/assets/icon-192.png'));
   const attachment = page.getByRole('button', { name: 'Remove icon-192.png' });
   await expect(attachment).toBeVisible();
   await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Read the picture');

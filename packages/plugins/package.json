@@ -3,6 +3,18 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "exports": {
+    "./api-types": "./src/server/api-types.ts",
+    "./catalog": "./src/server/catalog.ts",
+    "./manager": "./src/server/manager.ts",
+    "./manifest": "./src/manifest.ts",
+    "./package-installer": "./src/server/package-installer.ts"
+  },
+  "miniHarness": {
+    "api": [
+      "./api-types"
+    ]
+  },
   "dependencies": {
     "@mini-harness/conversation": "workspace:*",
     "@mini-harness/kernel": "workspace:*",
@@ -16,17 +28,5 @@
     "@mini-harness/ui-runtime": "workspace:*",
     "@mini-harness/ui-slots": "workspace:*",
     "@mini-harness/workspaces": "workspace:*"
-  },
-  "exports": {
-    "./api-types": "./api-types.ts",
-    "./catalog": "./catalog.ts",
-    "./manager": "./manager.ts",
-    "./manifest": "./manifest.ts",
-    "./package-installer": "./package-installer.ts"
-  },
-  "miniHarness": {
-    "api": [
-      "./api-types"
-    ]
   }
 }

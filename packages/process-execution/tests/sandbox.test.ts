@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { executeProcess } from '../executor.js';
+import { executeProcess } from '../src/executor.js';
 import { LinuxSandbox } from '@mini-harness/sandbox/linux';
 import { supportsIsolation } from '@mini-harness/platform/isolation';
 import { tmpdir } from 'node:os';

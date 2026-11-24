@@ -24,6 +24,51 @@ importers:
         specifier: 1.3.27
         version: 1.3.27
     devDependencies:
+      '@mini-harness/file-access':
+        specifier: workspace:*
+        version: link:packages/file-access
+      '@mini-harness/host':
+        specifier: workspace:*
+        version: link:packages/host
+      '@mini-harness/input':
+        specifier: workspace:*
+        version: link:packages/input
+      '@mini-harness/kernel':
+        specifier: workspace:*
+        version: link:packages/kernel
+      '@mini-harness/llm':
+        specifier: workspace:*
+        version: link:packages/llm
+      '@mini-harness/platform':
+        specifier: workspace:*
+        version: link:packages/platform
+      '@mini-harness/plugin-api':
+        specifier: workspace:*
+        version: link:packages/plugin-api
+      '@mini-harness/plugins':
+        specifier: workspace:*
+        version: link:packages/plugins
+      '@mini-harness/runs':
+        specifier: workspace:*
+        version: link:packages/runs
+      '@mini-harness/sandbox':
+        specifier: workspace:*
+        version: link:packages/sandbox
+      '@mini-harness/sessions':
+        specifier: workspace:*
+        version: link:packages/sessions
+      '@mini-harness/settings':
+        specifier: workspace:*
+        version: link:packages/settings
+      '@mini-harness/tools':
+        specifier: workspace:*
+        version: link:packages/tools
+      '@mini-harness/ui-runtime':
+        specifier: workspace:*
+        version: link:packages/ui-runtime
+      '@mini-harness/workspaces':
+        specifier: workspace:*
+        version: link:packages/workspaces
       '@playwright/test':
         specifier: 1.56.0
         version: 1.56.0
@@ -93,15 +138,15 @@ importers:
 
   packages/conversation:
     dependencies:
-      '@mini-harness/agent':
-        specifier: workspace:*
-        version: link:../agent
       '@mini-harness/approvals':
         specifier: workspace:*
         version: link:../approvals
       '@mini-harness/input':
         specifier: workspace:*
         version: link:../input
+      '@mini-harness/kernel':
+        specifier: workspace:*
+        version: link:../kernel
       '@mini-harness/llm':
         specifier: workspace:*
         version: link:../llm
@@ -212,15 +257,15 @@ importers:
       '@mini-harness/files':
         specifier: workspace:*
         version: link:../files
+      '@mini-harness/kernel':
+        specifier: workspace:*
+        version: link:../kernel
       '@mini-harness/models':
         specifier: workspace:*
         version: link:../models
       '@mini-harness/platform':
         specifier: workspace:*
         version: link:../platform
-      '@mini-harness/plugin-api':
-        specifier: workspace:*
-        version: link:../plugin-api
       '@mini-harness/plugins':
         specifier: workspace:*
         version: link:../plugins
@@ -257,9 +302,9 @@ importers:
       '@mini-harness/transport':
         specifier: workspace:*
         version: link:../transport
-      '@mini-harness/ui':
+      '@mini-harness/ui-gateway':
         specifier: workspace:*
-        version: link:../ui
+        version: link:../ui-gateway
       '@mini-harness/ui-layout':
         specifier: workspace:*
         version: link:../ui-layout
@@ -573,6 +618,9 @@ importers:
       '@mini-harness/ui-slots':
         specifier: workspace:*
         version: link:../ui-slots
+      '@mini-harness/ui-theme':
+        specifier: workspace:*
+        version: link:../ui-theme
 
   packages/shell:
     dependencies:
@@ -720,11 +768,8 @@ importers:
       '@mini-harness/platform':
         specifier: workspace:*
         version: link:../platform
-      '@mini-harness/ui-runtime':
-        specifier: workspace:*
-        version: link:../ui-runtime
 
-  packages/ui:
+  packages/ui-gateway:
     dependencies:
       '@mini-harness/plugin-api':
         specifier: workspace:*
@@ -768,6 +813,9 @@ importers:
       '@mini-harness/kernel':
         specifier: workspace:*
         version: link:../kernel
+      '@mini-harness/transport':
+        specifier: workspace:*
+        version: link:../transport
 
   packages/ui-slots:
     dependencies:
@@ -780,12 +828,12 @@ importers:
 
   packages/ui-theme:
     dependencies:
+      '@mini-harness/kernel':
+        specifier: workspace:*
+        version: link:../kernel
       '@mini-harness/plugin-api':
         specifier: workspace:*
         version: link:../plugin-api
-      '@mini-harness/settings':
-        specifier: workspace:*
-        version: link:../settings
       '@mini-harness/ui-runtime':
         specifier: workspace:*
         version: link:../ui-runtime

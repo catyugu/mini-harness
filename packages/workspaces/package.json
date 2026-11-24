@@ -3,25 +3,27 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "dependencies": {
-    "@mini-harness/platform": "workspace:*",
-    "@mini-harness/plugin-api": "workspace:*",
-    "@mini-harness/transport": "workspace:*",
-    "@mini-harness/ui-runtime": "workspace:*"
-  },
   "exports": {
-    "./api": "./api.ts",
-    "./browser/api": "./browser/api.ts",
-    "./browser/route": "./browser/route.ts",
-    "./catalog": "./catalog.ts",
-    "./data-manifest": "./data-manifest.ts",
-    "./manifest": "./manifest.ts"
+    "./api": "./src/server/api.ts",
+    "./browser/api": "./src/browser/api.ts",
+    "./browser/route": "./src/browser/route.ts",
+    "./catalog": "./src/server/catalog.ts",
+    "./manifests/data": "./src/manifests/data.ts",
+    "./manifests/workspaces": "./src/manifests/workspaces.ts",
+    "./record": "./src/shared/record.ts"
   },
   "miniHarness": {
     "api": [
       "./api",
       "./browser/api",
-      "./browser/route"
+      "./browser/route",
+      "./record"
     ]
+  },
+  "dependencies": {
+    "@mini-harness/platform": "workspace:*",
+    "@mini-harness/plugin-api": "workspace:*",
+    "@mini-harness/transport": "workspace:*",
+    "@mini-harness/ui-runtime": "workspace:*"
   }
 }

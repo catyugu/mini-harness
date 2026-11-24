@@ -3,17 +3,17 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "dependencies": {
-    "@mini-harness/platform": "workspace:*"
-  },
   "exports": {
-    "./message": "./message.ts",
-    "./prepare": "./prepare.ts"
+    "./message": "./src/message.ts",
+    "./prepare": "./src/prepare.ts"
   },
   "miniHarness": {
     "api": [
       "./message",
       "./prepare"
     ]
+  },
+  "dependencies": {
+    "@mini-harness/platform": "workspace:*"
   }
 }

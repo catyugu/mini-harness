@@ -3,6 +3,17 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "exports": {
+    "./api": "./src/api.ts",
+    "./manifest": "./src/manifest.ts",
+    "./stream": "./src/stream.ts"
+  },
+  "miniHarness": {
+    "api": [
+      "./api",
+      "./stream"
+    ]
+  },
   "dependencies": {
     "@mini-harness/agent": "workspace:*",
     "@mini-harness/input": "workspace:*",
@@ -12,16 +23,5 @@
     "@mini-harness/plugin-api": "workspace:*",
     "@mini-harness/sessions": "workspace:*",
     "@mini-harness/transport": "workspace:*"
-  },
-  "exports": {
-    "./api": "./api.ts",
-    "./manifest": "./manifest.ts",
-    "./stream": "./stream.ts"
-  },
-  "miniHarness": {
-    "api": [
-      "./api",
-      "./stream"
-    ]
   }
 }
