@@ -1,4 +1,4 @@
-import { HttpError } from '@mini-harness/contracts/routes';
+import { DomainError } from '@mini-harness/platform/errors';
 import type { PluginApi } from '@mini-harness/contracts/plugins';
 import type { ModelChoice } from '@mini-harness/contracts/conversation';
 import type { Context } from 'cordis';
@@ -40,14 +40,14 @@ export function setup(ctx: Context, api: PluginApi) {
       const input = await body();
       return ctx.harnessMutations.run(async () => {
         if (typeof input?.provider !== 'string' || !/^[a-z0-9-]+$/.test(input.provider))
-          throw new HttpError('invalid_input', 'Invalid provider');
-        if (!host.admin.hasProvider(input.provider)) throw new HttpError('invalid_input', 'Unknown provider');
+          throw new DomainError('invalid_input', 'Invalid provider');
+        if (!host.admin.hasProvider(input.provider)) throw new DomainError('invalid_input', 'Unknown provider');
         if (method === 'DELETE') {
           const release = ctx.harnessMutations.protect();
           try { await host.admin.removeCredential(input.provider); }
           finally { release(); }
         } else {
-          if (typeof input.key !== 'string' || !input.key.trim()) throw new HttpError('invalid_input', 'Invalid credential');
+          if (typeof input.key !== 'string' || !input.key.trim()) throw new DomainError('invalid_input', 'Invalid credential');
           await host.admin.storeCredential(input.provider, input.key.trim());
         }
         changed();

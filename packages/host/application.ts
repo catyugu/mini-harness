@@ -5,7 +5,7 @@ import { PluginHost } from '@mini-harness/plugins/manager';
 import { RouteRegistry } from '@mini-harness/transport/http';
 import { MutationGate } from '@mini-harness/transport/mutations';
 import type { NetworkPort } from '@mini-harness/contracts/routes';
-import type { Paths } from '@mini-harness/contracts/config';
+import type { Paths } from '@mini-harness/platform/runtime-paths';
 
 export class MiniHarnessRuntime {
   readonly plugins: PluginHost;

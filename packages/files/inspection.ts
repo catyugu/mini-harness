@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { realpath } from 'node:fs/promises';
-import { HttpError } from '@mini-harness/contracts/routes';
+import { DomainError } from '@mini-harness/platform/errors';
 import { resolve, relative } from 'node:path';
 import type { WorkspaceFileAccess } from '@mini-harness/contracts/files';
 
@@ -14,10 +14,10 @@ export class Inspection {
   }
   async preview(path: string) {
     const bytes = await this.files.readFile(path);
-    if (bytes.length > 512 * 1024) throw new HttpError('invalid_input', 'Preview is limited to 512 KiB');
+    if (bytes.length > 512 * 1024) throw new DomainError('invalid_input', 'Preview is limited to 512 KiB');
     const image = await this.files.imageType(path);
     if (image) return { path, content: bytes.toString('base64'), image };
-    if (bytes.includes(0)) throw new HttpError('invalid_input', 'Binary file: attach or open it in a local application');
+    if (bytes.includes(0)) throw new DomainError('invalid_input', 'Binary file: attach or open it in a local application');
     return { path, content: bytes.toString('utf8') };
   }
 
@@ -80,7 +80,7 @@ export class Inspection {
       return { available: true, files, truncated };
     } catch (error) {
       if (this.signal?.aborted) throw error;
-      throw new HttpError('unavailable', 'Git could not read the status for this workspace.', { cause: error });
+      throw new DomainError('unavailable', 'Git could not read the status for this workspace.', { cause: error });
     }
   }
 
@@ -117,8 +117,8 @@ export class Inspection {
         content: [staged.content && 'Staged\n' + staged.content, unstaged.content && 'Working tree\n' + unstaged.content]
           .filter(Boolean).join('\n') || 'Binary or metadata-only change.' };
     } catch (error) {
-      if (this.signal?.aborted || error instanceof HttpError) throw error;
-      throw new HttpError('unavailable', 'Git could not read the diff for this file.', { cause: error });
+      if (this.signal?.aborted || error instanceof DomainError) throw error;
+      throw new DomainError('unavailable', 'Git could not read the diff for this file.', { cause: error });
     }
   }
 }

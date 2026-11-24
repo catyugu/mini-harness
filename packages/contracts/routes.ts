@@ -1,18 +1,16 @@
 import type {} from 'cordis';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
-const errorStatus = {
+import { DomainError, type ErrorCode } from '@mini-harness/platform/errors';
+
+export const errorStatus = {
   invalid_input: 400, unauthorized: 401, forbidden: 403, not_found: 404,
   conflict: 409, payload_too_large: 413, unavailable: 503
-} as const;
+} satisfies Record<ErrorCode, number>;
 
-/** Use for failures with a short message that is safe to send to the requesting client. */
-export class HttpError extends Error {
-  readonly status: number;
-  constructor(readonly code: keyof typeof errorStatus, message: string, options?: ErrorOptions) {
-    super(message, options);
-    this.status = errorStatus[code];
-  }
+/** An HTTP failure raised by a route handler. */
+export class HttpError extends DomainError {
+  readonly status = errorStatus[this.code];
 }
 
 /** HTTP-specific transport contracts. Capability handlers never import the server. */

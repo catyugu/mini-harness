@@ -1,5 +1,5 @@
 import { Type } from 'typebox';
-import { HttpError } from '@mini-harness/contracts/routes';
+import { DomainError } from '@mini-harness/platform/errors';
 import type { ModelChoice } from '@mini-harness/contracts/conversation';
 import type { PluginDescriptor } from '@mini-harness/contracts/plugins';
 import { setup } from './host.js';
@@ -18,7 +18,7 @@ export const manifest: PluginDescriptor = {
   validateConfig(config, { service, operation }) {
     const model = config.model as ModelChoice;
     if (operation !== 'mount' && (model.provider || model.id) && !service('harnessModels').resolve(model))
-      throw new HttpError('invalid_input', 'Unknown model: ' + model.provider + '/' + model.id);
+      throw new DomainError('invalid_input', 'Unknown model: ' + model.provider + '/' + model.id);
   },
   inject: ['harnessModels', 'harnessModelStore', 'harnessState', 'harnessRoutes', 'harnessMutations', 'harnessChanges'],
   provides: ['harnessModelPreference'], setup,

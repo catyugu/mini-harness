@@ -1,5 +1,5 @@
 import { isThinkingLevel } from '@mini-harness/contracts/agent';
-import { HttpError } from '@mini-harness/contracts/routes';
+import { DomainError } from '@mini-harness/platform/errors';
 import type { ThinkingLevel } from '@mini-harness/contracts/agent';
 import type { ModelChoice } from '@mini-harness/contracts/conversation';
 import type { ModelCatalogPort } from '@mini-harness/contracts/models';
@@ -16,7 +16,7 @@ export function resolveThinking(capabilities: Capabilities, explicit?: ThinkingL
   if (explicit === null) return undefined;
   if (explicit !== undefined) {
     if (!supportsThinking(explicit, capabilities))
-      throw new HttpError('invalid_input', 'The selected model does not support thinking level: ' + explicit);
+      throw new DomainError('invalid_input', 'The selected model does not support thinking level: ' + explicit);
     return explicit;
   }
   return inherited !== undefined && supportsThinking(inherited, capabilities) ? inherited : undefined;

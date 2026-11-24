@@ -1,3 +1,4 @@
+import type { ContentDelta } from '@mini-harness/platform/content-delta';
 import type { ThinkingLevel } from './agent.js';
 import type { ModelChoice } from './conversation.js';
 import type { ImageInput, PreparedMessage } from './input.js';
@@ -29,13 +30,6 @@ export interface MessagePatch {
   start: number;
   deleteCount: number;
   insert: NativeMessage[];
-}
-
-/** JSON-string splice, avoiding a second copy of a large tool result. */
-export interface ContentDelta {
-  prefix: number;
-  suffix: number;
-  insert: string;
 }
 
 export type RecordedModelRequest = Omit<ModelRequestSnapshot, 'messages' | 'tools'> & {

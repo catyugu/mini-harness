@@ -1,4 +1,9 @@
-import type { ContentDelta } from '@mini-harness/contracts/session-log';
+/** JSON-string splice, avoiding a second copy of a large tool result. */
+export interface ContentDelta {
+  prefix: number;
+  suffix: number;
+  insert: string;
+}
 
 /** Reversible splice for the serialized JSON representation of a tool result. */
 export function contentDelta(original: string, transformed: string): ContentDelta | undefined {

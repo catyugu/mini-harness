@@ -1,4 +1,4 @@
-import { HttpError } from '@mini-harness/contracts/routes';
+import { DomainError } from '@mini-harness/platform/errors';
 import type { Context } from 'cordis';
 
 
@@ -7,7 +7,7 @@ export function setup(ctx: Context) {
       const input = await body(20 * 1024 * 1024) as Record<string, unknown>;
       if (!input || typeof input.sessionId !== 'string' || typeof input.sourceEntryId !== 'string' ||
           !Object.hasOwn(input, 'expectedLeafId') || typeof input.message !== 'string')
-        throw new HttpError('invalid_input', 'Invalid revision request');
+        throw new DomainError('invalid_input', 'Invalid revision request');
       return ctx.harnessRuns.reviseAndStart(input.sessionId, {
         sourceEntryId: input.sourceEntryId, expectedLeafId: input.expectedLeafId as string | null,
         message: input.message, removedImages: input.removedImages as number[] | undefined, attachments: input.attachments as import('@mini-harness/contracts/input').Attachment[],

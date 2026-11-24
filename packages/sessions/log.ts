@@ -1,5 +1,5 @@
 import { isThinkingLevel } from '@mini-harness/contracts/agent';
-import { HttpError } from '@mini-harness/contracts/routes';
+import { DomainError } from '@mini-harness/platform/errors';
 import { isRunning, type RunInfo } from '@mini-harness/contracts/transport';
 import { createHash, randomBytes } from 'node:crypto';
 import { closeSync, constants, fstatSync, fsyncSync, ftruncateSync, lstatSync, openSync, readFileSync, writeSync } from 'node:fs';
@@ -184,7 +184,7 @@ export class SessionLog implements SessionLogPort {
     if (this.closed) throw new Error('Session log is closed');
     if (this.readOnly) throw new Error('Session log is read-only');
     if (expectedLeafId !== undefined && expectedLeafId !== this.leafId)
-      throw new HttpError('conflict', 'Conversation changed; refresh before editing');
+      throw new DomainError('conflict', 'Conversation changed; refresh before editing');
     const value = JSON.parse(JSON.stringify(event)) as SessionEvent;
     const entry = { ...value, version: 1, seq: this.records.length + 1, id: randomBytes(16).toString('hex'),
       parentId, timestamp: new Date().toISOString() } as SessionEntry;
@@ -195,7 +195,7 @@ export class SessionLog implements SessionLogPort {
       try { this.close(); }
       finally { this.writeFailed?.(error); }
       if (!this.writeFailed) throw error;
-      throw new HttpError('unavailable', 'Could not write conversation log. See session diagnostics.', { cause: error });
+      throw new DomainError('unavailable', 'Could not write conversation log. See session diagnostics.', { cause: error });
     }
     this.remember(entry);
     this.changed?.(entry);

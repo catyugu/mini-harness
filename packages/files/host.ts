@@ -1,4 +1,4 @@
-import { HttpError } from '@mini-harness/contracts/routes';
+import { DomainError } from '@mini-harness/platform/errors';
 import { relative, resolve, sep } from 'node:path';
 import { toolExtensions } from '@mini-harness/contracts/tool-extensions';
 import type { PluginApi } from '@mini-harness/contracts/plugins';
@@ -17,7 +17,7 @@ export function setup(ctx: Context, api: PluginApi) {
       const root = sessions.workspacePath(id);
       const access = scopes.require(id, 'harnessFileAccess');
       const session = sessions.get(id);
-      if (!session) throw new HttpError('not_found', 'Conversation not found');
+      if (!session) throw new DomainError('not_found', 'Conversation not found');
       const tool = fileTools(root, access.open(session.workspaceId))[index];
       if (!writes) return tool;
       return {
@@ -38,7 +38,7 @@ export function setup(ctx: Context, api: PluginApi) {
   const inspection = async ({ params, url, signal }: RouteRequest) => {
     const workspace = workspaces.get(params.id);
     const sessionId = url.searchParams.get('sessionId');
-    if (sessionId && sessions.get(sessionId)?.workspaceId !== workspace.id) throw new HttpError('not_found', 'Conversation not found');
+    if (sessionId && sessions.get(sessionId)?.workspaceId !== workspace.id) throw new DomainError('not_found', 'Conversation not found');
     if (sessionId) await scopes.prepare(sessionId, signal);
     const access = scopes.require(sessionId, 'harnessFileAccess');
     return new Inspection(workspaces.resolveRoot(workspace.path, workspace.id), access.open(workspace.id), signal);

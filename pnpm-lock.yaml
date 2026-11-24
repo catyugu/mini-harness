@@ -54,11 +54,18 @@ importers:
       '@mini-harness/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@mini-harness/platform':
+        specifier: workspace:*
+        version: link:../platform
       '@mini-harness/ui-runtime':
         specifier: workspace:*
         version: link:../ui-runtime
 
-  packages/contracts: {}
+  packages/contracts:
+    dependencies:
+      '@mini-harness/platform':
+        specifier: workspace:*
+        version: link:../platform
 
   packages/file-access:
     dependencies:
@@ -74,6 +81,9 @@ importers:
       '@mini-harness/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@mini-harness/platform':
+        specifier: workspace:*
+        version: link:../platform
       '@mini-harness/ui-primitives':
         specifier: workspace:*
         version: link:../ui-primitives
@@ -176,11 +186,7 @@ importers:
         specifier: workspace:*
         version: link:../ui-runtime
 
-  packages/platform:
-    dependencies:
-      '@mini-harness/contracts':
-        specifier: workspace:*
-        version: link:../contracts
+  packages/platform: {}
 
   packages/plugins:
     dependencies:
@@ -211,6 +217,9 @@ importers:
       '@mini-harness/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@mini-harness/platform':
+        specifier: workspace:*
+        version: link:../platform
       '@mini-harness/transport':
         specifier: workspace:*
         version: link:../transport
@@ -229,6 +238,9 @@ importers:
       '@mini-harness/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@mini-harness/platform':
+        specifier: workspace:*
+        version: link:../platform
       '@mini-harness/ui-runtime':
         specifier: workspace:*
         version: link:../ui-runtime
@@ -280,6 +292,9 @@ importers:
       '@mini-harness/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@mini-harness/platform':
+        specifier: workspace:*
+        version: link:../platform
       '@mini-harness/ui-primitives':
         specifier: workspace:*
         version: link:../ui-primitives
@@ -292,6 +307,9 @@ importers:
       '@mini-harness/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@mini-harness/platform':
+        specifier: workspace:*
+        version: link:../platform
       '@mini-harness/ui-primitives':
         specifier: workspace:*
         version: link:../ui-primitives
@@ -310,6 +328,9 @@ importers:
       '@mini-harness/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@mini-harness/platform':
+        specifier: workspace:*
+        version: link:../platform
 
   packages/ui:
     dependencies:

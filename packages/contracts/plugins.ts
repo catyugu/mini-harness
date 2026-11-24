@@ -1,4 +1,4 @@
-import { HttpError } from './routes.js';
+import { DomainError } from '@mini-harness/platform/errors';
 import type { BrowserEntry } from './browser.js';
 import type { Extension } from './contributions.js';
 import type { Context } from 'cordis';
@@ -111,17 +111,17 @@ export function validateProviderChoices(choices: Record<string, unknown>) {
   for (const [service, id] of Object.entries(choices)) {
     if (!serviceNamePattern.test(service) ||
         typeof id !== 'string' || !pluginIdPattern.test(id))
-      throw new HttpError('invalid_input', 'Invalid provider selection');
+      throw new DomainError('invalid_input', 'Invalid provider selection');
   }
 }
 
 export function validatePluginSettings(plugins: Record<string, unknown>, configs: Record<string, unknown>) {
   for (const [key, value] of Object.entries(plugins)) {
-    if (!localPluginIdPattern.test(key)) throw new HttpError('invalid_input', 'Invalid plugin name');
-    if (typeof value !== 'boolean') throw new HttpError('invalid_input', 'Plugin switches must be boolean');
+    if (!localPluginIdPattern.test(key)) throw new DomainError('invalid_input', 'Invalid plugin name');
+    if (typeof value !== 'boolean') throw new DomainError('invalid_input', 'Plugin switches must be boolean');
   }
   for (const [id, config] of Object.entries(configs)) {
     if (!pluginIdPattern.test(id) || (!config || typeof config !== 'object' || Array.isArray(config)))
-      throw new HttpError('invalid_input', 'Invalid plugin configuration for ' + id);
+      throw new DomainError('invalid_input', 'Invalid plugin configuration for ' + id);
   }
 }

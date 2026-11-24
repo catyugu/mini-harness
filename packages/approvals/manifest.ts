@@ -1,4 +1,4 @@
-import { HttpError } from '@mini-harness/contracts/routes';
+import { DomainError } from '@mini-harness/platform/errors';
 import type { PluginDescriptor } from '@mini-harness/contracts/plugins';
 import { Approvals } from './approvals.js';
 
@@ -23,7 +23,7 @@ export const manifest: PluginDescriptor = {
     ctx.effect(() => ctx.harnessRoutes.register('GET', '/api/approvals', () => approvals.list()));
     ctx.effect(() => ctx.harnessRoutes.register('POST', '/api/approvals', async ({ body }) => {
       const input = await body() as { id?: string; allow?: boolean } | null;
-      if (typeof input?.id !== 'string' || typeof input.allow !== 'boolean') throw new HttpError('invalid_input', 'Choose allow or deny');
+      if (typeof input?.id !== 'string' || typeof input.allow !== 'boolean') throw new DomainError('invalid_input', 'Choose allow or deny');
       approvals.decide(input.id, input.allow);
       return { ok: true };
     }));

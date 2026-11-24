@@ -1,5 +1,5 @@
 import { toolExtensions } from '@mini-harness/contracts/tool-extensions';
-import { HttpError } from '@mini-harness/contracts/routes';
+import { DomainError } from '@mini-harness/platform/errors';
 import { agentExtensions } from '@mini-harness/contracts/agent-extensions';
 import { promptExtensions } from '@mini-harness/contracts/prompt-extensions';
 import type { Context } from 'cordis';
@@ -32,7 +32,7 @@ export function setup(ctx: Context, api: PluginApi) {
     const sessionId = url.searchParams.get('sessionId');
     if (sessionId) {
       if (ctx.harnessRegistry.get(sessionId)?.workspaceId !== workspace.id)
-        throw new HttpError('not_found', 'Conversation not found');
+        throw new DomainError('not_found', 'Conversation not found');
       await ctx.harnessScopes.prepare(sessionId, signal);
       if (api.signal.aborted) return [];
       return loader.list(ctx.harnessRegistry.workspacePath(sessionId));

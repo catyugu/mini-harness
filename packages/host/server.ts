@@ -1,3 +1,4 @@
+import { DomainError } from '@mini-harness/platform/errors';
 import { createServer } from 'node:http';
 import { closeSync, constants, createReadStream, fstatSync, openSync, lstatSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { dirname, join, resolve, relative, sep } from 'node:path';
@@ -5,9 +6,9 @@ import { fileURLToPath } from 'node:url';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import type { Paths } from '@mini-harness/contracts/config';
+import type { Paths } from '@mini-harness/platform/runtime-paths';
 import { Upgrades } from './upgrade.js';
-import { HttpError, type GatewayRequest } from '@mini-harness/contracts/routes';
+import { errorStatus, HttpError, type GatewayRequest } from '@mini-harness/contracts/routes';
 import { json } from '@mini-harness/transport/http';
 import { MiniHarnessRuntime } from './application.js';
 
@@ -153,9 +154,9 @@ export async function createMiniHarnessServer(paths: Paths, options: { token?: s
       throw new HttpError('not_found', 'Not found');
     } catch (error) {
       if (res.destroyed || res.writableEnded) return;
-      if (error instanceof HttpError) {
+      if (error instanceof DomainError) {
         if (res.headersSent) { res.end(); return; }
-        return json(res, error.status, { code: error.code, error: error.message });
+        return json(res, errorStatus[error.code], { code: error.code, error: error.message });
       }
       runtime.plugins.ctx.logger.error('HTTP %s failed: %s', req.method, error instanceof Error ? error.stack ?? error.message : String(error));
       if (res.headersSent) { res.end(); return; }

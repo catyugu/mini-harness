@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@mini-harness/contracts": "workspace:*"
+    "@mini-harness/contracts": "workspace:*",
+    "@mini-harness/platform": "workspace:*"
   },
   "exports": {
     "./http": "./http.ts",

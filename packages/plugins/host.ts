@@ -1,7 +1,8 @@
 import { lstatSync, realpathSync, rmSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import type { Context } from 'cordis';
-import { HttpError, HttpReply } from '@mini-harness/contracts/routes';
+import { DomainError } from '@mini-harness/platform/errors';
+import { HttpReply } from '@mini-harness/contracts/routes';
 import { installPlugin, uninstallPlugin } from './files.js';
 
 /** All local plugin filesystem mutations belong to Plugins. */
@@ -29,7 +30,7 @@ export function setup(ctx: Context) {
       const root = join(ctx.harnessState.paths.home, 'plugin-data');
       const directory = lstatSync(root, { throwIfNoEntry: false });
       if (directory && (!directory.isDirectory() || relative(root, realpathSync(root))))
-        throw new HttpError('conflict', 'Plugin data directory has been redirected');
+        throw new DomainError('conflict', 'Plugin data directory has been redirected');
       const metadata = await uninstallPlugin(host(), params.id);
       if (directory) rmSync(join(root, params.id), { recursive: true, force: true });
       ctx.harnessSettingsStore.forgetPlugin(params.id);

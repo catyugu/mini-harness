@@ -1,5 +1,5 @@
 import { localPluginIdPattern } from '@mini-harness/contracts/plugins';
-import { HttpError } from '@mini-harness/contracts/routes';
+import { DomainError } from '@mini-harness/platform/errors';
 import { readdirSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { Check } from 'typebox/value';
@@ -14,7 +14,7 @@ function configDefaults(schema: Record<string, any>, value: any): any {
   if (value === undefined && Object.hasOwn(schema, 'default')) value = structuredClone(schema.default);
   if (schema.type === 'object' && value && typeof value === 'object' && !Array.isArray(value)) {
     for (const [key, property] of Object.entries(schema.properties ?? {})) {
-      if (!property || typeof property !== 'object' || Array.isArray(property)) throw new HttpError('invalid_input', 'Invalid plugin config property');
+      if (!property || typeof property !== 'object' || Array.isArray(property)) throw new DomainError('invalid_input', 'Invalid plugin config property');
       const item = configDefaults(property as Record<string, unknown>, Object.hasOwn(value, key) ? value[key] : undefined);
       if (item !== undefined) Object.defineProperty(value, key, { value: item, enumerable: true, writable: true, configurable: true });
     }
@@ -101,24 +101,24 @@ export class PluginCatalog {
     const choices = isApp ? settings.providers : overrides?.providers ?? {};
     for (const [service, id] of Object.entries(choices))
       if (this.protectedServices.has(service) && (inherited.get(service) ?? this.protectedProviders.get(service)) !== id)
-        throw new HttpError('invalid_input', 'Protected service cannot be overridden: ' + service);
+        throw new DomainError('invalid_input', 'Protected service cannot be overridden: ' + service);
     const enabled: DiscoveredPlugin[] = [];
     const configs = new Map<string, Record<string, unknown>>();
     for (const [id, active] of Object.entries(overrides?.plugins ?? {})) {
       if (active && !descriptors.some((item) => item.id === id && item.scope === scope)) {
-        const error = new HttpError('invalid_input', 'Plugin ' + id + ' is unavailable in ' + scope + ' scope');
+        const error = new DomainError('invalid_input', 'Plugin ' + id + ' is unavailable in ' + scope + ' scope');
         if (!unavailable?.(id, error)) throw error;
       }
     }
     if (isApp) for (const [id, active] of Object.entries(settings.plugins)) {
       if (active && descriptors.some((item) => item.id === id && item.scope !== 'application'))
-        throw new HttpError('invalid_input', 'Select a scope for plugin ' + id);
+        throw new DomainError('invalid_input', 'Select a scope for plugin ' + id);
     }
     for (const item of descriptors) {
       const { id, scope: kind } = item;
       if (kind !== scope || !(isApp ? item.required || settings.plugins[id] === true : overrides?.plugins?.[id] === true)) continue;
       try {
-        if (item.error) throw new HttpError('invalid_input', 'Invalid plugin ' + id + ': ' + item.error);
+        if (item.error) throw new DomainError('invalid_input', 'Invalid plugin ' + id + ': ' + item.error);
         enabled.push(item);
         const values = isApp ? settings.pluginConfig[id] : { ...settings.pluginConfig[id], ...overrides?.pluginConfig?.[id] };
         configs.set(id, this.configValues(id, values, item.configSchema));
@@ -130,7 +130,7 @@ export class PluginCatalog {
           ...item, requires: item.requires?.filter((id) => !parentIds.has(id))
         })), inherited, choices, unavailable, this.protectedServices);
       } catch (error) {
-        throw new HttpError('invalid_input', error instanceof Error ? error.message : 'Invalid plugin dependency graph');
+        throw new DomainError('invalid_input', error instanceof Error ? error.message : 'Invalid plugin dependency graph');
       }
     })();
     const plans: PluginPlan[] = [];
@@ -146,7 +146,7 @@ export class PluginCatalog {
     const input = structuredClone(values && typeof values === 'object' ? values : {});
     if (!schema) return input;
     const config = configDefaults(schema, input) as Record<string, unknown>;
-    if (!Check(schema, config)) throw new HttpError('invalid_input', 'Invalid configuration for plugin: ' + id);
+    if (!Check(schema, config)) throw new DomainError('invalid_input', 'Invalid configuration for plugin: ' + id);
     return config;
   }
 

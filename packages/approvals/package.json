@@ -5,6 +5,7 @@
   "type": "module",
   "dependencies": {
     "@mini-harness/contracts": "workspace:*",
+    "@mini-harness/platform": "workspace:*",
     "@mini-harness/ui-runtime": "workspace:*"
   },
   "exports": {

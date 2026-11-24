@@ -12,19 +12,6 @@ export interface Settings {
 
 export type SettingsPatch = { [K in keyof Settings]?: Settings[K] extends object ? Partial<Settings[K]> : Settings[K] };
 
-/** Runtime paths are data, not a dependency on the filesystem adapter. */
-export interface Paths {
-  home: string;
-  cwd: string;
-  settings: string;
-  registry: string;
-  sessions: string;
-  pid: string;
-  log: string;
-  plugins: string;
-  devPlugin?: string;
-}
-
 /** A configuration handle whose namespace and lifetime are bound by the host. */
 export interface PluginConfiguration {
   get<T = unknown>(key: string): T;
@@ -45,6 +32,5 @@ export interface SettingsPort {
 declare module 'cordis' {
   interface Context {
     harnessSettingsStore: SettingsPort;
-    harnessState: { paths: Paths };
   }
 }

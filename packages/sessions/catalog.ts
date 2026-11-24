@@ -1,4 +1,4 @@
-import type { Paths } from '@mini-harness/contracts/config';
+import type { Paths } from '@mini-harness/platform/runtime-paths';
 import type { SessionRecord } from '@mini-harness/contracts/conversation';
 import type { WorkspacePort } from '@mini-harness/contracts/workspace';
 import { readJson } from '@mini-harness/platform/json';

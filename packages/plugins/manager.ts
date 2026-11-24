@@ -1,4 +1,4 @@
-import { HttpError } from '@mini-harness/contracts/routes';
+import { DomainError } from '@mini-harness/platform/errors';
 import { dirname, join } from 'node:path';
 import { Context } from 'cordis';
 import { isDeepStrictEqual } from 'node:util';
@@ -56,11 +56,11 @@ export class PluginHost implements ScopePort {
   browser() { return structuredClone(this.published); }
 
   async writeBrowserConfig(id: string, patch: unknown, signal: AbortSignal) {
-    if (!this.writePlugin) throw new HttpError('unavailable', 'Plugin settings are unavailable');
+    if (!this.writePlugin) throw new DomainError('unavailable', 'Plugin settings are unavailable');
     await this.writePlugin(id, undefined, patch, () => {
       signal.throwIfAborted();
       if (!this.published.some((entry) => entry.id === id && entry.browser) || !this.configSchemas.has(id))
-        throw new HttpError('not_found', 'Plugin settings are unavailable');
+        throw new DomainError('not_found', 'Plugin settings are unavailable');
     });
   }
 
@@ -85,7 +85,7 @@ export class PluginHost implements ScopePort {
         if (!descriptor.inject?.includes(name) && !descriptor.optional?.includes(name))
           throw new Error('Configuration dependency is not declared by ' + descriptor.id + ': ' + name);
         const service = ctx.get(name) as ServiceMap[Name] | undefined;
-        if (service == null) throw new HttpError('unavailable', 'Configuration dependency is unavailable to ' + descriptor.id + ': ' + name);
+        if (service == null) throw new DomainError('unavailable', 'Configuration dependency is unavailable to ' + descriptor.id + ': ' + name);
         return service;
       }
     });
@@ -155,7 +155,7 @@ export class PluginHost implements ScopePort {
       for (const key of id ? [...this.address(id)].reverse() : []) {
         const provider = settings.scopes[key]?.providers?.[service];
         const failure = provider && this.failures.get(key + '/' + provider);
-        if (failure) throw new HttpError('unavailable', 'Provider ' + provider + ' failed in ' + key + ': ' + failure);
+        if (failure) throw new DomainError('unavailable', 'Provider ' + provider + ' failed in ' + key + ': ' + failure);
       }
       throw new Error('Required service is unavailable: ' + service + (id ? ' in session ' + id : ''));
     }

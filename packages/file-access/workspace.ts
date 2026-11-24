@@ -1,4 +1,4 @@
-import { HttpError } from '@mini-harness/contracts/routes';
+import { DomainError } from '@mini-harness/platform/errors';
 import { randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
 import { link, lstat, mkdir, open, opendir, realpath, rename, stat, unlink, type FileHandle } from 'node:fs/promises';
@@ -19,12 +19,12 @@ import { containsPath } from '@mini-harness/platform/paths';
 function checkName(name: string) {
   if (windows && (/[<>:"|?*\x00-\x1f]/.test(name) || /[ .]$/.test(name) ||
     /^(?:con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/i.test(name))) {
-    throw new HttpError('invalid_input', 'Unsupported workspace path component');
+    throw new DomainError('invalid_input', 'Unsupported workspace path component');
   }
 }
 
 function samePath(a: string, b: string) { return relative(a, b) === ''; }
-const denied = () => new HttpError('forbidden', 'Path is outside the permitted workspace or is a link');
+const denied = () => new DomainError('forbidden', 'Path is outside the permitted workspace or is a link');
 const missing = (error: unknown) => (error as NodeJS.ErrnoException).code === 'ENOENT';
 
 export class Workspace implements WorkspaceFileAccess {
@@ -137,7 +137,7 @@ export class Workspace implements WorkspaceFileAccess {
   readFile(path: string) {
     return this.file(path, async (handle) => {
       const size = (await handle.stat()).size;
-      if (size > readLimit) throw new HttpError('invalid_input', 'File exceeds the 16 MiB read limit');
+      if (size > readLimit) throw new DomainError('invalid_input', 'File exceeds the 16 MiB read limit');
       const buffer = Buffer.allocUnsafe(size);
       let offset = 0;
       while (offset < size) {
@@ -196,7 +196,7 @@ export class Workspace implements WorkspaceFileAccess {
           const current = await identify();
           if (current.ino !== before.ino || current.dev !== before.dev ||
               current.mtimeNs !== before.mtimeNs || current.ctimeNs !== before.ctimeNs)
-            throw new HttpError('conflict', 'File changed during write: ' + basename(path));
+            throw new DomainError('conflict', 'File changed during write: ' + basename(path));
           signal?.throwIfAborted();
           await rename(temporary, target);
         }
@@ -229,7 +229,7 @@ export class Workspace implements WorkspaceFileAccess {
         const child = resolve(path, entry.name);
         if (containsPath(this.state, child)) continue;
         checkName(entry.name);
-        if (result.length >= 20000) throw new HttpError('invalid_input', 'Directory exceeds the listing limit');
+        if (result.length >= 20000) throw new DomainError('invalid_input', 'Directory exceeds the listing limit');
         result.push({ name: entry.name, directory: entry.isDirectory() });
       }
       return result.sort((a, b) => a.name.localeCompare(b.name));
@@ -264,7 +264,7 @@ export class Workspace implements WorkspaceFileAccess {
       const rules = await withRules(dir, inherited);
       for (const entry of await this.entries(dir)) {
         signal?.throwIfAborted();
-        if (++visited > 20000) throw new HttpError('invalid_input', 'Search limit reached. Select a narrower directory.');
+        if (++visited > 20000) throw new DomainError('invalid_input', 'Search limit reached. Select a narrower directory.');
         if (entry.name === '.git') continue;
         const path = resolve(dir, entry.name);
         let ignored = false;
@@ -318,7 +318,7 @@ export class Workspace implements WorkspaceFileAccess {
 
   async grep(input: SearchInput, signal?: AbortSignal) {
     const { pattern, glob, literal, ignoreCase } = input;
-    if (!pattern || pattern.length > 4096 || (glob?.length ?? 0) > 512) throw new HttpError('invalid_input', 'Invalid search pattern');
+    if (!pattern || pattern.length > 4096 || (glob?.length ?? 0) > 512) throw new DomainError('invalid_input', 'Invalid search pattern');
     const expression = new RE2(literal ? pattern.replace(/[.*+?^$${}()|[\]\\]/g, '\\$&') : pattern, ignoreCase ? 'ui' : 'u');
     const path = resolve(this.cwd, input.path || '.');
     const directory = (await this.stat(path)).isDirectory();

@@ -3,14 +3,13 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "dependencies": {
-    "@mini-harness/contracts": "workspace:*"
-  },
   "exports": {
     "./content-delta": "./content-delta.ts",
     "./isolation": "./isolation.ts",
     "./json": "./json.ts",
     "./local-secret": "./local-secret.ts",
-    "./paths": "./paths.ts"
+    "./paths": "./paths.ts",
+    "./runtime-paths": "./runtime-paths.ts",
+    "./errors": "./errors.ts"
   }
 }
