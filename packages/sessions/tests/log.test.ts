@@ -174,3 +174,25 @@ test('tool execution stays auditable while accepted content is stored as a compa
   assert.equal(log.entries().filter((entry) => entry.type === 'tool-execution').length, 1);
   assert.throws(() => log.append({ type: 'tool-accepted', executionId: 'a'.repeat(32) }), /missing execution/);
 });
+
+test('historical plugin records normalize to one owner without changing identity or the selected branch', (t) => {
+  const { open } = fixture(t);
+  const log = open(), first = log.append(user('before'));
+  const instanceId = 'session:' + 'a'.repeat(32) + '/notes';
+  const application = log.append({ type: 'custom', namespace: 'notes', data: { count: 1 } });
+  const scoped = log.append({ type: 'custom', namespace: 'display:' + instanceId,
+    data: { data: { count: 2 }, display: { title: 'Progress', content: 'Done' } } });
+  const last = log.append(user('after'));
+  log.close();
+  const restored = open();
+  const records = restored.branch().filter((entry) => entry.type === 'plugin-record');
+  assert.deepEqual(records.map(({ id, parentId, owner, data }) => ({ id, parentId, owner, data })), [
+    { id: application.id, parentId: first.id, owner: { pluginId: 'notes', instanceId: 'notes' }, data: { count: 1 } },
+    { id: scoped.id, parentId: application.id, owner: { pluginId: 'notes', instanceId }, data: { count: 2 } }
+  ]);
+  assert.deepEqual(restored.projection().records, [
+    { id: scoped.id, plugin: 'notes', instanceId, afterMessageId: first.id, title: 'Progress', content: 'Done' }
+  ]);
+  assert.equal(restored.projection().leafId, last.id);
+  assert.deepEqual(restored.projection().contextMessages.map(({ content }) => content), ['before', 'after']);
+});

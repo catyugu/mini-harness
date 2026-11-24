@@ -7,6 +7,7 @@ import { lstatSync, realpathSync, rmSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import type { Context } from 'cordis';
 import { DomainError } from '@mini-harness/platform/errors';
+import { localPluginIdPattern } from '@mini-harness/plugin-api/selection';
 import { HttpReply } from '@mini-harness/transport/routes';
 import { installPlugin, uninstallPlugin } from './files.js';
 
@@ -39,7 +40,7 @@ export function setup(ctx: Context) {
     const input = await body();
     return ctx.harnessMutations.run(async () => {
       const { tool, allowed } = input ?? {};
-      if (typeof tool !== 'string' || typeof allowed !== 'boolean')
+      if (!localPluginIdPattern.test(params.id) || typeof tool !== 'string' || typeof allowed !== 'boolean')
         throw new DomainError('invalid_input', 'Expected a tool name and an authorization decision');
       const grants = { ...ctx.harnessSettingsStore.settings.readOnlyTools };
       const selected = new Set(grants[params.id] ?? []);

@@ -6,6 +6,7 @@ import { createMiniHarnessServer } from '@mini-harness/host/server';
 import { SessionRegistry } from '@mini-harness/sessions/registry';
 import { WorkspaceCatalog } from '@mini-harness/workspaces/catalog';
 import type { RunEvent } from '../src/stream.js';
+import { executionForPlugin } from '../src/execution.js';
 import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.js';
 
 function gate() {
@@ -210,4 +211,32 @@ test('append, torn write and fsync failures evict the writer without acknowledgi
       Array.isArray(content) ? content[0]?.text : content), ['Accepted retry']);
     assert.equal(app.runtime.plugins.ctx.harnessRegistry.logError(session.id), undefined);
   }
+});
+
+test('execution handles cancel only their own run and cannot cancel a later run in the same conversation', { timeout: 15000 }, async (t) => {
+  const entered = gate(), held = gate();
+  let requests = 0;
+  const mock = await createMockProvider(async () => {
+    if (++requests > 1) { entered.release(); await held.promise; }
+    return 'Done';
+  });
+  const { root, paths } = createFixturePaths(mock.url);
+  const app = await createMiniHarnessServer(paths);
+  t.after(async () => { held.release(); await app.close(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
+  const { harnessRegistry: registry, harnessExecution, harnessRuns: runs } = app.runtime.plugins.ctx;
+  const session = registry.create();
+  const execution = harnessExecution[executionForPlugin];
+  const signal = new AbortController();
+  const first = execution.launch(session.id, { message: 'First' }, signal.signal);
+  assert.equal(await first.result, 'Done');
+  const later = execution.launch(session.id, { message: 'Later' }, signal.signal);
+  const cancelled = assert.rejects(later.result, /cancelled/);
+  await entered.promise;
+  assert.equal(first.cancel(), false);
+  assert.equal(runs.active(session.id), true);
+  assert.equal(later.cancel(), true);
+  assert.equal(later.cancel(), false);
+  held.release();
+  await cancelled;
+  assert.equal(execution.info(session.id)?.state, 'cancelled');
 });

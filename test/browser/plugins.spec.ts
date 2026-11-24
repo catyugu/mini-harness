@@ -330,7 +330,7 @@ test('unmounting browser plugins releases pages and restores replaced slot contr
     await expect(page.getByText('Replacement composer')).toHaveCount(0);
     await expect(page.getByRole('textbox', { name: 'Message' })).toBeVisible();
     await expect(page.locator('.message-image-dialog')).toHaveCount(1);
-    await expect(page.getByText('Hello from replacement', { exact: true })).toBeVisible();
+    await expect(page.locator('#messages .message.user').getByText('Hello from replacement', { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'New conversation', exact: true })).toBeVisible();
     await expect(page.locator('body')).toHaveAttribute('data-slot-disposed', 'yes');
     await page.evaluate(() => window.dispatchEvent(new Event('slot-test')));
