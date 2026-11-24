@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DEFAULTS, getPaths, mergeSettings, readSettings, validateSettings, writeJson } from '@mini-harness/platform/config';
+import { DEFAULTS, mergeSettings, readSettings, validateSettings } from '@mini-harness/settings/config';
+import { getPaths } from '@mini-harness/platform/paths';
+import { writeJson } from '@mini-harness/platform/json';
 
 test('config directories are independent and default safe', () => {
   const folder = mkdtempSync(join(tmpdir(), 'mini-harness-config-'));

@@ -6,6 +6,6 @@ export const manifest: PluginDescriptor = {
   browserProvides: ['miniSettings', 'miniSettingsData', 'miniSettingsRegistry'],
   browserInject: ['miniLayout', 'miniSlots', 'miniProjections'],
   id: 'core:settings', title: 'Settings', description: 'Application settings', required: true,
-  inject: ['harnessSettings', 'harnessUpdateSettings', 'harnessWriteBrowserConfig', 'harnessRoutes', 'harnessMutations'], provides: [], setup,
+  inject: ['harnessSettingsStore', 'harnessPluginCatalog', 'harnessRoutes', 'harnessMutations'], provides: [], setup,
   browser: '/packages/settings/browser.js',
 };

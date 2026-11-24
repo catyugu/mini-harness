@@ -1,6 +1,6 @@
 import { HttpError } from '@mini-harness/contracts/routes';
 import { randomBytes } from 'node:crypto';
-import { prepareInput } from '@mini-harness/platform/input';
+import { prepareInput } from '@mini-harness/contracts/input-node';
 import type { Attachment } from '@mini-harness/contracts/input';
 import type { SessionLogPort, InboxItem, QueueEntry } from '@mini-harness/contracts/session-log';
 

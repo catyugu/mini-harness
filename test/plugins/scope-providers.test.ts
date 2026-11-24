@@ -9,7 +9,7 @@ import { PluginHost } from '@mini-harness/plugins/manager';
 import { Context } from 'cordis';
 import type { PluginDescriptor } from '@mini-harness/contracts/plugins';
 import type { SessionRecord } from '@mini-harness/contracts/conversation';
-import { DEFAULTS, mergeSettings, validateSettings } from '@mini-harness/platform/config';
+import { DEFAULTS, mergeSettings, validateSettings } from '@mini-harness/settings/config';
 
 declare module '../../packages/contracts/plugin-sdk.js' {
   interface ServiceMap {

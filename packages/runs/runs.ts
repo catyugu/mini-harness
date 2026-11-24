@@ -1,9 +1,10 @@
-import { HttpError } from '@mini-harness/contracts/routes';
+import type { ThinkingLevel } from '@mini-harness/contracts/agent';
+import type { ScopePort } from '@mini-harness/contracts/capabilities';
+import { HttpError, type MutationPort } from '@mini-harness/contracts/routes';
 import { randomUUID } from 'node:crypto';
-import { prepareInput } from '@mini-harness/platform/input';
+import { imageMimeType, prepareInput, validateModelOptions } from '@mini-harness/contracts/input-node';
 import type { Attachment, InputSource } from '@mini-harness/contracts/input';
 import type { CapabilityObservation } from '@mini-harness/contracts/events';
-import type { AgentPort, ThinkingLevel } from '@mini-harness/contracts/agent';
 import type { ModelChoice } from '@mini-harness/contracts/conversation';
 import { RunInterrupted, type StreamEvent, type RunEvent, type RunInfo } from '@mini-harness/contracts/transport';
 import { RunEvents } from './events.js';
@@ -32,10 +33,9 @@ export class Runs {
 
   constructor(
     private readonly registry: SessionStore,
-    private readonly agent: Pick<AgentPort, 'prompt' | 'revisionTarget' | 'messages' | 'compact'>,
-    private readonly observe: (event: CapabilityObservation, signal?: AbortSignal) => void,
-    private readonly address: (id: string) => readonly string[] = () => [],
-    private readonly admit: (scopeKeys: readonly string[]) => void = () => {}
+    private readonly scopes: ScopePort,
+    private readonly mutations: MutationPort,
+    private readonly observe: (event: CapabilityObservation, signal?: AbortSignal) => void
   ) {}
 
   private changed(id: string) { this.events.dispatchEvent(new CustomEvent('change', { detail: { id } })); }
@@ -43,13 +43,13 @@ export class Runs {
   get size() { return this.work.size; }
   active(id: string) { return this.work.has(id); }
   activeInScope(scopes: ReadonlySet<string>) {
-    return [...this.work.keys()].some((id) => this.address(id).some((key) => scopes.has(key)));
+    return [...this.work.keys()].some((id) => this.scopes.address(id).some((key) => scopes.has(key)));
   }
   completion(id: string) { return this.work.get(id)?.done; }
 
-  view(id: string) {
+  activity(id: string) {
     const events = this.work.get(id)?.events;
-    return { run: this.info(id), partial: events?.partial, tools: events?.activeTools ?? [] };
+    return { partial: events?.partial, tools: events?.activeTools ?? [] };
   }
 
   signal(id: string, signal?: AbortSignal) {
@@ -59,17 +59,12 @@ export class Runs {
 
   private launch(id: string, prompt: string, emit: ((event: StreamEvent) => void) | undefined, { signal, source, model, attachments, thinkingLevel, revision, schedule }: RunOptions) {
     this.registry.assertAvailable(id);
-    this.admit(this.address(id));
+    this.mutations.admit(this.scopes.address(id));
     if (this.active(id)) throw new HttpError('conflict', 'Conversation is already running');
-    if (thinkingLevel !== undefined && thinkingLevel !== null && !['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(thinkingLevel))
-      throw new HttpError('invalid_input', 'Invalid thinking level');
+    validateModelOptions(model, thinkingLevel);
     const prepared = prepareInput(prompt, attachments);
     const record = this.registry.get(id);
     if (!record) throw new HttpError('not_found', 'Conversation not found');
-    if (model !== undefined) {
-      if (!model || typeof model.provider !== 'string' || typeof model.id !== 'string' ||
-          model.provider.length > 160 || model.id.length > 160) throw new HttpError('invalid_input', 'Invalid model choice');
-    }
     const info: RunInfo = { id: randomUUID(), sessionId: id, state: 'queued', startedAt: new Date().toISOString(), sequence: 0 };
     const events = new RunEvents(info);
     const controller = new AbortController();
@@ -88,7 +83,8 @@ export class Runs {
       this.changed(id);
       publish({ type: 'run', run: running });
       this.observe({ type: 'run-started', sessionId: id, run: running }, cancellation);
-      return this.agent.prompt(record, prepared.text, publish, {
+      await this.scopes.prepare(id, cancellation);
+      return this.agent(id).prompt(record, prepared.text, publish, {
         signal: cancellation, source, submissionId: info.id, choice: model, images: prepared.images, input: prepared.input, thinkingLevel, revision,
         changed: (path) => { info.changedFiles = [...new Set([...(info.changedFiles ?? []), path])]; }
       });
@@ -143,16 +139,17 @@ export class Runs {
 
   /** A run reservation protects branch navigation from concurrent submissions. */
   async reviseAndStart(id: string, input: { sourceEntryId: string; expectedLeafId: string | null; message: string; removedImages?: number[];
-    attachments?: Attachment[]; model?: ModelChoice; thinkingLevel?: ThinkingLevel }) {
+    attachments?: Attachment[]; model?: ModelChoice; thinkingLevel?: ThinkingLevel | null }) {
     if (this.active(id)) throw new HttpError('conflict', 'Conversation is already running');
-    this.admit(this.address(id));
-    const target = await this.agent.revisionTarget(id, input.sourceEntryId, input.expectedLeafId);
+    this.mutations.admit(this.scopes.address(id));
+    await this.scopes.prepare(id);
+    const target = await this.agent(id).revisionTarget(id, input.sourceEntryId, input.expectedLeafId);
     const removed = input.removedImages ?? [];
     if (!Array.isArray(removed) || removed.some((index) => !Number.isInteger(index) || index < 0 || index >= target.images.length))
       throw new HttpError('invalid_input', 'Invalid original image selection');
     const attached = input.attachments ?? [];
     if (!Array.isArray(attached)) throw new HttpError('invalid_input', 'Invalid attachments');
-    const missing = target.textFiles.filter((name) => !attached.some((file) => file?.name === name && typeof file.mimeType === 'string' && !/^image\/(png|jpeg|gif|webp)$/.test(file.mimeType)));
+    const missing = target.textFiles.filter((name) => !attached.some((file) => file?.name === name && typeof file.mimeType === 'string' && !imageMimeType.test(file.mimeType)));
     if (missing.length) throw new HttpError('invalid_input', 'Reattach the original text files: ' + missing.join(', '));
     const attachments = [...target.images.filter((_, index) => !removed.includes(index)), ...attached];
     return this.launch(id, input.message, undefined, {
@@ -173,8 +170,8 @@ export class Runs {
     // A restarted run has no volatile delta cursor; its durable interrupted snapshot is authoritative.
     if (!Number.isSafeInteger(after) || after < 0 || (after > info.sequence && info.state !== 'interrupted'))
       throw new HttpError('invalid_input', 'Invalid event cursor');
-    if (events) return events.watch(after, emit, () => this.agent.messages(id), end);
-    emit({ type: 'snapshot', messages: this.agent.messages(id), tools: [], run: info, sequence: info.sequence, runId: info.id, runSessionId: id });
+    if (events) return events.watch(after, emit, () => this.agent(id).messages(id), end);
+    emit({ type: 'snapshot', messages: this.agent(id).messages(id), tools: [], run: info, sequence: info.sequence, runId: info.id, runSessionId: id });
     return () => {};
   }
 
@@ -191,14 +188,16 @@ export class Runs {
 
   async compact(id: string) {
     this.registry.assertAvailable(id);
-    this.admit(this.address(id));
+    this.mutations.admit(this.scopes.address(id));
     if (this.active(id)) throw new HttpError('conflict', 'Stop the open conversation before compacting it');
     const controller = new AbortController();
-    const done = this.agent.compact(id, controller.signal);
+    const done = this.scopes.prepare(id, controller.signal).then(() => this.agent(id).compact(id, controller.signal));
     this.work.set(id, { done, controller });
     try { await done; }
     finally { this.work.delete(id); }
   }
+
+  private agent(id: string) { return this.scopes.require(id, 'harnessAgent'); }
 
   async stop() {
     const active = [...this.work.values()];

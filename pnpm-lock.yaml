@@ -211,9 +211,6 @@ importers:
       '@mini-harness/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@mini-harness/platform':
-        specifier: workspace:*
-        version: link:../platform
       '@mini-harness/transport':
         specifier: workspace:*
         version: link:../transport

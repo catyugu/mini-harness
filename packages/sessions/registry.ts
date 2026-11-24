@@ -4,7 +4,7 @@ import { HttpError } from '@mini-harness/contracts/routes';
 import { randomUUID } from 'node:crypto';
 import { lstatSync, unlinkSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { writeJson } from '@mini-harness/platform/config';
+import { writeJson } from '@mini-harness/platform/json';
 import type { Paths } from '@mini-harness/contracts/config';
 import type { SessionStore } from '@mini-harness/contracts/session-store';
 import type { WorkspacePort } from '@mini-harness/contracts/workspace';

@@ -10,6 +10,7 @@ export function registerRoutes(ctx: Context) {
   };
   add('POST', '/api/sessions/:id/queue', async ({ params, body }) => {
     const id = session(params.id), input = await body(20 * 1024 * 1024);
+    if (!input || typeof input !== 'object' || Array.isArray(input)) throw new HttpError('invalid_input', 'Invalid queue request');
     return new HttpReply(202, await ctx.harnessAgent.queueInput(id, input.message, input.mode, input.attachments,
       { model: input.model, thinkingLevel: input.thinkingLevel }));
   });

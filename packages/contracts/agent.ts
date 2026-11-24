@@ -1,13 +1,18 @@
 import type {} from 'cordis';
 import type { InboxItem, QueueEntry } from './session-log.js';
-import type { SessionRecord, ModelChoice } from './conversation.js';
+import type { SessionRecord, ModelChoice, ConversationView } from './conversation.js';
 import type { Attachment, ImageInput, InputSource, PreparedMessage } from './input.js';
 import type { StreamEvent } from './transport.js';
 import type { PromptContext } from './prompt-extensions.js';
 import type { ViewMessage } from './message.js';
 
 /** Native execution capabilities consumed by scheduling services. */
-export type ThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+const thinkingLevels = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
+export type ThinkingLevel = typeof thinkingLevels[number];
+
+export function isThinkingLevel(value: unknown): value is ThinkingLevel {
+  return thinkingLevels.some((level) => level === value);
+}
 
 export interface PromptPort {
   build(request: PromptContext): Promise<string>;
@@ -35,7 +40,7 @@ export interface AgentPort {
   readonly hasPending: boolean;
   prepare(id: string, signal?: AbortSignal): Promise<void>;
   activeModel(id: string): ModelChoice;
-  read(id: string): { messages: ViewMessage[]; leafId: string | null; model: ModelChoice; thinkingLevel?: ThinkingLevel; queue: QueueEntry[] };
+  read(id: string): Pick<ConversationView, 'messages' | 'leafId' | 'model' | 'thinkingLevel' | 'queue'>;
   queueInput(id: string, text: string, mode: 'steer' | 'followUp', attachments?: Attachment[],
     options?: Pick<InboxItem, 'model' | 'thinkingLevel'>): Promise<QueueEntry[]>;
   queue(id: string): QueueEntry[];

@@ -1,3 +1,4 @@
+import { isThinkingLevel } from '@mini-harness/contracts/agent';
 import { HttpError } from '@mini-harness/contracts/routes';
 import { isRunning, type RunInfo } from '@mini-harness/contracts/transport';
 import { createHash, randomBytes } from 'node:crypto';
@@ -331,7 +332,7 @@ function validateEvent(event: SessionEvent) {
       if (typeof event.model?.provider !== 'string' || typeof event.model.id !== 'string') throw new Error('Invalid session model');
       return;
     case 'thinking':
-      if (event.level !== null && !['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(event.level)) throw new Error('Invalid thinking level');
+      if (event.level !== null && !isThinkingLevel(event.level)) throw new Error('Invalid thinking level');
       return;
     case 'custom':
       if (typeof event.namespace !== 'string' || !event.namespace.length) throw new Error('Invalid session namespace');

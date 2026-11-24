@@ -55,9 +55,13 @@ export class PluginHost implements ScopePort {
   effective(settings: Settings) { return this.catalog.effective(settings); }
   browser() { return structuredClone(this.published); }
 
-  assertBrowserConfigurable(id: string) {
-    if (!this.published.some((entry) => entry.id === id && entry.browser) || !this.configSchemas.has(id))
-      throw new HttpError('not_found', 'Plugin settings are unavailable');
+  async writeBrowserConfig(id: string, patch: unknown, signal: AbortSignal) {
+    if (!this.writePlugin) throw new HttpError('unavailable', 'Plugin settings are unavailable');
+    await this.writePlugin(id, undefined, patch, () => {
+      signal.throwIfAborted();
+      if (!this.published.some((entry) => entry.id === id && entry.browser) || !this.configSchemas.has(id))
+        throw new HttpError('not_found', 'Plugin settings are unavailable');
+    });
   }
 
   diagnostics() { return structuredClone(this.graph); }

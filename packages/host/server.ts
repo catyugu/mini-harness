@@ -20,7 +20,7 @@ const assets = new Map([
 ]);
 
 // Only browser-safe shared contracts are served.
-for (const name of ['composer', 'layout', 'settings-browser', 'slots', 'workspace'])
+for (const name of ['composer', 'layout', 'settings-browser', 'slots', 'transport', 'workspace'])
   assets.set('packages/contracts/' + name + '.js', 'text/javascript');
 
 // Only client modules from UI foundations may be served.

@@ -1,6 +1,6 @@
 import { HttpError } from '@mini-harness/contracts/routes';
 import { join } from 'node:path';
-import { readJson, writeJson } from '@mini-harness/platform/config';
+import { readJson, writeJson } from '@mini-harness/platform/json';
 import type { ModelChoice } from '@mini-harness/contracts/conversation';
 import type { ModelCatalogPort, ProviderInfo } from '@mini-harness/contracts/models';
 

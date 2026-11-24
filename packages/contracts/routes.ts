@@ -43,6 +43,7 @@ export interface MutationPort {
 
 declare module 'cordis' {
   interface Context {
+    harnessRoutes: RoutePort;
     harnessMutations: MutationPort;
     harnessTransportSignal?: AbortSignal;
   }

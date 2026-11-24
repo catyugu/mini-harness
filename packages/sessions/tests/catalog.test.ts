@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { getPaths } from '@mini-harness/platform/config';
+import { getPaths } from '@mini-harness/platform/paths';
 import { loadCatalog } from '../catalog.js';
 import { WorkspaceCatalog } from '@mini-harness/workspaces/catalog';
 

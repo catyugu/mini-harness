@@ -4,7 +4,7 @@ import { readFileSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { PiModelStore, PiLlm } from '../pi-adapter.js';
 import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.js';
-import { readJson, writeJson } from '@mini-harness/platform/config';
+import { readJson, writeJson } from '@mini-harness/platform/json';
 import type { LlmEvent, NativeMessage } from '@mini-harness/contracts/llm';
 
 test('model adapter streams native messages, tool calls and metadata through the HTTP provider', async (t) => {

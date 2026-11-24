@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { realpathSync, rmSync } from 'node:fs';
 import { createServer, type ListenOptions } from 'node:net';
 import { readInstanceCredential } from './instance-credential.js';
-import { readJson } from '@mini-harness/platform/config';
+import { readJson } from '@mini-harness/platform/json';
 
 export interface ServerInfo { pid: number; url: string; startedAt: string }
 

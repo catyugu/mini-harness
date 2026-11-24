@@ -25,36 +25,36 @@ export function setup(ctx: Context, api: PluginApi) {
     ctx.effect(() => ctx.harnessRoutes.register(method, path, handler));
   const changed = () => ctx.harnessChanges.dispatchEvent(new CustomEvent('change', { detail: { domain: 'models' } }));
   add('GET', '/api/providers', () => providerSettings(host));
-  add('PUT', '/api/providers', async ({ body }) => ctx.harnessMutations.run(async () => {
-    const input = await body();
-    const release = ctx.harnessMutations.protect();
-    try { const result = await saveProvider(host, input); changed(); return result; }
-    finally { release(); }
-  }));
-  add('DELETE', '/api/providers', async ({ body }) => ctx.harnessMutations.run(async () => {
-    const input = await body();
-    const release = ctx.harnessMutations.protect();
-    try { const result = await saveProvider(host, input, true); changed(); return result; }
-    finally { release(); }
-  }));
-  for (const method of ['POST', 'DELETE']) {
-    add(method, '/api/credentials', async ({ body }) => ctx.harnessMutations.run(async () => {
+  for (const method of ['PUT', 'DELETE']) {
+    add(method, '/api/providers', async ({ body }) => {
       const input = await body();
-      if (typeof input?.provider !== 'string' || !/^[a-z0-9-]+$/.test(input.provider))
-        throw new HttpError('invalid_input', 'Invalid provider');
-      if (!host.admin.hasProvider(input.provider)) throw new HttpError('invalid_input', 'Unknown provider');
-      if (method === 'DELETE') {
+      return ctx.harnessMutations.run(async () => {
         const release = ctx.harnessMutations.protect();
-        try { await host.admin.removeCredential(input.provider); }
+        try { const result = await saveProvider(host, input, method === 'DELETE'); changed(); return result; }
         finally { release(); }
-      } else {
-        if (typeof input.key !== 'string' || !input.key.trim()) throw new HttpError('invalid_input', 'Invalid credential');
-        await host.admin.storeCredential(input.provider, input.key.trim());
-      }
-      changed();
-      return { ok: true, persisted: true, models: host.catalog.list(),
-        status: host.admin.authStatus(input.provider) };
-    }));
+      });
+    });
+  }
+  for (const method of ['POST', 'DELETE']) {
+    add(method, '/api/credentials', async ({ body }) => {
+      const input = await body();
+      return ctx.harnessMutations.run(async () => {
+        if (typeof input?.provider !== 'string' || !/^[a-z0-9-]+$/.test(input.provider))
+          throw new HttpError('invalid_input', 'Invalid provider');
+        if (!host.admin.hasProvider(input.provider)) throw new HttpError('invalid_input', 'Unknown provider');
+        if (method === 'DELETE') {
+          const release = ctx.harnessMutations.protect();
+          try { await host.admin.removeCredential(input.provider); }
+          finally { release(); }
+        } else {
+          if (typeof input.key !== 'string' || !input.key.trim()) throw new HttpError('invalid_input', 'Invalid credential');
+          await host.admin.storeCredential(input.provider, input.key.trim());
+        }
+        changed();
+        return { ok: true, persisted: true, models: host.catalog.list(),
+          status: host.admin.authStatus(input.provider) };
+      });
+    });
   }
   add('GET', '/api/models', async () => ({ models: await host.catalog.available() }));
 }

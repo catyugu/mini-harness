@@ -10,7 +10,7 @@ export interface RunPort {
   active(id: string): boolean;
   activeInScope(scopes: ReadonlySet<string>): boolean;
   completion(id: string): Promise<unknown> | undefined;
-  view(id: string): { run?: RunInfo; partial?: string; tools: Extract<StreamEvent, { type: 'tool' }>[] };
+  activity(id: string): { partial?: string; tools: Extract<StreamEvent, { type: 'tool' }>[] };
   signal(id: string, signal?: AbortSignal): AbortSignal | undefined;
   send(id: string, prompt: string, emit?: (event: StreamEvent) => void, options?: {
     signal?: AbortSignal; source?: InputSource; model?: ModelChoice; attachments?: Attachment[];

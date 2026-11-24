@@ -143,7 +143,7 @@ test('child queues honor live limits, explicit cancellation, and depth restricti
   const { root, paths } = createFixturePaths(mock.url);
   const app = await createMiniHarnessServer(paths);
   t.after(async () => { for (const gate of held) gate.release(); await app.close(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
-  await app.runtime.updateSettings({ pluginConfig: { subagents: { maxParallel: 1 } } });
+  await app.runtime.configuration.update({ pluginConfig: { subagents: { maxParallel: 1 } } });
   const parent = app.runtime.registry.create();
   const tools = app.runtime.plugins.ctx.harnessTools;
   const delegate = expectPresent(tools.forSession(parent.id).find(({ name }) => name === 'delegate'), 'delegate tool');
@@ -161,9 +161,9 @@ test('child queues honor live limits, explicit cancellation, and depth restricti
   await aborted;
   assert.equal(app.runtime.plugins.ctx.harnessRuns.info(queued.id)?.state, 'cancelled');
   assert.equal(requests, 1);
-  await app.runtime.updateSettings({ pluginConfig: { subagents: { maxParallel: 2 } } });
+  await app.runtime.configuration.update({ pluginConfig: { subagents: { maxParallel: 2 } } });
   await entered[1].promise;
-  await app.runtime.updateSettings({ pluginConfig: { subagents: { maxParallel: 1 } } });
+  await app.runtime.configuration.update({ pluginConfig: { subagents: { maxParallel: 1 } } });
   assert.equal(app.runtime.plugins.ctx.harnessRuns.size, 2, 'Lowering the limit preserves existing executions');
   const child = app.runtime.registry.list().find(({ title }) => title === 'First child');
   assert.ok(child);
@@ -204,6 +204,15 @@ test('append, torn write and fsync failures evict the writer without acknowledgi
   t.after(async () => { await app.close(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
   const base = 'http://127.0.0.1:' + await app.listen(0);
   const headers = { Authorization: 'Bearer ' + app.token };
+  const rejected = app.runtime.registry.create();
+  for (const invalid of [null, { message: 'Bad model', model: { provider: 42, id: 'invalid' } },
+    { message: 'Bad thinking', thinkingLevel: 'invalid' }, { message: 'Bad file', attachments: [{}] }]) {
+    const response = await fetch(base + '/api/sessions/' + rejected.id + '/runs', {
+      method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(invalid)
+    });
+    assert.equal(response.status, 400);
+  }
+  assert.equal(app.runtime.plugins.ctx.harnessRuns.info(rejected.id), undefined);
   const healthy = app.runtime.registry.create();
   for (const fault of ['append', 'torn', 'sync']) {
     const session = app.runtime.registry.create();

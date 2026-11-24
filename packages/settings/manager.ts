@@ -1,20 +1,21 @@
 import { HttpError } from '@mini-harness/contracts/routes';
 import { isDeepStrictEqual } from 'node:util';
-import { mergeSettings, parseSettings, readJson, writeJson } from '@mini-harness/platform/config';
-import type { Paths, Settings } from '@mini-harness/contracts/config';
-import type { SettingsPort } from '@mini-harness/contracts/config';
+import { mergeSettings, readSettings } from './config.js';
+import { writeJson } from '@mini-harness/platform/json';
+import type { Paths, Settings, SettingsPort } from '@mini-harness/contracts/config';
 import type { PluginConfigurationPort } from '@mini-harness/contracts/plugins';
 
 export class SettingsManager implements SettingsPort {
   private stored: Settings;
   private pending = Promise.resolve();
+  private closing = false;
   private readonly listeners = new Set<() => void>();
 
-  constructor(private readonly paths: Paths, private readonly effective: (settings: Settings) => Settings) {
-    this.stored = parseSettings(readJson<unknown>(paths.settings, {}));
+  constructor(private readonly paths: Paths, private readonly host: () => PluginConfigurationPort) {
+    this.stored = readSettings(paths);
   }
 
-  get settings() { return this.effective(this.stored); }
+  get settings() { return this.host().effective(this.stored); }
 
   subscribe(listener: () => void) {
     this.listeners.add(listener);
@@ -61,12 +62,12 @@ export class SettingsManager implements SettingsPort {
     if (changed) { this.save({ ...this.stored, scopes }); this.publish(); }
   }
 
-  update(patch: unknown, host: PluginConfigurationPort) {
-    return this.transact(host, () => patch);
+  update(patch: unknown) {
+    return this.transact(() => patch);
   }
 
-  writePlugin(id: string, key: string | undefined, patch: unknown, host: PluginConfigurationPort, check: () => void) {
-    return this.transact(host, () => {
+  writePlugin(id: string, key: string | undefined, patch: unknown, check: () => void) {
+    return this.transact(() => {
       check();
       const values = configurationPatch(patch);
       if (!key) return { pluginConfig: { [id]: { ...this.stored.pluginConfig[id], ...values } } };
@@ -77,12 +78,19 @@ export class SettingsManager implements SettingsPort {
     }, true);
   }
 
-  private transact(host: PluginConfigurationPort, patch: () => unknown, skipUnchanged = false) {
+  close() {
+    this.closing = true;
+    return this.pending;
+  }
+
+  private transact(patch: () => unknown, skipUnchanged = false) {
+    if (this.closing) return Promise.reject(new HttpError('unavailable', 'Settings are closing'));
     const work = this.pending.then(async () => {
       const original = this.stored;
       const updated = mergeSettings(original, patch());
       if (skipUnchanged && isDeepStrictEqual(updated, original)) return this.settings;
-      await host.configure(this.effective(updated), () => {
+      const host = this.host();
+      await host.configure(host.effective(updated), () => {
         // A conversation may have been deleted while the plugin graph was preparing.
         const removed = Object.keys(original.scopes).filter((key) => !Object.hasOwn(this.stored.scopes, key));
         const scopes = Object.fromEntries(Object.entries(updated.scopes).filter(([key]) => !removed.includes(key)));

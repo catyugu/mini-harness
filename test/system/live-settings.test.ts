@@ -19,23 +19,23 @@ test('appearance, parallelism and child defaults update without interrupting a r
   const pending = runtime.plugins.ctx.harnessRuns.send(item.id, 'Hold');
   await waiting;
   const original = runtime.registry.log(item.id);
-  await runtime.updateSettings({ pluginConfig: { 'core:theme': { appearance: 'dark' }, subagents: { maxParallel: 2 } } });
+  await runtime.configuration.update({ pluginConfig: { 'core:theme': { appearance: 'dark' }, subagents: { maxParallel: 2 } } });
   assert.equal(runtime.settings.pluginConfig['core:theme'].appearance, 'dark');
   assert.strictEqual(runtime.registry.log(item.id), original);
   assert.equal(runtime.settings.pluginConfig.subagents.maxParallel, 2);
   assert.equal(runtime.plugins.ctx.harnessRuns.active(item.id), true);
-  await assert.rejects(runtime.updateSettings({ pluginConfig: { subagents: { model: { provider: 'missing', id: 'unavailable' } } } }), /Unknown child model/);
-  await assert.rejects(runtime.updateSettings({ pluginConfig: { subagents: { model: { provider: 'local-mock', id: 'unavailable' } } } }), /Unknown child model/);
+  await assert.rejects(runtime.configuration.update({ pluginConfig: { subagents: { model: { provider: 'missing', id: 'unavailable' } } } }), /Unknown child model/);
+  await assert.rejects(runtime.configuration.update({ pluginConfig: { subagents: { model: { provider: 'local-mock', id: 'unavailable' } } } }), /Unknown child model/);
   assert.equal(runtime.settings.pluginConfig.subagents.model, null);
   assert.equal(runtime.settings.pluginConfig.subagents.maxParallel, 2);
   const target = 'session:' + item.id;
-  await assert.rejects(runtime.updateSettings({ plugins: { files: false } }), /Stop the affected conversations/);
+  await assert.rejects(runtime.configuration.update({ plugins: { files: false } }), /Stop the affected conversations/);
   assert.equal(runtime.settings.plugins.files, true);
-  await runtime.updateSettings({ scopes: { [target]: { disabledTools: ['shell'] } } });
+  await runtime.configuration.update({ scopes: { [target]: { disabledTools: ['shell'] } } });
   assert.equal(runtime.plugins.ctx.harnessRuns.active(item.id), true);
   release();
   assert.equal(await pending, 'Done');
-  await runtime.updateSettings({ plugins: { files: false, 'session-helper': false } });
+  await runtime.configuration.update({ plugins: { files: false, 'session-helper': false } });
   assert.ok(!runtime.plugins.ctx.harnessTools.forSession(item.id).map(({ name }) => name).includes('read'));
 });
 
@@ -61,7 +61,7 @@ test('a scoped plugin transaction excludes new runs in its subtree until commit'
   mkdirSync(otherDirectory);
   const otherWorkspace = runtime.registry.workspaces.register(otherDirectory);
   const other = runtime.registry.create({ workspaceId: otherWorkspace.id });
-  const updating = runtime.updateSettings({ scopes: { ['workspace:' + target.workspaceId]: { plugins: { staged: true } } } });
+  const updating = runtime.configuration.update({ scopes: { ['workspace:' + target.workspaceId]: { plugins: { staged: true } } } });
   let sibling: Promise<string>;
   try {
     await entered;

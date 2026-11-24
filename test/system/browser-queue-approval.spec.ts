@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { mkdirSync, realpathSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
-import { readJson, writeJson } from '@mini-harness/platform/config';
+import { readJson, writeJson } from '@mini-harness/platform/json';
 import { startIsolatedHost } from '../support/browser.js';
 
 test('running messages can queue follow-ups and approve shell commands from the GUI', async ({ page }) => {

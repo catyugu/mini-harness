@@ -1,3 +1,4 @@
+import { imageMimeType, validateModelOptions } from '@mini-harness/contracts/input-node';
 import type { ToolProjection, ToolResultTransform } from '@mini-harness/contracts/tool-extensions';
 import { HttpError } from '@mini-harness/contracts/routes';
 import { isDeepStrictEqual } from 'node:util';
@@ -130,12 +131,12 @@ export class NativeAgent implements AgentPort {
       const source = log.branch().find((entry) => entry.id === sourceEntryId);
       if (source?.type !== 'message' || source.message.role !== 'user') return;
       const files = source.presentation?.attachments ?? [];
-      const imageNames = files.filter((file) => /^image\/(png|jpeg|gif|webp)$/.test(file.mimeType));
+      const imageNames = files.filter((file) => imageMimeType.test(file.mimeType));
       const content = source.message.content;
       const images = (source.presentation?.images ?? (typeof content === 'string' ? [] : content.filter((part) => part.type === 'image')))
         .map(({ data, mimeType }, index) => ({ data, mimeType, name: imageNames[index]?.name ?? 'Image ' + (index + 1) }));
       return { parentId: source.parentId, images,
-        textFiles: files.filter((file) => !/^image\/(png|jpeg|gif|webp)$/.test(file.mimeType)).map(({ name }) => name) };
+        textFiles: files.filter((file) => !imageMimeType.test(file.mimeType)).map(({ name }) => name) };
     }, true);
     if (!target) throw new HttpError('invalid_input', 'User message not found on active branch');
     return target;
@@ -145,6 +146,7 @@ export class NativeAgent implements AgentPort {
     options: Pick<InboxItem, 'model' | 'thinkingLevel'> = {}) {
     this.sessions.assertAvailable(id);
     if (!this.agents.acceptsInput(id)) throw new HttpError('conflict', 'The agent is not streaming; send a new message');
+    validateModelOptions(options.model, options.thinkingLevel);
     const choice = options.model ? this.services.models(id).resolve(options.model) : this.activeModel(id);
     if (!choice) throw new HttpError('invalid_input', 'Unknown queued model');
     resolveThinking(this.services.models(id).capabilities(choice), options.thinkingLevel);

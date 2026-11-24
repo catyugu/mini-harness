@@ -1,10 +1,14 @@
-import { HttpError } from '@mini-harness/contracts/routes';
-import { TextDecoder } from 'node:util';
-import type { Attachment, ImageInput } from '@mini-harness/contracts/input';
+import { isThinkingLevel } from './agent.js';
+import { HttpError } from './routes.js';
+import type { Attachment, ImageInput } from './input.js';
+
+export const imageMimeType = /^image\/(png|jpeg|gif|webp)$/;
+
 export function prepareInput(text: unknown, attachments: Attachment[] = []) {
   if (typeof text !== 'string' || text.length > 200000 || (!text.trim() && !attachments?.length)) throw new HttpError('invalid_input', 'Invalid message');
   if (!Array.isArray(attachments) || attachments.length > 8) throw new HttpError('invalid_input', 'Attach at most eight files');
-  const userText = (text as string).trim();
+  const userText = text.trim();
+  let modelText = text;
   const images: ImageInput[] = [];
   let total = 0;
   for (const file of attachments) {
@@ -15,7 +19,7 @@ export function prepareInput(text: unknown, attachments: Attachment[] = []) {
     if (bytes.toString('base64') !== file.data) throw new HttpError('invalid_input', 'Invalid attachment encoding');
     total += bytes.length;
     if (total > 12 * 1024 * 1024 || bytes.length > 6 * 1024 * 1024) throw new HttpError('invalid_input', 'Attachments exceed 6 MiB per file or 12 MiB per message');
-    if (/^image\/(png|jpeg|gif|webp)$/.test(file.mimeType)) {
+    if (imageMimeType.test(file.mimeType)) {
       const valid = file.mimeType === 'image/png' ? bytes.subarray(0, 8).toString('hex') === '89504e470d0a1a0a' :
         file.mimeType === 'image/jpeg' ? bytes.subarray(0, 3).toString('hex') === 'ffd8ff' :
         file.mimeType === 'image/gif' ? /^GIF8[79]a/.test(bytes.toString('ascii', 0, 6)) :
@@ -27,8 +31,17 @@ export function prepareInput(text: unknown, attachments: Attachment[] = []) {
       let content: string;
       try { content = new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
       catch { throw new HttpError('invalid_input', 'Only UTF-8 text and PNG, JPEG, GIF or WebP images are supported'); }
-      text += '\n\nAttached file: ' + JSON.stringify(file.name) + '\n' + content;
+      modelText += '\n\nAttached file: ' + JSON.stringify(file.name) + '\n' + content;
     }
   }
-  return { text: (text as string).trim() || 'See attached images.', images, input: { userText, attachments: attachments.map(({ name, mimeType }) => ({ name, mimeType })) } };
+  return { text: modelText.trim() || 'See attached images.', images, input: { userText, attachments: attachments.map(({ name, mimeType }) => ({ name, mimeType })) } };
+}
+
+export function validateModelOptions(model: unknown, thinkingLevel: unknown) {
+  if (thinkingLevel !== undefined && thinkingLevel !== null && !isThinkingLevel(thinkingLevel))
+    throw new HttpError('invalid_input', 'Invalid thinking level');
+  if (model === undefined) return;
+  if (!model || typeof model !== 'object' || !('provider' in model) || !('id' in model) ||
+      typeof model.provider !== 'string' || typeof model.id !== 'string' || model.provider.length > 160 || model.id.length > 160)
+    throw new HttpError('invalid_input', 'Invalid model choice');
 }

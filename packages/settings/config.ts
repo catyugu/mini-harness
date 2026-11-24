@@ -1,9 +1,8 @@
 import { HttpError } from '@mini-harness/contracts/routes';
-import type { Settings, Paths } from '@mini-harness/contracts/config';
-import { createHash, randomUUID } from 'node:crypto';
-import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { join, resolve } from 'node:path';
+import type { Paths, Settings } from '@mini-harness/contracts/config';
+import { scopeSettingsPattern, validatePluginSettings, validateProviderChoices } from '@mini-harness/contracts/plugins';
+import { validToolRestrictions } from '@mini-harness/contracts/tools';
+import { readJson } from '@mini-harness/platform/json';
 
 export const DEFAULTS = Object.freeze({
   port: 3837,
@@ -12,44 +11,6 @@ export const DEFAULTS = Object.freeze({
   providers: {},
   scopes: {}
 });
-
-export function getPaths(cwd: string = process.cwd(), env: NodeJS.ProcessEnv = process.env): Paths {
-  const project = resolve(cwd);
-  const home = resolve(env.MINI_HARNESS_HOME || join(homedir(), '.mini-harness'));
-  const key = createHash('sha256').update(process.platform === 'win32' ? project.toLowerCase() : project).digest('hex').slice(0, 16);
-  return {
-    home, cwd: project, settings: join(home, 'settings.json'),
-    registry: join(home, 'sessions.json'), sessions: join(home, 'sessions', key),
-    pid: join(home, 'server.json'), log: join(home, 'server.log'),
-    plugins: join(home, 'plugins'),
-    ...(env.MINI_HARNESS_DEV_PLUGIN ? { devPlugin: resolve(env.MINI_HARNESS_DEV_PLUGIN) } : {})
-  };
-}
-
-
-export function ensurePaths(paths: Paths) {
-  for (const path of [paths.home, paths.sessions, paths.plugins]) {
-    mkdirSync(path, { recursive: true, mode: 0o700 });
-  }
-}
-
-export function readJson<T>(file: string, fallback: T): T {
-  if (!existsSync(file)) return structuredClone(fallback);
-  return JSON.parse(readFileSync(file, 'utf8'));
-}
-
-export function writeJson(file: string, value: unknown) {
-  mkdirSync(resolve(file, '..'), { recursive: true, mode: 0o700 });
-  const temp = file + '.' + randomUUID() + '.tmp';
-  const handle = openSync(temp, 'wx', 0o600);
-  try {
-    try {
-      writeFileSync(handle, JSON.stringify(value, null, 2) + '\n');
-      fsyncSync(handle);
-    } finally { closeSync(handle); }
-    renameSync(temp, file);
-  } finally { rmSync(temp, { force: true }); }
-}
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -69,37 +30,17 @@ export function validateSettings(input: unknown): asserts input is Settings {
   validatePluginSettings(section(plugins, 'plugins'), section(pluginConfig, 'pluginConfig'));
   validateProviderChoices(section(providers, 'providers'));
   for (const [key, scope] of Object.entries(section(scopes, 'scopes'))) {
-    if (!/^(?:workspace:[a-f0-9]{32}|session:[a-f0-9-]{36})$/.test(key) || !isObject(scope) ||
+    if (!scopeSettingsPattern.test(key) || !isObject(scope) ||
         Object.keys(scope).some((field) => !['plugins', 'pluginConfig', 'disabledTools', 'providers'].includes(field)))
       throw new HttpError('invalid_input', 'Invalid plugin scope: ' + key);
     const { disabledTools } = scope;
-    if (disabledTools !== undefined && (!Array.isArray(disabledTools) ||
-        disabledTools.some((name) => typeof name !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(name))))
+    if (disabledTools !== undefined && !validToolRestrictions(disabledTools))
       throw new HttpError('invalid_input', 'Invalid scoped tool restriction: ' + key);
     validatePluginSettings(section(scope.plugins, key + '.plugins'), section(scope.pluginConfig, key + '.pluginConfig'));
     validateProviderChoices(section(scope.providers, key + '.providers'));
   }
   if (typeof port !== 'number' || !Number.isInteger(port) || port < 1024 || port > 65535)
     throw new HttpError('invalid_input', 'Invalid port');
-}
-
-function validateProviderChoices(choices: Record<string, unknown>) {
-  for (const [service, id] of Object.entries(choices)) {
-    if (!/^[a-zA-Z][a-zA-Z0-9_.:-]{0,95}$/.test(service) ||
-        typeof id !== 'string' || !/^(?:core:)?[a-z][a-z0-9-]{0,63}$/.test(id))
-      throw new HttpError('invalid_input', 'Invalid provider selection');
-  }
-}
-
-function validatePluginSettings(plugins: Record<string, unknown>, configs: Record<string, unknown>) {
-  for (const [key, value] of Object.entries(plugins)) {
-    if (!/^[a-z][a-z0-9-]{0,63}$/.test(key)) throw new HttpError('invalid_input', 'Invalid plugin name');
-    if (typeof value !== 'boolean') throw new HttpError('invalid_input', 'Plugin switches must be boolean');
-  }
-  for (const [id, config] of Object.entries(configs)) {
-    if (!/^(?:core:)?[a-z][a-z0-9-]{0,63}$/.test(id) || !isObject(config))
-      throw new HttpError('invalid_input', 'Invalid plugin configuration for ' + id);
-  }
 }
 
 export function readSettings(paths: Paths): Settings {

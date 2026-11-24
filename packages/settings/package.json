@@ -10,6 +10,7 @@
     "@mini-harness/ui-runtime": "workspace:*"
   },
   "exports": {
+    "./config": "./config.ts",
     "./manager": "./manager.ts",
     "./manifest": "./manifest.ts"
   }

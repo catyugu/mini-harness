@@ -5,7 +5,8 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { MiniHarnessRuntime } from '@mini-harness/host/application';
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
-import { mergeSettings, readSettings, writeJson } from '@mini-harness/platform/config';
+import { mergeSettings, readSettings } from '@mini-harness/settings/config';
+import { writeJson } from '@mini-harness/platform/json';
 
 test('an installed Cordis plugin can use services, configure a tool, and release resources', async (t) => {
   const mock = await createMockProvider();
@@ -41,25 +42,25 @@ test('an installed Cordis plugin can use services, configure a tool, and release
   assert.equal(runtime.plugins.metadata().find(({ id }) => id === 'example')?.title, 'Example plugin');
   assert.deepEqual(runtime.plugins.metadata().find(({ id }) => id === 'example')?.icon,
     { path: 'M2 2h20v20H2z', viewBox: '0 0 24 24' });
-  await runtime.updateSettings({ plugins: { example: true }, pluginConfig: { example: { prefix: 'Total' } } });
+  await runtime.configuration.update({ plugins: { example: true }, pluginConfig: { example: { prefix: 'Total' } } });
   await runtime.plugins.ctx.harnessAgent.prepare(item.id);
   const activeNames = () => runtime.plugins.ctx.harnessTools.forSession(item.id).map(({ name }) => name);
   assert.ok(activeNames().includes('example_count'));
   const tool = expectPresent(runtime.plugins.ctx.harnessTools.forSession(item.id).find(({ name }) => name === 'example_count'), 'example count tool');
   assert.equal((await tool.execute('test', {}, undefined, undefined, undefined)).content[0].type, 'text');
   assert.match(JSON.stringify(await tool.execute('test', {}, undefined, undefined, undefined)), /Total: 1/);
-  await assert.rejects(runtime.updateSettings({ pluginConfig: { example: { prefix: 12 } } }), /Invalid configuration/);
+  await assert.rejects(runtime.configuration.update({ pluginConfig: { example: { prefix: 12 } } }), /Invalid configuration/);
   assert.equal(runtime.settings.pluginConfig.example.prefix, 'Total');
   await runtime.plugins.ctx.harnessAgent.prepare(item.id);
   assert.match(JSON.stringify(await tool.execute('after-invalid-config', {}, undefined, undefined, undefined)), /Total: 1/);
   assert.equal(activeNames().filter((name) => name === 'example_count').length, 1);
-  await runtime.updateSettings({ plugins: { shell: true } });
+  await runtime.configuration.update({ plugins: { shell: true } });
   assert.throws(() => readFileSync(log), { code: 'ENOENT' }, 'Unrelated switches and invalid config preserve an active plugin');
-  await runtime.updateSettings({ plugins: { example: false } });
+  await runtime.configuration.update({ plugins: { example: false } });
   assert.equal(readFileSync(log, 'utf8'), 'dispose\n');
   assert.ok(!activeNames().includes('example_count'));
   await assert.rejects(tool.execute('after-unload', {}, undefined, undefined, undefined), /no longer available/);
-  await runtime.updateSettings({ plugins: { example: true } });
+  await runtime.configuration.update({ plugins: { example: true } });
   assert.ok(activeNames().includes('example_count'));
 });
 
@@ -81,13 +82,13 @@ export default (ctx, api) => {
   await runtime.plugins.ctx.harnessAgent.prepare(item.id);
   const activeNames = () => runtime.plugins.ctx.harnessTools.forSession(item.id).map(({ name }) => name);
   assert.ok(activeNames().includes('read'));
-  await runtime.updateSettings({ plugins: { files: false } });
+  await runtime.configuration.update({ plugins: { files: false } });
   assert.ok(!activeNames().includes('read'));
-  await runtime.updateSettings({ plugins: { files: true, dependent: true } });
-  await assert.rejects(runtime.updateSettings({ plugins: { files: false } }), /Required plugin/);
+  await runtime.configuration.update({ plugins: { files: true, dependent: true } });
+  await assert.rejects(runtime.configuration.update({ plugins: { files: false } }), /Required plugin/);
   assert.equal(runtime.settings.plugins.files, true);
   assert.ok(activeNames().includes('dependent_tool'));
-  await runtime.updateSettings({ plugins: { files: false, dependent: false } });
+  await runtime.configuration.update({ plugins: { files: false, dependent: false } });
   assert.equal(runtime.plugins.ctx.harnessTools.forSession(item.id).some(({ name }) => name === 'read' || name === 'dependent_tool'), false);
 });
 
@@ -107,8 +108,8 @@ test('server entry requires a default setup function', async (t) => {
     writeFileSync(join(paths.plugins, id, 'plugin.json'), JSON.stringify({ inject: ['harnessSessions'] }));
   }
   await runtime.start();
-  await runtime.updateSettings({ plugins: { 'function-entry': true } });
-  await runtime.updateSettings({ plugins: { 'named-entry': true } });
+  await runtime.configuration.update({ plugins: { 'function-entry': true } });
+  await runtime.configuration.update({ plugins: { 'named-entry': true } });
   assert.match(runtime.plugins.metadata().find(({ id }) => id === 'named-entry')?.error ?? '', /Export a default setup function/);
   assert.equal(runtime.settings.plugins['function-entry'], true);
   assert.equal(runtime.settings.plugins['named-entry'], true);
@@ -139,7 +140,7 @@ export default (ctx, api) => {
     });
   };`);
   await runtime.start();
-  await runtime.updateSettings({ plugins: { schema: true } });
+  await runtime.configuration.update({ plugins: { schema: true } });
   const item = runtime.registry.create();
   const tool = expectPresent(runtime.plugins.ctx.harnessTools.forSession(item.id).find(({ name }) => name === 'schema_value'), 'schema tool');
   assert.match(JSON.stringify(await tool.execute('test', {}, undefined, undefined, undefined)), /3:true/);
@@ -150,7 +151,7 @@ export default (ctx, api) => {
   assert.deepEqual(readSettings(paths).pluginConfig.schema, { count: 7, options: { enabled: false } });
   await assert.rejects(tool.execute('invalid-count', { count: 0 }, undefined, undefined, undefined), /Invalid configuration/);
   assert.match(JSON.stringify(await tool.execute('committed', {}, undefined, undefined, undefined)), /7:false:7/);
-  await assert.rejects(runtime.updateSettings({ pluginConfig: { schema: { count: 0 } } }), /Invalid configuration/);
+  await assert.rejects(runtime.configuration.update({ pluginConfig: { schema: { count: 0 } } }), /Invalid configuration/);
   assert.deepEqual(await tool.execute('test', {}, undefined, undefined, undefined),
     await expectPresent(runtime.plugins.ctx.harnessTools.forSession(item.id).find(({ name }) => name === 'schema_value'), 'registered schema tool')
       .execute('test', {}, undefined, undefined, undefined));
@@ -178,8 +179,8 @@ test('dependent plugins restart in order and partial setup or persistence failur
       };`);
   }
   await runtime.start();
-  await runtime.updateSettings({ plugins: { base: true, dependent: true } });
-  await assert.rejects(runtime.updateSettings({ pluginConfig: { base: { fail: true } } }), /Partial setup failed/);
+  await runtime.configuration.update({ plugins: { base: true, dependent: true } });
+  await assert.rejects(runtime.configuration.update({ pluginConfig: { base: { fail: true } } }), /Partial setup failed/);
   assert.match(readFileSync(log, 'utf8'), /stop dependent\nstop base\nstart base\nstop base\nstart base\nstart dependent/);
   const item = runtime.registry.create();
   assert.equal(runtime.plugins.ctx.harnessTools.forSession(item.id).filter(({ name }) => name === 'base_tool').length, 1);
@@ -202,7 +203,7 @@ test('cyclic dependencies reject a configuration before mounting either plugin',
     writeFileSync(join(folder, 'plugin.js'), 'export default () => { throw new Error("Should not mount"); };');
   }
   await runtime.start();
-  await assert.rejects(runtime.updateSettings({ plugins: { first: true, second: true } }), /Cyclic plugin/);
+  await assert.rejects(runtime.configuration.update({ plugins: { first: true, second: true } }), /Cyclic plugin/);
   assert.equal(runtime.settings.plugins.first, undefined);
 });
 
@@ -217,7 +218,7 @@ test('malformed plugin manifests fail discovery instead of silently dropping the
   writeFileSync(join(folder, 'plugin.json'), '{"requires": [');
   assert.match(runtime.plugins.metadata().find(({ id }) => id === 'broken-manifest')?.error ?? '', /JSON|Unexpected|parse/i);
   await runtime.start();
-  await assert.rejects(runtime.updateSettings({ plugins: { 'broken-manifest': true } }), /Invalid plugin/);
+  await assert.rejects(runtime.configuration.update({ plugins: { 'broken-manifest': true } }), /Invalid plugin/);
   assert.equal(runtime.settings.plugins['broken-manifest'], undefined);
 });
 
@@ -233,12 +234,12 @@ test('disabled optional builtins cannot block boot or reload because their confi
   t.after(() => restored.stop());
   await restored.start();
   assert.match(restored.plugins.metadata().find(({ id }) => id === 'subagents')?.error ?? '', /Invalid configuration/);
-  await assert.rejects(restored.updateSettings({ pluginConfig: { subagents: { maxDepth: 101 } } }), /Invalid configuration/);
-  await assert.rejects(restored.updateSettings({ pluginConfig: { subagents: { model: { provider: 'unknown', id: 'missing' } } } }), /Unknown child model/);
-  await restored.updateSettings({ pluginConfig: { 'core:theme': { appearance: 'dark' } } });
+  await assert.rejects(restored.configuration.update({ pluginConfig: { subagents: { maxDepth: 101 } } }), /Invalid configuration/);
+  await assert.rejects(restored.configuration.update({ pluginConfig: { subagents: { model: { provider: 'unknown', id: 'missing' } } } }), /Unknown child model/);
+  await restored.configuration.update({ pluginConfig: { 'core:theme': { appearance: 'dark' } } });
   const conversation = restored.registry.create();
   assert.equal(await restored.plugins.ctx.harnessRuns.send(conversation.id, 'Main agent still works'), 'Mock response');
-  await restored.updateSettings({ plugins: { subagents: true }, pluginConfig: { subagents: { maxDepth: 2 } } });
+  await restored.configuration.update({ plugins: { subagents: true }, pluginConfig: { subagents: { maxDepth: 2 } } });
   assert.ok(restored.plugins.ctx.harnessTools.forSession(conversation.id).some(({ name }) => name === 'delegate'));
 });
 
@@ -258,8 +259,8 @@ test('an optional plugin that fails at startup reports its state without blockin
   assert.equal(status.state, 'failed');
   assert.match(expectPresent(status.error, 'startup error'), /Startup failed/);
   assert.ok(!restarted.plugins.browser().some(({ id }) => id === status.id));
-  await restarted.updateSettings({ pluginConfig: { 'core:theme': { appearance: 'dark' } } });
+  await restarted.configuration.update({ pluginConfig: { 'core:theme': { appearance: 'dark' } } });
   assert.equal(restarted.settings.pluginConfig['core:theme'].appearance, 'dark');
-  await restarted.updateSettings({ plugins: { 'fails-to-start': false } });
+  await restarted.configuration.update({ plugins: { 'fails-to-start': false } });
   assert.equal(expectPresent(restarted.plugins.metadata().find(({ id }) => id === status.id), 'disabled plugin metadata').state, 'disabled');
 });

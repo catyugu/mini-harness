@@ -1,6 +1,6 @@
 import { Check, Errors } from 'typebox/value';
 import { isTrustedContribution } from '@mini-harness/contracts/contributions';
-import { isToolContent, registerToolBinding, type ToolDefinition, type ToolPort } from '@mini-harness/contracts/tools';
+import { isToolContent, registerToolBinding, toolNamePattern, type ToolDefinition, type ToolPort } from '@mini-harness/contracts/tools';
 import type { ToolDecision } from '@mini-harness/contracts/tool-extensions';
 
 interface ToolRegistration {
@@ -23,7 +23,7 @@ export class ToolRegistry implements ToolPort {
 
   [registerToolBinding](name: string, bind: (id: string) => ToolDefinition,
     { visible, scope, source, access }: NonNullable<Parameters<ToolPort[typeof registerToolBinding]>[2]> = {}) {
-    if (!/^[a-zA-Z0-9_-]{1,64}$/.test(name)) throw new Error('Invalid tool name: ' + name);
+    if (!toolNamePattern.test(name)) throw new Error('Invalid tool name: ' + name);
     const key = (scope ?? '') + '/' + name;
     if (this.tools.has(key)) throw new Error('Duplicate tool in scope: ' + name);
     const lifetime = new AbortController();

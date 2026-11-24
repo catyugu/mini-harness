@@ -3,7 +3,7 @@ import { rmSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
 import { workspaceId } from '@mini-harness/workspaces/catalog';
-import { readJson, writeJson } from '@mini-harness/platform/config';
+import { readJson, writeJson } from '@mini-harness/platform/json';
 import { startIsolatedHost, settingsSection, suggestions } from '../support/browser.js';
 
 test('frontend plugins own UI contributions and clean up on disable and reconfiguration', async ({ page }) => {

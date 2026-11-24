@@ -2,7 +2,8 @@ import { HttpError, type MutationPort } from '@mini-harness/contracts/routes';
 
 /** One transaction gate for HTTP settings and installed plugin operations. */
 export class MutationGate implements MutationPort {
-  private busy = false;
+  private active?: Promise<unknown>;
+  private closing = false;
   private readonly structural = new Set<{ scopes?: ReadonlySet<string> }>();
 
   constructor(private readonly hasWork: (scopes?: ReadonlySet<string>) => boolean) {}
@@ -15,13 +16,21 @@ export class MutationGate implements MutationPort {
   }
 
   admit(scopeKeys: readonly string[]) {
+    if (this.closing) throw new HttpError('unavailable', 'Application is closing');
     if ([...this.structural].some(({ scopes }) => !scopes || scopeKeys.some((key) => scopes.has(key))))
       throw new HttpError('conflict', 'Conversation configuration is changing; try again when it finishes');
   }
   async run<T>(operation: () => Promise<T> | T): Promise<T> {
-    if (this.busy) throw new HttpError('conflict', 'Configuration is already changing');
-    this.busy = true;
-    try { return await operation(); }
-    finally { this.busy = false; }
+    if (this.closing) throw new HttpError('unavailable', 'Application is closing');
+    if (this.active) throw new HttpError('conflict', 'Configuration is already changing');
+    const work = Promise.resolve().then(operation);
+    this.active = work;
+    try { return await work; }
+    finally { this.active = undefined; }
+  }
+
+  close() {
+    this.closing = true;
+    return Promise.allSettled(this.active ? [this.active] : []);
   }
 }

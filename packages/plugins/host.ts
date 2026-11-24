@@ -8,7 +8,7 @@ import { installPlugin, uninstallPlugin } from './files.js';
 export function setup(ctx: Context) {
   const host = () => ({
     paths: { plugins: ctx.harnessState.paths.plugins },
-    settings: ctx.harnessSettings(),
+    settings: ctx.harnessSettingsStore.settings,
     plugins: ctx.harnessPluginCatalog
   });
   const add = (method: string, path: string, handler: Parameters<typeof ctx.harnessRoutes.register>[2]) =>
@@ -16,11 +16,14 @@ export function setup(ctx: Context) {
   const changed = () => ctx.harnessChanges.dispatchEvent(new CustomEvent('change', { detail: { domain: 'plugins' } }));
   add('GET', '/api/plugins/diagnostics', () => ctx.harnessPluginCatalog.diagnostics());
   add('GET', '/api/plugins', () => ctx.harnessPluginCatalog.metadata());
-  add('POST', '/api/plugins/install', async ({ body }) => ctx.harnessMutations.run(async () => {
-    const installed = installPlugin(host(), await body(2 * 1024 * 1024));
-    changed();
-    return new HttpReply(201, installed);
-  }));
+  add('POST', '/api/plugins/install', async ({ body }) => {
+    const bundle = await body(2 * 1024 * 1024);
+    return ctx.harnessMutations.run(() => {
+      const installed = installPlugin(host(), bundle);
+      changed();
+      return new HttpReply(201, installed);
+    });
+  });
   add('DELETE', '/api/plugins/:id', ({ params }) =>
     ctx.harnessMutations.run(async () => {
       const root = join(ctx.harnessState.paths.home, 'plugin-data');

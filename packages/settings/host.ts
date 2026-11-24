@@ -1,13 +1,17 @@
 import type { Context } from 'cordis';
 
-/** Settings API is one owner of configuration transactions, not a server branch. */
 export function setup(ctx: Context) {
-  ctx.effect(() => ctx.harnessRoutes.register('GET', '/api/settings', () => ctx.harnessSettings()));
-  ctx.effect(() => ctx.harnessRoutes.register('PATCH', '/api/settings/plugins/:id',
-    async ({ body, params, signal }) => ctx.harnessMutations.run(async () => {
-      await ctx.harnessWriteBrowserConfig(params.id, await body(), signal);
+  const { harnessSettingsStore: store, harnessPluginCatalog: plugins, harnessMutations: mutations, harnessRoutes: routes } = ctx;
+  ctx.effect(() => routes.register('GET', '/api/settings', () => store.settings));
+  ctx.effect(() => routes.register('PATCH', '/api/settings/plugins/:id', async ({ body, params, signal }) => {
+    const patch = await body();
+    return mutations.run(async () => {
+      await plugins.writeBrowserConfig(params.id, patch, signal);
       return { ok: true };
-    })));
-  ctx.effect(() => ctx.harnessRoutes.register('PATCH', '/api/settings',
-    async ({ body }) => ctx.harnessMutations.run(async () => ctx.harnessUpdateSettings(await body()))));
+    });
+  }));
+  ctx.effect(() => routes.register('PATCH', '/api/settings', async ({ body }) => {
+    const patch = await body();
+    return mutations.run(() => store.update(patch));
+  }));
 }

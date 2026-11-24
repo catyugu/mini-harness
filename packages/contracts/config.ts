@@ -36,6 +36,7 @@ export interface PluginConfiguration {
 
 export interface SettingsPort {
   readonly settings: Settings;
+  update(patch: unknown): Promise<Settings>;
   forgetPlugin(id: string): void;
   forgetScopes(keys: string[]): void;
   subscribe(listener: () => void): () => void;
@@ -44,6 +45,6 @@ export interface SettingsPort {
 declare module 'cordis' {
   interface Context {
     harnessSettingsStore: SettingsPort;
-    harnessUpdateSettings: (patch: unknown) => Promise<Settings>;
+    harnessState: { paths: Paths };
   }
 }

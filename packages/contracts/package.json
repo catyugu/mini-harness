@@ -17,6 +17,7 @@
     "./execution": "./execution.ts",
     "./files": "./files.ts",
     "./input": "./input.ts",
+    "./input-node": "./input-node.ts",
     "./layout": "./layout.ts",
     "./llm": "./llm.ts",
     "./message": "./message.ts",

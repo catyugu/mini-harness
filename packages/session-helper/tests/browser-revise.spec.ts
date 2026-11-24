@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { rmSync } from 'node:fs';
 import { resolve, join } from 'node:path';
-import { readJson, writeJson } from '@mini-harness/platform/config';
+import { readJson, writeJson } from '@mini-harness/platform/json';
 import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.js';
 import { startIsolatedHost } from '../../../test/support/browser.js';
 
