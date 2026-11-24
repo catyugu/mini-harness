@@ -1,6 +1,7 @@
 import type {} from 'cordis';
 import type { ConversationPermission, SessionRecord } from './shared/identity.js';
 import type { SessionLogPort } from './log-api.js';
+import type { Attachment, ImageInput, PreparedMessage } from '@mini-harness/input/message';
 import type { RunInfo } from './shared/run-state.js';
 
 export interface SessionCatalog {
@@ -26,13 +27,16 @@ export interface SessionLifecycle {
   rename(id: string, title: string, source?: SessionRecord['titleSource']): SessionRecord;
   assertAvailable(id?: string, workspaceId?: string): void;
   beforeDelete(handler: { quiesce(ids: string[]): Promise<void>; busy?(id: string): boolean }): () => void;
-  export(ids: string[]): (SessionRecord & { log: string })[];
+  export(ids: string[]): (SessionRecord & { log: string; attachments: Record<string, string> })[];
   delete(ids: string[]): Promise<string[]>;
 }
 
 /** The native persistence provider owns writers and their deletion transaction. */
 export interface SessionStore extends SessionCatalog, SessionHistory, SessionLifecycle {
   log(id: string): SessionLogPort;
+  prepareInput(id: string, text: unknown, attachments?: Attachment[]): { text: string; images: ImageInput[]; input: PreparedMessage };
+  readAttachment(id: string, attachmentId: string): Buffer | undefined;
+  attachmentDirectory(id: string): string | undefined;
 }
 
 declare module 'cordis' {

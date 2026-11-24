@@ -18,6 +18,8 @@ inside managed storage; symlinked directories, symlinked files, aliased hardlink
 and files replaced while open are rejected. New directories use mode `0700` and
 new log files use `0600` where supported.
 
+Original uploads are stored under `<conversation-id>/attachments/<sha256>` beside the JSONL file. The original name, MIME type, byte size and content identity are recorded in message or inbox presentation metadata. The store validates and flushes the uploads before acknowledging input; identical bytes share a file only within the same conversation. Historical model inputs remain in the log.
+
 The log starts with a version 1 `session` header. Every later line contains a
 native event, a monotonically increasing `seq`, a stable hexadecimal `id`, a
 `parentId`, an ISO timestamp and a SHA-256 checksum. Native IDs contain 32
@@ -112,11 +114,11 @@ reconstruct delivery state.
 ## Export and permanent deletion
 
 Export uses document version 3 and includes conversation metadata and each full
-native JSONL string in `log`. Selecting a parent includes its descendants. Active
+native JSONL string in `log`, plus an `attachments` map of content identities to base64 originals. Selecting a parent includes its descendants. Active
 conversations must be stopped before exporting, so each export is a coherent
 snapshot.
 
-Deletion first marks the selected tree as unavailable, drains registered participants and closes its writers. Sessions commits catalog removal together with a deletion journal, releases scoped configurations and instances, then removes the log files. Restart finishes any remaining journaled deletions. Deleting a workspace
+Deletion first marks the selected tree as unavailable, drains registered participants and closes its writers. Sessions commits catalog removal together with a deletion journal, releases scoped configurations and instances, then removes the log files and owned attachment directories. Restart finishes any remaining journaled deletions. Deleting a workspace
 cascades through its conversations while retaining the user's project files.
 There is no archive state.
 

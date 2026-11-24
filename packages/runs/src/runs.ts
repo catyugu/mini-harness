@@ -4,7 +4,7 @@ import type { ScopeKey, ScopePort } from '@mini-harness/kernel/scopes';
 import { DomainError } from '@mini-harness/platform/errors';
 import type { MutationPort } from '@mini-harness/kernel/mutation-api';
 import { randomUUID } from 'node:crypto';
-import { imageMimeType, prepareInput } from '@mini-harness/input/prepare';
+import { imageMimeType } from '@mini-harness/input/prepare';
 import { validateModelOptions } from '@mini-harness/llm/options';
 import type { Attachment, InputSource } from '@mini-harness/input/message';
 import type { CapabilityObservation } from '@mini-harness/kernel/observations';
@@ -85,7 +85,6 @@ export class Runs implements RunPort {
     { signal, source, model, attachments, thinkingLevel, revision, acquire }: RunOptions, preparedScope?: Activity) {
     validateModelOptions(model, thinkingLevel);
     const fallback = this.preference.recent();
-    const prepared = prepareInput(prompt, attachments);
     const record = this.registry.get(id);
     if (!record) throw new DomainError('not_found', 'Conversation not found');
     signal?.throwIfAborted();
@@ -95,8 +94,10 @@ export class Runs implements RunPort {
     const info: RunInfo = { id: randomUUID(), sessionId: id, state: 'queued', startedAt: new Date().toISOString(), sequence: 0, inputEntryId: null };
     const events = activity.events = new RunEvents(info);
     let log: ReturnType<SessionStore['log']>;
+    let prepared: ReturnType<SessionStore['prepareInput']>;
     try {
       cancellation.throwIfAborted();
+      prepared = this.registry.prepareInput(id, prompt, attachments);
       log = this.registry.log(id);
       log.append({ type: 'run', run: info });
     } catch (error) { this.work.delete(id); throw error; }
@@ -230,9 +231,11 @@ export class Runs implements RunPort {
       const parts = typeof message.content === 'string' ? [] : message.content;
       const images = [...presentation?.images ?? parts.filter((part) => part.type === 'image')];
       const attachments: Attachment[] = [], missing: string[] = [];
-      for (const { name, mimeType } of presentation?.attachments ?? []) {
+      for (const { name, mimeType, id: attachmentId } of presentation?.attachments ?? []) {
         const image = imageMimeType.test(mimeType) ? images.shift() : undefined;
-        if (image) attachments.push({ name, mimeType, data: image.data });
+        const bytes = attachmentId && this.registry.readAttachment(id, attachmentId);
+        if (bytes) attachments.push({ name, mimeType, data: bytes.toString('base64') });
+        else if (image) attachments.push({ name, mimeType, data: image.data });
         else missing.push(name);
       }
       if (images.length) missing.push('the original images');

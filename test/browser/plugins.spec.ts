@@ -352,7 +352,7 @@ test('unmounting browser plugins releases pages and restores replaced slot contr
     await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toHaveValue('New draft after submission');
     const submitted = page.locator('#messages .message.user');
     await expect(submitted).toContainText('Hello from replacement');
-    await expect(submitted.getByRole('list', { name: 'Attachments' })).toHaveText('keep.txt');
+    await expect(page.locator('#messages .message-row.user .message-attachments').getByRole('button', { name: 'Download keep.txt' })).toContainText('keep.txt');
     await expect(page.getByRole('button', { name: 'New conversation', exact: true })).toBeVisible();
     await expect(page.locator('body')).toHaveAttribute('data-slot-disposed', 'yes');
     await page.evaluate(() => window.dispatchEvent(new Event('slot-test')));

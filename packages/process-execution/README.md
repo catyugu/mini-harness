@@ -16,7 +16,7 @@ Chooses the execution environment for a request and captures process results. Sh
 
 ## Dependencies
 
-Uses [Execution](../execution/README.md) for requests and [Sandbox](../sandbox/README.md) for isolated execution preparation.
+Uses [Execution](../execution/README.md) for requests, [Sessions](../sessions/README.md) for the current conversation's upload directory, and [Sandbox](../sandbox/README.md) for isolated execution preparation.
 
 ## Lifecycle
 

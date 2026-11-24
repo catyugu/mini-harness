@@ -1,5 +1,6 @@
 import { scopedElements } from '@mini-harness/ui-primitives/primitives';
 import { icon } from '@mini-harness/ui-primitives/icons';
+import { fileCard, decodedSize, imageMime } from './attachment-card.js';
 import type { ComposerCommand, ComposerModel, Suggestion } from '../composer-api.js';
 
 export function createComposer(root: HTMLElement, model: ComposerModel, report: (error: Error) => void, signal: AbortSignal) {
@@ -18,9 +19,14 @@ export function createComposer(root: HTMLElement, model: ComposerModel, report: 
     })) return;
     files = current.attachments;
     attachmentList.replaceChildren(...files.map((file, index) => {
-      const card = document.createElement('div'); card.className = 'attachment';
-      if (file.mimeType.startsWith('image/')) { const image = document.createElement('img'); image.src = 'data:' + file.mimeType + ';base64,' + file.data; image.alt = file.name; card.append(image); }
-      const name = document.createElement('span'); name.textContent = file.name; card.append(name);
+      const card = fileCard({ ...file, size: decodedSize(file.data) });
+      card.classList.add('attachment');
+      if (imageMime.test(file.mimeType)) {
+        const image = document.createElement('img');
+        image.src = 'data:' + file.mimeType + ';base64,' + file.data;
+        image.alt = file.name;
+        card.firstElementChild?.replaceWith(image);
+      }
       const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'icon-button';
       remove.setAttribute('aria-label', 'Remove ' + file.name); remove.append(icon('close'));
       remove.onclick = () => model.removeAttachment(index); card.append(remove); return card;
@@ -39,7 +45,6 @@ export function createComposer(root: HTMLElement, model: ComposerModel, report: 
     if (images.length) { event.preventDefault(); void addFiles(images); }
   });
   const input = document.createElement('input'); input.type = 'file'; input.multiple = true; input.hidden = true;
-  input.accept = 'image/png,image/jpeg,image/webp,image/gif,text/*,.json,.csv,.md,.ts,.js,.py,.cpp,.h,.xml,.yaml,.yml,.log,.sql';
   input.onchange = () => { void addFiles([...(input.files ?? [])]); input.value = ''; };
   form.append(input);
   type Token = { start: number; end: number; query: string; kind: string };
@@ -80,7 +85,8 @@ export function createComposer(root: HTMLElement, model: ComposerModel, report: 
   function useCommand(command: ComposerCommand, match: Token, complete = false) {
     if (command.run && !complete) {
       replace('', match);
-      void Promise.resolve().then(command.run).catch(report);
+      try { void Promise.resolve(command.run()).catch(report); }
+      catch (error) { report(error instanceof Error ? error : new Error(String(error))); }
     } else {
       const space = !complete && !/^\s/.test(prompt.value.slice(match.end)) ? ' ' : '';
       replace('/' + command.name + space, match);
@@ -223,6 +229,7 @@ export function createComposer(root: HTMLElement, model: ComposerModel, report: 
   return {
     render,
     resetSuggestions: hide,
+    openFiles: () => input.click(),
     attachmentButton() {
       const button = document.createElement('button'); button.type = 'button'; button.className = 'icon-button';
       button.setAttribute('aria-label', 'Attach files'); button.append(icon('attach')); button.onclick = () => input.click();

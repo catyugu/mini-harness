@@ -438,6 +438,9 @@ importers:
       '@mini-harness/sandbox':
         specifier: workspace:*
         version: link:../sandbox
+      '@mini-harness/sessions':
+        specifier: workspace:*
+        version: link:../sessions
 
   packages/runs:
     dependencies:

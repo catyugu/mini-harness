@@ -2,7 +2,13 @@
 export interface Attachment { name: string; mimeType: string; data: string }
 export interface ImageInput { type: 'image'; mimeType: string; data: string }
 
-export interface InputAttachment { name: string; mimeType: string }
+export interface InputAttachment {
+  name: string;
+  mimeType: string;
+  /** Content identity and original byte count for stored uploads. */
+  id?: string;
+  size?: number;
+}
 export interface PreparedMessage {
   userText: string;
   attachments: InputAttachment[];

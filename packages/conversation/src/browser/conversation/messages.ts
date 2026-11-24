@@ -7,6 +7,8 @@ import type { ToolView, MessageAction, MessageActionContext } from '../history-a
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { renderMarkdown } from '@mini-harness/ui-primitives/markdown';
 import { button } from '@mini-harness/ui-primitives/primitives';
+import { data } from '@mini-harness/ui-runtime/http';
+import { fileCard, imageMime } from './attachment-card.js';
 
 export function createMessageView(dialogs: Context['miniDialogs'], signal: AbortSignal, messages: HTMLElement,
   extensions: { render(tool: ToolView, signal: AbortSignal, action?: boolean): HTMLElement | undefined; messageActions(): MessageAction[]; report(error: unknown): void },
@@ -19,7 +21,6 @@ const actionOwners = new WeakMap<HTMLButtonElement, MessageAction>();
 const saved = new Map<string, { node: HTMLElement; source: ViewMessage }>();
 let previewAnswer: { node: HTMLElement; bubble: HTMLElement } | undefined;
 const liveTools = new Map<string, HTMLDetailsElement>();
-const imageMime = /^image\/(?:png|jpeg|gif|webp)$/;
 
 const preview = document.createElement('figure');
 preview.className = 'message-image-preview';
@@ -258,42 +259,53 @@ function renderEntry(message: ViewMessage, node?: HTMLElement) {
   const attachments = message.attachments ?? [];
   if (text || images.length || attachments.length) {
     const bubble = addMessage(message.role, text, message.timestamp, message, entry);
-    const imageFiles = attachments.filter(({ mimeType }) => imageMime.test(mimeType));
-    const files = new Set(attachments);
-    if (images.length) {
-      const thumbnails = document.createElement('div');
-      thumbnails.className = 'message-images';
-      for (const [index, block] of images.entries()) {
-        const attachment = imageFiles[index];
-        const image = document.createElement('img');
-        image.alt = attachment?.name ?? 'Attached image ' + (index + 1);
-        image.loading = 'lazy';
-        image.src = 'data:' + block.mimeType + ';base64,' + block.data;
-        const trigger = document.createElement('button');
-        trigger.type = 'button';
-        trigger.className = 'message-image-trigger';
-        trigger.setAttribute('aria-label', 'Preview ' + image.alt);
-        trigger.setAttribute('aria-haspopup', 'dialog');
-        trigger.title = 'Preview ' + image.alt;
-        trigger.append(image);
-        trigger.onclick = () => openImage(image);
-        thumbnails.append(trigger);
-        if (attachment) files.delete(attachment);
-      }
-      if (text || files.size) thumbnails.classList.add('with-content');
-      bubble.prepend(thumbnails);
+    const list = document.createElement('div');
+    list.className = 'message-attachments';
+    list.setAttribute('aria-label', 'Attachments');
+    const sessionId = current().sessionId;
+    const remaining = [...images];
+
+    function thumbnail(block: typeof images[number], name: string) {
+      const image = document.createElement('img');
+      image.alt = name;
+      image.loading = 'lazy';
+      image.src = 'data:' + block.mimeType + ';base64,' + block.data;
+      const trigger = document.createElement('button');
+      trigger.type = 'button';
+      trigger.className = 'message-image-trigger';
+      trigger.setAttribute('aria-label', 'Preview ' + name);
+      trigger.setAttribute('aria-haspopup', 'dialog');
+      trigger.title = 'Preview ' + name;
+      trigger.append(image);
+      trigger.onclick = () => openImage(image);
+      return trigger;
     }
-    if (files.size) {
-      const list = document.createElement('ul');
-      list.className = 'message-attachments';
-      list.setAttribute('aria-label', 'Attachments');
-      for (const { name } of files) {
-        const item = document.createElement('li');
-        item.textContent = name;
-        list.append(item);
+
+    for (const file of attachments) {
+      const image = imageMime.test(file.mimeType) ? remaining.shift() : undefined;
+      if (image) { list.append(thumbnail(image, file.name)); continue; }
+      const attachmentId = file.id;
+      const card = fileCard(file, Boolean(attachmentId && sessionId));
+      if (card instanceof HTMLButtonElement && attachmentId && sessionId) {
+        card.setAttribute('aria-label', 'Download ' + file.name);
+        card.onclick = async () => {
+          card.disabled = true;
+          try {
+            const upload = await data<{ data: string }>('/sessions/' + sessionId + '/attachments/' + attachmentId, { signal });
+            const bytes = Uint8Array.from(atob(upload.data), (char) => char.charCodeAt(0));
+            const url = URL.createObjectURL(new Blob([bytes], { type: 'application/octet-stream' }));
+            const link = document.createElement('a');
+            link.href = url; link.download = file.name; link.click();
+            setTimeout(() => URL.revokeObjectURL(url), 2000);
+          } catch (error) { if (!signal.aborted) extensions.report(error); }
+          finally { card.disabled = false; }
+        };
       }
-      bubble.append(list);
+      list.append(card);
     }
+    for (const [index, image] of remaining.entries()) list.append(thumbnail(image, 'Attached image ' + (index + 1)));
+    if (list.childElementCount) bubble.before(list);
+
   }
   if (message.error) addMessage('error', message.error, undefined, undefined, entry);
   return entry;

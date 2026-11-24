@@ -20,7 +20,7 @@ Uses [Execution](../execution/README.md) and platform isolation discovery.
 
 ## Lifecycle
 
-`core:sandbox` mounts at application scope. Isolation is prepared for the individual process request.
+`core:sandbox` mounts at application scope. Isolation is prepared for the individual process request. Only the owning conversation's upload directory is exposed, read-only at `/attachments`.
 
 ## Testing
 
