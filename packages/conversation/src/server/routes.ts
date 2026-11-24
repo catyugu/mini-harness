@@ -98,6 +98,8 @@ export function registerSessionRoutes(ctx: Context, read: (id: string) => Conver
     ctx.harnessRegistry.assertAvailable(id);
     return ctx.harnessRegistry.inspectLog(id, (log) => log.queue(), true) ?? [];
   });
+  add('GET', '/api/sessions/:id/records', ({ params }) =>
+    ctx.harnessRegistry.inspectLog(session(params.id), (log) => log.projection().records, true) ?? []);
   add('GET', '/api/sessions/:id/events', ({ params, url, response }) => {
     const id = session(params.id);
     const runId = url.searchParams.get('run');
@@ -107,6 +109,10 @@ export function registerSessionRoutes(ctx: Context, read: (id: string) => Conver
       if (event.type === 'snapshot') {
         stream.send({ ...event, messages: projectHistory(ctx, id, event.messages),
           tools: event.tools?.map((tool) => projectToolEvent(ctx, id, tool)) });
+      } else if (event.type === 'user' && event.revised) {
+        const { messages, records, leafId, model, thinkingLevel, partial, tools, run } = read(id);
+        stream.send({ type: 'snapshot', messages, records, leafId, model, thinkingLevel, partial, tools, run,
+          runId: event.runId, runSessionId: id, sequence: run?.sequence ?? event.sequence });
       } else stream.send(event.type === 'tool' ? projectToolEvent(ctx, id, event) : event);
       if ((event.type === 'run' || event.type === 'snapshot') && !isRunning(event.run)) response.end();
     }, () => response.end());

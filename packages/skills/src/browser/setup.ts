@@ -1,7 +1,7 @@
 import type {} from '@mini-harness/conversation/browser/navigation-api';
 import type {} from '@mini-harness/ui-runtime/projection-api';
 import { slotExtensions } from '@mini-harness/ui-slots/browser/api';
-import { conversationExtensions } from '@mini-harness/conversation/browser/composer-api';
+import { conversationExtensions } from '@mini-harness/conversation/browser/extensions';
 import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend-api';
 import { workspaceRoute } from '@mini-harness/workspaces/browser/route';
 import { iconButton } from '@mini-harness/ui-primitives/primitives';

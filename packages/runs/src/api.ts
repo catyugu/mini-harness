@@ -18,9 +18,10 @@ export interface RunPort {
   }): Promise<string>;
   startRun(id: string, prompt: string, options?: {
     model?: ModelChoice; attachments?: Attachment[]; thinkingLevel?: ThinkingLevel | null;
-  }): RunInfo;
+  }): Promise<RunInfo & { accepted: boolean }>;
   reviseAndStart(id: string, input: { sourceEntryId: string; expectedLeafId: string | null; message: string; removedImages?: number[];
-    attachments?: Attachment[]; model?: ModelChoice; thinkingLevel?: ThinkingLevel | null }): Promise<RunInfo>;
+    attachments?: Attachment[]; model?: ModelChoice; thinkingLevel?: ThinkingLevel | null }): Promise<RunInfo & { accepted: boolean }>;
+  retryInput(id: string, runId: string): { message: string; attachments: Attachment[]; missing: string[]; model?: ModelChoice; thinkingLevel?: ThinkingLevel } | undefined;
   info(id: string): RunInfo | undefined;
   watch(id: string, runId: string, after: number, emit: (event: RunEvent) => void, end?: () => void): () => void;
   queueInput(id: string, input: { message: string; mode: 'steer' | 'followUp'; model?: ModelChoice;
@@ -32,4 +33,10 @@ export interface RunPort {
 
 declare module 'cordis' {
   interface Context { harnessRuns: RunPort }
+}
+
+declare module '@mini-harness/kernel/observations' {
+  interface CapabilityObservations {
+    'input-accepted': { type: 'input-accepted'; sessionId: string; parentId?: string | null; source: InputSource; runSource: InputSource; model: ModelChoice };
+  }
 }

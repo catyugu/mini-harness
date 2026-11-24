@@ -1,7 +1,7 @@
 import { DomainError } from '@mini-harness/platform/errors';
 import type { Paths } from '@mini-harness/platform/runtime-paths';
 import type { Settings } from '../shared/settings.js';
-import { localPluginIdPattern, scopeSettingsPattern, validatePluginSettings, validateProviderChoices } from '@mini-harness/plugin-api/selection';
+import { localPluginIdPattern, isScopeKey, validatePluginSettings, validateProviderChoices } from '@mini-harness/plugin-api/selection';
 import { toolNamePattern } from '@mini-harness/llm/vocabulary';
 import { readJson } from '@mini-harness/platform/json';
 
@@ -34,7 +34,7 @@ export function validateSettings(input: unknown): asserts input is Settings {
   validateProviderChoices(section(providers, 'providers'));
   validateProviderChoices(section(browserProviders, 'browserProviders'));
   for (const [key, scope] of Object.entries(section(scopes, 'scopes'))) {
-    if (!scopeSettingsPattern.test(key) || !isObject(scope) ||
+    if (!isScopeKey(key) || !isObject(scope) ||
         Object.keys(scope).some((field) => !['plugins', 'pluginConfig', 'disabledTools', 'providers'].includes(field)))
       throw new DomainError('invalid_input', 'Invalid plugin scope: ' + key);
     const { disabledTools } = scope;

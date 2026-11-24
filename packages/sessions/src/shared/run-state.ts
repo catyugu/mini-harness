@@ -5,6 +5,8 @@ export interface RunInfo {
   startedAt: string;
   finishedAt?: string;
   error?: string;
+  /** User message responsible for the current turn, null while input is being accepted. */
+  inputEntryId?: string | null;
   sequence: number;
   changedFiles?: string[];
 }

@@ -1,4 +1,6 @@
 import type {} from '@mini-harness/settings/browser/api';
+import type { ScopeKey } from '@mini-harness/kernel/scopes';
+import type { Context } from 'cordis';
 import type {} from '@mini-harness/ui-runtime/graph-api';
 import type {} from '@mini-harness/models/browser/api';
 import type {} from '@mini-harness/ui-runtime/projection-api';
@@ -32,7 +34,7 @@ const setup: FrontendSetup = async (ctx, api) => {
       return error ? { ...plugin, state: 'failed' as const, error } : plugin;
     }),
     settings: settings.get()
-  }), refresh, pages, () => models.get());
+  }), refresh, pages, () => models.get(), ctx.miniSettingsRegistry);
   plugins.subscribe(catalog.refresh, api.signal);
   settings.subscribe(catalog.refresh, api.signal);
   browserFailures.subscribe(catalog.refresh, api.signal);
@@ -117,7 +119,7 @@ function installer(api: FrontendApi, installed: () => Promise<void>) {
   return modal;
 }
 
-function pluginCatalog(api: FrontendApi, snapshot: () => { plugins: PluginMetadata[]; settings: Settings }, refresh: () => Promise<void>, pages: { open(id?: string): void; register(id: string, node: HTMLElement): () => void }, modelCatalog: () => ModelCatalog) {
+function pluginCatalog(api: FrontendApi, snapshot: () => { plugins: PluginMetadata[]; settings: Settings }, refresh: () => Promise<void>, pages: { open(id?: string): void; register(id: string, node: HTMLElement): () => void }, modelCatalog: () => ModelCatalog, registry: Context['miniSettingsRegistry']) {
   const entry = fromMarkup<HTMLButtonElement>('<button type="button" class="nav-action" aria-label="Browse plugins" aria-controls="pluginCatalog"><span class="nav-label">Plugins</span></button>');
   entry.prepend(icon('plugin'));
   const page = fromMarkup(`<section id="pluginCatalog" class="catalog-page" tabindex="-1" aria-label="Plugin catalog">
@@ -142,7 +144,8 @@ function pluginCatalog(api: FrontendApi, snapshot: () => { plugins: PluginMetada
   api.contribute(slotExtensions.register, 'sidebar.actions', entry, -10);
   api.onDispose(pages.register('plugins', page));
 
-  let editing: string | undefined;
+  let detailLifetime: AbortController | undefined;
+  api.onDispose(() => detailLifetime?.abort());
   let busy = false;
   let savingSwitch = false;
   async function mutate(operation: () => Promise<unknown>, failed: (error: Error) => void) {
@@ -160,7 +163,8 @@ function pluginCatalog(api: FrontendApi, snapshot: () => { plugins: PluginMetada
   function detail(plugin: PluginMetadata) {
     status.textContent = '';
     header.hidden = true;
-    editing = plugin.id;
+    detailLifetime?.abort();
+    detailLifetime = new AbortController();
     const section = fromMarkup(`<section class="catalog-detail settings-scroll">
       <header class="catalog-detail-header"><div class="plugin-symbol"></div><h1></h1><p class="hint"></p></header>
     </section>`);
@@ -191,7 +195,9 @@ function pluginCatalog(api: FrontendApi, snapshot: () => { plugins: PluginMetada
     const services = new Map<string, HTMLInputElement>();
     const configFields = document.createElement('div');
     fields.append(scopedControls, configFields);
-    const currentScope = () => snapshot().settings.scopes[scopePicker.value];
+    const locationsByKey = new Map<string, ScopeKey>();
+    const currentKey = () => locationsByKey.get(scopePicker.value);
+    const currentScope = () => { const key = currentKey(); return key && snapshot().settings.scopes[key] || undefined; };
     const values = () => ({ ...snapshot().settings.pluginConfig[plugin.id], ...currentScope()?.pluginConfig?.[plugin.id] });
     function renderFields() {
       configFields.replaceChildren();
@@ -237,13 +243,16 @@ function pluginCatalog(api: FrontendApi, snapshot: () => { plugins: PluginMetada
       save.disabled = true;
       scopePicker.add(new Option('Choose a scope', ''));
       scopedControls.querySelectorAll('input').forEach((control) => { control.disabled = true; });
-      const locations = plugin.scope === 'workspace'
-        ? api.request<WorkspaceRecord[]>('/workspaces').then((items) => items.map(({ id, name }) => ({ key: 'workspace:' + id, name })))
-        : api.request<Conversation[]>('/sessions').then((items) => items.map(({ id, title }) => ({ key: 'session:' + id, name: title })));
+      const locations: Promise<{ key: ScopeKey; name: string }[]> = plugin.scope === 'workspace'
+        ? api.request<WorkspaceRecord[]>('/workspaces').then((items) => items.map(({ id, name }) => ({ key: `workspace:${id}`, name })))
+        : api.request<Conversation[]>('/sessions').then((items) => items.map(({ id, title }) => ({ key: `session:${id}`, name: title })));
       void locations.then((items) => {
-        for (const { key, name } of items) scopePicker.add(new Option(name, key));
+        for (const { key, name } of items) { locationsByKey.set(key, key); scopePicker.add(new Option(name, key)); }
         for (const { scope } of plugin.instances ?? [])
-          if (!items.some(({ key }) => key === scope)) scopePicker.add(new Option(scope, scope));
+          if (scope !== 'application' && !locationsByKey.has(scope)) {
+            locationsByKey.set(scope, scope);
+            scopePicker.add(new Option(scope, scope));
+          }
         scopePicker.value = plugin.instances?.find(({ error }) => error)?.scope ?? items[0]?.key ?? plugin.instances?.[0]?.scope ?? '';
         const sync = () => {
           save.disabled = !scopePicker.value;
@@ -261,8 +270,9 @@ function pluginCatalog(api: FrontendApi, snapshot: () => { plugins: PluginMetada
       try {
         const config = readPluginValues({ [plugin.id]: {} }, configFields)[plugin.id];
         let patch: SettingsPatch = { pluginConfig: { [plugin.id]: config } };
-        const key = scopePicker.value;
+        const key = currentKey();
         if (scoped) {
+          if (!key) return;
           const current = currentScope() ?? {};
           const providers = { ...current.providers };
           for (const [service, box] of services) {
@@ -287,21 +297,7 @@ function pluginCatalog(api: FrontendApi, snapshot: () => { plugins: PluginMetada
       finally { save.disabled = false; }
     };
     if (schema || scoped) section.append(form);
-    const grants = snapshot().settings.readOnlyTools[plugin.id] ?? [];
-    const tools = new Set([...(plugin.readOnlyTools ?? []), ...grants]);
-    if (tools.size) {
-      const permissions = fromMarkup('<section class="ui-section"><h3>Read-only conversation tools</h3><p class="hint">Only grant access to tools you trust not to change files or other state. Scope restrictions still apply.</p><p class="hint" role="status"></p></section>');
-      const result = required(permissions.querySelector<HTMLElement>('[role="status"]'));
-      for (const name of tools) {
-        const control = toggle('Allow ' + name + ' in read-only conversations', grants.includes(name));
-        control.disabled = !grants.includes(name) && !plugin.readOnlyTools?.includes(name);
-        saveToggle(control, (allowed) => mutate(() =>
-          api.request('/plugins/' + encodeURIComponent(plugin.id) + '/read-only', payload('PATCH', { tool: name, allowed })),
-          (error) => { result.textContent = error.message; }));
-        permissions.insertBefore(field(name, control), result);
-      }
-      section.append(permissions);
-    }
+    registry.mountPlugin(plugin.id, section, detailLifetime.signal);
     content.replaceChildren(section);
     back.focus();
   }
@@ -312,7 +308,8 @@ function pluginCatalog(api: FrontendApi, snapshot: () => { plugins: PluginMetada
     const focused = document.activeElement as HTMLElement;
     const focusId = focused?.dataset.pluginRow ?? focused?.dataset.pluginToggle;
     const isToggle = focused?.dataset.pluginToggle !== undefined;
-    editing = undefined;
+    detailLifetime?.abort();
+    detailLifetime = undefined;
     header.hidden = false;
     const { settings, plugins } = snapshot();
     const groups = [
@@ -340,7 +337,7 @@ function pluginCatalog(api: FrontendApi, snapshot: () => { plugins: PluginMetada
         required(row.querySelector('small')).textContent = state + ' · ' + (plugin.error ?? plugin.description);
         const controls = required(row.querySelector('.catalog-controls'));
         const scoped = plugin.scope && plugin.scope !== 'application';
-        const checked = scoped ? Object.values(settings.scopes).some((scope) => scope.plugins?.[plugin.id]) :
+        const checked = scoped ? Object.values(settings.scopes).some((scope) => scope?.plugins?.[plugin.id]) :
           Boolean(settings.plugins[plugin.id]);
         const control = toggle(plugin.title, checked);
         control.dataset.pluginToggle = plugin.id;
@@ -396,7 +393,7 @@ function pluginCatalog(api: FrontendApi, snapshot: () => { plugins: PluginMetada
   }
   function open() { status.textContent = ''; render(); pages.open('plugins'); }
   entry.onclick = open;
-  return { open, refresh: () => { if (!editing && !savingSwitch) render(); } };
+  return { open, refresh: () => { if (!detailLifetime && !savingSwitch) render(); } };
 }
 
 

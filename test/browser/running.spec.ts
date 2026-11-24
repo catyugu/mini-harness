@@ -137,7 +137,7 @@ test('running messages can queue follow-ups and approve shell commands from the 
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.locator('.approval-card pre')).toHaveText('echo approved');
     await expect(page.locator('.approval-card strong')).toHaveText('Shell approval');
-    await expect(page.locator('.approval-heading small')).toHaveText(realpathSync.native(workspace));
+    await expect(page.locator('.approval-heading small')).toHaveText('shell · ' + realpathSync.native(workspace));
     const viewport = page.viewportSize();
     if (!viewport) throw new Error('Missing browser viewport');
     await page.setViewportSize({ width: 390, height: 844 });

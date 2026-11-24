@@ -153,6 +153,11 @@ test('the global recent model survives history navigation and page reload', asyn
     await expect(modelButton(page)).toHaveText('Mock Model');
     await chooseModel(page, 'second-model');
     await page.getByRole('button', { name: /New conversation/ }).click();
+    await expect(modelButton(page)).toHaveText('Mock Model');
+    await page.getByRole('button', { name: 'Old model conversation', exact: true }).click();
+    await expect(modelButton(page)).toHaveText('Second Model');
+    await page.getByRole('button', { name: /New conversation/ }).click();
+    await chooseModel(page, 'second-model');
     const thinking = page.locator('#thinkingLevel');
     await expect(thinking).toHaveAttribute('aria-label', 'Thinking level: Default');
     await thinking.click();

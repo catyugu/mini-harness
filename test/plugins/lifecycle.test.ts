@@ -1,3 +1,4 @@
+import { request as httpRequest } from 'node:http';
 import { tmpdir } from 'node:os';
 import { fixture, waitUntil } from '../support/api-fixture.js';
 import { pluginSdkUrl, writePlugin } from '../support/plugin-fixture.js';
@@ -287,26 +288,66 @@ test('an optional plugin that fails at startup reports its state without blockin
   assert.equal(expectPresent(restarted.plugins.metadata().find(({ id }) => id === status.id), 'disabled plugin metadata').state, 'disabled');
 });
 
-test('unloading a route signals an active request and waits for its cleanup', async (t) => {
-  const { paths, root, request } = await fixture(t);
-  const entered = join(root, 'entered');
-  const drained = join(root, 'drained');
-  writePlugin(paths.plugins, 'drain', { inject: ['harnessRoutes'] }, `
-    import { writeFileSync } from 'node:fs';
-    export default (_ctx, api) => api.registerRoute('GET', '/wait', async ({ signal }) => {
-      writeFileSync(${JSON.stringify(entered)}, 'ready');
+test('unloading cancels and drains HTTP, scoped requests and upgrades before disposing resources', async (t) => {
+  const { app, base, headers, paths, root, request } = await fixture(t);
+  const trace = join(root, 'calls');
+  const lifecycle = `
+    import { appendFileSync } from 'node:fs';
+    const mark = (value) => appendFileSync(${JSON.stringify(trace)}, value + '\\n');
+    const wait = async (name, signal) => {
+      mark(name + ':entered');
       await new Promise((done) => signal.addEventListener('abort', done, { once: true }));
       await new Promise((done) => setImmediate(done));
-      writeFileSync(${JSON.stringify(drained)}, 'done');
-    });`);
-  const toggle = (active: boolean) => request('/settings', 'PATCH', { plugins: { drain: active } });
+      mark(name + ':drained');
+    };
+  `;
+  writePlugin(paths.plugins, 'drain', { inject: ['harnessSettingsStore'] }, lifecycle + `
+    export default (ctx, api) => {
+      ctx.effect(() => () => mark('app:disposed'));
+      api.registerRoute('GET', '/wait', ({ signal }) => wait('http', signal));
+      api.registerRoute('POST', '/disable', async () => {
+        try { await ctx.harnessSettingsStore.update({ plugins: { drain: false } }); }
+        catch (error) { return { error: error.message }; }
+      });
+      api.registerUpgrade('/socket', async (_request, _socket, _head, signal) => wait('ws', signal));
+    };`);
+  writePlugin(paths.plugins, 'scoped-drain', { scope: 'session' }, lifecycle + `
+    export default (ctx, api) => {
+      ctx.effect(() => () => mark('scope:disposed'));
+      api.registerScopeRequest('wait', (_input, signal) => wait('scope', signal));
+    };`);
+  const session = app.runtime.plugins.ctx.harnessRegistry.create();
+  const scope = `session:${session.id}`;
+  const toggle = (active: boolean) => request('/settings', 'PATCH', {
+    plugins: { drain: active }, scopes: { [scope]: { plugins: { 'scoped-drain': active } } }
+  });
   assert.equal((await toggle(true)).status, 200);
+  const attempted = await request('/extensions/drain/disable', 'POST');
+  assert.match(attempted.body.error, /Structural settings cannot be changed during a plugin request/);
+  assert.equal(app.runtime.settings.plugins.drain, true);
   const current = request('/extensions/drain/wait');
-  await waitUntil(() => existsSync(entered), Boolean);
-  assert.equal((await toggle(false)).status, 200);
-  assert.equal(readFileSync(drained, 'utf8'), 'done');
+  const currentScope = request('/plugins/scoped-drain/scopes/' + scope + '/wait', 'POST', {});
+  const closed = new Promise<void>((resolve, reject) => {
+    const request = httpRequest(base + '/api/extensions/drain/socket', {
+      headers: { ...headers, Connection: 'Upgrade', Upgrade: 'websocket' }
+    }, (response) => { response.resume(); reject(new Error('Unexpected upgrade response ' + response.statusCode)); });
+    request.once('error', (error) => 'code' in error && error.code === 'ECONNRESET' ? resolve() : reject(error));
+    request.end();
+  });
+  try {
+    await waitUntil(() => existsSync(trace) ? readFileSync(trace, 'utf8') : '', (log) =>
+      ['http:entered', 'ws:entered', 'scope:entered'].every((entry) => log.includes(entry)));
+  } finally { assert.equal((await toggle(false)).status, 200); }
+  const log = readFileSync(trace, 'utf8').split('\n');
+  for (const [name, disposal] of [['http', 'app'], ['ws', 'app'], ['scope', 'scope']]) {
+    const drained = log.indexOf(name + ':drained');
+    assert.ok(drained > log.indexOf(name + ':entered') && drained < log.indexOf(disposal + ':disposed'), log.join(', '));
+  }
+  await closed;
   assert.equal((await current).status, 400);
+  assert.equal((await currentScope).status, 503);
   assert.equal((await request('/extensions/drain/wait')).status, 404);
+  assert.equal((await request('/plugins/scoped-drain/scopes/' + scope + '/wait', 'POST', {})).status, 404);
 });
 
 test('live scoped providers isolate siblings, restore inheritance and roll back failed setup', async (t) => {

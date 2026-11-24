@@ -1,5 +1,5 @@
 import { isThinkingLevel, type ToolSchema } from '@mini-harness/llm/vocabulary';
-import { pluginIdPattern, scopeSettingsPattern } from '@mini-harness/plugin-api/selection';
+import { pluginIdPattern, isScopeKey } from '@mini-harness/plugin-api/selection';
 import { DomainError } from '@mini-harness/platform/errors';
 import { isRunning, type RunInfo } from './shared/run-state.js';
 import { createHash, randomBytes } from 'node:crypto';
@@ -10,6 +10,9 @@ import type { InboxItem, SessionEntry, SessionEvent, SessionLogPort, SessionProj
 import type { QueueEntry } from './shared/queue.js';
 import { projectLog, projectMessage } from './projection.js';
 import { applyContentDelta } from './content-delta.js';
+
+type StoredEntry = SessionEntry | (Pick<SessionEntry, 'version' | 'seq' | 'id' | 'parentId' | 'timestamp'> &
+  { type: 'custom'; namespace: unknown; data: unknown });
 
 export interface SessionHeader { type: 'session'; version: 1; id: string; createdAt: string; importedFrom?: string }
 const entryId = /^[a-f0-9]{8,64}$/i;
@@ -73,12 +76,12 @@ export class SessionLog implements SessionLogPort {
     this.header = header;
     const recovery = { leaf: null as string | null, checker: new RequestMessages() };
     for (const line of lines) {
-      let record: SessionEntry & { checksum: string };
+      let record: StoredEntry & { checksum: string };
       try { record = JSON.parse(line); }
       catch { throw new Error('Corrupt session log record'); }
       const { checksum, ...entry } = record;
       if (checksum !== digest(entry)) throw new Error('Corrupt session log checksum');
-      const normalized = storedEntry(entry as SessionEntry);
+      const normalized = storedEntry(entry);
       this.validateEntry(normalized, recovery);
       this.remember(normalized);
     }
@@ -343,8 +346,8 @@ function validateEvent(event: SessionEvent) {
         throw new Error('Invalid plugin record');
       return;
     }
-    case 'custom':
-      if (typeof event.namespace !== 'string' || !event.namespace.length) throw new Error('Invalid session namespace');
+    case 'diagnostic':
+      if (event.code !== 'invalid-tool-calls' && event.code !== 'historical-record') throw new Error('Invalid session diagnostic');
       return;
     case 'compaction':
       if (typeof event.summary !== 'string' || (event.keepFromId !== null && !entryId.test(event.keepFromId))) throw new Error('Invalid session compaction');
@@ -367,7 +370,8 @@ function validateEvent(event: SessionEvent) {
     case 'run':
       if (!event.run || typeof event.run.id !== 'string' || typeof event.run.sessionId !== 'string' ||
           !['queued', 'running', 'completed', 'failed', 'cancelled', 'interrupted'].includes(event.run.state) ||
-          !Number.isFinite(Date.parse(event.run.startedAt)) || !Number.isInteger(event.run.sequence) || event.run.sequence < 0)
+          !Number.isFinite(Date.parse(event.run.startedAt)) || !Number.isInteger(event.run.sequence) || event.run.sequence < 0 ||
+          (event.run.inputEntryId != null && !entryId.test(event.run.inputEntryId)))
         throw new Error('Invalid session run');
       return;
     case 'branch': return;
@@ -389,22 +393,27 @@ export function encodeLog(header: SessionHeader, entries: SessionEntry[]) {
 function ownsRecord(pluginId: string, instanceId: string) {
   if (instanceId === pluginId) return true;
   const slash = instanceId.indexOf('/');
-  return slash > 0 && scopeSettingsPattern.test(instanceId.slice(0, slash)) && instanceId.slice(slash + 1) === pluginId;
+  return slash > 0 && isScopeKey(instanceId.slice(0, slash)) && instanceId.slice(slash + 1) === pluginId;
 }
 
 /** Normalize historical record envelopes only after validating the original checksum. */
-function storedEntry(entry: SessionEntry): SessionEntry {
-  if (entry.type !== 'custom' || typeof entry.namespace !== 'string') return entry;
-  const shown = entry.namespace.startsWith('display:');
-  const instanceId = shown ? entry.namespace.slice('display:'.length) : entry.namespace;
+function storedEntry(entry: StoredEntry): SessionEntry {
+  if (entry.type !== 'custom') return entry;
+  const { type: _type, namespace, data, ...identity } = entry;
+  if (typeof namespace !== 'string' || !namespace) throw new Error('Invalid historical record namespace');
+  if (namespace === 'agent.invalid-tool-calls') return { ...identity, type: 'diagnostic', code: 'invalid-tool-calls', data };
+  const shown = namespace.startsWith('display:');
+  const instanceId = shown ? namespace.slice('display:'.length) : namespace;
   const pluginId = instanceId.slice(instanceId.lastIndexOf('/') + 1);
-  if (!pluginIdPattern.test(pluginId) || !ownsRecord(pluginId, instanceId)) return entry;
-  const { type: _type, namespace: _namespace, data, ...identity } = entry;
-  if (shown) {
-    const envelope = data as { data: unknown; display: { title: string; content?: unknown } };
-    return { ...identity, type: 'plugin-record', owner: { pluginId, instanceId }, data: envelope?.data, display: envelope?.display };
+  if (pluginIdPattern.test(pluginId) && ownsRecord(pluginId, instanceId)) {
+    const owner = { pluginId, instanceId };
+    if (!shown) return { ...identity, type: 'plugin-record', owner, data };
+    const envelope = data as { data?: unknown; display?: { title?: unknown; content?: unknown } } | undefined;
+    const { display } = envelope ?? {};
+    if (typeof display?.title === 'string' && display.title.trim() && display.title.length <= 140)
+      return { ...identity, type: 'plugin-record', owner, data: envelope?.data, display: { title: display.title, content: display.content } };
   }
-  return { ...identity, type: 'plugin-record', owner: { pluginId, instanceId }, data };
+  return { ...identity, type: 'diagnostic', code: 'historical-record', data: { label: namespace, payload: data } };
 }
 
 function operational(entry: SessionEvent) { return entry.type === 'run' || entry.type === 'model-request' || entry.type === 'tool-schema' || entry.type === 'tool-execution' || entry.type.startsWith('inbox-'); }

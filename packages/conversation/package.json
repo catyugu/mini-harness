@@ -5,6 +5,9 @@
   "type": "module",
   "exports": {
     "./browser/composer-api": "./src/browser/composer-api.ts",
+    "./browser/conversation-api": "./src/browser/conversation-api.ts",
+    "./browser/history-api": "./src/browser/history-api.ts",
+    "./browser/extensions": "./src/browser/extensions.ts",
     "./browser/navigation-api": "./src/browser/navigation-api.ts",
     "./display-extensions": "./src/server/display-extensions.ts",
     "./manifests/conversation": "./src/manifests/conversation.ts",
@@ -16,6 +19,9 @@
   "miniHarness": {
     "api": [
       "./browser/composer-api",
+      "./browser/conversation-api",
+      "./browser/history-api",
+      "./browser/extensions",
       "./browser/navigation-api",
       "./display-extensions",
       "./view"

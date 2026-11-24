@@ -20,11 +20,11 @@ Owns catalog discovery, installed plugin files, scoped graph planning, diagnosti
 
 ## Lifecycle
 
-The application selects required capabilities and fixed features independently of descriptor defaults. PluginHost publishes the graph after the selected providers mount. New required scoped provider selections are mounted before committing configuration. Optional scoped instances may remain lazy. Server cleanup drains plugin-owned work. Browser resource URLs follow the published graph.
+The application selects required capabilities and fixed features independently of descriptor defaults. PluginHost verifies protected provider identity on the effective graph and publishes only after required capabilities mount. New required scoped provider selections are mounted before committing configuration. Optional scoped instances may remain lazy. Server cleanup stops admission and drains plugin-owned HTTP, scoped and upgrade handlers before disposing their instances. Browser resource URLs follow the published graph.
 
 ## Configuration
 
-`settings.json` selects plugins and providers by scope. Installed plugins declare dependencies, schema and browser assets in `plugin.json`. Plugin details expose grant and revoke controls for actual read-only tool registrations.
+`settings.json` selects plugins and providers by scope. Installed plugins declare dependencies, schema and browser assets in `plugin.json`. Plugin detail pages display settings contributions, including tool grant controls owned by Sessions.
 
 Scoped requests target a mounted plugin address and use its invocation lease. Discovery checks npm peer ranges, and mounted plugins may export a synchronous semantic validator.
 

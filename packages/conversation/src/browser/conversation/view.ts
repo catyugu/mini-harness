@@ -4,7 +4,7 @@ import { slotExtensions } from '@mini-harness/ui-slots/browser/api';
 import { scopedElements, fromMarkup } from '@mini-harness/ui-primitives/primitives';
 import { createRunSummary } from './run-summary.js';
 import { renderQueue } from './queue-view.js';
-import { messageText } from './controller.js';
+import { isRunning } from '@mini-harness/sessions/run-state';
 
 export function mountConversationLayout(ctx: Context, api: FrontendApi) {
   const control = ctx.miniConversation;
@@ -36,18 +36,18 @@ export function mountConversationLayout(ctx: Context, api: FrontendApi) {
     const state = control.get();
     if (previous?.run !== state.run || !previous) showRun(state.run);
     if (previous?.queue !== state.queue) renderQueue(element('queuedMessages'), state.queue, (id) => void control.cancelQueue(id).catch(control.report));
-    const welcome = !state.sending && !state.records.length && !state.events.length &&
-      !state.view?.messages.some((message) => message.role === 'toolResult' || messageText(message.content) || message.attachments?.length ||
+    const welcome = !isRunning(state.run) && state.interaction.operation !== 'submit' && !state.history.records.length &&
+      !state.history.messages.some((message) => message.role === 'toolResult' || (typeof message.content === 'string' ? message.content : message.content.some((part) => part.type === 'text' && part.text)) || message.attachments?.length ||
         message.error || (Array.isArray(message.content) && message.content.some((part) => part.type === 'image'))) &&
       !(state.run?.state === 'failed' && state.run.error);
     element('welcome').hidden = !welcome;
     element('conversationHistory').hidden = welcome;
     ctx.miniHeader.showWorkspace(!welcome);
-    ctx.miniHeader.setTitle(state.conversation?.title ?? 'New conversation');
-    element('status').textContent = state.status;
-    element('status').classList.toggle('error', state.error);
+    ctx.miniHeader.setTitle(state.session?.title ?? 'New conversation');
+    element('status').textContent = state.interaction.status;
+    element('status').classList.toggle('error', Boolean(state.interaction.error));
     previous = state;
   }
-  control.subscribe(render, api.signal);
+  control.subscribe(['session', 'history', 'run', 'queue', 'interaction'], render, api.signal);
   render();
 }

@@ -17,8 +17,9 @@ export interface AgentPort {
   prompt(record: SessionRecord, prompt: string, emit: (event: AgentEvent) => void | Promise<void>, options: {
     signal: AbortSignal; source?: InputSource; submissionId?: string; choice?: ModelChoice; images?: ImageInput[]; input?: PreparedMessage;
     fallback?: ModelChoice;
+    beginSubmission?(): void;
     thinkingLevel?: ThinkingLevel | null; changed?: (path: string) => void;
-    revision?: { sourceEntryId: string; expectedLeafId: string | null };
+    revision?: { parentId: string | null; expectedLeafId: string | null };
   }): Promise<string>;
   compact(id: string, signal: AbortSignal): Promise<void>;
   queueInput(id: string, text: string, mode: 'steer' | 'followUp', attachments?: Attachment[],

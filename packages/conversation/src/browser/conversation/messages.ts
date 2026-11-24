@@ -2,21 +2,23 @@ import type { Context } from 'cordis';
 import type {} from '@mini-harness/ui-layout/browser/api';
 import type { SessionDisplayRecord } from '@mini-harness/sessions/display-record';
 import type { MessageContent, ViewMessage } from '@mini-harness/sessions/message';
-import type { RunEvent } from '@mini-harness/runs/stream';
-import type { ConversationView } from '../../shared/api.js';
-import type { ToolView, MessageAction, MessageActionContext } from '../composer-api.js';
+import type { StreamEvent } from '@mini-harness/runs/stream';
+import type { ToolView, MessageAction, MessageActionContext } from '../history-api.js';
 import { icon } from '@mini-harness/ui-primitives/icons';
-import { renderMarkdown, markdownSource } from '@mini-harness/ui-primitives/markdown';
+import { renderMarkdown } from '@mini-harness/ui-primitives/markdown';
 import { button } from '@mini-harness/ui-primitives/primitives';
 
 export function createMessageView(dialogs: Context['miniDialogs'], signal: AbortSignal, messages: HTMLElement,
-  extensions: { render(tool: ToolView, action?: boolean): HTMLElement | undefined; messageActions(): MessageAction[] },
+  extensions: { render(tool: ToolView, signal: AbortSignal, action?: boolean): HTMLElement | undefined; messageActions(): MessageAction[]; report(error: unknown): void },
   current: () => { sessionId?: string; leafId?: string | null }, retryLast: () => void) {
 const toolItems = new WeakMap<HTMLDetailsElement, Parameters<typeof toolCard>[0]>();
-const actionContext = new WeakMap<HTMLElement, MessageActionContext>();
-const saved = new Map<string, { node: HTMLElement; signature?: string }>();
+const resources = new Map<HTMLElement, AbortController>();
+signal.addEventListener('abort', () => { for (const resource of resources.values()) resource.abort(); resources.clear(); }, { once: true });
+const actionContext = new WeakMap<HTMLElement, Omit<MessageActionContext, 'signal'>>();
+const actionOwners = new WeakMap<HTMLButtonElement, MessageAction>();
+const saved = new Map<string, { node: HTMLElement; source: ViewMessage }>();
+let previewAnswer: { node: HTMLElement; bubble: HTMLElement } | undefined;
 const liveTools = new Map<string, HTMLDetailsElement>();
-const runError = 'run-error';
 const imageMime = /^image\/(?:png|jpeg|gif|webp)$/;
 
 const preview = document.createElement('figure');
@@ -93,15 +95,14 @@ function addMessage(role: 'user' | 'assistant' | 'error', text: string, timestam
   }
 
   if (role === 'error') actions.append(action('Retry', 'refresh', retryLast));
-  if (role !== 'error') {
+  if (source) {
     const snapshot = current();
-    const message = source ?? { role, content: text, timestamp };
     actionContext.set(wrapper, {
-      sessionId: snapshot.sessionId, leafId: snapshot.leafId, message: message as ViewMessage, rawText: text
+      sessionId: snapshot.sessionId, leafId: snapshot.leafId, message: source, rawText: text
     });
     renderMessageActions(wrapper);
   }
-  if (role !== 'error' && Number.isFinite(timestamp)) {
+  if (source && Number.isFinite(timestamp)) {
     const time = document.createElement('time');
     time.className = 'message-time';
     updateTimestamp(time, timestamp);
@@ -119,29 +120,41 @@ function renderMessageActions(wrapper: HTMLElement) {
     .map((button) => [button.dataset.messageAction, button]));
   const at = { ...context, ...current() };
   for (const extension of extensions.messageActions()) {
-    if (!extension.visible(at)) continue;
     const existing = available.get(extension.id);
-    const button = existing ?? document.createElement('button');
+    if (existing && actionOwners.get(existing) !== extension) remove(existing);
+    const button = existing && actionOwners.get(existing) === extension ? existing : document.createElement('button');
+    const lifetime = resources.get(button) ?? new AbortController();
+    try {
+      if (!extension.visible({ ...at, signal: lifetime.signal })) { lifetime.abort(); continue; }
+    } catch (error) { lifetime.abort(); extensions.report(error); continue; }
+    resources.set(button, lifetime);
+    actionOwners.set(button, extension);
     available.delete(extension.id);
     button.type = 'button'; button.className = 'message-action';
     button.dataset.messageAction = extension.id;
-    if (!existing || (button.title !== extension.successLabel && !button.disabled)) {
+    if (button.title !== extension.successLabel && !button.disabled) {
       button.title = extension.label;
       button.setAttribute('aria-label', extension.label);
     }
-    if (!existing) button.append(icon(extension.icon));
+    if (!button.parentElement) button.append(icon(extension.icon));
     button.onclick = () => {
       button.disabled = true;
-      void Promise.resolve().then(() => extension.run({ ...(actionContext.get(wrapper) ?? context), ...current() })).then(() => {
-        if (extension.successLabel) { button.title = extension.successLabel; button.setAttribute('aria-label', extension.successLabel); }
+      const signal = lifetime.signal;
+      void Promise.resolve().then(() => {
+        signal.throwIfAborted();
+        return extension.run({ ...(actionContext.get(wrapper) ?? context), ...current(), signal });
+      }).then(() => {
+        if (!signal.aborted && extension.successLabel) { button.title = extension.successLabel; button.setAttribute('aria-label', extension.successLabel); }
       }).catch((error) => {
+        if (signal.aborted) return;
         button.title = error instanceof Error ? error.message : String(error);
         button.setAttribute('aria-label', 'Action failed: ' + button.title);
       }).finally(() => { button.disabled = false; });
     };
-    if (!existing) group.append(button);
+    if (!button.parentElement) group.append(button);
   }
-  for (const button of available.values()) button.remove();
+  for (const button of available.values()) remove(button);
+
 }
 
 function refreshActions() {
@@ -190,7 +203,10 @@ function toolCard(data: { name: string; state: string; content?: MessageContent;
     args.textContent = JSON.stringify(data.arguments, null, 2);
     body.append(args);
   }
-  const custom = extensions.render(data);
+  resources.get(item)?.abort();
+  const resource = new AbortController();
+  resources.set(item, resource);
+  const custom = extensions.render(data, resource.signal);
   if (custom) custom.dataset.toolExtension = 'true';
   if (custom) body.append(custom);
   const output = custom ? '' : textOf(data.content);
@@ -207,23 +223,23 @@ function toolCard(data: { name: string; state: string; content?: MessageContent;
     img.src = 'data:' + block.mimeType + ';base64,' + block.data;
     body.append(img);
   }
-  const action = extensions.render(data, true);
+  const action = extensions.render(data, resource.signal, true);
   if (action) { action.dataset.toolExtension = 'true'; body.append(action); }
   const oldSummary = item.firstElementChild;
   const oldBody = item.lastElementChild;
   if (oldSummary && oldBody) {
     reconcileChildren(oldSummary, summary);
-    reconcileChildren(oldBody, body, refresh);
+    reconcileChildren(oldBody, body);
   } else item.append(summary, body);
   return item;
 }
 
-function reconcileChildren(current: Element, updated: Element, refresh = false) {
+function reconcileChildren(current: Element, updated: Element) {
   const existing = [...current.children], desired = [...updated.children];
   for (const [index, fresh] of desired.entries()) {
     const old = existing[index];
     if (!old) current.append(fresh);
-    else if (!old.isEqualNode(fresh) || refresh && fresh.hasAttribute('data-tool-extension')) old.replaceWith(fresh);
+    else if (!old.isEqualNode(fresh) || fresh.hasAttribute('data-tool-extension')) old.replaceWith(fresh);
   }
   for (const extra of existing.slice(desired.length)) extra.remove();
 }
@@ -283,10 +299,10 @@ function renderEntry(message: ViewMessage, node?: HTMLElement) {
   return entry;
 }
 
-function refreshTools() {
+function refreshTools(name: string) {
   for (const card of messages.querySelectorAll<HTMLDetailsElement>('details.tool-card')) {
     const tool = toolItems.get(card);
-    if (tool) toolCard(tool, card, true);
+    if (tool?.name === name) toolCard(tool, card, true);
   }
 }
 
@@ -301,77 +317,87 @@ function preserveScroll(update: () => void, reset = false) {
   else if (visible && visible.isConnected) messages.scrollTop += visible.getBoundingClientRect().top - offset;
 }
 
-function history(entries: ViewMessage[], error?: string, reset = false) {
-  preserveScroll(() => {
-    if (reset) { previewDialog.close(); messages.replaceChildren(); saved.clear(); liveTools.clear(); }
-    const nodes = entries.flatMap((message, index) => {
-      if (message.role !== 'toolResult' && !textOf(message.content) && !message.attachments?.length &&
-          !message.error && !(Array.isArray(message.content) && message.content.some((part) => part.type === 'image'))) return [];
-      const key = message.id ?? message.role + ':' + index;
-      const signature = JSON.stringify([message.role, message.content, message.attachments, message.error]);
-      const prior = saved.get(key);
-      let node = prior?.node;
-      if (message.role === 'toolResult') {
-        node = renderEntry(message, node ?? (message.toolCallId ? liveTools.get(message.toolCallId) : undefined));
-      } else if (node && prior?.signature === undefined && message.role === 'assistant' && !message.error) {
-        const bubble = node.querySelector<HTMLElement>('.message.assistant');
-        if (bubble && markdownSource.get(bubble) !== textOf(message.content)) renderMarkdown(bubble, textOf(message.content));
-      } else if (!node || prior?.signature !== signature) {
-        node = renderEntry(message);
-      }
-      if (!node) return [];
-      const row = node.querySelector<HTMLElement>('.message-row');
-      if (row && message.role !== 'toolResult') {
-        actionContext.set(row, { ...current(), message, rawText: textOf(message.content) });
-        const time = row.querySelector<HTMLTimeElement>('time');
-        if (time) updateTimestamp(time, message.timestamp);
-        renderMessageActions(row);
-      }
-      saved.set(key, { node, signature });
-      return [{ key, node }];
-    });
-    if (error && !entries.some((entry) => entry.error === error)) {
-      const node = saved.get(runError)?.node ?? errorEntry(error);
-      const bubble = node.querySelector('.message.error');
-      if (bubble && bubble.textContent !== error) bubble.textContent = error;
-      saved.set(runError, { node });
-      nodes.push({ key: runError, node });
-    }
-    const keys = new Set(nodes.map(({ key }) => key));
-    const kept = new Set(nodes.map(({ node }) => node));
-    for (const key of saved.keys()) if (!keys.has(key)) saved.delete(key);
-    for (const element of [...messages.children]) if (!kept.has(element as HTMLElement)) element.remove();
-    let next = messages.firstElementChild;
-    for (const { node } of nodes) {
-      if (node !== next) messages.insertBefore(node, next);
-      next = node.nextElementSibling;
-    }
-    liveTools.clear();
-  }, reset);
+function remove(node: HTMLElement) {
+  for (const button of node.querySelectorAll<HTMLElement>('[data-message-action]')) {
+    resources.get(button)?.abort();
+    resources.delete(button);
+  }
+  resources.get(node)?.abort();
+  resources.delete(node);
+  node.remove();
 }
 
-/** Insert business nodes in the branch, without discarding the live response or tool cards. */
-function placeRecords(records: { record: SessionDisplayRecord; node: HTMLElement }[], entries: ViewMessage[]) {
+function history(entries: readonly ViewMessage[], records: readonly { record: SessionDisplayRecord; node: HTMLElement }[], error?: string, reset = false) {
   preserveScroll(() => {
-    for (const node of messages.querySelectorAll('[data-conversation-record]')) node.remove();
-    const positions = new Map<string, HTMLElement | undefined>();
-    let previous: HTMLElement | undefined;
-    for (const { id } of entries) {
-      if (!id) continue;
-      const node = saved.get(id)?.node;
-      if (node?.parentElement === messages) previous = node;
-      positions.set(id, previous);
+    if (reset) {
+      previewDialog.close();
+      for (const node of resources.keys()) remove(node);
+      messages.replaceChildren();
+      saved.clear();
+      liveTools.clear();
+      previewAnswer = undefined;
     }
-    const placed = new Map<HTMLElement | undefined, HTMLElement>();
+    const desired: HTMLElement[] = [];
+    const anchors = new Map<string | null, HTMLElement[]>();
     for (const { record, node } of records) {
-      node.dataset.conversationRecord = record.id;
-      const anchor = record.afterMessageId ? positions.get(record.afterMessageId) : undefined;
-      const tail = placed.get(anchor) ?? anchor;
-      if (tail) tail.after(node);
-      else messages.prepend(node);
-      placed.set(anchor, node);
+      const list = anchors.get(record.afterMessageId ?? null) ?? [];
+      list.push(node);
+      anchors.set(record.afterMessageId ?? null, list);
     }
-  });
+    const place = (key: string | null) => {
+      desired.push(...anchors.get(key) ?? []);
+      anchors.delete(key);
+    };
+    place(null);
+    const currentEntries = new Set<string>();
+    for (const [index, message] of entries.entries()) {
+      const key = message.id ?? message.role + ':' + index;
+      const prior = saved.get(key);
+      if (message.role === 'toolResult' || textOf(message.content) || message.attachments?.length ||
+          message.error || (Array.isArray(message.content) && message.content.some(({ type }) => type === 'image'))) {
+        let node = prior?.node;
+        if (message.role === 'toolResult') {
+          const tool = message.toolCallId && liveTools.get(message.toolCallId);
+          node = renderEntry(message, node ?? (tool || undefined));
+          if (message.toolCallId) liveTools.delete(message.toolCallId);
+        } else if (!node || prior?.source !== message && JSON.stringify(prior?.source) !== JSON.stringify(message)) {
+          const text = textOf(message.content);
+          if (index === entries.length - 1 && message.role === 'assistant' && !message.error && previewAnswer &&
+              text.startsWith(previewAnswer.bubble.textContent ?? '') && !message.attachments?.length) {
+            const { node: previewNode, bubble } = previewAnswer;
+            renderMarkdown(bubble, text);
+            const row = bubble.parentElement!;
+            actionContext.set(row, { ...current(), message, rawText: text });
+            const time = document.createElement('time');
+            time.className = 'message-time';
+            updateTimestamp(time, message.timestamp);
+            row.querySelector('.message-actions')?.append(time);
+            renderMessageActions(row);
+            node = previewNode;
+            previewAnswer = undefined;
+          } else node = renderEntry(message);
+        }
+        saved.set(key, { node, source: message });
+        currentEntries.add(key);
+        desired.push(node);
+      }
+      if (message.id) place(message.id);
+    }
+    for (const nodes of anchors.values()) desired.push(...nodes);
+    for (const key of saved.keys()) if (!currentEntries.has(key)) saved.delete(key);
+    if (error && !entries.some((entry) => entry.error === error)) {
+      const previous = messages.querySelector<HTMLElement>('[data-run-error]');
+      const node = previous?.querySelector('.message.error')?.textContent === error ? previous : errorEntry(error);
+      node.dataset.runError = '';
+      desired.push(node);
+    }
+    if (previewAnswer) desired.push(previewAnswer.node);
+    desired.push(...liveTools.values());
+    const kept = new Set(desired);
+    for (const child of [...messages.children]) if (child instanceof HTMLElement && !kept.has(child)) remove(child);
+    for (const [index, node] of desired.entries())
+      if (messages.children[index] !== node) messages.insertBefore(node, messages.children[index] ?? null);
+  }, reset);
 }
 
 function errorEntry(error: string) {
@@ -380,72 +406,31 @@ function errorEntry(error: string) {
   return bubble.parentElement!;
 }
 
-function stream(initial: ConversationView) {
-  let answer: HTMLElement | undefined;
-  let text = '';
-  function live({ partial, tools }: Pick<Extract<RunEvent, { type: 'snapshot' }>, 'partial' | 'tools'>) {
-    text = partial ?? '';
-    answer = text ? addMessage('assistant', text) : undefined;
-    for (const tool of tools ?? []) {
-      const card = toolCard(tool);
-      liveTools.set(tool.id, card);
-      messages.append(card);
+function partial(text: string) {
+  if (!text && !previewAnswer) return;
+  preserveScroll(() => {
+    if (!text) { previewAnswer?.node.remove(); previewAnswer = undefined; return; }
+    if (!previewAnswer) {
+      const node = document.createElement('div');
+      node.className = 'message-entry';
+      previewAnswer = { node, bubble: addMessage('assistant', '', undefined, undefined, node) };
+      messages.insertBefore(node, liveTools.values().next().value ?? null);
     }
-  }
-  function finish() {
-    if (answer && markdownSource.get(answer) !== text) renderMarkdown(answer, text);
-    else if (answer && !answer.querySelector('*') && text) renderMarkdown(answer, text);
-  }
-  preserveScroll(() => live(initial));
-  return (event: RunEvent) => preserveScroll(() => {
-    switch (event.type) {
-      case 'user': {
-        const message: ViewMessage = { id: event.id, role: 'user', content: event.content, attachments: event.attachments,
-          timestamp: event.timestamp ?? Date.now() };
-        if (event.id && saved.has(event.id)) break;
-        const node = renderEntry(message);
-        if (event.id) saved.set(event.id, { node, signature: JSON.stringify([message.role, message.content, message.attachments, message.error]) });
-        messages.append(node);
-        break;
-      }
-      case 'assistant-start':
-        answer = undefined;
-        text = '';
-        break;
-      case 'delta':
-        answer ??= addMessage('assistant', '');
-        text += event.text;
-        answer.textContent = text;
-        const row = answer.parentElement;
-        const context = row && actionContext.get(row);
-        if (row && context) actionContext.set(row, { ...context, rawText: text, message: { ...context.message, content: text } });
-        break;
-      case 'assistant-end': {
-        finish();
-        const node = answer?.parentElement;
-        if (event.id && node) saved.set(event.id, { node });
-        break;
-      }
-      case 'tool': {
-        const existing = liveTools.get(event.id);
-        const card = toolCard(event, existing);
-        liveTools.set(event.id, card);
-        if (!existing) messages.append(card);
-        break;
-      }
-      case 'error': {
-        const node = errorEntry(event.error);
-        saved.set(runError, { node });
-        messages.append(node);
-        break;
-      }
-      case 'snapshot':
-        history(event.messages, event.run.error);
-        live(event);
-        break;
+    previewAnswer.bubble.textContent = text;
+  });
+}
+
+function activity(tools: readonly Extract<StreamEvent, { type: 'tool' }>[]) {
+  preserveScroll(() => {
+    const active = new Set(tools.map(({ id }) => id));
+    for (const [id, card] of liveTools) if (!active.has(id)) { remove(card); liveTools.delete(id); }
+    for (const tool of tools) {
+      const card = toolCard(tool, liveTools.get(tool.id));
+      if (!liveTools.has(tool.id)) messages.append(card);
+      liveTools.set(tool.id, card);
     }
   });
 }
 
-return { textOf, history, stream, placeRecords, refreshTools, refreshActions };
+return { history, partial, activity, refreshTools, refreshActions };
 }

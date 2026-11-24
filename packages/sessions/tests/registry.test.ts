@@ -31,7 +31,7 @@ test('nested sessions cascade permanent deletion through native logs', async (t)
   assert.equal(deleted.length, 2);
   assert.deepEqual(registry.list().map(({ id }) => id), [second.id]);
   assert.equal(existsSync(file), false);
-  assert.throws(() => log.append({ type: 'custom', namespace: 'test', data: 'late write' }), /closed/);
+  assert.throws(() => log.append({ type: 'branch' }), /closed/);
   await assert.rejects(registry.delete(['does-not-exist']), /Unknown conversation/);
 });
 

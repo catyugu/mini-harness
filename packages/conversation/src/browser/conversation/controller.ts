@@ -1,82 +1,105 @@
 import type { Context } from 'cordis';
 import type { FrontendApi } from '@mini-harness/ui-runtime/frontend-api';
 import type { Conversation, ConversationView } from '../../shared/api.js';
-import type { ConversationController, ConversationState, ConversationSubmission } from '../composer-api.js';
-import type { ConversationPermission } from '@mini-harness/sessions/identity';
+import type { ConversationController, ConversationState, ConversationSubmission } from '../conversation-api.js';
 import type { RunEvent } from '@mini-harness/runs/stream';
 import type { RunInfo } from '@mini-harness/sessions/run-state';
-import type { MessageContent } from '@mini-harness/sessions/message';
+import type { ViewMessage } from '@mini-harness/sessions/message';
 import { isRunning } from '@mini-harness/sessions/run-state';
 import { payload } from '@mini-harness/ui-runtime/http';
 import { workspaceRoute } from '@mini-harness/workspaces/browser/route';
 import { readConversation, observeRun } from '../session-client.js';
 
-export function messageText(value?: MessageContent) {
-  return typeof value === 'string' ? value : value?.filter((block) => block.type === 'text').map((block) => block.text ?? '').join('\n') ?? '';
-}
+const emptyHistory = { messages: [], records: [], leafId: null };
+const path = (id: string, suffix = '') => '/sessions/' + id + suffix;
 
-/** The selected conversation and its live run belong to the controller, not to a renderer. */
 export function createConversationController(ctx: Context, api: FrontendApi): ConversationController {
   const { miniSelection: selection, miniSessions: sessions } = ctx;
-  const changes = new EventTarget();
-  let state: ConversationState = { events: [], records: [], recordMessages: [], queue: [], pending: false, sending: false, cancelling: false, status: '', error: false };
+  const subscriptions = new Set<{ parts: readonly (keyof ConversationState)[]; listener: () => void }>();
+  let state: ConversationState = { history: emptyHistory, partial: '', tools: [], queue: [], interaction: { status: '' } };
   let visit = new AbortController(), queueRevision = 0;
-  const lastInputs = new Map<string, ConversationSubmission>();
-  const active = () => state.conversation?.id;
-  const update = (patch: Partial<ConversationState>) => {
-    state = { ...state, ...patch };
-    changes.dispatchEvent(new Event('change'));
+  const active = () => state.session?.id;
+  function update(patch: Partial<ConversationState>) {
+    const previous = state;
+    state = { ...previous, ...patch };
+    for (const { parts, listener } of subscriptions) {
+      if (!parts.some((part) => state[part] !== previous[part])) continue;
+      try { listener(); }
+      catch (error) { console.error('Conversation subscriber failed', error); }
+    }
+  }
+  const interact = (patch: Partial<ConversationState['interaction']>) => update({ interaction: { ...state.interaction, ...patch } });
+  const status = (text: string, error = false) => {
+    if (state.interaction.status !== text || Boolean(state.interaction.error) !== error) interact({ status: text, error });
   };
-  const status = (text: string, error = false) => update({ status: text, error });
   const report = (error: Error) => status(error.message, true);
-  const begin = () => {
+  function begin() {
     visit.abort();
     visit = new AbortController();
     return visit.signal;
-  };
-  const path = (id: string, suffix = '') => '/sessions/' + id + suffix;
-  const read = readConversation;
-
-  function remember(id: string, content: MessageContent) {
-    if (lastInputs.has(id)) return;
-    const attachments = (typeof content === 'string' ? [] : content ?? []).flatMap((block) =>
-      block.type === 'image' && block.mimeType && block.data ? [{ name: 'image', mimeType: block.mimeType, data: block.data }] : []);
-    lastInputs.set(id, { message: messageText(content), attachments });
   }
-
-  function select(item?: Conversation, view?: ConversationView, revealWorkspace = true) {
-    const previous = view?.messages.filter((message) => message.role === 'user').at(-1);
-    if (item && previous) remember(item.id, previous.content);
+  function select(item?: Conversation, revealWorkspace = true) {
+    const { run, ...session } = item ?? { run: undefined };
     queueRevision++;
-    update({ conversation: item, view, run: item?.run, sending: isRunning(item?.run), cancelling: false,
-      events: [], records: view?.records ?? [], recordMessages: view?.messages ?? [], queue: view?.queue ?? [] });
+    update({ session: 'id' in session ? session : undefined, run,
+      history: emptyHistory, partial: '', tools: [], queue: [] });
     selection.selectConversation(item, revealWorkspace);
   }
 
   function display(item: ConversationView, signal: AbortSignal, revealWorkspace: boolean) {
-    select(item, item, revealWorkspace);
-    if (signal.aborted) return;
+    const { run, messages, records, leafId, partial = '', tools, queue, ...session } = item;
+    queueRevision++;
+    update({ session, run, history: { messages, records, leafId }, partial, tools, queue });
+    selection.selectConversation(item, revealWorkspace);
     status(item.logError ?? '', Boolean(item.logError));
-    if (isRunning(item.run)) void observe(item, signal);
+    if (!signal.aborted && isRunning(run)) void observe(item, signal);
+  }
+
+  function append(message: ViewMessage, patch: Partial<ConversationState> = {}) {
+    const history = state.history;
+    update({ ...patch, history: { ...history, leafId: message.id ?? history.leafId, messages: [...history.messages, message] } });
   }
 
   async function observe(item: ConversationView, signal: AbortSignal) {
     status(item.run?.state === 'queued' ? 'Queued…' : 'Thinking…');
     function accept(event: RunEvent) {
       if (signal.aborted) return;
-      if (event.type === 'snapshot') {
-        update({ view: { ...item, messages: event.messages, partial: event.partial, tools: event.tools ?? [], run: event.run },
-          events: [], recordMessages: event.messages });
-      } else update({ events: [...state.events, event] });
       switch (event.type) {
-        case 'user': remember(item.id, event.content); break;
-        case 'tool': status(event.state === 'approval' ? 'Waiting for approval…' : event.state === 'running' ? 'Running ' + event.name + '…' : 'Thinking…'); break;
-        case 'complete':
-        case 'error': status(''); break;
-        case 'run':
+        case 'user': {
+          if (state.history.messages.some(({ id }) => id === event.id)) break;
+          const { id, parentId, submissionId, timestamp, content, attachments, model, thinkingLevel } = event;
+          append({ id, parentId, submissionId, timestamp, content, attachments, role: 'user' },
+            { session: state.session && { ...state.session, model, thinkingLevel } });
+          break;
+        }
+        case 'assistant-start': update({ partial: '' }); break;
+        case 'delta': update({ partial: state.partial + event.text }); break;
+        case 'assistant-end': append(event.message, { partial: '' }); break;
+        case 'tool': {
+          const tools = state.tools.filter(({ id }) => id !== event.id);
+          if (event.entry) {
+            append({ id: event.entry.id, parentId: event.entry.parentId, role: 'toolResult', toolCallId: event.id, toolName: event.name,
+              content: event.content ?? '', arguments: event.arguments, timestamp: event.entry.timestamp,
+              sessionId: event.sessionId, elapsedMs: event.elapsedMs, approvalMs: event.approvalMs, exitCode: event.exitCode,
+              approvalDenied: event.state === 'denied', isError: event.state === 'error' }, { tools });
+          } else {
+            const index = state.tools.findIndex(({ id }) => id === event.id);
+            const { runId: _runId, runSessionId: _sessionId, sequence: _sequence, ...tool } = event;
+            tools.splice(index === -1 ? tools.length : index, 0, tool);
+            update({ tools });
+          }
+          status(event.state === 'approval' ? 'Waiting for approval…' : event.state === 'running' ? 'Running ' + event.name + '…' : 'Thinking…');
+          break;
+        }
         case 'snapshot':
-          update({ run: event.run, sending: isRunning(event.run), cancelling: isRunning(event.run) && state.cancelling });
-          if (!isRunning(event.run)) { queueRevision++; update({ queue: [] }); status(''); }
+          update({ run: event.run, history: { ...state.history, messages: event.messages, records: event.records, leafId: event.leafId },
+            partial: event.partial ?? '', tools: event.tools ?? [],
+            session: state.session && { ...state.session, model: event.model, thinkingLevel: event.thinkingLevel } });
+          if (!isRunning(event.run)) interact({ cancelling: false, status: '' });
+          break;
+        case 'run':
+          update({ run: event.run, ...(!isRunning(event.run) ? { partial: '', tools: [] } : {}) });
+          if (!isRunning(event.run)) interact({ cancelling: false, status: '' });
           break;
       }
     }
@@ -88,50 +111,49 @@ export function createConversationController(ctx: Context, api: FrontendApi): Co
 
   async function activate(id: string, revealWorkspace = true) {
     const signal = begin();
-    update({ pending: true });
     const selected = sessions.get().find((entry) => entry.id === id);
-    if (selected && id !== active()) { select(selected, undefined, revealWorkspace); status('Loading conversation…'); }
+    if (id !== active()) select(selected, revealWorkspace);
+    interact({ operation: 'open', status: 'Loading conversation…', error: false, cancelling: false });
     try {
-      const item = await read(id, signal);
+      const item = await readConversation(id, signal);
       if (signal.aborted) return false;
       display(item, signal, revealWorkspace);
       return true;
     } catch (error) { if (!signal.aborted) report(error instanceof Error ? error : new Error(String(error))); return false; }
-    finally { if (!signal.aborted) update({ pending: false }); }
+    finally { if (!signal.aborted) interact({ operation: undefined }); }
   }
 
-  async function submit(input: ConversationSubmission) {
-    if (state.sending || state.pending) throw new Error('Wait for the current operation to finish.');
+  async function submit(input: ConversationSubmission, created?: (sessionId: string) => void) {
+    if (isRunning(state.run) || state.interaction.operation) throw new Error('Wait for the current operation to finish.');
     const signal = begin();
     const workspace = selection.selectedWorkspace;
-    update({ pending: true, sending: true });
+    interact({ operation: 'submit', status: '' });
+    let id = active();
     try {
-      let id = active();
       if (!id) {
         if (!workspace) throw new Error('Add a workspace before starting a conversation.');
         const item = await api.request<Conversation>(workspaceRoute(workspace, '/sessions'), payload('POST', { permission: input.permission ?? 'standard' }));
         id = item.id;
+        created?.(id);
         await sessions.refresh();
+        if (!signal.aborted) select(item);
       }
       const { permission: _permission, revision, ...message } = input;
-      const run = await api.request<RunInfo>(path(id, revision ? '/revise' : '/runs'), payload('POST', revision ? { ...message, ...revision } : message));
-      lastInputs.set(id, { message: message.message, attachments: message.attachments });
-      if (!signal.aborted) { update({ pending: false, modelDraft: undefined, thinkingDraft: undefined }); void activate(id); }
-      return { sessionId: id, run };
-    } catch (error) {
-      if (!signal.aborted) update({ pending: false, sending: false });
-      throw error;
-    }
+      const run = await api.request<RunInfo & { accepted: boolean }>(path(id, revision ? '/revise' : '/runs'),
+        payload('POST', revision ? { ...message, ...revision } : message));
+      if (!signal.aborted) void activate(id);
+      return run;
+    } finally { if (!signal.aborted) interact({ operation: undefined }); }
   }
 
   async function queue(input: Omit<ConversationSubmission, 'revision' | 'permission'>, mode = api.configuration.get<'steer' | 'followUp'>('queueMode')) {
     const id = active(), signal = visit.signal;
-    if (!id || !state.sending || state.pending) throw new Error('No running conversation to queue a message.');
-    update({ pending: true });
+    if (!id || !isRunning(state.run) || state.interaction.operation) throw new Error('No running conversation to queue a message.');
+    interact({ operation: 'queue' });
     try {
       const entries = await api.request<ConversationView['queue']>(path(id, '/queue'), payload('POST', { ...input, mode }));
-      if (!signal.aborted) { queueRevision++; update({ queue: entries, modelDraft: undefined, thinkingDraft: undefined }); }
-    } finally { if (!signal.aborted) update({ pending: false }); }
+      if (!signal.aborted) { queueRevision++; update({ queue: entries }); }
+    } finally { if (!signal.aborted) interact({ operation: undefined }); }
   }
 
   api.onDispose(ctx.miniProjections.register('conversation-records', {
@@ -139,8 +161,8 @@ export function createConversationController(ctx: Context, api: FrontendApi): Co
       const id = active(), signal = visit.signal;
       if (!id || (!reconnect && changedId && id !== changedId)) return;
       try {
-        const item = await read(id, signal);
-        if (!signal.aborted) update({ records: item.records, recordMessages: item.messages });
+        const records = await api.request<ConversationView['records']>(path(id, '/records'), { signal });
+        if (!signal.aborted) update({ history: { ...state.history, records } });
       } catch (error) { if (!signal.aborted) throw error; }
     }
   }));
@@ -159,15 +181,20 @@ export function createConversationController(ctx: Context, api: FrontendApi): Co
 
   return {
     get: () => state,
-    subscribe: (listener, signal) => changes.addEventListener('change', listener, { signal }),
+    subscribe(parts, listener, signal) {
+      if (signal.aborted) return;
+      const entry = { parts, listener };
+      subscriptions.add(entry);
+      signal.addEventListener('abort', () => { subscriptions.delete(entry); }, { once: true });
+    },
     activate, report, submit, queue,
-    clear() { begin(); update({ pending: false }); select(); status(''); },
+    clear() { begin(); select(); update({ interaction: { status: '' } }); },
     async cancel() {
       const id = active(), signal = visit.signal;
-      if (!id || !state.sending) return;
-      update({ cancelling: true }); status('Cancelling…');
+      if (!id || !isRunning(state.run)) return;
+      interact({ cancelling: true, status: 'Cancelling…' });
       try { await api.request(path(id, '/cancel'), payload('POST', {})); }
-      catch (error) { if (!signal.aborted) { update({ cancelling: false }); throw error; } }
+      catch (error) { if (!signal.aborted) { interact({ cancelling: false }); throw error; } }
     },
     async cancelQueue(item) {
       const id = active(), signal = visit.signal;
@@ -176,33 +203,22 @@ export function createConversationController(ctx: Context, api: FrontendApi): Co
       const entries = await api.request<ConversationView['queue']>(path(id, '/queue' + (item ? '/' + encodeURIComponent(item) : '')), { method: 'DELETE' });
       if (!signal.aborted && revision === queueRevision) update({ queue: entries });
     },
-    async setPermission(permission: ConversationPermission) {
-      const id = active();
+    async setPermission(permission) {
+      const id = active(), signal = visit.signal;
       if (!id) throw new Error('Open a conversation first.');
       const item = await api.request<Conversation>(path(id, '/permissions'), payload('PATCH', { permission }));
-      if (active() === id) update({ conversation: item });
+      if (!signal.aborted && state.session) update({ session: { ...state.session, permission: item.permission } });
       await sessions.refresh();
-    },
-    chooseModel(modelDraft) { update({ modelDraft, thinkingDraft: undefined }); },
-    chooseThinking(thinkingDraft) { update({ thinkingDraft }); },
-    async retry() {
-      const id = active(), input = id ? lastInputs.get(id) : undefined;
-      if (!input || state.sending || state.pending) return;
-      const result = await submit({ ...input, model: state.modelDraft, thinkingLevel: state.thinkingDraft });
-      update({ retrySubmission: { ...result, input } });
     },
     async compact() {
       const id = active(), signal = visit.signal;
       if (!id) throw new Error('Open a conversation to compact it.');
-      if (state.sending || state.pending) throw new Error('Wait for the current operation to finish.');
-      update({ pending: true }); status('Compacting conversation…');
+      if (isRunning(state.run) || state.interaction.operation) throw new Error('Wait for the current operation to finish.');
+      interact({ operation: 'compact', status: 'Compacting conversation…' });
       try {
         await api.request(path(id, '/compact'), payload('POST', {}));
-        if (!signal.aborted) {
-          const item = await read(id, signal);
-          if (!signal.aborted) { display(item, signal, false); status('Conversation compacted.'); }
-        }
-      } finally { if (!signal.aborted) update({ pending: false }); }
+        if (!signal.aborted && await activate(id, false)) status('Conversation compacted.');
+      } finally { if (!signal.aborted) interact({ operation: undefined }); }
     }
   };
 }

@@ -12,20 +12,23 @@ export interface ResolvedCapability<T extends Capability> {
   services: Record<string, string>;
 }
 
+export class ProtectedProviderError extends Error {
+  constructor(service: string) { super('Protected service cannot be overridden: ' + service); }
+}
+
 /** Resolve a graph before Cordis starts any user code. Optional services are live lookups. */
 export function resolveCapabilities<T extends Capability>(
   descriptors: T[], inherited: ReadonlyMap<string, string>, choices: Readonly<Record<string, string>> = {},
   unavailable?: (id: string, error: unknown) => boolean,
-  protectedServices: ReadonlySet<string> = new Set()
+  protectedProviders: ReadonlyMap<string, string> = new Map()
 ) {
   const byId = new Map(descriptors.map((descriptor) => [descriptor.id, descriptor]));
   if (byId.size !== descriptors.length) throw new Error('Duplicate plugin ID in capability graph');
   const providers = new Map(inherited);
   const shadowed = new Set<string>();
   for (const [service, id] of Object.entries(choices)) {
-    if (protectedServices.has(service) && inherited.has(service) &&
-        (inherited.get(service) !== id || byId.get(id)?.provides?.includes(service)))
-      throw new Error('Protected service cannot be overridden: ' + service);
+    if (protectedProviders.has(service) && protectedProviders.get(service) !== id)
+      throw new ProtectedProviderError(service);
     if (!byId.get(id)?.provides?.includes(service) && inherited.get(service) !== id)
       throw new Error('Selected provider ' + id + ' does not provide ' + service);
   }
@@ -39,15 +42,18 @@ export function resolveCapabilities<T extends Capability>(
   for (const { id, provides = [] } of descriptors) {
     if (shadowed.has(id)) continue;
     for (const service of provides) {
+      if (protectedProviders.has(service) && (protectedProviders.get(service) !== id || inherited.has(service)))
+        throw new ProtectedProviderError(service);
       const previous = providers.get(service);
       if (previous && (previous !== id || inherited.has(service))) {
         if (choices[service] !== id) throw new Error('Multiple enabled providers for ' + service);
-        if (protectedServices.has(service))
-          throw new Error('Protected service cannot be overridden: ' + service);
       }
       providers.set(service, id);
     }
   }
+
+  for (const [service, id] of protectedProviders)
+    if (providers.get(service) !== id) throw new ProtectedProviderError(service);
 
   for (const [service, id] of Object.entries(choices))
     if (providers.get(service) !== id) throw new Error('Selected provider is unavailable: ' + id);

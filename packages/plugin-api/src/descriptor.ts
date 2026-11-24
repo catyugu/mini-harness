@@ -49,12 +49,10 @@ export interface PluginApi {
   onConfigChange(apply: (next: Readonly<Record<string, unknown>>) => void | Promise<void>): void;
   readonly scope: PluginScope;
   readonly signal: AbortSignal;
-  service<Name extends keyof ServiceMap & string>(name: Name): NonNullable<ServiceMap[Name]>;
   /** Resolve the current declared provider for a prepared conversation. Do not retain it across configuration changes. */
   scopedService<Name extends keyof ServiceMap & string>(sessionId: string, name: Name): NonNullable<ServiceMap[Name]>;
   /** Prepare providers during normal operation. Not available from setup or configuration callbacks. */
   prepareSession(sessionId: string, signal?: AbortSignal): Promise<void>;
-  optionalService<Name extends keyof ServiceMap & string>(name: Name): ServiceMap[Name] | undefined;
   contribute<Args extends unknown[], Result>(point: Extension<Args, Result>, ...args: Args): Result;
   /** Invalidate this plugin's application-wide state for its live browser clients. */
   invalidate(): void;

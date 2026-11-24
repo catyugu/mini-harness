@@ -96,7 +96,7 @@ test('an application plugin replaces only LLM and composes execution hooks witho
   const { app, paths, request, mock, base, headers } = await fixture(t);
   writePlugin(paths.plugins, 'transport', { provides: ['harnessLlm'], inject: ['harnessModels'] }, `export default (ctx, api) => {
     let attempts = 0;
-    const modelCatalog = api.service('harnessModels');
+    const modelCatalog = ctx.harnessModels;
     ctx.provide('harnessLlm', { async *stream(request) {
       if (!modelCatalog.resolve(request.model)) throw new Error('missing catalog');
       const terminal = (content, stopReason = 'stop') => ({ type: 'done', message: { role: 'assistant', timestamp: Date.now(), content, stopReason } });

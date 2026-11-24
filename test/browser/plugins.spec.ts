@@ -235,7 +235,7 @@ test('plugin catalog applies configuration and removes disabled browser capabili
     await expect(catalog.getByRole('spinbutton', { name: 'Maximum child depth · subagents' })).toHaveValue('2');
     await page.getByRole('button', { name: 'Toggle navigation' }).click();
     await page.getByRole('button', { name: 'New conversation' }).click();
-    await expect(page.getByRole('textbox', { name: 'Message' })).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toBeVisible();
   } finally { await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
@@ -279,18 +279,13 @@ test('unmounting browser plugins releases pages and restores replaced slot contr
   try {
     const folder = join(paths.plugins, 'replace-new');
     mkdirSync(folder);
-    writeJson(join(folder, 'plugin.json'), { browserInject: ['miniSlots', 'miniPrimitives', 'miniComposer', 'miniConversation'] });
+    writeJson(join(folder, 'plugin.json'), { browserInject: ['miniSlots', 'miniPrimitives', 'miniConversation'] });
     writeFileSync(join(folder, 'web.js'), `import { slotExtensions } from '/packages/ui-runtime/plugin-sdk.js';
     export default ({ miniPrimitives, miniConversation }, api) => {
-      api.contribute(slotExtensions.keyed, 'conversation.composer-view', 'composer', signal => {
-        const button = miniPrimitives.button('Replacement composer', 'quiet');
-        button.addEventListener('click', () => void miniConversation.submit({ message: 'Hello from replacement' }).catch(miniConversation.report), { signal });
-        return button;
-      });
       api.contribute(slotExtensions.keyed, 'conversation.history', 'history', signal => {
         const node = miniPrimitives.status('Replacement history');
         const render = () => { node.textContent = 'Replacement history: ' + (miniConversation.get().run?.state ?? 'idle'); };
-        miniConversation.subscribe(render, signal); render();
+        miniConversation.subscribe(['run'], render, signal); render();
         return node;
       });
       api.contribute(slotExtensions.keyed, 'sidebar.primary', 'new-conversation', signal => {
@@ -302,15 +297,38 @@ test('unmounting browser plugins releases pages and restores replaced slot contr
       });
     };`);
     cpSync(resolve('docs/examples/browser-panel'), join(paths.plugins, 'browser-panel'), { recursive: true });
-    writeJson(paths.settings, { pluginConfig: { 'core:models': { model: { provider: 'local-mock', id: 'mock-model' } } }, plugins: { 'replace-new': true, 'browser-panel': true } });
+    writeJson(paths.settings, { pluginConfig: { 'core:models': { model: { provider: 'local-mock', id: 'mock-model' } }, 'browser-panel': { replaceComposer: true } }, plugins: { 'replace-new': true, 'browser-panel': true } });
     server = await startIsolatedHost(paths);
     await page.goto(server.url + '/#token=' + server.token);
     await expect(page.getByRole('button', { name: 'Replacement conversation' })).toBeVisible();
-    await expect(page.getByText('Replacement composer')).toBeVisible();
-    await expect(page.getByRole('textbox', { name: 'Message' })).toHaveCount(0);
+    const replacement = page.getByRole('textbox', { name: 'Replacement message' });
+    await replacement.fill('Hello from replacement');
+    const attachments = page.getByLabel('Replacement attachments');
+    await attachments.setInputFiles([
+      { name: 'keep.txt', mimeType: 'text/plain', buffer: Buffer.from('kept attachment') },
+      { name: 'remove.txt', mimeType: 'text/plain', buffer: Buffer.from('removed attachment') }
+    ]);
+    await page.getByRole('button', { name: 'Remove remove.txt' }).click();
+    await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toHaveCount(0);
     await expect(page.locator('.message-image-dialog')).toHaveCount(0);
-    await page.getByRole('button', { name: 'Replacement composer' }).click();
+    let releaseResponse = () => {};
+    const responseHeld = new Promise<void>((resume) => { releaseResponse = resume; });
+    let sendAccepted = () => {};
+    const accepted = new Promise<void>((resolve) => { sendAccepted = resolve; });
+    await page.route('**/api/sessions/*/runs', async (route) => {
+      const result = await route.fetch();
+      sendAccepted();
+      await responseHeld;
+      await route.fulfill({ response: result });
+    }, { times: 1 });
+    try {
+      await page.getByRole('button', { name: 'Send replacement message' }).click();
+      await accepted;
+      await replacement.fill('New draft after submission');
+    } finally { releaseResponse(); }
     await expect(page.getByText('Replacement history: completed')).toBeVisible();
+    expect(JSON.stringify(mock.requests)).toContain('kept attachment');
+    expect(JSON.stringify(mock.requests)).not.toContain('removed attachment');
     await expect(page.getByRole('button', { name: 'New conversation', exact: true })).toHaveCount(0);
     await page.evaluate(() => window.dispatchEvent(new Event('slot-test')));
     await expect(page.locator('body')).toHaveAttribute('data-slot-events', '1');
@@ -328,10 +346,13 @@ test('unmounting browser plugins releases pages and restores replaced slot contr
     await expect(page.getByRole('button', { name: 'Example panel', exact: true })).toHaveCount(0);
     await expect(page.getByText('Example panel is ready.')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Replacement conversation' })).toHaveCount(0);
-    await expect(page.getByText('Replacement composer')).toHaveCount(0);
-    await expect(page.getByRole('textbox', { name: 'Message' })).toBeVisible();
+    await expect(replacement).toHaveCount(0);
+    await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toBeVisible();
     await expect(page.locator('.message-image-dialog')).toHaveCount(1);
-    await expect(page.locator('#messages .message.user').getByText('Hello from replacement', { exact: true })).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toHaveValue('New draft after submission');
+    const submitted = page.locator('#messages .message.user');
+    await expect(submitted).toContainText('Hello from replacement');
+    await expect(submitted.getByRole('list', { name: 'Attachments' })).toHaveText('keep.txt');
     await expect(page.getByRole('button', { name: 'New conversation', exact: true })).toBeVisible();
     await expect(page.locator('body')).toHaveAttribute('data-slot-disposed', 'yes');
     await page.evaluate(() => window.dispatchEvent(new Event('slot-test')));

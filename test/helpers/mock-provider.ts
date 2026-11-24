@@ -11,7 +11,7 @@ export interface MockProvider {
   close(): Promise<void>;
 }
 
-type MockAnswer = string | { tool: string; args: Record<string, unknown> };
+type MockAnswer = string | AsyncIterable<string> | { tool: string; args: Record<string, unknown> };
 
 export async function createMockProvider(reply?: (request: { messages: { role: string; content: string }[] }) => MockAnswer | Promise<MockAnswer>): Promise<MockProvider> {
   const requests: Record<string, unknown>[] = [];
@@ -30,14 +30,18 @@ export async function createMockProvider(reply?: (request: { messages: { role: s
       const item = (delta: Record<string, unknown>, finish_reason: string | null) =>
         JSON.stringify({ id, object: 'chat.completion.chunk', created: 1,
           model: 'mock-model', choices: [{ index: 0, delta, finish_reason }] });
-      res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' });
       const answer = reply ? await reply({ messages: request.messages.map((message: { role: string; content: string | { text?: string }[] }) => ({
         ...message,
         content: Array.isArray(message.content) ? message.content.map((part: { text?: string }) => part.text ?? '').join('') : message.content
       })) }) : 'Mock response';
+      res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' });
       if (typeof answer === 'string') {
         res.write('data: ' + item({ role: 'assistant', content: answer.slice(0, 5) }, null) + '\n\n');
         res.write('data: ' + item({ content: answer.slice(5) }, null) + '\n\n');
+        res.write('data: ' + item({}, 'stop') + '\n\n');
+      } else if (Symbol.asyncIterator in answer) {
+        res.write('data: ' + item({ role: 'assistant' }, null) + '\n\n');
+        for await (const content of answer) res.write('data: ' + item({ content }, null) + '\n\n');
         res.write('data: ' + item({}, 'stop') + '\n\n');
       } else {
         res.write('data: ' + item({ role: 'assistant', tool_calls: [{
@@ -48,6 +52,7 @@ export async function createMockProvider(reply?: (request: { messages: { role: s
       }
       res.end('data: [DONE]\n\n');
     } catch (error) {
+      if (res.headersSent) { res.destroy(); return; }
       res.writeHead(500);
       res.end(String(error));
     }

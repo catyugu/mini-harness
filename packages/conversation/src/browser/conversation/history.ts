@@ -1,7 +1,6 @@
 import type { Context } from 'cordis';
-import type { ConversationState } from '../composer-api.js';
+import type { SessionDisplayRecord } from '@mini-harness/sessions/display-record';
 import type { MessageExtensions } from './message-extensions.js';
-import { isRunning } from '@mini-harness/sessions/run-state';
 import { createMessageView } from './messages.js';
 
 export function mountHistory(ctx: Context, extensions: MessageExtensions, signal: AbortSignal) {
@@ -9,44 +8,47 @@ export function mountHistory(ctx: Context, extensions: MessageExtensions, signal
   const messages = document.createElement('section');
   messages.id = 'messages'; messages.className = 'messages'; messages.setAttribute('aria-label', 'Messages');
   const view = createMessageView(ctx.miniDialogs, signal, messages, {
-    render: (tool, action) => extensions.render(tool, action), messageActions: () => extensions.actionsForMessage()
-  }, () => ({ sessionId: control.get().conversation?.id, leafId: control.get().view?.leafId }),
-  () => void control.retry().catch(control.report));
-  let previous: ConversationState | undefined;
-  let stream: ReturnType<typeof view.stream> | undefined;
-  let records = new AbortController();
-  signal.addEventListener('abort', () => records.abort(), { once: true });
-  function refreshRecords() {
-    records.abort(); records = new AbortController();
-    const state = control.get(), sessionId = state.conversation?.id;
-    view.placeRecords(sessionId ? state.records.map((record) => {
+    render: (tool, lifetime, action) => extensions.render(tool, lifetime, action),
+    messageActions: () => extensions.actionsForMessage(),
+    report: extensions.report
+  }, () => ({ sessionId: control.get().session?.id, leafId: control.get().history.leafId }),
+  () => void ctx.miniComposer.retry().catch(control.report));
+  const records = new Map<string, { record: SessionDisplayRecord; render?: ReturnType<typeof extensions.recordRenderer>;
+    node: HTMLElement; lifetime: AbortController }>();
+  signal.addEventListener('abort', () => { for (const item of records.values()) item.lifetime.abort(); records.clear(); }, { once: true });
+  let sessionId: string | undefined;
+  function render() {
+    const { session, history, run } = control.get();
+    const reset = session?.id !== sessionId;
+    sessionId = session?.id;
+    const active = new Set(history.records.map(({ id }) => id));
+    for (const [id, item] of records) if (reset || !active.has(id)) { item.lifetime.abort(); records.delete(id); }
+    const nodes = sessionId ? history.records.map((record) => {
+      const render = extensions.recordRenderer(record.plugin);
+      const prior = records.get(record.id);
+      if (prior && prior.render === render && (prior.record === record || JSON.stringify(prior.record) === JSON.stringify(record))) return prior;
+      prior?.lifetime.abort();
+      const lifetime = new AbortController();
       const node = document.createElement('div');
       node.className = 'conversation-record';
-      const rendered = extensions.renderRecord(record, { sessionId, signal: records.signal });
+      node.dataset.conversationRecord = record.id;
+      const rendered = extensions.renderRecord(render, record, { sessionId: sessionId!, signal: lifetime.signal });
       if (rendered) node.append(rendered);
       else { const fallback = document.createElement('p'); fallback.className = 'hint'; fallback.textContent = record.title; node.append(fallback); }
-      return { record, node };
-    }) : [], state.recordMessages);
-  }
-  function render() {
-    const state = control.get();
-    const switched = previous?.conversation?.id !== state.conversation?.id;
-    const reset = !previous || switched || previous.view !== state.view;
-    const start = reset ? 0 : previous?.events.length ?? 0;
-    if (reset) {
-      view.history(state.view?.messages ?? [], state.view?.run?.state === 'failed' ? state.view.run.error : undefined, switched);
-      stream = state.view && isRunning(state.view.run) ? view.stream(state.view) : undefined;
-    }
-    const events = state.events.slice(start);
-    for (const event of events) stream?.(event);
-    if (reset || previous?.records !== state.records || previous?.recordMessages !== state.recordMessages ||
-        (state.records.length && events.some(({ type }) => type === 'user' || type === 'assistant-end' || type === 'tool'))) refreshRecords();
-    previous = state;
+      const item = { record, render, node, lifetime };
+      records.set(record.id, item);
+      return item;
+    }) : [];
+    view.history(history.messages, nodes, run?.state === 'failed' ? run.error : undefined, reset);
   }
   extensions.subscribe(view.refreshActions, signal);
   extensions.subscribeToTools(view.refreshTools, signal);
-  extensions.subscribeToRecords(refreshRecords, signal);
-  control.subscribe(render, signal);
+  extensions.subscribeToRecords(render, signal);
+  control.subscribe(['session', 'history', 'run'], render, signal);
+  control.subscribe(['partial'], () => view.partial(control.get().partial), signal);
+  control.subscribe(['tools'], () => view.activity(control.get().tools), signal);
   render();
+  view.partial(control.get().partial);
+  view.activity(control.get().tools);
   return messages;
 }

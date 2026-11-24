@@ -1,32 +1,34 @@
-import type { PluginScope, ScopeAddress } from '@mini-harness/kernel/scopes';
-import type { PluginSettings } from '@mini-harness/plugin-api/configuration';
+import { ProtectedProviderError } from '@mini-harness/kernel/composition';
+import { DomainError } from '@mini-harness/platform/errors';
+import type { PluginScope, ScopeAddress, ScopeKey } from '@mini-harness/kernel/scopes';
+import { scopeKeys, type PluginSettings } from '@mini-harness/plugin-api/configuration';
 import type { PluginCatalog, PluginPlan } from './catalog.js';
 
 interface Parent {
-  key?: string;
+  key?: ScopeKey;
   ids: ReadonlyMap<string, string>;
   owners: ReadonlyMap<string, string>;
   providers: ReadonlyMap<string, string>;
 }
 
 interface ScopedNode {
-  key: string;
-  parent?: string;
+  key: ScopeKey;
+  parent?: ScopeKey;
   scope: PluginScope;
   isolates: string[];
   owners: ReadonlyMap<string, string>;
   plugins: { plan: PluginPlan; id: string; needs: string[] }[];
 }
 
-export function resolveScopes(settings: PluginSettings, describe: PluginCatalog['plans'], lookup: (key: string) => ScopeAddress | undefined,
+export function resolveScopes(settings: PluginSettings, describe: PluginCatalog['plans'], lookup: (key: ScopeKey) => ScopeAddress | undefined,
   descriptors: ReturnType<PluginCatalog['descriptors']>, application: PluginPlan[], providers: ReadonlyMap<string, string>,
-  active: ReadonlySet<string>, released: ReadonlySet<string>,
-  unavailable: (id: string, error: unknown) => boolean) {
+  active: ReadonlySet<ScopeKey>, released: ReadonlySet<ScopeKey>,
+  unavailable: (id: string, error: unknown, key: ScopeKey) => boolean) {
   const root: Parent = { ids: new Map(application.map(({ id }) => [id, id])), owners: providers, providers };
-  const graph = new Map<string, Parent>();
-  const visiting = new Set<string>();
+  const graph = new Map<ScopeKey, Parent>();
+  const visiting = new Set<ScopeKey>();
   const nodes: ScopedNode[] = [];
-  function visit(key: string): Parent {
+  function visit(key: ScopeKey): Parent {
     const cached = graph.get(key);
     if (cached) return cached;
     if (visiting.has(key)) throw new Error('Cyclic scope ancestry: ' + key);
@@ -38,7 +40,7 @@ export function resolveScopes(settings: PluginSettings, describe: PluginCatalog[
       const configured = Object.entries(config?.plugins ?? {}).filter(([, enabled]) => enabled).map(([id]) => id);
       for (const id of new Set([...configured, ...Object.values(config?.providers ?? {})])) {
         const error = new Error('Configured scope does not exist: ' + key);
-        if (!unavailable(key + '/' + id, error)) throw error;
+        if (!unavailable(id, error, key)) throw error;
       }
       return root;
     }
@@ -55,11 +57,12 @@ export function resolveScopes(settings: PluginSettings, describe: PluginCatalog[
     let plans: PluginPlan[] = [];
     try {
       ({ plans, providers } = describe(settings, descriptors, scope.kind, parent.providers,
-        new Set(parent.ids.keys()), overrides, (id, error) => unavailable(key + '/' + id, error)));
+        new Set(parent.ids.keys()), overrides, (id, error) => unavailable(id, error, key)));
     } catch (error) {
+      if (error instanceof ProtectedProviderError) throw new DomainError('invalid_input', error.message);
       if (!enabled.length && !Object.keys(overrides.providers ?? {}).length) throw error;
       for (const id of new Set([...enabled.map(({ id }) => id), ...Object.values(overrides.providers ?? {})])) {
-        if (!unavailable(key + '/' + id, error)) throw error;
+        if (!unavailable(id, error, key)) throw error;
       }
     }
     for (const { id } of enabled) ids.set(id, key + '/' + id);
@@ -95,6 +98,6 @@ export function resolveScopes(settings: PluginSettings, describe: PluginCatalog[
     });
     return current;
   }
-  for (const key of new Set([...Object.keys(settings.scopes), ...active])) if (!released.has(key)) visit(key);
+  for (const key of new Set([...scopeKeys(settings), ...active])) if (!released.has(key)) visit(key);
   return nodes;
 }

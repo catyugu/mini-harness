@@ -9,7 +9,7 @@ import type { Paths } from '@mini-harness/platform/runtime-paths';
 import type { SessionStore } from './store.js';
 import type { WorkspacePort } from '@mini-harness/workspaces/api';
 import type { RecordDisplay, RecordOwner, SessionRecords } from './records.js';
-import type { ScopePort } from '@mini-harness/kernel/scopes';
+import type { ScopeKey, ScopePort } from '@mini-harness/kernel/scopes';
 import type { CapabilityObservation } from '@mini-harness/kernel/observations';
 import type { ConversationPermission, SessionRecord } from './shared/identity.js';
 import { SessionLog, syncDirectory } from './log.js';
@@ -32,7 +32,7 @@ export class SessionRegistry implements SessionStore {
 
   constructor(private readonly paths: Paths, private readonly workspaces: WorkspacePort,
     private readonly scopes?: ScopePort, private readonly observe?: (event: CapabilityObservation) => void,
-    private readonly forgetScopes?: (keys: string[]) => Promise<void>) {
+    private readonly forgetScopes?: (keys: ScopeKey[]) => Promise<void>) {
     this.state = loadCatalog(paths, workspaces);
     for (const record of this.state.sessions) {
       try { this.openLog(record, 'recover')?.close(); }
@@ -342,7 +342,7 @@ export class SessionRegistry implements SessionStore {
   async recoverDeletion() {
     const pending = this.state.pendingDelete;
     if (!pending?.length) return;
-    await this.forgetScopes?.(pending.map(({ id }) => 'session:' + id));
+    await this.forgetScopes?.(pending.map<ScopeKey>(({ id }) => `session:${id}`));
     for (const entry of pending) {
       if (this.state.sessions.some((record) => record.id === entry.id)) throw new Error('Deletion journal includes an active conversation');
       const file = this.nativeFile(entry);

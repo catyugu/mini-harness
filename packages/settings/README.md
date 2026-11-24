@@ -28,6 +28,8 @@ Uses [Plugin API](../plugin-api/README.md) for selection contracts and [Platform
 
 `readOnlyTools` holds user grants indexed by plugin ID. `browserProviders` selects application-level browser services independently of server providers.
 
+Plugin detail content can be contributed through the settings registry and is tied to the lifetime of the displayed detail.
+
 ## Testing
 
 `tests/config.test.ts` covers validation. [Lifecycle tests](../../test/plugins/lifecycle.test.ts) cover rollback and live config.

@@ -8,7 +8,7 @@ Owns the root Cordis context, built-in descriptor list, local instance credentia
 
 ## Structure
 
-`src/composition.ts` selects built-ins and specifies required capabilities and protected providers. `application.ts` owns the runtime, `server.ts` handles HTTP and static delivery, and `process.ts` handles detached instances.
+`src/composition.ts` selects built-ins and specifies required capabilities and protected provider identities. `application.ts` owns the runtime, `server.ts` handles HTTP and static delivery, and `process.ts` handles detached instances.
 
 ## API
 
@@ -20,7 +20,7 @@ Combines [Plugins](../plugins/README.md), [Settings](../settings/README.md), [Tr
 
 ## Lifecycle
 
-Waits for capability readiness before serving requests. Shutdown seals HTTP and mutation admission, waits for capability quiescence and drains outstanding requests and configuration transactions before releasing the graph.
+Waits for capability readiness before serving requests. Shutdown seals HTTP and mutation admission, waits for capability quiescence and drains outstanding requests and configuration transactions before releasing the graph. Upgrades use connection signals and wait for their asynchronous handlers.
 
 ## Testing
 

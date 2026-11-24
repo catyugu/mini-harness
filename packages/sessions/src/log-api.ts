@@ -42,7 +42,7 @@ export type SessionEvent =
   | { type: 'tool-accepted'; executionId: string; contentDelta?: ContentDelta }
   | { type: 'model'; model: ModelChoice }
   | { type: 'thinking'; level: ThinkingLevel | null }
-  | { type: 'custom'; namespace: string; data: unknown }
+  | { type: 'diagnostic'; code: 'invalid-tool-calls' | 'historical-record'; data: unknown }
   | { type: 'plugin-record'; owner: RecordOwner; data: unknown; display?: RecordDisplay }
   | { type: 'compaction'; summary: string; keepFromId: string | null; tokensBefore?: number }
   | { type: 'context-edit'; targetId: string; replacement: NativeMessage['content'] | null }

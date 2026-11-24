@@ -56,6 +56,6 @@ export function uninstallPlugin(runtime: PluginFilesHost, id: string) {
 }
 export function assertDisabled(settings: PluginFilesHost['settings'], id: string) {
   if (settings.plugins[id] === true || Object.values(settings.scopes).some((scope) =>
-    scope.plugins?.[id] === true || Object.values(scope.providers ?? {}).includes(id)) ||
+    scope?.plugins?.[id] === true || Object.values(scope?.providers ?? {}).includes(id)) ||
       Object.values(settings.providers).includes(id) || Object.values(settings.browserProviders ?? {}).includes(id)) throw new DomainError('conflict', 'Disable and save this plugin before changing its files');
 }

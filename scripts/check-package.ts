@@ -79,7 +79,7 @@ async function checkPackage() {
       declare const api: PluginApi;
       declare const ctx: Context;
       const scope: ScopeSettings = { disabledTools: ['write'] };
-      const llm: LlmPort | undefined = api.service('harnessLlm');
+      const llm: LlmPort | undefined = ctx.harnessLlm;
       ctx.provide('example', { greet: (name: string) => name.toUpperCase() });
       ctx.example.greet('world');
       // @ts-expect-error The run scheduler is a private Cordis service.
@@ -88,7 +88,7 @@ async function checkPackage() {
       ctx.harnessRegistry;
       // @ts-expect-error The settings store is a private Cordis service.
       ctx.harnessSettingsStore;
-      api.service('example')?.greet('world');
+      ctx.example.greet('world');
       api.storage.write('state', { count: 1 });
       api.secrets.read('credential');
       api.onConfigChange(() => {});
@@ -110,13 +110,11 @@ async function checkPackage() {
         if (signal.aborted) socket.destroy();
       });
       // @ts-expect-error The declared service takes a string.
-      api.service('example')?.greet(1);
+      ctx.example.greet(1);
       // @ts-expect-error TypeScript plugins declare their own services.
-      api.service('undeclared');
-      // @ts-expect-error The run scheduler is a host service.
-      api.service('harnessRuns');
+      ctx.undeclared;
       // @ts-expect-error Plugin execution operations must use the scoped binding.
-      api.service('harnessExecution').cancel('session');
+      ctx.harnessExecution.cancel('session');
     `);
     await writeFile(join(installed, 'browser-types.mts'), `
       import { settingsExtensions, slotExtensions, type FrontendSetup, type SlotRenderer } from 'mini-harness/browser-plugin';
@@ -130,6 +128,18 @@ async function checkPackage() {
         // @ts-expect-error A keyed contribution needs a renderer.
         frontend.contribute(slotExtensions.keyed, 'sidebar.primary', 'example', document.body);
         frontend.watch(() => {});
+        const model = ctx.miniComposer;
+        model.setText('Write a review');
+        model.choose({ provider: 'local', id: 'example-model' });
+        model.chooseThinking(null);
+        void model.setPermission('readOnly');
+        void model.addFiles([new File(['text'], 'notes.txt', { type: 'text/plain' })]);
+        model.removeAttachment(0);
+        model.subscribe(() => model.draft(), frontend.signal);
+        void model.send();
+        // @ts-expect-error The draft snapshot cannot be edited directly.
+        model.draft().text = 'Replace this';
+        ctx.miniConversation.subscribe(['partial'], () => ctx.miniConversation.get().partial, frontend.signal);
         frontend.contribute(settingsExtensions.register, { id: 'example', section: 'General', render: ({ configuration }) =>
           ctx.miniPrimitives.status(String(configuration.get<boolean>('showDetails')))
         });

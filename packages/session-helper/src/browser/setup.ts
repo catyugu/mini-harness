@@ -1,4 +1,4 @@
-import { conversationExtensions } from '@mini-harness/conversation/browser/composer-api';
+import { conversationExtensions } from '@mini-harness/conversation/browser/extensions';
 import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend-api';
 
 /** One Cordis scope owns both message actions and the branch revision draft. */

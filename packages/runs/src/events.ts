@@ -1,6 +1,5 @@
 import { isRunning, type RunInfo } from '@mini-harness/sessions/run-state';
 import type { RunEvent, StreamEvent } from './stream.js';
-import type { ViewMessage } from '@mini-harness/sessions/message';
 
 export class RunEvents {
   private events: RunEvent[] = [];
@@ -31,9 +30,9 @@ export class RunEvents {
     return item;
   }
 
-  watch(after: number, emit: (event: RunEvent) => void, history: () => ViewMessage[], end = () => {}) {
+  watch(after: number, emit: (event: RunEvent) => void, history: () => Pick<Extract<StreamEvent, { type: 'snapshot' }>, 'messages' | 'records' | 'model' | 'thinkingLevel' | 'leafId'>, end = () => {}) {
     if (after < (this.events[0]?.sequence ?? 1) - 1) {
-      emit({ type: 'snapshot', messages: history(), partial: this.partial, tools: this.activeTools,
+      emit({ type: 'snapshot', ...history(), partial: this.partial, tools: this.activeTools,
         run: { ...this.info }, sequence: this.info.sequence, runId: this.info.id, runSessionId: this.info.sessionId });
     } else {
       for (const event of this.events) if (event.sequence > after) emit(structuredClone(event));

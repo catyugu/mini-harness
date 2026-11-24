@@ -2,15 +2,16 @@
  * Contributions can arrive before their owner and are restored when an owner remounts.
  * The registry has no knowledge of business features or Cordis.
  */
+import { KeyedContributions } from '@mini-harness/ui-runtime/contribution';
 import type { KeyedSlotOptions, SlotKind, SlotName, SlotRenderer } from './api.js';
 
-interface Entry { key?: string; node?: HTMLElement; render?: SlotRenderer; order: number }
+interface Entry { node?: HTMLElement; render?: SlotRenderer; order: number }
 interface Mounted { node: HTMLElement; release(): void }
 interface Outlet { container: HTMLElement; kind: SlotKind; active: Map<Entry, Mounted> }
 
 export class SlotRegistry {
   private readonly owners = new Map<SlotName, Outlet>();
-  private readonly entries = new Map<SlotName, Set<Entry>>();
+  private readonly entries = new Map<SlotName, KeyedContributions<string | HTMLElement, Entry>>();
 
   define(name: SlotName, container: HTMLElement, kind: SlotKind = 'list'): () => void {
     if (this.owners.has(name)) throw new Error('Duplicate slot owner: ' + name);
@@ -29,24 +30,25 @@ export class SlotRegistry {
   }
 
   register(name: SlotName, node: HTMLElement, order = 0): () => void {
-    if ([...(this.entries.get(name) ?? [])].some((entry) => entry.node === node))
+    if (this.entries.get(name)?.get(node))
       throw new Error('Duplicate node contribution: ' + name);
-    return this.add(name, { node, order });
+    return this.add(name, node, { node, order });
   }
 
   registerKeyed(name: SlotName, key: string, render: SlotRenderer, { order = 0 }: KeyedSlotOptions = {}): () => void {
     if (!key || !Number.isFinite(order)) throw new Error('Invalid keyed slot contribution');
-    return this.add(name, { key, render, order });
+    return this.add(name, key, { render, order });
   }
 
-  private add(name: SlotName, value: Entry) {
-    const entries = this.entries.get(name) ?? new Set<Entry>();
-    entries.add(value);
+  private add(name: SlotName, key: string | HTMLElement, value: Entry) {
+    const entries = this.entries.get(name) ?? new KeyedContributions<string | HTMLElement, Entry>();
     this.entries.set(name, entries);
+    const remove = entries.add(key, value, value.order);
     const dispose = () => {
-      if (!entries.delete(value)) return;
-      if (!entries.size) this.entries.delete(name);
-      this.render(name);
+      const prior = entries.get(key);
+      remove();
+      if (this.entries.get(name) === entries && !entries.size) this.entries.delete(name);
+      if (prior !== entries.get(key)) this.render(name);
     };
     try { this.render(name); }
     catch (error) { dispose(); throw error; }
@@ -78,14 +80,8 @@ export class SlotRegistry {
   private render(name: SlotName) {
     const owner = this.owners.get(name);
     if (!owner) return;
-    const selected = new Map<string | Entry, Entry>();
-    for (const entry of this.entries.get(name) ?? []) {
-      const key = entry.key ?? entry;
-      const prior = selected.get(key);
-      if (!prior || entry.order >= prior.order) selected.set(key, entry);
-    }
-    if (owner.kind === 'single' && selected.size > 1) throw new Error('Multiple entries for single slot: ' + name);
-    const entries = [...selected.values()].sort((a, b) => a.order - b.order);
+    const entries = [...this.entries.get(name)?.values() ?? []].sort((a, b) => a.order - b.order);
+    if (owner.kind === 'single' && entries.length > 1) throw new Error('Multiple entries for single slot: ' + name);
     const visible = new Set(entries);
     for (const [entry, active] of owner.active) if (!visible.has(entry)) this.unmount(owner, entry, active);
     const staged = new Map<Entry, Mounted>();

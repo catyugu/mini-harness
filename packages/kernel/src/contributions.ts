@@ -1,3 +1,4 @@
+import type { ScopeKey } from './scopes.js';
 import type { Context } from 'cordis';
 import type { ServiceMap } from './services.js';
 
@@ -5,7 +6,7 @@ export interface ContributionSource {
   readonly context: Context;
   readonly pluginId: string;
   readonly instanceId: string;
-  readonly scopeKey?: string;
+  readonly scopeKey?: ScopeKey;
   readonly signal: AbortSignal;
   visible(scopeId: string): boolean;
   depth(scopeId: string): number;
