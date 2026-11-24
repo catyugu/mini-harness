@@ -8,13 +8,8 @@
   },
   "dependencies": {
     "@mini-harness/conversation": "workspace:*",
-    "@mini-harness/input": "workspace:*",
-    "@mini-harness/llm": "workspace:*",
-    "@mini-harness/platform": "workspace:*",
     "@mini-harness/plugin-api": "workspace:*",
-    "@mini-harness/runs": "workspace:*",
     "@mini-harness/sessions": "workspace:*",
-    "@mini-harness/transport": "workspace:*",
     "@mini-harness/ui-runtime": "workspace:*"
   }
 }

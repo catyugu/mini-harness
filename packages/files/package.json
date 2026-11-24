@@ -9,7 +9,6 @@
   "dependencies": {
     "@mini-harness/conversation": "workspace:*",
     "@mini-harness/file-access": "workspace:*",
-    "@mini-harness/kernel": "workspace:*",
     "@mini-harness/platform": "workspace:*",
     "@mini-harness/plugin-api": "workspace:*",
     "@mini-harness/sessions": "workspace:*",

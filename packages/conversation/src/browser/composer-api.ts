@@ -1,5 +1,7 @@
 import type {} from 'cordis';
 import type { BrowserContributionSource } from '@mini-harness/ui-runtime/contribution';
+import type { PluginIcon } from '@mini-harness/plugin-api/descriptor';
+import type { SessionDisplayRecord } from '@mini-harness/sessions/display-record';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { Attachment } from '@mini-harness/input/message';
 import type { MessageContent, ViewMessage } from '@mini-harness/sessions/message';
@@ -44,11 +46,14 @@ export interface MessageAction {
   id: string;
   label: string;
   successLabel?: string;
-  icon: 'copy' | 'edit' | 'refresh';
+  icon: PluginIcon;
   order?: number;
   visible(context: MessageActionContext): boolean;
   run(context: MessageActionContext): void | Promise<void>;
 }
+export type RecordRenderer = (record: SessionDisplayRecord, context: { sessionId: string; signal: AbortSignal }) =>
+  HTMLElement | undefined;
+
 export interface DraftMode {
   title: string;
   text: string;
@@ -65,6 +70,7 @@ declare module 'cordis' {
       completion(trigger: string, complete: Completer): () => void;
     };
     miniMessages: {
+      registerRecord(plugin: string, render: RecordRenderer): () => void;
       registerAction(action: MessageAction): () => void;
       registerTool(name: string, render: (tool: ToolView) => HTMLElement | undefined, action?: boolean): () => void;
     };
@@ -81,6 +87,9 @@ export const conversationExtensions = {
   draft(source: BrowserContributionSource, mode: DraftMode) {
     return source.effect(() => source.service('miniComposer').beginDraftMode(mode));
   },
+  record(source: BrowserContributionSource, render: RecordRenderer, plugin = source.id) {
+    return source.effect(() => source.service('miniMessages').registerRecord(plugin, render));
+  },
   messageAction(source: BrowserContributionSource, action: MessageAction) {
     return source.effect(() => source.service('miniMessages').registerAction(action));
   },
@@ -96,6 +105,8 @@ declare module '@mini-harness/ui-slots/browser/api' {
   interface SlotMap {
     'workspace.welcome': { kind: 'single' };
     'conversation.composer': { kind: 'list' };
+    'conversation.composer-view': { kind: 'single' };
+    'conversation.history': { kind: 'single' };
     'conversation.approvals': { kind: 'list' };
   }
 }

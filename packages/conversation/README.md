@@ -26,6 +26,8 @@ Application browser plugins `core:conversation`, `core:sessions-data`, `core:nav
 
 `core:conversation.queueMode` defaults to `steer` in the manifest and can be updated in Settings.
 
+The native composer and message history occupy keyed outlets. Plugin display records project from the active log branch with a title fallback when the browser renderer is absent.
+
 ## Testing
 
 [Browser conversation and navigation suites](../../test/browser/) cover rendering, search, image previews, message actions and stream reconnection.

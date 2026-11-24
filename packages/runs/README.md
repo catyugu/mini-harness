@@ -12,7 +12,7 @@ Owns run IDs, cancellation, compaction scheduling, current activity and bounded 
 
 ## API
 
-`harnessRuns` is the internal scheduler. Conversation consumes the replay and activity interfaces and transforms display data at its transport boundary.
+`harnessRuns` is the internal scheduler. `executionExtensions.control` provides scoped submission, status and cancellation to native and installed plugins. Conversation supplies user submission preferences and consumes replay and activity.
 
 ## Dependencies
 

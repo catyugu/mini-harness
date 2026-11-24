@@ -18,12 +18,17 @@ test('child spawning is limited to one level', () => {
 test('semaphore caps concurrency and releases on errors', async () => {
   const sem = new Semaphore(2);
   let active = 0, peak = 0;
-  const outputs = await Promise.all(Array.from({ length: 8 }, (_, i) => sem.run(async () => {
-    active++; peak = Math.max(peak, active);
-    await new Promise((resolve) => setTimeout(resolve, 5));
-    active--;
-    if (i === 2) throw new Error('expected');
-    return i;
+  const outputs = await Promise.all(Array.from({ length: 8 }, (_, i) => sem.lease().then(async (lease) => {
+    try {
+      active++;
+      peak = Math.max(peak, active);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      if (i === 2) throw new Error('expected');
+      return i;
+    } finally {
+      active--;
+      lease.release();
+    }
   }).catch(() => 'error')));
   assert.equal(peak, 2);
   assert.equal(outputs[2], 'error');

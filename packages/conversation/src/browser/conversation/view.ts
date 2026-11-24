@@ -4,6 +4,7 @@ import type { Attachment } from '@mini-harness/input/message';
 import type { Conversation, ConversationView } from '../../shared/api.js';
 import type { ConversationPermission } from '@mini-harness/sessions/identity';
 import type { ModelChoice, ThinkingLevel } from '@mini-harness/llm/vocabulary';
+import type { SessionDisplayRecord } from '@mini-harness/sessions/display-record';
 import type { MessageContent } from '@mini-harness/sessions/message';
 import { isRunning } from '@mini-harness/sessions/run-state';
 import type { RunEvent } from '@mini-harness/runs/stream';
@@ -14,7 +15,7 @@ import { createConversationController } from './controller.js';
 import type { ConversationSelection, ConversationSessions } from '../session-data/api.js';
 import { createMessageView } from './messages.js';
 import { CommandRegistry } from './commands.js';
-import type { ComposerCommand, ToolView, MessageAction, DraftMode } from '../composer-api.js';
+import type { ComposerCommand, ToolView, MessageAction, DraftMode, RecordRenderer } from '../composer-api.js';
 import { createComposer, type ConversationDraft } from './composer.js';
 import { createModelPicker } from './model-picker.js';
 import { createThinkingPicker } from './thinking-picker.js';
@@ -34,6 +35,7 @@ interface ConversationServices {
   setTitle(title: string): void;
   renderTool(tool: ToolView, action?: boolean): HTMLElement | undefined;
   messageActions(): MessageAction[];
+  renderRecord: RecordRenderer;
 }
 
 export function conversationView(api: FrontendApi, state: ConversationSelection, options: ConversationServices) {
@@ -46,12 +48,13 @@ export function conversationView(api: FrontendApi, state: ConversationSelection,
         <div id="workspaceWelcome"></div>
       </section>
       <div id="runSummary" class="run-summary" aria-label="Latest run" hidden><span></span><time></time><details id="changedFiles" hidden><summary></summary><ul></ul></details></div>
-      <section id="messages" class="messages" aria-label="Messages" hidden></section>
+      <div id="conversationRecords" class="conversation-records" hidden></div>
+      <div id="conversationHistory" hidden><section id="messages" class="messages" aria-label="Messages"></section></div>
       <div class="composer-wrap">
         <div id="approvalRequests" class="approval-requests"></div>
         <div id="queuedMessages" class="queued-messages" hidden></div>
         <div id="status" class="status" role="status"></div>
-        <form id="composer" class="composer">
+        <div id="composerOutlet"><form id="composer" class="composer">
           <div id="attachments" class="attachments" hidden></div>
           <div id="suggestions" class="suggestions" role="listbox" aria-label="Input suggestions" hidden></div>
           <div id="draftMode" class="draft-mode" hidden><span></span><button type="button" aria-label="Cancel editing">Cancel</button></div>
@@ -74,19 +77,31 @@ export function conversationView(api: FrontendApi, state: ConversationSelection,
             <button id="stop" type="button" aria-label="Stop response" hidden data-icon="stop"></button>
             <button id="send" type="submit" aria-label="Send" data-icon="send"></button>
           </div>
-        </form>
+        </form></div>
       </div>
     </div>`);
   api.contribute(slotExtensions.register, 'conversation.body', view);
-  const { element } = scopedElements(view);
+  const viewElements = scopedElements(view);
+  const composer = viewElements.element<'form'>('composer');
+  const composerElements = scopedElements(composer);
+  function element<K extends keyof HTMLElementTagNameMap = 'div'>(id: string) {
+    return viewElements.element<K>(id) ?? composerElements.element<K>(id);
+  }
+  composer.remove();
+  api.contribute(slotExtensions.define, 'conversation.composer-view', element('composerOutlet'), 'single');
+  api.contribute(slotExtensions.keyed, 'conversation.composer-view', 'composer', () => composer);
   const outlets = {
     composer: element('composerExtensions'), approvals: element('approvalRequests'), workspace: element('workspaceWelcome')
   };
 
   const messages = element('messages');
+  const historyOutlet = element('conversationHistory');
+  const recordOutlet = element('conversationRecords');
+  messages.remove();
+  api.contribute(slotExtensions.define, 'conversation.history', historyOutlet, 'single');
+  api.contribute(slotExtensions.keyed, 'conversation.history', 'history', () => messages);
   const welcome = element('welcome');
   const showRunSummary = createRunSummary(element('runSummary'), api.onDispose);
-  const composer = element<'form'>('composer');
   const prompt = element<'textarea'>('prompt');
 
   let sending = false;
@@ -165,9 +180,9 @@ export function conversationView(api: FrontendApi, state: ConversationSelection,
   let conversationModel: ModelChoice | undefined;
   let conversationThinking: ThinkingLevel | undefined;
   let thinkingDraft: ThinkingLevel | null | undefined;
-  const thinkingPicker = createThinkingPicker(view, (level) => { thinkingDraft = level; updateModelControls(); }, api.signal);
+  const thinkingPicker = createThinkingPicker(composer, (level) => { thinkingDraft = level; updateModelControls(); }, api.signal);
   let activeLeaf: string | null | undefined;
-  const modelPicker = createModelPicker(view, (choice) => { modelDraft = choice; thinkingDraft = undefined; updateModelControls(); }, api.signal);
+  const modelPicker = createModelPicker(composer, (choice) => { modelDraft = choice; thinkingDraft = undefined; updateModelControls(); }, api.signal);
   const submitted = new Map<string, { runId: string; clear: () => void }>();
   const lastInputs = new Map<string, { message: string; attachments: Attachment[] }>();
   const blankDraft = (): ConversationDraft => ({ text: '', attachments: [], version: 0, loading: 0 });
@@ -215,7 +230,7 @@ export function conversationView(api: FrontendApi, state: ConversationSelection,
     prompt.style.height = Math.min(prompt.scrollHeight, 210) + 'px';
   };
   const commands = new CommandRegistry();
-  const composerUi = createComposer(view, draft, report, commands, api.signal);
+  const composerUi = createComposer(composer, draft, report, commands, api.signal);
   const messageView = createMessageView(api, messages, {
     render: options.renderTool, messageActions: options.messageActions
   }, () => ({ sessionId: active(), leafId: activeLeaf }), () => {
@@ -235,9 +250,28 @@ export function conversationView(api: FrontendApi, state: ConversationSelection,
     lastInputs.set(id, { message: messageView.textOf(content), attachments });
   }
 
+  let displayRecords: SessionDisplayRecord[] = [];
+  let recordView = new AbortController();
+  api.onDispose(() => recordView.abort());
+  function refreshRecords() {
+    recordView.abort();
+    recordView = new AbortController();
+    const sessionId = active();
+    const signal = recordView.signal;
+    recordOutlet.replaceChildren(...(sessionId ? displayRecords.map((record) => {
+      const node = options.renderRecord(record, { sessionId, signal });
+      if (node) return node;
+      const fallback = document.createElement('p');
+      fallback.className = 'hint';
+      fallback.textContent = record.title;
+      return fallback;
+    }) : []));
+    recordOutlet.hidden = !recordOutlet.childElementCount;
+  }
+
   function showWelcome(show: boolean) {
     welcome.hidden = !show;
-    messages.hidden = show;
+    historyOutlet.hidden = show;
     options.showWorkspaceInHeader(!show);
   }
 
@@ -269,7 +303,9 @@ export function conversationView(api: FrontendApi, state: ConversationSelection,
     options.setTitle(item?.title ?? 'New conversation');
     state.selectConversation(item, revealWorkspace);
     messageView.history(history, item?.run?.state === 'failed' ? item.run.error : undefined, switched);
-    showWelcome(!messages.childElementCount && !isRunning(item?.run));
+    displayRecords = view?.records ?? [];
+    refreshRecords();
+    showWelcome(!messages.childElementCount && !displayRecords.length && !isRunning(item?.run));
   }
 
   function display(item: ConversationView, signal: AbortSignal, revealWorkspace: boolean) {
@@ -481,6 +517,20 @@ export function conversationView(api: FrontendApi, state: ConversationSelection,
     queueRevision++;
     renderQueue(element('queuedMessages'), queue, cancelQueue);
   }
+  api.onDispose(options.projections.register('conversation-records', {
+    async sync(_revision, reconnect, changedId) {
+      const id = active(), signal = visit.signal;
+      if (!id || (!reconnect && changedId && id !== changedId)) return;
+      try {
+        const item = await controller.read(id, signal);
+        if (!signal.aborted && id === active()) {
+          displayRecords = item.records;
+          refreshRecords();
+          showWelcome(!messages.childElementCount && !displayRecords.length && !isRunning(item.run));
+        }
+      } catch (error) { if (!signal.aborted) throw error; }
+    }
+  }));
   api.onDispose(options.projections.register('queue', {
     async sync(_revision, reconnect, changedId) {
       const id = active(), signal = visit.signal;
@@ -524,7 +574,7 @@ export function conversationView(api: FrontendApi, state: ConversationSelection,
 
   element('queueSend').onclick = () => void queueMessage();
   return {
-    outlets, activate, showConversation, clear, updateModelControls, report,
+    outlets, refreshRecords, activate, showConversation, clear, updateModelControls, report,
     refreshTools: messageView.refreshTools,
     refreshActions: messageView.refreshActions,
     beginDraftMode(mode: DraftMode) {

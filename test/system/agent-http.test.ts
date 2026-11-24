@@ -58,7 +58,7 @@ test('native agent through HTTP: streaming, persistence, Skills, export and perm
 
   const stored = await (await get('/api/sessions/' + session.id)).json();
   assert.equal(stored.title, 'Test native integration');
-  const file = app.runtime.registry.log(session.id).file;
+  const file = app.runtime.plugins.ctx.harnessRegistry.log(session.id).file;
   assert.ok(file && existsSync(file));
   assert.ok(stored.messages.some((m: {role: string}) => m.role === 'assistant'));
 
@@ -84,10 +84,10 @@ test('native agent through HTTP: streaming, persistence, Skills, export and perm
   assert.match(sentAfterChange, /Mention the verification skill/);
   assert.match(sentAfterChange, /\/skill:unavailable/);
   assert.doesNotMatch(sentAfterChange, /Changed skill body/);
-  const child = app.runtime.registry.create({ parentId: session.id });
+  const child = app.runtime.plugins.ctx.harnessRegistry.create({ parentId: session.id });
   await runs.send(child.id, '/skill:unavailable', undefined, { source: 'agent' });
   await assert.rejects(runs.send(child.id, '/skill:unavailable'), /Unknown skill: unavailable/);
-  await app.runtime.registry.delete([child.id]);
+  await app.runtime.plugins.ctx.harnessRegistry.delete([child.id]);
 
   // Use the new server's token after restart.
   const newPort = await app.listen(0);
@@ -109,7 +109,7 @@ test('native agent through HTTP: streaming, persistence, Skills, export and perm
   });
   assert.equal(deleted.status, 200);
   assert.equal((await deleted.json()).deleted[0], session.id);
-  assert.equal((await app.runtime.registry.list()).length, 0);
+  assert.equal((await app.runtime.plugins.ctx.harnessRegistry.list()).length, 0);
   assert.equal(existsSync(file), false);
 });
 

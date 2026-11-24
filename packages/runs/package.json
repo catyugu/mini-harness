@@ -6,12 +6,14 @@
   "exports": {
     "./api": "./src/api.ts",
     "./manifest": "./src/manifest.ts",
-    "./stream": "./src/stream.ts"
+    "./stream": "./src/stream.ts",
+    "./execution": "./src/execution.ts"
   },
   "miniHarness": {
     "api": [
       "./api",
-      "./stream"
+      "./stream",
+      "./execution"
     ]
   },
   "dependencies": {

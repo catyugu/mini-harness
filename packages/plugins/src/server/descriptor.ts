@@ -4,7 +4,7 @@ import { readJson } from '@mini-harness/platform/json';
 import { pluginIdPattern, serviceNamePattern } from '@mini-harness/plugin-api/selection';
 import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
 import { readBrowserAssets, type BrowserAssets } from './browser-assets.js';
-import { isRegularFile } from './source.js';
+import { assertPeerCompatibility, isRegularFile } from './source.js';
 
 import type { PluginMetadata } from '../shared/metadata.js';
 
@@ -14,6 +14,7 @@ export interface DiscoveredPlugin extends PluginDescriptor, Pick<PluginMetadata,
 }
 
 export function describePlugin(id: string, folder: string): DiscoveredPlugin {
+  assertPeerCompatibility(folder);
   const source = join(folder, 'plugin.js');
   const hasHost = isRegularFile(source);
   const hasWeb = isRegularFile(join(folder, 'web.js'));
@@ -53,6 +54,12 @@ export function describePlugin(id: string, folder: string): DiscoveredPlugin {
   const configSchema = manifest.configSchema;
   if (configSchema && (configSchema.type !== 'object' || !configSchema.properties || typeof configSchema.properties !== 'object'))
     throw new Error('Expected an object configSchema for plugin: ' + id);
+  const { configGroups, configHint } = manifest;
+  if (configGroups !== undefined && (!Array.isArray(configGroups) || !configGroups.every((group) =>
+    group && typeof group.title === 'string' && Array.isArray(group.fields) &&
+    group.fields.every((field) => typeof field === 'string' && Object.hasOwn(configSchema?.properties ?? {}, field)))))
+    throw new Error('Invalid plugin configuration groups: ' + id);
+  if (configHint !== undefined && typeof configHint !== 'string') throw new Error('Invalid plugin configuration hint: ' + id);
   const icon = manifest.icon;
   if (icon !== undefined && !(
     typeof icon === 'string' && icon.length > 0 && icon.length <= 128 ||
@@ -61,5 +68,5 @@ export function describePlugin(id: string, folder: string): DiscoveredPlugin {
     (icon.viewBox === undefined || typeof icon.viewBox === 'string' && icon.viewBox.length <= 100)
   )) throw new Error('Invalid plugin icon: ' + id);
   return { source: hasHost ? source : undefined, resources, scope, id, title, description,
-    requires, provides, inject, optional, browserRequires, browserInject, browserProvides, configSchema, configChanges: manifest.configChanges, icon, web: hasWeb, trustedCode: true };
+    requires, provides, inject, optional, browserRequires, browserInject, browserProvides, configSchema, configGroups, configHint, configChanges: manifest.configChanges, icon, web: hasWeb, trustedCode: true };
 }

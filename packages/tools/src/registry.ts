@@ -3,11 +3,14 @@ import { Check, Errors } from 'typebox/value';
 import { isTrustedContribution } from '@mini-harness/kernel/contributions';
 import { isToolContent, registerToolBinding, type ToolDefinition, type ToolPort } from './api.js';
 import type { ToolDecision } from './extensions.js';
+import type { ToolPolicy } from './policy.js';
 
 interface ToolRegistration {
   name: string;
   scope?: string;
   readOnly: boolean;
+  pluginId?: string;
+  trusted: boolean;
   bind(id: string): ToolDefinition;
   visible(id: string): boolean;
 }
@@ -18,7 +21,7 @@ export class ToolRegistry implements ToolPort {
 
   constructor(private readonly address: (id: string) => readonly string[] = () => [],
     private readonly decide?: (request: ToolDecision) => Promise<'deny' | undefined>,
-    private readonly restrictions: (id: string) => { readOnly: boolean; disabledTools: string[] } = () => ({
+    private readonly restrictions: ToolPolicy = () => ({
       readOnly: false, disabledTools: []
     })) {}
 
@@ -31,7 +34,8 @@ export class ToolRegistry implements ToolPort {
     const registry = this;
     const active = new Set<Promise<unknown>>();
     const expired = () => lifetime.signal.aborted || source?.signal.aborted === true;
-    const entry: ToolRegistration = { name, scope, readOnly: access === 'readOnly' && !!source && isTrustedContribution(source),
+    const entry: ToolRegistration = { name, scope, readOnly: access === 'readOnly', pluginId: source?.pluginId,
+      trusted: source !== undefined && isTrustedContribution(source),
       visible: (id) => !expired() && (source?.visible(id) ?? true) && (visible?.(id) ?? true),
       bind(id) {
         const tool = bind(id);
@@ -88,9 +92,13 @@ export class ToolRegistry implements ToolPort {
     if (candidate?.visible(id)) return candidate;
   }
 
-  private allowed(id: string, { name, readOnly }: ToolRegistration) {
+  private allowed(id: string, { name, readOnly, pluginId, trusted }: ToolRegistration) {
     const policy = this.restrictions(id);
-    return !policy.disabledTools.includes(name) && (!policy.readOnly || readOnly);
+    if (policy.disabledTools.includes(name)) return false;
+    if (!policy.readOnly) return true;
+    const grant = pluginId && Object.hasOwn(policy.readOnlyTools ?? {}, pluginId)
+      ? policy.readOnlyTools?.[pluginId] : undefined;
+    return readOnly && (trusted || grant?.includes(name) === true);
   }
 
   isAvailable(id: string, tool: ToolDefinition) {

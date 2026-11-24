@@ -26,6 +26,8 @@ The `skills` application plugin owns its tool registration, routes and browser p
 
 Skill discovery uses the application and workspace directories. Enable the plugin in Plugins.
 
+Skill tool bindings and list requests use the public session access and scope preparation APIs.
+
 ## Testing
 
 `tests/loader.test.ts` covers discovery and loading. [Agent HTTP tests](../../test/system/agent-http.test.ts) cover committed skill input.

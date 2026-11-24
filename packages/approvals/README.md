@@ -20,7 +20,9 @@ Uses [Transport](../transport/README.md) to publish changes. Shell consumes appr
 
 ## Lifecycle
 
-`core:approvals` mounts at application scope. Run cancellation and plugin disposal release pending requests and listeners.
+`core:approval-data` owns the browser projection and consumes the application approval capability. `core:approvals` mounts at application scope. Run cancellation and plugin disposal release pending requests and listeners.
+
+Native and installed plugins use `approvalExtensions.request`. Requests carry the plugin identity, session, current run and cancellation signal. Conversation owns the shared approval panel.
 
 ## Testing
 

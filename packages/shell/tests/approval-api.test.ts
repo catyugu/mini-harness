@@ -12,7 +12,7 @@ test('shell approval gates execution, handles rejection and cancellation', async
   for (const allow of [false, true]) {
     await request('/sessions/' + session.id + '/runs', 'POST', { message: 'Run a shell command' });
     const pending = await waitUntil(() => request('/approvals'), (r) => r.body.length > 0);
-    assert.equal(pending.body[0].command, 'echo approved');
+    assert.equal(pending.body[0].message, 'echo approved');
     assert.equal((await request('/approvals', 'POST', { id: pending.body[0].id, allow })).status, 200);
     await finish(session.id);
     const history = (await request('/sessions/' + session.id)).body.messages;
@@ -88,8 +88,8 @@ test('full access bypasses Shell prompts only for its conversation and applies t
   await request('/approvals', 'POST', { id: pending.body[0].id, allow: true });
   await finish(standard.id);
 
-  const parent = app.runtime.registry.create({ permission: 'readOnly' });
-  const child = app.runtime.registry.create({ parentId: parent.id, permission: 'fullAccess' });
+  const parent = app.runtime.plugins.ctx.harnessRegistry.create({ permission: 'readOnly' });
+  const child = app.runtime.plugins.ctx.harnessRegistry.create({ parentId: parent.id, permission: 'fullAccess' });
   assert.equal(app.runtime.plugins.ctx.harnessTools.forSession(child.id).some(({ name }) => name === 'sandbox_shell'), false);
 });
 
@@ -109,8 +109,8 @@ test('disabling Shell waits until conversations using its tools have finished', 
     return { tool: 'sandbox_shell', args: { command: 'echo must-not-run' } };
   });
   await app.runtime.configuration.update({ plugins: { shell: true }, pluginConfig: { shell: { mode: 'host' } } });
-  const shell = app.runtime.registry.create();
-  const other = app.runtime.registry.create();
+  const shell = app.runtime.plugins.ctx.harnessRegistry.create();
+  const other = app.runtime.plugins.ctx.harnessRegistry.create();
   const pending = app.runtime.plugins.ctx.harnessRuns.send(other.id, 'Unrelated task');
   try {
     await running;
@@ -121,7 +121,7 @@ test('disabling Shell waits until conversations using its tools have finished', 
     assert.equal((await request('/approvals', 'POST', { id: approval.id, allow: false })).status, 200);
     assert.ok(app.runtime.plugins.ctx.harnessRuns.active(other.id));
     assert.equal((await finish(shell.id)).body.run.state, 'completed');
-    const tool = expectPresent(app.runtime.registry.log(shell.id).projection().messages.find(({ role }) => role === 'toolResult'), 'shell tool result');
+    const tool = expectPresent(app.runtime.plugins.ctx.harnessRegistry.log(shell.id).projection().messages.find(({ role }) => role === 'toolResult'), 'shell tool result');
     assert.equal(tool.isError, true);
   } finally { release(); }
   assert.equal(await pending, 'Unrelated task completed');

@@ -8,7 +8,7 @@ import { writeJson } from '@mini-harness/platform/json';
 import type { Paths } from '@mini-harness/platform/runtime-paths';
 import type { SessionStore } from './store.js';
 import type { WorkspacePort } from '@mini-harness/workspaces/api';
-import type { SessionRecords } from './records.js';
+import type { RecordDisplay, SessionRecords } from './records.js';
 import type { ScopePort } from '@mini-harness/kernel/scopes';
 import type { CapabilityObservation } from '@mini-harness/kernel/observations';
 import type { ConversationPermission, SessionRecord } from './shared/identity.js';
@@ -21,7 +21,7 @@ type Participant = Parameters<SessionStore['beforeDelete']>[0];
 export class SessionRegistry implements SessionStore {
   private state: CatalogState;
   private readonly deleting = new Set<string>();
-  private readonly deletingWorkspaces = new Set<string>();
+  private readonly deletions = new Set<Promise<string[]>>();
   private readonly participants = new Set<Participant>();
   private readonly logs = new Map<string, SessionLog>();
   private readonly latestRuns = new Map<string, RunInfo>();
@@ -46,8 +46,8 @@ export class SessionRegistry implements SessionStore {
     this.state = state;
   }
 
-  private notify(id: string, deleted = false, queue = false) {
-    this.events.dispatchEvent(new CustomEvent('change', { detail: { id, deleted, queue } }));
+  private notify(id: string, deleted = false, queue = false, records = false) {
+    this.events.dispatchEvent(new CustomEvent('change', { detail: { id, deleted, queue, records } }));
   }
 
   list(workspaceId?: string) {
@@ -63,7 +63,7 @@ export class SessionRegistry implements SessionStore {
   assertAvailable(id?: string, workspaceId = id && this.get(id)?.workspaceId) {
     if (this.closing) throw new DomainError('unavailable', 'Agent service is unavailable during shutdown');
     if (id && this.deleting.has(id)) throw new DomainError('conflict', 'Conversation is being deleted');
-    if (workspaceId && this.deletingWorkspaces.has(workspaceId)) throw new DomainError('conflict', 'Workspace is being deleted');
+    if (workspaceId) this.workspaces.assertAvailable(workspaceId);
   }
 
   beforeDelete(handler: Participant) {
@@ -72,7 +72,10 @@ export class SessionRegistry implements SessionStore {
   }
 
   /** Stop accepting work; existing writers remain available while runs drain. */
-  close() { this.closing = true; }
+  async close() {
+    this.closing = true;
+    await Promise.allSettled(this.deletions);
+  }
 
   dispose() {
     this.closing = true;
@@ -146,7 +149,8 @@ export class SessionRegistry implements SessionStore {
       if (entry.type === 'run') this.latestRuns.set(id, entry.run);
       const inbox = entry.type.startsWith('inbox-');
       if (inbox || entry.type === 'message' && entry.inboxId) this.notify(id, false, true);
-      if (!inbox && entry.type !== 'model-request' && entry.type !== 'tool-schema') this.notify(id);
+      if (!inbox && entry.type !== 'model-request' && entry.type !== 'tool-schema')
+        this.notify(id, false, false, entry.type === 'custom' && entry.namespace.startsWith('display:'));
     };
     let log: SessionLog | undefined;
     try {
@@ -213,15 +217,25 @@ export class SessionRegistry implements SessionStore {
     }
   }
 
-  records(id: string, namespace: string): SessionRecords {
+  records(id: string, plugin: string, instance: string): SessionRecords {
     this.assertAvailable(id);
+    if (!this.get(id)) throw new DomainError('not_found', 'Conversation not found');
+    const displayNamespace = 'display:' + instance;
     return {
-      list: () => this.inspectLog(id, (log) => log.branch().flatMap((entry) => entry.type === 'custom' && entry.namespace === namespace
-        ? [{ id: entry.id, timestamp: entry.timestamp, data: structuredClone(entry.data) }] : []), true) ?? [],
-      append: async (data) => {
+      list: () => this.inspectLog(id, (log) => log.branch().flatMap((entry) => {
+        if (entry.type !== 'custom') return [];
+        if (entry.namespace === displayNamespace)
+          return [{ id: entry.id, timestamp: entry.timestamp, data: structuredClone((entry.data as { data: unknown })?.data) }];
+        if (entry.namespace === instance || entry.namespace === plugin)
+          return [{ id: entry.id, timestamp: entry.timestamp, data: structuredClone(entry.data) }];
+        return [];
+      }), true) ?? [],
+      append: async (data, display?: RecordDisplay) => {
         this.assertAvailable(id);
-        const value = JSON.parse(JSON.stringify(data));
-        return this.log(id).append({ type: 'custom', namespace, data: value }).id;
+        if (display && (typeof display.title !== 'string' || !display.title.trim() || display.title.length > 140))
+          throw new DomainError('invalid_input', 'Invalid session display title');
+        const value: unknown = JSON.parse(JSON.stringify(display ? { data, display } : data));
+        return this.log(id).append({ type: 'custom', namespace: display ? displayNamespace : instance, data: value }).id;
       }
     };
   }
@@ -277,19 +291,13 @@ export class SessionRegistry implements SessionStore {
     });
   }
 
-  async deleteWorkspace(id: string) {
-    this.assertAvailable(undefined, id);
-    this.workspaces.get(id);
-    this.deletingWorkspaces.add(id);
-    try {
-      const deleted = await this.delete(this.list(id).map((record) => record.id));
-      await this.forgetScopes?.(['workspace:' + id]);
-      this.workspaces.remove(id);
-      return { removed: id, deleted };
-    } finally { this.deletingWorkspaces.delete(id); }
+  delete(ids: string[]) {
+    const operation = this.deleteTree(ids).finally(() => this.deletions.delete(operation));
+    this.deletions.add(operation);
+    return operation;
   }
 
-  async delete(ids: string[]) {
+  private async deleteTree(ids: string[]) {
     this.assertAvailable();
     const all = this.descendants(ids);
     if (all.some((id) => this.deleting.has(id))) throw new DomainError('conflict', 'Conversation is being deleted');

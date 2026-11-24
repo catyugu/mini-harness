@@ -1,12 +1,12 @@
 import type { FrontendSetup } from '@mini-harness/ui-runtime/frontend-api';
 import type { BrowserPrimitives } from './api.js';
 import { button, field, dialog } from './primitives.js';
-import { hydrateIcons } from './icons.js';
+import { hydrateIcons, icon } from './icons.js';
 
 /** Elements contributed by plugins are hydrated without a global app-entry pass. */
 const setup: FrontendSetup = (ctx, api) => {
   const primitives: BrowserPrimitives = {
-    button, field, dialog,
+    button, field, dialog, icon,
     status(text, kind = 'status') {
       const node = document.createElement('p');
       node.className = 'hint';

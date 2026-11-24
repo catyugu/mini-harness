@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile as exec } from 'node:child_process';
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -27,10 +27,13 @@ async function availablePort() {
 
 async function checkPackage() {
   const work = await mkdtemp(join(process.env.RUNNER_TEMP || tmpdir(), 'mini-harness-pack-'));
-  const mock = await createMockProvider();
+  const mock = await createMockProvider(({ messages }) =>
+    messages.at(-1)?.content === 'Pack smoke test'
+      ? { tool: 'save_task_note', args: { note: 'Installed SDK recorded progress' } }
+      : 'Mock response');
   const { root, paths } = createFixturePaths(mock.url);
   const installed = join(work, 'install');
-  const plugin = join(installed, 'sdk-consumer');
+  const plugin = join(installed, 'task-notes');
   const env = { ...process.env, MINI_HARNESS_HOME: paths.home, MINI_HARNESS_DEV_PLUGIN: plugin };
   let started = false;
   const cli = (...args: string[]) => npm(['exec', '--offline', '--', 'mini-harness', ...args], { cwd: installed, env });
@@ -103,6 +106,8 @@ async function checkPackage() {
       api.service('undeclared');
       // @ts-expect-error The run scheduler is a host service.
       api.service('harnessRuns');
+      // @ts-expect-error Plugin execution operations must use the scoped binding.
+      api.service('harnessExecution').cancel('session');
     `);
     await writeFile(join(installed, 'browser-types.mts'), `
       import { settingsExtensions, slotExtensions, type FrontendSetup, type SlotRenderer } from 'mini-harness/browser-plugin';
@@ -125,17 +130,10 @@ async function checkPackage() {
       [resolve('node_modules/typescript/bin/tsc'), '--strict', '--noEmit', '--target', 'ES2022', '--module', 'NodeNext', file],
       { cwd: installed })));
     assert.match((await cli('--help')).stdout, /minimal native agent harness/);
-    await mkdir(plugin);
-    await writeFile(join(plugin, 'plugin.json'), JSON.stringify({ inject: ['harnessRoutes'] }));
-    await writeFile(join(plugin, 'plugin.js'), `
-      import { HttpReply, promptExtensions } from 'mini-harness/plugin';
-      export default (_ctx, api) => {
-        api.registerRoute('GET', '/smoke', () => new HttpReply(200, { sdk: true }));
-        api.contribute(promptExtensions.section, { id: 'installed-sdk', render: () => 'Installed SDK prompt section' });
-      };
-    `);
+    await cp(resolve('docs/examples/task-notes'), plugin, { recursive: true });
+    await execFile(process.execPath, [resolve('node_modules/typescript/bin/tsc'), '-p', 'tsconfig.json'], { cwd: plugin });
     const settings = readJson<Record<string, unknown>>(paths.settings, {});
-    writeJson(paths.settings, { ...settings, plugins: { 'sdk-consumer': true } });
+    writeJson(paths.settings, { ...settings, plugins: { 'task-notes': true } });
     const launch = await cli('--detached', '--cwd', paths.cwd, '--port', String(await availablePort()));
     assert.match(launch.stdout, /started independently/);
     started = true;
@@ -153,8 +151,8 @@ async function checkPackage() {
       await response.arrayBuffer();
     }
     const plugins = await (await get('/api/plugins')).json();
-    assert.ok(plugins.some(({ id, state }: { id: string; state: string }) => id === 'sdk-consumer' && state === 'ready'));
-    assert.deepEqual(await (await get('/api/extensions/sdk-consumer/smoke')).json(), { sdk: true });
+    assert.ok(plugins.some(({ id, state }: { id: string; state: string }) => id === 'task-notes' && state === 'ready'));
+    assert.deepEqual(await (await get('/api/extensions/task-notes/smoke')).json(), { label: 'Task progress', ready: true, credential: false });
     const bootstrap: import('@mini-harness/ui-runtime/bootstrap').BrowserBootstrap = await (await get('/api/bootstrap')).json();
     for (const { browser, styles } of bootstrap.ui) {
       if (browser) assert.equal((await get(browser)).status, 200, browser);
@@ -174,9 +172,20 @@ async function checkPackage() {
     const run = await startedRun.json();
     const chat = await fetch(url + '/events?run=' + run.id, { headers });
     assert.match(await chat.text(), /Mock response/);
-    assert.match(JSON.stringify(mock.requests[0]?.messages), /Installed SDK prompt section/);
+    assert.match(JSON.stringify(mock.requests[0]?.messages), /Task notes are available/);
     const status = await (await fetch(url + '/runs', { headers })).json();
     assert.equal(status.run.state, 'completed');
+    const conversation = await (await fetch(url, { headers })).json();
+    assert.deepEqual(conversation.records.map(({ title, content }: { title: string; content: string }) => ({ title, content })),
+      [{ title: 'Task progress', content: 'Installed SDK recorded progress' }]);
+    const followUp = await fetch(info.url + '/api/extensions/task-notes/follow-up', {
+      method: 'POST', headers, body: JSON.stringify({ parentId: item.id, message: 'Follow up' })
+    });
+    assert.equal(followUp.status, 200);
+    const child = await followUp.json();
+    assert.equal(child.text, 'Mock response');
+    assert.equal((await (await get('/api/sessions/' + child.childId)).json()).parentId, item.id);
+
     assert.match((await cli('status')).stdout, /is running/);
     assert.match((await cli('stop')).stdout, /stopped/);
     started = false;

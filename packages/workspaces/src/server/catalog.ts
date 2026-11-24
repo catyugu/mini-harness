@@ -23,6 +23,9 @@ export class WorkspaceCatalog {
   private records: WorkspaceRecord[];
   private readonly startupId: string;
   readonly events = new EventTarget();
+  private readonly removalHooks = new Set<(id: string) => Promise<string[]>>();
+  private readonly removing = new Map<string, Promise<{ removed: string; deleted: string[] }>>();
+  private closing = false;
 
   constructor(paths: ReturnType<typeof getPaths>) {
     this.file = join(paths.home, 'workspaces.json');
@@ -97,9 +100,32 @@ export class WorkspaceCatalog {
     return this.list();
   }
 
-  remove(id: string) {
+  assertAvailable(id: string) {
+    if (this.removing.has(id)) throw new DomainError('conflict', 'Workspace is being deleted');
+  }
+
+  beforeRemove(handler: (id: string) => Promise<string[]>) {
+    this.removalHooks.add(handler);
+    return () => { this.removalHooks.delete(handler); };
+  }
+
+  remove(id: string, release: () => Promise<void>) {
+    if (this.closing) throw new DomainError('unavailable', 'Workspaces are closing');
+    this.assertAvailable(id);
     this.get(id);
-    this.save(this.records.filter((record) => record.id !== id));
+    const work = Promise.resolve().then(async () => {
+      const groups = await Promise.all([...this.removalHooks].map((hook) => hook(id)));
+      await release();
+      this.save(this.records.filter((record) => record.id !== id));
+      return { removed: id, deleted: groups.flat() };
+    }).finally(() => this.removing.delete(id));
+    this.removing.set(id, work);
+    return work;
+  }
+
+  async close() {
+    this.closing = true;
+    await Promise.allSettled(this.removing.values());
   }
 
   browse(path: string) {

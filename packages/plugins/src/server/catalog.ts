@@ -38,10 +38,13 @@ export interface PluginPlan {
 
 export class PluginCatalog {
   readonly builtins: Map<string, DiscoveredPlugin>;
+  readonly requiredServices: ReadonlySet<string>;
   private readonly protectedServices: Set<string>;
   constructor(private readonly directory: string, builtins: PluginDescriptor[], rootServices: string[],
     private readonly devPlugin?: string, private readonly protectedProviders: ReadonlyMap<string, string> = new Map()) {
     this.builtins = new Map(builtins.map((plugin) => [plugin.id, { ...plugin, resources: builtinBrowserAssets(plugin) }]));
+    this.requiredServices = new Set(builtins.filter(({ required, scope }) => required && scope === 'application')
+      .flatMap(({ provides }) => provides ?? []));
     this.protectedServices = new Set([...rootServices, ...protectedProviders.keys()]);
     if (this.builtins.size !== builtins.length) throw new Error('Duplicate builtin plugin ID');
     const services = new Set(builtins.flatMap(({ provides }) => provides ?? []));
@@ -124,8 +127,8 @@ export class PluginCatalog {
   }
 
   validateConfig(descriptor: PluginDescriptor, config: Record<string, unknown>,
-    operation: ConfigValidationContext['operation'], ctx: Context) {
-    descriptor.validateConfig?.(Object.freeze(structuredClone(config)), {
+    operation: ConfigValidationContext['operation'], ctx: Context, validator = descriptor.validateConfig) {
+    const result: unknown = validator?.(Object.freeze(structuredClone(config)), {
       operation,
       service<Name extends keyof ServiceMap & string>(name: Name): NonNullable<ServiceMap[Name]> {
         if (!descriptor.inject?.includes(name) && !descriptor.optional?.includes(name))
@@ -135,16 +138,20 @@ export class PluginCatalog {
         return service;
       }
     });
+    if (result instanceof Promise) {
+      void result.catch(() => {});
+      throw new Error('Plugin configuration validators must be synchronous');
+    }
   }
 
   changedConfig(descriptors: DiscoveredPlugin[], previous: PluginSettings, settings: PluginSettings) {
-    const validations: { descriptor: PluginDescriptor; config: Record<string, unknown>; key?: string }[] = [];
+    const validations: { descriptor: DiscoveredPlugin; config: Record<string, unknown>; key?: string }[] = [];
     for (const descriptor of descriptors) {
       const { id, configSchema, scope } = descriptor;
       const validate = (values: Record<string, unknown> | undefined, before: Record<string, unknown> | undefined, key?: string) => {
         if (isDeepStrictEqual(values, before)) return;
         const config = this.configValues(id, values, configSchema);
-        if (descriptor.validateConfig) validations.push({ descriptor, config, key });
+        if (descriptor.validateConfig || descriptor.source) validations.push({ descriptor, config, key });
       };
       if (scope === 'application') validate(settings.pluginConfig[id], previous.pluginConfig[id]);
       else {
@@ -224,6 +231,7 @@ export function changedSelection(instance: string, previous: PluginSettings, set
   const separator = instance.indexOf('/');
   if (separator < 0) return settings.plugins[instance] !== previous.plugins[instance] ||
     !isDeepStrictEqual(previous.providers, settings.providers) ||
+    !isDeepStrictEqual(previous.browserProviders, settings.browserProviders) ||
     !isDeepStrictEqual(previous.pluginConfig[instance], settings.pluginConfig[instance]);
   const key = instance.slice(0, separator), id = instance.slice(separator + 1);
   const before = previous.scopes[key], after = settings.scopes[key];

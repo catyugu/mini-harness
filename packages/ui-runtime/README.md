@@ -22,6 +22,8 @@ Consumes the graph supplied by [UI Gateway](../ui-gateway/README.md) and package
 
 Refreshes graph and projections after reconnects. Disposes owned styles, JS preloads, contributions and requests when a plugin unloads.
 
+`scopeRequest` dispatches through the authenticated server route. `watchScope` refreshes the current address after invalidation or reconnect.
+
 ## Testing
 
 [Browser graph and projection tests](../../test/system/) and [plugin browser tests](../../test/browser/plugins.spec.ts) cover composition, reload and cleanup.

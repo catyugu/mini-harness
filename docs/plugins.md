@@ -42,12 +42,15 @@ A plugin with no descriptor fields can use `{}` as its `plugin.json`.
 | `requires` | Required plugin IDs |
 | `browserProvides`, `browserInject`, `browserRequires` | Published and required browser services, and required browser plugin IDs |
 | `configSchema` | Self-contained JSON Schema for an object. Defaults apply before validation. |
+| `configGroups`, `configHint` | Group existing schema fields and describe configuration. |
 | `configChanges` | Set to `live` to apply validated changes without remounting the plugin. |
 | `icon` | A symbolic icon name or an SVG path object with optional `viewBox` |
 
 ```js
+import { sessionExtensions } from 'mini-harness/plugin';
+
 export default function setup(_ctx, api) {
-  const sessions = api.service('harnessSessions');
+  const sessions = api.contribute(sessionExtensions.access);
   api.registerRoute('GET', '/count', () => ({
     label: api.config.prefix,
     count: sessions.list().length
@@ -65,7 +68,9 @@ export default function setup(_ctx, api) {
 | `optionalService(name)` | Read a service declared in `optional` |
 | `contribute(point, ...args)` | Register through a typed extension point owned by a capability. The host binds scope, identity and lifetime. |
 | `registerRoute(method, path, handler)` | Authenticated route under `/api/extensions/<id>`. Handler receives URL, `body(maxBytes?)` and `signal`. Application scope only. |
-| `onDispose(cleanup)` | Register sync or async cleanup |
+| `prepareSession(id, signal)`, `scopedService(id, service)` | Prepare and resolve a declared service in a visible conversation. Tool handlers already run in a prepared scope. |
+| `registerScopeRequest(name, handler)` | Registers an authenticated operation for one mounted workspace or session instance. |
+| `ctx.effect(() => cleanup)` | Bind cleanup to the Cordis setup fiber. Setup may also return cleanup. |
 
 Return JSON from route handlers and honor their cancellation signals. Use the plugin lifetime signal for other work owned by setup. Use the credential or secret store for sensitive values.
 
@@ -123,7 +128,7 @@ Tool names contain 1–64 letters, digits, underscores or hyphens. Duplicate nam
 
 ## Session record projections
 
-Declare `harnessSessions` in `inject` and acquire a record handle through `sessionExtensions.records`. The handle reads and appends this plugin's namespaced data on the active branch. A projection starts with a fresh initial value on each read and folds the branch with a synchronous reducer. Dispose a projection early with `dispose()` or let plugin unload release it.
+Declare `harnessSessions` in `inject` to use `sessionExtensions.access` for a visible session directory, child creation and read-only history. Acquire a record handle through `sessionExtensions.records`. The handle reads and appends this plugin's namespaced data on the active branch. A projection starts with a fresh initial value on each read and folds the branch with a synchronous reducer. Pass `{ title, content }` as the third argument to `append` to publish a browser record. Keep private business data in the second argument. Display records follow the active branch and remain available when the plugin is disabled. Dispose a projection early with `dispose()` or let plugin unload release it.
 
 ```js
 import { sessionExtensions } from 'mini-harness/plugin';
@@ -269,3 +274,20 @@ Declare browser CSS, ESM chunks, images and fonts in `browserAssets`. Only liste
 Mount HTTP routes with `api.registerRoute` and local WebSocket endpoints with `api.registerUpgrade`. The host authenticates upgrades, checks the browser origin and closes owned sockets when the plugin unloads. Gateway plugins create their own listener and authenticate the viewer before calling `harnessNetwork.forward`. The host authorizes only a read-only subset of its UI, session and workspace APIs on this path. Gateway credentials must be independent of the local management credential.
 
 `pluginConfig` changes remount plugins by default. A plugin declaring `configChanges: "live"` registers one handler with `api.onConfigChange`. The handler receives validated configuration and can keep its services alive. A failed update to a healthy instance restores its previous configuration. A valid configuration for an inactive or failed optional instance can be saved even when the instance fails to start. Active runs block changes that would replace their configured providers or unload their plugins. Handlers should make updates reversible. Store private state with `api.storage` and keep credentials in `api.secrets`. Disabling a plugin keeps its data. Uninstall deletes its data and secrets. Each workspace or session mount has its own storage. Browser plugins can use `api.watch` to refresh their own snapshot after the server calls `api.invalidate`. `api.locale` reports the browser's language, supports change listeners and selects translations from a supplied dictionary.
+
+
+## Execute tasks and request confirmation
+
+Declare `harnessExecution` and acquire `api.contribute(executionExtensions.control)`. Submit a message with `submit(sessionId, input, { signal })` and await the returned handle’s `result`. Use `status(sessionId)` and `cancel(sessionId, runId)` for the current execution. Runs owns admission, durable state and cancellation. Plugin unload cancels submissions made through this interface. Use `sessionExtensions.access` to create a child and obtain the parent’s committed model.
+
+Declare `harnessApprovalRequests` and acquire `api.contribute(approvalExtensions.request)`. Supply a conversation ID, title and message. The returned promise settles when the user decides or the request expires, and follows the supplied signal, active run and plugin lifetime.
+
+## Configure and develop a plugin
+
+Export a synchronous `validateConfig(values, context)` next to the default server setup to reject invalid configuration with a clear error. It runs against declared services during mount and before committing changed settings for a mounted instance. A live configuration callback runs after validation. Use an npm `peerDependencies.mini-harness` range to declare compatible releases.
+
+Copy [Task notes](examples/task-notes) into an independent directory called `task-notes`, run `npm install` and `npm run build`, then load it with `MINI_HARNESS_DEV_PLUGIN` set to the absolute directory and enable it in Plugins. The example uses both published SDKs, a tool, its own service, grouped settings, private storage, a record renderer and a controlled child execution. Inspect setup failures and scope details in Plugins.
+
+Use `conversationExtensions.record` for display records. The renderer gets an abort signal for the current render. To replace a component, use `slotExtensions.keyed` with `conversation.history` and key `history`, or `conversation.composer-view` and key `composer`. Declare the feature dependency through `miniMessages` or `miniComposer` so the default outlet mounts first.
+
+For scoped browser operations, call `api.scopeRequest(pluginId, { kind, id }, operation, input, signal)`. The server resolves the exact target instance. `api.watchScope(pluginId, { kind, id }, refresh)` follows invalidations for that address and refreshes on reconnect. The scoped server plugin registers handlers with `registerScopeRequest` and publishes changes with `api.invalidate()`.

@@ -19,6 +19,6 @@ export const manifest: PluginDescriptor = {
         finally { active.delete(running); }
       }
     });
-    api.onDispose(async () => { await Promise.allSettled(active); });
+    ctx.effect(() => async () => { await Promise.allSettled(active); });
   }
 };

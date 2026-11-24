@@ -32,8 +32,6 @@ interface AgentServices {
   prompt(id: string): PromptPort;
   inputHooks?(id: string): OrderedHook<InputPreparation>[];
   prepare(id: string, signal?: AbortSignal): Promise<void>;
-  defaultModel(): ModelChoice;
-  rememberModel(model: ModelChoice, sessionId: string): void | Promise<void>;
   policy(): { maxTurns: number; autoCompact: boolean };
   observe(event: CapabilityObservation, signal?: AbortSignal): void;
   modelRequestHooks?(id: string): OrderedHook<ModelRequestTransform>[];
@@ -87,18 +85,12 @@ export class NativeAgent implements AgentPort {
 
   constructor(private readonly sessions: SessionStore, private readonly services: AgentServices) {}
 
-  get hasPending() { return this.agents.hasPending; }
-
-  async prepare(id: string, signal?: AbortSignal) {
+  private async prepare(id: string, signal?: AbortSignal) {
     this.sessions.assertAvailable(id);
     signal?.throwIfAborted();
     await this.agents.prepare(id, () => this.services.prepare(id, signal));
     signal?.throwIfAborted();
     this.sessions.assertAvailable(id);
-  }
-
-  activeModel(id: string) {
-    return this.sessions.inspectLog(id, (log) => log.projection().model, true) ?? this.services.defaultModel();
   }
 
   async revisionTarget(id: string, sourceEntryId: string, expectedLeafId: string | null) {
@@ -123,14 +115,17 @@ export class NativeAgent implements AgentPort {
   }
 
   async queueInput(id: string, text: string, mode: 'steer' | 'followUp', attachments?: Attachment[],
-    options: Pick<InboxItem, 'model' | 'thinkingLevel'> = {}) {
+    options: Pick<InboxItem, 'model' | 'thinkingLevel'> & { fallback?: ModelChoice } = {}) {
     this.sessions.assertAvailable(id);
     if (!this.agents.acceptsInput(id)) throw new DomainError('conflict', 'The agent is not streaming; send a new message');
     validateModelOptions(options.model, options.thinkingLevel);
-    const choice = options.model ? this.services.models(id).resolve(options.model) : this.activeModel(id);
+    const log = this.sessions.log(id);
+    const models = this.services.models(id);
+    const model = options.model ?? log.projection().model ?? options.fallback;
+    const choice = model && models.resolve(model);
     if (!choice) throw new DomainError('invalid_input', 'Unknown queued model');
-    resolveThinking(this.services.models(id).capabilities(choice), options.thinkingLevel);
-    return new Inbox(this.sessions.log(id)).enqueue(text, mode, attachments, { ...options, model: choice });
+    resolveThinking(models.capabilities(choice), options.thinkingLevel);
+    return new Inbox(log).enqueue(text, mode, attachments, { model: choice, thinkingLevel: options.thinkingLevel });
   }
 
   cancelQueue(id: string, itemId?: string) {
@@ -196,22 +191,22 @@ export class NativeAgent implements AgentPort {
 
   async prompt(record: SessionRecord, prompt: string, emit: (event: AgentEvent) => void,
     options: Parameters<AgentPort['prompt']>[3]): Promise<string> {
-    const { id } = record, { signal, choice, images = [], input = { userText: prompt, attachments: [] }, source = 'user', thinkingLevel, revision, changed, submissionId } = options;
+    const { id } = record, { signal, choice, images = [], input = { userText: prompt, attachments: [] }, source = 'user', thinkingLevel, revision, changed, submissionId, fallback, acceptedModel } = options;
     const leave = this.agents.enter(id);
     let runLog: SessionLogPort | undefined;
     try {
       await this.prepare(id, signal);
       const log = runLog = this.sessions.log(id);
       const target = revision && await this.revisionTarget(id, revision.sourceEntryId, revision.expectedLeafId);
-      let model = log.projection(target?.parentId).model ?? this.services.defaultModel();
+      let model: ModelChoice | undefined = log.projection(target?.parentId).model;
       let capabilities: ReturnType<ModelCatalogPort['capabilities']>;
       let activeThinking: ThinkingLevel | undefined;
       if (!revision) this.closeUnfinishedTools(log);
       const inbox = new Inbox(log);
       const queuedSelection = (item: InboxItem) => {
         const models = this.services.models(id);
-        const choice = item.model ?? log.projection().model ?? this.services.defaultModel();
-        const chosen = models.resolve(choice);
+        const choice = item.model ?? log.projection().model ?? fallback;
+        const chosen = choice && models.resolve(choice);
         if (!chosen) return { ok: false, failure: 'The queued model is no longer available' } as const;
         const nextCapabilities = models.capabilities(chosen);
         if (item.images.length && !nextCapabilities?.input.includes('image'))
@@ -253,8 +248,8 @@ export class NativeAgent implements AgentPort {
           this.user(log, prepared, item.images, emit, {
             inboxId: item.id, selection: { model: chosen, thinkingLevel: level }
           });
-          if (!record.parentId && (model.provider !== chosen.provider || model.id !== chosen.id))
-            await this.services.rememberModel(chosen, id);
+          if (!record.parentId && (model?.provider !== chosen.provider || model.id !== chosen.id))
+            await acceptedModel?.(chosen);
           model = chosen;
           capabilities = nextCapabilities;
           activeThinking = level;
@@ -269,7 +264,7 @@ export class NativeAgent implements AgentPort {
         const previous = log.projection(target?.parentId);
         const models = this.services.models(id);
         model = selectModel(models, { explicit: choice, stored: previous.model,
-          global: this.services.defaultModel(), child: Boolean(record.parentId) });
+          fallback, child: Boolean(record.parentId) });
         capabilities = models.capabilities(model);
         activeThinking = resolveThinking(capabilities, thinkingLevel, previous.thinkingLevel);
         const prepared = await this.prepareInput(id, model, source, prompt, images, input, signal);
@@ -278,7 +273,7 @@ export class NativeAgent implements AgentPort {
         if (record.titleSource === 'auto' && !previous.messages.some((item) => item.role === 'user'))
           this.sessions.rename(id, (input.userText || input.attachments[0]?.name || prompt).slice(0, 72), 'auto');
         if (revision) this.closeUnfinishedTools(log);
-        if (!record.parentId) await this.services.rememberModel(model, id);
+        if (!record.parentId) await acceptedModel?.(model);
         submitted = true;
       };
       if (revision || !await deliver('followUp')) await submit();
@@ -286,6 +281,7 @@ export class NativeAgent implements AgentPort {
       for (let turn = 0; turn < maxTurns; turn++) {
         signal.throwIfAborted();
         await this.prepare(id, signal);
+        if (!model) throw new Error('Configure a model before sending a message');
         const cwd = this.sessions.workspacePath(id);
         const step: StepContext = { sessionId: id, turn: turn + 1, phase: 'turn', cwd, model, signal };
         this.services.observe({ type: 'step-started', sessionId: id, turn: step.turn }, signal);
@@ -456,7 +452,8 @@ export class NativeAgent implements AgentPort {
     const prefix = messages.slice(0, projection.contextEntryIds.indexOf(keepFromId));
     if (!prefix.length) { if (automatic) return; throw new DomainError('invalid_input', 'Nothing to compact'); }
     signal.throwIfAborted();
-    const model = this.services.models(id).resolve(log.projection().model ?? this.services.defaultModel());
+    const choice = projection.model;
+    const model = choice && this.services.models(id).resolve(choice);
     if (!model) throw new DomainError('invalid_input', 'Configure a model before compacting');
     const context: StepContext = { sessionId: id, cwd: this.sessions.workspacePath(id), model, turn: 0, phase: 'compaction', signal };
     const request = await this.prepareRequest(log, context, {
