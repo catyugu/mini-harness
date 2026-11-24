@@ -111,11 +111,16 @@ export class SkillLoader {
     return 'Available skills describe task-specific instructions. When a skill matches the task, call load_skill with its name and follow its instructions.\n' +
       '<available_skills>\n' + skills.map((skill) => `  <skill name="${xml(skill.name)}">${xml(skill.description)}</skill>`).join('\n') + '\n</available_skills>';
   }
-  async instruction(cwd: string, text: string) {
-    const match = text.match(/^\/skill:([a-z0-9-]+)(?:\s+[\s\S]*)?$/);
+  async invocation(cwd: string, text: string) {
+    const match = /(?<!\S)\/skill:([a-z0-9-]+)(?=\s|$)/.exec(text);
     if (!match) return;
     const skill = await this.load(cwd, match[1]);
-    return `<skill name="${xml(skill.name)}" source="${xml(skill.file)}">\n${skill.content}\n</skill>`;
+    const before = text.slice(0, match.index).trimEnd();
+    const after = text.slice(match.index + match[0].length).trimStart();
+    return {
+      task: [before, after].filter(Boolean).join(' '),
+      instruction: `<skill name="${xml(skill.name)}" source="${xml(skill.file)}">\n${skill.content}\n</skill>`
+    };
   }
 }
 

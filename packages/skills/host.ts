@@ -13,11 +13,18 @@ export function setup(ctx: Context, api: PluginApi) {
     (path, error) => ctx.logger.warn('Could not discover skill at %s: %s', path, String(error)));
   api.contribute(agentExtensions.prepareInput, async (content, { source, original, cwd, signal }) => {
     if (source !== 'user') return;
-    const instruction = await loader.instruction(cwd, original.userText);
+    const invocation = await loader.invocation(cwd, original.userText);
     signal.throwIfAborted();
-    if (!instruction) return;
+    if (!invocation) return;
     const parts = typeof content === 'string' ? [{ type: 'text' as const, text: content }] : content;
-    return [...parts, { type: 'text', text: instruction }];
+    const first = parts[0];
+    // Remove the invocation from the original text when it is still the first model-visible block.
+    // Keep the suffix intact, including any text attachments added during input normalization.
+    if (first?.type === 'text' && first.text.startsWith(original.userText)) {
+      first.text = invocation.task + first.text.slice(original.userText.length);
+      if (!first.text) parts.shift();
+    }
+    return [...parts, { type: 'text', text: invocation.instruction }];
   });
   api.contribute(promptExtensions.section, { id: 'skills', order: 400, render: ({ cwd }) => loader.prompt(cwd) });
   ctx.effect(() => ctx.harnessRoutes.register('GET', '/api/workspaces/:id/skills', async ({ params, url, signal }) => {

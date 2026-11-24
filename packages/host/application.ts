@@ -26,7 +26,6 @@ export class MiniHarnessRuntime {
         prepare: (id: string, signal?: AbortSignal) => this.plugins.prepare(id, signal),
         require: (id, service) => this.plugins.require(id, service),
         optional: (id, service) => this.plugins.optional(id, service),
-        toolRestrictions: (id) => this.plugins.toolRestrictions(id),
         address: (id: string) => this.plugins.address(id),
         release: (ids: string[], workspaceId?: string) => this.plugins.release(ids, workspaceId)
       } satisfies ScopePort,

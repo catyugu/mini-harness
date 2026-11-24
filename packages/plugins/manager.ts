@@ -160,16 +160,6 @@ export class PluginHost implements ScopePort {
     return ((scope || undefined)?.ctx ?? this.ctx).get(service) as HostServices[Name] | undefined;
   }
 
-  toolRestrictions(id: string) {
-    const lineage = this.lineage(id);
-    const { scopes } = this.settings();
-    const keys = lineage.length ? ['workspace:' + lineage[0].workspaceId, ...lineage.map(({ id }) => 'session:' + id)] : [];
-    return {
-      readOnly: lineage.some(({ permission }) => permission === 'readOnly'),
-      disabledTools: keys.flatMap((key) => scopes[key]?.disabledTools ?? [])
-    };
-  }
-
   async prepare(id: string, signal?: AbortSignal) {
     if (this.closing) throw new Error('Plugin host is closing');
     signal?.throwIfAborted();

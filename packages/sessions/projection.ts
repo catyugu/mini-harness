@@ -44,7 +44,7 @@ export function projectLog(entries: SessionEntry[], branch: SessionEntry[]): Ses
     if (entry.type === 'message' && message.role === 'user' && entry.presentation) {
       view.attachments = entry.presentation.attachments;
       const { userText, images } = entry.presentation;
-      view.content = [
+      view.content = typeof message.content === 'string' && !images?.length ? userText : [
         ...(userText ? [{ type: 'text', text: userText }] : []),
         ...(images ?? (typeof message.content === 'string' ? [] : message.content.filter((block) => block.type === 'image')))
       ];

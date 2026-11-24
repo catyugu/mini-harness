@@ -47,6 +47,13 @@ test('drafts, search, rename, single deletion, attachment and input discovery', 
 
     await draft.fill('Open https://example.test/model and /home/model');
     await expect(suggestions(page)).toBeHidden();
+    const refreshed = join(paths.cwd, '.agents', 'skills', 'fresh');
+    mkdirSync(refreshed, { recursive: true });
+    writeFileSync(join(refreshed, 'SKILL.md'), '---\nname: fresh\ndescription: Added after connecting\n---\nFresh instructions.');
+    await draft.fill('');
+    await page.getByRole('button', { name: 'Choose skill' }).click();
+    await expect(suggestions(page).getByRole('option', { name: /Added after connecting/ })).toBeVisible();
+    await draft.press('Escape');
     await draft.fill('Read this attachment  and keep this text');
     await draft.evaluate((input: HTMLTextAreaElement) => input.setSelectionRange(21, 21));
     await draft.press('/'); await draft.press('r'); await draft.press('e'); await draft.press('v');
@@ -71,6 +78,7 @@ test('drafts, search, rename, single deletion, attachment and input discovery', 
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.locator('.message.assistant')).toHaveText('Mock response');
     const bubble = page.locator('.message.user').first();
+    await expect(bubble).toContainText('Read this attachment /skill:review and keep this text');
     const thumbs = bubble.locator('.message-images img');
     await expect(thumbs).toHaveCount(2);
     await expect(bubble.getByRole('img', { name: 'blue.png' })).toBeVisible();

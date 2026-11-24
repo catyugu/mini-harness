@@ -74,3 +74,25 @@ test('file-tool names follow the same scoped registration, restriction and lifet
   await releaseWorkspace();
   assert.equal(registry.forSession('child')[0].description, 'application');
 });
+
+test('a permission change while awaiting a tool decision prevents execution', async () => {
+  let readOnly = false;
+  let entered = () => {};
+  let release = () => {};
+  const checking = new Promise<void>((resolve) => { entered = resolve; });
+  const hold = new Promise<void>((resolve) => { release = resolve; });
+  const registry = new ToolRegistry(() => [], async () => {
+    entered();
+    await hold;
+    return undefined;
+  }, () => ({ readOnly, disabledTools: [] }));
+  registry[registerToolBinding]('modify', () => defineTool({ name: 'modify', description: 'Change a value',
+    parameters: Type.Object({}), async execute() { assert.fail('A denied tool executed'); } }));
+  const tool = registry.forSession('session')[0];
+  const result = assert.rejects(tool.execute('call', {}), /Tool denied/);
+  await checking;
+  readOnly = true;
+  assert.deepEqual(registry.forSession('session'), []);
+  release();
+  await result;
+});

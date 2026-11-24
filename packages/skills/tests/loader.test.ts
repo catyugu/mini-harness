@@ -31,12 +31,15 @@ test('four default roots override by priority and keep the user home independent
   const loader = new SkillLoader(roots, () => assert.fail('Unexpected scan diagnostic'));
   assert.deepEqual((await loader.list(cwd)).map(({ name }) => name), ['review', 'skill-0', 'skill-1', 'skill-2', 'skill-3']);
   assert.equal((await loader.load(cwd, 'review')).description, 'Review the task with care');
+  const invocation = await loader.invocation(cwd, 'Please /skill:review inspect the change');
+  assert.equal(invocation?.task, 'Please inspect the change');
+  assert.match(invocation?.instruction ?? '', /Instructions 3/);
   for (const [index, path] of [...paths.entries()].reverse()) {
     assert.equal((await loader.load(cwd, 'review')).content, 'Instructions ' + index);
     rmSync(path, { recursive: true });
   }
-  assert.equal(await loader.instruction(cwd, 'ordinary prompt'), undefined);
-  await assert.rejects(loader.instruction(cwd, '/skill:missing'), /Unknown skill/);
+  assert.equal(await loader.invocation(cwd, 'ordinary prompt'), undefined);
+  await assert.rejects(loader.invocation(cwd, '/skill:missing'), /Unknown skill/);
 });
 
 test('root, parent and directory links are followed once per file, including Windows junctions', async (t) => {

@@ -29,7 +29,7 @@ const setup: FrontendSetup = (ctx, api) => {
       const skills = await api.request<{ name: string; description: string }[]>(workspaceRoute(workspace, '/skills') + query, { signal: controller.signal });
       if (controller.signal.aborted || api.signal.aborted) return;
       for (const skill of skills)
-        commands.push(api.command({ name: 'skill:' + skill.name, description: skill.description, group: 'Skill' }));
+        commands.push(api.command({ name: 'skill:' + skill.name, aliases: [skill.name], description: skill.description, group: 'Skill' }));
     } catch (error) {
       if (!controller.signal.aborted && !api.signal.aborted) services.report(error instanceof Error ? error : new Error(String(error)));
     }

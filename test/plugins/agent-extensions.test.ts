@@ -1,7 +1,7 @@
 import { expectPresent } from '../support/required.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fixture } from '../support/api-fixture.js';
 
@@ -43,6 +43,58 @@ test('prompt contributions coexist, override within a session tree and are remov
   assert.match(await prompt(sibling.id), /\[Plan\]\s+\[Extra\]\s+\[App status\]/);
   assert.equal((await request('/settings', 'PATCH', { plugins: { 'more-prompt': false }, scopes: {} })).status, 200);
   assert.match(await prompt(child.id), /\[Plan\]\s+\[App status\]/);
+});
+
+test('input contributions run at delivery in stable order and keep the submitted text', async (t) => {
+  const { app, paths, mock, request } = await fixture(t, ({ messages }) => {
+    const text = messages.at(-1)?.content;
+    appendFileSync(join(paths.home, 'inputs.log'), 'model ' + text + '\n');
+    return 'Done';
+  });
+  const trace = join(paths.home, 'inputs.log');
+  plugin(paths.plugins, 'input-z', {}, `
+    import { appendFileSync } from 'node:fs';
+    export default (_ctx, api) => {
+      api.contribute(agentExtensions.prepareInput, (content, { original }) => {
+        appendFileSync(${JSON.stringify(trace)}, 'prepare ' + original.userText + '\\n');
+        if (original.userText === 'Blocked') return { reject: 'fixture input denied' };
+        return [...content, { type: 'text', text: '[z]' }];
+      });
+    };`);
+  plugin(paths.plugins, 'input-a', { requires: ['input-z'] }, `
+    export default (_ctx, api) => {
+      api.contribute(agentExtensions.prepareInput, (content, { original }) => {
+        original.userText = 'lost';
+        content[0].text = 'lost';
+      });
+      api.contribute(agentExtensions.prepareInput, (content) => [...content, { type: 'text', text: '[a]' }]);
+    };`);
+  assert.equal((await request('/settings', 'PATCH', { plugins: { 'input-z': true, 'input-a': true } })).status, 200);
+  const { registry, plugins } = app.runtime;
+  const session = registry.create();
+  const log = registry.log(session.id);
+  log.append({ type: 'inbox-enqueued', item: { id: 'blocked', mode: 'followUp', text: 'Blocked', images: [] } });
+  log.append({ type: 'inbox-enqueued', item: { id: 'recovered', mode: 'followUp', text: 'Recovered', images: [] } });
+  await plugins.ctx.harnessRuns.send(session.id, 'Manual');
+  assert.deepEqual(readFileSync(trace, 'utf8').trimEnd().split('\n'), [
+    'prepare Blocked', 'prepare Recovered', 'model Recovered[a][z]', 'prepare Manual', 'model Manual[a][z]'
+  ]);
+  assert.equal(log.inbox().length, 0);
+  assert.match(expectPresent(log.queue().find(({ id }) => id === 'blocked'), 'rejected queue item').reason ?? '', /fixture input denied/);
+  const messages = log.projection().messages.filter(({ role }) => role === 'user');
+  assert.deepEqual(messages.map(({ content }) => content), [
+    [{ type: 'text', text: 'Recovered' }], [{ type: 'text', text: 'Manual' }]
+  ]);
+
+  const edit = await plugins.ctx.harnessRuns.reviseAndStart(session.id, {
+    sourceEntryId: expectPresent(messages.at(-1)?.id, 'edited message'), expectedLeafId: log.projection().leafId, message: 'Edited'
+  });
+  await plugins.ctx.harnessRuns.completion(edit.sessionId);
+  assert.match(readFileSync(trace, 'utf8'), /prepare Edited\nmodel Edited\[a\]\[z\]\n$/);
+  const before = mock.requests.length;
+  await assert.rejects(plugins.ctx.harnessRuns.send(session.id, 'Blocked'), /fixture input denied/);
+  assert.equal(mock.requests.length, before);
+  assert.doesNotMatch(JSON.stringify(log.projection().messages), /Blocked|lost|Manual/);
 });
 
 test('an application plugin replaces only LLM and composes execution hooks without rewriting history', async (t) => {

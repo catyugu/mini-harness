@@ -76,6 +76,20 @@ test('native agent through HTTP: streaming, persistence, Skills, export and perm
   open = false;
   app = await createMiniHarnessServer(paths);
   open = true;
+  writeFileSync(join(skillDir, 'SKILL.md'), '---\nname: verification\ndescription: New description\n---\nChanged skill body');
+  const { harnessRuns: runs } = app.runtime.plugins.ctx;
+  await runs.send(session.id, '', undefined, { attachments: [
+    { name: 'instruction.txt', mimeType: 'text/plain', data: Buffer.from('/skill:unavailable').toString('base64') }
+  ] });
+  const sentAfterChange = JSON.stringify(mock.requests.at(-1));
+  assert.match(sentAfterChange, /Mention the verification skill/);
+  assert.match(sentAfterChange, /\/skill:unavailable/);
+  assert.doesNotMatch(sentAfterChange, /Changed skill body/);
+  const child = app.runtime.registry.create({ parentId: session.id });
+  await runs.send(child.id, '/skill:unavailable', undefined, { source: 'agent' });
+  await assert.rejects(runs.send(child.id, '/skill:unavailable'), /Unknown skill: unavailable/);
+  await app.runtime.registry.delete([child.id]);
+
   const restored = await app.runtime.plugins.ctx.harnessConversationView.read(session.id);
   assert.equal(restored.title, 'Test native integration');
   assert.ok(restored.messages.some((m: {role: string}) => m.role === 'assistant'));
