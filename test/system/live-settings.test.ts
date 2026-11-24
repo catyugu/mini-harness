@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { readSettings } from '@mini-harness/settings/config';
 import { MiniHarnessRuntime } from '@mini-harness/host/application';
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
 
@@ -35,10 +36,10 @@ test('appearance, parallelism and child defaults update without interrupting a r
   assert.equal(runtime.plugins.ctx.harnessRuns.active(item.id), true);
   release();
   assert.equal(await pending, 'Done');
-  const firstMessage = runtime.plugins.ctx.harnessAgent.messages(item.id)[0].id;
+  const firstMessage = runtime.registry.log(item.id).projection().messages[0].id;
   await runtime.configuration.update({ plugins: { files: false, 'session-helper': false } });
   await runtime.plugins.ctx.harnessRuns.send(item.id, 'After the policy changes');
-  assert.equal(runtime.plugins.ctx.harnessAgent.messages(item.id)[0].id, firstMessage);
+  assert.equal(runtime.registry.log(item.id).projection().messages[0].id, firstMessage);
   assert.strictEqual(runtime.registry.log(item.id), original);
   const advertised = mock.requests.at(-1)?.tools as { function: { name: string } }[];
   assert.equal(advertised.some(({ function: tool }) => tool.name === 'read'), false);
@@ -63,19 +64,32 @@ test('a scoped plugin transaction excludes new runs in its subtree until commit'
   writeFileSync(join(folder, 'plugin.js'), "export default () => globalThis[Symbol.for('mini-harness-test-admission')]();");
   await runtime.start();
   const target = runtime.registry.create();
+  const obsolete = runtime.registry.create();
+  const obsoleteScope = 'session:' + obsolete.id;
+  const obsoleteConfig = { disabledTools: ['shell'] };
+  await runtime.configuration.update({ scopes: { [obsoleteScope]: obsoleteConfig } });
   const otherDirectory = join(root, 'other');
   mkdirSync(otherDirectory);
-  const otherWorkspace = runtime.registry.workspaces.register(otherDirectory);
+  const otherWorkspace = runtime.plugins.ctx.harnessWorkspaces.register(otherDirectory);
   const other = runtime.registry.create({ workspaceId: otherWorkspace.id });
-  const updating = runtime.configuration.update({ scopes: { ['workspace:' + target.workspaceId]: { plugins: { staged: true } } } });
+  const workspace = 'workspace:' + target.workspaceId;
+  const updating = runtime.configuration.update({ scopes: {
+    [workspace]: { plugins: { staged: true } },
+    [obsoleteScope]: obsoleteConfig
+  } });
   let sibling: Promise<string>;
+  let deletion: Promise<string[]>;
   try {
     await entered;
     assert.throws(() => runtime.plugins.ctx.harnessRuns.startRun(target.id, 'Cannot cross the transaction'), /configuration is changing/);
     assert.equal(runtime.plugins.ctx.harnessRuns.info(target.id), undefined);
     sibling = runtime.plugins.ctx.harnessRuns.send(other.id, 'Unaffected workspace');
+    deletion = runtime.registry.delete([obsolete.id]);
   } finally { release(); }
   await updating;
+  assert.deepEqual(await deletion, [obsolete.id]);
+  assert.equal(readSettings(paths).scopes[obsoleteScope], undefined);
+  assert.equal(readSettings(paths).scopes[workspace]?.plugins?.staged, true);
   assert.equal(await sibling, 'Mock response');
   assert.equal(await runtime.plugins.ctx.harnessRuns.send(target.id, 'After commit'), 'Mock response');
 });

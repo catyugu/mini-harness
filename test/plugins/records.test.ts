@@ -9,7 +9,7 @@ test('an extension owns its authenticated routes and native branch records witho
   const folder = join(paths.plugins, 'records');
   mkdirSync(folder);
   writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ inject: ['harnessSessions'] }));
-  writeFileSync(join(folder, 'plugin.js'), `import { sessionExtensions } from "${new URL('../../packages/sdk/plugin.js', import.meta.url).href}";
+  writeFileSync(join(folder, 'plugin.js'), `import { sessionExtensions } from "${new URL('../../packages/sdk/src/plugin.js', import.meta.url).href}";
 export default (_ctx, api) => {
     const records = api.contribute(sessionExtensions.records);
     api.registerRoute('POST', '/entries', async ({ body }) => {

@@ -124,10 +124,10 @@ test('server entry requires a default setup function', async (t) => {
   }
   await runtime.start();
   await runtime.configuration.update({ plugins: { 'function-entry': true } });
-  await runtime.configuration.update({ plugins: { 'named-entry': true } });
-  assert.match(runtime.plugins.metadata().find(({ id }) => id === 'named-entry')?.error ?? '', /Export a default setup function/);
+  await assert.rejects(runtime.configuration.update({ plugins: { 'named-entry': true } }), /Export a default setup function/);
   assert.equal(runtime.settings.plugins['function-entry'], true);
-  assert.equal(runtime.settings.plugins['named-entry'], true);
+  assert.equal(runtime.settings.plugins['named-entry'], undefined);
+  assert.equal(readSettings(paths).plugins['named-entry'], undefined);
 });
 
 test('plugin JSON Schema applies defaults and rejects invalid changes before setup', async (t) => {

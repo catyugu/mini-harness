@@ -2,8 +2,8 @@ import { expectPresent } from '../../../test/support/required.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Type } from 'typebox';
-import { defineTool, registerToolBinding } from '../api.js';
-import { ToolRegistry } from '../registry.js';
+import { defineTool, registerToolBinding } from '../src/api.js';
+import { ToolRegistry } from '../src/registry.js';
 
 test('tool registry validates native JSON schemas before executing a plugin', async () => {
   const registry = new ToolRegistry();

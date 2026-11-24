@@ -3,6 +3,30 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "exports": {
+    "./content-delta": "./src/content-delta.ts",
+    "./identity": "./src/shared/identity.ts",
+    "./log-api": "./src/log-api.ts",
+    "./manifest": "./src/manifest.ts",
+    "./message": "./src/shared/message.ts",
+    "./queue": "./src/shared/queue.ts",
+    "./records": "./src/records.ts",
+    "./registry": "./src/registry.ts",
+    "./run-state": "./src/shared/run-state.ts",
+    "./store": "./src/store.ts"
+  },
+  "miniHarness": {
+    "api": [
+      "./content-delta",
+      "./identity",
+      "./log-api",
+      "./message",
+      "./queue",
+      "./records",
+      "./run-state",
+      "./store"
+    ]
+  },
   "dependencies": {
     "@mini-harness/input": "workspace:*",
     "@mini-harness/kernel": "workspace:*",
@@ -11,27 +35,5 @@
     "@mini-harness/plugin-api": "workspace:*",
     "@mini-harness/settings": "workspace:*",
     "@mini-harness/workspaces": "workspace:*"
-  },
-  "exports": {
-    "./display-extensions": "./display-extensions.ts",
-    "./identity": "./identity.ts",
-    "./log-api": "./log-api.ts",
-    "./manifest": "./manifest.ts",
-    "./message": "./message.ts",
-    "./records": "./records.ts",
-    "./registry": "./registry.ts",
-    "./run-state.browser": "./run-state.browser.ts",
-    "./store": "./store.ts"
-  },
-  "miniHarness": {
-    "api": [
-      "./display-extensions",
-      "./identity",
-      "./log-api",
-      "./message",
-      "./records",
-      "./run-state.browser",
-      "./store"
-    ]
   }
 }

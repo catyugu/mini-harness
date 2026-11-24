@@ -92,7 +92,7 @@ test('input contributions run at delivery in stable order and keep the submitted
 });
 
 test('an application plugin replaces only LLM and composes execution hooks without rewriting history', async (t) => {
-  const { app, paths, request, mock } = await fixture(t);
+  const { app, paths, request, mock, base, headers } = await fixture(t);
   writePlugin(paths.plugins, 'transport', { provides: ['harnessLlm'], inject: ['harnessModels'] }, `export default (_ctx, api) => {
     let attempts = 0;
     const modelCatalog = api.service('harnessModels');
@@ -131,6 +131,9 @@ test('an application plugin replaces only LLM and composes execution hooks witho
     });
     api.contribute(agentExtensions.toolResult,  (content, { tool }) => tool === 'check'
       ? [{ type: 'text', text: content[0].text + ' transformed' }] : undefined);
+    api.contribute(sessionDisplayExtensions.project, ({ content, tool }) =>
+      tool === 'check' && Array.isArray(content) && content[0]?.text === 'Value transformed'
+        ? [{ type: 'text', text: 'Display value' }] : undefined);
   };`);
   const { harnessModels: models, harnessModelStore: store } = app.runtime.plugins.ctx;
   const configured = await request('/settings', 'PATCH', {
@@ -144,6 +147,12 @@ test('an application plugin replaces only LLM and composes execution hooks witho
   const log = app.runtime.registry.log(session.id).projection();
   assert.equal(log.contextMessages.filter(({ role }) => role === 'user').length, 1);
   const sessionLog = app.runtime.registry.log(session.id);
+  const visible = await request('/sessions/' + session.id);
+  assert.match(JSON.stringify(visible.body.messages), /Display value/);
+  assert.doesNotMatch(JSON.stringify(log), /Display value/);
+  const run = expectPresent(app.runtime.plugins.ctx.harnessRuns.info(session.id), 'completed run');
+  const replay = await fetch(base + '/api/sessions/' + session.id + '/events?run=' + run.id, { headers });
+  assert.match(await replay.text(), /Display value/);
   const requests = sessionLog.entries().filter((entry) => entry.type === 'model-request');
   assert.equal(requests.length, 2);
   assert.match(requests[0].request.systemPrompt, /\[first\]\[second\]$/);

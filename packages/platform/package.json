@@ -4,17 +4,15 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./content-delta": "./content-delta.ts",
-    "./errors": "./errors.ts",
-    "./isolation": "./isolation.ts",
-    "./json": "./json.ts",
-    "./local-secret": "./local-secret.ts",
-    "./paths": "./paths.ts",
-    "./runtime-paths": "./runtime-paths.ts"
+    "./errors": "./src/errors.ts",
+    "./isolation": "./src/isolation.ts",
+    "./json": "./src/json.ts",
+    "./local-secret": "./src/local-secret.ts",
+    "./paths": "./src/paths.ts",
+    "./runtime-paths": "./src/runtime-paths.ts"
   },
   "miniHarness": {
     "api": [
-      "./content-delta",
       "./errors",
       "./isolation",
       "./json",

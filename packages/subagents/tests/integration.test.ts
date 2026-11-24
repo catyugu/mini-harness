@@ -29,12 +29,12 @@ test('Native execution honors file policy and recursive delegates can finish wit
   assert.deepEqual(records.map((record) => { assert.ok(record); return record.title; }), ['root task', 'child task', 'leaf task']);
   const childRecord = records[1], leafRecord = records[2];
   assert.ok(childRecord && leafRecord);
-  assert.deepEqual(app.runtime.plugins.ctx.harnessAgent.read(leafRecord.id).model, { provider: 'local-mock', id: 'mock-model' });
+  assert.deepEqual(app.runtime.registry.log(leafRecord.id).projection().model, { provider: 'local-mock', id: 'mock-model' });
   assert.equal(app.runtime.plugins.ctx.harnessTools.forSession(leafRecord.id).map(({ name }) => name).includes('delegate'), false);
   assert.ok(toolEvents.some((event) => event.state === 'finished' && event.sessionId === childRecord.id));
   const check = app.runtime.registry.create();
   await app.runtime.plugins.ctx.harnessRuns.send(check.id, 'read policy');
-  const failure = app.runtime.plugins.ctx.harnessAgent.messages(check.id).find((message) => message.role === 'toolResult');
+  const failure = app.runtime.registry.log(check.id).projection().messages.find((message) => message.role === 'toolResult');
   assert.ok(failure);
   assert.equal(failure.isError, true);
   assert.match(JSON.stringify(failure.content), /permitted workspace/);
@@ -45,7 +45,7 @@ test('Native execution honors file policy and recursive delegates can finish wit
   assert.deepEqual(exported.map(({ id, parentId }) => ({ id, parentId })),
     records.map((record) => { assert.ok(record); return { id: record.id, parentId: record.parentId }; }));
   assert.ok(exported.every(({ log }) => log?.includes('"type":"session"')));
-  assert.equal((await app.runtime.plugins.ctx.harnessConversationView.read(leafRecord.id))?.model?.id, 'mock-model');
+  assert.equal(app.runtime.registry.log(leafRecord.id).projection().model?.id, 'mock-model');
 });
 
 test('cancelling a root aborts its active child and preserves indexed history', { timeout: 15000 }, async (t) => {

@@ -3,23 +3,24 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "dependencies": {
-    "@mini-harness/kernel": "workspace:*",
-    "@mini-harness/platform": "workspace:*",
-    "@mini-harness/ui-runtime": "workspace:*"
-  },
   "exports": {
-    "./http": "./http.ts",
-    "./projection-api": "./projection-api.ts",
-    "./projections": "./projections.ts",
-    "./router": "./router.ts",
-    "./routes": "./routes.ts"
+    "./http": "./src/http.ts",
+    "./projection-api": "./src/projection-api.ts",
+    "./projection-notice": "./src/shared/projection-notice.ts",
+    "./projections": "./src/projections.ts",
+    "./router": "./src/router.ts",
+    "./routes": "./src/routes.ts"
   },
   "miniHarness": {
     "api": [
       "./http",
       "./projection-api",
+      "./projection-notice",
       "./routes"
     ]
+  },
+  "dependencies": {
+    "@mini-harness/kernel": "workspace:*",
+    "@mini-harness/platform": "workspace:*"
   }
 }

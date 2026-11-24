@@ -3,19 +3,19 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "dependencies": {
-    "@mini-harness/execution": "workspace:*",
-    "@mini-harness/kernel": "workspace:*",
-    "@mini-harness/plugin-api": "workspace:*",
-    "@mini-harness/sandbox": "workspace:*"
-  },
   "exports": {
-    "./api": "./api.ts",
-    "./manifest": "./manifest.ts"
+    "./api": "./src/api.ts",
+    "./manifest": "./src/manifest.ts"
   },
   "miniHarness": {
     "api": [
       "./api"
     ]
+  },
+  "dependencies": {
+    "@mini-harness/execution": "workspace:*",
+    "@mini-harness/kernel": "workspace:*",
+    "@mini-harness/plugin-api": "workspace:*",
+    "@mini-harness/sandbox": "workspace:*"
   }
 }

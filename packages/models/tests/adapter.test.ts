@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { PiModelStore, PiLlm } from '../pi-adapter.js';
+import { PiModelStore, PiLlm } from '../src/server/pi-adapter.js';
 import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.js';
 import { readJson, writeJson } from '@mini-harness/platform/json';
 import type { LlmEvent, NativeMessage } from '@mini-harness/llm/api';

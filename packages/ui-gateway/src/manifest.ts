@@ -1,0 +1,9 @@
+import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
+import { setup } from './setup.js';
+
+export const manifest: PluginDescriptor = {
+  scope: 'application',
+  id: 'core:ui', title: 'Browser transport', description: 'Browser startup and projections', required: true,
+  optional: ['harnessTransportSignal'],
+  inject: ['harnessPluginCatalog', 'harnessRoutes', 'harnessChanges'], setup
+};

@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import type { NativeAssistantMessage } from '@mini-harness/llm/api';
-import { SessionLog } from '../log.js';
+import { SessionLog } from '../src/log.js';
 
 function fixture(t: test.TestContext) {
   const root = mkdtempSync(join(tmpdir(), 'mini-harness-log-'));

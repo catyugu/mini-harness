@@ -16,7 +16,7 @@ function copyExample(directory: string, id: string) {
   cpSync(join(examples, id), join(directory, id), { recursive: true });
   const entry = join(directory, id, 'plugin.js');
   const source = readFileSync(entry, 'utf8');
-  const sdk = new URL('../../packages/sdk/plugin.js', import.meta.url).href;
+  const sdk = new URL('../../packages/sdk/src/plugin.js', import.meta.url).href;
   writeFileSync(entry, source.replace("'mini-harness/plugin'", JSON.stringify(sdk)));
 }
 test('external services and their declared consumers share Cordis provider selection', async (t) => {
@@ -263,7 +263,7 @@ test('native file and shell tools use scoped file, process and sandbox services 
   const preview = (id: string) => request('/workspaces/' + parent.workspaceId + '/files/preview?path=note.txt&sessionId=' + id);
   assert.equal((await preview(parent.id)).body.content, 'scoped file', 'HTTP inspection prepares the lazy scope');
   assert.equal((await preview(sibling.id)).body.content, 'application file');
-  const lastTool = (id: string) => expectPresent(app.runtime.plugins.ctx.harnessAgent.messages(id).filter(({ role }) => role === 'toolResult').at(-1), 'tool result');
+  const lastTool = (id: string) => expectPresent(app.runtime.registry.log(id).projection().messages.filter(({ role }) => role === 'toolResult').at(-1), 'tool result');
   await app.runtime.plugins.ctx.harnessRuns.send(child.id, 'read in inherited scope');
   assert.match(JSON.stringify(lastTool(child.id).content), /scoped file/);
   await app.runtime.plugins.ctx.harnessRuns.send(sibling.id, 'read in sibling');
@@ -402,13 +402,13 @@ test('scoped model catalogs govern explicit runs and inherited or model-selected
   const inherited = children.find(({ title }) => title === 'Inherited child task');
   const explicit = children.find(({ title }) => title === 'Explicit child task');
   assert.ok(inherited); assert.ok(explicit);
-  assert.deepEqual(app.runtime.plugins.ctx.harnessAgent.read(inherited.id).model, scopedChoice);
-  assert.deepEqual(app.runtime.plugins.ctx.harnessAgent.read(explicit.id).model, { provider: 'scoped-only', id: 'child-model' });
+  assert.deepEqual(app.runtime.registry.log(inherited.id).projection().model, scopedChoice);
+  assert.deepEqual(app.runtime.registry.log(explicit.id).projection().model, { provider: 'scoped-only', id: 'child-model' });
   assert.equal(app.runtime.plugins.ctx.harnessRuns.info(inherited.id)?.state, 'completed');
   assert.equal(app.runtime.plugins.ctx.harnessRuns.info(explicit.id)?.state, 'completed');
-  assert.ok(app.runtime.plugins.ctx.harnessAgent.messages(parent.id).filter(({ role }) => role === 'toolResult').every(({ isError }) => !isError));
+  assert.ok(app.runtime.registry.log(parent.id).projection().messages.filter(({ role }) => role === 'toolResult').every(({ isError }) => !isError));
   assert.deepEqual(app.runtime.plugins.ctx.harnessModelPreference.recent(), applicationChoice);
   assert.equal(await app.runtime.plugins.ctx.harnessRuns.send(sibling.id, 'Use the application model'), 'Mock response');
-  assert.deepEqual(app.runtime.plugins.ctx.harnessAgent.read(sibling.id).model, applicationChoice);
+  assert.deepEqual(app.runtime.registry.log(sibling.id).projection().model, applicationChoice);
   assert.equal(mock.requests.length, 1);
 });

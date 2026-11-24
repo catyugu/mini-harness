@@ -1,4 +1,3 @@
-import { expectPresent } from '../support/required.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, rmSync, writeFileSync, existsSync } from 'node:fs';
@@ -31,7 +30,7 @@ test('native agent through HTTP: streaming, persistence, Skills, export and perm
   const home = await fetch(base + '/');
   assert.equal(home.status, 200);
   assert.match(await home.text(), /mini-harness/);
-  const bundle = await fetch(base + '/packages/ui-runtime/http.js');
+  const bundle = await fetch(base + '/packages/ui-runtime/src/browser/http.js');
   assert.equal(bundle.status, 200);
   assert.match(await bundle.text(), /mini-harness-token/);
 
@@ -59,7 +58,7 @@ test('native agent through HTTP: streaming, persistence, Skills, export and perm
 
   const stored = await (await get('/api/sessions/' + session.id)).json();
   assert.equal(stored.title, 'Test native integration');
-  const file = app.runtime.registry.nativeFile(expectPresent(app.runtime.registry.get(session.id), 'conversation record'));
+  const file = app.runtime.registry.log(session.id).file;
   assert.ok(file && existsSync(file));
   assert.ok(stored.messages.some((m: {role: string}) => m.role === 'assistant'));
 
@@ -90,14 +89,13 @@ test('native agent through HTTP: streaming, persistence, Skills, export and perm
   await assert.rejects(runs.send(child.id, '/skill:unavailable'), /Unknown skill: unavailable/);
   await app.runtime.registry.delete([child.id]);
 
-  const restored = await app.runtime.plugins.ctx.harnessConversationView.read(session.id);
-  assert.equal(restored.title, 'Test native integration');
-  assert.ok(restored.messages.some((m: {role: string}) => m.role === 'assistant'));
-
   // Use the new server's token after restart.
   const newPort = await app.listen(0);
   const newBase = 'http://127.0.0.1:' + newPort;
   const nextHeaders = { Authorization: 'Bearer ' + app.token, 'Content-Type': 'application/json' };
+  const restored = await (await fetch(newBase + '/api/sessions/' + session.id, { headers: nextHeaders })).json();
+  assert.equal(restored.title, 'Test native integration');
+  assert.ok(restored.messages.some((message: { role: string }) => message.role === 'assistant'));
   const exported = await fetch(newBase + '/api/sessions/export', {
     method: 'POST', headers: nextHeaders, body: JSON.stringify({ ids: [session.id] })
   });

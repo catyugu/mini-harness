@@ -38,7 +38,6 @@ environment services. Plugins declaring `inject` receive services from their own
 scope's context.
 
 The graph is validated before setup. Provider changes restart their dependent
-plugins in dependency order and await cleanup. A failed update to a healthy
-instance restores its previous configuration. A failed optional instance is
+plugins in dependency order and await cleanup. A failed configuration update restores the previously committed settings and mounts. Deleting a session or workspace removes its overrides through the same settings queue. A failed optional instance is
 shown in the Plugins page, where its scope configuration can be repaired. Application replacements must replace a
 multi-service plugin as a unit; scoped replacements leave the parent mounted.

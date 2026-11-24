@@ -1,6 +1,6 @@
 # Plugin development
 
-Put a `plugin.json` descriptor and `plugin.js`, `web.js`, or both in `~/.mini-harness/plugins/<id>/`. The Plugins page installs bundles up to 1 MiB and leaves them disabled until enabled. IDs start with a lowercase letter and can contain lowercase letters, digits and hyphens, up to 64 characters. Disable a plugin in every scope and remove any provider selection before uninstalling. Uninstalling permanently removes the bundle and its configuration. Review local code before enabling it.
+Put a `plugin.json` descriptor and `plugin.js`, `web.js`, or both in `~/.mini-harness/plugins/<id>/`. The Plugins page installs bundles up to 1 MiB and leaves them disabled until enabled. IDs start with a lowercase letter and can contain lowercase letters, digits and hyphens, up to 64 characters. Disable a plugin in every scope and remove any provider selection before uninstalling. Uninstalling permanently removes the bundle and its configuration. Installed server plugins are trusted local JavaScript and run with the OS permissions of the mini-harness process. Service declarations and the plugin API govern composition and lifecycle.
 
 ## npm distribution
 
@@ -115,7 +115,7 @@ export default function setup(_ctx: unknown, api: PluginApi) {
 | `toolExtensions.register` | Registers a definition or `{ name, bind(sessionId) }`. Declare `harnessTools` in `inject`. The optional `access: 'readOnly'` declaration is subject to a host grant on the actual plugin instance. |
 | `toolExtensions.decide` | Receives the name, call ID, validated arguments, session and signal. Return `'deny'` to stop execution or `undefined` to defer. Decisions can only restrict access. |
 | `agentExtensions.toolResult` | Transforms a successful result for model context and display. The original execution is persisted first. A transform failure records a safe error and stops the run. Raw progress content is withheld while a transform applies. |
-| `sessionDisplayExtensions.project` | Synchronously transforms tool display content in live and saved views. Projection failures preserve the earlier display content. |
+| `sessionDisplayExtensions.project` | Transforms tool output in Conversation history, activity and event streams. It leaves persisted tool results and model-visible context intact. Projection failures preserve the earlier display content. |
 
 Ordered transforms and decisions take an optional numeric order after the handler. They run in ascending order, then by plugin instance ID and registration order. The host copies transform data before invocation. Returning `undefined` discards any edits to the copy. Async callbacks receive a signal combining task cancellation with plugin unload. Unload stops new calls and waits for existing callbacks to settle before disposal.
 
@@ -264,7 +264,7 @@ The file and Skill endpoints return 404 when their plugin is disabled. The Appro
 
 Run `mini-harness plugin dev <directory>` from a directory with a valid plugin descriptor. It builds the plugin, starts an isolated instance and restarts it after source changes so both the server and browser reload against the new graph.
 
-Declare browser CSS, ESM chunks, images and fonts in `browserAssets`. Only listed files below `web/` and the entry `web.js` are served, and only while the plugin is enabled. Resources use same-origin URLs with their media types. `browserPreload` can select one listed ESM entry. Its default function receives a lifetime signal and may return cleanup. Pre-start functions run in the resolved dependency order before ordinary browser setup.
+Declare browser CSS, ESM chunks, images and fonts in `browserAssets`. Only listed files below `web/` and the entry `web.js` are served, and only while the plugin is enabled. Resources use same-origin URLs with their media types. The browser mounts styles in dependency order and removes them when the owning plugin unloads. `browserPreload` can select one listed ESM entry. Its default function receives a lifetime signal and may return cleanup. Pre-start functions run in the resolved dependency order before ordinary browser setup.
 
 Mount HTTP routes with `api.registerRoute` and local WebSocket endpoints with `api.registerUpgrade`. The host authenticates upgrades, checks the browser origin and closes owned sockets when the plugin unloads. Gateway plugins create their own listener and authenticate the viewer before calling `harnessNetwork.forward`. The host authorizes only a read-only subset of its UI, session and workspace APIs on this path. Gateway credentials must be independent of the local management credential.
 

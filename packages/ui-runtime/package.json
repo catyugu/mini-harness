@@ -3,19 +3,15 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "dependencies": {
-    "@mini-harness/kernel": "workspace:*"
-  },
   "exports": {
-    "./bootstrap": "./bootstrap.ts",
-    "./contribution": "./contribution.ts",
-    "./frontend-api": "./frontend-api.ts",
-    "./graph-api": "./graph-api.ts",
-    "./http": "./http.ts",
-    "./projection-api": "./projection-api.ts",
-    "./projection-notice": "./projection-notice.ts",
-    "./projections": "./projections.ts",
-    "./remote-store": "./remote-store.ts"
+    "./bootstrap": "./src/shared/bootstrap.ts",
+    "./contribution": "./src/browser/contribution.ts",
+    "./frontend-api": "./src/browser/frontend-api.ts",
+    "./graph-api": "./src/browser/graph-api.ts",
+    "./http": "./src/browser/http.ts",
+    "./projection-api": "./src/browser/projection-api.ts",
+    "./projections": "./src/browser/projections.ts",
+    "./remote-store": "./src/browser/remote-store.ts"
   },
   "miniHarness": {
     "api": [
@@ -25,8 +21,11 @@
       "./graph-api",
       "./http",
       "./projection-api",
-      "./projection-notice",
       "./remote-store"
     ]
+  },
+  "dependencies": {
+    "@mini-harness/kernel": "workspace:*",
+    "@mini-harness/transport": "workspace:*"
   }
 }

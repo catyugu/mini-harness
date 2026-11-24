@@ -3,18 +3,17 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "dependencies": {
-    "@mini-harness/plugin-api": "workspace:*",
-    "@mini-harness/ui-runtime": "workspace:*"
-  },
   "exports": {
-    "./browser/api": "./browser/api.ts",
-    "./manifest": "./manifest.ts",
-    "./registry": "./registry.ts"
+    "./browser/api": "./src/browser/api.ts",
+    "./manifest": "./src/manifest.ts"
   },
   "miniHarness": {
     "api": [
       "./browser/api"
     ]
+  },
+  "dependencies": {
+    "@mini-harness/plugin-api": "workspace:*",
+    "@mini-harness/ui-runtime": "workspace:*"
   }
 }

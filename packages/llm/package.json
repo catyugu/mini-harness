@@ -3,14 +3,10 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "dependencies": {
-    "@mini-harness/kernel": "workspace:*",
-    "@mini-harness/platform": "workspace:*"
-  },
   "exports": {
-    "./api": "./api.ts",
-    "./options": "./options.ts",
-    "./vocabulary": "./vocabulary.ts"
+    "./api": "./src/api.ts",
+    "./options": "./src/options.ts",
+    "./vocabulary": "./src/vocabulary.ts"
   },
   "miniHarness": {
     "api": [
@@ -18,5 +14,9 @@
       "./options",
       "./vocabulary"
     ]
+  },
+  "dependencies": {
+    "@mini-harness/kernel": "workspace:*",
+    "@mini-harness/platform": "workspace:*"
   }
 }

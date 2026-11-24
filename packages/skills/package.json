@@ -3,6 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "exports": {
+    "./manifest": "./src/manifest.ts"
+  },
   "dependencies": {
     "@mini-harness/agent": "workspace:*",
     "@mini-harness/conversation": "workspace:*",
@@ -16,8 +19,5 @@
     "@mini-harness/ui-runtime": "workspace:*",
     "@mini-harness/ui-slots": "workspace:*",
     "@mini-harness/workspaces": "workspace:*"
-  },
-  "exports": {
-    "./manifest": "./manifest.ts"
   }
 }

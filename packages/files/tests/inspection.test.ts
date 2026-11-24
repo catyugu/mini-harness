@@ -5,7 +5,7 @@ import { mkdirSync, realpathSync, writeFileSync, rmSync, symlinkSync } from 'nod
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
-import { Inspection } from '../inspection.js';
+import { Inspection } from '../src/server/inspection.js';
 
 import { fixture } from '../../../test/support/api-fixture.js';
 test('Git inspection includes staged, unstaged and untracked files and refuses linked previews', async (t) => {

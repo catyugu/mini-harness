@@ -20,18 +20,18 @@ test('the composed browser graph serves its runtime dependencies and excludes se
     if (browser && (required || defaultEnabled)) assert.equal(mounted.get(id)?.browser, browser);
 
   for (const asset of [
-    '/packages/host/application.js',
-    '/packages/platform/local-secret.js',
-    '/packages/input/prepare.js',
-    '/packages/sdk/plugin.js',
-    '/packages/settings/manager.js',
-    '/packages/transport/router.js',
-    '/packages/shell/host.js',
-    '/packages/subagents/delegation.js',
+    '/packages/host/src/application.js',
+    '/packages/platform/src/local-secret.js',
+    '/packages/input/src/prepare.js',
+    '/packages/sdk/src/plugin.js',
+    '/packages/settings/src/server/manager.js',
+    '/packages/transport/src/router.js',
+    '/packages/shell/src/server/setup.js',
+    '/packages/subagents/src/server/delegation.js',
     '/packages/sessions/tests/log.test.js'
   ]) assert.equal((await fetch(base + asset)).status, 404, asset);
 
-  const pending = ['/packages/ui-runtime/boot.js', '/packages/ui-runtime/plugin-sdk.js'];
+  const pending = ['/packages/ui-runtime/src/browser/boot.js', '/packages/ui-runtime/plugin-sdk.js'];
   for (const { browser } of plugins) if (browser) pending.push(browser);
   const seenModules = new Set<string>();
   for (const path of pending) {
@@ -44,7 +44,7 @@ test('the composed browser graph serves its runtime dependencies and excludes se
       if (typeOnly) continue;
       assert.ok(literal.text.startsWith('.') || literal.text.startsWith('/'),
         'Unbundled browser import in ' + path + ': ' + literal.text);
-      const target = new URL(literal.text, base + path);
+      const target = new URL(literal.text, response.url);
       assert.equal(target.origin, base, 'Browser module has an off-origin import: ' + path);
       pending.push(target.pathname);
     }
@@ -56,4 +56,14 @@ test('the composed browser graph serves its runtime dependencies and excludes se
   const dependencies = changed.ui.find(({ id }) => id === 'shell')?.requires ?? [];
   assert.ok(dependencies.includes('core:conversation'), 'Shell needs the conversation tool renderer');
   assert.ok(dependencies.includes('core:approvals'), 'Shell needs the approval projection');
+  const shellStyles = changed.ui.find(({ id }) => id === 'shell')?.styles ?? [];
+  assert.equal(shellStyles.length, 1);
+  const sheet = await fetch(base + shellStyles[0]);
+  assert.equal(sheet.status, 200);
+  assert.match(sheet.headers.get('content-type') ?? '', /^text\/css/);
+  assert.match(await sheet.text(), /\.approval-heading/);
+  assert.equal((await request('/settings', 'PATCH', { plugins: { shell: false } })).status, 200);
+  assert.equal((await fetch(base + shellStyles[0])).status, 404);
+  assert.ok(changed.ui.findIndex(({ id }) => id === 'core:theme') <
+    changed.ui.findIndex(({ id }) => id === 'core:primitives'));
 });

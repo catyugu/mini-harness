@@ -16,7 +16,7 @@ test('workspace registration, session navigation and scoped tools leave an activ
     if (last.content === 'Keep working') { entered(); await held; return 'Done'; }
     return last.role === 'tool' ? 'Written' : { tool: 'write', args: { path: 'isolated.txt', content: 'second workspace' } };
   });
-  const first = '/workspaces/' + app.runtime.registry.workspaces.defaultId;
+  const first = '/workspaces/' + app.runtime.plugins.ctx.harnessWorkspaces.defaultId;
   const next = join(root, 'second');
   mkdirSync(next);
   writeFileSync(join(next, 'note.txt'), 'only in second');
