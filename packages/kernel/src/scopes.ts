@@ -5,6 +5,16 @@ export type PluginScope = { kind: 'application' }
   | { kind: 'workspace'; workspaceId: string }
   | { kind: 'session'; workspaceId: string; sessionId: string };
 
+/** A business-owned address, ordered from the outermost scope to the target. */
+export interface ScopeIdentity {
+  key: string;
+  scope: Exclude<PluginScope, { kind: 'application' }>;
+}
+
+export interface ScopeDirectory {
+  address(key: string): readonly ScopeIdentity[];
+}
+
 export interface ScopeSettings {
   /** A scoped selection replaces an inherited provider only in this subtree. */
   providers?: Record<string, string>;
@@ -25,5 +35,6 @@ export interface ScopePort {
 declare module 'cordis' {
   interface Context {
     harnessScopes: ScopePort;
+    harnessScopeDirectory: ScopeDirectory;
   }
 }

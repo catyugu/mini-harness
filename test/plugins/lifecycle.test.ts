@@ -12,7 +12,7 @@ import { DEFAULTS, mergeSettings, readSettings } from '@mini-harness/settings/co
 import { writeJson } from '@mini-harness/platform/json';
 
 import { Context } from 'cordis';
-import type { SessionRecord } from '@mini-harness/sessions/identity';
+import type { ScopeIdentity } from '@mini-harness/kernel/scopes';
 import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
 import { PluginHost } from '@mini-harness/plugins/manager';
 
@@ -305,11 +305,16 @@ test('unloading a route signals an active request and waits for its cleanup', as
 test('live scoped providers isolate siblings, restore inheritance and roll back failed setup', async (t) => {
   const directory = mkdtempSync(join(tmpdir(), 'mini-live-scopes-'));
   const workspaceId = 'a'.repeat(32), otherWorkspace = 'b'.repeat(32);
-  const records = new Map<string, SessionRecord>([
-    ['parent', { id: 'parent', workspaceId, parentId: null } as SessionRecord],
-    ['child', { id: 'child', workspaceId, parentId: 'parent' } as SessionRecord],
-    ['sibling', { id: 'sibling', workspaceId, parentId: null } as SessionRecord],
-    ['independent', { id: 'independent', workspaceId: otherWorkspace, parentId: null } as SessionRecord]
+  const workspaceAddress = (workspaceId: string): ScopeIdentity =>
+    ({ key: 'workspace:' + workspaceId, scope: { kind: 'workspace', workspaceId } });
+  const sessionAddress = (sessionId: string, workspaceId: string): ScopeIdentity =>
+    ({ key: 'session:' + sessionId, scope: { kind: 'session', sessionId, workspaceId } });
+  const parentAddress = [workspaceAddress(workspaceId), sessionAddress('parent', workspaceId)];
+  const addresses = new Map<string, ScopeIdentity[]>([
+    ['session:parent', parentAddress],
+    ['session:child', [...parentAddress, sessionAddress('child', workspaceId)]],
+    ['session:sibling', [workspaceAddress(workspaceId), sessionAddress('sibling', workspaceId)]],
+    ['session:independent', [workspaceAddress(otherWorkspace), sessionAddress('independent', otherWorkspace)]]
   ]);
   const released: string[] = [];
   const builtins: PluginDescriptor[] = [
@@ -333,7 +338,7 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
   const ctx = new Context();
   ctx.provide('authority', {});
   const host = new PluginHost(ctx, directory, builtins, ['authority'], () => settings,
-    (id) => records.get(id));
+    (key) => addresses.get(key) ?? []);
   t.after(async () => { await host.close(); rmSync(directory, { recursive: true, force: true }); });
   await host.start(settings);
   assert.equal(host.metadata().find(({ id }) => id === 'workspace')?.state, 'failed');
@@ -397,7 +402,7 @@ test('configuration validation resolves the staged scope provider and rejects in
         if (config.expected !== service('greeting')) throw new Error('Wrong scoped greeting during ' + operation);
       } }
   ];
-  const host = new PluginHost(new Context(), directory, builtins, [], () => settings, () => undefined);
+  const host = new PluginHost(new Context(), directory, builtins, [], () => settings, () => []);
   t.after(async () => { await host.close(); rmSync(directory, { recursive: true, force: true }); });
   await host.start(settings);
   const configure = (expected: string) => {

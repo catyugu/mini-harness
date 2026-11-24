@@ -59,7 +59,7 @@ test('restart finishes a journaled deletion after partial cleanup', async (t) =>
   writeFileSync(paths.registry, JSON.stringify({ sessions: [unrelated],
     pendingDelete: [{ id: parent.id, workspaceId: parent.workspaceId }, { id: child.id, workspaceId: child.workspaceId }] }));
   const forgotten: string[] = [];
-  const restored = new SessionRegistry(paths, new WorkspaceCatalog(paths), undefined, undefined, async (keys) => { forgotten.push(...keys); });
+  const restored = new SessionRegistry(paths, new WorkspaceCatalog(paths), undefined, async (keys) => { forgotten.push(...keys); });
   t.after(() => restored.dispose());
   await restored.recoverDeletion();
   assert.deepEqual(restored.list().map(({ id }) => id), [unrelated.id]);

@@ -9,7 +9,7 @@ import type { Paths } from '@mini-harness/platform/runtime-paths';
 import type { SessionStore } from './store.js';
 import type { WorkspacePort } from '@mini-harness/workspaces/api';
 import type { SessionRecords } from './records.js';
-import type { ScopePort } from '@mini-harness/kernel/scopes';
+import type { ScopeIdentity } from '@mini-harness/kernel/scopes';
 import type { CapabilityObservation } from '@mini-harness/kernel/observations';
 import type { ConversationPermission, SessionRecord } from './shared/identity.js';
 import { SessionLog, syncDirectory } from './log.js';
@@ -32,7 +32,7 @@ export class SessionRegistry implements SessionStore {
   readonly events = new EventTarget();
 
   constructor(private readonly paths: Paths, private readonly workspaces: WorkspacePort,
-    private readonly scopes?: ScopePort, private readonly observe?: (event: CapabilityObservation) => void,
+    private readonly observe?: (event: CapabilityObservation) => void,
     private readonly forgetScopes?: (keys: string[]) => Promise<void>) {
     this.state = loadCatalog(paths, workspaces);
     for (const record of this.state.sessions) {
@@ -242,17 +242,33 @@ export class SessionRegistry implements SessionStore {
     return this.workspaces.resolveRoot(workspace.path, workspace.id);
   }
 
-  depth(id: string) {
-    let record = this.get(id);
-    if (!record) throw new DomainError('not_found', 'Conversation not found');
-    const ancestors = new Set([id]);
-    while (record.parentId) {
-      if (ancestors.has(record.parentId)) throw new Error('Invalid conversation ancestry');
-      ancestors.add(record.parentId);
-      record = this.get(record.parentId);
+  scopeAddress(key: string): ScopeIdentity[] {
+    if (key.startsWith('workspace:')) {
+      const workspaceId = key.slice('workspace:'.length);
+      return [{ key, scope: { kind: 'workspace', workspaceId } }];
+    }
+    if (!key.startsWith('session:')) return [];
+    let record = this.get(key.slice('session:'.length));
+    if (!record) return [];
+    const { workspaceId } = record;
+    const ancestors: ScopeIdentity[] = [];
+    const seen = new Set<string>();
+    while (record) {
+      const { id, parentId } = record;
+      if (seen.has(id) || record.workspaceId !== workspaceId) throw new Error('Invalid conversation ancestry');
+      seen.add(id);
+      ancestors.unshift({ key: 'session:' + id, scope: { kind: 'session', workspaceId, sessionId: id } });
+      if (!parentId) break;
+      record = this.get(parentId);
       if (!record) throw new DomainError('not_found', 'Parent conversation not found');
     }
-    return ancestors.size - 1;
+    return [{ key: 'workspace:' + workspaceId, scope: { kind: 'workspace', workspaceId } }, ...ancestors];
+  }
+
+  depth(id: string) {
+    const address = this.scopeAddress('session:' + id);
+    if (!address.length) throw new DomainError('not_found', 'Conversation not found');
+    return address.length - 2;
   }
 
   descendants(ids: string[]) {
@@ -331,7 +347,7 @@ export class SessionRegistry implements SessionStore {
       return { id, workspaceId: record.workspaceId };
     });
     if (all.length) {
-      const locations = all.map((id) => ({ id, keys: this.scopes?.address(id) ?? [] }));
+      const locations = all.map((id) => ({ id, keys: this.scopeAddress('session:' + id).map(({ key }) => key) }));
       this.commit({ ...this.state, sessions: this.state.sessions.filter((entry) => !chosen.has(entry.id)), pendingDelete });
       await this.recoverDeletion();
       for (const { id, keys } of locations) {

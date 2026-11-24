@@ -1,4 +1,5 @@
 import type {} from '@mini-harness/kernel/observations';
+import type {} from '@mini-harness/kernel/scopes';
 import type {} from '@mini-harness/sessions/store';
 import { Context } from 'cordis';
 import { authority, plugins } from './composition.js';
@@ -35,7 +36,7 @@ export class MiniHarnessRuntime {
     };
     for (const [name, service] of Object.entries(root)) ctx.provide(name, service);
     this.plugins = new PluginHost(ctx, paths.plugins, plugins, [...Object.keys(root), 'harnessScopes', 'harnessPluginCatalog'],
-      () => this.settings, (id) => ctx.get('harnessRegistry')?.get(id), upgrade, paths.devPlugin,
+      () => this.settings, (key) => ctx.get('harnessScopeDirectory')?.address(key) ?? [], upgrade, paths.devPlugin,
       (id, key, patch, check) => this.configuration.writePlugin(id, key, patch, check).then(() => {}), authority);
     ctx.provide('harnessScopes', this.plugins);
     ctx.provide('harnessPluginCatalog', this.plugins);

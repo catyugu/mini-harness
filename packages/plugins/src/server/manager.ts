@@ -8,13 +8,13 @@ import { isDeepStrictEqual } from 'node:util';
 import { lstatSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
-import type { HostServices, PluginScope, ScopePort } from '@mini-harness/kernel/scopes';
+import type { HostServices, PluginScope, ScopePort, ScopeDirectory } from '@mini-harness/kernel/scopes';
 import { planBrowser, publishBrowser } from './browser-assets.js';
 import { addAbortListener } from 'node:events';
 import type { UpgradeHandler } from '@mini-harness/transport/routes';
 import type { PluginSettings } from '@mini-harness/plugin-api/configuration';
 import { PluginMounts, type MountPlan } from '@mini-harness/kernel/mounts';
-import { resolveScopes, type ScopeSession } from './scope-graph.js';
+import { resolveScopes } from './scope-graph.js';
 import { createPluginApi } from './api.js';
 import { changedSelection, PluginCatalog, type PluginPlan } from './catalog.js';
 
@@ -34,7 +34,7 @@ export class PluginHost implements ScopePort {
 
   constructor(readonly ctx: Context, private readonly directory: string, builtins: PluginDescriptor[], rootServices: string[],
     private readonly settings: () => PluginSettings,
-    private readonly session: (id: string) => ScopeSession | undefined,
+    private readonly resolveAddress: ScopeDirectory['address'],
     private readonly upgrade?: (path: string, handler: UpgradeHandler) => () => void, devPlugin?: string,
     private readonly writePlugin?: (id: string, key: string | undefined, patch: unknown, check: () => void) => Promise<void>,
     private readonly authority: {
@@ -71,7 +71,7 @@ export class PluginHost implements ScopePort {
 
   private configurationContext(key?: string, scopes = this.scopes) {
     if (!key) return this.ctx;
-    const keys = key.startsWith('session:') ? this.address(key.slice('session:'.length)) : [key];
+    const keys = this.scopeAddress(key).map(({ key }) => key);
     return keys.reverse().map((item) => scopes.get(item)).find(Boolean)?.ctx ?? this.ctx;
   }
 
@@ -81,25 +81,16 @@ export class PluginHost implements ScopePort {
   }
   reserved(id: string) { return this.catalog.reserved(id); }
 
-  private lineage(id: string) {
-    const records: ScopeSession[] = [];
-    const seen = new Set<string>();
-    let current = this.session(id);
-    if (!current) return records;
-    while (current) {
-      if (seen.has(current.id) || (records.length && current.workspaceId !== records[0].workspaceId))
-        throw new Error('Invalid session scope ancestry');
-      records.unshift(current);
-      seen.add(current.id);
-      current = current.parentId ? this.session(current.parentId) : undefined;
-    }
-    return records;
+  private scopeAddress(key: string) {
+    const address = this.resolveAddress(key);
+    // Workspace addresses are roots and can be planned before application providers mount.
+    if (!address.length && key.startsWith('workspace:'))
+      return [{ key, scope: { kind: 'workspace' as const, workspaceId: key.slice('workspace:'.length) } }];
+    return address;
   }
 
   address(id: string) {
-    const records = this.lineage(id);
-    if (!records.length) return [];
-    return ['workspace:' + records[0].workspaceId, ...records.map(({ id }) => 'session:' + id)];
+    return this.scopeAddress('session:' + id).map(({ key }) => key);
   }
 
   require<Name extends keyof HostServices & string>(id: string | null | undefined, service: Name): NonNullable<HostServices[Name]> {
@@ -147,9 +138,9 @@ export class PluginHost implements ScopePort {
     const mounts: MountPlan[] = [];
     const diagnostics: ReturnType<PluginHost['describe']>[] = [];
     const active = new Set([...Object.keys(settings.scopes).filter((key) => key.startsWith('workspace:')), ...this.scopes.keys(), ...validating, ...(preparing ? this.address(preparing) : [])]);
-    for (const key of active) if (key.startsWith('session:'))
-      for (const ancestor of this.address(key.slice('session:'.length))) if (!released.has(ancestor)) active.add(ancestor);
-    const graph = resolveScopes(settings, this.catalog.plans.bind(this.catalog), this.session,
+    for (const key of active)
+      for (const ancestor of this.scopeAddress(key)) if (!released.has(ancestor.key)) active.add(ancestor.key);
+    const graph = resolveScopes(settings, this.catalog.plans.bind(this.catalog), (key) => this.scopeAddress(key),
       descriptors, appPlans, appProviders, active, released, unavailable);
     for (const { key, parent, scope, isolates, plugins } of graph) {
       const parentContext = parent ? scopes.get(parent)?.ctx : this.ctx;

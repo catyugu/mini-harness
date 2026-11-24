@@ -25,3 +25,5 @@ Uses [Workspaces](../workspaces/README.md) to own storage beneath managed worksp
 ## Testing
 
 `tests/` exercises durability, branch projection, deletion recovery and log isolation. The [log protocol](../../docs/session-log.md) documents the persistent format.
+
+Sessions owns the conversation scope address (workspace and ancestor session identities). Plugin graph resolution consumes these addresses without reading session records.

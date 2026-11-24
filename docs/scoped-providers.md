@@ -24,7 +24,7 @@ cannot be overridden. Feature services, including the model adapter, can be
 replaced through their declared contracts. An inherited multi-service provider
 continues supplying its other services when a child replaces just one of them.
 
-Provider selection and isolation follow application → workspace → ancestor
+Sessions owns the address of each conversation and supplies the ordered scope identities to the plugin host. The resolver does not read session records. Provider selection and isolation follow application → workspace → ancestor
 session → session. A choice affects only its subtree. A sibling keeps its
 parent's provider. Remove the local provider selection to restore inheritance.
 A selected provider that fails to mount remains unavailable in its subtree until
