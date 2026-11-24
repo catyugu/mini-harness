@@ -47,7 +47,7 @@ test('copy, preview and revise a message with its image, and release editing dra
           };
           miniConversation.subscribe(['session', 'history'], update, api.signal);
           update();
-          api.contribute(conversationExtensions.record, 'record-writer', (_record, { signal }) => {
+          api.contribute(conversationExtensions.record, (_record, { signal }) => {
             document.body.dataset.recordReleased = 'no';
             signal.addEventListener('abort', () => { document.body.dataset.recordReleased = 'yes'; }, { once: true });
             throw new Error('fixture record rendering failure');
