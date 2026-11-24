@@ -6,9 +6,9 @@ import { protectLocal } from '@mini-harness/platform/local-secret';
 import { readJson, writeJson } from '@mini-harness/platform/json';
 import { isDeepStrictEqual } from 'node:util';
 import type { Context } from 'cordis';
-import type { PluginScope } from '@mini-harness/kernel/scopes';
+import type { PluginScope, ScopeTarget } from '@mini-harness/kernel/scopes';
 import type { ServiceMap } from '@mini-harness/kernel/services';
-import type { PluginApi } from '@mini-harness/plugin-api/descriptor';
+import type { PluginApi, ScopedRequestHandler } from '@mini-harness/plugin-api/descriptor';
 import type { DiscoveredPlugin } from './descriptor.js';
 import { bindContributionSource, contribute } from '@mini-harness/kernel/contributions';
 import { pluginInvocation } from './invocation.js';
@@ -20,6 +20,9 @@ export interface PluginLifetime {
   readOnlyGrant(name: string): boolean;
   address(id: string): readonly string[];
   dataRoot: string;
+  prepareScope(target: ScopeTarget, signal?: AbortSignal): Promise<void>;
+  scopedService(target: ScopeTarget, name: string): unknown;
+  registerScopedRequest?(operation: string, handler: ScopedRequestHandler): () => void;
   invalidate(): void;
   readConfig?(): Record<string, unknown>;
   subscribeConfig?(listener: () => void): () => void;
@@ -133,6 +136,25 @@ export function createPluginApi(ctx: Context, { id, descriptor, config }: { id: 
     optionalService<Name extends keyof ServiceMap & string>(name: Name): ServiceMap[Name] | undefined {
       if (!descriptor.optional?.includes(name)) throw new Error('Optional service is not declared by ' + id + ': ' + name);
       return ctx.get(name) as ServiceMap[Name] | undefined;
+    },
+    prepareScope(target, signal) {
+      lifetime.throwIfAborted();
+      return state.prepareScope(target, signal ? AbortSignal.any([lifetime, signal]) : lifetime);
+    },
+    scopedService<Name extends keyof ServiceMap & string>(target: ScopeTarget, name: Name): NonNullable<ServiceMap[Name]> {
+      lifetime.throwIfAborted();
+      if (!descriptor.inject?.includes(name)) throw new Error('Undeclared scoped service: ' + name);
+      const value = state.scopedService(target, name) as ServiceMap[Name] | undefined;
+      if (value == null) throw new Error('Required scoped service is unavailable: ' + name);
+      return value;
+    },
+    registerScopedRequest(operation, handler) {
+      lifetime.throwIfAborted();
+      const register = state.registerScopedRequest;
+      if (!register || !/^[a-zA-Z0-9_-]+$/.test(operation) || typeof handler !== 'function')
+        throw new Error('Invalid scoped plugin operation');
+      return ctx.effect(() => register(operation, (input, target, signal) =>
+        run('scoped request ' + operation, (active) => handler(input, target, active), signal)));
     },
     registerRoute(method, path, handler) {
       if (scopeKey || !['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method) ||

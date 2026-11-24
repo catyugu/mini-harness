@@ -71,6 +71,17 @@ export class FrontendHost {
           return point(contribution, ...args);
         },
         watch: (refresh) => own(() => root.miniProjections.register('plugin:' + id, { sync: refresh })),
+        watchScope: (pluginId, targets, refresh) => own(() => root.miniProjections.register('plugin:' + pluginId, {
+          sync: (_revision, snapshot, id) => {
+            if (snapshot || !id || targets().some((target) => (target.kind === 'session' ? target.sessionId : target.workspaceId) === id))
+              return refresh();
+          }
+        })),
+        requestScope: (pluginId, target, operation, input, signal) => this.request(
+          '/plugin-requests/' + encodeURIComponent(pluginId) + '/' + encodeURIComponent(operation), {
+            method: 'POST', body: JSON.stringify({ target, input }),
+            signal: signal ? AbortSignal.any([controller.signal, signal]) : controller.signal
+          }),
         locale: {
           current: () => navigator.language,
           subscribe: (listener) => {

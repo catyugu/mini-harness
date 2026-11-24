@@ -12,3 +12,4 @@ export type { SettingsContext, SettingsContribution, SettingsSection } from '@mi
 export { slotExtensions } from '@mini-harness/ui-slots/browser/api';
 export type { KeyedSlotOptions, SlotMap, SlotName, SlotKind, SlotMount, SlotRenderer } from '@mini-harness/ui-slots/browser/api';
 export type { PluginConfiguration } from '@mini-harness/kernel/configuration';
+export type { ScopeTarget } from '@mini-harness/kernel/scopes';

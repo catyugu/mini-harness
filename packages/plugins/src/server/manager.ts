@@ -7,8 +7,8 @@ import { Context } from 'cordis';
 import { isDeepStrictEqual } from 'node:util';
 import { lstatSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
-import type { HostServices, PluginScope, ScopePort, ScopeDirectory } from '@mini-harness/kernel/scopes';
+import type { PluginDescriptor, ScopedRequestHandler } from '@mini-harness/plugin-api/descriptor';
+import type { HostServices, PluginScope, ScopePort, ScopeDirectory, ScopeTarget } from '@mini-harness/kernel/scopes';
 import { planBrowser, publishBrowser } from './browser-assets.js';
 import { addAbortListener } from 'node:events';
 import type { UpgradeHandler } from '@mini-harness/transport/routes';
@@ -31,6 +31,7 @@ export class PluginHost implements ScopePort {
   private started = false;
   private applying?: Promise<void>;
   private closing = false;
+  private readonly requests = new Map<string, ScopedRequestHandler>();
 
   constructor(readonly ctx: Context, private readonly directory: string, builtins: PluginDescriptor[], rootServices: string[],
     private readonly settings: () => PluginSettings,
@@ -112,7 +113,48 @@ export class PluginHost implements ScopePort {
     return ((scope || undefined)?.ctx ?? this.ctx).get(service) as HostServices[Name] | undefined;
   }
 
-  async prepare(id: string, signal?: AbortSignal) {
+  private targetKey(target: ScopeTarget) {
+    const key = target?.kind === 'workspace' && typeof target.workspaceId === 'string' ? 'workspace:' + target.workspaceId :
+      target?.kind === 'session' && typeof target.sessionId === 'string' ? 'session:' + target.sessionId : undefined;
+    if (!key || this.resolveAddress(key).at(-1)?.key !== key) throw new DomainError('not_found', 'Unknown scope target');
+    return key;
+  }
+
+  private checkTarget(target: ScopeTarget, owner?: string) {
+    const key = this.targetKey(target);
+    if (owner && !this.resolveAddress(key).some((entry) => entry.key === owner))
+      throw new DomainError('forbidden', 'Target outside plugin scope');
+    return key;
+  }
+
+  private registerRequest(key: string, handler: ScopedRequestHandler) {
+    if (this.requests.has(key)) throw new Error('Duplicate scoped plugin operation: ' + key);
+    this.requests.set(key, handler);
+    return () => { this.requests.delete(key); };
+  }
+
+  async requestScope(id: string, operation: string, target: ScopeTarget, input: unknown, signal: AbortSignal) {
+    if (!/^[a-zA-Z0-9_-]+$/.test(id) || !/^[a-zA-Z0-9_-]+$/.test(operation))
+      throw new DomainError('invalid_input', 'Invalid scoped plugin operation');
+    const key = this.checkTarget(target);
+    await this.prepareKey(key, signal);
+    signal.throwIfAborted();
+    this.checkTarget(target);
+    for (const { key: ancestor } of [...this.resolveAddress(key)].reverse()) {
+      // A mounted nearer instance shadows its ancestor even if it has no such operation.
+      if (!this.mounts.plan(ancestor + '/' + id)) continue;
+      const handler = this.requests.get(ancestor + '/' + id + '/' + operation);
+      if (handler) return handler(input, target, signal);
+      break;
+    }
+    throw new DomainError('not_found', 'Scoped plugin operation is unavailable');
+  }
+
+  prepare(id: string, signal?: AbortSignal) {
+    return this.prepareKey('session:' + id, signal);
+  }
+
+  private async prepareKey(key: string, signal?: AbortSignal) {
     if (this.closing) throw new Error('Plugin host is closing');
     signal?.throwIfAborted();
     while (this.applying) {
@@ -127,8 +169,8 @@ export class PluginHost implements ScopePort {
     }
     if (!this.started) return;
     const settings = this.settings();
-    if (!this.address(id).some((key) => Object.hasOwn(settings.scopes, key) && !this.scopes.has(key))) return;
-    await this.apply(settings, () => {}, false, id);
+    if (!this.scopeAddress(key).some(({ key }) => Object.hasOwn(settings.scopes, key) && !this.scopes.has(key))) return;
+    await this.apply(settings, () => {}, false, key);
   }
 
   private scopedMounts(settings: PluginSettings, descriptors: ReturnType<PluginCatalog['descriptors']>,
@@ -137,7 +179,7 @@ export class PluginHost implements ScopePort {
     const scopes = new Map<string, MountedScope>();
     const mounts: MountPlan[] = [];
     const diagnostics: ReturnType<PluginHost['describe']>[] = [];
-    const active = new Set([...Object.keys(settings.scopes).filter((key) => key.startsWith('workspace:')), ...this.scopes.keys(), ...validating, ...(preparing ? this.address(preparing) : [])]);
+    const active = new Set([...Object.keys(settings.scopes).filter((key) => key.startsWith('workspace:')), ...this.scopes.keys(), ...validating, ...(preparing ? this.scopeAddress(preparing).map(({ key }) => key) : [])]);
     for (const key of active)
       for (const ancestor of this.scopeAddress(key)) if (!released.has(ancestor.key)) active.add(ancestor.key);
     const graph = resolveScopes(settings, this.catalog.plans.bind(this.catalog), (key) => this.scopeAddress(key),
@@ -174,6 +216,9 @@ export class PluginHost implements ScopePort {
           : this.authority.defaultReadOnlyTools?.get(plan.id)?.has(name) === true,
         address: (id) => this.address(id),
         routes: this.ctx.get('harnessRoutes'), upgrade: this.upgrade,
+        prepareScope: (target, signal) => this.prepareKey(this.checkTarget(target, scopeKey), signal),
+        scopedService: (target, name) => this.configurationContext(this.checkTarget(target, scopeKey)).get(name),
+        registerScopedRequest: scopeKey ? (operation, handler) => this.registerRequest(scopeKey + '/' + plan.id + '/' + operation, handler) : undefined,
         dataRoot: join(dirname(this.directory), 'plugin-data'),
         readConfig: () => {
           const settings = this.settings();
@@ -187,7 +232,8 @@ export class PluginHost implements ScopePort {
           if (!this.writePlugin || !descriptor.configSchema) throw new Error('Plugin configuration schema is unavailable');
           return this.writePlugin(plan.id, scopeKey, patch, check);
         },
-        invalidate: () => changes?.invalidate(domain)
+        invalidate: () => changes?.invalidate(domain, scope.kind === 'session' ? { sessionId: scope.sessionId } :
+          scope.kind === 'workspace' ? { workspaceId: scope.workspaceId } : {})
       });
       setDrain(runtime.drain);
       if (descriptor.validateConfig) this.catalog.validateConfig(descriptor, runtime.api.config, 'mount', ctx);

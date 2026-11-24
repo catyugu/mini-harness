@@ -244,6 +244,7 @@ export class SessionRegistry implements SessionStore {
   scopeAddress(key: string): ScopeIdentity[] {
     if (key.startsWith('workspace:')) {
       const workspaceId = key.slice('workspace:'.length);
+      if (!this.workspaces.list().some(({ id }) => id === workspaceId)) return [];
       return [{ key, scope: { kind: 'workspace', workspaceId } }];
     }
     if (!key.startsWith('session:')) return [];

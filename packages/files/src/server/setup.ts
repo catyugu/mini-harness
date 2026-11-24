@@ -1,6 +1,6 @@
-import type {} from '@mini-harness/sessions/store';
+import { sessionExtensions } from '@mini-harness/sessions/records';
 import type {} from '@mini-harness/workspaces/api';
-import type {} from '@mini-harness/kernel/scopes';
+import type { ScopeTarget } from '@mini-harness/kernel/scopes';
 import type {} from '@mini-harness/transport/projection-api';
 import type {} from '@mini-harness/file-access/api';
 import { DomainError } from '@mini-harness/platform/errors';
@@ -13,15 +13,16 @@ import { fileTools, fileToolNames } from './tools.js';
 import type { RouteRequest } from '@mini-harness/transport/routes';
 
 export function setup(ctx: Context, api: PluginApi) {
-  const { harnessRegistry: sessions, harnessWorkspaces: workspaces,
-    harnessRoutes: routes, harnessScopes: scopes, harnessChanges: changes } = ctx;
+  const sessions = api.contribute(sessionExtensions.access);
+  const workspaces = api.service('harnessWorkspaces');
+  const { harnessRoutes: routes, harnessChanges: changes } = ctx;
   ctx.effect(() => changes.register('files'));
 
   for (const [index, name] of fileToolNames.entries()) {
     const writes = name === 'edit' || name === 'write';
     api.contribute(toolExtensions.register, { name, bind(id) {
       const root = sessions.workspacePath(id);
-      const access = scopes.require(id, 'harnessFileAccess');
+      const access = api.scopedService({ kind: 'session', sessionId: id }, 'harnessFileAccess');
       const session = sessions.get(id);
       if (!session) throw new DomainError('not_found', 'Conversation not found');
       const tool = fileTools(root, access.open(session.workspaceId))[index];
@@ -45,8 +46,9 @@ export function setup(ctx: Context, api: PluginApi) {
     const workspace = workspaces.get(params.id);
     const sessionId = url.searchParams.get('sessionId');
     if (sessionId && sessions.get(sessionId)?.workspaceId !== workspace.id) throw new DomainError('not_found', 'Conversation not found');
-    if (sessionId) await scopes.prepare(sessionId, signal);
-    const access = scopes.require(sessionId, 'harnessFileAccess');
+    const target: ScopeTarget = sessionId ? { kind: 'session', sessionId } : { kind: 'workspace', workspaceId: workspace.id };
+    await api.prepareScope(target, signal);
+    const access = api.scopedService(target, 'harnessFileAccess');
     return new Inspection(workspaces.resolveRoot(workspace.path, workspace.id), access.open(workspace.id), signal);
   };
   const path = ({ url }: RouteRequest) => url.searchParams.get('path') ?? '.';

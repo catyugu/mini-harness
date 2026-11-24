@@ -5,8 +5,8 @@ export type { ExecutionAccess, ExecutionOptions } from '@mini-harness/runs/api';
 export type {} from '@mini-harness/settings/api';
 
 export type { ServiceMap } from '@mini-harness/kernel/services';
-export type { PluginScope, ScopeSettings } from '@mini-harness/kernel/scopes';
-export type { PluginApi, PluginDescriptor, ConfigValidationContext } from '@mini-harness/plugin-api/descriptor';
+export type { PluginScope, ScopeSettings, ScopeTarget } from '@mini-harness/kernel/scopes';
+export type { PluginApi, PluginDescriptor, ConfigValidationContext, ScopedRequestHandler } from '@mini-harness/plugin-api/descriptor';
 export type { InputContext, InputPreparation, ModelFailure, ModelRequestContent, ModelRequestTransform, ModelRetry, StepContext } from '@mini-harness/agent/extensions';
 export type { PromptContext, PromptSection } from '@mini-harness/agent/prompt-api';
 export type { ToolDecision } from '@mini-harness/tools/extensions';

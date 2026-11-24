@@ -2,7 +2,7 @@ import type { PluginConfiguration } from '@mini-harness/kernel/configuration';
 import type { Extension } from '@mini-harness/kernel/contributions';
 import type { Context } from 'cordis';
 import type { RouteHandler, UpgradeHandler } from '@mini-harness/transport/routes';
-import type { PluginScope } from '@mini-harness/kernel/scopes';
+import type { PluginScope, ScopeTarget } from '@mini-harness/kernel/scopes';
 import type { ServiceMap } from '@mini-harness/kernel/services';
 
 /** A symbolic icon name or an inline SVG path for plugin-defined artwork. */
@@ -41,6 +41,8 @@ export interface ConfigValidationContext {
   service<Name extends keyof ServiceMap & string>(name: Name): NonNullable<ServiceMap[Name]>;
 }
 
+export type ScopedRequestHandler = (input: unknown, target: ScopeTarget, signal: AbortSignal) => unknown | Promise<unknown>;
+
 export interface PluginApi {
   /** The value comes from settings.pluginConfig[pluginId]. */
   readonly config: Readonly<Record<string, unknown>>;
@@ -53,8 +55,13 @@ export interface PluginApi {
   provide<Name extends keyof ServiceMap & string>(name: Name, service: ServiceMap[Name]): void;
   service<Name extends keyof ServiceMap & string>(name: Name): NonNullable<ServiceMap[Name]>;
   optionalService<Name extends keyof ServiceMap & string>(name: Name): ServiceMap[Name] | undefined;
+  /** Prepare a visible target before resolving its declared scoped services. */
+  prepareScope(target: ScopeTarget, signal?: AbortSignal): Promise<void>;
+  scopedService<Name extends keyof ServiceMap & string>(target: ScopeTarget, name: Name): NonNullable<ServiceMap[Name]>;
+  /** Expose an operation on this scoped instance through the authenticated shared dispatcher. */
+  registerScopedRequest(operation: string, handler: ScopedRequestHandler): () => void;
   contribute<Args extends unknown[], Result>(point: Extension<Args, Result>, ...args: Args): Result;
-  /** Invalidate this plugin's application-wide state for its live browser clients. */
+  /** Invalidate this plugin's application or scoped state for its live browser clients. */
   invalidate(): void;
   /** Read and write an instance's private JSON data. */
   readonly storage: {

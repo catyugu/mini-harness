@@ -12,7 +12,7 @@ function renderResult(tool: ToolView) {
   return pre;
 }
 
-const setup: FrontendSetup = (ctx, api) => {
+const setup: FrontendSetup = (_ctx, api) => {
   api.contribute(conversationExtensions.tool, 'sandbox_shell', renderResult);
 };
 export default setup;

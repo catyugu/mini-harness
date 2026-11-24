@@ -5,6 +5,8 @@ export type PluginScope = { kind: 'application' }
   | { kind: 'workspace'; workspaceId: string }
   | { kind: 'session'; workspaceId: string; sessionId: string };
 
+export type ScopeTarget = { kind: 'workspace'; workspaceId: string } | { kind: 'session'; sessionId: string };
+
 /** A business-owned address, ordered from the outermost scope to the target. */
 export interface ScopeIdentity {
   key: string;
