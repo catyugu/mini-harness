@@ -20,12 +20,19 @@ interface Draft {
   failedRun?: string;
 }
 
+interface DraftOwner {
+  input: Draft;
+  edit?: Draft;
+  permission?: ConversationPermission;
+  submission?: { draft: Draft; version: number; runId?: string; retryable: boolean };
+}
+
 export function createComposerModel(ctx: Context, api: FrontendApi): ComposerModel {
   const control = ctx.miniConversation, selection = ctx.miniSelection;
   const changes = new EventTarget();
   const commands = new CommandRegistry(), completions = new Map<string, Completer>();
   const blank = (): Draft => ({ text: '', attachments: [], version: 0, loading: 0 });
-  const drafts = new Map<string, { input: Draft; edit?: Draft; permission?: ConversationPermission }>();
+  const drafts = new Map<string, DraftOwner>();
   const key = () => control.get().session?.id ?? 'workspace:' + selection.selectedWorkspace;
   function entryFor(key: string) {
     let entry = drafts.get(key);
@@ -36,9 +43,12 @@ export function createComposerModel(ctx: Context, api: FrontendApi): ComposerMod
   const draft = () => entry().edit ?? entry().input;
   let snapshot: { owner: Draft; version: number; value: ComposerDraft } | undefined;
   const change = (focus = false) => changes.dispatchEvent(new CustomEvent('change', { detail: focus }));
-  function edited(current: Draft, focus = false, inputChanged = true) {
+  function edited(current: Draft, focus = false, inputChanged = true, owner = entry()) {
     current.version++;
-    if (inputChanged) delete current.failedRun;
+    if (inputChanged) {
+      delete current.failedRun;
+      if (owner.submission?.draft === current) owner.submission.retryable = false;
+    }
     if (current === draft()) change(focus);
   }
   let selected = key();
@@ -46,6 +56,30 @@ export function createComposerModel(ctx: Context, api: FrontendApi): ComposerMod
     const next = key();
     if (next !== selected) { selected = next; change(); }
   }, api.signal);
+  function clearAccepted(owner: DraftOwner, current: Draft, version: number) {
+    if (current.version === version) {
+      if (owner.edit === current) delete owner.edit;
+      else if (owner.input === current) owner.input = blank();
+    }
+    if (entry() === owner) change();
+  }
+  function reconcileSubmission() {
+    const { session, history, run, interaction } = control.get();
+    if (!session || interaction.operation === 'open') return;
+    const owner = drafts.get(session.id), submission = owner?.submission;
+    if (!owner || !submission?.runId) return;
+    const accepted = history.messages.some((message) => message.role === 'user' &&
+      message.submissionId === submission.runId && !message.inboxId);
+    if (!accepted && run?.id === submission.runId && isRunning(run)) return;
+    delete owner.submission;
+    if (accepted) clearAccepted(owner, submission.draft, submission.version);
+    else {
+      if (submission.retryable && run?.id === submission.runId && run.state === 'failed')
+        submission.draft.failedRun = run.id;
+      change();
+    }
+  }
+  control.subscribe(['session', 'history', 'run', 'interaction'], reconcileSubmission, api.signal);
   const register: ComposerModel['command'] = (command) => {
     const dispose = commands.register(command); change();
     return () => { dispose(); change(); };
@@ -59,6 +93,7 @@ export function createComposerModel(ctx: Context, api: FrontendApi): ComposerMod
 
   async function send(queued = false) {
     const origin = key(), owner = entry(), current = draft();
+    if (owner.submission) throw new Error('Wait for the submitted input to be accepted.');
     if (current.loading) throw new Error('Files are still loading');
     if (queued && current.revision) throw new Error('Finish editing before queuing a message');
     const { revision, version, text } = current;
@@ -68,32 +103,34 @@ export function createComposerModel(ctx: Context, api: FrontendApi): ComposerMod
     const removedImages = revision?.images?.flatMap((_, index) => originalImages.includes(index) ? [] : [index]) ?? [];
     if (!text.trim() && !attachments.length && (revision?.images?.length ?? 0) === removedImages.length) return;
     const input = { message: text, attachments, model: current.model, thinkingLevel: current.thinkingLevel };
-    if (queued) await control.queue(input);
-    else {
-      const run = await control.submit({ ...input, permission: owner.permission, revision: revision && { ...revision.revision, removedImages } }, (id) => {
-        drafts.set(id, owner); drafts.delete(origin);
-      });
-      if (!run.accepted) {
-        const sameInput = current.text === text && current.attachments.length === originalImages.length + attachments.length &&
-          current.attachments.every(({ name, mimeType, data, originalIndex }) => originalIndex === undefined
-            ? attachments.some((file) => file.name === name && file.mimeType === mimeType && file.data === data)
-            : originalImages.includes(originalIndex));
-        if (sameInput) current.failedRun = run.id;
-        return;
-      }
+    if (queued) {
+      await control.queue(input);
+      clearAccepted(owner, current, version);
+      return;
     }
-    if (current.version !== version) return;
-    if (revision) { if (owner.edit === current) delete owner.edit; }
-    else if (owner.input === current) owner.input = blank();
-    if (entry() === owner) change();
+    const submission: NonNullable<DraftOwner['submission']> = { draft: current, version, retryable: true };
+    owner.submission = submission;
+    change();
+    try {
+      const run = await control.submit({ ...input, permission: owner.permission, revision: revision && { ...revision.revision, removedImages } }, (id) => {
+        drafts.set(id, owner);
+        if (drafts.get(origin) === owner) drafts.delete(origin);
+      });
+      submission.runId = run.id;
+      reconcileSubmission();
+    } catch (error) {
+      delete owner.submission;
+      if (entry() === owner) change();
+      throw error;
+    }
   }
 
   return {
     draft(): ComposerDraft {
-      const current = draft();
-      if (snapshot?.owner === current && snapshot.version === current.version) return snapshot.value;
+      const current = draft(), awaitingAcceptance = Boolean(entry().submission);
+      if (snapshot?.owner === current && snapshot.version === current.version && snapshot.value.awaitingAcceptance === awaitingAcceptance) return snapshot.value;
       const value = Object.freeze({
-        text: current.text, editTitle: current.revision?.title, loading: current.loading > 0,
+        text: current.text, editTitle: current.revision?.title, loading: current.loading > 0, awaitingAcceptance,
         model: current.model && Object.freeze({ ...current.model }), thinkingLevel: current.thinkingLevel,
         attachments: Object.freeze(current.attachments.map(({ name, mimeType, data }) => Object.freeze({ name, mimeType, data })))
       });
@@ -134,7 +171,7 @@ export function createComposerModel(ctx: Context, api: FrontendApi): ComposerMod
     cursor() { const current = draft(); return current.cursor?.start ?? current.text.length; },
     async addFiles(incoming) {
       if (!incoming.length) return;
-      const current = draft();
+      const owner = entry(), current = owner.edit ?? owner.input;
       if (current.attachments.length + current.loading + incoming.length > 8) throw new Error('Attach at most eight files');
       current.loading += incoming.length;
       edited(current);
@@ -156,7 +193,7 @@ export function createComposerModel(ctx: Context, api: FrontendApi): ComposerMod
         current.attachments.push(...added);
       } finally {
         current.loading -= incoming.length;
-        if (!api.signal.aborted) edited(current);
+        if (!api.signal.aborted) edited(current, false, true, owner);
       }
     },
     removeAttachment(index) {
@@ -187,11 +224,10 @@ export function createComposerModel(ctx: Context, api: FrontendApi): ComposerMod
     send,
     async retry() {
       const { session, run, interaction } = control.get();
-      if (!session || run?.state !== 'failed' || interaction.operation) return;
+      if (!session || run?.state !== 'failed' || interaction.operation || entry().submission) return;
       const current = draft();
       if (run.inputEntryId === null && current.failedRun === run.id) return send();
-      const input = await api.request<{ message: string; attachments: Attachment[]; missing: string[]; model?: ModelChoice; thinkingLevel?: ThinkingLevel } | null>(
-        '/sessions/' + session.id + '/runs/' + run.id + '/input');
+      const input = await control.retryInput();
       if (control.get().run?.id !== run.id || control.get().interaction.operation) return;
       if (!input) throw new Error('This run did not accept a message. Check the draft and send it again.');
       const { missing, ...submission } = input;

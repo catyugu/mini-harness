@@ -227,7 +227,7 @@ The local API requires a bearer credential. A trusted gateway can forward authen
 
 | Request | Result |
 | - | - |
-| `POST /api/sessions/:id/runs` with `{ "message": "...", "model": { "provider": "...", "id": "..." } }` | Starts a server-owned run. The `202` response includes run ID, status and `accepted`. Acceptance means the user message is durable. Both model and `thinkingLevel` are optional. |
+| `POST /api/sessions/:id/runs` with `{ "message": "...", "model": { "provider": "...", "id": "..." } }` | Starts a server-owned run. The `202` response returns the admitted run immediately. Acceptance is represented by a durable user message whose `submissionId` matches the run ID and has no `inboxId`. Both model and `thinkingLevel` are optional. |
 | `GET /api/sessions/:id/runs` | Latest run status, including terminal errors |
 | `GET /api/sessions/:id/runs/:run/input` | Input identified by the latest failed run, with original attachments when available and a list of files that must be reattached |
 | `GET /api/sessions/:id/events?run=<run-id>&after=<sequence>` | NDJSON events after the cursor; disconnecting removes only this observer |
@@ -292,7 +292,7 @@ Copy [Task notes](examples/task-notes) into an independent directory called `tas
 
 Use `slotExtensions.keyed` with `conversation.history` and key `history`, or with `conversation.composer-view` and key `composer`. Outlets prefer higher order, then the most recent contribution at that order. Removing the winner mounts the previous renderer with a fresh signal. Use the render signal to release listeners and async requests.
 
-Inject `miniConversation` to read the selected session, history, active response and tool activity. Subscribe to the fields the view displays. A newly mounted History reads the current state directly. Inject `miniComposer` to read and subscribe to the draft, edit text, add or remove `File` attachments, choose model and thinking level, set permissions, start a revision, send or queue. The model retains complete drafts by session or workspace and clears a submitted draft after acceptance if it is still the same input. See the [browser panel example](examples/browser-panel) with `replaceComposer` enabled.
+Inject `miniConversation` to read the selected session, history, active response and tool activity. Subscribe to the fields the view displays. A newly mounted History reads the current state directly. Inject `miniComposer` to read and subscribe to the draft, edit text, add or remove `File` attachments, choose model and thinking level, set permissions, start a revision, send or queue. The model retains complete drafts by session or workspace and clears a submitted draft after acceptance if it has not been edited. `draft().awaitingAcceptance` indicates that the submitted input is awaiting its durable message; keep send/queue disabled while that input is pending. See the [browser panel example](examples/browser-panel) with `replaceComposer` enabled.
 
 Use `conversationExtensions.record`, `.tool` and `.toolAction` to register replaceable renderers. Renderers and message actions receive an abort signal scoped to the rendered contribution. Message action and command IDs are exclusive. Use `settingsExtensions.plugin` to contribute content to individual plugin detail pages.
 

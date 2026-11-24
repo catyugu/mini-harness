@@ -20,6 +20,13 @@ export function setup(ctx: Context) {
       info: (id: string) => runs.info(id)
     }
   });
+  ctx.effect(() => {
+    const changed = (event: Event) => {
+      if (event instanceof CustomEvent && event.detail.records) runs.branchChanged(event.detail.id);
+    };
+    catalog.events.addEventListener('change', changed);
+    return () => catalog.events.removeEventListener('change', changed);
+  });
   ctx.effect(() => () => runs.stop());
   ctx.on('harness/quiesce', () => runs.stop());
   ctx.effect(() => mutations.guard((keys) => {

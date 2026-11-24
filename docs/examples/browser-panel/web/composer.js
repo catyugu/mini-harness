@@ -25,7 +25,7 @@ export function replaceComposer({ miniComposer: model, miniConversation: convers
     form.append(prompt, files, attachments, send);
 
     function render() {
-      const { text, attachments: selected, loading } = model.draft();
+      const { text, attachments: selected, loading, awaitingAcceptance } = model.draft();
       if (prompt.value !== text) prompt.value = text;
       attachments.replaceChildren(...selected.map(({ name }, index) => {
         const remove = document.createElement('button');
@@ -34,7 +34,7 @@ export function replaceComposer({ miniComposer: model, miniConversation: convers
         remove.addEventListener('click', () => model.removeAttachment(index), { signal });
         return remove;
       }));
-      send.disabled = loading || Boolean(conversation.get().interaction.operation);
+      send.disabled = loading || awaitingAcceptance || Boolean(conversation.get().interaction.operation);
     }
     model.subscribe(render, signal);
     conversation.subscribe(['interaction'], render, signal);

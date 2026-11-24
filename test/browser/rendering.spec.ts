@@ -5,6 +5,7 @@ import { createFixturePaths, createMockProvider } from '../helpers/mock-provider
 import { join } from 'node:path';
 import { readJson, writeJson } from '@mini-harness/platform/json';
 import { startIsolatedHost } from '../support/browser.js';
+import { writePlugin } from '../support/plugin-fixture.js';
 
 test('renders Markdown and tool results, and stops a pending reply', async ({ page }) => {
   let markWaiting: () => void;
@@ -22,12 +23,23 @@ test('renders Markdown and tool results, and stops a pending reply', async ({ pa
     return '### Workspace\n\n```text\nExample\n```\n\n<img src=x onerror="alert(1)">\n\n<p class="overlay">A tool note</p>';
   });
   const { root, paths } = createFixturePaths(mock.url);
-  const folder = join(paths.plugins, 'bad-renderer');
-  mkdirSync(folder);
-  writeJson(join(folder, 'plugin.json'), { browserInject: ['miniMessages'] });
+  const folder = writePlugin(paths.plugins, 'bad-renderer', { browserInject: ['miniMessages'] }, `
+    export default (_ctx, api) => {
+      api.contribute(agentExtensions.prepareInput, async (_content, { original, signal }) => {
+        if (original.userText !== 'Stop before acceptance') return;
+        signal.throwIfAborted();
+        await new Promise((_, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true }));
+      });
+    };`);
   writeFileSync(join(folder, 'web.js'), `import { conversationExtensions } from '/packages/ui-runtime/plugin-sdk.js';
     export default (_ctx, api) => {
-      api.contribute(conversationExtensions.tool, 'ls', () => { throw new Error('broken fixture tool renderer'); });
+      api.contribute(conversationExtensions.tool, 'ls', (_tool, signal) => {
+        document.body.dataset.activeFailedRenderers = String(Number(document.body.dataset.activeFailedRenderers ?? 0) + 1);
+        signal.addEventListener('abort', () => {
+          document.body.dataset.activeFailedRenderers = String(Number(document.body.dataset.activeFailedRenderers) - 1);
+        }, { once: true });
+        throw new Error('broken fixture tool renderer');
+      });
     };`);
   writeJson(paths.settings, { ...readJson(paths.settings, {}), plugins: { 'bad-renderer': true } });
   const failures: string[] = [], unhandled: string[] = [];
@@ -53,6 +65,7 @@ test('renders Markdown and tool results, and stops a pending reply', async ({ pa
     expect(failures.length).toBeGreaterThan(0);
     expect(failures.length).toBeLessThanOrEqual(4);
     expect(unhandled).toEqual([]);
+    await expect(page.locator('body')).toHaveAttribute('data-active-failed-renderers', '0');
 
     await page.getByRole('textbox', { name: 'Message' }).fill('Stop this response');
     await page.getByRole('button', { name: 'Send' }).click();
@@ -61,6 +74,15 @@ test('renders Markdown and tool results, and stops a pending reply', async ({ pa
     await expect(page.getByLabel('Latest run')).toHaveAttribute('data-state', 'cancelled');
     await expect(page.locator('.message.error')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Retry' })).toHaveCount(0);
+    const requests = mock.requests.length;
+    const prompt = page.getByRole('textbox', { name: 'Message' });
+    await prompt.fill('Stop before acceptance');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Stop response' })).toBeVisible();
+    await page.getByRole('button', { name: 'Stop response' }).click();
+    await expect(page.getByLabel('Latest run')).toHaveAttribute('data-state', 'cancelled');
+    await expect(prompt).toHaveValue('Stop before acceptance');
+    expect(mock.requests.length).toBe(requests);
   } finally {
     release();
     await page.close();

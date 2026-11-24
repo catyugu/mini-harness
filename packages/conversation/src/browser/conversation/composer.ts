@@ -10,8 +10,8 @@ export function createComposer(root: HTMLElement, model: ComposerModel, report: 
   let files: ReturnType<ComposerModel['draft']>['attachments'] | undefined;
   const render = (pending: boolean) => {
     const current = model.draft();
-    element<'button'>('send').disabled = current.loading || pending;
-    element<'button'>('queueSend').disabled = current.loading || pending;
+    element<'button'>('send').disabled = current.loading || current.awaitingAcceptance || pending;
+    element<'button'>('queueSend').disabled = current.loading || current.awaitingAcceptance || pending;
     if (files?.length === current.attachments.length && files.every((file, index) => {
       const next = current.attachments[index];
       return file.name === next.name && file.mimeType === next.mimeType && file.data === next.data;

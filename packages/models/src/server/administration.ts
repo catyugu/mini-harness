@@ -2,9 +2,7 @@ import type {} from '@mini-harness/platform/runtime-paths';
 import type {} from '@mini-harness/transport/routes';
 import type {} from '@mini-harness/transport/projection-api';
 import type {} from '@mini-harness/kernel/mutation-api';
-import { isDeepStrictEqual } from 'node:util';
 import { DomainError } from '@mini-harness/platform/errors';
-import type {} from '@mini-harness/settings/api';
 import type { Context } from 'cordis';
 import { providerSettings, saveProvider } from './provider-settings.js';
 
@@ -21,15 +19,6 @@ export function setupAdministration(ctx: Context) {
   const changes = ctx.harnessChanges;
   ctx.effect(() => changes.register('models'));
   const changed = () => changes.invalidate('models');
-  ctx.effect(() => {
-    let previous = recent();
-    return ctx.harnessSettingsStore.subscribe(() => {
-      const next = recent();
-      if (isDeepStrictEqual(previous, next)) return;
-      previous = next;
-      changed();
-    });
-  });
   add('GET', '/api/providers', () => providerSettings(host));
   for (const method of ['PUT', 'DELETE']) {
     add(method, '/api/providers', async ({ body }) => {

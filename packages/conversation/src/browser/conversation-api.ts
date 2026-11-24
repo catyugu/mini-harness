@@ -7,7 +7,19 @@ import type { Attachment } from '@mini-harness/input/message';
 import type { ViewMessage } from '@mini-harness/sessions/message';
 import type { RunInfo } from '@mini-harness/sessions/run-state';
 import type { SessionDisplayRecord } from '@mini-harness/sessions/display-record';
-import type { DraftMode } from './composer-api.js';
+
+export interface ConversationRevision {
+  sourceEntryId: string;
+  expectedLeafId: string | null;
+}
+
+export interface RetryInput {
+  message: string;
+  attachments: Attachment[];
+  missing: string[];
+  model?: ModelChoice;
+  thinkingLevel?: ThinkingLevel;
+}
 
 export interface ConversationSubmission {
   message: string;
@@ -15,7 +27,7 @@ export interface ConversationSubmission {
   model?: ModelChoice;
   thinkingLevel?: ThinkingLevel | null;
   permission?: ConversationPermission;
-  revision?: DraftMode['revision'] & { removedImages: number[] };
+  revision?: ConversationRevision & { removedImages: number[] };
 }
 
 export interface ConversationState {
@@ -34,7 +46,8 @@ export interface ConversationController {
   activate(id: string, revealWorkspace?: boolean): Promise<boolean>;
   clear(): void;
   report(error: Error): void;
-  submit(input: ConversationSubmission, created?: (sessionId: string) => void): Promise<RunInfo & { accepted: boolean }>;
+  submit(input: ConversationSubmission, created?: (sessionId: string) => void): Promise<RunInfo>;
+  retryInput(): Promise<RetryInput | null>;
   queue(input: Omit<ConversationSubmission, 'revision' | 'permission'>, mode?: 'steer' | 'followUp'): Promise<void>;
   cancel(): Promise<void>;
   cancelQueue(id?: string): Promise<void>;

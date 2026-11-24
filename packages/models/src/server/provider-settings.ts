@@ -67,8 +67,8 @@ export async function saveProvider(runtime: ProviderHost, input: any, remove = f
     await runtime.admin.refresh();
     if (recent.provider === input.id) {
       if (!runtime.catalog.resolve(recent)) {
-        await runtime.remember({ provider: '', id: '' });
         clearedRecent = true;
+        await runtime.remember({ provider: '', id: '' });
       }
     }
     if (remove && !runtime.admin.hasProvider(input.id)) await runtime.admin.removeCredential(input.id);

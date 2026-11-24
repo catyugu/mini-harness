@@ -35,6 +35,6 @@ export function registerRoutes(ctx: Context) {
     const id = session(params.id);
     const input = await body(20 * 1024 * 1024);
     if (!input || typeof input !== 'object' || Array.isArray(input)) throw new HttpError('invalid_input', 'Invalid run request');
-    return new HttpReply(202, await ctx.harnessRuns.startRun(id, input.message, input));
+    return new HttpReply(202, ctx.harnessRuns.startRun(id, input.message, input));
   });
 }

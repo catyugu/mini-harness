@@ -150,7 +150,7 @@ export class SessionRegistry implements SessionStore {
       const inbox = entry.type.startsWith('inbox-');
       if (inbox || entry.type === 'message' && entry.inboxId) this.notify(id, false, true);
       if (!inbox && entry.type !== 'model-request' && entry.type !== 'tool-schema')
-        this.notify(id, false, false, entry.type === 'plugin-record' && entry.display !== undefined);
+        this.notify(id, false, false, entry.type === 'plugin-record');
     };
     let log: SessionLog | undefined;
     try {

@@ -1,7 +1,7 @@
 import type { Context } from 'cordis';
 import type { FrontendApi } from '@mini-harness/ui-runtime/frontend-api';
 import type { Conversation, ConversationView } from '../../shared/api.js';
-import type { ConversationController, ConversationState, ConversationSubmission } from '../conversation-api.js';
+import type { ConversationController, ConversationState, ConversationSubmission, RetryInput } from '../conversation-api.js';
 import type { RunEvent } from '@mini-harness/runs/stream';
 import type { RunInfo } from '@mini-harness/sessions/run-state';
 import type { ViewMessage } from '@mini-harness/sessions/message';
@@ -17,7 +17,7 @@ export function createConversationController(ctx: Context, api: FrontendApi): Co
   const { miniSelection: selection, miniSessions: sessions } = ctx;
   const subscriptions = new Set<{ parts: readonly (keyof ConversationState)[]; listener: () => void }>();
   let state: ConversationState = { history: emptyHistory, partial: '', tools: [], queue: [], interaction: { status: '' } };
-  let visit = new AbortController(), queueRevision = 0;
+  let visit = new AbortController(), queueRevision = 0, branchRevision = 0;
   const active = () => state.session?.id;
   function update(patch: Partial<ConversationState>) {
     const previous = state;
@@ -60,15 +60,26 @@ export function createConversationController(ctx: Context, api: FrontendApi): Co
     update({ ...patch, history: { ...history, leafId: message.id ?? history.leafId, messages: [...history.messages, message] } });
   }
 
+  async function refreshBranch() {
+    const id = active(), signal = visit.signal, revision = branchRevision;
+    if (!id || isRunning(state.run) || state.interaction.operation) return;
+    try {
+      const item = await readConversation(id, signal);
+      if (!signal.aborted && revision === branchRevision && !isRunning(state.run) && !state.interaction.operation)
+        display(item, signal, false);
+    } catch (error) { if (!signal.aborted && revision === branchRevision) throw error; }
+  }
+
   async function observe(item: ConversationView, signal: AbortSignal) {
+    let terminal: RunInfo | undefined, revision = branchRevision;
     status(item.run?.state === 'queued' ? 'Queued…' : 'Thinking…');
     function accept(event: RunEvent) {
       if (signal.aborted) return;
       switch (event.type) {
         case 'user': {
           if (state.history.messages.some(({ id }) => id === event.id)) break;
-          const { id, parentId, submissionId, timestamp, content, attachments, model, thinkingLevel } = event;
-          append({ id, parentId, submissionId, timestamp, content, attachments, role: 'user' },
+          const { id, parentId, submissionId, inboxId, timestamp, content, attachments, model, thinkingLevel } = event;
+          append({ id, parentId, submissionId, inboxId, timestamp, content, attachments, role: 'user' },
             { session: state.session && { ...state.session, model, thinkingLevel } });
           break;
         }
@@ -91,36 +102,56 @@ export function createConversationController(ctx: Context, api: FrontendApi): Co
           status(event.state === 'approval' ? 'Waiting for approval…' : event.state === 'running' ? 'Running ' + event.name + '…' : 'Thinking…');
           break;
         }
+        case 'branch':
+          update({ history: { ...state.history, records: event.records, leafId: event.leafId } });
+          break;
         case 'snapshot':
-          update({ run: event.run, history: { ...state.history, messages: event.messages, records: event.records, leafId: event.leafId },
+          if (!isRunning(event.run)) { terminal = event.run; revision = branchRevision; }
+          update({ run: terminal ? state.run : event.run, history: { ...state.history, messages: event.messages, records: event.records, leafId: event.leafId },
             partial: event.partial ?? '', tools: event.tools ?? [],
             session: state.session && { ...state.session, model: event.model, thinkingLevel: event.thinkingLevel } });
           if (!isRunning(event.run)) interact({ cancelling: false, status: '' });
           break;
         case 'run':
-          update({ run: event.run, ...(!isRunning(event.run) ? { partial: '', tools: [] } : {}) });
-          if (!isRunning(event.run)) interact({ cancelling: false, status: '' });
+          if (isRunning(event.run)) update({ run: event.run });
+          else {
+            // Keep observation active until the final authoritative conversation snapshot arrives.
+            terminal = event.run; revision = branchRevision;
+            update({ partial: '', tools: [] });
+            interact({ cancelling: false, status: '' });
+          }
           break;
       }
     }
     try {
       const latest = await observeRun(item, signal, accept, () => status('Reconnecting…'));
-      if (latest && !signal.aborted) display(latest, signal, false);
-    } catch (error) { if (!signal.aborted) report(error instanceof Error ? error : new Error(String(error))); }
+      if (latest && !signal.aborted) {
+        display(latest, signal, false);
+        if (!isRunning(latest.run) && revision !== branchRevision) await refreshBranch();
+      }
+    } catch (error) {
+      if (!signal.aborted) {
+        if (terminal) update({ run: terminal });
+        report(error instanceof Error ? error : new Error(String(error)));
+      }
+    }
   }
 
   async function activate(id: string, revealWorkspace = true) {
     const signal = begin();
     const selected = sessions.get().find((entry) => entry.id === id);
-    if (id !== active()) select(selected, revealWorkspace);
     interact({ operation: 'open', status: 'Loading conversation…', error: false, cancelling: false });
+    if (id !== active()) select(selected, revealWorkspace);
+    const revision = branchRevision;
     try {
       const item = await readConversation(id, signal);
       if (signal.aborted) return false;
       display(item, signal, revealWorkspace);
-      return true;
+      interact({ operation: undefined });
+      if (!isRunning(item.run) && revision !== branchRevision) await refreshBranch();
+      return !signal.aborted;
     } catch (error) { if (!signal.aborted) report(error instanceof Error ? error : new Error(String(error))); return false; }
-    finally { if (!signal.aborted) interact({ operation: undefined }); }
+    finally { if (!signal.aborted && state.interaction.operation === 'open') interact({ operation: undefined }); }
   }
 
   async function submit(input: ConversationSubmission, created?: (sessionId: string) => void) {
@@ -139,9 +170,12 @@ export function createConversationController(ctx: Context, api: FrontendApi): Co
         if (!signal.aborted) select(item);
       }
       const { permission: _permission, revision, ...message } = input;
-      const run = await api.request<RunInfo & { accepted: boolean }>(path(id, revision ? '/revise' : '/runs'),
+      const run = await api.request<RunInfo>(path(id, revision ? '/revise' : '/runs'),
         payload('POST', revision ? { ...message, ...revision } : message));
-      if (!signal.aborted) void activate(id);
+      if (!signal.aborted) {
+        update({ run });
+        void activate(id);
+      }
       return run;
     } finally { if (!signal.aborted) interact({ operation: undefined }); }
   }
@@ -158,12 +192,10 @@ export function createConversationController(ctx: Context, api: FrontendApi): Co
 
   api.onDispose(ctx.miniProjections.register('conversation-records', {
     async sync(_revision, reconnect, changedId) {
-      const id = active(), signal = visit.signal;
+      const id = active();
       if (!id || (!reconnect && changedId && id !== changedId)) return;
-      try {
-        const records = await api.request<ConversationView['records']>(path(id, '/records'), { signal });
-        if (!signal.aborted) update({ history: { ...state.history, records } });
-      } catch (error) { if (!signal.aborted) throw error; }
+      branchRevision++;
+      await refreshBranch();
     }
   }));
   api.onDispose(ctx.miniProjections.register('queue', {
@@ -188,6 +220,11 @@ export function createConversationController(ctx: Context, api: FrontendApi): Co
       signal.addEventListener('abort', () => { subscriptions.delete(entry); }, { once: true });
     },
     activate, report, submit, queue,
+    retryInput() {
+      const { session, run } = state;
+      if (!session || run?.state !== 'failed') throw new Error('No failed run to retry.');
+      return api.request<RetryInput | null>(path(session.id, '/runs/' + run.id + '/input'));
+    },
     clear() { begin(); select(); update({ interaction: { status: '' } }); },
     async cancel() {
       const id = active(), signal = visit.signal;

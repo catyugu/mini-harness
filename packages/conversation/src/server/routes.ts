@@ -98,8 +98,6 @@ export function registerSessionRoutes(ctx: Context, read: (id: string) => Conver
     ctx.harnessRegistry.assertAvailable(id);
     return ctx.harnessRegistry.inspectLog(id, (log) => log.queue(), true) ?? [];
   });
-  add('GET', '/api/sessions/:id/records', ({ params }) =>
-    ctx.harnessRegistry.inspectLog(session(params.id), (log) => log.projection().records, true) ?? []);
   add('GET', '/api/sessions/:id/events', ({ params, url, response }) => {
     const id = session(params.id);
     const runId = url.searchParams.get('run');
