@@ -177,8 +177,7 @@ export function createComposerModel(ctx: Context, api: FrontendApi): ComposerMod
       edited(current);
       try {
         const added = await Promise.all(incoming.map(async (file) => {
-          if (file.size > (file.type.startsWith('image/') ? 6 : 1) * 1024 * 1024)
-            throw new Error('Images: up to 6 MiB; UTF-8 text: up to 1 MiB');
+          if (file.size > 6 * 1024 * 1024) throw new Error('Files: up to 6 MiB each');
           const data = await new Promise<string>((resolve, reject) => {
             const reader = new FileReader();
             reader.onload = () => resolve(String(reader.result).split(',')[1]);
@@ -186,7 +185,7 @@ export function createComposerModel(ctx: Context, api: FrontendApi): ComposerMod
             reader.readAsDataURL(file);
           });
           api.signal.throwIfAborted();
-          return { name: file.name, mimeType: file.type || 'text/plain', data };
+          return { name: file.name, mimeType: file.type || 'application/octet-stream', data };
         }));
         if ([...current.attachments, ...added].reduce((total, file) => total + file.data.length * .75, 0) > 12 * 1024 * 1024)
           throw new Error('Attachments exceed 12 MiB per message');
@@ -205,7 +204,7 @@ export function createComposerModel(ctx: Context, api: FrontendApi): ComposerMod
       if (isRunning(control.get().run) || control.get().interaction.operation || !control.get().session) return () => {};
       const owner = entry();
       const edit: Draft = { ...blank(), text: mode.text, revision: structuredClone(mode),
-        attachments: (mode.images ?? []).map((file, originalIndex) => ({ ...file, originalIndex })) };
+        attachments: [...(mode.images ?? []).map((file, originalIndex) => ({ ...file, originalIndex })), ...(mode.attachments ?? [])] };
       owner.edit = edit; change(true);
       return () => {
         if (owner.edit !== edit) return;

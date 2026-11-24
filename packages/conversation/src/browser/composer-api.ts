@@ -35,6 +35,7 @@ export interface DraftMode {
   title: string;
   text: string;
   images?: Attachment[];
+  attachments?: Attachment[];
   revision: ConversationRevision;
 }
 

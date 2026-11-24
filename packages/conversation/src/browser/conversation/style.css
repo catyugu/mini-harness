@@ -106,15 +106,12 @@
 #send, #stop { border: 0; background: var(--accent); color: var(--on-accent); width: var(--control); height: var(--control); border-radius: var(--control-radius); }
 
 
-.message-images { display: flex; flex-wrap: wrap; gap: 6px; }
-.message.user .message-images { justify-content: flex-end; }
-.message-images.with-content { margin-block-end: 6px; }
 .message-image-trigger {
-  width: clamp(56px, 13vw, 72px); max-width: 100%; padding: 0; border: 0;
-  border-radius: 6px; background: var(--surface); cursor: zoom-in;
+  width: 52px; height: 52px; flex-shrink: 0; max-width: 100%; padding: 0; border: 1px solid var(--border);
+  border-radius: 9px; background: var(--surface); cursor: zoom-in;
 }
 .message-image-trigger img {
-  display: block; width: 100%; aspect-ratio: 1; object-fit: contain; border-radius: inherit;
+  display: block; width: 100%; height: 100%; object-fit: cover; border-radius: inherit;
 }
 .message-image-trigger:hover { box-shadow: 0 0 0 1px var(--focus); }
 .ui-dialog.message-image-dialog {
@@ -133,21 +130,27 @@
 }
 .message-image-preview button[aria-pressed="true"] { background: var(--selected); }
 .message-attachments {
-  align-self: flex-end;
-  color: var(--muted);
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  list-style: none;
-  margin: 0;
-  padding: 0;
+  display: flex; flex-wrap: wrap; gap: 6px; max-width: 100%;
+  margin: 0 0 5px; padding: 0;
 }
-.message-attachments li {
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  overflow-wrap: anywhere;
-  padding: 3px 8px;
+.message-row.user .message-attachments { justify-content: flex-end; }
+.file-card {
+  display: flex; align-items: center; gap: 8px; text-align: left;
+  width: 180px; min-width: 0; max-width: 100%; min-height: 52px; padding: 6px 9px;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--border); border-radius: 10px;
 }
+button.file-card:hover { background: var(--hover); }
+.file-card > .file-card-icon, .file-card > img {
+  width: 30px; height: 30px; flex: 0 0 30px; border-radius: 5px; object-fit: cover;
+}
+.file-card-icon {
+  display: grid; place-items: center; color: var(--muted); background: var(--hover);
+}
+.file-card-icon.pdf { background: #e92c35; color: #fff; font-size: 10px; font-weight: 650; }
+.file-card-meta { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 2px; }
+.file-card-meta strong, .file-card-meta small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.file-card-meta strong { font-size: 12px; font-weight: 600; }
+.file-card-meta small { font-size: 11px; color: var(--muted); }
 
 .permission-select { display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0; padding: 6px 8px; border: 0; background: transparent; color: var(--muted); font-size: 12px; border-radius: 8px; }
 .permission-select:hover, .permission-select[aria-expanded="true"] { background: var(--hover); color: var(--ink); }
@@ -184,7 +187,8 @@
 .composer-tools { display: flex; align-items: center; gap: 2px; }
 #send, #stop { color: var(--on-accent); display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .message-row { min-width: 0; }
-.message-row.user { align-self: flex-end; max-width: 85%; }
+.message-row.user { display: flex; flex-direction: column; align-items: flex-end; align-self: flex-end; max-width: 90%; }
+.message-row.user .message:empty { display: none; }
 .message-row .message.user { max-width: 100%; border-radius: var(--radius-lg); }
 .message-actions { display: flex; align-items: center; gap: 2px; padding-top: 3px; min-height: 28px; }
 .message-actions .message-action {
@@ -205,9 +209,8 @@
   .composer-footer { justify-content: initial; }
 }
 .attachments { display: flex; flex-wrap: wrap; gap: 6px; max-height: 150px; overflow: auto; padding-bottom: 7px; }
-.attachment { display: flex; align-items: center; gap: 5px; padding-left: 6px; max-width: 100%; border: 1px solid var(--border); border-radius: var(--radius); font-size: 12px; }
-.attachment span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.attachment img { width: 42px; height: 42px; object-fit: cover; border-radius: 5px; }
+.attachment { width: 198px; gap: 6px; padding-right: 4px; }
+.attachment > button { flex-shrink: 0; }
 .composer { position: relative; }
 .composer.dragging { border: 2px dashed var(--focus); }
 .suggestions { position: absolute; bottom: calc(100% + 6px); left: 0; width: min(520px, 100%); max-height: 280px; overflow: auto; padding: 5px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); z-index: 1; }

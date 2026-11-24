@@ -47,6 +47,9 @@ export function mountComposer(ctx: Context, signal: AbortSignal) {
   signal.addEventListener('abort', removeToolbar, { once: true });
   const removeAttachment = ctx.miniSlots.register('conversation.composer', ui.attachmentButton());
   signal.addEventListener('abort', removeAttachment, { once: true });
+  const removeFileCommand = model.command({ name: 'file', aliases: ['attach', 'upload'], group: 'Add',
+    description: 'Upload files from your device', run: ui.openFiles });
+  signal.addEventListener('abort', removeFileCommand, { once: true });
   const removeModelCommand = model.command({ name: 'model', group: 'Conversation', description: 'Choose a configured model', run: modelPicker.open });
   signal.addEventListener('abort', removeModelCommand, { once: true });
   const permissionButton = element<'button'>('permissionSelect');
