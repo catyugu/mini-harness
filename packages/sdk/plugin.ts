@@ -1,4 +1,5 @@
-import type {} from '@mini-harness/runs/api';
+export type {} from '@mini-harness/runs/api';
+export type {} from '@mini-harness/settings/api';
 
 export type { ServiceMap } from '@mini-harness/kernel/services';
 export type { PluginScope, ScopeSettings } from '@mini-harness/kernel/scopes';

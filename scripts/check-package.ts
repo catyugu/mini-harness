@@ -67,15 +67,12 @@ async function checkPackage() {
     for (const path of ['sdk/plugin.d.ts', 'sdk/browser-plugin.d.ts'])
       assert.ok(files.some((file) => file.path === 'dist/types/packages/' + path), 'Missing SDK declarations: ' + path);
     await writeFile(join(installed, 'plugin-types.mts'), `
-      import { agentExtensions, promptExtensions, sessionDisplayExtensions, sessionExtensions, toolExtensions, type PluginApi, type LlmPort } from 'mini-harness/plugin';
-      import { settingsExtensions, slotExtensions, type FrontendSetup, type SlotRenderer } from 'mini-harness/browser-plugin';
+      import { agentExtensions, promptExtensions, sessionDisplayExtensions, sessionExtensions, toolExtensions, type PluginApi, type LlmPort, type ScopeSettings } from 'mini-harness/plugin';
       declare module 'mini-harness/plugin' {
         interface ServiceMap { example: { greet(name: string): string } }
       }
-      declare module 'mini-harness/browser-plugin' {
-        interface SlotMap { 'example.panel': { kind: 'single' } }
-      }
       declare const api: PluginApi;
+      const scope: ScopeSettings = { disabledTools: ['write'] };
       const llm: LlmPort | undefined = api.service('harnessLlm');
       api.provide('example', { greet: (name) => name.toUpperCase() });
       api.service('example')?.greet('world');
@@ -105,6 +102,12 @@ async function checkPackage() {
       api.service('undeclared');
       // @ts-expect-error The run scheduler is a host service.
       api.service('harnessRuns');
+    `);
+    await writeFile(join(installed, 'browser-types.mts'), `
+      import { settingsExtensions, slotExtensions, type FrontendSetup, type SlotRenderer } from 'mini-harness/browser-plugin';
+      declare module 'mini-harness/browser-plugin' {
+        interface SlotMap { 'example.panel': { kind: 'single' } }
+      }
       declare const render: SlotRenderer;
       const setup: FrontendSetup = (ctx, frontend) => {
         frontend.contribute(slotExtensions.keyed, 'sidebar.primary', 'example', render);
@@ -117,9 +120,9 @@ async function checkPackage() {
         });
       };
     `);
-    await execFile(process.execPath, [resolve('node_modules/typescript/bin/tsc'),
-      '--strict', '--noEmit', '--target', 'ES2022', '--module', 'NodeNext', 'plugin-types.mts'],
-    { cwd: installed });
+    await Promise.all(['plugin-types.mts', 'browser-types.mts'].map((file) => execFile(process.execPath,
+      [resolve('node_modules/typescript/bin/tsc'), '--strict', '--noEmit', '--target', 'ES2022', '--module', 'NodeNext', file],
+      { cwd: installed })));
     assert.match((await cli('--help')).stdout, /minimal native agent harness/);
     await mkdir(plugin);
     await writeFile(join(plugin, 'plugin.json'), JSON.stringify({ inject: ['harnessRoutes'] }));
