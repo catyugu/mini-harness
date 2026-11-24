@@ -21,6 +21,7 @@ export interface MessageAction {
   visible(context: MessageActionContext): boolean;
   run(context: MessageActionContext): void | Promise<void>;
 }
+export type AttachmentPreview = (file: NonNullable<ViewMessage['attachments']>[number], sessionId: string) => void;
 export type RecordRenderer = (record: SessionDisplayRecord, context: { sessionId: string; signal: AbortSignal }) =>
   HTMLElement | undefined;
 
@@ -28,6 +29,7 @@ declare module 'cordis' {
   interface Context {
     miniMessages: {
       registerRecord(plugin: string, render: RecordRenderer): () => void;
+      registerAttachmentPreview(open: AttachmentPreview): () => void;
       registerAction(action: MessageAction): () => void;
       registerTool(name: string, render: ToolRenderer, action?: boolean): () => void;
     };

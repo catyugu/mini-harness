@@ -31,6 +31,7 @@ export function createComposerModel(ctx: Context, api: FrontendApi): ComposerMod
   const control = ctx.miniConversation, selection = ctx.miniSelection;
   const changes = new EventTarget();
   const commands = new CommandRegistry(), completions = new Map<string, Completer>();
+  let reference: ((path: string) => void) | undefined;
   const blank = (): Draft => ({ text: '', attachments: [], version: 0, loading: 0 });
   const drafts = new Map<string, DraftOwner>();
   const key = () => control.get().session?.id ?? 'workspace:' + selection.selectedWorkspace;
@@ -211,6 +212,15 @@ export function createComposerModel(ctx: Context, api: FrontendApi): ComposerMod
         delete owner.edit;
         if (owner === entry() && !api.signal.aborted) change();
       };
+    },
+    openReference(path) {
+      if (!reference) return false;
+      reference(path); return true;
+    },
+    registerReference(open) {
+      if (reference) throw new Error('Duplicate workspace reference provider');
+      reference = open;
+      return () => { reference = undefined; };
     },
     matchCommands: (query) => commands.match(query),
     completer: (trigger) => completions.get(trigger),

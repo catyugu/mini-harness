@@ -1,6 +1,6 @@
 import { KeyedContributions } from '@mini-harness/ui-runtime/contribution';
 import type { SessionDisplayRecord } from '@mini-harness/sessions/display-record';
-import type { MessageAction, RecordRenderer, ToolRenderer, ToolView } from '../history-api.js';
+import type { AttachmentPreview, MessageAction, RecordRenderer, ToolRenderer, ToolView } from '../history-api.js';
 
 export class MessageExtensions {
   private readonly actions = new Map<string, MessageAction>();
@@ -8,6 +8,19 @@ export class MessageExtensions {
   private readonly toolActions = new KeyedContributions<string, ToolRenderer>();
   private readonly records = new KeyedContributions<string, RecordRenderer>();
   private readonly events = new EventTarget();
+
+  private attachmentPreview?: AttachmentPreview;
+
+  registerAttachmentPreview(open: AttachmentPreview) {
+    if (this.attachmentPreview) throw new Error('Duplicate attachment preview provider');
+    this.attachmentPreview = open;
+    return () => { this.attachmentPreview = undefined; };
+  }
+
+  openAttachment(...args: Parameters<AttachmentPreview>) {
+    if (!this.attachmentPreview) return false;
+    this.attachmentPreview(...args); return true;
+  }
 
   readonly report = (error: unknown) => console.error('Conversation extension failed', error);
 

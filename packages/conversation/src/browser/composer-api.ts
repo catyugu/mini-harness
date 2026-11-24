@@ -69,6 +69,9 @@ export interface ComposerModel {
   completer(trigger: string): Completer | undefined;
   command(command: ComposerCommand): () => void;
   completion(trigger: string, complete: Completer): () => void;
+  /** Opens a workspace path referenced by the user, if its provider is enabled. */
+  openReference(path: string): boolean;
+  registerReference(open: (path: string) => void): () => void;
 }
 
 declare module 'cordis' {

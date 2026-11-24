@@ -1,3 +1,4 @@
+import { icon } from '@mini-harness/ui-primitives/icons';
 import { button, iconButton } from '@mini-harness/ui-primitives/primitives';
 import type { createLayout } from './layout.js';
 
@@ -19,6 +20,12 @@ export function createRightTabs(view: {
   const states = new Map<string, ScopeTabs>();
   let current = state();
   let nextId = 0;
+  const visibleTabs = (target = current) => target.tabs.filter(({ address }) => !address ||
+    !types.get(address.type)?.sessionScoped || address.sessionId === target.scope?.sessionId);
+  const launcher = document.createElement('section');
+  launcher.className = 'right-launcher';
+  const start = iconButton('Open workspace tools', 'plus');
+  start.onclick = () => { current.active = undefined; render(); launcher.querySelector('button')?.focus(); };
 
   function state(scope?: TabScope): ScopeTabs {
     const key = scopeKey(scope);
@@ -31,13 +38,28 @@ export function createRightTabs(view: {
   }
 
   function render(focus = false) {
-    const { active, tabs } = current;
+    const tabs = visibleTabs();
+    const active = current.active;
+    const launchers = [...types].filter(([, definition]) => definition.launcher);
+    launcher.replaceChildren(...launchers.map(([type, definition]) => {
+      const entry = definition.launcher!;
+      const card = button('', 'quiet');
+      card.classList.add('right-launcher-entry');
+      const label = document.createElement('span');
+      const title = document.createElement('strong'); title.textContent = entry.title;
+      const detail = document.createElement('small'); detail.textContent = entry.description;
+      label.append(title, detail); card.append(icon(entry.icon), label);
+      card.onclick = () => open(type);
+      return card;
+    }));
+    launcher.hidden = !!active;
+    if (!launcher.parentElement) view.body.append(launcher);
     view.bar.replaceChildren(...tabs.map((tab) => {
       const item = document.createElement('div');
       item.className = 'right-tab';
       const select = button(tab.title, 'quiet');
       select.id = tab.key + '-select';
-      select.title = tab.address?.path ?? tab.title;
+      select.title = tab.address && !types.get(tab.address.type)?.sessionScoped ? tab.address.path ?? tab.title : tab.title;
       select.setAttribute('role', 'tab');
       select.setAttribute('aria-selected', String(tab === active));
       select.setAttribute('aria-controls', tab.key);
@@ -48,6 +70,7 @@ export function createRightTabs(view: {
       item.append(select, close);
       return item;
     }));
+    if (launchers.length) view.bar.append(start);
     for (const tab of tabs) {
       const node = tab.view?.node ?? mount(tab, (signal) => {
         const address = tab.address;
@@ -80,7 +103,8 @@ export function createRightTabs(view: {
     current = state(scope);
     current.scope = scope;
     if (openedBeforeSelection) current.open = true;
-    for (const tab of current.tabs) if (tab.address) tab.address.sessionId = scope?.sessionId;
+    for (const tab of current.tabs) if (tab.address && !types.get(tab.address.type)?.sessionScoped) tab.address.sessionId = scope?.sessionId;
+    if (current.active && !visibleTabs().includes(current.active)) current.active = visibleTabs().at(-1);
     render();
     layout.setPanel(current.open);
     if (openedBeforeSelection) openDefault();
@@ -119,7 +143,9 @@ export function createRightTabs(view: {
     const definition = types.get(type);
     if (!definition || !scope) return;
     const target = state(scope);
-    let tab = target.tabs.find(({ address }) => address?.type === type && address.path === path);
+    if (definition.sessionScoped && !scope.sessionId) return;
+    let tab = target.tabs.find(({ address }) => address?.type === type && address.path === path &&
+      (!definition.sessionScoped || address.sessionId === scope.sessionId));
     if (!tab) {
       const address = { ...scope, type, path, mode };
       tab = { key: 'right-tab-' + ++nextId, title: definition.title(address), address };
@@ -134,7 +160,7 @@ export function createRightTabs(view: {
     const index = target.tabs.indexOf(tab);
     if (index === -1) return;
     target.tabs.splice(index, 1);
-    if (target.active === tab) target.active = target.tabs[index] ?? target.tabs[index - 1];
+    if (target.active === tab) target.active = visibleTabs(target).at(-1);
     unmount(tab);
   }
 
@@ -143,6 +169,7 @@ export function createRightTabs(view: {
       const scope = target.scope;
       if (!scope) continue;
       if (workspaces.has(scope.workspaceId)) {
+        for (const tab of [...target.tabs]) if (tab.address?.sessionId && types.get(tab.address.type)?.sessionScoped && !sessions.has(tab.address.sessionId)) remove(target, tab);
         if (target === current && scope.sessionId && !sessions.has(scope.sessionId)) selectScope({ workspaceId: scope.workspaceId });
         continue;
       }
@@ -153,7 +180,7 @@ export function createRightTabs(view: {
   }
 
   function openDefault() {
-    if (!current.scope || current.tabs.length) return false;
+    if (!current.scope || visibleTabs().length) return false;
     const entry = [...types].find(([, type]) => type.default);
     if (!entry) return false;
     open(entry[0]);
@@ -168,7 +195,7 @@ export function createRightTabs(view: {
   };
   view.bar.addEventListener('keydown', (event) => {
     if (!(event.target as HTMLElement).matches('[role=tab]')) return;
-    const { tabs } = current;
+    const tabs = visibleTabs();
     if (!tabs.length) return;
     const index = current.active ? tabs.indexOf(current.active) : 0;
     const target = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 :
@@ -190,7 +217,7 @@ export function createRightTabs(view: {
       types.set(type, definition);
       // A plugin can register after a user has opened the empty right panel.
       // Materialize its default tab when the scope is already selected.
-      if (definition.default && layout.panelOpen() && !current.tabs.length && current.scope)
+      if (definition.default && layout.panelOpen() && !visibleTabs().length && current.scope)
         open(type);
       else render();
       return () => {

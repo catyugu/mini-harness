@@ -1,4 +1,5 @@
 import type {} from 'cordis';
+import type { PluginIcon } from '@mini-harness/plugin-api/descriptor';
 import type { BrowserContributionSource } from '@mini-harness/ui-runtime/contribution';
 
 export interface TabScope { workspaceId: string; sessionId?: string }
@@ -7,6 +8,10 @@ export interface RightTabType {
   title(address: TabAddress): string;
   create(address: TabAddress, signal: AbortSignal): HTMLElement;
   default?: boolean;
+  /** An entry on the right-panel start screen. */
+  launcher?: { title: string; description: string; icon: PluginIcon };
+  /** Keep this tab tied to its owning conversation rather than the workspace. */
+  sessionScoped?: boolean;
 }
 
 /** Browser plugin contract; independent from the concrete right panel implementation. */
