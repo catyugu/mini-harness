@@ -1,6 +1,6 @@
 import { tmpdir } from 'node:os';
 import { fixture, waitUntil } from '../support/api-fixture.js';
-import { writePlugin } from '../support/plugin-fixture.js';
+import { pluginSdkUrl, writePlugin } from '../support/plugin-fixture.js';
 import { expectPresent } from '../support/required.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -37,7 +37,7 @@ test('an installed Cordis plugin can use services, configure a tool, and release
   }, title: 'Example plugin', icon: {
     path: 'M2 2h20v20H2z', viewBox: '0 0 24 24'
   } }));
-  writeFileSync(join(folder, 'plugin.js'), `import { toolExtensions } from "${new URL('@mini-harness/kernel/services', import.meta.url).href}";
+  writeFileSync(join(folder, 'plugin.js'), `import { toolExtensions } from "${pluginSdkUrl}";
 
     import { appendFileSync } from 'node:fs';
     export default (ctx, api) => {
@@ -87,7 +87,7 @@ test('file tools have a plugin lifecycle and required plugins cannot be disabled
   const folder = join(paths.plugins, 'dependent');
   mkdirSync(folder);
   writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ inject: ['harnessTools'], requires: ['files'] }));
-  writeFileSync(join(folder, 'plugin.js'), `import { toolExtensions } from "${new URL('@mini-harness/kernel/services', import.meta.url).href}";
+  writeFileSync(join(folder, 'plugin.js'), `import { toolExtensions } from "${pluginSdkUrl}";
 export default (ctx, api) => {
     api.contribute(toolExtensions.register, { name: 'dependent_tool', description: 'Fixture', parameters: { type: 'object', properties: {} },
       execute: async () => ({ content: [{ type: 'text', text: 'ok' }] }) });
@@ -142,7 +142,7 @@ test('plugin JSON Schema applies defaults and rejects invalid changes before set
     properties: { count: { type: 'integer', minimum: 1, maximum: 10, default: 3 },
       options: { type: 'object', default: {}, properties: { enabled: { type: 'boolean', default: true } } } }
   } }));
-  writeFileSync(join(folder, 'plugin.js'), `import { toolExtensions } from "${new URL('@mini-harness/kernel/services', import.meta.url).href}";
+  writeFileSync(join(folder, 'plugin.js'), `import { toolExtensions } from "${pluginSdkUrl}";
 export default (ctx, api) => {
     const changes = [];
     api.configuration.subscribe('count', (value) => changes.push(value));
@@ -182,7 +182,7 @@ test('dependent plugins restart in order and partial setup or persistence failur
     const folder = join(paths.plugins, id);
     mkdirSync(folder);
     writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ inject: ['harnessTools'], requires: id === 'dependent' ? ['base'] : [] }));
-    writeFileSync(join(folder, 'plugin.js'), `import { toolExtensions } from "${new URL('@mini-harness/kernel/services', import.meta.url).href}";
+    writeFileSync(join(folder, 'plugin.js'), `import { toolExtensions } from "${pluginSdkUrl}";
 
       import { appendFileSync } from 'node:fs';
       export default (ctx, api) => {
