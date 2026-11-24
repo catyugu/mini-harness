@@ -9,7 +9,6 @@ import { plugins } from '@mini-harness/host/composition';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const packages = join(root, 'packages');
-const web = join(packages, 'web');
 const prefix = '@mini-harness/';
 const manifests = new Map(readdirSync(packages, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map(({ name }) =>
   [name, JSON.parse(readFileSync(join(packages, name, 'package.json'), 'utf8'))]));
@@ -111,7 +110,7 @@ test('browser boot mounts a declared graph instead of constructing feature state
   assert.doesNotMatch(boot, /['"]\/(?:sessions|workspaces|settings|models|providers|approvals)(?:['"?\/])/);
   assert.doesNotMatch(boot, /\b(?:miniSelection|miniSessions|miniWorkspaces|miniSettingsData|miniModels|miniPluginData|miniApprovals)\b/);
   const browserProviders = new Set(plugins.flatMap(({ browserProvides }) => browserProvides ?? []));
-  for (const service of ['miniSelection', 'miniSessions', 'miniWorkspaces', 'miniSettingsData', 'miniModels', 'miniPluginData', 'miniApprovals'])
+  for (const service of ['miniSelection', 'miniSessions', 'miniWorkspaces', 'miniSettingsData', 'miniModels', 'miniApprovals'])
     assert.ok(browserProviders.has(service), service + ' is not owned by a browser plugin');
 });
 test('browser values never load host-only modules', () => {
@@ -119,7 +118,7 @@ test('browser values never load host-only modules', () => {
     ...[join(packages,name,'client.ts'), join(packages,name,'browser.ts')].filter(existsSync),
     ...(existsSync(join(packages,name,'browser')) ? files(join(packages,name,'browser')).filter(production) : [])
   ]);
-  for (const file of [...files(web).filter(production), ...files(join(packages, 'ui-runtime')).filter(production), ...files(join(packages, 'ui-layout')).filter(production), ...files(join(packages, 'ui-primitives')).filter(production), ...files(join(packages, 'ui-theme')).filter(production), ...clients]) for (const dep of dependencies(file)) {
+  for (const file of [...files(join(packages, 'ui-runtime')).filter(production), ...files(join(packages, 'ui-layout')).filter(production), ...files(join(packages, 'ui-primitives')).filter(production), ...files(join(packages, 'ui-theme')).filter(production), ...clients]) for (const dep of dependencies(file)) {
     if (dep.typeOnly) continue;
     for (const name of ['host','platform','transport','kernel']) {
       assert.equal(dep.target.startsWith(join(packages,name) + sep), false,

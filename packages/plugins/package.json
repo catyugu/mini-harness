@@ -12,7 +12,6 @@
   },
   "exports": {
     "./catalog": "./catalog.ts",
-    "./data-manifest": "./data-manifest.ts",
     "./manager": "./manager.ts",
     "./manifest": "./manifest.ts",
     "./package-installer": "./package-installer.ts"

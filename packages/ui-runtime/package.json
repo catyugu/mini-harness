@@ -4,8 +4,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@mini-harness/contracts": "workspace:*",
-    "@mini-harness/web": "workspace:*"
+    "@mini-harness/contracts": "workspace:*"
   },
   "exports": {
     "./frontend": "./frontend.ts",

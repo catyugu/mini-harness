@@ -343,18 +343,12 @@ importers:
       '@mini-harness/ui-runtime':
         specifier: workspace:*
         version: link:../ui-runtime
-      '@mini-harness/web':
-        specifier: workspace:*
-        version: link:../web
 
   packages/ui-runtime:
     dependencies:
       '@mini-harness/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@mini-harness/web':
-        specifier: workspace:*
-        version: link:../web
 
   packages/ui-slots:
     dependencies:
@@ -370,8 +364,6 @@ importers:
       '@mini-harness/ui-runtime':
         specifier: workspace:*
         version: link:../ui-runtime
-
-  packages/web: {}
 
   packages/workspaces:
     dependencies:

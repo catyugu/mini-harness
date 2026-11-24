@@ -8,9 +8,7 @@ import { manifest as agent } from '@mini-harness/agent/manifest';
 import { manifest as prompt } from '@mini-harness/agent/prompt-manifest';
 import { manifest as model_store } from '@mini-harness/models/store-manifest';
 import { manifest as model_catalog } from '@mini-harness/models/catalog-manifest';
-import { manifest as model_admin } from '@mini-harness/models/admin-manifest';
 import { manifest as llm } from '@mini-harness/models/llm-manifest';
-import { manifest as settings_data } from '@mini-harness/settings/data-manifest';
 import { manifest as workspaces_data } from '@mini-harness/workspaces/data-manifest';
 import { manifest as sessions_data } from '@mini-harness/sessions/data-manifest';
 import { manifest as runs } from '@mini-harness/runs/manifest';
@@ -31,7 +29,7 @@ import { manifest as tools } from '@mini-harness/tools/manifest';
 import { manifest as conversation } from '@mini-harness/sessions/conversation-manifest';
 
 export const plugins = [
-  settings_data, workspaces_data, sessions_data, model_store, model_catalog, model_admin, llm, prompt,
+  workspaces_data, sessions_data, model_store, model_catalog, llm, prompt,
   ui_slots, ui_theme, ui_primitives, ui_layout, workspaces, sessions, agent, runs, settings, models, plugin_management, ui, file_access, files, skills, subagents, shell, session_helper, approvals, sandbox, process_execution, tools, conversation
 ];
 

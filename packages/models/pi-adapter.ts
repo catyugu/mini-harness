@@ -7,7 +7,7 @@ import {
 import { builtinModels } from '@earendil-works/pi-ai/providers/all';
 import { readJson, writeJson } from '@mini-harness/platform/config';
 import type { ModelChoice } from '@mini-harness/contracts/conversation';
-import type { ModelAdminPort, ModelCatalogPort, ProviderModel } from '@mini-harness/contracts/models';
+import type { ModelCatalogPort, ProviderModel } from '@mini-harness/contracts/models';
 import type { LlmEvent, LlmPort, LlmRequest, NativeAssistantMessage, NativeMessage } from '@mini-harness/contracts/llm';
 
 const apiLoaders: Record<string, () => Promise<ProviderStreams>> = {
@@ -65,7 +65,7 @@ class FileCredentials implements CredentialStore {
 }
 
 /** Owns provider definitions, credentials and the shared SDK provider registry. */
-export class PiModelStore implements ModelCatalogPort, ModelAdminPort {
+export class PiModelStore implements ModelCatalogPort {
   private initializedRuntime?: MutableModels;
   private get runtime(): MutableModels {
     if (!this.initializedRuntime) throw new Error('Model store is not initialized; refresh before use');

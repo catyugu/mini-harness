@@ -2,14 +2,16 @@ import { HttpError } from '@mini-harness/contracts/routes';
 import { join } from 'node:path';
 import { readJson, writeJson } from '@mini-harness/platform/config';
 import type { ModelChoice } from '@mini-harness/contracts/conversation';
-import type { ModelAdminPort, ModelCatalogPort, ProviderInfo } from '@mini-harness/contracts/models';
+import type { ModelCatalogPort, ProviderInfo } from '@mini-harness/contracts/models';
+
+import type { PiModelStore } from './pi-adapter.js';
 
 type ProviderHost = {
   paths: { home: string };
   recent(): ModelChoice;
   remember(model: ModelChoice): Promise<void>;
   catalog: ModelCatalogPort;
-  admin: ModelAdminPort;
+  admin: Pick<PiModelStore, 'providers' | 'authStatus' | 'hasProvider' | 'refresh' | 'storeCredential' | 'removeCredential'>;
 };
 export function providerSettings(runtime: ProviderHost): ProviderInfo[] {
   const config = readJson<any>(join(runtime.paths.home, 'models.json'), { providers: {} });

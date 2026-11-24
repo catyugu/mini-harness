@@ -19,7 +19,7 @@ export function setup(ctx: Context, api: PluginApi) {
     paths: ctx.harnessState.paths,
     recent, remember,
     catalog: ctx.harnessModels,
-    admin: ctx.harnessModelAdmin
+    admin: ctx.harnessModelStore
   };
   const add = (method: string, path: string, handler: Parameters<typeof ctx.harnessRoutes.register>[2]) =>
     ctx.effect(() => ctx.harnessRoutes.register(method, path, handler));

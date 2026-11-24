@@ -1,4 +1,4 @@
-import { Context } from '@mini-harness/web/vendor/cordis';
+import { Context } from './vendor/cordis.js';
 import { api, data, readEvents, wait, AuthenticationError } from './http.js';
 import { RemoteStore } from './remote-store.js';
 import { FrontendHost } from './frontend.js';

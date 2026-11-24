@@ -20,7 +20,7 @@ test('editing a user message creates a native branch from the editor on mobile a
         await page.goto(service.url + '/#token=' + service.token);
         const prompt = page.getByRole('textbox', { name: 'Message' });
         await prompt.fill('Original prompt');
-        await page.locator('#composer input[type=file]').setInputFiles(resolve('packages/web/icon-192.png'));
+        await page.locator('#composer input[type=file]').setInputFiles(resolve('packages/ui-runtime/assets/icon-192.png'));
         await expect(page.getByRole('button', { name: 'Remove icon-192.png' })).toBeVisible();
         await page.getByRole('button', { name: 'Send', exact: true }).click();
         await expect(page.locator('.message-row.assistant .message')).toHaveText('Response: Original prompt');

@@ -10,9 +10,7 @@
     "@mini-harness/ui-runtime": "workspace:*"
   },
   "exports": {
-    "./admin-manifest": "./admin-manifest.ts",
     "./catalog-manifest": "./catalog-manifest.ts",
-    "./data-manifest": "./data-manifest.ts",
     "./llm-manifest": "./llm-manifest.ts",
     "./manifest": "./manifest.ts",
     "./store-manifest": "./store-manifest.ts"

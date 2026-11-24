@@ -1,3 +1,5 @@
+import type { Settings } from '@mini-harness/contracts/config';
+import { RemoteStore } from '@mini-harness/ui-runtime/remote-store';
 import { slotExtensions } from '@mini-harness/contracts/slots';
 import type { FrontendSetup, FrontendApi } from '@mini-harness/ui-runtime/frontend';
 import { icon } from '@mini-harness/ui-primitives/icons';
@@ -5,7 +7,11 @@ import { closeOnBackdrop, fromMarkup, required, scopedElements } from '@mini-har
 
 import { SettingsRegistry } from './browser/registry.js';
 
-const setup: FrontendSetup = (ctx, api) => {
+const setup: FrontendSetup = async (ctx, api) => {
+  const store = new RemoteStore(() => api.request<Settings>('/settings'));
+  await store.refresh();
+  api.onDispose(ctx.miniProjections.register('settings', store));
+  ctx.provide('miniSettingsData', store);
   const registry = new SettingsRegistry();
   const layout = ctx.miniLayout;
   ctx.provide('miniSettingsRegistry', registry);
@@ -119,7 +125,10 @@ function mountSettings(api: FrontendApi, registry: SettingsRegistry) {
 }
 
 declare module 'cordis' {
-  interface Context { miniSettings: ReturnType<typeof mountSettings> }
+  interface Context {
+    miniSettings: ReturnType<typeof mountSettings>;
+    miniSettingsData: RemoteStore<Settings>;
+  }
 }
 
 export default setup;

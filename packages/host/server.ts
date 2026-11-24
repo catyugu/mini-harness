@@ -11,17 +11,15 @@ import { HttpError, type GatewayRequest } from '@mini-harness/contracts/routes';
 import { json } from '@mini-harness/transport/http';
 import { MiniHarnessRuntime } from './application.js';
 
-const WEB_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'web');
-const FEATURE_DIR = resolve(WEB_DIR, '..');
+const FEATURE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const WEB_DIR = join(FEATURE_DIR, 'ui-runtime', 'assets');
 const assets = new Map([
   ['index.html', 'text/html'],
   ['theme.css', 'text/css'], ['logo.svg', 'image/svg+xml'], ['manifest.webmanifest', 'application/manifest+json'],
   ['icon-192.png', 'image/png'], ['icon-512.png', 'image/png'], ['favicon.ico', 'image/x-icon']
 ]);
 
-// Vendor modules and shared browser-safe route construction are public.
-for (const name of ['cordis', 'cosmokit', 'marked', 'purify'])
-  assets.set('packages/web/vendor/' + name + '.js', 'text/javascript');
+// Only browser-safe shared contracts are served.
 for (const name of ['composer', 'layout', 'settings-browser', 'slots', 'workspace'])
   assets.set('packages/contracts/' + name + '.js', 'text/javascript');
 

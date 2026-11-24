@@ -17,7 +17,6 @@ const setup: FrontendSetup = async (ctx, api) => {
   const plugins = new RemoteStore(() => api.request<PluginMetadata[]>('/plugins'));
   await plugins.refresh();
   api.onDispose(ctx.miniProjections.register('plugins', plugins));
-  ctx.provide('miniPluginData', plugins);
   const refresh = async () => {
     await Promise.all([plugins.refresh(), settings.refresh()]);
     const failures = await syncPlugins();
@@ -376,8 +375,5 @@ function pluginCatalog(api: FrontendApi, snapshot: () => { plugins: PluginMetada
   return { open, refresh: () => { if (!editing && !savingSwitch) render(); } };
 }
 
-declare module 'cordis' {
-  interface Context { miniPluginData: RemoteStore<PluginMetadata[]> }
-}
 
 export default setup;

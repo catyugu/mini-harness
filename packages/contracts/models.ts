@@ -41,19 +41,10 @@ export interface ModelCatalogPort {
   capabilities(choice: ModelChoice): ProviderModel | undefined;
 }
 
-export interface ModelAdminPort {
-  providers(): { id: string; name: string; canSetKey: boolean; models: ProviderModel[] }[];
-  authStatus(id: string): { configured: boolean; source?: string };
-  hasProvider(id: string): boolean;
-  refresh(): Promise<void>;
-  storeCredential(id: string, key: string): Promise<void>;
-  removeCredential(id: string): Promise<void>;
-}
 
 declare module 'cordis' {
   interface Context {
     harnessModels: ModelCatalogPort;
-    harnessModelAdmin: ModelAdminPort;
     harnessModelPreference: {
       recent(): ModelChoice;
       remember(model: ModelChoice): Promise<void>;

@@ -1,6 +1,6 @@
 import type { PluginConfiguration } from '@mini-harness/contracts/config';
 import type { BrowserContribution, BrowserContributionSource, BrowserRelease } from '@mini-harness/contracts/browser';
-import { Context, type Fiber } from '@mini-harness/web/vendor/cordis';
+import { Context, type Fiber } from './vendor/cordis.js';
 
 export interface FrontendApi {
   contribute<Args extends unknown[], Result>(point: BrowserContribution<Args, Result>, ...args: Args): Result;

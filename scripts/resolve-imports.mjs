@@ -26,8 +26,7 @@ function rewrite(file) {
       if (!entry) throw new Error('Missing workspace export ' + literal.text + ' in ' + file);
       const target = resolve(output, name, entry.replace(/(?:\.d)?\.ts$/, '.js'));
       const emitted = declaration ? target.replace(/\.js$/, '.d.ts') : target;
-      // Browser vendor files are copied after emission.
-      if (!existsSync(emitted) && !entry.startsWith('./vendor/')) throw new Error('Missing build output ' + emitted);
+      if (!existsSync(emitted)) throw new Error('Missing build output ' + emitted);
       const path = relative(dirname(file), target).split(sep).join('/');
       edits.push({ from: literal.getStart(ast), to: literal.end, value: JSON.stringify(path.startsWith('.') ? path : './' + path) });
     }

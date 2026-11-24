@@ -20,7 +20,7 @@ export const manifest: PluginDescriptor = {
     if (operation !== 'mount' && (model.provider || model.id) && !service('harnessModels').resolve(model))
       throw new HttpError('invalid_input', 'Unknown model: ' + model.provider + '/' + model.id);
   },
-  inject: ['harnessModels', 'harnessModelAdmin', 'harnessState', 'harnessRoutes', 'harnessMutations', 'harnessChanges'],
+  inject: ['harnessModels', 'harnessModelStore', 'harnessState', 'harnessRoutes', 'harnessMutations', 'harnessChanges'],
   provides: ['harnessModelPreference'], setup,
   browser: '/packages/models/browser.js',
 };

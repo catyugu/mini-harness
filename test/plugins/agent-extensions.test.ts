@@ -138,13 +138,13 @@ test('an application plugin replaces only LLM and composes execution hooks witho
     api.contribute(toolExtensions.result,  (content, { tool }) => tool === 'check'
       ? [{ type: 'text', text: content[0].text + ' transformed' }] : undefined);
   };`);
-  const { harnessModels: models, harnessModelAdmin: admin } = app.runtime.plugins.ctx;
+  const { harnessModels: models, harnessModelStore: store } = app.runtime.plugins.ctx;
   const configured = await request('/settings', 'PATCH', {
     plugins: { transport: true, pipeline: true }, providers: { harnessLlm: 'transport' }
   });
   assert.equal(configured.status, 200, JSON.stringify(configured.body));
   assert.equal(app.runtime.plugins.ctx.harnessModels, models);
-  assert.equal(app.runtime.plugins.ctx.harnessModelAdmin, admin);
+  assert.equal(app.runtime.plugins.ctx.harnessModelStore, store);
   const session = app.runtime.registry.create();
   assert.equal(await app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Use the alternate LLM'), 'Alternate response');
   const log = app.runtime.registry.log(session.id).projection();
