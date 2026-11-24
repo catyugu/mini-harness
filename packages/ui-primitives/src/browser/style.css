@@ -95,3 +95,13 @@ button { border-radius: var(--radius); }
 @media (max-width: 860px) {
   .icon-button, .link-button, .small-button { min-height: 44px; }
 }
+
+.file-markdown { overflow-wrap: anywhere; }
+.source-line::before { content: attr(data-line); display: inline-block; min-width: 4ch; margin-inline-end: 1em; text-align: right; color: var(--muted); user-select: none; }
+.syntax-string { color: light-dark(#14683d, #90d7a6); }
+.syntax-comment { color: var(--muted); }
+.syntax-keyword { color: light-dark(#67328d, #d6abfb); }
+.syntax-number { color: light-dark(#86460b, #f1ae70); }
+.file-accessible-source {
+  position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); user-select: none;
+}

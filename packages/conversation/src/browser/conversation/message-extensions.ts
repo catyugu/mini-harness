@@ -1,8 +1,9 @@
 import { KeyedContributions } from '@mini-harness/ui-runtime/contribution';
 import type { SessionDisplayRecord } from '@mini-harness/sessions/display-record';
-import type { MessageAction, RecordRenderer, ToolRenderer, ToolView } from '../history-api.js';
+import type { MessageAction, RecordRenderer, ToolRenderer, ToolView, UserTextRenderer } from '../history-api.js';
 
 export class MessageExtensions {
+  private readonly userText = new KeyedContributions<string, UserTextRenderer>();
   private readonly actions = new Map<string, MessageAction>();
   private readonly renderers = new KeyedContributions<string, ToolRenderer>();
   private readonly toolActions = new KeyedContributions<string, ToolRenderer>();
@@ -20,6 +21,19 @@ export class MessageExtensions {
       remove();
       if (selected !== registry.get(key)) change();
     };
+  }
+
+  registerUserText(render: UserTextRenderer) {
+    return this.replace(this.userText, 'user', render, 'user-text');
+  }
+
+  renderUserText(text: string): Node {
+    try { return this.userText.get('user')?.(text) ?? document.createTextNode(text); }
+    catch (error) { this.report(error); return document.createTextNode(text); }
+  }
+
+  subscribeToUserText(listener: () => void, signal: AbortSignal) {
+    this.events.addEventListener('user-text', listener, { signal });
   }
 
   registerRecord(plugin: string, render: RecordRenderer) {

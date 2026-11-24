@@ -1,18 +1,22 @@
 import type {} from 'cordis';
+import type { PluginIcon } from '@mini-harness/plugin-api/descriptor';
 import type { BrowserContributionSource } from '@mini-harness/ui-runtime/contribution';
 
 export interface TabScope { workspaceId: string; sessionId?: string }
-export interface TabAddress extends TabScope { type: string; path?: string; mode?: string }
+export interface TabAddress extends TabScope { type: string; path?: string }
 export interface RightTabType {
   title(address: TabAddress): string;
   create(address: TabAddress, signal: AbortSignal): HTMLElement;
-  default?: boolean;
+  /** Offer a root tab on the panel's Start screen. */
+  launcher?: { title: string; description: string; icon: PluginIcon };
+  /** Close the tab when leaving its owning conversation. */
+  sessionScoped?: boolean;
 }
 
 /** Browser plugin contract; independent from the concrete right panel implementation. */
 export interface RightTabsPort {
   register(type: string, definition: RightTabType): () => void;
-  open(type: string, path?: string, scope?: TabScope, mode?: string): void;
+  open(type: string, path?: string, scope?: TabScope): void;
   inspect(owner: string, title: string, node: HTMLElement, signal: AbortSignal): void;
 }
 
@@ -50,8 +54,8 @@ export const layoutExtensions = {
   tab(source: BrowserContributionSource, type: string, definition: RightTabType) {
     return source.effect(() => source.service('miniTabs').register(source.id + ':' + type, definition));
   },
-  openTab(source: BrowserContributionSource, type: string, path?: string, scope?: TabScope, mode?: string) {
-    source.service('miniTabs').open(source.id + ':' + type, path, scope, mode);
+  openTab(source: BrowserContributionSource, type: string, path?: string, scope?: TabScope) {
+    source.service('miniTabs').open(source.id + ':' + type, path, scope);
   },
   inspect(source: BrowserContributionSource, title: string, content: HTMLElement) {
     source.service('miniTabs').inspect(source.id, title, content, source.signal);

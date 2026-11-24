@@ -8,6 +8,7 @@
     "./icons": "./src/browser/icons.ts",
     "./manifest": "./src/manifest.ts",
     "./markdown": "./src/browser/markdown.ts",
+    "./file-preview": "./src/browser/file-preview.ts",
     "./primitives": "./src/browser/primitives.ts"
   },
   "miniHarness": {

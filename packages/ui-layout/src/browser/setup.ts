@@ -58,6 +58,7 @@ function createAppFrame(primitives: BrowserPrimitives, slotRegistry: Context['mi
     <div id="panelResize" class="panel-resize" role="separator" aria-label="Resize workspace panel" aria-orientation="vertical" aria-valuemin="260" tabindex="0"></div>
     <header>
       <div id="rightTabList" class="right-tab-list" role="tablist" aria-label="Workspace tabs"></div>
+      <button id="inspectorNewTab" class="icon-button" type="button" aria-label="New workspace tab" data-icon="plus"></button>
       <button id="inspectorClose" class="icon-button" type="button" aria-label="Close workspace panel" data-icon="close"></button>
     </header>
     <div id="inspectorContent" class="right-content"></div>
@@ -74,7 +75,7 @@ function createAppFrame(primitives: BrowserPrimitives, slotRegistry: Context['mi
   }, signal);
   const tabs = createRightTabs({
     root: element('inspector'), bar: element('rightTabList'),
-    body: element('inspectorContent'), toggle: element<'button'>('inspectorOpen')
+    body: element('inspectorContent'), newTab: element<'button'>('inspectorNewTab'), toggle: element<'button'>('inspectorOpen')
   }, layout, signal);
 
   const pageViews = new Map<string, HTMLElement>();

@@ -1,6 +1,6 @@
 import type { BrowserContributionSource } from '@mini-harness/ui-runtime/contribution';
 import type { ComposerCommand, Completer, DraftMode } from './composer-api.js';
-import type { MessageAction, RecordRenderer, ToolRenderer } from './history-api.js';
+import type { MessageAction, RecordRenderer, ToolRenderer, UserTextRenderer } from './history-api.js';
 
 export const conversationExtensions = {
   command(source: BrowserContributionSource, command: ComposerCommand) {
@@ -11,6 +11,9 @@ export const conversationExtensions = {
   },
   draft(source: BrowserContributionSource, mode: DraftMode) {
     return source.effect(() => source.service('miniComposer').beginDraftMode(mode));
+  },
+  userText(source: BrowserContributionSource, render: UserTextRenderer) {
+    return source.effect(() => source.service('miniMessages').registerUserText(render));
   },
   record(source: BrowserContributionSource, render: RecordRenderer, plugin = source.id) {
     return source.effect(() => source.service('miniMessages').registerRecord(plugin, render));

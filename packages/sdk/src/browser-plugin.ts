@@ -6,7 +6,7 @@ export type { ConversationBrowserPort } from '@mini-harness/conversation/browser
 export { conversationExtensions } from '@mini-harness/conversation/browser/extensions';
 export type { Completer, Completion, ComposerCommand, ComposerDraft, ComposerModel, DraftMode, Suggestion } from '@mini-harness/conversation/browser/composer-api';
 export type { ConversationController, ConversationState, ConversationSubmission, ConversationRevision, RetryInput } from '@mini-harness/conversation/browser/conversation-api';
-export type { MessageAction, MessageActionContext, RecordRenderer, ToolRenderer, ToolView } from '@mini-harness/conversation/browser/history-api';
+export type { MessageAction, MessageActionContext, RecordRenderer, ToolRenderer, ToolView, UserTextRenderer } from '@mini-harness/conversation/browser/history-api';
 export type { SessionDisplayRecord } from '@mini-harness/sessions/display-record';
 export { layoutExtensions } from '@mini-harness/ui-layout/browser/api';
 export type { PageContribution, RightTabType, TabAddress, TabScope } from '@mini-harness/ui-layout/browser/api';

@@ -1,4 +1,5 @@
 import { button, iconButton } from '@mini-harness/ui-primitives/primitives';
+import { icon } from '@mini-harness/ui-primitives/icons';
 import type { createLayout } from './layout.js';
 
 import type { TabScope, TabAddress, RightTabType } from './api.js';
@@ -13,12 +14,15 @@ type ScopeTabs = { scope?: TabScope; open: boolean; active?: Tab; tabs: Tab[] };
 const scopeKey = (scope?: TabScope) => scope?.workspaceId ?? '';
 
 export function createRightTabs(view: {
-  root: HTMLElement; bar: HTMLElement; body: HTMLElement; toggle: HTMLButtonElement;
+  root: HTMLElement; bar: HTMLElement; body: HTMLElement; toggle: HTMLButtonElement; newTab: HTMLButtonElement;
 }, layout: ReturnType<typeof createLayout>, signal: AbortSignal) {
   const types = new Map<string, RightTabType>();
   const states = new Map<string, ScopeTabs>();
   let current = state();
   let nextId = 0;
+  const launcher = document.createElement('section');
+  launcher.className = 'right-launcher';
+  view.body.append(launcher);
 
   function state(scope?: TabScope): ScopeTabs {
     const key = scopeKey(scope);
@@ -59,6 +63,31 @@ export function createRightTabs(view: {
       node.hidden = tab !== active;
       if (node.parentElement !== view.body) view.body.append(node);
     }
+    const choices = [...types].filter(([, type]) => type.launcher && (!type.sessionScoped || current.scope?.sessionId));
+    launcher.hidden = Boolean(active);
+    launcher.replaceChildren();
+    if (!active) {
+      const heading = document.createElement('h2');
+      heading.textContent = 'Start';
+      launcher.append(heading);
+      for (const [key, definition] of choices) {
+        const { title, description, icon: symbol } = definition.launcher!;
+        const entry = button('', 'quiet');
+        entry.classList.add('right-launcher-action');
+        entry.disabled = !current.scope;
+        const label = document.createElement('span');
+        const name = document.createElement('strong'); name.textContent = title;
+        const detail = document.createElement('small'); detail.textContent = description;
+        label.append(name, detail); entry.append(icon(symbol), label);
+        entry.onclick = () => open(key);
+        launcher.append(entry);
+      }
+      if (!choices.length) {
+        const empty = document.createElement('p'); empty.className = 'hint'; empty.textContent = 'No workspace tools available.';
+        launcher.append(empty);
+      }
+    }
+    view.newTab.hidden = !tabs.length;
     if (focus) (active ? document.getElementById(active.key + '-select') : view.root.querySelector<HTMLElement>('#inspectorClose'))?.focus();
   }
 
@@ -74,8 +103,8 @@ export function createRightTabs(view: {
     // The frame can open before workspace selection and the default tab provider are ready.
     const openedBeforeSelection = !current.scope && Boolean(scope) && current.open;
     for (const tab of [...current.tabs]) {
-      if (tab.address) unmount(tab);
-      else remove(current, tab);
+      if (!tab.address || types.get(tab.address.type)?.sessionScoped) remove(current, tab);
+      else unmount(tab);
     }
     current = state(scope);
     current.scope = scope;
@@ -83,7 +112,7 @@ export function createRightTabs(view: {
     for (const tab of current.tabs) if (tab.address) tab.address.sessionId = scope?.sessionId;
     render();
     layout.setPanel(current.open);
-    if (openedBeforeSelection) openDefault();
+
   }
 
   function mount(tab: Tab, create: (signal: AbortSignal) => HTMLElement) {
@@ -115,17 +144,16 @@ export function createRightTabs(view: {
     activate(tab);
   }
 
-  function open(type: string, path?: string, scope = current.scope, mode?: string) {
+  function open(type: string, path?: string, scope = current.scope) {
     const definition = types.get(type);
-    if (!definition || !scope) return;
+    if (!definition || !scope || (definition.sessionScoped && (!scope.sessionId || scope.sessionId !== current.scope?.sessionId))) return;
     const target = state(scope);
     let tab = target.tabs.find(({ address }) => address?.type === type && address.path === path);
     if (!tab) {
-      const address = { ...scope, type, path, mode };
+      const address = { ...scope, type, path };
       tab = { key: 'right-tab-' + ++nextId, title: definition.title(address), address };
       target.tabs.push(tab);
     }
-    if (mode !== undefined && tab.address) tab.address.mode = mode;
     target.active = tab;
     if (target === current) reveal(tab);
   }
@@ -152,16 +180,12 @@ export function createRightTabs(view: {
     }
   }
 
-  function openDefault() {
-    if (!current.scope || current.tabs.length) return false;
-    const entry = [...types].find(([, type]) => type.default);
-    if (!entry) return false;
-    open(entry[0]);
-    return true;
-  }
-
+  view.newTab.onclick = () => {
+    current.active = undefined;
+    render();
+    launcher.querySelector<HTMLElement>('button:not(:disabled)')?.focus();
+  };
   view.toggle.onclick = () => {
-    if (!layout.panelOpen() && openDefault()) return;
     const opening = !layout.panelOpen();
     layout.setPanel(opening, true);
     if (opening) current.active?.view?.node.dispatchEvent(new Event('tab-activate'));
@@ -188,11 +212,7 @@ export function createRightTabs(view: {
     register(type: string, definition: RightTabType) {
       if (types.has(type)) throw new Error('Duplicate right panel tab type: ' + type);
       types.set(type, definition);
-      // A plugin can register after a user has opened the empty right panel.
-      // Materialize its default tab when the scope is already selected.
-      if (definition.default && layout.panelOpen() && !current.tabs.length && current.scope)
-        open(type);
-      else render();
+      render();
       return () => {
         types.delete(type);
         for (const target of states.values()) for (const tab of [...target.tabs]) {

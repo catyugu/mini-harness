@@ -32,3 +32,18 @@
   .right-panel > header { padding-top: env(safe-area-inset-top); }
   .panel-resize { display: none; }
 }
+
+.right-launcher {
+  flex: 1; min-width: 0; overflow: auto; padding: 20px 14px;
+  display: flex; flex-direction: column; justify-content: safe center; align-items: center; gap: 10px;
+}
+.right-launcher h2 { color: var(--muted); font-size: 13px; font-weight: 500; margin: 0 0 6px; }
+.right-launcher .right-launcher-action {
+  width: min(300px, 100%); min-height: 54px; display: flex; align-items: center; justify-content: flex-start;
+  gap: 11px; text-align: left; padding: 9px 13px; border: 1px solid var(--border); border-radius: 11px;
+  background: var(--surface);
+}
+.right-launcher-action > svg { flex: 0 0 19px; height: 19px; color: var(--muted); }
+.right-launcher-action > span { display: grid; gap: 2px; min-width: 0; }
+.right-launcher-action strong { font-size: 13px; font-weight: 550; }
+.right-launcher-action small { color: var(--muted); font-size: 11px; }
