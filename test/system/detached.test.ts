@@ -28,7 +28,8 @@ test('--detached starts an independent, accessible server', { timeout: 30000 }, 
   const port = await unusedPort();
   const cli = resolve('dist/bin/mini-harness.js');
   const env = { ...process.env, MINI_HARNESS_HOME: home };
-  const command = (...args: string[]) => execute(process.execPath, [cli, ...args], { cwd, env, timeout: 15000 });
+  const command = (...args: string[]) =>
+    execute(process.execPath, [cli, ...args], { cwd, env, timeout: 15000 });
   mkdirSync(home);
   const statePath = join(home, 'server.json');
   writeFileSync(statePath, 'stale');

@@ -137,7 +137,9 @@ function load(file: string, optional = false): Layer | undefined {
     for (const row of (value.plugins as unknown[]) ?? []) {
       if (
         !object(row) ||
-        Object.keys(row).some((key) => !['id', 'name', 'disabled', 'client', 'live', 'config'].includes(key)) ||
+        Object.keys(row).some(
+          (key) => !['id', 'name', 'disabled', 'client', 'live', 'config'].includes(key),
+        ) ||
         (row.name !== undefined && (typeof row.name !== 'string' || !row.name.trim())) ||
         (row.config !== undefined && !object(row.config)) ||
         ['disabled', 'client', 'live'].some((key) => row[key] !== undefined && typeof row[key] !== 'boolean')
