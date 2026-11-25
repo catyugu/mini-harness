@@ -140,13 +140,19 @@ export class PluginCatalog {
         if (!this.enabled(descriptor, settings)) {
           const key = descriptor.scopeKey ? descriptor.scopeKey + '/' + id : id;
           const previous = this.resolved.get(key);
-          return previous && previous.source === source && previous.location?.url === location?.url && previous.location?.exportName === location?.exportName
+          return previous &&
+            previous.source === source &&
+            previous.location?.url === location?.url &&
+            previous.location?.exportName === location?.exportName
             ? this.withSchema({ ...descriptor, Config: previous.Config })
             : descriptor;
         }
         try {
           const url = location?.url ?? pathToFileURL(source!).href + '?v=' + lstatSync(source!).mtimeMs;
-          const { plugin, Config, browserConfig, metadata } = await loadPluginModule(url, location?.exportName);
+          const { plugin, Config, browserConfig, metadata } = await loadPluginModule(
+            url,
+            location?.exportName,
+          );
           if (!plugin && !descriptor.resources && !metadata?.browser)
             throw new Error('Plugin ' + id + ' must export a Cordis plugin with apply(ctx, config)');
           return this.withSchema({
@@ -269,7 +275,9 @@ export class PluginCatalog {
           scope,
           scopeKey,
           writableConfig: plan.live,
-          module: descriptor.source ? pathToFileURL(realpathSync(descriptor.source)).href : descriptor.name ?? plan.id,
+          module: descriptor.source
+            ? pathToFileURL(realpathSync(descriptor.source)).href
+            : (descriptor.name ?? plan.id),
         });
         const changes = context.get('harnessChanges');
         if (changes) ctx.effect(() => changes.register('plugin:' + plan.id));
@@ -320,7 +328,9 @@ export class PluginCatalog {
   configValues(descriptor: ResolvedPlugin, values: Record<string, unknown> | undefined) {
     try {
       return resolveConfig(
-        descriptor.Config ?? descriptor.plugin?.Config ?? (descriptor.configSchema ? defineConfig(descriptor.configSchema) : undefined),
+        descriptor.Config ??
+          descriptor.plugin?.Config ??
+          (descriptor.configSchema ? defineConfig(descriptor.configSchema) : undefined),
         structuredClone(values ?? {}),
       ) as Record<string, unknown>;
     } catch (error) {

@@ -24,14 +24,27 @@ export function setupPermissionSettings(ctx: Context) {
   ctx.effect(() =>
     routes.register('PATCH', path, async ({ params, body }) => {
       const { instanceId, module, tools: names, allowed } = (await body()) ?? {};
-      if (typeof instanceId !== 'string' || typeof module !== 'string' ||
-          !Array.isArray(names) || !names.length || !names.every((name: unknown) => typeof name === 'string') ||
-          typeof allowed !== 'boolean')
-        throw new DomainError('invalid_input', 'Expected an instance, module, tool names and authorization decision');
+      if (
+        typeof instanceId !== 'string' ||
+        typeof module !== 'string' ||
+        !Array.isArray(names) ||
+        !names.length ||
+        !names.every((name: unknown) => typeof name === 'string') ||
+        typeof allowed !== 'boolean'
+      )
+        throw new DomainError(
+          'invalid_input',
+          'Expected an instance, module, tool names and authorization decision',
+        );
       return mutations.run(async () => {
         const { id } = params;
-        const registrations = inspect(id).filter((item) => item.instanceId === instanceId && item.module === module);
-        if (!registrations.length || names.some((name: string) => !registrations.some((item) => item.name === name)))
+        const registrations = inspect(id).filter(
+          (item) => item.instanceId === instanceId && item.module === module,
+        );
+        if (
+          !registrations.length ||
+          names.some((name: string) => !registrations.some((item) => item.name === name))
+        )
           throw new DomainError('invalid_input', 'Tool registration is no longer available');
         const grants = { ...settings.settings.readOnlyTools };
         const previous = grants[instanceId];

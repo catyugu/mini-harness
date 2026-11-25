@@ -296,12 +296,8 @@ export class PluginHost implements ScopePort {
       }
       const parent = address.parent ? visit(address.parent) : root;
       if (!hasComposition(overrides)) return parent;
-      const plans = this.catalog.plans(
-        settings,
-        descriptors,
-        address.scope.kind,
-        key,
-        (id, error) => unavailable(id, error, key),
+      const plans = this.catalog.plans(settings, descriptors, address.scope.kind, key, (id, error) =>
+        unavailable(id, error, key),
       );
       const isolates = [...new Set(overrides.isolate)].sort();
       const existing = this.scopes.get(key);

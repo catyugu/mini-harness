@@ -21,10 +21,14 @@ const plugin: Plugin.Object = {
           key.startsWith('session:') &&
           ctx.harnessRegistry.get(key.slice('session:'.length))?.permission === 'readOnly',
       );
-      const grant = instanceId && Object.hasOwn(settings.readOnlyTools, instanceId)
-        ? settings.readOnlyTools[instanceId]
-        : undefined;
-      return !requiresReadOnly || Boolean(readOnly && grant && grant.module === module && grant.tools.includes(name));
+      const grant =
+        instanceId && Object.hasOwn(settings.readOnlyTools, instanceId)
+          ? settings.readOnlyTools[instanceId]
+          : undefined;
+      return (
+        !requiresReadOnly ||
+        Boolean(readOnly && grant && grant.module === module && grant.tools.includes(name))
+      );
     };
     ctx.provide('harnessToolPolicy', authorize);
   },

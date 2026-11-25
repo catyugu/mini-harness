@@ -14,14 +14,21 @@ const setup = (ctx: Context) => {
           '<section class="ui-section" hidden><h3>Read-only conversation tools</h3><p class="hint">Grant access only to tools you trust to leave files and other state unchanged. Scope restrictions still apply.</p><p class="hint" role="status"></p></section>',
         );
         const status = required(section.querySelector<HTMLElement>('[role="status"]'));
-        void browserRequest<{ instanceId: string; module: string; name: string; granted: boolean }[]>(ctx, path, { signal })
+        void browserRequest<{ instanceId: string; module: string; name: string; granted: boolean }[]>(
+          ctx,
+          path,
+          { signal },
+        )
           .then((registrations) => {
             for (const { instanceId, module, name, granted } of registrations) {
               const control = toggle('Allow ' + name + ' in read-only conversations', granted);
               saveToggle(control, async (allowed) => {
                 status.textContent = '';
                 try {
-                  await browserRequest(ctx, path, { ...payload('PATCH', { instanceId, module, tools: [name], allowed }), signal });
+                  await browserRequest(ctx, path, {
+                    ...payload('PATCH', { instanceId, module, tools: [name], allowed }),
+                    signal,
+                  });
                   return true;
                 } catch (error) {
                   if (!signal.aborted)

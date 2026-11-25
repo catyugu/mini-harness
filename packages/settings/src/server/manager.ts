@@ -68,7 +68,9 @@ export class SettingsManager implements SettingsPort {
           .map((key) => [key, this.stored.scopes[key]]),
       );
       const readOnlyTools = Object.fromEntries(
-        Object.entries(this.stored.readOnlyTools).filter(([id]) => !released.has(id.split('/')[0] as ScopeKey)),
+        Object.entries(this.stored.readOnlyTools).filter(
+          ([id]) => !released.has(id.split('/')[0] as ScopeKey),
+        ),
       );
       const next = { ...this.stored, scopes, readOnlyTools };
       const changed = !isDeepStrictEqual(next, this.stored);

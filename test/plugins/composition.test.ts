@@ -313,8 +313,28 @@ export const apply = (ctx) => {
   const grants = (await request('/permissions/plugins/replacement')).body;
   assert.deepEqual(grants.map(({ name }: { name: string }) => name).sort(), ['custom', 'read']);
   const { instanceId, module } = grants[0];
-  assert.equal((await request('/permissions/plugins/replacement', 'PATCH', { instanceId, module, tools: ['write_like'], allowed: true })).status, 400);
-  assert.equal((await request('/permissions/plugins/replacement', 'PATCH', { instanceId, module, tools: ['custom'], allowed: true })).status, 200);
+  assert.equal(
+    (
+      await request('/permissions/plugins/replacement', 'PATCH', {
+        instanceId,
+        module,
+        tools: ['write_like'],
+        allowed: true,
+      })
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await request('/permissions/plugins/replacement', 'PATCH', {
+        instanceId,
+        module,
+        tools: ['custom'],
+        allowed: true,
+      })
+    ).status,
+    200,
+  );
   const custom = expectPresent(
     list(child.id).find(({ name }) => name === 'custom'),
     'read-only registration',
@@ -335,8 +355,22 @@ export const apply = (ctx) => {
   );
   assert.ok(!list(child.id).some(({ name }) => name === 'custom'));
   await assert.rejects(custom.execute('restricted', {}), /Tool denied/);
-  writePlugin(paths.plugins, 'replacement-new', {}, `export const inject = ['harnessTools']; export const apply = (ctx) => ctx.effect(() => ctx.harnessTools.register({ name: 'custom', description: 'replacement', parameters: { type: 'object' }, async execute() { return { content: [] }; } }, { access: 'readOnly' }));`);
-  assert.equal((await request('/settings', 'PATCH', { scopes: { ['session:' + child.id]: { entries: { replacement: { name: '../../plugins/replacement-new' } } } } })).status, 200);
+  writePlugin(
+    paths.plugins,
+    'replacement-new',
+    {},
+    `export const inject = ['harnessTools']; export const apply = (ctx) => ctx.effect(() => ctx.harnessTools.register({ name: 'custom', description: 'replacement', parameters: { type: 'object' }, async execute() { return { content: [] }; } }, { access: 'readOnly' }));`,
+  );
+  assert.equal(
+    (
+      await request('/settings', 'PATCH', {
+        scopes: {
+          ['session:' + child.id]: { entries: { replacement: { name: '../../plugins/replacement-new' } } },
+        },
+      })
+    ).status,
+    200,
+  );
   assert.ok(!list(child.id).some(({ name }) => name === 'custom'));
 });
 

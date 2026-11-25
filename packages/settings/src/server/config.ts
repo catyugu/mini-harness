@@ -35,7 +35,11 @@ export function validateSettings(input: unknown): asserts input is ProfileConfig
     )
       throw new DomainError('invalid_input', 'Invalid plugin scope: ' + key);
     const { disabledTools, isolate } = scope;
-    if (isolate !== undefined && (!Array.isArray(isolate) || !isolate.every((name: unknown) => typeof name === 'string' && !!name.trim())))
+    if (
+      isolate !== undefined &&
+      (!Array.isArray(isolate) ||
+        !isolate.every((name: unknown) => typeof name === 'string' && !!name.trim()))
+    )
       throw new DomainError('invalid_input', 'Invalid service isolation: ' + key);
     if (
       disabledTools !== undefined &&
@@ -48,7 +52,9 @@ export function validateSettings(input: unknown): asserts input is ProfileConfig
   for (const [instance, grant] of Object.entries(section(readOnlyTools, 'readOnlyTools'))) {
     const [scope, id, extra] = instance.split('/');
     if (
-      (id ? !isScopeKey(scope) || !pluginIdPattern.test(id) || extra !== undefined : !pluginIdPattern.test(scope)) ||
+      (id
+        ? !isScopeKey(scope) || !pluginIdPattern.test(id) || extra !== undefined
+        : !pluginIdPattern.test(scope)) ||
       !isObject(grant) ||
       typeof grant.module !== 'string' ||
       !grant.module ||

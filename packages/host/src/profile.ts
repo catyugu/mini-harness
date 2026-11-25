@@ -355,7 +355,9 @@ function builtin(id: string, name: string, client: boolean): ResolvedPlugin | un
 }
 
 export function profileDescriptors(entries: ReadonlyMap<string, Row>): ResolvedPlugin[] {
-  const client = [...entries.values()].some(({ name, disabled }) => name === '@mini-harness/web-gateway' && !disabled);
+  const client = [...entries.values()].some(
+    ({ name, disabled }) => name === '@mini-harness/web-gateway' && !disabled,
+  );
   return [...entries.values()].flatMap((row) => {
     const descriptor = builtin(row.id, row.name!, row.client ?? client);
     return descriptor ? [{ ...descriptor, defaultEnabled: !row.disabled }] : [];
@@ -401,7 +403,10 @@ export async function loadProfile(
         ]),
       ),
       scopes: withToolRules(scopedEntries([...shipped, ...selectedLayers]), scopedTools),
-      readOnlyTools: Object.assign({}, ...[...shipped, ...selectedLayers].map((layer) => layer.readOnlyTools)),
+      readOnlyTools: Object.assign(
+        {},
+        ...[...shipped, ...selectedLayers].map((layer) => layer.readOnlyTools),
+      ),
     });
   }
   let persistent = configurationFor(persistentRows, userLayers);
@@ -427,10 +432,14 @@ export async function loadProfile(
         const original = persistentRows.get(id);
         const local = isAbsolute(entry.name) ? relative(dirname(file), entry.name).split(sep).join('/') : '';
         row.name =
-          original?.name && moduleName(original.name, original.source!) === entry.name && original.source === file
+          original?.name &&
+          moduleName(original.name, original.source!) === entry.name &&
+          original.source === file
             ? original.name
             : local && !isAbsolute(local)
-              ? local.startsWith('../') ? local : './' + local
+              ? local.startsWith('../')
+                ? local
+                : './' + local
               : entry.name;
       }
       const disabled = settings.entries[id]?.disabled;
