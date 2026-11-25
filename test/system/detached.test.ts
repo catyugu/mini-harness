@@ -28,8 +28,8 @@ test('--detached starts an independent, accessible server', { timeout: 30000 }, 
   const port = await unusedPort();
   const cli = resolve('dist/bin/mini-harness.js');
   const env = { ...process.env, MINI_HARNESS_HOME: home };
-  const command = (...args: string[]) =>
-    execute(process.execPath, [cli, ...args], { cwd, env, timeout: 15000 });
+  const options = { cwd, env, timeout: 15000 };
+  const command = (...args: string[]) => execute(process.execPath, [cli, ...args], options);
   mkdirSync(home);
   const statePath = join(home, 'server.json');
   writeFileSync(statePath, 'stale');
@@ -95,12 +95,10 @@ test('port collisions fail promptly and release the instance lock', { timeout: 2
   });
   const address = listener.address();
   assert.ok(address && typeof address === 'object');
-  const call = () =>
-    execute(
-      process.execPath,
-      [resolve('dist/bin/mini-harness.js'), '--port', String(address.port)],
-      { cwd: root, env: { ...process.env, MINI_HARNESS_HOME: join(root, 'home') }, timeout: 6000 },
-    );
+  const cli = resolve('dist/bin/mini-harness.js');
+  const env = { ...process.env, MINI_HARNESS_HOME: join(root, 'home') };
+  const options = { cwd: root, env, timeout: 6000 };
+  const call = () => execute(process.execPath, [cli, '--port', String(address.port)], options);
   await assert.rejects(call(), /HTTP port is already in use/);
   await assert.rejects(call(), /HTTP port is already in use/);
   assert.equal(existsSync(join(root, 'home', 'server.json')), false);
