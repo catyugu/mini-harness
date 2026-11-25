@@ -2,17 +2,19 @@ import { isDeepStrictEqual } from 'node:util';
 import type { PluginMetadata } from '../shared/metadata.ts';
 import { localPluginIdPattern } from '@mini-harness/plugin-api/selection';
 import { DomainError } from '@mini-harness/platform/errors';
-import { lstatSync, readdirSync } from 'node:fs';
-import { pathToFileURL } from 'node:url';
-import { resolve } from 'node:path';
+import { existsSync, lstatSync, readdirSync } from 'node:fs';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { dirname, join, resolve } from 'node:path';
 import { Check } from 'typebox/value';
 import { scopeKeys, type PluginSettings } from '@mini-harness/plugin-api/configuration';
 import type { PluginScope, ScopeKey, ScopeSettings } from '@mini-harness/plugin-api/scopes';
 import { pluginBundle } from './source.ts';
-import type { Context, Plugin } from 'mini-harness/cordis';
+import type { Context, EntryOptions, Plugin } from 'mini-harness/cordis';
 import type { ConfigValidationContext, ResolvedPlugin } from '@mini-harness/plugin-api/descriptor';
 import { builtinBrowserAssets } from './browser-assets.ts';
 import { describePlugin, type DiscoveredPlugin } from './descriptor.ts';
+import { resolveModule } from './module-resolution.ts';
+import { bindInstance } from '@mini-harness/plugin-api/instance';
 
 function configDefaults(schema: Record<string, any>, value: any): any {
   if (value === undefined && Object.hasOwn(schema, 'default')) value = structuredClone(schema.default);
@@ -50,7 +52,7 @@ export class PluginCatalog {
     builtins: ResolvedPlugin[],
     private readonly profile?: Pick<
       import('@mini-harness/plugin-api/profile').ProfileRuntime,
-      'installed' | 'client'
+      'installed' | 'modules' | 'client'
     >,
   ) {
     this.builtins = new Map(
@@ -78,7 +80,7 @@ export class PluginCatalog {
   }
 
   reserved(id: string) {
-    return this.builtins.has(id);
+    return this.builtins.has(id) || Boolean(this.profile?.modules.has(id));
   }
 
   private discover(): DiscoveredPlugin[] {
@@ -89,7 +91,7 @@ export class PluginCatalog {
     );
     for (const [id, module] of this.profile?.installed ?? []) directories.set(id, module);
     return [...directories].flatMap(([id, module]) =>
-      this.builtins.has(id) ? [] : [this.describe(id, resolve(this.directory, module))],
+      this.reserved(id) ? [] : [this.describe(id, resolve(this.directory, module))],
     );
   }
 
@@ -114,8 +116,33 @@ export class PluginCatalog {
     }
   }
 
+  private describeModule(id: string, name: string, source: string): DiscoveredPlugin {
+    try {
+      const entry = fileURLToPath(resolveModule(name, source));
+      let directory = dirname(entry);
+      while (!existsSync(join(directory, 'package.json')) && dirname(directory) !== directory)
+        directory = dirname(directory);
+      const descriptor = describePlugin(id, directory, entry);
+      if (!this.profile?.client(id)) delete descriptor.resources;
+      return descriptor;
+    } catch (error) {
+      return {
+        id,
+        scope: 'application',
+        title: id,
+        description: name,
+        trustedCode: true,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
   descriptors(): DiscoveredPlugin[] {
-    return [...this.builtins.values(), ...this.discover()];
+    return [
+      ...this.builtins.values(),
+      ...[...this.profile?.modules ?? []].map(([id, { name, source }]) => this.describeModule(id, name, source)),
+      ...this.discover(),
+    ];
   }
 
   async runtimeDescriptors(settings: PluginSettings): Promise<DiscoveredPlugin[]> {
@@ -228,6 +255,32 @@ export class PluginCatalog {
           error: failed?.error ?? instances.find(({ error }) => error)?.error ?? metadata.error,
         };
       });
+  }
+
+  entry(plan: ConfiguredPlugin, context: Context, scope: PluginScope, id = plan.id, scopeKey?: ScopeKey): EntryOptions {
+    const { source, descriptor } = plan;
+    const plugin = descriptor.plugin;
+    if (!plugin) throw new Error('Missing server module: ' + plan.id);
+    return {
+      id,
+      context,
+      config: plan.config ?? {},
+      module: descriptor.module ?? plan.id,
+      live: descriptor.configChanges === 'live',
+      load: () => plugin,
+      prepare: (ctx) => {
+        bindInstance(ctx.fiber.entry!, {
+          pluginId: plan.id,
+          scope,
+          scopeKey,
+          writableConfig: descriptor.configChanges === 'live' && descriptor.configSchema !== undefined,
+          trusted: !source && descriptor.trustedContributor === true,
+        });
+        const changes = context.get('harnessChanges');
+        if (changes) ctx.effect(() => changes.register('plugin:' + plan.id));
+        this.validateConfig(descriptor, ctx.fiber.config, 'mount', ctx, descriptor.validateConfig, id);
+      },
+    };
   }
 
   validateConfig(

@@ -77,9 +77,10 @@ resolve relative to the layer that declares the name. A directory entry loads th
 other fragments using `include`; they cannot use executable YAML tags or cyclic
 references. The final entry ID determines the configuration override.
 
-Native entries are currently edited in the Profile package and reloaded on
-restart. The existing Web Plugins page edits the same user patch for managed
-entries. Scoped overrides and the installed bundle
+All declared server modules use the same Cordis EntryTree and configuration path.
+The Web Plugins page edits the user patch, including ordinary module entries.
+Changes to services currently executing the configuration transaction require a
+Profile restart. Scoped overrides and the installed bundle
 format remain described in [scoped providers](scoped-providers.md) and
 [plugins](plugins.md). The package layout migration moves the old Web
 `cordis.yml` user configuration into `cordis.patch.yml` before creating the

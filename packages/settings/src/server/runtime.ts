@@ -5,7 +5,7 @@ export default {
   inject: ['harnessState', 'harnessProfile'],
   provide: ['harnessSettingsStore'],
   apply(ctx: Context) {
-    const settings = new SettingsManager(ctx.harnessProfile, () => ctx.get('harnessComposition')!);
+    const settings = new SettingsManager(ctx.harnessProfile, () => ctx.get('harnessComposition'));
     ctx.provide('harnessSettingsStore', settings);
     ctx.on('harness/drain', () => settings.close());
   },

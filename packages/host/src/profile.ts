@@ -3,11 +3,11 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import { parseDocument, stringify } from 'yaml';
-import { Context, EntryTree, type EntryOptions, type Plugin } from 'mini-harness/cordis';
+import { Context, EntryTree, type Plugin } from 'mini-harness/cordis';
 import { readJson, writeJson, writeText } from '@mini-harness/platform/json';
 import type { Paths } from '@mini-harness/platform/runtime-paths';
 import type { ResolvedPlugin, PluginInfo } from '@mini-harness/plugin-api/descriptor';
-import { bindInstance } from '@mini-harness/plugin-api/instance';
+import { PluginCatalog } from '@mini-harness/plugins/catalog';
 import { bindPluginImports, resolveModule } from '@mini-harness/plugins/module-resolution';
 import { isScopeKey, localPluginIdPattern, pluginIdPattern } from '@mini-harness/plugin-api/selection';
 import type { ProfileConfiguration, ProfileRuntime } from '@mini-harness/plugin-api/profile';
@@ -270,33 +270,26 @@ async function moduleFor(name: string): Promise<{ plugin?: Plugin; metadata?: Pl
   return { plugin: value, metadata };
 }
 
-async function nativeModule(row: ResolvedRow, module: string) {
-  const name = row.name!;
-  const value: unknown = packagedModules.has(name)
-    ? (await moduleFor(name)).plugin
-    : await import(module).then((exports) => exports.default ?? exports);
-  if (!isPlugin(value)) throw new Error('Profile module must export a Cordis plugin: ' + name);
-  return { row, module, plugin: value };
-}
-
 export async function profileDescriptors(entries: ReadonlyMap<string, Row>): Promise<ResolvedPlugin[]> {
   const descriptors = await Promise.all(
     [...entries.values()]
       .filter((row) => row.name && packagedModules.has(row.name))
       .map(async (row) => {
         const { plugin, metadata } = await moduleFor(row.name!);
-        if (!metadata) return;
         return {
+          title: row.id,
+          description: '',
+          scope: 'application' as const,
           ...metadata,
           plugin,
           id: row.id,
           defaultEnabled: !row.disabled,
-          browser: row.client ? metadata.browser : undefined,
-          browserStyles: row.client ? metadata.browserStyles : undefined,
+          browser: row.client ? metadata?.browser : undefined,
+          browserStyles: row.client ? metadata?.browserStyles : undefined,
         };
       }),
   );
-  return descriptors.filter((descriptor) => descriptor !== undefined);
+  return descriptors;
 }
 
 export async function loadProfile(name: string, paths: Paths, context: Context): Promise<ProfileRuntime> {
@@ -313,38 +306,34 @@ export async function loadProfile(name: string, paths: Paths, context: Context):
   }
   const descriptors = await profileDescriptors(resolved);
   const managedIds = new Set(descriptors.map(({ id }) => id));
-  const nativeRows = [...resolved.values()].filter(
-    (row) => !managedIds.has(row.id) && !aliases.has(row.id),
+  const modules = new Map(
+    [...resolved.values()]
+      .filter((row) => !managedIds.has(row.id) && !aliases.has(row.id))
+      .map((row) => [row.id, { name: row.name!, source: row.source! }]),
   );
-  const nativeIds = new Set(nativeRows.map(({ id }) => id));
   const { legacy: previousSettings, product, scopedTools, migration: pendingMigration, raw } =
     legacySettings(paths);
   const legacy = name === 'web' ? previousSettings : parseSettings({});
   const migration = name === 'web' && pendingMigration;
   const overrides = {
     plugins: Object.fromEntries(
-      [...resolved.values()].filter((row) => !nativeIds.has(row.id)).map((row) => [row.id, !row.disabled]),
+      [...resolved.values()].map((row) => [row.id, !row.disabled]),
     ),
     pluginConfig: Object.fromEntries(
       [...resolved.values()]
-        .filter((row) => !nativeIds.has(row.id) && Object.keys(row.config ?? {}).length)
+        .filter((row) => Object.keys(row.config ?? {}).length)
         .map((row) => [row.id, { ...row.config, ...legacy.pluginConfig[row.id] }]),
     ),
     scopes: legacy.scopes,
   };
   Object.assign(overrides.plugins, legacy.plugins);
   for (const [id, config] of Object.entries(legacy.pluginConfig))
-    if (!nativeIds.has(id)) overrides.pluginConfig[id] ??= config;
+    overrides.pluginConfig[id] ??= config;
   for (const layer of userLayers)
     for (const row of layer.plugins ?? []) {
-      if (nativeIds.has(row.id)) continue;
       if (row.disabled !== undefined) overrides.plugins[row.id] = !row.disabled;
       if (row.config) overrides.pluginConfig[row.id] = { ...overrides.pluginConfig[row.id], ...row.config };
     }
-  for (const id of nativeIds) {
-    delete overrides.plugins[id];
-    delete overrides.pluginConfig[id];
-  }
   const configuredPort = resolved.get('core:web-server')?.config?.port;
   const effective = parseSettings({
     ...product,
@@ -365,67 +354,34 @@ export async function loadProfile(name: string, paths: Paths, context: Context):
       };
     }
   }
-  // Disabled external modules are never resolved or imported.
-  const sources = nativeRows
-    .filter((row) => !row.disabled)
-    .map((row) => ({
-      row,
-      module: packagedModules.has(row.name!) ? row.name! : resolveModule(row.name!, row.source!),
-    }));
   const roots = [
     directory,
     ...[...aliases.values()].flatMap((location) => {
       const directory = resolve(paths.plugins, location);
       return existsSync(directory) ? [directory, realpathSync(directory)] : [directory];
     }),
-    ...sources.flatMap(({ row, module }) =>
-      packagedModules.has(row.name!) ? [] : [dirname(fileURLToPath(module))],
-    ),
+    ...[...modules.values()].flatMap(({ name, source }) => {
+      try {
+        return [dirname(fileURLToPath(resolveModule(name, source)))];
+      } catch {
+        return [dirname(source)];
+      }
+    }),
   ];
   const imports = bindPluginImports(roots);
-  let modules: Awaited<ReturnType<typeof nativeModule>>[];
-  try {
-    modules = await Promise.all(sources.map(({ row, module }) => nativeModule(row, module)));
-  } catch (error) {
-    imports.deregister();
-    throw error;
-  }
-  const nativeEntries: EntryOptions[] = modules.map(({ row, module, plugin }) => ({
-    id: row.id,
-    module,
-    context,
-    config: row.config ?? {},
-    load: () => plugin,
-    prepare: packagedModules.has(row.name!)
-      ? undefined
-      : (ctx) => {
-          bindInstance(ctx.fiber.entry!, {
-            pluginId: row.id,
-            scope: { kind: 'application' },
-            trusted: false,
-            writableConfig: false,
-          });
-        },
-  }));
   const entries = new EntryTree();
   let current = effective;
   let migrate = migration;
   function commit(settings: ProfileConfiguration) {
-    // Native Entries belong to the selected YAML and are not editable through the
-    // managed Settings projection. Preserve their root declarations verbatim.
-    const plugins: Row[] = (user.plugins ?? []).filter(({ id }) => nativeIds.has(id));
-    for (const id of nativeIds)
-      if (Object.hasOwn(settings.plugins, id) || Object.hasOwn(settings.pluginConfig, id))
-        throw new Error('Edit the native Profile entry and restart to configure: ' + id);
+    const plugins: Row[] = [];
     for (const id of new Set([
       ...Object.keys(settings.plugins),
       ...Object.keys(settings.pluginConfig),
       ...(user.plugins ?? [])
-        .filter((row) => !nativeIds.has(row.id) && !aliases.has(row.id))
+        .filter((row) => !aliases.has(row.id))
         .map((row) => row.id),
     ])) {
       const base = official.get(id);
-      if (nativeIds.has(id)) continue;
       const existing = resolved.get(id);
       const config = settings.pluginConfig[id];
       const row: Row = { id };
@@ -488,11 +444,25 @@ export async function loadProfile(name: string, paths: Paths, context: Context):
         aliases.delete(id);
     current = settings;
   }
-  return {
+  const profile: ProfileRuntime = {
     directory,
     descriptors,
-    nativeEntries,
+    modules,
     entries,
+    async start() {
+      const catalog = new PluginCatalog(paths.plugins, descriptors, profile);
+      const settings = catalog.effective(current);
+      const errors = new Map<string, unknown>();
+      const { plans } = catalog.plans(settings, await catalog.runtimeDescriptors(settings), 'application', undefined,
+        (id, error) => {
+          errors.set(id, error);
+          return true;
+        });
+      for (const [id, error] of await entries.update(
+        plans.filter(({ descriptor }) => descriptor.plugin).map((plan) => catalog.entry(plan, context, { kind: 'application' })),
+      )) errors.set(id, error);
+      return errors;
+    },
     installed: aliases,
     client(id) {
       return resolved.get(id)?.client ?? descriptors.some((row) => row.browser);
@@ -510,6 +480,7 @@ export async function loadProfile(name: string, paths: Paths, context: Context):
       }
     },
   };
+  return profile;
 }
 
 function readProfileText(file: string) {

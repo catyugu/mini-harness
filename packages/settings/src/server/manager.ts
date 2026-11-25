@@ -23,7 +23,7 @@ export class SettingsManager implements SettingsPort {
 
   constructor(
     private readonly profile: Pick<ProfileRuntime, 'read' | 'commit' | 'installed'>,
-    private readonly host: () => PluginConfigurationPort,
+    private readonly host: () => PluginConfigurationPort | undefined,
   ) {}
 
   private get stored() {
@@ -31,7 +31,7 @@ export class SettingsManager implements SettingsPort {
   }
 
   get settings() {
-    return this.host().effective(this.stored);
+    return this.host()?.effective(this.stored) ?? this.stored;
   }
 
   subscribe(listener: () => void) {
@@ -108,6 +108,7 @@ export class SettingsManager implements SettingsPort {
       const next = { ...this.stored, scopes };
       const changed = !isDeepStrictEqual(next, this.stored);
       const host = this.host();
+      if (!host) throw new DomainError('unavailable', 'Live Profile configuration is unavailable');
       await host.configure(
         host.effective(next),
         () => {
@@ -152,6 +153,7 @@ export class SettingsManager implements SettingsPort {
       const next = mergeSettings(this.stored, patch());
       if (skipUnchanged && isDeepStrictEqual(next, this.stored)) return this.settings;
       const host = this.host();
+      if (!host) throw new DomainError('unavailable', 'Live Profile configuration is unavailable');
       await host.configure(host.effective(next), () => this.save(next));
       this.publish();
       return this.settings;

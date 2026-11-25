@@ -21,8 +21,8 @@ import { bindPluginImports } from './module-resolution.ts';
 import { pluginData, pluginSecrets, removeScopeData } from './data.ts';
 import { PluginRouteRegistry, scopeOperation } from './routes.ts';
 import { pluginSettings } from './plugin-settings.ts';
-import { bindInstance, pluginInstance } from '@mini-harness/plugin-api/instance';
-import { changedSelection, PluginCatalog, type ConfiguredPlugin } from './catalog.ts';
+import { pluginInstance } from '@mini-harness/plugin-api/instance';
+import { changedSelection, PluginCatalog } from './catalog.ts';
 
 const appScope: PluginScope = { kind: 'application' };
 
@@ -35,6 +35,7 @@ function hasComposition(scope: ScopeSettings | undefined): scope is ScopeSetting
 export class PluginHost implements ScopePort {
   private readonly catalog: PluginCatalog;
   private readonly entries: EntryTree;
+  private readonly ownsTree: boolean;
   private readonly pluginRoutes: PluginRouteRegistry;
   private readonly imports: ReturnType<typeof bindPluginImports>;
   private scopes = new Map<ScopeKey, EntryGroup>();
@@ -58,11 +59,11 @@ export class PluginHost implements ScopePort {
       patch: unknown,
       check: () => void,
     ) => Promise<void>,
-    private readonly nativeEntries: readonly EntryOptions[] = [],
-    owner = ctx,
-    entries = new EntryTree(),
+    private readonly owner = ctx,
+    entries?: EntryTree,
   ) {
-    this.entries = entries;
+    this.entries = entries ?? new EntryTree();
+    this.ownsTree = entries === undefined;
     this.pluginRoutes = new PluginRouteRegistry(ctx, upgrade);
     const directoryData = join(dirname(directory), 'plugin-data');
     const services = {
@@ -86,7 +87,7 @@ export class PluginHost implements ScopePort {
         },
       }),
     };
-    for (const [name, value] of Object.entries(services)) owner.provide(name, value);
+    for (const [name, value] of Object.entries(services)) this.owner.provide(name, value);
     this.catalog = new PluginCatalog(directory, builtins, ctx.get('harnessProfile'));
     this.imports = bindPluginImports([directory]);
   }
@@ -112,7 +113,7 @@ export class PluginHost implements ScopePort {
 
   diagnostics() {
     return [...this.entries.values()].flatMap(({ active, options, fiber }) => {
-      if (!active || !fiber || this.nativeEntries.some((entry) => entry.id === options.id)) return [];
+      if (!active || !fiber) return [];
       const identity = pluginInstance(fiber.ctx);
       const inject = Object.keys(fiber.inject);
       const services = Object.fromEntries(
@@ -313,7 +314,7 @@ export class PluginHost implements ScopePort {
         for (const plan of plans) {
           if (!plan.descriptor.plugin) continue;
           const id = key + '/' + plan.id;
-          entries.push(this.entry(plan, address.scope, id, key, context));
+          entries.push(this.catalog.entry(plan, context, address.scope, id, key));
           instances.set(id, { key, plugin: plan.id });
         }
       }
@@ -325,45 +326,6 @@ export class PluginHost implements ScopePort {
       visit(key);
     }
     return { contexts, entries, instances };
-  }
-
-  private entry(
-    plan: ConfiguredPlugin,
-    scope: PluginScope,
-    id = plan.id,
-    scopeKey?: ScopeKey,
-    context = this.ctx,
-  ): EntryOptions {
-    const { source, descriptor } = plan;
-    const plugin = descriptor.plugin;
-    if (!plugin) throw new Error('Missing server module: ' + plan.id);
-    return {
-      id,
-      context,
-      config: plan.config ?? {},
-      module: descriptor.module ?? plan.id,
-      live: descriptor.configChanges === 'live',
-      load: () => plugin,
-      prepare: (ctx) => {
-        bindInstance(ctx.fiber.entry!, {
-          pluginId: plan.id,
-          scope,
-          scopeKey,
-          writableConfig: descriptor.configChanges === 'live' && descriptor.configSchema !== undefined,
-          trusted: !source && descriptor.trustedContributor === true,
-        });
-        const changes = this.ctx.get('harnessChanges');
-        if (changes) ctx.effect(() => changes.register('plugin:' + plan.id));
-        this.catalog.validateConfig(
-          descriptor,
-          ctx.fiber.config,
-          'mount',
-          ctx,
-          descriptor.validateConfig,
-          id,
-        );
-      },
-    };
   }
 
   async requestScope(plugin: string, key: string, operation: string, input: unknown, signal: AbortSignal) {
@@ -423,10 +385,9 @@ export class PluginHost implements ScopePort {
     released?: ReadonlySet<ScopeKey>,
   ) {
     const oldEntries = [...this.entries.values()];
-    const nativeIds = new Set(this.nativeEntries.map(({ id }) => id));
     const previousActive = new Set(
       oldEntries
-        .filter((entry) => entry.active && !nativeIds.has(entry.options.id))
+        .filter((entry) => entry.active)
         .map(({ options }) => options.id),
     );
     const previousEntries = oldEntries.map(({ options }) => options);
@@ -469,7 +430,7 @@ export class PluginHost implements ScopePort {
     const mounts = [
       ...plans
         .filter(({ id, descriptor }) => descriptor.plugin && !failures.has(id))
-        .map((plan) => this.entry(plan, appScope)),
+        .map((plan) => this.catalog.entry(plan, this.ctx, appScope)),
       ...scoped.entries,
     ];
     const appChanged =
@@ -505,7 +466,25 @@ export class PluginHost implements ScopePort {
         ? this.ctx.get('harnessMutations')?.protect(appChanged ? undefined : scopeChanges)
         : undefined;
     try {
-      const activationErrors = await this.entries.update([...this.nativeEntries, ...mounts]);
+      // An Entry cannot dispose the Fiber whose active configuration transaction
+      // is awaiting that disposal. The actual control-plane dependencies require restart.
+      if (updating) {
+        const visited = new Set<Context['fiber']>();
+        const check = (fiber: Context['fiber']) => {
+          if (visited.has(fiber)) return;
+          visited.add(fiber);
+          const entry = fiber.entry && this.entries.get(fiber.entry.options.id);
+          if (entry) {
+            const next = mounts.find(({ id }) => id === entry.options.id);
+            if (!next || !entry.matches(next) || !isDeepStrictEqual(next.config, entry.options.config))
+              throw new DomainError('conflict', 'Changing ' + entry.options.id + ' requires a Profile restart');
+          }
+          for (const provision of Object.values(fiber.committed ?? {}))
+            if (provision) check(provision.ctx.fiber);
+        };
+        check(this.owner.fiber);
+      }
+      const activationErrors = await this.entries.update(mounts);
       for (const mounted of mounts) {
         if (!activationErrors.has(mounted.id)) continue;
         const scope = scoped.instances.get(mounted.id);
@@ -559,7 +538,7 @@ export class PluginHost implements ScopePort {
     this.closing = true;
     await this.applying?.catch(() => {});
     try {
-      if (!this.nativeEntries.length) await withMountTransaction(() => this.entries.close());
+      if (this.ownsTree) await withMountTransaction(() => this.entries.close());
     } finally {
       this.imports.deregister();
       this.scopes.clear();

@@ -18,7 +18,7 @@ export interface DiscoveredPlugin
   resources?: BrowserAssets;
 }
 
-export function describePlugin(id: string, folder: string): DiscoveredPlugin {
+export function describePlugin(id: string, folder: string, entry?: string): DiscoveredPlugin {
   assertPeerCompatibility(folder);
   const packageFile = join(folder, 'package.json');
   const packageInfo = readJson<{
@@ -27,8 +27,8 @@ export function describePlugin(id: string, folder: string): DiscoveredPlugin {
     exports?: unknown;
     miniHarness?: { plugin?: Partial<PluginInfo> & { browserDirectory?: unknown; browserPreload?: unknown } };
   }>(packageFile, {});
-  let source: string | undefined;
-  if (packageInfo.name && (packageInfo.exports !== undefined || packageInfo.main !== undefined)) {
+  let source = entry;
+  if (!source && packageInfo.name && (packageInfo.exports !== undefined || packageInfo.main !== undefined)) {
     const resolved = packageInfo.exports !== undefined
       ? fileURLToPath(resolveModule(packageInfo.name, packageFile))
       : createRequire(packageFile).resolve(folder);
@@ -37,7 +37,7 @@ export function describePlugin(id: string, folder: string): DiscoveredPlugin {
     if (isAbsolute(location) || location === '..' || location.startsWith('..' + sep) || !isRegularFile(physical))
       throw new Error('Plugin entry must resolve inside its package');
     source = physical;
-  } else if (isRegularFile(join(folder, 'plugin.js'))) {
+  } else if (!source && isRegularFile(join(folder, 'plugin.js'))) {
     source = join(folder, 'plugin.js');
   }
   const descriptor = join(folder, 'plugin.json');

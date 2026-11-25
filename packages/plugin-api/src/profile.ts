@@ -1,4 +1,4 @@
-import type { EntryOptions, EntryTree } from 'mini-harness/cordis';
+import type { EntryTree } from 'mini-harness/cordis';
 import type { ResolvedPlugin } from './descriptor.ts';
 import type { PluginSettings } from './configuration.ts';
 
@@ -10,7 +10,8 @@ export interface ProfileConfiguration extends PluginSettings {
 export interface ProfileRuntime {
   readonly directory: string;
   readonly descriptors: ResolvedPlugin[];
-  readonly nativeEntries: readonly EntryOptions[];
+  readonly modules: ReadonlyMap<string, { name: string; source: string }>;
+  start(): Promise<Map<string, unknown>>;
   readonly entries: EntryTree;
   readonly installed: ReadonlyMap<string, string>;
   client(id: string): boolean;
