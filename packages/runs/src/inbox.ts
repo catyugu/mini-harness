@@ -64,33 +64,29 @@ export class Inbox {
       });
   }
 
-  select<T>(
-    mode: InboxItem['mode'],
-    select: (item: InboxItem) => T,
-  ): { item: InboxItem; value: T } | undefined {
-    for (const item of this.list()) {
-      if (item.mode !== mode) continue;
+  hasValid(mode: InboxItem['mode'], validate: (item: InboxItem) => unknown) {
+    for (let item = this.next(mode); item; item = this.next(mode)) {
       try {
-        return { item, value: select(item) };
+        validate(item);
+        return true;
       } catch (error) {
         this.fail(item, error);
       }
     }
+    return false;
   }
 
-  async deliver<T, P>(
+  async deliver<P>(
     mode: InboxItem['mode'],
     signal: AbortSignal,
-    select: (item: InboxItem) => T,
-    prepare: (item: InboxItem, selection: T) => Promise<P>,
+    prepare: (item: InboxItem) => Promise<P>,
     commit: (item: InboxItem, prepared: P) => Promise<void>,
   ) {
     signal.throwIfAborted();
-    for (let next = this.select(mode, select); next; next = this.select(mode, select)) {
-      const { item, value } = next;
+    for (let item = this.next(mode); item; item = this.next(mode)) {
       let prepared: P;
       try {
-        prepared = await prepare(item, value);
+        prepared = await prepare(item);
       } catch (error) {
         signal.throwIfAborted();
         this.fail(item, error);

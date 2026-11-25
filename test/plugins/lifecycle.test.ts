@@ -1179,3 +1179,111 @@ test('custom scope namespaces support normal Cordis composition and inheritance'
   assert.equal(scopeOf(host.context('project:alpha')), projectKeys('alpha'));
   assert.deepEqual(scopeChainOf(taskKey), [taskKey, projectKeys('alpha')]);
 });
+
+test('shipped, local and npm entries share metadata, configuration and resource lifecycle', async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'mini-plugin-parity-'));
+  const folder = join(directory, 'node_modules', 'parity-plugin');
+  const entry = join(folder, 'server', 'entry.mjs');
+  const web = join(folder, 'web');
+  mkdirSync(join(folder, 'server'), { recursive: true });
+  mkdirSync(web, { recursive: true });
+  writeJson(join(folder, 'package.json'), {
+    name: 'parity-plugin',
+    version: '1.0.0',
+    type: 'module',
+    exports: { '.': './server/entry.mjs', './client': './web/main.js' },
+  });
+  const schema = {
+    type: 'object',
+    properties: { label: { type: 'string', default: 'Default' } },
+    additionalProperties: false,
+  };
+  const browser = {
+    browser: 'web/main.js',
+    browserDirectory: 'web',
+    browserStyles: ['web/b.css', 'web/a.css'],
+  };
+  writeJson(join(folder, 'plugin.json'), {
+    title: 'Static title',
+    description: 'Static description',
+    configSchema: schema,
+    ...browser,
+  });
+  const trace = join(directory, 'effects.log');
+  const configKey = entry + '#config';
+  Object.defineProperty(globalThis, configKey, { value: defineConfig(schema), configurable: true });
+  writeFileSync(entry, `
+    import { appendFileSync } from 'node:fs';
+    const trace = ${JSON.stringify(trace)};
+    appendFileSync(trace, 'import\\n');
+    export const Config = globalThis[${JSON.stringify(configKey)}];
+    export const metadata = ${JSON.stringify({ title: 'Native title', description: 'Native description', ...browser })};
+    export function apply(ctx, config) {
+      ctx.effect(() => {
+        appendFileSync(trace, 'open:' + config.label + '\\n');
+        return () => appendFileSync(trace, 'close:' + config.label + '\\n');
+      });
+    }
+  `);
+  writeFileSync(join(web, 'main.js'), 'export function apply() {}');
+  writeFileSync(join(web, 'a.css'), '.a {}');
+  writeFileSync(join(web, 'b.css'), '.b {}');
+  writeFileSync(join(folder, 'private.js'), 'private');
+  let settings = mergeSettings(structuredClone(DEFAULTS), {
+    entries: {
+      bundled: { name: 'shipped-parity', disabled: true },
+      local: { name: entry, disabled: true },
+      npm: { name: 'parity-plugin', disabled: true },
+    },
+  });
+  const host = new PluginHost(new Context(), join(directory, 'plugins'), {
+    locate: (name) => name === 'shipped-parity' ? { folder, entry } : undefined,
+    source: () => join(directory, 'package.json'),
+    read: () => settings,
+    commit: (next) => { settings = next; },
+  });
+  t.after(async () => {
+    await host.close();
+    Reflect.deleteProperty(globalThis, configKey);
+    rmSync(directory, { recursive: true, force: true });
+  });
+  await host.start();
+  assert.equal(existsSync(trace), false);
+  assert.equal(host.metadata().length, 3);
+  assert.ok(host.metadata().every((item) => item.title === 'Static title' && item.state === 'disabled'));
+  assert.deepEqual(host.browser(), []);
+  await host.update({
+    entries: { bundled: { disabled: false }, local: { disabled: false }, npm: { disabled: false } },
+  });
+  assert.ok(host.metadata().every((item) => item.title === 'Native title' && item.state === 'active'));
+  assert.equal(readFileSync(trace, 'utf8').split('\n').filter((line) => line === 'import').length, 1);
+  const browserEntries = () => host.browser().sort((a, b) => a.id.localeCompare(b.id));
+  assert.equal(browserEntries().length, 3);
+  for (const item of browserEntries()) {
+    const asset = expectPresent(host.browserAsset(item.browser), 'entry asset');
+    assert.equal(readFileSync(asset.path, 'utf8'), 'export function apply() {}');
+    assert.deepEqual(item.styles?.map((path) => path.split('/').at(-1)), ['b.css', 'a.css']);
+    assert.equal(host.browserAsset(item.browser.replace(/web\/main\.js$/, 'private.js')), undefined);
+  }
+  await assert.rejects(host.update({ entries: { local: { config: { label: 42 } } } }));
+  await host.update({
+    entries: { bundled: { config: { label: 'B' } }, local: { config: { label: 'L' } }, npm: { config: { label: 'N' } } },
+  });
+  const before = browserEntries();
+  writeFileSync(join(web, 'b.css'), '.b { color: red; }');
+  await host.update({});
+  const after = browserEntries();
+  assert.equal(after.length, before.length);
+  for (const [index, item] of after.entries()) {
+    assert.notEqual(item.browser, before[index].browser);
+    assert.equal(host.browserAsset(before[index].browser), undefined);
+    const css = expectPresent(host.browserAsset(expectPresent(item.styles?.[0], 'stylesheet')), 'stylesheet asset');
+    assert.equal(readFileSync(css.path, 'utf8'), '.b { color: red; }');
+  }
+  await host.update({
+    entries: { bundled: { disabled: true }, local: { disabled: true }, npm: { disabled: true } },
+  });
+  assert.deepEqual(host.browser(), []);
+  const events = readFileSync(trace, 'utf8').split('\n');
+  assert.equal(events.filter((line) => line.startsWith('open:')).length, events.filter((line) => line.startsWith('close:')).length);
+});

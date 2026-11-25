@@ -239,8 +239,7 @@ export class SessionRun {
       inbox.deliver(
         mode,
         signal,
-        queuedSelection,
-        (item, selected) => prepare(item, selected, 'user'),
+        (item) => prepare(item, queuedSelection(item), 'user'),
         (item, prepared) => commit(item, prepared, item.id),
       );
     // Drain recovered follow-ups as turns before committing the new manual input.
@@ -359,7 +358,7 @@ export class SessionRun {
                 arguments: call.arguments,
               });
               if (signal.aborted) return 'Agent run cancelled';
-              if (inbox.select('steer', queuedSelection))
+              if (inbox.hasValid('steer', queuedSelection))
                 return 'Skipped because a steering message arrived.';
               const tool = advertisedTools.get(call.name);
               if (tool && ctx.get('harnessToolPolicy')?.(id, tool) === false)
@@ -480,9 +479,10 @@ export class SessionRun {
         signal,
         request: async (content) => {
           signal.throwIfAborted();
-          const choice = projection.model;
-          const model = choice && requireService(ctx, 'harnessModels').resolve(choice);
-          if (!model) throw new DomainError('invalid_input', 'Configure a model before compacting');
+          const { model } = selectModel(requireService(ctx, 'harnessModels'), {
+            explicit: projection.model,
+            unavailable: 'Configure a model before compacting',
+          });
           const context: StepContext = {
             sessionId: id,
             cwd: this.sessions.workspacePath(id),
