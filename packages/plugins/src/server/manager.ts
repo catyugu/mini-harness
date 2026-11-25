@@ -121,10 +121,12 @@ export class PluginHost implements ScopePort {
       if (!active || !fiber || this.nativeEntries.some((entry) => entry.id === options.id)) return [];
       const identity = pluginInstance(fiber.ctx);
       const inject = Object.keys(fiber.inject);
-      const services = Object.fromEntries(inject.flatMap((name) => {
-            const provider = fiber.committed?.[name]?.ctx.fiber;
-            return provider ? [[name, provider.entry?.options.id ?? 'application']] : [];
-      }));
+      const services = Object.fromEntries(
+        inject.flatMap((name) => {
+          const provider = fiber.committed?.[name]?.ctx.fiber;
+          return provider ? [[name, provider.entry?.options.id ?? 'application']] : [];
+        }),
+      );
       return [
         {
           id: options.id,

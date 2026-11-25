@@ -284,9 +284,9 @@ export const apply = (ctx) => {
   assert.equal(accepted.executionId, execution.id);
   assert.ok(JSON.stringify(accepted).length < JSON.stringify(execution).length);
   const missing = await request('/settings', 'PATCH', { plugins: { transport: false }, providers: {} });
-  assert.equal(missing.status, 400);
-  assert.match(missing.body.error, /harnessLlm/);
-  assert.equal(app.runtime.settings.providers.harnessLlm, 'transport');
+  assert.equal(missing.status, 200);
+  assert.equal(app.runtime.plugins.ctx.get('harnessLlm'), undefined);
+  assert.equal(app.runtime.plugins.ctx.get('harnessAgent'), undefined);
   assert.equal(
     (
       await request('/settings', 'PATCH', {

@@ -277,7 +277,7 @@ export function apply(ctx, config) {
       files: [{ name: 'plugin.json', content }, ...bundle.files.slice(1)],
     });
   assert.match((await installWithManifest('[]')).body.error, /Expected an object in plugin.json/);
-  assert.match((await installWithManifest('{"requires":"invalid"}')).body.error, /Invalid plugin requires/);
+  assert.match((await installWithManifest('{"scope":"invalid"}')).body.error, /Invalid plugin scope/);
   assert.match(
     (await request('/plugins/install', 'POST', { ...bundle, files: bundle.files.slice(1) })).body.error,
     /Include plugin.json/,
