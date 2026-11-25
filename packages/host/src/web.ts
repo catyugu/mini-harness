@@ -29,7 +29,8 @@ const plugin: Plugin.Object = {
     let port = config.port ?? 3837;
     let open = !launch.detached;
     const flags = launch.flags ?? [];
-    for (let index = 0; index < flags.length; index++) {
+    const help = flags.includes('--help') || flags.includes('-h');
+    for (let index = 0; !help && index < flags.length; index++) {
       if (flags[index] === '--no-open') open = false;
       else if (flags[index] === '--port') port = Number(flags[++index]);
       else throw new Error('Unknown Web option: ' + flags[index]);
@@ -43,6 +44,11 @@ const plugin: Plugin.Object = {
     });
     ctx.on('harness/open', async () => {
       if (!launch.interactive) return;
+      if (help) {
+        console.log('Web options:\\n  --port <number>  Listen port (default 3837)\\n  --no-open        Do not open a browser');
+        launch.shutdown();
+        return;
+      }
       try {
         const listening = await web.listen(port);
         const url = 'http://127.0.0.1:' + listening;

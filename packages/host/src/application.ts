@@ -6,7 +6,7 @@ import { loadProfile } from './profile.ts';
 /** The launcher supplies process state and loads the selected Profile onto a fresh Cordis tree. */
 export async function bootProfile(name: string, paths: Paths, launch: LaunchOptions) {
   const ctx = new Context();
-  const profile = await loadProfile(name, paths, ctx);
+  const profile = await loadProfile(name, paths, ctx, launch.patches);
   ctx.provide('harnessState', { paths });
   ctx.provide('harnessProfile', profile);
   ctx.provide('harnessLaunch', launch);

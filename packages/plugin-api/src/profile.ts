@@ -23,6 +23,7 @@ export interface ProfileRuntime {
 
 export interface LaunchOptions {
   flags?: readonly string[];
+  patches?: readonly string[];
   detached?: boolean;
   token?: string;
   shutdown(): void;

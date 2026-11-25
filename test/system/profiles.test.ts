@@ -3,6 +3,7 @@ import test from 'node:test';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { writeText, writeJson } from '@mini-harness/platform/json';
 import { getPaths, ensurePaths } from '@mini-harness/platform/paths';
 import { Context } from 'mini-harness/cordis';
@@ -165,11 +166,16 @@ export function apply(ctx, config) {
   assert.equal(readFileSync(join(directory, 'cordis.yml'), 'utf8'), 'plugins: []\n');
   const standalone = join(directory, 'standalone.yml');
   writeText(standalone, 'include: [' + JSON.stringify(fragment) + ']\n');
-  const direct = await bootProfile(standalone, paths, launch);
+  await assert.rejects(bootProfile(standalone, paths, launch), /Invalid Profile name/);
+  writeText(standalone, 'plugins:\\n  - id: provider\\n    config:\\n      value: temporary\\n');
+  const patched = await bootProfile('custom', paths, { ...launch, patches: [standalone] });
   try {
-    assert.equal(direct.ctx.get('profileResult'), 'base!');
+    assert.equal(patched.ctx.get('profileResult'), 'temporary!');
+    const profile = patched.ctx.harnessProfile;
+    profile.commit({ ...profile.read(), readOnlyTools: { example: ['read', 'search'] } });
+    assert.doesNotMatch(readFileSync(file, 'utf8'), /temporary/);
   } finally {
-    await direct.close();
+    await patched.close();
   }
   const reopened = await bootProfile('custom', paths, launch);
   try {
@@ -180,4 +186,20 @@ export function apply(ctx, config) {
 
   writeText(fragment, 'include: [' + JSON.stringify(fragment) + ']\n');
   await assert.rejects(bootProfile('custom', paths, launch), /Cyclic Profile include/);
+});
+
+test('launcher inspects and recreates named Profile packages without mounting', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'mini-harness-cli-profile-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const env = { ...process.env, MINI_HARNESS_HOME: join(root, 'home') };
+  const cli = (...args: string[]) =>
+    execFileSync(process.execPath, ['dist/bin/mini-harness.js', ...args], { env, encoding: 'utf8' });
+  const extra = join(root, 'extra.yml');
+  writeText(extra, 'plugins:\\n  - id: git-diff\\n    disabled: true\\n');
+  const config = cli('rescue', '--from-default-profile', 'web', '--patch', extra, '--dump-config');
+  assert.match(config, /id: git-diff[\\s\\S]*?disabled: true/);
+  assert.doesNotMatch(cli('rescue', '--dump-default-config'), /id: git-diff[\\s\\S]*?disabled: true/);
+  assert.equal(JSON.parse(cli('--dump-config-schema')).properties.plugins.type, 'array');
+  assert.doesNotMatch(readFileSync(join(env.MINI_HARNESS_HOME, 'profiles', 'rescue', 'cordis.patch.yml'), 'utf8'), /git-diff/);
+  assert.throws(() => cli('--profile', extra, '--dump-config'), /Invalid Profile name/);
 });
