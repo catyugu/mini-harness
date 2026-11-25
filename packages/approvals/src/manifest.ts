@@ -12,7 +12,7 @@ export const metadata: PluginInfo = {
 };
 
 const plugin: Plugin.Object = {
-  inject: ['harnessChanges', 'harnessRuns', 'harnessRegistry'],
+  inject: ['harnessChanges', 'harnessRuns', 'harnessSessions'],
   provide: ['harnessApprovals', 'harnessApprovalRequests'],
   apply(ctx) {
     const approvals = new Approvals();
@@ -30,8 +30,8 @@ const plugin: Plugin.Object = {
       request(id, prompt, signal) {
         const caller = Service.caller(this);
         const instanceId = entryFiber(caller)?.entry?.options.id ?? 'fiber:' + caller.fiber.uid;
-        ctx.harnessRegistry.assertAvailable(id);
-        if (!ctx.harnessRegistry.get(id)) throw new DomainError('not_found', 'Conversation not found');
+        ctx.harnessSessions.assertAvailable(id);
+        if (!ctx.harnessSessions.get(id)) throw new DomainError('not_found', 'Conversation not found');
         const run = ctx.harnessRuns.info(id);
         return caller.fiber.run(
           (lifetime) =>
@@ -48,7 +48,7 @@ const plugin: Plugin.Object = {
     });
     ctx.provide('harnessApprovalRequests', requests);
     ctx.effect(() =>
-      ctx.harnessRegistry.beforeDelete({
+      ctx.harnessSessions.beforeDelete({
         async quiesce(ids) {
           for (const id of ids) approvals.cancelSession(id);
         },

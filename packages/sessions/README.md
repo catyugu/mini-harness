@@ -8,15 +8,15 @@ Maintains session ancestry and permissions, the append-only log, original upload
 
 ## Structure
 
-`src/registry.ts` owns session access and cleanup; `storage.ts` owns log paths and upload files. `log.ts`, `log-api.ts` and `projection.ts` implement the durable record. `src/shared/` contains read contracts used by other runtimes.
+`src/registry.ts` owns session access and cleanup; `storage.ts` owns log paths and upload files. `record-log.ts` owns durable framing, identity, ancestry and persistence; `log.ts`, `log-api.ts` and `projection.ts` interpret conversation records. `src/shared/` contains read contracts used by other runtimes.
 
 ## API
 
-`harnessRegistry` groups internal catalog, history and lifecycle operations. The server SDK exposes conversation creation and history directly through `harnessSessions`, and branch-owned records through `harnessSessions.records(id, owner)`.
+`harnessSessions` is the shared session contract for built-in and external plugins, including catalog, history, lifecycle and branch-owned records through `harnessSessions.records(id, owner)`.
 
 ## Dependencies
 
-Uses [Workspaces](../workspaces/README.md) to own storage beneath managed workspace roots. Owns stable runtime scope keys and coordinates removal of persisted Profile addresses with [Settings](../settings/README.md).
+[Workspaces](../workspaces/README.md) is optional; bound conversations derive their workspace path and scope from that service. Log storage is resolved from the persistent conversation identity independently of workspace paths. Owns stable runtime scope keys and coordinates removal of persisted Profile addresses with [Settings](../settings/README.md).
 
 ## Lifecycle
 

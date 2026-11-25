@@ -95,13 +95,6 @@ export const administrationMetadata: PluginInfo = {
 };
 
 export const administration: Plugin.Object = {
-  inject: [
-    'harnessModels',
-    'harnessModelStore',
-    'harnessModelPreference',
-    'harnessState',
-    'harnessRoutes',
-    'harnessChanges',
-  ],
+  inject: ['harnessModels', 'harnessState', 'harnessRoutes', 'harnessChanges'],
   apply: setupAdministration,
 };

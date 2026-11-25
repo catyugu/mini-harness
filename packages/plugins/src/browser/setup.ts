@@ -334,7 +334,8 @@ function pluginCatalog(
             const peers = [...content.querySelectorAll<HTMLInputElement>('input.toggle')].filter(
               (toggle) => toggle !== control && !toggle.disabled,
             );
-            for (const peer of peers) peer.disabled = true;
+            const detailButtons = [...content.querySelectorAll<HTMLButtonElement>('[data-plugin-row]')];
+            for (const peer of [...peers, ...detailButtons]) peer.disabled = true;
             try {
               const saved = await mutate(
                 () =>
@@ -356,7 +357,7 @@ function pluginCatalog(
               return saved;
             } finally {
               savingSwitch = false;
-              for (const peer of peers) peer.disabled = false;
+              for (const peer of [...peers, ...detailButtons]) peer.disabled = false;
             }
           });
           controls.append(control);

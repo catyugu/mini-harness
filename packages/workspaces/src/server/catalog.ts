@@ -12,11 +12,14 @@ interface CatalogState {
   records: WorkspaceRecord[];
 }
 
+// Resource identity lasts for the Profile, not for an activation of its service.
+const profileScopes = new WeakMap<ReturnType<typeof getPaths>, Map<string, ScopeKey>>();
+
 export class WorkspaceCatalog {
   private readonly file: string;
   private readonly stateRoot: string;
   private records: WorkspaceRecord[];
-  private readonly runtimeScopes = new Map<string, ScopeKey>();
+  private readonly runtimeScopes: Map<string, ScopeKey>;
   private readonly startupId: string;
   readonly events = new EventTarget();
   private readonly removalHooks = new Set<(id: string) => Promise<string[]>>();
@@ -24,6 +27,8 @@ export class WorkspaceCatalog {
   private closing = false;
 
   constructor(paths: ReturnType<typeof getPaths>) {
+    this.runtimeScopes = profileScopes.get(paths) ?? new Map();
+    profileScopes.set(paths, this.runtimeScopes);
     this.file = join(paths.home, 'workspaces.json');
     mkdirSync(paths.home, { recursive: true, mode: 0o700 });
     this.stateRoot = canonicalWorkspacePath(paths.home);
@@ -88,6 +93,7 @@ export class WorkspaceCatalog {
       name: name === undefined ? basename(target) || target : this.name(name),
     };
     this.save([...this.records, record]);
+    this.events.dispatchEvent(new CustomEvent('membership', { detail: id }));
     return { ...record };
   }
 
@@ -130,6 +136,7 @@ export class WorkspaceCatalog {
         const groups = await Promise.all([...this.removalHooks].map((hook) => hook(id)));
         await release();
         this.save(this.records.filter((record) => record.id !== id));
+        this.events.dispatchEvent(new CustomEvent('membership', { detail: id }));
         this.runtimeScopes.delete(id);
         return { removed: id, deleted: groups.flat() };
       })

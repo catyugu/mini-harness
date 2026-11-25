@@ -8,13 +8,13 @@ export const metadata: PluginInfo = {
 };
 
 const plugin: Plugin.Object = {
-  inject: ['harnessLlm', 'harnessModelStore'],
+  inject: ['harnessModels', 'harnessLlm', 'harnessModelStore'],
   async apply(ctx) {
     const store = ctx.harnessModelStore;
     const adapter = new PiLlm(store);
     const removeDefaults = await adapter.registerModels();
     ctx.effect(() => removeDefaults);
-    ctx.effect(() => ctx.harnessLlm.register(adapter, -1));
+    ctx.effect(() => ctx.harnessModels.register(store, adapter, -1));
   },
 };
 

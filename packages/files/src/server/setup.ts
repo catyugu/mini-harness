@@ -18,10 +18,12 @@ export function setup(ctx: Context) {
     ctx.effect(() =>
       ctx.harnessTools.register({
         name,
+        visible: (id) => Boolean(sessions.get(id)?.workspaceId),
         resolve(id, caller = ctx) {
           const root = sessions.workspacePath(id);
           const session = sessions.get(id);
-          if (!session) throw new DomainError('not_found', 'Conversation not found');
+          if (!session || !root || !session.workspaceId)
+            throw new DomainError('not_found', 'Conversation workspace not found');
           const tool = fileTools(root, () => {
             const files = caller.get('harnessFileAccess');
             if (!files) throw new DomainError('unavailable', 'File access is unavailable');
@@ -35,7 +37,7 @@ export function setup(ctx: Context) {
               if (!writes) return result;
               const path = (args[1] as { path?: unknown })?.path;
               if (typeof path !== 'string') return result;
-              changes.invalidate('files', session.workspaceId);
+              changes.invalidate('files', session.workspaceId ?? undefined);
               const changedPath = relative(root, resolve(root, path)).split(sep).join('/');
               const details = typeof result.details === 'object' ? result.details : undefined;
               return { ...result, details: { ...details, changedPath } };

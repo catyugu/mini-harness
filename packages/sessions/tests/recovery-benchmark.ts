@@ -3,7 +3,8 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { SessionEntry, SessionEvent } from '../src/log-api.ts';
-import { encodeLog, SessionLog } from '../src/log.ts';
+import { SessionLog } from '../src/log.ts';
+import { encodeLog } from '../src/record-log.ts';
 
 const root = mkdtempSync(join(tmpdir(), 'mini-harness-recovery-bench-'));
 const file = join(root, 'session.jsonl');

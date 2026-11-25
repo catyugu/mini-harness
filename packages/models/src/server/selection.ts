@@ -1,6 +1,7 @@
 import { isThinkingLevel, type ThinkingLevel, type ModelChoice } from '@mini-harness/llm/vocabulary';
 import { DomainError } from '@mini-harness/platform/errors';
-import type { ModelCatalogPort } from '@mini-harness/models/api';
+import type { ModelCatalogPort } from './api.ts';
+import type { NativeMessage } from '@mini-harness/llm/api';
 
 type Capabilities = ReturnType<ModelCatalogPort['capabilities']>;
 
@@ -57,4 +58,27 @@ export function selectModel(
         ? 'Unknown model: ' + explicit.provider + '/' + explicit.id
         : 'Configure a model before sending a message'),
   );
+}
+
+export function assertImageInput(capabilities: Capabilities, count: number, queued = false) {
+  if (count && !capabilities?.input.includes('image'))
+    throw new DomainError(
+      'invalid_input',
+      queued
+        ? 'The selected model does not support queued image input'
+        : 'The selected model does not support image input. Choose an image-capable model and retry.',
+    );
+}
+
+export function prepareModelMessages(capabilities: Capabilities, messages: NativeMessage[]): NativeMessage[] {
+  if (capabilities?.input.includes('image')) return messages;
+  return messages.map((message) => {
+    if (message.role === 'assistant' || !Array.isArray(message.content)) return message;
+    return {
+      ...message,
+      content: message.content.map((part) =>
+        part.type === 'image' ? { type: 'text' as const, text: '[Image unavailable to this model]' } : part,
+      ),
+    };
+  });
 }

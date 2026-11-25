@@ -31,15 +31,15 @@ test('appearance, parallelism and child defaults update without interrupting a r
     rmSync(root, { recursive: true, force: true });
   });
   await runtime.start();
-  const item = runtime.plugins.ctx.harnessRegistry.create();
+  const item = runtime.plugins.ctx.harnessSessions.create();
   const pending = runtime.plugins.ctx.harnessRuns.send(item.id, 'Hold');
   await waiting;
-  const original = runtime.plugins.ctx.harnessRegistry.log(item.id);
+  const original = runtime.plugins.ctx.harnessSessions.log(item.id);
   await runtime.configuration.update({
     entries: { 'core:theme': { config: { appearance: 'dark' } }, subagents: { config: { maxParallel: 2 } } },
   });
   assert.equal(runtime.settings.entries['core:theme']?.config?.appearance, 'dark');
-  assert.strictEqual(runtime.plugins.ctx.harnessRegistry.log(item.id), original);
+  assert.strictEqual(runtime.plugins.ctx.harnessSessions.log(item.id), original);
   assert.equal(runtime.settings.entries.subagents?.config?.maxParallel, 2);
   assert.equal(runtime.plugins.ctx.harnessRuns.active(item.id), true);
   await assert.rejects(
@@ -61,13 +61,13 @@ test('appearance, parallelism and child defaults update without interrupting a r
   assert.equal(runtime.plugins.ctx.harnessRuns.active(item.id), true);
   release();
   assert.equal(await pending, 'Done');
-  const firstMessage = runtime.plugins.ctx.harnessRegistry.log(item.id).projection().messages[0].id;
+  const firstMessage = runtime.plugins.ctx.harnessSessions.log(item.id).projection().messages[0].id;
   await runtime.configuration.update({
     entries: { files: { disabled: true }, 'session-helper': { disabled: true } },
   });
   await runtime.plugins.ctx.harnessRuns.send(item.id, 'After the policy changes');
-  assert.equal(runtime.plugins.ctx.harnessRegistry.log(item.id).projection().messages[0].id, firstMessage);
-  assert.strictEqual(runtime.plugins.ctx.harnessRegistry.log(item.id), original);
+  assert.equal(runtime.plugins.ctx.harnessSessions.log(item.id).projection().messages[0].id, firstMessage);
+  assert.strictEqual(runtime.plugins.ctx.harnessSessions.log(item.id), original);
   const advertised = mock.requests.at(-1)?.tools as { function: { name: string } }[];
   assert.equal(
     advertised.some(({ function: tool }) => tool.name === 'read'),
@@ -75,7 +75,7 @@ test('appearance, parallelism and child defaults update without interrupting a r
   );
   assert.ok(
     !runtime.plugins.ctx.harnessTools
-      .list({ resourceId: item.id, scope: runtime.plugins.ctx.harnessRegistry.runScope(item.id) })
+      .list({ resourceId: item.id, scope: runtime.plugins.ctx.harnessSessions.runScope(item.id) })
       .map(({ name }) => name)
       .includes('read'),
   );
@@ -117,15 +117,15 @@ test(
       "export default () => globalThis[Symbol.for('mini-harness-test-admission')]();",
     );
     await runtime.start();
-    const target = runtime.plugins.ctx.harnessRegistry.create();
-    const obsolete = runtime.plugins.ctx.harnessRegistry.create();
+    const target = runtime.plugins.ctx.harnessSessions.create();
+    const obsolete = runtime.plugins.ctx.harnessSessions.create();
     const obsoleteScope = `session:${obsolete.id}` as const;
     const obsoleteConfig = { entries: {} };
     await runtime.configuration.update({ scopes: { [obsoleteScope]: obsoleteConfig } });
     const otherDirectory = join(root, 'other');
     mkdirSync(otherDirectory);
     const otherWorkspace = runtime.plugins.ctx.harnessWorkspaces.register(otherDirectory);
-    const other = runtime.plugins.ctx.harnessRegistry.create({ workspaceId: otherWorkspace.id });
+    const other = runtime.plugins.ctx.harnessSessions.create({ workspaceId: otherWorkspace.id });
     const workspace = `workspace:${target.workspaceId}` as const;
     const updating = runtime.configuration.update({
       scopes: {
@@ -141,7 +141,7 @@ test(
       targetRun = runtime.plugins.ctx.harnessRuns.send(target.id, 'Wait for the new composition');
       assert.equal(runtime.plugins.ctx.harnessRuns.info(target.id)?.state, 'queued');
       sibling = runtime.plugins.ctx.harnessRuns.send(other.id, 'Unaffected workspace');
-      deletion = runtime.plugins.ctx.harnessRegistry.delete([obsolete.id]);
+      deletion = runtime.plugins.ctx.harnessSessions.delete([obsolete.id]);
     } finally {
       release();
     }

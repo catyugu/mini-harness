@@ -20,7 +20,11 @@ export function projectMessage(
 }
 
 /** Read projections are pure and never write synthetic history back into the transcript. */
-export function projectLog(entries: SessionEntry[], branch: SessionEntry[]): SessionProjection {
+export function projectLog(
+  branch: SessionEntry[],
+  execution: (id: string) => NativeToolMessage | undefined,
+  run?: SessionProjection['run'],
+): SessionProjection {
   const state: SessionProjection = {
     leafId: branch.at(-1)?.id ?? null,
     messages: [],
@@ -28,11 +32,8 @@ export function projectLog(entries: SessionEntry[], branch: SessionEntry[]): Ses
     contextMessages: [],
     contextEntryIds: [],
   };
-  for (const entry of entries) if (entry.type === 'run') state.run = entry.run;
-  const raw = new Map(
-    entries.flatMap((entry) => (entry.type === 'tool-execution' ? [[entry.id, entry.result] as const] : [])),
-  );
-  const messageOf = (entry: SessionEntry) => projectMessage(entry, (id) => raw.get(id));
+  if (run) state.run = run;
+  const messageOf = (entry: SessionEntry) => projectMessage(entry, execution);
   const calls = new Map<string, unknown>();
   const edits = new Map<string, NativeMessage['content'] | null>();
   let compaction: Extract<SessionEntry, { type: 'compaction' }> | undefined;

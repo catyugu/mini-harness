@@ -1,16 +1,20 @@
 import type { ModelSummary, ProviderModel } from '../shared/catalog.ts';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
+import type { LlmAdapter } from '@mini-harness/llm/api';
 
-export interface ModelCatalogPort {
+/** A provider or adapter contributes its models without exposing connection or credential details. */
+export interface ModelSource {
   list(): ModelSummary[];
-  available(): Promise<ModelSummary[]>;
+  available?(): Promise<ModelSummary[]>;
   /** Returns undefined when the choice is absent from this catalog. */
   resolve(choice: ModelChoice): ModelChoice | undefined;
   capabilities(choice: ModelChoice): ProviderModel | undefined;
-  /** The protocol identifier and endpoint from the configured model. */
-  connection(choice: ModelChoice): { api: string; baseUrl: string } | undefined;
-  /** Resolve the provider key for server-side adapter code. */
-  apiKey(choice: ModelChoice): Promise<string | undefined>;
+}
+
+export interface ModelCatalogPort extends ModelSource {
+  available(): Promise<ModelSummary[]>;
+  /** Register model metadata and its adapter together, with one scope, priority and lifetime. */
+  register(source: ModelSource, adapter: LlmAdapter, priority?: number): () => void;
 }
 
 export interface ModelPreference {

@@ -11,6 +11,13 @@ export function createScopeKey(parent?: ScopeKey): ScopeKey {
   return key;
 }
 
+/** Change a runtime relationship explicitly. The topology is always acyclic. */
+export function setScopeParent(key: ScopeKey, parent?: ScopeKey) {
+  if (scopeChainOf(parent).includes(key)) throw new Error('Cyclic scope ancestry');
+  if (parent) parents.set(key, parent);
+  else parents.delete(key);
+}
+
 export function scopeParentOf(key: ScopeKey) {
   return parents.get(key);
 }
@@ -18,8 +25,26 @@ export function scopeParentOf(key: ScopeKey) {
 /** Nearest scope first. */
 export function scopeChainOf(key?: ScopeKey): ScopeKey[] {
   const chain: ScopeKey[] = [];
-  for (; key; key = parents.get(key)) chain.push(key);
+  for (; key; key = scopeParentOf(key)) chain.push(key);
   return chain;
+}
+
+/** Rank visible contributions by nearest scope, then descending priority. */
+export function rankScoped<T extends { scope?: ScopeKey; priority: number }>(
+  key: ScopeKey | undefined,
+  entries: Iterable<T>,
+) {
+  const ancestry = [...scopeChainOf(key), undefined];
+  return [...entries]
+    .filter(({ scope }) => ancestry.includes(scope))
+    .sort((a, b) => ancestry.indexOf(a.scope) - ancestry.indexOf(b.scope) || b.priority - a.priority);
+}
+
+export function sameRank(
+  a: { scope?: ScopeKey; priority: number },
+  b?: { scope?: ScopeKey; priority: number },
+) {
+  return b !== undefined && a.scope === b.scope && a.priority === b.priority;
 }
 
 /** Tag a newly created context whose lifetime is already owned by Cordis. */
@@ -34,12 +59,11 @@ export function scopeOf(ctx: Context): ScopeKey | undefined {
 
 /** Route to unscoped listeners and listeners on the target's ancestry. */
 export function scopeTarget(base: Context, key = scopeOf(base)) {
-  const chain = scopeChainOf(key);
   const filter = base[Context.filter];
   return base.extend({
     [Context.filter](ctx: Context) {
       const scope = scopeOf(ctx);
-      return (!filter || filter.call(base, ctx)) && (!scope || chain.includes(scope));
+      return (!filter || filter.call(base, ctx)) && (!scope || scopeChainOf(key).includes(scope));
     },
   });
 }
