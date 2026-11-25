@@ -14,7 +14,7 @@ mini-harness plugin --profile web remove <package>
 
 Installing a package changes only the selected Profile's npm dependencies. Declare an Entry in the Profile to activate it; restart before updating or removing packages used by a running application. npm lifecycle scripts default to disabled; authorize them explicitly with `--ignore-scripts=false`. To develop locally, declare the built package directory as an entry name in a Profile. Multiple local packages can run together. Use the Web Plugins page to enable and configure available entries; it does not install or delete code.
 
-Metadata supplies display information, not scope or authority. Package exports can declare `./client`; local bundles may use `browser` and `browserDirectory`. Publish only dedicated browser build output. A server module must export `browserConfig(config)` to expose an explicit public projection; otherwise its browser receives `{}`. Browser-only entries use their own configuration. Settings forms expose declared schema fields only, excluding write-only or password fields. Keep credentials in `harnessPluginSecrets`.
+Metadata supplies display information, not scope or authority. Package exports can declare `./client`; local bundles may use `browser` and `browserDirectory`. Publish only dedicated browser build output. Browser entries receive their configuration directly; independent client entries have their own config. Keep credentials in `harnessPluginSecrets`.
 
 ## Declare a Cordis plugin
 

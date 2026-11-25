@@ -6,7 +6,6 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import {
   defineConfig,
-  publicConfigSchema,
   scopeKeys,
   type CompositionConfig,
   type EntryConfiguration,
@@ -130,7 +129,7 @@ export class PluginCatalog {
         }
         try {
           const url = location?.url ?? pathToFileURL(source!).href + '?v=' + lstatSync(source!).mtimeMs;
-          const { plugin, Config, browserConfig, metadata } = await loadPluginModule(
+          const { plugin, Config, metadata } = await loadPluginModule(
             url,
             location?.exportName,
           );
@@ -141,7 +140,6 @@ export class PluginCatalog {
             plugin,
             module: url + '#' + (location?.exportName ?? 'default'),
             Config,
-            browserConfig,
           });
         } catch (error) {
           return { ...descriptor, error: error instanceof Error ? error.message : String(error) };
@@ -185,10 +183,8 @@ export class PluginCatalog {
         browserStyles,
         Config: _Config,
         location: _location,
-        browserConfig: _browserConfig,
         module: _module,
         scopeKey: _scopeKey,
-        configSchema: schema,
         ...metadata
       } = descriptor;
       const instances: NonNullable<PluginMetadata['instances']> = group.map((item) => {
@@ -208,7 +204,7 @@ export class PluginCatalog {
         return {
           scope: item.scopeKey ?? 'application',
           name: item.name,
-          configSchema: publicConfigSchema(item.configSchema),
+          configSchema: item.configSchema,
           error,
           state: !enabled ? 'disabled' : error ? 'failed' : mounted(key) ? 'ready' : 'inactive',
         };
@@ -227,7 +223,6 @@ export class PluginCatalog {
             : 'disabled';
       return {
         ...metadata,
-        configSchema: publicConfigSchema(schema),
         instances,
         state,
         error: failed?.error ?? instances.find((instance) => instance.error)?.error ?? metadata.error,

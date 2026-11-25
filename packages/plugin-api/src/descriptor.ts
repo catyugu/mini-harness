@@ -25,6 +25,4 @@ export interface ResolvedPlugin extends PluginInfo {
   Config?: Plugin.Base['Config'];
   /** JSON form projection of the module's native Config, when available. */
   configSchema?: Record<string, any>;
-  /** Explicit public projection for a module with both server and browser implementations. */
-  browserConfig?: (config: Readonly<Record<string, unknown>>) => Record<string, unknown>;
 }

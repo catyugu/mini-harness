@@ -57,7 +57,5 @@ export async function loadPluginModule(url: string, exportName = 'default') {
     exports[exportName === 'default' ? 'metadata' : exportName + 'Metadata'];
   const Config: Plugin.Base['Config'] =
     plugin?.Config ?? exports[exportName === 'default' ? 'Config' : exportName + 'Config'];
-  const browserConfig: import('@mini-harness/plugin-api/descriptor').ResolvedPlugin['browserConfig'] =
-    exports[exportName === 'default' ? 'browserConfig' : exportName + 'BrowserConfig'];
-  return { plugin, metadata, Config, browserConfig };
+  return { plugin, metadata, Config };
 }

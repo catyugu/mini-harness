@@ -107,15 +107,8 @@ export class PluginHost implements ScopePort {
     if (!this.writePlugin) throw new DomainError('unavailable', 'Plugin settings are unavailable');
     await this.writePlugin(id, undefined, patch, () => {
       signal.throwIfAborted();
-      const entry = this.browserState.entries.find((item) => item.id === id);
-      if (!entry || !this.browserState.configurable.has(id))
+      if (!this.browserState.configurable.has(id))
         throw new DomainError('not_found', 'Plugin settings are unavailable');
-      if (
-        patch &&
-        typeof patch === 'object' &&
-        Object.keys(patch).some((key) => !Object.hasOwn(entry.config, key))
-      )
-        throw new DomainError('forbidden', 'Configuration field is not exposed to the browser');
     });
   }
 

@@ -98,14 +98,6 @@ export function describePlugin(id: string, folder: string, entry?: string): Disc
   const inferredDirectory =
     standardClient && dirname(standardClient) !== '.' ? dirname(standardClient) : undefined;
   const browserDirectory = manifest.browserDirectory ?? inferredDirectory;
-  if (source && browser) {
-    const location = relative(realpathSync(folder), realpathSync(source)).split(sep).join('/');
-    if (
-      location === browser ||
-      (typeof browserDirectory === 'string' && location.startsWith(browserDirectory.replace(/\/$/, '') + '/'))
-    )
-      throw new Error('Server entry cannot be inside the public browser asset directory');
-  }
   const resources =
     browser !== undefined ? readBrowserAssets(id, folder, browser, browserDirectory) : undefined;
   const { configGroups, configHint } = manifest;

@@ -42,8 +42,6 @@ export const Config = defineConfig(
   },
   (config) => (typeof config.label !== 'string' || !config.label.trim() ? 'Enter a note label' : undefined),
 );
-export const browserConfig = (config: Readonly<Record<string, unknown>>) => ({ label: config.label });
-
 export function apply(ctx: Context) {
   const sessions: SessionAccess = ctx.harnessSessions.access();
   const execute: Execution = ctx.harnessExecution;
