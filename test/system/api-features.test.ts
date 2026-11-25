@@ -165,11 +165,12 @@ test('GUI APIs configure providers, persist keys privately, discover Skills and 
   );
 });
 
-
 test('a trusted gateway can forward plugin routes without an additional host allowlist', async (t) => {
   const { app } = await fixture(t);
   const ctx = app.runtime.plugins.ctx;
-  const release = ctx.harnessRoutes.register('POST', '/api/extension/ping', async ({ body }) => ({ received: await body() }));
+  const release = ctx.harnessRoutes.register('POST', '/api/extension/ping', async ({ body }) => ({
+    received: await body(),
+  }));
   const signal = new AbortController();
   let origin = '';
   const gateway = createServer((req, res) => {
@@ -187,15 +188,21 @@ test('a trusted gateway can forward plugin routes without an additional host all
     await new Promise<void>((resolve) => gateway.close(() => resolve()));
     await release();
   });
-  const send = (path: string, headers: Record<string, string> = {}) => fetch(origin + path, {
-    method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify({ value: 42 }),
-  });
+  const send = (path: string, headers: Record<string, string> = {}) =>
+    fetch(origin + path, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...headers },
+      body: JSON.stringify({ value: 42 }),
+    });
   assert.equal((await send('/api/extension/ping')).status, 401);
   const headers = { authorization: 'Bearer gateway-token' };
   const result = await send('/api/extension/ping', headers);
   assert.equal(result.status, 200);
   assert.deepEqual(await result.json(), { received: { value: 42 } });
-  assert.equal((await send('/api/extension/ping', { ...headers, origin: 'https://example.invalid' })).status, 403);
+  assert.equal(
+    (await send('/api/extension/ping', { ...headers, origin: 'https://example.invalid' })).status,
+    403,
+  );
   assert.equal((await send('/api/shutdown', headers)).status, 403);
 });
 
@@ -206,7 +213,8 @@ test('unbound conversations can run, persist attachments and be deleted without 
   assert.equal(session.workspaceId, null);
   const data = Buffer.from('workspace-free attachment').toString('base64');
   const started = await request('/sessions/' + session.id + '/runs', 'POST', {
-    message: 'Read attachment', attachments: [{ name: 'note.txt', mimeType: 'text/plain', data }],
+    message: 'Read attachment',
+    attachments: [{ name: 'note.txt', mimeType: 'text/plain', data }],
   });
   assert.equal(started.status, 202, JSON.stringify(started.body));
   assert.equal((await finish(session.id)).body.run.state, 'completed');
