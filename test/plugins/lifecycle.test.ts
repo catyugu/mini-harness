@@ -1023,10 +1023,35 @@ test('custom scope namespaces support normal Cordis composition and inheritance'
       },
     },
   });
-  const host = new PluginHost(ctx, directory, fixtureModules([
-    { id: 'global', title: 'Global', description: '', plugin: { provide: ['greeting'], apply(ctx) { ctx.provide('greeting', 'global'); } } },
-    { id: 'local', title: 'Local', description: '', plugin: { provide: ['greeting'], apply(ctx) { ctx.provide('greeting', 'project'); } } },
-  ]), () => settings);
+  const host = new PluginHost(
+    ctx,
+    directory,
+    fixtureModules([
+      {
+        id: 'global',
+        title: 'Global',
+        description: '',
+        plugin: {
+          provide: ['greeting'],
+          apply(ctx) {
+            ctx.provide('greeting', 'global');
+          },
+        },
+      },
+      {
+        id: 'local',
+        title: 'Local',
+        description: '',
+        plugin: {
+          provide: ['greeting'],
+          apply(ctx) {
+            ctx.provide('greeting', 'project');
+          },
+        },
+      },
+    ]),
+    () => settings,
+  );
   host.register('project', () => ({}), true);
   host.register('task', () => ({ parent: 'project:alpha' }));
   t.after(async () => {

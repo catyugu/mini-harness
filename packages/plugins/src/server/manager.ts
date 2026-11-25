@@ -12,12 +12,7 @@ import {
 import { localPluginIdPattern, isScopeKey } from '@mini-harness/plugin-api/selection';
 import { isDeepStrictEqual } from 'node:util';
 import type { ProfileRuntime } from '@mini-harness/plugin-api/profile';
-import type {
-  ScopeAddress,
-  ScopeKey,
-  ScopePort,
-  ScopeSettings,
-} from '@mini-harness/plugin-api/scopes';
+import type { ScopeAddress, ScopeKey, ScopePort, ScopeSettings } from '@mini-harness/plugin-api/scopes';
 import { planBrowser, publishBrowser } from './browser-assets.ts';
 import { addAbortListener } from 'node:events';
 import type { UpgradeHandler } from '@mini-harness/transport/routes';
@@ -142,11 +137,7 @@ export class PluginHost implements ScopePort {
         this.entries.get(id)?.active === true || this.browserState.entries.some((entry) => entry.id === id),
     );
   }
-  register(
-    kind: string,
-    resolve: (id: string) => ScopeAddress | undefined,
-    eager = false,
-  ) {
+  register(kind: string, resolve: (id: string) => ScopeAddress | undefined, eager = false) {
     if (this.scopeSources.has(kind)) throw new Error('Scope source already registered: ' + kind);
     this.scopeSources.set(kind, { resolve, eager });
     return () => {

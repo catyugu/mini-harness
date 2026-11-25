@@ -9,10 +9,7 @@ export function setup(ctx: Context) {
   ctx.effect(() =>
     ctx.harnessScopes.register(
       'workspace',
-      (id) =>
-        catalog.list().some((entry) => entry.id === id)
-          ? {}
-          : undefined,
+      (id) => (catalog.list().some((entry) => entry.id === id) ? {} : undefined),
       true,
     ),
   );

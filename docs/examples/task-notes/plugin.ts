@@ -70,7 +70,10 @@ export function apply(ctx: Context) {
           },
           async execute(_call, input) {
             const note = String(input.note);
-            const records: SessionRecords = ctx.harnessSessions.records(sessionId, { pluginId: 'task-notes', instanceId: 'task-notes' });
+            const records: SessionRecords = ctx.harnessSessions.records(sessionId, {
+              pluginId: 'task-notes',
+              instanceId: 'task-notes',
+            });
             await records.append({ note }, { title: label(), content: note });
             return { content: [{ type: 'text', text: 'Task note saved.' }] };
           },

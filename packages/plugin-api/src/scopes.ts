@@ -21,11 +21,7 @@ export interface ScopeOption {
 }
 
 export interface ScopePort {
-  register(
-    namespace: string,
-    resolve: (id: string) => ScopeAddress | undefined,
-    eager?: boolean,
-  ): () => void;
+  register(namespace: string, resolve: (id: string) => ScopeAddress | undefined, eager?: boolean): () => void;
   prepare(key: ScopeKey, signal?: AbortSignal): Promise<void>;
   /** Read the nearest prepared Cordis service without changing a parent or sibling scope. */
   require<Name extends keyof Context & string>(

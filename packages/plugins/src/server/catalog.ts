@@ -227,12 +227,7 @@ export class PluginCatalog {
     });
   }
 
-  entry(
-    plan: ConfiguredPlugin,
-    context: Context,
-    id = plan.id,
-    scopeKey?: ScopeKey,
-  ): EntryOptions {
+  entry(plan: ConfiguredPlugin, context: Context, id = plan.id, scopeKey?: ScopeKey): EntryOptions {
     const { descriptor } = plan;
     const plugin = descriptor.plugin;
     if (!plugin) throw new Error('Missing server module: ' + plan.id);
@@ -280,8 +275,7 @@ export class PluginCatalog {
     for (const item of descriptors) {
       const { id } = item;
       if (item.scopeKey !== scopeKey || !this.enabled(item, settings)) continue;
-      const entry =
-        scopeKey ? settings.scopes[scopeKey]?.entries?.[id] : settings.entries[id];
+      const entry = scopeKey ? settings.scopes[scopeKey]?.entries?.[id] : settings.entries[id];
       try {
         if (item.error) throw new DomainError('invalid_input', 'Invalid plugin ' + id + ': ' + item.error);
         const values = entry?.config;

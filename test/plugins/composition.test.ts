@@ -184,7 +184,10 @@ export const apply = (ctx, config) => {
   assert.equal(created.status, 200);
   assert.equal(created.body.parentId, null);
   assert.equal(created.body.workspaceId, parent.workspaceId);
-  assert.equal((await request(operation(workspaceKey, 'lookup'), 'POST', { input: outside.id })).body.id, outside.id);
+  assert.equal(
+    (await request(operation(workspaceKey, 'lookup'), 'POST', { input: outside.id })).body.id,
+    outside.id,
+  );
   assert.deepEqual((await request(operation(workspaceKey), 'POST', { input: 'World' })).body, {
     workspaceId: parent.workspaceId,
     input: 'World',
@@ -207,7 +210,9 @@ export const apply = (ctx, config) => {
       'scoped_greeting',
     ),
   );
-  assert.ok((await request(operation(workspaceKey, 'tools'), 'POST', { input: outside.id })).body.includes('read'));
+  assert.ok(
+    (await request(operation(workspaceKey, 'tools'), 'POST', { input: outside.id })).body.includes('read'),
+  );
   assert.ok(names(child.id).includes('scoped_greeting'));
   assert.ok(!names(child.id).includes('read'));
   for (const id of [sibling.id, outside.id]) {
