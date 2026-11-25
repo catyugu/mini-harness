@@ -6,7 +6,6 @@ export const metadata: PluginInfo = {
   title: 'Theme',
   description: 'Application theme',
   configChanges: 'live',
-  browserConfig: ['appearance'],
   configSchema: Type.Object(
     {
       appearance: Type.Union([Type.Literal('system'), Type.Literal('light'), Type.Literal('dark')], {

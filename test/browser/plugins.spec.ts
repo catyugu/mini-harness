@@ -20,7 +20,6 @@ test('frontend plugins own UI contributions and clean up on disable and reconfig
     join(folder, 'plugin.json'),
     JSON.stringify({
       title: 'UI example',
-      browserConfig: ['label', 'showDetails'],
       icon: {
         path: 'M2 2h20v20H2z',
         viewBox: '0 0 24 24',
@@ -187,7 +186,6 @@ test('a failed browser plugin reports the saved state and can be retried', async
   writeFileSync(join(folder, 'plugin.js'), 'export default () => {}');
   writeJson(join(folder, 'plugin.json'), {
     title: 'Retry UI',
-    browserConfig: ['ready'],
     browserAssets: ['web/preload.js'],
     browserPreload: 'web/preload.js',
     configSchema: {

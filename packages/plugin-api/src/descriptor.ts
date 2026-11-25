@@ -20,8 +20,6 @@ export interface PluginInfo {
   configGroups?: { title: string; fields: string[] }[];
   configHint?: string;
   configSchema?: Record<string, any>;
-  /** Top-level configuration fields explicitly shared with the browser entry. */
-  browserConfig?: string[];
   /** A mounted plugin may opt in to configuration updates without a restart. */
   configChanges?: 'live';
   validateConfig?(config: Readonly<Record<string, unknown>>, context: ConfigValidationContext): void;

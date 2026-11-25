@@ -8,7 +8,6 @@ export const metadata: PluginInfo = {
   title: 'Conversation',
   description: 'Conversation interface',
   configChanges: 'live',
-  browserConfig: ['queueMode'],
   configSchema: Type.Object(
     {
       queueMode: Type.Union([Type.Literal('steer'), Type.Literal('followUp')], { default: 'steer' }),
