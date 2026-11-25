@@ -72,7 +72,12 @@ declare module 'mini-harness/cordis' {
 
 export interface UpgradePort {
   register(path: string, handler: UpgradeHandler): () => Promise<void>;
-  dispatch(path: string, request: IncomingMessage, socket: import('node:stream').Duplex, head: Buffer): boolean;
+  dispatch(
+    path: string,
+    request: IncomingMessage,
+    socket: import('node:stream').Duplex,
+    head: Buffer,
+  ): boolean;
   close(): void;
 }
 

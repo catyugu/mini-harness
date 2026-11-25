@@ -82,46 +82,54 @@ export function apply(ctx: Context) {
     }),
   );
   const running = new Map<string, import('mini-harness/execution').ExecutionHandle>();
-  ctx.effect(() => routes.register('POST', '/api/extensions/task-notes/cancel-follow-up', async ({ body }) => {
-    const { runId } = await body();
-    return { cancelled: typeof runId === 'string' && (running.get(runId)?.cancel() ?? false) };
-  }));
-  ctx.effect(() => routes.register('GET', '/api/extensions/task-notes/smoke', () => ({
-    label: label(),
-    ready: data.read('seen', false),
-    credential: hasCredential(),
-  })));
-  ctx.effect(() => routes.register('PUT', '/api/extensions/task-notes/credential', async ({ body }) => {
-    const token = (await body())?.token;
-    if (typeof token !== 'string' || !token.trim())
-      throw new HttpError('invalid_input', 'Enter a service token');
-    secrets.write('service-token', token);
-    return { credential: hasCredential() };
-  }));
-  ctx.effect(() => routes.register('POST', '/api/extensions/task-notes/follow-up', async ({ body, signal }) => {
-    const { parentId, message, requireApproval } = (await body()) ?? {};
-    if (
-      typeof parentId !== 'string' ||
-      typeof message !== 'string' ||
-      !message.trim() ||
-      !sessions.get(parentId)
-    )
-      throw new HttpError('invalid_input', 'Provide a parent conversation and a follow-up message');
-    const scope = `session:${parentId}` as const;
-    await ctx.harnessProfileScopes.prepare(scope, signal);
-    const models: ModelCatalogPort = ctx.harnessProfileScopes.context(scope).harnessModels;
-    const model = sessions.history(parentId).model;
-    if (!model || !models.resolve(model))
-      throw new HttpError('invalid_input', 'Send a message to the parent conversation first');
-    if (requireApproval === true) await confirm(parentId, { title: 'Start a follow-up', message }, signal);
-    const child = sessions.create({ parentId, title: 'Task follow-up' });
-    const run = execute.submit(child.id, { message, model }, { signal });
-    running.set(run.id, run);
-    try {
-      const text = await run.result;
-      return { childId: child.id, runId: run.id, state: execute.status(child.id)?.state, text };
-    } finally {
-      running.delete(run.id);
-    }
-  }));
+  ctx.effect(() =>
+    routes.register('POST', '/api/extensions/task-notes/cancel-follow-up', async ({ body }) => {
+      const { runId } = await body();
+      return { cancelled: typeof runId === 'string' && (running.get(runId)?.cancel() ?? false) };
+    }),
+  );
+  ctx.effect(() =>
+    routes.register('GET', '/api/extensions/task-notes/smoke', () => ({
+      label: label(),
+      ready: data.read('seen', false),
+      credential: hasCredential(),
+    })),
+  );
+  ctx.effect(() =>
+    routes.register('PUT', '/api/extensions/task-notes/credential', async ({ body }) => {
+      const token = (await body())?.token;
+      if (typeof token !== 'string' || !token.trim())
+        throw new HttpError('invalid_input', 'Enter a service token');
+      secrets.write('service-token', token);
+      return { credential: hasCredential() };
+    }),
+  );
+  ctx.effect(() =>
+    routes.register('POST', '/api/extensions/task-notes/follow-up', async ({ body, signal }) => {
+      const { parentId, message, requireApproval } = (await body()) ?? {};
+      if (
+        typeof parentId !== 'string' ||
+        typeof message !== 'string' ||
+        !message.trim() ||
+        !sessions.get(parentId)
+      )
+        throw new HttpError('invalid_input', 'Provide a parent conversation and a follow-up message');
+      const scope = `session:${parentId}` as const;
+      await ctx.harnessProfileScopes.prepare(scope, signal);
+      const models: ModelCatalogPort = ctx.harnessProfileScopes.context(scope).harnessModels;
+      const model = sessions.history(parentId).model;
+      if (!model || !models.resolve(model))
+        throw new HttpError('invalid_input', 'Send a message to the parent conversation first');
+      if (requireApproval === true) await confirm(parentId, { title: 'Start a follow-up', message }, signal);
+      const child = sessions.create({ parentId, title: 'Task follow-up' });
+      const run = execute.submit(child.id, { message, model }, { signal });
+      running.set(run.id, run);
+      try {
+        const text = await run.result;
+        return { childId: child.id, runId: run.id, state: execute.status(child.id)?.state, text };
+      } finally {
+        running.delete(run.id);
+      }
+    }),
+  );
 }

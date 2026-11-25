@@ -1,9 +1,6 @@
 import type { ScopeAddress } from '@mini-harness/plugin-api/configuration';
 import { DomainError } from '@mini-harness/platform/errors';
-import {
-  assertOutsideMountTransaction,
-  type MutationPort,
-} from '@mini-harness/plugin-api/mutation-api';
+import { assertOutsideMountTransaction, type MutationPort } from '@mini-harness/plugin-api/mutation-api';
 
 /** One transaction gate for HTTP settings and installed plugin operations. */
 export class MutationGate implements MutationPort {

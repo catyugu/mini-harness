@@ -31,4 +31,3 @@ export const http = {
     ctx.on('harness/drain', () => routes.drain());
   },
 };
-

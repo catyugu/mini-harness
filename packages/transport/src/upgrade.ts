@@ -5,10 +5,7 @@ import { RequestWork } from './request-work.ts';
 
 export class Upgrades {
   private readonly admission = new AbortController();
-  private readonly entries = new Map<
-    string,
-    { handler: UpgradeHandler; work: RequestWork }
-  >();
+  private readonly entries = new Map<string, { handler: UpgradeHandler; work: RequestWork }>();
 
   register(path: string, handler: UpgradeHandler) {
     if (this.entries.has(path)) throw new Error('Duplicate WebSocket path: ' + path);
@@ -39,7 +36,8 @@ export class Upgrades {
       connection.abort();
     });
     socket.on('error', () => socket.destroy());
-    void entry.work.run(controller, () => {
+    void entry.work
+      .run(controller, () => {
         signal.throwIfAborted();
         return entry.handler(request, socket, head, signal);
       })
