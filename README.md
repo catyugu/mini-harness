@@ -11,7 +11,7 @@ npm install -g mini-harness
 mini-harness --detached
 ```
 
-To run from source, use `pnpm install --frozen-lockfile && pnpm run build`, then `node dist/bin/mini-harness.js --detached`.
+To run from source, use `pnpm install --frozen-lockfile`, then `pnpm start --detached`.
 
 Ordinary foreground startup opens the browser; use `--no-open` to keep it closed. Detached startup prints the URL without opening a browser. The server listens on `127.0.0.1`; the browser keeps the access token in tab storage. Configuration lives in `~/.mini-harness`, or `MINI_HARNESS_HOME`.
 

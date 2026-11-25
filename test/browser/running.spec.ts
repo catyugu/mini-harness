@@ -386,7 +386,7 @@ test('the browser starts with authenticated requests and recovers when credentia
       await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
     });
     await page.evaluate(async () => {
-      const { api } = (await import(String('/packages/ui-runtime/src/browser/http.js'))) as {
+      const { api } = (await import(String('mini-harness/ui-runtime/http'))) as {
         api: (path: string, options: RequestInit) => Promise<Response>;
       };
       await api('/settings', {

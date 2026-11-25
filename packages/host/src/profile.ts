@@ -312,6 +312,18 @@ function isPlugin(value: unknown): value is Plugin {
   return typeof value === 'function' || (object(value) && typeof value.apply === 'function');
 }
 
+// Resolve built-in source references relative to the declaring Profile module.
+function browserResource(module: string, source: string, extension: '.ts' | '.css') {
+  if (!/^\.\.?\//.test(source) || !source.endsWith(extension))
+    throw new Error('Invalid built-in browser source: ' + source);
+  const file = fileURLToPath(new URL(source.replace(/\.ts$/, '.js'), new URL(module, installed)));
+  const path = relative(fileURLToPath(installed), file).split(sep).join('/');
+  const owner = module.split('/')[1];
+  if (!path.startsWith('packages/' + owner + '/src/browser/') || !statSync(file).isFile())
+    throw new Error('Invalid built-in browser resource: ' + source);
+  return '/' + path;
+}
+
 async function moduleFor(
   name: string,
 ): Promise<{ plugin?: Plugin; metadata?: PluginInfo; Config?: Plugin.Base['Config'] }> {
@@ -326,7 +338,15 @@ async function moduleFor(
   if (!value && !metadata?.browser) throw new Error('Profile module export not found: ' + name);
   const Config =
     value?.Config ?? exports[target.exportName === 'default' ? 'Config' : target.exportName + 'Config'];
-  return { plugin: value, metadata, Config };
+  return {
+    plugin: value,
+    Config,
+    metadata: metadata && {
+      ...metadata,
+      browser: metadata.browser && browserResource(target.path, metadata.browser, '.ts'),
+      browserStyles: metadata.browserStyles?.map((source) => browserResource(target.path, source, '.css')),
+    },
+  };
 }
 
 export async function profileDescriptors(entries: ReadonlyMap<string, Row>): Promise<ResolvedPlugin[]> {

@@ -1,9 +1,10 @@
+import { cliEntry } from './package-entry.ts';
 import { expect, test, type Page } from '@playwright/test';
 import { parse } from 'yaml';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.ts';
 
 export function readWebProfile(paths: { home: string }) {
@@ -31,7 +32,7 @@ export async function startIsolatedHost(
   const selected = port ?? (await availablePort());
   const child: ChildProcess = spawn(
     process.execPath,
-    [resolve('dist/bin/mini-harness.js'), '--no-open', '--cwd', paths.cwd, '--port', String(selected)],
+    [cliEntry, '--no-open', '--cwd', paths.cwd, '--port', String(selected)],
     {
       env: { ...process.env, MINI_HARNESS_HOME: paths.home },
       stdio: ['ignore', 'pipe', 'pipe'],

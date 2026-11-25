@@ -1,9 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import ts from 'typescript';
 import type { BrowserBootstrap } from '@mini-harness/ui-runtime/bootstrap';
 import { profileDescriptors, readProfile } from '@mini-harness/host/profile';
-import { moduleReferences } from '../../scripts/module-references.ts';
+import { browserPage, verifyBrowserGraph } from '../support/browser-page.ts';
 import { fixture } from '../support/api-fixture.ts';
 
 test('the composed browser graph serves its runtime dependencies and excludes server code', async (t) => {
@@ -19,8 +18,6 @@ test('the composed browser graph serves its runtime dependencies and excludes se
     '/packages/host/src/application.js',
     '/packages/platform/src/local-secret.js',
     '/packages/input/src/prepare.js',
-    '/packages/sdk/src/plugin.js',
-    '/packages/sdk/src/browser-plugin.js',
     '/packages/settings/src/server/manager.js',
     '/packages/transport/src/router.js',
     '/packages/shell/src/server/setup.js',
@@ -29,35 +26,13 @@ test('the composed browser graph serves its runtime dependencies and excludes se
   ])
     assert.equal((await fetch(base + asset)).status, 404, asset);
 
-  const pending = [
-    '/packages/ui-runtime/src/browser/boot.js',
-    '/packages/ui-runtime/src/browser/plugin-settings.js',
-  ];
-  for (const { browser } of plugins) if (browser) pending.push(browser);
-  const seenModules = new Set<string>();
-  for (const path of pending) {
-    if (seenModules.has(path)) continue;
-    seenModules.add(path);
-    const response = await fetch(base + path);
-    assert.equal(response.status, 200, 'Missing browser module: ' + path);
-    const source = ts.createSourceFile(
-      path,
-      await response.text(),
-      ts.ScriptTarget.Latest,
-      true,
-      ts.ScriptKind.JS,
-    );
-    for (const { literal, typeOnly } of moduleReferences(source)) {
-      if (typeOnly) continue;
-      assert.ok(
-        literal.text.startsWith('.') || literal.text.startsWith('/'),
-        'Unbundled browser import in ' + path + ': ' + literal.text,
-      );
-      const target = new URL(literal.text, response.url);
-      assert.equal(target.origin, base, 'Browser module has an off-origin import: ' + path);
-      pending.push(target.pathname);
-    }
-  }
+  const { boot, imports } = browserPage(await (await fetch(base)).text());
+  assert.ok(imports['mini-harness/ui-runtime/plugin-settings']);
+  await verifyBrowserGraph(base, [
+    boot,
+    ...Object.values(imports),
+    ...plugins.flatMap(({ browser }) => (browser ? [browser] : [])),
+  ]);
 
   assert.equal(
     (

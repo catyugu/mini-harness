@@ -1,3 +1,4 @@
+import { cliEntry } from '../support/package-entry.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
@@ -5,7 +6,7 @@ import { mkdtempSync, mkdirSync, existsSync, readFileSync, rmSync, writeFileSync
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { promisify } from 'node:util';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 
 async function unusedPort() {
   const server = createServer();
@@ -26,7 +27,7 @@ test('--detached starts an independent, accessible server', { timeout: 30000 }, 
   mkdirSync(cwd);
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const port = await unusedPort();
-  const cli = resolve('dist/bin/mini-harness.js');
+  const cli = cliEntry;
   const env = { ...process.env, MINI_HARNESS_HOME: home };
   const command = (...args: string[]) => execute(process.execPath, [cli, ...args], { env, timeout: 15000 });
   mkdirSync(home);
@@ -96,7 +97,7 @@ test('port collisions fail promptly and release the instance lock', { timeout: 2
   const call = () =>
     execute(
       process.execPath,
-      [resolve('dist/bin/mini-harness.js'), '--cwd', root, '--port', String(address.port)],
+      [cliEntry, '--cwd', root, '--port', String(address.port)],
       { env: { ...process.env, MINI_HARNESS_HOME: join(root, 'home') }, timeout: 6000 },
     );
   await assert.rejects(call(), /HTTP port is already in use/);

@@ -74,6 +74,17 @@ test('tracked TypeScript uses source specifiers and named type imports', () => {
           'JavaScript source specifier: ' + path + ': ' + literal.text,
         );
       }
+      if (path.startsWith(packages + sep) && !path.includes(sep + 'tests' + sep)) {
+        function checkLiteral(node: ts.Node) {
+          if (ts.isStringLiteralLike(node))
+            assert.ok(
+              !/^(?:\/?packages\/|(?:\.\/)?dist\/).*\.[cm]?js$/.test(node.text),
+              'Direct JavaScript artifact reference: ' + path + ': ' + node.text,
+            );
+          ts.forEachChild(node, checkLiteral);
+        }
+        checkLiteral(ast);
+      }
       for (const statement of ast.statements) {
         if (!ts.isImportDeclaration(statement)) continue;
         const bindings = statement.importClause?.namedBindings;

@@ -7,8 +7,8 @@ export const metadata: PluginInfo = {
   description: 'Inspect staged, unstaged, and untracked files.',
   icon: 'list-checks',
   scope: 'application',
-  browser: '/packages/git-diff/src/browser/setup.js',
-  browserStyles: ['/packages/git-diff/src/browser/style.css'],
+  browser: './browser/setup.ts',
+  browserStyles: ['./browser/style.css'],
 };
 
 const plugin: Plugin.Object = {

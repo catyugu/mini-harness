@@ -6,8 +6,8 @@ export const metadata: PluginInfo = {
   scope: 'application',
   title: 'Settings',
   description: 'Application settings',
-  browserStyles: ['/packages/settings/src/browser/style.css'],
-  browser: '/packages/settings/src/browser/setup.js',
+  browserStyles: ['./browser/style.css'],
+  browser: './browser/setup.ts',
 };
 
 const plugin: Plugin.Object = {

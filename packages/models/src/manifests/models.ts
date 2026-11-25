@@ -92,8 +92,8 @@ export const administrationMetadata: PluginInfo = {
   scope: 'application',
   title: 'Models',
   description: 'Model endpoints and credentials',
-  browserStyles: ['/packages/models/src/browser/style.css'],
-  browser: '/packages/models/src/browser/setup.js',
+  browserStyles: ['../browser/style.css'],
+  browser: '../browser/setup.ts',
 };
 
 export const administration: Plugin.Object = {

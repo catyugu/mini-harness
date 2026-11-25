@@ -5,9 +5,9 @@ export const metadata: PluginInfo = {
   title: 'Layout',
   description: 'Application layout',
   browserStyles: [
-    '/packages/ui-layout/src/browser/frame.css',
-    '/packages/ui-layout/src/browser/responsive.css',
-    '/packages/ui-layout/src/browser/panels.css',
+    './browser/frame.css',
+    './browser/responsive.css',
+    './browser/panels.css',
   ],
-  browser: '/packages/ui-layout/src/browser/setup.js',
+  browser: './browser/setup.ts',
 };

@@ -1,3 +1,4 @@
+import { cliEntry } from '../support/package-entry.ts';
 import { fixture } from '../support/api-fixture.ts';
 import { expectPresent } from '../support/required.ts';
 import test from 'node:test';
@@ -22,7 +23,7 @@ const npmCli =
       ? 'node_modules/npm/bin/npm-cli.js'
       : '../lib/node_modules/npm/bin/npm-cli.js',
   );
-const cli = resolve('dist/bin/mini-harness.js');
+const cli = cliEntry;
 
 test('npm pack output accepts both array and npm 12 keyed objects', () => {
   const result = { name: 'probe-pkg', filename: 'probe-pkg-1.0.0.tgz', files: [{ path: 'package.json' }] };

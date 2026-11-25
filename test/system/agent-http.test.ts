@@ -1,3 +1,4 @@
+import { browserPage } from '../support/browser-page.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, rmSync, writeFileSync, existsSync } from 'node:fs';
@@ -39,8 +40,12 @@ test(
     assert.equal((await fetch(base + '/api/bootstrap')).status, 401);
     const home = await fetch(base + '/');
     assert.equal(home.status, 200);
-    assert.match(await home.text(), /mini-harness/);
-    const bundle = await fetch(base + '/packages/ui-runtime/src/browser/http.js');
+    const html = await home.text();
+    assert.match(html, /mini-harness/);
+    const { imports } = browserPage(html);
+    const http = imports['mini-harness/ui-runtime/http'];
+    assert.ok(http);
+    const bundle = await fetch(base + http);
     assert.equal(bundle.status, 200);
     assert.match(await bundle.text(), /mini-harness-token/);
 

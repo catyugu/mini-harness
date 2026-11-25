@@ -1,3 +1,4 @@
+import { cliEntry } from '../support/package-entry.ts';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -194,7 +195,7 @@ test('launcher inspects and recreates named Profile packages without mounting', 
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const env = { ...process.env, MINI_HARNESS_HOME: join(root, 'home') };
   const cli = (...args: string[]) =>
-    execFileSync(process.execPath, ['dist/bin/mini-harness.js', ...args], { env, encoding: 'utf8' });
+    execFileSync(process.execPath, [cliEntry, ...args], { env, encoding: 'utf8' });
   const extra = join(root, 'extra.yml');
   writeText(extra, 'plugins:\n  - id: git-diff\n    disabled: true\n');
   const config = cli('rescue', '--from-default-profile', 'web', '--patch', extra, '--dump-config');

@@ -27,7 +27,7 @@ export const metadata: PluginInfo = {
   title: 'Shell',
   description: 'Run commands using the configured execution policy.',
   icon: 'terminal',
-  browser: '/packages/shell/src/browser/setup.js',
+  browser: './browser/setup.ts',
   configHint:
     'Isolated mode requires Linux bubblewrap. Host mode executes with your permissions; Full access conversations skip Shell approval.',
 };

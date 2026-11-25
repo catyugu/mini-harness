@@ -4,5 +4,5 @@ export const metadata: PluginInfo = {
   scope: 'application',
   title: 'Session data',
   description: 'Live conversation selection and navigation',
-  browser: '/packages/conversation/src/browser/session-data/setup.js',
+  browser: '../browser/session-data/setup.ts',
 };

@@ -1,7 +1,7 @@
 import { build } from 'esbuild';
 import { createRequire } from 'node:module';
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join, relative } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 
 const require = createRequire(import.meta.url);
 const profileModules = new Map<string, { path: string; exportName: string }>();
@@ -29,7 +29,19 @@ for (const { name, parentPath } of readdirSync('packages', { withFileTypes: true
     const file = join(asset.parentPath, asset.name);
     const target = join('dist/packages', name, 'src', relative(source, file));
     mkdirSync(dirname(target), { recursive: true });
-    copyFileSync(file, target);
+    if (asset.name.endsWith('.html')) {
+      const html = readFileSync(file, 'utf8').replace(
+        /(<script type="module" src=")(\.\.?\/[^"]+\.ts)(")/g,
+        (_, start: string, specifier: string, end: string) => {
+          const entry = resolve(dirname(target), specifier.replace(/\.ts$/, '.js'));
+          const path = relative(resolve('dist'), entry).split(sep).join('/');
+          if (!path.startsWith('packages/') || !existsSync(entry))
+            throw new Error('Missing HTML module entry: ' + specifier);
+          return start + '/' + path + end;
+        },
+      );
+      writeFileSync(target, html);
+    } else copyFileSync(file, target);
   }
 }
 
@@ -64,9 +76,10 @@ for (const owner of readdirSync('vendor', { withFileTypes: true })) {
   }
 }
 
+const editorEntry = 'packages/conversation/src/browser/conversation/editor-vendor.ts';
 const editor = await build({
-  entryPoints: ['packages/conversation/src/browser/conversation/editor-vendor.ts'],
-  outfile: 'dist/packages/conversation/src/browser/conversation/editor-vendor.js',
+  entryPoints: [editorEntry],
+  outfile: 'dist/' + editorEntry.replace(/\.ts$/, '.js'),
   bundle: true,
   format: 'esm',
   minify: true,

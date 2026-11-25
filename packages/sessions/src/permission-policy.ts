@@ -40,7 +40,7 @@ export const permissionSettingsMetadata: PluginInfo = {
   scope: 'application',
   title: 'Tool grants',
   description: 'Manage read-only tool grants from a plugin’s settings',
-  browser: '/packages/sessions/src/browser/permission-settings.js',
+  browser: './browser/permission-settings.ts',
 };
 
 export const permissionSettings: Plugin.Object = {

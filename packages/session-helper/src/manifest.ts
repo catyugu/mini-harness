@@ -6,5 +6,5 @@ export const metadata: PluginInfo = {
   title: 'Session helper',
   description: 'Copy messages and edit/resend prompts on a session branch.',
   icon: 'edit',
-  browser: '/packages/session-helper/src/browser/setup.js',
+  browser: './browser/setup.ts',
 };

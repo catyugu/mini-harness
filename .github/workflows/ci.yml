@@ -9,7 +9,42 @@ permissions:
   contents: read
 
 jobs:
+  format:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Fix formatting and block unformatted revisions
+        env:
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          HEAD_BRANCH: ${{ github.head_ref || github.ref_name }}
+        run: |
+          pnpm run format
+          if git diff --quiet; then
+            exit 0
+          fi
+          git diff
+          if [ "$HEAD_REPO" = "$GITHUB_REPOSITORY" ] && [ "$HEAD_BRANCH" != main ]; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add -u
+            git commit -m 'style: apply Prettier formatting'
+            git push origin "HEAD:refs/heads/$HEAD_BRANCH"
+          fi
+          echo "::error::Formatting was repaired locally or pushed to the PR branch. Check the corrected revision before running tests."
+          exit 1
+
   test:
+    needs: format
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -24,9 +59,6 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Check formatting
-        if: runner.os == 'Linux' && matrix.node == '24'
-        run: pnpm run format:check
       - name: Set up Linux workspace isolation
         if: runner.os == 'Linux'
         run: |
@@ -46,6 +78,7 @@ jobs:
         run: pnpm run pack:verify
 
   browser-linux:
+    needs: format
     runs-on: ubuntu-24.04
     container:
       image: mcr.microsoft.com/playwright:v1.56.0-noble
@@ -73,6 +106,7 @@ jobs:
           retention-days: 7
 
   browser-windows:
+    needs: format
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4

@@ -4,6 +4,6 @@ export const metadata: PluginInfo = {
   scope: 'application',
   title: 'Workspace navigation',
   description: 'Workspace picker and browser panels',
-  browserStyles: ['/packages/conversation/src/browser/workspace/style.css'],
-  browser: '/packages/conversation/src/browser/workspace/setup.js',
+  browserStyles: ['../browser/workspace/style.css'],
+  browser: '../browser/workspace/setup.ts',
 };

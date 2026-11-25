@@ -18,8 +18,8 @@ export const metadata: PluginInfo = {
   title: 'Conversation',
   description: 'Conversation interface',
 
-  browserStyles: ['/packages/conversation/src/browser/conversation/style.css'],
-  browser: '/packages/conversation/src/browser/conversation/setup.js',
+  browserStyles: ['../browser/conversation/style.css'],
+  browser: '../browser/conversation/setup.ts',
 };
 
 const plugin: Plugin.Object = {
@@ -41,12 +41,12 @@ export const composerMetadata: PluginInfo = {
   scope: 'application',
   title: 'Composer',
   description: 'Conversation input and draft contributions',
-  browser: '/packages/conversation/src/browser/conversation/composer-setup.js',
+  browser: '../browser/conversation/composer-setup.ts',
 };
 
 export const historyMetadata: PluginInfo = {
   scope: 'application',
   title: 'History',
   description: 'Conversation messages and record contributions',
-  browser: '/packages/conversation/src/browser/conversation/history-setup.js',
+  browser: '../browser/conversation/history-setup.ts',
 };

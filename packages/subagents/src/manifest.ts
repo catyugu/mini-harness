@@ -33,7 +33,7 @@ export const metadata: PluginInfo = {
   title: 'Subagents',
   description: 'Delegate tasks to child conversations.',
   icon: 'delegate',
-  browser: '/packages/subagents/src/browser/setup.js',
+  browser: './browser/setup.ts',
   configGroups: [
     { title: 'Run limits', fields: ['maxDepth', 'maxParallel'] },
     { title: 'Model selection', fields: ['model'] },

@@ -4,6 +4,6 @@ export const metadata: PluginInfo = {
   scope: 'application',
   title: 'Navigation',
   description: 'Session navigation and search',
-  browserStyles: ['/packages/conversation/src/browser/navigation/style.css'],
-  browser: '/packages/conversation/src/browser/navigation/setup.js',
+  browserStyles: ['../browser/navigation/style.css'],
+  browser: '../browser/navigation/setup.ts',
 };

@@ -11,8 +11,9 @@ export interface PluginInfo {
   scope: PluginScope['kind'];
   trustedContributor?: boolean;
   web?: boolean;
+  /** Built-in modules declare a relative TypeScript source; installed packages declare a built entry. */
   browser?: string;
-  /** Styles shipped with a built-in browser entry. Local plugins may declare a browser build directory. */
+  /** Styles relative to the declaring built-in module. Local plugins may declare a browser build directory. */
   browserStyles?: string[];
   icon?: PluginIcon;
   configGroups?: { title: string; fields: string[] }[];

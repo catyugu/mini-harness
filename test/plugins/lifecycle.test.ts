@@ -1,3 +1,4 @@
+import { profileDescriptors, readProfile } from '@mini-harness/host/profile';
 import { request as httpRequest } from 'node:http';
 import { tmpdir } from 'node:os';
 import { fixture, waitUntil } from '../support/api-fixture.ts';
@@ -922,7 +923,8 @@ test('setup and live configuration cannot await their own graph transaction', as
 
 test('a failed server entry does not publish its browser module', async (t) => {
   const directory = mkdtempSync(join(tmpdir(), 'mini-required-browser-'));
-  const browser = '/packages/ui-runtime/src/browser/boot.js';
+  const browser = (await profileDescriptors(readProfile('web'))).find(({ browser }) => browser)?.browser;
+  assert.ok(browser);
   const builtins: ResolvedPlugin[] = [
     {
       id: 'ui',

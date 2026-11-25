@@ -8,9 +8,9 @@ export const metadata: PluginInfo = {
   trustedContributor: true,
   title: 'Workspace files',
   description: 'Read, search and edit files within the workspace.',
-  browserStyles: ['/packages/files/src/browser/style.css'],
+  browserStyles: ['./browser/style.css'],
   icon: 'files',
-  browser: '/packages/files/src/browser/setup.js',
+  browser: './browser/setup.ts',
 };
 
 const plugin: Plugin.Object = {

@@ -6,8 +6,8 @@ export const metadata: PluginInfo = {
   scope: 'application',
   title: 'Plugins',
   description: 'Plugin management',
-  browserStyles: ['/packages/plugins/src/browser/style.css'],
-  browser: '/packages/plugins/src/browser/setup.js',
+  browserStyles: ['./browser/style.css'],
+  browser: './browser/setup.ts',
 };
 
 const plugin: Plugin.Object = {

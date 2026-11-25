@@ -1,3 +1,4 @@
+import { browserPage, verifyBrowserGraph } from '../test/support/browser-page.ts';
 import assert from 'node:assert/strict';
 import ts from 'typescript';
 import { moduleReferences } from './module-references.ts';
@@ -357,10 +358,6 @@ async function checkPackage() {
       fetch(info.url + path, { method, headers, body: JSON.stringify(body) });
     for (const asset of [
       '/',
-      '/packages/ui-runtime/src/browser/boot.js',
-      '/packages/ui-runtime/src/browser/plugin-settings.js',
-      '/packages/ui-primitives/src/browser/vendor/marked.js',
-      '/packages/ui-primitives/src/browser/vendor/purify.js',
       '/logo.svg',
       '/manifest.webmanifest',
       '/startup.css',
@@ -372,6 +369,8 @@ async function checkPackage() {
       assert.equal(response.status, 200, asset);
       await response.arrayBuffer();
     }
+    const { boot, imports } = browserPage(await (await get('/')).text());
+    assert.ok(imports['mini-harness/ui-runtime/plugin-settings']);
     const plugins = await (await get('/api/plugins')).json();
     assert.ok(
       plugins.some(
@@ -399,6 +398,11 @@ async function checkPackage() {
       await get('/api/bootstrap')
     ).json();
     assert.doesNotMatch(JSON.stringify(bootstrap), new RegExp(secret));
+    await verifyBrowserGraph(
+      info.url,
+      [boot, ...Object.values(imports), ...bootstrap.ui.flatMap(({ browser }) => (browser ? [browser] : []))],
+      imports,
+    );
     assert.equal(bootstrap.ui.find(({ id }) => id === 'task-notes')?.config.label, 'Progress update');
     for (const { browser, styles } of bootstrap.ui) {
       if (browser) assert.equal((await get(browser)).status, 200, browser);
