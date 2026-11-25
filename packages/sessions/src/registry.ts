@@ -43,11 +43,11 @@ export class SessionRegistry implements SessionStore {
 
   constructor(
     private readonly paths: Paths,
-    private readonly workspaces: WorkspacePort,
+    private readonly workspaceService: () => WorkspacePort | undefined = () => undefined,
     private readonly observe?: (event: CapabilityObservation, key?: ScopeKey) => void,
     private readonly forgetScopes?: (keys: ScopeAddress[]) => Promise<void>,
   ) {
-    this.state = loadCatalog(paths, workspaces);
+    this.state = loadCatalog(paths, workspaceService());
     for (const record of this.state.sessions) {
       try {
         this.openLog(record, 'recover')?.close();
@@ -86,7 +86,7 @@ export class SessionRegistry implements SessionStore {
       const parent = record.parentId
         ? this.runScope(record.parentId)
         : record.workspaceId
-          ? this.workspaces.scope(record.workspaceId)
+          ? this.workspaceService()?.scope(record.workspaceId)
           : undefined;
       this.runtimeScopes.set(id, (key = createScopeKey(createScopeKey(parent))));
     }
@@ -101,7 +101,7 @@ export class SessionRegistry implements SessionStore {
   assertAvailable(id?: string, workspaceId = id && this.get(id)?.workspaceId) {
     if (this.closing) throw new DomainError('unavailable', 'Agent service is unavailable during shutdown');
     if (id && this.deleting.has(id)) throw new DomainError('conflict', 'Conversation is being deleted');
-    if (workspaceId) this.workspaces.assertAvailable(workspaceId);
+    if (workspaceId) this.workspaceService()?.assertAvailable(workspaceId);
   }
 
   beforeDelete(handler: Participant) {
@@ -137,12 +137,14 @@ export class SessionRegistry implements SessionStore {
     const targetWorkspace = parent
       ? parent.workspaceId
       : workspaceId === undefined
-        ? (this.workspaces.defaultId ?? null)
+        ? (this.workspaceService()?.defaultId ?? null)
         : workspaceId;
     this.assertAvailable(parentId ?? undefined, targetWorkspace);
     if (targetWorkspace !== null) {
-      const workspace = this.workspaces.get(targetWorkspace);
-      this.workspaces.resolveRoot(workspace.path, workspace.id);
+      const workspaces = this.workspaceService();
+      if (!workspaces) throw new DomainError('unavailable', 'Workspace service unavailable');
+      const workspace = workspaces.get(targetWorkspace);
+      workspaces.resolveRoot(workspace.path, workspace.id);
     }
     const session: SessionRecord = {
       id: randomUUID(),
@@ -415,8 +417,10 @@ export class SessionRegistry implements SessionStore {
     const item = this.get(id);
     if (!item) throw new DomainError('not_found', 'Conversation not found');
     if (item.workspaceId === null) return;
-    const workspace = this.workspaces.get(item.workspaceId);
-    return this.workspaces.resolveRoot(workspace.path, workspace.id);
+    const workspaces = this.workspaceService();
+    if (!workspaces) return;
+    const workspace = workspaces.get(item.workspaceId);
+    return workspaces.resolveRoot(workspace.path, workspace.id);
   }
 
   depth(id: string) {

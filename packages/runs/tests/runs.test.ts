@@ -157,7 +157,10 @@ test('startup durably interrupts runs, fails stale steering, and recovers idempo
     await mock.close();
     rmSync(root, { recursive: true, force: true });
   });
-  const registry = new SessionRegistry(paths, new WorkspaceCatalog(paths));
+  const registry = new SessionRegistry(paths, (() => {
+    const workspaces = new WorkspaceCatalog(paths);
+    return () => workspaces;
+  })());
   const parent = registry.create(),
     child = registry.create({ parentId: parent.id });
   registry.log(child.id).append({
@@ -180,7 +183,10 @@ test('startup durably interrupts runs, fails stale steering, and recovers idempo
   });
   const file = registry.log(child.id).file;
   registry.dispose();
-  const restored = new SessionRegistry(paths, new WorkspaceCatalog(paths));
+  const restored = new SessionRegistry(paths, (() => {
+    const workspaces = new WorkspaceCatalog(paths);
+    return () => workspaces;
+  })());
   t.after(() => restored.dispose());
   const interrupted = restored.runSummary(child.id);
   assert.ok(interrupted);

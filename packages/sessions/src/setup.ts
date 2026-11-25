@@ -5,7 +5,7 @@ import { SessionRegistry } from './registry.ts';
 export function setup(ctx: Context) {
   const registry = new SessionRegistry(
     ctx.harnessState.paths,
-    ctx.harnessWorkspaces,
+    () => ctx.get('harnessWorkspaces'),
     (event, key) => observe(ctx, event, undefined, key),
     (keys) => ctx.harnessProfileConfig.forgetScopes(keys),
   );
@@ -19,7 +19,7 @@ export function setup(ctx: Context) {
           key,
           parent: record.parentId
             ? `session:${record.parentId}`
-            : record.workspaceId
+            : record.workspaceId && ctx.get('harnessWorkspaces')
               ? `workspace:${record.workspaceId}`
               : undefined,
         }
@@ -29,7 +29,9 @@ export function setup(ctx: Context) {
   ctx.on('settings/scopes', (options) => {
     for (const { id, title } of registry.list()) options.push({ key: `session:${id}`, name: title });
   });
-  ctx.effect(() => ctx.harnessWorkspaces.beforeRemove((id) => registry.removeWorkspaceSessions(id)));
+  ctx.inject(['harnessWorkspaces'], (workspace) => {
+    workspace.effect(() => workspace.harnessWorkspaces.beforeRemove((id) => registry.removeWorkspaceSessions(id)));
+  });
   ctx.on('harness/ready', () => registry.recoverDeletion());
   ctx.on('harness/quiesce', () => registry.close());
   ctx.inject(['harnessRoutes'], (web) => {

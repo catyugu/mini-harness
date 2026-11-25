@@ -51,7 +51,10 @@ function fixture(
   executor = nativeExecutor,
 ) {
   const { root, paths } = createFixturePaths('http://127.0.0.1:1/v1');
-  const sessions = new SessionRegistry(paths, new WorkspaceCatalog(paths));
+  const sessions = new SessionRegistry(paths, (() => {
+    const workspaces = new WorkspaceCatalog(paths);
+    return () => workspaces;
+  })());
   t.after(() => {
     sessions.dispose();
     rmSync(root, { recursive: true, force: true });
