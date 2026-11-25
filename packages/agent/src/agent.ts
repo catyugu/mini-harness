@@ -606,17 +606,14 @@ export class NativeAgent implements AgentPort {
               originalContent = output.content;
               try {
                 const resultContext = { ...step, signal: toolSignal, tool: call.name, callId: call.id };
-                const initial = executor.result ? await executor.result(structuredClone(output), resultContext) : output.content;
+                const initial = executor.result
+                  ? await executor.result(structuredClone(output), resultContext)
+                  : output.content;
                 if (!isToolContent(initial)) throw new Error('Invalid tool result content');
-                const content = await applyTransforms(
-                  hooks,
-                  initial,
-                  resultContext,
-                  (value) => {
-                    if (!isToolContent(value)) throw new Error('Invalid tool result content');
-                    return value;
-                  },
-                );
+                const content = await applyTransforms(hooks, initial, resultContext, (value) => {
+                  if (!isToolContent(value)) throw new Error('Invalid tool result content');
+                  return value;
+                });
                 output = { ...output, content };
               } catch (error) {
                 const failure = failedTool(
@@ -727,7 +724,9 @@ export class NativeAgent implements AgentPort {
       validate,
     );
     context.signal.throwIfAborted();
-    const prepared: ModelRequestContent & { tools?: LlmRequest['tools'] } = present ? present(transformed) : transformed;
+    const prepared: ModelRequestContent & { tools?: LlmRequest['tools'] } = present
+      ? present(transformed)
+      : transformed;
     const { systemPrompt, thinkingLevel, maxTokens } = validate(prepared);
     const input = capabilities?.input.includes('image')
       ? prepared.messages

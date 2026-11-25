@@ -64,9 +64,16 @@ export interface ToolScheduler {
 
 /** Model-facing tool protocol. Execution always goes through the selected registry lease. */
 export interface ToolExecutorPort extends ToolScheduler {
-  present(content: ModelRequestContent, tools: readonly ToolSchema[], context: StepContext): ModelRequestContent & { tools?: ToolSchema[] };
+  present(
+    content: ModelRequestContent,
+    tools: readonly ToolSchema[],
+    context: StepContext,
+  ): ModelRequestContent & { tools?: ToolSchema[] };
   interpret(message: NativeAssistantMessage, context: StepContext): NativeAssistantMessage;
-  result?(result: NativeToolMessage, context: ToolResultContext): NativeToolMessage['content'] | Promise<NativeToolMessage['content']>;
+  result?(
+    result: NativeToolMessage,
+    context: ToolResultContext,
+  ): NativeToolMessage['content'] | Promise<NativeToolMessage['content']>;
 }
 
 export interface CompactionInput {
