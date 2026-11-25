@@ -15,14 +15,17 @@ export interface RecordOwner {
   instanceId: string;
 }
 
-export interface SessionRecords {
-  list(): { id: string; timestamp: string; data: unknown }[];
-  append(data: unknown, display?: RecordDisplay): Promise<string>;
+/** Plugin-contributed payloads use the same durable branch record contract as native events. */
+export interface PluginRecord<Data = unknown> {
+  type: 'plugin-record';
+  owner: RecordOwner;
+  data: Data;
+  display?: RecordDisplay;
 }
 
-export interface RecordProjection<State> {
-  initial(): State;
-  reduce(state: State, record: ReturnType<SessionRecords['list']>[number]): State;
+export interface SessionRecords<Data = unknown> {
+  list(): { id: string; timestamp: string; data: Data }[];
+  append(data: Data, display?: RecordDisplay): Promise<string>;
 }
 
 export interface SessionCatalog {
@@ -75,7 +78,7 @@ export interface SessionLifecycle {
 /** The native persistence provider owns writers and their deletion transaction. */
 export interface SessionStore extends SessionCatalog, SessionHistory, SessionLifecycle {
   history(id: string): { messages: ViewMessage[]; leafId: string | null; model?: ModelChoice };
-  records(id: string, owner: RecordOwner): SessionRecords;
+  records<Data = unknown>(id: string, owner: RecordOwner): SessionRecords<Data>;
   log(id: string): SessionLogPort;
   prepareInput(
     id: string,

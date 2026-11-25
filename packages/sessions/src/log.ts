@@ -1,21 +1,7 @@
 import { isThinkingLevel, type ToolSchema } from '@mini-harness/llm/vocabulary';
 import { pluginIdPattern, isScopeAddress } from '@mini-harness/plugin-api/selection';
-import { DomainError } from '@mini-harness/platform/errors';
 import { isRunning, type RunInfo } from './shared/run-state.ts';
 import { isDeepStrictEqual } from 'node:util';
-import { createHash, randomBytes } from 'node:crypto';
-import {
-  closeSync,
-  constants,
-  fstatSync,
-  fsyncSync,
-  ftruncateSync,
-  lstatSync,
-  openSync,
-  readFileSync,
-  writeSync,
-} from 'node:fs';
-import { dirname } from 'node:path';
 import {
   RequestMessages,
   validateNativeMessage,
@@ -36,6 +22,7 @@ import type {
 import type { QueueEntry } from './shared/queue.ts';
 import { projectLog, projectMessage } from './projection.ts';
 import { applyContentDelta, contentDelta } from './content-delta.ts';
+import { RecordLog, digest, entryId } from './record-log.ts';
 
 type StoredEntry =
   | SessionEntry
@@ -44,16 +31,6 @@ type StoredEntry =
       namespace: unknown;
       data: unknown;
     });
-
-export interface SessionHeader {
-  type: 'session';
-  version: 1;
-  id: string;
-  createdAt: string;
-  importedFrom?: string;
-}
-const entryId = /^[a-f0-9]{8,64}$/i;
-const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 
 /** Store only the divergent interval of a transformed model context. */
 function messagePatch(base: NativeMessage[], actual: NativeMessage[]): MessagePatch | undefined {
@@ -74,116 +51,38 @@ function messagePatch(base: NativeMessage[], actual: NativeMessage[]): MessagePa
   return { start, deleteCount: endBase - start, insert: actual.slice(start, endActual) };
 }
 
-/** A single host owns the writer. Every acknowledged record is newline framed and fsynced. */
-export class SessionLog implements SessionLogPort {
-  private handle: number;
-  private readonly records: SessionEntry[] = [];
-  private readonly byId = new Map<string, SessionEntry>();
+/** Session semantics layered over the generic durable record log. */
+export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPort {
   private readonly schemas = new Map<string, ToolSchema[]>();
   private readonly inboxIds = new Set<string>();
   private readonly pendingInbox = new Map<string, InboxItem>();
   private readonly inboxFailures: QueueEntry[] = [];
   private run?: RunInfo;
-  private currentLeafId: string | null = null;
   private cachedProjection?: SessionProjection;
-  private header: SessionHeader;
-  private closed = false;
-  private length = 0;
+  private recovery = { leaf: null as string | null, checker: new RequestMessages() };
 
   constructor(
-    readonly file: string,
-    readonly sessionId: string,
+    file: string,
+    sessionId: string,
     createdAt = new Date().toISOString(),
-    private readonly changed?: (entry: SessionEntry) => void,
-    private readonly readOnly = false,
-    private readonly writeFailed?: (error: unknown) => void,
+    changed?: (entry: SessionEntry) => void,
+    readOnly = false,
+    writeFailed?: (error: unknown) => void,
   ) {
-    // Windows append handles lack FILE_WRITE_DATA and cannot truncate a torn tail.
-    // A single validated writer uses explicit positions at its verified end instead.
-    this.header = { type: 'session', version: 1, id: sessionId, createdAt };
-    const flags = readOnly ? constants.O_RDONLY : constants.O_RDWR | constants.O_CREAT;
-    this.handle = openSync(file, flags | (constants.O_NOFOLLOW ?? 0), 0o600);
-    try {
-      this.checkFile();
-      const bytes = readFileSync(this.handle);
-      this.length = bytes.length;
-      this.checkFile(this.length);
-      if (!bytes.length && !readOnly) {
-        this.write(this.header);
-        syncDirectory(dirname(file));
-      } else this.load(bytes);
-    } catch (error) {
-      closeSync(this.handle);
-      this.closed = true;
-      throw error;
-    }
+    super(file, sessionId, changed, readOnly, writeFailed);
+    this.open(createdAt);
   }
 
-  private checkFile(expectedLength?: number) {
-    const descriptor = fstatSync(this.handle),
-      path = lstatSync(this.file);
-    if (
-      !descriptor.isFile() ||
-      descriptor.nlink !== 1 ||
-      path.isSymbolicLink() ||
-      descriptor.dev !== path.dev ||
-      descriptor.ino !== path.ino
-    )
-      throw new Error('Session file outside managed storage or replaced while open');
-    if (expectedLength !== undefined && descriptor.size !== expectedLength)
-      throw new Error('Session file size changed outside its writer');
+  protected decodeRecord(record: Record<string, unknown>): SessionEntry {
+    return storedEntry(record as StoredEntry);
   }
 
-  private load(bytes: Buffer) {
-    const end = bytes.lastIndexOf(10) + 1;
-    if (!end) throw new Error('Invalid session log header');
-    const lines = bytes.subarray(0, end).toString('utf8').split('\n');
-    lines.pop();
-    const first = lines.shift();
-    if (!first) throw new Error('Missing session log header');
-    const header = JSON.parse(first);
-    if (
-      header?.type !== 'session' ||
-      header.version !== 1 ||
-      header.id !== this.sessionId ||
-      typeof header.createdAt !== 'string'
-    )
-      throw new Error('Invalid session log header');
-    this.header = header;
-    const recovery = { leaf: null as string | null, checker: new RequestMessages() };
-    for (const line of lines) {
-      let record: StoredEntry & { checksum: string };
-      try {
-        record = JSON.parse(line);
-      } catch {
-        throw new Error('Corrupt session log record');
-      }
-      const { checksum, ...entry } = record;
-      if (checksum !== digest(entry)) throw new Error('Corrupt session log checksum');
-      const normalized = storedEntry(entry);
-      this.validateEntry(normalized, recovery);
-      this.remember(normalized);
-    }
-    // An incomplete, unacknowledged final write can be discarded; complete corrupt records cannot.
-    if (!this.readOnly && end < bytes.length) {
-      this.checkFile(bytes.length);
-      ftruncateSync(this.handle, end);
-      fsyncSync(this.handle);
-      this.length = end;
-    }
+  protected advancesBranch(entry: SessionEntry) {
+    return !operational(entry);
   }
 
-  private validateEntry(entry: SessionEntry, recovery?: { leaf: string | null; checker: RequestMessages }) {
-    if (
-      entry.version !== 1 ||
-      entry.seq !== this.records.length + 1 ||
-      !entryId.test(entry.id) ||
-      this.byId.has(entry.id) ||
-      (entry.parentId !== null && !this.byId.has(entry.parentId)) ||
-      typeof entry.timestamp !== 'string' ||
-      !Number.isFinite(Date.parse(entry.timestamp))
-    )
-      throw new Error('Invalid session log sequence or ancestry');
+  protected validateRecord(entry: SessionEntry, recovering: boolean) {
+    const recovery = recovering ? this.recovery : undefined;
     validateEvent(entry);
     if (entry.type === 'tool-schema' && digest(entry.tools) !== entry.hash)
       throw new Error('Tool schema digest does not match its content');
@@ -234,13 +133,10 @@ export class SessionLog implements SessionLogPort {
     }
   }
 
-  private remember(entry: SessionEntry) {
+  protected recordAdded(entry: SessionEntry) {
     this.cachedProjection = undefined;
     if (entry.type === 'run') this.run = entry.run;
     if (entry.type === 'tool-schema') this.schemas.set(entry.hash, entry.tools);
-    this.records.push(entry);
-    this.byId.set(entry.id, entry);
-    if (!operational(entry)) this.currentLeafId = entry.id;
     if (entry.type === 'inbox-enqueued') {
       this.inboxIds.add(entry.item.id);
       this.pendingInbox.set(entry.item.id, entry.item);
@@ -258,94 +154,12 @@ export class SessionLog implements SessionLogPort {
     if (entry.type === 'message' && entry.inboxId) this.pendingInbox.delete(entry.inboxId);
   }
 
-  private write(value: unknown) {
-    this.checkFile(this.length);
-    const bytes = Buffer.from(JSON.stringify(value) + '\n');
-    for (let offset = 0; offset < bytes.length; ) {
-      const written = writeSync(this.handle, bytes, offset, bytes.length - offset, this.length + offset);
-      if (written <= 0) throw new Error('Session log write made no progress');
-      offset += written;
-    }
-    fsyncSync(this.handle);
-    this.length += bytes.length;
-  }
-
-  private get leafId() {
-    return this.currentLeafId;
-  }
-
-  entries() {
-    return structuredClone(this.records);
-  }
-
   inbox() {
     return structuredClone([...this.pendingInbox.values()]);
   }
 
   queue() {
     return [...Array.from(this.pendingInbox.values(), queueEntry), ...structuredClone(this.inboxFailures)];
-  }
-
-  private branchEntries(leafId: string | null = this.leafId) {
-    if (leafId !== null && !this.byId.has(leafId)) throw new Error('Unknown session branch');
-    const entries: SessionEntry[] = [];
-    for (
-      let entry = leafId && this.byId.get(leafId);
-      entry;
-      entry = entry.parentId && this.byId.get(entry.parentId)
-    )
-      entries.push(entry);
-    return entries.reverse();
-  }
-
-  branch(leafId: string | null = this.leafId) {
-    return structuredClone(this.branchEntries(leafId));
-  }
-
-  private persist(event: SessionEvent, parentId: string | null, expectedLeafId?: string | null) {
-    if (this.closed) throw new Error('Session log is closed');
-    if (this.readOnly) throw new Error('Session log is read-only');
-    if (expectedLeafId !== undefined && expectedLeafId !== this.leafId)
-      throw new DomainError('conflict', 'Conversation changed; refresh before editing');
-    const value = JSON.parse(JSON.stringify(event)) as SessionEvent;
-    const entry = {
-      ...value,
-      version: 1,
-      seq: this.records.length + 1,
-      id: randomBytes(16).toString('hex'),
-      parentId,
-      timestamp: new Date().toISOString(),
-    } as SessionEntry;
-    this.validateEntry(entry);
-    try {
-      this.write({ ...entry, checksum: digest(entry) });
-    } catch (error) {
-      // The disk may contain a partial record. Prevent a later append from masking the damage.
-      try {
-        this.close();
-      } finally {
-        this.writeFailed?.(error);
-      }
-      if (!this.writeFailed) throw error;
-      throw new DomainError('unavailable', 'Could not write conversation log. See session diagnostics.', {
-        cause: error,
-      });
-    }
-    this.remember(entry);
-    this.changed?.(entry);
-    return structuredClone(entry);
-  }
-
-  append(event: SessionEvent, expectedLeafId?: string | null) {
-    return this.persist(event, this.leafId, expectedLeafId);
-  }
-
-  revise(
-    event: Extract<SessionEvent, { type: 'message' }>,
-    parentId: string | null,
-    expectedLeafId: string | null,
-  ) {
-    return this.persist(event, parentId, expectedLeafId);
   }
 
   projection(leafId?: string | null) {
@@ -458,12 +272,6 @@ export class SessionLog implements SessionLogPort {
     return structuredClone(this.materializeRequest(entry));
   }
 
-  serialize() {
-    if (this.closed) throw new Error('Session log is closed');
-    this.checkFile(this.length);
-    return encodeLog(this.header, this.records);
-  }
-
   get latestRun() {
     return this.run && structuredClone(this.run);
   }
@@ -491,12 +299,6 @@ export class SessionLog implements SessionLogPort {
     }
   }
 
-  close() {
-    if (!this.closed) {
-      this.closed = true;
-      closeSync(this.handle);
-    }
-  }
 }
 
 function queueEntry(item: InboxItem): QueueEntry {
@@ -635,26 +437,6 @@ function validateEvent(event: SessionEvent) {
     default:
       throw new Error('Unknown session event');
   }
-}
-
-export function syncDirectory(path: string) {
-  if (process.platform === 'win32') return;
-  const handle = openSync(path, constants.O_RDONLY);
-  try {
-    fsyncSync(handle);
-  } finally {
-    closeSync(handle);
-  }
-}
-
-/** Renders a complete log document for exports; live appends go through SessionLog. */
-export function encodeLog(header: SessionHeader, entries: SessionEntry[]) {
-  return (
-    [
-      JSON.stringify(header),
-      ...entries.map((entry) => JSON.stringify({ ...entry, checksum: digest(entry) })),
-    ].join('\n') + '\n'
-  );
 }
 
 function ownsRecord(pluginId: string, instanceId: string) {

@@ -8,7 +8,7 @@ Maintains session ancestry and permissions, the append-only log, original upload
 
 ## Structure
 
-`src/registry.ts` owns session access and cleanup; `storage.ts` owns log paths and upload files. `log.ts`, `log-api.ts` and `projection.ts` implement the durable record. `src/shared/` contains read contracts used by other runtimes.
+`src/registry.ts` owns session access and cleanup; `storage.ts` owns log paths and upload files. `record-log.ts` owns durable framing, identity, ancestry and persistence; `log.ts`, `log-api.ts` and `projection.ts` interpret conversation records. `src/shared/` contains read contracts used by other runtimes.
 
 ## API
 

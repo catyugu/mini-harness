@@ -12,7 +12,8 @@ import { createScopeKey, scopeParentOf, type ScopeKey } from '@mini-harness/plug
 import type { ScopeAddress } from '@mini-harness/plugin-api/configuration';
 import type { CapabilityObservation } from '@mini-harness/plugin-api/observations';
 import type { ConversationPermission, SessionRecord } from './shared/identity.ts';
-import { SessionLog, syncDirectory } from './log.ts';
+import { SessionLog } from './log.ts';
+import { syncDirectory } from './record-log.ts';
 import { loadCatalog, type CatalogState } from './catalog.ts';
 import {
   attachmentDirectory,
@@ -375,7 +376,7 @@ export class SessionRegistry implements SessionStore {
     );
   }
 
-  records(id: string, owner: RecordOwner): SessionRecords {
+  records<Data = unknown>(id: string, owner: RecordOwner): SessionRecords<Data> {
     this.assertAvailable(id);
     if (!this.get(id)) throw new DomainError('not_found', 'Conversation not found');
     return {
@@ -387,7 +388,7 @@ export class SessionRegistry implements SessionStore {
               return entry.type === 'plugin-record' &&
                 entry.owner.instanceId === owner.instanceId &&
                 entry.owner.pluginId === owner.pluginId
-                ? [{ id: entry.id, timestamp: entry.timestamp, data: structuredClone(entry.data) }]
+                ? [{ id: entry.id, timestamp: entry.timestamp, data: structuredClone(entry.data) as Data }]
                 : [];
             }),
           true,
