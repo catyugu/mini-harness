@@ -23,7 +23,6 @@ const Config = defineConfig({
 });
 
 export const metadata: PluginInfo = {
-  scope: 'application',
   title: 'Shell',
   description: 'Run commands using the configured execution policy.',
   icon: 'terminal',
@@ -36,11 +35,12 @@ const plugin: Plugin.Object = {
   Config,
   inject: [
     'harnessSessions',
+    'harnessRegistry',
     'harnessApprovalRequests',
     'harnessProcess',
     'harnessTools',
     'harnessChanges',
-    'harnessScopes',
+    'harnessProfileScopes',
   ],
   apply: setup,
 };

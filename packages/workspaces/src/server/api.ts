@@ -1,3 +1,4 @@
+import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
 import type { WorkspaceRecord } from '../shared/record.ts';
 
 export interface WorkspacePort {
@@ -5,6 +6,7 @@ export interface WorkspacePort {
   readonly defaultId: string | undefined;
   list(): WorkspaceRecord[];
   get(id: string): WorkspaceRecord;
+  scope(id: string): ScopeKey | undefined;
   resolveRoot(root: string, id: string): string;
   register(path: string, name?: string): WorkspaceRecord;
   rename(id: string, name: string): WorkspaceRecord;

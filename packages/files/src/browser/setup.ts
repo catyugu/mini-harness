@@ -1,4 +1,4 @@
-import type { WorkspaceView } from '@mini-harness/file-access/browser/views';
+import type { WorkspaceView } from '@mini-harness/workspaces/browser/file-views';
 import type { Context } from 'mini-harness/cordis';
 import { fileCompletion } from './completion.ts';
 import { fileTree } from './tree.ts';

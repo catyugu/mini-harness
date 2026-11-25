@@ -34,9 +34,9 @@ export type RecordRenderer = (
 declare module 'mini-harness/cordis' {
   interface Context {
     miniMessages: {
-      registerRecord(plugin: string, render: RecordRenderer): () => void;
+      registerRecord(plugin: string, render: RecordRenderer, priority?: number): () => void;
       registerAction(action: MessageAction): () => void;
-      registerTool(name: string, render: ToolRenderer, action?: boolean): () => void;
+      registerTool(name: string, render: ToolRenderer, action?: boolean, priority?: number): () => void;
     };
   }
 }

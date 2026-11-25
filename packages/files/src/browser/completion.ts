@@ -1,4 +1,4 @@
-import { fileRoute } from '@mini-harness/file-access/browser/views';
+import { fileRoute } from '@mini-harness/workspaces/browser/file-views';
 import type { Suggestion } from '@mini-harness/conversation/browser/composer-api';
 import { browserRequest, wait } from '@mini-harness/ui-runtime/http';
 import type { Context } from 'mini-harness/cordis';

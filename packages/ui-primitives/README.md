@@ -20,7 +20,7 @@ Uses [UI Theme](../ui-theme/README.md) for visual tokens and the pinned Marked a
 
 ## Lifecycle
 
-`core:primitives` mounts after the theme and cleans up browser resources when disposed.
+`core:primitives` hydrates icons and cleans up browser resources when disposed.
 
 Browser plugins can use `miniPrimitives.icon` with a symbolic name or a custom SVG path, including for conversation message actions.
 

@@ -12,13 +12,13 @@ Shipped and installed plugins declare `inject`, `provide` and `apply(ctx, config
 
 ## Configuration and lifecycle
 
-Settings submits configuration candidates to the active Profile. Runs guards structural changes while affected conversations are active. A rejected candidate restores the prior entries. Live configuration can update a running Fiber, and configuration subscribers read committed values from the owning Entry. Nested fibers keep their own lifetime while reading their Entry's configuration.
+The Profile composition owner serializes configuration edits and applies each candidate to the Entry Tree before persisting it. A rejected candidate restores the prior entries. Run startup waits for scope preparation. Active runs release their work with the owning Fiber, and unloaded tool registrations invalidate their leases. Live configuration can update a running Fiber, and configuration subscribers read committed values from the owning Entry. Nested fibers keep their own lifetime while reading their Entry's configuration.
 
 Each activation has an abort signal. Teardown aborts and drains work registered with `fiber.run()` and then releases effects. Cordis retains injected services while dependents dispose. Transport routes, long-running work and browser views also have lifetimes owned by their domains.
 
 ## File interaction
 
-File Access owns workspace path constraints and publishes the file change projection shared by Files, File Preview and Git Diff. Files owns file browsing, search and composer completion. File Preview renders workspace resources, stored attachments and draft bytes. Git Diff owns the Git changes list and diff tabs. Sessions owns the stored attachment bytes and their conversation identity.
+File Access opens an explicit directory and enforces path containment. Workspace routes and Agent tools resolve the directory and scoped service before opening it. Files and Shell publish changes with workspace IDs as projection resource IDs. Files owns file browsing, search and composer completion. File Preview renders workspace resources, stored attachments and draft bytes. Git Diff owns the Git changes list and diff tabs. Sessions owns the stored attachment bytes and their conversation identity.
 
 Layout registers typed views and opens tabs by their stable key and workspace or conversation owner. File Preview renders the selected resource in a tab or a media dialog. Conversation keeps the normalized reference in raw draft and history text while rendering it as an inline action.
 

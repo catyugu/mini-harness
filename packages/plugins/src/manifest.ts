@@ -3,7 +3,6 @@ import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 import { setup } from './server/setup.ts';
 
 export const metadata: PluginInfo = {
-  scope: 'application',
   title: 'Plugins',
   description: 'Plugin management',
   browserStyles: ['/packages/plugins/src/browser/style.css'],
@@ -11,7 +10,7 @@ export const metadata: PluginInfo = {
 };
 
 const plugin: Plugin.Object = {
-  inject: ['harnessPluginCatalog', 'harnessRoutes', 'harnessMutations', 'harnessChanges'],
+  inject: ['harnessPluginCatalog', 'harnessRoutes', 'harnessChanges'],
   provide: [],
   apply: setup,
 };

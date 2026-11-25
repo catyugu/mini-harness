@@ -1,4 +1,4 @@
-import { refreshOnFileChange, type WorkspaceView } from '@mini-harness/file-access/browser/views';
+import { refreshOnFileChange, type WorkspaceView } from '@mini-harness/workspaces/browser/file-views';
 import { renderMarkdown } from '@mini-harness/ui-primitives/markdown';
 import { button, iconButton } from '@mini-harness/ui-primitives/primitives';
 import type { Context } from 'mini-harness/cordis';

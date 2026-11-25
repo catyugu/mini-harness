@@ -9,7 +9,8 @@ import type { Paths } from '@mini-harness/platform/runtime-paths';
 import type { SessionStore } from './store.ts';
 import type { WorkspacePort } from '@mini-harness/workspaces/api';
 import type { RecordDisplay, RecordOwner, SessionRecords } from './records.ts';
-import type { ScopeKey, ScopePort } from '@mini-harness/plugin-api/scopes';
+import { createScopeKey, scopeParentOf, type ScopeKey } from '@mini-harness/plugin-api/scopes';
+import type { ScopeAddress } from '@mini-harness/plugin-api/configuration';
 import type { CapabilityObservation } from '@mini-harness/plugin-api/observations';
 import type { ConversationPermission, SessionRecord } from './shared/identity.ts';
 import { SessionLog, syncDirectory } from './log.ts';
@@ -33,6 +34,7 @@ export class SessionRegistry implements SessionStore {
   private readonly deletions = new Set<Promise<string[]>>();
   private readonly participants = new Set<Participant>();
   private readonly logs = new Map<string, SessionLog>();
+  private readonly runtimeScopes = new Map<string, ScopeKey>();
   private readonly latestRuns = new Map<string, RunInfo>();
   private readonly logErrors = new Map<string, string>();
   private closing = false;
@@ -42,9 +44,8 @@ export class SessionRegistry implements SessionStore {
   constructor(
     private readonly paths: Paths,
     private readonly workspaces: WorkspacePort,
-    private readonly scopes?: ScopePort,
-    private readonly observe?: (event: CapabilityObservation) => void,
-    private readonly forgetScopes?: (keys: ScopeKey[]) => Promise<void>,
+    private readonly observe?: (event: CapabilityObservation, key?: ScopeKey) => void,
+    private readonly forgetScopes?: (keys: ScopeAddress[]) => Promise<void>,
   ) {
     this.state = loadCatalog(paths, workspaces);
     for (const record of this.state.sessions) {
@@ -77,6 +78,24 @@ export class SessionRegistry implements SessionStore {
     return entry && { ...entry };
   }
 
+  runScope(id: string): ScopeKey | undefined {
+    const record = this.get(id);
+    if (!record) return;
+    let key = this.runtimeScopes.get(id);
+    if (!key) {
+      const parent = record.parentId
+        ? this.runScope(record.parentId)
+        : this.workspaces.scope(record.workspaceId);
+      this.runtimeScopes.set(id, (key = createScopeKey(createScopeKey(parent))));
+    }
+    return key;
+  }
+
+  scope(id: string) {
+    const key = this.runScope(id);
+    return key && scopeParentOf(key);
+  }
+
   assertAvailable(id?: string, workspaceId = id && this.get(id)?.workspaceId) {
     if (this.closing) throw new DomainError('unavailable', 'Agent service is unavailable during shutdown');
     if (id && this.deleting.has(id)) throw new DomainError('conflict', 'Conversation is being deleted');
@@ -97,6 +116,7 @@ export class SessionRegistry implements SessionStore {
   }
 
   dispose() {
+    this.runtimeScopes.clear();
     this.closing = true;
     for (const log of this.logs.values()) log.close();
     this.logs.clear();
@@ -129,7 +149,7 @@ export class SessionRegistry implements SessionStore {
     };
     this.commit({ ...this.state, sessions: [...this.state.sessions, session] });
     this.notify(session.id);
-    this.observe?.({ type: 'session-created', sessionId: session.id });
+    this.observe?.({ type: 'session-created', sessionId: session.id }, this.runScope(session.id));
     return { ...session };
   }
 
@@ -445,16 +465,17 @@ export class SessionRegistry implements SessionStore {
       return { id, workspaceId: record.workspaceId };
     });
     if (all.length) {
-      const locations = all.map((id) => ({ id, keys: this.scopes?.address(`session:${id}`) ?? [] }));
+      const locations = all.map((id) => ({ id, key: this.runScope(id) }));
       this.commit({
         ...this.state,
         sessions: this.state.sessions.filter((entry) => !chosen.has(entry.id)),
         pendingDelete,
       });
       await this.recoverDeletion();
-      for (const { id, keys } of locations) {
+      for (const { id, key } of locations) {
         this.notify(id, true);
-        this.observe?.({ type: 'session-deleted', sessionId: id, scopeKeys: keys });
+        this.observe?.({ type: 'session-deleted', sessionId: id }, key);
+        this.runtimeScopes.delete(id);
       }
     }
   }
@@ -462,7 +483,7 @@ export class SessionRegistry implements SessionStore {
   async recoverDeletion() {
     const pending = this.state.pendingDelete;
     if (!pending?.length) return;
-    await this.forgetScopes?.(pending.map<ScopeKey>(({ id }) => `session:${id}`));
+    await this.forgetScopes?.(pending.map<ScopeAddress>(({ id }) => `session:${id}`));
     for (const entry of pending) {
       if (this.state.sessions.some((record) => record.id === entry.id))
         throw new Error('Deletion journal includes an active conversation');

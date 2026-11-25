@@ -3,7 +3,6 @@ import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 import { LinuxSandbox } from './linux.ts';
 
 export const metadata: PluginInfo = {
-  scope: 'application',
   title: 'Sandbox',
   description: 'Prepare isolated execution environments',
 };

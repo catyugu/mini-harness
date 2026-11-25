@@ -1,3 +1,4 @@
+import { waitFor } from '@mini-harness/platform/wait';
 import type { ConversationView } from '../shared/api.ts';
 import { isRunning } from '@mini-harness/sessions/run-state';
 import { eventStream } from '@mini-harness/transport/http';
@@ -205,9 +206,9 @@ export function registerSessionRoutes(ctx: Context, read: (id: string) => Conver
     if (updated.permission === 'fullAccess') ctx.harnessApprovals.approveSession(id);
     return projectSession(ctx, updated);
   });
-  add('POST', '/api/sessions/delete', async ({ body }) => {
+  add('POST', '/api/sessions/delete', async ({ body, signal }) => {
     const input = await body();
-    return { deleted: await ctx.harnessRegistry.delete(input.ids) };
+    return { deleted: await waitFor(ctx.harnessRegistry.delete(input.ids), signal) };
   });
   add('POST', '/api/sessions/export', async ({ body, response }) => {
     const input = await body();

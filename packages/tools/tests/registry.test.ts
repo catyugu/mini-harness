@@ -1,3 +1,6 @@
+import { Context } from 'mini-harness/cordis';
+import toolsPlugin from '../src/manifest.ts';
+import { createScopeKey } from '@mini-harness/plugin-api/scopes';
 import { expectPresent } from '../../../test/support/required.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -8,7 +11,7 @@ import { ToolRegistry } from '../src/registry.ts';
 test('tool registry validates native JSON schemas before executing a plugin', async () => {
   const registry = new ToolRegistry();
   let calls = 0;
-  registry.registerBinding('inspect', () =>
+  registry.register(
     defineTool({
       name: 'inspect',
       description: 'Inspect',
@@ -19,7 +22,7 @@ test('tool registry validates native JSON schemas before executing a plugin', as
       },
     }),
   );
-  const tool = registry.forSession('session')[0];
+  const tool = registry.list()[0];
   await assert.rejects(tool.execute('call', { path: 1 }), /Invalid arguments/);
   await assert.rejects(tool.execute('call', { path: 'ok', extra: true }), /Invalid arguments/);
   assert.equal(calls, 0);
@@ -28,10 +31,9 @@ test('tool registry validates native JSON schemas before executing a plugin', as
 });
 
 test('scoped tools inherit locally and disposal aborts and drains active execution', async () => {
-  const registry = new ToolRegistry((id) => [
-    'workspace:a',
-    ...(id === 'child' ? (['session:child'] as const) : []),
-  ]);
+  const workspace = createScopeKey();
+  const child = createScopeKey(workspace);
+  const registry = new ToolRegistry();
   const make = (text: string) =>
     defineTool({
       name: 'inspect',
@@ -41,16 +43,16 @@ test('scoped tools inherit locally and disposal aborts and drains active executi
         return { content: [{ type: 'text', text }] };
       },
     });
-  registry.registerBinding('inspect', () => make('root'));
-  registry.registerBinding('inspect', () => make('workspace'), { scope: 'workspace:a' });
-  registry.registerBinding('inspect', () => make('child'), { scope: 'session:child' });
-  assert.equal(registry.forSession('child')[0].description, 'child');
-  assert.equal(registry.forSession('sibling')[0].description, 'workspace');
+  registry.register(make('root'));
+  registry.register(make('workspace'), { scope: workspace });
+  registry.register(make('child'), { scope: child });
+  assert.equal(registry.list({ scope: child })[0].description, 'child');
+  assert.equal(registry.list({ scope: workspace })[0].description, 'workspace');
   let entered: () => void;
   const ready = new Promise<void>((resolve) => {
     entered = resolve;
   });
-  const dispose = registry.registerBinding('wait', () =>
+  const dispose = registry.register(
     defineTool({
       name: 'wait',
       description: 'Wait',
@@ -65,7 +67,7 @@ test('scoped tools inherit locally and disposal aborts and drains active executi
     }),
   );
   const pending = expectPresent(
-    registry.forSession('child').find(({ name }) => name === 'wait'),
+    registry.list({ scope: child }).find(({ name }) => name === 'wait'),
     'wait tool',
   ).execute('call', {});
   const rejected = assert.rejects(pending, /no longer available/);
@@ -73,92 +75,62 @@ test('scoped tools inherit locally and disposal aborts and drains active executi
   await dispose();
   await rejected;
   assert.equal(
-    registry.forSession('child').some(({ name }) => name === 'wait'),
+    registry.list({ scope: child }).some(({ name }) => name === 'wait'),
     false,
   );
 });
 
-test('file-tool names follow the same scoped registration, restriction and lifetime rules as plugins', async () => {
-  let allowed = true,
-    denied = false;
-  const registry = new ToolRegistry(
-    (id) =>
-      id === 'outside'
-        ? ['workspace:other']
-        : ['workspace:one', ...(id === 'child' ? (['session:child'] as const) : [])],
-    async () => (denied ? 'deny' : undefined),
-    (_id, { name }) => allowed || name !== 'read',
-  );
-  const bind = (text: string) => () =>
+test('a scoped replacement invalidates existing leases and removal restores inheritance', async () => {
+  const parent = createScopeKey();
+  const child = createScopeKey(parent);
+  const registry = new ToolRegistry();
+  const make = (text: string) =>
     defineTool({
-      name: 'read',
+      name: 'inspect',
       description: text,
       parameters: Type.Object({}),
       async execute() {
         return { content: [{ type: 'text', text }] };
       },
     });
-  registry.registerBinding('read', bind('application'));
-  assert.throws(() => registry.registerBinding('read', bind('duplicate')), /Duplicate tool in scope/);
-  const releaseWorkspace = registry.registerBinding('read', bind('workspace'), { scope: 'workspace:one' });
-  assert.throws(
-    () => registry.registerBinding('read', bind('duplicate'), { scope: 'workspace:one' }),
-    /Duplicate tool in scope/,
-  );
-  const releaseChild = registry.registerBinding('read', bind('child'), { scope: 'session:child' });
-  const tool = registry.forSession('child')[0];
-  assert.equal(tool.description, 'child');
-  assert.equal(registry.forSession('sibling')[0].description, 'workspace');
-  assert.equal(registry.forSession('outside')[0].description, 'application');
-  assert.deepEqual((await tool.execute('call', {})).content, [{ type: 'text', text: 'child' }]);
-  allowed = false;
-  assert.deepEqual(registry.forSession('child'), []);
-  await assert.rejects(tool.execute('restricted', {}), /Tool denied by conversation or plugin policy/);
-  allowed = true;
-  denied = true;
-  await assert.rejects(tool.execute('denied', {}), /Tool denied by conversation or plugin policy/);
-  denied = false;
-  await releaseChild();
-  await assert.rejects(tool.execute('disposed', {}), /no longer available/);
-  assert.equal(registry.forSession('child')[0].description, 'workspace');
-  await releaseWorkspace();
-  assert.equal(registry.forSession('child')[0].description, 'application');
+  registry.register(make('application'));
+  const original = registry.list({ scope: child })[0];
+  const remove = registry.register(make('scoped'), { scope: parent });
+  assert.throws(() => registry.register(make('duplicate'), { scope: parent }), /Duplicate entry in scope/);
+  assert.equal(registry.isAvailable(original), false);
+  await assert.rejects(original.execute('old', {}), /no longer available/);
+  const replacement = registry.list({ scope: child })[0];
+  assert.deepEqual((await replacement.execute('call', {})).content, [{ type: 'text', text: 'scoped' }]);
+  assert.equal(registry.list()[0].description, 'application');
+  await remove();
+  await assert.rejects(replacement.execute('disposed', {}), /no longer available/);
+  assert.equal(registry.list({ scope: child })[0].description, 'application');
 });
 
-test('a permission change while awaiting a tool decision prevents execution', async () => {
-  let readOnly = false;
-  let entered = () => {};
-  let release = () => {};
-  const checking = new Promise<void>((resolve) => {
-    entered = resolve;
-  });
-  const hold = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  const registry = new ToolRegistry(
-    () => [],
-    async () => {
-      entered();
-      await hold;
-      return undefined;
-    },
-    (_id, tool) => !readOnly || tool.readOnly,
-  );
-  registry.registerBinding('modify', () =>
-    defineTool({
-      name: 'modify',
-      description: 'Change a value',
-      parameters: Type.Object({}),
-      async execute() {
-        assert.fail('A denied tool executed');
-      },
-    }),
-  );
-  const tool = registry.forSession('session')[0];
-  const result = assert.rejects(tool.execute('call', {}), /Tool denied/);
-  await checking;
-  readOnly = true;
-  assert.deepEqual(registry.forSession('session'), []);
-  release();
-  await result;
+test('Tools activates and registers a definition without Sessions or a policy provider', async () => {
+  const ctx = new Context();
+  const fiber = ctx.plugin(toolsPlugin);
+  try {
+    await fiber;
+    const tools = expectPresent(ctx.get('harnessTools'), 'standalone tools');
+    const remove = tools.register(
+      defineTool({
+        name: 'example',
+        description: 'Standalone tool',
+        parameters: Type.Object({}),
+        async execute() {
+          return { content: [{ type: 'text', text: 'ready' }] };
+        },
+      }),
+    );
+    try {
+      assert.deepEqual((await tools.list()[0].execute('call', {})).content, [
+        { type: 'text', text: 'ready' },
+      ]);
+    } finally {
+      await remove();
+    }
+  } finally {
+    await fiber.dispose();
+  }
 });

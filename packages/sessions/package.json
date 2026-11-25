@@ -31,8 +31,7 @@
     ],
     "profileModules": {
       "@mini-harness/sessions": "./src/manifest.ts",
-      "@mini-harness/tool-policy": "./src/permission-policy.ts",
-      "@mini-harness/ui-permission-settings": "./src/permission-policy.ts#permissionSettings"
+      "@mini-harness/tool-policy": "./src/permission-policy.ts"
     }
   },
   "dependencies": {
@@ -41,8 +40,6 @@
     "@mini-harness/platform": "workspace:*",
     "@mini-harness/plugin-api": "workspace:*",
     "@mini-harness/tools": "workspace:*",
-    "@mini-harness/ui-primitives": "workspace:*",
-    "@mini-harness/ui-runtime": "workspace:*",
     "@mini-harness/workspaces": "workspace:*"
   }
 }

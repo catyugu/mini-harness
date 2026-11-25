@@ -1,3 +1,4 @@
+import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
 import type { ToolDefinition } from '@mini-harness/tools/api';
 
 export interface PromptContext {
@@ -9,16 +10,13 @@ export interface PromptContext {
 export interface PromptSection {
   id: string;
   order?: number;
+  /** Higher priority wins among sections at the same scope depth; equal winning priorities conflict. */
+  priority?: number;
   render(context: PromptContext): string | undefined | Promise<string | undefined>;
 }
 
-export interface ScopedPromptSection extends PromptSection {
-  depth: number;
-  pluginId: string;
-}
-
 export interface PromptPort {
-  build(request: PromptContext): Promise<string>;
+  build(request: PromptContext, scope?: ScopeKey): Promise<string>;
   register(section: PromptSection): () => void;
 }
 

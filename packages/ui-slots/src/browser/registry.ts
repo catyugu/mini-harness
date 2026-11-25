@@ -53,16 +53,15 @@ export class SlotRegistry {
     name: SlotName,
     key: string,
     render: SlotRenderer,
-    { order = 0 }: KeyedSlotOptions = {},
+    { order = 0, priority = 0 }: KeyedSlotOptions = {},
   ): () => void {
-    if (!key || !Number.isFinite(order)) throw new Error('Invalid keyed slot contribution');
-    return this.add(name, key, { render, order });
+    return this.add(name, key, { render, order }, priority);
   }
 
-  private add(name: SlotName, key: string | HTMLElement, value: Entry) {
+  private add(name: SlotName, key: string | HTMLElement, value: Entry, priority = 0) {
     const entries = this.entries.get(name) ?? new KeyedRegistry<string | HTMLElement, Entry>();
     this.entries.set(name, entries);
-    const remove = entries.add(key, value, value.order);
+    const remove = entries.add(key, value, priority);
     const dispose = () => {
       const prior = entries.get(key);
       remove();

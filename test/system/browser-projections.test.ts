@@ -20,7 +20,7 @@ test('browser invalidations reach only registered feature owners and dispose ind
       seen.push(['settings', ...args]);
     },
   });
-  await registry.dispatch({ type: 'change', domain: 'sessions', revision: 3, sessionId: 'one' });
+  await registry.dispatch({ type: 'change', domain: 'sessions', revision: 3, resourceId: 'one' });
   assert.deepEqual(seen, [
     ['first', 3, false, 'one'],
     ['second', 3, false, 'one'],

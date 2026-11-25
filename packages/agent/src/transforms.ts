@@ -1,5 +1,5 @@
 import type { Context } from 'mini-harness/cordis';
-import { pluginInstance } from '@mini-harness/plugin-api/instance';
+import { entryFiber } from '@mini-harness/plugin-api/plugin-configuration';
 
 export interface AgentListener<Handler> {
   context: Context;
@@ -27,7 +27,7 @@ export async function applyTransforms<
       if (result !== undefined) value = validate(structuredClone(result));
     } catch (error) {
       signal.throwIfAborted();
-      const { instanceId } = pluginInstance(context);
+      const instanceId = entryFiber(context)?.entry?.options.id ?? 'fiber:' + context.fiber.uid;
       const reason = error instanceof Error ? error.message : String(error);
       throw new Error('Plugin ' + instanceId + ' could not prepare transformed data: ' + reason, {
         cause: error,

@@ -1,5 +1,5 @@
 import type { Context } from 'mini-harness/cordis';
-import { scopedEvent, sessionEvent } from './instance.ts';
+import { scopeOf, scopeTarget, type ScopeKey } from './scopes.ts';
 
 export interface CapabilityObservations {}
 export type CapabilityObservation = CapabilityObservations[keyof CapabilityObservations];
@@ -10,10 +10,13 @@ declare module 'mini-harness/cordis' {
   }
 }
 
-export function observe(ctx: Context, event: CapabilityObservation, request?: AbortSignal) {
-  const scope =
-    event.type === 'session-deleted' ? scopedEvent(ctx, event.scopeKeys) : sessionEvent(ctx, event.sessionId);
-  for (const { context, callback } of ctx.events.listeners('harness/observe', scope)) {
+export function observe(
+  ctx: Context,
+  event: CapabilityObservation,
+  request?: AbortSignal,
+  scope: ScopeKey | undefined = scopeOf(ctx),
+) {
+  for (const { context, callback } of ctx.events.listeners('harness/observe', scopeTarget(ctx, scope))) {
     void context.fiber
       .run((signal) => callback(structuredClone(event), signal), request)
       .catch((error) => {

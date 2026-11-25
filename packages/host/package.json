@@ -13,7 +13,6 @@
     "@mini-harness/platform": "workspace:*",
     "@mini-harness/plugin-api": "workspace:*",
     "@mini-harness/plugins": "workspace:*",
-    "@mini-harness/settings": "workspace:*",
     "@mini-harness/transport": "workspace:*"
   },
   "miniHarness": {

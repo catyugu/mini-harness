@@ -5,7 +5,7 @@ import { defineTool } from '@mini-harness/tools/api';
 import { SkillLoader, defaultSkillRoots } from './loader.ts';
 
 export function setup(ctx: Context) {
-  const sessions = ctx.harnessSessions.access();
+  const sessions = ctx.harnessSessions;
   const loader = new SkillLoader(defaultSkillRoots(ctx.harnessState.paths.home), (path, error) =>
     ctx.logger.warn('Could not discover skill at %s: %s', path, String(error)),
   );
@@ -35,7 +35,7 @@ export function setup(ctx: Context) {
         if (sessionId) {
           if (sessions.get(sessionId)?.workspaceId !== workspace.id)
             throw new DomainError('not_found', 'Conversation not found');
-          await ctx.harnessScopes.prepare(`session:${sessionId}`, signal);
+          await ctx.harnessProfileScopes.prepare(`session:${sessionId}`, signal);
           if (ctx.fiber.signal.aborted) return [];
           return loader.list(sessions.workspacePath(sessionId));
         }
@@ -44,27 +44,25 @@ export function setup(ctx: Context) {
     );
   });
   ctx.effect(() =>
-    ctx.harnessTools.register(
-      {
-        name: 'load_skill',
-        bind: (sessionId) =>
-          defineTool({
-            name: 'load_skill',
-            label: 'Load skill',
-            description: 'Read the instructions for an available skill by name.',
-            parameters: Type.Object(
-              { name: Type.String({ minLength: 1, maxLength: 64 }) },
-              { additionalProperties: false },
-            ),
-            async execute(_callId, { name }, signal) {
-              signal?.throwIfAborted();
-              const skill = await loader.load(sessions.workspacePath(sessionId), name);
-              signal?.throwIfAborted();
-              return { content: [{ type: 'text', text: skill.content }], details: { skill: skill.name } };
-            },
-          }),
-      },
-      { access: 'readOnly' },
-    ),
+    ctx.harnessTools.register({
+      name: 'load_skill',
+      resolve: (sessionId) =>
+        defineTool({
+          name: 'load_skill',
+          tags: ['readOnly'],
+          label: 'Load skill',
+          description: 'Read the instructions for an available skill by name.',
+          parameters: Type.Object(
+            { name: Type.String({ minLength: 1, maxLength: 64 }) },
+            { additionalProperties: false },
+          ),
+          async execute(_callId, { name }, signal) {
+            signal?.throwIfAborted();
+            const skill = await loader.load(sessions.workspacePath(sessionId), name);
+            signal?.throwIfAborted();
+            return { content: [{ type: 'text', text: skill.content }], details: { skill: skill.name } };
+          },
+        }),
+    }),
   );
 }

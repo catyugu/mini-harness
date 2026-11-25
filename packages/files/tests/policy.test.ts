@@ -8,7 +8,7 @@ import { open } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { Workspace } from '@mini-harness/file-access/workspace';
+import { RootedFiles } from '@mini-harness/file-access/root';
 
 test('workspace tools share one policy for reads, searches and writes', async (t) => {
   const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'mini-harness-policy-')));
@@ -22,7 +22,7 @@ test('workspace tools share one policy for reads, searches and writes', async (t
   symlinkSync(privateDir, join(cwd, 'linked'), 'junction');
   writeFileSync(join(cwd, '.gitignore'), 'hidden.txt\n');
   writeFileSync(join(cwd, 'hidden.txt'), 'marked text');
-  const workspace = new Workspace(cwd, state);
+  const workspace = new RootedFiles(cwd, state);
   const execute = (name: string, value: object) =>
     expectPresent(
       fileTools(cwd, () => workspace).find((tool) => tool.name === name),
@@ -52,8 +52,8 @@ test('workspace tools share one policy for reads, searches and writes', async (t
     /hidden\.txt/,
   );
   assert.doesNotMatch(JSON.stringify(await execute('ls', { path: '.' })), /linked|state/);
-  await assert.rejects(execute('read', { path: '../private/secret.txt' }), /permitted workspace/);
-  await assert.rejects(execute('read', { path: 'state/secret.txt' }), /permitted workspace/);
+  await assert.rejects(execute('read', { path: '../private/secret.txt' }), /permitted root/);
+  await assert.rejects(execute('read', { path: 'state/secret.txt' }), /permitted root/);
   await assert.rejects(execute('write', { path: 'linked/secret.txt', content: 'changed' }));
   await assert.rejects(execute('grep', { path: 'linked/secret.txt', pattern: 'secret' }));
   await assert.rejects(execute('find', { path: privateDir, pattern: '*.txt' }));
@@ -66,7 +66,7 @@ test('failed or superseded atomic writes preserve the existing file and remove t
   mkdirSync(state);
   const file = join(root, 'edit.txt');
   writeFileSync(file, 'original');
-  const workspace = new Workspace(root, state);
+  const workspace = new RootedFiles(root, state);
   const probe = await open(file);
   const handles: { writeFile: typeof probe.writeFile } = Object.getPrototypeOf(probe);
   await probe.close();

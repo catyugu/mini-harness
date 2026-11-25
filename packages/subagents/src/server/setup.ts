@@ -12,7 +12,7 @@ export function setup(ctx: Context) {
       throw new DomainError('invalid_input', 'Unknown child model: ' + model.provider + '/' + model.id);
   };
   validate(policy());
-  const delegation = new Delegation(ctx.harnessSessions.access(), ctx.harnessExecution, policy);
+  const delegation = new Delegation(ctx.harnessSessions, ctx.harnessExecution, policy);
   ctx.on('internal/update', (next) => {
     const config = next as unknown as SubagentPolicy;
     validate(config);
@@ -35,6 +35,6 @@ export function setup(ctx: Context) {
       },
     });
   ctx.effect(() =>
-    ctx.harnessTools.register({ name: 'delegate', bind: tool }, { visible: (id) => delegation.visible(id) }),
+    ctx.harnessTools.register({ name: 'delegate', resolve: tool, visible: (id) => delegation.visible(id) }),
   );
 }

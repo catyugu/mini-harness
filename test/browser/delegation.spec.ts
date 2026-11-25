@@ -18,36 +18,42 @@ test('plugin schema controls, recursive tree navigation, batch export and perman
   });
   const { root, paths } = createFixturePaths(mock.url);
   writeJson(join(paths.home, 'profiles', 'web', 'cordis.patch.yml'), {
-    plugins: [{ id: 'subagents', config: { maxDepth: 2, maxParallel: 1, model: null } }],
+    plugins: [
+      { id: 'subagents', config: { maxDepth: 2, maxParallel: 1, model: null } },
+      { id: 'example', name: '../../plugins/example', disabled: true },
+    ],
   });
   const folder = join(paths.plugins, 'example');
   mkdirSync(folder);
   writeFileSync(
-    join(folder, 'plugin.json'),
+    join(folder, 'schema.json'),
     JSON.stringify({
-      title: 'Example',
-      configSchema: {
-        type: 'object',
-        required: ['prefix', 'count', 'mode'],
-        additionalProperties: false,
-        properties: {
-          prefix: { type: 'string', title: 'Prefix', default: 'Count' },
-          count: { type: 'integer', title: 'Count', minimum: 1, maximum: 9, default: 3 },
-          mode: { type: 'string', title: 'Mode', enum: ['brief', 'full'], default: 'brief' },
-          enabled: { type: 'boolean', title: 'Enabled', default: true },
-          limits: {
-            type: 'object',
-            title: 'Limits',
-            properties: { threshold: { type: 'number', title: 'Threshold', default: 0.5 } },
-          },
-          tags: { type: 'array', title: 'Tags', items: { type: 'string' }, default: ['base'] },
+      type: 'object',
+      required: ['prefix', 'count', 'mode'],
+      additionalProperties: false,
+      properties: {
+        prefix: { type: 'string', title: 'Prefix', default: 'Count' },
+        count: { type: 'integer', title: 'Count', minimum: 1, maximum: 9, default: 3 },
+        mode: { type: 'string', title: 'Mode', enum: ['brief', 'full'], default: 'brief' },
+        enabled: { type: 'boolean', title: 'Enabled', default: true },
+        limits: {
+          type: 'object',
+          title: 'Limits',
+          properties: { threshold: { type: 'number', title: 'Threshold', default: 0.5 } },
         },
+        tags: { type: 'array', title: 'Tags', items: { type: 'string' }, default: ['base'] },
       },
     }),
   );
   writeFileSync(
+    join(folder, 'plugin.json'),
+    JSON.stringify({
+      title: 'Example',
+    }),
+  );
+  writeFileSync(
     join(folder, 'plugin.js'),
-    "import { defineConfig } from 'mini-harness/configuration';\nimport { readFileSync } from 'node:fs';\nexport const Config = defineConfig(JSON.parse(readFileSync(new URL('./plugin.json', import.meta.url), 'utf8')).configSchema);\nexport const apply = (ctx, config) => { if (config.prefix === \"bad\") throw new Error(\"Bad prefix\"); };",
+    "import { defineConfig } from 'mini-harness/configuration';\nimport { readFileSync } from 'node:fs';\nexport const Config = defineConfig(JSON.parse(readFileSync(new URL('./schema.json', import.meta.url), 'utf8')));\nexport const apply = (ctx, config) => { if (config.prefix === \"bad\") throw new Error(\"Bad prefix\"); };",
   );
   const service = await startIsolatedHost(paths);
   try {

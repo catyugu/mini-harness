@@ -1,4 +1,4 @@
-import { isAbsolute, join, relative, sep } from 'node:path';
+import { dirname, isAbsolute, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { realpathSync } from 'node:fs';
@@ -12,7 +12,9 @@ import type { PluginMetadata } from '../shared/metadata.ts';
 
 export interface DiscoveredPlugin
   extends ResolvedPlugin,
-    Pick<PluginMetadata, 'trustedCode' | 'package' | 'error'> {
+    Pick<PluginMetadata, 'external' | 'package' | 'error'> {
+  scopeAddress?: import('@mini-harness/plugin-api/configuration').ScopeAddress;
+  name?: string;
   source?: string;
   module?: string;
   resources?: BrowserAssets;
@@ -26,10 +28,38 @@ export function describePlugin(id: string, folder: string, entry?: string): Disc
     version?: string;
     main?: string;
     exports?: unknown;
-    miniHarness?: { plugin?: Partial<PluginInfo> & { browserDirectory?: unknown; browserPreload?: unknown } };
+    miniHarness?: { plugin?: Partial<PluginInfo> & { browserDirectory?: unknown } };
   }>(packageFile, {});
-  let source = entry;
-  if (!source && packageInfo.name && (packageInfo.exports !== undefined || packageInfo.main !== undefined)) {
+  const exports = packageInfo.exports;
+  const subpaths =
+    exports &&
+    typeof exports === 'object' &&
+    !Array.isArray(exports) &&
+    Object.keys(exports).some((key) => key.startsWith('.'))
+      ? (exports as Record<string, unknown>)
+      : undefined;
+  const standardClient =
+    packageInfo.name && subpaths && Object.hasOwn(subpaths, './client')
+      ? relative(
+          realpathSync(folder),
+          realpathSync(fileURLToPath(resolveModule(packageInfo.name + '/client', packageFile))),
+        )
+          .split(sep)
+          .join('/')
+      : undefined;
+  const clientOnly = !!(
+    entry &&
+    standardClient &&
+    realpathSync(entry) === realpathSync(join(folder, standardClient))
+  );
+  let source = clientOnly ? undefined : entry;
+  if (
+    !clientOnly &&
+    !source &&
+    packageInfo.name &&
+    (exports !== undefined || packageInfo.main !== undefined) &&
+    (!subpaths || Object.hasOwn(subpaths, '.'))
+  ) {
     const resolved =
       packageInfo.exports !== undefined
         ? fileURLToPath(resolveModule(packageInfo.name, packageFile))
@@ -44,19 +74,17 @@ export function describePlugin(id: string, folder: string, entry?: string): Disc
     )
       throw new Error('Plugin entry must resolve inside its package');
     source = physical;
-  } else if (!source && isRegularFile(join(folder, 'plugin.js'))) {
+  } else if (!source && !standardClient && isRegularFile(join(folder, 'plugin.js'))) {
     source = join(folder, 'plugin.js');
   }
   const descriptor = join(folder, 'plugin.json');
   const manifest = isRegularFile(descriptor)
-    ? readJson<(Partial<PluginInfo> & { browserDirectory?: unknown; browserPreload?: unknown }) | null>(
-        descriptor,
-        null,
-      )
+    ? readJson<(Partial<PluginInfo> & { browserDirectory?: unknown }) | null>(descriptor, null)
     : (packageInfo.miniHarness?.plugin ?? {});
   if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest))
     throw new Error('Expected an object in plugin.json');
-  const browser = manifest.browser ?? (isRegularFile(join(folder, 'web.js')) ? 'web.js' : undefined);
+  const browser =
+    standardClient ?? manifest.browser ?? (isRegularFile(join(folder, 'web.js')) ? 'web.js' : undefined);
   if (browser !== undefined && typeof browser !== 'string') throw new Error('Invalid browser entry');
   const hasWeb = browser !== undefined;
   if (!source && !hasWeb) throw new Error('Provide a server or browser module');
@@ -65,24 +93,13 @@ export function describePlugin(id: string, folder: string, entry?: string): Disc
     typeof manifest.description === 'string'
       ? manifest.description.slice(0, 300)
       : 'Runs local JavaScript with your user permissions.';
-  const scope = manifest.scope ?? 'application';
-  if (scope !== 'application' && scope !== 'workspace' && scope !== 'session')
-    throw new Error('Invalid plugin scope');
-  if (scope !== 'application' && hasWeb) throw new Error('Browser entries belong to the application scope');
-  if (!hasWeb && (manifest.browserDirectory !== undefined || manifest.browserPreload !== undefined))
+  if (!hasWeb && manifest.browserDirectory !== undefined)
     throw new Error('Browser assets require a browser entry');
+  const inferredDirectory =
+    standardClient && dirname(standardClient) !== '.' ? dirname(standardClient) : undefined;
+  const browserDirectory = manifest.browserDirectory ?? inferredDirectory;
   const resources =
-    browser !== undefined
-      ? readBrowserAssets(id, folder, browser, manifest.browserDirectory, manifest.browserPreload)
-      : undefined;
-  const configSchema = manifest.configSchema;
-  if (
-    configSchema &&
-    (configSchema.type !== 'object' ||
-      !configSchema.properties ||
-      typeof configSchema.properties !== 'object')
-  )
-    throw new Error('Expected an object configSchema for plugin: ' + id);
+    browser !== undefined ? readBrowserAssets(id, folder, browser, browserDirectory) : undefined;
   const { configGroups, configHint } = manifest;
   if (
     configGroups !== undefined &&
@@ -92,9 +109,7 @@ export function describePlugin(id: string, folder: string, entry?: string): Disc
           group &&
           typeof group.title === 'string' &&
           Array.isArray(group.fields) &&
-          group.fields.every(
-            (field) => typeof field === 'string' && Object.hasOwn(configSchema?.properties ?? {}, field),
-          ),
+          group.fields.every((field) => typeof field === 'string'),
       ))
   )
     throw new Error('Invalid plugin configuration groups: ' + id);
@@ -122,15 +137,13 @@ export function describePlugin(id: string, folder: string, entry?: string): Disc
       packageInfo.name && packageInfo.version
         ? { name: packageInfo.name, version: packageInfo.version }
         : undefined,
-    scope,
     id,
     title,
     description,
-    configSchema,
     configGroups,
     configHint,
     icon,
     web: hasWeb,
-    trustedCode: true,
+    external: true,
   };
 }

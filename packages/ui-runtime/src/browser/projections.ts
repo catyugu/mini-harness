@@ -40,7 +40,7 @@ export class BrowserProjections implements BrowserProjectionPort {
               await lease.projection.sync(
                 revision,
                 event.type === 'snapshot',
-                event.type === 'change' ? (event.sessionId ?? event.workspaceId) : undefined,
+                event.type === 'change' ? event.resourceId : undefined,
               );
               lease.failed = false;
             } catch (error) {

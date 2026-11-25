@@ -1,3 +1,4 @@
+import { conversationTools } from '@mini-harness/agent/tool-selection';
 import { expectPresent } from '../support/required.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -17,13 +18,23 @@ test('external services and their declared consumers compose through Cordis serv
   copyExample(paths.plugins, 'greeting-route');
   copyExample(paths.plugins, 'greeting-service');
   const patch = (data: unknown) => request('/settings', 'PATCH', data);
-  const endpoint = '/extensions/greeting-route/hello?name=Harness';
-  assert.equal((await patch({ entries: { 'greeting-route': { disabled: false } } })).status, 200);
+  const endpoint = '/greeting/hello/Harness';
+  assert.equal(
+    (
+      await patch({
+        entries: { 'greeting-route': { name: '../../plugins/greeting-route', disabled: false } },
+      })
+    ).status,
+    200,
+  );
   assert.equal((await request(endpoint)).status, 404);
   assert.equal(
     (
       await patch({
-        entries: { 'greeting-route': { disabled: false }, 'greeting-service': { disabled: false } },
+        entries: {
+          'greeting-route': { name: '../../plugins/greeting-route', disabled: false },
+          'greeting-service': { name: '../../plugins/greeting-service', disabled: false },
+        },
       })
     ).status,
     200,
@@ -35,7 +46,10 @@ test('external services and their declared consumers compose through Cordis serv
     {},
     "export const provide = [\"exampleSuffix\"];\nexport const apply = (ctx) => { ctx.provide('exampleSuffix', '!'); };",
   );
-  assert.equal((await patch({ entries: { suffix: { disabled: false } } })).status, 200);
+  assert.equal(
+    (await patch({ entries: { suffix: { name: '../../plugins/suffix', disabled: false } } })).status,
+    200,
+  );
   assert.equal((await request(endpoint)).body.greeting, 'Hello, Harness!');
 
   writePlugin(
@@ -45,13 +59,17 @@ test('external services and their declared consumers compose through Cordis serv
     "export const provide = [\"exampleGreeting\"];\nexport const apply = (ctx) => { ctx.provide('exampleGreeting', { greet: (name) => 'Welcome, ' + name }); };",
   );
   assert.match(
-    (await patch({ entries: { 'greeting-alt': { disabled: false } } })).body.error,
+    (await patch({ entries: { 'greeting-alt': { name: '../../plugins/greeting-alt', disabled: false } } }))
+      .body.error,
     /has been registered/,
   );
   assert.equal(
     (
       await patch({
-        entries: { 'greeting-service': { disabled: true }, 'greeting-alt': { disabled: false } },
+        entries: {
+          'greeting-service': { name: '../../plugins/greeting-service', disabled: true },
+          'greeting-alt': { name: '../../plugins/greeting-alt', disabled: false },
+        },
       })
     ).status,
     200,
@@ -68,7 +86,10 @@ test('external services and their declared consumers compose through Cordis serv
   assert.equal(
     (
       await patch({
-        entries: { 'greeting-alt': { disabled: true }, 'greeting-service': { disabled: false } },
+        entries: {
+          'greeting-alt': { name: '../../plugins/greeting-alt', disabled: true },
+          'greeting-service': { name: '../../plugins/greeting-service', disabled: false },
+        },
       })
     ).status,
     200,
@@ -83,13 +104,15 @@ test('Shell delegates to a selected external process provider and still requires
     entries: {
       shell: { disabled: false },
       'core:process': { disabled: true },
-      'process-preview': { disabled: false },
+      'process-preview': { name: '../../plugins/process-preview', disabled: false },
     },
   });
   assert.equal(result.status, 200, JSON.stringify(result.body));
   const { id } = app.runtime.plugins.ctx.harnessRegistry.create();
   const tool = expectPresent(
-    app.runtime.plugins.ctx.harnessTools.forSession(id).find(({ name }) => name === 'sandbox_shell'),
+    app.runtime.plugins.ctx.harnessTools
+      .list({ resourceId: id, scope: app.runtime.plugins.ctx.harnessRegistry.runScope(id) })
+      .find(({ name }) => name === 'sandbox_shell'),
     'shell tool',
   );
   const execution = tool.execute('preview', { command: 'Preview command' }, undefined, undefined, undefined);
@@ -102,7 +125,7 @@ test('Shell delegates to a selected external process provider and still requires
   assert.match(JSON.stringify(response.content), /Preview command/);
 });
 
-test('scoped plugins inherit declared services and tool policies, and release their own resources', async (t) => {
+test('scoped plugins inherit services and contributions and release their own resources', async (t) => {
   const { app, paths, root, request, mock } = await fixture(t, ({ messages }) =>
     messages.at(-1)?.role === 'tool' ? 'Finished greeting' : { tool: 'scoped_greeting', args: {} },
   );
@@ -111,24 +134,32 @@ test('scoped plugins inherit declared services and tool policies, and release th
   writePlugin(
     paths.plugins,
     'workspace-greeting',
-    { scope: 'workspace' },
+    {},
     `
 export const provide = ["exampleGreeting"];
-export const inject = ["harnessSessions","harnessPluginRoutes","harnessPluginData","harnessPluginChanges","harnessTools"];
-import { pluginScope } from 'mini-harness/plugin-scope';
+export const inject = ["harnessSessions","harnessWorkspaces","harnessRoutes","harnessPluginData","harnessPluginChanges","harnessTools"];
+import { scopeOf } from 'mini-harness/scopes';
 import { appendFileSync } from 'node:fs';
 export const apply = (ctx, config) => {
       if (config.fail) throw new Error('Scoped setup failed');
       ctx.effect(() => () => appendFileSync(${JSON.stringify(cleaned)}, 'released\\n'));
-      ctx.provide('exampleGreeting', { greet: (name) => pluginScope(ctx).workspaceId + ':' + name });
-      const sessions = ctx.harnessSessions.access();
-      ctx.harnessPluginRoutes.scope('start', () => sessions.create({ title: 'Scoped root' }));
-      ctx.harnessPluginRoutes.scope('tools', (id) => ctx.harnessTools.forSession(id).map(({ name }) => name));
-      ctx.harnessPluginRoutes.scope('greet', (input) => {
+      const workspaces = ctx.harnessWorkspaces;
+      const workspaceId = workspaces.list().find(({ id }) => workspaces.scope(id) === scopeOf(ctx)).id;
+      ctx.provide('exampleGreeting', { greet: (name) => workspaceId + ':' + name });
+      const sessions = ctx.harnessSessions;
+      const prefix = '/api/workspace-greeting/' + workspaceId;
+      ctx.effect(() => ctx.harnessRoutes.register('POST', prefix + '/start', () => sessions.create({ title: 'Scoped root', workspaceId })));
+      ctx.effect(() => ctx.harnessRoutes.register('POST', prefix + '/tools', async ({ body }) => {
+        const { input: id } = await body();
+        return ctx.harnessTools.list({ resourceId: id, scope: sessions.runScope(id) }).map(({ name }) => name);
+      }));
+      ctx.effect(() => ctx.harnessRoutes.register('POST', prefix + '/lookup', async ({ body }) => sessions.get((await body()).input)));
+      ctx.effect(() => ctx.harnessRoutes.register('POST', prefix + '/greet', async ({ body }) => {
+        const { input } = await body();
         ctx.harnessPluginData.write('seen', input);
         ctx.harnessPluginChanges.invalidate();
-        return { workspaceId: pluginScope(ctx).workspaceId, input };
-      });
+        return { workspaceId, input };
+      }));
     };
 `,
   );
@@ -141,19 +172,31 @@ export const apply = (ctx, config) => {
   const outside = app.runtime.plugins.ctx.harnessRegistry.create({ workspaceId: workspace.id });
   const workspaceKey = 'workspace:' + parent.workspaceId;
   const sessionKey = 'session:' + parent.id;
+  const locations = (await request('/plugins/scopes')).body;
+  assert.ok(locations.some(({ key }: { key: string }) => key === workspaceKey));
+  assert.ok(locations.some(({ key }: { key: string }) => key === sessionKey));
   const scopes = {
-    [workspaceKey]: { entries: { 'workspace-greeting': { disabled: false } } },
-    [sessionKey]: { entries: { 'scoped-tool': { disabled: false } }, disabledTools: ['read'] },
+    [workspaceKey]: {
+      isolate: ['exampleGreeting'],
+      entries: { 'workspace-greeting': { name: '../../plugins/workspace-greeting', disabled: false } },
+    },
+    [sessionKey]: {
+      entries: { 'scoped-tool': { name: '../../plugins/scoped-tool', disabled: false } },
+    },
   };
   const enabled = await request('/settings', 'PATCH', { scopes });
   assert.equal(enabled.status, 200, JSON.stringify(enabled.body));
   assert.equal(existsSync(cleaned), false);
   const operation = (key: string, action = 'greet') =>
-    '/plugins/workspace-greeting/scopes/' + encodeURIComponent(key) + '/' + action;
+    '/workspace-greeting/' + key.slice('workspace:'.length) + '/' + action;
   const created = await request(operation(workspaceKey, 'start'), 'POST', {});
   assert.equal(created.status, 200);
   assert.equal(created.body.parentId, null);
   assert.equal(created.body.workspaceId, parent.workspaceId);
+  assert.equal(
+    (await request(operation(workspaceKey, 'lookup'), 'POST', { input: outside.id })).body.id,
+    outside.id,
+  );
   assert.deepEqual((await request(operation(workspaceKey), 'POST', { input: 'World' })).body, {
     workspaceId: parent.workspaceId,
     input: 'World',
@@ -169,22 +212,29 @@ export const apply = (ctx, config) => {
   for (const id of [parent.id, child.id, sibling.id, outside.id])
     await app.runtime.plugins.prepare(`session:${id}`);
   const tools = app.runtime.plugins.ctx.harnessTools;
-  const names = (id: string) => tools.forSession(id).map(({ name }) => name);
+  const names = (id: string) =>
+    tools
+      .list({ resourceId: id, scope: app.runtime.plugins.ctx.harnessRegistry.runScope(id) })
+      .map(({ name }) => name);
   assert.ok(names(parent.id).includes('scoped_greeting'));
   assert.ok(
     (await request(operation(workspaceKey, 'tools'), 'POST', { input: parent.id })).body.includes(
       'scoped_greeting',
     ),
   );
-  assert.deepEqual((await request(operation(workspaceKey, 'tools'), 'POST', { input: outside.id })).body, []);
+  assert.ok(
+    (await request(operation(workspaceKey, 'tools'), 'POST', { input: outside.id })).body.includes('read'),
+  );
   assert.ok(names(child.id).includes('scoped_greeting'));
-  assert.ok(!names(child.id).includes('read'));
+  assert.ok(names(child.id).includes('read'));
   for (const id of [sibling.id, outside.id]) {
     assert.ok(!names(id).includes('scoped_greeting'));
     assert.ok(names(id).includes('read'));
   }
   const tool = expectPresent(
-    tools.forSession(child.id).find(({ name }) => name === 'scoped_greeting'),
+    tools
+      .list({ resourceId: child.id, scope: app.runtime.plugins.ctx.harnessRegistry.runScope(child.id) })
+      .find(({ name }) => name === 'scoped_greeting'),
     'scoped greeting tool',
   );
   assert.match(
@@ -212,7 +262,13 @@ export const apply = (ctx, config) => {
       ...scopes,
       [workspaceKey]: {
         ...scopes[workspaceKey],
-        entries: { 'workspace-greeting': { disabled: false, config: { fail: true } } },
+        entries: {
+          'workspace-greeting': {
+            name: '../../plugins/workspace-greeting',
+            disabled: false,
+            config: { fail: true },
+          },
+        },
       },
     },
   });
@@ -229,19 +285,19 @@ export const apply = (ctx, config) => {
   assert.ok(names(outside.id).includes('read'));
 });
 
-test('read-only permissions are bound to the selected tool registration', async (t) => {
+test('read-only tool declarations follow the same policy for every plugin', async (t) => {
   const { app, mock, paths, request } = await fixture(t);
   writePlugin(
     paths.plugins,
     'replacement',
-    { scope: 'session' },
+    {},
     `
 export const inject = ["harnessTools"];
 export const apply = (ctx) => {
-      for (const name of ['read', 'custom']) ctx.effect(() => ctx.harnessTools.register({
-        name, description: 'replacement', parameters: { type: 'object' },
+      for (const name of ['read', 'custom', 'write_like']) ctx.effect(() => ctx.harnessTools.register({
+        name, tags: name === 'write_like' ? [] : ['readOnly'], description: 'replacement', parameters: { type: 'object' },
         async execute() { return { content: [{ type: 'text', text: 'Authorized local read' }] }; }
-      }, { access: 'readOnly' }));
+      }));
     };
 `,
   );
@@ -249,7 +305,7 @@ export const apply = (ctx) => {
   const registry = plugins.ctx.harnessRegistry;
   const parent = registry.create({ permission: 'readOnly' });
   const child = registry.create({ parentId: parent.id, permission: 'fullAccess' });
-  const list = (id: string) => plugins.ctx.harnessTools.forSession(id);
+  const list = (id: string) => conversationTools(plugins.ctx, id, registry.runScope(id));
   const original = expectPresent(
     list(child.id).find(({ name }) => name === 'read'),
     'inherited read tool',
@@ -258,42 +314,32 @@ export const apply = (ctx) => {
   assert.equal(
     (
       await request('/settings', 'PATCH', {
-        scopes: { ['session:' + child.id]: { entries: { replacement: { disabled: false } } } },
+        scopes: {
+          ['session:' + child.id]: {
+            entries: { replacement: { name: '../../plugins/replacement', disabled: false } },
+          },
+        },
       })
     ).status,
     200,
   );
   await plugins.prepare(`session:${child.id}`);
-  assert.equal(
-    list(child.id).some(({ name }) => name === 'read' || name === 'custom'),
-    false,
-  );
+  assert.ok(list(child.id).some(({ name }) => name === 'read'));
+  assert.ok(list(child.id).some(({ name }) => name === 'custom'));
+  assert.ok(!list(child.id).some(({ name }) => name === 'write_like'));
   assert.ok(list(parent.id).some(({ name }) => name === 'read'));
-  await assert.rejects(original.execute('old', { path: 'README.md' }), /Tool denied/);
+  await assert.rejects(original.execute('old', { path: 'README.md' }), /no longer available/);
   await app.runtime.plugins.ctx.harnessRuns.send(child.id, 'Continue');
   const sent = expectPresent(mock.requests.at(-1), 'request with tools');
-  assert.equal(JSON.stringify(sent.tools).includes('"name":"read"'), false);
+  assert.equal(JSON.stringify(sent.tools).includes('"name":"read"'), true);
+  assert.equal(JSON.stringify(sent.tools).includes('"name":"custom"'), true);
+  assert.equal(JSON.stringify(sent.tools).includes('"name":"write_like"'), false);
   assert.equal(JSON.stringify(sent.tools).includes('"name":"load_skill"'), true);
-  assert.deepEqual((await request('/permissions/plugins/replacement')).body.tools, ['custom', 'read']);
-  assert.equal(
-    (await request('/permissions/plugins/replacement', 'PATCH', { tool: 'unknown', allowed: true })).status,
-    400,
-  );
-  assert.equal(
-    (await request('/permissions/plugins/replacement', 'PATCH', { tool: 'custom', allowed: true })).status,
-    200,
-  );
-  const granted = expectPresent(
+  const custom = expectPresent(
     list(child.id).find(({ name }) => name === 'custom'),
-    'granted registration',
+    'read-only registration',
   );
-  assert.match(JSON.stringify(await granted.execute('granted', {})), /Authorized local read/);
-  assert.ok(!list(child.id).some(({ name }) => name === 'read'));
-  assert.equal(
-    (await request('/permissions/plugins/replacement', 'PATCH', { tool: 'custom', allowed: false })).status,
-    200,
-  );
-  await assert.rejects(granted.execute('revoked', {}), /Tool denied/);
+  assert.match(JSON.stringify(await custom.execute('read', {})), /Authorized local read/);
 });
 
 test('explicit Profile composition can replace the default tool policy without a provider whitelist', async (t) => {
@@ -311,19 +357,53 @@ export function apply(ctx) {
   );
   const root = app.runtime.plugins.ctx;
   const session = root.harnessRegistry.create();
-  assert.ok(root.harnessTools.forSession(session.id).some(({ name }) => name === 'read'));
-  const duplicate = await request('/settings', 'PATCH', { entries: { 'deny-tools': { disabled: false } } });
+  assert.ok(
+    conversationTools(root, session.id, root.harnessRegistry.runScope(session.id)).some(
+      ({ name }) => name === 'read',
+    ),
+  );
+  const duplicate = await request('/settings', 'PATCH', {
+    entries: { 'deny-tools': { name: '../../plugins/deny-tools', disabled: false } },
+  });
   assert.notEqual(duplicate.status, 200);
   const replacement = await request('/settings', 'PATCH', {
-    entries: { 'core:tool-policy': { disabled: true }, 'deny-tools': { disabled: false } },
+    entries: {
+      'core:tool-policy': { disabled: true },
+      'deny-tools': { name: '../../plugins/deny-tools', disabled: false },
+    },
   });
   assert.equal(replacement.status, 200, JSON.stringify(replacement.body));
-  assert.deepEqual(root.harnessTools.forSession(session.id), []);
+  assert.deepEqual(conversationTools(root, session.id, root.harnessRegistry.runScope(session.id)), []);
+  assert.ok(
+    root.harnessTools
+      .list({ resourceId: session.id, scope: root.harnessRegistry.runScope(session.id) })
+      .some(({ name }) => name === 'read'),
+  );
+  assert.equal(
+    (
+      await request('/settings', 'PATCH', {
+        entries: { 'deny-tools': { disabled: true } },
+      })
+    ).status,
+    200,
+  );
+  assert.ok(
+    conversationTools(root, session.id, root.harnessRegistry.runScope(session.id)).some(
+      ({ name }) => name === 'read',
+    ),
+  );
   const restored = await request('/settings', 'PATCH', {
-    entries: { 'core:tool-policy': { disabled: false }, 'deny-tools': { disabled: true } },
+    entries: {
+      'core:tool-policy': { disabled: false },
+      'deny-tools': { name: '../../plugins/deny-tools', disabled: true },
+    },
   });
   assert.equal(restored.status, 200, JSON.stringify(restored.body));
-  assert.ok(root.harnessTools.forSession(session.id).some(({ name }) => name === 'read'));
+  assert.ok(
+    conversationTools(root, session.id, root.harnessRegistry.runScope(session.id)).some(
+      ({ name }) => name === 'read',
+    ),
+  );
 });
 
 test('file tools and HTTP preview consume the same selected File Access provider', async (t) => {
@@ -347,14 +427,19 @@ export function apply(ctx) {
 `,
   );
   const selection = {
-    entries: { 'core:file-access': { disabled: true }, 'virtual-files': { disabled: false } },
+    entries: {
+      'core:file-access': { disabled: true },
+      'virtual-files': { name: '../../plugins/virtual-files', disabled: false },
+    },
   };
   assert.equal((await request('/settings', 'PATCH', selection)).status, 200);
   const session = app.runtime.plugins.ctx.harnessRegistry.create();
   const preview = await request('/workspaces/' + session.workspaceId + '/files/preview?path=virtual.txt');
   assert.equal(preview.body.text, 'Provided file content');
   const tool = expectPresent(
-    app.runtime.plugins.ctx.harnessTools.forSession(session.id).find(({ name }) => name === 'read'),
+    app.runtime.plugins.ctx.harnessTools
+      .list({ resourceId: session.id, scope: app.runtime.plugins.ctx.harnessRegistry.runScope(session.id) })
+      .find(({ name }) => name === 'read'),
     'read tool',
   );
   assert.match(
@@ -370,7 +455,7 @@ test('native runs use the nearest scoped LLM provider while siblings retain the 
   writePlugin(
     paths.plugins,
     'scoped-llm',
-    { scope: 'session' },
+    {},
     `
 export const provide = ["harnessLlm"];
 export const apply = (ctx, config) => { ctx.provide('harnessLlm', {
@@ -387,7 +472,8 @@ export const apply = (ctx, config) => { ctx.provide('harnessLlm', {
   const child = app.runtime.plugins.ctx.harnessRegistry.create({ parentId: parent.id });
   const sibling = app.runtime.plugins.ctx.harnessRegistry.create();
   const scope = (answer: string) => ({
-    entries: { 'scoped-llm': { disabled: false, config: { answer } } },
+    isolate: ['harnessLlm'],
+    entries: { 'scoped-llm': { name: '../../plugins/scoped-llm', disabled: false, config: { answer } } },
   });
   const scopes = {
     ['session:' + parent.id]: scope('Parent adapter'),
@@ -408,7 +494,7 @@ export const apply = (ctx, config) => { ctx.provide('harnessLlm', {
       await request('/settings', 'PATCH', {
         scopes: {
           ['session:' + parent.id]: scopes['session:' + parent.id],
-          ['session:' + child.id]: { disabledTools: ['sandbox_shell'] },
+          ['session:' + child.id]: {},
         },
       })
     ).status,
@@ -447,7 +533,7 @@ export const apply = (ctx) => { ctx.provide('harnessSandbox', ${isolated('applic
   writePlugin(
     paths.plugins,
     'scoped-environment',
-    { scope: 'session' },
+    {},
     `
 export const provide = ["harnessFileAccess","harnessSandbox"];
 export const apply = (ctx) => {
@@ -464,12 +550,12 @@ export const apply = (ctx) => {
   writePlugin(
     paths.plugins,
     'scoped-process',
-    { scope: 'session' },
+    {},
     `
 export const provide = ["harnessProcess"];
 export const apply = (ctx) => { ctx.provide('harnessProcess', {
       async run(request) {
-        if (!request.sessionId) throw new Error('Missing execution scope');
+        if (!request.file) throw new Error('Missing executable');
         return { code: 0, signal: null, stdout: 'scoped process', stderr: '', truncated: false };
       }
     }); };
@@ -482,15 +568,17 @@ export const apply = (ctx) => { ctx.provide('harnessProcess', {
     entries: {
       shell: { disabled: false, config: { mode: 'isolated' } },
       'core:sandbox': { disabled: true },
-      'application-sandbox': { disabled: false },
+      'application-sandbox': { name: '../../plugins/application-sandbox', disabled: false },
     },
 
     scopes: {
       ['session:' + parent.id]: {
-        entries: { 'scoped-environment': { disabled: false } },
+        isolate: ['harnessFileAccess', 'harnessSandbox'],
+        entries: { 'scoped-environment': { name: '../../plugins/scoped-environment', disabled: false } },
       },
       ['session:' + child.id]: {
-        entries: { 'scoped-process': { disabled: false } },
+        isolate: ['harnessProcess'],
+        entries: { 'scoped-process': { name: '../../plugins/scoped-process', disabled: false } },
       },
     },
   });
@@ -542,7 +630,7 @@ test('scoped model catalogs govern explicit runs and inherited or model-selected
   writePlugin(
     paths.plugins,
     'scoped-models',
-    { scope: 'session' },
+    {},
     `
 export const provide = ["harnessModels","harnessLlm"];
 export const apply = (ctx) => {
@@ -571,7 +659,7 @@ export const apply = (ctx) => {
             if (!request.tools.some(tool => tool.name === 'delegate')) throw new Error('Delegation tool unavailable');
             const explicit = text === 'Delegate explicit';
             yield { type: 'done', message: { role: 'assistant', provider, model: model.id, timestamp: Date.now(), stopReason: 'toolUse',
-              content: [{ type: 'toolCall', id: request.sessionId + (explicit ? '-explicit' : '-inherited'), name: 'delegate',
+              content: [{ type: 'toolCall', id: explicit ? 'delegate-explicit' : 'delegate-inherited', name: 'delegate',
                 arguments: { task: explicit ? 'Explicit child task' : 'Inherited child task', ...(explicit ? { provider, model: 'child-model' } : {}) } }] } };
           } else {
             const answer = 'Scoped ' + model.id;
@@ -592,7 +680,8 @@ export const apply = (ctx) => {
   const configured = await request('/settings', 'PATCH', {
     scopes: {
       ['session:' + parent.id]: {
-        entries: { 'scoped-models': { disabled: false } },
+        isolate: ['harnessModels', 'harnessLlm'],
+        entries: { 'scoped-models': { name: '../../plugins/scoped-models', disabled: false } },
       },
     },
   });
@@ -658,7 +747,7 @@ test('a replacement Agent receives a scoped run Fiber and releases its resources
   writePlugin(
     paths.plugins,
     'custom-agent',
-    { scope: 'session' },
+    {},
     `
 import { appendFileSync } from 'node:fs';
 export const provide = ['harnessAgent', 'agentMarker'];
@@ -680,7 +769,12 @@ export function apply(ctx) {
   const session = root.harnessRegistry.create();
   const sibling = root.harnessRegistry.create();
   const configured = await request('/settings', 'PATCH', {
-    scopes: { ['session:' + session.id]: { entries: { 'custom-agent': { disabled: false } } } },
+    scopes: {
+      ['session:' + session.id]: {
+        isolate: ['harnessAgent', 'agentMarker'],
+        entries: { 'custom-agent': { name: '../../plugins/custom-agent', disabled: false } },
+      },
+    },
   });
   assert.equal(configured.status, 200, JSON.stringify(configured.body));
   assert.equal(await root.harnessRuns.send(session.id, 'success'), 'Custom answer');
@@ -714,14 +808,18 @@ export function apply(ctx) {
 `,
   );
   const configured = await request('/settings', 'PATCH', {
-    entries: { 'run-capabilities': { disabled: false } },
+    entries: { 'run-capabilities': { name: '../../plugins/run-capabilities', disabled: false } },
   });
   assert.equal(configured.status, 200, JSON.stringify(configured.body));
   const root = app.runtime.plugins.ctx;
   const first = root.harnessRegistry.create();
   const second = root.harnessRegistry.create();
   await root.harnessRuns.send(first.id, 'First run');
-  assert.ok(!root.harnessTools.forSession(first.id).some(({ name }) => name === 'run_marker'));
+  assert.ok(
+    !root.harnessTools
+      .list({ resourceId: first.id, scope: root.harnessRegistry.runScope(first.id) })
+      .some(({ name }) => name === 'run_marker'),
+  );
   await root.harnessRuns.send(second.id, 'Second run');
   assert.match(JSON.stringify(mock.requests[0]), new RegExp('Run marker ' + first.id));
   assert.match(JSON.stringify(mock.requests[1]), new RegExp('Run marker ' + second.id));

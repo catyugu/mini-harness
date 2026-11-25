@@ -1,16 +1,14 @@
 import { realpath } from 'node:fs/promises';
 import { relative } from 'node:path';
 import { containsPath } from '@mini-harness/platform/paths';
-import type { IsolatedProcess, SandboxPort } from './api.ts';
-import type { ProcessRequest } from '@mini-harness/execution/request';
+import type { SandboxOptions, SandboxPort } from './api.ts';
+import type { ProcessCommand } from '@mini-harness/process-execution/api';
 import { supportsIsolation, bubblewrap } from '@mini-harness/platform/isolation';
 
-export function isolationCommand(
-  command: string,
-  cwd: string,
-  timeout: number,
-  attachments?: string,
-): IsolatedProcess {
+function isolationCommand(
+  { file, args = [], cwd, env }: ProcessCommand,
+  { cpuSeconds, mounts = [] }: SandboxOptions,
+): ProcessCommand {
   return {
     file: bubblewrap,
     cwd,
@@ -50,44 +48,50 @@ export function isolationCommand(
       '/workspace',
       '--chdir',
       '/workspace',
-      ...(attachments
-        ? ['--ro-bind', attachments, '/attachments', '--setenv', 'MINI_HARNESS_ATTACHMENTS', '/attachments']
-        : []),
+      ...mounts.flatMap(({ source, target, readOnly }) => [
+        readOnly ? '--ro-bind' : '--bind',
+        source,
+        target,
+      ]),
       '--setenv',
       'PATH',
       '/usr/local/bin:/usr/bin:/bin',
       '--setenv',
       'HOME',
       '/tmp',
+      ...Object.entries(env ?? {}).flatMap(([name, value]) =>
+        value === undefined ? [] : ['--setenv', name, value],
+      ),
       '--',
       '/usr/bin/prlimit',
       '--nofile=1024',
       '--fsize=268435456',
-      '--cpu=' + timeout,
+      '--cpu=' + cpuSeconds,
       '--core=0',
       '--',
-      '/bin/sh',
-      '-c',
-      command,
+      file,
+      ...args,
     ],
   };
 }
 
 export class LinuxSandbox implements SandboxPort {
   constructor(
-    private readonly stateDir: string,
+    private readonly protectedRoot: string,
     private readonly platform = process.platform,
   ) {}
 
-  async prepare({ command, cwd, timeoutSeconds, signal }: ProcessRequest, attachments?: string) {
+  async prepare(command: ProcessCommand, options: SandboxOptions) {
+    const { cwd } = command;
+    const { signal } = options;
     signal?.throwIfAborted();
     if (this.platform !== 'linux') throw new Error('Isolated shell requires Linux and bubblewrap');
-    const [root, state] = await Promise.all([realpath(cwd), realpath(this.stateDir)]);
-    if (relative(root, cwd) || containsPath(root, state) || containsPath(state, root))
-      throw new Error('Use a canonical workspace separate from mini-harness storage for isolated shell');
+    const [root, protectedRoot] = await Promise.all([realpath(cwd), realpath(this.protectedRoot)]);
+    if (relative(root, cwd) || containsPath(root, protectedRoot) || containsPath(protectedRoot, root))
+      throw new Error('Use a canonical working directory separate from protected storage');
     if (!supportsIsolation())
       throw new Error('Isolation unavailable: Linux bubblewrap namespaces and prlimit are required');
     signal?.throwIfAborted();
-    return isolationCommand(command, root, timeoutSeconds, attachments);
+    return isolationCommand({ ...command, cwd: root }, options);
   }
 }

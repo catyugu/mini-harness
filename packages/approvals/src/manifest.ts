@@ -1,13 +1,12 @@
 import type { ApprovalRequests } from './server/api.ts';
 import { Service, type Plugin } from 'mini-harness/cordis';
-import { pluginInstance, sessionVisible } from '@mini-harness/plugin-api/instance';
+import { entryFiber } from '@mini-harness/plugin-api/plugin-configuration';
 import { isRunning } from '@mini-harness/sessions/run-state';
 import { DomainError } from '@mini-harness/platform/errors';
 import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 import { Approvals } from './server/approvals.ts';
 
 export const metadata: PluginInfo = {
-  scope: 'application',
   title: 'Approvals',
   description: 'Pending user decisions',
 };
@@ -21,7 +20,7 @@ const plugin: Plugin.Object = {
     ctx.effect(() => changes.register('approvals'));
     ctx.effect(() => {
       const changed = (event: Event) => {
-        if (event instanceof CustomEvent) changes.invalidate('approvals', { sessionId: event.detail.id });
+        if (event instanceof CustomEvent) changes.invalidate('approvals', event.detail.id);
       };
       approvals.events.addEventListener('change', changed);
       return () => approvals.events.removeEventListener('change', changed);
@@ -30,8 +29,7 @@ const plugin: Plugin.Object = {
     const requests: ApprovalRequests = Service.track({
       request(id, prompt, signal) {
         const caller = Service.caller(this);
-        const { instanceId } = pluginInstance(caller);
-        if (!sessionVisible(caller, id)) throw new Error('Conversation outside plugin scope');
+        const instanceId = entryFiber(caller)?.entry?.options.id ?? 'fiber:' + caller.fiber.uid;
         ctx.harnessRegistry.assertAvailable(id);
         if (!ctx.harnessRegistry.get(id)) throw new DomainError('not_found', 'Conversation not found');
         const run = ctx.harnessRuns.info(id);

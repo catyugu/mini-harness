@@ -12,7 +12,7 @@ Owns route registration, HTTP errors and replies, event streams, and projection 
 
 ## API
 
-`harnessRoutes` and `harnessChanges` are host services. `harnessPluginRoutes` registers plugin-owned authenticated endpoints.
+`harnessRoutes`, `harnessUpgrades` and `harnessChanges` are host services. Projection changes identify a domain, a revision and an optional resource ID. All plugins use the same HTTP and upgrade registry; register routes in a Cordis effect to remove them on unload.
 
 ## Dependencies
 
@@ -20,7 +20,7 @@ Uses Node HTTP and [Platform](../platform/README.md) errors. Features own payloa
 
 ## Lifecycle
 
-Route leases are revoked with their owner. Application shutdown seals route admission, cancels request work and ends open streams. Projection subscribers detach when their stream closes.
+Unregistering a route cancels and drains its active requests, except for the request that is itself removing the route. Related resources can be released after awaiting the route disposer in the same effect. Application shutdown seals route admission, cancels request work and ends open streams. Projection subscribers detach when their stream closes.
 
 ## Testing
 

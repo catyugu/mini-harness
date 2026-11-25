@@ -1,4 +1,5 @@
-import type { IncomingMessage, ServerResponse } from 'node:http';
+import { METHODS, type IncomingMessage, type ServerResponse } from 'node:http';
+import { RequestWork } from './request-work.ts';
 import { HttpError, HttpReply, type RouteHandler, type RoutePort } from './routes.ts';
 import { json } from './http.ts';
 
@@ -48,6 +49,7 @@ function requestBody(req: IncomingMessage, max = 1024 * 1024, signal?: AbortSign
 
 export class RouteRegistry implements RoutePort {
   private readonly admission = new AbortController();
+  private readonly active = new Set<Promise<unknown>>();
   private readonly routes = new Map<
     string,
     {
@@ -56,13 +58,12 @@ export class RouteRegistry implements RoutePort {
       names: string[];
       literal: boolean;
       handler: RouteHandler;
-      controller: AbortController;
-      active: Set<Promise<unknown>>;
+      work: RequestWork;
     }
   >();
 
   register(method: string, path: string, handler: RouteHandler) {
-    if (!['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method) || !/^\/[a-zA-Z0-9_:/-]+$/.test(path))
+    if (!METHODS.includes(method) || !/^\/[a-zA-Z0-9_:/-]+$/.test(path))
       throw new Error('Invalid route: ' + method + ' ' + path);
     const key = method + ' ' + path;
     if (this.routes.has(key)) throw new Error('Duplicate route: ' + key);
@@ -79,21 +80,18 @@ export class RouteRegistry implements RoutePort {
         if (!/^[a-zA-Z0-9_-]+$/.test(segment)) throw new Error('Invalid route segment');
         return segment;
       });
-    const controller = new AbortController();
     const entry = {
       path,
       pattern: new RegExp('^/' + parts.join('/') + '$'),
       names,
       literal: names.length === 0,
       handler,
-      controller,
-      active: new Set<Promise<unknown>>(),
+      work: new RequestWork(),
     };
     this.routes.set(key, entry);
     return async () => {
       if (this.routes.get(key) === entry) this.routes.delete(key);
-      controller.abort(new HttpError('invalid_input', 'Route is no longer available'));
-      await Promise.allSettled(entry.active);
+      await entry.work.close(new HttpError('invalid_input', 'Route is no longer available'));
     };
   }
 
@@ -102,7 +100,7 @@ export class RouteRegistry implements RoutePort {
   }
 
   async drain() {
-    await Promise.allSettled([...this.routes.values()].flatMap(({ active }) => [...active]));
+    await Promise.allSettled(this.active);
   }
 
   dispatch(req: IncomingMessage, res: ServerResponse, url: URL) {
@@ -124,7 +122,8 @@ export class RouteRegistry implements RoutePort {
       throw new HttpError('invalid_input', 'Invalid URL encoding');
     }
     const disconnect = new AbortController();
-    const signal = AbortSignal.any([route.controller.signal, disconnect.signal, this.admission.signal]);
+    const controller = new AbortController();
+    const signal = AbortSignal.any([controller.signal, disconnect.signal, this.admission.signal]);
     const close = () => {
       if (res.headersSent) res.end();
     };
@@ -133,7 +132,7 @@ export class RouteRegistry implements RoutePort {
       signal.removeEventListener('abort', close);
       disconnect.abort();
     });
-    const active = Promise.resolve().then(() => {
+    const active = route.work.run(controller, () => {
       signal.throwIfAborted();
       return route.handler({
         url,
@@ -148,7 +147,7 @@ export class RouteRegistry implements RoutePort {
         },
       });
     });
-    route.active.add(active);
+    this.active.add(active);
     return active
       .then((result) => {
         if (res.destroyed || res.writableEnded || res.headersSent) return;
@@ -163,7 +162,7 @@ export class RouteRegistry implements RoutePort {
         } else json(res, 200, result ?? null);
       })
       .finally(() => {
-        route.active.delete(active);
+        this.active.delete(active);
       });
   }
 }

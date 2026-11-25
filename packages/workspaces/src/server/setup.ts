@@ -1,3 +1,4 @@
+import { waitFor } from '@mini-harness/platform/wait';
 import type { Context } from 'mini-harness/cordis';
 import { WorkspaceCatalog } from './catalog.ts';
 import { HttpError, HttpReply } from '@mini-harness/transport/routes';
@@ -7,15 +8,18 @@ const validId = /^[a-f0-9]{32}$/;
 export function setup(ctx: Context) {
   const catalog = new WorkspaceCatalog(ctx.harnessState.paths);
   ctx.effect(() =>
-    ctx.harnessScopes.register(
+    ctx.harnessProfileScopes.register(
       'workspace',
-      (id) =>
-        catalog.list().some((entry) => entry.id === id)
-          ? { scope: { kind: 'workspace', workspaceId: id } }
-          : undefined,
+      (id) => {
+        const key = catalog.scope(id);
+        return key && { key };
+      },
       true,
     ),
   );
+  ctx.on('settings/scopes', (options) => {
+    for (const { id, name } of catalog.list()) options.push({ key: `workspace:${id}`, name });
+  });
   const changes = ctx.harnessChanges;
   ctx.effect(() => changes.register('workspaces'));
   ctx.effect(() => {
@@ -45,9 +49,12 @@ export function setup(ctx: Context) {
     add('PATCH', '/api/workspaces/:id', async ({ params, body }) =>
       catalog.rename(requireId(params.id), (await body())?.name),
     );
-    add('DELETE', '/api/workspaces/:id', ({ params }) => {
+    add('DELETE', '/api/workspaces/:id', ({ params, signal }) => {
       const id = requireId(params.id);
-      return catalog.remove(id, () => ctx.harnessSettingsStore.forgetScopes([`workspace:${id}`]));
+      return waitFor(
+        catalog.remove(id, () => ctx.harnessProfileConfig.forgetScopes([`workspace:${id}`])),
+        signal,
+      );
     });
   });
 }

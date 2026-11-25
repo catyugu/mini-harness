@@ -15,7 +15,6 @@ const Config = defineConfig(
 );
 
 export const metadata: PluginInfo = {
-  scope: 'application',
   title: 'Agent',
   description: 'Native agent execution, inbox and tool pipeline',
 };
@@ -23,7 +22,7 @@ export const metadata: PluginInfo = {
 const plugin: Plugin.Object = {
   Config,
   inject: [
-    'harnessScopes',
+    'harnessProfileScopes',
     'harnessRegistry',
     'harnessTools',
     'harnessModels',

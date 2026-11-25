@@ -19,7 +19,6 @@ export function getPaths(cwd: string = process.cwd(), env: NodeJS.ProcessEnv = p
   return {
     home,
     cwd: project,
-    settings: join(home, 'settings.json'),
     registry: join(home, 'sessions.json'),
     sessions: join(home, 'sessions', key),
     pid: join(home, 'server.json'),

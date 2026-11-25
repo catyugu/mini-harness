@@ -26,7 +26,7 @@ export class MiniHarnessRuntime {
     return this.profile!.ctx.harnessPluginCatalog as PluginHost;
   }
   get configuration() {
-    return this.profile!.ctx.harnessSettingsStore;
+    return this.profile!.ctx.harnessProfileConfig;
   }
   get settings() {
     return this.configuration.settings;

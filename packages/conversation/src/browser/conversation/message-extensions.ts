@@ -11,8 +11,14 @@ export class MessageExtensions {
 
   readonly report = (error: unknown) => console.error('Conversation extension failed', error);
 
-  private replace<T>(registry: KeyedRegistry<string, T>, key: string, value: T, event: string) {
-    const remove = registry.add(key, value);
+  private replace<T>(
+    registry: KeyedRegistry<string, T>,
+    key: string,
+    value: T,
+    event: string,
+    priority: number,
+  ) {
+    const remove = registry.add(key, value, priority);
     const change = () => this.events.dispatchEvent(new CustomEvent(event, { detail: key }));
     change();
     return () => {
@@ -22,8 +28,8 @@ export class MessageExtensions {
     };
   }
 
-  registerRecord(plugin: string, render: RecordRenderer) {
-    return this.replace(this.records, plugin, render, 'records');
+  registerRecord(plugin: string, render: RecordRenderer, priority = 0) {
+    return this.replace(this.records, plugin, render, 'records', priority);
   }
 
   subscribeToRecords(listener: () => void, signal: AbortSignal) {
@@ -74,9 +80,9 @@ export class MessageExtensions {
     };
   }
 
-  registerTool(name: string, render: ToolRenderer, action = false) {
+  registerTool(name: string, render: ToolRenderer, action = false, priority = 0) {
     const registry = action ? this.toolActions : this.renderers;
-    return this.replace(registry, name, render, 'tools');
+    return this.replace(registry, name, render, 'tools', priority);
   }
 
   subscribeToTools(listener: (name: string) => void, signal: AbortSignal) {

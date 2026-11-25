@@ -1,7 +1,6 @@
 import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 
 export const metadata: PluginInfo = {
-  scope: 'application',
   title: 'Layout',
   description: 'Application layout',
   browserStyles: [

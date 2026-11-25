@@ -11,7 +11,9 @@ test('the composed browser graph serves its runtime dependencies and excludes se
   const { body: snapshot }: { body: BrowserBootstrap } = await request('/bootstrap');
   const mounted = new Map(snapshot.ui.map((entry) => [entry.id, entry]));
   assert.equal(mounted.size, snapshot.ui.length);
-  const plugins = await profileDescriptors(readProfile('web'));
+  const plugins = profileDescriptors(readProfile('web'));
+  assert.ok(plugins.length);
+  assert.ok(plugins.every(({ plugin, Config, location }) => !plugin && !Config && location));
   for (const { id, browser, defaultEnabled } of plugins)
     if (browser && defaultEnabled) assert.equal(mounted.get(id)?.browser, browser);
 

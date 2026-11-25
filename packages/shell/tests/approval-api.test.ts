@@ -1,3 +1,4 @@
+import { conversationTools } from '@mini-harness/agent/tool-selection';
 import { expectPresent } from '../../../test/support/required.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -51,10 +52,22 @@ test('shell approval gates execution, handles rejection and cancellation', async
   );
   assert.equal((await request('/sessions/' + session.id)).body.permission, 'readOnly');
   assert.equal((await request('/sessions/' + other.id)).body.permission, 'standard');
-  const tools = app.runtime.plugins.ctx.harnessTools;
-  assert.ok(tools.forSession(session.id).some(({ name }) => name === 'read'));
-  assert.ok(!tools.forSession(session.id).some(({ name }) => name === 'sandbox_shell' || name === 'write'));
-  assert.ok(tools.forSession(other.id).some(({ name }) => name === 'sandbox_shell'));
+  const ctx = app.runtime.plugins.ctx;
+  assert.ok(
+    conversationTools(ctx, session.id, ctx.harnessRegistry.runScope(session.id)).some(
+      ({ name }) => name === 'read',
+    ),
+  );
+  assert.ok(
+    !conversationTools(ctx, session.id, ctx.harnessRegistry.runScope(session.id)).some(
+      ({ name }) => name === 'sandbox_shell' || name === 'write',
+    ),
+  );
+  assert.ok(
+    conversationTools(ctx, other.id, ctx.harnessRegistry.runScope(other.id)).some(
+      ({ name }) => name === 'sandbox_shell',
+    ),
+  );
   assert.equal(
     (await request('/sessions/' + session.id + '/permissions', 'PATCH', { permission: 'invalid' })).status,
     400,
@@ -159,13 +172,17 @@ test('full access bypasses Shell prompts only for its conversation and applies t
     permission: 'fullAccess',
   });
   assert.equal(
-    app.runtime.plugins.ctx.harnessTools.forSession(child.id).some(({ name }) => name === 'sandbox_shell'),
+    conversationTools(
+      app.runtime.plugins.ctx,
+      child.id,
+      app.runtime.plugins.ctx.harnessRegistry.runScope(child.id),
+    ).some(({ name }) => name === 'sandbox_shell'),
     false,
   );
 });
 
 test(
-  'disabling Shell waits until conversations using its tools have finished',
+  'disabling Shell cancels its pending approval while an unrelated run continues',
   { timeout: 15000 },
   async (t) => {
     let entered: () => void;
@@ -203,10 +220,9 @@ test(
       );
       assert.equal(
         (await request('/settings', 'PATCH', { entries: { shell: { disabled: true } } })).status,
-        409,
+        200,
       );
-      const approval = (await request('/approvals')).body[0];
-      assert.equal((await request('/approvals', 'POST', { id: approval.id, allow: false })).status, 200);
+      assert.deepEqual((await request('/approvals')).body, []);
       assert.ok(app.runtime.plugins.ctx.harnessRuns.active(other.id));
       assert.equal((await finish(shell.id)).body.run.state, 'completed');
       const tool = expectPresent(
@@ -221,15 +237,14 @@ test(
       release();
     }
     assert.equal(await pending, 'Unrelated task completed');
-    assert.equal(
-      (await request('/settings', 'PATCH', { entries: { shell: { disabled: true } } })).status,
-      200,
-    );
-    assert.deepEqual((await request('/approvals')).body, []);
     const graph = (await request('/bootstrap')).body.ui;
     assert.ok(!graph.some(({ id }: { id: string }) => id === 'shell'));
     assert.ok(
-      !app.runtime.plugins.ctx.harnessTools.forSession(shell.id).some(({ name }) => name === 'sandbox_shell'),
+      !conversationTools(
+        app.runtime.plugins.ctx,
+        shell.id,
+        app.runtime.plugins.ctx.harnessRegistry.runScope(shell.id),
+      ).some(({ name }) => name === 'sandbox_shell'),
     );
   },
 );

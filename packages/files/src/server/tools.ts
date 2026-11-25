@@ -2,7 +2,7 @@ import { dirname, resolve } from 'node:path';
 import { TextDecoder } from 'node:util';
 import { Type } from 'typebox';
 import { defineTool, type ToolDefinition, type ToolResult } from '@mini-harness/tools/api';
-import type { WorkspaceFileAccess } from '@mini-harness/file-access/api';
+import type { RootedFileAccess } from '@mini-harness/file-access/api';
 
 export const fileToolNames = ['read', 'write', 'edit', 'ls', 'find', 'grep'] as const;
 const outputLimit = 48 * 1024;
@@ -26,8 +26,8 @@ function textFile(bytes: Buffer) {
   }
 }
 
-/** All file operations stay behind WorkspaceFileAccess, including metadata and searches. */
-export function fileTools(cwd: string, access: () => WorkspaceFileAccess): ToolDefinition[] {
+/** All file operations stay behind RootedFileAccess, including metadata and searches. */
+export function fileTools(cwd: string, access: () => RootedFileAccess): ToolDefinition[] {
   return [
     defineTool({
       name: 'read',

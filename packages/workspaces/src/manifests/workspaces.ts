@@ -3,13 +3,12 @@ import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 import { setup } from '../server/setup.ts';
 
 export const metadata: PluginInfo = {
-  scope: 'application',
   title: 'Workspaces',
   description: 'Workspace identity and registry',
 };
 
 const plugin: Plugin.Object = {
-  inject: ['harnessChanges', 'harnessState', 'harnessScopes', 'harnessSettingsStore'],
+  inject: ['harnessChanges', 'harnessState', 'harnessProfileScopes', 'harnessProfileConfig'],
   provide: ['harnessWorkspaces'],
   apply: setup,
 };

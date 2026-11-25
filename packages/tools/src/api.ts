@@ -1,3 +1,4 @@
+import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
 import type { Static, TSchema } from 'typebox';
 import type { TextPart, ImagePart } from '@mini-harness/llm/api';
 
@@ -9,12 +10,13 @@ export interface ToolResult {
   details?: Record<string, unknown>;
 }
 export interface ToolContext {
-  sessionId: string;
   cwd: string;
   assertAuthorized?(): void;
   waitForApproval?(request: () => Promise<void>): Promise<void>;
 }
 export interface ToolDefinition<Arguments = Record<string, any>> extends ToolSchema {
+  /** Tags are interpreted by the tool consumer. */
+  tags?: readonly string[];
   label?: string;
   promptSnippet?: string;
   promptGuidelines?: string[];
@@ -29,20 +31,21 @@ export interface ToolDefinition<Arguments = Record<string, any>> extends ToolSch
   ): Promise<ToolResult>;
 }
 
-export interface ToolRegistrationOptions {
-  /** The host only honors a read-only declaration from an authorized source. */
-  access?: 'readOnly' | 'standard';
-  visible?(sessionId: string): boolean;
+export interface ToolFactory {
+  name: string;
+  resolve(resourceId: string): ToolDefinition;
+  visible?(resourceId: string): boolean;
+}
+
+export interface ToolSelection {
+  scope?: ScopeKey;
+  resourceId?: string;
 }
 
 export interface ToolPort {
-  register(
-    tool: ToolDefinition | { name: string; bind(sessionId: string): ToolDefinition },
-    options?: ToolRegistrationOptions,
-  ): () => Promise<void>;
-  forSession(id: string): ToolDefinition[];
-  readOnlyRegistrations(pluginId: string): string[];
-  isAvailable(id: string, tool: ToolDefinition): boolean;
+  register(tool: ToolDefinition | ToolFactory): () => Promise<void>;
+  list(selection?: ToolSelection): ToolDefinition[];
+  isAvailable(tool: ToolDefinition): boolean;
 }
 
 export function isToolContent(value: unknown): value is ToolResult['content'] {

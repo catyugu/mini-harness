@@ -1,17 +1,12 @@
 import { DomainError } from '@mini-harness/platform/errors';
 import { join } from 'node:path';
 import { readJson, writeJson } from '@mini-harness/platform/json';
-import type { ModelChoice } from '@mini-harness/llm/vocabulary';
-import type { ModelCatalogPort } from './api.ts';
 import type { ProviderInfo } from '../shared/catalog.ts';
 
 import type { ProviderAdministration } from './store-api.ts';
 
 type ProviderHost = {
   paths: { home: string };
-  recent(): ModelChoice;
-  remember(model: ModelChoice): Promise<void>;
-  catalog: ModelCatalogPort;
   admin: ProviderAdministration;
 };
 export function providerSettings(runtime: ProviderHost): ProviderInfo[] {
@@ -111,23 +106,14 @@ export async function saveProvider(runtime: ProviderHost, input: any, remove = f
       })),
     };
   }
-  const recent = runtime.recent();
   writeJson(path, next);
-  let clearedRecent = false;
   try {
     await runtime.admin.refresh();
-    if (recent.provider === input.id) {
-      if (!runtime.catalog.resolve(recent)) {
-        clearedRecent = true;
-        await runtime.remember({ provider: '', id: '' });
-      }
-    }
     if (remove && !runtime.admin.hasProvider(input.id)) await runtime.admin.removeCredential(input.id);
     else if (!remove && input.key?.trim()) await runtime.admin.storeCredential(input.id, input.key.trim());
   } catch (error) {
     writeJson(path, previous);
     await runtime.admin.refresh();
-    if (clearedRecent) await runtime.remember(recent);
     throw error;
   }
   return providerSettings(runtime);

@@ -1,5 +1,6 @@
+import { conversationTools } from './tool-selection.ts';
 import type { Context } from 'mini-harness/cordis';
-import { sessionEvent } from '@mini-harness/plugin-api/instance';
+import { scopeOf, scopeTarget } from '@mini-harness/plugin-api/scopes';
 import { observe } from '@mini-harness/plugin-api/observations';
 import { imageMimeType } from '@mini-harness/input/prepare';
 import { validateModelOptions } from '@mini-harness/llm/options';
@@ -54,10 +55,7 @@ function requireService<K extends keyof Context & string>(ctx: Context, name: K)
 
 async function retryModel(ctx: Context, failure: ModelFailure) {
   const { signal, ...input } = failure;
-  for (const { context, callback } of ctx.events.listeners(
-    'agent/model-retry',
-    sessionEvent(ctx, failure.sessionId),
-  )) {
+  for (const { context, callback } of ctx.events.listeners('agent/model-retry', scopeTarget(ctx))) {
     const retry = await context.fiber.run(
       (signal) => callback({ ...structuredClone(input), signal }),
       signal,
@@ -214,7 +212,7 @@ export class NativeAgent implements AgentPort {
     input: PreparedMessage,
     signal: AbortSignal,
   ) {
-    const hooks = ctx.events.listeners('agent/prepare-input', sessionEvent(ctx, sessionId));
+    const hooks = ctx.events.listeners('agent/prepare-input', scopeTarget(ctx));
     const context: InputContext = {
       sessionId,
       model,
@@ -490,7 +488,8 @@ export class NativeAgent implements AgentPort {
           await this.compactLog(ctx, id, log, signal, true);
         const current = log.projection();
         const registry: ToolPort = requireService(ctx, 'harnessTools');
-        const tools = registry.forSession(id);
+        const executor: ToolExecutorPort = requireService(ctx, 'harnessToolExecutor');
+        const tools = conversationTools(ctx, id, scopeOf(ctx), registry);
         const advertisedTools = new Map(tools.map((tool) => [tool.name, tool]));
         const toolMetadata = tools.map(
           ({ name, description, parameters, label, promptSnippet, promptGuidelines }) => ({
@@ -503,22 +502,33 @@ export class NativeAgent implements AgentPort {
           }),
         );
         const promptService: PromptPort = requireService(ctx, 'harnessPrompt');
-        const systemPrompt = await promptService.build({ sessionId: id, cwd, tools: toolMetadata, signal });
+        const systemPrompt = await promptService.build(
+          { sessionId: id, cwd, tools: toolMetadata, signal },
+          scopeOf(ctx),
+        );
         const request = await this.prepareRequest(
           ctx,
           log,
           step,
           { systemPrompt, messages: current.contextMessages, thinkingLevel: current.thinkingLevel },
-          () => {
-            for (const [name, tool] of advertisedTools)
-              if (!registry.isAvailable(id, tool)) advertisedTools.delete(name);
-            return toolMetadata
+          (content) => {
+            for (const [name, tool] of advertisedTools) if (!tool.available()) advertisedTools.delete(name);
+            const available = toolMetadata
               .filter(({ name }) => advertisedTools.has(name))
               .map(({ name, description, parameters }) => ({ name, description, parameters }));
+            return executor.present(structuredClone(content), structuredClone(available), step);
           },
         );
         emit({ type: 'assistant-start' });
         let result = await this.request(ctx, id, request, (text) => emit({ type: 'delta', text }));
+        if (!result.errorMessage && result.stopReason !== 'error' && result.stopReason !== 'aborted') {
+          const interpreted = executor.interpret(structuredClone(result), step);
+          validateNativeMessage(interpreted);
+          if (!isDeepStrictEqual(interpreted, result)) {
+            log.append({ type: 'diagnostic', code: 'executor-response', data: result });
+            result = interpreted;
+          }
+        }
         const knownCalls = new Set(
           [...current.contextMessages, ...request.messages].flatMap((message) =>
             message.role === 'assistant'
@@ -560,7 +570,6 @@ export class NativeAgent implements AgentPort {
           );
         signal.throwIfAborted();
         const calls = result.content.filter((part): part is ToolCallPart => part.type === 'toolCall');
-        const executor: ToolExecutorPort = requireService(ctx, 'harnessToolExecutor');
         await dispatchTools(executor, calls, advertisedTools, signal, async (call, tool, toolSignal) => {
           const steering = nextValid('steer');
           let output: NativeToolMessage;
@@ -573,15 +582,14 @@ export class NativeAgent implements AgentPort {
               steering ? 'Skipped because a steering message arrived.' : 'Agent run cancelled',
             );
           else {
-            const hooks = ctx.events.listeners('agent/tool-result', sessionEvent(ctx, id));
+            const hooks = ctx.events.listeners('agent/tool-result', scopeTarget(ctx));
             output = await executeTool(call, tool, {
-              sessionId: id,
               cwd,
               signal: toolSignal,
               phase: (state) =>
                 emit({ type: 'tool', id: call.id, name: call.name, state, arguments: call.arguments }),
               update: (value) => {
-                if (hooks.length) return;
+                if (hooks.length || executor.result) return;
                 emit({
                   type: 'tool',
                   id: call.id,
@@ -592,19 +600,19 @@ export class NativeAgent implements AgentPort {
                 });
               },
             });
-            if (!output.isError && hooks.length) {
+            if (!output.isError && (hooks.length || executor.result)) {
               executionId = log.append({ type: 'tool-execution', result: output }).id;
               originalContent = output.content;
               try {
-                const content = await applyTransforms(
-                  hooks,
-                  output.content,
-                  { ...step, signal: toolSignal, tool: call.name, callId: call.id },
-                  (value) => {
-                    if (!isToolContent(value)) throw new Error('Invalid tool result content');
-                    return value;
-                  },
-                );
+                const resultContext = { ...step, signal: toolSignal, tool: call.name, callId: call.id };
+                const initial = executor.result
+                  ? await executor.result(structuredClone(output), resultContext)
+                  : output.content;
+                if (!isToolContent(initial)) throw new Error('Invalid tool result content');
+                const content = await applyTransforms(hooks, initial, resultContext, (value) => {
+                  if (!isToolContent(value)) throw new Error('Invalid tool result content');
+                  return value;
+                });
                 output = { ...output, content };
               } catch (error) {
                 const failure = failedTool(
@@ -697,7 +705,7 @@ export class NativeAgent implements AgentPort {
     log: SessionLogPort,
     context: StepContext,
     requestContent: ModelRequestContent,
-    tools?: () => LlmRequest['tools'],
+    present?: (content: ModelRequestContent) => ModelRequestContent & { tools?: LlmRequest['tools'] },
   ): Promise<LlmRequest> {
     const projected = log.projection();
     const base = { model: context.model };
@@ -709,20 +717,23 @@ export class NativeAgent implements AgentPort {
       return value;
     };
     const transformed = await applyTransforms(
-      ctx.events.listeners('agent/model-request', sessionEvent(ctx, context.sessionId)),
+      ctx.events.listeners('agent/model-request', scopeTarget(ctx)),
       requestContent,
       context,
       validate,
     );
     context.signal.throwIfAborted();
-    const { systemPrompt, thinkingLevel, maxTokens } = transformed;
+    const prepared: ModelRequestContent & { tools?: LlmRequest['tools'] } = present
+      ? present(transformed)
+      : transformed;
+    const { systemPrompt, thinkingLevel, maxTokens } = validate(prepared);
     const input = capabilities?.input.includes('image')
-      ? transformed.messages
-      : withoutImages(transformed.messages);
-    const snapshot: Omit<LlmRequest, 'signal' | 'sessionId'> = JSON.parse(
+      ? prepared.messages
+      : withoutImages(prepared.messages);
+    const snapshot: Omit<LlmRequest, 'signal'> = JSON.parse(
       JSON.stringify({
         ...base,
-        tools: tools?.(),
+        tools: prepared.tools,
         messages: input,
         systemPrompt,
         thinkingLevel,
@@ -762,7 +773,7 @@ export class NativeAgent implements AgentPort {
       },
       projected.leafId,
     );
-    return { ...snapshot, sessionId: context.sessionId, signal: context.signal };
+    return { ...snapshot, signal: context.signal };
   }
 
   private request(
@@ -775,7 +786,7 @@ export class NativeAgent implements AgentPort {
       delta,
       ended: (attempt, failed) =>
         observe(ctx, { type: 'model-attempt-ended', sessionId: id, attempt, failed }, request.signal),
-      retry: (failure) => retryModel(ctx, failure),
+      retry: (failure) => retryModel(ctx, { ...failure, sessionId: id }),
     });
   }
 

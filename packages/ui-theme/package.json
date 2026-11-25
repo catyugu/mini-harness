@@ -4,7 +4,6 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./browser/api": "./src/browser/api.ts",
     "./manifest": "./src/manifest.ts"
   },
   "dependencies": {
@@ -12,9 +11,6 @@
     "@mini-harness/ui-runtime": "workspace:*"
   },
   "miniHarness": {
-    "api": [
-      "./browser/api"
-    ],
     "profileModules": {
       "@mini-harness/ui-theme": "./src/manifest.ts"
     }

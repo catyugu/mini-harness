@@ -4,8 +4,6 @@ import { setup } from './server/setup.ts';
 
 /** One metadata definition for the host, settings, and browser loader. */
 export const metadata: PluginInfo = {
-  scope: 'application',
-  trustedContributor: true,
   title: 'Workspace files',
   description: 'Read, search and edit files within the workspace.',
   browserStyles: ['/packages/files/src/browser/style.css'],
@@ -20,7 +18,7 @@ const plugin: Plugin.Object = {
     'harnessSessions',
     'harnessTools',
     'harnessChanges',
-    'harnessScopes',
+    'harnessProfileScopes',
   ],
   apply: setup,
 };

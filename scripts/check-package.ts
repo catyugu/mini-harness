@@ -145,26 +145,29 @@ async function checkPackage() {
       `
       import { Context, type Plugin } from 'mini-harness/cordis';
       import type { LlmPort } from 'mini-harness/llm';
-      import type { ScopeSettings } from 'mini-harness/scopes';
-      import type { ProfileConfiguration } from 'mini-harness/configuration';
+      import { createScopeKey, type ScopeKey } from 'mini-harness/scopes';
+      import type { ProfileConfiguration, ScopeSettings } from 'mini-harness/configuration';
       import { defineTool } from 'mini-harness/tools';
       import type { PluginData, PluginSecrets } from 'mini-harness/plugin-data';
       import type { SessionRecords } from 'mini-harness/sessions';
       import type { Execution } from 'mini-harness/execution';
-      import type { ModelRequestContent, InputContext } from 'mini-harness/agent/events';
+      import type { ModelRequestContent, InputContext, ToolDecision } from 'mini-harness/agent/events';
       import type { PromptPort } from 'mini-harness/agent/prompt';
       import type { CapabilityObservation } from 'mini-harness/observations';
       import type { ToolProjection } from 'mini-harness/conversation/display-events';
-      import type { ToolDecision } from 'mini-harness/tools/events';
-      import type { PluginRoutes } from 'mini-harness/transport';
+      import type { RoutePort } from 'mini-harness/transport';
       declare module 'mini-harness/cordis' {
         interface Context { example: { greet(name: string): string } }
       }
       declare const ctx: Context;
-      const scope: ScopeSettings = { disabledTools: ['write'] };
+      const scopeKey: ScopeKey = createScopeKey();
+      void scopeKey;
+      const scope: ScopeSettings = { isolate: ['example'] };
       const scopedSettings: ProfileConfiguration['scopes'] = { 'session:example': scope };
       void scopedSettings;
       const llm: LlmPort | undefined = ctx.harnessLlm;
+      const scopeContext: Context = ctx.harnessProfileScopes.context('session:example');
+      void scopeContext;
       const plugin: Plugin = {
         apply(ctx) { ctx.provide('example', { greet: (name: string) => name.toUpperCase() }); }
       };
@@ -176,9 +179,9 @@ async function checkPackage() {
       const pluginData: PluginData = ctx.harnessPluginData;
       const pluginSecrets: PluginSecrets = ctx.harnessPluginSecrets;
       const execution: Execution = ctx.harnessExecution;
-      const records: SessionRecords = ctx.harnessSessions.records('session');
+      const records: SessionRecords = ctx.harnessSessions.records('session', { pluginId: 'fixture', instanceId: 'fixture' });
       const prompt: PromptPort = ctx.harnessPrompt;
-      const routes: PluginRoutes = ctx.harnessPluginRoutes;
+      const routes: RoutePort = ctx.harnessRoutes;
       pluginData.write('state', { count: 1 });
       pluginSecrets.read('credential');
       ctx.on('internal/update', () => {});
@@ -190,14 +193,15 @@ async function checkPackage() {
         if (event.type === 'run-ended') void event.run.id;
       });
       ctx.on('conversation/tool-projection', ({ content }: ToolProjection) => content);
-      ctx.on('tools/decide', ({ tool }: ToolDecision) => tool === 'change' ? 'deny' : undefined);
+      ctx.on('agent/tool-decision', ({ tool }: ToolDecision) => tool === 'change' ? 'deny' : undefined);
       void records.append({ seen: true });
       // @ts-expect-error Input listeners return native user content or a rejection.
       ctx.on('agent/prepare-input', () => ({ arbitrary: true }));
       void ctx.harnessPluginSettings.set('showDetails', true);
-      routes.upgrade('/updates', (_request, socket, _head, signal) => {
+      ctx.effect(() => routes.register('GET', '/api/example/:id', ({ params }) => params.id));
+      ctx.effect(() => ctx.harnessUpgrades.register('/api/example/updates', (_request, socket, _head, signal) => {
         if (signal.aborted) socket.destroy();
-      });
+      }));
       // @ts-expect-error The declared service takes a string.
       ctx.example.greet(1);
       // @ts-expect-error TypeScript plugins declare their own services.
@@ -411,7 +415,7 @@ async function checkPackage() {
     }
     assert.ok(bootstrap.ui.some(({ id }: { id: string }) => id === 'core:conversation'));
     assert.ok(!bootstrap.ui.some(({ id }: { id: string }) => id === 'shell'));
-    assert.deepEqual(await (await get('/api/extensions/greeting-route/hello?name=SDK')).json(), {
+    assert.deepEqual(await (await get('/api/greeting/hello/SDK')).json(), {
       greeting: 'Hello, SDK',
     });
     assert.equal(
@@ -422,7 +426,7 @@ async function checkPackage() {
       ).status,
       200,
     );
-    assert.deepEqual(await (await get('/api/extensions/greeting-route/hello?name=SDK')).json(), {
+    assert.deepEqual(await (await get('/api/greeting/hello/SDK')).json(), {
       greeting: 'Installed, SDK',
     });
     const panel = bootstrap.ui.find(({ id }) => id === 'browser-panel');
@@ -481,7 +485,11 @@ async function checkPackage() {
     assert.equal(
       (
         await write('/api/settings', 'PATCH', {
-          scopes: { [scope]: { entries: { 'scoped-tool': { disabled: false } } } },
+          scopes: {
+            [scope]: {
+              entries: { 'scoped-tool': { name: 'mini-harness-sdk-scoped-tool', disabled: false } },
+            },
+          },
         })
       ).status,
       200,

@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { rmSync, mkdirSync, realpathSync, writeFileSync, cpSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.ts';
-import { workspaceId } from '@mini-harness/workspaces/catalog';
+import { workspaceId } from '@mini-harness/workspaces/identity';
 import { writeJson } from '@mini-harness/platform/json';
 import { readWebProfile, startIsolatedHost, settingsSection, suggestions } from '../support/browser.ts';
 
@@ -17,7 +17,17 @@ test('frontend plugins own UI contributions and clean up on disable and reconfig
   mkdirSync(folder);
   writeFileSync(
     join(folder, 'plugin.js'),
-    "import { defineConfig } from 'mini-harness/configuration';\nimport { readFileSync } from 'node:fs';\nexport const Config = defineConfig(JSON.parse(readFileSync(new URL('./plugin.json', import.meta.url), 'utf8')).configSchema);\nexport function apply() {}",
+    "import { defineConfig } from 'mini-harness/configuration';\nimport { readFileSync } from 'node:fs';\nexport const Config = defineConfig(JSON.parse(readFileSync(new URL('./schema.json', import.meta.url), 'utf8')));",
+  );
+  writeFileSync(
+    join(folder, 'schema.json'),
+    JSON.stringify({
+      type: 'object',
+      properties: {
+        label: { type: 'string', title: 'Button label', default: 'Plugin entry' },
+        showDetails: { type: 'boolean', default: false },
+      },
+    }),
   );
   writeFileSync(
     join(folder, 'plugin.json'),
@@ -26,13 +36,6 @@ test('frontend plugins own UI contributions and clean up on disable and reconfig
       icon: {
         path: 'M2 2h20v20H2z',
         viewBox: '0 0 24 24',
-      },
-      configSchema: {
-        type: 'object',
-        properties: {
-          label: { type: 'string', title: 'Button label', default: 'Plugin entry' },
-          showDetails: { type: 'boolean', default: false },
-        },
       },
     }),
   );
@@ -189,33 +192,30 @@ test('a failed browser plugin reports the saved state and can be retried', async
   mkdirSync(folder);
   writeFileSync(
     join(folder, 'plugin.js'),
-    "import { defineConfig } from 'mini-harness/configuration';\nimport { readFileSync } from 'node:fs';\nexport const Config = defineConfig(JSON.parse(readFileSync(new URL('./plugin.json', import.meta.url), 'utf8')).configSchema);\nexport function apply() {}",
+    "import { defineConfig } from 'mini-harness/configuration';\nimport { readFileSync } from 'node:fs';\nexport const Config = defineConfig(JSON.parse(readFileSync(new URL('./schema.json', import.meta.url), 'utf8')));",
+  );
+  writeFileSync(
+    join(folder, 'schema.json'),
+    JSON.stringify({
+      type: 'object',
+      properties: { ready: { type: 'boolean', title: 'Ready', default: false } },
+    }),
   );
   writeJson(join(folder, 'plugin.json'), {
     title: 'Retry UI',
     browserDirectory: 'web',
-    browserPreload: 'web/preload.js',
-    configSchema: {
-      type: 'object',
-      properties: { ready: { type: 'boolean', title: 'Ready', default: false } },
-    },
   });
   mkdirSync(join(folder, 'web'));
-  writeFileSync(
-    join(folder, 'web/preload.js'),
-    `
-export default (signal) => {
-    document.body.dataset.retryPreload = 'mounted';
-    return () => { document.body.dataset.retryPreload = signal.aborted ? 'released' : 'active'; };
-  };
-`,
-  );
   writeFileSync(
     join(folder, 'web.js'),
     `
 export const inject = ["miniSlots"];
 
 export const apply = (ctx, config) => {
+    ctx.effect(() => {
+      document.body.dataset.retryEffect = 'mounted';
+      return () => { document.body.dataset.retryEffect = 'released'; };
+    });
     const node = document.createElement('button');
     node.textContent = 'Recovered UI';
     ctx.effect(() => ctx.miniSlots.register('conversation.composer', node));
@@ -223,6 +223,9 @@ export const apply = (ctx, config) => {
   };
 `,
   );
+  writeJson(join(paths.home, 'profiles', 'web', 'cordis.patch.yml'), {
+    plugins: [{ id: 'retry-ui', name: '../../plugins/retry-ui', disabled: true }],
+  });
   const service = await startIsolatedHost(paths);
   try {
     await page.goto(service.url + '/#token=' + service.token);
@@ -233,14 +236,14 @@ export const apply = (ctx, config) => {
     await expect(control).toBeChecked();
     await expect(page.getByRole('button', { name: 'Recovered UI', includeHidden: true })).toHaveCount(0);
     await expect(page.getByText(/Browser setup failed.*Not ready/)).toBeVisible();
-    await expect(page.locator('body')).toHaveAttribute('data-retry-preload', 'released');
+    await expect(page.locator('body')).toHaveAttribute('data-retry-effect', 'released');
     await page.getByRole('button', { name: 'Retry UI settings' }).click();
     await page.getByLabel('Ready · retry-ui').check();
     await page.getByRole('button', { name: 'Save configuration' }).click();
     await expect(page.getByText('Saved.', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'New conversation' }).click();
     await expect(page.getByRole('button', { name: 'Recovered UI' })).toHaveCount(1);
-    await expect(page.locator('body')).toHaveAttribute('data-retry-preload', 'mounted');
+    await expect(page.locator('body')).toHaveAttribute('data-retry-effect', 'mounted');
   } finally {
     await page.close();
     await service.stop();
@@ -327,6 +330,22 @@ test('plugin catalog applies configuration and removes disabled browser capabili
     await expect(catalog.getByRole('spinbutton', { name: 'Maximum child depth · subagents' })).toHaveValue(
       '2',
     );
+    await catalog.getByRole('button', { name: /All plugins/ }).click();
+    const models = catalog.getByRole('switch', { name: 'Models', exact: true });
+    await models.uncheck();
+    await expect(models).not.toBeChecked();
+    await expect(models).toBeEnabled();
+    await catalog.getByRole('button', { name: 'Subagents settings' }).click();
+    await expect(catalog.getByRole('textbox', { name: 'Child model · subagents' })).toHaveValue(
+      JSON.stringify({ provider: 'local-mock', id: 'mock-model' }, null, 2),
+    );
+    await catalog.getByRole('button', { name: /All plugins/ }).click();
+    await models.check();
+    await expect(models).toBeEnabled();
+    await catalog.getByRole('button', { name: 'Subagents settings' }).click();
+    await expect(catalog.getByRole('combobox', { name: 'Child model · subagents' })).toHaveValue(
+      JSON.stringify({ provider: 'local-mock', id: 'mock-model' }),
+    );
     await page.getByRole('button', { name: 'Toggle navigation' }).click();
     await page.getByRole('button', { name: 'New conversation' }).click();
     await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toBeVisible();
@@ -344,24 +363,32 @@ test('the Plugins page keeps stored settings when a workspace plugin setup fails
     { root, paths } = createFixturePaths(mock.url);
   const folder = join(paths.plugins, 'workspace-example');
   mkdirSync(folder);
-  writeJson(join(folder, 'plugin.json'), {
-    scope: 'workspace',
-    title: 'Workspace example',
-    configSchema: {
+  writeFileSync(
+    join(folder, 'schema.json'),
+    JSON.stringify({
       type: 'object',
       properties: { value: { type: 'integer', minimum: 1 } },
       required: ['value'],
-    },
+    }),
+  );
+  writeJson(join(folder, 'plugin.json'), {
+    title: 'Workspace example',
   });
   writeFileSync(
     join(folder, 'plugin.js'),
-    "import { defineConfig } from 'mini-harness/configuration';\nimport { readFileSync } from 'node:fs';\nexport const Config = defineConfig(JSON.parse(readFileSync(new URL('./plugin.json', import.meta.url), 'utf8')).configSchema);\nexport const apply = (ctx, config) => { if (config.value === 1) throw new Error('Workspace setup failed'); };",
+    "import { defineConfig } from 'mini-harness/configuration';\nimport { readFileSync } from 'node:fs';\nexport const Config = defineConfig(JSON.parse(readFileSync(new URL('./schema.json', import.meta.url), 'utf8')));\nexport const apply = (ctx, config) => { if (config.value === 1) throw new Error('Workspace setup failed'); };",
   );
   const key = 'workspace:' + workspaceId(realpathSync.native(paths.cwd));
   const initial = {
     scopes: {
       [key]: {
-        entries: { 'workspace-example': { disabled: false, config: { value: 'invalid' } } },
+        entries: {
+          'workspace-example': {
+            name: '../../plugins/workspace-example',
+            disabled: false,
+            config: { value: 'invalid' },
+          },
+        },
       },
     },
   };
@@ -415,14 +442,14 @@ export const apply = (ctx) => {
         const render = () => { node.textContent = 'Replacement history: ' + (miniConversation.get().run?.state ?? 'idle'); };
         miniConversation.subscribe(['run'], render, signal); render();
         return node;
-      }));
+      }, { priority: -1 }));
       ctx.effect(() => ctx.miniSlots.registerKeyed('sidebar.primary', 'new-conversation', signal => {
         const button = miniPrimitives.button('Replacement conversation', 'quiet');
         window.addEventListener('slot-test', () => {
           document.body.dataset.slotEvents = String(Number(document.body.dataset.slotEvents ?? 0) + 1);
         }, { signal });
         return { node: button, dispose() { document.body.dataset.slotDisposed = 'yes'; } };
-      }));
+      }, { priority: -1 }));
     };
 `,
     );

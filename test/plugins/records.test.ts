@@ -12,20 +12,22 @@ test('an extension owns its authenticated routes and native branch records witho
   writeFileSync(
     join(folder, 'plugin.js'),
     `
-export const inject = ["harnessPluginRoutes","harnessSessions"];
+export const inject = ["harnessRoutes","harnessSessions"];
 
 export const apply = (ctx) => {
-    ctx.harnessPluginRoutes.register('POST', '/entries', async ({ body }) => {
+    ctx.effect(() => ctx.harnessRoutes.register('POST', '/api/extensions/records/entries', async ({ body }) => {
       const { id, value } = await body();
-      return ctx.harnessSessions.records(id).append(value, { title: 'Progress', content: 'Browser summary' });
-    });
-    ctx.harnessPluginRoutes.register('GET', '/entries', ({ url }) => ctx.harnessSessions.records(url.searchParams.get('id')).list());
-        ctx.harnessPluginRoutes.register('GET', '/notes', ({ url }) => ctx.harnessSessions.records(url.searchParams.get('id')).list().map(({ data }) => data.note));
+      return ctx.harnessSessions.records(id, { pluginId: 'records', instanceId: 'records' }).append(value, { title: 'Progress', content: 'Browser summary' });
+    }));
+    ctx.effect(() => ctx.harnessRoutes.register('GET', '/api/extensions/records/entries', ({ url }) => ctx.harnessSessions.records(url.searchParams.get('id'), { pluginId: 'records', instanceId: 'records' }).list()));
+    ctx.effect(() => ctx.harnessRoutes.register('GET', '/api/extensions/records/notes', ({ url }) => ctx.harnessSessions.records(url.searchParams.get('id'), { pluginId: 'records', instanceId: 'records' }).list().map(({ data }) => data.note)));
   };
 `,
   );
   const toggle = (enabled: boolean) =>
-    request('/settings', 'PATCH', { entries: { records: { disabled: !enabled } } });
+    request('/settings', 'PATCH', {
+      entries: { records: { name: '../../plugins/records', disabled: !enabled } },
+    });
   assert.equal((await toggle(true)).status, 200);
   const { body: session } = await request('/sessions', 'POST', {});
   await app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Persist this conversation');

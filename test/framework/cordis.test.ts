@@ -119,20 +119,16 @@ test('EntryTree distinguishes configuration, dependency changes and failed setup
   assert.equal(context.registry.size, 0);
 });
 
-test('event dispatch shares scoped priority and skips removed listeners after awaiting', async () => {
+test('event dispatch preserves prepend and registration order and skips removed listeners after awaiting', async () => {
   const context = new Context();
   const event = Symbol('test');
   const visits: string[] = [];
   const included = context.extend();
   const excluded = context.extend();
   const scope = context.extend({ [Context.filter]: (listener: Context) => listener === included });
-  const remove = included.on(
-    event,
-    () => {
-      visits.push('removed');
-    },
-    { order: 4 },
-  );
+  const remove = included.on(event, () => {
+    visits.push('removed');
+  });
   excluded.on(event, () => {
     visits.push('excluded');
   });
@@ -141,7 +137,7 @@ test('event dispatch shares scoped priority and skips removed listeners after aw
     () => {
       visits.push('global');
     },
-    { global: true, order: 3 },
+    { global: true },
   );
   included.on(
     event,
@@ -150,7 +146,7 @@ test('event dispatch shares scoped priority and skips removed listeners after aw
       await Promise.resolve();
       remove();
     },
-    { order: 1 },
+    { prepend: true },
   );
   assert.equal(context.events.listeners(event, scope).length, 3);
   await context.serial(scope, event);

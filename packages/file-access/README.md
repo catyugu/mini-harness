@@ -1,26 +1,26 @@
 # @mini-harness/file-access
 
-Enforces the workspace file access policy for features that inspect or modify files.
+Provides file operations anchored to a directory.
 
 ## Responsibilities
 
-Resolves managed workspace paths and exposes scoped access operations. The Files plugin owns user-visible tools and inspection.
+Checks path containment and protects application storage. Callers resolve the directory before opening it.
 
 ## Structure
 
-`src/api.ts` defines the access port, `workspace.ts` implements it, and `manifest.ts` mounts it.
+`src/api.ts` defines the access port, `root.ts` implements it, and `manifest.ts` mounts it.
 
 ## API
 
-`harnessFileAccess` and `WorkspaceFileAccess` are available through the server SDK.
+`harnessFileAccess.open(root)` returns a `RootedFileAccess` handle for the supplied directory.
 
 ## Dependencies
 
-Uses [Workspaces](../workspaces/README.md) for canonical roots and [Platform](../platform/README.md) for path and file operations.
+Uses [Platform](../platform/README.md) for path checks and the application storage path.
 
 ## Lifecycle
 
-`core:file-access` mounts at application scope and supplies per-workspace access on demand.
+`core:file-access` mounts at application scope and supplies rooted access on demand.
 
 ## Testing
 

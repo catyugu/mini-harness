@@ -4,7 +4,7 @@ Owns tool registration, validation and invocation leases.
 
 ## Responsibilities
 
-Resolves scoped registrations and checks them against the host’s authorization policy. The registry rechecks each lease after asynchronous authorization.
+Resolves tool registrations through opaque runtime scope layers shared with Prompt. A selected definition holds a lease that expires when its registration is replaced or unloaded.
 
 ## Structure
 
@@ -12,7 +12,7 @@ Resolves scoped registrations and checks them against the host’s authorization
 
 ## API
 
-`harnessTools.register` owns registration and `defineTool` infers argument types. The `tools/decide` event can restrict an invocation. The host protects the provider.
+`harnessTools.register` accepts a definition or a resource-specific factory. `harnessTools.list()` selects plain registrations. Pass `{ scope, resourceId }` to resolve scoped or resource-specific registrations. `defineTool` infers argument types from the schema.
 
 ## Dependencies
 
@@ -24,9 +24,7 @@ Uses Cordis fibers for plugin-owned calls and session ancestry for tool visibili
 
 ## Configuration
 
-Scoped `disabledTools` can restrict tools through an entire descendant tree.
-
-The registry receives the mandatory tool policy through `harnessToolPolicy`. Sessions interprets inherited permissions and user grants, and the registry checks the selected registration again before execution.
+Sessions supplies an optional `harnessToolPolicy`, interpreting the inherited conversation mode and the declared read-only property. Tools runs without this provider or any session service.
 
 ## Testing
 

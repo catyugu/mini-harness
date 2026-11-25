@@ -1,18 +1,21 @@
-import { addAbortListener } from 'node:events';
 import { Service, type Context } from 'mini-harness/cordis';
-import { pluginInstance } from '@mini-harness/plugin-api/instance';
-import { pluginRequestSignal, assertOutsideMountTransaction } from '@mini-harness/plugin-api/mutation-api';
+import { pluginEntryFiber } from '@mini-harness/plugin-api/plugin-configuration';
+import { entryAddress } from './entry-address.ts';
 import { pluginConfiguration, type PluginConfiguration } from '@mini-harness/plugin-api/plugin-configuration';
-import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
+import type { ScopeAddress } from '@mini-harness/plugin-api/configuration';
 
 type ConfigWriter = (
   id: string,
-  key: ScopeKey | undefined,
+  key: ScopeAddress | undefined,
   patch: unknown,
   check: () => void,
+  signal: AbortSignal,
 ) => Promise<void>;
 
-export function pluginSettings(root: Context, writer?: ConfigWriter): PluginConfiguration {
+export function pluginSettings(
+  writer: ConfigWriter,
+  committed: (notify: () => void) => () => void,
+): PluginConfiguration {
   const handles = new WeakMap<AbortSignal, PluginConfiguration>();
   function configuration(caller: Context) {
     const lifetime = caller.fiber.signal;
@@ -20,25 +23,12 @@ export function pluginSettings(root: Context, writer?: ConfigWriter): PluginConf
     if (handle) return handle;
     handle = pluginConfiguration(
       caller,
-      async (values, signal) => {
-        assertOutsideMountTransaction();
-        const request = pluginRequestSignal();
-        const active = request ? AbortSignal.any([signal, request]) : signal;
-        const { pluginId, scopeKey, writableConfig } = pluginInstance(caller);
-        const check = () => active.throwIfAborted();
-        check();
-        if (!writer || !writableConfig) throw new Error('Plugin configuration writes require a live Entry');
-        let listener: ReturnType<typeof addAbortListener> | undefined;
-        const aborted = new Promise<never>((_, reject) => {
-          listener = addAbortListener(active, () => reject(active.reason));
-        });
-        try {
-          await Promise.race([writer(pluginId, scopeKey, structuredClone(values), check), aborted]);
-        } finally {
-          listener?.[Symbol.dispose]();
-        }
+      (values, signal) => {
+        const entry = pluginEntryFiber(caller).entry!;
+        const { id, scope } = entryAddress(entry.options.id);
+        return writer(id, scope, structuredClone(values), () => signal.throwIfAborted(), signal);
       },
-      (notify) => root.harnessSettingsStore.subscribe(notify),
+      committed,
     );
     handles.set(lifetime, handle);
     return handle;

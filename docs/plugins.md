@@ -14,7 +14,7 @@ mini-harness plugin --profile web remove <package>
 
 Installing a package changes only the selected Profile's npm dependencies. Declare an Entry in the Profile to activate it; restart before updating or removing packages used by a running application. npm lifecycle scripts default to disabled; authorize them explicitly with `--ignore-scripts=false`. To develop locally, declare the built package directory as an entry name in a Profile. Multiple local packages can run together. Use the Web Plugins page to enable and configure available entries; it does not install or delete code.
 
-The manifest supplies display information, scope (`application`, `workspace`, or `session`), and optional configuration-form metadata. Browser modules declare their dependencies and services directly with Cordis `inject` and `provide`. A browser entry receives its configuration as a whole and can update it through `browserPluginSettings(ctx)` when the entry exposes a configuration contract. Keep server-only secrets in `harnessPluginSecrets` or a separate server entry; do not put them in browser entry configuration. Set `browser` to the browser entry module and `browserDirectory` to its dedicated build output directory. JavaScript chunks, styles, fonts and other supported assets inside that directory are published together; never put private files there. Use `browserPreload` for a published module that exports a function receiving an activation signal and optionally returning cleanup.
+Metadata supplies display information, not scope or authority. Package exports can declare `./client`; local bundles may use `browser` and `browserDirectory`. Publish only dedicated browser build output. Browser entries receive their configuration directly; independent client entries have their own config. Keep credentials in `harnessPluginSecrets`.
 
 ## Declare a Cordis plugin
 
@@ -48,23 +48,28 @@ A service provider declares `provide = ['exampleGreeting']` and calls `ctx.provi
 
 | Service                                        | Contract                                                                                                                                                                                                        |
 | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `harnessTools`                                 | Register a definition or a `{ name, bind(sessionId) }` factory. Read-only access also requires authorization for the selected registration.                                                                     |
+| `harnessTools`                                 | Register a definition or a `{ name, resolve(resourceId) }` factory. Use `list()` to select standalone tools and `list({ scope, resourceId })` for scoped or resource-specific tools.                            |
+| `harnessLlm`                                   | Stream a model response with `stream({ model, systemPrompt, messages, signal })`.                                                                                                                               |
+| `harnessProcess`                               | Run an executable with arguments, a working directory, and an optional explicit environment.                                                                                                                    |
+| `harnessFileAccess`                            | Open a file access handle with `open(root)`.                                                                                                                                                                    |
 | `harnessPrompt`                                | Register a named section, with an optional order and a render callback. The nearest scope wins for a shared ID.                                                                                                 |
-| `harnessSessions`                              | `access()` returns the caller's visible conversation directory. `records(id)` reads or appends the instance's records on the active branch. Use `append(data, { title, content })` to publish a display record. |
+| `harnessSessions`                              | Direct conversation methods accept explicit IDs. `records(id, owner)` reads or appends records for the selected owner on the active branch. Use `append(data, { title, content })` to publish a display record. |
 | `harnessExecution`                             | `submit(id, input, { signal })` goes through normal admission and returns a handle with its own result and cancellation.                                                                                        |
-| `harnessApprovalRequests`                      | `request(id, prompt, signal)` requests a user decision for a visible conversation.                                                                                                                              |
-| `harnessPluginRoutes`                          | `register()` and `upgrade()` publish authenticated routes under `/api/extensions/<id>` for application plugins. `scope()` registers a workspace or session RPC.                                                 |
+| `harnessApprovalRequests`                      | `request(id, prompt, signal)` requests a user decision for a conversation.                                                                                                                                      |
+| `harnessRoutes` and `harnessUpgrades`          | Register ordinary authenticated HTTP routes (including dynamic path parameters) and WebSocket upgrades. Use `ctx.effect(() => service.register(...))` for lifecycle ownership.                                  |
 | `harnessPluginData` and `harnessPluginSecrets` | Read, write and remove data in the caller's own plugin and scope namespace.                                                                                                                                     |
-| `harnessPluginSettings`                        | Read the current effective config, subscribe to committed changes or write this instance's configuration when the Profile marks its Entry as live.                                                              |
+| `harnessPluginSettings`                        | Read the current effective config, subscribe to committed changes or write the owning Entry's configuration. A non-live Entry can restart and end the calling Fiber.                                            |
 | `harnessPluginChanges`                         | Invalidate the plugin's browser projection after a domain mutation.                                                                                                                                             |
 
-Use `await sessionService(ctx, sessionId, serviceName, signal)` to prepare a visible conversation and access a declared service with the caller's identity. Session writes and scope preparation belong in runtime calls after plugin setup. See [scoped providers](scoped-providers.md).
+Runtime scopes use opaque object identities. Use `scopeOf(ctx)` from `mini-harness/scopes` to inspect the current registration scope. Resolve configured services directly from `harnessProfileScopes.context(address)` after preparing the Profile address. See [scoped providers](scoped-providers.md).
+
+The Agent recognizes the `readOnly` tool tag when selecting tools for read-only conversations. An alternative `harnessToolExecutor` can present tools and interpret model messages in another protocol, while scheduling and executing only authorized calls.
 
 ### Events
 
-Use `agent/setup` to register capabilities for a particular running Agent. The callback receives its Cordis context, session ID and cancellation signal. Register run-local tools and prompt sections with `run.effect(() => run.get('harnessTools')!.register(...))` and `run.effect(() => run.get('harnessPrompt')!.register(...))`. These contributions are disposed with the run; child runs inherit active parent capabilities and keep their own overrides. Run-local registrations do not acquire a plugin's read-only authorization automatically.
+Use `agent/setup` to register capabilities for a particular running Agent. The callback receives its Cordis context, session ID and cancellation signal. Register run-local tools and prompt sections with `run.effect(() => run.get('harnessTools')!.register(...))` and `run.effect(() => run.get('harnessPrompt')!.register(...))`. These contributions are disposed with the run; child runs inherit active parent capabilities and keep their own overrides.
 
-Register listeners with `ctx.on(event, handler, { order })`. Listeners are owned by the Fiber and visibility follows the target session's ancestry. Pipeline order is ascending, then by plugin instance ID.
+Register listeners with `ctx.on(event, handler)`. Listeners are owned by the Fiber; the domain selects the applicable context. Cordis uses registration order and supports `prepend` for an explicit leading listener. Dependencies, not Entry IDs or numeric event options, determine activation.
 
 | Event                          | Behavior                                                                                                                |
 | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
@@ -72,13 +77,13 @@ Register listeners with `ctx.on(event, handler, { order })`. Listeners are owned
 | `agent/model-request`          | Transform the system prompt, model-visible messages, thinking level or token limit.                                     |
 | `agent/model-retry`            | Return `{ delayMs }` to retry a model attempt before output has streamed. The first decision applies.                   |
 | `agent/tool-result`            | Transform successful results after persistence of the original execution.                                               |
-| `tools/decide`                 | Return `'deny'` to restrict a tool call or `undefined` to defer.                                                        |
+| `agent/tool-decision`          | Return `'deny'` to restrict a call or `undefined` to defer.                                                             |
 | `conversation/tool-projection` | Synchronously transform tool output in the conversation display.                                                        |
 | `harness/observe`              | Observe session, run or turn events with an activation-bound cancellation signal.                                       |
 
 ### Configuration
 
-Export a synchronous Standard Schema `Config` (or attach `Config` to a default Cordis plugin object or class). Cordis resolves this schema before activation and updates. The optional SDK helper `defineConfig` from `mini-harness/configuration` builds a Standard Schema from JSON Schema and supplies defaults; its `jsonSchema` is also used for configuration forms. A manifest `configSchema`, if supplied, describes the form for unloaded entries only and does not validate runtime input. A browser-only package may export `Config` without an `apply` module on the server to validate its configuration without mounting a server fiber.
+Export a synchronous Standard Schema `Config` (or attach `Config` to a default Cordis plugin object or class). Cordis resolves this schema before activation and updates. The optional SDK helper `defineConfig` from `mini-harness/configuration` builds a Standard Schema from JSON Schema and supplies defaults; its `jsonSchema` is also used for configuration forms. Static `configSchema`, if supplied, supports validation and forms without importing disabled modules; mounted entries validate with native `Config`. A browser-only package may export `Config` without an `apply` module on the server to validate its configuration without mounting a server fiber.
 
 Set `live: true` on the Entry in `cordis.yml` or a Profile patch to allow in-place configuration changes. Register `ctx.on('internal/update', next => ...)` for resource changes or service-dependent checks, and check those constraints inside `apply` when mounting. Errors reject the candidate and restore the previous configuration. Non-live entries restart on configuration changes. Profile files contain user-supplied config, not schema defaults.
 
@@ -107,15 +112,13 @@ export function apply(ctx) {
 
 Declare the services you use:
 
-- `miniSlots` defines outlets and registers elements or keyed renderers. Keyed renderers receive a signal for the view's lifetime.
+- `miniSlots` defines outlets and registers elements or keyed renderers. Keyed renderers receive a signal for the view's lifetime. Use `order` for display sequence and a lower `priority` (for example `-1` against the default `0`) to replace a keyed contribution. Equal priorities at the same key conflict.
 - `miniPages`, `miniDialogs`, and `miniTabs` own page, dialog and tab resources. `miniTabs.register(type, definition)` returns a typed handle that accepts an owner, stable key, and payload. `miniTabs.contribute` adds an entry to the workspace panel.
 - `miniFilePreview.open(resource, placement)` renders a workspace file, conversation attachment or temporary resource. Declare `miniFilePreview` for a required dependency or use optional access for integrations that also work with previews disabled.
 - `miniComposer` handles drafts, commands and completions. `miniMessages` owns actions and renderers for history.
-- `miniSettingsRegistry` registers settings sections and plugin-specific controls. Use `browserPluginSettings(ctx)` to bind configuration.
+- `miniSettingsRegistry` registers settings sections and plugin-specific controls. Use `browserPluginSettings(ctx)` to bind configuration. `settings/options` is a native Cordis bail event for dynamic schema field choices; the first provider returning options supplies the selector.
 - `miniProjections` subscribes to state revisions. Use `browserRequest(ctx, path, options)` for authenticated requests bound to the activation.
 
 The [Task notes example](examples/task-notes/) uses both entry points. The [browser panel](examples/browser-panel/) shows a keyed composer renderer. The [scoped examples](scoped-providers.md) show local service replacement.
 
-### Profile entries
-
-Declare npm modules by their package name in the [active Profile](profiles.md). Local file bundles can be enabled in the Web Plugins page or declared by their directory path. The server entry's `inject` and `provide` declarations govern Cordis. Missing required services leave the consuming entry waiting until Cordis can activate it.
+Declare npm packages and local paths explicitly in the [active Profile](profiles.md). Missing injected services leave a consumer waiting until Cordis can activate it.

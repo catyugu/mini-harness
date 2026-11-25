@@ -1,10 +1,10 @@
 import type { Context } from 'mini-harness/cordis';
-import type { NativeAssistantMessage, NativeMessage } from '@mini-harness/llm/api';
-import type { ModelRequestContent } from './events.ts';
+import type { NativeAssistantMessage, NativeMessage, NativeToolMessage } from '@mini-harness/llm/api';
+import type { ModelRequestContent, StepContext, ToolResultContext } from './events.ts';
 import type { InboxItem } from '@mini-harness/sessions/log-api';
 import type { QueueEntry } from '@mini-harness/sessions/queue';
 import type { SessionRecord } from '@mini-harness/sessions/identity';
-import type { ModelChoice, ThinkingLevel } from '@mini-harness/llm/vocabulary';
+import type { ModelChoice, ThinkingLevel, ToolSchema } from '@mini-harness/llm/vocabulary';
 import type { Attachment, ImageInput, InputSource, PreparedMessage } from '@mini-harness/input/message';
 import type { AgentEvent } from './stream.ts';
 
@@ -54,12 +54,26 @@ export interface ToolDispatch {
   readonly parallel: boolean;
 }
 
-export interface ToolExecutorPort {
+export interface ToolScheduler {
   schedule(
     calls: readonly ToolDispatch[],
     signal: AbortSignal,
     execute: (id: string, signal: AbortSignal) => Promise<void>,
   ): Promise<void>;
+}
+
+/** Model-facing tool protocol. Execution always goes through the selected registry lease. */
+export interface ToolExecutorPort extends ToolScheduler {
+  present(
+    content: ModelRequestContent,
+    tools: readonly ToolSchema[],
+    context: StepContext,
+  ): ModelRequestContent & { tools?: ToolSchema[] };
+  interpret(message: NativeAssistantMessage, context: StepContext): NativeAssistantMessage;
+  result?(
+    result: NativeToolMessage,
+    context: ToolResultContext,
+  ): NativeToolMessage['content'] | Promise<NativeToolMessage['content']>;
 }
 
 export interface CompactionInput {

@@ -1,3 +1,4 @@
+import { conversationTools } from '@mini-harness/agent/tool-selection';
 import { expectPresent } from '../support/required.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -17,6 +18,7 @@ test('prompt contributions coexist, override within a session tree and are remov
 export const inject = ["harnessPrompt"];
 export const apply = (ctx) => {
     ctx.effect(() => ctx.harnessPrompt.register({ id: 'workspace-status', order: 600, render: () => '[App status]' }));
+    ctx.effect(() => ctx.harnessPrompt.register({ id: 'base', order: 0, render: () => '[Custom base]' }));
     ctx.effect(() => ctx.harnessPrompt.register({ id: 'plan', order: 500, render: async ({ tools }) => tools.some(({ name }) => name === 'load_skill') ? '[Plan]' : undefined }));
   };
 `,
@@ -35,7 +37,7 @@ export const apply = (ctx) => {
   writePlugin(
     paths.plugins,
     'child-prompt',
-    { scope: 'session' },
+    {},
     `
 export const inject = ["harnessPrompt"];
 export const apply = (ctx) => {
@@ -55,15 +57,29 @@ export const apply = (ctx) => {
     return expectPresent(system, 'system message').content;
   }
   const configured = await request('/settings', 'PATCH', {
-    entries: { 'app-prompt': { disabled: false }, 'more-prompt': { disabled: false } },
-    scopes: { ['session:' + parent.id]: { entries: { 'child-prompt': { disabled: false } } } },
+    entries: {
+      'app-prompt': { name: '../../plugins/app-prompt', disabled: false },
+      'more-prompt': { name: '../../plugins/more-prompt', disabled: false },
+    },
+    scopes: {
+      ['session:' + parent.id]: {
+        entries: { 'child-prompt': { name: '../../plugins/child-prompt', disabled: false } },
+      },
+    },
   });
   assert.equal(configured.status, 200, JSON.stringify(configured.body));
   assert.match(await prompt(child.id), /\[Plan\]\s+\[Extra\]\s+\[Child status\]/);
-  assert.match(await prompt(sibling.id), /\[Plan\]\s+\[Extra\]\s+\[App status\]/);
+  const siblingPrompt = await prompt(sibling.id);
+  assert.match(siblingPrompt, /\[Plan\]\s+\[Extra\]\s+\[App status\]/);
+  assert.match(siblingPrompt, /^\[Custom base\]/);
+  assert.doesNotMatch(siblingPrompt, /You are mini-harness/);
   assert.equal(
-    (await request('/settings', 'PATCH', { entries: { 'more-prompt': { disabled: true } }, scopes: {} }))
-      .status,
+    (
+      await request('/settings', 'PATCH', {
+        entries: { 'more-prompt': { name: '../../plugins/more-prompt', disabled: true } },
+        scopes: {},
+      })
+    ).status,
     200,
   );
   assert.match(await prompt(child.id), /\[Plan\]\s+\[App status\]/);
@@ -111,7 +127,10 @@ export const apply = (ctx) => {
   assert.equal(
     (
       await request('/settings', 'PATCH', {
-        entries: { 'input-z': { disabled: false }, 'input-a': { disabled: false } },
+        entries: {
+          'input-z': { name: '../../plugins/input-z', disabled: false },
+          'input-a': { name: '../../plugins/input-a', disabled: false },
+        },
       })
     ).status,
     200,
@@ -132,9 +151,9 @@ export const apply = (ctx) => {
   assert.deepEqual(readFileSync(trace, 'utf8').trimEnd().split('\n'), [
     'prepare Blocked',
     'prepare Recovered',
-    'model Recovered[a][z]',
+    'model Recovered[z][a]',
     'prepare Manual',
-    'model Manual[a][z]',
+    'model Manual[z][a]',
   ]);
   assert.equal(log.inbox().length, 0);
   assert.match(
@@ -156,7 +175,7 @@ export const apply = (ctx) => {
     message: 'Edited',
   });
   await plugins.ctx.harnessRuns.completion(edit.sessionId);
-  assert.match(readFileSync(trace, 'utf8'), /prepare Edited\nmodel Edited\[a\]\[z\]\n$/);
+  assert.match(readFileSync(trace, 'utf8'), /prepare Edited\nmodel Edited\[z\]\[a\]\n$/);
   const before = mock.requests.length;
   await assert.rejects(plugins.ctx.harnessRuns.send(session.id, 'Blocked'), /fixture input denied/);
   assert.equal(mock.requests.length, before);
@@ -203,13 +222,13 @@ export const apply = (ctx) => {
     `
 export const inject = ["harnessTools"];
 export const apply = (ctx) => {
-    ctx.on("agent/model-request", (request) => ({ ...request, systemPrompt: request.systemPrompt + '[second]' }), { order: 2 });
+    ctx.on("agent/model-request", (request) => ({ ...request, systemPrompt: request.systemPrompt + '[second]' }));
     ctx.on("agent/model-request", (request, { turn, phase }) => phase === 'turn' && turn === 1 ? ({
       ...request, systemPrompt: request.systemPrompt + '[first]',
       messages: [...request.messages, { role: 'user', content: 'Temporary context', timestamp: Date.now() }]
-    }) : undefined, { order: 1 });
+    }) : undefined, { prepend: true });
     ctx.on("agent/model-retry", ({ error, attempt }) => error === 'transient transport failure' && attempt === 1 ? {} : undefined);
-    ctx.on("tools/decide", ({ tool, callId, arguments: args }) => tool === 'check' && callId === 'denied' && args.mode === 'denied' ? 'deny' : undefined);
+    ctx.on("agent/tool-decision", ({ tool, callId, arguments: args }) => tool === 'check' && callId === 'denied' && args.mode === 'denied' ? 'deny' : undefined);
     ctx.effect(() => ctx.harnessTools.register({ name: 'check', description: 'Check mode', parameters: { type: 'object' },
       async execute(_id, { mode }) {
         if (mode !== 'allowed') throw new Error('denied invocation ran');
@@ -228,8 +247,8 @@ export const apply = (ctx) => {
   const configured = await request('/settings', 'PATCH', {
     entries: {
       'core:llm': { disabled: true },
-      transport: { disabled: false },
-      pipeline: { disabled: false },
+      transport: { name: '../../plugins/transport', disabled: false },
+      pipeline: { name: '../../plugins/pipeline', disabled: false },
     },
   });
   assert.equal(configured.status, 200, JSON.stringify(configured.body));
@@ -291,7 +310,9 @@ export const apply = (ctx) => {
   assert.ok(execution && accepted);
   assert.equal(accepted.executionId, execution.id);
   assert.ok(JSON.stringify(accepted).length < JSON.stringify(execution).length);
-  const missing = await request('/settings', 'PATCH', { entries: { transport: { disabled: true } } });
+  const missing = await request('/settings', 'PATCH', {
+    entries: { transport: { name: '../../plugins/transport', disabled: true } },
+  });
   assert.equal(missing.status, 200);
   assert.equal(app.runtime.plugins.ctx.get('harnessLlm'), undefined);
   assert.equal(app.runtime.plugins.ctx.get('harnessAgent'), undefined);
@@ -300,8 +321,8 @@ export const apply = (ctx) => {
       await request('/settings', 'PATCH', {
         entries: {
           'core:llm': { disabled: false },
-          transport: { disabled: true },
-          pipeline: { disabled: true },
+          transport: { name: '../../plugins/transport', disabled: true },
+          pipeline: { name: '../../plugins/pipeline', disabled: true },
         },
       })
     ).status,
@@ -336,7 +357,11 @@ export const apply = (ctx) => {
 `,
   );
   assert.equal(
-    (await request('/settings', 'PATCH', { entries: { redaction: { disabled: false } } })).status,
+    (
+      await request('/settings', 'PATCH', {
+        entries: { redaction: { name: '../../plugins/redaction', disabled: false } },
+      })
+    ).status,
     200,
   );
   const session = app.runtime.plugins.ctx.harnessRegistry.create();
@@ -370,7 +395,11 @@ export const apply = (ctx) => {
 `,
   );
   assert.equal(
-    (await request('/settings', 'PATCH', { entries: { 'invalid-request': { disabled: false } } })).status,
+    (
+      await request('/settings', 'PATCH', {
+        entries: { 'invalid-request': { name: '../../plugins/invalid-request', disabled: false } },
+      })
+    ).status,
     200,
   );
   const session = app.runtime.plugins.ctx.harnessRegistry.create();
@@ -388,43 +417,39 @@ export const apply = (ctx) => {
   );
 });
 
-test(
-  'configuration cannot unmount an active request hook and can retry after the run',
-  { timeout: 5000 },
-  async (t) => {
-    const { app, paths, request } = await fixture(t);
-    const key = Symbol.for('mini-harness-test-hook-drain');
-    let entered: () => void = () => {
-      throw new Error('Not started');
-    };
-    let cancelled: () => void = () => {
-      throw new Error('Not started');
-    };
-    let release: () => void = () => {
-      throw new Error('Not started');
-    };
-    const started = new Promise<void>((resolve) => {
-      entered = resolve;
-    });
-    const hold = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    let aborted = false;
-    cancelled = () => {
-      aborted = true;
-    };
-    const state = { entered, cancelled, hold, cleaned: false };
-    const shared = globalThis as typeof globalThis & Record<symbol, typeof state>;
-    shared[key] = state;
-    t.after(() => {
-      release();
-      delete shared[key];
-    });
-    writePlugin(
-      paths.plugins,
-      'slow-transform',
-      {},
-      `
+test('unloading a request hook signals cancellation and waits for cleanup', { timeout: 5000 }, async (t) => {
+  const { app, paths, request } = await fixture(t);
+  const key = Symbol.for('mini-harness-test-hook-drain');
+  let entered: () => void = () => {
+    throw new Error('Not started');
+  };
+  let cancelled: () => void = () => {
+    throw new Error('Not started');
+  };
+  let release: () => void = () => {
+    throw new Error('Not started');
+  };
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const hold = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const aborted = new Promise<void>((resolve) => {
+    cancelled = resolve;
+  });
+  const state = { entered, cancelled, hold, cleaned: false };
+  const shared = globalThis as typeof globalThis & Record<symbol, typeof state>;
+  shared[key] = state;
+  t.after(() => {
+    release();
+    delete shared[key];
+  });
+  writePlugin(
+    paths.plugins,
+    'slow-transform',
+    {},
+    `
 export const apply = (ctx) => {
     const state = globalThis[Symbol.for('mini-harness-test-hook-drain')];
     ctx.on("agent/model-request", async (_request, { signal }) => {
@@ -435,42 +460,44 @@ export const apply = (ctx) => {
     ctx.effect(() => () => { state.cleaned = true; });
   };
 `,
-    );
-    assert.equal(
-      (await request('/settings', 'PATCH', { entries: { 'slow-transform': { disabled: false } } })).status,
-      200,
-    );
-    const session = app.runtime.plugins.ctx.harnessRegistry.create();
-    const run = app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Keep the active hook');
-    await started;
-    try {
-      assert.equal(
-        (await request('/settings', 'PATCH', { entries: { 'slow-transform': { disabled: true } } })).status,
-        409,
-      );
-      assert.equal(aborted, false);
-      assert.equal(state.cleaned, false);
-    } finally {
-      release();
-    }
-    await run;
-    assert.equal(
-      (await request('/settings', 'PATCH', { entries: { 'slow-transform': { disabled: true } } })).status,
-      200,
-    );
-    assert.equal(state.cleaned, true);
-  },
-);
+  );
+  assert.equal(
+    (
+      await request('/settings', 'PATCH', {
+        entries: { 'slow-transform': { name: '../../plugins/slow-transform', disabled: false } },
+      })
+    ).status,
+    200,
+  );
+  const session = app.runtime.plugins.ctx.harnessRegistry.create();
+  const run = assert.rejects(
+    app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Unload the active hook'),
+    /slow-transform could not prepare transformed data/,
+  );
+  await started;
+  const updating = request('/settings', 'PATCH', {
+    entries: { 'slow-transform': { name: '../../plugins/slow-transform', disabled: true } },
+  });
+  try {
+    await aborted;
+    assert.equal(state.cleaned, false);
+  } finally {
+    release();
+  }
+  assert.equal((await updating).status, 200);
+  await run;
+  assert.equal(state.cleaned, true);
+});
 
 test('a decision hook can deny an inherited tool and is removed with its owner', async (t) => {
   const { app, paths, request } = await fixture(t);
   writePlugin(
     paths.plugins,
     'policy',
-    { scope: 'session' },
+    {},
     `
 export function apply(ctx) {
-      ctx.on("tools/decide", async ({ tool, signal }) => {
+      ctx.on("agent/tool-decision", async ({ tool, signal }) => {
         signal.throwIfAborted();
         return tool === 'ls' ? 'deny' : undefined;
       });
@@ -482,14 +509,20 @@ export function apply(ctx) {
   const child = app.runtime.plugins.ctx.harnessRegistry.create({ parentId: selected.id });
   const toggle = (scopes: unknown) => request('/settings', 'PATCH', { scopes });
   assert.equal(
-    (await toggle({ ['session:' + selected.id]: { entries: { policy: { disabled: false } } } })).status,
+    (
+      await toggle({
+        ['session:' + selected.id]: {
+          entries: { policy: { name: '../../plugins/policy', disabled: false } },
+        },
+      })
+    ).status,
     200,
   );
   await app.runtime.plugins.prepare(`session:${child.id}`);
-  const tools = app.runtime.plugins.ctx.harnessTools;
+  const ctx = app.runtime.plugins.ctx;
   const call = (id: string) =>
     expectPresent(
-      tools.forSession(id).find(({ name }) => name === 'ls'),
+      conversationTools(ctx, id, ctx.harnessRegistry.runScope(id)).find(({ name }) => name === 'ls'),
       'ls tool',
     ).execute('policy', { path: '.' }, undefined, undefined, undefined);
   await assert.rejects(call(child.id), /Tool denied by conversation or plugin policy/);

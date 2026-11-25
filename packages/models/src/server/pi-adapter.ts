@@ -357,7 +357,6 @@ export class PiLlm implements LlmPort {
       },
       {
         signal: request.signal,
-        sessionId: request.sessionId,
         reasoning:
           request.thinkingLevel && request.thinkingLevel !== 'off' ? request.thinkingLevel : undefined,
         maxTokens: request.maxTokens,

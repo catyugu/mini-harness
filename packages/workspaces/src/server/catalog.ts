@@ -1,28 +1,22 @@
+import { createScopeKey, type ScopeKey } from '@mini-harness/plugin-api/scopes';
 import { DomainError } from '@mini-harness/platform/errors';
-import { createHash } from 'node:crypto';
-import { lstatSync, mkdirSync, readdirSync, realpathSync, statSync } from 'node:fs';
+import { lstatSync, mkdirSync, readdirSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { readJson, writeJson } from '@mini-harness/platform/json';
 import { type getPaths, containsPath } from '@mini-harness/platform/paths';
 
 import type { WorkspaceRecord } from '../shared/record.ts';
+import { canonicalWorkspacePath, workspaceId } from './identity.ts';
 interface CatalogState {
   records: WorkspaceRecord[];
-}
-
-// Use the same native resolver as fs/promises.realpath, including Windows long path names.
-export const canonicalWorkspacePath = realpathSync.native;
-
-export function workspaceId(path: string) {
-  const key = process.platform === 'win32' ? path.toLowerCase() : path;
-  return createHash('sha256').update(key).digest('hex').slice(0, 32);
 }
 
 export class WorkspaceCatalog {
   private readonly file: string;
   private readonly stateRoot: string;
   private records: WorkspaceRecord[];
+  private readonly runtimeScopes = new Map<string, ScopeKey>();
   private readonly startupId: string;
   readonly events = new EventTarget();
   private readonly removalHooks = new Set<(id: string) => Promise<string[]>>();
@@ -62,6 +56,13 @@ export class WorkspaceCatalog {
 
   list() {
     return this.records.map((record) => ({ ...record }));
+  }
+
+  scope(id: string) {
+    if (!this.records.some((record) => record.id === id)) return;
+    let key = this.runtimeScopes.get(id);
+    if (!key) this.runtimeScopes.set(id, (key = createScopeKey()));
+    return key;
   }
 
   get(id: string) {
@@ -129,6 +130,7 @@ export class WorkspaceCatalog {
         const groups = await Promise.all([...this.removalHooks].map((hook) => hook(id)));
         await release();
         this.save(this.records.filter((record) => record.id !== id));
+        this.runtimeScopes.delete(id);
         return { removed: id, deleted: groups.flat() };
       })
       .finally(() => this.removing.delete(id));

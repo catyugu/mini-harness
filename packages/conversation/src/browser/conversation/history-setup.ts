@@ -5,11 +5,8 @@ const setup = (ctx: Context) => {
   const extensions = new MessageExtensions();
   ctx.provide('miniMessages', extensions);
   ctx.effect(() =>
-    ctx.miniSlots.registerKeyed(
-      'conversation.history',
-      'history',
-      (signal) => mountHistory(ctx, extensions, signal),
-      { order: -1 },
+    ctx.miniSlots.registerKeyed('conversation.history', 'history', (signal) =>
+      mountHistory(ctx, extensions, signal),
     ),
   );
 };

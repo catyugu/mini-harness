@@ -20,7 +20,7 @@ Receives a run-owned Cordis Context and resolves LLM, model, prompt, tool and ex
 
 ## Lifecycle
 
-`core:agent` and `core:prompt` mount at application scope. Runs owns the execution reservation, prepares the session scope and creates a child Cordis Fiber for each run or compaction. The Agent contract receives this context explicitly; its lifetime is aborted and disposed when the run ends.
+`core:agent` and `core:prompt` mount at application scope. Runs owns the execution reservation, prepares the session scope and creates a child Cordis Fiber for each run or compaction. Prompt and Tools inherit contributions using the runtime scope key, independently of Profile addressing. The Agent contract receives this context explicitly; its lifetime is aborted and disposed when the run ends.
 
 ## Configuration
 

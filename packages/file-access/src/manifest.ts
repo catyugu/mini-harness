@@ -1,24 +1,21 @@
+import { resolve } from 'node:path';
 import type { Plugin } from 'mini-harness/cordis';
 import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
-import { Workspace } from './workspace.ts';
+import { RootedFiles } from './root.ts';
 
 export const metadata: PluginInfo = {
-  scope: 'application',
   title: 'File access',
-  description: 'Access paths within registered workspaces',
+  description: 'Access files within a directory',
 };
 
 const plugin: Plugin.Object = {
-  inject: ['harnessState', 'harnessWorkspaces', 'harnessChanges'],
+  inject: ['harnessState'],
   provide: ['harnessFileAccess'],
   apply(ctx) {
-    ctx.effect(() => ctx.harnessChanges.register('files'));
     const { home } = ctx.harnessState.paths;
-    const workspaces = ctx.harnessWorkspaces;
     ctx.provide('harnessFileAccess', {
-      open(id: string) {
-        const { path } = workspaces.get(id);
-        return new Workspace(workspaces.resolveRoot(path, id), home);
+      open(root: string) {
+        return new RootedFiles(resolve(root), home);
       },
     });
   },

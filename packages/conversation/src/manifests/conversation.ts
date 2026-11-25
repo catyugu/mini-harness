@@ -14,7 +14,6 @@ const Config = defineConfig(
 );
 
 export const metadata: PluginInfo = {
-  scope: 'application',
   title: 'Conversation',
   description: 'Conversation interface',
 
@@ -38,14 +37,12 @@ const plugin: Plugin.Object = {
 export default plugin;
 
 export const composerMetadata: PluginInfo = {
-  scope: 'application',
   title: 'Composer',
   description: 'Conversation input and draft contributions',
   browser: '/packages/conversation/src/browser/conversation/composer-setup.js',
 };
 
 export const historyMetadata: PluginInfo = {
-  scope: 'application',
   title: 'History',
   description: 'Conversation messages and record contributions',
   browser: '/packages/conversation/src/browser/conversation/history-setup.js',

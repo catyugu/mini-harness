@@ -9,6 +9,7 @@ import { rmSync } from 'node:fs';
 import { Type } from 'typebox';
 import { NativeAgent } from '../src/agent.ts';
 import { dispatchTools, scheduleTools } from '../src/tool-pipeline.ts';
+import { nativeExecutor } from '../src/strategies.ts';
 import { basicCompaction } from '../src/compaction.ts';
 import { SessionRegistry } from '@mini-harness/sessions/registry';
 import { WorkspaceCatalog } from '@mini-harness/workspaces/catalog';
@@ -44,6 +45,7 @@ function fixture(
   llm: LlmPort,
   retryModel?: () => Promise<ModelRetry>,
   thinkingLevels: (id: string) => ThinkingLevel[] | undefined = () => undefined,
+  executor = nativeExecutor,
 ) {
   const { root, paths } = createFixturePaths('http://127.0.0.1:1/v1');
   const sessions = new SessionRegistry(paths, new WorkspaceCatalog(paths));
@@ -69,7 +71,7 @@ function fixture(
     }),
   });
   ctx.provide('harnessLlm', llm);
-  ctx.provide('harnessToolExecutor', { schedule: scheduleTools });
+  ctx.provide('harnessToolExecutor', executor);
   ctx.provide('harnessCompaction', basicCompaction);
   ctx.provide('harnessPrompt', { build: async () => 'Fixture', register: () => () => {} });
   if (retryModel) ctx.on('agent/model-retry', retryModel);
@@ -77,6 +79,59 @@ function fixture(
   const record = sessions.create();
   return { agent, ctx, sessions, tools, record };
 }
+
+test('an alternative executor translates a model protocol through the same tool lease', async (t) => {
+  let requests = 0,
+    executions = 0;
+  const { agent, ctx, tools, record, sessions } = fixture(
+    t,
+    {
+      async *stream(request) {
+        assert.match(request.systemPrompt, /custom protocol/);
+        assert.equal(request.tools, undefined);
+        yield { type: 'done', message: requests++ === 0 ? answer('call change') : answer() };
+      },
+    },
+    undefined,
+    undefined,
+    {
+      ...nativeExecutor,
+      present: (content, tools) => ({
+        ...content,
+        systemPrompt: content.systemPrompt + ' custom protocol: ' + tools.map((tool) => tool.name).join(', '),
+      }),
+      interpret: (message) =>
+        message.content.some((part) => part.type === 'text' && part.text === 'call change')
+          ? toolsAnswer(call('custom-call', 'change'))
+          : message,
+    },
+  );
+  tools.register(
+    defineTool({
+      name: 'change',
+      description: 'Change',
+      parameters: Type.Object({}),
+      async execute() {
+        executions++;
+        return { content: [{ type: 'text', text: 'changed' }] };
+      },
+    }),
+  );
+  await agent.prompt(ctx, record, 'Change it', () => {}, {
+    fallback: model,
+    signal: new AbortController().signal,
+  });
+  assert.equal(executions, 1);
+  assert.equal(requests, 2);
+  assert.ok(
+    sessions
+      .log(record.id)
+      .projection()
+      .contextMessages.some(
+        (message) => message.role === 'toolResult' && message.toolCallId === 'custom-call',
+      ),
+  );
+});
 
 test('duplicate tool call identities fail before executing any side effect', async (t) => {
   let requests = 0,
@@ -90,7 +145,7 @@ test('duplicate tool call identities fail before executing any side effect', asy
       };
     },
   });
-  tools.registerBinding('change', () =>
+  tools.register(
     defineTool({
       name: 'change',
       description: 'Change',
@@ -123,7 +178,7 @@ test('tool execution uses the advertised registration and does not execute a hot
       } else yield { type: 'done', message: answer() };
     },
   });
-  const dispose = tools.registerBinding('change', () =>
+  const dispose = tools.register(
     defineTool({
       name: 'change',
       description: 'Original',
@@ -136,7 +191,7 @@ test('tool execution uses the advertised registration and does not execute a hot
   );
   replace = async () => {
     await dispose();
-    tools.registerBinding('change', () =>
+    tools.register(
       defineTool({
         name: 'change',
         description: 'Replacement',
@@ -176,7 +231,7 @@ test('malformed tool arguments become durable error results without invoking the
       }
     },
   });
-  tools.registerBinding('inspect', () =>
+  tools.register(
     defineTool({
       name: 'inspect',
       description: 'Inspect',
@@ -213,7 +268,7 @@ test('cancellation closes the whole tool batch durably and never executes later 
       yield { type: 'done', message: toolsAnswer(call('one', 'first'), call('two', 'second')) };
     },
   });
-  tools.registerBinding('first', () =>
+  tools.register(
     defineTool({
       name: 'first',
       description: 'First',
@@ -226,7 +281,7 @@ test('cancellation closes the whole tool batch durably and never executes later 
       },
     }),
   );
-  tools.registerBinding('second', () =>
+  tools.register(
     defineTool({
       name: 'second',
       description: 'Second',
@@ -266,7 +321,7 @@ test('interrupted calls receive an error record before the next prompt and are n
       yield { type: 'done', message: answer() };
     },
   });
-  tools.registerBinding('change', () =>
+  tools.register(
     defineTool({
       name: 'change',
       description: 'Change',
@@ -370,7 +425,7 @@ test('steering accepts off, skips deterministic failures and resets incompatible
     undefined,
     (id) => (id === 'new-model' ? ['low'] : ['low', 'medium', 'high', 'xhigh', 'max']),
   );
-  tools.registerBinding('first', () =>
+  tools.register(
     defineTool({
       name: 'first',
       description: 'Should be skipped',
@@ -456,7 +511,7 @@ test(
     const waitForDurability = new Promise<void>((resolve) => {
       release = resolve;
     });
-    tools.registerBinding('parallel', () =>
+    tools.register(
       defineTool({
         name: 'parallel',
         description: 'Parallel',
@@ -476,7 +531,7 @@ test(
         },
       }),
     );
-    tools.registerBinding('serial', () =>
+    tools.register(
       defineTool({
         name: 'serial',
         description: 'Serial',

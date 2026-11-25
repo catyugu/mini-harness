@@ -22,7 +22,7 @@ Uses [UI Runtime](../ui-runtime/README.md) to associate contributions with their
 
 `core:slots` owns its browser registry. Each mounted renderer receives a disposal signal.
 
-Keyed registrations use order and registration time for selection. Each selected renderer gets a fresh signal and releases it when replaced or removed.
+Keyed registrations use `order` for display and `priority` for selection (lower wins, equal priorities conflict). Each selected renderer gets a fresh signal and releases it when replaced or removed.
 
 ## Testing
 

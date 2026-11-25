@@ -75,7 +75,7 @@ test('workspace registration, session navigation and scoped tools leave an activ
       assert.equal(event.type, 'change');
       assert.equal(event.domain, 'sessions');
       assert.ok(event.revision > snapshot.revisions.sessions);
-      assert.equal(event.sessionId, other.id);
+      assert.equal(event.resourceId, other.id);
       assert.equal(other.workspaceId, workspace.id);
       assert.equal(
         app.runtime.plugins.ctx.harnessRegistry.create({ parentId: other.id }).workspaceId,

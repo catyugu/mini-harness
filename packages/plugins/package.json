@@ -21,13 +21,9 @@
     }
   },
   "dependencies": {
-    "@mini-harness/conversation": "workspace:*",
-    "@mini-harness/models": "workspace:*",
     "@mini-harness/platform": "workspace:*",
     "@mini-harness/plugin-api": "workspace:*",
-    "@mini-harness/transport": "workspace:*",
     "@mini-harness/ui-primitives": "workspace:*",
-    "@mini-harness/ui-runtime": "workspace:*",
-    "@mini-harness/workspaces": "workspace:*"
+    "@mini-harness/ui-runtime": "workspace:*"
   }
 }

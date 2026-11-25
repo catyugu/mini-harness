@@ -9,10 +9,10 @@ export interface SearchInput {
 }
 
 export interface FileAccessPort {
-  open(workspaceId: string): WorkspaceFileAccess;
+  open(root: string): RootedFileAccess;
 }
 
-export interface WorkspaceFileAccess {
+export interface RootedFileAccess {
   validatePath(path: string): Promise<void>;
   searchFiles(query: string, signal?: AbortSignal): Promise<string[]>;
   access(path: string): Promise<void>;

@@ -8,6 +8,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { createServer } from 'node:http';
 import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
+import { parse } from 'yaml';
 import { writeJson } from '@mini-harness/platform/json';
 import { createMiniHarnessServer } from '../support/profile.ts';
 import { createFixturePaths } from '../helpers/mock-provider.ts';
@@ -92,6 +93,7 @@ test(
       npm_config_cache: join(root, 'npm-cache'),
       npm_config_fetch_retries: '0',
       npm_config_prefer_online: 'true',
+      npm_config_ignore_scripts: 'true',
     };
     const run = (...args: string[]) =>
       execFile(process.execPath, [cli, 'plugin', '--profile', 'web', ...args], {
@@ -115,10 +117,11 @@ test(
         dependencies,
         exports: files['index.js']
           ? './index.js'
-          : files['server/entry.mjs']
-            ? './server/entry.mjs'
-            : undefined,
-        scripts: { postinstall: 'node -e "process.exit(13)"' },
+          : {
+              ...(files['server/entry.mjs'] ? { '.': './server/entry.mjs' } : {}),
+              ...(files['web/main.js'] ? { './client': './web/main.js' } : {}),
+            },
+        scripts: { postinstall: "node -e \"require('node:fs').writeFileSync('installed-by-npm', 'yes')\"" },
       };
       writeJson(join(cwd, 'package.json'), manifest);
       for (const [file, source] of Object.entries(files)) {
@@ -137,19 +140,13 @@ test(
     const name = '@fixture/harness-plugin';
     const id = 'npm-plugin';
     const files = {
-      'plugin.json': JSON.stringify({
-        browser: 'web/main.js',
-        browserDirectory: 'web',
-        browserPreload: 'web/preload.js',
-      }),
       'server/entry.mjs': `
-export const inject = ["harnessPluginRoutes"];
+export const inject = ["harnessRoutes"];
 import { label } from 'mini-setup-helper';
-export const apply = (ctx) => { ctx.harnessPluginRoutes.register('GET', '/label', () => label); };
+export const apply = (ctx) => { ctx.effect(() => ctx.harnessRoutes.register('GET', '/api/extensions/npm-plugin/label', () => label)); };
 `,
       'web/main.js': "export const inject = ['miniPages']; export function apply() {}",
       'web/panel.css': '.panel { color: inherit; }',
-      'web/preload.js': 'export default (signal) => { signal.throwIfAborted(); };',
       'private.js': 'export const privateValue = "not published";',
       'web/chunks/feature.mjs': 'export const feature = true;',
     };
@@ -159,15 +156,28 @@ export const apply = (ctx) => { ctx.harnessPluginRoutes.register('GET', '/label'
     await publish(name, '1.0.0', files, { 'mini-setup-helper': '1.0.0' });
     await run('add', name + '@latest', '--no-audit', '--no-fund');
     const directory = join(paths.home, 'profiles', 'web');
+    const added = parse(readFileSync(join(directory, 'cordis.patch.yml'), 'utf8'));
+    assert.deepEqual(added.plugins, []);
     let lock = JSON.parse(readFileSync(join(directory, 'package-lock.json'), 'utf8'));
     assert.equal(lock.packages['node_modules/mini-setup-helper'].version, '1.0.0');
     assert.equal(lock.packages['node_modules/' + name].version, '1.0.0');
+    assert.ok(!existsSync(join(directory, 'node_modules', name, 'installed-by-npm')));
     await publish(name, '1.1.0', files, { 'mini-setup-helper': '1.0.0' });
-    await run('add', name + '@1.1.0', '--no-audit', '--no-fund');
+    await run('add', name + '@1.1.0', '--no-audit', '--no-fund', '--ignore-scripts');
     lock = JSON.parse(readFileSync(join(directory, 'package-lock.json'), 'utf8'));
     assert.equal(lock.packages['node_modules/' + name].version, '1.1.0');
+    assert.ok(!existsSync(join(directory, 'node_modules', name, 'installed-by-npm')));
+    assert.deepEqual(parse(readFileSync(join(directory, 'cordis.patch.yml'), 'utf8')), added);
     writeJson(join(directory, 'cordis.patch.yml'), {
-      plugins: [{ id, name, client: true, disabled: true, config: { greeting: 'preserved' } }],
+      plugins: [
+        {
+          id,
+          name,
+          client: true,
+          disabled: true,
+          config: { greeting: 'preserved' },
+        },
+      ],
     });
 
     app = await createMiniHarnessServer(paths);
@@ -189,12 +199,12 @@ export const apply = (ctx) => { ctx.harnessPluginRoutes.register('GET', '/label'
     assert.equal(await (await request('/extensions/' + id + '/label')).json(), 'From dependency');
     const bootstrap = await (await request('/bootstrap')).json();
     const entry = bootstrap.ui.find((entry: { id: string }) => entry.id === id);
+    assert.deepEqual(entry.config, { greeting: 'preserved' });
     const asset = (path: string) => fetch('http://127.0.0.1:' + port + path);
     assert.equal(await (await asset(entry.browser)).text(), files['web/main.js']);
     const css = await asset(entry.styles[0]);
     assert.match(css.headers.get('Content-Type') ?? '', /^text\/css/);
     assert.equal(await css.text(), files['web/panel.css']);
-    assert.equal(await (await asset(entry.preload)).text(), files['web/preload.js']);
     assert.equal((await asset(entry.browser.replace(/web\/main\.js$/, 'private.js'))).status, 404);
     assert.equal(
       await (await asset(entry.browser.replace(/main\.js$/, 'chunks/feature.mjs'))).text(),
@@ -206,9 +216,28 @@ export const apply = (ctx) => { ctx.harnessPluginRoutes.register('GET', '/label'
     );
     assert.equal((await asset(entry.browser)).status, 404);
     assert.equal((await asset(entry.styles[0])).status, 404);
+    const standalone = 'npm-client';
+    assert.equal(
+      (
+        await request('/settings', 'PATCH', {
+          entries: {
+            [standalone]: { name: name + '/client', config: { label: 'independent client' } },
+          },
+        })
+      ).status,
+      200,
+    );
+    const independent = (await (await request('/bootstrap')).json()).ui.find(
+      (item: { id: string }) => item.id === standalone,
+    );
+    assert.deepEqual(independent.config, { label: 'independent client' });
+    assert.equal((await asset(independent.browser)).status, 200);
+    assert.equal((await request('/extensions/' + id + '/label')).status, 404);
     await app.close();
     app = undefined;
     await run('remove', name, '--no-audit', '--no-fund');
+    // npm dependency operations do not mutate the explicit Profile composition.
+    assert.equal(parse(readFileSync(join(directory, 'cordis.patch.yml'), 'utf8')).plugins[0].name, name);
     const manifest = JSON.parse(readFileSync(join(directory, 'package.json'), 'utf8'));
     assert.equal(manifest.dependencies?.[name], undefined);
     assert.ok(!existsSync(join(directory, 'node_modules', name)));
@@ -223,9 +252,9 @@ test('local modules mount and unmount without a separate installer', async (t) =
   writeFileSync(
     join(folder, 'plugin.js'),
     `
-export const inject = ['harnessPluginRoutes'];
+export const inject = ['harnessRoutes'];
 export function apply(ctx, config) {
-  ctx.harnessPluginRoutes.register('POST', '/echo', async ({ body }) => ({ echo: await body() }));
+  ctx.effect(() => ctx.harnessRoutes.register('POST', '/api/extensions/local-module/echo', async ({ body }) => ({ echo: await body() })));
   if (config.fail) throw new Error('Setup failed after registering a route');
 }
 `,
@@ -234,7 +263,14 @@ export function apply(ctx, config) {
   const route = '/extensions/local-module/echo';
   const id = 'local-module';
   assert.equal((await request(route, 'POST', { value: 1 })).status, 404);
-  assert.equal((await request('/settings', 'PATCH', { entries: { [id]: { disabled: false } } })).status, 200);
+  assert.equal(
+    (
+      await request('/settings', 'PATCH', {
+        entries: { [id]: { name: '../../plugins/local-module', disabled: false } },
+      })
+    ).status,
+    200,
+  );
   const browser = (await request('/bootstrap')).body.ui.find(
     (entry: { id: string }) => entry.id === id,
   ).browser;
@@ -257,19 +293,25 @@ test('browser entries receive and edit their configuration without a field allow
   writeFileSync(join(folder, 'web.js'), 'export default () => {}');
   writeFileSync(
     join(folder, 'plugin.js'),
-    "import { defineConfig } from 'mini-harness/configuration';\nimport { readFileSync } from 'node:fs';\nexport const Config = defineConfig(JSON.parse(readFileSync(new URL('./plugin.json', import.meta.url), 'utf8')).configSchema);\n",
+    "import { defineConfig } from 'mini-harness/configuration';\nimport { readFileSync } from 'node:fs';\nexport const Config = defineConfig(JSON.parse(readFileSync(new URL('./schema.json', import.meta.url), 'utf8')));\n",
   );
-  writeJson(join(folder, 'plugin.json'), {
-    configSchema: {
+  writeFileSync(
+    join(folder, 'schema.json'),
+    JSON.stringify({
       type: 'object',
       properties: {
         label: { type: 'string', default: 'Visible' },
         detail: { type: 'string', default: 'Original' },
       },
-    },
-  });
+    }),
+  );
+  writeJson(join(folder, 'plugin.json'), {});
   assert.equal(
-    (await request('/settings', 'PATCH', { entries: { 'config-visibility': { disabled: false } } })).status,
+    (
+      await request('/settings', 'PATCH', {
+        entries: { 'config-visibility': { name: '../../plugins/config-visibility', disabled: false } },
+      })
+    ).status,
     200,
   );
   const entry = async () =>

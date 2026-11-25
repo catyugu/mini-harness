@@ -26,14 +26,12 @@ export async function bootProfile(name: string, paths: Paths, launch: LaunchOpti
     })());
   try {
     const errors = await profile.start();
-    if (errors.size && !ctx.get('harnessComposition'))
+    if (errors.size && !ctx.get('harnessPluginCatalog'))
       throw new AggregateError(
         [...errors.values()],
         'Profile entries failed: ' + [...errors.keys()].join(', '),
       );
     await ctx.parallel('harness/start');
-    if (name === 'web' && !ctx.get('harnessWeb'))
-      throw new Error('The Web Profile requires an available HTTP server');
     await ctx.parallel('harness/open');
   } catch (error) {
     await close();

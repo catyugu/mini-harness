@@ -4,7 +4,7 @@ export type ChangesListener = (notice: ProjectionNotice) => void;
 
 export interface ProjectionPort {
   register(domain: string): () => void;
-  invalidate(domain: string, scope?: { sessionId?: string; workspaceId?: string }): void;
+  invalidate(domain: string, resourceId?: string): void;
   snapshot(): ProjectionNotice;
   subscribe(listener: ChangesListener): () => void;
 }

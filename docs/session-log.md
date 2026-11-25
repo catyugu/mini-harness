@@ -33,6 +33,8 @@ per conversation. Model requests refer to its SHA-256 hash via `toolSchema`.
 `SessionLog.requestSnapshot(id)` reconstructs and validates the exact model-visible
 input for audit and retry. The session ID comes from the log header.
 
+An `executor-response` diagnostic preserves the original model response when an executor translates it into the native protocol.
+
 A `tool-execution` entry records a completed side effect before a model-visible result transform.
 A successful transform commits a `tool-accepted` branch entry referencing the raw execution.
 It saves only a reversible JSON splice when the content differs; an unchanged result stores no

@@ -1,19 +1,12 @@
 import type { Context } from 'mini-harness/cordis';
-import { MutationGate } from './mutations.ts';
 import { ProjectionChanges } from './projections.ts';
 import { RouteRegistry } from './router.ts';
 import { Upgrades } from './upgrade.ts';
 
 export default {
-  provide: ['harnessMutations', 'harnessChanges'],
+  provide: ['harnessChanges'],
   apply(ctx: Context) {
-    const mutations = new MutationGate();
-    ctx.provide('harnessMutations', mutations);
     ctx.provide('harnessChanges', new ProjectionChanges());
-    ctx.on('harness/seal', () => mutations.seal());
-    ctx.on('harness/drain', async () => {
-      await mutations.drain();
-    });
   },
 };
 
@@ -31,9 +24,3 @@ export const http = {
     ctx.on('harness/drain', () => routes.drain());
   },
 };
-
-declare module 'mini-harness/cordis' {
-  interface Context {
-    harnessUpgrades: Pick<Upgrades, 'register' | 'dispatch' | 'close'>;
-  }
-}

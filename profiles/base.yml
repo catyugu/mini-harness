@@ -1,8 +1,6 @@
 plugins:
   - id: core:transport
     name: '@mini-harness/transport-runtime'
-  - id: core:settings-runtime
-    name: '@mini-harness/settings-runtime'
   - id: core:plugins-runtime
     name: '@mini-harness/plugins-runtime'
   - id: core:workspace
@@ -19,6 +17,8 @@ plugins:
     name: '@mini-harness/compaction'
   - id: core:prompt
     name: '@mini-harness/agent-prompt'
+  - id: core:prompt-defaults
+    name: '@mini-harness/prompt-defaults'
   - id: core:model-store
     name: '@mini-harness/model-store'
   - id: core:model-catalog

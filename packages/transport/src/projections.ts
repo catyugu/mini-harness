@@ -16,10 +16,10 @@ export class ProjectionChanges implements ProjectionPort {
     };
   }
 
-  invalidate(domain: string, scope: { sessionId?: string; workspaceId?: string } = {}) {
+  invalidate(domain: string, resourceId?: string) {
     const state = this.domains.get(domain);
     if (!state?.mounts) return;
-    const notice: ProjectionNotice = { type: 'change', domain, revision: ++state.revision, ...scope };
+    const notice: ProjectionNotice = { type: 'change', domain, revision: ++state.revision, resourceId };
     for (const send of this.listeners) send(notice);
   }
 

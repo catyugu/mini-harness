@@ -8,16 +8,21 @@
     "./browser/api": "./src/browser/api.ts",
     "./browser/route": "./src/browser/route.ts",
     "./catalog": "./src/server/catalog.ts",
+    "./identity": "./src/server/identity.ts",
     "./manifests/data": "./src/manifests/data.ts",
     "./manifests/workspaces": "./src/manifests/workspaces.ts",
-    "./record": "./src/shared/record.ts"
+    "./record": "./src/shared/record.ts",
+    "./file-request": "./src/server/file-request.ts",
+    "./browser/file-views": "./src/browser/file-views.ts"
   },
   "miniHarness": {
     "api": [
       "./api",
       "./browser/api",
       "./browser/route",
-      "./record"
+      "./record",
+      "./file-request",
+      "./browser/file-views"
     ],
     "profileModules": {
       "@mini-harness/workspaces": "./src/manifests/workspaces.ts",
@@ -25,6 +30,7 @@
     }
   },
   "dependencies": {
+    "@mini-harness/file-access": "workspace:*",
     "@mini-harness/platform": "workspace:*",
     "@mini-harness/plugin-api": "workspace:*",
     "@mini-harness/transport": "workspace:*",
