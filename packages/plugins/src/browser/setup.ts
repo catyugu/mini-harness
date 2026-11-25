@@ -489,7 +489,7 @@ function pluginCatalog(
                 const state = snapshot().plugins.find(({ id }) => id === plugin.id);
                 if (next && state?.error && !status.textContent)
                   status.textContent = 'Configuration saved. Plugin failed to start: ' + state.error;
-                render();
+                if (!detailLifetime) render();
               }
               return saved;
             } finally {
