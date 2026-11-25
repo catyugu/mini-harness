@@ -856,8 +856,9 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
   });
   await host.start();
   assert.equal(host.metadata().find(({ id }) => id === 'workspace')?.state, 'failed');
-  assert.throws(() => host.require('session:sibling', 'greeting'), /Invalid configuration/);
-  assert.equal(host.require('session:independent', 'greeting'), 'global');
+  assert.match(host.metadata().find(({ id }) => id === 'workspace')?.error ?? '', /Invalid configuration/);
+  assert.equal(host.context('session:sibling').get('greeting'), undefined);
+  assert.equal(host.context('session:independent').get('greeting'), 'global');
   const configure = (scopes: typeof settings.scopes) => {
     const next = { ...settings, scopes };
     return host.update(next);
@@ -890,10 +891,10 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
     'ready',
     'changed scoped entries are mounted before commit',
   );
-  assert.equal(host.require('session:parent', 'greeting'), 'parent');
-  assert.equal(host.require('session:child', 'greeting'), 'child');
-  assert.equal(host.require('session:sibling', 'greeting'), 'workspace');
-  assert.equal(host.require('session:independent', 'greeting'), 'global');
+  assert.equal(host.context('session:parent').get('greeting'), 'parent');
+  assert.equal(host.context('session:child').get('greeting'), 'child');
+  assert.equal(host.context('session:sibling').get('greeting'), 'workspace');
+  assert.equal(host.context('session:independent').get('greeting'), 'global');
   await configure({
     ...settings.scopes,
     'session:sibling': {
@@ -901,9 +902,9 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
       entries: { layer: { name: 'layer', disabled: false, config: { value: 'fixed' } } },
     },
   });
-  assert.equal(host.require('session:sibling', 'greeting'), 'fixed');
+  assert.equal(host.context('session:sibling').get('greeting'), 'fixed');
   assert.equal(host.metadata().find(({ id }) => id === 'layer')?.state, 'ready');
-  assert.equal(host.require('session:child', 'extra'), 'retained');
+  assert.equal(host.context('session:child').get('extra'), 'retained');
   await assert.rejects(
     configure({
       ...settings.scopes,
@@ -914,21 +915,21 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
     }),
     /Scoped setup failed/,
   );
-  assert.equal(host.require('session:child', 'greeting'), 'child');
-  assert.equal(host.require('session:parent', 'greeting'), 'parent');
+  assert.equal(host.context('session:child').get('greeting'), 'child');
+  assert.equal(host.context('session:parent').get('greeting'), 'parent');
   assert.ok(released.includes('broken'));
 
   // An empty scope must not retain a stale service isolation.
   await configure({ 'session:parent': parent, 'session:child': {} });
-  assert.equal(host.require('session:child', 'greeting'), 'parent');
+  assert.equal(host.context('session:child').get('greeting'), 'parent');
 
   // Adding a configured ancestor of an already mounted child must mount that ancestor immediately.
   await configure({ [workspaceKey]: workspace, 'session:child': {} });
-  assert.equal(host.require('session:child', 'greeting'), 'workspace');
-  assert.equal(host.require('session:sibling', 'greeting'), 'workspace');
+  assert.equal(host.context('session:child').get('greeting'), 'workspace');
+  assert.equal(host.context('session:sibling').get('greeting'), 'workspace');
   assert.equal(ctx.get('greeting'), 'global');
   await configure({});
-  assert.equal(host.require('session:child', 'greeting'), 'global');
+  assert.equal(host.context('session:child').get('greeting'), 'global');
 });
 
 test('configuration validation resolves the staged scope provider and rejects invalid writes atomically', async (t) => {

@@ -277,23 +277,6 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
     return this.ancestry(key);
   }
 
-  require<Name extends keyof Context & string>(
-    key: ScopeAddress | null | undefined,
-    service: Name,
-  ): NonNullable<Context[Name]> {
-    const value = this.context(key).get(service);
-    if (value == null) {
-      for (const ancestor of key ? [...this.address(key)].reverse() : []) {
-        if (!this.scopes.get(ancestor)?.isolated.includes(service)) continue;
-        const failure = [...this.failures].find(([instance]) => instance.startsWith(ancestor + '/'));
-        if (failure) throw new DomainError('unavailable', failure[1]);
-        break;
-      }
-      throw new Error('Required service is unavailable: ' + service + (key ? ' in ' + key : ''));
-    }
-    return value;
-  }
-
   private assertCanWait() {
     if (this.transaction && this.lifecycle.getStore() === this.transaction)
       throw new DomainError('conflict', 'A plugin lifecycle callback cannot wait for its own Profile update');

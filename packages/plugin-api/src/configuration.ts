@@ -25,10 +25,6 @@ export interface ProfileScopes {
   register(namespace: string, resolve: (id: string) => ScopeBinding | undefined, eager?: boolean): () => void;
   prepare(address: ScopeAddress, signal?: AbortSignal): Promise<void>;
   context(address?: ScopeAddress | null): Context;
-  require<Name extends keyof Context & string>(
-    address: ScopeAddress | null | undefined,
-    service: Name,
-  ): NonNullable<Context[Name]>;
   address(address: ScopeAddress): readonly ScopeAddress[];
 }
 
