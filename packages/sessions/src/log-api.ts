@@ -4,7 +4,7 @@ import type { QueueEntry } from './shared/queue.ts';
 import type { ContentDelta } from './content-delta.ts';
 import type { ThinkingLevel, ModelChoice, ToolSchema } from '@mini-harness/llm/vocabulary';
 import type { ImageInput, PreparedMessage } from '@mini-harness/input/message';
-import type { ModelRequestSnapshot, NativeMessage, NativeToolMessage } from '@mini-harness/llm/api';
+import type { LlmRequest, ModelRequestSnapshot, NativeMessage, NativeToolMessage } from '@mini-harness/llm/api';
 import type { ViewMessage } from './shared/message.ts';
 import type { RunInfo } from './shared/run-state.ts';
 
@@ -101,6 +101,10 @@ export interface SessionLogPort {
     expectedLeafId: string | null,
   ): SessionEntry;
   projection(leafId?: string | null): SessionProjection;
+  /** Persist the exact model-visible request, sharing schemas and branch context. */
+  recordRequest(snapshot: Omit<LlmRequest, 'signal'>): SessionEntry;
+  /** Commit the model-visible content of a previously recorded raw execution. */
+  acceptToolResult(executionId: string, content: NativeToolMessage['content']): SessionEntry;
   /** Reconstruct exact model-visible inputs for audits, including distinct tool schemas. */
   requestSnapshot(id: string): ModelRequestSnapshot & { messages: NativeMessage[] };
   close(): void;

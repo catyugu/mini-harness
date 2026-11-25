@@ -10,28 +10,24 @@ import type {
 } from '@mini-harness/agent/events';
 import { DomainError } from '@mini-harness/platform/errors';
 import { isDeepStrictEqual } from 'node:util';
-import { createHash } from 'node:crypto';
 import type { ToolExecutorPort } from '@mini-harness/agent/api';
 import type { SessionCatalog, SessionLifecycle, SessionStore } from '@mini-harness/sessions/store';
 import type { ModelChoice, ThinkingLevel } from '@mini-harness/llm/vocabulary';
 import type { SessionRecord } from '@mini-harness/sessions/identity';
 import {
   validateNativeMessage,
-  validateRequestSnapshot,
   type LlmRequest,
   type NativeAssistantMessage,
   type NativeMessage,
   type NativeUserMessage,
-  type NativeToolMessage,
   type ToolCallPart,
 } from '@mini-harness/llm/api';
 import type { PromptPort } from '@mini-harness/agent/prompt-api';
 import { RunInterrupted, type AgentEvent } from './stream.ts';
 import type { Attachment, ImageInput, InputSource, PreparedMessage } from '@mini-harness/input/message';
-import type { SessionLogPort, MessagePatch, InboxItem } from '@mini-harness/sessions/log-api';
+import type { SessionLogPort, InboxItem } from '@mini-harness/sessions/log-api';
 import { Inbox } from './inbox.ts';
 import { isToolContent } from '@mini-harness/tools/api';
-import { contentDelta } from '@mini-harness/sessions/content-delta';
 import { applyTransforms } from './transforms.ts';
 import { failedTool } from '@mini-harness/agent/tool-pipeline';
 import { resolveThinking, selectModel } from './model-selection.ts';
@@ -58,25 +54,6 @@ const textOf = (message: NativeAssistantMessage) =>
     .filter((part) => part.type === 'text')
     .map((part) => part.text)
     .join('');
-/** Store only the divergent interval of a transformed model context. */
-function messagePatch(base: NativeMessage[], actual: NativeMessage[]): MessagePatch | undefined {
-  let start = 0;
-  while (start < base.length && start < actual.length && isDeepStrictEqual(base[start], actual[start]))
-    start++;
-  if (start === base.length && start === actual.length) return;
-  let endBase = base.length,
-    endActual = actual.length;
-  while (
-    endBase > start &&
-    endActual > start &&
-    isDeepStrictEqual(base[endBase - 1], actual[endActual - 1])
-  ) {
-    endBase--;
-    endActual--;
-  }
-  return { start, deleteCount: endBase - start, insert: actual.slice(start, endActual) };
-}
-
 const imageNotice = '[Image unavailable to this model]';
 
 function withoutImages(messages: NativeMessage[]): NativeMessage[] {
@@ -106,8 +83,6 @@ interface SessionPrompt {
 }
 
 export class SessionRun {
-  private readonly recordedSchemas = new WeakMap<SessionLogPort, Set<string>>();
-
   constructor(
     private readonly sessions: Pick<SessionCatalog, 'workspacePath'> &
       Pick<SessionLifecycle, 'assertAvailable' | 'rename'> &
@@ -375,7 +350,7 @@ export class SessionRun {
         retry: (failure) => retryModel(ctx, { ...failure, sessionId: id }),
         onEvent: (event) => {
           if (event.type === 'request') {
-            this.recordRequest(log, event.request);
+            log.recordRequest(event.request);
             return;
           }
           if (event.type !== 'assistant') {
@@ -489,10 +464,8 @@ export class SessionRun {
             async deliver(output, toolSignal, call) {
               let executionId: string | undefined;
               let transformError: Error | undefined;
-              let originalContent: NativeToolMessage['content'] | undefined;
               if (!output.isError && hooks.length) {
                 executionId = log.append({ type: 'tool-execution', result: output }).id;
-                originalContent = output.content;
                 try {
                   const resultContext = { ...step, signal: toolSignal, tool: call.name, callId: call.id };
                   const content = await applyTransforms(hooks, output.content, resultContext);
@@ -513,14 +486,7 @@ export class SessionRun {
               }
               const entry =
                 executionId && !transformError
-                  ? log.append({
-                      type: 'tool-accepted',
-                      executionId,
-                      contentDelta: contentDelta(
-                        JSON.stringify(originalContent),
-                        JSON.stringify(output.content),
-                      ),
-                    })
+                  ? log.acceptToolResult(executionId, output.content)
                   : log.append({ type: 'message', message: output, elapsedMs: output.elapsedMs });
               const details = output.details;
               if (!output.isError && typeof details?.changedPath === 'string') changed?.(details.changedPath);
@@ -576,42 +542,6 @@ export class SessionRun {
     };
   }
 
-  private recordRequest(log: SessionLogPort, snapshot: Omit<LlmRequest, 'signal'>) {
-    const projected = log.projection();
-    const patch = messagePatch(projected.contextMessages, snapshot.messages);
-    const schemaHashes =
-      this.recordedSchemas.get(log) ??
-      new Set(
-        log
-          .entries()
-          .filter((entry) => entry.type === 'tool-schema')
-          .map((entry) => entry.hash),
-      );
-    this.recordedSchemas.set(log, schemaHashes);
-    const toolSchema =
-      snapshot.tools === undefined
-        ? undefined
-        : createHash('sha256').update(JSON.stringify(snapshot.tools)).digest('hex');
-    if (toolSchema && snapshot.tools && !schemaHashes.has(toolSchema)) {
-      log.append({ type: 'tool-schema', hash: toolSchema, tools: snapshot.tools });
-      schemaHashes.add(toolSchema);
-    }
-    log.append(
-      {
-        type: 'model-request',
-        request: {
-          model: snapshot.model,
-          systemPrompt: snapshot.systemPrompt,
-          thinkingLevel: snapshot.thinkingLevel,
-          maxTokens: snapshot.maxTokens,
-          toolSchema,
-          ...(patch && { messagesPatch: patch }),
-        },
-      },
-      projected.leafId,
-    );
-  }
-
   private async compactLog(
     ctx: Context,
     id: string,
@@ -649,8 +579,7 @@ export class SessionRun {
             signal,
           };
           const request = await this.prepareRequest(ctx, context, content);
-          validateRequestSnapshot(request);
-          this.recordRequest(log, request);
+          log.recordRequest(request);
           return requestModel(requireService(ctx, 'harnessLlm'), request, {
             retry: (failure) => retryModel(ctx, { ...failure, sessionId: id }),
           });

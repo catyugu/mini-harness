@@ -2,6 +2,7 @@ import { isThinkingLevel, type ToolSchema } from '@mini-harness/llm/vocabulary';
 import { pluginIdPattern, isScopeAddress } from '@mini-harness/plugin-api/selection';
 import { DomainError } from '@mini-harness/platform/errors';
 import { isRunning, type RunInfo } from './shared/run-state.ts';
+import { isDeepStrictEqual } from 'node:util';
 import { createHash, randomBytes } from 'node:crypto';
 import {
   closeSync,
@@ -20,11 +21,14 @@ import {
   validateNativeMessage,
   validateRequestSnapshot,
   type ModelRequestSnapshot,
+  type LlmRequest,
+  type NativeMessage,
+  type NativeToolMessage,
 } from '@mini-harness/llm/api';
-import type { InboxItem, SessionEntry, SessionEvent, SessionLogPort, SessionProjection } from './log-api.ts';
+import type { InboxItem, MessagePatch, SessionEntry, SessionEvent, SessionLogPort, SessionProjection } from './log-api.ts';
 import type { QueueEntry } from './shared/queue.ts';
 import { projectLog, projectMessage } from './projection.ts';
-import { applyContentDelta } from './content-delta.ts';
+import { applyContentDelta, contentDelta } from './content-delta.ts';
 
 type StoredEntry =
   | SessionEntry
@@ -43,6 +47,25 @@ export interface SessionHeader {
 }
 const entryId = /^[a-f0-9]{8,64}$/i;
 const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+
+/** Store only the divergent interval of a transformed model context. */
+function messagePatch(base: NativeMessage[], actual: NativeMessage[]): MessagePatch | undefined {
+  let start = 0;
+  while (start < base.length && start < actual.length && isDeepStrictEqual(base[start], actual[start]))
+    start++;
+  if (start === base.length && start === actual.length) return;
+  let endBase = base.length,
+    endActual = actual.length;
+  while (
+    endBase > start &&
+    endActual > start &&
+    isDeepStrictEqual(base[endBase - 1], actual[endActual - 1])
+  ) {
+    endBase--;
+    endActual--;
+  }
+  return { start, deleteCount: endBase - start, insert: actual.slice(start, endActual) };
+}
 
 /** A single host owns the writer. Every acknowledged record is newline framed and fsynced. */
 export class SessionLog implements SessionLogPort {
@@ -157,7 +180,7 @@ export class SessionLog implements SessionLogPort {
     validateEvent(entry);
     if (
       entry.type === 'tool-schema' &&
-      createHash('sha256').update(JSON.stringify(entry.tools)).digest('hex') !== entry.hash
+      digest(entry.tools) !== entry.hash
     )
       throw new Error('Tool schema digest does not match its content');
     if (entry.type === 'model-request') {
@@ -325,6 +348,28 @@ export class SessionLog implements SessionLogPort {
     if (leafId !== undefined) return structuredClone(projectLog(this.records, this.branchEntries(leafId)));
     this.cachedProjection ??= projectLog(this.records, this.branchEntries());
     return structuredClone(this.cachedProjection);
+  }
+
+  recordRequest(snapshot: Omit<LlmRequest, 'signal'>) {
+    const projected = this.projection();
+    const { messages, tools, model, systemPrompt, thinkingLevel, maxTokens } = snapshot;
+    const patch = messagePatch(projected.contextMessages, messages);
+    const toolSchema = tools === undefined ? undefined : digest(tools);
+    if (toolSchema && tools && !this.schemas.has(toolSchema))
+      this.append({ type: 'tool-schema', hash: toolSchema, tools });
+    return this.append({
+      type: 'model-request',
+      request: { model, systemPrompt, thinkingLevel, maxTokens, toolSchema, ...(patch && { messagesPatch: patch }) },
+    }, projected.leafId);
+  }
+
+  acceptToolResult(executionId: string, content: NativeToolMessage['content']) {
+    const raw = this.byId.get(executionId);
+    if (raw?.type !== 'tool-execution') throw new Error('Tool acceptance references a missing execution');
+    return this.append({
+      type: 'tool-accepted', executionId,
+      contentDelta: contentDelta(JSON.stringify(raw.result.content), JSON.stringify(content)),
+    });
   }
 
   private requestMetadata(entry: Extract<SessionEntry, { type: 'model-request' }>) {
