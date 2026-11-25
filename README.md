@@ -78,3 +78,7 @@ The default Web app is composed from the base and Web bundles in the independent
 The workspace panel has separate **Workspace files** and **Git changes** entries. Click a text attachment to open it in the workspace panel, or a photo or video to open a media dialog. Workspace file references from `@` completion open in the panel.
 
 Use `pnpm install --frozen-lockfile` to install dependencies, `pnpm run build` to compile, `pnpm run format` to apply formatting, and `pnpm run check` to verify formatting and run the Node tests.
+
+CI runs `format` once before the Node and browser jobs. A formatting failure blocks those jobs. On same-repository pull requests (except Dependabot), the `autofix` job runs `pnpm run format`, verifies the result, and pushes a formatting-only commit to the PR branch if needed. Fork PRs and pushes to `main` are check-only. A concurrent push is not overwritten.
+
+Require the `format` status check in the `main` branch rules to enforce this gate at merge time. To rerun CI automatically after an autofix commit, configure the optional Actions secret `FORMAT_AUTOFIX_TOKEN` with a fine-grained personal access token with Contents write access (and Workflows write access if formatting changes workflow files). Without it, the built-in `GITHUB_TOKEN` can write back, but GitHub may require approval of the resulting PR workflow runs; approve them on the PR page to validate the new commit.

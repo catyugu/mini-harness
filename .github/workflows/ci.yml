@@ -9,7 +9,60 @@ permissions:
   contents: read
 
 jobs:
+  format:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run format:check
+
+  autofix:
+    needs: format
+    if: >-
+      failure() && needs.format.result == 'failure' &&
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref != 'main' &&
+      github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run format
+      - run: pnpm run format:check
+      - name: Commit and push formatting changes
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          GH_TOKEN: ${{ secrets.FORMAT_AUTOFIX_TOKEN || github.token }}
+        run: |
+          git add -u
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m "style: apply Prettier formatting"
+          git -c credential.helper= -c 'credential.helper=!gh auth git-credential' push origin "HEAD:refs/heads/$HEAD_REF"
+
   test:
+    needs: format
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -24,9 +77,6 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Check formatting
-        if: runner.os == 'Linux' && matrix.node == '24'
-        run: pnpm run format:check
       - name: Set up Linux workspace isolation
         if: runner.os == 'Linux'
         run: |
@@ -46,6 +96,7 @@ jobs:
         run: pnpm run pack:verify
 
   browser-linux:
+    needs: format
     runs-on: ubuntu-24.04
     container:
       image: mcr.microsoft.com/playwright:v1.56.0-noble
@@ -73,6 +124,7 @@ jobs:
           retention-days: 7
 
   browser-windows:
+    needs: format
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
