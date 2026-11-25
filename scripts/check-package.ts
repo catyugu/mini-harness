@@ -265,9 +265,15 @@ async function checkPackage() {
       cwd: plugin,
     });
     await cli('web', '--dump-config');
+    const pluginPack = parseNpmPackResult((await npm(['pack', '--json', '--pack-destination', work], { cwd: plugin })).stdout);
+    await cli('plugin', '--profile', 'web', 'add', join(work, pluginPack.filename), '--legacy-peer-deps', '--no-audit', '--no-fund');
+    const profileDirectory = join(paths.home, 'profiles', 'web');
+    const profileManifest = JSON.parse(await readFile(join(profileDirectory, 'package.json'), 'utf8'));
+    assert.ok(profileManifest.dependencies[pluginPack.name]);
+    await access(join(profileDirectory, 'node_modules', pluginPack.name, 'plugin.js'));
     await writeFile(
       join(paths.home, 'profiles', 'web', 'cordis.patch.yml'),
-      JSON.stringify({ plugins: [{ id: 'task-notes', name: plugin, client: true }] }),
+      JSON.stringify({ plugins: [{ id: 'task-notes', name: pluginPack.name, client: true, live: true }] }),
     );
     const launch = await cli('--detached', '--cwd', paths.cwd, '--port', String(await availablePort()));
     assert.match(launch.stdout, /started independently/);
@@ -393,6 +399,10 @@ async function checkPackage() {
     assert.match((await cli('status')).stdout, /is running/);
     assert.match((await cli('stop')).stdout, /stopped/);
     started = false;
+    await cli('plugin', '--profile', 'web', 'remove', pluginPack.name, '--legacy-peer-deps', '--no-audit', '--no-fund');
+    const afterRemoval = JSON.parse(await readFile(join(profileDirectory, 'package.json'), 'utf8'));
+    assert.ok(!afterRemoval.dependencies?.[pluginPack.name]);
+    await assert.rejects(access(join(profileDirectory, 'node_modules', pluginPack.name)));
     console.log(filename + ' passed clean installation, CLI, browser assets and native agent smoke checks');
   } finally {
     if (started) await cli('stop').catch(() => {});

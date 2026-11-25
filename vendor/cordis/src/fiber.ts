@@ -83,7 +83,7 @@ Object.defineProperty(ValidationError.prototype, kValidationError, {
 /**
  * Validate and normalize config for a plugin runtime before it starts.
  *
- * @param runtime — the plugin runtime whose `Config` schema to apply.
+ * @param schema — the native plugin Config schema to apply.
  * @param config — the raw user config.
  * @returns the validated config, or `config` unchanged if the runtime has no schema.
  * @throws {ValidationError} when validation reports issues.

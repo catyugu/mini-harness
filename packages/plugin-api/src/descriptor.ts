@@ -17,6 +17,7 @@ export interface PluginInfo {
   icon?: PluginIcon;
   configGroups?: { title: string; fields: string[] }[];
   configHint?: string;
+  /** Optional JSON form description for unloaded entries; runtime validation belongs to Config. */
   configSchema?: Record<string, any>;
 }
 

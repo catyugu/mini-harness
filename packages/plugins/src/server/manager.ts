@@ -445,15 +445,16 @@ export class PluginHost implements ScopePort {
           after = settings.scopes[key];
         return (
           !isDeepStrictEqual(
-            Object.fromEntries(Object.entries(before?.entries ?? {}).filter(([, entry]) => entry.disabled !== undefined).map(([id, entry]) => [id, [entry.disabled, entry.live]])),
-            Object.fromEntries(Object.entries(after?.entries ?? {}).filter(([, entry]) => entry.disabled !== undefined).map(([id, entry]) => [id, [entry.disabled, entry.live]])),
+            Object.fromEntries(Object.entries(before?.entries ?? {}).filter(([, entry]) => entry.disabled !== undefined || entry.live !== undefined).map(([id, entry]) => [id, [entry.disabled, entry.live]])),
+            Object.fromEntries(Object.entries(after?.entries ?? {}).filter(([, entry]) => entry.disabled !== undefined || entry.live !== undefined).map(([id, entry]) => [id, [entry.disabled, entry.live]])),
           ) ||
           descriptors.some(
             ({ id }) =>
-              !(after?.entries?.[id]?.live ?? settings.entries[id]?.live) &&
               after?.entries?.[id]?.disabled === false &&
-              (!isDeepStrictEqual(before?.entries?.[id]?.config, after.entries?.[id]?.config) ||
-                !isDeepStrictEqual(previous.entries[id]?.config, settings.entries[id]?.config)),
+              ((before?.entries?.[id]?.live ?? previous.entries[id]?.live) !== (after.entries?.[id]?.live ?? settings.entries[id]?.live) ||
+                (!(after.entries?.[id]?.live ?? settings.entries[id]?.live) &&
+                  (!isDeepStrictEqual(before?.entries?.[id]?.config, after.entries?.[id]?.config) ||
+                    !isDeepStrictEqual(previous.entries[id]?.config, settings.entries[id]?.config)))),
           )
         );
       }),

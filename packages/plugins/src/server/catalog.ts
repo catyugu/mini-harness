@@ -131,7 +131,7 @@ export class PluginCatalog {
           const plugin: Plugin | undefined = typeof value === 'function' || typeof value?.apply === 'function'
             ? value
             : undefined;
-          const Config = plugin?.Config ?? exports.Config;
+          const Config = plugin ? plugin.Config : exports.Config;
           if (!plugin && !(descriptor.resources && Config))
             throw new Error('Plugin ' + id + ' must export a Cordis plugin with apply(ctx, config)');
           return this.withSchema({ ...descriptor, plugin, module, Config });
@@ -337,6 +337,7 @@ export function changedSelection(
     before?.entries?.[id]?.disabled !== after?.entries?.[id]?.disabled ||
     before?.entries?.[id]?.live !== after?.entries?.[id]?.live ||
     !isDeepStrictEqual(before?.entries?.[id]?.config, after?.entries?.[id]?.config) ||
+    previous.entries[id]?.live !== settings.entries[id]?.live ||
     !isDeepStrictEqual(previous.entries[id]?.config, settings.entries[id]?.config)
   );
 }

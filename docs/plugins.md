@@ -14,7 +14,7 @@ mini-harness plugin --profile web remove <package>
 
 Installing a package changes only the selected Profile's npm dependencies. Declare an Entry in the Profile to activate it; restart before updating or removing packages used by a running application. npm lifecycle scripts default to disabled; authorize them explicitly with `--ignore-scripts=false`. To develop locally, declare the built package directory as an entry name in a Profile. Multiple local packages can run together. Use the Web Plugins page to enable and configure available entries; it does not install or delete code.
 
-The manifest supplies display information, scope (`application`, `workspace`, or `session`), and optional JSON Schema and configuration-form metadata. Browser modules declare their dependencies and services directly with Cordis `inject` and `provide`. A browser entry receives its configuration as a whole and can update it through `browserPluginSettings(ctx)` when a configuration schema is present. Keep server-only secrets in `harnessPluginSecrets` or a separate server entry; do not put them in browser entry configuration. Set `browser` to the browser entry module and `browserDirectory` to its dedicated build output directory. JavaScript chunks, styles, fonts and other supported assets inside that directory are published together; never put private files there. Use `browserPreload` for a published module that exports a function receiving an activation signal and optionally returning cleanup.
+The manifest supplies display information, scope (`application`, `workspace`, or `session`), and optional configuration-form metadata. Browser modules declare their dependencies and services directly with Cordis `inject` and `provide`. A browser entry receives its configuration as a whole and can update it through `browserPluginSettings(ctx)` when the entry exposes a configuration contract. Keep server-only secrets in `harnessPluginSecrets` or a separate server entry; do not put them in browser entry configuration. Set `browser` to the browser entry module and `browserDirectory` to its dedicated build output directory. JavaScript chunks, styles, fonts and other supported assets inside that directory are published together; never put private files there. Use `browserPreload` for a published module that exports a function receiving an activation signal and optionally returning cleanup.
 
 ## Declare a Cordis plugin
 
@@ -55,7 +55,7 @@ A service provider declares `provide = ['exampleGreeting']` and calls `ctx.provi
 | `harnessApprovalRequests`                      | `request(id, prompt, signal)` requests a user decision for a visible conversation.                                                                                                                              |
 | `harnessPluginRoutes`                          | `register()` and `upgrade()` publish authenticated routes under `/api/extensions/<id>` for application plugins. `scope()` registers a workspace or session RPC.                                                 |
 | `harnessPluginData` and `harnessPluginSecrets` | Read, write and remove data in the caller's own plugin and scope namespace.                                                                                                                                     |
-| `harnessPluginSettings`                        | Read the current effective config, subscribe to committed changes or write this instance's configuration when it declares a live schema.                                                                        |
+| `harnessPluginSettings`                        | Read the current effective config, subscribe to committed changes or write this instance's configuration when the Profile marks its Entry as live.                                                                        |
 | `harnessPluginChanges`                         | Invalidate the plugin's browser projection after a domain mutation.                                                                                                                                             |
 
 Use `await sessionService(ctx, sessionId, serviceName, signal)` to prepare a visible conversation and access a declared service with the caller's identity. Session writes and scope preparation belong in runtime calls after plugin setup. See [scoped providers](scoped-providers.md).
@@ -78,7 +78,18 @@ Register listeners with `ctx.on(event, handler, { order })`. Listeners are owned
 
 ### Configuration
 
-Declare a `configSchema` in `plugin.json` to validate values and supply JSON defaults. Cordis plugins may also export a synchronous Standard Schema `Config`. Use the configuration passed to `apply` for activation. For live configuration, set `"configChanges": "live"` and register `ctx.on('internal/update', next => ...)` when in-memory resources need to change. Any error rejects the candidate and restores the prior configuration. The optional `validateConfig(config, { operation, service })` export can validate product constraints with the selected services.
+Export a synchronous Standard Schema `Config` (or attach `Config` to a default Cordis plugin object or class). Cordis resolves this schema before activation and updates. The optional SDK helper `defineConfig` from `mini-harness/configuration` builds a Standard Schema from JSON Schema and supplies defaults; its `jsonSchema` is also used for configuration forms. A manifest `configSchema`, if supplied, describes the form for unloaded entries only and does not validate runtime input. A browser-only package may export `Config` without an `apply` module on the server to validate its configuration without mounting a server fiber.
+
+Set `live: true` on the Entry in `cordis.yml` or a Profile patch to allow in-place configuration changes. Register `ctx.on('internal/update', next => ...)` for resource changes or service-dependent checks, and check those constraints inside `apply` when mounting. Errors reject the candidate and restore the previous configuration. Non-live entries restart on configuration changes. Profile files contain user-supplied config, not schema defaults.
+
+```ts
+import { defineConfig } from 'mini-harness/configuration';
+export const Config = defineConfig({
+  type: 'object',
+  properties: { label: { type: 'string', default: 'Notes' } },
+  additionalProperties: false,
+});
+```
 
 ## Browser plugins
 

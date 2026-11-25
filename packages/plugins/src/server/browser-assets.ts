@@ -155,6 +155,6 @@ export function publishBrowser(
   return {
     entries,
     assets: new Map(resources.flatMap(({ descriptor }) => [...(descriptor.resources?.urls ?? [])])),
-    configurable: new Set(resources.map(({ id }) => id)),
+    configurable: new Set(resources.filter(({ descriptor }) => descriptor.Config || descriptor.configSchema).map(({ id }) => id)),
   };
 }
