@@ -11,14 +11,16 @@ export function setup(ctx: Context) {
   );
   ctx.harnessProfileScopes.register(ctx, 'session', (id) => {
     const record = registry.get(id);
-    return record && {
-      key: registry.scope(id)!,
-      parent: record.parentId
-        ? `session:${record.parentId}`
-        : record.workspaceId
-          ? `workspace:${record.workspaceId}`
-          : undefined,
-    };
+    return (
+      record && {
+        key: registry.scope(id)!,
+        parent: record.parentId
+          ? `session:${record.parentId}`
+          : record.workspaceId
+            ? `workspace:${record.workspaceId}`
+            : undefined,
+      }
+    );
   });
   ctx.effect(() => {
     const changed = (event: Event) => {

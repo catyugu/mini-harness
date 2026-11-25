@@ -854,10 +854,12 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
   );
   host.register(host.ctx, 'session', (id) => {
     const record = records.get(id);
-    return record && {
-      key: sessionKeys(id),
-      parent: record.parentId ? `session:${record.parentId}` : `workspace:${record.workspaceId}`,
-    };
+    return (
+      record && {
+        key: sessionKeys(id),
+        parent: record.parentId ? `session:${record.parentId}` : `workspace:${record.workspaceId}`,
+      }
+    );
   });
   t.after(async () => {
     await host.close();
@@ -1180,7 +1182,9 @@ test('custom scope namespaces support normal Cordis composition and inheritance'
   host.register(host.ctx, 'project', (id) =>
     ['alpha', 'beta'].includes(id) ? { key: projectKeys(id) } : undefined,
   );
-  host.register(host.ctx, 'task', (id) => (id === 'child' ? { key: taskKey, parent: 'project:alpha' } : undefined));
+  host.register(host.ctx, 'task', (id) =>
+    id === 'child' ? { key: taskKey, parent: 'project:alpha' } : undefined,
+  );
   t.after(async () => {
     await host.close();
     rmSync(directory, { recursive: true, force: true });
@@ -1371,7 +1375,9 @@ test('configured subtrees follow late scope owners, including owners installed b
           description: '',
           plugin: {
             apply(owner) {
-              owner.harnessProfileScopes.register(owner, 'project', (id) => (id === 'alpha' ? { key: project } : undefined));
+              owner.harnessProfileScopes.register(owner, 'project', (id) =>
+                id === 'alpha' ? { key: project } : undefined,
+              );
             },
             inject: ['harnessProfileScopes'],
           },
@@ -1541,18 +1547,24 @@ test('configured compositions follow individual resources created after their ow
 });
 
 test('historical conversations do not allocate Cordis service names', async (t) => {
-  const records = Array.from({ length: 128 }, (): SessionRecord => ({
-    id: randomUUID(),
-    title: 'Historical conversation',
-    titleSource: 'manual',
-    workspaceId: null,
-    parentId: null,
-    createdAt: new Date().toISOString(),
-    permission: 'standard',
-  }));
+  const records = Array.from(
+    { length: 128 },
+    (): SessionRecord => ({
+      id: randomUUID(),
+      title: 'Historical conversation',
+      titleSource: 'manual',
+      workspaceId: null,
+      parentId: null,
+      createdAt: new Date().toISOString(),
+      permission: 'standard',
+    }),
+  );
   const { app } = await fixture(t, undefined, (paths) => writeJson(paths.registry, { sessions: records }));
   const ctx = app.runtime.plugins.ctx;
-  const scopeNames = () => Object.keys(ctx.reflect.props).filter((name) => name.startsWith('scope-')).sort();
+  const scopeNames = () =>
+    Object.keys(ctx.reflect.props)
+      .filter((name) => name.startsWith('scope-'))
+      .sort();
   assert.equal(ctx.harnessSessions.list().length, records.length);
   const names = scopeNames();
   assert.deepEqual(names, ['scope-source:session', 'scope-source:workspace']);
