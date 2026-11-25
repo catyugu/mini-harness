@@ -186,7 +186,10 @@ export function apply(ctx, config) {
   const reopened = await bootProfile('custom', paths, launch);
   try {
     assert.equal(reopened.ctx.get('profileResult'), 'patched!');
-    assert.deepEqual(reopened.ctx.harnessProfile.read().scopes[`workspace:${'a'.repeat(32)}`]?.disabledTools, ['read', 'search']);
+    assert.deepEqual(
+      reopened.ctx.harnessProfile.read().scopes[`workspace:${'a'.repeat(32)}`]?.disabledTools,
+      ['read', 'search'],
+    );
   } finally {
     await reopened.close();
   }

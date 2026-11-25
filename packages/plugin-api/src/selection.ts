@@ -65,8 +65,7 @@ export function validateSettings(input: unknown): asserts input is ProfileConfig
     const { disabledTools, isolate } = scope;
     if (
       isolate !== undefined &&
-      (!Array.isArray(isolate) ||
-        !isolate.every((name: unknown) => typeof name === 'string' && !!name))
+      (!Array.isArray(isolate) || !isolate.every((name: unknown) => typeof name === 'string' && !!name))
     )
       throw new DomainError('invalid_input', 'Invalid service isolation: ' + key);
     if (

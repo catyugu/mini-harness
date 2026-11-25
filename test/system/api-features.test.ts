@@ -25,7 +25,13 @@ test('GUI APIs configure providers, persist keys privately, discover Skills and 
   assert.ok(search.body.includes('note.md'));
   assert.equal((await request(scope + '/files/preview?path=note.md')).body.text, 'workspace note');
   assert.equal(
-    (await request(scope + '/files/preview?path=' + encodeURIComponent(join(paths.home, 'profiles', 'web', 'cordis.patch.yml')))).status,
+    (
+      await request(
+        scope +
+          '/files/preview?path=' +
+          encodeURIComponent(join(paths.home, 'profiles', 'web', 'cordis.patch.yml')),
+      )
+    ).status,
     403,
   );
   assert.equal((await request(scope + '/files/tree?path=..')).status, 403);
