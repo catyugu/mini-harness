@@ -12,7 +12,7 @@ Workspace identity is stored separately in `workspaces.json`; `workspaceId: null
 
 Each conversation has one native JSONL file under
 `~/.mini-harness/sessions/<workspace-hash>/<conversation-id>.jsonl`. The Session
-Registry owns the writer and resolves this path from catalog identity. Unbound conversations use the `sessions/unbound/` directory. It does
+Registry owns the writer and resolves this path from catalog identity. The shared SessionLogPort exposes durable record operations, not the file path or close operation. Unbound conversations use the `sessions/unbound/` directory. It does
 not accept an arbitrary path from an API request. Session directories must remain
 inside managed storage; symlinked directories, symlinked files, aliased hardlinks
 and files replaced while open are rejected. New directories use mode `0700` and

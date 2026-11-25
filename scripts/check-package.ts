@@ -187,6 +187,10 @@ async function checkPackage() {
       const log: SessionLogPort = ctx.harnessSessions.log('session');
       const event: SessionEvent<{ note: string }> = { type: 'plugin-record', owner: { pluginId: 'fixture', instanceId: 'fixture' }, data: { note: 'hello' } };
       void log.append(event);
+      // @ts-expect-error The registry owns the writer lifecycle.
+      log.close();
+      // @ts-expect-error The public log has no filesystem path.
+      log.file;
       void records.append({ note: 'hello' });
       void selectModel;
       const executor: ToolExecutorPort = ctx.harnessToolExecutor;

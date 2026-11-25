@@ -36,6 +36,7 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
   private readonly ownsTree: boolean;
   private scopes = new Map<ScopeAddress, EntryGroup>();
   private started = false;
+  private scopeGeneration = 0;
   private readonly scopeSources = new Map<
     string,
     { resolve: (id: string) => ScopeBinding | undefined; eager: boolean }
@@ -234,8 +235,9 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
   register(kind: string, resolve: (id: string) => ScopeBinding | undefined, eager = false) {
     if (this.scopeSources.has(kind)) throw new Error('Scope source already registered: ' + kind);
     this.scopeSources.set(kind, { resolve, eager });
+    this.scopeGeneration++;
     return () => {
-      this.scopeSources.delete(kind);
+      if (this.scopeSources.delete(kind)) this.scopeGeneration++;
     };
   }
 
@@ -328,6 +330,8 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
       const overrides = settings.scopes[key];
       if (released.has(key)) return root;
       if (!address) {
+        // A disabled domain retains its scoped configuration without mounting it.
+        if (!this.scopeSource(key)) return root;
         for (const plugin of new Set([
           ...Object.entries(overrides?.entries ?? {})
             .filter(([, entry]) => entry.disabled !== true)
@@ -343,7 +347,9 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
       const plans = this.catalog.plans(descriptors, key, (id, error) => unavailable(id, error, key));
       const isolates = [...new Set(overrides.isolate)].sort();
       const existing = this.scopes.get(key);
-      const group = existing?.matches(parent, isolates) ? existing : new EntryGroup(parent, isolates);
+      const group = existing?.matches(parent, isolates) && scopeOf(existing.context) === address.key
+        ? existing
+        : new EntryGroup(parent, isolates);
       if (group !== existing) tagScope(group.context, address.key);
       const { context } = group;
       if (active.has(key)) {
@@ -433,13 +439,12 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
           ),
         )
       : [];
-    const scoped = this.scopedEntries(settings, descriptors, unavailable, preparing, released, changedScopes);
-    const mounts = [
-      ...plans
-        .filter(({ id, descriptor }) => descriptor.native?.plugin && !failures.has(id))
-        .map((plan) => this.catalog.entry(plan, this.ctx)),
-      ...scoped.entries,
-    ];
+    const application = plans
+      .filter(({ id, descriptor }) => descriptor.native?.plugin && !failures.has(id))
+      .map((plan) => this.catalog.entry(plan, this.ctx));
+    const planScopes = () => this.scopedEntries(settings, descriptors, unavailable, preparing, released, changedScopes);
+    let scoped = planScopes();
+    let mounts = [...application, ...scoped.entries];
     const owner = this.owner.fiber.entry;
     if (updating && owner) {
       const entry = this.entries.get(owner.options.id);
@@ -448,7 +453,19 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
         throw new DomainError('conflict', 'Changing ' + owner.options.id + ' requires a Profile restart');
     }
     try {
-      const activationErrors = await this.entries.update(mounts);
+      const generation = this.scopeGeneration;
+      let activationErrors = await this.entries.update(mounts);
+      // Domain providers may register or remove scope resolvers during graph activation.
+      // Reconcile their dependent groups against the settled bindings before publishing.
+      if (generation !== this.scopeGeneration && !starting) {
+        for (const mounted of application) {
+          const error = activationErrors.get(mounted.id);
+          if (error !== undefined && !unavailable(mounted.id, error)) throw error;
+        }
+        scoped = planScopes();
+        mounts = [...application, ...scoped.entries];
+        activationErrors = await this.entries.update(mounts);
+      }
       for (const mounted of mounts) {
         if (!activationErrors.has(mounted.id)) continue;
         const error = activationErrors.get(mounted.id);

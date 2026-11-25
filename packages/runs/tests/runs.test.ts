@@ -5,6 +5,7 @@ import fs, { readFileSync, rmSync } from 'node:fs';
 import { syncBuiltinESMExports } from 'node:module';
 import { createMiniHarnessServer } from '../../../test/support/profile.ts';
 import { SessionRegistry } from '@mini-harness/sessions/registry';
+import { nativeFile } from '../../sessions/src/storage.ts';
 import { WorkspaceCatalog } from '@mini-harness/workspaces/catalog';
 import type { RunEvent } from '../src/stream.ts';
 import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.ts';
@@ -97,7 +98,7 @@ test(
     const finishedRun = app.runtime.plugins.ctx.harnessRuns.info(item.id);
     assert.ok(finishedRun);
     assert.equal(finishedRun.state, 'completed');
-    const durable = readFileSync(app.runtime.plugins.ctx.harnessSessions.log(item.id).file, 'utf8')
+    const durable = readFileSync(nativeFile(paths, item), 'utf8')
       .trim()
       .split('\n')
       .map((line) => JSON.parse(line));
@@ -184,7 +185,7 @@ test('startup durably interrupts runs, fails stale steering, and recovers idempo
     type: 'inbox-enqueued',
     item: { id: 'follow', mode: 'followUp', text: 'Recovered follow-up', images: [] },
   });
-  const file = registry.log(child.id).file;
+  const file = nativeFile(paths, child);
   registry.dispose();
   const restored = new SessionRegistry(
     paths,
@@ -296,7 +297,8 @@ test('append, torn write and fsync failures evict the writer without acknowledgi
   for (const fault of ['append', 'torn', 'sync']) {
     const session = app.runtime.plugins.ctx.harnessSessions.create();
     const log = app.runtime.plugins.ctx.harnessSessions.log(session.id);
-    const original = readFileSync(log.file);
+    const file = nativeFile(paths, session);
+    const original = readFileSync(file);
     const write = fs.writeSync;
     let shortened = false;
     const mocked =
@@ -329,7 +331,7 @@ test('append, torn write and fsync failures evict the writer without acknowledgi
     }
     assert.throws(() => log.append({ type: 'branch' }), /closed/);
     assert.equal(app.runtime.plugins.ctx.harnessRuns.active(session.id), false);
-    const damaged = readFileSync(log.file);
+    const damaged = readFileSync(file);
     if (fault === 'append') assert.deepEqual(damaged, original);
     if (fault === 'torn') {
       assert.ok(damaged.length > original.length);
@@ -341,7 +343,7 @@ test('append, torn write and fsync failures evict the writer without acknowledgi
     assert.equal(details.run, undefined);
     assert.match(details.logError, /Injected/);
     assert.ok(status.sessionDiagnostics.some(({ id }: { id: string }) => id === session.id));
-    assert.deepEqual(readFileSync(log.file), damaged, 'GET must leave even a torn tail intact');
+    assert.deepEqual(readFileSync(file), damaged, 'GET must leave even a torn tail intact');
     assert.equal(
       await app.runtime.plugins.ctx.harnessRuns.send(healthy.id, 'Healthy session'),
       'Mock response',
@@ -352,7 +354,7 @@ test('append, torn write and fsync failures evict the writer without acknowledgi
       app.runtime.plugins.ctx.harnessRuns.info(session.id)?.state,
       fault === 'sync' ? 'interrupted' : undefined,
     );
-    if (fault === 'torn') assert.deepEqual(readFileSync(log.file), original);
+    if (fault === 'torn') assert.deepEqual(readFileSync(file), original);
     assert.equal(
       await app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Accepted retry'),
       'Mock response',

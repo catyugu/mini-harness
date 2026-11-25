@@ -86,7 +86,6 @@ export interface SessionProjection {
 }
 
 export interface SessionLogPort {
-  readonly file: string;
   readonly sessionId: string;
   entries(): SessionEntry[];
   inbox(): InboxItem[];
@@ -107,5 +106,4 @@ export interface SessionLogPort {
   acceptToolResult(executionId: string, content: NativeToolMessage['content']): SessionEntry;
   /** Reconstruct exact model-visible inputs for audits, including distinct tool schemas. */
   requestSnapshot(id: string): ModelRequestSnapshot & { messages: NativeMessage[] };
-  close(): void;
 }

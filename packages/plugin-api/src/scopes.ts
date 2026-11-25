@@ -3,22 +3,24 @@ import { Context } from 'mini-harness/cordis';
 /** Opaque, identity-compared runtime scope. Scope routing is not an access boundary. */
 export type ScopeKey = object;
 const scopeTag = Symbol('mini-harness.scope');
-const parents = new WeakMap<ScopeKey, ScopeKey>();
+type ScopeParent = ScopeKey | (() => ScopeKey | undefined);
+const parents = new WeakMap<ScopeKey, ScopeParent>();
 
-export function createScopeKey(parent?: ScopeKey): ScopeKey {
+export function createScopeKey(parent?: ScopeParent): ScopeKey {
   const key = {};
   if (parent) parents.set(key, parent);
   return key;
 }
 
 export function scopeParentOf(key: ScopeKey) {
-  return parents.get(key);
+  const parent = parents.get(key);
+  return typeof parent === 'function' ? parent() : parent;
 }
 
 /** Nearest scope first. */
 export function scopeChainOf(key?: ScopeKey): ScopeKey[] {
   const chain: ScopeKey[] = [];
-  for (; key; key = parents.get(key)) chain.push(key);
+  for (; key; key = scopeParentOf(key)) chain.push(key);
   return chain;
 }
 

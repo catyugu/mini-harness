@@ -1,5 +1,5 @@
 import type { RunInfo } from './shared/run-state.ts';
-import type { SessionEntry } from './log-api.ts';
+import type { SessionEntry, SessionLogPort } from './log-api.ts';
 import { DomainError } from '@mini-harness/platform/errors';
 import { randomUUID } from 'node:crypto';
 import { lstatSync, unlinkSync } from 'node:fs';
@@ -83,12 +83,14 @@ export class SessionRegistry implements SessionStore {
     if (!record) return;
     let key = this.runtimeScopes.get(id);
     if (!key) {
-      const parent = record.parentId
-        ? this.runScope(record.parentId)
-        : record.workspaceId
-          ? this.workspaceService()?.scope(record.workspaceId)
-          : undefined;
-      this.runtimeScopes.set(id, (key = createScopeKey(createScopeKey(parent))));
+      const standing = createScopeKey(() =>
+        record.parentId
+          ? this.runScope(record.parentId)
+          : record.workspaceId
+            ? this.workspaceService()?.scope(record.workspaceId)
+            : undefined,
+      );
+      this.runtimeScopes.set(id, (key = createScopeKey(standing)));
     }
     return key;
   }
@@ -285,7 +287,11 @@ export class SessionRegistry implements SessionStore {
     }
   }
 
-  log(id: string) {
+  log(id: string): SessionLogPort {
+    return this.writer(id).port;
+  }
+
+  private writer(id: string) {
     const existing = this.logs.get(id);
     if (existing) {
       this.logs.delete(id);
@@ -350,16 +356,16 @@ export class SessionRegistry implements SessionStore {
     return target;
   }
 
-  inspectLog<T>(id: string, read: (log: SessionLog) => T, strict = false): T | undefined {
+  inspectLog<T>(id: string, read: (log: Pick<SessionLogPort, 'entries' | 'branch' | 'projection' | 'queue'>) => T, strict = false): T | undefined {
     const existing = this.logs.get(id);
-    if (existing) return read(existing);
+    if (existing) return read(existing.port);
     const record = this.get(id);
     if (!record) return;
     try {
       const log = this.openLog(record, 'read');
       if (!log) return;
       try {
-        return read(log);
+        return read(log.port);
       } finally {
         log.close();
       }
@@ -461,7 +467,7 @@ export class SessionRegistry implements SessionStore {
       const record = this.get(id);
       if (!record) throw new Error('Conversation disappeared during export');
       this.nativeFile(record);
-      const log = this.log(id);
+      const log = this.writer(id);
       const attachments: Record<string, string> = {};
       for (const entry of log.entries()) {
         const input =

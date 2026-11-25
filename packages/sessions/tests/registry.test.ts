@@ -35,13 +35,13 @@ function fixture(t: test.TestContext) {
 }
 
 test('nested sessions cascade permanent deletion through native logs', async (t) => {
-  const { registry } = fixture(t);
+  const { paths, registry } = fixture(t);
   const parent = registry.create({ title: 'root' });
   const child = registry.create({ title: 'worker', parentId: parent.id });
   const second = registry.create({ title: 'unrelated' });
   const log = registry.log(child.id);
   log.append({ type: 'message', message: { role: 'user', content: 'hello', timestamp: Date.now() } });
-  const file = log.file;
+  const file = nativeFile(paths, child);
   assert.equal(registry.list().length, 3);
   assert.deepEqual(new Set(registry.descendants([parent.id])), new Set([parent.id, child.id]));
   const deleted = await registry.delete([parent.id]);
@@ -56,11 +56,12 @@ test('nested sessions cascade permanent deletion through native logs', async (t)
 });
 
 test('refuses export and deletion through a symlink outside managed storage', async (t) => {
-  const { temp, registry } = fixture(t);
+  const { temp, paths, registry } = fixture(t);
   const item = registry.create();
   const foreign = join(temp, 'other.jsonl');
   writeFileSync(foreign, 'keep');
-  const file = registry.log(item.id).file;
+  registry.log(item.id);
+  const file = nativeFile(paths, item);
   rmSync(file);
   symlinkSync(foreign, file);
   assert.throws(() => registry.export([item.id]), /outside managed storage/);
@@ -74,7 +75,8 @@ test('restart finishes a journaled deletion after partial cleanup', async (t) =>
   const parent = registry.create();
   const child = registry.create({ parentId: parent.id });
   const unrelated = registry.create();
-  const childFile = registry.log(child.id).file;
+  registry.log(child.id);
+  const childFile = nativeFile(paths, child);
   const upload = {
     name: 'document.pdf',
     mimeType: 'application/pdf',
@@ -152,7 +154,8 @@ test('a corrupt log is isolated, remains deletable and never creates a log for a
   const damaged = registry.create({ title: 'Damaged' });
   const healthy = registry.create({ title: 'Healthy' });
   const unopened = registry.create();
-  const invalid = registry.log(damaged.id).file;
+  registry.log(damaged.id);
+  const invalid = nativeFile(paths, damaged);
   registry
     .log(healthy.id)
     .append({ type: 'message', message: { role: 'user', content: 'intact', timestamp: Date.now() } });
@@ -257,4 +260,18 @@ test('the session registry needs no workspace provider', async (t) => {
     .append({ type: 'message', message: { role: 'user', content: 'Standalone', timestamp: 1 } });
   assert.equal(registry.history(session.id).messages[0].content, 'Standalone');
   assert.deepEqual(await registry.delete([session.id]), [session.id]);
+});
+
+test('public session logs expose record operations but not the writer lifecycle', (t) => {
+  const { registry } = fixture(t);
+  const session = registry.create();
+  const log = registry.log(session.id);
+  assert.equal('close' in log, false);
+  assert.equal('file' in log, false);
+  registry.inspectLog(session.id, (view) => {
+    assert.equal('close' in view, false);
+    assert.equal('file' in view, false);
+  });
+  log.append({ type: 'message', message: { role: 'user', content: 'Still writable', timestamp: 1 } });
+  assert.equal(registry.history(session.id).messages[0].content, 'Still writable');
 });
