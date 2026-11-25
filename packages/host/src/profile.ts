@@ -217,7 +217,7 @@ export function ensureProfile(name: string, paths: Paths) {
   return directory;
 }
 
-function profileLayers(name: string, paths: Paths, patches: readonly string[] = []) {
+function profileLayers(name: string, paths: Paths, patches: readonly string[] = [], defaults = false) {
   const directory = ensureProfile(name, paths);
   const manifestPath = join(directory, MANIFEST);
   const manifest = readJson<{ miniHarness?: { profile?: { bundles?: unknown } } }>(manifestPath, {});
@@ -232,7 +232,7 @@ function profileLayers(name: string, paths: Paths, patches: readonly string[] = 
       ...layers(join(directory, ROOT)),
       ...bundles.flatMap((bundle: string) => bundleLayers(bundle, directory)),
     ],
-    userLayers: layers(file),
+    userLayers: defaults ? [] : layers(file),
     overlays: patches.flatMap((patch) => layers(resolve(patch))),
   };
 }
@@ -244,7 +244,7 @@ export function allowsDetachment(name: string, paths: Paths, patches: readonly s
 
 /** Print the actual layer composition without importing or mounting a plugin. */
 export function dumpProfile(name: string, paths: Paths, patches: readonly string[], defaults = false) {
-  const { shipped, userLayers, overlays } = profileLayers(name, paths, defaults ? [] : patches);
+  const { shipped, userLayers, overlays } = profileLayers(name, paths, defaults ? [] : patches, defaults);
   const selected = defaults ? shipped : [...shipped, ...userLayers, ...overlays];
   const { detached, scopes } = Object.assign({}, ...selected) as Layer;
   return stringify({

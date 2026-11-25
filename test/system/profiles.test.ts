@@ -167,7 +167,7 @@ export function apply(ctx, config) {
   const standalone = join(directory, 'standalone.yml');
   writeText(standalone, 'include: [' + JSON.stringify(fragment) + ']\n');
   await assert.rejects(bootProfile(standalone, paths, launch), /Invalid Profile name/);
-  writeText(standalone, 'plugins:\\n  - id: provider\\n    config:\\n      value: temporary\\n');
+  writeText(standalone, 'plugins:\n  - id: provider\n    config:\n      value: temporary\n');
   const patched = await bootProfile('custom', paths, { ...launch, patches: [standalone] });
   try {
     assert.equal(patched.ctx.get('profileResult'), 'temporary!');
@@ -195,11 +195,16 @@ test('launcher inspects and recreates named Profile packages without mounting', 
   const cli = (...args: string[]) =>
     execFileSync(process.execPath, ['dist/bin/mini-harness.js', ...args], { env, encoding: 'utf8' });
   const extra = join(root, 'extra.yml');
-  writeText(extra, 'plugins:\\n  - id: git-diff\\n    disabled: true\\n');
+  writeText(extra, 'plugins:\n  - id: git-diff\n    disabled: true\n');
   const config = cli('rescue', '--from-default-profile', 'web', '--patch', extra, '--dump-config');
-  assert.match(config, /id: git-diff[\\s\\S]*?disabled: true/);
-  assert.doesNotMatch(cli('rescue', '--dump-default-config'), /id: git-diff[\\s\\S]*?disabled: true/);
+  assert.match(config, /id: git-diff\s+name:[^\n]+\n\s+disabled: true/);
+  assert.doesNotMatch(cli('rescue', '--dump-default-config'), /id: git-diff\s+name:[^\n]+\n\s+disabled: true/);
   assert.equal(JSON.parse(cli('--dump-config-schema')).properties.plugins.type, 'array');
+  const patch = join(env.MINI_HARNESS_HOME, 'profiles', 'rescue', 'cordis.patch.yml');
+  writeText(patch, 'not: a valid layer');
+  assert.doesNotThrow(() => cli('rescue', '--dump-default-config'));
+  assert.throws(() => cli('rescue', '--dump-config'), /Expected a Profile object/);
+  writeText(patch, 'plugins: []\n');
   assert.doesNotMatch(readFileSync(join(env.MINI_HARNESS_HOME, 'profiles', 'rescue', 'cordis.patch.yml'), 'utf8'), /git-diff/);
   assert.throws(() => cli('--profile', extra, '--dump-config'), /Invalid Profile name/);
 });
