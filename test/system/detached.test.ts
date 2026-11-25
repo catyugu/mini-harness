@@ -95,11 +95,10 @@ test('port collisions fail promptly and release the instance lock', { timeout: 2
   const address = listener.address();
   assert.ok(address && typeof address === 'object');
   const call = () =>
-    execute(
-      process.execPath,
-      [cliEntry, '--cwd', root, '--port', String(address.port)],
-      { env: { ...process.env, MINI_HARNESS_HOME: join(root, 'home') }, timeout: 6000 },
-    );
+    execute(process.execPath, [cliEntry, '--cwd', root, '--port', String(address.port)], {
+      env: { ...process.env, MINI_HARNESS_HOME: join(root, 'home') },
+      timeout: 6000,
+    });
   await assert.rejects(call(), /HTTP port is already in use/);
   await assert.rejects(call(), /HTTP port is already in use/);
   assert.equal(existsSync(join(root, 'home', 'server.json')), false);

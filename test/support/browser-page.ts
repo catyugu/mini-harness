@@ -9,7 +9,11 @@ export function browserPage(html: string) {
   return { boot, imports: (JSON.parse(map) as { imports: Record<string, string> }).imports };
 }
 
-export async function verifyBrowserGraph(base: string, entries: string[], imports: Record<string, string> = {}) {
+export async function verifyBrowserGraph(
+  base: string,
+  entries: string[],
+  imports: Record<string, string> = {},
+) {
   const pending = [...entries];
   const seen = new Set<string>();
   for (const path of pending) {
