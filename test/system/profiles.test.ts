@@ -4,6 +4,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { parse } from 'yaml';
 import { writeText, writeJson } from '@mini-harness/platform/json';
 import { getPaths, ensurePaths } from '@mini-harness/platform/paths';
 import { Context } from 'mini-harness/cordis';
@@ -197,8 +198,10 @@ test('launcher inspects and recreates named Profile packages without mounting', 
   const extra = join(root, 'extra.yml');
   writeText(extra, 'plugins:\n  - id: git-diff\n    disabled: true\n');
   const config = cli('rescue', '--from-default-profile', 'web', '--patch', extra, '--dump-config');
-  assert.match(config, /id: git-diff\s+name:[^\n]+\n\s+disabled: true/);
-  assert.doesNotMatch(cli('rescue', '--dump-default-config'), /id: git-diff\s+name:[^\n]+\n\s+disabled: true/);
+  const gitDiff = (yaml: string) =>
+    parse(yaml).plugins.find(({ id }: { id: string }) => id === 'git-diff');
+  assert.equal(gitDiff(config).disabled, true);
+  assert.notEqual(gitDiff(cli('--dump-default-config')).disabled, true);
   assert.equal(JSON.parse(cli('--dump-config-schema')).properties.plugins.type, 'array');
   const patch = join(env.MINI_HARNESS_HOME, 'profiles', 'rescue', 'cordis.patch.yml');
   writeText(patch, 'not: a valid layer');
