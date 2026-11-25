@@ -177,13 +177,17 @@ async function main() {
     try {
       const { installPackagedPlugin } = await import('@mini-harness/plugins/package-installer');
       const profile = await loadProfile('web', paths, new Context());
-      const reserved = readProfile('web');
-      const { name, version } = await installPackagedPlugin(paths, operation, id, spec, {
-        settings: profile.read(),
-        reserved: (id) => reserved.has(id),
-        signal: cancellation.signal,
-      });
-      console.log(id + ': ' + name + '@' + version);
+      try {
+        const reserved = readProfile('web');
+        const { name, version } = await installPackagedPlugin(paths, operation, id, spec, {
+          settings: profile.read(),
+          reserved: (id) => reserved.has(id),
+          signal: cancellation.signal,
+        });
+        console.log(id + ': ' + name + '@' + version);
+      } finally {
+        await profile.close();
+      }
     } finally {
       process.off('SIGINT', abort);
       process.off('SIGTERM', abort);
@@ -224,6 +228,9 @@ async function main() {
     } else console.log(info ? 'mini-harness stopped' : 'mini-harness is not running');
     return;
   }
+  // A relative YAML path belongs to the invoking directory, not the detached
+  // child's workspace directory.
+  if (!/^[a-z][a-z0-9-]*$/.test(args.profile)) args.profile = resolve(args.profile);
   if (args.detached && !args.serve) await detached(paths, args.profile, args.flags);
   else await serve(paths, args.profile, args.flags, args.serve);
 }

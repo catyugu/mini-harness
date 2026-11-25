@@ -5,7 +5,12 @@ import type { Paths } from '@mini-harness/platform/runtime-paths';
 import { Context } from 'mini-harness/cordis';
 
 export async function storedProfile(paths: Paths, name = 'web') {
-  return (await loadProfile(name, paths, new Context())).read();
+  const profile = await loadProfile(name, paths, new Context());
+  try {
+    return profile.read();
+  } finally {
+    await profile.close();
+  }
 }
 
 export class MiniHarnessRuntime {

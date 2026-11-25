@@ -17,6 +17,7 @@ export interface ProfileRuntime {
   read(): ProfileConfiguration;
   commit(settings: ProfileConfiguration): void;
   finishMigration(): void;
+  close(): Promise<void>;
 }
 
 export interface LaunchOptions {

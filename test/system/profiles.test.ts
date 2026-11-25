@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { writeText } from '@mini-harness/platform/json';
+import { writeText, writeJson } from '@mini-harness/platform/json';
+import { getPaths, ensurePaths } from '@mini-harness/platform/paths';
+import { Context } from 'mini-harness/cordis';
+import { allowsDetachment, loadProfile } from '@mini-harness/host/profile';
 import { bootProfile } from '@mini-harness/host/application';
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
 
@@ -49,4 +53,110 @@ test('YAML Profile composes through Cordis and persists Web entry changes', asyn
 
   writeText(configure('web'), 'plugins:\n  - id: files\n    disabled: !!js arbitrary()\n');
   await assert.rejects(bootProfile('web', paths, launch), /cordis\.yml.*tag/is);
+});
+
+test('custom Profiles load native local and npm entries without the plugin manager', async (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'mini-harness-profile-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const paths = getPaths(root, { MINI_HARNESS_HOME: join(root, 'home') });
+  ensurePaths(paths);
+  const file = join(paths.home, 'profiles', 'custom', 'cordis.yml');
+  const fragment = join(root, 'fragments', 'provider.yml');
+  writeText(
+    join(root, 'fragments', 'provider.mjs'),
+    `import { Context } from 'mini-harness/cordis';
+export default {
+  provide: 'profileValue',
+  apply(ctx, config) {
+    if (!(ctx instanceof Context)) throw new Error('Duplicated Cordis runtime');
+    ctx.provide('profileValue', config.value);
+  },
+};`,
+  );
+  writeText(
+    join(root, 'fragments', 'disabled.mjs'),
+    "throw new Error('A disabled entry was imported');",
+  );
+  writeJson(join(root, 'fragments', 'node_modules', 'profile-consumer', 'package.json'), {
+    name: 'profile-consumer',
+    type: 'module',
+    exports: { import: './entry.js' },
+  });
+  writeText(
+    join(root, 'fragments', 'node_modules', 'profile-consumer', 'entry.js'),
+    `export const inject = ['profileValue'];
+export const provide = 'profileResult';
+export function apply(ctx, config) {
+  ctx.provide('profileResult', ctx.profileValue + config.suffix);
+}`,
+  );
+  writeText(
+    fragment,
+    `plugins:
+  - id: consumer
+    name: profile-consumer
+    config:
+      suffix: '!'
+  - id: provider
+    name: ./provider.mjs
+    config:
+      value: base
+  - id: disabled
+    name: ./disabled.mjs
+    disabled: true
+`,
+  );
+  const include = JSON.stringify(fragment);
+  writeText(
+    file,
+    `include: [${include}]
+plugins:
+  - id: provider
+    config:
+      value: patched
+  - id: waiting
+    name: ./waiting.mjs
+`,
+  );
+  writeText(
+    join(paths.home, 'profiles', 'custom', 'waiting.mjs'),
+    `export default {
+  inject: ['missingProfileService'],
+  apply() { throw new Error('Waiting entry must not activate'); },
+};`,
+  );
+  const launch = { interactive: false, shutdown() {} };
+  for (const name of ['custom', file]) {
+    const app = await bootProfile(name, paths, launch);
+    try {
+      assert.equal(app.ctx.get('harnessPluginCatalog'), undefined);
+      assert.equal(app.ctx.get('profileResult'), 'patched!');
+      assert.equal(app.ctx.harnessProfile.entries.get('disabled'), undefined);
+      assert.equal(app.ctx.harnessProfile.entries.get('waiting')?.active, false);
+      assert.equal(allowsDetachment(name, paths), false);
+    } finally {
+      await app.close();
+    }
+    assert.equal(app.ctx.get('profileResult'), undefined);
+  }
+  const profile = await loadProfile('custom', paths, new Context());
+  try {
+    profile.commit({ ...profile.read(), readOnlyTools: { example: ['read'] } });
+  } finally {
+    await profile.close();
+  }
+  const persisted = readFileSync(file, 'utf8');
+  assert.match(persisted, /include:/);
+  assert.match(persisted, /value: patched/);
+  assert.match(persisted, /name: \\.\\/waiting\\.mjs/);
+  assert.equal(readFileSync(fragment, 'utf8').includes('value: base'), true);
+  const reopened = await bootProfile(file, paths, launch);
+  try {
+    assert.equal(reopened.ctx.get('profileResult'), 'patched!');
+  } finally {
+    await reopened.close();
+  }
+
+  writeText(fragment, 'include: [' + JSON.stringify(file) + ']\\n');
+  await assert.rejects(bootProfile(file, paths, launch), /Cyclic Profile include/);
 });

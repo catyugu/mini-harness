@@ -20,7 +20,7 @@ export async function bootProfile(name: string, paths: Paths, launch: LaunchOpti
         try {
           await ctx.parallel('harness/drain');
         } finally {
-          await profile.entries.close();
+          await profile.close();
         }
       }
     })());

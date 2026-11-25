@@ -91,7 +91,7 @@ export class PluginHost implements ScopePort {
     const provided = [...new Set([...rootServices, ...Object.keys(services)])];
     this.catalog = new PluginCatalog(directory, builtins, provided, devPlugin, ctx.get('harnessProfile'));
     this.root = new Map(provided.map((name) => [name, 'application']));
-    this.imports = bindPluginImports(directory, devPlugin);
+    this.imports = bindPluginImports([directory, ...(devPlugin ? [devPlugin] : [])]);
   }
 
   private browserState = publishBrowser([], [], () => false);

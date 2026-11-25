@@ -8,8 +8,8 @@ const sdk = new Map([
 ]);
 
 /** Resolve the public server SDK from this host for local, npm and development plugins. */
-export function bindPluginImports(directory: string, devPlugin?: string) {
-  const roots = [directory, ...(devPlugin ? [devPlugin] : [])].map((root) =>
+export function bindPluginImports(directories: readonly string[]) {
+  const roots = directories.map((root) =>
     pathToFileURL(join(root, 'plugin.js')).href.slice(0, -'plugin.js'.length),
   );
   return registerHooks({

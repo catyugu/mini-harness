@@ -9,6 +9,7 @@ import { readJson, writeJson, writeText } from '@mini-harness/platform/json';
 import type { Paths } from '@mini-harness/platform/runtime-paths';
 import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
 import { bindInstance } from '@mini-harness/plugin-api/instance';
+import { bindPluginImports } from '@mini-harness/plugins/module-resolution';
 import { isScopeKey, localPluginIdPattern, pluginIdPattern } from '@mini-harness/plugin-api/selection';
 import type { ProfileConfiguration, ProfileRuntime } from '@mini-harness/plugin-api/profile';
 import { parseSettings } from '@mini-harness/settings/config';
@@ -191,9 +192,8 @@ function resolveModule(name: string, source: string) {
   }
 }
 
-async function nativeModule(row: ResolvedRow) {
+async function nativeModule(row: ResolvedRow, module: string) {
   const name = row.name!;
-  const module = packagedModules.has(name) ? name : resolveModule(name, row.source!);
   const value: unknown = packagedModules.has(name)
     ? await moduleFor(name)
     : await import(module).then((exports) => exports.default ?? exports);
@@ -297,7 +297,23 @@ export async function loadProfile(name: string, paths: Paths, context: Context):
     }
   }
   // Disabled external modules are never resolved or imported.
-  const modules = await Promise.all(nativeRows.filter((row) => !row.disabled).map(nativeModule));
+  const sources = nativeRows
+    .filter((row) => !row.disabled)
+    .map((row) => ({
+      row,
+      module: packagedModules.has(row.name!) ? row.name! : resolveModule(row.name!, row.source!),
+    }));
+  const roots = sources.flatMap(({ row, module }) =>
+    packagedModules.has(row.name!) ? [] : [dirname(fileURLToPath(module))],
+  );
+  const imports = roots.length ? bindPluginImports(roots) : undefined;
+  let modules: Awaited<ReturnType<typeof nativeModule>>[];
+  try {
+    modules = await Promise.all(sources.map(({ row, module }) => nativeModule(row, module)));
+  } catch (error) {
+    imports?.deregister();
+    throw error;
+  }
   const infrastructure = modules.flatMap(({ plugin }) =>
     typeof plugin.provide === 'string' ? [plugin.provide] : (plugin.provide ?? []),
   );
@@ -353,7 +369,8 @@ export async function loadProfile(name: string, paths: Paths, context: Context):
       );
       if (Object.keys(changed).length) row.config = changed;
       if (existing?.client !== undefined && existing.client !== base?.client) row.client = existing.client;
-      if (existing?.required !== undefined && existing.required !== base?.required) row.required = existing.required;
+      if (existing?.required !== undefined && existing.required !== base?.required)
+        row.required = existing.required;
       if (Object.keys(row).length > 1) plugins.push(row);
     }
     const rules = Object.fromEntries(
@@ -417,6 +434,13 @@ export async function loadProfile(name: string, paths: Paths, context: Context):
     commit,
     finishMigration() {
       if (migrate) commit(current);
+    },
+    async close() {
+      try {
+        await entries.close();
+      } finally {
+        imports?.deregister();
+      }
     },
   };
 }

@@ -85,17 +85,6 @@ export class PluginCatalog {
     ]);
     this.lockedPlugins = new Set(this.protectedProviders.values());
     if (this.builtins.size !== builtins.length) throw new Error('Duplicate builtin plugin ID');
-    const services = new Set([...this.builtins.values()].flatMap(({ provides }) => provides ?? []));
-    for (const service of rootServices)
-      if (services.has(service)) throw new Error('Duplicate provider for ' + service);
-    for (const { id, inject = [], browserRequires = [] } of this.builtins.values()) {
-      for (const service of inject)
-        if (!rootServices.includes(service) && !services.has(service))
-          throw new Error('Missing provider for ' + service + ' (' + id + ')');
-      for (const dependency of browserRequires)
-        if (!this.builtins.get(dependency)?.browser)
-          throw new Error('Missing browser dependency: ' + dependency);
-    }
   }
 
   effective<Settings extends PluginSettings>(settings: Settings): Settings {

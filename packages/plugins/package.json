@@ -7,6 +7,7 @@
     "./api-types": "./src/server/api-types.ts",
     "./catalog": "./src/server/catalog.ts",
     "./manager": "./src/server/manager.ts",
+    "./module-resolution": "./src/server/module-resolution.ts",
     "./manifest": "./src/manifest.ts",
     "./package-installer": "./src/server/package-installer.ts"
   },
