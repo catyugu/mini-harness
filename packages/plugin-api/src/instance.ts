@@ -10,7 +10,7 @@ export function findInstance(ctx: Context) {
     return {
       instanceId,
       pluginId: instanceId.slice(slash + 1),
-      scopeAddress: slash < 0 ? undefined : instanceId.slice(0, slash) as ScopeAddress,
+      scopeAddress: slash < 0 ? undefined : (instanceId.slice(0, slash) as ScopeAddress),
       writableConfig: live === true,
     };
   }
