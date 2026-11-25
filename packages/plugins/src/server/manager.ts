@@ -9,18 +9,20 @@ import {
   type Context,
   type EntryOptions,
 } from 'mini-harness/cordis';
-import { localPluginIdPattern, isScopeKey } from '@mini-harness/plugin-api/selection';
+import { localPluginIdPattern, isScopeAddress } from '@mini-harness/plugin-api/selection';
 import { isDeepStrictEqual } from 'node:util';
 import type { ProfileRuntime } from '@mini-harness/plugin-api/profile';
-import type { ScopeAddress, ScopeKey, ScopePort, ScopeSettings } from '@mini-harness/plugin-api/scopes';
+import type { ScopeAddress, ScopeSettings } from '@mini-harness/plugin-api/configuration';
+import type { ScopeBinding, ProfileScopes } from '@mini-harness/plugin-api/profile';
 import { planBrowser, publishBrowser } from './browser-assets.ts';
 import { addAbortListener } from 'node:events';
 import type { UpgradeHandler } from '@mini-harness/transport/routes';
-import { scopeKeys, type CompositionConfig } from '@mini-harness/plugin-api/configuration';
+import { scopeAddresses, type CompositionConfig } from '@mini-harness/plugin-api/configuration';
 import { pluginData, pluginSecrets, removeScopeData } from './data.ts';
 import { PluginRouteRegistry, scopeOperation } from './routes.ts';
 import { pluginSettings } from './plugin-settings.ts';
 import { pluginInstance } from '@mini-harness/plugin-api/instance';
+import { tagScope } from '@mini-harness/plugin-api/scopes';
 import { changedSelection, PluginCatalog } from './catalog.ts';
 
 /** Permission-only settings do not require a separate plugin context. */
@@ -29,16 +31,16 @@ function hasComposition(scope: ScopeSettings | undefined): scope is ScopeSetting
 }
 
 /** The descriptor and its resolved graph are the source of both server and browser mounts. */
-export class PluginHost implements ScopePort {
+export class PluginHost implements ProfileScopes {
   private readonly catalog: PluginCatalog;
   private readonly entries: EntryTree;
   private readonly ownsTree: boolean;
   private readonly pluginRoutes: PluginRouteRegistry;
-  private scopes = new Map<ScopeKey, EntryGroup>();
+  private scopes = new Map<ScopeAddress, EntryGroup>();
   private started = false;
   private readonly scopeSources = new Map<
     string,
-    { resolve: (id: string) => ScopeAddress | undefined; eager: boolean }
+    { resolve: (id: string) => ScopeBinding | undefined; eager: boolean }
   >();
   private applying?: Promise<void>;
   private closing = false;
@@ -51,7 +53,7 @@ export class PluginHost implements ScopePort {
     upgrade?: (path: string, handler: UpgradeHandler) => () => Promise<void>,
     private readonly writePlugin?: (
       id: string,
-      key: ScopeKey | undefined,
+      key: ScopeAddress | undefined,
       patch: unknown,
       check: () => void,
     ) => Promise<void>,
@@ -111,14 +113,14 @@ export class PluginHost implements ScopePort {
           id: options.id,
           services,
           provides: [...fiber.provisions].map(({ name }) => name),
-          scope: identity.scopeKey?.split(':')[0] ?? 'application',
+          scope: identity.scopeAddress?.split(':')[0] ?? 'application',
           source: this.catalog.reserved(identity.pluginId) ? 'built-in' : 'local',
         },
       ];
     });
   }
 
-  private configurationContext(key?: ScopeKey, scopes = this.scopes) {
+  private configurationContext(key?: ScopeAddress, scopes = this.scopes) {
     if (!key) return this.ctx;
     const keys = this.ancestry(key);
     return (
@@ -137,7 +139,7 @@ export class PluginHost implements ScopePort {
         this.entries.get(id)?.active === true || this.browserState.entries.some((entry) => entry.id === id),
     );
   }
-  register(kind: string, resolve: (id: string) => ScopeAddress | undefined, eager = false) {
+  register(kind: string, resolve: (id: string) => ScopeBinding | undefined, eager = false) {
     if (this.scopeSources.has(kind)) throw new Error('Scope source already registered: ' + kind);
     this.scopeSources.set(kind, { resolve, eager });
     return () => {
@@ -145,18 +147,18 @@ export class PluginHost implements ScopePort {
     };
   }
 
-  private scopeSource(key: ScopeKey) {
+  private scopeSource(key: ScopeAddress) {
     return this.scopeSources.get(key.slice(0, key.indexOf(':')));
   }
 
-  private lookup(key: ScopeKey) {
+  private lookup(key: ScopeAddress) {
     const source = this.scopeSource(key);
     return source?.resolve(key.slice(key.indexOf(':') + 1));
   }
 
-  private ancestry(key: ScopeKey) {
-    const ancestors = new Set<ScopeKey>();
-    for (let current: ScopeKey | undefined = key; current; ) {
+  private ancestry(key: ScopeAddress) {
+    const ancestors = new Set<ScopeAddress>();
+    for (let current: ScopeAddress | undefined = key; current; ) {
       const address = this.lookup(current);
       if (!address) break;
       if (ancestors.has(current)) throw new Error('Cyclic scope ancestry: ' + current);
@@ -166,7 +168,7 @@ export class PluginHost implements ScopePort {
     return [...ancestors].reverse();
   }
 
-  context(key?: ScopeKey | null) {
+  context(key?: ScopeAddress | null) {
     if (!key) return this.ctx;
     const ancestry = this.ancestry(key);
     if (!ancestry.length) throw new DomainError('not_found', 'Plugin scope not found: ' + key);
@@ -177,12 +179,12 @@ export class PluginHost implements ScopePort {
     return this.configurationContext(key);
   }
 
-  address(key: ScopeKey) {
+  address(key: ScopeAddress) {
     return this.ancestry(key);
   }
 
   require<Name extends keyof Context & string>(
-    key: ScopeKey | null | undefined,
+    key: ScopeAddress | null | undefined,
     service: Name,
   ): NonNullable<Context[Name]> {
     const value = this.context(key).get(service);
@@ -198,7 +200,7 @@ export class PluginHost implements ScopePort {
     return value;
   }
 
-  async prepare(key: ScopeKey, signal?: AbortSignal) {
+  async prepare(key: ScopeAddress, signal?: AbortSignal) {
     assertOutsideMountTransaction();
     if (this.closing) throw new Error('Plugin host is closing');
     signal?.throwIfAborted();
@@ -234,26 +236,26 @@ export class PluginHost implements ScopePort {
   private scopedEntries(
     settings: CompositionConfig,
     descriptors: ReturnType<PluginCatalog['descriptors']>,
-    unavailable: (id: string, error: unknown, key?: ScopeKey) => boolean,
-    preparing?: ScopeKey,
-    released: ReadonlySet<ScopeKey> = new Set(),
-    validating: readonly ScopeKey[] = [],
+    unavailable: (id: string, error: unknown, key?: ScopeAddress) => boolean,
+    preparing?: ScopeAddress,
+    released: ReadonlySet<ScopeAddress> = new Set(),
+    validating: readonly ScopeAddress[] = [],
   ) {
-    const contexts = new Map<ScopeKey, EntryGroup>();
+    const contexts = new Map<ScopeAddress, EntryGroup>();
     const entries: EntryOptions[] = [];
-    const instances = new Map<string, { key: ScopeKey; plugin: string }>();
+    const instances = new Map<string, { key: ScopeAddress; plugin: string }>();
     const active = new Set([
-      ...scopeKeys(settings).filter((key) => this.scopeSource(key)?.eager),
+      ...scopeAddresses(settings).filter((key) => this.scopeSource(key)?.eager),
       ...this.scopes.keys(),
       ...validating,
       ...(preparing ? this.ancestry(preparing) : []),
     ]);
     for (const key of active)
       for (const ancestor of this.ancestry(key)) if (!released.has(ancestor)) active.add(ancestor);
-    const planned = new Map<ScopeKey, Context>();
+    const planned = new Map<ScopeAddress, Context>();
     const root = this.ctx;
 
-    const visit = (key: ScopeKey): typeof root => {
+    const visit = (key: ScopeAddress): typeof root => {
       const cached = planned.get(key);
       if (cached) return cached;
       const address = this.lookup(key);
@@ -278,6 +280,7 @@ export class PluginHost implements ScopePort {
       const isolates = [...new Set(overrides.isolate)].sort();
       const existing = this.scopes.get(key);
       const group = existing?.matches(parent, isolates) ? existing : new EntryGroup(parent, isolates);
+      if (group !== existing) tagScope(group.context, address.key);
       const { context } = group;
       if (active.has(key)) {
         contexts.set(key, group);
@@ -291,7 +294,7 @@ export class PluginHost implements ScopePort {
       planned.set(key, context);
       return context;
     };
-    for (const key of new Set([...scopeKeys(settings), ...active])) {
+    for (const key of new Set([...scopeAddresses(settings), ...active])) {
       this.ancestry(key); // validate domain ancestry before evaluating scope selections
       visit(key);
     }
@@ -299,7 +302,7 @@ export class PluginHost implements ScopePort {
   }
 
   async requestScope(plugin: string, key: string, operation: string, input: unknown, signal: AbortSignal) {
-    if (!isScopeKey(key) || !localPluginIdPattern.test(plugin) || !scopeOperation.test(operation))
+    if (!isScopeAddress(key) || !localPluginIdPattern.test(plugin) || !scopeOperation.test(operation))
       throw new DomainError('invalid_input', 'Invalid scoped plugin request');
     if (!this.lookup(key)) throw new DomainError('not_found', 'Plugin scope not found');
     await this.prepare(key, signal);
@@ -323,7 +326,7 @@ export class PluginHost implements ScopePort {
     await this.apply(this.settings(), () => {}, true);
   }
 
-  async configure(settings: CompositionConfig, commit = () => {}, released?: ReadonlySet<ScopeKey>) {
+  async configure(settings: CompositionConfig, commit = () => {}, released?: ReadonlySet<ScopeAddress>) {
     assertOutsideMountTransaction();
     while (this.applying) await this.applying.catch(() => {});
     if (this.closing) throw new Error('Plugin host is closing');
@@ -335,8 +338,8 @@ export class PluginHost implements ScopePort {
     settings: CompositionConfig,
     commit: () => void,
     starting: boolean,
-    preparing?: ScopeKey,
-    released?: ReadonlySet<ScopeKey>,
+    preparing?: ScopeAddress,
+    released?: ReadonlySet<ScopeAddress>,
   ) {
     const work = withMountTransaction(() =>
       Promise.resolve().then(() => this.configureGraph(settings, commit, starting, preparing, released)),
@@ -351,8 +354,8 @@ export class PluginHost implements ScopePort {
     settings: CompositionConfig,
     commit: () => void,
     starting: boolean,
-    preparing?: ScopeKey,
-    released?: ReadonlySet<ScopeKey>,
+    preparing?: ScopeAddress,
+    released?: ReadonlySet<ScopeAddress>,
   ) {
     const oldEntries = [...this.entries.values()];
     const previousActive = new Set(
@@ -364,7 +367,7 @@ export class PluginHost implements ScopePort {
     const descriptors = await this.catalog.runtimeDescriptors(settings);
     const updating = !starting && !preparing && !released;
     if (updating) this.catalog.validateDisabled(descriptors, previous, settings);
-    const unavailable = (id: string, error: unknown, key?: ScopeKey) => {
+    const unavailable = (id: string, error: unknown, key?: ScopeAddress) => {
       const instance = key ? key + '/' + id : id;
       const message =
         error instanceof ValidationError
@@ -384,7 +387,7 @@ export class PluginHost implements ScopePort {
     };
     const plans = this.catalog.plans(settings, descriptors, undefined, unavailable);
     const changedScopes = updating
-      ? scopeKeys(settings).filter((key) =>
+      ? scopeAddresses(settings).filter((key) =>
           Object.entries(settings.scopes[key]?.entries ?? {}).some(
             ([id, entry]) => entry.disabled !== true && changedSelection(id, previous, settings, key),
           ),
@@ -399,7 +402,7 @@ export class PluginHost implements ScopePort {
     ];
     const nextEntries = new Map(mounts.map((entry) => [entry.id, entry]));
     const scopeChanges = new Set(
-      [...scopeKeys(previous), ...scopeKeys(settings)].filter(
+      [...scopeAddresses(previous), ...scopeAddresses(settings)].filter(
         (key) => !isDeepStrictEqual(previous.scopes[key]?.isolate, settings.scopes[key]?.isolate),
       ),
     );
@@ -416,7 +419,7 @@ export class PluginHost implements ScopePort {
         continue;
       const slash = id.indexOf('/');
       if (slash < 0) appChanged = true;
-      else scopeChanges.add(id.slice(0, slash) as ScopeKey);
+      else scopeChanges.add(id.slice(0, slash) as ScopeAddress);
     }
     const release =
       !starting && !preparing && !released && (appChanged || scopeChanges.size)

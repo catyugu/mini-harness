@@ -5,7 +5,7 @@ import type { Context } from 'mini-harness/cordis';
 /** Resolve the same scoped file policy for every authenticated workspace file route. */
 export async function workspaceFiles(ctx: Context, { params, url, signal }: RouteRequest) {
   const workspace = ctx.harnessWorkspaces.get(params.id);
-  const scopes = ctx.harnessScopes;
+  const scopes = ctx.harnessProfileScopes;
   const session = url.searchParams.get('sessionId');
   const owner = `workspace:${workspace.id}` as const;
   const key = session ? (`session:${session}` as const) : owner;

@@ -1,5 +1,5 @@
-import { scopeKeys } from '@mini-harness/plugin-api/configuration';
-import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
+import { scopeAddresses } from '@mini-harness/plugin-api/configuration';
+import type { ScopeAddress } from '@mini-harness/plugin-api/configuration';
 import {
   assertOutsideMountTransaction,
   assertOutsidePluginRequest,
@@ -50,12 +50,12 @@ export class SettingsManager implements SettingsPort {
     this.profile.commit(next);
   }
 
-  forgetScopes(keys: ScopeKey[]) {
+  forgetScopes(keys: ScopeAddress[]) {
     assertOutsidePluginRequest();
     return this.enqueue(async () => {
       const released = new Set(keys);
       const scopes = Object.fromEntries(
-        scopeKeys(this.stored)
+        scopeAddresses(this.stored)
           .filter((key) => !released.has(key))
           .map((key) => [key, this.stored.scopes[key]]),
       );
@@ -79,7 +79,7 @@ export class SettingsManager implements SettingsPort {
     return this.transact(() => patch);
   }
 
-  writePlugin(id: string, key: ScopeKey | undefined, patch: unknown, check: () => void) {
+  writePlugin(id: string, key: ScopeAddress | undefined, patch: unknown, check: () => void) {
     return this.transact(() => {
       check();
       const values = configurationPatch(patch);

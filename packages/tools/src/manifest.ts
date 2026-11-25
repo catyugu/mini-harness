@@ -1,5 +1,5 @@
 import type { Plugin } from 'mini-harness/cordis';
-import { sessionEvent } from '@mini-harness/plugin-api/instance';
+import { scopeTarget } from '@mini-harness/plugin-api/scopes';
 import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 import { ToolRegistry } from './registry.ts';
 
@@ -9,19 +9,18 @@ export const metadata: PluginInfo = {
 };
 
 const plugin: Plugin.Object = {
-  inject: ['harnessScopes', 'harnessToolPolicy'],
+  inject: ['harnessToolPolicy'],
   provide: ['harnessTools'],
   apply(ctx) {
-    const { harnessScopes: scopes, harnessToolPolicy } = ctx;
+    const { harnessToolPolicy } = ctx;
     ctx.provide(
       'harnessTools',
       new ToolRegistry(
-        (id) => scopes.address(`session:${id}`),
-        async (request) => {
+        async (request, scope) => {
           const { signal, ...input } = request;
           for (const { context, callback } of ctx.events.listeners(
             'tools/decide',
-            sessionEvent(ctx, request.sessionId),
+            scopeTarget(ctx, scope),
           )) {
             const decision = await context.fiber.run(
               (signal) => callback({ ...structuredClone(input), signal }),

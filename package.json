@@ -170,10 +170,6 @@
       "types": "./dist/types/packages/plugin-api/src/services.d.ts",
       "default": "./dist/packages/plugin-api/src/services.js"
     },
-    "./plugin-scope": {
-      "types": "./dist/types/packages/plugin-api/src/scope-api.d.ts",
-      "default": "./dist/packages/plugin-api/src/scope-api.js"
-    },
     "./configuration": {
       "types": "./dist/types/packages/plugin-api/src/configuration.d.ts",
       "default": "./dist/packages/plugin-api/src/configuration.js"

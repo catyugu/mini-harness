@@ -16,7 +16,7 @@ Owns run IDs, task and inbox admission, cancellation, compaction scheduling, cur
 
 ## Dependencies
 
-Prepares session scopes and resolves [Agent](../agent/README.md) services and records run transitions through [Sessions](../sessions/README.md).
+Prepares persisted session composition, tags the run's Cordis context with the session-owned execution key and resolves [Agent](../agent/README.md) services and records run transitions through [Sessions](../sessions/README.md).
 
 ## Lifecycle
 

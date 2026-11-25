@@ -19,7 +19,7 @@ export function setup(ctx: Context) {
             const session = sessions.get(id);
             if (!session) throw new DomainError('not_found', 'Conversation not found');
             const tool = fileTools(root, () =>
-              ctx.harnessScopes.require(`session:${id}`, 'harnessFileAccess').open(session.workspaceId),
+              ctx.harnessProfileScopes.require(`session:${id}`, 'harnessFileAccess').open(session.workspaceId),
             )[index];
             return {
               ...tool,

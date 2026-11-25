@@ -16,7 +16,7 @@ Owns catalog resolution, scoped entry composition, diagnostics, browser asset pu
 
 ## Dependencies
 
-[Cordis](../../vendor/cordis/README.md) owns entries and fibers. [Settings](../settings/README.md) commits configuration. The browser runtime consumes the published bootstrap entries. Scope owners contribute scope choices through the native Cordis `scopes/list` event; model providers and other UI plugins contribute dynamic schema options through `settings/options`. The catalog does not depend on specific domain implementations.
+[Cordis](../../vendor/cordis/README.md) owns entries and fibers. [Settings](../settings/README.md) commits configuration. The browser runtime consumes the published bootstrap entries. Scope owners contribute scope choices through the native Cordis `settings/scopes` event; model providers and other UI plugins contribute dynamic schema options through `settings/options`. The catalog does not depend on specific domain implementations.
 
 ## Lifecycle
 

@@ -1,5 +1,5 @@
 import { isThinkingLevel, type ToolSchema } from '@mini-harness/llm/vocabulary';
-import { pluginIdPattern, isScopeKey } from '@mini-harness/plugin-api/selection';
+import { pluginIdPattern, isScopeAddress } from '@mini-harness/plugin-api/selection';
 import { DomainError } from '@mini-harness/platform/errors';
 import { isRunning, type RunInfo } from './shared/run-state.ts';
 import { createHash, randomBytes } from 'node:crypto';
@@ -600,7 +600,7 @@ export function encodeLog(header: SessionHeader, entries: SessionEntry[]) {
 function ownsRecord(pluginId: string, instanceId: string) {
   if (instanceId === pluginId) return true;
   const slash = instanceId.indexOf('/');
-  return slash > 0 && isScopeKey(instanceId.slice(0, slash)) && instanceId.slice(slash + 1) === pluginId;
+  return slash > 0 && isScopeAddress(instanceId.slice(0, slash)) && instanceId.slice(slash + 1) === pluginId;
 }
 
 /** Normalize historical record envelopes only after validating the original checksum. */

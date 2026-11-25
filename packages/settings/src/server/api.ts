@@ -1,21 +1,21 @@
-import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
+import type { ScopeAddress } from '@mini-harness/plugin-api/configuration';
 import type { ProfileConfiguration } from '@mini-harness/plugin-api/configuration';
 
 export interface PluginConfigurationPort {
   configure(
     settings: ProfileConfiguration,
     commit?: () => void,
-    released?: ReadonlySet<ScopeKey>,
+    released?: ReadonlySet<ScopeAddress>,
   ): Promise<void>;
 }
 
 export interface SettingsPort {
   readonly settings: ProfileConfiguration;
   update(patch: unknown): Promise<ProfileConfiguration>;
-  forgetScopes(keys: ScopeKey[]): Promise<void>;
+  forgetScopes(keys: ScopeAddress[]): Promise<void>;
   writePlugin(
     id: string,
-    key: ScopeKey | undefined,
+    key: ScopeAddress | undefined,
     patch: unknown,
     check: () => void,
   ): Promise<ProfileConfiguration>;

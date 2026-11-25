@@ -1,3 +1,4 @@
+import { createScopeKey, type ScopeKey } from '@mini-harness/plugin-api/scopes';
 import { DomainError } from '@mini-harness/platform/errors';
 import { createHash } from 'node:crypto';
 import { lstatSync, mkdirSync, readdirSync, realpathSync, statSync } from 'node:fs';
@@ -23,6 +24,7 @@ export class WorkspaceCatalog {
   private readonly file: string;
   private readonly stateRoot: string;
   private records: WorkspaceRecord[];
+  private readonly runtimeScopes = new Map<string, ScopeKey>();
   private readonly startupId: string;
   readonly events = new EventTarget();
   private readonly removalHooks = new Set<(id: string) => Promise<string[]>>();
@@ -62,6 +64,13 @@ export class WorkspaceCatalog {
 
   list() {
     return this.records.map((record) => ({ ...record }));
+  }
+
+  scope(id: string) {
+    if (!this.records.some((record) => record.id === id)) return;
+    let key = this.runtimeScopes.get(id);
+    if (!key) this.runtimeScopes.set(id, (key = createScopeKey()));
+    return key;
   }
 
   get(id: string) {
@@ -129,6 +138,7 @@ export class WorkspaceCatalog {
         const groups = await Promise.all([...this.removalHooks].map((hook) => hook(id)));
         await release();
         this.save(this.records.filter((record) => record.id !== id));
+        this.runtimeScopes.delete(id);
         return { removed: id, deleted: groups.flat() };
       })
       .finally(() => this.removing.delete(id));

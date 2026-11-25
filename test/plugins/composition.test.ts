@@ -109,7 +109,7 @@ test('Shell delegates to a selected external process provider and still requires
   assert.equal(result.status, 200, JSON.stringify(result.body));
   const { id } = app.runtime.plugins.ctx.harnessRegistry.create();
   const tool = expectPresent(
-    app.runtime.plugins.ctx.harnessTools.forSession(id).find(({ name }) => name === 'sandbox_shell'),
+    app.runtime.plugins.ctx.harnessTools.forSession(id, app.runtime.plugins.ctx.harnessRegistry.runScope(id)).find(({ name }) => name === 'sandbox_shell'),
     'shell tool',
   );
   const execution = tool.execute('preview', { command: 'Preview command' }, undefined, undefined, undefined);
@@ -134,21 +134,23 @@ test('scoped plugins inherit declared services and tool policies, and release th
     {},
     `
 export const provide = ["exampleGreeting"];
-export const inject = ["harnessSessions","harnessPluginRoutes","harnessPluginData","harnessPluginChanges","harnessTools"];
-import { pluginScope } from 'mini-harness/plugin-scope';
+export const inject = ["harnessSessions","harnessWorkspaces","harnessPluginRoutes","harnessPluginData","harnessPluginChanges","harnessTools"];
+import { scopeOf } from 'mini-harness/scopes';
 import { appendFileSync } from 'node:fs';
 export const apply = (ctx, config) => {
       if (config.fail) throw new Error('Scoped setup failed');
       ctx.effect(() => () => appendFileSync(${JSON.stringify(cleaned)}, 'released\\n'));
-      ctx.provide('exampleGreeting', { greet: (name) => pluginScope(ctx).slice('workspace:'.length) + ':' + name });
+      const workspaces = ctx.harnessWorkspaces;
+      const workspaceId = workspaces.list().find(({ id }) => workspaces.scope(id) === scopeOf(ctx)).id;
+      ctx.provide('exampleGreeting', { greet: (name) => workspaceId + ':' + name });
       const sessions = ctx.harnessSessions;
-      ctx.harnessPluginRoutes.scope('start', () => sessions.create({ title: 'Scoped root', workspaceId: pluginScope(ctx).slice('workspace:'.length) }));
-      ctx.harnessPluginRoutes.scope('tools', (id) => ctx.harnessTools.forSession(id).map(({ name }) => name));
+      ctx.harnessPluginRoutes.scope('start', () => sessions.create({ title: 'Scoped root', workspaceId: workspaceId }));
+      ctx.harnessPluginRoutes.scope('tools', (id) => ctx.harnessTools.forSession(id, sessions.runScope(id)).map(({ name }) => name));
       ctx.harnessPluginRoutes.scope('lookup', (id) => sessions.get(id));
       ctx.harnessPluginRoutes.scope('greet', (input) => {
         ctx.harnessPluginData.write('seen', input);
         ctx.harnessPluginChanges.invalidate();
-        return { workspaceId: pluginScope(ctx).slice('workspace:'.length), input };
+        return { workspaceId: workspaceId, input };
       });
     };
 `,
@@ -203,7 +205,7 @@ export const apply = (ctx, config) => {
   for (const id of [parent.id, child.id, sibling.id, outside.id])
     await app.runtime.plugins.prepare(`session:${id}`);
   const tools = app.runtime.plugins.ctx.harnessTools;
-  const names = (id: string) => tools.forSession(id).map(({ name }) => name);
+  const names = (id: string) => tools.forSession(id, app.runtime.plugins.ctx.harnessRegistry.runScope(id)).map(({ name }) => name);
   assert.ok(names(parent.id).includes('scoped_greeting'));
   assert.ok(
     (await request(operation(workspaceKey, 'tools'), 'POST', { input: parent.id })).body.includes(
@@ -220,7 +222,7 @@ export const apply = (ctx, config) => {
     assert.ok(names(id).includes('read'));
   }
   const tool = expectPresent(
-    tools.forSession(child.id).find(({ name }) => name === 'scoped_greeting'),
+    tools.forSession(child.id, app.runtime.plugins.ctx.harnessRegistry.runScope(child.id)).find(({ name }) => name === 'scoped_greeting'),
     'scoped greeting tool',
   );
   assert.match(
@@ -291,7 +293,7 @@ export const apply = (ctx) => {
   const registry = plugins.ctx.harnessRegistry;
   const parent = registry.create({ permission: 'readOnly' });
   const child = registry.create({ parentId: parent.id, permission: 'fullAccess' });
-  const list = (id: string) => plugins.ctx.harnessTools.forSession(id);
+  const list = (id: string) => plugins.ctx.harnessTools.forSession(id, registry.runScope(id));
   const original = expectPresent(
     list(child.id).find(({ name }) => name === 'read'),
     'inherited read tool',
@@ -367,7 +369,7 @@ export function apply(ctx) {
   );
   const root = app.runtime.plugins.ctx;
   const session = root.harnessRegistry.create();
-  assert.ok(root.harnessTools.forSession(session.id).some(({ name }) => name === 'read'));
+  assert.ok(root.harnessTools.forSession(session.id, root.harnessRegistry.runScope(session.id)).some(({ name }) => name === 'read'));
   const duplicate = await request('/settings', 'PATCH', {
     entries: { 'deny-tools': { name: '../../plugins/deny-tools', disabled: false } },
   });
@@ -379,7 +381,7 @@ export function apply(ctx) {
     },
   });
   assert.equal(replacement.status, 200, JSON.stringify(replacement.body));
-  assert.deepEqual(root.harnessTools.forSession(session.id), []);
+  assert.deepEqual(root.harnessTools.forSession(session.id, root.harnessRegistry.runScope(session.id)), []);
   const restored = await request('/settings', 'PATCH', {
     entries: {
       'core:tool-policy': { disabled: false },
@@ -387,7 +389,7 @@ export function apply(ctx) {
     },
   });
   assert.equal(restored.status, 200, JSON.stringify(restored.body));
-  assert.ok(root.harnessTools.forSession(session.id).some(({ name }) => name === 'read'));
+  assert.ok(root.harnessTools.forSession(session.id, root.harnessRegistry.runScope(session.id)).some(({ name }) => name === 'read'));
 });
 
 test('file tools and HTTP preview consume the same selected File Access provider', async (t) => {
@@ -421,7 +423,7 @@ export function apply(ctx) {
   const preview = await request('/workspaces/' + session.workspaceId + '/files/preview?path=virtual.txt');
   assert.equal(preview.body.text, 'Provided file content');
   const tool = expectPresent(
-    app.runtime.plugins.ctx.harnessTools.forSession(session.id).find(({ name }) => name === 'read'),
+    app.runtime.plugins.ctx.harnessTools.forSession(session.id, app.runtime.plugins.ctx.harnessRegistry.runScope(session.id)).find(({ name }) => name === 'read'),
     'read tool',
   );
   assert.match(
@@ -797,7 +799,7 @@ export function apply(ctx) {
   const first = root.harnessRegistry.create();
   const second = root.harnessRegistry.create();
   await root.harnessRuns.send(first.id, 'First run');
-  assert.ok(!root.harnessTools.forSession(first.id).some(({ name }) => name === 'run_marker'));
+  assert.ok(!root.harnessTools.forSession(first.id, root.harnessRegistry.runScope(first.id)).some(({ name }) => name === 'run_marker'));
   await root.harnessRuns.send(second.id, 'Second run');
   assert.match(JSON.stringify(mock.requests[0]), new RegExp('Run marker ' + first.id));
   assert.match(JSON.stringify(mock.requests[1]), new RegExp('Run marker ' + second.id));

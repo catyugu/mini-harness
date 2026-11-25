@@ -1,3 +1,4 @@
+import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
 import type { ToolDefinition } from '@mini-harness/tools/api';
 
 export interface PromptContext {
@@ -15,7 +16,7 @@ export interface PromptSection {
 }
 
 export interface PromptPort {
-  build(request: PromptContext): Promise<string>;
+  build(request: PromptContext, scope?: ScopeKey): Promise<string>;
   register(section: PromptSection): () => void;
 }
 

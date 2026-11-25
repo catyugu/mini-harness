@@ -13,8 +13,7 @@
     "./mutation-api": "./src/mutation-api.ts",
     "./observations": "./src/observations.ts",
     "./scopes": "./src/scopes.ts",
-    "./profile": "./src/profile.ts",
-    "./scope-api": "./src/scope-api.ts"
+    "./profile": "./src/profile.ts"
   },
   "miniHarness": {
     "api": [
@@ -27,8 +26,7 @@
       "./mutation-api",
       "./observations",
       "./scopes",
-      "./profile",
-      "./scope-api"
+      "./profile"
     ]
   },
   "dependencies": {

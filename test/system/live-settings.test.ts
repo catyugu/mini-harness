@@ -80,7 +80,7 @@ test('appearance, parallelism and child defaults update without interrupting a r
   );
   assert.ok(
     !runtime.plugins.ctx.harnessTools
-      .forSession(item.id)
+      .forSession(item.id, runtime.plugins.ctx.harnessRegistry.runScope(item.id))
       .map(({ name }) => name)
       .includes('read'),
   );

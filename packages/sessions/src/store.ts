@@ -1,3 +1,4 @@
+import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
 import type { ConversationPermission, SessionRecord } from './shared/identity.ts';
 import type { SessionLogPort } from './log-api.ts';
 import type { Attachment, ImageInput, PreparedMessage } from '@mini-harness/input/message';
@@ -6,6 +7,8 @@ import type { RunInfo } from './shared/run-state.ts';
 export interface SessionCatalog {
   readonly events: EventTarget;
   get(id: string): SessionRecord | undefined;
+  scope(id: string): ScopeKey | undefined;
+  runScope(id: string): ScopeKey | undefined;
   list(workspaceId?: string): SessionRecord[];
   workspacePath(id: string): string;
   depth(id: string): number;

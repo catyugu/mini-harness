@@ -18,7 +18,7 @@ Inheritance follows application → workspace → ancestor session → session. 
 
 Cordis activates and disposes consumers according to their dependencies. Changed scopes are prepared before commit; a failed update restores the previous entries. Deleting a session or workspace releases its entries and removes scoped settings and data. Changes to services executing a configuration transaction require a Profile restart.
 
-Use `await sessionService(ctx, sessionId, name, signal)` to resolve a service for a session. Resolve it again after configuration changes. Setup and live configuration callbacks register resources; perform session writes, execution submission and scope preparation in runtime handlers.
+Prepare a Profile address with `await ctx.harnessProfileScopes.prepare(address, signal)`, then use the selected Cordis context directly: `ctx.harnessProfileScopes.context(address).harnessModels`, for example. Resolve it again after configuration changes. Perform configuration preparation in runtime handlers.
 
 Read-only tool grants belong to the active Profile. Grant only registrations which declare read-only access. For example, the default bundle includes:
 
@@ -29,4 +29,8 @@ readOnlyTools:
 
 The plugin Settings detail can grant or revoke read-only tools by Entry ID. The same policy applies to shipped and third-party entries. Existing conversation and workspace restrictions still apply.
 
-Scope providers register a namespace with `harnessScopes.register(namespace, resolve, eager)`. The resolver returns `{ parent }` (or `{}` for a root scope), or `undefined` for an unknown ID. Profile keys are namespaced strings; no built-in business type is required. `pluginScope(ctx)` returns the Entry's key, or `undefined` at application scope.
+## Runtime scopes
+
+`mini-harness/scopes` provides opaque object keys, `createScopeKey(parent)`, `scopeOf(ctx)`, `scopeParentOf(key)`, `scopeChainOf(key)` and `scopeTarget(ctx, key)`. These primitives know nothing about business IDs or Profiles. `tagScope` tags a newly created Cordis context; the owning Fiber manages its lifetime. Scoped contributions inherit along the object chain; scope routing is not an access boundary.
+
+Profile address resolvers register with `harnessProfileScopes.register(namespace, resolve, eager)` and return `{ key, parent? }` or `undefined` for an unknown address. `key` is the domain's stable runtime object, while `parent` is an optional persistent Profile address. Workspaces and Sessions own their identities. Sessions expose `scope(id)` for standing contributions and `runScope(id)` for the execution layer. Tools and Prompt receive runtime keys explicitly and share the same scoped registry mechanism. Display options are contributed through the plugin editor's `settings/scopes` event.

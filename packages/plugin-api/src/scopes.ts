@@ -1,42 +1,73 @@
-import type { Context } from 'mini-harness/cordis';
-import type { EntryConfiguration } from './configuration.ts';
+import { Context } from 'mini-harness/cordis';
 
-export interface ScopeSettings {
-  entries?: Record<string, EntryConfiguration>;
-  /** Services isolated from the parent even if a local provider fails or is disabled. */
-  isolate?: string[];
-  disabledTools?: string[];
+/** Opaque, identity-compared runtime scope. Scope routing is not an access boundary. */
+export type ScopeKey = object;
+const scopeTag = Symbol('mini-harness.scope');
+const parents = new WeakMap<ScopeKey, ScopeKey>();
+
+export function createScopeKey(parent?: ScopeKey): ScopeKey {
+  const key = {};
+  if (parent) parents.set(key, parent);
+  return key;
 }
 
-/** Stable namespaced key. Namespace and identity are defined by scope providers. */
-export type ScopeKey = `${string}:${string}`;
-
-export interface ScopeAddress {
-  parent?: ScopeKey;
+export function scopeParentOf(key: ScopeKey) {
+  return parents.get(key);
 }
 
-export interface ScopeOption {
-  key: ScopeKey;
-  name: string;
+/** Nearest scope first. */
+export function scopeChainOf(key?: ScopeKey): ScopeKey[] {
+  const chain: ScopeKey[] = [];
+  for (; key; key = parents.get(key)) chain.push(key);
+  return chain;
 }
 
-export interface ScopePort {
-  register(namespace: string, resolve: (id: string) => ScopeAddress | undefined, eager?: boolean): () => void;
-  prepare(key: ScopeKey, signal?: AbortSignal): Promise<void>;
-  /** Read the nearest prepared Cordis service without changing a parent or sibling scope. */
-  require<Name extends keyof Context & string>(
-    key: ScopeKey | null | undefined,
-    service: Name,
-  ): NonNullable<Context[Name]>;
-  context(key?: ScopeKey | null): Context;
-  address(key: ScopeKey): readonly ScopeKey[];
+/** Tag a newly created context whose lifetime is already owned by Cordis. */
+export function tagScope(ctx: Context, key: ScopeKey) {
+  Object.defineProperty(ctx, scopeTag, { value: key });
+  return ctx;
 }
 
-declare module 'mini-harness/cordis' {
-  interface Events {
-    'scopes/list'(options: ScopeOption[]): void;
+export function scopeOf(ctx: Context): ScopeKey | undefined {
+  return (ctx as Context & { [scopeTag]?: ScopeKey })[scopeTag];
+}
+
+/** Route to unscoped listeners and listeners on the target's ancestry. */
+export function scopeTarget(base: Context, key = scopeOf(base)) {
+  const chain = scopeChainOf(key);
+  const filter = base[Context.filter];
+  return base.extend({
+    [Context.filter](ctx: Context) {
+      const scope = scopeOf(ctx);
+      return (!filter || filter.call(base, ctx)) && (!scope || chain.includes(scope));
+    },
+  });
+}
+
+/** Named contribution layers shared by registries. */
+export class ScopedLayers<T> {
+  private readonly layers = new Map<ScopeKey | undefined, Map<string, T>>();
+
+  add(scope: ScopeKey | undefined, name: string, value: T) {
+    const layer = this.layers.get(scope) ?? new Map<string, T>();
+    if (layer.has(name)) throw new Error('Duplicate entry in scope: ' + name);
+    layer.set(name, value);
+    this.layers.set(scope, layer);
+    return () => {
+      if (layer.get(name) !== value) return;
+      layer.delete(name);
+      if (!layer.size) this.layers.delete(scope);
+    };
   }
-  interface Context {
-    harnessScopes: ScopePort;
+
+  chain(scope?: ScopeKey) {
+    return [...scopeChainOf(scope), undefined].flatMap((key) => {
+      const layer = this.layers.get(key);
+      return layer ? [layer] : [];
+    });
+  }
+
+  *values() {
+    for (const layer of this.layers.values()) yield* layer.values();
   }
 }

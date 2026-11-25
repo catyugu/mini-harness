@@ -11,8 +11,8 @@ export const inject = [
   'harnessTools',
   'harnessPluginRoutes',
   'harnessModels',
+  'harnessProfileScopes',
 ];
-import { sessionService } from 'mini-harness/plugin-scope';
 import { HttpError } from 'mini-harness/transport';
 import type { Context } from 'mini-harness/cordis';
 import type { SessionDirectory, SessionRecords } from 'mini-harness/sessions';
@@ -107,7 +107,9 @@ export function apply(ctx: Context) {
       !sessions.get(parentId)
     )
       throw new HttpError('invalid_input', 'Provide a parent conversation and a follow-up message');
-    const models: ModelCatalogPort = await sessionService(ctx, parentId, 'harnessModels', signal);
+    const scope = `session:${parentId}` as const;
+    await ctx.harnessProfileScopes.prepare(scope, signal);
+    const models: ModelCatalogPort = ctx.harnessProfileScopes.context(scope).harnessModels;
     const model = sessions.history(parentId).model;
     if (!model || !models.resolve(model))
       throw new HttpError('invalid_input', 'Send a message to the parent conversation first');

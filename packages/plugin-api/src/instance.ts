@@ -1,24 +1,13 @@
-import { Context, type FiberEntry } from 'mini-harness/cordis';
-import type { ScopeKey } from './scopes.ts';
+import type { Context, FiberEntry } from 'mini-harness/cordis';
+import type { ScopeAddress } from './configuration.ts';
 
 interface PluginInstance {
   pluginId: string;
-  scopeKey?: ScopeKey;
+  scopeAddress?: ScopeAddress;
   writableConfig: boolean;
 }
 
 const identities = new WeakMap<FiberEntry, PluginInstance>();
-const agentScope = Symbol('agentScope');
-
-/** Attach the runtime conversation identity without granting a plugin identity. */
-export function agentContext(ctx: Context, sessionId: string) {
-  return ctx.extend({ [agentScope]: `session:${sessionId}` });
-}
-
-export function agentScopeOf(ctx: Context): ScopeKey | undefined {
-  return (ctx as Context & { [agentScope]?: ScopeKey })[agentScope];
-}
-
 export function bindInstance(entry: FiberEntry, identity: PluginInstance) {
   identities.set(entry, Object.freeze(identity));
 }
@@ -35,27 +24,4 @@ export function pluginInstance(ctx: Context) {
   const identity = findInstance(ctx);
   if (!identity) throw new Error('A server plugin instance is required');
   return identity;
-}
-
-export function sessionAddress(ctx: Context, id: string) {
-  return ctx.get('harnessScopes')?.address(`session:${id}`) ?? [];
-}
-
-export function sessionEvent(ctx: Context, id: string) {
-  const scopes = sessionAddress(ctx, id);
-  return scopedEvent(ctx, scopes);
-}
-
-export function scopedEvent(ctx: Context, scopes: readonly string[]) {
-  return ctx.extend({
-    [Context.filter]: (listener: Context) => {
-      const runScope = agentScopeOf(listener);
-      if (runScope && !scopes.includes(runScope)) return false;
-      for (let fiber = listener.fiber; fiber.runtime; fiber = fiber.parent.fiber) {
-        const identity = fiber.entry && identities.get(fiber.entry);
-        if (identity) return !identity.scopeKey || scopes.includes(identity.scopeKey);
-      }
-      return true;
-    },
-  });
 }

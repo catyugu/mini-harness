@@ -13,7 +13,7 @@ import type { PluginMetadata } from '../shared/metadata.ts';
 export interface DiscoveredPlugin
   extends ResolvedPlugin,
     Pick<PluginMetadata, 'external' | 'package' | 'error'> {
-  scopeKey?: import('@mini-harness/plugin-api/scopes').ScopeKey;
+  scopeAddress?: import('@mini-harness/plugin-api/configuration').ScopeAddress;
   name?: string;
   source?: string;
   module?: string;

@@ -1,4 +1,3 @@
-import type { ScopeKey, ScopeSettings } from './scopes.ts';
 import { Check } from 'typebox/value';
 import type { StandardSchemaV1 } from '@standard-schema/spec';
 
@@ -11,17 +10,26 @@ export interface EntryConfiguration {
   config?: Record<string, unknown>;
 }
 
+/** Persistent address in a Profile, not a runtime scope key. */
+export type ScopeAddress = `${string}:${string}`;
+
+export interface ScopeSettings {
+  entries?: Record<string, EntryConfiguration>;
+  isolate?: string[];
+  disabledTools?: string[];
+}
+
 export interface CompositionConfig {
   entries: Record<string, EntryConfiguration>;
-  scopes: Partial<Record<ScopeKey, ScopeSettings>>;
+  scopes: Partial<Record<ScopeAddress, ScopeSettings>>;
 }
 
 export interface ProfileConfiguration extends CompositionConfig {
   readOnlyTools: Record<string, string[]>;
 }
 
-export function scopeKeys(configuration: CompositionConfig) {
-  return Object.keys(configuration.scopes) as ScopeKey[];
+export function scopeAddresses(configuration: CompositionConfig) {
+  return Object.keys(configuration.scopes) as ScopeAddress[];
 }
 
 /** A synchronous native Cordis schema backed by JSON Schema, also usable by configuration forms. */

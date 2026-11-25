@@ -1,9 +1,9 @@
 import { Service, type Context } from 'mini-harness/cordis';
-import { agentScopeOf, findInstance, sessionAddress } from '@mini-harness/plugin-api/instance';
+import { ScopedLayers, scopeOf, type ScopeKey } from '@mini-harness/plugin-api/scopes';
 import type { PromptPort, PromptContext, PromptSection } from './prompt-api.ts';
 
 export class Prompt implements PromptPort {
-  private readonly sections = new Map<string, { context: Context; section: PromptSection }>();
+  private readonly sections = new ScopedLayers<{ context: Context; section: PromptSection }>();
 
   register(section: PromptSection) {
     const context = Service.caller(this);
@@ -15,45 +15,33 @@ export class Prompt implements PromptPort {
       typeof render !== 'function'
     )
       throw new Error('Invalid prompt section: ' + id);
-    const key = context.fiber.uid + '/' + id;
-    if (this.sections.has(key)) throw new Error('Duplicate prompt section: ' + id);
-    this.sections.set(key, { context, section: { id, order, priority, render } });
-    return () => {
-      this.sections.delete(key);
-    };
+    return this.sections.add(scopeOf(context), context.fiber.uid + '/' + id, {
+      context,
+      section: { id, order, priority, render },
+    });
   }
 
-  async build(context: PromptContext) {
-    const contributed = [...this.sections.values()].flatMap(({ context: owner, section }) => {
-      if (owner.fiber.signal.aborted) return [];
-      const runScope = agentScopeOf(owner);
-      const identity = runScope ? undefined : findInstance(owner);
-      const scopeKey = runScope ?? identity?.scopeKey;
-      const address = sessionAddress(owner, context.sessionId);
-      if (scopeKey && !address.includes(scopeKey)) return [];
-      return [
-        {
-          ...section,
-          depth: (scopeKey ? 2 * (address.indexOf(scopeKey) + 1) : 0) + (runScope ? 1 : 0),
-          render: ({ signal, ...input }: PromptContext) =>
-            owner.fiber.run((signal) => section.render({ ...structuredClone(input), signal }), signal),
-        },
-      ];
-    });
-    const sections = new Map<string, (typeof contributed)[number]>();
-    contributed.sort((a, b) => b.depth - a.depth || (b.priority ?? 0) - (a.priority ?? 0));
-    for (const section of contributed) {
-      const current = sections.get(section.id);
-      if (!current) sections.set(section.id, section);
-      else if (section.depth === current.depth && section.priority === current.priority)
-        throw new Error('Conflicting prompt section priority: ' + section.id);
+  async build(context: PromptContext, scope?: ScopeKey) {
+    const sections = new Map<string, { context: Context; section: PromptSection }>();
+    for (const layer of this.sections.chain(scope)) {
+      const candidates = [...layer.values()].filter(({ context, section }) =>
+        !context.fiber.signal.aborted && !sections.has(section.id),
+      );
+      candidates.sort((a, b) => (b.section.priority ?? 0) - (a.section.priority ?? 0));
+      for (const item of candidates) {
+        const current = sections.get(item.section.id);
+        if (!current) sections.set(item.section.id, item);
+        else if (current.section.priority === item.section.priority)
+          throw new Error('Conflicting prompt section priority: ' + item.section.id);
+      }
     }
     const parts: string[] = [];
-    for (const section of [...sections.values()].sort(
-      (a, b) => (a.order ?? 0) - (b.order ?? 0) || a.id.localeCompare(b.id),
+    for (const { context: owner, section } of [...sections.values()].sort(
+      (a, b) => (a.section.order ?? 0) - (b.section.order ?? 0) || a.section.id.localeCompare(b.section.id),
     )) {
       context.signal.throwIfAborted();
-      const text = await section.render(context);
+      const { signal, ...input } = context;
+      const text = await owner.fiber.run((signal) => section.render({ ...structuredClone(input), signal }), signal);
       if (text !== undefined && typeof text !== 'string')
         throw new Error('Invalid prompt section output: ' + section.id);
       if (text?.trim()) parts.push(text);

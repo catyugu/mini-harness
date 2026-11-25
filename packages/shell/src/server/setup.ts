@@ -14,7 +14,7 @@ export function setup(ctx: Context) {
         'Run a shell command in the workspace. Standard requires approval; Full access skips the approval prompt.',
       parameters: Type.Object({ command: Type.String({ minLength: 1, maxLength: 16000 }) }),
       execute: async (_id, args, signal, _update, context) => {
-        await ctx.harnessScopes.prepare(`session:${sessionId}`, signal);
+        await ctx.harnessProfileScopes.prepare(`session:${sessionId}`, signal);
         const cwd = workspace.workspacePath(sessionId);
         // A pending Standard approval may be released when the user selects Full access.
         // If the permission is reduced again before resuming, request approval anew.
@@ -38,7 +38,7 @@ export function setup(ctx: Context) {
         }
         // Permission changes also apply while a Shell command is awaiting approval.
         context?.assertAuthorized?.();
-        const execution = ctx.harnessScopes.require(`session:${sessionId}`, 'harnessProcess');
+        const execution = ctx.harnessProfileScopes.require(`session:${sessionId}`, 'harnessProcess');
         try {
           const output = await execution.run({ command: args.command, cwd, ...options, signal, sessionId });
           return {

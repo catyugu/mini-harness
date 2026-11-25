@@ -7,13 +7,16 @@ const validId = /^[a-f0-9]{32}$/;
 export function setup(ctx: Context) {
   const catalog = new WorkspaceCatalog(ctx.harnessState.paths);
   ctx.effect(() =>
-    ctx.harnessScopes.register(
+    ctx.harnessProfileScopes.register(
       'workspace',
-      (id) => (catalog.list().some((entry) => entry.id === id) ? {} : undefined),
+      (id) => {
+        const key = catalog.scope(id);
+        return key && { key };
+      },
       true,
     ),
   );
-  ctx.on('scopes/list', (options) => {
+  ctx.on('settings/scopes', (options) => {
     for (const { id, name } of catalog.list()) options.push({ key: `workspace:${id}`, name });
   });
   const changes = ctx.harnessChanges;

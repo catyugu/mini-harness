@@ -5,15 +5,15 @@ import { Service } from 'mini-harness/cordis';
 import { pluginInstance } from '@mini-harness/plugin-api/instance';
 import { protectLocal } from '@mini-harness/platform/local-secret';
 import { readJson, writeJson } from '@mini-harness/platform/json';
-import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
+import type { ScopeAddress } from '@mini-harness/plugin-api/configuration';
 import type { PluginData, PluginSecrets } from '@mini-harness/plugin-api/services';
 
 function storagePath(service: object, directory: string, name: string, secret = false) {
   const ctx = Service.caller(service);
-  const { pluginId, scopeKey } = pluginInstance(ctx);
+  const { pluginId, scopeAddress } = pluginInstance(ctx);
   ctx.fiber.signal.throwIfAborted();
   if (!/^[a-z][a-z0-9-]{0,63}$/.test(name)) throw new Error('Invalid private data name');
-  const instance = scopeKey ? createHash('sha256').update(scopeKey).digest('hex') : 'application';
+  const instance = scopeAddress ? createHash('sha256').update(scopeAddress).digest('hex') : 'application';
   const root = join(directory, pluginId, instance);
   mkdirSync(root, { recursive: true, mode: 0o700 });
   if (relative(root, realpathSync(root))) throw new Error('Plugin data directory was redirected');
@@ -68,7 +68,7 @@ export function pluginSecrets(directory: string): PluginSecrets {
   });
 }
 
-export function removeScopeData(root: string, keys: ReadonlySet<ScopeKey>) {
+export function removeScopeData(root: string, keys: ReadonlySet<ScopeAddress>) {
   const info = lstatSync(root, { throwIfNoEntry: false });
   if (!info) return;
   if (!info.isDirectory() || relative(root, realpathSync(root)))

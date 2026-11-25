@@ -1,4 +1,4 @@
-import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
+import type { ScopeAddress } from '@mini-harness/plugin-api/configuration';
 import { DomainError } from '@mini-harness/platform/errors';
 import {
   assertOutsideMountTransaction,
@@ -10,11 +10,11 @@ import {
 export class MutationGate implements MutationPort {
   private active?: Promise<unknown>;
   private closing = false;
-  private readonly structural = new Set<{ scopes?: ReadonlySet<ScopeKey> }>();
+  private readonly structural = new Set<{ scopes?: ReadonlySet<ScopeAddress> }>();
 
-  private readonly guards = new Set<(scopes?: ReadonlySet<ScopeKey>) => void>();
+  private readonly guards = new Set<(scopes?: ReadonlySet<ScopeAddress>) => void>();
 
-  guard(check: (scopes?: ReadonlySet<ScopeKey>) => void) {
+  guard(check: (scopes?: ReadonlySet<ScopeAddress>) => void) {
     this.guards.add(check);
     return () => {
       this.guards.delete(check);
@@ -25,7 +25,7 @@ export class MutationGate implements MutationPort {
     this.closing = true;
   }
 
-  protect(scopes?: ReadonlySet<ScopeKey>) {
+  protect(scopes?: ReadonlySet<ScopeAddress>) {
     for (const check of this.guards) check(scopes);
     const guard = { scopes };
     this.structural.add(guard);
@@ -34,10 +34,10 @@ export class MutationGate implements MutationPort {
     };
   }
 
-  admit(scopeKeys: readonly ScopeKey[]) {
+  admit(scopeAddresses: readonly ScopeAddress[]) {
     assertOutsideMountTransaction();
     if (this.closing) throw new DomainError('unavailable', 'Application is closing');
-    if ([...this.structural].some(({ scopes }) => !scopes || scopeKeys.some((key) => scopes.has(key))))
+    if ([...this.structural].some(({ scopes }) => !scopes || scopeAddresses.some((key) => scopes.has(key))))
       throw new DomainError('conflict', 'Resource configuration is changing; try again when it finishes');
   }
   async run<T>(operation: () => Promise<T> | T): Promise<T> {

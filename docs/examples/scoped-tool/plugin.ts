@@ -3,15 +3,14 @@ import type { ToolPort } from 'mini-harness/tools';
 import type { ToolProjection } from 'mini-harness/conversation/display-events';
 import type { Greeting } from '../greeting-service/plugin.ts';
 
-export const inject = ['exampleGreeting', 'harnessTools'];
-import { pluginScope } from 'mini-harness/plugin-scope';
+export const inject = ['exampleGreeting', 'harnessTools', 'harnessSessions'];
+import { scopeOf } from 'mini-harness/scopes';
 
 export function apply(ctx: Context) {
   const greeting: Greeting = ctx.exampleGreeting;
   const tools: ToolPort = ctx.harnessTools;
-  const scope = pluginScope(ctx);
-  if (!scope?.startsWith('session:')) throw new Error('This plugin belongs to a session');
-  const sessionId = scope.slice('session:'.length);
+  const sessions = ctx.harnessSessions;
+  const sessionId = sessions.list().find(({ id }) => sessions.scope(id) === scopeOf(ctx))!.id;
   ctx.effect(() =>
     tools.register({
       name: 'scoped_greeting',

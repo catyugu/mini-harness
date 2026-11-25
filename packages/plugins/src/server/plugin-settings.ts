@@ -3,11 +3,11 @@ import { Service, type Context } from 'mini-harness/cordis';
 import { pluginInstance } from '@mini-harness/plugin-api/instance';
 import { pluginRequestSignal, assertOutsideMountTransaction } from '@mini-harness/plugin-api/mutation-api';
 import { pluginConfiguration, type PluginConfiguration } from '@mini-harness/plugin-api/plugin-configuration';
-import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
+import type { ScopeAddress } from '@mini-harness/plugin-api/configuration';
 
 type ConfigWriter = (
   id: string,
-  key: ScopeKey | undefined,
+  key: ScopeAddress | undefined,
   patch: unknown,
   check: () => void,
 ) => Promise<void>;
@@ -24,7 +24,7 @@ export function pluginSettings(root: Context, writer?: ConfigWriter): PluginConf
         assertOutsideMountTransaction();
         const request = pluginRequestSignal();
         const active = request ? AbortSignal.any([signal, request]) : signal;
-        const { pluginId, scopeKey, writableConfig } = pluginInstance(caller);
+        const { pluginId, scopeAddress, writableConfig } = pluginInstance(caller);
         const check = () => active.throwIfAborted();
         check();
         if (!writer || !writableConfig) throw new Error('Plugin configuration writes require a live Entry');
@@ -33,7 +33,7 @@ export function pluginSettings(root: Context, writer?: ConfigWriter): PluginConf
           listener = addAbortListener(active, () => reject(active.reason));
         });
         try {
-          await Promise.race([writer(pluginId, scopeKey, structuredClone(values), check), aborted]);
+          await Promise.race([writer(pluginId, scopeAddress, structuredClone(values), check), aborted]);
         } finally {
           listener?.[Symbol.dispose]();
         }

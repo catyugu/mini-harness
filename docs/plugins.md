@@ -58,7 +58,7 @@ A service provider declares `provide = ['exampleGreeting']` and calls `ctx.provi
 | `harnessPluginSettings`                        | Read the current effective config, subscribe to committed changes or write this instance's configuration when the Profile marks its Entry as live.                                                              |
 | `harnessPluginChanges`                         | Invalidate the plugin's browser projection after a domain mutation.                                                                                                                                             |
 
-Use `await sessionService(ctx, sessionId, serviceName, signal)` to prepare a visible conversation and access a service with the caller's identity. Session writes and scope preparation belong in runtime calls after plugin setup. See [scoped providers](scoped-providers.md).
+Runtime scopes use opaque object identities. Use `scopeOf(ctx)` from `mini-harness/scopes` to inspect the current registration scope. Resolve configured services directly from `harnessProfileScopes.context(address)` after preparing the Profile address. See [scoped providers](scoped-providers.md).
 
 An alternative `harnessToolExecutor` can present tools and interpret model messages in another protocol, while scheduling and executing only authorized calls.
 

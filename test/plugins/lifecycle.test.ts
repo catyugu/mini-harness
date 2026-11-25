@@ -17,12 +17,22 @@ import { defineConfig } from '@mini-harness/plugin-api/configuration';
 import type { SessionRecord } from '@mini-harness/sessions/identity';
 import type { ResolvedPlugin } from '@mini-harness/plugin-api/descriptor';
 import { PluginHost } from '@mini-harness/plugins/manager';
+import { createScopeKey, scopeChainOf, scopeOf, type ScopeKey } from '@mini-harness/plugin-api/scopes';
 
 declare module 'mini-harness/cordis' {
   interface Context {
     greeting: string;
     extra: string;
   }
+}
+
+function fixtureKeys() {
+  const keys = new Map<string, ScopeKey>();
+  return (id: string, parent?: ScopeKey) => {
+    let key = keys.get(id);
+    if (!key) keys.set(id, (key = createScopeKey(parent)));
+    return key;
+  };
 }
 
 function fixtureModules(modules: ResolvedPlugin[]) {
@@ -103,10 +113,10 @@ export const apply = (ctx, config) => {
     viewBox: '0 0 24 24',
   });
   await runtime.plugins.prepare(`session:${item.id}`);
-  const activeNames = () => runtime.plugins.ctx.harnessTools.forSession(item.id).map(({ name }) => name);
+  const activeNames = () => runtime.plugins.ctx.harnessTools.forSession(item.id, runtime.plugins.ctx.harnessRegistry.runScope(item.id)).map(({ name }) => name);
   assert.ok(activeNames().includes('example_count'));
   const tool = expectPresent(
-    runtime.plugins.ctx.harnessTools.forSession(item.id).find(({ name }) => name === 'example_count'),
+    runtime.plugins.ctx.harnessTools.forSession(item.id, runtime.plugins.ctx.harnessRegistry.runScope(item.id)).find(({ name }) => name === 'example_count'),
     'example count tool',
   );
   assert.equal((await tool.execute('test', {}, undefined, undefined, undefined)).content[0].type, 'text');
@@ -175,7 +185,7 @@ export const apply = (ctx) => {
   await runtime.start();
   const item = runtime.plugins.ctx.harnessRegistry.create();
   await runtime.plugins.prepare(`session:${item.id}`);
-  const activeNames = () => runtime.plugins.ctx.harnessTools.forSession(item.id).map(({ name }) => name);
+  const activeNames = () => runtime.plugins.ctx.harnessTools.forSession(item.id, runtime.plugins.ctx.harnessRegistry.runScope(item.id)).map(({ name }) => name);
   assert.ok(activeNames().includes('read'));
   await runtime.configuration.update({ entries: { files: { disabled: true } } });
   assert.ok(!activeNames().includes('read'));
@@ -199,7 +209,7 @@ export const apply = (ctx) => {
   });
   assert.equal(
     runtime.plugins.ctx.harnessTools
-      .forSession(item.id)
+      .forSession(item.id, runtime.plugins.ctx.harnessRegistry.runScope(item.id))
       .some(({ name }) => name === 'read' || name === 'dependent_tool'),
     false,
   );
@@ -302,7 +312,7 @@ export const apply = (ctx) => {
   });
   const item = runtime.plugins.ctx.harnessRegistry.create();
   const tool = expectPresent(
-    runtime.plugins.ctx.harnessTools.forSession(item.id).find(({ name }) => name === 'schema_value'),
+    runtime.plugins.ctx.harnessTools.forSession(item.id, runtime.plugins.ctx.harnessRegistry.runScope(item.id)).find(({ name }) => name === 'schema_value'),
     'schema tool',
   );
   assert.match(JSON.stringify(await tool.execute('test', {}, undefined, undefined, undefined)), /3:true/);
@@ -334,7 +344,7 @@ export const apply = (ctx) => {
   assert.deepEqual(
     await tool.execute('test', {}, undefined, undefined, undefined),
     await expectPresent(
-      runtime.plugins.ctx.harnessTools.forSession(item.id).find(({ name }) => name === 'schema_value'),
+      runtime.plugins.ctx.harnessTools.forSession(item.id, runtime.plugins.ctx.harnessRegistry.runScope(item.id)).find(({ name }) => name === 'schema_value'),
       'registered schema tool',
     ).execute('test', {}, undefined, undefined, undefined),
   );
@@ -389,7 +399,7 @@ export const apply = (ctx, config) => {
   );
   const item = runtime.plugins.ctx.harnessRegistry.create();
   assert.equal(
-    runtime.plugins.ctx.harnessTools.forSession(item.id).filter(({ name }) => name === 'base_tool').length,
+    runtime.plugins.ctx.harnessTools.forSession(item.id, runtime.plugins.ctx.harnessRegistry.runScope(item.id)).filter(({ name }) => name === 'base_tool').length,
     1,
   );
   const next = mergeSettings(runtime.settings, { entries: { base: { config: { value: 'replacement' } } } });
@@ -400,7 +410,7 @@ export const apply = (ctx, config) => {
     /Persistence failed/,
   );
   const restored = expectPresent(
-    runtime.plugins.ctx.harnessTools.forSession(item.id).find(({ name }) => name === 'base_tool'),
+    runtime.plugins.ctx.harnessTools.forSession(item.id, runtime.plugins.ctx.harnessRegistry.runScope(item.id)).find(({ name }) => name === 'base_tool'),
     'restored tool',
   );
   assert.match(
@@ -408,7 +418,7 @@ export const apply = (ctx, config) => {
     /original/,
   );
   assert.ok(
-    runtime.plugins.ctx.harnessTools.forSession(item.id).some(({ name }) => name === 'dependent_tool'),
+    runtime.plugins.ctx.harnessTools.forSession(item.id, runtime.plugins.ctx.harnessRegistry.runScope(item.id)).some(({ name }) => name === 'dependent_tool'),
   );
 });
 
@@ -512,7 +522,7 @@ test('disabled optional builtins cannot block boot or reload because their confi
     entries: { subagents: { disabled: false, config: { maxDepth: 2 } } },
   });
   assert.ok(
-    restored.plugins.ctx.harnessTools.forSession(conversation.id).some(({ name }) => name === 'delegate'),
+    restored.plugins.ctx.harnessTools.forSession(conversation.id, restored.plugins.ctx.harnessRegistry.runScope(conversation.id)).some(({ name }) => name === 'delegate'),
   );
 });
 
@@ -753,11 +763,14 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
   const ctx = new Context();
   ctx.provide('authority', {});
   const host = new PluginHost(ctx, directory, fixtureModules(builtins), () => settings);
-  host.register('workspace', () => ({}), true);
+  const workspaceKeys = fixtureKeys();
+  host.register('workspace', (id) => ({ key: workspaceKeys(id) }), true);
+  const sessionKeys = fixtureKeys();
   host.register('session', (id) => {
     const record = records.get(id);
     return (
       record && {
+        key: sessionKeys(id),
         parent: record.parentId ? `session:${record.parentId}` : `workspace:${record.workspaceId}`,
       }
     );
@@ -894,7 +907,8 @@ test('configuration validation resolves the staged scope provider and rejects in
     },
   ];
   const host = new PluginHost(new Context(), directory, fixtureModules(builtins), () => settings);
-  host.register('workspace', () => ({}), true);
+  const workspaceKeys = fixtureKeys();
+  host.register('workspace', (id) => ({ key: workspaceKeys(id) }), true);
   t.after(async () => {
     await host.close();
     rmSync(directory, { recursive: true, force: true });
@@ -935,9 +949,9 @@ test('setup and live configuration cannot await their own graph transaction', as
       description: '',
       plugin: {
         async apply(ctx: Context, config: Record<string, unknown>) {
-          if (config.prepare) await ctx.harnessScopes.prepare('session:session');
+          if (config.prepare) await ctx.harnessProfileScopes.prepare('session:session');
           ctx.on('internal/update', async (next) => {
-            if (next.prepare) await ctx.harnessScopes.prepare('session:session');
+            if (next.prepare) await ctx.harnessProfileScopes.prepare('session:session');
           });
         },
       },
@@ -945,8 +959,9 @@ test('setup and live configuration cannot await their own graph transaction', as
   ];
   const ctx = new Context();
   const host = new PluginHost(ctx, directory, fixtureModules(builtins), () => settings);
-  ctx.provide('harnessScopes', host);
-  host.register('session', () => ({}));
+  ctx.provide('harnessProfileScopes', host);
+  const sessionKey = createScopeKey();
+  host.register('session', () => ({ key: sessionKey }));
   t.after(async () => {
     await host.close();
     rmSync(directory, { recursive: true, force: true });
@@ -1052,8 +1067,10 @@ test('custom scope namespaces support normal Cordis composition and inheritance'
     ]),
     () => settings,
   );
-  host.register('project', () => ({}), true);
-  host.register('task', () => ({ parent: 'project:alpha' }));
+  const projectKeys = fixtureKeys();
+  const taskKey = createScopeKey(projectKeys('alpha'));
+  host.register('project', (id) => ({ key: projectKeys(id) }), true);
+  host.register('task', () => ({ key: taskKey, parent: 'project:alpha' }));
   t.after(async () => {
     await host.close();
     rmSync(directory, { recursive: true, force: true });
@@ -1062,4 +1079,6 @@ test('custom scope namespaces support normal Cordis composition and inheritance'
   await host.prepare('task:child');
   assert.equal(host.context('task:child').get('greeting'), 'project');
   assert.equal(host.context('project:beta').get('greeting'), 'global');
+  assert.equal(scopeOf(host.context('project:alpha')), projectKeys('alpha'));
+  assert.deepEqual(scopeChainOf(taskKey), [taskKey, projectKeys('alpha')]);
 });

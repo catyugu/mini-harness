@@ -6,12 +6,12 @@ import { sessionExecution } from './execution.ts';
 import { Runs } from './runs.ts';
 
 export function setup(ctx: Context) {
-  const { harnessRegistry: catalog, harnessScopes: scopes, harnessMutations: mutations } = ctx;
+  const { harnessRegistry: catalog, harnessProfileScopes: scopes, harnessMutations: mutations } = ctx;
   const runs = new Runs(
     catalog,
     scopes,
     mutations,
-    (event, signal) => observe(ctx, event, signal),
+    (event, signal) => observe(ctx, event, signal, catalog.runScope(event.sessionId)),
     ctx.harnessModelPreference,
   );
   ctx.provide('harnessRuns', runs);

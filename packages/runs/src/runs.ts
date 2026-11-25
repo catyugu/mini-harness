@@ -1,7 +1,8 @@
 import { Context } from 'mini-harness/cordis';
-import { agentContext, sessionEvent } from '@mini-harness/plugin-api/instance';
+import { tagScope, scopeTarget } from '@mini-harness/plugin-api/scopes';
 import type { ThinkingLevel, ModelChoice } from '@mini-harness/llm/vocabulary';
-import type { ScopeKey, ScopePort } from '@mini-harness/plugin-api/scopes';
+import type { ScopeAddress } from '@mini-harness/plugin-api/configuration';
+import type { ProfileScopes } from '@mini-harness/plugin-api/profile';
 import { DomainError } from '@mini-harness/platform/errors';
 import type { MutationPort } from '@mini-harness/plugin-api/mutation-api';
 import { randomUUID } from 'node:crypto';
@@ -42,7 +43,7 @@ export class Runs implements RunPort {
 
   constructor(
     private readonly registry: SessionStore,
-    private readonly scopes: ScopePort,
+    private readonly scopes: ProfileScopes,
     private readonly mutations: MutationPort,
     private readonly observe: (event: CapabilityObservation, signal?: AbortSignal) => void,
     private readonly preference: ModelPreference,
@@ -58,7 +59,7 @@ export class Runs implements RunPort {
   active(id: string) {
     return this.work.has(id);
   }
-  activeInScope(scopes: ReadonlySet<ScopeKey>) {
+  activeInScope(scopes: ReadonlySet<ScopeAddress>) {
     return [...this.work.keys()].some((id) =>
       this.scopes.address(`session:${id}`).some((key) => scopes.has(key)),
     );
@@ -511,7 +512,7 @@ export class Runs implements RunPort {
           parent = parent.intercept(name, scope[Context.intercept][name]);
       break;
     }
-    const fiber = agentContext(parent, id).inject(['harnessAgent'], function agentRun() {});
+    const fiber = tagScope(parent.extend(), this.registry.runScope(id)!).inject(['harnessAgent'], function agentRun() {});
     try {
       await fiber;
       if (!fiber.ctx.get('harnessAgent'))
@@ -520,7 +521,7 @@ export class Runs implements RunPort {
       return await fiber.run(async (signal) => {
         for (const { context, callback } of fiber.ctx.events.listeners(
           'agent/setup',
-          sessionEvent(fiber.ctx, id),
+          scopeTarget(fiber.ctx),
         ))
           await context.fiber.run((signal) => callback(fiber.ctx, id, signal), signal);
         return work(fiber.ctx, signal);

@@ -6,11 +6,11 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import {
   defineConfig,
-  scopeKeys,
+  scopeAddresses,
   type CompositionConfig,
   type EntryConfiguration,
 } from '@mini-harness/plugin-api/configuration';
-import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
+import type { ScopeAddress } from '@mini-harness/plugin-api/configuration';
 import { resolveConfig, type Context, type EntryOptions } from 'mini-harness/cordis';
 import type { ResolvedPlugin } from '@mini-harness/plugin-api/descriptor';
 import { builtinBrowserAssets } from './browser-assets.ts';
@@ -36,8 +36,8 @@ export class PluginCatalog {
   ) {}
 
   enabled(descriptor: DiscoveredPlugin, settings: CompositionConfig) {
-    const entry = descriptor.scopeKey
-      ? settings.scopes[descriptor.scopeKey]?.entries?.[descriptor.id]
+    const entry = descriptor.scopeAddress
+      ? settings.scopes[descriptor.scopeAddress]?.entries?.[descriptor.id]
       : settings.entries[descriptor.id];
     return !!entry && entry.disabled !== true;
   }
@@ -71,7 +71,7 @@ export class PluginCatalog {
     id: string,
     entry: EntryConfiguration,
     client: boolean,
-    scopeKey?: ScopeKey,
+    scopeAddress?: ScopeAddress,
   ): Promise<DiscoveredPlugin> {
     const name = entry.name;
     try {
@@ -83,13 +83,13 @@ export class PluginCatalog {
       } else {
         descriptor = this.describeModule(id, name, this.profile.source(id, name));
       }
-      if (!client || scopeKey) delete descriptor.resources;
-      return this.withSchema({ ...descriptor, name, scopeKey, defaultEnabled: entry.disabled !== true });
+      if (!client || scopeAddress) delete descriptor.resources;
+      return this.withSchema({ ...descriptor, name, scopeAddress, defaultEnabled: entry.disabled !== true });
     } catch (error) {
       return {
         id,
         name,
-        scopeKey,
+        scopeAddress,
         title: id,
         description: name ?? '',
         external: true,
@@ -107,7 +107,7 @@ export class PluginCatalog {
       ...Object.entries(settings.entries).map(([id, entry]) =>
         this.describe(id, entry, entry.client ?? (client || !!entry.name?.endsWith('/client'))),
       ),
-      ...scopeKeys(settings).flatMap((key) =>
+      ...scopeAddresses(settings).flatMap((key) =>
         Object.entries(settings.scopes[key]?.entries ?? {}).map(([id, entry]) =>
           this.describe(id, entry, false, key),
         ),
@@ -118,7 +118,7 @@ export class PluginCatalog {
         const { id, source, location } = descriptor;
         if ((!source && !location) || descriptor.error) return descriptor;
         if (!this.enabled(descriptor, settings)) {
-          const key = descriptor.scopeKey ? descriptor.scopeKey + '/' + id : id;
+          const key = descriptor.scopeAddress ? descriptor.scopeAddress + '/' + id : id;
           const previous = this.resolved.get(key);
           return previous &&
             previous.source === source &&
@@ -151,7 +151,7 @@ export class PluginCatalog {
 
   commit(descriptors: DiscoveredPlugin[]) {
     this.resolved = new Map(
-      descriptors.map((item) => [item.scopeKey ? item.scopeKey + '/' + item.id : item.id, item]),
+      descriptors.map((item) => [item.scopeAddress ? item.scopeAddress + '/' + item.id : item.id, item]),
     );
   }
 
@@ -172,7 +172,7 @@ export class PluginCatalog {
       groups.set(item.id, group);
     }
     return [...groups.values()].map((group) => {
-      const descriptor = group.find((item) => !item.scopeKey) ?? group[0];
+      const descriptor = group.find((item) => !item.scopeAddress) ?? group[0];
       const {
         source,
         resources,
@@ -181,17 +181,17 @@ export class PluginCatalog {
         Config: _Config,
         location: _location,
         module: _module,
-        scopeKey: _scopeKey,
+        scopeAddress: _scopeKey,
         ...metadata
       } = descriptor;
       const instances: PluginMetadata['instances'] = group.map((item) => {
-        const key = item.scopeKey ? item.scopeKey + '/' + item.id : item.id;
+        const key = item.scopeAddress ? item.scopeAddress + '/' + item.id : item.id;
         const enabled = this.enabled(item, settings);
         let error = failures.get(key) ?? item.error;
         if (!error && !mounted(key) && (item.Config || item.configSchema)) {
           try {
-            const config = item.scopeKey
-              ? settings.scopes[item.scopeKey]?.entries?.[item.id]?.config
+            const config = item.scopeAddress
+              ? settings.scopes[item.scopeAddress]?.entries?.[item.id]?.config
               : settings.entries[item.id]?.config;
             this.configValues(item, config);
           } catch (cause) {
@@ -199,7 +199,7 @@ export class PluginCatalog {
           }
         }
         return {
-          scope: item.scopeKey ?? 'application',
+          scope: item.scopeAddress ?? 'application',
           name: item.name,
           configSchema: item.configSchema,
           error,
@@ -227,7 +227,7 @@ export class PluginCatalog {
     });
   }
 
-  entry(plan: ConfiguredPlugin, context: Context, id = plan.id, scopeKey?: ScopeKey): EntryOptions {
+  entry(plan: ConfiguredPlugin, context: Context, id = plan.id, scopeAddress?: ScopeAddress): EntryOptions {
     const { descriptor } = plan;
     const plugin = descriptor.plugin;
     if (!plugin) throw new Error('Missing server module: ' + plan.id);
@@ -241,7 +241,7 @@ export class PluginCatalog {
       prepare: (ctx) => {
         bindInstance(ctx.fiber.entry!, {
           pluginId: plan.id,
-          scopeKey,
+          scopeAddress,
           writableConfig: plan.live,
         });
         const changes = context.get('harnessChanges');
@@ -257,9 +257,9 @@ export class PluginCatalog {
     settings: CompositionConfig,
   ) {
     for (const descriptor of descriptors) {
-      const { id, scopeKey } = descriptor;
-      const before = scopeKey ? previous.scopes[scopeKey]?.entries?.[id] : previous.entries[id];
-      const after = scopeKey ? settings.scopes[scopeKey]?.entries?.[id] : settings.entries[id];
+      const { id, scopeAddress } = descriptor;
+      const before = scopeAddress ? previous.scopes[scopeAddress]?.entries?.[id] : previous.entries[id];
+      const after = scopeAddress ? settings.scopes[scopeAddress]?.entries?.[id] : settings.entries[id];
       if (!this.enabled(descriptor, settings) && !isDeepStrictEqual(before?.config, after?.config))
         this.configValues(descriptor, after?.config);
     }
@@ -268,14 +268,14 @@ export class PluginCatalog {
   plans(
     settings: CompositionConfig,
     descriptors: DiscoveredPlugin[],
-    scopeKey?: ScopeKey,
+    scopeAddress?: ScopeAddress,
     unavailable?: (id: string, error: unknown) => boolean,
   ) {
     const plans: ConfiguredPlugin[] = [];
     for (const item of descriptors) {
       const { id } = item;
-      if (item.scopeKey !== scopeKey || !this.enabled(item, settings)) continue;
-      const entry = scopeKey ? settings.scopes[scopeKey]?.entries?.[id] : settings.entries[id];
+      if (item.scopeAddress !== scopeAddress || !this.enabled(item, settings)) continue;
+      const entry = scopeAddress ? settings.scopes[scopeAddress]?.entries?.[id] : settings.entries[id];
       try {
         if (item.error) throw new DomainError('invalid_input', 'Invalid plugin ' + id + ': ' + item.error);
         const values = entry?.config;
@@ -310,7 +310,7 @@ export function changedSelection(
   id: string,
   previous: CompositionConfig,
   settings: CompositionConfig,
-  key?: ScopeKey,
+  key?: ScopeAddress,
 ) {
   const before = key ? previous.scopes[key]?.entries?.[id] : previous.entries[id];
   const after = key ? settings.scopes[key]?.entries?.[id] : settings.entries[id];

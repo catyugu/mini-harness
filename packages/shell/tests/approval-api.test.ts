@@ -52,9 +52,9 @@ test('shell approval gates execution, handles rejection and cancellation', async
   assert.equal((await request('/sessions/' + session.id)).body.permission, 'readOnly');
   assert.equal((await request('/sessions/' + other.id)).body.permission, 'standard');
   const tools = app.runtime.plugins.ctx.harnessTools;
-  assert.ok(tools.forSession(session.id).some(({ name }) => name === 'read'));
-  assert.ok(!tools.forSession(session.id).some(({ name }) => name === 'sandbox_shell' || name === 'write'));
-  assert.ok(tools.forSession(other.id).some(({ name }) => name === 'sandbox_shell'));
+  assert.ok(tools.forSession(session.id, app.runtime.plugins.ctx.harnessRegistry.runScope(session.id)).some(({ name }) => name === 'read'));
+  assert.ok(!tools.forSession(session.id, app.runtime.plugins.ctx.harnessRegistry.runScope(session.id)).some(({ name }) => name === 'sandbox_shell' || name === 'write'));
+  assert.ok(tools.forSession(other.id, app.runtime.plugins.ctx.harnessRegistry.runScope(other.id)).some(({ name }) => name === 'sandbox_shell'));
   assert.equal(
     (await request('/sessions/' + session.id + '/permissions', 'PATCH', { permission: 'invalid' })).status,
     400,
@@ -159,7 +159,7 @@ test('full access bypasses Shell prompts only for its conversation and applies t
     permission: 'fullAccess',
   });
   assert.equal(
-    app.runtime.plugins.ctx.harnessTools.forSession(child.id).some(({ name }) => name === 'sandbox_shell'),
+    app.runtime.plugins.ctx.harnessTools.forSession(child.id, app.runtime.plugins.ctx.harnessRegistry.runScope(child.id)).some(({ name }) => name === 'sandbox_shell'),
     false,
   );
 });
@@ -229,7 +229,7 @@ test(
     const graph = (await request('/bootstrap')).body.ui;
     assert.ok(!graph.some(({ id }: { id: string }) => id === 'shell'));
     assert.ok(
-      !app.runtime.plugins.ctx.harnessTools.forSession(shell.id).some(({ name }) => name === 'sandbox_shell'),
+      !app.runtime.plugins.ctx.harnessTools.forSession(shell.id, app.runtime.plugins.ctx.harnessRegistry.runScope(shell.id)).some(({ name }) => name === 'sandbox_shell'),
     );
   },
 );

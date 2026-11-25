@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import type { ScopeKey } from './scopes.ts';
+import type { ScopeAddress } from './configuration.ts';
 
 // The marker follows only work initiated inside a graph transaction; unrelated requests may wait.
 const mountTransaction = new AsyncLocalStorage<{ active: boolean }>();
@@ -39,9 +39,9 @@ export function assertOutsidePluginRequest() {
 }
 
 export interface MutationPort {
-  guard(check: (scopes?: ReadonlySet<ScopeKey>) => void): () => void;
-  protect(scopes?: ReadonlySet<ScopeKey>): () => void;
-  admit(scopeKeys: readonly ScopeKey[]): void;
+  guard(check: (scopes?: ReadonlySet<ScopeAddress>) => void): () => void;
+  protect(scopes?: ReadonlySet<ScopeAddress>): () => void;
+  admit(scopeAddresses: readonly ScopeAddress[]): void;
   run<T>(operation: () => Promise<T> | T): Promise<T>;
 }
 

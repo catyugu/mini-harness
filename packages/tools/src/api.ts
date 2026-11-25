@@ -1,3 +1,4 @@
+import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
 import type { Static, TSchema } from 'typebox';
 import type { TextPart, ImagePart } from '@mini-harness/llm/api';
 
@@ -40,7 +41,7 @@ export interface ToolPort {
     tool: ToolDefinition | { name: string; bind(sessionId: string): ToolDefinition },
     options?: ToolRegistrationOptions,
   ): () => Promise<void>;
-  forSession(id: string): ToolDefinition[];
+  forSession(id: string, scope?: ScopeKey): ToolDefinition[];
   readOnlyRegistrations(pluginId: string): string[];
   isAvailable(id: string, tool: ToolDefinition): boolean;
 }

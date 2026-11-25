@@ -4,7 +4,7 @@ import { PluginHost } from './manager.ts';
 export default {
   inject: ['harnessState', 'harnessProfile', 'harnessSettingsStore', 'harnessMutations', 'harnessChanges'],
   provide: [
-    'harnessScopes',
+    'harnessProfileScopes',
     'harnessPluginCatalog',
     'harnessComposition',
     'harnessPluginRoutes',
@@ -34,7 +34,7 @@ export default {
       ctx,
       profile.entries,
     );
-    ctx.provide('harnessScopes', host);
+    ctx.provide('harnessProfileScopes', host);
     ctx.provide('harnessPluginCatalog', host);
     ctx.provide('harnessComposition', host);
     ctx.on('harness/start', () => host.start(settings.settings));

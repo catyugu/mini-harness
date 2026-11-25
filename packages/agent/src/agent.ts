@@ -1,5 +1,5 @@
 import type { Context } from 'mini-harness/cordis';
-import { sessionEvent } from '@mini-harness/plugin-api/instance';
+import { scopeOf, scopeTarget } from '@mini-harness/plugin-api/scopes';
 import { observe } from '@mini-harness/plugin-api/observations';
 import { imageMimeType } from '@mini-harness/input/prepare';
 import { validateModelOptions } from '@mini-harness/llm/options';
@@ -56,7 +56,7 @@ async function retryModel(ctx: Context, failure: ModelFailure) {
   const { signal, ...input } = failure;
   for (const { context, callback } of ctx.events.listeners(
     'agent/model-retry',
-    sessionEvent(ctx, failure.sessionId),
+    scopeTarget(ctx),
   )) {
     const retry = await context.fiber.run(
       (signal) => callback({ ...structuredClone(input), signal }),
@@ -214,7 +214,7 @@ export class NativeAgent implements AgentPort {
     input: PreparedMessage,
     signal: AbortSignal,
   ) {
-    const hooks = ctx.events.listeners('agent/prepare-input', sessionEvent(ctx, sessionId));
+    const hooks = ctx.events.listeners('agent/prepare-input', scopeTarget(ctx));
     const context: InputContext = {
       sessionId,
       model,
@@ -491,7 +491,7 @@ export class NativeAgent implements AgentPort {
         const current = log.projection();
         const registry: ToolPort = requireService(ctx, 'harnessTools');
         const executor: ToolExecutorPort = requireService(ctx, 'harnessToolExecutor');
-        const tools = registry.forSession(id);
+        const tools = registry.forSession(id, scopeOf(ctx));
         const advertisedTools = new Map(tools.map((tool) => [tool.name, tool]));
         const toolMetadata = tools.map(
           ({ name, description, parameters, label, promptSnippet, promptGuidelines }) => ({
@@ -504,7 +504,7 @@ export class NativeAgent implements AgentPort {
           }),
         );
         const promptService: PromptPort = requireService(ctx, 'harnessPrompt');
-        const systemPrompt = await promptService.build({ sessionId: id, cwd, tools: toolMetadata, signal });
+        const systemPrompt = await promptService.build({ sessionId: id, cwd, tools: toolMetadata, signal }, scopeOf(ctx));
         const request = await this.prepareRequest(
           ctx,
           log,
@@ -582,7 +582,7 @@ export class NativeAgent implements AgentPort {
               steering ? 'Skipped because a steering message arrived.' : 'Agent run cancelled',
             );
           else {
-            const hooks = ctx.events.listeners('agent/tool-result', sessionEvent(ctx, id));
+            const hooks = ctx.events.listeners('agent/tool-result', scopeTarget(ctx));
             output = await executeTool(call, tool, {
               sessionId: id,
               cwd,
@@ -718,7 +718,7 @@ export class NativeAgent implements AgentPort {
       return value;
     };
     const transformed = await applyTransforms(
-      ctx.events.listeners('agent/model-request', sessionEvent(ctx, context.sessionId)),
+      ctx.events.listeners('agent/model-request', scopeTarget(ctx)),
       requestContent,
       context,
       validate,

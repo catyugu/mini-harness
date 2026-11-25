@@ -1,8 +1,8 @@
 import { browserRequest } from '@mini-harness/ui-runtime/http';
-import type { ScopeKey, ScopeOption } from '@mini-harness/plugin-api/scopes';
+import type { ScopeAddress } from '@mini-harness/plugin-api/configuration';
 import type { Context } from 'mini-harness/cordis';
 import type { ProfileConfiguration } from '@mini-harness/plugin-api/configuration';
-import type { PluginMetadata } from '../shared/metadata.ts';
+import type { PluginMetadata, ScopeOption } from '../shared/metadata.ts';
 import { RemoteStore } from '@mini-harness/ui-runtime/remote-store';
 import { payload } from '@mini-harness/ui-runtime/http';
 import { icon } from '@mini-harness/ui-primitives/icons';
@@ -131,7 +131,7 @@ function pluginCatalog(
     const configFields = document.createElement('div');
     fields.append(scopedControls, configFields);
     const currentKey = () =>
-      scopePicker.value && scopePicker.value !== 'application' ? (scopePicker.value as ScopeKey) : undefined;
+      scopePicker.value && scopePicker.value !== 'application' ? (scopePicker.value as ScopeAddress) : undefined;
     const currentScope = () => {
       const key = currentKey();
       return (key && snapshot().settings.scopes[key]) || undefined;

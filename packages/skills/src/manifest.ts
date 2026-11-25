@@ -17,7 +17,7 @@ const plugin: Plugin.Object = {
     'harnessSessions',
     'harnessTools',
     'harnessPrompt',
-    'harnessScopes',
+    'harnessProfileScopes',
   ],
   apply: setup,
 };

@@ -8,13 +8,13 @@ export const metadata: PluginInfo = {
 };
 
 const plugin: Plugin.Object = {
-  inject: ['harnessSandbox', 'harnessScopes', 'harnessRegistry'],
+  inject: ['harnessSandbox', 'harnessProfileScopes', 'harnessRegistry'],
   provide: ['harnessProcess'],
   apply(ctx) {
     ctx.provide('harnessProcess', {
       run(request: Parameters<typeof executeProcess>[0]) {
         return ctx.fiber.run((signal) => {
-          const environment = ctx.harnessScopes.require(
+          const environment = ctx.harnessProfileScopes.require(
             request.sessionId ? `session:${request.sessionId}` : undefined,
             'harnessSandbox',
           );

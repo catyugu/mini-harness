@@ -4,7 +4,7 @@ Owns tool registration, validation and invocation leases.
 
 ## Responsibilities
 
-Resolves scoped registrations and checks them against the host’s authorization policy. The registry rechecks each lease after asynchronous authorization.
+Resolves registrations through opaque runtime scope layers shared with Prompt. `forSession(id, scope)` selects contributions for the supplied runtime key; the session ID binds the tool's input environment. The tool policy remains a separate domain service. The registry rechecks each lease after asynchronous authorization.
 
 ## Structure
 

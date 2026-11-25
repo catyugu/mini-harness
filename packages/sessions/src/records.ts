@@ -1,3 +1,4 @@
+import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { ViewMessage } from './shared/message.ts';
 import type { SessionRecord } from './shared/identity.ts';
@@ -23,6 +24,8 @@ export interface RecordProjection<State> {
 
 export interface SessionDirectory {
   get(id: string): SessionRecord | undefined;
+  scope(id: string): ScopeKey | undefined;
+  runScope(id: string): ScopeKey | undefined;
   list(workspaceId?: string): SessionRecord[];
   create(input?: { parentId?: string; title?: string; workspaceId?: string }): SessionRecord;
   rename(id: string, title: string): SessionRecord;

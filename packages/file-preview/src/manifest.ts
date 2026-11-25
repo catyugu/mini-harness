@@ -11,7 +11,7 @@ export const metadata: PluginInfo = {
 };
 
 const plugin: Plugin.Object = {
-  inject: ['harnessRoutes', 'harnessWorkspaces', 'harnessScopes', 'harnessFileAccess'],
+  inject: ['harnessRoutes', 'harnessWorkspaces', 'harnessProfileScopes', 'harnessFileAccess'],
   apply: setup,
 };
 

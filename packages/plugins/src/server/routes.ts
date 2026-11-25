@@ -42,8 +42,8 @@ export class PluginRouteRegistry {
     return Service.track({
       register(method, path, handler) {
         const caller = Service.caller(this);
-        const { pluginId, scopeKey } = pluginInstance(caller);
-        if (scopeKey || !routePath.test(path) || !['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method))
+        const { pluginId, scopeAddress } = pluginInstance(caller);
+        if (scopeAddress || !routePath.test(path) || !['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method))
           throw new Error('Invalid plugin route');
         const lifetime = caller.fiber.signal;
         return networkEffect(caller, () =>
@@ -63,8 +63,8 @@ export class PluginRouteRegistry {
       },
       upgrade(path, handler) {
         const caller = Service.caller(this);
-        const { pluginId, scopeKey } = pluginInstance(caller);
-        if (scopeKey || !routePath.test(path) || !upgrade) throw new Error('Invalid WebSocket route');
+        const { pluginId, scopeAddress } = pluginInstance(caller);
+        if (scopeAddress || !routePath.test(path) || !upgrade) throw new Error('Invalid WebSocket route');
         return networkEffect(caller, () =>
           upgrade('/api/extensions/' + pluginId + path, (request, socket, head, signal) =>
             caller.fiber.run(
@@ -76,8 +76,8 @@ export class PluginRouteRegistry {
       },
       scope(name, handler) {
         const caller = Service.caller(this);
-        const { instanceId, scopeKey } = pluginInstance(caller);
-        if (!scopeKey || !scopeOperation.test(name) || typeof handler !== 'function')
+        const { instanceId, scopeAddress } = pluginInstance(caller);
+        if (!scopeAddress || !scopeOperation.test(name) || typeof handler !== 'function')
           throw new Error('Invalid scoped plugin request');
         const key = instanceId + '/' + name;
         return caller.effect(() => {

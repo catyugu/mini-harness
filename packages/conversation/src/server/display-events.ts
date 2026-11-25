@@ -1,4 +1,4 @@
-import { sessionEvent } from '@mini-harness/plugin-api/instance';
+import { scopeTarget } from '@mini-harness/plugin-api/scopes';
 import type { Context } from 'mini-harness/cordis';
 import type { MessageContent, ViewMessage } from '@mini-harness/sessions/message';
 
@@ -20,7 +20,7 @@ export function projectTool(ctx: Context, projection: ToolProjection) {
   let { content } = projection;
   for (const { context, callback } of ctx.events.listeners(
     'conversation/tool-projection',
-    sessionEvent(ctx, projection.sessionId),
+    scopeTarget(ctx, ctx.harnessRegistry.runScope(projection.sessionId)),
   )) {
     try {
       const result = callback(structuredClone({ ...projection, content }));

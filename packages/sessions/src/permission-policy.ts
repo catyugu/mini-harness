@@ -9,11 +9,11 @@ export const metadata: PluginInfo = {
 };
 
 const plugin: Plugin.Object = {
-  inject: ['harnessRegistry', 'harnessScopes', 'harnessSettingsStore'],
+  inject: ['harnessRegistry', 'harnessProfileScopes', 'harnessSettingsStore'],
   provide: ['harnessToolPolicy'],
   apply(ctx) {
     const authorize: ToolPolicy = (id, { name, readOnly, pluginId }) => {
-      const address = ctx.harnessScopes.address(`session:${id}`);
+      const address = ctx.harnessProfileScopes.address(`session:${id}`);
       const settings = ctx.harnessSettingsStore.settings;
       if (address.some((key) => settings.scopes[key]?.disabledTools?.includes(name))) return false;
       const requiresReadOnly = address.some(

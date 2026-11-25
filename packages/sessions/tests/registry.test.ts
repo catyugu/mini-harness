@@ -96,7 +96,6 @@ test('restart finishes a journaled deletion after partial cleanup', async (t) =>
     paths,
     new WorkspaceCatalog(paths),
     undefined,
-    undefined,
     async (keys) => {
       forgotten.push(...keys);
     },

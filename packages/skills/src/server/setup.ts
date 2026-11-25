@@ -35,7 +35,7 @@ export function setup(ctx: Context) {
         if (sessionId) {
           if (sessions.get(sessionId)?.workspaceId !== workspace.id)
             throw new DomainError('not_found', 'Conversation not found');
-          await ctx.harnessScopes.prepare(`session:${sessionId}`, signal);
+          await ctx.harnessProfileScopes.prepare(`session:${sessionId}`, signal);
           if (ctx.fiber.signal.aborted) return [];
           return loader.list(sessions.workspacePath(sessionId));
         }

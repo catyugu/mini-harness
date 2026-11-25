@@ -39,7 +39,7 @@ const plugin: Plugin.Object = {
     'harnessProcess',
     'harnessTools',
     'harnessChanges',
-    'harnessScopes',
+    'harnessProfileScopes',
   ],
   apply: setup,
 };

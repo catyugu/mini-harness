@@ -1,10 +1,10 @@
 import type { ProfileConfiguration } from './configuration.ts';
-import type { ScopeKey } from './scopes.ts';
+import type { ScopeAddress } from './configuration.ts';
 import { DomainError } from '@mini-harness/platform/errors';
 
 export const localPluginIdPattern = /^[a-z][a-z0-9-]{0,63}$/;
 export const pluginIdPattern = /^(?:core:)?[a-z][a-z0-9-]{0,63}$/;
-export function isScopeKey(value: string): value is ScopeKey {
+export function isScopeAddress(value: string): value is ScopeAddress {
   return /^[a-z][a-z0-9-]*:[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(value);
 }
 
@@ -57,7 +57,7 @@ export function validateSettings(input: unknown): asserts input is ProfileConfig
   validateEntries(entries as Record<string, unknown>);
   for (const [key, scope] of Object.entries(scopes as Record<string, unknown>)) {
     if (
-      !isScopeKey(key) ||
+      !isScopeAddress(key) ||
       !isObject(scope) ||
       Object.keys(scope).some((field) => !['entries', 'disabledTools', 'isolate'].includes(field))
     )

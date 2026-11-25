@@ -145,8 +145,8 @@ async function checkPackage() {
       `
       import { Context, type Plugin } from 'mini-harness/cordis';
       import type { LlmPort } from 'mini-harness/llm';
-      import type { ScopeSettings } from 'mini-harness/scopes';
-      import type { ProfileConfiguration } from 'mini-harness/configuration';
+      import { createScopeKey, type ScopeKey } from 'mini-harness/scopes';
+      import type { ProfileConfiguration, ScopeSettings } from 'mini-harness/configuration';
       import { defineTool } from 'mini-harness/tools';
       import type { PluginData, PluginSecrets } from 'mini-harness/plugin-data';
       import type { SessionRecords } from 'mini-harness/sessions';
@@ -161,6 +161,8 @@ async function checkPackage() {
         interface Context { example: { greet(name: string): string } }
       }
       declare const ctx: Context;
+      const scopeKey: ScopeKey = createScopeKey();
+      void scopeKey;
       const scope: ScopeSettings = { disabledTools: ['write'] };
       const scopedSettings: ProfileConfiguration['scopes'] = { 'session:example': scope };
       void scopedSettings;

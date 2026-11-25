@@ -22,7 +22,7 @@ export const metadata: PluginInfo = {
 const plugin: Plugin.Object = {
   Config,
   inject: [
-    'harnessScopes',
+    'harnessProfileScopes',
     'harnessRegistry',
     'harnessTools',
     'harnessModels',

@@ -16,7 +16,7 @@ Maintains session ancestry and permissions, the append-only log, original upload
 
 ## Dependencies
 
-Uses [Workspaces](../workspaces/README.md) to own storage beneath managed workspace roots. Coordinates session scope removal with [Settings](../settings/README.md).
+Uses [Workspaces](../workspaces/README.md) to own storage beneath managed workspace roots. Owns stable runtime scope keys and coordinates removal of persisted Profile addresses with [Settings](../settings/README.md).
 
 ## Lifecycle
 

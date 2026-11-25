@@ -1,3 +1,4 @@
+import { createScopeKey } from '@mini-harness/plugin-api/scopes';
 import { expectPresent } from '../../../test/support/required.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -28,10 +29,9 @@ test('tool registry validates native JSON schemas before executing a plugin', as
 });
 
 test('scoped tools inherit locally and disposal aborts and drains active execution', async () => {
-  const registry = new ToolRegistry((id) => [
-    'workspace:a',
-    ...(id === 'child' ? (['session:child'] as const) : []),
-  ]);
+  const workspace = createScopeKey();
+  const child = createScopeKey(workspace);
+  const registry = new ToolRegistry();
   const make = (text: string) =>
     defineTool({
       name: 'inspect',
@@ -42,10 +42,10 @@ test('scoped tools inherit locally and disposal aborts and drains active executi
       },
     });
   registry.registerBinding('inspect', () => make('root'));
-  registry.registerBinding('inspect', () => make('workspace'), { scope: 'workspace:a' });
-  registry.registerBinding('inspect', () => make('child'), { scope: 'session:child' });
-  assert.equal(registry.forSession('child')[0].description, 'child');
-  assert.equal(registry.forSession('sibling')[0].description, 'workspace');
+  registry.registerBinding('inspect', () => make('workspace'), { scope: workspace });
+  registry.registerBinding('inspect', () => make('child'), { scope: child });
+  assert.equal(registry.forSession('child', child)[0].description, 'child');
+  assert.equal(registry.forSession('sibling', workspace)[0].description, 'workspace');
   let entered: () => void;
   const ready = new Promise<void>((resolve) => {
     entered = resolve;
@@ -65,7 +65,7 @@ test('scoped tools inherit locally and disposal aborts and drains active executi
     }),
   );
   const pending = expectPresent(
-    registry.forSession('child').find(({ name }) => name === 'wait'),
+    registry.forSession('child', child).find(({ name }) => name === 'wait'),
     'wait tool',
   ).execute('call', {});
   const rejected = assert.rejects(pending, /no longer available/);
@@ -73,7 +73,7 @@ test('scoped tools inherit locally and disposal aborts and drains active executi
   await dispose();
   await rejected;
   assert.equal(
-    registry.forSession('child').some(({ name }) => name === 'wait'),
+    registry.forSession('child', child).some(({ name }) => name === 'wait'),
     false,
   );
 });
@@ -81,11 +81,10 @@ test('scoped tools inherit locally and disposal aborts and drains active executi
 test('file-tool names follow the same scoped registration, restriction and lifetime rules as plugins', async () => {
   let allowed = true,
     denied = false;
+  const workspace = createScopeKey();
+  const child = createScopeKey(workspace);
+  const outside = createScopeKey();
   const registry = new ToolRegistry(
-    (id) =>
-      id === 'outside'
-        ? ['workspace:other']
-        : ['workspace:one', ...(id === 'child' ? (['session:child'] as const) : [])],
     async () => (denied ? 'deny' : undefined),
     (_id, { name }) => allowed || name !== 'read',
   );
@@ -99,20 +98,20 @@ test('file-tool names follow the same scoped registration, restriction and lifet
       },
     });
   registry.registerBinding('read', bind('application'));
-  assert.throws(() => registry.registerBinding('read', bind('duplicate')), /Duplicate tool in scope/);
-  const releaseWorkspace = registry.registerBinding('read', bind('workspace'), { scope: 'workspace:one' });
+  assert.throws(() => registry.registerBinding('read', bind('duplicate')), /Duplicate entry in scope/);
+  const releaseWorkspace = registry.registerBinding('read', bind('workspace'), { scope: workspace });
   assert.throws(
-    () => registry.registerBinding('read', bind('duplicate'), { scope: 'workspace:one' }),
-    /Duplicate tool in scope/,
+    () => registry.registerBinding('read', bind('duplicate'), { scope: workspace }),
+    /Duplicate entry in scope/,
   );
-  const releaseChild = registry.registerBinding('read', bind('child'), { scope: 'session:child' });
-  const tool = registry.forSession('child')[0];
+  const releaseChild = registry.registerBinding('read', bind('child'), { scope: child });
+  const tool = registry.forSession('child', child)[0];
   assert.equal(tool.description, 'child');
-  assert.equal(registry.forSession('sibling')[0].description, 'workspace');
-  assert.equal(registry.forSession('outside')[0].description, 'application');
+  assert.equal(registry.forSession('sibling', workspace)[0].description, 'workspace');
+  assert.equal(registry.forSession('outside', outside)[0].description, 'application');
   assert.deepEqual((await tool.execute('call', {})).content, [{ type: 'text', text: 'child' }]);
   allowed = false;
-  assert.deepEqual(registry.forSession('child'), []);
+  assert.deepEqual(registry.forSession('child', child), []);
   await assert.rejects(tool.execute('restricted', {}), /Tool denied by conversation or plugin policy/);
   allowed = true;
   denied = true;
@@ -120,9 +119,9 @@ test('file-tool names follow the same scoped registration, restriction and lifet
   denied = false;
   await releaseChild();
   await assert.rejects(tool.execute('disposed', {}), /no longer available/);
-  assert.equal(registry.forSession('child')[0].description, 'workspace');
+  assert.equal(registry.forSession('child', child)[0].description, 'workspace');
   await releaseWorkspace();
-  assert.equal(registry.forSession('child')[0].description, 'application');
+  assert.equal(registry.forSession('child', child)[0].description, 'application');
 });
 
 test('a permission change while awaiting a tool decision prevents execution', async () => {
@@ -136,7 +135,6 @@ test('a permission change while awaiting a tool decision prevents execution', as
     release = resolve;
   });
   const registry = new ToolRegistry(
-    () => [],
     async () => {
       entered();
       await hold;
