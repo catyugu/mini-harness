@@ -3,7 +3,6 @@ import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 import { setup } from './setup.ts';
 
 export const metadata: PluginInfo = {
-  scope: 'application',
   title: 'Sessions',
   description: 'Session identity and durable history',
 };

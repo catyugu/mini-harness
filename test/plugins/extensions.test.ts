@@ -35,7 +35,7 @@ export const apply = (ctx) => {
   writePlugin(
     paths.plugins,
     'child-prompt',
-    { scope: 'session' },
+    {},
     `
 export const inject = ["harnessPrompt"];
 export const apply = (ctx) => {
@@ -467,7 +467,7 @@ test('a decision hook can deny an inherited tool and is removed with its owner',
   writePlugin(
     paths.plugins,
     'policy',
-    { scope: 'session' },
+    {},
     `
 export function apply(ctx) {
       ctx.on("tools/decide", async ({ tool, signal }) => {

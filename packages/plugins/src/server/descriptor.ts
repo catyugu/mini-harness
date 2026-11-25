@@ -65,10 +65,6 @@ export function describePlugin(id: string, folder: string, entry?: string): Disc
     typeof manifest.description === 'string'
       ? manifest.description.slice(0, 300)
       : 'Runs local JavaScript with your user permissions.';
-  const scope = manifest.scope ?? 'application';
-  if (scope !== 'application' && scope !== 'workspace' && scope !== 'session')
-    throw new Error('Invalid plugin scope');
-  if (scope !== 'application' && hasWeb) throw new Error('Browser entries belong to the application scope');
   if (!hasWeb && (manifest.browserDirectory !== undefined || manifest.browserPreload !== undefined))
     throw new Error('Browser assets require a browser entry');
   const resources =
@@ -122,7 +118,6 @@ export function describePlugin(id: string, folder: string, entry?: string): Disc
       packageInfo.name && packageInfo.version
         ? { name: packageInfo.name, version: packageInfo.version }
         : undefined,
-    scope,
     id,
     title,
     description,

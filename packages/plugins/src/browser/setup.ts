@@ -125,7 +125,6 @@ function pluginCatalog(
     required(section.querySelector('h1')).textContent = plugin.title;
     required(section.querySelector('p')).textContent = plugin.description;
     const schema = plugin.configSchema;
-    const scoped = plugin.scope === 'workspace' || plugin.scope === 'session';
     const diagnostics = document.createElement('p');
     diagnostics.className = 'hint';
     diagnostics.textContent = plugin.error ?? '';
@@ -155,14 +154,15 @@ function pluginCatalog(
     });
     function renderFields() {
       configFields.replaceChildren();
-      if (scoped) {
-        const instance = snapshot()
-          .plugins.find(({ id }) => id === plugin.id)
-          ?.instances?.find(({ scope }) => scope === scopePicker.value);
-        diagnostics.textContent =
-          instance?.error ?? (instance?.state === 'inactive' ? 'Waiting for this scope to activate.' : '');
-        enabled.checked = currentScope()?.entries?.[plugin.id]?.disabled === false;
-      }
+      const key = currentKey();
+      const instance = snapshot()
+        .plugins.find(({ id }) => id === plugin.id)
+        ?.instances?.find(({ scope }) => scope === (key ?? 'application'));
+      diagnostics.textContent =
+        instance?.error ?? (instance?.state === 'inactive' ? 'Waiting for this scope to activate.' : '');
+      enabled.checked = key
+        ? currentScope()?.entries?.[plugin.id]?.disabled === false
+        : snapshot().settings.entries[plugin.id]?.disabled === false;
       if (!schema) return;
       if (plugin.configHint) {
         const note = document.createElement('p');
@@ -180,63 +180,55 @@ function pluginCatalog(
         }
       } else configFields.append(schemaFields(plugin.id, schema, values(), modelCatalog()));
     }
-    if (scoped) {
-      scopedControls.className = 'plugin-fields';
-      scopedControls.append(
-        field(plugin.scope === 'workspace' ? 'Workspace' : 'Conversation', scopePicker),
-        field('Enabled in this scope', enabled),
-      );
-      save.disabled = true;
-      scopePicker.add(new Option('Choose a scope', ''));
-      scopedControls.querySelectorAll('input').forEach((control) => {
-        control.disabled = true;
+    scopedControls.className = 'plugin-fields';
+    scopedControls.append(field('Scope', scopePicker), field('Enabled in this scope', enabled));
+    scopePicker.add(new Option('Application', 'application'));
+    const instances = plugin.instances ?? [];
+    for (const { scope } of instances) {
+      if (scope === 'application') continue;
+      locationsByKey.set(scope, scope);
+      scopePicker.add(new Option(scope, scope));
+    }
+    const selected =
+      instances.find(({ state }) => state === 'failed')?.scope ??
+      instances.find(({ state }) => state === 'ready' || state === 'inactive')?.scope ??
+      'application';
+    scopePicker.value = selected;
+    scopePicker.onchange = renderFields;
+    renderFields();
+    void Promise.all([
+      browserRequest<WorkspaceRecord[]>(ctx, '/workspaces'),
+      browserRequest<Conversation[]>(ctx, '/sessions'),
+    ])
+      .then(([workspaces, sessions]) => {
+        const add = (key: ScopeKey, label: string) => {
+          locationsByKey.set(key, key);
+          const existing = [...scopePicker.options].find((option) => option.value === key);
+          if (existing) existing.textContent = label;
+          else scopePicker.add(new Option(label, key));
+        };
+        for (const { id, name } of workspaces) add(`workspace:${id}`, 'Workspace: ' + name);
+        for (const { id, title } of sessions) add(`session:${id}`, 'Conversation: ' + title);
+      })
+      .catch((error: Error) => {
+        outcome.textContent = error.message;
       });
-      const locations: Promise<{ key: ScopeKey; name: string }[]> =
-        plugin.scope === 'workspace'
-          ? browserRequest<WorkspaceRecord[]>(ctx, '/workspaces').then((items) =>
-              items.map(({ id, name }) => ({ key: `workspace:${id}`, name })),
-            )
-          : browserRequest<Conversation[]>(ctx, '/sessions').then((items) =>
-              items.map(({ id, title }) => ({ key: `session:${id}`, name: title })),
-            );
-      void locations
-        .then((items) => {
-          for (const { key, name } of items) {
-            locationsByKey.set(key, key);
-            scopePicker.add(new Option(name, key));
-          }
-          for (const { scope } of plugin.instances ?? [])
-            if (scope !== 'application' && !locationsByKey.has(scope)) {
-              locationsByKey.set(scope, scope);
-              scopePicker.add(new Option(scope, scope));
-            }
-          scopePicker.value =
-            plugin.instances?.find(({ error }) => error)?.scope ??
-            items[0]?.key ??
-            plugin.instances?.[0]?.scope ??
-            '';
-          const sync = () => {
-            save.disabled = !scopePicker.value;
-            enabled.disabled = !scopePicker.value;
-            renderFields();
-          };
-          scopePicker.onchange = sync;
-          sync();
-        })
-        .catch((error: Error) => {
-          outcome.textContent = error.message;
-        });
-    } else renderFields();
     form.onsubmit = async (event) => {
       event.preventDefault();
       save.disabled = true;
       outcome.textContent = '';
       try {
-        const config = readPluginValues({ [plugin.id]: {} }, configFields)[plugin.id];
-        let patch: Partial<ProfileConfiguration> = { entries: { [plugin.id]: { config } } };
         const key = currentKey();
-        if (scoped) {
-          if (!key) return;
+        const previous = key
+          ? currentScope()?.entries?.[plugin.id]?.config
+          : snapshot().settings.entries[plugin.id]?.config;
+        const config = schema
+          ? readPluginValues({ [plugin.id]: previous ?? {} }, configFields)[plugin.id]
+          : previous;
+        let patch: Partial<ProfileConfiguration> = {
+          entries: { [plugin.id]: { disabled: !enabled.checked, config } },
+        };
+        if (key) {
           const current = currentScope() ?? {};
           patch = {
             scopes: {
@@ -245,7 +237,7 @@ function pluginCatalog(
                 ...current,
                 entries: {
                   ...current.entries,
-                  [plugin.id]: { disabled: !enabled.checked, config },
+                  [plugin.id]: { ...current.entries?.[plugin.id], disabled: !enabled.checked, config },
                 },
               },
             },
@@ -259,7 +251,7 @@ function pluginCatalog(
         );
         if (saved && !outcome.textContent) {
           const latest = snapshot().plugins.find(({ id }) => id === plugin.id);
-          const state = scoped ? latest?.instances?.find(({ scope }) => scope === key) : latest;
+          const state = key ? latest?.instances?.find(({ scope }) => scope === key) : latest;
           diagnostics.textContent = state?.error ?? '';
           outcome.textContent =
             state?.error && (state.state === 'failed' || state.state === 'partial')
@@ -274,7 +266,7 @@ function pluginCatalog(
         save.disabled = false;
       }
     };
-    if (schema || scoped) section.append(form);
+    section.append(form);
     registry.mountPlugin(plugin.id, section, detailLifetime.signal);
     content.replaceChildren(section);
     back.focus();
@@ -324,16 +316,9 @@ function pluginCatalog(
           required(row.querySelector('small')).textContent =
             state + ' · ' + (plugin.error ?? plugin.description);
           const controls = required(row.querySelector('.catalog-controls'));
-          const scoped = plugin.scope && plugin.scope !== 'application';
-          const checked = scoped
-            ? Object.values(settings.scopes).some((scope) => scope?.entries?.[plugin.id]?.disabled === false)
-            : settings.entries[plugin.id]?.disabled === false;
+          const checked = settings.entries[plugin.id]?.disabled === false;
           const control = toggle(plugin.title, checked);
           control.dataset.pluginToggle = plugin.id;
-          if (scoped) {
-            control.disabled = true;
-            control.title = 'Open plugin settings to select a scope';
-          }
           saveToggle(control, async (next) => {
             if (busy) return false;
             savingSwitch = true;

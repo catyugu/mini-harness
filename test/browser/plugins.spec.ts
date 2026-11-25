@@ -345,7 +345,6 @@ test('the Plugins page keeps stored settings when a workspace plugin setup fails
   const folder = join(paths.plugins, 'workspace-example');
   mkdirSync(folder);
   writeJson(join(folder, 'plugin.json'), {
-    scope: 'workspace',
     title: 'Workspace example',
     configSchema: {
       type: 'object',
@@ -370,7 +369,7 @@ test('the Plugins page keeps stored settings when a workspace plugin setup fails
   try {
     await page.goto(service.url + '/#token=' + service.token);
     await page.getByRole('button', { name: 'Browse plugins' }).click();
-    await expect(page.getByRole('switch', { name: 'Workspace example' })).toBeChecked();
+    await expect(page.getByRole('switch', { name: 'Workspace example' })).not.toBeChecked();
     await page.getByRole('button', { name: 'Workspace example settings' }).click();
     await expect(page.getByText('Invalid configuration for plugin: workspace-example')).toBeVisible();
     const value = page.getByRole('spinbutton', { name: 'value · workspace-example' });

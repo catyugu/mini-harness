@@ -555,7 +555,7 @@ export const apply = (ctx) => {
   writePlugin(
     paths.plugins,
     'scoped-drain',
-    { scope: 'session' },
+    {},
     lifecycle +
       `
 export const inject = ["harnessPluginRoutes"];
@@ -654,7 +654,6 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
   const builtins: ResolvedPlugin[] = [
     {
       id: 'global',
-      scope: 'application',
       title: 'Global',
       description: '',
       defaultEnabled: true,
@@ -668,7 +667,6 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
     },
     {
       id: 'workspace',
-      scope: 'workspace',
       title: 'Workspace',
       description: '',
       plugin: {
@@ -685,7 +683,6 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
     },
     {
       id: 'layer',
-      scope: 'session',
       title: 'Layer',
       description: '',
       plugin: {
@@ -806,7 +803,6 @@ test('configuration validation resolves the staged scope provider and rejects in
   const builtins: ResolvedPlugin[] = [
     {
       id: 'global',
-      scope: 'application',
       title: 'Default',
       description: '',
       defaultEnabled: true,
@@ -819,7 +815,6 @@ test('configuration validation resolves the staged scope provider and rejects in
     },
     {
       id: 'local',
-      scope: 'workspace',
       title: 'Local',
       description: '',
       plugin: {
@@ -831,7 +826,6 @@ test('configuration validation resolves the staged scope provider and rejects in
     },
     {
       id: 'consumer',
-      scope: 'workspace',
       title: 'Consumer',
       description: '',
       plugin: {
@@ -881,7 +875,6 @@ test('setup and live configuration cannot await their own graph transaction', as
   const builtins: ResolvedPlugin[] = [
     {
       id: 'reentrant',
-      scope: 'application',
       title: 'Reentrant',
       description: '',
       plugin: {
@@ -926,7 +919,6 @@ test('a failed server entry does not publish its browser module', async (t) => {
   const builtins: ResolvedPlugin[] = [
     {
       id: 'ui',
-      scope: 'application',
       title: 'UI',
       description: '',
       defaultEnabled: true,
@@ -934,7 +926,6 @@ test('a failed server entry does not publish its browser module', async (t) => {
     },
     {
       id: 'replacement',
-      scope: 'application',
       title: 'Replacement',
       description: '',
       browser,

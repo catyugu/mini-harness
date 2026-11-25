@@ -426,8 +426,8 @@ export class PluginHost implements ScopePort {
       ...scoped.entries,
     ];
     const appChanged = descriptors.some((descriptor) => {
-      const { id, scope, plugin, source } = descriptor;
-      if (scope !== 'application' || !(plugin || source)) return false;
+      const { id, plugin, source } = descriptor;
+      if (!(plugin || source)) return false;
       const enabled = this.catalog.enabled(descriptor, settings);
       return (
         enabled !== this.catalog.enabled(descriptor, previous) ||

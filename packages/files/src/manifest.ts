@@ -4,7 +4,6 @@ import { setup } from './server/setup.ts';
 
 /** One metadata definition for the host, settings, and browser loader. */
 export const metadata: PluginInfo = {
-  scope: 'application',
   title: 'Workspace files',
   description: 'Read, search and edit files within the workspace.',
   browserStyles: ['/packages/files/src/browser/style.css'],

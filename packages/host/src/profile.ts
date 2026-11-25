@@ -351,7 +351,6 @@ export async function profileDescriptors(entries: ReadonlyMap<string, Row>): Pro
         return {
           title: row.id,
           description: '',
-          scope: 'application' as const,
           ...metadata,
           plugin,
           Config,

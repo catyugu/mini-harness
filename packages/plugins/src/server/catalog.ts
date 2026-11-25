@@ -76,7 +76,6 @@ export class PluginCatalog {
       return descriptor;
     } catch (error) {
       return {
-        scope: 'application',
         id,
         title: id,
         description: 'Plugin manifest cannot be loaded.',
@@ -99,7 +98,6 @@ export class PluginCatalog {
     } catch (error) {
       return {
         id,
-        scope: 'application',
         title: id,
         description: name,
         trustedCode: true,
@@ -121,15 +119,11 @@ export class PluginCatalog {
   async runtimeDescriptors(settings: CompositionConfig): Promise<DiscoveredPlugin[]> {
     const descriptors = await Promise.all(
       this.descriptors().map(async (descriptor) => {
-        const { id, source, scope } = descriptor;
+        const { id, source } = descriptor;
         if (!source || descriptor.error) return descriptor;
         const enabled =
-          scope === 'application'
-            ? this.enabled(descriptor, settings)
-            : scopeKeys(settings).some(
-                (key) =>
-                  key.startsWith(scope + ':') && settings.scopes[key]?.entries?.[id]?.disabled === false,
-              );
+          this.enabled(descriptor, settings) ||
+          scopeKeys(settings).some((key) => settings.scopes[key]?.entries?.[id]?.disabled === false);
         if (!enabled) return descriptor;
         try {
           const module = pathToFileURL(source).href + '?v=' + lstatSync(source).mtimeMs;
@@ -185,15 +179,13 @@ export class PluginCatalog {
             return error instanceof Error ? error.message : String(error);
           }
         };
-        const scopes: { scope: 'application' | ScopeKey; enabled: boolean }[] =
-          metadata.scope === 'application'
-            ? [{ scope: 'application', enabled: this.enabled(descriptor, settings) }]
-            : scopeKeys(settings).flatMap((scope) => {
-                const value = settings.scopes[scope];
-                if (!value || !scope.startsWith(metadata.scope + ':')) return [];
-                const enabled = value.entries?.[id]?.disabled === false;
-                return enabled || Object.hasOwn(value.entries ?? {}, id) ? [{ scope, enabled }] : [];
-              });
+        const scopes: { scope: 'application' | ScopeKey; enabled: boolean }[] = [
+          { scope: 'application', enabled: this.enabled(descriptor, settings) },
+          ...scopeKeys(settings).flatMap((scope) => {
+            const entry = settings.scopes[scope]?.entries?.[id];
+            return entry ? [{ scope, enabled: entry.disabled === false }] : [];
+          }),
+        ];
         const instances = scopes.map(
           ({ scope, enabled }): NonNullable<PluginMetadata['instances']>[number] => {
             const key = scope === 'application' ? id : scope + '/' + id;
@@ -264,19 +256,18 @@ export class PluginCatalog {
     settings: CompositionConfig,
   ) {
     for (const descriptor of descriptors) {
-      const { id, scope } = descriptor;
+      const { id } = descriptor;
       const before = previous.entries[id]?.config;
       const after = settings.entries[id]?.config;
-      if (scope === 'application' && !this.enabled(descriptor, settings) && !isDeepStrictEqual(before, after))
+      if (!this.enabled(descriptor, settings) && !isDeepStrictEqual(before, after))
         this.configValues(descriptor, after);
-      if (scope !== 'application')
-        for (const key of scopeKeys(settings)) {
-          if (!key.startsWith(scope + ':') || settings.scopes[key]?.entries?.[id]?.disabled === false)
-            continue;
-          const prior = { ...before, ...previous.scopes[key]?.entries?.[id]?.config };
-          const next = { ...after, ...settings.scopes[key]?.entries?.[id]?.config };
-          if (!isDeepStrictEqual(prior, next)) this.configValues(descriptor, next);
-        }
+      for (const key of scopeKeys(settings)) {
+        const entry = settings.scopes[key]?.entries?.[id];
+        if (!entry || entry.disabled === false) continue;
+        const prior = { ...before, ...previous.scopes[key]?.entries?.[id]?.config };
+        const next = { ...after, ...entry.config };
+        if (!isDeepStrictEqual(prior, next)) this.configValues(descriptor, next);
+      }
     }
   }
 
@@ -291,7 +282,7 @@ export class PluginCatalog {
     const plans: ConfiguredPlugin[] = [];
     const declared = new Set<string>();
     for (const [id, entry] of Object.entries(overrides?.entries ?? {})) {
-      if (entry.disabled === false && !descriptors.some((item) => item.id === id && item.scope === scope)) {
+      if (entry.disabled === false && !descriptors.some((item) => item.id === id)) {
         const error = new DomainError(
           'invalid_input',
           'Plugin ' + id + ' is unavailable in ' + scope + ' scope',
@@ -299,26 +290,16 @@ export class PluginCatalog {
         if (!unavailable?.(id, error)) throw error;
       }
     }
-    if (isApp)
-      for (const [id, entry] of Object.entries(settings.entries)) {
-        if (
-          entry.disabled === false &&
-          descriptors.some((item) => item.id === id && item.scope !== 'application')
-        )
-          throw new DomainError('invalid_input', 'Select a scope for plugin ' + id);
-      }
     for (const item of descriptors) {
-      const { id, scope: kind } = item;
-      if (
-        kind !== scope ||
-        !(isApp ? this.enabled(item, settings) : overrides?.entries?.[id]?.disabled === false)
-      )
+      const { id } = item;
+      if (!(isApp ? this.enabled(item, settings) : overrides?.entries?.[id]?.disabled === false))
         continue;
       // Child groups isolate the services declared by their Cordis modules.
       const provide = item.plugin?.provide;
       for (const service of typeof provide === 'string' ? [provide] : (provide ?? [])) declared.add(service);
       try {
         if (item.error) throw new DomainError('invalid_input', 'Invalid plugin ' + id + ': ' + item.error);
+        if (!isApp && !item.plugin) throw new Error('Scoped Entry requires a server module: ' + id);
         const values = isApp
           ? settings.entries[id]?.config
           : { ...settings.entries[id]?.config, ...overrides?.entries?.[id]?.config };

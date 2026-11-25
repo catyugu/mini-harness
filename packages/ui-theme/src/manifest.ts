@@ -14,7 +14,6 @@ export const Config = defineConfig(
 );
 
 export const metadata: PluginInfo = {
-  scope: 'application',
   title: 'Theme',
   description: 'Application theme',
 

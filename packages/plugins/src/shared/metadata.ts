@@ -5,7 +5,6 @@ export interface PluginMetadata
   extends Pick<
     ResolvedPlugin,
     | 'id'
-    | 'scope'
     | 'title'
     | 'description'
     | 'defaultEnabled'

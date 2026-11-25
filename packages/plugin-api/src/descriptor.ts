@@ -1,5 +1,4 @@
 import type { Plugin } from 'mini-harness/cordis';
-import type { PluginScope } from './scopes.ts';
 
 /** A symbolic icon name or an inline SVG path for plugin-defined artwork. */
 export type PluginIcon = string | { path: string; viewBox?: string };
@@ -8,7 +7,6 @@ export type PluginIcon = string | { path: string; viewBox?: string };
 export interface PluginInfo {
   title: string;
   description: string;
-  scope: PluginScope['kind'];
   web?: boolean;
   browser?: string;
   /** Styles shipped with a built-in browser entry. Local plugins may declare a browser build directory. */

@@ -29,7 +29,6 @@ const Config = defineConfig({
 });
 
 export const metadata: PluginInfo = {
-  scope: 'application',
   title: 'Subagents',
   description: 'Delegate tasks to child conversations.',
   icon: 'delegate',

@@ -5,7 +5,9 @@ scope, replace a service by disabling its original entry and enabling the new
 entry together. Cordis rejects duplicate services in the same Context.
 
 A workspace or session can enable its own entry declaring the services that
-should be isolated from the parent. For example:
+should be isolated from the parent. The same module can be mounted at any of
+these positions with different configuration. No manifest scope is required.
+Disable its application entry if it should only run in selected scopes. For example:
 
 ```yaml
 scopes:

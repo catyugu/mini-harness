@@ -111,7 +111,7 @@ test('scoped plugins inherit declared services and tool policies, and release th
   writePlugin(
     paths.plugins,
     'workspace-greeting',
-    { scope: 'workspace' },
+    {},
     `
 export const provide = ["exampleGreeting"];
 export const inject = ["harnessSessions","harnessPluginRoutes","harnessPluginData","harnessPluginChanges","harnessTools"];
@@ -229,12 +229,58 @@ export const apply = (ctx, config) => {
   assert.ok(names(outside.id).includes('read'));
 });
 
+test('one plugin module mounts in application, workspace and conversation with distinct configuration', async (t) => {
+  const { app, paths, request } = await fixture(t);
+  writePlugin(
+    paths.plugins,
+    'placement',
+    {},
+    `
+export const inject = ['harnessTools'];
+export function apply(ctx, config) {
+  ctx.effect(() => ctx.harnessTools.register({
+    name: 'placement_probe',
+    description: 'Return the configuration of the nearest instance',
+    parameters: { type: 'object' },
+    async execute() { return { content: [{ type: 'text', text: config.value }] }; }
+  }, { access: 'readOnly' }));
+}
+`,
+  );
+  const { ctx } = app.runtime.plugins;
+  const parent = ctx.harnessRegistry.create();
+  const child = ctx.harnessRegistry.create({ parentId: parent.id });
+  const sibling = ctx.harnessRegistry.create();
+  const workspace = 'workspace:' + parent.workspaceId;
+  const session = 'session:' + parent.id;
+  const mounted = await request('/settings', 'PATCH', {
+    entries: { placement: { disabled: false, config: { value: 'application' } } },
+    scopes: {
+      [workspace]: { entries: { placement: { disabled: false, config: { value: 'workspace' } } } },
+      [session]: { entries: { placement: { disabled: false, config: { value: 'session' } } } },
+    },
+  });
+  assert.equal(mounted.status, 200, JSON.stringify(mounted.body));
+  for (const { id } of [parent, child, sibling]) await app.runtime.plugins.prepare(`session:${id}`);
+  async function probe(id: string) {
+    const tool = expectPresent(
+      ctx.harnessTools.forSession(id).find(({ name }) => name === 'placement_probe'),
+      'placement tool',
+    );
+    return (await tool.execute('probe', {})).content;
+  }
+  assert.deepEqual(await probe(child.id), [{ type: 'text', text: 'session' }]);
+  assert.deepEqual(await probe(sibling.id), [{ type: 'text', text: 'workspace' }]);
+  assert.equal((await request('/settings', 'PATCH', { scopes: {} })).status, 200);
+  assert.deepEqual(await probe(child.id), [{ type: 'text', text: 'application' }]);
+});
+
 test('read-only permissions apply equally to selected built-in and external tool registrations', async (t) => {
   const { app, mock, paths, request } = await fixture(t);
   writePlugin(
     paths.plugins,
     'replacement',
-    { scope: 'session' },
+    {},
     `
 export const inject = ["harnessTools"];
 export const apply = (ctx) => {
@@ -358,7 +404,7 @@ test('native runs use the nearest scoped LLM provider while siblings retain the 
   writePlugin(
     paths.plugins,
     'scoped-llm',
-    { scope: 'session' },
+    {},
     `
 export const provide = ["harnessLlm"];
 export const apply = (ctx, config) => { ctx.provide('harnessLlm', {
@@ -435,7 +481,7 @@ export const apply = (ctx) => { ctx.provide('harnessSandbox', ${isolated('applic
   writePlugin(
     paths.plugins,
     'scoped-environment',
-    { scope: 'session' },
+    {},
     `
 export const provide = ["harnessFileAccess","harnessSandbox"];
 export const apply = (ctx) => {
@@ -452,7 +498,7 @@ export const apply = (ctx) => {
   writePlugin(
     paths.plugins,
     'scoped-process',
-    { scope: 'session' },
+    {},
     `
 export const provide = ["harnessProcess"];
 export const apply = (ctx) => { ctx.provide('harnessProcess', {
@@ -530,7 +576,7 @@ test('scoped model catalogs govern explicit runs and inherited or model-selected
   writePlugin(
     paths.plugins,
     'scoped-models',
-    { scope: 'session' },
+    {},
     `
 export const provide = ["harnessModels","harnessLlm"];
 export const apply = (ctx) => {
@@ -646,7 +692,7 @@ test('a replacement Agent receives a scoped run Fiber and releases its resources
   writePlugin(
     paths.plugins,
     'custom-agent',
-    { scope: 'session' },
+    {},
     `
 import { appendFileSync } from 'node:fs';
 export const provide = ['harnessAgent', 'agentMarker'];

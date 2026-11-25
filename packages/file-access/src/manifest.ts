@@ -3,7 +3,6 @@ import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 import { Workspace } from './workspace.ts';
 
 export const metadata: PluginInfo = {
-  scope: 'application',
   title: 'File access',
   description: 'Access paths within registered workspaces',
 };
