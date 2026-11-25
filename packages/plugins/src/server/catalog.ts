@@ -70,7 +70,7 @@ export class PluginCatalog {
       if (scope === 'application') entry.disabled ??= !defaultEnabled;
       if (configSchema)
         entry.config = configDefaults(configSchema, structuredClone(entry.config ?? {}));
-      entries[id] = entry;
+      if (Object.keys(entry).length) entries[id] = entry;
     }
     return { ...settings, entries };
   }

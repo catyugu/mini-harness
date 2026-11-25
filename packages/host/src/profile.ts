@@ -389,7 +389,7 @@ export async function loadProfile(
       entries: Object.fromEntries(
         [...selected.values()].map((row) => [row.id, {
           disabled: Boolean(row.disabled),
-          config: row.config ?? {},
+          ...(row.config === undefined ? {} : { config: row.config }),
         }]),
       ),
       readOnlyTools: policy.readOnlyTools,

@@ -447,8 +447,8 @@ export class PluginHost implements ScopePort {
           after = settings.scopes[key];
         return (
           !isDeepStrictEqual(
-            Object.fromEntries(Object.entries(before?.entries ?? {}).map(([id, entry]) => [id, entry.disabled])),
-            Object.fromEntries(Object.entries(after?.entries ?? {}).map(([id, entry]) => [id, entry.disabled])),
+            Object.fromEntries(Object.entries(before?.entries ?? {}).filter(([, entry]) => entry.disabled !== undefined).map(([id, entry]) => [id, entry.disabled])),
+            Object.fromEntries(Object.entries(after?.entries ?? {}).filter(([, entry]) => entry.disabled !== undefined).map(([id, entry]) => [id, entry.disabled])),
           ) ||
           descriptors.some(
             ({ id, configChanges }) =>
