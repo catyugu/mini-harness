@@ -462,6 +462,7 @@ function configurationPatch(patch: unknown): Record<string, unknown> {
 }
 
 function failureMessage(id: string, error: unknown) {
-  if (error instanceof ValidationError) return 'Invalid configuration for plugin: ' + id + ': ' + error.message;
+  if (error instanceof ValidationError)
+    return 'Invalid configuration for plugin: ' + id + ': ' + error.message;
   return error instanceof Error ? error.message : String(error);
 }
