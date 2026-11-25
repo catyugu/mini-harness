@@ -693,7 +693,7 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
   const workspaceKey = 'workspace:' + workspaceId;
   const workspace = {
     plugins: { workspace: true },
-    providers: { greeting: 'workspace' },
+
     pluginConfig: { workspace: { value: 'workspace' } },
   };
   let settings: typeof DEFAULTS = {
@@ -731,12 +731,12 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
   };
   const parent = {
     plugins: { layer: true },
-    providers: { greeting: 'layer' },
+
     pluginConfig: { layer: { value: 'parent' } },
   };
   const child = {
     plugins: { layer: true },
-    providers: { greeting: 'layer' },
+
     pluginConfig: { layer: { value: 'child' } },
   };
   const broken = { ...parent, pluginConfig: { layer: { fail: true } } };
@@ -754,7 +754,7 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
   assert.equal(
     host.metadata().find(({ id }) => id === 'layer')?.state,
     'ready',
-    'required replacements are mounted before commit',
+    'changed scoped entries are mounted before commit',
   );
   assert.equal(host.require('session:parent', 'greeting'), 'parent');
   assert.equal(host.require('session:child', 'greeting'), 'child');
@@ -853,7 +853,7 @@ test('configuration validation resolves the staged scope provider and rejects in
       scopes: {
         [key]: {
           plugins: { consumer: true, local: true },
-          providers: { greeting: 'local' },
+
           pluginConfig: { consumer: { expected } },
         },
       },

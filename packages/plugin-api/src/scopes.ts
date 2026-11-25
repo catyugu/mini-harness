@@ -6,8 +6,6 @@ export type PluginScope =
   | { kind: 'session'; workspaceId: string; sessionId: string };
 
 export interface ScopeSettings {
-  /** A scoped selection replaces an inherited provider only in this subtree. */
-  providers?: Record<string, string>;
   plugins?: Record<string, boolean>;
   pluginConfig?: Record<string, Record<string, unknown>>;
 }

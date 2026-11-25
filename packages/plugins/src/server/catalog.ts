@@ -8,7 +8,6 @@ import { basename, join } from 'node:path';
 import { Check } from 'typebox/value';
 import { scopeKeys, type PluginSettings } from '@mini-harness/plugin-api/configuration';
 import type { PluginScope, ScopeKey, ScopeSettings } from '@mini-harness/plugin-api/scopes';
-import { ProtectedProviderError, selectProviders } from './providers.ts';
 import { pluginBundle } from './source.ts';
 import { Inject, type Context, type Plugin } from 'mini-harness/cordis';
 import type { ConfigValidationContext, PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
@@ -234,8 +233,7 @@ export class PluginCatalog {
             : scopeKeys(settings).flatMap((scope) => {
                 const value = settings.scopes[scope];
                 if (!value || !scope.startsWith(metadata.scope + ':')) return [];
-                const enabled =
-                  value.plugins?.[id] === true || Object.values(value.providers ?? {}).includes(id);
+                const enabled = value.plugins?.[id] === true;
                 return enabled || Object.hasOwn(value.pluginConfig ?? {}, id) ? [{ scope, enabled }] : [];
               });
         const instances = scopes.map(
@@ -332,12 +330,7 @@ export class PluginCatalog {
           const changed = settings.scopes[key]?.pluginConfig?.[id];
           const before = previous.scopes[key]?.pluginConfig?.[id];
           const selected = settings.scopes[key];
-          if (
-            changed === undefined &&
-            !selected?.plugins?.[id] &&
-            !Object.values(selected?.providers ?? {}).includes(id)
-          )
-            continue;
+          if (changed === undefined && !selected?.plugins?.[id]) continue;
           validate(
             { ...settings.pluginConfig[id], ...changed },
             { ...previous.pluginConfig[id], ...before },
@@ -353,14 +346,19 @@ export class PluginCatalog {
     settings: PluginSettings,
     descriptors: DiscoveredPlugin[],
     scope: PluginScope['kind'],
-    inherited: ReadonlyMap<string, string>,
     overrides?: ScopeSettings,
     unavailable?: (id: string, error: unknown) => boolean,
   ) {
     const isApp = scope === 'application';
-    const choices = isApp ? settings.providers : (overrides?.providers ?? {});
-    const enabled: DiscoveredPlugin[] = [];
-    const configs = new Map<string, Record<string, unknown>>();
+    const plans: ConfiguredPlugin[] = [];
+    const declared = new Set<string>();
+    if (isApp) {
+      for (const [service, owner] of this.protectedProviders) {
+        const builtin = this.builtins.get(owner);
+        if (builtin && !this.enabled(builtin, settings))
+          throw new DomainError('invalid_input', 'Protected service cannot be overridden: ' + service);
+      }
+    }
     for (const [id, active] of Object.entries(overrides?.plugins ?? {})) {
       if (active && !descriptors.some((item) => item.id === id && item.scope === scope)) {
         const error = new DomainError(
@@ -379,35 +377,25 @@ export class PluginCatalog {
       const { id, scope: kind } = item;
       if (kind !== scope || !(isApp ? this.enabled(item, settings) : overrides?.plugins?.[id] === true))
         continue;
+      // Cordis owns service uniqueness and activation. Child groups isolate their
+      // declared services; only the host/tool authorization boundary is fixed.
+      for (const service of item.provides ?? []) {
+        const owner = this.protectedProviders.get(service);
+        if (owner && (!isApp || owner !== id))
+          throw new DomainError('invalid_input', 'Protected service cannot be overridden: ' + service);
+        declared.add(service);
+      }
       try {
         if (item.error) throw new DomainError('invalid_input', 'Invalid plugin ' + id + ': ' + item.error);
-        enabled.push(item);
         const values = isApp
           ? settings.pluginConfig[id]
           : { ...settings.pluginConfig[id], ...overrides?.pluginConfig?.[id] };
-        configs.set(id, this.configValues(id, values, item.configSchema));
+        plans.push({ descriptor: item, id, source: item.source, config: this.configValues(id, values, item.configSchema) });
       } catch (error) {
         if (!unavailable?.(id, error)) throw error;
       }
     }
-    const { selected, providers } = (() => {
-      try {
-        return selectProviders(enabled, inherited, choices, this.protectedProviders);
-      } catch (error) {
-        if (error instanceof ProtectedProviderError && !isApp) throw error;
-        throw new DomainError(
-          'invalid_input',
-          error instanceof Error ? error.message : 'Invalid provider selection',
-        );
-      }
-    })();
-    const plans: ConfiguredPlugin[] = [];
-    for (const descriptor of selected) {
-      const { id, source } = descriptor;
-      const config = configs.get(id);
-      if (config) plans.push({ descriptor, id, source, config });
-    }
-    return { plans, providers };
+    return { plans, declared };
   }
 
   configValues(id: string, values: Record<string, unknown> | undefined, schema?: Record<string, any>) {
@@ -429,14 +417,12 @@ export function changedSelection(
   if (!key)
     return (
       settings.plugins[id] !== previous.plugins[id] ||
-      !isDeepStrictEqual(previous.providers, settings.providers) ||
       !isDeepStrictEqual(previous.pluginConfig[id], settings.pluginConfig[id])
     );
   const before = previous.scopes[key],
     after = settings.scopes[key];
   return (
     before?.plugins?.[id] !== after?.plugins?.[id] ||
-    !isDeepStrictEqual(before?.providers, after?.providers) ||
     !isDeepStrictEqual(before?.pluginConfig?.[id], after?.pluginConfig?.[id]) ||
     !isDeepStrictEqual(previous.pluginConfig[id], settings.pluginConfig[id])
   );

@@ -17,7 +17,6 @@ import { planBrowser, publishBrowser } from './browser-assets.ts';
 import { addAbortListener } from 'node:events';
 import type { UpgradeHandler } from '@mini-harness/transport/routes';
 import { scopeKeys, type PluginSettings } from '@mini-harness/plugin-api/configuration';
-import { ProtectedProviderError } from './providers.ts';
 import { bindPluginImports } from './module-resolution.ts';
 import { pluginData, pluginSecrets, removeScopeData } from './data.ts';
 import { PluginRouteRegistry, scopeOperation } from './routes.ts';
@@ -29,14 +28,13 @@ const appScope: PluginScope = { kind: 'application' };
 
 /** Permission-only settings do not require a separate plugin context. */
 function hasComposition(scope: ScopeSettings | undefined): scope is ScopeSettings {
-  return !!scope && [scope.plugins, scope.providers, scope.pluginConfig].some((map) => Object.keys(map ?? {}).length > 0);
+  return !!scope && [scope.plugins, scope.pluginConfig].some((map) => Object.keys(map ?? {}).length > 0);
 }
 
 /** The descriptor and its resolved graph are the source of both server and browser mounts. */
 export class PluginHost implements ScopePort {
   private readonly catalog: PluginCatalog;
   private readonly entries: EntryTree;
-  private readonly root: ReadonlyMap<string, string>;
   private readonly pluginRoutes: PluginRouteRegistry;
   private readonly imports: ReturnType<typeof bindPluginImports>;
   private scopes = new Map<ScopeKey, EntryGroup>();
@@ -93,7 +91,6 @@ export class PluginHost implements ScopePort {
     for (const [name, value] of Object.entries(services)) owner.provide(name, value);
     const provided = [...new Set([...rootServices, ...Object.keys(services)])];
     this.catalog = new PluginCatalog(directory, builtins, provided, devPlugin, ctx.get('harnessProfile'));
-    this.root = new Map(provided.map((name) => [name, 'application']));
     this.imports = bindPluginImports([directory, ...(devPlugin ? [devPlugin] : [])]);
   }
 
@@ -216,15 +213,11 @@ export class PluginHost implements ScopePort {
   ): NonNullable<HostServices[Name]> {
     const value = this.context(key).get(service);
     if (value == null) {
-      const settings = this.settings();
       for (const ancestor of key ? [...this.address(key)].reverse() : []) {
-        const provider = settings.scopes[ancestor]?.providers?.[service];
-        const failure = provider && this.failures.get(ancestor + '/' + provider);
-        if (failure)
-          throw new DomainError(
-            'unavailable',
-            'Provider ' + provider + ' failed in ' + ancestor + ': ' + failure,
-          );
+        if (!this.scopes.get(ancestor)?.isolated.includes(service)) continue;
+        const failure = [...this.failures].find(([instance]) => instance.startsWith(ancestor + '/'));
+        if (failure) throw new DomainError('unavailable', failure[1]);
+        break;
       }
       throw new Error('Required service is unavailable: ' + service + (key ? ' in ' + key : ''));
     }
@@ -267,7 +260,6 @@ export class PluginHost implements ScopePort {
   private scopedEntries(
     settings: PluginSettings,
     descriptors: ReturnType<PluginCatalog['descriptors']>,
-    appProviders: ReadonlyMap<string, string>,
     unavailable: (id: string, error: unknown, key?: ScopeKey) => boolean,
     preparing?: ScopeKey,
     released: ReadonlySet<ScopeKey> = new Set(),
@@ -284,8 +276,8 @@ export class PluginHost implements ScopePort {
     ]);
     for (const key of active)
       for (const ancestor of this.ancestry(key)) if (!released.has(ancestor)) active.add(ancestor);
-    const planned = new Map<ScopeKey, { context: Context; providers: ReadonlyMap<string, string> }>();
-    const root = { context: this.ctx, providers: appProviders };
+    const planned = new Map<ScopeKey, Context>();
+    const root = this.ctx;
 
     const visit = (key: ScopeKey): typeof root => {
       const cached = planned.get(key);
@@ -298,7 +290,6 @@ export class PluginHost implements ScopePort {
           ...Object.entries(overrides?.plugins ?? {})
             .filter(([, enabled]) => enabled)
             .map(([id]) => id),
-          ...Object.values(overrides?.providers ?? {}),
         ])) {
           const error = new Error('Configured scope does not exist: ' + key);
           if (!unavailable(plugin, error, key)) throw error;
@@ -307,43 +298,18 @@ export class PluginHost implements ScopePort {
       }
       const parent = address.parent ? visit(address.parent) : root;
       if (!hasComposition(overrides)) return parent;
-      const enabled = descriptors.filter(
-        ({ id, scope }) => scope === address.scope.kind && overrides.plugins?.[id],
+      const { plans, declared } = this.catalog.plans(
+        settings,
+        descriptors,
+        address.scope.kind,
+        overrides,
+        (id, error) => unavailable(id, error, key),
       );
-      let plans: ConfiguredPlugin[] = [];
-      let providers = parent.providers;
-      try {
-        ({ plans, providers } = this.catalog.plans(
-          settings,
-          descriptors,
-          address.scope.kind,
-          parent.providers,
-          overrides,
-          (id, error) => unavailable(id, error, key),
-        ));
-      } catch (error) {
-        if (error instanceof ProtectedProviderError) throw new DomainError('invalid_input', error.message);
-        const selected = new Set([
-          ...enabled.map(({ id }) => id),
-          ...Object.values(overrides.providers ?? {}),
-        ]);
-        if (!selected.size) throw error;
-        for (const id of selected) if (!unavailable(id, error, key)) throw error;
-      }
-      const isolated = new Set<string>();
-      for (const [service, plugin] of Object.entries(overrides.providers ?? {})) {
-        if (parent.providers.get(service) !== plugin || enabled.some(({ id }) => id === plugin))
-          isolated.add(service);
-      }
-      for (const { id, provides } of enabled) {
-        for (const service of provides ?? [])
-          if (providers.get(service) === id || !parent.providers.has(service)) isolated.add(service);
-      }
-      const isolates = [...isolated].sort();
+      const isolates = [...declared].sort();
       const existing = this.scopes.get(key);
-      const group = existing?.matches(parent.context, isolates)
+      const group = existing?.matches(parent, isolates)
         ? existing
-        : new EntryGroup(parent.context, isolates);
+        : new EntryGroup(parent, isolates);
       const { context } = group;
       if (active.has(key)) {
         contexts.set(key, group);
@@ -353,12 +319,8 @@ export class PluginHost implements ScopePort {
           instances.set(id, { key, plugin: plan.id });
         }
       }
-      const current = {
-        context,
-        providers: new Map([...providers, ...Object.entries(overrides.providers ?? {})]),
-      };
-      planned.set(key, current);
-      return current;
+      planned.set(key, context);
+      return context;
     };
     for (const key of new Set([...scopeKeys(settings), ...active])) {
       this.ancestry(key); // validate domain ancestry before evaluating scope selections
@@ -491,31 +453,21 @@ export class PluginHost implements ScopePort {
       failures.set(instance, message);
       return true;
     };
-    const { plans, providers } = this.catalog.plans(
-      settings,
-      descriptors,
-      'application',
-      this.root,
-      undefined,
-      unavailable,
-    );
-    const requiredScopes = new Set(
-      updating
-        ? scopeKeys(settings).filter((key) =>
-            Object.values(settings.scopes[key]?.providers ?? {}).some((provider) =>
-              changedSelection(provider, previous, settings, key),
-            ),
-          )
-        : [],
-    );
+    const { plans } = this.catalog.plans(settings, descriptors, 'application', undefined, unavailable);
+    const changedScopes = updating
+      ? scopeKeys(settings).filter((key) =>
+          Object.entries(settings.scopes[key]?.plugins ?? {}).some(
+            ([id, enabled]) => enabled && changedSelection(id, previous, settings, key),
+          ),
+        )
+      : [];
     const scoped = this.scopedEntries(
       settings,
       descriptors,
-      providers,
       unavailable,
       preparing,
       released,
-      [...requiredScopes, ...validations.flatMap(({ key }) => (key ? [key] : []))],
+      [...changedScopes, ...validations.flatMap(({ key }) => (key ? [key] : []))],
     );
     const browser = planBrowser(plans);
     const mounts = [
@@ -525,7 +477,6 @@ export class PluginHost implements ScopePort {
       ...scoped.entries,
     ];
     const appChanged =
-      !isDeepStrictEqual(previous.providers, settings.providers) ||
       descriptors.some((descriptor) => {
         const { id, configChanges, scope, plugin, source } = descriptor;
         if (scope !== 'application' || !(plugin || source)) return false;
@@ -543,7 +494,6 @@ export class PluginHost implements ScopePort {
           after = settings.scopes[key];
         return (
           !isDeepStrictEqual(before?.plugins, after?.plugins) ||
-          !isDeepStrictEqual(before?.providers, after?.providers) ||
           descriptors.some(
             ({ id, configChanges }) =>
               configChanges !== 'live' &&
@@ -566,12 +516,6 @@ export class PluginHost implements ScopePort {
         const error = activationErrors.get(mounted.id);
         if (!(scope ? unavailable(scope.plugin, error, scope.key) : unavailable(mounted.id, error)))
           throw error;
-      }
-      for (const key of requiredScopes) {
-        const context = this.configurationContext(key, scoped.contexts);
-        for (const service of Object.keys(settings.scopes[key]?.providers ?? {}))
-          if (context.get(service) == null)
-            throw new DomainError('unavailable', 'Selected service ' + service + ' is unavailable in ' + key);
       }
       for (const { descriptor, config, key } of validations) {
         const instance = key ? key + '/' + descriptor.id : descriptor.id;

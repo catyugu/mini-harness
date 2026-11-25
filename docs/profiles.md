@@ -75,7 +75,7 @@ references. The final entry ID determines the configuration override.
 
 Native entries are currently edited in the Profile package and reloaded on
 restart. The existing Web Plugins page edits the same user patch for managed
-entries. Provider selections, scoped overrides and the legacy installed bundle
+entries. Scoped overrides and the installed bundle
 format remain described in [scoped providers](scoped-providers.md) and
 [plugins](plugins.md). The package layout migration moves the old Web
 `cordis.yml` user configuration into `cordis.patch.yml` before creating the

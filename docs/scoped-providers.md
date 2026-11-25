@@ -1,33 +1,29 @@
-# Scoped provider selection
+# Scoped service composition
 
-The application selects providers through the top-level `providers` map.
-A workspace or session may select a local replacement through its
-`scopes[scopeKey].providers` map. Without a local choice, the scope inherits
-the nearest parent's services.
+Enable the Cordis entries that provide the services you want. At application
+scope, replace a service by disabling its original entry and enabling the new
+entry together. Cordis rejects duplicate services in the same Context.
 
-Example:
+A workspace or session can enable its own entry declaring the services that
+should be isolated from the parent. For example:
 
-```json
-{
-  "scopes": {
-    "workspace:0123456789abcdef0123456789abcdef": {
-      "plugins": { "workspace-greeting": true },
-      "providers": { "exampleGreeting": "workspace-greeting" }
-    }
-  }
-}
+```yaml
+scopes:
+  workspace:0123456789abcdef0123456789abcdef:
+    plugins:
+      workspace-greeting: true
 ```
 
-A local replacement must be enabled at that address. Host infrastructure
-(scope resolution, configuration, authenticated routes and mutation control)
-cannot be overridden. The tool registry and inherited authorization policy are protected because they enforce the final restrictions on model calls. Feature services, including the model adapter, can be replaced through their declared contracts. The default composition checks for required capabilities after mounting the chosen providers. An inherited multi-service provider
-continues supplying its other services when a child replaces just one of them.
+Scopes inherit services from application → workspace → ancestor session →
+session. A local entry isolates its declared services in that subtree; disable
+it to restore inheritance. Siblings and ancestors retain their services. A
+local entry can replace one service from an inherited multi-service entry.
+Changed scoped entries are prepared before configuration is committed.
+If a configured entry fails during startup, its isolated services remain
+unavailable rather than falling back silently.
 
-Provider selection and isolation follow application → workspace → ancestor
-session → session. A choice affects only its subtree. A sibling keeps its
-parent's provider. Remove the local provider selection to restore inheritance.
-New or changed required provider selections must mount successfully before settings are committed. A previously saved provider that fails during startup or lazy preparation remains unavailable in its subtree until repaired. A second instance of the same provider ID needs an explicit choice to
-shadow its ancestor.
+The current host infrastructure and final tool authorization services are
+protected. Business services use the normal Cordis composition mechanism.
 
 Plugins declare required services in their Cordis `inject` declaration. A running
 plugin can use `await sessionService(ctx, sessionId, name, signal)` to access a declared service in a visible session. The native
@@ -44,4 +40,4 @@ A user can grant specific registered tools to a trusted local plugin in that plu
 
 Setup and live configuration callbacks register and update plugin resources. Scope preparation, session writes, execution submission and configuration writes are available from runtime handlers after the configuration commits. Use those operations from normal runtime handlers. A prepared scoped service is a current provider reference, not a stable proxy: resolve it again after configuration changes. Browser entries are published for active server entries; the browser resolves its own dependencies through Cordis.
 
-Provider selections and scoped plugin configuration are written to the active [Profile](profiles.md). Tool grants and scoped tool restrictions are saved as domain settings.
+Enabled entries and scoped plugin configuration are written to the active [Profile](profiles.md). Tool grants and scoped tool restrictions are saved as domain settings.

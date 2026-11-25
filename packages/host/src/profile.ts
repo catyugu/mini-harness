@@ -27,7 +27,6 @@ interface Layer {
   detached?: boolean;
   include?: string[];
   plugins?: Row[];
-  providers?: ProfileConfiguration['providers'];
   scopes?: ProfileConfiguration['scopes'];
 }
 
@@ -119,7 +118,7 @@ function load(file: string, optional = false): Layer | undefined {
       throw new Error([...doc.errors, ...doc.warnings].map((error) => error.message).join('\n'));
     const value: unknown = doc.toJS({ maxAliasCount: 0 });
     if (value == null) return {};
-    const fields = ['include', 'detached', 'plugins', 'providers', 'scopes'];
+    const fields = ['include', 'detached', 'plugins', 'scopes'];
     if (!object(value) || Object.keys(value).some((key) => !fields.includes(key)))
       throw new Error('Expected a Profile object');
     if (value.detached !== undefined && typeof value.detached !== 'boolean')
@@ -324,7 +323,6 @@ export async function loadProfile(name: string, paths: Paths, context: Context):
         .filter((row) => !nativeIds.has(row.id) && Object.keys(row.config ?? {}).length)
         .map((row) => [row.id, { ...row.config, ...legacy.pluginConfig[row.id] }]),
     ),
-    providers: legacy.providers,
     scopes: legacy.scopes,
   };
   Object.assign(overrides.plugins, legacy.plugins);
@@ -345,7 +343,6 @@ export async function loadProfile(name: string, paths: Paths, context: Context):
     ...product,
     ...overrides,
     port: configuredPort ?? legacy.port,
-    providers: merged.providers ?? overrides.providers,
     scopes: withToolRules(merged.scopes ?? overrides.scopes, scopedTools),
   });
   if (
@@ -457,7 +454,6 @@ export async function loadProfile(name: string, paths: Paths, context: Context):
       ...(user.include === undefined ? {} : { include: user.include }),
       ...(user.detached === undefined ? {} : { detached: user.detached }),
       plugins,
-      providers: settings.providers,
       scopes,
     };
     const text = stringify(next);
@@ -549,6 +545,8 @@ function legacySettings(paths: Paths) {
   const migration = ['plugins', 'pluginConfig', 'providers', 'scopes', 'port'].some(
     (key) => Object.hasOwn(raw, key),
   );
+  if (object(raw.providers) && Object.keys(raw.providers).length)
+    throw new Error('Plugin provider selections are no longer supported. Enable the desired entries and disable conflicting entries in the Profile.');
   const legacy = parseSettings(raw);
   const scopedTools = object(raw.scopedTools) ? raw.scopedTools : scopedRules(legacy.scopes);
   if (Object.keys(scopedTools).some((key) => !isScopeKey(key)))

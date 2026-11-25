@@ -5,7 +5,6 @@ import {
   localPluginIdPattern,
   isScopeKey,
   validatePluginSettings,
-  validateProviderChoices,
 } from '@mini-harness/plugin-api/selection';
 import { toolNamePattern } from '@mini-harness/llm/vocabulary';
 import { readJson } from '@mini-harness/platform/json';
@@ -14,7 +13,6 @@ export const DEFAULTS = Object.freeze({
   port: 3837,
   plugins: {},
   pluginConfig: {},
-  providers: {},
   scopes: {},
   readOnlyTools: {},
 });
@@ -31,17 +29,16 @@ function section(value: unknown, name: string) {
 
 export function validateSettings(input: unknown): asserts input is Settings {
   if (!isObject(input)) throw new DomainError('invalid_input', 'Invalid settings object');
-  const { plugins, pluginConfig, providers, scopes, port, readOnlyTools } = input;
-  for (const [key, value] of Object.entries({ plugins, pluginConfig, providers, scopes, readOnlyTools }))
+  const { plugins, pluginConfig, scopes, port, readOnlyTools } = input;
+  for (const [key, value] of Object.entries({ plugins, pluginConfig, scopes, readOnlyTools }))
     if (!isObject(value)) throw new DomainError('invalid_input', 'Invalid settings section: ' + key);
   validatePluginSettings(section(plugins, 'plugins'), section(pluginConfig, 'pluginConfig'));
-  validateProviderChoices(section(providers, 'providers'));
   for (const [key, scope] of Object.entries(section(scopes, 'scopes'))) {
     if (
       !isScopeKey(key) ||
       !isObject(scope) ||
       Object.keys(scope).some(
-        (field) => !['plugins', 'pluginConfig', 'disabledTools', 'providers'].includes(field),
+        (field) => !['plugins', 'pluginConfig', 'disabledTools'].includes(field),
       )
     )
       throw new DomainError('invalid_input', 'Invalid plugin scope: ' + key);
@@ -56,7 +53,6 @@ export function validateSettings(input: unknown): asserts input is Settings {
       section(scope.plugins, key + '.plugins'),
       section(scope.pluginConfig, key + '.pluginConfig'),
     );
-    validateProviderChoices(section(scope.providers, key + '.providers'));
   }
   for (const [plugin, tools] of Object.entries(section(readOnlyTools, 'readOnlyTools'))) {
     if (
@@ -80,7 +76,6 @@ export function parseSettings(input: unknown): Settings {
     port: input.port === undefined ? DEFAULTS.port : input.port,
     plugins: section(input.plugins, 'plugins'),
     pluginConfig: section(input.pluginConfig, 'pluginConfig'),
-    providers: section(input.providers, 'providers'),
     scopes: section(input.scopes, 'scopes'),
     readOnlyTools: section(input.readOnlyTools, 'readOnlyTools'),
   };
@@ -98,7 +93,6 @@ export function mergeSettings(current: Settings, patch: unknown): Settings {
   const next = {
     ...current,
     ...patch,
-    providers: patch.providers === undefined ? current.providers : section(patch.providers, 'providers'),
     scopes: patch.scopes === undefined ? current.scopes : section(patch.scopes, 'scopes'),
     plugins: { ...current.plugins, ...plugins },
     pluginConfig: { ...current.pluginConfig, ...pluginConfig },

@@ -222,7 +222,7 @@ export const apply = (ctx) => {
   const { harnessModels: models, harnessModelStore: store } = app.runtime.plugins.ctx;
   const configured = await request('/settings', 'PATCH', {
     plugins: { 'core:llm': false, transport: true, pipeline: true },
-    providers: { harnessLlm: 'transport' },
+
   });
   assert.equal(configured.status, 200, JSON.stringify(configured.body));
   assert.equal(app.runtime.plugins.ctx.harnessModels, models);
@@ -283,7 +283,7 @@ export const apply = (ctx) => {
   assert.ok(execution && accepted);
   assert.equal(accepted.executionId, execution.id);
   assert.ok(JSON.stringify(accepted).length < JSON.stringify(execution).length);
-  const missing = await request('/settings', 'PATCH', { plugins: { transport: false }, providers: {} });
+  const missing = await request('/settings', 'PATCH', { plugins: { transport: false } });
   assert.equal(missing.status, 200);
   assert.equal(app.runtime.plugins.ctx.get('harnessLlm'), undefined);
   assert.equal(app.runtime.plugins.ctx.get('harnessAgent'), undefined);
@@ -291,7 +291,7 @@ export const apply = (ctx) => {
     (
       await request('/settings', 'PATCH', {
         plugins: { 'core:llm': true, transport: false, pipeline: false },
-        providers: {},
+
       })
     ).status,
     200,

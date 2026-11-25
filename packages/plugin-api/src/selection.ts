@@ -8,13 +8,6 @@ export function isScopeKey(value: string): value is ScopeKey {
   return /^(?:workspace:[a-f0-9]{32}|session:[a-f0-9-]{36})$/.test(value);
 }
 
-export function validateProviderChoices(choices: Record<string, unknown>) {
-  for (const [service, id] of Object.entries(choices)) {
-    if (!serviceNamePattern.test(service) || typeof id !== 'string' || !pluginIdPattern.test(id))
-      throw new DomainError('invalid_input', 'Invalid provider selection');
-  }
-}
-
 export function validatePluginSettings(plugins: Record<string, unknown>, configs: Record<string, unknown>) {
   for (const [key, value] of Object.entries(plugins)) {
     if (!pluginIdPattern.test(key)) throw new DomainError('invalid_input', 'Invalid plugin name');

@@ -4,11 +4,11 @@ The Web application is assembled from [YAML Profile entries](profiles.md) and Co
 
 | Boundary | Responsibilities                                                                                               |
 | -------- | -------------------------------------------------------------------------------------------------------------- |
-| Profile  | Entry identities, module resolution, configuration layers, provider selections and browser projections         |
+| Profile  | Entry identities, module resolution, configuration layers, and browser projections         |
 | Cordis   | Contexts, service isolation, injection, Entry Tree reconciliation, Fiber activation, typed events and disposal |
 | Product  | Conversation identity and persistence, Agent execution, tool authorization, transport, and UI                  |
 
-Shipped and installed plugins declare `inject`, `provide` and `apply(ctx, config)`. Cordis activates consumers when the requested services are available. Workspaces and Sessions own identity and ancestry, and the plugin manager represents scoped provider selections as Cordis Contexts and Entry Groups. The browser loads its entries with the same Cordis implementation.
+Shipped and installed plugins declare `inject`, `provide` and `apply(ctx, config)`. Cordis activates consumers when the requested services are available. Workspaces and Sessions own identity and ancestry, and the plugin manager represents scoped entries as Cordis Contexts and Entry Groups. The browser loads its entries with the same Cordis implementation.
 
 ## Configuration and lifecycle
 

@@ -2,11 +2,8 @@ import { storedProfile } from '../support/profile.ts';
 import { expectPresent } from '../support/required.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { tmpdir } from 'node:os';
-import { PluginCatalog } from '@mini-harness/plugins/catalog';
-import { DEFAULTS, mergeSettings, validateSettings } from '@mini-harness/settings/config';
 import { writePlugin } from '../support/plugin-fixture.ts';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,7 +13,7 @@ const examples = fileURLToPath(new URL('../../docs/examples/', import.meta.url))
 function copyExample(directory: string, id: string) {
   cpSync(join(examples, id), join(directory, id), { recursive: true });
 }
-test('external services and their declared consumers share Cordis provider selection', async (t) => {
+test('external services and their declared consumers compose through Cordis service ownership', async (t) => {
   const { paths, request } = await fixture(t);
   copyExample(paths.plugins, 'greeting-route');
   copyExample(paths.plugins, 'greeting-service');
@@ -41,9 +38,9 @@ test('external services and their declared consumers share Cordis provider selec
     { provides: ['exampleGreeting'] },
     "export const provide = [\"exampleGreeting\"];\nexport const apply = (ctx) => { ctx.provide('exampleGreeting', { greet: (name) => 'Welcome, ' + name }); };",
   );
-  assert.match((await patch({ plugins: { 'greeting-alt': true } })).body.error, /Multiple enabled providers/);
+  assert.match((await patch({ plugins: { 'greeting-alt': true } })).body.error, /has been registered/);
   assert.equal(
-    (await patch({ plugins: { 'greeting-alt': true }, providers: { exampleGreeting: 'greeting-alt' } }))
+    (await patch({ plugins: { 'greeting-service': false, 'greeting-alt': true } }))
       .status,
     200,
   );
@@ -56,7 +53,7 @@ test('external services and their declared consumers share Cordis provider selec
     ).services.exampleGreeting,
     'greeting-alt',
   );
-  assert.equal((await patch({ plugins: { 'greeting-alt': false }, providers: {} })).status, 200);
+  assert.equal((await patch({ plugins: { 'greeting-alt': false, 'greeting-service': true } })).status, 200);
   assert.equal((await request(endpoint)).body.greeting, 'Hello, Harness!');
 });
 
@@ -64,8 +61,8 @@ test('Shell delegates to a selected external process provider and still requires
   const { paths, app, request } = await fixture(t);
   copyExample(paths.plugins, 'process-preview');
   const result = await request('/settings', 'PATCH', {
-    plugins: { shell: true, 'process-preview': true },
-    providers: { harnessProcess: 'process-preview' },
+    plugins: { shell: true, 'core:process': false, 'process-preview': true },
+
   });
   assert.equal(result.status, 200, JSON.stringify(result.body));
   const { id } = app.runtime.plugins.ctx.harnessRegistry.create();
@@ -293,7 +290,7 @@ export function apply() { throw new Error('Protected provider must never mount')
   const session = app.runtime.plugins.ctx.harnessRegistry.create();
   const application = await request('/settings', 'PATCH', {
     plugins: { 'tools-application': true },
-    providers: { harnessTools: 'tools-application' },
+
   });
   assert.equal(application.status, 400);
   assert.match(application.body.error, /Protected service cannot be overridden: harnessTools/);
@@ -310,7 +307,7 @@ export function apply() { throw new Error('Protected provider must never mount')
     scopes: {
       ['session:' + session.id]: {
         plugins: { 'tools-session': true },
-        providers: { harnessTools: 'tools-session' },
+
       },
     },
   });
@@ -339,7 +336,7 @@ export function apply(ctx) {
     }
 `,
   );
-  const selection = { plugins: { 'virtual-files': true }, providers: { harnessFileAccess: 'virtual-files' } };
+  const selection = { plugins: { 'core:file-access': false, 'virtual-files': true } };
   assert.equal((await request('/settings', 'PATCH', selection)).status, 200);
   const session = app.runtime.plugins.ctx.harnessRegistry.create();
   const preview = await request('/workspaces/' + session.workspaceId + '/files/preview?path=virtual.txt');
@@ -379,7 +376,7 @@ export const apply = (ctx, config) => { ctx.provide('harnessLlm', {
   const sibling = app.runtime.plugins.ctx.harnessRegistry.create();
   const scope = (answer: string) => ({
     plugins: { 'scoped-llm': true },
-    providers: { harnessLlm: 'scoped-llm' },
+
     pluginConfig: { 'scoped-llm': { answer } },
   });
   const scopes = {
@@ -472,17 +469,17 @@ export const apply = (ctx) => { ctx.provide('harnessProcess', {
   const child = app.runtime.plugins.ctx.harnessRegistry.create({ parentId: parent.id });
   const sibling = app.runtime.plugins.ctx.harnessRegistry.create();
   const configured = await request('/settings', 'PATCH', {
-    plugins: { shell: true, 'application-sandbox': true },
+    plugins: { shell: true, 'core:sandbox': false, 'application-sandbox': true },
     pluginConfig: { shell: { mode: 'isolated' } },
-    providers: { harnessSandbox: 'application-sandbox' },
+
     scopes: {
       ['session:' + parent.id]: {
         plugins: { 'scoped-environment': true },
-        providers: { harnessFileAccess: 'scoped-environment', harnessSandbox: 'scoped-environment' },
+
       },
       ['session:' + child.id]: {
         plugins: { 'scoped-process': true },
-        providers: { harnessProcess: 'scoped-process' },
+
       },
     },
   });
@@ -526,74 +523,6 @@ export const apply = (ctx) => { ctx.provide('harnessProcess', {
     await running;
     assert.equal(lastTool(id).isError, false);
     assert.match(JSON.stringify(lastTool(id).content), new RegExp(expected));
-  }
-});
-
-test('catalog computes independent scoped provider maps and rejects fixed service shadows', () => {
-  const folder = mkdtempSync(join(tmpdir(), 'mini-scope-providers-'));
-  try {
-    const catalog = new PluginCatalog(
-      folder,
-      [
-        {
-          id: 'global',
-          title: 'Global',
-          description: '',
-          scope: 'application',
-          defaultEnabled: true,
-          provides: ['greeting'],
-        },
-        { id: 'local', title: 'Local', description: '', scope: 'workspace', provides: ['greeting'] },
-      ],
-      ['harnessRoutes'],
-    );
-    const key = `workspace:${'a'.repeat(32)}` as const;
-    const settings = mergeSettings(DEFAULTS as any, {
-      scopes: { [key]: { plugins: { local: true }, providers: { greeting: 'local' } } },
-    });
-    validateSettings(settings);
-    const descriptors = catalog.descriptors();
-    descriptors.push({
-      id: 'fake-locked',
-      title: 'Fake',
-      description: '',
-      scope: 'workspace',
-      provides: ['harnessRoutes'],
-    });
-    const app = catalog.plans(
-      settings,
-      descriptors,
-      'application',
-      new Map([['harnessRoutes', 'application']]),
-    );
-    assert.equal(app.providers.get('greeting'), 'global');
-    const workspace = catalog.plans(settings, descriptors, 'workspace', app.providers, settings.scopes[key]);
-    assert.equal(workspace.providers.get('greeting'), 'local');
-    assert.equal(app.providers.get('greeting'), 'global');
-    assert.equal(
-      catalog.plans(settings, descriptors, 'workspace', app.providers).providers.get('greeting'),
-      'global',
-    );
-    assert.throws(
-      () =>
-        catalog.plans(settings, descriptors, 'workspace', app.providers, {
-          plugins: { 'fake-locked': true },
-          providers: { harnessRoutes: 'fake-locked' },
-        }),
-      /Protected service/,
-    );
-    assert.throws(
-      () =>
-        validateSettings({
-          ...settings,
-          scopes: {
-            [key]: { providers: { greeting: '../outside' } },
-          },
-        }),
-      /Invalid provider selection/,
-    );
-  } finally {
-    rmSync(folder, { recursive: true, force: true });
   }
 });
 
@@ -653,7 +582,7 @@ export const apply = (ctx) => {
     scopes: {
       ['session:' + parent.id]: {
         plugins: { 'scoped-models': true },
-        providers: { harnessModels: 'scoped-models', harnessLlm: 'scoped-models' },
+
       },
     },
   });
