@@ -5,11 +5,11 @@ import { join, relative } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { writeJson } from '@mini-harness/platform/json';
 import type { PluginSettings } from '@mini-harness/plugin-api/configuration';
-import type { PluginMetadata } from '../shared/metadata.js';
+import type { PluginMetadata } from '../shared/metadata.ts';
 
 type PluginFilesHost = {
   paths: { plugins: string };
-  settings: Pick<PluginSettings, 'plugins' | 'scopes' | 'providers' | 'browserProviders'>;
+  settings: Pick<PluginSettings, 'plugins' | 'scopes'>;
   plugins: { metadata(): PluginMetadata[]; reserved(id: string): boolean };
 };
 export function installPlugin(runtime: PluginFilesHost, input: any) {
@@ -118,10 +118,8 @@ export function assertDisabled(settings: PluginFilesHost['settings'], id: string
   if (
     settings.plugins[id] === true ||
     Object.values(settings.scopes).some(
-      (scope) => scope?.plugins?.[id] === true || Object.values(scope?.providers ?? {}).includes(id),
-    ) ||
-    Object.values(settings.providers).includes(id) ||
-    Object.values(settings.browserProviders ?? {}).includes(id)
+      (scope) => scope?.plugins?.[id] === true,
+    )
   )
     throw new DomainError('conflict', 'Disable and save this plugin before changing its files');
 }

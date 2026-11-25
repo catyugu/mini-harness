@@ -1,7 +1,7 @@
 import { isRunning } from '@mini-harness/sessions/run-state';
 import type { RunEvent } from '@mini-harness/runs/stream';
 import { api, AuthenticationError, data, payload, readEvents, wait } from '@mini-harness/ui-runtime/http';
-import type { ConversationView } from '../shared/api.js';
+import type { ConversationView } from '../shared/api.ts';
 
 export const readConversation = (id: string, signal: AbortSignal) =>
   data<ConversationView>('/sessions/' + id, { signal });

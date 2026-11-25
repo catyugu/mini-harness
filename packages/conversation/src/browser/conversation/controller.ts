@@ -1,20 +1,20 @@
 import { browserPluginSettings } from '@mini-harness/ui-runtime/plugin-settings';
 import { browserRequest } from '@mini-harness/ui-runtime/http';
 import type { Context } from 'mini-harness/cordis';
-import type { Conversation, ConversationView } from '../../shared/api.js';
+import type { Conversation, ConversationView } from '../../shared/api.ts';
 import type {
   ConversationController,
   ConversationState,
   ConversationSubmission,
   RetryInput,
-} from '../conversation-api.js';
+} from '../conversation-api.ts';
 import type { RunEvent } from '@mini-harness/runs/stream';
 import type { RunInfo } from '@mini-harness/sessions/run-state';
 import type { ViewMessage } from '@mini-harness/sessions/message';
 import { isRunning } from '@mini-harness/sessions/run-state';
 import { payload } from '@mini-harness/ui-runtime/http';
 import { workspaceRoute } from '@mini-harness/workspaces/browser/route';
-import { readConversation, observeRun } from '../session-client.js';
+import { readConversation, observeRun } from '../session-client.ts';
 
 const emptyHistory = { messages: [], records: [], leafId: null };
 const path = (id: string, suffix = '') => '/sessions/' + id + suffix;

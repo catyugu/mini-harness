@@ -4,11 +4,11 @@ The Web application is assembled from [YAML Profile entries](profiles.md) and Co
 
 | Boundary | Responsibilities                                                                                               |
 | -------- | -------------------------------------------------------------------------------------------------------------- |
-| Profile  | Entry identities, module resolution, configuration layers, provider selections and browser projections         |
+| Profile  | Entry identities, module resolution, configuration layers, and browser projections         |
 | Cordis   | Contexts, service isolation, injection, Entry Tree reconciliation, Fiber activation, typed events and disposal |
 | Product  | Conversation identity and persistence, Agent execution, tool authorization, transport, and UI                  |
 
-Shipped and installed plugins declare `inject`, `provide` and `apply(ctx, config)`. Cordis activates consumers when the requested services are available. Workspaces and Sessions own identity and ancestry, and the plugin manager represents scoped provider selections as Cordis Contexts and Entry Groups. The browser loads its entries with the same Cordis implementation.
+Shipped and installed plugins declare `inject`, `provide` and `apply(ctx, config)`. Cordis activates consumers when the requested services are available. Workspaces and Sessions own identity and ancestry, and the plugin manager represents scoped entries as Cordis Contexts and Entry Groups. The browser loads its entries with the same Cordis implementation.
 
 ## Configuration and lifecycle
 
@@ -24,6 +24,6 @@ Layout registers typed views and opens tabs by their stable key and workspace or
 
 ## Plugin SDK
 
-The single npm package exports `mini-harness/cordis`, `mini-harness/plugin`, and `mini-harness/browser-plugin`. Plugins use services, events and domain registries. The browser SDK includes the tab and preview contracts, and the Node.js SDK exposes scoped service access and plugin configuration.
+The single npm package exports Cordis and domain contracts directly, including `mini-harness/agent`, `mini-harness/llm`, `mini-harness/tools`, `mini-harness/sessions` and `mini-harness/ui-slots`. Plugins import the services and events they consume. Browser modules use an import map restricted to public browser-safe modules.
 
 See the [plugin guide](plugins.md), [scoped providers](scoped-providers.md) and [session log](session-log.md).

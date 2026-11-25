@@ -1,4 +1,3 @@
-import type {} from 'mini-harness/cordis';
 import type { PluginIcon } from '@mini-harness/plugin-api/descriptor';
 import type { SessionDisplayRecord } from '@mini-harness/sessions/display-record';
 import type { MessageContent, ViewMessage } from '@mini-harness/sessions/message';

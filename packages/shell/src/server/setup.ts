@@ -1,9 +1,3 @@
-import type {} from '@mini-harness/approvals/api';
-import type {} from '@mini-harness/plugin-api/scopes';
-import type {} from '@mini-harness/sessions/records';
-import type {} from '@mini-harness/tools/api';
-import type {} from '@mini-harness/process-execution/api';
-import type {} from '@mini-harness/transport/projection-api';
 import { defineTool } from '@mini-harness/tools/api';
 import type { Context } from 'mini-harness/cordis';
 import { Type } from 'typebox';

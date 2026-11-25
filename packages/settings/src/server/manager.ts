@@ -6,10 +6,10 @@ import {
 } from '@mini-harness/plugin-api/mutation-api';
 import { DomainError } from '@mini-harness/platform/errors';
 import { isDeepStrictEqual } from 'node:util';
-import { mergeSettings } from './config.js';
+import { mergeSettings } from './config.ts';
 import type { ProfileRuntime } from '@mini-harness/plugin-api/profile';
-import type { SettingsPort } from './api.js';
-import type { Settings } from '../shared/settings.js';
+import type { SettingsPort } from './api.ts';
+import type { Settings } from '../shared/settings.ts';
 
 export interface PluginConfigurationPort {
   effective(settings: Settings): Settings;

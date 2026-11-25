@@ -2,8 +2,8 @@ import { expect } from '@playwright/test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { readJson, writeJson } from '@mini-harness/platform/json';
-import { browserTest as test, chooseModel, expectInViewport } from '../support/browser.js';
-import { writePlugin } from '../support/plugin-fixture.js';
+import { browserTest as test, chooseModel, expectInViewport } from '../support/browser.ts';
+import { writePlugin } from '../support/plugin-fixture.ts';
 
 test('copy, preview and revise a message with its image, and release editing drafts by owner', async ({
   page,
@@ -60,7 +60,7 @@ export const apply = (ctx) => {
         join(records, 'web.js'),
         `
 export const inject = ["miniConversation","miniMessages"];
-import { browserPluginId } from "/packages/sdk/src/browser-plugin.js";
+import { browserPluginId } from "mini-harness/ui-runtime/plugin-settings";
 
 export const apply = (ctx) => {
     const { miniConversation } = ctx;

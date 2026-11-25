@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, relative, resolve, sep } from 'node:path';
 import ts from 'typescript';
-import { moduleReferences } from '../dist/scripts/module-references.js';
+import { moduleReferences } from './module-references.ts';
 
 const prefix = '@mini-harness/';
 const cordis = 'mini-harness/cordis';
@@ -19,14 +19,17 @@ const exportsByPackage = new Map(
   ),
 );
 
-function rewrite(file) {
+function rewrite(file: string) {
   const original = readFileSync(file, 'utf8');
-  if (!original.includes(prefix) && !original.includes(cordis)) return;
   const declaration = file.endsWith('.d.ts');
   const output = declaration ? 'dist/types' : 'dist';
   const ast = ts.createSourceFile(file, original, ts.ScriptTarget.Latest, true);
-  const edits = [];
+  const edits: { from: number; to: number; value: string }[] = [];
   for (const { literal } of moduleReferences(ast)) {
+    if (literal.text.startsWith('.') && /\.ts$/.test(literal.text)) {
+      edits.push({ from: literal.getStart(ast), to: literal.end, value: JSON.stringify(literal.text.replace(/\.ts$/, '.js')) });
+      continue;
+    }
     if (literal.text !== cordis && !literal.text.startsWith(prefix)) continue;
     const [name, ...subpath] =
       literal.text === cordis ? ['cordis-runtime'] : literal.text.slice(prefix.length).split('/');
@@ -49,7 +52,7 @@ function rewrite(file) {
   if (edits.length) writeFileSync(file, content);
 }
 
-function emit(directory) {
+function emit(directory: string) {
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
     const path = resolve(directory, entry.name);
     if (entry.isDirectory()) emit(path);

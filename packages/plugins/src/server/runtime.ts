@@ -1,9 +1,5 @@
-import type {} from '@mini-harness/platform/runtime-paths';
-import type {} from '@mini-harness/plugin-api/profile';
-import type {} from '@mini-harness/settings/api';
-import type {} from '@mini-harness/transport/runtime';
 import { Context } from 'mini-harness/cordis';
-import { PluginHost } from './manager.js';
+import { PluginHost } from './manager.ts';
 
 export default {
   inject: ['harnessState', 'harnessProfile', 'harnessSettingsStore', 'harnessMutations', 'harnessChanges'],
@@ -37,7 +33,7 @@ export default {
       async (id, key, patch, check) => {
         await settings.writePlugin(id, key, patch, check);
       },
-      profile.bootstrap,
+      profile.nativeEntries,
       ctx,
       profile.entries,
     );

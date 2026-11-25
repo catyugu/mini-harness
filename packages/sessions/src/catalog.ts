@@ -1,5 +1,5 @@
 import type { Paths } from '@mini-harness/platform/runtime-paths';
-import type { SessionRecord } from './shared/identity.js';
+import type { SessionRecord } from './shared/identity.ts';
 import type { WorkspacePort } from '@mini-harness/workspaces/api';
 import { readJson } from '@mini-harness/platform/json';
 

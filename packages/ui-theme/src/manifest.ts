@@ -3,7 +3,6 @@ import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
 
 export const manifest: PluginDescriptor = {
   scope: 'application',
-  browserProvides: ['miniAppearance'],
   id: 'core:theme',
   title: 'Theme',
   description: 'Application theme',

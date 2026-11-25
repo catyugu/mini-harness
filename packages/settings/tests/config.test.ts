@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DEFAULTS, mergeSettings, readSettings, validateSettings } from '../src/server/config.js';
+import { DEFAULTS, mergeSettings, readSettings, validateSettings } from '../src/server/config.ts';
 import { getPaths } from '@mini-harness/platform/paths';
 
 test('config directories are independent and default safe', () => {
@@ -19,7 +19,7 @@ test('config directories are independent and default safe', () => {
 });
 
 test('settings merge preserves other sections and validates bounds', () => {
-  const before = structuredClone(DEFAULTS) as import('../src/shared/settings.js').Settings;
+  const before = structuredClone(DEFAULTS) as import('../src/shared/settings.ts').Settings;
   before.plugins.example = true;
   const after = mergeSettings(before, {
     plugins: { shell: true },

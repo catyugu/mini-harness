@@ -1,5 +1,4 @@
 import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
-import type {} from '../server/store-api.js';
 
 export const manifest: PluginDescriptor = {
   id: 'core:llm',

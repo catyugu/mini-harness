@@ -1,6 +1,6 @@
 import { button, iconButton } from '@mini-harness/ui-primitives/primitives';
-import { imageMime } from '../shared/content.js';
-import { blobUrl } from './content.js';
+import { imageMime } from '../shared/content.ts';
+import { blobUrl } from './content.ts';
 
 export function mediaElement(data: string, mimeType: string, name: string, signal: AbortSignal) {
   const media = imageMime.test(mimeType) ? document.createElement('img') : document.createElement('video');

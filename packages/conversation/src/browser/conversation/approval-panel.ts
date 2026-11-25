@@ -1,7 +1,5 @@
 import { browserRequest } from '@mini-harness/ui-runtime/http';
 import type { Context } from 'mini-harness/cordis';
-import type {} from '@mini-harness/approvals/browser/api';
-import type {} from '../navigation-api.js';
 import { payload } from '@mini-harness/ui-runtime/http';
 
 export const mountApprovals = (ctx: Context) => {

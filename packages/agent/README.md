@@ -12,7 +12,7 @@ Owns model selection for each delivery, request preparation, retries, inbox deli
 
 ## API
 
-`harnessAgent` is an internal execution service. Prompt registration and typed Agent events are available through the [server SDK](../sdk/README.md).
+`harnessAgent` owns the default Agent execution. `harnessToolExecutor` schedules advertised tool call identities; the Agent retains execution authorization and result persistence. `harnessCompaction` selects a summary and retained history boundary; the Agent validates and commits the result through Sessions. Disable or replace the compaction Entry in the Profile to select a different strategy.
 
 ## Dependencies
 

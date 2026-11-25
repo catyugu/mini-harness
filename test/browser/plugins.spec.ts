@@ -1,10 +1,10 @@
 import { test, expect } from '@playwright/test';
 import { rmSync, mkdirSync, realpathSync, writeFileSync, cpSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
+import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.ts';
 import { workspaceId } from '@mini-harness/workspaces/catalog';
 import { readJson, writeJson } from '@mini-harness/platform/json';
-import { readWebProfile, startIsolatedHost, settingsSection, suggestions } from '../support/browser.js';
+import { readWebProfile, startIsolatedHost, settingsSection, suggestions } from '../support/browser.ts';
 
 test('frontend plugins own UI contributions and clean up on disable and reconfiguration', async ({
   page,
@@ -37,7 +37,8 @@ test('frontend plugins own UI contributions and clean up on disable and reconfig
     join(folder, 'web.js'),
     `
 export const inject = ["miniPrimitives","miniComposer","miniTabs","miniSlots","miniSettingsRegistry","miniMessages"];
-import { browserPluginId, browserPluginSettings } from "/packages/sdk/src/browser-plugin.js";
+export const provide = ["exampleUi"];
+import { browserPluginId, browserPluginSettings } from "mini-harness/ui-runtime/plugin-settings";
 
 export function apply(ctx, config) {
     const signal = ctx.fiber.signal;
@@ -55,6 +56,7 @@ export function apply(ctx, config) {
           ctx.miniTabs.inspect('Example', panel, signal);
         };
       }
+      if (slot === 'sidebar') ctx.provide('exampleUi', node);
       ctx.effect(() => ctx.miniSlots.register({sidebar:'sidebar.actions',composer:'conversation.composer',inspector:'conversation.header'}[slot], node));
     }
     ctx.effect(() => ctx.miniSettingsRegistry.register(browserPluginId(ctx), { section: 'General', id: 'preferences', order: 10, render({ bind }) {
@@ -86,15 +88,15 @@ export function apply(ctx, config) {
   writeFileSync(join(dependent, 'plugin.js'), 'export function apply() {}');
   writeFileSync(
     join(dependent, 'plugin.json'),
-    JSON.stringify({ title: 'Dependent UI', browserRequires: ['ui-example'] }),
+    JSON.stringify({ title: 'Dependent UI' }),
   );
   writeFileSync(
     join(dependent, 'web.js'),
     `
-export const inject = ["miniSlots"];
+export const inject = ["miniSlots", "exampleUi"];
 
 export function apply(ctx) {
-    const parent = document.querySelector('[data-example-slot=sidebar]');
+    const parent = ctx.exampleUi;
     if (!parent) throw new Error('Dependency must mount first');
     const node = document.createElement('button'); node.type = 'button'; node.textContent = 'Dependent ' + parent.textContent; ctx.effect(() => ctx.miniSlots.register('sidebar.actions', node));
     ctx.effect(() => () => { document.documentElement.dataset.dependencyDisposal = parent.isConnected ? 'ordered' : 'incorrect'; });
@@ -437,7 +439,7 @@ export const apply = (ctx) => {
     };
 `,
     );
-    cpSync(resolve('docs/examples/browser-panel'), join(paths.plugins, 'browser-panel'), { recursive: true });
+    cpSync(resolve('dist/docs/examples/browser-panel'), join(paths.plugins, 'browser-panel'), { recursive: true });
     writeJson(paths.settings, {
       pluginConfig: {
         'core:models': { model: { provider: 'local-mock', id: 'mock-model' } },

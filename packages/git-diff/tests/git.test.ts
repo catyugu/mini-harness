@@ -5,9 +5,9 @@ import { mkdirSync, realpathSync, writeFileSync, rmSync, symlinkSync } from 'nod
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
-import { GitInspection } from '../src/server/git.js';
+import { GitInspection } from '../src/server/git.ts';
 
-import { fixture } from '../../../test/support/api-fixture.js';
+import { fixture } from '../../../test/support/api-fixture.ts';
 test('Git inspection includes staged, unstaged and untracked files and rejects out-of-scope files', async (t) => {
   const { paths, root } = await fixture(t);
   const git = (...args: string[]) => execFileSync('git', args, { cwd: paths.cwd, encoding: 'utf8' });

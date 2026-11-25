@@ -1,6 +1,6 @@
-import { MessageExtensions } from './message-extensions.js';
+import { MessageExtensions } from './message-extensions.ts';
 import type { Context } from 'mini-harness/cordis';
-import { mountHistory } from './history.js';
+import { mountHistory } from './history.ts';
 const setup = (ctx: Context) => {
   const extensions = new MessageExtensions();
   ctx.provide('miniMessages', extensions);

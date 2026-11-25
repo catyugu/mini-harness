@@ -1,10 +1,10 @@
-import { expectPresent } from '../support/required.js';
+import { expectPresent } from '../support/required.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync, readFileSync, existsSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { fixture } from '../support/api-fixture.js';
+import { fixture } from '../support/api-fixture.ts';
 
 test('workspace registration, session navigation and scoped tools leave an active run executing', async (t) => {
   let release: () => void = () => {

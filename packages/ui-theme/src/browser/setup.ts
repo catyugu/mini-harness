@@ -1,6 +1,5 @@
 import { browserPluginSettings } from '@mini-harness/ui-runtime/plugin-settings';
 import type { Context } from 'mini-harness/cordis';
-import type {} from './api.js';
 
 const setup = (ctx: Context) => {
   const apply = (theme: string) => {

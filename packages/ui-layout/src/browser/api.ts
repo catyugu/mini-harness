@@ -1,4 +1,3 @@
-import type {} from 'mini-harness/cordis';
 
 export interface TabScope {
   workspaceId: string;

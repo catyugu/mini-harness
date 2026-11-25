@@ -1,6 +1,5 @@
-import type {} from '@mini-harness/platform/runtime-paths';
 import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
-import { LinuxSandbox } from './linux.js';
+import { LinuxSandbox } from './linux.ts';
 
 export const manifest: PluginDescriptor = {
   scope: 'application',

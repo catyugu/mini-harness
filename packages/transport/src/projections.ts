@@ -1,6 +1,6 @@
-import type { ProjectionNotice } from './shared/projection-notice.js';
+import type { ProjectionNotice } from './shared/projection-notice.ts';
 
-import type { ChangesListener, ProjectionPort } from './projection-api.js';
+import type { ChangesListener, ProjectionPort } from './projection-api.ts';
 
 export class ProjectionChanges implements ProjectionPort {
   private readonly domains = new Map<string, { mounts: number; revision: number }>();

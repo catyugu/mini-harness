@@ -1,7 +1,7 @@
 import { attachmentPlacement, type PreviewResource } from '@mini-harness/file-preview/browser/api';
 import type { InputAttachment } from '@mini-harness/input/message';
 import type { Context } from 'mini-harness/cordis';
-import { fileCard, imageMime } from './attachment-card.js';
+import { fileCard, imageMime } from './attachment-card.ts';
 
 export function attachmentView(
   ctx: Context,

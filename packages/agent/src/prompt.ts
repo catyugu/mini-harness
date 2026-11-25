@@ -3,7 +3,7 @@ import { pluginInstance, sessionAddress } from '@mini-harness/plugin-api/instanc
 import { constants } from 'node:fs';
 import { lstat, open } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { PromptPort, PromptContext, PromptSection, ScopedPromptSection } from './prompt-api.js';
+import type { PromptPort, PromptContext, PromptSection, ScopedPromptSection } from './prompt-api.ts';
 
 async function instructions(file: string) {
   try {

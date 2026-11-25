@@ -1,8 +1,5 @@
-import type {} from '@mini-harness/platform/runtime-paths';
-import type {} from '@mini-harness/workspaces/api';
-import type {} from '@mini-harness/transport/projection-api';
 import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
-import { Workspace } from './workspace.js';
+import { Workspace } from './workspace.ts';
 
 export const manifest: PluginDescriptor = {
   scope: 'application',

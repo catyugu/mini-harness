@@ -1,4 +1,3 @@
-import type {} from 'mini-harness/cordis';
 import type { ProcessRequest } from '@mini-harness/execution/request';
 
 export interface IsolatedProcess {

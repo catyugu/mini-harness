@@ -4,10 +4,10 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
-import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
+import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.ts';
 
 export function readWebProfile(paths: { home: string }) {
-  const yaml = readFileSync(join(paths.home, 'profiles', 'web', 'cordis.yml'), 'utf8');
+  const yaml = readFileSync(join(paths.home, 'profiles', 'web', 'cordis.patch.yml'), 'utf8');
   const { plugins = [], scopes = {} } = parse(yaml) as {
     plugins?: { id: string; config?: Record<string, unknown> }[];
     scopes?: Record<string, { pluginConfig: Record<string, Record<string, unknown>> }>;

@@ -2,7 +2,6 @@ import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
 
 export const manifest: PluginDescriptor = {
   scope: 'application',
-  browserProvides: ['miniLayout', 'miniPages', 'miniHeader', 'miniTabs', 'miniDialogs'],
   id: 'core:layout',
   title: 'Layout',
   description: 'Application layout',

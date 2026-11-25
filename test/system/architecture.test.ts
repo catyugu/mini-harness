@@ -5,7 +5,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { profileDescriptors, readProfile } from '@mini-harness/host/profile';
-import { moduleReferences } from '../../scripts/module-references.js';
+import { moduleReferences } from '../../scripts/module-references.ts';
 
 interface Manifest {
   name: string;
@@ -56,10 +56,38 @@ function checkCycles(graph: Map<string, Set<string>>, kind: string) {
   for (const name of graph.keys()) visit(name);
 }
 
+test('tracked TypeScript uses source specifiers and named type imports', () => {
+  const roots = ['bin', 'packages', 'vendor', 'test', 'scripts', 'docs/examples'];
+  function visit(directory: string) {
+    for (const item of readdirSync(directory, { withFileTypes: true })) {
+      const path = join(directory, item.name);
+      if (item.isDirectory()) {
+        if (item.name !== 'node_modules') visit(path);
+        continue;
+      }
+      assert.ok(!/\.[cm]?js$/.test(item.name), 'JavaScript source file: ' + path);
+      if (!item.name.endsWith('.ts')) continue;
+      const ast = ts.createSourceFile(path, readFileSync(path, 'utf8'), ts.ScriptTarget.Latest, true);
+      for (const { literal } of moduleReferences(ast)) {
+        assert.ok(!literal.text.startsWith('.') || !/\.[cm]?js$/.test(literal.text), 'JavaScript source specifier: ' + path + ': ' + literal.text);
+      }
+      for (const statement of ast.statements) {
+        if (!ts.isImportDeclaration(statement)) continue;
+        const bindings = statement.importClause?.namedBindings;
+        assert.ok(
+          !bindings || !ts.isNamedImports(bindings) || bindings.elements.length !== 0,
+          'Empty import declaration: ' + path,
+        );
+      }
+    }
+  }
+  for (const directory of roots) visit(join(root, directory));
+});
+
 test('workspace dependencies use domain APIs and keep providers at the application boundary', async () => {
   assert.ok(!manifests.has('kernel'), 'Business plugins must use the vendored Cordis runtime directly');
   const browserModules = new Map<string, string[]>();
-  const browserRoots = [join(packages, 'sdk', 'src', 'browser-plugin.ts')];
+  const browserRoots: string[] = [];
   const runtime = new Map<string, Set<string>>();
   const declared = new Map<string, Set<string>>();
   for (const [name, manifest] of manifests) {
@@ -93,13 +121,12 @@ test('workspace dependencies use domain APIs and keep providers at the applicati
         if (specifier.startsWith('.')) {
           const target = resolve(dirname(file), specifier);
           assert.ok(target.startsWith(directory + sep), reason);
-          if (!typeOnly) imports.push(target.replace(/\.js$/, '.ts'));
+          if (!typeOnly) imports.push(target);
           if (area === 'browser' || area === 'shared')
             assert.ok(!relative(directory, target).split(sep).includes('server'), reason);
           continue;
         }
         if (specifier === 'mini-harness/cordis') continue;
-        assert.ok(specifier !== 'mini-harness/plugin' && specifier !== 'mini-harness/browser-plugin', reason);
         if (['@codemirror/commands', '@codemirror/state', '@codemirror/view'].includes(specifier)) {
           assert.equal(
             file,
@@ -119,7 +146,6 @@ test('workspace dependencies use domain APIs and keep providers at the applicati
         assert.ok(target && target.startsWith(join(packages, owner) + sep) && existsSync(target), reason);
         assert.notEqual(name, owner, reason);
         assert.notEqual(owner, 'host', reason);
-        assert.notEqual(owner, 'sdk', reason);
         if (name !== 'host') assert.ok(dependency?.miniHarness?.api?.includes(entry), reason);
         actual.add(owner);
         if (area === 'browser' || area === 'shared')
@@ -161,13 +187,12 @@ test('workspace dependencies use domain APIs and keep providers at the applicati
 
   const entries = readProfile('web');
   const plugins = await profileDescriptors(entries);
-  const browserIds = new Set(plugins.filter(({ browser }) => browser).map(({ id }) => id));
   const moduleOwners = new Map(
     [...manifests].flatMap(([owner, manifest]) =>
       Object.keys(manifest.miniHarness?.profileModules ?? {}).map((specifier) => [specifier, owner] as const),
     ),
   );
-  for (const { id, browser, browserStyles, browserRequires } of plugins) {
+  for (const { id, browser, browserStyles } of plugins) {
     if (!browser) {
       assert.ok(!browserStyles?.length, id + ' has styles without a browser entry');
       continue;
@@ -182,8 +207,6 @@ test('workspace dependencies use domain APIs and keep providers at the applicati
         id + ' is missing ' + resource,
       );
     }
-    for (const dependency of browserRequires ?? [])
-      assert.ok(browserIds.has(dependency), id + ' requires ' + dependency);
   }
 
   assert.equal(declared.get('platform')?.size, 0);

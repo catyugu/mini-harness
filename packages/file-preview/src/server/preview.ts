@@ -6,7 +6,7 @@ import {
   textLimit,
   workspaceReadLimit,
   type PreviewContent,
-} from '../shared/content.js';
+} from '../shared/content.ts';
 
 export async function workspacePreview(
   files: WorkspaceFileAccess,

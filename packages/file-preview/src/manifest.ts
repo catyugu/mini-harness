@@ -1,5 +1,5 @@
 import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
-import { setup } from './server/setup.js';
+import { setup } from './server/setup.ts';
 
 export const manifest: PluginDescriptor = {
   id: 'file-preview',
@@ -13,6 +13,5 @@ export const manifest: PluginDescriptor = {
     apply: setup,
   },
   browser: '/packages/file-preview/src/browser/setup.js',
-  browserProvides: ['miniFilePreview'],
   browserStyles: ['/packages/file-preview/src/browser/style.css'],
 };

@@ -11,31 +11,45 @@ export const inject = [
   'harnessPluginRoutes',
   'harnessModels',
 ];
-import { sessionService } from 'mini-harness/plugin';
-import { HttpError, type ConfigValidationContext, type Context } from 'mini-harness/plugin';
+import { sessionService } from 'mini-harness/plugin-scope';
+import { HttpError } from 'mini-harness/transport';
+import type { Context } from 'mini-harness/cordis';
+import type { SessionAccess, SessionRecords } from 'mini-harness/sessions';
+import type { Execution } from 'mini-harness/execution';
+import type { ApprovalRequests } from 'mini-harness/approvals';
+import type { PluginData, PluginSecrets } from 'mini-harness/plugin-data';
+import type { PromptPort } from 'mini-harness/agent/prompt';
+import type { ToolDefinition } from 'mini-harness/tools';
+import type { ModelCatalogPort } from 'mini-harness/models';
+import type { PluginRoutes } from 'mini-harness/transport';
 declare module 'mini-harness/cordis' {
   interface Context {
     taskNotes: { label(): string };
   }
 }
-export function validateConfig(config: Readonly<Record<string, unknown>>, _context: ConfigValidationContext) {
+export function validateConfig(config: Readonly<Record<string, unknown>>) {
   if (typeof config.label !== 'string' || !config.label.trim()) throw new Error('Enter a note label');
 }
 export function apply(ctx: Context) {
-  const sessions = ctx.harnessSessions.access();
-  const execute = ctx.harnessExecution;
-  const confirm = ctx.harnessApprovalRequests.request.bind(ctx.harnessApprovalRequests);
+  const sessions: SessionAccess = ctx.harnessSessions.access();
+  const execute: Execution = ctx.harnessExecution;
+  const data: PluginData = ctx.harnessPluginData;
+  const secrets: PluginSecrets = ctx.harnessPluginSecrets;
+  const prompt: PromptPort = ctx.harnessPrompt;
+  const routes: PluginRoutes = ctx.harnessPluginRoutes;
+  const approvals: ApprovalRequests = ctx.harnessApprovalRequests;
+  const confirm = approvals.request.bind(approvals);
   const label = () => ctx.harnessPluginSettings.get<string>('label');
   ctx.provide('taskNotes', { label });
-  ctx.harnessPluginData.write('seen', true);
-  const hasCredential = () => ctx.harnessPluginSecrets.read('service-token') !== undefined;
+  data.write('seen', true);
+  const hasCredential = () => secrets.read('service-token') !== undefined;
   ctx.effect(() =>
-    ctx.harnessPrompt.register({ id: 'task-notes', render: () => 'Task notes are available.' }),
+    prompt.register({ id: 'task-notes', render: () => 'Task notes are available.' }),
   );
   ctx.effect(() =>
     ctx.harnessTools.register({
       name: 'save_task_note',
-      bind(sessionId) {
+      bind(sessionId): ToolDefinition {
         return {
           name: 'save_task_note',
           description: 'Record one line of task progress.',
@@ -46,31 +60,32 @@ export function apply(ctx: Context) {
           },
           async execute(_call, input) {
             const note = String(input.note);
-            await ctx.harnessSessions.records(sessionId).append({ note }, { title: label(), content: note });
+            const records: SessionRecords = ctx.harnessSessions.records(sessionId);
+            await records.append({ note }, { title: label(), content: note });
             return { content: [{ type: 'text', text: 'Task note saved.' }] };
           },
         };
       },
     }),
   );
-  const running = new Map<string, import('mini-harness/plugin').ExecutionHandle>();
-  ctx.harnessPluginRoutes.register('POST', '/cancel-follow-up', async ({ body }) => {
+  const running = new Map<string, import('mini-harness/execution').ExecutionHandle>();
+  routes.register('POST', '/cancel-follow-up', async ({ body }) => {
     const { runId } = await body();
     return { cancelled: typeof runId === 'string' && (running.get(runId)?.cancel() ?? false) };
   });
-  ctx.harnessPluginRoutes.register('GET', '/smoke', () => ({
+  routes.register('GET', '/smoke', () => ({
     label: label(),
-    ready: ctx.harnessPluginData.read('seen', false),
+    ready: data.read('seen', false),
     credential: hasCredential(),
   }));
-  ctx.harnessPluginRoutes.register('PUT', '/credential', async ({ body }) => {
+  routes.register('PUT', '/credential', async ({ body }) => {
     const token = (await body())?.token;
     if (typeof token !== 'string' || !token.trim())
       throw new HttpError('invalid_input', 'Enter a service token');
-    ctx.harnessPluginSecrets.write('service-token', token);
+    secrets.write('service-token', token);
     return { credential: hasCredential() };
   });
-  ctx.harnessPluginRoutes.register('POST', '/follow-up', async ({ body, signal }) => {
+  routes.register('POST', '/follow-up', async ({ body, signal }) => {
     const { parentId, message, requireApproval } = (await body()) ?? {};
     if (
       typeof parentId !== 'string' ||
@@ -79,7 +94,7 @@ export function apply(ctx: Context) {
       !sessions.get(parentId)
     )
       throw new HttpError('invalid_input', 'Provide a parent conversation and a follow-up message');
-    const models = await sessionService(ctx, parentId, 'harnessModels', signal);
+    const models: ModelCatalogPort = await sessionService(ctx, parentId, 'harnessModels', signal);
     const model = sessions.history(parentId).model;
     if (!model || !models.resolve(model))
       throw new HttpError('invalid_input', 'Send a message to the parent conversation first');

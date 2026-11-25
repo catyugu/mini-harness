@@ -1,8 +1,7 @@
-import type {} from 'mini-harness/cordis';
 import type { ConversationPermission } from '@mini-harness/sessions/identity';
 import type { ModelChoice, ThinkingLevel } from '@mini-harness/llm/vocabulary';
 import type { Attachment } from '@mini-harness/input/message';
-import type { ConversationRevision } from './conversation-api.js';
+import type { ConversationRevision } from './conversation-api.ts';
 
 export interface ComposerCommand {
   name: string;

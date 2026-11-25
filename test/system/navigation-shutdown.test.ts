@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { rmSync } from 'node:fs';
-import { createMiniHarnessServer } from '../support/profile.js';
-import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
+import { createMiniHarnessServer } from '../support/profile.ts';
+import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.ts';
 
 test('HTTP shutdown cancels active requests and closes projection streams', { timeout: 15000 }, async (t) => {
   const mock = await createMockProvider();

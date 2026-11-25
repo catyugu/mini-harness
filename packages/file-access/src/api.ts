@@ -1,4 +1,3 @@
-import type {} from 'mini-harness/cordis';
 
 export interface SearchInput {
   pattern: string;

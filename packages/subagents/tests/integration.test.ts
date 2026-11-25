@@ -2,10 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { createMiniHarnessServer } from '../../../test/support/profile.js';
-import { fixture, waitUntil } from '../../../test/support/api-fixture.js';
-import { expectPresent } from '../../../test/support/required.js';
-import { createMockProvider, createFixturePaths } from '../../../test/helpers/mock-provider.js';
+import { createMiniHarnessServer } from '../../../test/support/profile.ts';
+import { fixture, waitUntil } from '../../../test/support/api-fixture.ts';
+import { expectPresent } from '../../../test/support/required.ts';
+import { createMockProvider, createFixturePaths } from '../../../test/helpers/mock-provider.ts';
 
 test(
   'Native execution honors file policy and recursive delegates can finish with one slot',

@@ -14,7 +14,7 @@ import {
   type FileHandle,
 } from 'node:fs/promises';
 import { basename, dirname, matchesGlob, parse, relative, resolve, sep } from 'node:path';
-import type { SearchInput, WorkspaceFileAccess } from './api.js';
+import type { SearchInput, WorkspaceFileAccess } from './api.ts';
 import { RE2 } from 're2-wasm';
 import ignore from 'ignore';
 

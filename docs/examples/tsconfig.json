@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noEmitOnError": true,
+    "rewriteRelativeImportExtensions": true,
+    "rootDir": ".",
+    "outDir": "../../dist/docs/examples",
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ]
+  },
+  "include": [
+    "browser-panel/**/*.ts",
+    "greeting-service/**/*.ts",
+    "greeting-route/**/*.ts",
+    "process-preview/**/*.ts",
+    "scoped-tool/**/*.ts"
+  ]
+}

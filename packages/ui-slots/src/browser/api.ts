@@ -1,4 +1,3 @@
-import type {} from 'mini-harness/cordis';
 
 /** Plugins declare their own slot names via TypeScript module augmentation. */
 export interface SlotMap {}

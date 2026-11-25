@@ -1,11 +1,11 @@
-import { expectPresent } from '../support/required.js';
+import { expectPresent } from '../support/required.ts';
 import { test, expect } from '@playwright/test';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
+import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.ts';
 import { join } from 'node:path';
 import { readJson, writeJson } from '@mini-harness/platform/json';
-import { startIsolatedHost } from '../support/browser.js';
-import { writePlugin } from '../support/plugin-fixture.js';
+import { startIsolatedHost } from '../support/browser.ts';
+import { writePlugin } from '../support/plugin-fixture.ts';
 
 test('renders Markdown and tool results, and stops a pending reply', async ({ page }) => {
   let markWaiting: () => void;

@@ -1,5 +1,5 @@
 import type { Context, Plugin } from 'mini-harness/cordis';
-import type { PluginScope } from './scopes.js';
+import type { PluginScope } from './scopes.ts';
 
 /** A symbolic icon name or an inline SVG path for plugin-defined artwork. */
 export type PluginIcon = string | { path: string; viewBox?: string };
@@ -10,8 +10,7 @@ export interface PluginDescriptor {
   description: string;
   scope: PluginScope['kind'];
   defaultEnabled?: boolean;
-  /** Runtime constraints declared by the active Profile and trusted built-in modules. */
-  required?: boolean;
+  /** Protected host and authorization service ownership. */
   protectServices?: readonly string[];
   trustedContributor?: boolean;
   web?: boolean;
@@ -21,7 +20,6 @@ export interface PluginDescriptor {
   icon?: PluginIcon;
   configGroups?: { title: string; fields: string[] }[];
   configHint?: string;
-  requires?: string[];
   provides?: string[];
   configSchema?: Record<string, any>;
   /** A mounted plugin may opt in to configuration updates without a restart. */
@@ -29,8 +27,6 @@ export interface PluginDescriptor {
   validateConfig?(config: Readonly<Record<string, unknown>>, context: ConfigValidationContext): void;
   inject?: string[];
   optional?: string[];
-  browserRequires?: string[];
-  browserProvides?: string[];
   plugin?: Plugin;
 }
 

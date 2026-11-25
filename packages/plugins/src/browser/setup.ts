@@ -1,15 +1,11 @@
 import { browserRequest } from '@mini-harness/ui-runtime/http';
-import type {} from '@mini-harness/settings/browser/api';
 import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
 import type { Context } from 'mini-harness/cordis';
-import type {} from '@mini-harness/ui-runtime/graph-api';
-import type {} from '@mini-harness/models/browser/api';
-import type {} from '@mini-harness/ui-runtime/projection-api';
 import type { ModelCatalog } from '@mini-harness/models/catalog';
 import type { WorkspaceRecord } from '@mini-harness/workspaces/record';
 import type { Conversation } from '@mini-harness/conversation/view';
 import type { Settings, SettingsPatch } from '@mini-harness/settings/settings';
-import type { PluginMetadata } from '../shared/metadata.js';
+import type { PluginMetadata } from '../shared/metadata.ts';
 import { RemoteStore } from '@mini-harness/ui-runtime/remote-store';
 import { payload } from '@mini-harness/ui-runtime/http';
 import { icon } from '@mini-harness/ui-primitives/icons';
@@ -23,7 +19,7 @@ import {
   confirmAction,
   required,
 } from '@mini-harness/ui-primitives/primitives';
-import { readPluginValues, schemaFields } from './fields.js';
+import { readPluginValues, schemaFields } from './fields.ts';
 
 const setup = async (ctx: Context) => {
   const signal = ctx.fiber.signal;
@@ -254,8 +250,6 @@ function pluginCatalog(
     const scopePicker = document.createElement('select');
     const scopedControls = document.createElement('div');
     const enabled = toggle('Enabled in this scope', false);
-    const provision = document.createElement('fieldset');
-    const services = new Map<string, HTMLInputElement>();
     const configFields = document.createElement('div');
     fields.append(scopedControls, configFields);
     const locationsByKey = new Map<string, ScopeKey>();
@@ -277,19 +271,6 @@ function pluginCatalog(
         diagnostics.textContent =
           instance?.error ?? (instance?.state === 'inactive' ? 'Waiting for this scope to activate.' : '');
         enabled.checked = currentScope()?.plugins?.[plugin.id] === true;
-        services.clear();
-        provision.replaceChildren();
-        const legend = document.createElement('legend');
-        legend.textContent = 'Services provided in this scope';
-        provision.append(legend);
-        const providers = currentScope()?.providers ?? {};
-        const supplied = Object.keys(providers).filter((key) => providers[key] === plugin.id);
-        for (const service of new Set([...(plugin.provides ?? []), ...supplied])) {
-          const box = toggle('Use ' + plugin.title + ' for ' + service, providers[service] === plugin.id);
-          services.set(service, box);
-          provision.append(field(service, box));
-        }
-        provision.hidden = !services.size;
       }
       if (!schema) return;
       if (plugin.configHint) {
@@ -313,7 +294,6 @@ function pluginCatalog(
       scopedControls.append(
         field(plugin.scope === 'workspace' ? 'Workspace' : 'Conversation', scopePicker),
         field('Enabled in this scope', enabled),
-        provision,
       );
       save.disabled = true;
       scopePicker.add(new Option('Choose a scope', ''));
@@ -367,17 +347,11 @@ function pluginCatalog(
         if (scoped) {
           if (!key) return;
           const current = currentScope() ?? {};
-          const providers = { ...current.providers };
-          for (const [service, box] of services) {
-            if (box.checked && enabled.checked) providers[service] = plugin.id;
-            else if (providers[service] === plugin.id) delete providers[service];
-          }
           patch = {
             scopes: {
               ...snapshot().settings.scopes,
               [key]: {
                 ...current,
-                providers,
                 plugins: { ...current.plugins, [plugin.id]: enabled.checked },
                 pluginConfig: { ...current.pluginConfig, [plugin.id]: config },
               },

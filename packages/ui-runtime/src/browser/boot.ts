@@ -1,9 +1,9 @@
 import { Context } from 'mini-harness/cordis';
-import { api, data, readEvents, wait, AuthenticationError } from './http.js';
-import { RemoteStore } from './remote-store.js';
-import { browserModules } from './modules.js';
-import { BrowserProjections } from './projections.js';
-import type { BrowserBootstrap } from '../shared/bootstrap.js';
+import { api, data, readEvents, wait, AuthenticationError } from './http.ts';
+import { RemoteStore } from './remote-store.ts';
+import { browserModules } from './modules.ts';
+import { BrowserProjections } from './projections.ts';
+import type { BrowserBootstrap } from '../shared/bootstrap.ts';
 import type { ProjectionNotice } from '@mini-harness/transport/projection-notice';
 
 /** A hash-only navigation does not reload ESM modules. Recover by reloading with the new credential. */
@@ -81,14 +81,11 @@ async function boot() {
       [...nextFailures].some(([id, message]) => currentFailures.get(id) !== message);
     if (changed) for (const [id, error] of failures) console.warn('Browser plugin ' + id, error);
     currentFailures = nextFailures;
-    const coreFailure = [...failures].find(([id]) =>
-      graph.get().ui.some((entry) => entry.id === id && entry.required),
-    );
     const status = document.getElementById('startupStatus');
-    if (coreFailure && status) {
+    if (failures.size && !ctx.get('miniLayout') && status) {
       status.hidden = false;
-      status.textContent = 'Required UI plugin failed: ' + coreFailure[0] + ': ' + String(coreFailure[1]);
-    } else if (status?.textContent?.startsWith('Required UI plugin failed: ')) {
+      status.textContent = 'Browser entries failed: ' + [...nextFailures].map(([id, message]) => id + ': ' + message).join('; ');
+    } else if (status?.textContent?.startsWith('Browser entries failed: ')) {
       status.hidden = true;
       status.textContent = '';
     }

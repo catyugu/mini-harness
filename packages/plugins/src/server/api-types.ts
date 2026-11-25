@@ -1,5 +1,4 @@
-import type { PluginMetadata } from '../shared/metadata.js';
-import type {} from 'mini-harness/cordis';
+import type { PluginMetadata } from '../shared/metadata.ts';
 import type { BrowserEntry } from '@mini-harness/ui-runtime/bootstrap';
 
 declare module 'mini-harness/cordis' {

@@ -1,18 +1,17 @@
 import type { Context } from 'mini-harness/cordis';
 
-const sdkUrl: string = '/packages/sdk/src/browser-plugin.js';
-const { browserPluginId, browserPluginSettings } = (await import(
-  sdkUrl
-)) as typeof import('mini-harness/browser-plugin');
+import { browserPluginId, browserPluginSettings } from 'mini-harness/ui-runtime/plugin-settings';
+import type { BrowserPrimitives } from 'mini-harness/ui-primitives';
+import type { RecordRenderer } from 'mini-harness/conversation/history';
+import type { SettingsContribution } from 'mini-harness/ui-settings';
 
 export const inject = ['miniPrimitives', 'miniMessages', 'miniSettingsRegistry'];
 
 export function apply(ctx: Context) {
-  const { miniPrimitives } = ctx;
+  const miniPrimitives: BrowserPrimitives = ctx.miniPrimitives;
+  const renderRecord: RecordRenderer = (record) => miniPrimitives.status(record.title + ': ' + String(record.content ?? ''));
   ctx.effect(() =>
-    ctx.miniMessages.registerRecord(browserPluginId(ctx), (record) =>
-      miniPrimitives.status(record.title + ': ' + String(record.content ?? '')),
-    ),
+    ctx.miniMessages.registerRecord(browserPluginId(ctx), renderRecord),
   );
   ctx.effect(() =>
     ctx.miniMessages.registerTool('save_task_note', () => miniPrimitives.status('Saved to task notes')),
@@ -38,7 +37,7 @@ export function apply(ctx: Context) {
           );
           return field;
         },
-      },
+      } satisfies SettingsContribution,
       browserPluginSettings(ctx),
     ),
   );

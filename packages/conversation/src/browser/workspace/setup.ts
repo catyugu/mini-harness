@@ -1,6 +1,5 @@
 import { browserRequest } from '@mini-harness/ui-runtime/http';
 import type { Context } from 'mini-harness/cordis';
-import type {} from '@mini-harness/workspaces/browser/api';
 import type { WorkspaceRecord } from '@mini-harness/workspaces/record';
 import { button, field, confirmAction } from '@mini-harness/ui-primitives/primitives';
 import { payload } from '@mini-harness/ui-runtime/http';

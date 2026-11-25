@@ -5,16 +5,16 @@ import { join } from 'node:path';
 import type { Paths } from '@mini-harness/platform/runtime-paths';
 import type { Settings } from '@mini-harness/settings/settings';
 import { writeJson } from '@mini-harness/platform/json';
-import { describePlugin } from './descriptor.js';
-import { assertDisabled } from './files.js';
-import { installRegistryPackage } from './registry-client.js';
+import { describePlugin } from './descriptor.ts';
+import { assertDisabled } from './files.ts';
+import { installRegistryPackage } from './registry-client.ts';
 import {
   generationPattern,
   packageBundle,
   packageMarker,
   packageSource,
   packageSpecPattern,
-} from './source.js';
+} from './source.ts';
 
 /** CLI holds the instance lock for all inspection, installation and publication. */
 export async function installPackagedPlugin(

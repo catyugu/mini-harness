@@ -1,16 +1,13 @@
-import type { ConversationView } from '../shared/api.js';
+import type { ConversationView } from '../shared/api.ts';
 import { isRunning } from '@mini-harness/sessions/run-state';
 import { eventStream } from '@mini-harness/transport/http';
-import { projectHistory, projectToolEvent } from './display-events.js';
-import type {} from '@mini-harness/sessions/store';
-import type {} from '@mini-harness/workspaces/api';
-import type {} from '@mini-harness/approvals/api';
+import { projectHistory, projectToolEvent } from './display-events.ts';
 import { scheduler } from 'node:timers/promises';
 import type { ConversationPermission } from '@mini-harness/sessions/identity';
-import type { SessionSearchResult } from '../shared/api.js';
+import type { SessionSearchResult } from '../shared/api.ts';
 import type { Context } from 'mini-harness/cordis';
 import { HttpError, HttpReply } from '@mini-harness/transport/routes';
-import { projectSession } from './navigation.js';
+import { projectSession } from './navigation.ts';
 
 const validSession = /^[a-f0-9-]{36}$/;
 const validWorkspace = /^[a-f0-9]{32}$/;

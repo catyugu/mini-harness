@@ -1,6 +1,6 @@
 import type { Context } from 'mini-harness/cordis';
-import { createComposerModel } from './composer-model.js';
-import { mountComposer } from './composer-view.js';
+import { createComposerModel } from './composer-model.ts';
+import { mountComposer } from './composer-view.ts';
 const setup = (ctx: Context) => {
   const model = createComposerModel(ctx);
   ctx.provide('miniComposer', model);

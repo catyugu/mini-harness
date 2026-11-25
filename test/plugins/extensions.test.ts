@@ -1,11 +1,11 @@
-import { expectPresent } from '../support/required.js';
+import { expectPresent } from '../support/required.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { appendFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fixture } from '../support/api-fixture.js';
+import { fixture } from '../support/api-fixture.ts';
 
-import { writePlugin } from '../support/plugin-fixture.js';
+import { writePlugin } from '../support/plugin-fixture.ts';
 
 test('prompt contributions coexist, override within a session tree and are removed with their plugins', async (t) => {
   const { app, paths, mock, request } = await fixture(t);
@@ -81,7 +81,9 @@ test('input contributions run at delivery in stable order and keep the submitted
     {},
     `
 import { appendFileSync } from 'node:fs';
+export const provide = ['inputTransform'];
 export const apply = (ctx) => {
+      ctx.provide('inputTransform', true);
       ctx.on("agent/prepare-input", (content, { original }) => {
         appendFileSync(${JSON.stringify(trace)}, 'prepare ' + original.userText + '\\n');
         if (original.userText === 'Blocked') return { reject: 'fixture input denied' };
@@ -93,8 +95,9 @@ export const apply = (ctx) => {
   writePlugin(
     paths.plugins,
     'input-a',
-    { requires: ['input-z'] },
+    {},
     `
+export const inject = ['inputTransform'];
 export const apply = (ctx) => {
       ctx.on("agent/prepare-input", (content, { original }) => {
         original.userText = 'lost';
@@ -219,7 +222,7 @@ export const apply = (ctx) => {
   const { harnessModels: models, harnessModelStore: store } = app.runtime.plugins.ctx;
   const configured = await request('/settings', 'PATCH', {
     plugins: { 'core:llm': false, transport: true, pipeline: true },
-    providers: { harnessLlm: 'transport' },
+
   });
   assert.equal(configured.status, 200, JSON.stringify(configured.body));
   assert.equal(app.runtime.plugins.ctx.harnessModels, models);
@@ -280,15 +283,15 @@ export const apply = (ctx) => {
   assert.ok(execution && accepted);
   assert.equal(accepted.executionId, execution.id);
   assert.ok(JSON.stringify(accepted).length < JSON.stringify(execution).length);
-  const missing = await request('/settings', 'PATCH', { plugins: { transport: false }, providers: {} });
-  assert.equal(missing.status, 400);
-  assert.match(missing.body.error, /harnessLlm/);
-  assert.equal(app.runtime.settings.providers.harnessLlm, 'transport');
+  const missing = await request('/settings', 'PATCH', { plugins: { transport: false } });
+  assert.equal(missing.status, 200);
+  assert.equal(app.runtime.plugins.ctx.get('harnessLlm'), undefined);
+  assert.equal(app.runtime.plugins.ctx.get('harnessAgent'), undefined);
   assert.equal(
     (
       await request('/settings', 'PATCH', {
         plugins: { 'core:llm': true, transport: false, pipeline: false },
-        providers: {},
+
       })
     ).status,
     200,

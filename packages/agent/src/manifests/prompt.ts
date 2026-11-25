@@ -1,7 +1,6 @@
-import type {} from '@mini-harness/platform/runtime-paths';
 import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
 import { Service } from 'mini-harness/cordis';
-import { Prompt } from '../prompt.js';
+import { Prompt } from '../prompt.ts';
 
 export const manifest: PluginDescriptor = {
   scope: 'application',

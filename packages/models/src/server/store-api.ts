@@ -1,7 +1,6 @@
-import type {} from 'mini-harness/cordis';
 import type { LlmPort } from '@mini-harness/llm/api';
-import type { ModelCatalogPort } from './api.js';
-import type { ProviderInfo } from '../shared/catalog.js';
+import type { ModelCatalogPort } from './api.ts';
+import type { ProviderInfo } from '../shared/catalog.ts';
 
 export interface ProviderAdministration {
   providers(): Pick<ProviderInfo, 'id' | 'name' | 'canSetKey' | 'models'>[];

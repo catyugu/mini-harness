@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { realpathSync, rmSync } from 'node:fs';
 import { createServer, type ListenOptions } from 'node:net';
-import { readInstanceCredential } from './instance-credential.js';
+import { readInstanceCredential } from './instance-credential.ts';
 import { readJson } from '@mini-harness/platform/json';
 
 export interface ServerInfo {

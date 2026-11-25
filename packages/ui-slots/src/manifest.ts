@@ -6,6 +6,5 @@ export const manifest: PluginDescriptor = {
   title: 'UI slots',
   description: 'Own and dispose browser contributions',
   defaultEnabled: true,
-  browserProvides: ['miniSlots'],
   browser: '/packages/ui-slots/src/browser/setup.js',
 };

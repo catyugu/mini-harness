@@ -1,7 +1,7 @@
 import type { Context } from 'mini-harness/cordis';
 import type { SessionDisplayRecord } from '@mini-harness/sessions/display-record';
-import type { MessageExtensions } from './message-extensions.js';
-import { createMessageView } from './messages.js';
+import type { MessageExtensions } from './message-extensions.ts';
+import { createMessageView } from './messages.ts';
 
 export function mountHistory(ctx: Context, extensions: MessageExtensions, signal: AbortSignal) {
   const control = ctx.miniConversation;

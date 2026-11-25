@@ -1,9 +1,9 @@
 import { browserRequest } from '@mini-harness/ui-runtime/http';
 import type { Context } from 'mini-harness/cordis';
-import type { SessionSearchResult, Conversation } from '../shared/api.js';
+import type { SessionSearchResult, Conversation } from '../shared/api.ts';
 import type { WorkspaceRecord } from '@mini-harness/workspaces/record';
-import { exportSessions } from './session-client.js';
-import type { ConversationSelection, ConversationSessions } from './session-data/api.js';
+import { exportSessions } from './session-client.ts';
+import type { ConversationSelection, ConversationSessions } from './session-data/api.ts';
 import type { RemoteStore } from '@mini-harness/ui-runtime/remote-store';
 import {
   scopedElements,
@@ -15,8 +15,8 @@ import {
   confirmAction,
 } from '@mini-harness/ui-primitives/primitives';
 import { payload } from '@mini-harness/ui-runtime/http';
-import { workspaceTree } from './navigation-tree.js';
-import { sessionTree } from './sessions.js';
+import { workspaceTree } from './navigation-tree.ts';
+import { sessionTree } from './sessions.ts';
 import { fileLabel, icon } from '@mini-harness/ui-primitives/icons';
 
 interface NavigationServices {

@@ -1,6 +1,5 @@
-import type { Settings } from '../shared/settings.js';
+import type { Settings } from '../shared/settings.ts';
 import type { RemoteStore } from '@mini-harness/ui-runtime/remote-store';
-import type {} from 'mini-harness/cordis';
 import type { PluginConfiguration } from '@mini-harness/plugin-api/plugin-configuration';
 import type { PluginIcon } from '@mini-harness/plugin-api/descriptor';
 

@@ -1,5 +1,4 @@
-import type { ModelSummary, ProviderModel } from '../shared/catalog.js';
-import type {} from 'mini-harness/cordis';
+import type { ModelSummary, ProviderModel } from '../shared/catalog.ts';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 
 export interface ModelCatalogPort {

@@ -3,7 +3,11 @@
     "target": "ES2022",
     "module": "NodeNext",
     "strict": true,
-    "noEmitOnError": true
+    "noEmitOnError": true,
+    "rewriteRelativeImportExtensions": true
   },
-  "files": ["plugin.ts", "web.ts"]
+  "files": [
+    "plugin.ts",
+    "web.ts"
+  ]
 }

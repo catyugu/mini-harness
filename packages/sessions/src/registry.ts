@@ -1,19 +1,19 @@
-import type { RunInfo } from './shared/run-state.js';
-import type { SessionEntry } from './log-api.js';
+import type { RunInfo } from './shared/run-state.ts';
+import type { SessionEntry } from './log-api.ts';
 import { DomainError } from '@mini-harness/platform/errors';
 import { randomUUID } from 'node:crypto';
 import { lstatSync, unlinkSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { writeJson } from '@mini-harness/platform/json';
 import type { Paths } from '@mini-harness/platform/runtime-paths';
-import type { SessionStore } from './store.js';
+import type { SessionStore } from './store.ts';
 import type { WorkspacePort } from '@mini-harness/workspaces/api';
-import type { RecordDisplay, RecordOwner, SessionRecords } from './records.js';
+import type { RecordDisplay, RecordOwner, SessionRecords } from './records.ts';
 import type { ScopeKey, ScopePort } from '@mini-harness/plugin-api/scopes';
 import type { CapabilityObservation } from '@mini-harness/plugin-api/observations';
-import type { ConversationPermission, SessionRecord } from './shared/identity.js';
-import { SessionLog, syncDirectory } from './log.js';
-import { loadCatalog, type CatalogState } from './catalog.js';
+import type { ConversationPermission, SessionRecord } from './shared/identity.ts';
+import { SessionLog, syncDirectory } from './log.ts';
+import { loadCatalog, type CatalogState } from './catalog.ts';
 import {
   attachmentDirectory,
   deleteAttachments,
@@ -21,7 +21,7 @@ import {
   nativeFile,
   readAttachmentFile,
   storeAttachments,
-} from './storage.js';
+} from './storage.ts';
 import { prepareInput } from '@mini-harness/input/prepare';
 import type { Attachment } from '@mini-harness/input/message';
 

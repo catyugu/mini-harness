@@ -20,7 +20,9 @@
     ],
     "profileModules": {
       "@mini-harness/agent": "./src/manifests/agent.ts#manifest",
-      "@mini-harness/agent-prompt": "./src/manifests/prompt.ts#manifest"
+      "@mini-harness/agent-prompt": "./src/manifests/prompt.ts#manifest",
+      "@mini-harness/tool-executor": "./src/strategies.ts#executor",
+      "@mini-harness/compaction": "./src/strategies.ts#compaction"
     }
   },
   "dependencies": {

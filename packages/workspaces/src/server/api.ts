@@ -1,5 +1,4 @@
-import type { WorkspaceRecord } from '../shared/record.js';
-import type {} from 'mini-harness/cordis';
+import type { WorkspaceRecord } from '../shared/record.ts';
 
 export interface WorkspacePort {
   readonly events: EventTarget;

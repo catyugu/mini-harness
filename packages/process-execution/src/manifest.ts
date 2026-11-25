@@ -1,8 +1,5 @@
-import type {} from '@mini-harness/plugin-api/scopes';
-import type {} from '@mini-harness/sessions/store';
-import type {} from '@mini-harness/sandbox/api';
 import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
-import { executeProcess } from './executor.js';
+import { executeProcess } from './executor.ts';
 
 export const manifest: PluginDescriptor = {
   scope: 'application',

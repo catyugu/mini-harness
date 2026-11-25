@@ -1,14 +1,14 @@
 import { request as httpRequest } from 'node:http';
 import { tmpdir } from 'node:os';
-import { fixture, waitUntil } from '../support/api-fixture.js';
-import { writePlugin } from '../support/plugin-fixture.js';
-import { expectPresent } from '../support/required.js';
+import { fixture, waitUntil } from '../support/api-fixture.ts';
+import { writePlugin } from '../support/plugin-fixture.ts';
+import { expectPresent } from '../support/required.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { MiniHarnessRuntime, storedProfile } from '../support/profile.js';
-import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
+import { MiniHarnessRuntime, storedProfile } from '../support/profile.ts';
+import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.ts';
 import { DEFAULTS, mergeSettings, readSettings } from '@mini-harness/settings/config';
 import { writeJson } from '@mini-harness/platform/json';
 
@@ -121,7 +121,7 @@ export const apply = (ctx, config) => {
   assert.ok(activeNames().includes('example_count'));
 });
 
-test('file tools have a plugin lifecycle and required plugins cannot be disabled independently', async (t) => {
+test('file tools and dependent services follow their Cordis lifetimes', async (t) => {
   const mock = await createMockProvider();
   const { root, paths } = createFixturePaths(mock.url);
   const runtime = new MiniHarnessRuntime(paths);
@@ -130,20 +130,21 @@ test('file tools have a plugin lifecycle and required plugins cannot be disabled
     await mock.close();
     rmSync(root, { recursive: true, force: true });
   });
+  writePlugin(paths.plugins, 'base', {}, `export const provide = ['fixtureGreeting']; export const apply = (ctx) => ctx.provide('fixtureGreeting', 'ok');`);
   const folder = join(paths.plugins, 'dependent');
   mkdirSync(folder);
   writeFileSync(
     join(folder, 'plugin.json'),
-    JSON.stringify({ inject: ['harnessTools'], requires: ['files'] }),
+    JSON.stringify({}),
   );
   writeFileSync(
     join(folder, 'plugin.js'),
     `
-export const inject = ["harnessTools"];
+export const inject = ["harnessTools", "fixtureGreeting"];
 
 export const apply = (ctx) => {
     ctx.effect(() => ctx.harnessTools.register({ name: 'dependent_tool', description: 'Fixture', parameters: { type: 'object', properties: {} },
-      execute: async () => ({ content: [{ type: 'text', text: 'ok' }] }) }));
+      execute: async () => ({ content: [{ type: 'text', text: ctx.fixtureGreeting }] }) }));
   };
 `,
   );
@@ -155,10 +156,15 @@ export const apply = (ctx) => {
   await runtime.configuration.update({ plugins: { files: false } });
   assert.ok(!activeNames().includes('read'));
   await runtime.configuration.update({ plugins: { files: true, dependent: true } });
-  await assert.rejects(runtime.configuration.update({ plugins: { files: false } }), /No enabled provider/);
-  assert.equal(runtime.settings.plugins.files, true);
+  assert.ok(!activeNames().includes('dependent_tool'));
+  await runtime.configuration.update({ plugins: { base: true } });
   assert.ok(activeNames().includes('dependent_tool'));
-  await runtime.configuration.update({ plugins: { files: false, dependent: false } });
+  await runtime.configuration.update({ plugins: { base: false } });
+  assert.ok(!activeNames().includes('dependent_tool'));
+  assert.ok(activeNames().includes('read'));
+  await runtime.configuration.update({ plugins: { base: true } });
+  assert.ok(activeNames().includes('dependent_tool'));
+  await runtime.configuration.update({ plugins: { files: false, base: false, dependent: false } });
   assert.equal(
     runtime.plugins.ctx.harnessTools
       .forSession(item.id)
@@ -312,12 +318,13 @@ test('dependent plugins restart in order and partial setup or persistence failur
     mkdirSync(folder);
     writeFileSync(
       join(folder, 'plugin.json'),
-      JSON.stringify({ inject: ['harnessTools'], requires: id === 'dependent' ? ['base'] : [] }),
+      JSON.stringify({}),
     );
     writeFileSync(
       join(folder, 'plugin.js'),
       `
-export const inject = ["harnessTools"];
+export const inject = ${JSON.stringify(id === 'dependent' ? ['harnessTools', 'fixtureBase'] : ['harnessTools'])};
+export const provide = ${JSON.stringify(id === 'base' ? ['fixtureBase'] : [])};
 
 import { appendFileSync } from 'node:fs';
 export const apply = (ctx, config) => {
@@ -326,6 +333,7 @@ export const apply = (ctx, config) => {
         ctx.effect(() => ctx.harnessTools.register({ name: '${id}_tool', description: 'Fixture', parameters: {type: 'object', properties: {}},
           execute: async () => ({content: [{type: 'text', text: String(config.value ?? 'original')}]}) }));
         if (config.fail) throw new Error('Partial setup failed');
+        if ('${id}' === 'base') ctx.provide('fixtureBase', config.value ?? 'original');
       };
 `,
     );
@@ -365,7 +373,7 @@ export const apply = (ctx, config) => {
   );
 });
 
-test('cyclic dependencies reject a configuration before mounting either plugin', async (t) => {
+test('cyclic services stay waiting without activating either plugin', async (t) => {
   const mock = await createMockProvider();
   const { root, paths } = createFixturePaths(mock.url);
   const runtime = new MiniHarnessRuntime(paths);
@@ -380,18 +388,17 @@ test('cyclic dependencies reject a configuration before mounting either plugin',
   ]) {
     const folder = join(paths.plugins, id);
     mkdirSync(folder);
-    writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ requires: [dependency] }));
+    writeFileSync(join(folder, 'plugin.json'), JSON.stringify({}));
     writeFileSync(
       join(folder, 'plugin.js'),
-      'export default () => { throw new Error("Should not mount"); };',
+      `export const inject = [${JSON.stringify(dependency)}]; export const provide = [${JSON.stringify(id)}]; export function apply() { throw new Error('Should not mount'); }`,
     );
   }
   await runtime.start();
-  await assert.rejects(
-    runtime.configuration.update({ plugins: { first: true, second: true } }),
-    /No enabled provider/,
-  );
-  assert.equal(runtime.settings.plugins.first, undefined);
+  await runtime.configuration.update({ plugins: { first: true, second: true } });
+  assert.equal(runtime.settings.plugins.first, true);
+  for (const id of ['first', 'second'])
+    assert.equal(runtime.plugins.metadata().find((plugin) => plugin.id === id)?.state, 'inactive');
 });
 
 test('malformed plugin manifests fail discovery instead of silently dropping their metadata', async (t) => {
@@ -686,7 +693,7 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
   const workspaceKey = 'workspace:' + workspaceId;
   const workspace = {
     plugins: { workspace: true },
-    providers: { greeting: 'workspace' },
+
     pluginConfig: { workspace: { value: 'workspace' } },
   };
   let settings: typeof DEFAULTS = {
@@ -724,12 +731,12 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
   };
   const parent = {
     plugins: { layer: true },
-    providers: { greeting: 'layer' },
+
     pluginConfig: { layer: { value: 'parent' } },
   };
   const child = {
     plugins: { layer: true },
-    providers: { greeting: 'layer' },
+
     pluginConfig: { layer: { value: 'child' } },
   };
   const broken = { ...parent, pluginConfig: { layer: { fail: true } } };
@@ -747,7 +754,7 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
   assert.equal(
     host.metadata().find(({ id }) => id === 'layer')?.state,
     'ready',
-    'required replacements are mounted before commit',
+    'changed scoped entries are mounted before commit',
   );
   assert.equal(host.require('session:parent', 'greeting'), 'parent');
   assert.equal(host.require('session:child', 'greeting'), 'child');
@@ -846,7 +853,7 @@ test('configuration validation resolves the staged scope provider and rejects in
       scopes: {
         [key]: {
           plugins: { consumer: true, local: true },
-          providers: { greeting: 'local' },
+
           pluginConfig: { consumer: { expected } },
         },
       },
@@ -906,7 +913,7 @@ test('setup and live configuration cannot await their own graph transaction', as
   await host.prepare('session:session');
 });
 
-test('required browser services must survive server mounting, including replacement providers', async (t) => {
+test('a failed server entry does not publish its browser module', async (t) => {
   const directory = mkdtempSync(join(tmpdir(), 'mini-required-browser-'));
   const browser = '/packages/ui-runtime/src/browser/boot.js';
   const builtins: PluginDescriptor[] = [
@@ -916,9 +923,7 @@ test('required browser services must survive server mounting, including replacem
       title: 'UI',
       description: '',
       defaultEnabled: true,
-      required: true,
       browser,
-      browserProvides: ['miniTest'],
     },
     {
       id: 'replacement',
@@ -926,7 +931,6 @@ test('required browser services must survive server mounting, including replacem
       title: 'Replacement',
       description: '',
       browser,
-      browserProvides: ['miniTest'],
       plugin: {
         apply(_ctx: Context, config: Record<string, unknown>) {
           if (config.fail) throw new Error('Unavailable replacement');
@@ -937,7 +941,6 @@ test('required browser services must survive server mounting, including replacem
   const settings = {
     ...structuredClone(DEFAULTS),
     plugins: { replacement: true },
-    browserProviders: { miniTest: 'replacement' },
     pluginConfig: { replacement: { fail: true } },
   };
   const host = new PluginHost(new Context(), directory, builtins, [], () => settings);
@@ -945,5 +948,7 @@ test('required browser services must survive server mounting, including replacem
     await host.close();
     rmSync(directory, { recursive: true, force: true });
   });
-  await assert.rejects(host.start(settings), /Required browser service is unavailable: miniTest/);
+  await host.start(settings);
+  assert.deepEqual(host.browser().map(({ id }) => id), ['ui']);
+  assert.equal(host.metadata().find(({ id }) => id === 'replacement')?.state, 'failed');
 });

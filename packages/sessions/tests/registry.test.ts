@@ -1,4 +1,4 @@
-import { nativeFile } from '../src/storage.js';
+import { nativeFile } from '../src/storage.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -13,8 +13,8 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getPaths } from '@mini-harness/platform/paths';
-import { loadCatalog } from '../src/catalog.js';
-import { SessionRegistry } from '../src/registry.js';
+import { loadCatalog } from '../src/catalog.ts';
+import { SessionRegistry } from '../src/registry.ts';
 import { WorkspaceCatalog } from '@mini-harness/workspaces/catalog';
 
 function fixture(t: test.TestContext) {

@@ -1,4 +1,3 @@
-import type {} from 'mini-harness/cordis';
 
 /** Runtime paths are data, not a dependency on the filesystem adapter. */
 export interface Paths {

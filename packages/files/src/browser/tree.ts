@@ -1,6 +1,4 @@
 import { fileRoute, refreshOnFileChange, type WorkspaceView } from '@mini-harness/file-access/browser/views';
-import type {} from '@mini-harness/file-preview/browser/api';
-import type {} from '@mini-harness/conversation/browser/navigation-api';
 import { browserRequest } from '@mini-harness/ui-runtime/http';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { button as control, iconButton } from '@mini-harness/ui-primitives/primitives';

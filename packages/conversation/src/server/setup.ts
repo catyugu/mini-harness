@@ -1,13 +1,8 @@
-import type {} from '@mini-harness/transport/projection-api';
-import type {} from '@mini-harness/sessions/store';
-import type {} from '@mini-harness/runs/api';
-import type {} from '@mini-harness/approvals/api';
-import type {} from '@mini-harness/models/api';
-import type { ConversationView } from '../shared/api.js';
+import type { ConversationView } from '../shared/api.ts';
 import type { Context } from 'mini-harness/cordis';
-import { projectHistory, projectToolEvent } from './display-events.js';
-import { projectSession } from './navigation.js';
-import { registerSessionRoutes } from './routes.js';
+import { projectHistory, projectToolEvent } from './display-events.ts';
+import { projectSession } from './navigation.ts';
+import { registerSessionRoutes } from './routes.ts';
 
 export function setup(ctx: Context) {
   const changes = ctx.harnessChanges;

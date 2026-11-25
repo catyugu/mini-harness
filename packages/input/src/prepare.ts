@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { DomainError } from '@mini-harness/platform/errors';
-import type { Attachment, ImageInput } from './message.js';
+import type { Attachment, ImageInput } from './message.ts';
 
 export const imageMimeType = /^image\/(png|jpeg|gif|webp)$/;
 

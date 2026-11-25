@@ -1,4 +1,3 @@
-import type {} from 'mini-harness/cordis';
 export type BrowserPluginFailures = ReadonlyMap<string, unknown>;
 
 declare module 'mini-harness/cordis' {

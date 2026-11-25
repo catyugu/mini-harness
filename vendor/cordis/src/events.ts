@@ -1,7 +1,7 @@
 import { defineProperty, type Awaitable, type Promisify } from '@mini-harness/cosmokit'
-import { Context } from './context.js'
-import { Fiber, FiberState, resolveConfig } from './fiber.js'
-import { DisposableList, symbols } from './utils.js'
+import { Context } from './context.ts'
+import { Fiber, FiberState, resolveConfig } from './fiber.ts'
+import { DisposableList, symbols } from './utils.ts'
 
 /**
  * Return whether an event result should stop a bail-style dispatch.
@@ -30,7 +30,7 @@ export type ThisType<F> = F extends (this: infer T, ...args: any) => any ? T : n
  */
 export type DispatchMode = 'emit' | 'parallel' | 'serial' | 'bail' | 'waterfall'
 
-declare module './context.js' {
+declare module './context.ts' {
   export interface Context {
     /* eslint-disable max-len */
     /**

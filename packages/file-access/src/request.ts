@@ -1,9 +1,6 @@
 import { DomainError } from '@mini-harness/platform/errors';
-import type {} from '@mini-harness/plugin-api/scopes';
 import type { RouteRequest } from '@mini-harness/transport/routes';
-import type {} from '@mini-harness/workspaces/api';
 import type { Context } from 'mini-harness/cordis';
-import type {} from './api.js';
 
 /** Resolve the same scoped file policy for every authenticated workspace file route. */
 export async function workspaceFiles(ctx: Context, { params, url, signal }: RouteRequest) {

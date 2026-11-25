@@ -1,5 +1,4 @@
-import type {} from 'mini-harness/cordis';
-import type { ModelChoice, ThinkingLevel, ToolSchema } from './vocabulary.js';
+import type { ModelChoice, ThinkingLevel, ToolSchema } from './vocabulary.ts';
 
 /** Harness-owned transcript. Provider details stay opaque outside the adapter. */
 export interface TextPart {

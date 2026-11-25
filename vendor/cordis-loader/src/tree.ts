@@ -1,4 +1,4 @@
-import { Entry, type EntryOptions } from './entry.js'
+import { Entry, type EntryOptions } from './entry.ts'
 
 /** Store the desired entries and their Cordis fibers for one runtime. */
 export class EntryTree {

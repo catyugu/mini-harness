@@ -1,10 +1,9 @@
 import { Type } from 'typebox';
 import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
-import { setup } from '../server/setup.js';
+import { setup } from '../server/setup.ts';
 
 export const manifest: PluginDescriptor = {
   scope: 'application',
-  browserProvides: ['miniConversation'],
   id: 'core:conversation',
   title: 'Conversation',
   description: 'Conversation interface',
@@ -37,7 +36,6 @@ export const composerManifest: PluginDescriptor = {
   title: 'Composer',
   description: 'Conversation input and draft contributions',
   defaultEnabled: true,
-  browserProvides: ['miniComposer'],
   browser: '/packages/conversation/src/browser/conversation/composer-setup.js',
 };
 
@@ -47,6 +45,5 @@ export const historyManifest: PluginDescriptor = {
   title: 'History',
   description: 'Conversation messages and record contributions',
   defaultEnabled: true,
-  browserProvides: ['miniMessages'],
   browser: '/packages/conversation/src/browser/conversation/history-setup.js',
 };

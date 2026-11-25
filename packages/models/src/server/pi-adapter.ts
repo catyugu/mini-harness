@@ -1,4 +1,4 @@
-import type { ModelStorePort } from './store-api.js';
+import type { ModelStorePort } from './store-api.ts';
 import { join } from 'node:path';
 import {
   createProvider,
@@ -16,7 +16,7 @@ import {
 import { builtinModels } from '@earendil-works/pi-ai/providers/all';
 import { readJson, writeJson } from '@mini-harness/platform/json';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
-import type { ProviderModel } from '../shared/catalog.js';
+import type { ProviderModel } from '../shared/catalog.ts';
 import type {
   LlmEvent,
   LlmPort,

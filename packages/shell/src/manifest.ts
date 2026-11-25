@@ -1,5 +1,5 @@
 import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
-import { setup } from './server/setup.js';
+import { setup } from './server/setup.ts';
 import { Type } from 'typebox';
 import { supportsIsolation } from '@mini-harness/platform/isolation';
 

@@ -54,7 +54,7 @@ Conversation permissions can be changed at any time from the left side of the co
 
 ## Develop
 
-Each local plugin bundle has a `plugin.json` descriptor and a server or browser Cordis entry, or both. Services can be selected at application, workspace and nested session scopes. Third-party plugins can register tools, record progress, run child conversations, request confirmations and add keyed browser components. The standalone [Task notes example](docs/examples/task-notes) uses both SDK entry points. Parent and sibling scopes retain their own providers. See the [architecture](docs/architecture.md), [plugin guide](docs/plugins.md), [scoped provider examples](docs/scoped-providers.md), and [session log reference](docs/session-log.md).
+Each local plugin bundle has a `plugin.json` descriptor and a server or browser Cordis entry, or both. Services can be replaced by enabling entries at application, workspace and nested session scopes. Third-party plugins can register tools, record progress, run child conversations, request confirmations and add keyed browser components. The standalone [Task notes example](docs/examples/task-notes) uses both SDK entry points. Parent and sibling scopes retain their own providers. See the [architecture](docs/architecture.md), [plugin guide](docs/plugins.md), [scoped provider examples](docs/scoped-providers.md), and [session log reference](docs/session-log.md).
 
 ```sh
 pnpm install --frozen-lockfile
@@ -73,7 +73,7 @@ MIT. See [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
 
 ## Profiles and development
 
-The default Web app is composed from the shipped YAML and the optional user overlay at `~/.mini-harness/profiles/web/cordis.yml`. See [Profiles](docs/profiles.md) for the Entry format, provider selection and migration.
+The default Web app is composed from the base and Web bundles in the independent package at `~/.mini-harness/profiles/web/`. Each Profile has a package manifest, a fixed Cordis root and a user patch. See [Profiles](docs/profiles.md) for package initialization, module resolution and configuration.
 
 The workspace panel has separate **Workspace files** and **Git changes** entries. Click a text attachment to open it in the workspace panel, or a photo or video to open a media dialog. Workspace file references from `@` completion open in the panel.
 

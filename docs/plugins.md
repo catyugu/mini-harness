@@ -14,15 +14,15 @@ mini-harness plugin uninstall <id>
 
 Disable an npm plugin and save before updating it. Installed plugins start disabled. Development mode accepts `MINI_HARNESS_DEV_PLUGIN=/absolute/path/to/plugin`. The directory name sets the plugin ID.
 
-The manifest supplies display information, scope (`application`, `workspace`, or `session`), and optional JSON Schema and configuration-form metadata. Use `provides` and `browserProvides` to publish service choices before the module activates. Browser styles and helper modules must be listed in `browserAssets`. Use `browserPreload` for a declared asset that exports a function receiving an activation signal and optionally returning cleanup.
+The manifest supplies display information, scope (`application`, `workspace`, or `session`), and optional JSON Schema and configuration-form metadata. Browser modules declare their dependencies and services directly with Cordis `inject` and `provide`. Browser styles and helper modules must be listed in `browserAssets`. Use `browserPreload` for a declared asset that exports a function receiving an activation signal and optionally returning cleanup.
 
 ## Declare a Cordis plugin
 
-The CLI and browser load named `inject`, `provide` and `apply` exports or a default Cordis plugin. The host resolves `mini-harness/cordis` and `mini-harness/plugin` imports from installed server plugins to its own package. Augment the public Cordis module to type your own services. Installed plugin code written for the old setup API needs migration to these declarations. Existing settings and owned records retain their namespace.
+The CLI and browser load named `inject`, `provide` and `apply` exports or a default Cordis plugin. The host resolves public `mini-harness/*` modules from installed server plugins to the active installation. Import the public contract belonging to the service you use, such as `mini-harness/tools`, `mini-harness/agent`, or `mini-harness/llm`. Augment the public Cordis module to type your own services. Installed plugin code written for the old setup API needs migration to these declarations. Existing settings and owned records retain their namespace.
 
 ```ts
 import type { Context } from 'mini-harness/cordis';
-import { defineTool } from 'mini-harness/plugin';
+import { defineTool } from 'mini-harness/tools';
 
 export const inject = ['harnessTools'];
 
@@ -80,7 +80,7 @@ Declare a `configSchema` in `plugin.json` to validate values and supply JSON def
 
 ## Browser plugins
 
-Use the same Cordis declarations. Browser JavaScript can import from `/packages/sdk/src/browser-plugin.js`. TypeScript uses types from `mini-harness/cordis` and `mini-harness/browser-plugin`.
+Use the same Cordis declarations. Browser modules import the same public specifiers via the browser import map, such as `mini-harness/cordis`, `mini-harness/ui-slots` and `mini-harness/ui-runtime/plugin-settings`. Server-only public modules are not published to the browser.
 
 ```js
 export const inject = ['miniSlots'];
@@ -105,4 +105,4 @@ The [Task notes example](examples/task-notes/) uses both entry points. The [brow
 
 ### Profile entries
 
-Installing a plugin makes it available in the catalog. To enable it, use the Web Plugins page or add an `installed:<id>` entry to the [active Profile](profiles.md). The server entry's `inject` and `provide` declarations govern Cordis. Optional manifest declarations are verified against the module. Browser service declarations are checked against both the published module and its registrations.
+Installing a plugin makes it available in the catalog. To enable it, use the Web Plugins page or add an `installed:<id>` entry to the [active Profile](profiles.md). The server entry's `inject` and `provide` declarations govern Cordis. Missing required services leave the consuming entry waiting until Cordis can activate it.

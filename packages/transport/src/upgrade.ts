@@ -1,6 +1,6 @@
 import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
-import type { UpgradeHandler } from './routes.js';
+import type { UpgradeHandler } from './routes.ts';
 
 export class Upgrades {
   private readonly admission = new AbortController();

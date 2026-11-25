@@ -1,4 +1,3 @@
-import type {} from 'mini-harness/cordis';
 
 export interface ToolAccess {
   name: string;

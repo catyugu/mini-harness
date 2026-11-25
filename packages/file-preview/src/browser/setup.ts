@@ -1,13 +1,12 @@
 import { refreshOnFileChange, type WorkspaceView } from '@mini-harness/file-access/browser/views';
-import type {} from '@mini-harness/ui-layout/browser/api';
 import { renderMarkdown } from '@mini-harness/ui-primitives/markdown';
 import { button, iconButton } from '@mini-harness/ui-primitives/primitives';
 import type { Context } from 'mini-harness/cordis';
-import { codeExtensions, extension, imageMime, mediaType } from '../shared/content.js';
-import type { PreviewPlacement, PreviewResource } from './api.js';
-import { blobUrl, download, fetchContent, nameOf } from './content.js';
-import { mediaDialog, mediaElement } from './media.js';
-import { source } from './source.js';
+import { codeExtensions, extension, imageMime, mediaType } from '../shared/content.ts';
+import type { PreviewPlacement, PreviewResource } from './api.ts';
+import { blobUrl, download, fetchContent, nameOf } from './content.ts';
+import { mediaDialog, mediaElement } from './media.ts';
+import { source } from './source.ts';
 
 function errorText(error: unknown) {
   return error instanceof Error ? error.message : String(error);

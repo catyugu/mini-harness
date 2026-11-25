@@ -1,5 +1,4 @@
-import type {} from 'mini-harness/cordis';
-import type { ProjectionNotice } from './shared/projection-notice.js';
+import type { ProjectionNotice } from './shared/projection-notice.ts';
 
 export type ChangesListener = (notice: ProjectionNotice) => void;
 

@@ -1,12 +1,8 @@
-import type {} from '@mini-harness/plugin-api/scopes';
-import type {} from '@mini-harness/sessions/records';
-import type {} from '@mini-harness/tools/api';
-import type {} from '@mini-harness/transport/projection-api';
 import { DomainError } from '@mini-harness/platform/errors';
 import { relative, resolve, sep } from 'node:path';
 import type { Context } from 'mini-harness/cordis';
 import { workspaceFiles } from '@mini-harness/file-access/request';
-import { fileTools, fileToolNames } from './tools.js';
+import { fileTools, fileToolNames } from './tools.ts';
 
 export function setup(ctx: Context) {
   const { harnessChanges: changes } = ctx;

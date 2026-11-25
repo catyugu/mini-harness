@@ -1,4 +1,3 @@
-import type {} from 'mini-harness/cordis';
 import type { ProcessRequest, ProcessResult } from '@mini-harness/execution/request';
 
 export interface ProcessExecutionPort {

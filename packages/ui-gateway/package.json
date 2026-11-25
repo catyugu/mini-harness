@@ -8,7 +8,6 @@
   },
   "dependencies": {
     "@mini-harness/plugin-api": "workspace:*",
-    "@mini-harness/plugins": "workspace:*",
     "@mini-harness/transport": "workspace:*",
     "@mini-harness/ui-runtime": "workspace:*"
   },

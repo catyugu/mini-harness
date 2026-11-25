@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { writeText } from '@mini-harness/platform/json';
+import { writeText, writeJson } from '@mini-harness/platform/json';
+import { getPaths, ensurePaths } from '@mini-harness/platform/paths';
+import { Context } from 'mini-harness/cordis';
+import { allowsDetachment, initializeProfile, loadProfile } from '@mini-harness/host/profile';
 import { bootProfile } from '@mini-harness/host/application';
-import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
+import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.ts';
 
 test('YAML Profile composes through Cordis and persists Web entry changes', async (t) => {
   const mock = await createMockProvider();
@@ -13,7 +17,7 @@ test('YAML Profile composes through Cordis and persists Web entry changes', asyn
     await mock.close();
     rmSync(root, { recursive: true, force: true });
   });
-  const configure = (name: string) => join(paths.home, 'profiles', name, 'cordis.yml');
+  const configure = (name: string) => join(paths.home, 'profiles', name, 'cordis.patch.yml');
   writeText(
     configure('web'),
     "plugins:\n  - id: git-diff\n    name: '@mini-harness/git-diff'\n    disabled: true\n",
@@ -27,10 +31,10 @@ test('YAML Profile composes through Cordis and persists Web entry changes', asyn
     assert.ok(web.ctx.harnessPluginCatalog.browser().some(({ id }) => id === 'files'));
     assert.ok(!web.ctx.harnessPluginCatalog.browser().some(({ id }) => id === 'git-diff'));
     assert.doesNotMatch(readFileSync(paths.settings, 'utf8'), /pluginConfig|providers|"plugins"/);
-    await assert.rejects(
-      web.ctx.harnessSettingsStore.update({ plugins: { 'core:layout': false } }),
-      /Required Profile entry/,
-    );
+    await web.ctx.harnessSettingsStore.update({ plugins: { 'core:layout': false } });
+    assert.ok(!web.ctx.harnessPluginCatalog.browser().some(({ id }) => id === 'core:layout'));
+    await web.ctx.harnessSettingsStore.update({ plugins: { 'core:layout': true } });
+    assert.ok(web.ctx.harnessPluginCatalog.browser().some(({ id }) => id === 'core:layout'));
     await web.ctx.harnessSettingsStore.update({ plugins: { 'file-preview': false } });
     assert.match(readFileSync(configure('web'), 'utf8'), /id: file-preview\s+disabled: true/);
   } finally {
@@ -48,5 +52,123 @@ test('YAML Profile composes through Cordis and persists Web entry changes', asyn
   }
 
   writeText(configure('web'), 'plugins:\n  - id: files\n    disabled: !!js arbitrary()\n');
-  await assert.rejects(bootProfile('web', paths, launch), /cordis\.yml.*tag/is);
+  await assert.rejects(bootProfile('web', paths, launch), /cordis\.patch\.yml.*tag/is);
+});
+
+test('custom Profiles load native local and npm entries without the plugin manager', async (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'mini-harness-profile-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const paths = getPaths(root, { MINI_HARNESS_HOME: join(root, 'home') });
+  ensurePaths(paths);
+  const directory = initializeProfile('custom', paths);
+  const file = join(directory, 'cordis.patch.yml');
+  const bundle = join(directory, 'node_modules', 'profile-bundle');
+  const fragment = join(bundle, 'provider.yml');
+  writeJson(join(bundle, 'package.json'), {
+    name: 'profile-bundle',
+    type: 'module',
+    miniHarness: { bundle: { patch: './provider.yml' } },
+  });
+  const manifest = join(directory, 'package.json');
+  const metadata = JSON.parse(readFileSync(manifest, 'utf8'));
+  metadata.dependencies = { 'profile-bundle': '1.0.0', 'profile-consumer': '1.0.0' };
+  metadata.miniHarness.profile.bundles = ['profile-bundle'];
+  writeJson(manifest, metadata);
+  writeText(
+    join(bundle, 'provider.mjs'),
+    `import { Context } from 'mini-harness/cordis';
+export default {
+  provide: 'profileValue',
+  apply(ctx, config) {
+    if (!(ctx instanceof Context)) throw new Error('Duplicated Cordis runtime');
+    ctx.provide('profileValue', config.value);
+  },
+};`,
+  );
+  writeText(
+    join(bundle, 'disabled.mjs'),
+    "throw new Error('A disabled entry was imported');",
+  );
+  writeJson(join(directory, 'node_modules', 'profile-consumer', 'package.json'), {
+    name: 'profile-consumer',
+    type: 'module',
+    exports: { import: './entry.js' },
+  });
+  writeText(
+    join(directory, 'node_modules', 'profile-consumer', 'entry.js'),
+    `export const inject = ['profileValue'];
+export const provide = 'profileResult';
+export function apply(ctx, config) {
+  ctx.provide('profileResult', ctx.profileValue + config.suffix);
+}`,
+  );
+  writeText(
+    fragment,
+    `plugins:
+  - id: consumer
+    name: profile-consumer
+    config:
+      suffix: '!'
+  - id: provider
+    name: ./provider.mjs
+    config:
+      value: base
+  - id: disabled
+    name: ./disabled.mjs
+    disabled: true
+`,
+  );
+  writeText(
+    file,
+    `plugins:
+  - id: provider
+    config:
+      value: patched
+  - id: waiting
+    name: ./waiting.mjs
+`,
+  );
+  writeText(
+    join(paths.home, 'profiles', 'custom', 'waiting.mjs'),
+    `export default {
+  inject: ['missingProfileService'],
+  apply() { throw new Error('Waiting entry must not activate'); },
+};`,
+  );
+  const launch = { interactive: false, shutdown() {} };
+  for (const name of ['custom']) {
+    const app = await bootProfile(name, paths, launch);
+    try {
+      assert.equal(app.ctx.get('harnessPluginCatalog'), undefined);
+      assert.equal(app.ctx.get('profileResult'), 'patched!');
+      assert.equal(app.ctx.harnessProfile.entries.get('disabled'), undefined);
+      assert.equal(app.ctx.harnessProfile.entries.get('waiting')?.active, false);
+      assert.equal(allowsDetachment(name, paths), false);
+    } finally {
+      await app.close();
+    }
+    assert.equal(app.ctx.get('profileResult'), undefined);
+  }
+  const profile = await loadProfile('custom', paths, new Context());
+  try {
+    profile.commit({ ...profile.read(), readOnlyTools: { example: ['read'] } });
+  } finally {
+    await profile.close();
+  }
+  const persisted = readFileSync(file, 'utf8');
+  assert.match(readFileSync(manifest, 'utf8'), /profile-bundle/);
+  assert.match(persisted, /value: patched/);
+  assert.ok(persisted.includes('name: ./waiting.mjs'));
+  assert.equal(readFileSync(fragment, 'utf8').includes('value: base'), true);
+  assert.equal(readFileSync(join(directory, 'cordis.yml'), 'utf8'), 'plugins: []\n');
+  await assert.rejects(bootProfile(file, paths, launch), /Invalid Profile name/);
+  const reopened = await bootProfile('custom', paths, launch);
+  try {
+    assert.equal(reopened.ctx.get('profileResult'), 'patched!');
+  } finally {
+    await reopened.close();
+  }
+
+  writeText(fragment, 'include: [' + JSON.stringify(fragment) + ']\n');
+  await assert.rejects(bootProfile('custom', paths, launch), /Cyclic Profile include/);
 });

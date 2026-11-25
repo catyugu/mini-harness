@@ -1,7 +1,7 @@
 import { realpath } from 'node:fs/promises';
 import { relative } from 'node:path';
 import { containsPath } from '@mini-harness/platform/paths';
-import type { IsolatedProcess, SandboxPort } from './api.js';
+import type { IsolatedProcess, SandboxPort } from './api.ts';
 import type { ProcessRequest } from '@mini-harness/execution/request';
 import { supportsIsolation, bubblewrap } from '@mini-harness/platform/isolation';
 

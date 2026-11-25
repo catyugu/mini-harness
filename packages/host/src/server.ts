@@ -18,8 +18,6 @@ import { fileURLToPath } from 'node:url';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import type { Context } from 'mini-harness/cordis';
-import type {} from '@mini-harness/transport/runtime';
-import type {} from '@mini-harness/plugins/api-types';
 import { errorStatus, HttpError, type GatewayRequest } from '@mini-harness/transport/routes';
 import { json } from '@mini-harness/transport/http';
 
@@ -35,8 +33,6 @@ const assets = new Map([
   ['favicon.ico', 'image/x-icon'],
 ]);
 
-const browserSdk = 'packages/sdk/src/browser-plugin.js';
-assets.set(browserSdk, 'text/javascript');
 for (const owner of readdirSync(FEATURE_DIR, { withFileTypes: true })) {
   if (!owner.isDirectory()) continue;
   const source = join(FEATURE_DIR, owner.name, 'src');
@@ -61,6 +57,18 @@ for (const owner of readdirSync(vendor, { withFileTypes: true })) {
     assets.set('vendor/' + path, 'text/javascript');
   }
 }
+
+const { exports: publicModules } = JSON.parse(
+  readFileSync(new URL('../../../../package.json', import.meta.url), 'utf8'),
+) as { exports: Record<string, { default: string }> };
+const importMap = {
+  imports: Object.fromEntries(
+    Object.entries(publicModules).flatMap(([name, target]) => {
+      const path = target.default.replace(/^\.\/dist\//, '');
+      return assets.has(path) ? [['mini-harness' + name.slice(1), '/' + path]] : [];
+    }),
+  ),
+};
 
 export function authorize(request: IncomingMessage, token: string) {
   const auth = request.headers.authorization;
@@ -171,11 +179,17 @@ export function webServer(ctx: Context, token: string, shutdown: () => void) {
             : join(WEB_DIR, requested));
         const nonce = requested === 'index.html' ? randomBytes(18).toString('base64') : undefined;
         const csp =
-          "default-src 'self'; script-src 'self'; style-src 'self'" +
+          "default-src 'self'; script-src 'self'" +
+          (nonce ? " 'nonce-" + nonce + "'" : '') +
+          "; style-src 'self'" +
           (nonce ? " 'nonce-" + nonce + "'" : '') +
           "; img-src 'self' data: blob:; media-src 'self' blob:; object-src 'none'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'";
         if (nonce) {
-          const page = readFileSync(path, 'utf8').replace('EDITOR_STYLE_NONCE', nonce);
+          const page = readFileSync(path, 'utf8')
+            .replace('EDITOR_STYLE_NONCE', nonce)
+            .replace('<!-- MINI_HARNESS_IMPORT_MAP -->',
+              '<script type="importmap" nonce="' + nonce + '">' + JSON.stringify(importMap) + '</script>',
+            );
           res.writeHead(200, {
             'Content-Type': 'text/html; charset=utf-8',
             'Content-Length': Buffer.byteLength(page),

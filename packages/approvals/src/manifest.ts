@@ -1,14 +1,10 @@
-import type {} from '@mini-harness/transport/projection-api';
-import type {} from '@mini-harness/runs/api';
-import type {} from '@mini-harness/transport/routes';
-import type {} from '@mini-harness/sessions/store';
-import type { ApprovalRequests } from './server/api.js';
+import type { ApprovalRequests } from './server/api.ts';
 import { Service } from 'mini-harness/cordis';
 import { pluginInstance, sessionVisible } from '@mini-harness/plugin-api/instance';
 import { isRunning } from '@mini-harness/sessions/run-state';
 import { DomainError } from '@mini-harness/platform/errors';
 import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
-import { Approvals } from './server/approvals.js';
+import { Approvals } from './server/approvals.ts';
 
 export const manifest: PluginDescriptor = {
   scope: 'application',

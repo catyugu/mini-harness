@@ -1,9 +1,8 @@
 import { fileRoute } from '@mini-harness/file-access/browser/views';
 import type { Suggestion } from '@mini-harness/conversation/browser/composer-api';
-import type {} from '@mini-harness/conversation/browser/navigation-api';
 import { browserRequest, wait } from '@mini-harness/ui-runtime/http';
 import type { Context } from 'mini-harness/cordis';
-import { readDirectory } from './tree.js';
+import { readDirectory } from './tree.ts';
 
 export function fileCompletion(ctx: Context) {
   const services = ctx.harnessBrowser;

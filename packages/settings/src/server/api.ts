@@ -1,7 +1,6 @@
 import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
-import type { PluginConfigurationPort, SettingsManager } from './manager.js';
-import type { Settings } from '../shared/settings.js';
-import type {} from 'mini-harness/cordis';
+import type { PluginConfigurationPort, SettingsManager } from './manager.ts';
+import type { Settings } from '../shared/settings.ts';
 
 export interface SettingsPort {
   readonly settings: Settings;

@@ -1,6 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import type {} from 'mini-harness/cordis';
-import type { ScopeKey } from './scopes.js';
+import type { ScopeKey } from './scopes.ts';
 
 // The marker follows only work initiated inside a graph transaction; unrelated requests may wait.
 const mountTransaction = new AsyncLocalStorage<{ active: boolean }>();

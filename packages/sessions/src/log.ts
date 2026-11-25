@@ -1,7 +1,7 @@
 import { isThinkingLevel, type ToolSchema } from '@mini-harness/llm/vocabulary';
 import { pluginIdPattern, isScopeKey } from '@mini-harness/plugin-api/selection';
 import { DomainError } from '@mini-harness/platform/errors';
-import { isRunning, type RunInfo } from './shared/run-state.js';
+import { isRunning, type RunInfo } from './shared/run-state.ts';
 import { createHash, randomBytes } from 'node:crypto';
 import {
   closeSync,
@@ -21,10 +21,10 @@ import {
   validateRequestSnapshot,
   type ModelRequestSnapshot,
 } from '@mini-harness/llm/api';
-import type { InboxItem, SessionEntry, SessionEvent, SessionLogPort, SessionProjection } from './log-api.js';
-import type { QueueEntry } from './shared/queue.js';
-import { projectLog, projectMessage } from './projection.js';
-import { applyContentDelta } from './content-delta.js';
+import type { InboxItem, SessionEntry, SessionEvent, SessionLogPort, SessionProjection } from './log-api.ts';
+import type { QueueEntry } from './shared/queue.ts';
+import { projectLog, projectMessage } from './projection.ts';
+import { applyContentDelta } from './content-delta.ts';
 
 type StoredEntry =
   | SessionEntry

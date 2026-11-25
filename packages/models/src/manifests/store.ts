@@ -1,6 +1,5 @@
-import type {} from '@mini-harness/platform/runtime-paths';
 import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
-import { PiModelStore } from '../server/pi-adapter.js';
+import { PiModelStore } from '../server/pi-adapter.ts';
 
 export const manifest: PluginDescriptor = {
   id: 'core:model-store',

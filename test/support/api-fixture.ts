@@ -1,7 +1,7 @@
 import { rmSync } from 'node:fs';
 import type { TestContext } from 'node:test';
-import { createMiniHarnessServer } from './profile.js';
-import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
+import { createMiniHarnessServer } from './profile.ts';
+import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.ts';
 
 export async function waitUntil<T>(read: () => T | Promise<T>, accept: (value: T) => boolean) {
   for (let attempt = 0; attempt < 300; attempt++) {

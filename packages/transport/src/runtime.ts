@@ -1,9 +1,8 @@
-import type {} from '@mini-harness/plugin-api/profile';
 import type { Context } from 'mini-harness/cordis';
-import { MutationGate } from './mutations.js';
-import { ProjectionChanges } from './projections.js';
-import { RouteRegistry } from './router.js';
-import { Upgrades } from './upgrade.js';
+import { MutationGate } from './mutations.ts';
+import { ProjectionChanges } from './projections.ts';
+import { RouteRegistry } from './router.ts';
+import { Upgrades } from './upgrade.ts';
 
 export default {
   provide: ['harnessMutations', 'harnessChanges'],

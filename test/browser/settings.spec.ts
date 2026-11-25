@@ -1,5 +1,5 @@
 import { expect } from '@playwright/test';
-import { browserTest as test, expectInViewport, settingsSection } from '../support/browser.js';
+import { browserTest as test, expectInViewport, settingsSection } from '../support/browser.ts';
 
 test('settings stay reachable across viewport sizes and theme changes persist', async ({ page, launch }) => {
   const { host } = await launch();

@@ -1,5 +1,4 @@
-import type {} from 'mini-harness/cordis';
-import type { PluginConfiguration } from './shared/plugin-configuration.js';
+import type { PluginConfiguration } from './shared/plugin-configuration.ts';
 
 export interface PluginData {
   read<T>(name: string, fallback: T): T;

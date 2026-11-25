@@ -1,5 +1,5 @@
-import type { Conversation, SessionSearchResult } from '../shared/api.js';
-import { sessionHierarchy } from './navigation-tree.js';
+import type { Conversation, SessionSearchResult } from '../shared/api.ts';
+import { sessionHierarchy } from './navigation-tree.ts';
 import { button, iconButton } from '@mini-harness/ui-primitives/primitives';
 
 function highlight(node: HTMLElement, text: string, start: number, end: number) {

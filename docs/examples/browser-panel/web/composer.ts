@@ -1,7 +1,12 @@
-export function replaceComposer(ctx) {
-  const { miniComposer: model, miniConversation: conversation } = ctx;
-  ctx.effect(() =>
-    ctx.miniSlots.registerKeyed('conversation.composer-view', 'composer', (signal) => {
+import type { Context } from 'mini-harness/cordis';
+import type { ComposerModel } from 'mini-harness/conversation/composer';
+import type { ConversationController } from 'mini-harness/conversation/controller';
+import type { SlotRenderer } from 'mini-harness/ui-slots';
+
+export function replaceComposer(ctx: Context) {
+  const model: ComposerModel = ctx.miniComposer;
+  const conversation: ConversationController = ctx.miniConversation;
+  const renderComposer: SlotRenderer = (signal) => {
       const form = document.createElement('form');
       const prompt = document.createElement('textarea');
       prompt.setAttribute('aria-label', 'Replacement message');
@@ -18,7 +23,7 @@ export function replaceComposer(ctx) {
       files.addEventListener(
         'change',
         () => {
-          void model.addFiles([...files.files]).catch(conversation.report);
+          void model.addFiles([...(files.files ?? [])]).catch(conversation.report);
           files.value = '';
         },
         { signal },
@@ -54,6 +59,6 @@ export function replaceComposer(ctx) {
       conversation.subscribe(['interaction'], render, signal);
       render();
       return form;
-    }),
-  );
+  };
+  ctx.effect(() => ctx.miniSlots.registerKeyed('conversation.composer-view', 'composer', renderComposer));
 }

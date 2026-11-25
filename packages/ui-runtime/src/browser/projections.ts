@@ -1,5 +1,5 @@
 import type { ProjectionNotice } from '@mini-harness/transport/projection-notice';
-import type { BrowserProjection, BrowserProjectionPort } from './projection-api.js';
+import type { BrowserProjection, BrowserProjectionPort } from './projection-api.ts';
 
 /** Features own snapshots; the runtime only routes invalidation notices to live owners. */
 export class BrowserProjections implements BrowserProjectionPort {

@@ -1,6 +1,5 @@
-import type {} from 'mini-harness/cordis';
 import type { WorkspaceRecord } from '@mini-harness/workspaces/record';
-import type { Conversation } from '../shared/api.js';
+import type { Conversation } from '../shared/api.ts';
 
 export interface ConversationBrowserPort {
   workspaceRecord(id: string): WorkspaceRecord | undefined;

@@ -1,9 +1,9 @@
 import { fromMarkup, required, scopedElements } from '@mini-harness/ui-primitives/primitives';
 import type { BrowserPrimitives } from '@mini-harness/ui-primitives/api';
-import type { PageContribution } from './api.js';
+import type { PageContribution } from './api.ts';
 import type { Context } from 'mini-harness/cordis';
-import { createLayout } from './layout.js';
-import { createRightTabs } from './right-tabs.js';
+import { createLayout } from './layout.ts';
+import { createRightTabs } from './right-tabs.ts';
 
 /** App frame owns geometry and slot declarations, never feature navigation controls. */
 const slots = {

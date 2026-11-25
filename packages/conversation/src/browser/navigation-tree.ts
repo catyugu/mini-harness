@@ -1,4 +1,4 @@
-import type { Conversation } from '../shared/api.js';
+import type { Conversation } from '../shared/api.ts';
 import type { WorkspaceRecord } from '@mini-harness/workspaces/record';
 
 function workspacePath(path: string) {

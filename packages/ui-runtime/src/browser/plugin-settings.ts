@@ -1,7 +1,6 @@
 import type { Context } from 'mini-harness/cordis';
 import { pluginConfiguration, pluginEntryFiber } from '@mini-harness/plugin-api/plugin-configuration';
-import type {} from './graph-api.js';
-import { browserRequest, payload } from './http.js';
+import { browserRequest, payload } from './http.ts';
 
 export function browserPluginId(ctx: Context) {
   return pluginEntryFiber(ctx).entry!.options.id;

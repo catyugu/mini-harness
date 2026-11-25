@@ -28,7 +28,7 @@
   },
   "scripts": {
     "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
-    "build": "pnpm run clean && tsc -p tsconfig.json && node scripts/resolve-imports.mjs && node dist/scripts/copy-assets.js && node dist/scripts/prune-sdk.js",
+    "build": "pnpm run clean && tsc -p tsconfig.json && node --experimental-strip-types scripts/resolve-imports.ts && node dist/scripts/copy-assets.js && node dist/scripts/prune-sdk.js && tsc -p docs/examples/tsconfig.json",
     "start": "pnpm run build && node dist/bin/mini-harness.js",
     "test": "pnpm run build && pnpm run test:node",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -90,17 +90,169 @@
     "plugins"
   ],
   "exports": {
-    "./plugin": {
-      "types": "./dist/types/packages/sdk/src/plugin.d.ts",
-      "default": "./dist/packages/sdk/src/plugin.js"
-    },
-    "./browser-plugin": {
-      "types": "./dist/types/packages/sdk/src/browser-plugin.d.ts",
-      "default": "./dist/packages/sdk/src/browser-plugin.js"
-    },
     "./cordis": {
       "types": "./dist/types/vendor/cordis-runtime/src/index.d.ts",
       "default": "./dist/vendor/cordis-runtime/src/index.js"
+    },
+    "./agent": {
+      "types": "./dist/types/packages/agent/src/api.d.ts",
+      "default": "./dist/packages/agent/src/api.js"
+    },
+    "./agent/events": {
+      "types": "./dist/types/packages/agent/src/events.d.ts",
+      "default": "./dist/packages/agent/src/events.js"
+    },
+    "./agent/prompt": {
+      "types": "./dist/types/packages/agent/src/prompt-api.d.ts",
+      "default": "./dist/packages/agent/src/prompt-api.js"
+    },
+    "./approvals": {
+      "types": "./dist/types/packages/approvals/src/server/api.d.ts",
+      "default": "./dist/packages/approvals/src/server/api.js"
+    },
+    "./conversation/display-events": {
+      "types": "./dist/types/packages/conversation/src/server/display-events.d.ts",
+      "default": "./dist/packages/conversation/src/server/display-events.js"
+    },
+    "./conversation/composer": {
+      "types": "./dist/types/packages/conversation/src/browser/composer-api.d.ts",
+      "default": "./dist/packages/conversation/src/browser/composer-api.js"
+    },
+    "./conversation/controller": {
+      "types": "./dist/types/packages/conversation/src/browser/conversation-api.d.ts",
+      "default": "./dist/packages/conversation/src/browser/conversation-api.js"
+    },
+    "./conversation/history": {
+      "types": "./dist/types/packages/conversation/src/browser/history-api.d.ts",
+      "default": "./dist/packages/conversation/src/browser/history-api.js"
+    },
+    "./conversation/navigation": {
+      "types": "./dist/types/packages/conversation/src/browser/navigation-api.d.ts",
+      "default": "./dist/packages/conversation/src/browser/navigation-api.js"
+    },
+    "./execution": {
+      "types": "./dist/types/packages/runs/src/execution.d.ts",
+      "default": "./dist/packages/runs/src/execution.js"
+    },
+    "./file-access": {
+      "types": "./dist/types/packages/file-access/src/api.d.ts",
+      "default": "./dist/packages/file-access/src/api.js"
+    },
+    "./file-preview": {
+      "types": "./dist/types/packages/file-preview/src/browser/api.d.ts",
+      "default": "./dist/packages/file-preview/src/browser/api.js"
+    },
+    "./input": {
+      "types": "./dist/types/packages/input/src/message.d.ts",
+      "default": "./dist/packages/input/src/message.js"
+    },
+    "./llm": {
+      "types": "./dist/types/packages/llm/src/api.d.ts",
+      "default": "./dist/packages/llm/src/api.js"
+    },
+    "./llm/vocabulary": {
+      "types": "./dist/types/packages/llm/src/vocabulary.d.ts",
+      "default": "./dist/packages/llm/src/vocabulary.js"
+    },
+    "./models": {
+      "types": "./dist/types/packages/models/src/server/api.d.ts",
+      "default": "./dist/packages/models/src/server/api.js"
+    },
+    "./models/catalog": {
+      "types": "./dist/types/packages/models/src/shared/catalog.d.ts",
+      "default": "./dist/packages/models/src/shared/catalog.js"
+    },
+    "./observations": {
+      "types": "./dist/types/packages/plugin-api/src/observations.d.ts",
+      "default": "./dist/packages/plugin-api/src/observations.js"
+    },
+    "./plugin-data": {
+      "types": "./dist/types/packages/plugin-api/src/services.d.ts",
+      "default": "./dist/packages/plugin-api/src/services.js"
+    },
+    "./plugin-scope": {
+      "types": "./dist/types/packages/plugin-api/src/scope-api.d.ts",
+      "default": "./dist/packages/plugin-api/src/scope-api.js"
+    },
+    "./plugin-configuration": {
+      "types": "./dist/types/packages/plugin-api/src/shared/plugin-configuration.d.ts",
+      "default": "./dist/packages/plugin-api/src/shared/plugin-configuration.js"
+    },
+    "./process-execution": {
+      "types": "./dist/types/packages/process-execution/src/api.d.ts",
+      "default": "./dist/packages/process-execution/src/api.js"
+    },
+    "./sandbox": {
+      "types": "./dist/types/packages/sandbox/src/api.d.ts",
+      "default": "./dist/packages/sandbox/src/api.js"
+    },
+    "./scopes": {
+      "types": "./dist/types/packages/plugin-api/src/scopes.d.ts",
+      "default": "./dist/packages/plugin-api/src/scopes.js"
+    },
+    "./sessions": {
+      "types": "./dist/types/packages/sessions/src/records.d.ts",
+      "default": "./dist/packages/sessions/src/records.js"
+    },
+    "./sessions/identity": {
+      "types": "./dist/types/packages/sessions/src/shared/identity.d.ts",
+      "default": "./dist/packages/sessions/src/shared/identity.js"
+    },
+    "./sessions/run-state": {
+      "types": "./dist/types/packages/sessions/src/shared/run-state.d.ts",
+      "default": "./dist/packages/sessions/src/shared/run-state.js"
+    },
+    "./sessions/display-record": {
+      "types": "./dist/types/packages/sessions/src/shared/display-record.d.ts",
+      "default": "./dist/packages/sessions/src/shared/display-record.js"
+    },
+    "./settings": {
+      "types": "./dist/types/packages/settings/src/shared/settings.d.ts",
+      "default": "./dist/packages/settings/src/shared/settings.js"
+    },
+    "./tools": {
+      "types": "./dist/types/packages/tools/src/api.d.ts",
+      "default": "./dist/packages/tools/src/api.js"
+    },
+    "./tools/events": {
+      "types": "./dist/types/packages/tools/src/events.d.ts",
+      "default": "./dist/packages/tools/src/events.js"
+    },
+    "./transport": {
+      "types": "./dist/types/packages/transport/src/routes.d.ts",
+      "default": "./dist/packages/transport/src/routes.js"
+    },
+    "./ui-layout": {
+      "types": "./dist/types/packages/ui-layout/src/browser/api.d.ts",
+      "default": "./dist/packages/ui-layout/src/browser/api.js"
+    },
+    "./ui-primitives": {
+      "types": "./dist/types/packages/ui-primitives/src/browser/api.d.ts",
+      "default": "./dist/packages/ui-primitives/src/browser/api.js"
+    },
+    "./ui-runtime/http": {
+      "types": "./dist/types/packages/ui-runtime/src/browser/http.d.ts",
+      "default": "./dist/packages/ui-runtime/src/browser/http.js"
+    },
+    "./ui-runtime/plugin-settings": {
+      "types": "./dist/types/packages/ui-runtime/src/browser/plugin-settings.d.ts",
+      "default": "./dist/packages/ui-runtime/src/browser/plugin-settings.js"
+    },
+    "./ui-runtime/projections": {
+      "types": "./dist/types/packages/ui-runtime/src/browser/projection-api.d.ts",
+      "default": "./dist/packages/ui-runtime/src/browser/projection-api.js"
+    },
+    "./ui-settings": {
+      "types": "./dist/types/packages/settings/src/browser/api.d.ts",
+      "default": "./dist/packages/settings/src/browser/api.js"
+    },
+    "./ui-slots": {
+      "types": "./dist/types/packages/ui-slots/src/browser/api.d.ts",
+      "default": "./dist/packages/ui-slots/src/browser/api.js"
+    },
+    "./workspaces": {
+      "types": "./dist/types/packages/workspaces/src/server/api.d.ts",
+      "default": "./dist/packages/workspaces/src/server/api.js"
     }
   },
   "packageManager": "pnpm@10.34.9"

@@ -15,7 +15,6 @@ export interface PluginMetadata
     | 'icon'
     | 'configGroups'
     | 'configHint'
-    | 'requires'
     | 'configSchema'
   > {
   trustedCode?: boolean;

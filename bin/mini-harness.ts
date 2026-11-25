@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { bootProfile } from '@mini-harness/host/application';
-import { allowsDetachment, loadProfile, readProfile } from '@mini-harness/host/profile';
+import { allowsDetachment, initializeProfile, loadProfile, readProfile, WEB_BUNDLES } from '@mini-harness/host/profile';
 import { Context } from 'mini-harness/cordis';
 import { spawn } from 'node:child_process';
 import { openSync, closeSync } from 'node:fs';
@@ -18,18 +18,19 @@ function help() {
   console.log(`mini-harness — minimal native agent harness
 
 Usage:
-  mini-harness [--profile web] [--port 3837]              Start the local web interface
+  mini-harness [--profile name] [--port 3837]              Start the local web interface
   mini-harness --detached [--port 3837]   Run independently of this terminal
   mini-harness --no-open                 Start without opening a browser
   mini-harness status                    Show server status
   mini-harness stop                      Stop the running server
   mini-harness reset-token               Stop the server and replace its browser credential
+  mini-harness profile init <name> [--from web]   Create an independent Profile package
   mini-harness plugin dev <directory>    Build and reload a plugin in an isolated host
   mini-harness plugin install <id> <package[@version-or-tag]>
   mini-harness plugin update <id> [package[@version-or-tag]]
   mini-harness --help                    Show help
 
-Configuration: ~/.mini-harness/profiles/<profile>/cordis.yml (or MINI_HARNESS_HOME)
+Configuration: ~/.mini-harness/profiles/<profile>/cordis.patch.yml (or MINI_HARNESS_HOME)
 Workspace Skills: .mini-harness/skills/
 Access: localhost only; bearer token required for all API endpoints.
 `);
@@ -67,7 +68,7 @@ function parse(argv: string[]) {
 }
 
 async function detached(paths: ReturnType<typeof getPaths>, profile: string, flags: string[]) {
-  if (!allowsDetachment(profile)) throw new Error('Profile ' + profile + ' does not support --detached');
+  if (!allowsDetachment(profile, paths)) throw new Error('Profile ' + profile + ' does not support --detached');
   const running = await serverStatus(paths.home, paths.pid);
   if (running) throw new Error('mini-harness is already running (PID ' + running.pid + ')');
   const output = openSync(paths.log, 'a', 0o600);
@@ -150,9 +151,23 @@ async function serve(
 
 async function main() {
   const argv = process.argv.slice(2);
+  if (argv[0] === 'profile' && argv[1] === 'init') {
+    const [, , name, ...flags] = argv;
+    if (!name || (flags.length && (flags.length !== 2 || flags[0] !== '--from' || flags[1] !== 'web')))
+      throw new Error('Usage: mini-harness profile init <name> [--from web]');
+    const paths = getPaths();
+    ensurePaths(paths);
+    const unlock = await lockInstance(paths.home);
+    try {
+      console.log(initializeProfile(name, paths, flags.length ? WEB_BUNDLES : []));
+    } finally {
+      await unlock();
+    }
+    return;
+  }
   if (argv[0] === 'plugin' && argv[1] === 'dev') {
     if (argv.length !== 3) throw new Error('Usage: mini-harness plugin dev <directory>');
-    const { pluginDev } = await import('./plugin-dev.js');
+    const { pluginDev } = await import('./plugin-dev.ts');
     await pluginDev(argv[2], executable);
     return;
   }
@@ -177,13 +192,17 @@ async function main() {
     try {
       const { installPackagedPlugin } = await import('@mini-harness/plugins/package-installer');
       const profile = await loadProfile('web', paths, new Context());
-      const reserved = readProfile('web');
-      const { name, version } = await installPackagedPlugin(paths, operation, id, spec, {
-        settings: profile.read(),
-        reserved: (id) => reserved.has(id),
-        signal: cancellation.signal,
-      });
-      console.log(id + ': ' + name + '@' + version);
+      try {
+        const reserved = readProfile('web');
+        const { name, version } = await installPackagedPlugin(paths, operation, id, spec, {
+          settings: profile.read(),
+          reserved: (id) => reserved.has(id),
+          signal: cancellation.signal,
+        });
+        console.log(id + ': ' + name + '@' + version);
+      } finally {
+        await profile.close();
+      }
     } finally {
       process.off('SIGINT', abort);
       process.off('SIGTERM', abort);

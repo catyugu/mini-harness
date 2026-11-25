@@ -1,11 +1,11 @@
-import { expectPresent } from '../../../test/support/required.js';
+import { expectPresent } from '../../../test/support/required.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, renameSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { MiniHarnessRuntime } from '../../../test/support/profile.js';
+import { MiniHarnessRuntime } from '../../../test/support/profile.ts';
 import { readJson, writeJson } from '@mini-harness/platform/json';
-import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.js';
+import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.ts';
 
 test('recent main model survives child overrides and a restart through the native agent', async (t) => {
   const mock = await createMockProvider();
@@ -87,7 +87,7 @@ test('a failed recent-model write does not delay accepted input or terminate exe
   const context = runtime.plugins.ctx;
   const { harnessRegistry: registry, harnessRuns: runs } = context;
   const session = registry.create();
-  const config = join(paths.home, 'profiles', 'web', 'cordis.yml');
+  const config = join(paths.home, 'profiles', 'web', 'cordis.patch.yml');
   const old = config + '.original';
   renameSync(config, old);
   mkdirSync(config);

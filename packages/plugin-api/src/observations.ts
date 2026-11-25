@@ -1,5 +1,5 @@
 import type { Context } from 'mini-harness/cordis';
-import { scopedEvent, sessionEvent } from './instance.js';
+import { scopedEvent, sessionEvent } from './instance.ts';
 
 export interface CapabilityObservations {}
 export type CapabilityObservation = CapabilityObservations[keyof CapabilityObservations];

@@ -1,11 +1,10 @@
 import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
-import { setup } from './server/setup.js';
+import { setup } from './server/setup.ts';
 
 /** One metadata definition for the host, settings, and browser loader. */
 export const manifest: PluginDescriptor = {
   scope: 'application',
   trustedContributor: true,
-  browserProvides: ['miniFileTree'],
   plugin: {
     inject: [
       'harnessFileAccess',
