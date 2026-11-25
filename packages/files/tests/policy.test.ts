@@ -92,3 +92,15 @@ test('failed or superseded atomic writes preserve the existing file and remove t
     ['edit.txt'],
   );
 });
+
+test('confined file views write binary data and stream past workspace preview limits', async (t) => {
+  const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'mini-harness-binary-')));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const view = new RootedFiles(root);
+  const content = Buffer.alloc(16 * 1024 * 1024 + 8, 0xff);
+  await view.writeFile('data.bin', content);
+  assert.deepEqual(await view.readFile('data.bin'), content);
+  const chunks: Uint8Array[] = [];
+  for await (const chunk of view.chunks('data.bin')) chunks.push(chunk);
+  assert.deepEqual(Buffer.concat(chunks), content);
+});

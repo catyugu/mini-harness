@@ -1,3 +1,4 @@
+import { finished } from 'node:stream/promises';
 import type { ProcessCommand, ProcessExecutionPort } from '@mini-harness/process-execution/api';
 
 export async function runShellCommand(
@@ -30,10 +31,18 @@ export async function runShellCommand(
   const stdout: Buffer[] = [];
   const stderr: Buffer[] = [];
   child.stdin.end();
-  child.stdout.on('data', (chunk: Buffer) => collect(stdout, chunk));
-  child.stderr.on('data', (chunk: Buffer) => collect(stderr, chunk));
+  child.stdout.on('data', (chunk: Buffer | string) =>
+    collect(stdout, typeof chunk === 'string' ? Buffer.from(chunk) : chunk),
+  );
+  child.stderr.on('data', (chunk: Buffer | string) =>
+    collect(stderr, typeof chunk === 'string' ? Buffer.from(chunk) : chunk),
+  );
   try {
-    const status = await child.finished;
+    const [status] = await Promise.all([
+      child.finished,
+      finished(child.stdout, { cleanup: true }),
+      finished(child.stderr, { cleanup: true }),
+    ]);
     return {
       ...status,
       reason,

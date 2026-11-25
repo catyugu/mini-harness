@@ -9,12 +9,13 @@ export const metadata: PluginInfo = {
 
 const plugin: Plugin.Object = {
   inject: ['harnessState'],
-  provide: ['harnessModelStore'],
+  provide: ['harnessModelStore', 'harnessModels'],
   async apply(ctx) {
     const store = new PiModelStore(ctx.harnessState.paths.home);
     ctx.effect(() => () => store.close());
     await store.refresh();
     ctx.provide('harnessModelStore', store);
+    ctx.provide('harnessModels', store);
   },
 };
 

@@ -230,7 +230,6 @@ test('a third-party plugin uses tools, models and subprocesses from a Profile wi
     `plugins:
   - name: '@mini-harness/tools'
   - name: '@mini-harness/model-store'
-  - name: '@mini-harness/model-catalog'
   - name: '@mini-harness/llm'
   - name: '@mini-harness/pi-adapter'
   - name: '@mini-harness/process-execution'

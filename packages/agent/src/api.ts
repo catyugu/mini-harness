@@ -5,13 +5,7 @@ import type {
   NativeMessage,
   NativeToolMessage,
 } from '@mini-harness/llm/api';
-import type {
-  ModelFailure,
-  ModelRetry,
-  ModelRequestContent,
-  StepContext,
-  ToolResultContext,
-} from './events.ts';
+import type { ModelFailure, ModelRetry, ModelRequestContent, StepContext } from './events.ts';
 import type { ToolSchema } from '@mini-harness/llm/vocabulary';
 import type { ToolCallPart } from '@mini-harness/llm/api';
 import type { ToolDefinition, ToolResult } from '@mini-harness/tools/api';
@@ -75,10 +69,6 @@ export interface ToolExecutorPort {
     tools: ReadonlyMap<string, ToolDefinition>,
     execution: ToolExecution,
   ): Promise<void>;
-  result?(
-    result: NativeToolMessage,
-    context: ToolResultContext,
-  ): NativeToolMessage['content'] | Promise<NativeToolMessage['content']>;
 }
 
 export interface CompactionInput {

@@ -64,6 +64,7 @@ export class WorkspaceSearch {
     let inherited: Rules[] = [];
     for (const dir of ancestors) inherited = await withRules(dir, inherited);
     const pending = [{ dir: root, inherited }];
+    let visited = 0;
     while (pending.length) {
       signal?.throwIfAborted();
       const item = pending.pop();
@@ -72,6 +73,8 @@ export class WorkspaceSearch {
       const rules = await withRules(dir, inherited);
       for (const entry of await this.files.entries(dir)) {
         signal?.throwIfAborted();
+        if (++visited > 20000)
+          throw new DomainError('invalid_input', 'Search limit reached. Select a narrower directory.');
         if (entry.name === '.git') continue;
         const path = resolve(dir, entry.name);
         let ignored = false;

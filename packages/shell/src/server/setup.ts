@@ -12,7 +12,7 @@ export function setup(ctx: Context) {
   const workspace = ctx.harnessSessions;
   const requestApproval = ctx.harnessApprovalRequests.request.bind(ctx.harnessApprovalRequests);
   const options = ctx.fiber.effectiveConfig as { mode: 'isolated' | 'host'; timeoutSeconds: number };
-  const tool = (sessionId: string) =>
+  const tool = (sessionId: string, caller = ctx) =>
     defineTool({
       name: 'sandbox_shell',
       label: 'Shell',
@@ -43,13 +43,14 @@ export function setup(ctx: Context) {
         }
         // Permission changes also apply while a Shell command is awaiting approval.
         context?.assertAuthorized?.();
-        const key = `session:${sessionId}` as const;
-        const execution = ctx.harnessProfileScopes.require(key, 'harnessProcess');
+        const execution = caller.get('harnessProcess');
+        if (!execution) throw new Error('Process execution is unavailable');
         const attachments = ctx.harnessRegistry.attachmentDirectory(sessionId);
         const { mode, timeoutSeconds } = options;
         let command: ProcessCommand;
         if (mode === 'isolated') {
-          const sandbox = ctx.harnessProfileScopes.require(key, 'harnessSandbox');
+          const sandbox = caller.get('harnessSandbox');
+          if (!sandbox) throw new Error('Isolation unavailable: no Sandbox backend is configured');
           const [root, state] = await Promise.all([realpath(cwd), realpath(ctx.harnessState.paths.home)]);
           if (relative(root, cwd) || containsPath(root, state) || containsPath(state, root))
             throw new Error('Use a canonical working directory separate from protected storage');

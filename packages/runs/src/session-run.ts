@@ -56,12 +56,8 @@ function requireService<K extends keyof Context & string>(ctx: Context, name: K)
 
 async function retryModel(ctx: Context, failure: ModelFailure) {
   const { signal, ...input } = failure;
-  if (failure.attempt >= 3) return;
   for (const { context, callback } of ctx.events.listeners('agent/model-retry', scopeTarget(ctx))) {
-    const retry = await context.fiber.run(
-      (signal) => callback({ ...structuredClone(input), signal }),
-      signal,
-    );
+    const retry = await context.fiber.run((signal) => callback({ ...input, signal }), signal);
     if (retry === undefined) continue;
     if (
       !retry ||
@@ -577,7 +573,7 @@ export class SessionRun {
               phase: (call, state) =>
                 emit({ type: 'tool', id: call.id, name: call.name, state, arguments: call.arguments }),
               update(call, value) {
-                if (hooks.length || executor.result) return;
+                if (hooks.length) return;
                 emit({
                   type: 'tool',
                   id: call.id,
@@ -591,16 +587,12 @@ export class SessionRun {
             async deliver(output, toolSignal, call) {
               let executionId: string | undefined;
               let originalContent: NativeToolMessage['content'] | undefined;
-              if (!output.isError && (hooks.length || executor.result)) {
+              if (!output.isError && hooks.length) {
                 executionId = log.append({ type: 'tool-execution', result: output }).id;
                 originalContent = output.content;
                 try {
                   const resultContext = { ...step, signal: toolSignal, tool: call.name, callId: call.id };
-                  const initial = executor.result
-                    ? await executor.result(structuredClone(output), resultContext)
-                    : output.content;
-                  if (!isToolContent(initial)) throw new Error('Invalid tool result content');
-                  const content = await applyTransforms(hooks, initial, resultContext, (value) => {
+                  const content = await applyTransforms(hooks, output.content, resultContext, (value) => {
                     if (!isToolContent(value)) throw new Error('Invalid tool result content');
                     return value;
                   });

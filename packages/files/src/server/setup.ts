@@ -18,15 +18,15 @@ export function setup(ctx: Context) {
     ctx.effect(() =>
       ctx.harnessTools.register({
         name,
-        resolve(id) {
+        resolve(id, caller = ctx) {
           const root = sessions.workspacePath(id);
           const session = sessions.get(id);
           if (!session) throw new DomainError('not_found', 'Conversation not found');
-          const tool = fileTools(root, () =>
-            ctx.harnessProfileScopes
-              .require(`session:${id}`, 'harnessFileAccess')
-              .open(root, { exclude: (path) => containsPath(state, path) }),
-          )[index];
+          const tool = fileTools(root, () => {
+            const files = caller.get('harnessFileAccess');
+            if (!files) throw new DomainError('unavailable', 'File access is unavailable');
+            return files.open(root, { exclude: (path) => containsPath(state, path) });
+          })[index];
           return {
             ...tool,
             tags: writes ? undefined : ['readOnly'],

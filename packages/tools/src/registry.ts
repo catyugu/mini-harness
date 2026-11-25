@@ -10,7 +10,7 @@ import {
 } from './api.ts';
 interface ToolRegistration {
   name: string;
-  resolve(selection: ToolSelection): RegisteredTool;
+  resolve(selection: ToolSelection, caller?: Context): RegisteredTool;
   visible(resourceId?: string): boolean;
 }
 
@@ -23,7 +23,9 @@ export class ToolRegistry {
         const context = Service.caller(this);
         return registry.register(definition, { context, scope: scopeOf(context) });
       },
-      list: registry.list.bind(registry),
+      list(selection) {
+        return registry.list(selection, Service.caller(this));
+      },
     });
   }
 
@@ -38,23 +40,25 @@ export class ToolRegistry {
     const registry = this;
     const active = new Set<Promise<unknown>>();
     const signal = owner?.fiber.signal;
+    const unavailable = () => new Error('Tool is no longer available: ' + name);
     const expired = () => lifetime.signal.aborted || signal?.aborted === true;
     const entry: ToolRegistration = {
       name,
       visible: (resourceId) =>
         !expired() && (!factory || (resourceId !== undefined && (factory.visible?.(resourceId) ?? true))),
-      resolve(selection) {
-        const tool = 'resolve' in definition ? definition.resolve(selection.resourceId!) : definition;
+      resolve(selection, caller) {
+        const tool = 'resolve' in definition ? definition.resolve(selection.resourceId!, caller) : definition;
         if (tool.name !== name) throw new Error('Tool binding changed its registered name: ' + name);
         const available = () => registry.selected(name, selection) === entry;
         return {
           ...tool,
           available,
           async execute(call, args, signal, update, context) {
+            if (expired()) throw unavailable();
             const combined = signal ? AbortSignal.any([signal, lifetime.signal]) : lifetime.signal;
             const execute = async (signal: AbortSignal) => {
               signal.throwIfAborted();
-              if (!available()) throw new Error('Tool is no longer available: ' + name);
+              if (!available()) throw unavailable();
               return tool.execute(call, args, signal, update, context);
             };
             const work = owner
@@ -73,7 +77,7 @@ export class ToolRegistry {
     const remove = this.tools.add(scope, name, entry);
     return async () => {
       remove();
-      lifetime.abort(new Error('Tool is no longer available: ' + name));
+      lifetime.abort(unavailable());
       await Promise.allSettled(active);
     };
   }
@@ -85,7 +89,7 @@ export class ToolRegistry {
     }
   }
 
-  list(selection: ToolSelection = {}) {
+  list(selection: ToolSelection = {}, caller?: Context) {
     selection = { ...selection };
     const names = new Set(
       this.tools
@@ -96,7 +100,7 @@ export class ToolRegistry {
     const available: RegisteredTool[] = [];
     for (const name of names) {
       const selected = this.selected(name, selection);
-      if (selected) available.push(selected.resolve(selection));
+      if (selected) available.push(selected.resolve(selection, caller));
     }
     return available;
   }

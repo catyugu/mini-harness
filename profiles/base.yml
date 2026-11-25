@@ -21,8 +21,6 @@ plugins:
     name: '@mini-harness/prompt-defaults'
   - id: core:model-store
     name: '@mini-harness/model-store'
-  - id: core:model-catalog
-    name: '@mini-harness/model-catalog'
   - id: core:llm
     name: '@mini-harness/llm'
   - id: core:pi-adapter

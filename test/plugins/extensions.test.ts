@@ -182,19 +182,20 @@ export const apply = (ctx) => {
   assert.doesNotMatch(JSON.stringify(log.projection().messages), /Blocked|lost|Manual/);
 });
 
-test('an application plugin replaces only LLM and composes execution hooks without rewriting history', async (t) => {
+test('an application plugin registers an LLM adapter and composes execution hooks without rewriting history', async (t) => {
   const { app, paths, request, mock, base, headers } = await fixture(t);
   writePlugin(
     paths.plugins,
     'transport',
     {},
     `
-export const provide = ["harnessLlm"];
-export const inject = ["harnessModels"];
+export const inject = ["harnessLlm", "harnessModels"];
 export const apply = (ctx) => {
     let attempts = 0;
     const modelCatalog = ctx.harnessModels;
-    ctx.provide('harnessLlm', { async *stream(request) {
+    ctx.effect(() => ctx.harnessLlm.register({
+    accepts: (choice) => !!modelCatalog.resolve(choice),
+    async *stream(request) {
       if (!modelCatalog.resolve(request.model)) throw new Error('missing catalog');
       const terminal = (content, stopReason = 'stop') => ({ type: 'done', message: { role: 'assistant', timestamp: Date.now(), content, stopReason } });
       if (++attempts === 1) throw new Error('transient transport failure');
@@ -211,7 +212,7 @@ export const apply = (ctx) => {
           throw new Error('tool policy or result waterfall failed');
         yield terminal([{ type: 'text', text: 'Alternate response' }]);
       }
-    } });
+    } }));
   };
 `,
   );
@@ -246,7 +247,6 @@ export const apply = (ctx) => {
   const { harnessModels: models, harnessModelStore: store } = app.runtime.plugins.ctx;
   const configured = await request('/settings', 'PATCH', {
     entries: {
-      'core:llm': { disabled: true },
       transport: { name: '../../plugins/transport', disabled: false },
       pipeline: { name: '../../plugins/pipeline', disabled: false },
     },
@@ -310,24 +310,13 @@ export const apply = (ctx) => {
   assert.ok(execution && accepted);
   assert.equal(accepted.executionId, execution.id);
   assert.ok(JSON.stringify(accepted).length < JSON.stringify(execution).length);
-  const missing = await request('/settings', 'PATCH', {
-    entries: { transport: { name: '../../plugins/transport', disabled: true } },
+  const removed = await request('/settings', 'PATCH', {
+    entries: {
+      transport: { name: '../../plugins/transport', disabled: true },
+      pipeline: { name: '../../plugins/pipeline', disabled: true },
+    },
   });
-  assert.equal(missing.status, 200);
-  assert.equal(app.runtime.plugins.ctx.get('harnessLlm'), undefined);
-  assert.equal(app.runtime.plugins.ctx.get('harnessAgent'), undefined);
-  assert.equal(
-    (
-      await request('/settings', 'PATCH', {
-        entries: {
-          'core:llm': { disabled: false },
-          transport: { name: '../../plugins/transport', disabled: true },
-          pipeline: { name: '../../plugins/pipeline', disabled: true },
-        },
-      })
-    ).status,
-    200,
-  );
+  assert.equal(removed.status, 200);
   assert.equal(
     await app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Restore the built-in LLM'),
     'Mock response',

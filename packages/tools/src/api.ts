@@ -1,3 +1,4 @@
+import type { Context } from 'mini-harness/cordis';
 import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
 import type { Static, TSchema } from 'typebox';
 import type { TextPart, ImagePart } from '@mini-harness/llm/api';
@@ -33,7 +34,7 @@ export interface ToolDefinition<Arguments = Record<string, any>> extends ToolSch
 
 export interface ToolFactory {
   name: string;
-  resolve(resourceId: string): ToolDefinition;
+  resolve(resourceId: string, caller?: Context): ToolDefinition;
   visible?(resourceId: string): boolean;
 }
 
