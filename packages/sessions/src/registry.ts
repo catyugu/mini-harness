@@ -8,7 +8,12 @@ import { writeJson } from '@mini-harness/platform/json';
 import type { Paths } from '@mini-harness/platform/runtime-paths';
 import type { WorkspacePort } from '@mini-harness/workspaces/api';
 import type { RecordOwner, SessionRecords, SessionStore } from './records.ts';
-import { createScopeKey, scopeParentOf, setScopeParent, type ScopeKey } from '@mini-harness/plugin-api/scopes';
+import {
+  createScopeKey,
+  scopeParentOf,
+  setScopeParent,
+  type ScopeKey,
+} from '@mini-harness/plugin-api/scopes';
 import type { ScopeAddress } from '@mini-harness/plugin-api/configuration';
 import type { CapabilityObservation } from '@mini-harness/plugin-api/observations';
 import type { ConversationPermission, SessionRecord } from './shared/identity.ts';

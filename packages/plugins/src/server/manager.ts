@@ -2,13 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { mergeSettings } from '@mini-harness/plugin-api/selection';
 import { DomainError } from '@mini-harness/platform/errors';
 import { dirname, join } from 'node:path';
-import {
-  EntryTree,
-  Service,
-  ValidationError,
-  type Context,
-  type EntryOptions,
-} from 'mini-harness/cordis';
+import { EntryTree, Service, ValidationError, type Context, type EntryOptions } from 'mini-harness/cordis';
 import { isDeepStrictEqual } from 'node:util';
 import type { ProfileConfigurationPort, ProfileRuntime } from '@mini-harness/plugin-api/profile';
 import type { ScopeAddress, ScopeSettings } from '@mini-harness/plugin-api/configuration';
@@ -254,7 +248,11 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
     for (const ancestor of ancestry)
       if (hasComposition(settings.scopes[ancestor]) && !this.scopes.has(ancestor))
         throw new DomainError('unavailable', 'Plugin scope is not prepared: ' + ancestor);
-    const context = ancestry.reverse().map((item) => this.scopes.get(item)?.context).find(Boolean) ?? this.ctx;
+    const context =
+      ancestry
+        .reverse()
+        .map((item) => this.scopes.get(item)?.context)
+        .find(Boolean) ?? this.ctx;
     const scope = this.lookup(key)!.key;
     return scopeOf(context) === scope ? context : tagScope(context.extend(), scope);
   }
@@ -287,16 +285,24 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
     descriptors: ReturnType<PluginCatalog['descriptors']>,
     unavailable: (id: string, error: unknown, key?: ScopeAddress) => boolean,
   ) {
-    const configured = new Set(scopeAddresses(settings).filter((key) => hasComposition(settings.scopes[key])));
+    const configured = new Set(
+      scopeAddresses(settings).filter((key) => hasComposition(settings.scopes[key])),
+    );
     return [...configured].map((key) => {
       const scope = settings.scopes[key]!;
       const plans = this.catalog.plans(descriptors, key, (id, error) => unavailable(id, error, key));
       return scopeEntry(
-        this.ctx, key, configured, this.ancestry(key).filter((item) => item !== key),
+        this.ctx,
+        key,
+        configured,
+        this.ancestry(key).filter((item) => item !== key),
         [...new Set(scope.isolate)].sort(),
-        (context) => plans.filter(({ descriptor }) => descriptor.native?.plugin)
-          .map((plan) => this.catalog.entry(plan, context, key + '/' + plan.id)),
-        this.scopes, this.scopeFailures,
+        (context) =>
+          plans
+            .filter(({ descriptor }) => descriptor.native?.plugin)
+            .map((plan) => this.catalog.entry(plan, context, key + '/' + plan.id)),
+        this.scopes,
+        this.scopeFailures,
       );
     });
   }
@@ -311,11 +317,7 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
     await this.apply(this.settings, true);
   }
 
-  private apply(
-    settings: ProfileConfiguration,
-    starting: boolean,
-    released?: ReadonlySet<ScopeAddress>,
-  ) {
+  private apply(settings: ProfileConfiguration, starting: boolean, released?: ReadonlySet<ScopeAddress>) {
     const transaction = (this.transaction = {});
     const work = this.lifecycle.run(transaction, () =>
       Promise.resolve().then(() => this.configureGraph(settings, starting, released)),
@@ -363,7 +365,8 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
     };
     const plans = this.catalog.plans(descriptors, undefined, unavailable);
     const mounts = [
-      ...plans.filter(({ id, descriptor }) => descriptor.native?.plugin && !failures.has(id))
+      ...plans
+        .filter(({ id, descriptor }) => descriptor.native?.plugin && !failures.has(id))
         .map((plan) => this.catalog.entry(plan, this.ctx)),
       ...this.scopedEntries(settings, descriptors, unavailable),
     ];

@@ -79,7 +79,13 @@ export function scopeEntry(
 
         // Resolve topology through the owners' services. A configured ancestor
         // is itself a dependency, so its disposal also disposes this subtree.
-        async function connect(owner: Context, binding: ScopeBinding, parent: ScopeAddress | undefined, seen: Set<ScopeAddress>, nearest?: ScopeAddress): Promise<void> {
+        async function connect(
+          owner: Context,
+          binding: ScopeBinding,
+          parent: ScopeAddress | undefined,
+          seen: Set<ScopeAddress>,
+          nearest?: ScopeAddress,
+        ): Promise<void> {
           if (!parent) {
             if (!nearest) return mount(owner, root, binding);
             await owner.inject([compositionName(nearest)], (child) =>
@@ -93,7 +99,10 @@ export function scopeEntry(
             const next = lookupScope(child, address);
             if (!next) throw new Error('Configured scope does not exist: ' + address);
             await connect(
-              child, binding, next.parent, new Set([...seen, address]),
+              child,
+              binding,
+              next.parent,
+              new Set([...seen, address]),
               nearest ?? (options().configured.has(address) ? address : undefined),
             );
           });
@@ -105,7 +114,9 @@ export function scopeEntry(
           await connect(ctx, binding, binding.parent, new Set([key]));
         } catch (error) {
           failures.set(key, error);
-          ctx.effect(() => () => { failures.delete(key); });
+          ctx.effect(() => () => {
+            failures.delete(key);
+          });
         }
       },
     }),
