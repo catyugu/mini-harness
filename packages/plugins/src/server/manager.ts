@@ -423,16 +423,21 @@ export class PluginHost implements ScopePort {
     ];
     const nextEntries = new Map(mounts.map((entry) => [entry.id, entry]));
     const scopeChanges = new Set(
-      [...scopeKeys(previous), ...scopeKeys(settings)].filter((key) =>
-        !isDeepStrictEqual(previous.scopes[key]?.isolate, settings.scopes[key]?.isolate),
+      [...scopeKeys(previous), ...scopeKeys(settings)].filter(
+        (key) => !isDeepStrictEqual(previous.scopes[key]?.isolate, settings.scopes[key]?.isolate),
       ),
     );
     let appChanged = false;
     for (const id of new Set([...this.entries.keys(), ...nextEntries.keys()])) {
       const before = this.entries.get(id);
       const after = nextEntries.get(id);
-      if (before && after && before.matches(after) &&
-          (after.live || isDeepStrictEqual(before.options.config, after.config))) continue;
+      if (
+        before &&
+        after &&
+        before.matches(after) &&
+        (after.live || isDeepStrictEqual(before.options.config, after.config))
+      )
+        continue;
       const slash = id.indexOf('/');
       if (slash < 0) appChanged = true;
       else scopeChanges.add(id.slice(0, slash) as ScopeKey);
