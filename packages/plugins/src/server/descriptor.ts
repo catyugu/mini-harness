@@ -1,15 +1,14 @@
 import { lstatSync } from 'node:fs';
 import { join } from 'node:path';
 import { readJson } from '@mini-harness/platform/json';
-import { serviceNamePattern } from '@mini-harness/plugin-api/selection';
-import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
+import type { PluginInfo, ResolvedPlugin } from '@mini-harness/plugin-api/descriptor';
 import { readBrowserAssets, type BrowserAssets } from './browser-assets.ts';
 import { assertPeerCompatibility, isRegularFile } from './source.ts';
 
 import type { PluginMetadata } from '../shared/metadata.ts';
 
 export interface DiscoveredPlugin
-  extends PluginDescriptor,
+  extends ResolvedPlugin,
     Pick<PluginMetadata, 'trustedCode' | 'package' | 'error'> {
   source?: string;
   module?: string;
@@ -26,7 +25,7 @@ export function describePlugin(id: string, folder: string): DiscoveredPlugin {
     throw new Error('Plugin browser entry exceeds 1 MiB');
   const descriptor = join(folder, 'plugin.json');
   const manifest = isRegularFile(descriptor)
-    ? readJson<(Partial<PluginDescriptor> & { browserAssets?: unknown; browserPreload?: unknown }) | null>(
+    ? readJson<(Partial<PluginInfo> & { browserAssets?: unknown; browserPreload?: unknown }) | null>(
         descriptor,
         null,
       )
@@ -41,31 +40,8 @@ export function describePlugin(id: string, folder: string): DiscoveredPlugin {
   const scope = manifest.scope ?? 'application';
   if (scope !== 'application' && scope !== 'workspace' && scope !== 'session')
     throw new Error('Invalid plugin scope');
-  const names = (
-    field: 'inject' | 'optional' | 'provides',
-    pattern: RegExp,
-  ) => {
-    const input = manifest[field] ?? [];
-    if (
-      !Array.isArray(input) ||
-      input.some((name) => typeof name !== 'string' || !pattern.test(name)) ||
-      new Set(input).size !== input.length
-    )
-      throw new Error('Invalid plugin ' + field + ': ' + id);
-    return input;
-  };
-  const provides = names('provides', serviceNamePattern);
-  const inject = names('inject', serviceNamePattern);
-  const optional = names('optional', serviceNamePattern);
-  if (!hasHost && (provides.length || inject.length || optional.length))
-    throw new Error('Server services require plugin.js');
-  if (
-    scope !== 'application' &&
-    (hasWeb || [...inject, ...optional].some((name) => name === 'harnessRoutes' || name === 'harnessNetwork'))
-  )
-    throw new Error('Scoped plugins require a server entry without routes');
-  if (inject.some((service) => optional.includes(service) || provides.includes(service)))
-    throw new Error('Conflicting service declarations');
+  if (scope !== 'application' && hasWeb)
+    throw new Error('Browser entries belong to the application scope');
   if (!hasWeb && (manifest.browserAssets !== undefined || manifest.browserPreload !== undefined))
     throw new Error('Browser assets require web.js');
   const resources = hasWeb
@@ -120,9 +96,6 @@ export function describePlugin(id: string, folder: string): DiscoveredPlugin {
     id,
     title,
     description,
-    provides: manifest.provides === undefined ? undefined : provides,
-    inject: manifest.inject === undefined ? undefined : inject,
-    optional,
     configSchema,
     configGroups,
     configHint,

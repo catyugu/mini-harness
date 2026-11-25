@@ -163,7 +163,7 @@ test('an application plugin replaces only LLM and composes execution hooks witho
   writePlugin(
     paths.plugins,
     'transport',
-    { provides: ['harnessLlm'], inject: ['harnessModels'] },
+    {},
     `
 export const provide = ["harnessLlm"];
 export const inject = ["harnessModels"];
@@ -194,7 +194,7 @@ export const apply = (ctx) => {
   writePlugin(
     paths.plugins,
     'pipeline',
-    { inject: ['harnessTools'] },
+    {},
     `
 export const inject = ["harnessTools"];
 export const apply = (ctx) => {
@@ -307,7 +307,7 @@ test('a failed model-visible transform preserves the execution and never sends t
   writePlugin(
     paths.plugins,
     'redaction',
-    { inject: ['harnessTools'] },
+    {},
     `
 export const inject = ["harnessTools"];
 export const apply = (ctx) => {

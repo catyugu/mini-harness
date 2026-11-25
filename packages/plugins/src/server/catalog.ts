@@ -9,8 +9,8 @@ import { Check } from 'typebox/value';
 import { scopeKeys, type PluginSettings } from '@mini-harness/plugin-api/configuration';
 import type { PluginScope, ScopeKey, ScopeSettings } from '@mini-harness/plugin-api/scopes';
 import { pluginBundle } from './source.ts';
-import { Inject, type Context, type Plugin } from 'mini-harness/cordis';
-import type { ConfigValidationContext, PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
+import type { Context, Plugin } from 'mini-harness/cordis';
+import type { ConfigValidationContext, ResolvedPlugin } from '@mini-harness/plugin-api/descriptor';
 import { builtinBrowserAssets } from './browser-assets.ts';
 import { describePlugin, type DiscoveredPlugin } from './descriptor.ts';
 
@@ -49,7 +49,7 @@ export class PluginCatalog {
   private readonly protectedProviders: ReadonlyMap<string, string>;
   constructor(
     private readonly directory: string,
-    builtins: PluginDescriptor[],
+    builtins: ResolvedPlugin[],
     rootServices: string[],
     private readonly devPlugin?: string,
     private readonly profile?: Pick<
@@ -58,21 +58,10 @@ export class PluginCatalog {
     >,
   ) {
     this.builtins = new Map(
-      builtins.map((descriptor) => {
-        const { plugin } = descriptor;
-        return [
-          descriptor.id,
-          {
-            ...descriptor,
-            inject: plugin ? Object.keys(Inject.resolve(plugin.inject)) : descriptor.inject,
-            provides:
-              typeof plugin?.provide === 'string'
-                ? [plugin.provide]
-                : (plugin?.provide ?? descriptor.provides),
-            resources: builtinBrowserAssets(descriptor),
-          },
-        ];
-      }),
+      builtins.map((descriptor) => [
+        descriptor.id,
+        { ...descriptor, resources: builtinBrowserAssets(descriptor) },
+      ]),
     );
     this.protectedProviders = new Map([
       ...rootServices.map((name) => [name, 'application'] as const),
@@ -93,7 +82,7 @@ export class PluginCatalog {
     return { ...settings, plugins, pluginConfig };
   }
 
-  enabled(descriptor: PluginDescriptor, settings: PluginSettings) {
+  enabled(descriptor: ResolvedPlugin, settings: PluginSettings) {
     return (settings.plugins[descriptor.id] ?? descriptor.defaultEnabled) === true;
   }
 
@@ -162,22 +151,13 @@ export class PluginCatalog {
           const plugin: Plugin = exports.default ?? exports;
           if (typeof plugin !== 'function' && typeof plugin?.apply !== 'function')
             throw new Error('Plugin ' + id + ' must export a Cordis plugin with apply(ctx, config)');
-          const inject = Object.keys(Inject.resolve(plugin.inject));
-          const provides = typeof plugin.provide === 'string' ? [plugin.provide] : (plugin.provide ?? []);
-          if (descriptor.optional?.some((name) => inject.includes(name) || provides.includes(name)))
-            throw new Error('Conflicting service declarations for ' + id);
-          if (
-            scope !== 'application' &&
-            inject.some((name) => name === 'harnessRoutes' || name === 'harnessNetwork')
-          )
-            throw new Error('Scoped plugins cannot register application routes');
           const validateConfig = exports.validateConfig;
           if (
             validateConfig !== undefined &&
             (typeof validateConfig !== 'function' || !descriptor.configSchema)
           )
             throw new Error('Export a validateConfig function with a configSchema in plugin.json');
-          return { ...descriptor, plugin, module, inject, provides, validateConfig };
+          return { ...descriptor, plugin, module, validateConfig };
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           return { ...descriptor, error: message };
@@ -199,9 +179,7 @@ export class PluginCatalog {
           id,
           source,
           resources,
-          inject,
           plugin: _plugin,
-          optional,
           browserStyles,
           configChanges,
           validateConfig,
@@ -268,7 +246,7 @@ export class PluginCatalog {
   }
 
   validateConfig(
-    descriptor: PluginDescriptor,
+    descriptor: ResolvedPlugin,
     config: Record<string, unknown>,
     operation: ConfigValidationContext['operation'],
     ctx: Context,
@@ -280,8 +258,6 @@ export class PluginCatalog {
       const result: unknown = validator(Object.freeze(structuredClone(config)), {
         operation,
         service<Name extends keyof Context & string>(name: Name): NonNullable<Context[Name]> {
-          if (!descriptor.inject?.includes(name) && !descriptor.optional?.includes(name))
-            throw new Error('Configuration dependency is not declared: ' + name);
           const service = ctx.get(name) as Context[Name] | undefined;
           if (service == null)
             throw new DomainError('unavailable', 'Configuration dependency is unavailable: ' + name);
@@ -377,7 +353,8 @@ export class PluginCatalog {
         continue;
       // Cordis owns service uniqueness and activation. Child groups isolate their
       // declared services; only the host/tool authorization boundary is fixed.
-      for (const service of item.provides ?? []) {
+      const provide = item.plugin?.provide;
+      for (const service of typeof provide === 'string' ? [provide] : (provide ?? [])) {
         const owner = this.protectedProviders.get(service);
         if (owner && (!isApp || owner !== id))
           throw new DomainError('invalid_input', 'Protected service cannot be overridden: ' + service);

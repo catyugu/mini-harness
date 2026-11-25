@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { EntryGroup, EntryTree, Service, type Context, type EntryOptions } from 'mini-harness/cordis';
 import { localPluginIdPattern, isScopeKey } from '@mini-harness/plugin-api/selection';
 import { isDeepStrictEqual } from 'node:util';
-import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
+import type { ResolvedPlugin } from '@mini-harness/plugin-api/descriptor';
 import type {
   HostServices,
   PluginScope,
@@ -49,7 +49,7 @@ export class PluginHost implements ScopePort {
   constructor(
     readonly ctx: Context,
     private readonly directory: string,
-    builtins: PluginDescriptor[],
+    builtins: ResolvedPlugin[],
     rootServices: string[],
     private readonly settings: () => PluginSettings,
     upgrade?: (path: string, handler: UpgradeHandler) => () => Promise<void>,

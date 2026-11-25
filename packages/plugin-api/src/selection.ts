@@ -3,7 +3,6 @@ import { DomainError } from '@mini-harness/platform/errors';
 
 export const localPluginIdPattern = /^[a-z][a-z0-9-]{0,63}$/;
 export const pluginIdPattern = /^(?:core:)?[a-z][a-z0-9-]{0,63}$/;
-export const serviceNamePattern = /^[a-zA-Z][a-zA-Z0-9_.:-]{0,95}$/;
 export function isScopeKey(value: string): value is ScopeKey {
   return /^(?:workspace:[a-f0-9]{32}|session:[a-f0-9-]{36})$/.test(value);
 }

@@ -26,12 +26,9 @@ export interface PluginInfo {
 }
 
 /** Internal resolved entry, with the module and its display metadata kept distinct. */
-export interface PluginDescriptor extends PluginInfo {
+export interface ResolvedPlugin extends PluginInfo {
   id: string;
   defaultEnabled?: boolean;
-  provides?: string[];
-  inject?: string[];
-  optional?: string[];
   plugin?: Plugin;
 }
 

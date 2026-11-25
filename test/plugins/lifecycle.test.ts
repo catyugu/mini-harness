@@ -14,7 +14,7 @@ import { writeJson } from '@mini-harness/platform/json';
 
 import { Context } from 'mini-harness/cordis';
 import type { SessionRecord } from '@mini-harness/sessions/identity';
-import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
+import type { ResolvedPlugin } from '@mini-harness/plugin-api/descriptor';
 import { PluginHost } from '@mini-harness/plugins/manager';
 
 declare module 'mini-harness/cordis' {
@@ -40,7 +40,6 @@ test('an installed Cordis plugin can use services, configure a tool, and release
   writeFileSync(
     join(folder, 'plugin.json'),
     JSON.stringify({
-      inject: ['harnessTools', 'harnessSessions'],
       configSchema: {
         type: 'object',
         properties: { prefix: { type: 'string', default: 'Count' } },
@@ -197,7 +196,7 @@ export function apply(ctx) {
   ]) {
     mkdirSync(join(paths.plugins, id));
     writeFileSync(join(paths.plugins, id, 'plugin.js'), source);
-    writeFileSync(join(paths.plugins, id, 'plugin.json'), JSON.stringify({ inject: ['harnessSessions'] }));
+    writeFileSync(join(paths.plugins, id, 'plugin.json'), JSON.stringify({}));
   }
   await runtime.start();
   await runtime.configuration.update({ plugins: { 'function-entry': true } });
@@ -643,7 +642,7 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
     ['independent', { id: 'independent', workspaceId: otherWorkspace, parentId: null } as SessionRecord],
   ]);
   const released: string[] = [];
-  const builtins: PluginDescriptor[] = [
+  const builtins: ResolvedPlugin[] = [
     {
       id: 'global',
       scope: 'application',
@@ -663,7 +662,6 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
       scope: 'workspace',
       title: 'Workspace',
       description: '',
-      provides: ['greeting'],
       configSchema: { type: 'object', properties: { value: { type: 'string' } }, required: ['value'] },
       plugin: {
         provide: 'greeting',
@@ -677,7 +675,6 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
       scope: 'session',
       title: 'Layer',
       description: '',
-      provides: ['greeting'],
       plugin: {
         provide: 'greeting',
         apply(ctx: Context, config: Record<string, unknown>) {
@@ -799,14 +796,13 @@ test('configuration validation resolves the staged scope provider and rejects in
   const workspaceId = 'a'.repeat(32);
   const key = 'workspace:' + workspaceId;
   let settings = structuredClone(DEFAULTS);
-  const builtins: PluginDescriptor[] = [
+  const builtins: ResolvedPlugin[] = [
     {
       id: 'global',
       scope: 'application',
       title: 'Default',
       description: '',
       defaultEnabled: true,
-      provides: ['greeting'],
       plugin: {
         provide: 'greeting',
         apply(ctx) {
@@ -819,7 +815,6 @@ test('configuration validation resolves the staged scope provider and rejects in
       scope: 'workspace',
       title: 'Local',
       description: '',
-      provides: ['greeting'],
       plugin: {
         provide: 'greeting',
         apply(ctx) {
@@ -873,7 +868,7 @@ test('configuration validation resolves the staged scope provider and rejects in
 test('setup and live configuration cannot await their own graph transaction', async (t) => {
   const directory = mkdtempSync(join(tmpdir(), 'mini-reentrant-'));
   let settings = structuredClone(DEFAULTS);
-  const builtins: PluginDescriptor[] = [
+  const builtins: ResolvedPlugin[] = [
     {
       id: 'reentrant',
       scope: 'application',
@@ -916,7 +911,7 @@ test('setup and live configuration cannot await their own graph transaction', as
 test('a failed server entry does not publish its browser module', async (t) => {
   const directory = mkdtempSync(join(tmpdir(), 'mini-required-browser-'));
   const browser = '/packages/ui-runtime/src/browser/boot.js';
-  const builtins: PluginDescriptor[] = [
+  const builtins: ResolvedPlugin[] = [
     {
       id: 'ui',
       scope: 'application',

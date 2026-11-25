@@ -7,7 +7,7 @@ import { parseDocument, stringify } from 'yaml';
 import { Context, EntryTree, type EntryOptions, type Plugin } from 'mini-harness/cordis';
 import { readJson, writeJson, writeText } from '@mini-harness/platform/json';
 import type { Paths } from '@mini-harness/platform/runtime-paths';
-import type { PluginDescriptor, PluginInfo } from '@mini-harness/plugin-api/descriptor';
+import type { ResolvedPlugin, PluginInfo } from '@mini-harness/plugin-api/descriptor';
 import { bindInstance } from '@mini-harness/plugin-api/instance';
 import { bindPluginImports } from '@mini-harness/plugins/module-resolution';
 import { isScopeKey, localPluginIdPattern, pluginIdPattern } from '@mini-harness/plugin-api/selection';
@@ -272,7 +272,7 @@ async function nativeModule(row: ResolvedRow, module: string) {
   return { row, module, plugin: value };
 }
 
-export async function profileDescriptors(entries: ReadonlyMap<string, Row>): Promise<PluginDescriptor[]> {
+export async function profileDescriptors(entries: ReadonlyMap<string, Row>): Promise<ResolvedPlugin[]> {
   const descriptors = await Promise.all(
     [...entries.values()]
       .filter((row) => row.name && packagedModules.has(row.name))

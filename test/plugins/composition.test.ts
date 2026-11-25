@@ -26,7 +26,7 @@ test('external services and their declared consumers compose through Cordis serv
   writePlugin(
     paths.plugins,
     'suffix',
-    { provides: ['exampleSuffix'] },
+    {},
     "export const provide = [\"exampleSuffix\"];\nexport const apply = (ctx) => { ctx.provide('exampleSuffix', '!'); };",
   );
   assert.equal((await patch({ plugins: { suffix: true } })).status, 200);
@@ -35,7 +35,7 @@ test('external services and their declared consumers compose through Cordis serv
   writePlugin(
     paths.plugins,
     'greeting-alt',
-    { provides: ['exampleGreeting'] },
+    {},
     "export const provide = [\"exampleGreeting\"];\nexport const apply = (ctx) => { ctx.provide('exampleGreeting', { greet: (name) => 'Welcome, ' + name }); };",
   );
   assert.match((await patch({ plugins: { 'greeting-alt': true } })).body.error, /has been registered/);
@@ -89,7 +89,7 @@ test('scoped plugins inherit declared services and tool policies, and release th
   writePlugin(
     paths.plugins,
     'workspace-greeting',
-    { scope: 'workspace', provides: ['exampleGreeting'] },
+    { scope: 'workspace' },
     `
 export const provide = ["exampleGreeting"];
 export const inject = ["harnessSessions","harnessPluginRoutes","harnessPluginData","harnessPluginChanges","harnessTools"];
@@ -212,7 +212,7 @@ test('read-only permissions are bound to the selected tool registration', async 
   writePlugin(
     paths.plugins,
     'replacement',
-    { scope: 'session', inject: ['harnessTools'] },
+    { scope: 'session' },
     `
 export const inject = ["harnessTools"];
 export const apply = (ctx) => {
@@ -280,7 +280,7 @@ test('the host tool authorization service cannot be replaced at either scope', a
     writePlugin(
       paths.plugins,
       'tools-' + scope,
-      { scope, provides: ['harnessTools'] },
+      { scope },
       `
 export const provide = ['harnessTools'];
 export function apply() { throw new Error('Protected provider must never mount'); }
@@ -321,7 +321,7 @@ test('file tools and HTTP preview consume the same selected File Access provider
   writePlugin(
     paths.plugins,
     'virtual-files',
-    { provides: ['harnessFileAccess'] },
+    {},
     `
 export const provide = ["harnessFileAccess"];
 export function apply(ctx) {
@@ -358,7 +358,7 @@ test('native runs use the nearest scoped LLM provider while siblings retain the 
   writePlugin(
     paths.plugins,
     'scoped-llm',
-    { scope: 'session', provides: ['harnessLlm'] },
+    { scope: 'session' },
     `
 export const provide = ["harnessLlm"];
 export const apply = (ctx, config) => { ctx.provide('harnessLlm', {
@@ -428,7 +428,7 @@ test('native file and shell tools use scoped file, process and sandbox services 
   writePlugin(
     paths.plugins,
     'application-sandbox',
-    { provides: ['harnessSandbox'] },
+    {},
     `
 export const provide = ["harnessSandbox"];
 export const apply = (ctx) => { ctx.provide('harnessSandbox', ${isolated('application sandbox')}); };
@@ -437,7 +437,7 @@ export const apply = (ctx) => { ctx.provide('harnessSandbox', ${isolated('applic
   writePlugin(
     paths.plugins,
     'scoped-environment',
-    { scope: 'session', provides: ['harnessFileAccess', 'harnessSandbox'] },
+    { scope: 'session' },
     `
 export const provide = ["harnessFileAccess","harnessSandbox"];
 export const apply = (ctx) => {
@@ -454,7 +454,7 @@ export const apply = (ctx) => {
   writePlugin(
     paths.plugins,
     'scoped-process',
-    { scope: 'session', provides: ['harnessProcess'] },
+    { scope: 'session' },
     `
 export const provide = ["harnessProcess"];
 export const apply = (ctx) => { ctx.provide('harnessProcess', {
@@ -531,7 +531,7 @@ test('scoped model catalogs govern explicit runs and inherited or model-selected
   writePlugin(
     paths.plugins,
     'scoped-models',
-    { scope: 'session', provides: ['harnessModels', 'harnessLlm'] },
+    { scope: 'session' },
     `
 export const provide = ["harnessModels","harnessLlm"];
 export const apply = (ctx) => {

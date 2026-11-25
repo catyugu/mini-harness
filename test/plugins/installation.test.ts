@@ -139,7 +139,6 @@ test(
     const id = 'npm-plugin';
     const files = {
       'plugin.json': JSON.stringify({
-        inject: ['harnessPluginRoutes'],
         browserAssets: ['web/panel.css', 'web/preload.js'],
         browserPreload: 'web/preload.js',
       }),
@@ -231,7 +230,7 @@ test('local and browser-only plugins install disabled, mount when enabled and un
   const bundle = {
     id: 'gui-plugin',
     files: [
-      { name: 'plugin.json', content: JSON.stringify({ inject: ['harnessPluginRoutes'] }) },
+      { name: 'plugin.json', content: JSON.stringify({}) },
       {
         name: 'plugin.js',
         content: `

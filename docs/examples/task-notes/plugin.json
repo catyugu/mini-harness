@@ -1,12 +1,13 @@
 {
   "title": "Task notes",
   "description": "Record progress and run a follow-up in a child conversation.",
-  "provides": ["taskNotes"],
   "configChanges": "live",
   "configGroups": [
     {
       "title": "Task notes",
-      "fields": ["label"]
+      "fields": [
+        "label"
+      ]
     }
   ],
   "configSchema": {

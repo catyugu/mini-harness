@@ -1,9 +1,13 @@
 {
   "title": "Greeting service",
-  "provides": ["exampleGreeting"],
   "configSchema": {
     "type": "object",
-    "properties": { "prefix": { "type": "string", "default": "Hello" } },
+    "properties": {
+      "prefix": {
+        "type": "string",
+        "default": "Hello"
+      }
+    },
     "additionalProperties": false
   }
 }

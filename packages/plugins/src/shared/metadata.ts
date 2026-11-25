@@ -1,14 +1,13 @@
 import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
-import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
+import type { ResolvedPlugin } from '@mini-harness/plugin-api/descriptor';
 
 export interface PluginMetadata
   extends Pick<
-    PluginDescriptor,
+    ResolvedPlugin,
     | 'id'
     | 'scope'
     | 'title'
     | 'description'
-    | 'provides'
     | 'defaultEnabled'
     | 'web'
     | 'browser'

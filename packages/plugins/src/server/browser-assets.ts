@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { lstatSync, realpathSync } from 'node:fs';
 import { extname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
+import type { ResolvedPlugin } from '@mini-harness/plugin-api/descriptor';
 import type { BrowserEntry } from '@mini-harness/ui-runtime/bootstrap';
 import type { ConfiguredPlugin } from './catalog.ts';
 
@@ -23,7 +23,7 @@ export function builtinBrowserAssets({
   id,
   browser,
   browserStyles = [],
-}: PluginDescriptor): BrowserAssets | undefined {
+}: ResolvedPlugin): BrowserAssets | undefined {
   if (!browser) {
     if (browserStyles.length) throw new Error('Browser styles require an entry: ' + id);
     return;
