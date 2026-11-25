@@ -28,7 +28,7 @@
   },
   "scripts": {
     "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
-    "build": "pnpm run clean && tsc -p tsconfig.json && node --experimental-strip-types scripts/resolve-imports.ts && node dist/scripts/copy-assets.js && node dist/scripts/prune-sdk.js",
+    "build": "pnpm run clean && tsc -p tsconfig.json && node --experimental-strip-types scripts/resolve-imports.ts && node dist/scripts/copy-assets.js && node dist/scripts/prune-sdk.js && tsc -p docs/examples/tsconfig.json",
     "start": "pnpm run build && node dist/bin/mini-harness.js",
     "test": "pnpm run build && pnpm run test:node",
     "typecheck": "tsc -p tsconfig.json --noEmit",

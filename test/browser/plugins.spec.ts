@@ -437,7 +437,7 @@ export const apply = (ctx) => {
     };
 `,
     );
-    cpSync(resolve('docs/examples/browser-panel'), join(paths.plugins, 'browser-panel'), { recursive: true });
+    cpSync(resolve('dist/docs/examples/browser-panel'), join(paths.plugins, 'browser-panel'), { recursive: true });
     writeJson(paths.settings, {
       pluginConfig: {
         'core:models': { model: { provider: 'local-mock', id: 'mock-model' } },

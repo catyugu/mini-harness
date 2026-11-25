@@ -85,3 +85,11 @@ for (const path of Object.keys(editor.metafile.inputs)) {
   if (!license) throw new Error('Missing license for bundled dependency: ' + name);
   copyFileSync(join(directory, license), join(notices, name.replace(/[^a-zA-Z0-9-]/g, '-') + '.LICENSE'));
 }
+
+// Examples are TypeScript sources; only compiled copies are loaded by integration tests.
+for (const example of readdirSync('docs/examples', { withFileTypes: true })) {
+  if (!example.isDirectory() || example.name === 'task-notes') continue;
+  const directory = join('dist/docs/examples', example.name);
+  mkdirSync(directory, { recursive: true });
+  copyFileSync(join('docs/examples', example.name, 'plugin.json'), join(directory, 'plugin.json'));
+}

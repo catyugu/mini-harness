@@ -1,6 +1,12 @@
+import type { Context } from 'mini-harness/cordis';
+import type { BrowserPrimitives } from 'mini-harness/ui-primitives';
+import type { PageContribution } from 'mini-harness/ui-layout';
+import type { SettingsContribution } from 'mini-harness/ui-settings';
+import type { MessageAction } from 'mini-harness/conversation/history';
+
 import { browserPluginId, browserPluginSettings } from 'mini-harness/ui-runtime/plugin-settings';
 
-import { replaceComposer } from './web/composer.js';
+import { replaceComposer } from './web/composer.ts';
 
 export const inject = [
   'miniPrimitives',
@@ -13,8 +19,9 @@ export const inject = [
   'miniConversation',
 ];
 
-export function apply(ctx, config) {
-  const { miniPrimitives: ui, miniComposer } = ctx;
+export function apply(ctx: Context, config: { replaceComposer: boolean }) {
+  const ui: BrowserPrimitives = ctx.miniPrimitives;
+  const { miniComposer } = ctx;
   const signal = ctx.fiber.signal;
   const id = browserPluginId(ctx);
   if (config.replaceComposer) replaceComposer(ctx);
@@ -30,7 +37,7 @@ export function apply(ctx, config) {
   open.addEventListener('click', () => modal.showModal(), { signal });
   panel.append(open);
   ctx.effect(() =>
-    ctx.miniPages.contribute(id + ':example', { title: 'Example panel', content: panel }, signal),
+    ctx.miniPages.contribute(id + ':example', { title: 'Example panel', content: panel } satisfies PageContribution, signal),
   );
   ctx.effect(() =>
     ctx.miniSettingsRegistry.register(
@@ -39,7 +46,7 @@ export function apply(ctx, config) {
         id: 'example-info',
         section: 'Extensions',
         render: () => ui.status('The example panel can also replace the conversation composer.'),
-      },
+      } satisfies SettingsContribution,
       browserPluginSettings(ctx),
     ),
   );
@@ -50,6 +57,6 @@ export function apply(ctx, config) {
       icon: 'copy',
       visible: ({ message }) => message.role === 'assistant',
       run: ({ rawText }) => miniComposer.insert(rawText),
-    }),
+    } satisfies MessageAction),
   );
 }

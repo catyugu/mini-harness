@@ -1,6 +1,6 @@
 # Plugin examples
 
-Copy each example directory into your mini-harness plugins directory under its current name.
+These examples are TypeScript source. Run the repository build, then copy the corresponding compiled example from `dist/docs/examples/` to your plugins directory. The Task notes package can also be built independently.
 
 | Example                           | Enablement                                                                                                                                                                  |
 | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

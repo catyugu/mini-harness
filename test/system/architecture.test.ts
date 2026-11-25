@@ -65,6 +65,7 @@ test('tracked TypeScript uses source specifiers and named type imports', () => {
         if (item.name !== 'node_modules') visit(path);
         continue;
       }
+      assert.ok(!/\.[cm]?js$/.test(item.name), 'JavaScript source file: ' + path);
       if (!item.name.endsWith('.ts')) continue;
       const ast = ts.createSourceFile(path, readFileSync(path, 'utf8'), ts.ScriptTarget.Latest, true);
       for (const statement of ast.statements) {
