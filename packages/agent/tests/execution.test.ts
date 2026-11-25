@@ -12,7 +12,7 @@ import { Inbox } from '../../runs/src/inbox.ts';
 import type { Attachment } from '@mini-harness/input/message';
 import type { InboxItem } from '@mini-harness/sessions/log-api';
 import { SessionRun } from '../../runs/src/session-run.ts';
-import { nativeExecutor } from '../src/strategies.ts';
+import { nativeExecutor } from '@mini-harness/tools/execution';
 import { basicCompaction } from '../src/compaction.ts';
 import { SessionRegistry } from '@mini-harness/sessions/registry';
 import { WorkspaceCatalog } from '@mini-harness/workspaces/catalog';

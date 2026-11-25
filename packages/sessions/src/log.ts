@@ -87,7 +87,7 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
     if (entry.type === 'tool-schema' && digest(entry.tools) !== entry.hash)
       throw new Error('Tool schema digest does not match its content');
     if (entry.type === 'model-request') {
-      if (!recovery || entry.request.messagesPatch !== undefined) this.materializeRequest(entry);
+      if (!recovery || entry.request.messagesPatch !== undefined) validateRequestSnapshot(this.materializeRequest(entry));
       else {
         validateRequestSnapshot(this.requestMetadata(entry));
         this.validateRecoveryContext(entry.parentId, recovery);
@@ -259,9 +259,7 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
       messages = [...context.slice(0, start), ...insert, ...context.slice(start + deleteCount)];
     }
     const metadata = this.requestMetadata(entry);
-    const snapshot = { ...metadata, messages };
-    validateRequestSnapshot(snapshot);
-    return snapshot;
+    return { ...metadata, messages };
   }
 
   requestSnapshot(
@@ -323,12 +321,6 @@ function validateEvent(event: SessionEvent) {
     case 'model-request':
       if (
         !event.request ||
-        !event.request.model ||
-        typeof event.request.model.provider !== 'string' ||
-        !event.request.model.provider ||
-        typeof event.request.model.id !== 'string' ||
-        !event.request.model.id ||
-        typeof event.request.systemPrompt !== 'string' ||
         (event.request.toolSchema !== undefined && !/^[a-f0-9]{64}$/.test(event.request.toolSchema))
       )
         throw new Error('Invalid recorded model request');

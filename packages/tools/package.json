@@ -15,7 +15,8 @@
       "./execution"
     ],
     "profileModules": {
-      "@mini-harness/tools": "./src/manifest.ts"
+      "@mini-harness/tools": "./src/manifest.ts",
+      "@mini-harness/tool-executor": "./src/execution.ts#executor"
     }
   },
   "dependencies": {

@@ -1,3 +1,4 @@
+import type { Context } from 'mini-harness/cordis';
 import { isToolContent, type ToolDefinition, type ToolUpdate } from './api.ts';
 import { Check } from 'typebox/value';
 import type {
@@ -138,3 +139,17 @@ declare module 'mini-harness/cordis' {
     harnessToolExecutor: ToolExecutorPort;
   }
 }
+
+export const nativeExecutor: ToolExecutorPort = {
+  present: (content, tools) => ({ ...content, tools: [...tools] }),
+  interpret: (message) => message,
+  execute: executeTools,
+};
+
+export const executor = {
+  provide: ['harnessToolExecutor'],
+  apply(ctx: Context) {
+    ctx.provide('harnessToolExecutor', nativeExecutor);
+  },
+};
+

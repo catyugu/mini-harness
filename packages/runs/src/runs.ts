@@ -160,8 +160,6 @@ export class Runs implements RunPort {
       this.changed(id);
       publish({ type: 'run', run: running });
       this.observe({ type: 'run-started', sessionId: id, run: running }, cancellation);
-      if (!preparedScope) await this.scopes.prepare(`session:${id}`, cancellation);
-      cancellation.throwIfAborted();
       return this.withAgentContext(id, activity, cancellation, async (ctx, signal) => {
         activity.inputSignal = signal;
         try {
@@ -480,13 +478,9 @@ export class Runs implements RunPort {
   async compact(id: string) {
     const activity = this.reserve(id);
     const { signal } = activity.controller;
-    const done = (activity.done = this.scopes
-      .prepare(`session:${id}`, signal)
-      .then(() =>
-        this.withAgentContext(id, activity, signal, (ctx, signal) =>
-          this.sessionRun.compact(ctx, id, signal),
-        ),
-      ));
+    const done = (activity.done = this.withAgentContext(id, activity, signal, (ctx, signal) =>
+      this.sessionRun.compact(ctx, id, signal),
+    ));
     try {
       await done;
     } finally {
@@ -501,6 +495,8 @@ export class Runs implements RunPort {
     work: (ctx: Context, signal: AbortSignal) => Promise<T>,
   ) {
     const key = `session:${id}` as const;
+    await this.scopes.prepare(key, signal);
+    signal.throwIfAborted();
     const scope = this.scopes.context(key);
     const fiber = tagScope(scope.extend(), this.registry.runScope(id)!).inject(['harnessAgent'], () => {});
     try {

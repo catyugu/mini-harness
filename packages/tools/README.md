@@ -8,7 +8,7 @@ Resolves tool registrations through opaque runtime scope layers shared with Prom
 
 ## Structure
 
-`src/api.ts` defines tool inputs and results. `events.ts` declares the tool policy event and `registry.ts` owns leases.
+`src/api.ts` defines tool inputs and results. `execution.ts` defines the shared executor contract, default strategy and tool-call pipeline; `registry.ts` owns leases.
 
 ## API
 
@@ -16,11 +16,11 @@ Resolves tool registrations through opaque runtime scope layers shared with Prom
 
 ## Dependencies
 
-Uses Cordis fibers for plugin-owned calls and session ancestry for tool visibility. Agent consumes tool definitions and invocation leases.
+Uses Cordis fibers for plugin-owned calls and session ancestry for tool visibility. Agent consumes tool definitions and invocation leases. `mini-harness/tools/execution` exports `ToolExecutorPort`, `executeTools` and the native strategy for any consumer.
 
 ## Lifecycle
 
-`core:tools` mounts at application scope. Unmount revokes contributed definitions and waits for active invocations to drain.
+`core:tools` and `core:tool-executor` mount independently at application scope. Unmount revokes contributed definitions and waits for active invocations to drain.
 
 ## Configuration
 
