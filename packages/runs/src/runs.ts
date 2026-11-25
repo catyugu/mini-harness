@@ -14,7 +14,6 @@ import { RunInterrupted } from './stream.ts';
 import type { StreamEvent, RunEvent } from './stream.ts';
 import { isRunning, type RunInfo } from '@mini-harness/sessions/run-state';
 import { RunEvents } from './events.ts';
-import type { ModelPreference } from '@mini-harness/models/api';
 import type { ExecutionInput } from './execution.ts';
 import type { RunPort } from './api.ts';
 import type { SessionStore } from '@mini-harness/sessions/store';
@@ -46,7 +45,7 @@ export class Runs implements RunPort {
     private readonly registry: SessionStore,
     private readonly scopes: ProfileScopes,
     private readonly observe: (event: CapabilityObservation, signal?: AbortSignal) => void,
-    private readonly preference: ModelPreference,
+    private readonly recent: () => ModelChoice | undefined,
     private readonly sessionRun: SessionRun,
   ) {}
 
@@ -107,7 +106,7 @@ export class Runs implements RunPort {
     preparedScope?: Activity,
   ) {
     validateModelOptions(model, thinkingLevel);
-    const fallback = this.preference.recent();
+    const fallback = this.recent();
     const record = this.registry.get(id);
     if (!record) throw new DomainError('not_found', 'Conversation not found');
     signal?.throwIfAborted();
@@ -456,7 +455,7 @@ export class Runs implements RunPort {
       mode,
       () => this.registry.prepareInput(id, message, attachments),
       models,
-      { model, thinkingLevel, fallback: this.preference.recent() },
+      { model, thinkingLevel, fallback: this.recent() },
     );
   }
 

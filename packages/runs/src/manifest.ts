@@ -22,7 +22,6 @@ const plugin: Plugin.Object = {
     'harnessProfileScopes',
     'harnessRegistry',
     'harnessAgent',
-    'harnessModelPreference',
     'harnessModels',
     'harnessPrompt',
     'harnessTools',

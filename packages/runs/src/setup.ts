@@ -11,7 +11,7 @@ export function setup(ctx: Context) {
     catalog,
     scopes,
     (event, signal) => observe(ctx, event, signal, catalog.runScope(event.sessionId)),
-    ctx.harnessModelPreference,
+    () => ctx.get('harnessModelPreference')?.recent(),
     new SessionRun(catalog, () => ctx.fiber.effectiveConfig as { autoCompact: boolean }),
   );
   ctx.provide('harnessRuns', runs);

@@ -98,7 +98,6 @@ export const administration: Plugin.Object = {
   inject: [
     'harnessModels',
     'harnessModelStore',
-    'harnessModelPreference',
     'harnessState',
     'harnessRoutes',
     'harnessChanges',

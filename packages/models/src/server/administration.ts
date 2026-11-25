@@ -4,7 +4,7 @@ import type { Context } from 'mini-harness/cordis';
 import { saveProvider } from './provider-settings.ts';
 
 export function setupAdministration(ctx: Context) {
-  const { recent, remember } = ctx.harnessModelPreference;
+  const recent = () => ctx.get('harnessModelPreference')?.recent() ?? { provider: '', id: '' };
   const host = {
     paths: ctx.harnessState.paths,
     catalog: ctx.harnessModels,
@@ -35,7 +35,10 @@ export function setupAdministration(ctx: Context) {
         changed();
         const choice = recent();
         if (choice.provider === input.id && !host.catalog.resolve(choice))
-          await waitFor(remember({ provider: '', id: '' }), signal);
+          await waitFor(
+            ctx.get('harnessModelPreference')?.remember({ provider: '', id: '' }) ?? Promise.resolve(),
+            signal,
+          );
         return result;
       });
     });

@@ -542,12 +542,13 @@ test('disabled optional builtins cannot block boot or reload because their confi
     restored.plugins.metadata().find(({ id }) => id === 'subagents')?.error ?? '',
     /Invalid configuration/,
   );
+  await restored.configuration.update({ entries: { subagents: { config: { maxDepth: 101 } } } });
   await assert.rejects(
-    restored.configuration.update({ entries: { subagents: { config: { maxDepth: 101 } } } }),
+    restored.configuration.update({ entries: { subagents: { disabled: false } } }),
     /Invalid configuration/,
   );
   await restored.configuration.update({
-    entries: { subagents: { config: { model: { provider: 'unknown', id: 'missing' } } } },
+    entries: { subagents: { config: { maxDepth: 2, model: { provider: 'unknown', id: 'missing' } } } },
   });
   await assert.rejects(
     restored.configuration.update({ entries: { subagents: { disabled: false } } }),

@@ -424,7 +424,6 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
     const previous = this.settings;
     const descriptors = await this.catalog.runtimeDescriptors(settings);
     const updating = !starting && !preparing && !released;
-    if (updating) this.catalog.validateDisabled(descriptors, previous);
     const unavailable = (id: string, error: unknown, key?: ScopeAddress) => {
       const instance = key ? key + '/' + id : id;
       const message =

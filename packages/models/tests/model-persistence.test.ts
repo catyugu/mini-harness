@@ -107,3 +107,21 @@ test('a failed recent-model write does not delay accepted input or terminate exe
     renameSync(old, config);
   }
 });
+
+test('explicit and stored models work without the recent-model plugin', async (t) => {
+  const mock = await createMockProvider();
+  const { root, paths } = createFixturePaths(mock.url);
+  const runtime = new MiniHarnessRuntime(paths);
+  t.after(async () => {
+    await runtime.stop();
+    await mock.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+  await runtime.start();
+  await runtime.configuration.update({ entries: { 'core:models': { disabled: true } } });
+  const ctx = runtime.plugins.ctx;
+  const session = ctx.harnessRegistry.create();
+  const model = { provider: 'local-mock', id: 'mock-model' };
+  assert.equal(await ctx.harnessRuns.send(session.id, 'Explicit', undefined, { model }), 'Mock response');
+  assert.equal(await ctx.harnessRuns.send(session.id, 'Stored'), 'Mock response');
+});
