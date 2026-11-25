@@ -641,3 +641,37 @@ export const apply = (ctx) => {
   );
   assert.equal(mock.requests.length, 1);
 });
+
+
+test('a replacement Agent receives a scoped run Fiber and releases its resources on success and failure', async (t) => {
+  const { app, paths, request } = await fixture(t);
+  const file = join(paths.plugins, 'agent-lifetime.log');
+  writePlugin(paths.plugins, 'custom-agent', { scope: 'session' }, `
+import { appendFileSync } from 'node:fs';
+export const provide = ['harnessAgent', 'agentMarker'];
+export function apply(ctx) {
+  ctx.provide('agentMarker', 'session service');
+  ctx.provide('harnessAgent', {
+    async prompt(run, record, text) {
+      if (run.fiber === ctx.fiber || run.get('agentMarker') !== 'session service')
+        throw new Error('Missing isolated run context');
+      run.effect(() => () => appendFileSync(${JSON.stringify(file)}, text + '\\n'));
+      if (text === 'fail') throw new Error('Expected custom agent failure');
+      return 'Custom answer';
+    },
+  });
+}
+`);
+  const root = app.runtime.plugins.ctx;
+  const session = root.harnessRegistry.create();
+  const sibling = root.harnessRegistry.create();
+  const configured = await request('/settings', 'PATCH', {
+    scopes: { ['session:' + session.id]: { plugins: { 'custom-agent': true } } },
+  });
+  assert.equal(configured.status, 200, JSON.stringify(configured.body));
+  assert.equal(await root.harnessRuns.send(session.id, 'success'), 'Custom answer');
+  assert.equal(readFileSync(file, 'utf8'), 'success\\n');
+  await assert.rejects(root.harnessRuns.send(session.id, 'fail'), /Expected custom agent failure/);
+  assert.equal(readFileSync(file, 'utf8'), 'success\\nfail\\n');
+  assert.notEqual(await root.harnessRuns.send(sibling.id, 'Default loop'), 'Custom answer');
+});

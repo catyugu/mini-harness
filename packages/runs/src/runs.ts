@@ -161,21 +161,21 @@ export class Runs implements RunPort {
         activity.inputSignal = signal;
         try {
           return await this.agent(id).prompt(ctx, record, prepared.text, publish, {
-          fallback,
-          beginSubmission: () => {
-            info.inputEntryId = null;
-          },
-          signal,
-          source,
-          submissionId: info.id,
-          choice: model,
-          images: prepared.images,
-          input: prepared.input,
-          thinkingLevel,
-          revision,
-          changed: (path) => {
-            info.changedFiles = [...new Set([...(info.changedFiles ?? []), path])];
-          },
+            fallback,
+            beginSubmission: () => {
+              info.inputEntryId = null;
+            },
+            signal,
+            source,
+            submissionId: info.id,
+            choice: model,
+            images: prepared.images,
+            input: prepared.input,
+            thinkingLevel,
+            revision,
+            changed: (path) => {
+              info.changedFiles = [...new Set([...(info.changedFiles ?? []), path])];
+            },
           });
         } finally {
           activity.inputSignal = undefined;
@@ -475,7 +475,9 @@ export class Runs implements RunPort {
     const { signal } = activity.controller;
     const done = (activity.done = this.scopes
       .prepare(`session:${id}`, signal)
-      .then(() => this.withAgentContext(id, activity, signal, (ctx, signal) => this.agent(id).compact(ctx, id, signal))));
+      .then(() =>
+        this.withAgentContext(id, activity, signal, (ctx, signal) => this.agent(id).compact(ctx, id, signal)),
+      ));
     try {
       await done;
     } finally {
