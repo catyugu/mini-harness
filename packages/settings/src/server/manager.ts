@@ -6,18 +6,10 @@ import {
 } from '@mini-harness/plugin-api/mutation-api';
 import { DomainError } from '@mini-harness/platform/errors';
 import { isDeepStrictEqual } from 'node:util';
-import { mergeSettings } from './config.ts';
+import { mergeSettings } from '@mini-harness/plugin-api/selection';
 import type { ProfileRuntime } from '@mini-harness/plugin-api/profile';
-import type { SettingsPort } from './api.ts';
+import type { PluginConfigurationPort, SettingsPort } from './api.ts';
 import type { ProfileConfiguration } from '@mini-harness/plugin-api/configuration';
-
-export interface PluginConfigurationPort {
-  configure(
-    settings: ProfileConfiguration,
-    commit?: () => void,
-    released?: ReadonlySet<ScopeKey>,
-  ): Promise<void>;
-}
 
 export class SettingsManager implements SettingsPort {
   private pending = Promise.resolve();

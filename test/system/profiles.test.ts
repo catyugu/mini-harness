@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -34,7 +34,6 @@ test('YAML Profile composes through Cordis and persists Web entry changes', asyn
     assert.equal(web.ctx.harnessProfile.entries.get('core:layout'), undefined);
     assert.ok(web.ctx.harnessPluginCatalog.browser().some(({ id }) => id === 'core:layout'));
     assert.ok(!web.ctx.harnessPluginCatalog.browser().some(({ id }) => id === 'git-diff'));
-    assert.equal(existsSync(paths.settings), false);
     await web.ctx.harnessSettingsStore.update({ entries: { 'core:layout': { disabled: true } } });
     assert.ok(!web.ctx.harnessPluginCatalog.browser().some(({ id }) => id === 'core:layout'));
     await web.ctx.harnessSettingsStore.update({ entries: { 'core:layout': { disabled: false } } });
@@ -159,6 +158,7 @@ export function apply(ctx, config) {
     await profile.close();
   }
   const persisted = readFileSync(file, 'utf8');
+  assert.deepEqual(parse(persisted).scopes['workspace:' + 'a'.repeat(32)], { disabledTools: ['read'] });
   assert.match(readFileSync(manifest, 'utf8'), /profile-bundle/);
   assert.match(persisted, /value: patched/);
   assert.ok(persisted.includes('name: ./waiting.mjs'));
@@ -186,8 +186,17 @@ export function apply(ctx, config) {
   const reopened = await bootProfile('custom', paths, launch);
   try {
     assert.equal(reopened.ctx.get('profileResult'), 'patched!');
+    assert.deepEqual(reopened.ctx.harnessProfile.read().scopes[`workspace:${'a'.repeat(32)}`]?.disabledTools, ['read', 'search']);
   } finally {
     await reopened.close();
+  }
+
+  initializeProfile('independent', paths);
+  const independent = await loadProfile('independent', paths, new Context());
+  try {
+    assert.deepEqual(independent.read().scopes, {});
+  } finally {
+    await independent.close();
   }
 
   writeText(fragment, 'include: [' + JSON.stringify(fragment) + ']\n');

@@ -8,7 +8,7 @@ Validates settings, serializes mutations, commits atomic writes and publishes re
 
 ## Structure
 
-`src/server/` contains parsing, transactions and routes. The Entry configuration contract belongs to Plugin API. `src/browser/` owns the settings panel and contributions.
+`src/server/` contains transactions and routes. Parsing and validation belong to Plugin API. `src/browser/` owns the settings panel and contributions.
 
 ## API
 
@@ -24,7 +24,7 @@ Uses [Plugin API](../plugin-api/README.md) for selection contracts and [Platform
 
 ## Configuration
 
-The active YAML Profile owns plugin configuration and scoped composition. The settings API operates on Entry IDs, with each Entry holding its `disabled` and `live` flags and `config` object together. `settings.json` holds scoped tool restrictions. Profile `readOnlyTools` lists tool names by Entry ID. Browser services are composed directly through Cordis.
+The active YAML Profile owns plugin configuration and scoped composition. The settings API operates on Entry IDs, with each Entry holding its `disabled` and `live` flags and `config` object together. The Profile also owns `scopes` and `readOnlyTools`. Browser services are composed directly through Cordis.
 
 Plugin detail content can be contributed through the settings registry and is tied to the lifetime of the displayed detail.
 

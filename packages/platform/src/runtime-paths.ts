@@ -2,7 +2,6 @@
 export interface Paths {
   home: string;
   cwd: string;
-  settings: string;
   registry: string;
   sessions: string;
   pid: string;

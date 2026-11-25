@@ -13,8 +13,6 @@ export interface ScopeSettings {
   disabledTools?: string[];
 }
 
-export type HostServices = Context;
-
 export type ScopeKey = `${Exclude<PluginScope['kind'], 'application'>}:${string}`;
 
 export type ScopeAddress = { scope: Exclude<PluginScope, { kind: 'application' }>; parent?: ScopeKey };
@@ -27,10 +25,10 @@ export interface ScopePort {
   ): () => void;
   prepare(key: ScopeKey, signal?: AbortSignal): Promise<void>;
   /** Read the nearest prepared Cordis service without changing a parent or sibling scope. */
-  require<Name extends keyof HostServices & string>(
+  require<Name extends keyof Context & string>(
     key: ScopeKey | null | undefined,
     service: Name,
-  ): NonNullable<HostServices[Name]>;
+  ): NonNullable<Context[Name]>;
   context(key?: ScopeKey | null): Context;
   address(key: ScopeKey): readonly ScopeKey[];
 }

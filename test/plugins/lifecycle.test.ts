@@ -9,7 +9,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { join } from 'node:path';
 import { MiniHarnessRuntime, storedProfile } from '../support/profile.ts';
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.ts';
-import { DEFAULTS, mergeSettings } from '@mini-harness/settings/config';
+import { DEFAULTS, mergeSettings } from '@mini-harness/plugin-api/selection';
 import { writeJson } from '@mini-harness/platform/json';
 
 import { Context } from 'mini-harness/cordis';

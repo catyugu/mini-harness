@@ -275,9 +275,6 @@ importers:
       '@mini-harness/plugins':
         specifier: workspace:*
         version: link:../plugins
-      '@mini-harness/settings':
-        specifier: workspace:*
-        version: link:../settings
       '@mini-harness/transport':
         specifier: workspace:*
         version: link:../transport
@@ -436,9 +433,6 @@ importers:
 
   packages/settings:
     dependencies:
-      '@mini-harness/llm':
-        specifier: workspace:*
-        version: link:../llm
       '@mini-harness/platform':
         specifier: workspace:*
         version: link:../platform

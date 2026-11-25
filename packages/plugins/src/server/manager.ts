@@ -13,7 +13,6 @@ import { localPluginIdPattern, isScopeKey } from '@mini-harness/plugin-api/selec
 import { isDeepStrictEqual } from 'node:util';
 import type { ProfileRuntime } from '@mini-harness/plugin-api/profile';
 import type {
-  HostServices,
   PluginScope,
   ScopeAddress,
   ScopeKey,
@@ -202,10 +201,10 @@ export class PluginHost implements ScopePort {
     return this.ancestry(key);
   }
 
-  require<Name extends keyof HostServices & string>(
+  require<Name extends keyof Context & string>(
     key: ScopeKey | null | undefined,
     service: Name,
-  ): NonNullable<HostServices[Name]> {
+  ): NonNullable<Context[Name]> {
     const value = this.context(key).get(service);
     if (value == null) {
       for (const ancestor of key ? [...this.address(key)].reverse() : []) {

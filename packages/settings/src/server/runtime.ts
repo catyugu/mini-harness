@@ -2,7 +2,7 @@ import type { Context } from 'mini-harness/cordis';
 import { SettingsManager } from './manager.ts';
 
 export default {
-  inject: ['harnessState', 'harnessProfile'],
+  inject: ['harnessProfile'],
   provide: ['harnessSettingsStore'],
   apply(ctx: Context) {
     const settings = new SettingsManager(ctx.harnessProfile, () => ctx.get('harnessComposition'));

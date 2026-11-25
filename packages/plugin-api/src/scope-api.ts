@@ -1,5 +1,5 @@
 import { getTraceable, type Context } from 'mini-harness/cordis';
-import type { HostServices, PluginScope } from './scopes.ts';
+import type { PluginScope } from './scopes.ts';
 import { pluginInstance, sessionAddress, sessionVisible } from './instance.ts';
 
 /** Scope assigned by the host to this plugin instance. */
@@ -8,7 +8,7 @@ export function pluginScope(ctx: Context): PluginScope {
 }
 
 /** Prepare a visible conversation and resolve its current service as the caller. */
-export async function sessionService<Name extends keyof HostServices & string>(
+export async function sessionService<Name extends keyof Context & string>(
   ctx: Context,
   id: string,
   name: Name,

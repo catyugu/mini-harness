@@ -10,10 +10,9 @@ import type { Paths } from '@mini-harness/platform/runtime-paths';
 import type { ResolvedPlugin } from '@mini-harness/plugin-api/descriptor';
 import { PluginCatalog } from '@mini-harness/plugins/catalog';
 import { bindPluginImports } from '@mini-harness/plugins/module-resolution';
-import { localPluginIdPattern, pluginIdPattern } from '@mini-harness/plugin-api/selection';
+import { localPluginIdPattern, pluginIdPattern, parseSettings } from '@mini-harness/plugin-api/selection';
 import type { ProfileRuntime } from '@mini-harness/plugin-api/profile';
 import type { EntryConfiguration, ProfileConfiguration } from '@mini-harness/plugin-api/configuration';
-import { parseSettings } from '@mini-harness/settings/config';
 
 interface Row extends EntryConfiguration {
   id: string;
@@ -387,8 +386,6 @@ export async function loadProfile(
       return row.source!;
     return join(directory, MANIFEST);
   };
-  const policy = readJson<{ scopedTools?: unknown }>(paths.settings, {});
-  const scopedTools = object(policy.scopedTools) ? policy.scopedTools : {};
   function configurationFor(
     selected: ReadonlyMap<string, ResolvedRow>,
     selectedLayers: readonly LoadedLayer[],
@@ -406,7 +403,7 @@ export async function loadProfile(
           },
         ]),
       ),
-      scopes: withToolRules(scopedEntries([...shipped, ...selectedLayers]), scopedTools),
+      scopes: scopedEntries([...shipped, ...selectedLayers]),
       readOnlyTools: Object.assign(
         {},
         ...[...shipped, ...selectedLayers].map((layer) => layer.readOnlyTools),
@@ -457,39 +454,14 @@ export async function loadProfile(
       if (entry.client !== undefined && entry.client !== base?.client) row.client = entry.client;
       if (Object.keys(row).length > 1) plugins.push(row);
     }
-    const rules = Object.fromEntries(
-      Object.entries(settings.scopes).flatMap(([key, scope]) =>
-        scope?.disabledTools ? [[key, scope.disabledTools]] : [],
-      ),
-    );
-    const scopes = Object.fromEntries(
-      Object.entries(settings.scopes).flatMap(([key, scope]) => {
-        if (!scope) return [];
-        const { disabledTools: _, ...scopeSettings } = scope;
-        return Object.keys(scopeSettings).length ? [[key, scopeSettings]] : [];
-      }),
-    );
     const next = {
       ...(user.include === undefined ? {} : { include: user.include }),
       ...(user.detached === undefined ? {} : { detached: user.detached }),
       plugins,
-      scopes,
+      scopes: settings.scopes,
       readOnlyTools: settings.readOnlyTools,
     };
-    const text = stringify(next);
-    // Domain tool policy is stored separately from the Profile configuration.
-    const previous = readProfileText(file);
-    if (previous !== text) writeText(file, text);
-    const domain = {
-      scopedTools: rules,
-    };
-    try {
-      if (!isDeepStrictEqual(scopedRules(persistent.scopes), rules)) writeJson(paths.settings, domain);
-    } catch (error) {
-      if (previous === undefined) rmSync(file, { force: true });
-      else if (previous !== text) writeText(file, previous);
-      throw error;
-    }
+    writeText(file, stringify(next));
     persistent = settings;
     current = runtime;
   }
@@ -531,35 +503,4 @@ export async function loadProfile(
     },
   };
   return profile;
-}
-
-function readProfileText(file: string) {
-  try {
-    return readFileSync(file, 'utf8');
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-  }
-}
-
-function scopedRules(scopes: ProfileConfiguration['scopes']) {
-  return Object.fromEntries(
-    Object.entries(scopes).flatMap(([key, scope]) =>
-      scope?.disabledTools ? [[key, scope.disabledTools]] : [],
-    ),
-  );
-}
-
-function withToolRules(scopes: ProfileConfiguration['scopes'], rules: Record<string, unknown>) {
-  return {
-    ...scopes,
-    ...Object.fromEntries(
-      Object.entries(rules).map(([key, disabledTools]) => [
-        key,
-        {
-          ...scopes[key as keyof typeof scopes],
-          disabledTools,
-        },
-      ]),
-    ),
-  };
 }

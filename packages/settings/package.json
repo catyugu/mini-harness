@@ -6,8 +6,6 @@
   "exports": {
     "./api": "./src/server/api.ts",
     "./browser/api": "./src/browser/api.ts",
-    "./config": "./src/server/config.ts",
-    "./manager": "./src/server/manager.ts",
     "./manifest": "./src/manifest.ts"
   },
   "miniHarness": {
@@ -21,7 +19,6 @@
     }
   },
   "dependencies": {
-    "@mini-harness/llm": "workspace:*",
     "@mini-harness/platform": "workspace:*",
     "@mini-harness/plugin-api": "workspace:*",
     "@mini-harness/ui-primitives": "workspace:*",

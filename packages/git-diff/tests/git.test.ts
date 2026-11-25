@@ -50,7 +50,7 @@ test('Git inspection includes staged, unstaged and untracked files and rejects o
   assert.equal(bounded.truncated, true);
   assert.match(bounded.content, /\+modified change/);
   assert.ok(Buffer.byteLength(bounded.content) < 2 * 1024 * 1024);
-  await assert.rejects(inspection.diff('../home/settings.json'));
+  await assert.rejects(inspection.diff('../home/profiles/web/cordis.patch.yml'));
   const nestedState = join(paths.cwd, 'private');
   mkdirSync(nestedState);
   writeFileSync(join(nestedState, 'secret.txt'), 'private contents');
