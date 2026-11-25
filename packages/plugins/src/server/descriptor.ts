@@ -47,9 +47,10 @@ export function describePlugin(id: string, folder: string, entry?: string): Disc
           .split(sep)
           .join('/')
       : undefined;
-  let source = entry;
+  const clientOnly = !!(entry && standardClient && realpathSync(entry) === realpathSync(join(folder, standardClient)));
+  let source = clientOnly ? undefined : entry;
   if (
-    !source &&
+    !clientOnly && !source &&
     packageInfo.name &&
     (exports !== undefined || packageInfo.main !== undefined) &&
     (!subpaths || Object.hasOwn(subpaths, '.'))

@@ -7,7 +7,7 @@ import { parseDocument, stringify } from 'yaml';
 import { Context, EntryTree } from 'mini-harness/cordis';
 import { readJson, writeJson, writeText } from '@mini-harness/platform/json';
 import type { Paths } from '@mini-harness/platform/runtime-paths';
-import type { ResolvedPlugin, PluginInfo } from '@mini-harness/plugin-api/descriptor';
+import type { ResolvedPlugin } from '@mini-harness/plugin-api/descriptor';
 import { PluginCatalog } from '@mini-harness/plugins/catalog';
 import { bindPluginImports } from '@mini-harness/plugins/module-resolution';
 import { localPluginIdPattern, pluginIdPattern } from '@mini-harness/plugin-api/selection';
@@ -326,15 +326,20 @@ export function readProfile(name: string, paths?: Paths) {
   return rows([...shipped, ...userLayers]);
 }
 
-const displayMetadata = readJson<Record<string, Partial<PluginInfo>>>(
+const displayMetadata = readJson<Record<string, Partial<ResolvedPlugin>>>(
   fileURLToPath(new URL('./profile-metadata.json', import.meta.url)),
   {},
 );
 
 function builtin(id: string, name: string, client: boolean): ResolvedPlugin | undefined {
-  const target = packagedModules.get(name);
+  const base = name.endsWith('/client') ? name.slice(0, -7) : name;
+  const target = packagedModules.get(base);
   if (!target) return;
-  const info = displayMetadata[name];
+  const info = displayMetadata[base];
+  if (base !== name) {
+    if (!client || !info?.browser) return;
+    return { id, title: info.title ?? id, description: info.description ?? '', icon: info.icon, browser: info.browser, browserStyles: info.browserStyles };
+  }
   return {
     title: id,
     description: '',

@@ -219,6 +219,14 @@ export const apply = (ctx) => { ctx.harnessPluginRoutes.register('GET', '/label'
     );
     assert.equal((await asset(entry.browser)).status, 404);
     assert.equal((await asset(entry.styles[0])).status, 404);
+    const standalone = 'npm-client';
+    assert.equal((await request('/settings', 'PATCH', { entries: {
+      [standalone]: { name: name + '/client', config: { label: 'independent client' } },
+    } })).status, 200);
+    const independent = (await (await request('/bootstrap')).json()).ui.find((item: { id: string }) => item.id === standalone);
+    assert.deepEqual(independent.config, { label: 'independent client' });
+    assert.equal((await asset(independent.browser)).status, 200);
+    assert.equal((await request('/extensions/' + id + '/label')).status, 404);
     await app.close();
     app = undefined;
     await run('remove', name, '--no-audit', '--no-fund');

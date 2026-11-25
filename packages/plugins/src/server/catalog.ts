@@ -106,7 +106,7 @@ export class PluginCatalog {
     );
     const declarations = [
       ...Object.entries(settings.entries).map(([id, entry]) =>
-        this.describe(id, entry, entry.client ?? client),
+        this.describe(id, entry, entry.client ?? (client || !!entry.name?.endsWith('/client'))),
       ),
       ...scopeKeys(settings).flatMap((key) =>
         Object.entries(settings.scopes[key]?.entries ?? {}).map(([id, entry]) =>
