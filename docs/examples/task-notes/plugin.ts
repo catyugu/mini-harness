@@ -1,3 +1,4 @@
+import type { Context } from 'mini-harness/cordis';
 import { defineConfig } from 'mini-harness/configuration';
 export const provide = ['taskNotes'];
 export const inject = [
@@ -14,7 +15,6 @@ export const inject = [
   'harnessProfileScopes',
 ];
 import { HttpError } from 'mini-harness/transport';
-import type { Context } from 'mini-harness/cordis';
 import type { SessionDirectory, SessionRecords } from 'mini-harness/sessions';
 import type { Execution } from 'mini-harness/execution';
 import type { ApprovalRequests } from 'mini-harness/approvals';

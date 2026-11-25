@@ -1,5 +1,5 @@
 /** Core context type and root context implementation. */
-export { Context } from './context.ts'
+export * from './context.ts'
 /** Event bus, dispatch modes, and event augmentation types. */
 export * from './events.ts'
 /** Plugin fiber lifecycle, effects, and config validation helpers. */
