@@ -28,7 +28,7 @@ test('workspace tools share one policy for reads, searches and writes', async (t
     expectPresent(
       fileTools(cwd, () => workspace).find((tool) => tool.name === name),
       'file tool ' + name,
-    ).execute('test', value as never, undefined, undefined, undefined);
+    ).execute('test', value as never);
   assert.match(
     JSON.stringify(await execute('write', { path: 'src/note.txt', content: 'good text' })),
     /wrote/i,

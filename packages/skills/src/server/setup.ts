@@ -25,7 +25,11 @@ export function setup(ctx: Context) {
     return [...parts, { type: 'text', text: invocation.instruction }];
   });
   ctx.effect(() =>
-    ctx.harnessPrompt.register({ id: 'skills', order: 400, render: ({ cwd }) => cwd && loader.prompt(cwd) }),
+    ctx.harnessPrompt.register({
+      id: 'skills',
+      order: 400,
+      render: ({ cwd }) => (typeof cwd === 'string' ? loader.prompt(cwd) : undefined),
+    }),
   );
   ctx.inject(['harnessRoutes'], (web) => {
     web.effect(() =>

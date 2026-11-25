@@ -1,7 +1,7 @@
 import type { Plugin } from 'mini-harness/cordis';
 import type { ToolDefinition } from '@mini-harness/tools/api';
 
-export type ToolPolicy = (sessionId: string, tool: ToolDefinition) => boolean;
+export type ToolPolicy = (sessionId: string, tool: Pick<ToolDefinition, 'name' | 'tags'>) => boolean;
 
 declare module 'mini-harness/cordis' {
   interface Context {

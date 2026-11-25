@@ -1,6 +1,6 @@
 import type { Plugin } from 'mini-harness/cordis';
 import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
-import { PiModelStore } from '../server/store.ts';
+import { ModelStore } from '../server/store.ts';
 
 export const metadata: PluginInfo = {
   title: 'Model store',
@@ -11,7 +11,7 @@ const plugin: Plugin.Object = {
   inject: ['harnessState'],
   provide: ['harnessModelStore', 'harnessModels'],
   async apply(ctx) {
-    const store = new PiModelStore(ctx.harnessState.paths.home);
+    const store = new ModelStore(ctx.harnessState.paths.home);
     ctx.effect(() => () => store.close());
     await store.refresh();
     ctx.provide('harnessModelStore', store);

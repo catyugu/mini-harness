@@ -1,30 +1,11 @@
-import type { ModelStorePort } from './store-api.ts';
 import { join } from 'node:path';
-import {
-  createProvider,
-  getSupportedThinkingLevels,
-  lazyApi,
-  type Api,
-  type Credential,
-  type CredentialStore,
-  type Model,
-  type MutableModels,
-  type ProviderStreams,
-} from '@earendil-works/pi-ai';
-import { builtinModels } from '@earendil-works/pi-ai/providers/all';
 import { readJson, writeJson } from '@mini-harness/platform/json';
-import type { ModelChoice } from '@mini-harness/llm/vocabulary';
-import { providerApiPattern, type ProviderModel } from '../shared/catalog.ts';
-
-const apiLoaders: Record<string, () => Promise<ProviderStreams>> = {
-  'openai-completions': () => import('@earendil-works/pi-ai/api/openai-completions'),
-  'openai-responses': () => import('@earendil-works/pi-ai/api/openai-responses'),
-  'anthropic-messages': () => import('@earendil-works/pi-ai/api/anthropic-messages'),
-  'google-generative-ai': () => import('@earendil-works/pi-ai/api/google-generative-ai'),
-};
+import { thinkingLevels, type ModelChoice } from '@mini-harness/llm/vocabulary';
+import { providerApiPattern } from '../shared/catalog.ts';
+import type { AuthStatus, CatalogModel, CatalogProvider, Credential, ModelStorePort } from './store-api.ts';
 
 /** One serialized, atomic store for all providers; SDKs never own our config files. */
-class FileCredentials implements CredentialStore {
+class FileCredentials {
   private writes: Promise<unknown> = Promise.resolve();
   constructor(private readonly file: string) {}
   private values(): Record<string, Credential> {
@@ -36,7 +17,7 @@ class FileCredentials implements CredentialStore {
   async read(id: string) {
     await this.writes;
     const values = this.values();
-    return Object.hasOwn(values, id) ? structuredClone(values[id]) : undefined;
+    return Object.hasOwn(values, id) ? values[id] : undefined;
   }
   async list() {
     await this.writes;
@@ -58,13 +39,13 @@ class FileCredentials implements CredentialStore {
     return this.enqueue(async () => {
       options?.signal?.throwIfAborted();
       const values = this.values();
-      const next = await fn(Object.hasOwn(values, id) ? structuredClone(values[id]) : undefined);
+      const next = await fn(Object.hasOwn(values, id) ? values[id] : undefined);
       options?.signal?.throwIfAborted();
       if (next !== undefined) {
-        values[id] = structuredClone(next);
+        values[id] = next;
         writeJson(this.file, values);
       }
-      return Object.hasOwn(values, id) ? structuredClone(values[id]) : undefined;
+      return Object.hasOwn(values, id) ? values[id] : undefined;
     });
   }
   delete(id: string, options?: { signal?: AbortSignal }) {
@@ -80,218 +61,147 @@ class FileCredentials implements CredentialStore {
   }
 }
 
-/** Owns provider definitions, credentials and the shared SDK provider registry. */
-export class PiModelStore implements ModelStorePort {
-  private initializedRuntime?: MutableModels;
-  private get runtime(): MutableModels {
-    if (!this.initializedRuntime) throw new Error('Model store is not initialized; refresh before use');
-    return this.initializedRuntime;
-  }
-  private set runtime(value: MutableModels) {
-    this.initializedRuntime = value;
-  }
-  private external = new Set<string>();
-  private readonly credentials: FileCredentials;
-  private status = new Map<string, { configured: boolean; source?: string }>();
+export class ModelStore implements ModelStorePort {
+  readonly credentials: FileCredentials;
+  private readonly defaults = new Set<readonly CatalogProvider[]>();
+  private custom = new Map<string, CatalogProvider>();
+  private status = new Map<string, AuthStatus>();
+
   constructor(private readonly home: string) {
     this.credentials = new FileCredentials(join(home, 'auth.json'));
   }
 
-  async refresh() {
-    const next = builtinModels({
-      credentials: this.credentials,
-      identity: { userAgent: { custom: 'mini-harness' } },
-    });
-    const config = readJson<any>(join(this.home, 'models.json'), { providers: {} });
-    if (
-      !config ||
-      typeof config !== 'object' ||
-      !config.providers ||
-      typeof config.providers !== 'object' ||
-      Array.isArray(config.providers)
-    )
-      throw new Error('Invalid model provider configuration');
-    const external = new Set<string>();
-    for (const [id, entry] of Object.entries<any>(config.providers)) {
-      if (
-        !/^[a-z0-9][a-z0-9-]{0,63}$/.test(id) ||
-        !entry ||
-        typeof entry !== 'object' ||
-        Array.isArray(entry)
-      )
-        throw new Error('Invalid provider configuration: ' + id);
-      if (typeof entry.api !== 'string' || !providerApiPattern.test(entry.api))
-        throw new Error('Invalid API type for provider: ' + id);
-      const load = Object.hasOwn(apiLoaders, entry.api) ? apiLoaders[entry.api] : undefined;
-      if (!load) external.add(id);
-      let endpoint: URL;
-      try {
-        endpoint = new URL(entry.baseUrl);
-      } catch {
-        throw new Error('Invalid API endpoint for provider: ' + id);
-      }
-      if (
-        !['https:', 'http:'].includes(endpoint.protocol) ||
-        endpoint.username ||
-        endpoint.password ||
-        endpoint.hash
-      )
-        throw new Error('Invalid API endpoint for provider: ' + id);
-      if (entry.apiKey !== undefined && (typeof entry.apiKey !== 'string' || entry.apiKey.startsWith('!')))
-        throw new Error('Provider API keys must be literal values or environment variable names: ' + id);
-      if (!Array.isArray(entry.models) || !entry.models.length)
-        throw new Error('Provider needs at least one model: ' + id);
-      const seen = new Set<string>();
-      const models: Model<Api>[] = entry.models.map((item: any) => {
-        if (
-          !item ||
-          typeof item.id !== 'string' ||
-          !item.id.trim() ||
-          item.id.length > 160 ||
-          seen.has(item.id)
-        )
-          throw new Error('Invalid or duplicate model for provider: ' + id);
-        seen.add(item.id);
-        const contextWindow = item.contextWindow ?? 128000;
-        const maxTokens = item.maxTokens ?? 8192;
-        if (
-          ![contextWindow, maxTokens].every(
-            (value) => Number.isSafeInteger(value) && value > 0 && value <= 10000000,
-          )
-        )
-          throw new Error('Invalid model token limits: ' + id + '/' + item.id);
-        if (
-          item.input !== undefined &&
-          (!Array.isArray(item.input) ||
-            item.input.some((value: unknown) => !['text', 'image'].includes(String(value))))
-        )
-          throw new Error('Invalid model input modalities: ' + id + '/' + item.id);
-        return {
-          ...item,
-          id: item.id,
-          name: String(item.name ?? item.id),
-          api: entry.api,
-          provider: id,
-          baseUrl: endpoint.href.replace(/\/$/, ''),
-          reasoning: Boolean(item.reasoning),
-          input: item.input ?? ['text'],
-          contextWindow,
-          maxTokens,
-          cost: item.cost ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-        };
-      });
-      const configuredKey = entry.apiKey as string | undefined;
-      const resolveKey = () => (configuredKey ? (process.env[configuredKey] ?? configuredKey) : undefined);
-      next.setProvider(
-        createProvider({
-          id,
-          name: typeof entry.name === 'string' ? entry.name : id,
-          baseUrl: endpoint.href.replace(/\/$/, ''),
-          models,
-          headers: entry.headers,
-          // The SDK keeps these declarations in its catalog. Streaming belongs to the registered adapter.
-          api: lazyApi(
-            load ??
-              (async () => {
-                throw new Error('No Pi stream for ' + entry.api);
-              }),
-          ),
-          auth: {
-            apiKey: {
-              name: id + ' API key',
-              async login(interaction) {
-                return {
-                  type: 'api_key',
-                  key: await interaction.prompt({ type: 'secret', message: 'API key' }),
-                };
-              },
-              async resolve({ credential }) {
-                const key = credential?.key ?? resolveKey();
-                return key
-                  ? { auth: { apiKey: key }, source: credential?.key ? 'stored' : 'configured' }
-                  : undefined;
-              },
-            },
-          },
-        }),
-      );
+  async registerDefaults(providers: readonly CatalogProvider[]) {
+    this.defaults.add(providers);
+    try {
+      this.status = await this.readStatus();
+    } catch (error) {
+      this.defaults.delete(providers);
+      throw error;
     }
-    const status = await this.readStatus(next);
-    this.runtime = next;
-    this.external = external;
-    this.status = status;
+    return async () => {
+      this.defaults.delete(providers);
+      this.status = await this.readStatus();
+    };
   }
 
-  private async readStatus(runtime = this.runtime) {
+  async refresh() {
+    const { providers } =
+      readJson<{ providers: Record<string, unknown> }>(join(this.home, 'models.json'), { providers: {} }) ??
+      {};
+    if (!providers || typeof providers !== 'object' || Array.isArray(providers))
+      throw new Error('Invalid model provider configuration');
+    const next = new Map(Object.entries(providers).map(([id, entry]) => [id, parseProvider(id, entry)]));
+    this.status = await this.readStatus(next);
+    this.custom = next;
+  }
+
+  private catalog(custom = this.custom) {
+    return new Map(
+      [...this.defaults]
+        .flat()
+        .map((provider) => [provider.id, provider] as const)
+        .concat([...custom]),
+    );
+  }
+
+  private async readStatus(custom = this.custom) {
     const stored = new Set((await this.credentials.list()).map(({ providerId }) => providerId));
     return new Map(
       await Promise.all(
-        runtime.getProviders().map(async ({ id }) => {
-          const auth = await runtime.checkAuth(id);
+        [...this.catalog(custom).values()].map(async (provider) => {
+          const auth = provider.authStatus
+            ? await provider.authStatus()
+            : (await this.providerKey(provider)) !== undefined;
           return [
-            id,
+            provider.id,
             {
               configured: Boolean(auth),
-              source: auth ? (stored.has(id) ? 'stored' : auth.source) : undefined,
+              source: auth
+                ? stored.has(provider.id)
+                  ? 'stored'
+                  : typeof auth === 'string'
+                    ? auth
+                    : 'configured'
+                : undefined,
             },
           ] as const;
         }),
       ),
     );
   }
+
   list() {
-    return this.runtime.getModels().map((model) => ({
-      provider: model.provider,
-      id: model.id,
-      name: model.name || model.id,
-      configured: this.authStatus(model.provider).configured,
-      input: [...model.input],
-      thinkingLevels: getSupportedThinkingLevels(model),
-    }));
+    return [...this.catalog().values()].flatMap(({ id: provider, models }) =>
+      models.map((model) => ({
+        provider,
+        id: model.id,
+        name: model.name,
+        input: model.input,
+        configured: this.authStatus(provider).configured,
+        thinkingLevels: model.thinkingLevels ?? [],
+      })),
+    );
   }
+
   async available() {
     this.status = await this.readStatus();
     return this.list();
   }
-  private model(choice: ModelChoice) {
-    if (!choice?.provider) return undefined;
-    const id = choice.id || this.runtime.getModels(choice.provider)[0]?.id;
-    return id ? this.runtime.getModel(choice.provider, id) : undefined;
+
+  configuredProvider(id: string) {
+    return this.custom.get(id);
   }
-  resolve(choice: ModelChoice) {
-    const model = this.model(choice);
-    return model ? { provider: model.provider, id: model.id } : undefined;
-  }
-  capabilities(choice: ModelChoice): ProviderModel | undefined {
-    const model = this.model(choice);
+
+  private provider(id: string) {
     return (
-      model && {
-        id: model.id,
-        name: model.name,
-        input: [...model.input],
-        contextWindow: model.contextWindow,
-        maxTokens: model.maxTokens,
-        reasoning: model.reasoning,
-        thinkingLevels: getSupportedThinkingLevels(model),
-      }
+      this.custom.get(id) ??
+      [...this.defaults]
+        .reverse()
+        .flat()
+        .find((provider) => provider.id === id)
     );
   }
+
+  private model(choice: ModelChoice) {
+    const models = this.provider(choice.provider)?.models;
+    return choice.id ? models?.find(({ id }) => id === choice.id) : models?.[0];
+  }
+
+  resolve(choice: ModelChoice) {
+    const model = this.model(choice);
+    return model && { provider: choice.provider, id: model.id };
+  }
+
+  capabilities(choice: ModelChoice) {
+    const model = this.model(choice);
+    return model && capabilities(model);
+  }
+
   providers() {
-    return this.runtime.getProviders().map((provider) => ({
-      id: provider.id,
-      name: provider.name,
-      canSetKey: Boolean(provider.auth.apiKey?.login),
-      models: this.runtime.getModels(provider.id).flatMap((model) => {
-        const capabilities = this.capabilities({ provider: model.provider, id: model.id });
-        return capabilities ? [capabilities] : [];
-      }),
-    }));
+    return [...this.catalog().values()].map(({ id, name, canSetKey, models }) => {
+      const { configured, source } = this.authStatus(id);
+      const custom = this.custom.has(id);
+      return {
+        id,
+        name,
+        configured,
+        storedCredential: source === 'stored',
+        canSetKey,
+        custom,
+        baseUrl: custom ? models[0].baseUrl : '',
+        api: custom ? models[0].api : 'openai-completions',
+        models: models.map(capabilities),
+      };
+    });
   }
+
   authStatus(id: string) {
-    return { ...(this.status.get(id) ?? { configured: false }) };
+    return this.status.get(id) ?? { configured: false };
   }
+
   hasProvider(id: string) {
-    return Boolean(this.runtime.getProvider(id));
+    return Boolean(this.provider(id));
   }
   /** Credential persistence and authentication status must change together. */
   private async changeCredential(id: string, next?: Credential) {
@@ -332,14 +242,98 @@ export class PiModelStore implements ModelStorePort {
     return model && { api: model.api, baseUrl: model.baseUrl };
   }
 
-  async apiKey(choice: ModelChoice) {
-    const model = this.model(choice);
-    return model && (await this.runtime.getAuth(model))?.auth.apiKey;
+  private async providerKey(provider: CatalogProvider) {
+    const stored = await this.credentials.read(provider.id);
+    return (
+      (stored?.type === 'api_key' ? stored.key : undefined) ??
+      (provider.key ? (process.env[provider.key] ?? provider.key) : undefined)
+    );
   }
 
-  piConnection(choice: ModelChoice) {
-    if (this.external.has(choice.provider)) return;
-    const model = this.model(choice);
-    if (model) return { model, runtime: this.runtime };
+  async apiKey(choice: ModelChoice) {
+    const provider = this.provider(choice.provider);
+    if (provider && this.model(choice))
+      return provider.apiKey ? provider.apiKey(choice) : this.providerKey(provider);
   }
+}
+
+function capabilities({
+  id,
+  name,
+  input,
+  contextWindow,
+  maxTokens,
+  reasoning,
+  thinkingLevels,
+}: CatalogModel) {
+  return { id, name, input, contextWindow, maxTokens, reasoning, thinkingLevels };
+}
+
+export function parseProvider(id: string, entry: any): CatalogProvider {
+  if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(id) || !entry || typeof entry !== 'object' || Array.isArray(entry))
+    throw new Error('Invalid provider configuration: ' + id);
+  if (typeof entry.api !== 'string' || !providerApiPattern.test(entry.api))
+    throw new Error('Invalid API type for provider: ' + id);
+  let endpoint: URL;
+  try {
+    endpoint = new URL(entry.baseUrl);
+  } catch {
+    throw new Error('Invalid API endpoint for provider: ' + id);
+  }
+  if (
+    !['https:', 'http:'].includes(endpoint.protocol) ||
+    endpoint.username ||
+    endpoint.password ||
+    endpoint.hash
+  )
+    throw new Error('Invalid API endpoint for provider: ' + id);
+  if (entry.apiKey !== undefined && (typeof entry.apiKey !== 'string' || entry.apiKey.startsWith('!')))
+    throw new Error('Provider API keys must be literal values or environment variable names: ' + id);
+  if (!Array.isArray(entry.models) || !entry.models.length)
+    throw new Error('Provider needs at least one model: ' + id);
+  const seen = new Set<string>();
+  const models: CatalogModel[] = entry.models.map((item: any) => {
+    if (!item || typeof item.id !== 'string' || !item.id.trim() || item.id.length > 160 || seen.has(item.id))
+      throw new Error('Invalid or duplicate model for provider: ' + id);
+    seen.add(item.id);
+    const contextWindow = item.contextWindow ?? 128000;
+    const maxTokens = item.maxTokens ?? 8192;
+    if (
+      ![contextWindow, maxTokens].every(
+        (value) => Number.isSafeInteger(value) && value > 0 && value <= 10000000,
+      )
+    )
+      throw new Error('Invalid model token limits: ' + id + '/' + item.id);
+    if (
+      item.input !== undefined &&
+      (!Array.isArray(item.input) ||
+        item.input.some((value: unknown) => !['text', 'image'].includes(String(value))))
+    )
+      throw new Error('Invalid model input modalities: ' + id + '/' + item.id);
+    return {
+      ...item,
+      id: item.id,
+      name: String(item.name ?? item.id),
+      api: entry.api,
+      baseUrl: endpoint.href.replace(/\/$/, ''),
+      reasoning: Boolean(item.reasoning),
+      input: item.input ?? ['text'],
+      contextWindow,
+      maxTokens,
+      thinkingLevels: item.reasoning
+        ? thinkingLevels.filter((level) => {
+            const mapped = item.thinkingLevelMap?.[level];
+            return mapped !== null && (mapped !== undefined || (level !== 'xhigh' && level !== 'max'));
+          })
+        : ['off'],
+    };
+  });
+  return {
+    id,
+    name: typeof entry.name === 'string' ? entry.name : id,
+    canSetKey: true,
+    models,
+    key: entry.apiKey,
+    headers: entry.headers,
+  };
 }

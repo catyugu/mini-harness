@@ -1,12 +1,8 @@
-import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
-import type { ToolDefinition } from '@mini-harness/tools/api';
-
 export interface PromptContext {
-  sessionId?: string;
-  cwd?: string;
-  signal: AbortSignal;
-  tools?: readonly Omit<ToolDefinition, 'execute' | 'isConcurrencySafe'>[];
+  readonly signal: AbortSignal;
+  readonly [field: string]: unknown;
 }
+
 export interface PromptSection {
   id: string;
   order?: number;
@@ -16,7 +12,7 @@ export interface PromptSection {
 }
 
 export interface PromptPort {
-  build(request: PromptContext, scope?: ScopeKey): Promise<string>;
+  build(request: PromptContext): Promise<string>;
   register(section: PromptSection): () => void;
 }
 

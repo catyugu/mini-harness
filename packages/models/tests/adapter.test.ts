@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { PiLlm } from '../src/server/pi-adapter.ts';
-import { PiModelStore } from '../src/server/store.ts';
+import { ModelStore } from '../src/server/store.ts';
 import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.ts';
 import { readJson, writeJson } from '@mini-harness/platform/json';
 import type { LlmEvent, NativeMessage } from '@mini-harness/llm/api';
@@ -13,13 +13,14 @@ test('model adapter streams native messages, tool calls and metadata through the
     messages.at(-1)?.role === 'tool' ? 'Tool complete' : { tool: 'inspect', args: { path: 'note.txt' } },
   );
   const { root, paths } = createFixturePaths(mock.url);
-  const adapter = new PiModelStore(paths.home);
+  const adapter = new ModelStore(paths.home);
   t.after(async () => {
     await adapter.close();
     await mock.close();
     rmSync(root, { recursive: true, force: true });
   });
   await adapter.refresh();
+  await new PiLlm(adapter).registerModels();
   const choice = { provider: 'local-mock', id: 'mock-model' };
   const input: NativeMessage = { role: 'user', content: 'Inspect the note', timestamp: Date.now() };
   const request = {
@@ -77,13 +78,14 @@ test('model adapter streams native messages, tool calls and metadata through the
 test('credential updates serialize across providers and survive adapter replacement without leaking keys', async (t) => {
   const mock = await createMockProvider();
   const { root, paths } = createFixturePaths(mock.url);
-  const adapter = new PiModelStore(paths.home);
+  const adapter = new ModelStore(paths.home);
   t.after(async () => {
     await adapter.close();
     await mock.close();
     rmSync(root, { recursive: true, force: true });
   });
   await adapter.refresh();
+  await new PiLlm(adapter).registerModels();
   await Promise.all([
     adapter.storeCredential('openai', 'first-secret'),
     adapter.storeCredential('anthropic', 'second-secret'),
@@ -96,8 +98,9 @@ test('credential updates serialize across providers and survive adapter replacem
     JSON.stringify({ providers: adapter.providers(), status: adapter.authStatus('openai') }),
     /first-secret|second-secret/,
   );
-  const replacement = new PiModelStore(paths.home);
+  const replacement = new ModelStore(paths.home);
   await replacement.refresh();
+  await new PiLlm(replacement).registerModels();
   assert.deepEqual(replacement.authStatus('openai'), { configured: true, source: 'stored' });
   await replacement.removeCredential('openai');
   assert.equal(JSON.parse(readFileSync(join(paths.home, 'auth.json'), 'utf8')).openai, undefined);
@@ -111,13 +114,14 @@ test('credential updates serialize across providers and survive adapter replacem
 test('invalid provider refresh leaves the working catalog intact and unsupported images never issue a request', async (t) => {
   const mock = await createMockProvider();
   const { root, paths } = createFixturePaths(mock.url);
-  const adapter = new PiModelStore(paths.home);
+  const adapter = new ModelStore(paths.home);
   t.after(async () => {
     await adapter.close();
     await mock.close();
     rmSync(root, { recursive: true, force: true });
   });
   await adapter.refresh();
+  await new PiLlm(adapter).registerModels();
   const model = { provider: 'local-mock', id: 'mock-model' };
   const config = readJson<any>(join(paths.home, 'models.json'), {});
   config.providers['local-mock'].apiKey = '!run-a-command';
@@ -157,7 +161,7 @@ test('abort reaches the model transport and yields a native terminal message wit
     return 'Late response';
   });
   const { root, paths } = createFixturePaths(mock.url);
-  const adapter = new PiModelStore(paths.home);
+  const adapter = new ModelStore(paths.home);
   t.after(async () => {
     release();
     await adapter.close();
@@ -165,6 +169,7 @@ test('abort reaches the model transport and yields a native terminal message wit
     rmSync(root, { recursive: true, force: true });
   });
   await adapter.refresh();
+  await new PiLlm(adapter).registerModels();
   const controller = new AbortController();
   const pending = (async () => {
     const events: LlmEvent[] = [];
@@ -189,13 +194,14 @@ test('abort reaches the model transport and yields a native terminal message wit
 test('credential writes and removal roll back when authentication status refresh fails', async (t) => {
   const mock = await createMockProvider();
   const { root, paths } = createFixturePaths(mock.url);
-  const store = new PiModelStore(paths.home);
+  const store = new ModelStore(paths.home);
   t.after(async () => {
     await store.close();
     await mock.close();
     rmSync(root, { recursive: true, force: true });
   });
   await store.refresh();
+  await new PiLlm(store).registerModels();
   await store.storeCredential('anthropic', 'first-secret');
   const file = join(paths.home, 'auth.json');
   const before = readFileSync(file, 'utf8');

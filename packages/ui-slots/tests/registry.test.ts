@@ -32,8 +32,8 @@ test('slot contributions can precede their owner and survive remount', () => {
   const registry = new SlotRegistry();
   const alpha = element(),
     beta = element();
-  const removeAlpha = registry.register('sidebar.actions', node(alpha), 20);
-  const removeBeta = registry.register('sidebar.actions', node(beta), 5);
+  const removeAlpha = registry.register('sidebar.actions', node(alpha), { order: 20 });
+  const removeBeta = registry.register('sidebar.actions', node(beta), { order: 5 });
   const first = element();
   const stopFirst = registry.define('sidebar.actions', node(first));
   assert.deepEqual(first.children, [beta, alpha]);
@@ -57,7 +57,10 @@ test('owners and contributions have unique identities', () => {
   const child = element();
   const dispose = registry.register('conversation.body', node(child));
   assert.throws(() => registry.register('conversation.body', node(element())), /Multiple entries/);
-  assert.throws(() => registry.register('conversation.body', node(child)), /Duplicate node/);
+  assert.throws(
+    () => registry.register('conversation.body', node(child)),
+    /Conflicting contribution priority/,
+  );
   dispose();
   close();
   const later = element();
@@ -88,21 +91,24 @@ test('overrides restore the previous contribution and release its node', () => {
   const lifetimes: AbortSignal[] = [];
   const disposed: string[] = [];
   const stop = registry.define('sidebar.primary', node(outlet));
-  registry.register('sidebar.primary', node(sibling), 20);
-  registry.registerKeyed('sidebar.primary', 'button', (signal) => {
-    lifetimes.push(signal);
-    return { node: node(base), dispose: () => disposed.push('base') };
-  });
+  registry.register('sidebar.primary', node(sibling), { order: 20 });
+  registry.register(
+    'sidebar.primary',
+    (signal) => {
+      lifetimes.push(signal);
+      return { node: node(base), dispose: () => disposed.push('base') };
+    },
+    { key: 'button' },
+  );
   assert.deepEqual(outlet.children, [base, sibling]);
 
-  const removeReplacement = registry.registerKeyed(
+  const removeReplacement = registry.register(
     'sidebar.primary',
-    'button',
     () => ({
       node: node(replacement),
       dispose: () => disposed.push('replacement'),
     }),
-    { priority: 1 },
+    { key: 'button', priority: 1 },
   );
   assert.deepEqual(disposed, ['base']);
   assert.ok(lifetimes.slice(0, 1).every(({ aborted }) => aborted));
@@ -122,19 +128,22 @@ test('a failed keyed replacement retains the mounted instance', () => {
     preferred = element();
   const stop = registry.define('sidebar.primary', node(outlet));
   let lifetime: AbortSignal | undefined;
-  registry.registerKeyed('sidebar.primary', 'control', (signal) => {
-    lifetime = signal;
-    return node(preferred);
-  });
+  registry.register(
+    'sidebar.primary',
+    (signal) => {
+      lifetime = signal;
+      return node(preferred);
+    },
+    { key: 'control' },
+  );
   assert.throws(
     () =>
-      registry.registerKeyed(
+      registry.register(
         'sidebar.primary',
-        'control',
         () => {
           throw new Error('render failed');
         },
-        { priority: 1 },
+        { key: 'control', priority: 1 },
       ),
     /render failed/,
   );
@@ -151,15 +160,16 @@ test('keyed priority is independent of display order and activation order', () =
     replacement = element(),
     sibling = element();
   const stop = registry.define('sidebar.primary', node(outlet));
-  const removeReplacement = registry.registerKeyed('sidebar.primary', 'button', () => node(replacement), {
+  const removeReplacement = registry.register('sidebar.primary', () => node(replacement), {
+    key: 'button',
     order: 30,
     priority: 1,
   });
-  const removeBase = registry.registerKeyed('sidebar.primary', 'button', () => node(base), { order: 0 });
-  registry.register('sidebar.primary', node(sibling), 20);
+  const removeBase = registry.register('sidebar.primary', () => node(base), { key: 'button', order: 0 });
+  registry.register('sidebar.primary', node(sibling), { order: 20 });
   assert.deepEqual(outlet.children, [sibling, replacement]);
   assert.throws(
-    () => registry.registerKeyed('sidebar.primary', 'button', () => node(element()), { priority: 1 }),
+    () => registry.register('sidebar.primary', () => node(element()), { key: 'button', priority: 1 }),
     /Conflicting contribution priority/,
   );
   removeReplacement();

@@ -115,7 +115,7 @@ test('Shell delegates to a selected external process provider and still requires
       .find(({ name }) => name === 'sandbox_shell'),
     'shell tool',
   );
-  const execution = tool.execute('preview', { command: 'Preview command' }, undefined, undefined, undefined);
+  const execution = tool.execute('preview', { command: 'Preview command' });
   const pending = await waitUntil(
     () => request('/approvals'),
     ({ body }) => body.length === 1,
@@ -237,10 +237,7 @@ export const apply = (ctx, config) => {
       .find(({ name }) => name === 'scoped_greeting'),
     'scoped greeting tool',
   );
-  assert.match(
-    JSON.stringify(await tool.execute('scope', {}, undefined, undefined, undefined)),
-    new RegExp(parent.id),
-  );
+  assert.match(JSON.stringify(await tool.execute('scope', {})), new RegExp(parent.id));
   assert.equal(
     await app.runtime.plugins.ctx.harnessRuns.send(parent.id, 'Run scoped greeting'),
     'Finished greeting',
@@ -442,9 +439,7 @@ export function apply(ctx) {
     'read tool',
   );
   assert.match(
-    JSON.stringify(
-      (await tool.execute('virtual', { path: 'virtual.txt' }, undefined, undefined, undefined)).content,
-    ),
+    JSON.stringify((await tool.execute('virtual', { path: 'virtual.txt' })).content),
     /Provided file content/,
   );
 });
@@ -761,7 +756,7 @@ export function apply(ctx) {
     async run(run, input) {
       if (run.fiber === ctx.fiber || run.get('agentMarker') !== 'session service')
         throw new Error('Missing isolated run context');
-      const turn = await input.prepare(1, []);
+      const turn = await input.prepare(1);
       const content = turn.request.messages.at(-1).content;
       const text = typeof content === 'string' ? content : content[0].text;
       run.effect(() => () => appendFileSync(${JSON.stringify(file)}, text + '\\n'));

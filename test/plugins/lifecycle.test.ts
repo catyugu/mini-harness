@@ -130,18 +130,15 @@ export const apply = (ctx, config) => {
       .find(({ name }) => name === 'example_count'),
     'example count tool',
   );
-  assert.equal((await tool.execute('test', {}, undefined, undefined, undefined)).content[0].type, 'text');
-  assert.match(JSON.stringify(await tool.execute('test', {}, undefined, undefined, undefined)), /Total: 1/);
+  assert.equal((await tool.execute('test', {})).content[0].type, 'text');
+  assert.match(JSON.stringify(await tool.execute('test', {})), /Total: 1/);
   await assert.rejects(
     runtime.configuration.update({ entries: { example: { config: { prefix: 12 } } } }),
     /Invalid configuration/,
   );
   assert.equal(runtime.settings.entries.example?.config?.prefix, 'Total');
   await runtime.plugins.prepare(`session:${item.id}`);
-  assert.match(
-    JSON.stringify(await tool.execute('after-invalid-config', {}, undefined, undefined, undefined)),
-    /Total: 1/,
-  );
+  assert.match(JSON.stringify(await tool.execute('after-invalid-config', {})), /Total: 1/);
   assert.equal(activeNames().filter((name) => name === 'example_count').length, 1);
   await runtime.configuration.update({ entries: { shell: { disabled: false } } });
   assert.throws(
@@ -154,10 +151,7 @@ export const apply = (ctx, config) => {
   });
   assert.equal(readFileSync(log, 'utf8'), 'dispose\n');
   assert.ok(!activeNames().includes('example_count'));
-  await assert.rejects(
-    tool.execute('after-unload', {}, undefined, undefined, undefined),
-    /no longer available/,
-  );
+  await assert.rejects(tool.execute('after-unload', {}), /no longer available/);
   await runtime.configuration.update({
     entries: { example: { name: '../../plugins/example', disabled: false } },
   });
@@ -331,10 +325,10 @@ export const apply = (ctx) => {
       .find(({ name }) => name === 'schema_value'),
     'schema tool',
   );
-  assert.match(JSON.stringify(await tool.execute('test', {}, undefined, undefined, undefined)), /3:true/);
+  assert.match(JSON.stringify(await tool.execute('test', {})), /3:true/);
   await Promise.all([
-    tool.execute('set-count', { count: 7 }, undefined, undefined, undefined),
-    tool.execute('set-options', { options: { enabled: false } }, undefined, undefined, undefined),
+    tool.execute('set-count', { count: 7 }),
+    tool.execute('set-options', { options: { enabled: false } }),
   ]);
   assert.deepEqual((await storedProfile(paths)).entries.schema?.config, {
     count: 7,
@@ -345,26 +339,20 @@ export const apply = (ctx) => {
     count: 7,
     options: { enabled: false },
   });
-  await assert.rejects(
-    tool.execute('invalid-count', { count: 0 }, undefined, undefined, undefined),
-    /Invalid configuration/,
-  );
-  assert.match(
-    JSON.stringify(await tool.execute('committed', {}, undefined, undefined, undefined)),
-    /7:false:7/,
-  );
+  await assert.rejects(tool.execute('invalid-count', { count: 0 }), /Invalid configuration/);
+  assert.match(JSON.stringify(await tool.execute('committed', {})), /7:false:7/);
   await assert.rejects(
     runtime.configuration.update({ entries: { schema: { config: { count: 0 } } } }),
     /Invalid configuration/,
   );
   assert.deepEqual(
-    await tool.execute('test', {}, undefined, undefined, undefined),
+    await tool.execute('test', {}),
     await expectPresent(
       runtime.plugins.ctx.harnessTools
         .list({ resourceId: item.id, scope: runtime.plugins.ctx.harnessRegistry.runScope(item.id) })
         .find(({ name }) => name === 'schema_value'),
       'registered schema tool',
-    ).execute('test', {}, undefined, undefined, undefined),
+    ).execute('test', {}),
   );
 });
 
@@ -441,10 +429,7 @@ export const apply = (ctx, config) => {
       .find(({ name }) => name === 'base_tool'),
     'restored tool',
   );
-  assert.match(
-    JSON.stringify(await restored.execute('test', {}, undefined, undefined, undefined)),
-    /original/,
-  );
+  assert.match(JSON.stringify(await restored.execute('test', {})), /original/);
   assert.ok(
     runtime.plugins.ctx.harnessTools
       .list({ resourceId: item.id, scope: runtime.plugins.ctx.harnessRegistry.runScope(item.id) })

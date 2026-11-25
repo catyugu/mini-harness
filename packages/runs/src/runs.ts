@@ -1,4 +1,4 @@
-import { Context } from 'mini-harness/cordis';
+import type { Context } from 'mini-harness/cordis';
 import { tagScope, scopeTarget } from '@mini-harness/plugin-api/scopes';
 import type { ThinkingLevel, ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { ProfileScopes } from '@mini-harness/plugin-api/configuration';
@@ -499,26 +499,7 @@ export class Runs implements RunPort {
   ) {
     const key = `session:${id}` as const;
     const scope = this.scopes.context(key);
-    let parent = scope;
-    for (const ancestor of [...this.scopes.address(key)].reverse()) {
-      if (ancestor === key || !ancestor.startsWith('session:')) continue;
-      const running = this.work.get(ancestor.slice(8))?.context;
-      if (!running || running.fiber.signal.aborted) continue;
-      // Preserve child session overrides while inheriting the live parent's Fiber.
-      const inherited = this.scopes.context(ancestor);
-      parent = running;
-      for (const name in scope[Context.isolate])
-        if (scope[Context.isolate][name] !== inherited[Context.isolate][name])
-          parent = parent.isolate(name, scope[Context.isolate][name]);
-      for (const name in scope[Context.intercept])
-        if (scope[Context.intercept][name] !== inherited[Context.intercept][name])
-          parent = parent.intercept(name, scope[Context.intercept][name]);
-      break;
-    }
-    const fiber = tagScope(parent.extend(), this.registry.runScope(id)!).inject(
-      ['harnessAgent'],
-      function agentRun() {},
-    );
+    const fiber = tagScope(scope.extend(), this.registry.runScope(id)!).inject(['harnessAgent'], () => {});
     try {
       await fiber;
       if (!fiber.ctx.get('harnessAgent'))

@@ -109,7 +109,7 @@ test('an alternative executor owns the model protocol and executes without the r
           : message,
       async execute(calls, _tools, execution) {
         for (const call of calls) {
-          assert.equal(execution.start(call), undefined);
+          assert.equal(execution.start?.(call), undefined);
           await execution.deliver(
             {
               role: 'toolResult',
@@ -633,13 +633,11 @@ test('a fatal pipeline failure stops dispatch and drains active calls', async ()
   let drained = 0;
   await assert.rejects(
     nativeExecutor.execute(calls, tools, {
-      cwd: process.cwd(),
       signal: new AbortController().signal,
       start(call) {
         started.push(call.id);
         return undefined;
       },
-      phase() {},
       update() {},
       async deliver(result, signal) {
         if (result.toolCallId === '0') throw new Error('Log write failed');

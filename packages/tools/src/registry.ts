@@ -24,7 +24,8 @@ export class ToolRegistry {
         return registry.register(definition, { context, scope: scopeOf(context) });
       },
       list(selection) {
-        return registry.list(selection, Service.caller(this));
+        const caller = Service.caller(this);
+        return registry.list({ scope: scopeOf(caller), ...selection }, caller);
       },
     });
   }
@@ -53,13 +54,13 @@ export class ToolRegistry {
         return {
           ...tool,
           available,
-          async execute(call, args, signal, update, context) {
+          async execute(call, args, signal, update) {
             if (expired()) throw unavailable();
             const combined = signal ? AbortSignal.any([signal, lifetime.signal]) : lifetime.signal;
             const execute = async (signal: AbortSignal) => {
               signal.throwIfAborted();
               if (!available()) throw unavailable();
-              return tool.execute(call, args, signal, update, context);
+              return tool.execute(call, args, signal, update);
             };
             const work = owner
               ? owner.fiber.run(execute, combined)

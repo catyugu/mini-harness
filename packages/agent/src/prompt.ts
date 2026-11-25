@@ -1,5 +1,5 @@
 import { Service, type Context } from 'mini-harness/cordis';
-import { ScopedLayers, scopeOf, type ScopeKey } from '@mini-harness/plugin-api/scopes';
+import { ScopedLayers, scopeOf } from '@mini-harness/plugin-api/scopes';
 import type { PromptPort, PromptContext, PromptSection } from './prompt-api.ts';
 
 export class Prompt implements PromptPort {
@@ -8,20 +8,14 @@ export class Prompt implements PromptPort {
   register(section: PromptSection) {
     const context = Service.caller(this);
     const { id, order = 500, priority = 0, render } = section;
-    if (
-      !/^[a-zA-Z][a-zA-Z0-9_.:-]{0,95}$/.test(id) ||
-      !Number.isFinite(order) ||
-      !Number.isFinite(priority) ||
-      typeof render !== 'function'
-    )
-      throw new Error('Invalid prompt section: ' + id);
     return this.sections.add(scopeOf(context), context.fiber.uid + '/' + id, {
       context,
       section: { id, order, priority, render },
     });
   }
 
-  async build(context: PromptContext, scope?: ScopeKey) {
+  async build(context: PromptContext) {
+    const scope = scopeOf(Service.caller(this));
     const sections = new Map<string, { context: Context; section: PromptSection }>();
     for (const layer of this.sections.chain(scope)) {
       const candidates = [...layer.values()].filter(
@@ -36,14 +30,12 @@ export class Prompt implements PromptPort {
       }
     }
     const parts: string[] = [];
+    const { signal, ...input } = context;
     for (const { context: owner, section } of [...sections.values()].sort(
       (a, b) => (a.section.order ?? 0) - (b.section.order ?? 0) || a.section.id.localeCompare(b.section.id),
     )) {
-      context.signal.throwIfAborted();
-      const { signal, ...input } = context;
+      signal.throwIfAborted();
       const text = await owner.fiber.run((signal) => section.render({ ...input, signal }), signal);
-      if (text !== undefined && typeof text !== 'string')
-        throw new Error('Invalid prompt section output: ' + section.id);
       if (text?.trim()) parts.push(text);
     }
     return parts.join('\n\n');

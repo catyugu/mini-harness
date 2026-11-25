@@ -11,7 +11,8 @@
     "@mini-harness/platform": "workspace:*",
     "@mini-harness/plugin-api": "workspace:*",
     "@mini-harness/tools": "workspace:*",
-    "@mini-harness/process-execution": "workspace:*"
+    "@mini-harness/process-execution": "workspace:*",
+    "@mini-harness/approvals": "workspace:*"
   },
   "miniHarness": {
     "profileModules": {

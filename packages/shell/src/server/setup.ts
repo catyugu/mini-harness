@@ -1,4 +1,5 @@
-import { defineTool } from '@mini-harness/tools/api';
+import { ApprovalDenied } from '@mini-harness/approvals/api';
+import { defineTool, type ToolResult } from '@mini-harness/tools/api';
 import type { Context } from 'mini-harness/cordis';
 import type { ProcessCommand } from '@mini-harness/process-execution/api';
 import { Type } from 'typebox';
@@ -19,30 +20,44 @@ export function setup(ctx: Context) {
       description:
         'Run a shell command in the workspace. Standard requires approval; Full access skips the approval prompt.',
       parameters: Type.Object({ command: Type.String({ minLength: 1, maxLength: 16000 }) }),
-      execute: async (_id, args, signal, _update, context) => {
+      execute: async (_id, args, signal, update): Promise<ToolResult> => {
         const cwd = workspace.workspacePath(sessionId);
-        // A pending Standard approval may be released when the user selects Full access.
-        // If the permission is reduced again before resuming, request approval anew.
-        let automaticallyApproved = false;
-        const approval = async () => {
-          automaticallyApproved = await requestApproval(
-            sessionId,
-            {
-              title: 'Shell approval',
-              message: args.command,
-              context: JSON.stringify([cwd, options]),
-              followFullAccess: true,
-            },
-            signal,
-          );
-        };
-        while (workspace.get(sessionId)?.permission !== 'fullAccess') {
-          if (context?.waitForApproval) await context.waitForApproval(approval);
-          else await approval();
-          if (!automaticallyApproved) break;
+        const allowed = () => caller.get('harnessToolPolicy')?.(sessionId, { name: 'sandbox_shell' }) ?? true;
+        let approvalMs: number | undefined;
+        if (!allowed()) throw new Error('Tool denied by conversation policy: sandbox_shell');
+        if (workspace.get(sessionId)?.permission !== 'fullAccess') {
+          const requestedAt = performance.now();
+          update?.({ details: { approvalPending: true } });
+          try {
+            // Full access can release the prompt. Ask again if permission was lowered in the meantime.
+            while (workspace.get(sessionId)?.permission !== 'fullAccess') {
+              const automatic = await requestApproval(
+                sessionId,
+                {
+                  title: 'Shell approval',
+                  message: args.command,
+                  context: JSON.stringify([cwd, options]),
+                  followFullAccess: true,
+                },
+                signal,
+              );
+              if (!automatic) break;
+            }
+          } catch (error) {
+            return {
+              content: [{ type: 'text', text: error instanceof Error ? error.message : String(error) }],
+              isError: true,
+              elapsedMs: 0,
+              details: {
+                approvalMs: performance.now() - requestedAt,
+                approvalDenied: error instanceof ApprovalDenied,
+              },
+            };
+          }
+          approvalMs = performance.now() - requestedAt;
+          update?.({ details: { approvalPending: false } });
         }
-        // Permission changes also apply while a Shell command is awaiting approval.
-        context?.assertAuthorized?.();
+        signal?.throwIfAborted();
         const execution = caller.get('harnessProcess');
         if (!execution) throw new Error('Process execution is unavailable');
         const attachments = ctx.harnessRegistry.attachmentDirectory(sessionId);
@@ -91,10 +106,13 @@ export function setup(ctx: Context) {
               : { file: '/bin/sh', args: ['-c', args.command], cwd, env };
         }
         try {
+          if (!allowed()) throw new Error('Tool denied by conversation policy: sandbox_shell');
+          const startedAt = performance.now();
           const output = await runShellCommand(execution, command, timeoutSeconds, signal);
           return {
             content: [{ type: 'text', text: JSON.stringify(output) }],
-            details: { ...output, exitCode: output.code },
+            details: { ...output, exitCode: output.code, approvalMs },
+            elapsedMs: performance.now() - startedAt,
           };
         } finally {
           const workspaceId = workspace.get(sessionId)?.workspaceId;

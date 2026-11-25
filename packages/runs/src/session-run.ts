@@ -1,12 +1,10 @@
 import { conversationTools } from './tool-selection.ts';
 import type { Context } from 'mini-harness/cordis';
-import { scopeOf, scopeTarget } from '@mini-harness/plugin-api/scopes';
-import { observe } from '@mini-harness/plugin-api/observations';
+import { scopeTarget } from '@mini-harness/plugin-api/scopes';
 import { imageMimeType } from '@mini-harness/input/prepare';
 import { validateModelOptions } from '@mini-harness/llm/options';
 import type {
   InputContext,
-  InputPreparation,
   ModelFailure,
   ModelRequestContent,
   StepContext,
@@ -27,7 +25,6 @@ import type { ModelCatalogPort } from '@mini-harness/models/api';
 import {
   validateNativeMessage,
   validateRequestSnapshot,
-  type LlmPort,
   type LlmRequest,
   type NativeAssistantMessage,
   type NativeMessage,
@@ -40,7 +37,7 @@ import { RunInterrupted, type AgentEvent } from './stream.ts';
 import type { Attachment, ImageInput, InputSource, PreparedMessage } from '@mini-harness/input/message';
 import type { SessionLogPort, MessagePatch, InboxItem } from '@mini-harness/sessions/log-api';
 import { Inbox } from './inbox.ts';
-import { isToolContent, type ToolPort } from '@mini-harness/tools/api';
+import { isToolContent } from '@mini-harness/tools/api';
 import { contentDelta } from '@mini-harness/sessions/content-delta';
 import { applyTransforms } from './transforms.ts';
 import { failedTool } from '@mini-harness/agent/tool-pipeline';
@@ -54,19 +51,12 @@ function requireService<K extends keyof Context & string>(ctx: Context, name: K)
   return value;
 }
 
-async function retryModel(ctx: Context, failure: ModelFailure) {
+async function retryModel(ctx: Context, failure: ModelFailure & { sessionId: string }) {
   const { signal, ...input } = failure;
   for (const { context, callback } of ctx.events.listeners('agent/model-retry', scopeTarget(ctx))) {
     const retry = await context.fiber.run((signal) => callback({ ...input, signal }), signal);
     if (retry === undefined) continue;
-    if (
-      !retry ||
-      typeof retry !== 'object' ||
-      (retry.delayMs !== undefined &&
-        (!Number.isFinite(retry.delayMs) || retry.delayMs < 0 || retry.delayMs > 30000))
-    )
-      throw new Error('Invalid model retry decision');
-    return { delayMs: retry.delayMs };
+    return retry;
   }
 }
 
@@ -224,23 +214,8 @@ export class SessionRun {
       cwd: this.sessions.workspacePath(sessionId),
     };
     const initial: NativeUserMessage['content'] = [{ type: 'text', text }, ...images];
-    const content = await applyTransforms<
-      NativeUserMessage['content'],
-      InputContext,
-      Awaited<ReturnType<InputPreparation>>
-    >(hooks, initial, context, (result) => {
-      if (
-        result &&
-        typeof result === 'object' &&
-        'reject' in result &&
-        typeof result.reject === 'string' &&
-        result.reject.trim()
-      )
-        throw new Error('Input rejected: ' + result.reject);
-      if (typeof result !== 'string' && !Array.isArray(result)) throw new Error('Invalid input content');
-      validateNativeMessage({ role: 'user', content: result, timestamp: 0 });
-      return result;
-    });
+    const content = await applyTransforms(hooks, initial, context);
+    validateNativeMessage({ role: 'user', content, timestamp: 0 });
     const preparedImages = typeof content === 'string' ? [] : content.filter((part) => part.type === 'image');
     if (
       preparedImages.length &&
@@ -472,12 +447,17 @@ export class SessionRun {
       if (revision || !(await deliver('followUp'))) await submit();
       const answer = await requireService(ctx, 'harnessAgent').run(ctx, {
         signal,
-        assistantStart: () => emit({ type: 'assistant-start' }),
-        delta: (text) => emit({ type: 'delta', text }),
-        attemptEnded: (attempt, failed) =>
-          observe(ctx, { type: 'model-attempt-ended', sessionId: id, attempt, failed }, signal),
         retry: (failure) => retryModel(ctx, { ...failure, sessionId: id }),
-        assistant(result, diagnostic) {
+        onEvent: (event) => {
+          if (event.type === 'request') {
+            this.recordRequest(log, event.request);
+            return;
+          }
+          if (event.type !== 'assistant') {
+            emit(event);
+            return;
+          }
+          const { diagnostic, message: result } = event;
           if (diagnostic) log.append({ type: 'diagnostic', code: diagnostic.code, data: diagnostic.message });
           const assistant = log.append({ type: 'message', message: result });
           emit({
@@ -505,7 +485,6 @@ export class SessionRun {
           if (!model) throw new Error('Configure a model before sending a message');
           const cwd = this.sessions.workspacePath(id);
           const step: StepContext = { sessionId: id, turn, phase: 'turn', cwd, model, signal };
-          observe(ctx, { type: 'step-started', sessionId: id, turn: step.turn }, signal);
           if (
             this.policy().autoCompact &&
             capabilities &&
@@ -518,9 +497,8 @@ export class SessionRun {
           )
             await this.compactLog(ctx, id, log, signal, true);
           const current = log.projection();
-          const registry: ToolPort = requireService(ctx, 'harnessTools');
           const executor: ToolExecutorPort = requireService(ctx, 'harnessToolExecutor');
-          const tools = conversationTools(ctx, id, scopeOf(ctx), registry);
+          const tools = conversationTools(ctx, id);
           const advertisedTools = new Map(tools.map((tool) => [tool.name, tool]));
           const toolMetadata = tools.map(
             ({ name, description, parameters, label, promptSnippet, promptGuidelines }) => ({
@@ -533,13 +511,9 @@ export class SessionRun {
             }),
           );
           const promptService: PromptPort = requireService(ctx, 'harnessPrompt');
-          const systemPrompt = await promptService.build(
-            { sessionId: id, cwd, tools: toolMetadata, signal },
-            scopeOf(ctx),
-          );
+          const systemPrompt = await promptService.build({ sessionId: id, cwd, tools: toolMetadata, signal });
           const request = await this.prepareRequest(
             ctx,
-            log,
             step,
             { systemPrompt, messages: current.contextMessages, thinkingLevel: current.thinkingLevel },
             (content) => {
@@ -547,7 +521,7 @@ export class SessionRun {
               const available = toolMetadata
                 .filter(({ name }) => advertisedTools.has(name))
                 .map(({ name, description, parameters }) => ({ name, description, parameters }));
-              return executor.present(structuredClone(content), structuredClone(available), step);
+              return executor.present(content, available, { model: step.model, turn, signal });
             },
           );
 
@@ -556,8 +530,6 @@ export class SessionRun {
             request,
             executor,
             tools: advertisedTools,
-            context: { cwd, sessionId: id },
-            history: current.contextMessages,
             execution: {
               start(call) {
                 emit({
@@ -569,18 +541,20 @@ export class SessionRun {
                 });
                 if (signal.aborted) return 'Agent run cancelled';
                 if (nextValid('steer')) return 'Skipped because a steering message arrived.';
+                const tool = advertisedTools.get(call.name);
+                if (tool && ctx.get('harnessToolPolicy')?.(id, tool) === false)
+                  return 'Tool denied by conversation policy: ' + call.name;
               },
-              phase: (call, state) =>
-                emit({ type: 'tool', id: call.id, name: call.name, state, arguments: call.arguments }),
               update(call, value) {
-                if (hooks.length) return;
+                const pending = value.details?.approvalPending;
+                if (pending === undefined && hooks.length) return;
                 emit({
                   type: 'tool',
                   id: call.id,
                   name: call.name,
-                  state: 'running',
+                  state: pending === true ? 'approval' : 'running',
                   arguments: call.arguments,
-                  content: value.content,
+                  content: hooks.length ? undefined : value.content,
                 });
               },
             },
@@ -593,10 +567,8 @@ export class SessionRun {
                 originalContent = output.content;
                 try {
                   const resultContext = { ...step, signal: toolSignal, tool: call.name, callId: call.id };
-                  const content = await applyTransforms(hooks, output.content, resultContext, (value) => {
-                    if (!isToolContent(value)) throw new Error('Invalid tool result content');
-                    return value;
-                  });
+                  const content = await applyTransforms(hooks, output.content, resultContext);
+                  if (!isToolContent(content)) throw new Error('Invalid tool result content');
                   output = { ...output, content };
                 } catch (error) {
                   output = {
@@ -637,21 +609,7 @@ export class SessionRun {
                 sessionId: typeof details?.sessionId === 'string' ? details.sessionId : undefined,
                 exitCode: typeof details?.exitCode === 'number' ? details.exitCode : undefined,
               });
-              observe(
-                ctx,
-                {
-                  type: 'tool-ended',
-                  sessionId: id,
-                  tool: call.name,
-                  callId: call.id,
-                  failed: output.isError,
-                  elapsedMs: output.elapsedMs,
-                },
-                toolSignal,
-              );
-
               if (transformError) throw transformError;
-              return output;
             },
           };
         },
@@ -667,45 +625,31 @@ export class SessionRun {
 
   private async prepareRequest(
     ctx: Context,
-    log: SessionLogPort,
     context: StepContext,
     requestContent: ModelRequestContent,
     present?: (content: ModelRequestContent) => ModelRequestContent & { tools?: LlmRequest['tools'] },
   ): Promise<LlmRequest> {
-    const projected = log.projection();
-    const base = { model: context.model };
-    const capabilities = requireService(ctx, 'harnessModels').capabilities(context.model);
-    const validate = (value: ModelRequestContent) => {
-      if (!value || !Array.isArray(value.messages)) throw new Error('Invalid model request messages');
-      validateRequestSnapshot({ ...value, ...base });
-      resolveThinking(capabilities, value.thinkingLevel);
-      return value;
-    };
     const transformed = await applyTransforms(
       ctx.events.listeners('agent/model-request', scopeTarget(ctx)),
       requestContent,
       context,
-      validate,
     );
-    context.signal.throwIfAborted();
-    const prepared: ModelRequestContent & { tools?: LlmRequest['tools'] } = present
-      ? present(transformed)
-      : transformed;
-    const { systemPrompt, thinkingLevel, maxTokens } = validate(prepared);
-    const input = capabilities?.input.includes('image')
-      ? prepared.messages
-      : withoutImages(prepared.messages);
-    const snapshot: Omit<LlmRequest, 'signal'> = JSON.parse(
-      JSON.stringify({
-        ...base,
-        tools: prepared.tools,
-        messages: input,
-        systemPrompt,
-        thinkingLevel,
-        maxTokens,
-      }),
-    );
-    validate(snapshot);
+    const prepared = present ? present(transformed) : transformed;
+    const capabilities = requireService(ctx, 'harnessModels').capabilities(context.model);
+    resolveThinking(capabilities, prepared.thinkingLevel);
+    return {
+      ...prepared,
+      messages:
+        Array.isArray(prepared.messages) && !capabilities?.input.includes('image')
+          ? withoutImages(prepared.messages)
+          : prepared.messages,
+      model: context.model,
+      signal: context.signal,
+    };
+  }
+
+  private recordRequest(log: SessionLogPort, snapshot: Omit<LlmRequest, 'signal'>) {
+    const projected = log.projection();
     const patch = messagePatch(projected.contextMessages, snapshot.messages);
     const schemaHashes =
       this.recordedSchemas.get(log) ??
@@ -738,21 +682,6 @@ export class SessionRun {
       },
       projected.leafId,
     );
-    return { ...snapshot, signal: context.signal };
-  }
-
-  private request(
-    ctx: Context,
-    id: string,
-    request: Parameters<LlmPort['stream']>[0],
-    delta = (_text: string) => {},
-  ) {
-    return requestModel(requireService(ctx, 'harnessLlm'), request, {
-      delta,
-      ended: (attempt, failed) =>
-        observe(ctx, { type: 'model-attempt-ended', sessionId: id, attempt, failed }, request.signal),
-      retry: (failure) => retryModel(ctx, { ...failure, sessionId: id }),
-    });
   }
 
   private async compactLog(
@@ -791,7 +720,12 @@ export class SessionRun {
             phase: 'compaction',
             signal,
           };
-          return this.request(ctx, id, await this.prepareRequest(ctx, log, context, content));
+          const request = await this.prepareRequest(ctx, context, content);
+          validateRequestSnapshot(request);
+          this.recordRequest(log, request);
+          return requestModel(requireService(ctx, 'harnessLlm'), request, {
+            retry: (failure) => retryModel(ctx, { ...failure, sessionId: id }),
+          });
         },
       })
       .catch((error) => {

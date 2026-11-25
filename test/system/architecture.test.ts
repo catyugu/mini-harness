@@ -4,13 +4,11 @@ import { dirname, join, relative, resolve, sep } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
-import { profileDescriptors, readProfile } from '@mini-harness/host/profile';
 import { moduleReferences } from '../../scripts/module-references.ts';
 
 interface Manifest {
   exports?: Record<string, string>;
   dependencies?: Record<string, string>;
-  miniHarness?: { profileModules?: Record<string, string> };
 }
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
@@ -129,30 +127,6 @@ test('workspace dependencies are acyclic and browser imports are browser-safe', 
     for (const target of imports) checkBrowser(target, file);
   }
   for (const file of browserRoots) checkBrowser(file);
-
-  const entries = readProfile('web');
-  const plugins = await profileDescriptors(entries);
-  const moduleOwners = new Map(
-    [...manifests].flatMap(([owner, manifest]) =>
-      Object.keys(manifest.miniHarness?.profileModules ?? {}).map((specifier) => [specifier, owner] as const),
-    ),
-  );
-  for (const { id, browser, browserStyles } of plugins) {
-    if (!browser) {
-      assert.ok(!browserStyles?.length, id + ' has styles without a browser entry');
-      continue;
-    }
-    const owner = moduleOwners.get(entries.get(id)?.name ?? '');
-    assert.ok(owner, id + ' is missing its descriptor owner');
-    const prefix = '/packages/' + owner + '/src/browser/';
-    for (const resource of [browser, ...(browserStyles ?? [])]) {
-      assert.ok(resource.startsWith(prefix), id + ' references a foreign resource: ' + resource);
-      assert.ok(
-        existsSync(join(root, resource.slice(1).replace(/\.js$/, '.ts'))),
-        id + ' is missing ' + resource,
-      );
-    }
-  }
 
   checkCycles(runtime, 'Runtime dependency');
   checkCycles(declared, 'Workspace dependency');

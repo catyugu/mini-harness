@@ -4,16 +4,15 @@ import type { Static, TSchema } from 'typebox';
 import type { TextPart, ImagePart } from '@mini-harness/llm/api';
 
 import type { ToolSchema } from '@mini-harness/llm/vocabulary';
-export class ToolApprovalDenied extends Error {}
 
-export interface ToolResult {
-  content: (TextPart | ImagePart)[];
+export interface ToolUpdate {
+  content?: (TextPart | ImagePart)[];
   details?: Record<string, unknown>;
 }
-export interface ToolContext {
-  cwd?: string;
-  assertAuthorized?(): void;
-  waitForApproval?(request: () => Promise<void>): Promise<void>;
+export interface ToolResult extends ToolUpdate {
+  content: (TextPart | ImagePart)[];
+  isError?: boolean;
+  elapsedMs?: number;
 }
 export interface ToolDefinition<Arguments = Record<string, any>> extends ToolSchema {
   /** Tags are interpreted by the tool consumer. */
@@ -27,8 +26,7 @@ export interface ToolDefinition<Arguments = Record<string, any>> extends ToolSch
     callId: string,
     args: Arguments,
     signal?: AbortSignal,
-    onUpdate?: (result: ToolResult) => void,
-    context?: ToolContext,
+    onUpdate?: (update: ToolUpdate) => void,
   ): Promise<ToolResult>;
 }
 

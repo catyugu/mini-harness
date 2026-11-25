@@ -5,41 +5,52 @@ import type {
   NativeMessage,
   NativeToolMessage,
 } from '@mini-harness/llm/api';
-import type { ModelFailure, ModelRetry, ModelRequestContent, StepContext } from './events.ts';
+import type { ModelFailure, ModelRetry, ModelRequestContent } from './events.ts';
 import type { ToolSchema } from '@mini-harness/llm/vocabulary';
 import type { ToolCallPart } from '@mini-harness/llm/api';
-import type { ToolDefinition, ToolResult } from '@mini-harness/tools/api';
+import type { ToolDefinition, ToolUpdate } from '@mini-harness/tools/api';
+
+type Request = Omit<LlmRequest, 'signal'>;
 
 export interface AgentTurn {
-  request: Omit<LlmRequest, 'signal'>;
+  request: Request;
   executor: ToolExecutorPort;
   tools: ReadonlyMap<string, ToolDefinition>;
-  context?: Pick<StepContext, 'sessionId' | 'cwd'>;
-  /** The untransformed transcript, when a consumer overrides the messages sent to the model. */
-  history?: readonly NativeMessage[];
-  execution?: Partial<Omit<ToolExecution, 'signal' | 'cwd' | 'deliver'>>;
-  /** Persist or transform a model-facing tool result. */
-  deliver?(result: NativeToolMessage, signal: AbortSignal, call: ToolCallPart): Promise<NativeToolMessage>;
+  execution?: Partial<Omit<ToolExecution, 'signal' | 'deliver'>>;
+  deliver?(result: NativeToolMessage, signal: AbortSignal, call: ToolCallPart): Promise<void>;
 }
 
-export interface AgentRun {
-  signal: AbortSignal;
-  messages?: readonly NativeMessage[];
-  prepare(turn: number, messages: readonly NativeMessage[]): AgentTurn | Promise<AgentTurn>;
-  assistantStart?(): void;
-  delta?(text: string): void;
-  attemptEnded?(attempt: number, failed: boolean): void;
-  retry?(failure: Omit<ModelFailure, 'sessionId'>): Promise<ModelRetry | undefined>;
-  assistant?(
-    message: NativeAssistantMessage,
-    diagnostic?: {
-      code: 'executor-response' | 'invalid-tool-calls';
+export type AgentEvent =
+  | { type: 'request'; request: Request }
+  | { type: 'assistant-start' }
+  | { type: 'delta'; text: string }
+  | {
+      type: 'assistant';
       message: NativeAssistantMessage;
-    },
-  ): void;
-  afterTurn?(
-    calls: readonly ToolCallPart[],
-  ): 'continue' | 'restart' | void | Promise<'continue' | 'restart' | void>;
+      diagnostic?: {
+        code: 'executor-response' | 'invalid-tool-calls';
+        message: NativeAssistantMessage;
+      };
+    };
+
+export type AgentRun = {
+  signal: AbortSignal;
+  onEvent?(event: AgentEvent): void;
+  retry?(failure: ModelFailure): ModelRetry | undefined | Promise<ModelRetry | undefined>;
+} & (
+  | { request: Request; tools?: readonly ToolDefinition[] }
+  | {
+      prepare(turn: number): AgentTurn | Promise<AgentTurn>;
+      afterTurn?(
+        calls: readonly ToolCallPart[],
+      ): 'continue' | 'restart' | void | Promise<'continue' | 'restart' | void>;
+    }
+);
+
+export interface ToolTurn {
+  readonly model: LlmRequest['model'];
+  readonly turn: number;
+  readonly signal: AbortSignal;
 }
 
 export interface AgentPort {
@@ -47,12 +58,10 @@ export interface AgentPort {
 }
 
 export interface ToolExecution {
-  readonly cwd?: string;
   readonly signal: AbortSignal;
   /** Reports a started call and returns the reason to skip it, if any. */
-  start(call: ToolCallPart): string | undefined;
-  phase(call: ToolCallPart, state: 'approval' | 'running'): void;
-  update(call: ToolCallPart, result: ToolResult): void;
+  start?(call: ToolCallPart): string | undefined;
+  update?(call: ToolCallPart, result: ToolUpdate): void;
   deliver(result: NativeToolMessage, signal: AbortSignal): Promise<void>;
 }
 
@@ -60,9 +69,9 @@ export interface ToolExecutorPort {
   present(
     content: ModelRequestContent,
     tools: readonly ToolSchema[],
-    context: StepContext,
+    context: ToolTurn,
   ): ModelRequestContent & { tools?: ToolSchema[] };
-  interpret(message: NativeAssistantMessage, context: StepContext): NativeAssistantMessage;
+  interpret(message: NativeAssistantMessage, context: ToolTurn): NativeAssistantMessage;
   /** Interpret, execute and deliver a result for each call. */
   execute(
     calls: readonly ToolCallPart[],

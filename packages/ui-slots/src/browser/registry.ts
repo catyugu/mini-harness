@@ -3,13 +3,14 @@
  * The registry has no knowledge of business features or Cordis.
  */
 import { KeyedRegistry } from '@mini-harness/ui-runtime/keyed-registry';
-import type { KeyedSlotOptions, SlotKind, SlotName, SlotRenderer } from './api.ts';
+import type { SlotOptions, SlotKind, SlotName, SlotRenderer } from './api.ts';
 
 interface Entry {
-  node?: HTMLElement;
-  render?: SlotRenderer;
+  render: SlotRenderer;
   order: number;
 }
+type SlotKey = string | HTMLElement | SlotRenderer;
+
 interface Mounted {
   node: HTMLElement;
   release(): void;
@@ -22,7 +23,7 @@ interface Outlet {
 
 export class SlotRegistry {
   private readonly owners = new Map<SlotName, Outlet>();
-  private readonly entries = new Map<SlotName, KeyedRegistry<string | HTMLElement, Entry>>();
+  private readonly entries = new Map<SlotName, KeyedRegistry<SlotKey, Entry>>();
 
   define(name: SlotName, container: HTMLElement, kind: SlotKind = 'list'): () => void {
     if (this.owners.has(name)) throw new Error('Duplicate slot owner: ' + name);
@@ -44,29 +45,21 @@ export class SlotRegistry {
     return dispose;
   }
 
-  register(name: SlotName, node: HTMLElement, order = 0): () => void {
-    if (this.entries.get(name)?.get(node)) throw new Error('Duplicate node contribution: ' + name);
-    return this.add(name, node, { node, order });
-  }
-
-  registerKeyed(
+  register(
     name: SlotName,
-    key: string,
-    render: SlotRenderer,
-    { order = 0, priority = 0 }: KeyedSlotOptions = {},
+    contribution: HTMLElement | SlotRenderer,
+    { key, order = 0, priority = 0 }: SlotOptions = {},
   ): () => void {
-    return this.add(name, key, { render, order }, priority);
-  }
-
-  private add(name: SlotName, key: string | HTMLElement, value: Entry, priority = 0) {
-    const entries = this.entries.get(name) ?? new KeyedRegistry<string | HTMLElement, Entry>();
+    const entries = this.entries.get(name) ?? new KeyedRegistry<SlotKey, Entry>();
+    const render = typeof contribution === 'function' ? contribution : () => contribution;
+    const identity = key ?? contribution;
+    const remove = entries.add(identity, { render, order }, priority);
     this.entries.set(name, entries);
-    const remove = entries.add(key, value, priority);
     const dispose = () => {
-      const prior = entries.get(key);
+      const prior = entries.get(identity);
       remove();
       if (this.entries.get(name) === entries && !entries.size) this.entries.delete(name);
-      if (prior !== entries.get(key)) this.render(name);
+      if (prior !== entries.get(identity)) this.render(name);
     };
     try {
       this.render(name);
@@ -118,13 +111,7 @@ export class SlotRegistry {
     try {
       for (const entry of entries) {
         if (owner.active.has(entry)) continue;
-        const renderer: SlotRenderer =
-          entry.render ??
-          (() => {
-            if (!entry.node) throw new Error('Slot contribution has no node or renderer');
-            return entry.node;
-          });
-        staged.set(entry, this.mount(renderer));
+        staged.set(entry, this.mount(entry.render));
       }
     } catch (error) {
       for (const mount of staged.values()) mount.release();

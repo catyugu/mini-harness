@@ -5,9 +5,9 @@ const setup = (ctx: Context) => {
   const model = createComposerModel(ctx);
   ctx.provide('miniComposer', model);
   ctx.effect(() =>
-    ctx.miniSlots.registerKeyed('conversation.composer-view', 'composer', (signal) =>
-      mountComposer(ctx, signal),
-    ),
+    ctx.miniSlots.register('conversation.composer-view', (signal) => mountComposer(ctx, signal), {
+      key: 'composer',
+    }),
   );
 };
 export default {

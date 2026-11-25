@@ -1,4 +1,4 @@
-import { ToolApprovalDenied, isToolContent, type ToolDefinition } from '@mini-harness/tools/api';
+import { isToolContent, type ToolDefinition } from '@mini-harness/tools/api';
 import { Check } from 'typebox/value';
 import type { ToolCallPart, NativeToolMessage } from '@mini-harness/llm/api';
 import type { ToolExecutorPort } from './api.ts';
@@ -39,7 +39,7 @@ export const executeTools: ToolExecutorPort['execute'] = async (calls, tools, ex
       }
     }
     const run = async () => {
-      const skip = execution.start(call);
+      const skip = execution.start?.(call);
       if (skip) return failedTool(call, skip);
       return executeTool(call, tool, execution, batchSignal, invalid);
     };
@@ -72,59 +72,28 @@ async function executeTool(
   signal: AbortSignal,
   invalid?: string,
 ): Promise<NativeToolMessage> {
-  let start = performance.now();
-  let approvalMs: number | undefined;
-  let inApproval = false;
+  const start = performance.now();
   try {
     signal.throwIfAborted();
     if (!tool) throw new Error('Tool is no longer available: ' + call.name);
     if (invalid) throw new Error('Invalid arguments for ' + call.name + ': ' + invalid);
-    const result = await tool.execute(
-      call.id,
-      call.arguments,
-      signal,
-      (result) => execution.update(call, result),
-      {
-        cwd: execution.cwd,
-        async waitForApproval(request) {
-          inApproval = true;
-          const requestedAt = performance.now();
-          execution.phase(call, 'approval');
-          try {
-            await request();
-          } finally {
-            approvalMs = performance.now() - requestedAt;
-          }
-          inApproval = false;
-          start = performance.now();
-          execution.phase(call, 'running');
-        },
-      },
+    const result = await tool.execute(call.id, call.arguments, signal, (update) =>
+      execution.update?.(call, update),
     );
     if (!result || !isToolContent(result.content)) throw new Error('Invalid result from tool: ' + call.name);
     return {
+      ...result,
       role: 'toolResult',
       toolCallId: call.id,
       toolName: call.name,
-      content: result.content,
-      details: approvalMs === undefined ? result.details : { ...result.details, approvalMs },
-      isError: false,
+      isError: result.isError ?? false,
       timestamp: Date.now(),
-      elapsedMs: performance.now() - start,
+      elapsedMs: result.elapsedMs ?? performance.now() - start,
     };
   } catch (error) {
     return {
       ...failedTool(call, error instanceof Error ? error.message : String(error)),
-      elapsedMs: inApproval ? 0 : performance.now() - start,
-      details:
-        approvalMs === undefined
-          ? undefined
-          : {
-              approvalMs,
-              approvalDenied:
-                error instanceof ToolApprovalDenied ||
-                (error instanceof Error && error.cause instanceof ToolApprovalDenied),
-            },
+      elapsedMs: performance.now() - start,
     };
   }
 }

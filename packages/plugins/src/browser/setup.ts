@@ -65,7 +65,7 @@ function pluginCatalog(
   const content = required(page.querySelector('.catalog-content'));
   const status = required(page.querySelector<HTMLElement>('.catalog-status'));
   entry.dataset.pageLink = 'plugins';
-  ctx.effect(() => ctx.miniSlots.register('sidebar.actions', entry, -10));
+  ctx.effect(() => ctx.miniSlots.register('sidebar.actions', entry, { order: -10 }));
   ctx.effect(() => pages.register('plugins', page));
 
   let detailLifetime: AbortController | undefined;
