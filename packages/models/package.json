@@ -7,6 +7,7 @@
     "./api": "./src/server/api.ts",
     "./browser/api": "./src/browser/api.ts",
     "./catalog": "./src/shared/catalog.ts",
+    "./selection": "./src/server/selection.ts",
     "./manifests/pi-adapter": "./src/manifests/pi-adapter.ts",
     "./manifests/models": "./src/manifests/models.ts",
     "./manifests/catalog": "./src/manifests/catalog.ts",

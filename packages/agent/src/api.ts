@@ -68,7 +68,7 @@ export interface CompactionResult {
 }
 
 export interface CompactionPort {
-  shouldCompact(messages: NativeMessage[], budget: number): boolean;
+  shouldCompact(messages: NativeMessage[], limits: { contextWindow: number; maxTokens: number }): boolean;
   compact(input: CompactionInput): Promise<CompactionResult | undefined>;
 }
 

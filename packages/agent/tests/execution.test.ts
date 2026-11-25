@@ -61,8 +61,7 @@ function fixture(
   ctx.provide('harnessTools', tools.service());
   ctx.provide('harnessModels', {
     list: () => [],
-    connection: () => undefined,
-    apiKey: async () => undefined,
+    register: () => () => {},
     available: async () => [],
     resolve: (choice) => choice,
     capabilities: (choice) => ({
@@ -77,11 +76,11 @@ function fixture(
   });
   ctx.provide('harnessLlm', { ...llm, register: () => () => {} });
   ctx.provide('harnessToolExecutor', executor);
-  ctx.provide('harnessCompaction', basicCompaction);
+  ctx.provide('harnessCompaction', { ...basicCompaction, shouldCompact: () => false });
   ctx.provide('harnessPrompt', { build: async () => 'Fixture', register: () => () => {} });
   if (retryModel) ctx.on('agent/model-retry', retryModel);
   ctx.provide('harnessAgent', new AgentLoop(() => 8));
-  const agent = new SessionRun(sessions, () => ({ autoCompact: false }));
+  const agent = new SessionRun(sessions);
   const record = sessions.create();
   return { agent, ctx, sessions, tools, record };
 }
@@ -751,7 +750,7 @@ test('text models see historical placeholders in the request and audit snapshot,
 
 test('native compaction reduces context and preserves message identities and history', async (t) => {
   const { app, mock, request } = await httpFixture(t);
-  await app.runtime.configuration.update({ entries: { 'core:runs': { config: { autoCompact: false } } } });
+  await app.runtime.configuration.update({ entries: { 'core:compaction': { config: { autoCompact: false } } } });
   const { body: session } = await request('/sessions', 'POST', {});
   const compact = () => request('/sessions/' + session.id + '/compact', 'POST');
   const small = await compact();

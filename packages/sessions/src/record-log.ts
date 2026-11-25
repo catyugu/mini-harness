@@ -199,7 +199,7 @@ export abstract class RecordLog<Event extends { type: string }> {
       id: randomBytes(16).toString('hex'),
       parentId,
       timestamp: new Date().toISOString(),
-    } as SessionEntry;
+    } as LogEntry<Event>;
     this.validateEntry(entry);
     try {
       this.write({ ...entry, checksum: digest(entry) });
