@@ -367,10 +367,20 @@ export async function loadProfile(
   }
   const descriptors = await profileDescriptors(resolved);
   const managedIds = new Set(descriptors.map(({ id }) => id));
+  const overlayFiles = new Set(overlays.map(({ file }) => file));
   const modules = new Map(
     [...resolved.values()]
       .filter((row) => !managedIds.has(row.id) && !aliases.has(row.id))
-      .map((row) => [row.id, { name: row.name!, source: row.source! }]),
+      .map((row) => {
+        const name = row.name!;
+        // Command-line overlays can live outside the Profile's npm environment.
+        // Relative paths still belong to the file that declares them.
+        const bare = !isAbsolute(name) && !name.startsWith('./') && !name.startsWith('../');
+        const source = bare && overlayFiles.has(row.source!)
+          ? join(directory, MANIFEST)
+          : row.source!;
+        return [row.id, { name, source }];
+      }),
   );
   const { legacy: previousSettings, product, scopedTools, migration: pendingMigration, raw } =
     legacySettings(paths);

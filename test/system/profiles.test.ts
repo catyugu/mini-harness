@@ -165,10 +165,10 @@ export function apply(ctx, config) {
   assert.ok(persisted.includes('name: ./waiting.mjs'));
   assert.equal(readFileSync(fragment, 'utf8').includes('value: base'), true);
   assert.equal(readFileSync(join(directory, 'cordis.yml'), 'utf8'), 'plugins: []\n');
-  const standalone = join(directory, 'standalone.yml');
+  const standalone = join(root, 'standalone.yml');
   writeText(standalone, 'include: [' + JSON.stringify(fragment) + ']\n');
   await assert.rejects(bootProfile(standalone, paths, launch), /Invalid Profile name/);
-  writeText(standalone, 'plugins:\n  - id: provider\n    config:\n      value: temporary\n');
+  writeText(standalone, 'plugins:\n  - id: provider\n    config:\n      value: temporary\n  - id: consumer\n    name: profile-consumer\n');
   const patched = await bootProfile('custom', paths, { ...launch, patches: [standalone] });
   try {
     assert.equal(patched.ctx.get('profileResult'), 'temporary!');
