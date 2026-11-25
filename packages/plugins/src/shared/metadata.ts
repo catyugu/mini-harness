@@ -1,7 +1,11 @@
 import type { ScopeAddress } from '@mini-harness/plugin-api/configuration';
 import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 
-export interface PluginMetadata extends Pick<PluginInfo, 'title' | 'description' | 'icon' | 'configGroups' | 'configHint' | 'configSchema'> {
+export interface PluginMetadata
+  extends Pick<
+    PluginInfo,
+    'title' | 'description' | 'icon' | 'configGroups' | 'configHint' | 'configSchema'
+  > {
   id: string;
   external?: boolean;
   name?: string;

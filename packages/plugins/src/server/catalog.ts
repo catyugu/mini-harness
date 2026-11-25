@@ -79,16 +79,26 @@ export class PluginCatalog {
       const descriptor = await describePlugin(id, location, client, !entry.disabled, this.resolved.get(key));
       return { ...descriptor, name, scopeAddress, external };
     } catch (error) {
-      return { id, name, scopeAddress, external, info: { title: id, description: name ?? '' },
-        error: error instanceof Error ? error.message : String(error) };
+      return {
+        id,
+        name,
+        scopeAddress,
+        external,
+        info: { title: id, description: name ?? '' },
+        error: error instanceof Error ? error.message : String(error),
+      };
     }
   }
 
   runtimeDescriptors(settings: ProfileConfiguration): Promise<ResolvedPlugin[]> {
     return Promise.all([
-      ...Object.entries(settings.entries).map(([id, entry]) => this.describe(id, entry, entry.client ?? true)),
+      ...Object.entries(settings.entries).map(([id, entry]) =>
+        this.describe(id, entry, entry.client ?? true),
+      ),
       ...scopeAddresses(settings).flatMap((key) =>
-        Object.entries(settings.scopes[key]?.entries ?? {}).map(([id, entry]) => this.describe(id, entry, false, key)),
+        Object.entries(settings.scopes[key]?.entries ?? {}).map(([id, entry]) =>
+          this.describe(id, entry, false, key),
+        ),
       ),
     ]);
   }
@@ -153,7 +163,10 @@ export class PluginCatalog {
             : 'disabled';
       return {
         ...info,
-        id, name, external, package: packageInfo,
+        id,
+        name,
+        external,
+        package: packageInfo,
         instances,
         state,
         error: failed?.error ?? instances.find((instance) => instance.error)?.error ?? descriptorError,
@@ -169,7 +182,9 @@ export class PluginCatalog {
       id,
       context,
       config: plan.config ?? {},
-      module: descriptor.location ? descriptor.location.url + '#' + (descriptor.location.exportName ?? 'default') : plan.id,
+      module: descriptor.location
+        ? descriptor.location.url + '#' + (descriptor.location.exportName ?? 'default')
+        : plan.id,
       live: plan.live,
       load: () => plugin,
       prepare: (ctx) => {

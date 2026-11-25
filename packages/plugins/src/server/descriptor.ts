@@ -54,11 +54,9 @@ export async function describePlugin(
           .split(sep)
           .join('/')
       : undefined;
-  const clientOnly = explicitClient || !!(
-    entry &&
-    standardClient &&
-    realpathSync(entry) === realpathSync(join(folder, standardClient))
-  );
+  const clientOnly =
+    explicitClient ||
+    !!(entry && standardClient && realpathSync(entry) === realpathSync(join(folder, standardClient)));
   let source = clientOnly ? undefined : entry;
   if (
     !clientOnly &&
@@ -94,7 +92,9 @@ export async function describePlugin(
   const sidecar = entry ?? source;
   const staticInfo = {
     ...manifest,
-    ...(sidecar ? readJson<Partial<PluginInfo>>(sidecar + '.' + (exportName ?? 'default') + '.plugin.json', {}) : {}),
+    ...(sidecar
+      ? readJson<Partial<PluginInfo>>(sidecar + '.' + (exportName ?? 'default') + '.plugin.json', {})
+      : {}),
   };
   if (clientOnly) delete staticInfo.configSchema;
   const location = source
@@ -108,21 +108,28 @@ export async function describePlugin(
         ? previous.native
         : undefined;
   const info = { ...staticInfo, ...native?.metadata };
-  const browser = info.browser ?? standardClient ?? (isRegularFile(join(folder, 'web.js')) ? 'web.js' : undefined);
+  const browser =
+    info.browser ?? standardClient ?? (isRegularFile(join(folder, 'web.js')) ? 'web.js' : undefined);
   if (browser !== undefined && typeof browser !== 'string') throw new Error('Invalid browser entry');
   if (!source && !browser) throw new Error('Provide a server or browser module');
   const title = typeof info.title === 'string' ? info.title.slice(0, 100) : id;
   const description = typeof info.description === 'string' ? info.description.slice(0, 300) : '';
   if (!browser && (info.browserDirectory !== undefined || info.browserStyles?.length))
     throw new Error('Browser assets require a browser entry');
-  const inferredDirectory = browser === standardClient && standardClient && dirname(standardClient) !== '.'
-    ? dirname(standardClient) : undefined;
-  const resources = client && browser
-    ? readBrowserAssets(id, folder, browser, info.browserDirectory ?? inferredDirectory, info.browserStyles)
-    : undefined;
+  const inferredDirectory =
+    browser === standardClient && standardClient && dirname(standardClient) !== '.'
+      ? dirname(standardClient)
+      : undefined;
+  const resources =
+    client && browser
+      ? readBrowserAssets(id, folder, browser, info.browserDirectory ?? inferredDirectory, info.browserStyles)
+      : undefined;
   if (enabled && !native?.plugin && !browser)
-    throw new Error('Plugin ' + id + ' must export a Cordis plugin with apply(ctx, config) or a browser entry');
-  const configSchema = (native?.Config as { jsonSchema?: Record<string, any> } | undefined)?.jsonSchema ?? info.configSchema;
+    throw new Error(
+      'Plugin ' + id + ' must export a Cordis plugin with apply(ctx, config) or a browser entry',
+    );
+  const configSchema =
+    (native?.Config as { jsonSchema?: Record<string, any> } | undefined)?.jsonSchema ?? info.configSchema;
   const { configGroups, configHint } = info;
   if (
     configGroups !== undefined &&
@@ -158,7 +165,10 @@ export async function describePlugin(
     location,
     native,
     resources,
-    package: packageInfo.name && packageInfo.version ? { name: packageInfo.name, version: packageInfo.version } : undefined,
+    package:
+      packageInfo.name && packageInfo.version
+        ? { name: packageInfo.name, version: packageInfo.version }
+        : undefined,
     info: { title, description, icon, configGroups, configHint, configSchema },
   };
 }

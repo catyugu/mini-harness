@@ -84,14 +84,17 @@ export function readBrowserAssets(
   if (typeof directory === 'string') scan(directory);
   if (!entries.has(entry)) add(entry);
   for (const style of styles ?? []) {
-    if (!publicPath(style) || extname(style) !== '.css') throw new Error('Invalid browser stylesheet: ' + style);
+    if (!publicPath(style) || extname(style) !== '.css')
+      throw new Error('Invalid browser stylesheet: ' + style);
     if (!entries.has(style)) add(style);
   }
   const prefix = '/plugin-assets/' + id + '/' + signature.digest('hex').slice(0, 20) + '/';
   const urls = new Map([...entries].map(([file, info]) => [prefix + file, info]));
   return {
     entry: prefix + entry,
-    styles: (styles ?? [...entries.keys()].filter((file) => extname(file) === '.css')).map((file) => prefix + file),
+    styles: (styles ?? [...entries.keys()].filter((file) => extname(file) === '.css')).map(
+      (file) => prefix + file,
+    ),
     urls,
   };
 }
@@ -124,7 +127,9 @@ export function publishBrowser(
     entries,
     assets: new Map(resources.flatMap(({ descriptor }) => [...(descriptor.resources?.urls ?? [])])),
     configurable: new Set(
-      resources.filter(({ descriptor }) => descriptor.native?.Config || descriptor.info.configSchema).map(({ id }) => id),
+      resources
+        .filter(({ descriptor }) => descriptor.native?.Config || descriptor.info.configSchema)
+        .map(({ id }) => id),
     ),
   };
 }

@@ -100,9 +100,18 @@ for (const [name, { path, exportName }] of profileModules) {
   const entry = resolve(distribution, path);
   const { metadata, Config } = await loadPluginModule(pathToFileURL(entry).href, exportName);
   const configSchema = (Config as { jsonSchema?: Record<string, any> } | undefined)?.jsonSchema;
-  writeFileSync(entry + '.' + exportName + '.plugin.json', JSON.stringify({ ...metadata, configSchema }, null, 2) + '\n');
+  writeFileSync(
+    entry + '.' + exportName + '.plugin.json',
+    JSON.stringify({ ...metadata, configSchema }, null, 2) + '\n',
+  );
   if (!metadata?.browser) continue;
-  const assets = readBrowserAssets(name, distribution, metadata.browser, metadata.browserDirectory, metadata.browserStyles);
+  const assets = readBrowserAssets(
+    name,
+    distribution,
+    metadata.browser,
+    metadata.browserDirectory,
+    metadata.browserStyles,
+  );
   for (const { path: source, mime } of assets.urls.values()) {
     const target = join(clients, relative(distribution, source));
     mkdirSync(dirname(target), { recursive: true });
@@ -115,7 +124,11 @@ for (const [name, { path, exportName }] of profileModules) {
     const ast = ts.createSourceFile(source, code, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
     for (const { literal } of moduleReferences(ast).reverse()) {
       if (!literal.text.startsWith('.')) continue;
-      const url = '/' + relative(distribution, resolve(dirname(source), literal.text)).split(sep).join('/');
+      const url =
+        '/' +
+        relative(distribution, resolve(dirname(source), literal.text))
+          .split(sep)
+          .join('/');
       code = code.slice(0, literal.getStart(ast)) + JSON.stringify(url) + code.slice(literal.end);
     }
     writeFileSync(target, code);

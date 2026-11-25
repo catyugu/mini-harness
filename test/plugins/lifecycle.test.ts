@@ -54,8 +54,16 @@ function fixtureProfile(
       metadata.browser = 'web.js';
       writeFileSync(join(folder, 'web.js'), 'export function apply() {}');
     }
-    writeFileSync(entry, 'export const metadata = ' + JSON.stringify(metadata) +
-      '; export default globalThis[' + JSON.stringify(key) + ']; delete globalThis[' + JSON.stringify(key) + '];');
+    writeFileSync(
+      entry,
+      'export const metadata = ' +
+        JSON.stringify(metadata) +
+        '; export default globalThis[' +
+        JSON.stringify(key) +
+        ']; delete globalThis[' +
+        JSON.stringify(key) +
+        '];',
+    );
     locations.set(id, { folder, entry });
   }
   return {
@@ -820,7 +828,8 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
   const host = new PluginHost(
     ctx,
     directory,
-    fixtureProfile(directory, 
+    fixtureProfile(
+      directory,
       builtins,
       () => settings,
       (next) => {
@@ -972,7 +981,8 @@ test('configuration validation resolves the staged scope provider and rejects in
   const host = new PluginHost(
     new Context(),
     directory,
-    fixtureProfile(directory, 
+    fixtureProfile(
+      directory,
       builtins,
       () => settings,
       (next) => {
@@ -1032,7 +1042,8 @@ test('setup and live configuration cannot await their own graph transaction', as
   const host = new PluginHost(
     ctx,
     directory,
-    fixtureProfile(directory, 
+    fixtureProfile(
+      directory,
       builtins,
       () => settings,
       (next) => {
@@ -1124,7 +1135,8 @@ test('custom scope namespaces support normal Cordis composition and inheritance'
   const host = new PluginHost(
     ctx,
     directory,
-    fixtureProfile(directory, 
+    fixtureProfile(
+      directory,
       [
         {
           id: 'global',
