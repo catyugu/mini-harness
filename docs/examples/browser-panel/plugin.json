@@ -1,6 +1,7 @@
 {
   "title": "Example panel",
   "browserAssets": ["web/composer.js"],
+  "browserConfig": ["replaceComposer"],
   "configSchema": {
     "type": "object",
     "properties": {

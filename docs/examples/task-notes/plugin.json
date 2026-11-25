@@ -2,6 +2,7 @@
   "title": "Task notes",
   "description": "Record progress and run a follow-up in a child conversation.",
   "configChanges": "live",
+  "browserConfig": ["label"],
   "configGroups": [
     {
       "title": "Task notes",

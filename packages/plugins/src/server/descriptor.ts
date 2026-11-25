@@ -57,7 +57,17 @@ export function describePlugin(id: string, folder: string): DiscoveredPlugin {
       typeof configSchema.properties !== 'object')
   )
     throw new Error('Expected an object configSchema for plugin: ' + id);
-  const { configGroups, configHint } = manifest;
+  const { browserConfig, configGroups, configHint } = manifest;
+  if (
+    browserConfig !== undefined &&
+    (!hasWeb ||
+      !Array.isArray(browserConfig) ||
+      new Set(browserConfig).size !== browserConfig.length ||
+      browserConfig.some(
+        (key) => typeof key !== 'string' || !Object.hasOwn(configSchema?.properties ?? {}, key),
+      ))
+  )
+    throw new Error('Invalid browserConfig fields: ' + id);
   if (
     configGroups !== undefined &&
     (!Array.isArray(configGroups) ||
@@ -97,6 +107,7 @@ export function describePlugin(id: string, folder: string): DiscoveredPlugin {
     title,
     description,
     configSchema,
+    browserConfig,
     configGroups,
     configHint,
     configChanges: manifest.configChanges,

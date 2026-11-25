@@ -354,3 +354,30 @@ export const apply = async () => {
   assert.equal((await request('/plugins/slow-plugin', 'DELETE')).status, 200);
   assert.equal(existsSync(folder), false);
 });
+
+
+test('browser entries only receive and edit explicitly shared configuration', async (t) => {
+  const { paths, request } = await fixture(t);
+  const folder = join(paths.plugins, 'config-visibility');
+  mkdirSync(folder);
+  writeFileSync(join(folder, 'plugin.js'), 'export default () => {}');
+  writeFileSync(join(folder, 'web.js'), 'export default () => {}');
+  writeJson(join(folder, 'plugin.json'), {
+    browserConfig: ['label'],
+    configSchema: {
+      type: 'object',
+      properties: {
+        label: { type: 'string', default: 'Visible' },
+        credential: { type: 'string', default: 'server-only-value' },
+      },
+    },
+  });
+  assert.equal((await request('/settings', 'PATCH', { plugins: { 'config-visibility': true } })).status, 200);
+  const entry = async () => (await request('/bootstrap')).body.ui.find(
+    ({ id }: { id: string }) => id === 'config-visibility',
+  );
+  assert.deepEqual((await entry()).config, { label: 'Visible' });
+  assert.equal((await request('/settings/plugins/config-visibility', 'PATCH', { credential: 'overwrite' })).status, 400);
+  assert.equal((await request('/settings/plugins/config-visibility', 'PATCH', { label: 'Updated' })).status, 200);
+  assert.deepEqual((await entry()).config, { label: 'Updated' });
+});

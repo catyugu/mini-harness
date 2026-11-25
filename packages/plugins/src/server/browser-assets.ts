@@ -116,7 +116,11 @@ export function planBrowser(plans: ConfiguredPlugin[]): BrowserEntry[] {
       browser: resources.entry,
       styles: resources.styles,
       preload: resources.preload,
-      config: config ?? {},
+      config: Object.fromEntries(
+        (descriptor.browserConfig ?? []).flatMap((key) =>
+          config && Object.hasOwn(config, key) ? [[key, config[key]]] : [],
+        ),
+      ),
       liveConfig: descriptor.configChanges === 'live',
     }];
   });
@@ -133,6 +137,10 @@ export function publishBrowser(
   return {
     entries,
     assets: new Map(resources.flatMap(({ descriptor }) => [...(descriptor.resources?.urls ?? [])])),
-    configurable: new Set(resources.filter(({ descriptor }) => descriptor.configSchema).map(({ id }) => id)),
+    configurable: new Map(
+      resources
+        .filter(({ descriptor }) => descriptor.browserConfig?.length)
+        .map(({ id, descriptor }) => [id, new Set(descriptor.browserConfig)]),
+    ),
   };
 }

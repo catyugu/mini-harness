@@ -108,8 +108,15 @@ export class PluginHost implements ScopePort {
     if (!this.writePlugin) throw new DomainError('unavailable', 'Plugin settings are unavailable');
     await this.writePlugin(id, undefined, patch, () => {
       signal.throwIfAborted();
-      if (!this.browserState.configurable.has(id))
-        throw new DomainError('not_found', 'Plugin settings are unavailable');
+      const fields = this.browserState.configurable.get(id);
+      if (!fields) throw new DomainError('not_found', 'Plugin settings are unavailable');
+      if (
+        !patch ||
+        typeof patch !== 'object' ||
+        Array.isArray(patch) ||
+        Object.keys(patch).some((key) => !fields.has(key))
+      )
+        throw new DomainError('invalid_input', 'Configuration contains non-public browser fields');
     });
   }
 
