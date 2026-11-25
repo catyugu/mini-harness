@@ -9,7 +9,6 @@ export interface PluginInfo {
   title: string;
   description: string;
   scope: PluginScope['kind'];
-  trustedContributor?: boolean;
   web?: boolean;
   browser?: string;
   /** Styles shipped with a built-in browser entry. Local plugins may declare a browser build directory. */

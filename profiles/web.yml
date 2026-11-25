@@ -22,9 +22,6 @@ plugins:
   - id: core:layout
     name: '@mini-harness/ui-layout'
     client: true
-  - id: core:permission-settings
-    name: '@mini-harness/ui-permission-settings'
-    client: true
   - id: core:workspaces-data
     name: '@mini-harness/workspaces-data'
     client: true

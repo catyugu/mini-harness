@@ -14,9 +14,7 @@ export interface CompositionConfig {
   scopes: Partial<Record<ScopeKey, ScopeSettings>>;
 }
 
-export interface ProfileConfiguration extends CompositionConfig {
-  readOnlyTools: Record<string, string[]>;
-}
+export type ProfileConfiguration = CompositionConfig;
 
 export function scopeKeys(configuration: CompositionConfig) {
   return Object.keys(configuration.scopes) as ScopeKey[];

@@ -31,8 +31,7 @@
     ],
     "profileModules": {
       "@mini-harness/sessions": "./src/manifest.ts",
-      "@mini-harness/tool-policy": "./src/permission-policy.ts",
-      "@mini-harness/ui-permission-settings": "./src/permission-policy.ts#permissionSettings"
+      "@mini-harness/tool-policy": "./src/permission-policy.ts"
     }
   },
   "dependencies": {

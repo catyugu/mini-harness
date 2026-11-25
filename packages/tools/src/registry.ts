@@ -2,12 +2,7 @@ import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
 import { toolNamePattern } from '@mini-harness/llm/vocabulary';
 import { Check, Errors } from 'typebox/value';
 import { Service, type Context } from 'mini-harness/cordis';
-import {
-  agentScopeOf,
-  findInstance,
-  pluginInstance,
-  sessionVisible,
-} from '@mini-harness/plugin-api/instance';
+import { agentScopeOf, findInstance, sessionVisible } from '@mini-harness/plugin-api/instance';
 import { isToolContent, type ToolDefinition, type ToolPort, type ToolRegistrationOptions } from './api.ts';
 import type { ToolDecision } from './events.ts';
 import type { ToolAccess, ToolPolicy } from './policy.ts';
@@ -37,7 +32,7 @@ export class ToolRegistry {
     return Service.track<ToolPort>({
       register(definition, options) {
         const context = Service.caller(this);
-        const scopeKey = agentScopeOf(context) ?? pluginInstance(context).scopeKey;
+        const scopeKey = agentScopeOf(context) ?? findInstance(context)?.scopeKey;
         const bind = 'bind' in definition ? definition.bind : () => definition;
         return registry.registerBinding(definition.name, bind, { ...options, context, scope: scopeKey });
       },
@@ -47,7 +42,6 @@ export class ToolRegistry {
       isAvailable(id, tool) {
         return visibleToCaller(this, id) && registry.isAvailable(id, tool);
       },
-      readOnlyRegistrations: this.readOnlyRegistrations.bind(this),
     });
   }
 
@@ -69,14 +63,11 @@ export class ToolRegistry {
     const registry = this;
     const active = new Set<Promise<unknown>>();
     const signal = owner?.fiber.signal;
-    const identity = owner && (runScope ? findInstance(owner) : pluginInstance(owner));
     const expired = () => lifetime.signal.aborted || signal?.aborted === true;
     const entry: ToolRegistration = {
       name,
       scope,
       readOnly: access === 'readOnly',
-      pluginId: identity?.pluginId,
-      trusted: identity?.trusted ?? false,
       visible: (id) =>
         !expired() && (!scope || registry.address(id).includes(scope)) && (visible?.(id) ?? true),
       bind(id) {
@@ -168,16 +159,6 @@ export class ToolRegistry {
       this.selected(id, lease.entry.name) === lease.entry &&
       this.authorize(id, lease.entry)
     );
-  }
-
-  readOnlyRegistrations(pluginId: string): string[] {
-    return [
-      ...new Set(
-        [...this.tools.values()]
-          .filter((entry) => entry.pluginId === pluginId && entry.readOnly && !entry.trusted)
-          .map(({ name }) => name),
-      ),
-    ].sort();
   }
 
   forSession(id: string) {

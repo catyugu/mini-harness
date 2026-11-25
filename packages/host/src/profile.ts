@@ -384,7 +384,7 @@ export async function loadProfile(
         return [row.id, { name, source }];
       }),
   );
-  const policy = readJson<{ readOnlyTools?: unknown; scopedTools?: unknown }>(paths.settings, {});
+  const policy = readJson<{ scopedTools?: unknown }>(paths.settings, {});
   const scopedTools = object(policy.scopedTools) ? policy.scopedTools : {};
   function configurationFor(selected: ReadonlyMap<string, ResolvedRow>, selectedLayers: readonly Layer[]) {
     return parseSettings({
@@ -398,7 +398,6 @@ export async function loadProfile(
           },
         ]),
       ),
-      readOnlyTools: policy.readOnlyTools,
       scopes: withToolRules(Object.assign({}, ...shipped, ...selectedLayers).scopes ?? {}, scopedTools),
     });
   }
@@ -478,15 +477,10 @@ export async function loadProfile(
     const previous = readProfileText(file);
     if (previous !== text) writeText(file, text);
     const domain = {
-      readOnlyTools: settings.readOnlyTools,
       scopedTools: rules,
     };
     try {
-      if (
-        !isDeepStrictEqual(persistent.readOnlyTools, settings.readOnlyTools) ||
-        !isDeepStrictEqual(scopedRules(persistent.scopes), rules)
-      )
-        writeJson(paths.settings, domain);
+      if (!isDeepStrictEqual(scopedRules(persistent.scopes), rules)) writeJson(paths.settings, domain);
     } catch (error) {
       if (previous === undefined) rmSync(file, { force: true });
       else if (previous !== text) writeText(file, previous);

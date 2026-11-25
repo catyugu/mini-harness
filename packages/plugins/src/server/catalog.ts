@@ -234,7 +234,7 @@ export class PluginCatalog {
     id = plan.id,
     scopeKey?: ScopeKey,
   ): EntryOptions {
-    const { source, descriptor } = plan;
+    const { descriptor } = plan;
     const plugin = descriptor.plugin;
     if (!plugin) throw new Error('Missing server module: ' + plan.id);
     return {
@@ -250,7 +250,6 @@ export class PluginCatalog {
           scope,
           scopeKey,
           writableConfig: plan.live,
-          trusted: !source && descriptor.trustedContributor === true,
         });
         const changes = context.get('harnessChanges');
         if (changes) ctx.effect(() => changes.register('plugin:' + plan.id));
