@@ -1,7 +1,6 @@
 import { conversationTools } from './tool-selection.ts';
 import type { Context } from 'mini-harness/cordis';
 import { scopeTarget } from '@mini-harness/plugin-api/scopes';
-import { imageMimeType } from '@mini-harness/input/prepare';
 import { validateModelOptions } from '@mini-harness/llm/options';
 import type {
   InputContext,
@@ -15,13 +14,11 @@ import { createHash } from 'node:crypto';
 import type { ToolExecutorPort } from '@mini-harness/agent/api';
 import type {
   SessionCatalog,
-  SessionHistory,
   SessionLifecycle,
   SessionStore,
 } from '@mini-harness/sessions/store';
 import type { ModelChoice, ThinkingLevel } from '@mini-harness/llm/vocabulary';
 import type { SessionRecord } from '@mini-harness/sessions/identity';
-import type { ModelCatalogPort } from '@mini-harness/models/api';
 import {
   validateNativeMessage,
   validateRequestSnapshot,
@@ -117,52 +114,10 @@ export class SessionRun {
 
   constructor(
     private readonly sessions: Pick<SessionCatalog, 'workspacePath'> &
-      Pick<SessionHistory, 'inspectLog'> &
       Pick<SessionLifecycle, 'assertAvailable' | 'rename'> &
       Pick<SessionStore, 'log' | 'prepareInput'>,
     private readonly policy: () => { autoCompact: boolean },
   ) {}
-
-  revisionTarget(id: string, sourceEntryId: string, expectedLeafId: string | null) {
-    this.sessions.assertAvailable(id);
-    if (
-      typeof sourceEntryId !== 'string' ||
-      !/^[a-f0-9]{8,64}$/i.test(sourceEntryId) ||
-      (expectedLeafId !== null &&
-        (typeof expectedLeafId !== 'string' || !/^[a-f0-9]{8,64}$/i.test(expectedLeafId)))
-    )
-      throw new DomainError('invalid_input', 'Invalid revision target');
-    const target = this.sessions.inspectLog(
-      id,
-      (log) => {
-        if (log.projection().leafId !== expectedLeafId)
-          throw new DomainError('conflict', 'Conversation changed; refresh before editing');
-        const source = log.branch().find((entry) => entry.id === sourceEntryId);
-        if (source?.type !== 'message' || source.message.role !== 'user') return;
-        const files = source.presentation?.attachments ?? [];
-        const imageNames = files.filter((file) => imageMimeType.test(file.mimeType));
-        const content = source.message.content;
-        const images = (
-          source.presentation?.images ??
-          (typeof content === 'string' ? [] : content.filter((part) => part.type === 'image'))
-        ).map(({ data, mimeType }, index) => ({
-          data,
-          mimeType,
-          name: imageNames[index]?.name ?? 'Image ' + (index + 1),
-        }));
-        return {
-          parentId: source.parentId,
-          images,
-          textFiles: files
-            .filter((file) => !file.id && !imageMimeType.test(file.mimeType))
-            .map(({ name }) => name),
-        };
-      },
-      true,
-    );
-    if (!target) throw new DomainError('invalid_input', 'User message not found on active branch');
-    return target;
-  }
 
   queueInput(
     ctx: Context,
@@ -227,10 +182,6 @@ export class SessionRun {
     return {
       content,
       presentation: isDeepStrictEqual(images, preparedImages) ? input : { ...input, images },
-      assertActive: () => {
-        signal.throwIfAborted();
-        this.sessions.assertAvailable(sessionId);
-      },
     };
   }
 
@@ -247,7 +198,6 @@ export class SessionRun {
     },
     revision?: { parentId: string | null; expectedLeafId: string | null },
   ) {
-    prepared.assertActive();
     const { content, presentation: input } = prepared;
     const event = {
       type: 'message',
@@ -331,81 +281,74 @@ export class SessionRun {
     try {
       signal.throwIfAborted();
       const log = (runLog = this.sessions.log(id));
-      let model: ModelChoice | undefined = log.projection(revision?.parentId).model;
-      let capabilities: ReturnType<ModelCatalogPort['capabilities']>;
-      let activeThinking: ThinkingLevel | undefined;
       if (!revision) this.closeUnfinishedTools(log);
       const inbox = new Inbox(log);
-      const queuedSelection = (item: InboxItem) => {
+      const manual = {
+        text: prompt,
+        images,
+        input,
+        model: choice,
+        thinkingLevel,
+      };
+      type Input = typeof manual | InboxItem;
+      const selection = (item: Input, queued: boolean, previous = log.projection()) => {
         const models = requireService(ctx, 'harnessModels');
-        const choice = item.model ?? log.projection().model ?? fallback;
-        const chosen = choice && models.resolve(choice);
-        if (!chosen) return { ok: false, failure: 'The queued model is no longer available' } as const;
-        const nextCapabilities = models.capabilities(chosen);
-        if (item.images.length && !nextCapabilities?.input.includes('image'))
-          return { ok: false, failure: 'The selected model does not support queued image input' } as const;
-        try {
+        const explicit = queued ? (item.model ?? previous.model ?? fallback) : item.model;
+        if (queued && (!explicit || !models.resolve(explicit)))
+          throw new Error('The queued model is no longer available');
+        const model = selectModel(models, {
+          explicit,
+          stored: previous.model,
+          fallback,
+          preferStored: Boolean(record.parentId) || source !== 'user',
+        });
+        const capabilities = models.capabilities(model);
+        if (queued) {
+          if (item.images.length && !capabilities?.input.includes('image'))
+            throw new Error('The selected model does not support queued image input');
           validateNativeMessage({
             role: 'user',
             content: [{ type: 'text', text: item.text }, ...item.images],
             timestamp: 0,
           });
-          return {
-            ok: true,
-            chosen,
-            nextCapabilities,
-            level: resolveThinking(nextCapabilities, item.thinkingLevel, log.projection().thinkingLevel),
-          } as const;
-        } catch (error) {
-          return { ok: false, failure: error instanceof Error ? error.message : String(error) } as const;
         }
+        return { model, thinkingLevel: resolveThinking(capabilities, item.thinkingLevel, previous.thinkingLevel) };
       };
-      const nextValid = (mode: InboxItem['mode']) => {
-        for (const item of inbox.list()) {
-          if (item.mode !== mode) continue;
-          const selection = queuedSelection(item);
-          if (!selection.ok) {
-            log.append({ type: 'inbox-failed', inboxId: item.id, reason: selection.failure });
-          } else return { item, ...selection };
-        }
+      const nextValid = (mode: InboxItem['mode']) =>
+        inbox.select(mode, (item) => selection(item, true));
+      const prepare = async (item: Input, model: ModelChoice, inputSource: InputSource) => {
+        const prepared = await this.prepareInput(
+          ctx,
+          id,
+          model,
+          inputSource,
+          item.text,
+          item.images,
+          item.input ?? { userText: item.text, attachments: [] },
+          signal,
+        );
+        signal.throwIfAborted();
+        this.sessions.assertAvailable(id);
+        return prepared;
       };
       const deliver = async (mode: InboxItem['mode']) => {
         signal.throwIfAborted();
         for (let next = nextValid(mode); next; next = nextValid(mode)) {
-          const { item, chosen, nextCapabilities, level } = next;
-          let prepared: Awaited<ReturnType<SessionRun['prepareInput']>>;
+          const { item, value } = next;
+          let prepared: Awaited<ReturnType<typeof prepare>>;
           try {
-            prepared = await this.prepareInput(
-              ctx,
-              id,
-              chosen,
-              'user',
-              item.text,
-              item.images,
-              item.input ?? { userText: item.text, attachments: [] },
-              signal,
-            );
-            prepared.assertActive();
+            prepared = await prepare(item, value.model, 'user');
           } catch (error) {
             signal.throwIfAborted();
-            if (inbox.next(mode)?.id === item.id)
-              log.append({
-                type: 'inbox-failed',
-                inboxId: item.id,
-                reason: error instanceof Error ? error.message : String(error),
-              });
+            inbox.fail(item, error);
             continue;
           }
-          signal.throwIfAborted();
           if (inbox.next(mode)?.id !== item.id) continue;
           await this.user(log, prepared, item.images, emit, 'user', {
             submissionId,
             inboxId: item.id,
-            selection: { model: chosen, thinkingLevel: level },
+            selection: value,
           });
-          model = chosen;
-          capabilities = nextCapabilities;
-          activeThinking = level;
           return true;
         }
         return false;
@@ -416,25 +359,9 @@ export class SessionRun {
         signal.throwIfAborted();
         beginSubmission?.();
         const previous = log.projection(revision?.parentId);
-        const models = requireService(ctx, 'harnessModels');
-        model = selectModel(models, {
-          explicit: choice,
-          stored: previous.model,
-          fallback,
-          preferStored: Boolean(record.parentId) || source !== 'user',
-        });
-        capabilities = models.capabilities(model);
-        activeThinking = resolveThinking(capabilities, thinkingLevel, previous.thinkingLevel);
-        const prepared = await this.prepareInput(ctx, id, model, source, prompt, images, input, signal);
-        await this.user(
-          log,
-          prepared,
-          images,
-          emit,
-          source,
-          { submissionId, selection: { model, thinkingLevel: activeThinking } },
-          revision,
-        );
+        const chosen = selection(manual, false, previous);
+        const prepared = await prepare(manual, chosen.model, source);
+        await this.user(log, prepared, images, emit, source, { submissionId, selection: chosen }, revision);
         if (record.titleSource === 'auto' && !previous.messages.some((item) => item.role === 'user'))
           this.sessions.rename(
             id,
@@ -482,7 +409,10 @@ export class SessionRun {
           }
         },
         prepare: async (turn) => {
+          const previous = log.projection();
+          const model = previous.model;
           if (!model) throw new Error('Configure a model before sending a message');
+          const capabilities = requireService(ctx, 'harnessModels').capabilities(model);
           const cwd = this.sessions.workspacePath(id);
           const step: StepContext = { sessionId: id, turn, phase: 'turn', cwd, model, signal };
           if (
@@ -491,7 +421,7 @@ export class SessionRun {
             ctx
               .get('harnessCompaction')
               ?.shouldCompact(
-                log.projection().contextMessages,
+                previous.contextMessages,
                 Math.max(1024, capabilities.contextWindow * 0.8 - capabilities.maxTokens),
               )
           )

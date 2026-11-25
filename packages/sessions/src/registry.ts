@@ -23,7 +23,7 @@ import {
   readAttachmentFile,
   storeAttachments,
 } from './storage.ts';
-import { prepareInput } from '@mini-harness/input/prepare';
+import { imageMimeType, prepareInput } from '@mini-harness/input/prepare';
 import type { Attachment } from '@mini-harness/input/message';
 
 type Participant = Parameters<SessionStore['beforeDelete']>[0];
@@ -298,6 +298,47 @@ export class SessionRegistry implements SessionStore {
       this.logs.delete(key);
     }
     return log;
+  }
+
+  revisionTarget(id: string, sourceEntryId: string, expectedLeafId: string | null) {
+    this.assertAvailable(id);
+    if (
+      typeof sourceEntryId !== 'string' ||
+      !/^[a-f0-9]{8,64}$/i.test(sourceEntryId) ||
+      (expectedLeafId !== null &&
+        (typeof expectedLeafId !== 'string' || !/^[a-f0-9]{8,64}$/i.test(expectedLeafId)))
+    )
+      throw new DomainError('invalid_input', 'Invalid revision target');
+    const target = this.inspectLog(
+      id,
+      (log) => {
+        if (log.projection().leafId !== expectedLeafId)
+          throw new DomainError('conflict', 'Conversation changed; refresh before editing');
+        const source = log.branch().find((entry) => entry.id === sourceEntryId);
+        if (source?.type !== 'message' || source.message.role !== 'user') return;
+        const files = source.presentation?.attachments ?? [];
+        const imageNames = files.filter((file) => imageMimeType.test(file.mimeType));
+        const content = source.message.content;
+        const images = (
+          source.presentation?.images ??
+          (typeof content === 'string' ? [] : content.filter((part) => part.type === 'image'))
+        ).map(({ data, mimeType }, index) => ({
+          data,
+          mimeType,
+          name: imageNames[index]?.name ?? 'Image ' + (index + 1),
+        }));
+        return {
+          parentId: source.parentId,
+          images,
+          textFiles: files
+            .filter((file) => !file.id && !imageMimeType.test(file.mimeType))
+            .map(({ name }) => name),
+        };
+      },
+      true,
+    );
+    if (!target) throw new DomainError('invalid_input', 'User message not found on active branch');
+    return target;
   }
 
   inspectLog<T>(id: string, read: (log: SessionLog) => T, strict = false): T | undefined {

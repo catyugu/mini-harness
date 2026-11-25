@@ -316,7 +316,7 @@ export class Runs implements RunPort {
     reservation.done = prepare;
     try {
       await prepare;
-      const target = this.sessionRun.revisionTarget(id, input.sourceEntryId, input.expectedLeafId);
+      const target = this.registry.revisionTarget(id, input.sourceEntryId, input.expectedLeafId);
       const removed = input.removedImages ?? [];
       if (
         !Array.isArray(removed) ||

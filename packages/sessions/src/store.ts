@@ -17,6 +17,11 @@ export interface SessionCatalog {
 }
 
 export interface SessionHistory {
+  revisionTarget(id: string, sourceEntryId: string, expectedLeafId: string | null): {
+    parentId: string | null;
+    images: { data: string; mimeType: string; name: string }[];
+    textFiles: string[];
+  };
   inspectLog<T>(
     id: string,
     read: (log: Pick<SessionLogPort, 'entries' | 'branch' | 'projection' | 'queue'>) => T,

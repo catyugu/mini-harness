@@ -41,6 +41,26 @@ export class Inbox {
     return this.list().find((item) => item.mode === mode);
   }
 
+  fail(item: InboxItem, error: unknown) {
+    if (this.next(item.mode)?.id === item.id)
+      this.log.append({
+        type: 'inbox-failed',
+        inboxId: item.id,
+        reason: error instanceof Error ? error.message : String(error),
+      });
+  }
+
+  select<T>(mode: InboxItem['mode'], select: (item: InboxItem) => T): { item: InboxItem; value: T } | undefined {
+    for (const item of this.list()) {
+      if (item.mode !== mode) continue;
+      try {
+        return { item, value: select(item) };
+      } catch (error) {
+        this.fail(item, error);
+      }
+    }
+  }
+
   cancel(reason: string, id?: string) {
     const ids = this.list()
       .filter((item) => id === undefined || item.id === id)
