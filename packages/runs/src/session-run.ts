@@ -22,7 +22,12 @@ import { Inbox } from './inbox.ts';
 import { isToolContent } from '@mini-harness/tools/api';
 import { applyTransforms } from './transforms.ts';
 import { failedTool } from '@mini-harness/tools/execution';
-import { prepareModelMessages, resolveThinking, selectModel, assertImageInput } from '@mini-harness/models/selection';
+import {
+  prepareModelMessages,
+  resolveThinking,
+  selectModel,
+  assertImageInput,
+} from '@mini-harness/models/selection';
 import { NothingToCompact } from '@mini-harness/agent/compaction';
 import { requestModel } from '@mini-harness/agent/model-request';
 
@@ -168,7 +173,10 @@ export class SessionRun {
       validateNativeMessage({ role: 'user', content, timestamp: 0 });
       const preparedImages =
         typeof content === 'string' ? [] : content.filter((part) => part.type === 'image');
-      assertImageInput(requireService(ctx, 'harnessModels').capabilities(selected.model), preparedImages.length);
+      assertImageInput(
+        requireService(ctx, 'harnessModels').capabilities(selected.model),
+        preparedImages.length,
+      );
       signal.throwIfAborted();
       this.sessions.assertAvailable(id);
       return {
@@ -275,7 +283,10 @@ export class SessionRun {
         const capabilities = requireService(ctx, 'harnessModels').capabilities(model);
         const cwd = this.sessions.workspacePath(id);
         const step: StepContext = { sessionId: id, turn, phase: 'turn', cwd, model, signal };
-        if (capabilities && ctx.get('harnessCompaction')?.shouldCompact(current.contextMessages, capabilities)) {
+        if (
+          capabilities &&
+          ctx.get('harnessCompaction')?.shouldCompact(current.contextMessages, capabilities)
+        ) {
           await this.compactLog(ctx, id, log, signal, true);
           current = log.projection();
         }
@@ -289,7 +300,8 @@ export class SessionRun {
           label,
           metadata,
         }));
-        const systemPrompt = (await ctx.get('harnessPrompt')?.build({ sessionId: id, cwd, tools: toolMetadata, signal })) ?? '';
+        const systemPrompt =
+          (await ctx.get('harnessPrompt')?.build({ sessionId: id, cwd, tools: toolMetadata, signal })) ?? '';
         const request = await this.prepareRequest(
           ctx,
           step,
