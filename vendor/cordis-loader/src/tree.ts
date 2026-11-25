@@ -55,9 +55,12 @@ export class EntryTree {
     return failures
   }
 
-  private async settle() {
+  /** Wait for current lifecycle work, optionally restricted to selected entry subtrees. */
+  async settle(ids?: readonly string[]) {
     while (true) {
-      const roots = new Set([...this.entries.values()].flatMap(({ fiber }) => fiber ? [fiber] : []))
+      const roots = new Set([...this.entries.values()]
+        .filter(({ options }) => !ids || ids.includes(options.id))
+        .flatMap(({ fiber }) => fiber ? [fiber] : []))
       const first = roots.values().next().value
       if (!first) return
       const pending: Promise<void>[] = []

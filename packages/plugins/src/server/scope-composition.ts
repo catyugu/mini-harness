@@ -2,12 +2,11 @@ import { Context, EntryGroup, EntryTree, type EntryOptions } from 'mini-harness/
 import type { ScopeAddress, ScopeBinding } from '@mini-harness/plugin-api/configuration';
 import { tagScope } from '@mini-harness/plugin-api/scopes';
 
-type Resolver = (id: string) => ScopeBinding | undefined;
-export const sourceName = (key: string) => 'scope-source:' + key.split(':')[0];
+export const sourceName = (key: ScopeAddress) => 'scope-source:' + key;
 const compositionName = (key: ScopeAddress) => 'scope-composition:' + key;
 
 export function lookupScope(ctx: Context, key: ScopeAddress) {
-  return (ctx.get(sourceName(key)) as Resolver | undefined)?.(key.slice(key.indexOf(':') + 1));
+  return ctx.get(sourceName(key)) as ScopeBinding | undefined;
 }
 
 export interface MountedScope {
@@ -72,9 +71,11 @@ export function scopeEntry(
             tree = undefined;
             context = undefined;
             await state.tree.close();
+            root.get('harnessChanges')?.invalidate('plugins');
           });
           owner.provide(compositionName(key), state.context);
           await state.tree.update(options().plugins(state.context));
+          root.get('harnessChanges')?.invalidate('plugins');
         }
 
         async function activate(owner: Context, work: () => Promise<void>) {
@@ -108,8 +109,7 @@ export function scopeEntry(
           const address = parent;
           await owner.inject([sourceName(address)], (child) =>
             activate(child, async () => {
-              const next = lookupScope(child, address);
-              if (!next) throw new Error('Configured scope does not exist: ' + address);
+              const next = lookupScope(child, address)!;
               await connect(
                 child,
                 binding,
@@ -122,8 +122,7 @@ export function scopeEntry(
         }
 
         await activate(ctx, async () => {
-          const binding = lookupScope(ctx, key);
-          if (!binding) throw new Error('Configured scope does not exist: ' + key);
+          const binding = lookupScope(ctx, key)!;
           await connect(ctx, binding, binding.parent, new Set([key]));
         });
       },

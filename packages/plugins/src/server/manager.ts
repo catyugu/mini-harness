@@ -214,14 +214,22 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
   }
 
   metadata() {
+    const failures = new Map(this.failures);
+    for (const { id, scopeAddress } of this.catalog.descriptors()) {
+      if (!scopeAddress) continue;
+      const instance = scopeAddress + '/' + id;
+      const error = this.entry(instance)?.error ?? this.scopeFailures.get(scopeAddress);
+      if (error !== undefined) failures.set(instance, String(error instanceof Error ? error.message : error));
+      else if (this.entry(instance)?.active) failures.delete(instance);
+    }
     return this.catalog.metadata(
-      this.failures,
+      failures,
       (id) => this.entry(id)?.active === true || this.browserState.entries.some((entry) => entry.id === id),
     );
   }
 
-  register(owner: Context, kind: string, resolve: (id: string) => ScopeBinding | undefined) {
-    return owner.provide(sourceName(kind), resolve);
+  register(owner: Context, address: ScopeAddress, binding: ScopeBinding) {
+    return owner.provide(sourceName(address), binding);
   }
 
   private lookup(key: ScopeAddress) {
@@ -278,6 +286,7 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
     if (this.closing) throw new DomainError('unavailable', 'Profile configuration is closing');
     const ancestry = this.ancestry(key);
     if (!ancestry.length) throw new DomainError('not_found', 'Plugin scope not found: ' + key);
+    await waitFor(this.entries.settle(ancestry.map((address) => '@scope/' + address)), signal);
   }
 
   private scopedEntries(

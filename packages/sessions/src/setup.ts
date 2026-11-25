@@ -9,20 +9,28 @@ export function setup(ctx: Context) {
     (event, key) => observe(ctx, event, undefined, key),
     (keys) => ctx.harnessProfileConfig.forgetScopes(keys),
   );
-  ctx.harnessProfileScopes.register(ctx, 'session', (id) => {
+  const scopes = new Map<string, () => void>();
+  const syncScope = (id: string) => {
     const record = registry.get(id);
-    const key = registry.scope(id);
-    return (
-      record &&
-      key && {
-        key,
+    if (!record) {
+      scopes.get(id)?.();
+      scopes.delete(id);
+    } else if (!scopes.has(id)) {
+      scopes.set(id, ctx.harnessProfileScopes.register(ctx, `session:${id}`, {
+        key: registry.scope(id)!,
         parent: record.parentId
           ? `session:${record.parentId}`
           : record.workspaceId
             ? `workspace:${record.workspaceId}`
             : undefined,
-      }
-    );
+      }));
+    }
+  };
+  for (const { id } of registry.list()) syncScope(id);
+  ctx.effect(() => {
+    const changed = (event: Event) => syncScope((event as CustomEvent<{ id: string }>).detail.id);
+    registry.events.addEventListener('change', changed);
+    return () => registry.events.removeEventListener('change', changed);
   });
   ctx.on('settings/scopes', (options) => {
     for (const { id, title } of registry.list()) options.push({ key: `session:${id}`, name: title });

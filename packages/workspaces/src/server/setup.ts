@@ -7,9 +7,23 @@ const validId = /^[a-f0-9]{32}$/;
 /** Workspace identity, mutations and registered HTTP routes have one owner. */
 export function setup(ctx: Context) {
   const catalog = new WorkspaceCatalog(ctx.harnessState.paths);
-  ctx.harnessProfileScopes.register(ctx, 'workspace', (id) => {
-    const key = catalog.scope(id);
-    return key && { key };
+  const scopes = new Map<string, () => void>();
+  const syncScopes = () => {
+    const ids = new Set(catalog.list().map(({ id }) => id));
+    for (const [id, release] of scopes) {
+      if (ids.has(id)) continue;
+      scopes.delete(id);
+      release();
+    }
+    for (const id of ids) {
+      if (scopes.has(id)) continue;
+      scopes.set(id, ctx.harnessProfileScopes.register(ctx, `workspace:${id}`, { key: catalog.scope(id)! }));
+    }
+  };
+  syncScopes();
+  ctx.effect(() => {
+    catalog.events.addEventListener('change', syncScopes);
+    return () => catalog.events.removeEventListener('change', syncScopes);
   });
   ctx.on('settings/scopes', (options) => {
     for (const { id, name } of catalog.list()) options.push({ key: `workspace:${id}`, name });

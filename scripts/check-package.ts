@@ -172,6 +172,8 @@ async function checkPackage() {
       const source: ModelSource = { list: () => [], resolve: () => undefined, capabilities: () => undefined };
       ctx.effect(() => ctx.harnessModels.register(source, { accepts: () => false, async *stream() {} }));
       const scopeContext: Context = ctx.harnessProfileScopes.context('session:example');
+      const releaseScope = ctx.harnessProfileScopes.register(ctx, 'example:resource', { key: {} });
+      void releaseScope;
       void scopeContext;
       const plugin: Plugin = {
         apply(ctx) { ctx.provide('example', { greet: (name: string) => name.toUpperCase() }); }

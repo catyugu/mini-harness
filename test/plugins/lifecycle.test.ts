@@ -846,18 +846,15 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
       },
     ),
   );
-  const workspaceKeys = fixtureKeys();
-  host.register(host.ctx, 'workspace', (id) => ({ key: workspaceKeys(id) }));
-  const sessionKeys = fixtureKeys();
-  host.register(host.ctx, 'session', (id) => {
-    const record = records.get(id);
-    return (
-      record && {
-        key: sessionKeys(id),
-        parent: record.parentId ? `session:${record.parentId}` : `workspace:${record.workspaceId}`,
-      }
-    );
-  });
+  for (const id of [workspaceId, otherWorkspace]) {
+    host.register(host.ctx, `workspace:${id}`, { key: createScopeKey() });
+  }
+  for (const { id, parentId, workspaceId } of records.values()) {
+    host.register(host.ctx, `session:${id}`, {
+      key: createScopeKey(),
+      parent: parentId ? `session:${parentId}` : `workspace:${workspaceId}`,
+    });
+  }
   t.after(async () => {
     await host.close();
     rmSync(directory, { recursive: true, force: true });
@@ -1000,8 +997,7 @@ test('configuration validation resolves the staged scope provider and rejects in
       },
     ),
   );
-  const workspaceKeys = fixtureKeys();
-  host.register(host.ctx, 'workspace', (id) => ({ key: workspaceKeys(id) }));
+  host.register(host.ctx, `workspace:${workspaceId}`, { key: createScopeKey() });
   t.after(async () => {
     await host.close();
     rmSync(directory, { recursive: true, force: true });
@@ -1063,7 +1059,7 @@ test('setup and live configuration cannot await their own graph transaction', as
   );
   ctx.provide('harnessProfileScopes', host);
   const sessionKey = createScopeKey();
-  host.register(host.ctx, 'session', () => ({ key: sessionKey }));
+  host.register(host.ctx, 'session:session', { key: sessionKey });
   t.after(async () => {
     await host.close();
     rmSync(directory, { recursive: true, force: true });
@@ -1176,8 +1172,10 @@ test('custom scope namespaces support normal Cordis composition and inheritance'
   );
   const projectKeys = fixtureKeys();
   const taskKey = createScopeKey(projectKeys('alpha'));
-  host.register(host.ctx, 'project', (id) => ({ key: projectKeys(id) }));
-  host.register(host.ctx, 'task', () => ({ key: taskKey, parent: 'project:alpha' }));
+  for (const id of ['alpha', 'beta']) {
+    host.register(host.ctx, `project:${id}`, { key: projectKeys(id) });
+  }
+  host.register(host.ctx, 'task:child', { key: taskKey, parent: 'project:alpha' });
   t.after(async () => {
     await host.close();
     rmSync(directory, { recursive: true, force: true });
@@ -1368,9 +1366,7 @@ test('configured subtrees follow late scope owners, including owners installed b
           description: '',
           plugin: {
             apply(owner) {
-              owner.harnessProfileScopes.register(owner, 'project', (id) =>
-                id === 'alpha' ? { key: project } : undefined,
-              );
+              owner.harnessProfileScopes.register(owner, 'project:alpha', { key: project });
             },
             inject: ['harnessProfileScopes'],
           },
@@ -1381,9 +1377,10 @@ test('configured subtrees follow late scope owners, including owners installed b
           description: '',
           plugin: {
             apply(owner) {
-              owner.harnessProfileScopes.register(owner, 'task', (id) =>
-                id === 'child' ? { key: task, parent: 'project:alpha' } : undefined,
-              );
+              owner.harnessProfileScopes.register(owner, 'task:child', {
+                key: task,
+                parent: 'project:alpha',
+              });
             },
             inject: ['harnessProfileScopes'],
           },
@@ -1427,4 +1424,88 @@ test('configured subtrees follow late scope owners, including owners installed b
   await toggle(false);
   assert.equal(host.context('task:child').get('greeting'), 'nested');
   assert.deepEqual(effects, ['mounted', 'disposed', 'mounted']);
+});
+
+test('configured compositions follow individual resources created after their owner has loaded', async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'mini-dynamic-scopes-'));
+  const ctx = new Context();
+  const settings = mergeSettings(structuredClone(DEFAULTS), {
+    entries: { source: { name: 'source' } },
+    scopes: {
+      'project:alpha': { isolate: ['greeting'], entries: { local: { name: 'local' } } },
+      'project:beta': { isolate: ['greeting'], entries: { local: { name: 'local' } } },
+      'task:child': { entries: { consumer: { name: 'consumer' } } },
+    },
+  });
+  let owner: Context;
+  let ownerLoads = 0;
+  let mounts = 0;
+  let releases = 0;
+  const task = createScopeKey();
+  const host = new PluginHost(ctx, directory, fixtureProfile(directory, [
+    {
+      id: 'source', title: 'Projects', description: '',
+      plugin: {
+        inject: ['harnessProfileScopes'],
+        apply(context) {
+          owner = context;
+          ownerLoads++;
+          context.harnessProfileScopes.register(context, 'project:beta', { key: createScopeKey() });
+          context.harnessProfileScopes.register(context, 'task:child', { key: task, parent: 'project:alpha' });
+        },
+      },
+    },
+    {
+      id: 'local', title: 'Local greeting', description: '',
+      plugin: {
+        provide: ['greeting'],
+        apply(context) {
+          mounts++;
+          context.provide('greeting', 'project');
+          context.effect(() => () => { releases++; });
+        },
+      },
+    },
+    {
+      id: 'consumer', title: 'Child consumer', description: '',
+      plugin: {
+        inject: ['greeting'],
+        provide: ['extra'],
+        apply(context) { context.provide('extra', context.greeting + ' child'); },
+      },
+    },
+  ], () => settings));
+  ctx.provide('harnessProfileScopes', host);
+  t.after(async () => {
+    await host.close();
+    rmSync(directory, { recursive: true, force: true });
+  });
+  await host.start();
+  assert.equal(host.context('project:beta').greeting, 'project');
+  assert.equal(mounts, 1);
+  assert.equal(host.metadata().find(({ id }) => id === 'consumer')?.state, 'inactive');
+  await assert.rejects(host.prepare('project:alpha'), /Plugin scope not found/);
+
+  const publish = () => {
+    const key = createScopeKey();
+    setScopeParent(task, key);
+    return owner!.harnessProfileScopes.register(owner!, 'project:alpha', { key });
+  };
+  const release = publish();
+  await host.prepare('task:child');
+  assert.equal(host.context('task:child').extra, 'project child');
+  assert.equal(host.metadata().find(({ id }) => id === 'consumer')?.state, 'ready');
+  assert.equal(mounts, 2);
+  await release();
+  assert.equal(releases, 1);
+  assert.equal(host.metadata().find(({ id }) => id === 'consumer')?.state, 'inactive');
+  assert.equal(host.context('project:beta').greeting, 'project');
+  await assert.rejects(host.prepare('project:alpha'), /Plugin scope not found/);
+
+  publish();
+  await host.prepare('task:child');
+  assert.equal(host.context('task:child').extra, 'project child');
+  assert.equal(mounts, 3);
+  assert.equal(ownerLoads, 1);
+  assert.equal(releases, 1);
 });
