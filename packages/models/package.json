@@ -19,11 +19,11 @@
       "./catalog"
     ],
     "profileModules": {
-      "@mini-harness/llm": "./src/manifests/llm.ts#manifest",
-      "@mini-harness/model-catalog": "./src/manifests/catalog.ts#manifest",
-      "@mini-harness/model-store": "./src/manifests/store.ts#manifest",
-      "@mini-harness/models": "./src/manifests/models.ts#manifest",
-      "@mini-harness/ui-models": "./src/manifests/models.ts#administrationManifest"
+      "@mini-harness/llm": "./src/manifests/llm.ts",
+      "@mini-harness/model-catalog": "./src/manifests/catalog.ts",
+      "@mini-harness/model-store": "./src/manifests/store.ts",
+      "@mini-harness/models": "./src/manifests/models.ts",
+      "@mini-harness/ui-models": "./src/manifests/models.ts#administration"
     }
   },
   "dependencies": {

@@ -54,38 +54,34 @@ function fixture(
   const tools = new ToolRegistry();
   const ctx = new Context();
   ctx.provide('harnessTools', tools.service());
-  const agent = new NativeAgent(sessions, {
-    models: () => ({
-      list: () => [],
-      available: async () => [],
-      resolve: (choice) => choice,
-      capabilities: (choice) => ({
-        id: model.id,
-        name: 'Fixture',
-        input: choice.id === 'text-only' ? ['text'] : ['text', 'image'],
-        contextWindow: 32000,
-        maxTokens: 1024,
-        reasoning: true,
-        thinkingLevels: thinkingLevels(choice.id),
-      }),
+  ctx.provide('harnessModels', {
+    list: () => [],
+    available: async () => [],
+    resolve: (choice) => choice,
+    capabilities: (choice) => ({
+      id: model.id,
+      name: 'Fixture',
+      input: choice.id === 'text-only' ? ['text'] : ['text', 'image'],
+      contextWindow: 32000,
+      maxTokens: 1024,
+      reasoning: true,
+      thinkingLevels: thinkingLevels(choice.id),
     }),
-    llm: () => llm,
-    tools: () => ctx.harnessTools,
-    executor: () => ({ schedule: scheduleTools }),
-    compaction: () => basicCompaction,
-    prompt: () => ({ build: async () => 'Fixture', register: () => () => {} }),
-    policy: () => ({ maxTurns: 8, autoCompact: false }),
-    retryModel,
-    observe: () => {},
   });
+  ctx.provide('harnessLlm', llm);
+  ctx.provide('harnessToolExecutor', { schedule: scheduleTools });
+  ctx.provide('harnessCompaction', basicCompaction);
+  ctx.provide('harnessPrompt', { build: async () => 'Fixture', register: () => () => {} });
+  if (retryModel) ctx.on('agent/model-retry', retryModel);
+  const agent = new NativeAgent(sessions, () => ({ maxTurns: 8, autoCompact: false }));
   const record = sessions.create();
-  return { agent, sessions, tools, record };
+  return { agent, ctx, sessions, tools, record };
 }
 
 test('duplicate tool call identities fail before executing any side effect', async (t) => {
   let requests = 0,
     executions = 0;
-  const { agent, tools, record } = fixture(t, {
+  const { agent, ctx, tools, record } = fixture(t, {
     async *stream() {
       yield {
         type: 'done',
@@ -106,7 +102,10 @@ test('duplicate tool call identities fail before executing any side effect', asy
     }),
   );
   await assert.rejects(
-    agent.prompt(record, 'Change it', () => {}, { fallback: model, signal: new AbortController().signal }),
+    agent.prompt(ctx, record, 'Change it', () => {}, {
+      fallback: model,
+      signal: new AbortController().signal,
+    }),
     /duplicate.*tool|tool.*duplicate/i,
   );
   assert.equal(executions, 0);
@@ -116,7 +115,7 @@ test('tool execution uses the advertised registration and does not execute a hot
   let requests = 0,
     executions = 0;
   let replace: () => Promise<void>;
-  const { agent, tools, record, sessions } = fixture(t, {
+  const { agent, ctx, tools, record, sessions } = fixture(t, {
     async *stream() {
       if (requests++ === 0) {
         await replace();
@@ -149,7 +148,7 @@ test('tool execution uses the advertised registration and does not execute a hot
       }),
     );
   };
-  await agent.prompt(record, 'Change it', () => {}, {
+  await agent.prompt(ctx, record, 'Change it', () => {}, {
     fallback: model,
     signal: new AbortController().signal,
   });
@@ -166,7 +165,7 @@ test('tool execution uses the advertised registration and does not execute a hot
 test('malformed tool arguments become durable error results without invoking the tool', async (t) => {
   let requests = 0,
     executions = 0;
-  const { agent, tools, record, sessions } = fixture(t, {
+  const { agent, ctx, tools, record, sessions } = fixture(t, {
     async *stream(request) {
       if (requests++ === 0)
         yield { type: 'done', message: toolsAnswer(call('invalid-call', 'inspect', { path: 42 })) };
@@ -189,7 +188,7 @@ test('malformed tool arguments become durable error results without invoking the
     }),
   );
   assert.equal(
-    await agent.prompt(record, 'Inspect', () => {}, {
+    await agent.prompt(ctx, record, 'Inspect', () => {}, {
       fallback: model,
       signal: new AbortController().signal,
     }),
@@ -209,7 +208,7 @@ test('cancellation closes the whole tool batch durably and never executes later 
   const controller = new AbortController();
   let ranFirst = 0,
     ranSecond = 0;
-  const { agent, tools, record, sessions } = fixture(t, {
+  const { agent, ctx, tools, record, sessions } = fixture(t, {
     async *stream() {
       yield { type: 'done', message: toolsAnswer(call('one', 'first'), call('two', 'second')) };
     },
@@ -239,7 +238,7 @@ test('cancellation closes the whole tool batch durably and never executes later 
     }),
   );
   await assert.rejects(
-    agent.prompt(record, 'Run tools', () => {}, { fallback: model, signal: controller.signal }),
+    agent.prompt(ctx, record, 'Run tools', () => {}, { fallback: model, signal: controller.signal }),
     /Stopped by test/,
   );
   const results = sessions
@@ -259,7 +258,7 @@ test('cancellation closes the whole tool batch durably and never executes later 
 
 test('interrupted calls receive an error record before the next prompt and are not retried', async (t) => {
   let executed = 0;
-  const { agent, tools, record, sessions } = fixture(t, {
+  const { agent, ctx, tools, record, sessions } = fixture(t, {
     async *stream(request) {
       const results = request.messages.filter((message) => message.role === 'toolResult');
       assert.equal(results.length, 1);
@@ -279,7 +278,10 @@ test('interrupted calls receive an error record before the next prompt and are n
     }),
   );
   sessions.log(record.id).append({ type: 'message', message: toolsAnswer(call('interrupted', 'change')) });
-  await agent.prompt(record, 'Continue', () => {}, { fallback: model, signal: new AbortController().signal });
+  await agent.prompt(ctx, record, 'Continue', () => {}, {
+    fallback: model,
+    signal: new AbortController().signal,
+  });
   assert.equal(executed, 0);
 });
 
@@ -298,7 +300,7 @@ test('identical queued text preserves each attachment identity and is delivered 
     release = resolve;
   });
   t.after(() => release());
-  const { agent, record, sessions } = fixture(t, {
+  const { agent, ctx, record, sessions } = fixture(t, {
     async *stream() {
       if (requests++ === 0) {
         entered();
@@ -307,16 +309,16 @@ test('identical queued text preserves each attachment identity and is delivered 
       yield { type: 'done', message: answer() };
     },
   });
-  const run = agent.prompt(record, 'Initial', () => {}, {
+  const run = agent.prompt(ctx, record, 'Initial', () => {}, {
     fallback: model,
     signal: new AbortController().signal,
   });
   await ready;
   const data = Buffer.from('89504e470d0a1a0a', 'hex').toString('base64');
-  await agent.queueInput(record.id, 'Same text', 'followUp', [
+  await agent.queueInput(ctx, record.id, 'Same text', 'followUp', [
     { name: 'first.png', mimeType: 'image/png', data },
   ]);
-  await agent.queueInput(record.id, 'Same text', 'followUp', [
+  await agent.queueInput(ctx, record.id, 'Same text', 'followUp', [
     { name: 'second.png', mimeType: 'image/png', data },
   ]);
   release();
@@ -353,7 +355,7 @@ test('steering accepts off, skips deterministic failures and resets incompatible
   });
   t.after(() => release());
   const levels: (string | undefined)[] = [];
-  const { agent, sessions, record, tools } = fixture(
+  const { agent, ctx, sessions, record, tools } = fixture(
     t,
     {
       async *stream(request) {
@@ -378,7 +380,7 @@ test('steering accepts off, skips deterministic failures and resets incompatible
       },
     }),
   );
-  const run = agent.prompt(record, 'Initial', () => {}, {
+  const run = agent.prompt(ctx, record, 'Initial', () => {}, {
     fallback: model,
     signal: new AbortController().signal,
     thinkingLevel: 'off',
@@ -396,12 +398,12 @@ test('steering accepts off, skips deterministic failures and resets incompatible
       thinkingLevel: 'high',
     },
   });
-  await agent.queueInput(record.id, 'Actual instruction', 'steer');
-  await agent.queueInput(record.id, 'Keep reasoning', 'followUp', undefined, { thinkingLevel: 'high' });
-  await agent.queueInput(record.id, 'Switch model', 'followUp', undefined, {
+  await agent.queueInput(ctx, record.id, 'Actual instruction', 'steer');
+  await agent.queueInput(ctx, record.id, 'Keep reasoning', 'followUp', undefined, { thinkingLevel: 'high' });
+  await agent.queueInput(ctx, record.id, 'Switch model', 'followUp', undefined, {
     model: { ...model, id: 'new-model' },
   });
-  const queue = await agent.queueInput(record.id, 'Cancel me', 'followUp');
+  const queue = await agent.queueInput(ctx, record.id, 'Cancel me', 'followUp');
   agent.cancelQueue(
     record.id,
     expectPresent(
@@ -426,7 +428,7 @@ test(
   { timeout: 5000 },
   async (t) => {
     let requests = 0;
-    const { agent, tools, record, sessions } = fixture(t, {
+    const { agent, ctx, tools, record, sessions } = fixture(t, {
       async *stream() {
         yield {
           type: 'done',
@@ -487,6 +489,7 @@ test(
     );
     const snapshots: string[][] = [];
     await agent.prompt(
+      ctx,
       record,
       'Run batch',
       (event) => {
@@ -510,7 +513,7 @@ test(
 test('the retry policy cannot replay a model attempt after output has streamed', async (t) => {
   let requests = 0,
     retries = 0;
-  const { agent, record } = fixture(
+  const { agent, ctx, record } = fixture(
     t,
     {
       async *stream() {
@@ -527,6 +530,7 @@ test('the retry policy cannot replay a model attempt after output has streamed',
   const deltas: string[] = [];
   await assert.rejects(
     agent.prompt(
+      ctx,
       record,
       'Generate',
       (event) => {
@@ -554,15 +558,21 @@ test('a fatal pipeline failure stops dispatch and drains active calls', async ()
   const started: string[] = [];
   let drained = 0;
   await assert.rejects(
-    dispatchTools({ schedule: scheduleTools }, calls, tools, new AbortController().signal, async (call, _tool, signal) => {
-      started.push(call.id);
-      if (call.id === '0') throw new Error('Log write failed');
-      await new Promise<void>((resolve) => {
-        if (signal.aborted) return resolve();
-        signal.addEventListener('abort', () => resolve(), { once: true });
-      });
-      drained++;
-    }),
+    dispatchTools(
+      { schedule: scheduleTools },
+      calls,
+      tools,
+      new AbortController().signal,
+      async (call, _tool, signal) => {
+        started.push(call.id);
+        if (call.id === '0') throw new Error('Log write failed');
+        await new Promise<void>((resolve) => {
+          if (signal.aborted) return resolve();
+          signal.addEventListener('abort', () => resolve(), { once: true });
+        });
+        drained++;
+      },
+    ),
     /Log write failed/,
   );
   assert.equal(started.length, 16);
@@ -584,7 +594,7 @@ test('a queued follow-up can preselect the next model and thinking level', async
   });
   t.after(() => release());
   const seen: { model: string; thinking: string }[] = [];
-  const { agent, record, sessions } = fixture(t, {
+  const { agent, ctx, record, sessions } = fixture(t, {
     async *stream(request) {
       seen.push({ model: request.model.id, thinking: request.thinkingLevel ?? 'off' });
       if (seen.length === 1) {
@@ -594,12 +604,12 @@ test('a queued follow-up can preselect the next model and thinking level', async
       yield { type: 'done', message: answer() };
     },
   });
-  const pending = agent.prompt(record, 'Initial', () => {}, {
+  const pending = agent.prompt(ctx, record, 'Initial', () => {}, {
     fallback: model,
     signal: new AbortController().signal,
   });
   await started;
-  await agent.queueInput(record.id, 'Follow up', 'followUp', undefined, {
+  await agent.queueInput(ctx, record.id, 'Follow up', 'followUp', undefined, {
     model: { provider: 'fixture', id: 'next-model' },
     thinkingLevel: 'medium',
   });
@@ -615,7 +625,7 @@ test('a queued follow-up can preselect the next model and thinking level', async
 
 test('text models see historical placeholders in the request and audit snapshot, while new images are rejected', async (t) => {
   const image = { type: 'image' as const, mimeType: 'image/png', data: 'iVBORw0KGgo=' };
-  const { agent, record, sessions } = fixture(t, {
+  const { agent, ctx, record, sessions } = fixture(t, {
     async *stream(request) {
       assert.match(JSON.stringify(request.messages), /Image unavailable to this model/);
       assert.doesNotMatch(JSON.stringify(request.messages), /iVBORw0KGgo=/);
@@ -626,7 +636,7 @@ test('text models see historical placeholders in the request and audit snapshot,
   log.append({ type: 'message', message: { role: 'user', content: [image], timestamp: 1 } });
   const choice = { ...model, id: 'text-only' },
     signal = new AbortController().signal;
-  await agent.prompt(record, 'Continue with text', () => {}, { signal, choice });
+  await agent.prompt(ctx, record, 'Continue with text', () => {}, { signal, choice });
   const request = expectPresent(
     log.entries().find(({ type }) => type === 'model-request'),
     'recorded model request',
@@ -636,7 +646,7 @@ test('text models see historical placeholders in the request and audit snapshot,
   assert.match(JSON.stringify(log.projection().messages), /iVBORw0KGgo=/);
   const previous = log.projection();
   await assert.rejects(
-    agent.prompt(record, 'New image', () => {}, { signal, choice, images: [image] }),
+    agent.prompt(ctx, record, 'New image', () => {}, { signal, choice, images: [image] }),
     /does not support image/,
   );
   assert.deepEqual(log.projection(), previous);
@@ -644,7 +654,7 @@ test('text models see historical placeholders in the request and audit snapshot,
 
 test('native compaction reduces context and preserves message identities and history', async (t) => {
   const { app, mock, request } = await httpFixture(t);
-  await app.runtime.configuration.update({ pluginConfig: { 'core:agent': { autoCompact: false } } });
+  await app.runtime.configuration.update({ entries: { 'core:agent': { config: { autoCompact: false } } } });
   const { body: session } = await request('/sessions', 'POST', {});
   const compact = () => request('/sessions/' + session.id + '/compact', 'POST');
   const small = await compact();
@@ -720,7 +730,9 @@ test('custom scheduling cannot substitute or duplicate an advertised tool call',
     calls,
     new Map(),
     signal,
-    async (call) => { seen.push(call.id); },
+    async (call) => {
+      seen.push(call.id);
+    },
   );
   assert.deepEqual(seen, ['two', 'one']);
   await assert.rejects(

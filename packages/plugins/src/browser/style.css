@@ -24,10 +24,6 @@
   margin: 0;
   font-size: 13px;
 }
-.catalog-header > .ui-button {
-  flex: 0 0 auto;
-  white-space: nowrap;
-}
 .catalog-header h1,
 .catalog-detail h1 {
   margin: 0;
@@ -267,58 +263,6 @@
   .catalog-detail .plugin-fields > label > :is(input:not([type='checkbox']), select, textarea) {
     min-height: 44px;
   }
-}
-.install-plugin {
-  display: grid;
-  gap: 12px;
-}
-.bundle-input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-  pointer-events: none;
-}
-.bundle-drop {
-  display: grid;
-  justify-items: center;
-  gap: 8px;
-  border: 1px dashed var(--border);
-  border-radius: var(--radius);
-  padding: 14px;
-  font-size: 13px;
-  color: var(--muted);
-}
-.bundle-drop[data-dragging='true'] {
-  background: var(--selected);
-  border-color: var(--focus);
-}
-.bundle-files {
-  justify-self: stretch;
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 6px;
-  padding: 0;
-  margin: 0;
-  list-style: none;
-}
-.bundle-files:empty {
-  display: none;
-}
-.bundle-files li {
-  padding: 2px 7px;
-  border-radius: var(--control-radius);
-  background: var(--panel);
-  color: var(--ink);
-}
-.bundle-trust {
-  margin: 0;
-  padding: 9px 11px;
-  background: var(--panel);
-  color: var(--muted);
-  border-radius: var(--control-radius);
-  font-size: 12px;
 }
 .plugin-config {
   border: 0;

@@ -22,18 +22,15 @@ export default {
       root,
       paths.plugins,
       profile.descriptors,
-      ['harnessState', 'harnessProfile', 'harnessLaunch', ...profile.infrastructure],
       () => settings.settings,
       (path, handler) => {
         const upgrades = root.get('harnessUpgrades');
         if (!upgrades) throw new Error('WebSocket transport is unavailable in this Profile');
         return upgrades.register(path, handler);
       },
-      paths.devPlugin,
       async (id, key, patch, check) => {
         await settings.writePlugin(id, key, patch, check);
       },
-      profile.nativeEntries,
       ctx,
       profile.entries,
     );

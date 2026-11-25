@@ -1,24 +1,19 @@
-import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
+import type { Plugin } from 'mini-harness/cordis';
+import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 import { setup } from './server/setup.ts';
 
-export const manifest: PluginDescriptor = {
+export const metadata: PluginInfo = {
   scope: 'application',
-  id: 'core:plugins',
   title: 'Plugins',
   description: 'Plugin management',
-  defaultEnabled: true,
-  plugin: {
-    inject: [
-      'harnessPluginCatalog',
-      'harnessSettingsStore',
-      'harnessState',
-      'harnessRoutes',
-      'harnessMutations',
-      'harnessChanges',
-    ],
-    provide: [],
-    apply: setup,
-  },
   browserStyles: ['/packages/plugins/src/browser/style.css'],
   browser: '/packages/plugins/src/browser/setup.js',
 };
+
+const plugin: Plugin.Object = {
+  inject: ['harnessPluginCatalog', 'harnessRoutes', 'harnessMutations', 'harnessChanges'],
+  provide: [],
+  apply: setup,
+};
+
+export default plugin;

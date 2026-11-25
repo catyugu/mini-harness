@@ -16,9 +16,6 @@ test('recent main model survives child overrides and a restart through the nativ
     id: 'second-model',
   });
   writeJson(join(paths.home, 'models.json'), config);
-  writeJson(paths.settings, {
-    pluginConfig: { 'core:models': { model: { provider: 'local-mock', id: 'mock-model' } } },
-  });
   let runtime = new MiniHarnessRuntime(paths);
   t.after(async () => {
     await runtime.stop();
@@ -31,7 +28,7 @@ test('recent main model survives child overrides and a restart through the nativ
   await runtime.plugins.ctx.harnessRuns.send(old.id, 'First');
   const original = runtime.plugins.ctx.harnessRegistry.log(old.id).projection();
   await runtime.configuration.update({
-    pluginConfig: { 'core:models': { model: { provider: 'local-mock', id: 'second-model' } } },
+    entries: { 'core:models': { config: { model: { provider: 'local-mock', id: 'second-model' } } } },
   });
   assert.equal(runtime.plugins.ctx.harnessModelPreference.recent().id, 'second-model');
   assert.deepEqual(runtime.plugins.ctx.harnessRegistry.log(old.id).projection().messages, original.messages);

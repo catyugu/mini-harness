@@ -27,13 +27,13 @@ function stylesheet(href: string, ctx: Context) {
 }
 
 function entry(item: BrowserEntry, context: Context): EntryOptions {
-  const { id, browser, preload, styles = [], config, liveConfig } = item;
+  const { id, browser, preload, styles = [], config, live } = item;
   return {
     id,
     context,
     config,
-    live: liveConfig,
-    module: JSON.stringify([browser, styles, preload, liveConfig]),
+    live,
+    module: JSON.stringify([browser, styles, preload, live]),
     async load() {
       const exports = await import(browser);
       return (exports.default ?? exports) as Plugin;

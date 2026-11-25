@@ -37,7 +37,11 @@ export function apply(ctx: Context, config: { replaceComposer: boolean }) {
   open.addEventListener('click', () => modal.showModal(), { signal });
   panel.append(open);
   ctx.effect(() =>
-    ctx.miniPages.contribute(id + ':example', { title: 'Example panel', content: panel } satisfies PageContribution, signal),
+    ctx.miniPages.contribute(
+      id + ':example',
+      { title: 'Example panel', content: panel } satisfies PageContribution,
+      signal,
+    ),
   );
   ctx.effect(() =>
     ctx.miniSettingsRegistry.register(

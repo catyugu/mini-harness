@@ -1,11 +1,9 @@
-import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
+import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 
-export const manifest: PluginDescriptor = {
+export const metadata: PluginInfo = {
   scope: 'application',
-  id: 'core:primitives',
   title: 'Controls',
   description: 'Shared interface controls',
-  defaultEnabled: true,
   browserStyles: ['/packages/ui-primitives/src/browser/style.css'],
   browser: '/packages/ui-primitives/src/browser/setup.js',
 };

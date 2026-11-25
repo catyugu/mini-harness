@@ -33,8 +33,10 @@ test(
     });
     writeFileSync(join(root, 'outside.txt'), 'private fixture');
     await app.runtime.configuration.update({
-      pluginConfig: {
-        subagents: { maxDepth: 2, maxParallel: 1, model: { provider: 'local-mock', id: 'mock-model' } },
+      entries: {
+        subagents: {
+          config: { maxDepth: 2, maxParallel: 1, model: { provider: 'local-mock', id: 'mock-model' } },
+        },
       },
     });
     const parent = app.runtime.plugins.ctx.harnessRegistry.create();
@@ -164,7 +166,7 @@ test(
       await gate.promise;
       return 'Done';
     });
-    await app.runtime.configuration.update({ pluginConfig: { subagents: { maxParallel: 1 } } });
+    await app.runtime.configuration.update({ entries: { subagents: { config: { maxParallel: 1 } } } });
     const parent = app.runtime.plugins.ctx.harnessRegistry.create();
     const tools = app.runtime.plugins.ctx.harnessTools;
     const delegate = expectPresent(
@@ -192,9 +194,9 @@ test(
     await aborted;
     assert.equal(app.runtime.plugins.ctx.harnessRuns.info(queued.id)?.state, 'cancelled');
     assert.equal(requests, 1);
-    await app.runtime.configuration.update({ pluginConfig: { subagents: { maxParallel: 2 } } });
+    await app.runtime.configuration.update({ entries: { subagents: { config: { maxParallel: 2 } } } });
     await entered[1].promise;
-    await app.runtime.configuration.update({ pluginConfig: { subagents: { maxParallel: 1 } } });
+    await app.runtime.configuration.update({ entries: { subagents: { config: { maxParallel: 1 } } } });
     assert.equal(
       app.runtime.plugins.ctx.harnessRuns.size,
       2,

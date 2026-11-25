@@ -1,11 +1,8 @@
-import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
+import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 
-export const manifest: PluginDescriptor = {
+export const metadata: PluginInfo = {
   scope: 'application',
-  id: 'core:approval-data',
   title: 'Approval data',
   description: 'Browser projection for conversation approvals',
-  defaultEnabled: true,
-  inject: ['harnessApprovals'],
   browser: '/packages/approvals/src/browser/setup.js',
 };

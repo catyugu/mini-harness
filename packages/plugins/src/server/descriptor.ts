@@ -1,38 +1,65 @@
-import { lstatSync } from 'node:fs';
-import { join } from 'node:path';
+import { isAbsolute, join, relative, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
+import { realpathSync } from 'node:fs';
 import { readJson } from '@mini-harness/platform/json';
-import { serviceNamePattern } from '@mini-harness/plugin-api/selection';
-import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
+import type { PluginInfo, ResolvedPlugin } from '@mini-harness/plugin-api/descriptor';
 import { readBrowserAssets, type BrowserAssets } from './browser-assets.ts';
+import { resolveModule } from './module-resolution.ts';
 import { assertPeerCompatibility, isRegularFile } from './source.ts';
 
 import type { PluginMetadata } from '../shared/metadata.ts';
 
 export interface DiscoveredPlugin
-  extends PluginDescriptor,
+  extends ResolvedPlugin,
     Pick<PluginMetadata, 'trustedCode' | 'package' | 'error'> {
   source?: string;
   module?: string;
   resources?: BrowserAssets;
 }
 
-export function describePlugin(id: string, folder: string): DiscoveredPlugin {
+export function describePlugin(id: string, folder: string, entry?: string): DiscoveredPlugin {
   assertPeerCompatibility(folder);
-  const source = join(folder, 'plugin.js');
-  const hasHost = isRegularFile(source);
-  const hasWeb = isRegularFile(join(folder, 'web.js'));
-  if (!hasHost && !hasWeb) throw new Error('Provide plugin.js, web.js or both');
-  if (hasWeb && lstatSync(join(folder, 'web.js')).size > 1024 * 1024)
-    throw new Error('Plugin browser entry exceeds 1 MiB');
+  const packageFile = join(folder, 'package.json');
+  const packageInfo = readJson<{
+    name?: string;
+    version?: string;
+    main?: string;
+    exports?: unknown;
+    miniHarness?: { plugin?: Partial<PluginInfo> & { browserDirectory?: unknown; browserPreload?: unknown } };
+  }>(packageFile, {});
+  let source = entry;
+  if (!source && packageInfo.name && (packageInfo.exports !== undefined || packageInfo.main !== undefined)) {
+    const resolved =
+      packageInfo.exports !== undefined
+        ? fileURLToPath(resolveModule(packageInfo.name, packageFile))
+        : createRequire(packageFile).resolve(folder);
+    const physical = realpathSync(resolved);
+    const location = relative(realpathSync(folder), physical);
+    if (
+      isAbsolute(location) ||
+      location === '..' ||
+      location.startsWith('..' + sep) ||
+      !isRegularFile(physical)
+    )
+      throw new Error('Plugin entry must resolve inside its package');
+    source = physical;
+  } else if (!source && isRegularFile(join(folder, 'plugin.js'))) {
+    source = join(folder, 'plugin.js');
+  }
   const descriptor = join(folder, 'plugin.json');
   const manifest = isRegularFile(descriptor)
-    ? readJson<(Partial<PluginDescriptor> & { browserAssets?: unknown; browserPreload?: unknown }) | null>(
+    ? readJson<(Partial<PluginInfo> & { browserDirectory?: unknown; browserPreload?: unknown }) | null>(
         descriptor,
         null,
       )
-    : null;
+    : (packageInfo.miniHarness?.plugin ?? {});
   if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest))
     throw new Error('Expected an object in plugin.json');
+  const browser = manifest.browser ?? (isRegularFile(join(folder, 'web.js')) ? 'web.js' : undefined);
+  if (browser !== undefined && typeof browser !== 'string') throw new Error('Invalid browser entry');
+  const hasWeb = browser !== undefined;
+  if (!source && !hasWeb) throw new Error('Provide a server or browser module');
   const title = typeof manifest.title === 'string' ? manifest.title.slice(0, 100) : id;
   const description =
     typeof manifest.description === 'string'
@@ -41,38 +68,13 @@ export function describePlugin(id: string, folder: string): DiscoveredPlugin {
   const scope = manifest.scope ?? 'application';
   if (scope !== 'application' && scope !== 'workspace' && scope !== 'session')
     throw new Error('Invalid plugin scope');
-  const names = (
-    field: 'inject' | 'optional' | 'provides',
-    pattern: RegExp,
-  ) => {
-    const input = manifest[field] ?? [];
-    if (
-      !Array.isArray(input) ||
-      input.some((name) => typeof name !== 'string' || !pattern.test(name)) ||
-      new Set(input).size !== input.length
-    )
-      throw new Error('Invalid plugin ' + field + ': ' + id);
-    return input;
-  };
-  const provides = names('provides', serviceNamePattern);
-  const inject = names('inject', serviceNamePattern);
-  const optional = names('optional', serviceNamePattern);
-  if (!hasHost && (provides.length || inject.length || optional.length))
-    throw new Error('Server services require plugin.js');
-  if (
-    scope !== 'application' &&
-    (hasWeb || [...inject, ...optional].some((name) => name === 'harnessRoutes' || name === 'harnessNetwork'))
-  )
-    throw new Error('Scoped plugins require a server entry without routes');
-  if (inject.some((service) => optional.includes(service) || provides.includes(service)))
-    throw new Error('Conflicting service declarations');
-  if (!hasWeb && (manifest.browserAssets !== undefined || manifest.browserPreload !== undefined))
-    throw new Error('Browser assets require web.js');
-  const resources = hasWeb
-    ? readBrowserAssets(id, folder, manifest.browserAssets, manifest.browserPreload)
-    : undefined;
-  if (manifest.configChanges !== undefined && manifest.configChanges !== 'live')
-    throw new Error('Invalid plugin configChanges: ' + id);
+  if (scope !== 'application' && hasWeb) throw new Error('Browser entries belong to the application scope');
+  if (!hasWeb && (manifest.browserDirectory !== undefined || manifest.browserPreload !== undefined))
+    throw new Error('Browser assets require a browser entry');
+  const resources =
+    browser !== undefined
+      ? readBrowserAssets(id, folder, browser, manifest.browserDirectory, manifest.browserPreload)
+      : undefined;
   const configSchema = manifest.configSchema;
   if (
     configSchema &&
@@ -114,19 +116,19 @@ export function describePlugin(id: string, folder: string): DiscoveredPlugin {
   )
     throw new Error('Invalid plugin icon: ' + id);
   return {
-    source: hasHost ? source : undefined,
+    source,
     resources,
+    package:
+      packageInfo.name && packageInfo.version
+        ? { name: packageInfo.name, version: packageInfo.version }
+        : undefined,
     scope,
     id,
     title,
     description,
-    provides: manifest.provides === undefined ? undefined : provides,
-    inject: manifest.inject === undefined ? undefined : inject,
-    optional,
     configSchema,
     configGroups,
     configHint,
-    configChanges: manifest.configChanges,
     icon,
     web: hasWeb,
     trustedCode: true,

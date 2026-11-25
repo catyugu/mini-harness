@@ -1,28 +1,23 @@
-import type { EntryOptions, EntryTree } from 'mini-harness/cordis';
-import type { PluginDescriptor } from './descriptor.ts';
-import type { PluginSettings } from './configuration.ts';
-
-export interface ProfileConfiguration extends PluginSettings {
-  port: number;
-  readOnlyTools: Record<string, string[]>;
-}
+import type { EntryTree } from 'mini-harness/cordis';
+import type { ResolvedPlugin } from './descriptor.ts';
+import type { ProfileConfiguration } from './configuration.ts';
 
 export interface ProfileRuntime {
   readonly directory: string;
-  readonly descriptors: PluginDescriptor[];
-  readonly nativeEntries: readonly EntryOptions[];
+  readonly descriptors: ResolvedPlugin[];
+  readonly modules: ReadonlyMap<string, { name: string; source: string }>;
+  start(): Promise<Map<string, unknown>>;
   readonly entries: EntryTree;
-  readonly infrastructure: readonly string[];
   readonly installed: ReadonlyMap<string, string>;
   client(id: string): boolean;
   read(): ProfileConfiguration;
   commit(settings: ProfileConfiguration): void;
-  finishMigration(): void;
   close(): Promise<void>;
 }
 
 export interface LaunchOptions {
   flags?: readonly string[];
+  patches?: readonly string[];
   detached?: boolean;
   token?: string;
   shutdown(): void;

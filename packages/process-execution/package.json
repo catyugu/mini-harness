@@ -12,7 +12,7 @@
       "./api"
     ],
     "profileModules": {
-      "@mini-harness/process-execution": "./src/manifest.ts#manifest"
+      "@mini-harness/process-execution": "./src/manifest.ts"
     }
   },
   "dependencies": {

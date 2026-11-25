@@ -2,7 +2,12 @@ import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
 import { toolNamePattern } from '@mini-harness/llm/vocabulary';
 import { Check, Errors } from 'typebox/value';
 import { Service, type Context } from 'mini-harness/cordis';
-import { pluginInstance, sessionVisible } from '@mini-harness/plugin-api/instance';
+import {
+  agentScopeOf,
+  findInstance,
+  pluginInstance,
+  sessionVisible,
+} from '@mini-harness/plugin-api/instance';
 import { isToolContent, type ToolDefinition, type ToolPort, type ToolRegistrationOptions } from './api.ts';
 import type { ToolDecision } from './events.ts';
 import type { ToolAccess, ToolPolicy } from './policy.ts';
@@ -32,7 +37,7 @@ export class ToolRegistry {
     return Service.track<ToolPort>({
       register(definition, options) {
         const context = Service.caller(this);
-        const { scopeKey } = pluginInstance(context);
+        const scopeKey = agentScopeOf(context) ?? pluginInstance(context).scopeKey;
         const bind = 'bind' in definition ? definition.bind : () => definition;
         return registry.registerBinding(definition.name, bind, { ...options, context, scope: scopeKey });
       },
@@ -57,13 +62,14 @@ export class ToolRegistry {
     }: ToolRegistrationOptions & { context?: Context; scope?: ScopeKey } = {},
   ) {
     if (!toolNamePattern.test(name)) throw new Error('Invalid tool name: ' + name);
-    const key = (scope ?? '') + '/' + name;
+    const runScope = owner && agentScopeOf(owner);
+    const key = (runScope ? 'agent/' + runScope : (scope ?? '')) + '/' + name;
     if (this.tools.has(key)) throw new Error('Duplicate tool in scope: ' + name);
     const lifetime = new AbortController();
     const registry = this;
     const active = new Set<Promise<unknown>>();
     const signal = owner?.fiber.signal;
-    const identity = owner && pluginInstance(owner);
+    const identity = owner && (runScope ? findInstance(owner) : pluginInstance(owner));
     const expired = () => lifetime.signal.aborted || signal?.aborted === true;
     const entry: ToolRegistration = {
       name,
@@ -146,6 +152,8 @@ export class ToolRegistry {
 
   private selected(id: string, name: string) {
     for (const scope of [...this.address(id)].reverse()) {
+      const local = this.tools.get('agent/' + scope + '/' + name);
+      if (local?.visible(id)) return local;
       const candidate = this.tools.get(scope + '/' + name);
       if (candidate?.visible(id)) return candidate;
     }

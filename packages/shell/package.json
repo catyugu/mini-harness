@@ -14,7 +14,7 @@
   },
   "miniHarness": {
     "profileModules": {
-      "@mini-harness/shell": "./src/manifest.ts#manifest"
+      "@mini-harness/shell": "./src/manifest.ts"
     }
   }
 }

@@ -1,4 +1,4 @@
-import type { Settings } from '../shared/settings.ts';
+import type { ProfileConfiguration } from '@mini-harness/plugin-api/configuration';
 import type { RemoteStore } from '@mini-harness/ui-runtime/remote-store';
 import type { PluginConfiguration } from '@mini-harness/plugin-api/plugin-configuration';
 import type { PluginIcon } from '@mini-harness/plugin-api/descriptor';
@@ -41,7 +41,7 @@ declare module 'mini-harness/cordis' {
       open(title?: string): void;
       onClose(listener: () => void, signal: AbortSignal): void;
     };
-    miniSettingsData: RemoteStore<Settings>;
+    miniSettingsData: RemoteStore<ProfileConfiguration>;
     miniSettingsRegistry: {
       register(
         owner: string,

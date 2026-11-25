@@ -1,4 +1,5 @@
 import type { Context } from 'mini-harness/cordis';
+import type { EntryConfiguration } from './configuration.ts';
 
 export type PluginScope =
   | { kind: 'application' }
@@ -6,8 +7,8 @@ export type PluginScope =
   | { kind: 'session'; workspaceId: string; sessionId: string };
 
 export interface ScopeSettings {
-  plugins?: Record<string, boolean>;
-  pluginConfig?: Record<string, Record<string, unknown>>;
+  entries?: Record<string, EntryConfiguration>;
+  disabledTools?: string[];
 }
 
 export type HostServices = Context;

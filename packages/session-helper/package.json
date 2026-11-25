@@ -12,7 +12,7 @@
   },
   "miniHarness": {
     "profileModules": {
-      "@mini-harness/session-helper": "./src/manifest.ts#manifest"
+      "@mini-harness/session-helper": "./src/manifest.ts"
     }
   }
 }

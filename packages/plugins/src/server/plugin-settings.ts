@@ -27,7 +27,7 @@ export function pluginSettings(root: Context, writer?: ConfigWriter): PluginConf
         const { pluginId, scopeKey, writableConfig } = pluginInstance(caller);
         const check = () => active.throwIfAborted();
         check();
-        if (!writer || !writableConfig) throw new Error('Plugin configuration writes require a live schema');
+        if (!writer || !writableConfig) throw new Error('Plugin configuration writes require a live Entry');
         let listener: ReturnType<typeof addAbortListener> | undefined;
         const aborted = new Promise<never>((_, reject) => {
           listener = addAbortListener(active, () => reject(active.reason));

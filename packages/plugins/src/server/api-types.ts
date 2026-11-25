@@ -5,7 +5,6 @@ declare module 'mini-harness/cordis' {
   interface Context {
     harnessPluginCatalog: {
       metadata(): PluginMetadata[];
-      reserved(id: string): boolean;
       diagnostics(): unknown;
       browser(): BrowserEntry[];
       browserAsset(path: string): { path: string; mime: string } | undefined;

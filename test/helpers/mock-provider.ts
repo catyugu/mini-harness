@@ -131,8 +131,23 @@ export function createFixturePaths(mockUrl: string) {
       },
     },
   });
-  writeJson(paths.settings, {
-    pluginConfig: { 'core:models': { model: { provider: 'local-mock', id: 'mock-model' } } },
+  const profile = join(paths.home, 'profiles', 'web');
+  writeJson(join(profile, 'package.json'), {
+    name: 'mini-harness-profile-web',
+    private: true,
+    type: 'module',
+    dependencies: {},
+    miniHarness: { profile: { bundles: ['@mini-harness/base', '@mini-harness/web'] } },
+  });
+  writeJson(join(profile, 'cordis.patch.yml'), { plugins: [] });
+  writeJson(join(profile, 'cordis.yml'), {
+    plugins: [
+      {
+        id: 'core:models',
+        name: '@mini-harness/models',
+        config: { model: { provider: 'local-mock', id: 'mock-model' } },
+      },
+    ],
   });
   return { root, paths };
 }

@@ -8,18 +8,16 @@
     "./browser/api": "./src/browser/api.ts",
     "./config": "./src/server/config.ts",
     "./manager": "./src/server/manager.ts",
-    "./manifest": "./src/manifest.ts",
-    "./settings": "./src/shared/settings.ts"
+    "./manifest": "./src/manifest.ts"
   },
   "miniHarness": {
     "api": [
       "./api",
-      "./browser/api",
-      "./settings"
+      "./browser/api"
     ],
     "profileModules": {
       "@mini-harness/settings-runtime": "./src/server/runtime.ts",
-      "@mini-harness/ui-settings": "./src/manifest.ts#manifest"
+      "@mini-harness/ui-settings": "./src/manifest.ts"
     }
   },
   "dependencies": {

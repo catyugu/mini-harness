@@ -9,7 +9,7 @@
     "./manager": "./src/server/manager.ts",
     "./module-resolution": "./src/server/module-resolution.ts",
     "./manifest": "./src/manifest.ts",
-    "./package-installer": "./src/server/package-installer.ts"
+    "./registry-client": "./src/server/registry-client.ts"
   },
   "miniHarness": {
     "api": [
@@ -17,7 +17,7 @@
     ],
     "profileModules": {
       "@mini-harness/plugins-runtime": "./src/server/runtime.ts",
-      "@mini-harness/ui-plugins": "./src/manifest.ts#manifest"
+      "@mini-harness/ui-plugins": "./src/manifest.ts"
     }
   },
   "dependencies": {
@@ -25,7 +25,6 @@
     "@mini-harness/models": "workspace:*",
     "@mini-harness/platform": "workspace:*",
     "@mini-harness/plugin-api": "workspace:*",
-    "@mini-harness/settings": "workspace:*",
     "@mini-harness/transport": "workspace:*",
     "@mini-harness/ui-primitives": "workspace:*",
     "@mini-harness/ui-runtime": "workspace:*",

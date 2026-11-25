@@ -61,6 +61,12 @@ export class Entry implements FiberEntry {
     const previous = this.options
     this.options = options
     if (!this.fiber) return this.start()
+    // A native Config rejection leaves the active fiber's raw config untouched.
+    // Restoring the committed options must not restart that valid activation.
+    if (this.active && !this.fiber.error && sameData(this.fiber.rawConfig, options.config)) {
+      this.failure = undefined
+      return
+    }
     if (!this.error && sameData(previous.config, options.config)) return
     this.failure = undefined
     try {

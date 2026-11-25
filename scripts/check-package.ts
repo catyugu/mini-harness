@@ -8,7 +8,6 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
-import { readJson, writeJson } from '@mini-harness/platform/json';
 import { readServerInfo } from '@mini-harness/host/process';
 import { parseNpmPackResult } from './npm-pack.ts';
 import { waitUntil } from '../test/support/api-fixture.ts';
@@ -41,12 +40,14 @@ async function checkPackage() {
   const mock = await createMockProvider(({ messages }) =>
     messages.at(-1)?.content === 'Pack smoke test'
       ? { tool: 'save_task_note', args: { note: 'Installed SDK recorded progress' } }
-      : 'Mock response',
+      : messages.at(-1)?.content === 'Pack scoped test'
+        ? { tool: 'scoped_greeting', args: {} }
+        : 'Mock response',
   );
   const { root, paths } = createFixturePaths(mock.url);
   const installed = join(work, 'install');
   const plugin = join(installed, 'task-notes');
-  const env = { ...process.env, MINI_HARNESS_HOME: paths.home, MINI_HARNESS_DEV_PLUGIN: plugin };
+  const env = { ...process.env, MINI_HARNESS_HOME: paths.home };
   let started = false;
   const cli = (...args: string[]) =>
     npm(['exec', '--offline', '--', 'mini-harness', ...args], { cwd: installed, env });
@@ -116,13 +117,19 @@ async function checkPackage() {
     assert.ok(!Object.hasOwn(publicExports, './plugin') && !Object.hasOwn(publicExports, './browser-plugin'));
     for (const target of Object.values(publicExports)) {
       for (const path of [target.types, target.default])
-        assert.ok(files.some((file) => file.path === path.slice(2)), 'Missing public module: ' + path);
+        assert.ok(
+          files.some((file) => file.path === path.slice(2)),
+          'Missing public module: ' + path,
+        );
     }
     for (const { path } of files.filter(({ path }) => /\.(?:js|d\.ts)$/.test(path))) {
       const emitted = await readFile(join(published, path), 'utf8');
       const source = ts.createSourceFile(path, emitted, ts.ScriptTarget.Latest, true);
       for (const { literal } of moduleReferences(source))
-        assert.ok(!literal.text.startsWith('@mini-harness/'), path + ' depends on a private workspace: ' + literal.text);
+        assert.ok(
+          !literal.text.startsWith('@mini-harness/'),
+          path + ' depends on a private workspace: ' + literal.text,
+        );
     }
     await execFile(
       process.execPath,
@@ -139,7 +146,7 @@ async function checkPackage() {
       import { Context, type Plugin } from 'mini-harness/cordis';
       import type { LlmPort } from 'mini-harness/llm';
       import type { ScopeSettings } from 'mini-harness/scopes';
-      import type { Settings } from 'mini-harness/settings';
+      import type { ProfileConfiguration } from 'mini-harness/configuration';
       import { defineTool } from 'mini-harness/tools';
       import type { PluginData, PluginSecrets } from 'mini-harness/plugin-data';
       import type { SessionRecords } from 'mini-harness/sessions';
@@ -155,7 +162,7 @@ async function checkPackage() {
       }
       declare const ctx: Context;
       const scope: ScopeSettings = { disabledTools: ['write'] };
-      const scopedSettings: Settings['scopes'] = { 'session:example': scope };
+      const scopedSettings: ProfileConfiguration['scopes'] = { 'session:example': scope };
       void scopedSettings;
       const llm: LlmPort | undefined = ctx.harnessLlm;
       const plugin: Plugin = {
@@ -265,8 +272,78 @@ async function checkPackage() {
     await execFile(process.execPath, [resolve('node_modules/typescript/bin/tsc'), '-p', 'tsconfig.json'], {
       cwd: plugin,
     });
-    const settings = readJson<Record<string, unknown>>(paths.settings, {});
-    writeJson(paths.settings, { ...settings, plugins: { 'task-notes': true } });
+    const examples = join(installed, 'sdk-examples');
+    await mkdir(examples);
+    const examplesNames = ['greeting-service', 'greeting-route', 'scoped-tool', 'browser-panel'];
+    for (const example of examplesNames)
+      await cp(resolve('docs/examples', example), join(examples, example), { recursive: true });
+    await writeFile(
+      join(examples, 'tsconfig.json'),
+      JSON.stringify({
+        compilerOptions: {
+          target: 'ES2022',
+          module: 'NodeNext',
+          strict: true,
+          noEmitOnError: true,
+          rewriteRelativeImportExtensions: true,
+        },
+        include: ['**/*.ts'],
+      }),
+    );
+    await execFile(process.execPath, [resolve('node_modules/typescript/bin/tsc'), '-p', 'tsconfig.json'], {
+      cwd: examples,
+    });
+    const additional = [];
+    for (const id of examplesNames) {
+      const directory = join(examples, id);
+      await writeFile(
+        join(directory, 'package.json'),
+        JSON.stringify({
+          name: 'mini-harness-sdk-' + id,
+          version: '1.0.0',
+          type: 'module',
+          exports: './plugin.js',
+          peerDependencies: { 'mini-harness': '^0.4.0' },
+        }),
+      );
+      const packed = parseNpmPackResult(
+        (await npm(['pack', '--json', '--pack-destination', work], { cwd: directory })).stdout,
+      );
+      additional.push({ ...packed, id });
+    }
+    await cli('web', '--dump-config');
+    const pluginPack = parseNpmPackResult(
+      (await npm(['pack', '--json', '--pack-destination', work], { cwd: plugin })).stdout,
+    );
+    await cli(
+      'plugin',
+      '--profile',
+      'web',
+      'add',
+      join(work, pluginPack.filename),
+      ...additional.map(({ filename }) => join(work, filename)),
+      '--legacy-peer-deps',
+      '--no-audit',
+      '--no-fund',
+    );
+    const profileDirectory = join(paths.home, 'profiles', 'web');
+    const profileManifest = JSON.parse(await readFile(join(profileDirectory, 'package.json'), 'utf8'));
+    assert.ok(profileManifest.dependencies[pluginPack.name]);
+    await access(join(profileDirectory, 'node_modules', pluginPack.name, 'plugin.js'));
+    await writeFile(
+      join(paths.home, 'profiles', 'web', 'cordis.patch.yml'),
+      JSON.stringify({
+        plugins: [
+          { id: 'task-notes', name: pluginPack.name, client: true, live: true },
+          ...additional.map(({ id, name }) => ({
+            id,
+            name,
+            ...(id === 'scoped-tool' ? { disabled: true } : {}),
+            ...(id === 'browser-panel' ? { client: true } : {}),
+          })),
+        ],
+      }),
+    );
     const launch = await cli('--detached', '--cwd', paths.cwd, '--port', String(await availablePort()));
     assert.match(launch.stdout, /started independently/);
     started = true;
@@ -334,6 +411,24 @@ async function checkPackage() {
     }
     assert.ok(bootstrap.ui.some(({ id }: { id: string }) => id === 'core:conversation'));
     assert.ok(!bootstrap.ui.some(({ id }: { id: string }) => id === 'shell'));
+    assert.deepEqual(await (await get('/api/extensions/greeting-route/hello?name=SDK')).json(), {
+      greeting: 'Hello, SDK',
+    });
+    assert.equal(
+      (
+        await write('/api/settings', 'PATCH', {
+          entries: { 'greeting-service': { config: { prefix: 'Installed' } } },
+        })
+      ).status,
+      200,
+    );
+    assert.deepEqual(await (await get('/api/extensions/greeting-route/hello?name=SDK')).json(), {
+      greeting: 'Installed, SDK',
+    });
+    const panel = bootstrap.ui.find(({ id }) => id === 'browser-panel');
+    assert.ok(panel?.browser);
+    assert.equal(panel.config.replaceComposer, false);
+    assert.equal((await get(new URL('web/composer.js', info.url + panel.browser).pathname)).status, 200);
     const item = await (
       await fetch(info.url + '/api/sessions', { method: 'POST', headers, body: '{}' })
     ).json();
@@ -382,7 +477,76 @@ async function checkPackage() {
     assert.equal(child.text, 'Mock response');
     assert.equal((await (await get('/api/sessions/' + child.childId)).json()).parentId, item.id);
 
-    assert.equal((await write('/api/settings', 'PATCH', { plugins: { 'task-notes': false } })).status, 200);
+    const scope = 'session:' + item.id;
+    assert.equal(
+      (
+        await write('/api/settings', 'PATCH', {
+          scopes: { [scope]: { entries: { 'scoped-tool': { disabled: false } } } },
+        })
+      ).status,
+      200,
+    );
+    const runIn = async (id: string, message: string) => {
+      const base = '/api/sessions/' + id;
+      const response = await write(base + '/runs', 'POST', { message });
+      assert.equal(response.status, 202);
+      const run = await response.json();
+      assert.match(await (await get(base + '/events?run=' + run.id)).text(), /Mock response/);
+      assert.equal((await (await get(base + '/runs')).json()).run.state, 'completed');
+    };
+    await runIn(child.childId, 'Pack scoped test');
+    assert.match(JSON.stringify(mock.requests.at(-1)), /scoped_greeting/);
+    const scopedHistory = await (await get('/api/sessions/' + child.childId)).json();
+    assert.ok(
+      scopedHistory.messages.some(
+        (message: { role: string; content: unknown }) =>
+          message.role === 'toolResult' && JSON.stringify(message.content).includes('Greeting returned.'),
+      ),
+    );
+    const sibling = await (await write('/api/sessions', 'POST', {})).json();
+    await runIn(sibling.id, 'Pack sibling test');
+    assert.doesNotMatch(JSON.stringify(mock.requests.at(-1)?.tools), /scoped_greeting/);
+    assert.equal((await write('/api/settings', 'PATCH', { scopes: {} })).status, 200);
+    await runIn(child.childId, 'Pack after scope removal');
+    assert.doesNotMatch(JSON.stringify(mock.requests.at(-1)?.tools), /scoped_greeting/);
+    const disablePanel = async () => {
+      assert.equal(
+        (await write('/api/settings', 'PATCH', { entries: { 'browser-panel': { disabled: true } } })).status,
+        200,
+      );
+    };
+    if (process.argv.includes('--browser')) {
+      const { chromium, expect } = await import('@playwright/test');
+      const browser = await chromium.launch({ executablePath: process.env.MINI_HARNESS_CHROMIUM });
+      try {
+        const page = await browser.newPage();
+        await page.goto(info.url + '/#token=' + token);
+        const entry = page.getByRole('button', { name: 'Example panel', exact: true });
+        await entry.click();
+        await expect(page.getByText('Example panel is ready.')).toBeVisible();
+        await page.getByRole('button', { name: 'Preview', exact: true }).click();
+        const dialog = page.getByRole('dialog', { name: 'Example preview' });
+        await expect(dialog).toBeVisible();
+        await disablePanel();
+        await expect(dialog).toHaveCount(0);
+        await expect(entry).toHaveCount(0);
+      } finally {
+        await browser.close();
+      }
+    } else {
+      await disablePanel();
+    }
+    assert.ok(
+      !(await (await get('/api/bootstrap')).json()).ui.some(
+        ({ id }: { id: string }) => id === 'browser-panel',
+      ),
+    );
+    assert.equal((await get(panel.browser)).status, 404);
+
+    assert.equal(
+      (await write('/api/settings', 'PATCH', { entries: { 'task-notes': { disabled: true } } })).status,
+      200,
+    );
     assert.equal((await get('/api/extensions/task-notes/smoke')).status, 404);
     const withoutPlugin = (await (await get('/api/bootstrap')).json()) as typeof bootstrap;
     assert.ok(!withoutPlugin.ui.some(({ id }) => id === 'task-notes'));
@@ -391,6 +555,23 @@ async function checkPackage() {
     assert.match((await cli('status')).stdout, /is running/);
     assert.match((await cli('stop')).stdout, /stopped/);
     started = false;
+    await cli(
+      'plugin',
+      '--profile',
+      'web',
+      'remove',
+      pluginPack.name,
+      ...additional.map(({ name }) => name),
+      '--legacy-peer-deps',
+      '--no-audit',
+      '--no-fund',
+    );
+    const afterRemoval = JSON.parse(await readFile(join(profileDirectory, 'package.json'), 'utf8'));
+    assert.ok(!afterRemoval.dependencies?.[pluginPack.name]);
+    for (const { name } of [pluginPack, ...additional]) {
+      assert.ok(!afterRemoval.dependencies?.[name]);
+      await assert.rejects(access(join(profileDirectory, 'node_modules', name)));
+    }
     console.log(filename + ' passed clean installation, CLI, browser assets and native agent smoke checks');
   } finally {
     if (started) await cli('stop').catch(() => {});

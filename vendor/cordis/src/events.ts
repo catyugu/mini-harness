@@ -156,7 +156,7 @@ export class EventsService {
 
     this.on('internal/config', (fiber, next) => {
       const config = next()
-      return fiber.runtime ? resolveConfig(fiber.runtime, config) : config
+      return fiber.runtime ? resolveConfig(fiber.runtime.Config, config) : config
     })
   }
 

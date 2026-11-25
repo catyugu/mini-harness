@@ -17,7 +17,7 @@
   },
   "miniHarness": {
     "profileModules": {
-      "@mini-harness/subagents": "./src/manifest.ts#manifest"
+      "@mini-harness/subagents": "./src/manifest.ts"
     }
   }
 }

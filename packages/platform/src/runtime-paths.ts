@@ -1,4 +1,3 @@
-
 /** Runtime paths are data, not a dependency on the filesystem adapter. */
 export interface Paths {
   home: string;
@@ -9,7 +8,6 @@ export interface Paths {
   pid: string;
   log: string;
   plugins: string;
-  devPlugin?: string;
 }
 
 declare module 'mini-harness/cordis' {

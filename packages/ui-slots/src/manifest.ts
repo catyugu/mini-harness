@@ -1,10 +1,8 @@
-import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
+import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 
-export const manifest: PluginDescriptor = {
+export const metadata: PluginInfo = {
   scope: 'application',
-  id: 'core:slots',
   title: 'UI slots',
   description: 'Own and dispose browser contributions',
-  defaultEnabled: true,
   browser: '/packages/ui-slots/src/browser/setup.js',
 };

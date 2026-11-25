@@ -3,7 +3,7 @@ import { rmSync, mkdirSync, realpathSync, writeFileSync, cpSync } from 'node:fs'
 import { join, resolve } from 'node:path';
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.ts';
 import { workspaceId } from '@mini-harness/workspaces/catalog';
-import { readJson, writeJson } from '@mini-harness/platform/json';
+import { writeJson } from '@mini-harness/platform/json';
 import { readWebProfile, startIsolatedHost, settingsSection, suggestions } from '../support/browser.ts';
 
 test('frontend plugins own UI contributions and clean up on disable and reconfiguration', async ({
@@ -15,7 +15,10 @@ test('frontend plugins own UI contributions and clean up on disable and reconfig
   const { root, paths } = createFixturePaths(mock.url),
     folder = join(paths.plugins, 'ui-example');
   mkdirSync(folder);
-  writeFileSync(join(folder, 'plugin.js'), 'export function apply() {}');
+  writeFileSync(
+    join(folder, 'plugin.js'),
+    "import { defineConfig } from 'mini-harness/configuration';\nimport { readFileSync } from 'node:fs';\nexport const Config = defineConfig(JSON.parse(readFileSync(new URL('./plugin.json', import.meta.url), 'utf8')).configSchema);\nexport function apply() {}",
+  );
   writeFileSync(
     join(folder, 'plugin.json'),
     JSON.stringify({
@@ -86,10 +89,7 @@ export function apply(ctx, config) {
   const dependent = join(paths.plugins, 'a-dependent');
   mkdirSync(dependent);
   writeFileSync(join(dependent, 'plugin.js'), 'export function apply() {}');
-  writeFileSync(
-    join(dependent, 'plugin.json'),
-    JSON.stringify({ title: 'Dependent UI' }),
-  );
+  writeFileSync(join(dependent, 'plugin.json'), JSON.stringify({ title: 'Dependent UI' }));
   writeFileSync(
     join(dependent, 'web.js'),
     `
@@ -103,8 +103,12 @@ export function apply(ctx) {
   }
 `,
   );
-  const settings = readJson<any>(paths.settings, {});
-  writeJson(paths.settings, { ...settings, plugins: { 'ui-example': true, 'a-dependent': true } });
+  writeJson(join(paths.home, 'profiles', 'web', 'cordis.patch.yml'), {
+    plugins: [
+      { id: 'ui-example', name: '../../plugins/ui-example', client: true },
+      { id: 'a-dependent', name: '../../plugins/a-dependent', client: true },
+    ],
+  });
   const service = await startIsolatedHost(paths);
   try {
     await page.goto(service.url + '/#token=' + service.token);
@@ -183,10 +187,13 @@ test('a failed browser plugin reports the saved state and can be retried', async
     { root, paths } = createFixturePaths(mock.url);
   const folder = join(paths.plugins, 'retry-ui');
   mkdirSync(folder);
-  writeFileSync(join(folder, 'plugin.js'), 'export default () => {}');
+  writeFileSync(
+    join(folder, 'plugin.js'),
+    "import { defineConfig } from 'mini-harness/configuration';\nimport { readFileSync } from 'node:fs';\nexport const Config = defineConfig(JSON.parse(readFileSync(new URL('./plugin.json', import.meta.url), 'utf8')).configSchema);\nexport function apply() {}",
+  );
   writeJson(join(folder, 'plugin.json'), {
     title: 'Retry UI',
-    browserAssets: ['web/preload.js'],
+    browserDirectory: 'web',
     browserPreload: 'web/preload.js',
     configSchema: {
       type: 'object',
@@ -300,25 +307,7 @@ test('plugin catalog applies configuration and removes disabled browser capabili
       release();
       await page.unroute('**/api/settings');
     }
-    await catalog.getByRole('button', { name: 'Install plugin', exact: true }).click();
-    const install = page.getByRole('dialog', { name: 'Install plugin' });
-    await install.getByLabel('Plugin ID', { exact: true }).fill('local-example');
-    await expect(install.getByRole('button', { name: 'Install plugin', exact: true })).toBeDisabled();
-    await install.getByLabel('Plugin bundle files').setInputFiles([
-      {
-        name: 'plugin.js',
-        mimeType: 'text/javascript',
-        buffer: Buffer.from('export function apply() {}'),
-      },
-      { name: 'plugin.json', mimeType: 'application/json', buffer: Buffer.from('{}') },
-    ]);
-    await expect(install.getByRole('list', { name: 'Selected files' }).getByRole('listitem')).toHaveText([
-      'plugin.js',
-      'plugin.json',
-    ]);
-    await install.getByRole('button', { name: 'Install plugin', exact: true }).click();
-    await expect(install).toBeHidden();
-    await expect(catalog.getByRole('switch', { name: 'local-example', exact: true })).not.toBeChecked();
+    await expect(catalog.getByRole('button', { name: 'Install plugin' })).toHaveCount(0);
     await catalog.getByRole('button', { name: 'Subagents settings' }).click();
     await catalog.getByRole('spinbutton', { name: 'Maximum child depth · subagents' }).fill('2');
     await catalog.getByRole('button', { name: 'Save configuration' }).click();
@@ -366,19 +355,17 @@ test('the Plugins page keeps stored settings when a workspace plugin setup fails
   });
   writeFileSync(
     join(folder, 'plugin.js'),
-    "export const apply = (ctx, config) => { if (config.value === 1) throw new Error('Workspace setup failed'); };",
+    "import { defineConfig } from 'mini-harness/configuration';\nimport { readFileSync } from 'node:fs';\nexport const Config = defineConfig(JSON.parse(readFileSync(new URL('./plugin.json', import.meta.url), 'utf8')).configSchema);\nexport const apply = (ctx, config) => { if (config.value === 1) throw new Error('Workspace setup failed'); };",
   );
   const key = 'workspace:' + workspaceId(realpathSync.native(paths.cwd));
   const initial = {
-    ...readJson<Record<string, unknown>>(paths.settings, {}),
     scopes: {
       [key]: {
-        plugins: { 'workspace-example': true },
-        pluginConfig: { 'workspace-example': { value: 'invalid' } },
+        entries: { 'workspace-example': { disabled: false, config: { value: 'invalid' } } },
       },
     },
   };
-  writeJson(paths.settings, initial);
+  writeJson(join(paths.home, 'profiles', 'web', 'cordis.patch.yml'), initial);
   const service = await startIsolatedHost(paths);
   try {
     await page.goto(service.url + '/#token=' + service.token);
@@ -392,7 +379,7 @@ test('the Plugins page keeps stored settings when a workspace plugin setup fails
     await expect(
       page.getByText(/Plugin workspace:.*\/workspace-example: Workspace setup failed/),
     ).toBeVisible();
-    expect(readWebProfile(paths).scopes[key].pluginConfig['workspace-example'].value).toBe('invalid');
+    expect(readWebProfile(paths).scopes[key].entries['workspace-example']?.config?.value).toBe('invalid');
     await value.fill('2');
     await page.getByRole('button', { name: 'Save configuration' }).click();
     await expect(page.getByText('Saved.', { exact: true })).toBeVisible();
@@ -439,13 +426,19 @@ export const apply = (ctx) => {
     };
 `,
     );
-    cpSync(resolve('dist/docs/examples/browser-panel'), join(paths.plugins, 'browser-panel'), { recursive: true });
-    writeJson(paths.settings, {
-      pluginConfig: {
-        'core:models': { model: { provider: 'local-mock', id: 'mock-model' } },
-        'browser-panel': { replaceComposer: true },
-      },
-      plugins: { 'replace-new': true, 'browser-panel': true },
+    cpSync(resolve('dist/docs/examples/browser-panel'), join(paths.plugins, 'browser-panel'), {
+      recursive: true,
+    });
+    writeJson(join(paths.home, 'profiles', 'web', 'cordis.patch.yml'), {
+      plugins: [
+        { id: 'replace-new', name: '../../plugins/replace-new', client: true },
+        {
+          id: 'browser-panel',
+          name: '../../plugins/browser-panel',
+          client: true,
+          config: { replaceComposer: true },
+        },
+      ],
     });
     server = await startIsolatedHost(paths);
     await page.goto(server.url + '/#token=' + server.token);
@@ -499,7 +492,9 @@ export const apply = (ctx) => {
     const settings = await fetch(server.url + '/api/settings', {
       method: 'PATCH',
       headers: { Authorization: 'Bearer ' + server.token, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ plugins: { 'replace-new': false, 'browser-panel': false } }),
+      body: JSON.stringify({
+        entries: { 'replace-new': { disabled: true }, 'browser-panel': { disabled: true } },
+      }),
     });
     expect(settings.status).toBe(200);
     await expect(page.getByRole('dialog', { name: 'Example preview' })).toHaveCount(0);

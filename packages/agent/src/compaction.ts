@@ -52,7 +52,12 @@ export const basicCompaction: CompactionPort = {
       .filter((part) => part.type === 'text')
       .map((part) => part.text)
       .join('');
-    if (summary.errorMessage || summary.stopReason === 'error' || summary.stopReason === 'aborted' || !text.trim())
+    if (
+      summary.errorMessage ||
+      summary.stopReason === 'error' ||
+      summary.stopReason === 'aborted' ||
+      !text.trim()
+    )
       throw new Error(summary.errorMessage || 'Compaction did not produce a summary');
     return { summary: text, keepFromId, tokensBefore: Math.ceil(transcript(messages).length / 4) };
   },

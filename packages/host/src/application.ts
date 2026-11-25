@@ -6,7 +6,7 @@ import { loadProfile } from './profile.ts';
 /** The launcher supplies process state and loads the selected Profile onto a fresh Cordis tree. */
 export async function bootProfile(name: string, paths: Paths, launch: LaunchOptions) {
   const ctx = new Context();
-  const profile = await loadProfile(name, paths, ctx);
+  const profile = await loadProfile(name, paths, ctx, launch.patches);
   ctx.provide('harnessState', { paths });
   ctx.provide('harnessProfile', profile);
   ctx.provide('harnessLaunch', launch);
@@ -25,21 +25,16 @@ export async function bootProfile(name: string, paths: Paths, launch: LaunchOpti
       }
     })());
   try {
-    const errors = await profile.entries.update(profile.nativeEntries);
-    if (errors.size)
+    const errors = await profile.start();
+    if (errors.size && !ctx.get('harnessComposition'))
       throw new AggregateError(
         [...errors.values()],
         'Profile entries failed: ' + [...errors.keys()].join(', '),
       );
     await ctx.parallel('harness/start');
-    for (const { id } of profile.nativeEntries) {
-      const entry = profile.entries.get(id);
-      if (entry?.error) throw new Error('Profile entry failed: ' + id, { cause: entry.error });
-    }
     if (name === 'web' && !ctx.get('harnessWeb'))
       throw new Error('The Web Profile requires an available HTTP server');
     await ctx.parallel('harness/open');
-    profile.finishMigration();
   } catch (error) {
     await close();
     const issues =

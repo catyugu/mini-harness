@@ -1,36 +1,30 @@
-import type { Context, Plugin } from 'mini-harness/cordis';
+import type { Plugin } from 'mini-harness/cordis';
 import type { PluginScope } from './scopes.ts';
 
 /** A symbolic icon name or an inline SVG path for plugin-defined artwork. */
 export type PluginIcon = string | { path: string; viewBox?: string };
 
-export interface PluginDescriptor {
-  id: string;
+/** Optional display and configuration information; not a Cordis plugin wrapper. */
+export interface PluginInfo {
   title: string;
   description: string;
   scope: PluginScope['kind'];
-  defaultEnabled?: boolean;
-  /** Protected host and authorization service ownership. */
-  protectServices?: readonly string[];
   trustedContributor?: boolean;
   web?: boolean;
   browser?: string;
-  /** Styles shipped with a built-in browser entry. Local plugins declare browserAssets in plugin.json. */
+  /** Styles shipped with a built-in browser entry. Local plugins may declare a browser build directory. */
   browserStyles?: string[];
   icon?: PluginIcon;
   configGroups?: { title: string; fields: string[] }[];
   configHint?: string;
-  provides?: string[];
+  /** Optional JSON form description for unloaded entries; runtime validation belongs to Config. */
   configSchema?: Record<string, any>;
-  /** A mounted plugin may opt in to configuration updates without a restart. */
-  configChanges?: 'live';
-  validateConfig?(config: Readonly<Record<string, unknown>>, context: ConfigValidationContext): void;
-  inject?: string[];
-  optional?: string[];
-  plugin?: Plugin;
 }
 
-export interface ConfigValidationContext {
-  readonly operation: 'mount' | 'inspect' | 'write';
-  service<Name extends keyof Context & string>(name: Name): NonNullable<Context[Name]>;
+/** Internal resolved entry, with the module and its display metadata kept distinct. */
+export interface ResolvedPlugin extends PluginInfo {
+  id: string;
+  defaultEnabled?: boolean;
+  plugin?: Plugin;
+  Config?: Plugin.Base['Config'];
 }

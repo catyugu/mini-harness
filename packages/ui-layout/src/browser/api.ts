@@ -1,4 +1,3 @@
-
 export interface TabScope {
   workspaceId: string;
   sessionId?: string;

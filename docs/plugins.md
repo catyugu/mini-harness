@@ -1,24 +1,24 @@
 # Plugins
 
-A plugin bundle contains `plugin.json` and at least one of `plugin.js` and `web.js`. Local and npm plugins run trusted JavaScript. Review the code, dependencies and browser assets before installing it. See [SECURITY.md](../SECURITY.md).
+An npm plugin can expose an ordinary Cordis module through its package.json `exports` or `main`. Presentation metadata is optional and may be declared in `miniHarness.plugin` in package.json. A local file bundle can also include optional `plugin.json` metadata. Local and npm plugins run trusted JavaScript. Review the code, dependencies and browser assets before installing it. See [SECURITY.md](../SECURITY.md).
 
 ## Install and enable
 
-Use Settings → Plugins to install local files and configure or enable a plugin. For npm packages, use:
+Use the Profile package manager to install, update and remove npm dependencies:
 
 ```sh
-mini-harness plugin install <id> <package>
-mini-harness plugin update <id>
-mini-harness plugin uninstall <id>
+mini-harness plugin --profile web add <package>
+mini-harness plugin --profile web update <package>
+mini-harness plugin --profile web remove <package>
 ```
 
-Disable an npm plugin and save before updating it. Installed plugins start disabled. Development mode accepts `MINI_HARNESS_DEV_PLUGIN=/absolute/path/to/plugin`. The directory name sets the plugin ID.
+Installing a package changes only the selected Profile's npm dependencies. Declare an Entry in the Profile to activate it; restart before updating or removing packages used by a running application. npm lifecycle scripts default to disabled; authorize them explicitly with `--ignore-scripts=false`. To develop locally, declare the built package directory as an entry name in a Profile. Multiple local packages can run together. Use the Web Plugins page to enable and configure available entries; it does not install or delete code.
 
-The manifest supplies display information, scope (`application`, `workspace`, or `session`), and optional JSON Schema and configuration-form metadata. Browser modules declare their dependencies and services directly with Cordis `inject` and `provide`. Browser styles and helper modules must be listed in `browserAssets`. Use `browserPreload` for a declared asset that exports a function receiving an activation signal and optionally returning cleanup.
+The manifest supplies display information, scope (`application`, `workspace`, or `session`), and optional configuration-form metadata. Browser modules declare their dependencies and services directly with Cordis `inject` and `provide`. A browser entry receives its configuration as a whole and can update it through `browserPluginSettings(ctx)` when the entry exposes a configuration contract. Keep server-only secrets in `harnessPluginSecrets` or a separate server entry; do not put them in browser entry configuration. Set `browser` to the browser entry module and `browserDirectory` to its dedicated build output directory. JavaScript chunks, styles, fonts and other supported assets inside that directory are published together; never put private files there. Use `browserPreload` for a published module that exports a function receiving an activation signal and optionally returning cleanup.
 
 ## Declare a Cordis plugin
 
-The CLI and browser load named `inject`, `provide` and `apply` exports or a default Cordis plugin. The host resolves public `mini-harness/*` modules from installed server plugins to the active installation. Import the public contract belonging to the service you use, such as `mini-harness/tools`, `mini-harness/agent`, or `mini-harness/llm`. Augment the public Cordis module to type your own services. Installed plugin code written for the old setup API needs migration to these declarations. Existing settings and owned records retain their namespace.
+The CLI and browser load named `inject`, `provide` and `apply` exports or a default Cordis plugin. The host resolves public `mini-harness/*` modules from installed server plugins to the active installation. Import the public contract belonging to the service you use, such as `mini-harness/tools`, `mini-harness/agent`, or `mini-harness/llm`. Augment the public Cordis module to type your own services. An Entry ID identifies its persisted configuration and owned records.
 
 ```ts
 import type { Context } from 'mini-harness/cordis';
@@ -55,12 +55,14 @@ A service provider declares `provide = ['exampleGreeting']` and calls `ctx.provi
 | `harnessApprovalRequests`                      | `request(id, prompt, signal)` requests a user decision for a visible conversation.                                                                                                                              |
 | `harnessPluginRoutes`                          | `register()` and `upgrade()` publish authenticated routes under `/api/extensions/<id>` for application plugins. `scope()` registers a workspace or session RPC.                                                 |
 | `harnessPluginData` and `harnessPluginSecrets` | Read, write and remove data in the caller's own plugin and scope namespace.                                                                                                                                     |
-| `harnessPluginSettings`                        | Read the current effective config, subscribe to committed changes or write this instance's configuration when it declares a live schema.                                                                        |
+| `harnessPluginSettings`                        | Read the current effective config, subscribe to committed changes or write this instance's configuration when the Profile marks its Entry as live.                                                              |
 | `harnessPluginChanges`                         | Invalidate the plugin's browser projection after a domain mutation.                                                                                                                                             |
 
 Use `await sessionService(ctx, sessionId, serviceName, signal)` to prepare a visible conversation and access a declared service with the caller's identity. Session writes and scope preparation belong in runtime calls after plugin setup. See [scoped providers](scoped-providers.md).
 
 ### Events
+
+Use `agent/setup` to register capabilities for a particular running Agent. The callback receives its Cordis context, session ID and cancellation signal. Register run-local tools and prompt sections with `run.effect(() => run.get('harnessTools')!.register(...))` and `run.effect(() => run.get('harnessPrompt')!.register(...))`. These contributions are disposed with the run; child runs inherit active parent capabilities and keep their own overrides. Run-local registrations do not acquire a plugin's read-only authorization automatically.
 
 Register listeners with `ctx.on(event, handler, { order })`. Listeners are owned by the Fiber and visibility follows the target session's ancestry. Pipeline order is ascending, then by plugin instance ID.
 
@@ -76,7 +78,18 @@ Register listeners with `ctx.on(event, handler, { order })`. Listeners are owned
 
 ### Configuration
 
-Declare a `configSchema` in `plugin.json` to validate values and supply JSON defaults. Cordis plugins may also export a synchronous Standard Schema `Config`. Use the configuration passed to `apply` for activation. For live configuration, set `"configChanges": "live"` and register `ctx.on('internal/update', next => ...)` when in-memory resources need to change. Any error rejects the candidate and restores the prior configuration. The optional `validateConfig(config, { operation, service })` export can validate product constraints with the selected services.
+Export a synchronous Standard Schema `Config` (or attach `Config` to a default Cordis plugin object or class). Cordis resolves this schema before activation and updates. The optional SDK helper `defineConfig` from `mini-harness/configuration` builds a Standard Schema from JSON Schema and supplies defaults; its `jsonSchema` is also used for configuration forms. A manifest `configSchema`, if supplied, describes the form for unloaded entries only and does not validate runtime input. A browser-only package may export `Config` without an `apply` module on the server to validate its configuration without mounting a server fiber.
+
+Set `live: true` on the Entry in `cordis.yml` or a Profile patch to allow in-place configuration changes. Register `ctx.on('internal/update', next => ...)` for resource changes or service-dependent checks, and check those constraints inside `apply` when mounting. Errors reject the candidate and restore the previous configuration. Non-live entries restart on configuration changes. Profile files contain user-supplied config, not schema defaults.
+
+```ts
+import { defineConfig } from 'mini-harness/configuration';
+export const Config = defineConfig({
+  type: 'object',
+  properties: { label: { type: 'string', default: 'Notes' } },
+  additionalProperties: false,
+});
+```
 
 ## Browser plugins
 
@@ -105,4 +118,4 @@ The [Task notes example](examples/task-notes/) uses both entry points. The [brow
 
 ### Profile entries
 
-Installing a plugin makes it available in the catalog. To enable it, use the Web Plugins page or add an `installed:<id>` entry to the [active Profile](profiles.md). The server entry's `inject` and `provide` declarations govern Cordis. Missing required services leave the consuming entry waiting until Cordis can activate it.
+Declare npm modules by their package name in the [active Profile](profiles.md). Local file bundles can be enabled in the Web Plugins page or declared by their directory path. The server entry's `inject` and `provide` declarations govern Cordis. Missing required services leave the consuming entry waiting until Cordis can activate it.

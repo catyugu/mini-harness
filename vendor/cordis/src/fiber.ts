@@ -83,15 +83,15 @@ Object.defineProperty(ValidationError.prototype, kValidationError, {
 /**
  * Validate and normalize config for a plugin runtime before it starts.
  *
- * @param runtime — the plugin runtime whose `Config` schema to apply.
+ * @param schema — the native plugin Config schema to apply.
  * @param config — the raw user config.
  * @returns the validated config, or `config` unchanged if the runtime has no schema.
  * @throws {ValidationError} when validation reports issues.
  */
-export function resolveConfig(runtime: Plugin.Runtime, config: any) {
-  if (!runtime.Config) return config
+export function resolveConfig(schema: Plugin.Base['Config'], config: any) {
+  if (!schema) return config
   // TODO: async validation
-  const result = runtime.Config['~standard'].validate(config)
+  const result = schema['~standard'].validate(config)
   if ('then' in result) {
     throw new TypeError('Async config validation is not supported')
   }

@@ -29,7 +29,10 @@ test('the composed browser graph serves its runtime dependencies and excludes se
   ])
     assert.equal((await fetch(base + asset)).status, 404, asset);
 
-  const pending = ['/packages/ui-runtime/src/browser/boot.js', '/packages/ui-runtime/src/browser/plugin-settings.js'];
+  const pending = [
+    '/packages/ui-runtime/src/browser/boot.js',
+    '/packages/ui-runtime/src/browser/plugin-settings.js',
+  ];
   for (const { browser } of plugins) if (browser) pending.push(browser);
   const seenModules = new Set<string>();
   for (const path of pending) {
@@ -56,7 +59,14 @@ test('the composed browser graph serves its runtime dependencies and excludes se
     }
   }
 
-  assert.equal((await request('/settings', 'PATCH', { plugins: { files: false, shell: true } })).status, 200);
+  assert.equal(
+    (
+      await request('/settings', 'PATCH', {
+        entries: { files: { disabled: true }, shell: { disabled: false } },
+      })
+    ).status,
+    200,
+  );
   const { body: changed }: { body: BrowserBootstrap } = await request('/bootstrap');
   assert.equal(
     changed.ui.some(({ id }) => id === 'files'),
@@ -74,6 +84,6 @@ test('the composed browser graph serves its runtime dependencies and excludes se
   assert.equal(sheet.status, 200);
   assert.match(sheet.headers.get('content-type') ?? '', /^text\/css/);
   assert.match(await sheet.text(), /\.approval-heading/);
-  assert.equal((await request('/settings', 'PATCH', { plugins: { shell: false } })).status, 200);
+  assert.equal((await request('/settings', 'PATCH', { entries: { shell: { disabled: true } } })).status, 200);
   assert.equal((await fetch(base + conversationStyle)).status, 200);
 });

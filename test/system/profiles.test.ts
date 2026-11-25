@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { parse } from 'yaml';
 import { writeText, writeJson } from '@mini-harness/platform/json';
 import { getPaths, ensurePaths } from '@mini-harness/platform/paths';
 import { Context } from 'mini-harness/cordis';
@@ -29,13 +31,15 @@ test('YAML Profile composes through Cordis and persists Web entry changes', asyn
     assert.ok(web.ctx.get('harnessWeb'));
     assert.ok(web.ctx.get('harnessGateway'));
     assert.ok(web.ctx.harnessPluginCatalog.browser().some(({ id }) => id === 'files'));
-    assert.ok(!web.ctx.harnessPluginCatalog.browser().some(({ id }) => id === 'git-diff'));
-    assert.doesNotMatch(readFileSync(paths.settings, 'utf8'), /pluginConfig|providers|"plugins"/);
-    await web.ctx.harnessSettingsStore.update({ plugins: { 'core:layout': false } });
-    assert.ok(!web.ctx.harnessPluginCatalog.browser().some(({ id }) => id === 'core:layout'));
-    await web.ctx.harnessSettingsStore.update({ plugins: { 'core:layout': true } });
+    assert.equal(web.ctx.harnessProfile.entries.get('core:layout'), undefined);
     assert.ok(web.ctx.harnessPluginCatalog.browser().some(({ id }) => id === 'core:layout'));
-    await web.ctx.harnessSettingsStore.update({ plugins: { 'file-preview': false } });
+    assert.ok(!web.ctx.harnessPluginCatalog.browser().some(({ id }) => id === 'git-diff'));
+    assert.equal(existsSync(paths.settings), false);
+    await web.ctx.harnessSettingsStore.update({ entries: { 'core:layout': { disabled: true } } });
+    assert.ok(!web.ctx.harnessPluginCatalog.browser().some(({ id }) => id === 'core:layout'));
+    await web.ctx.harnessSettingsStore.update({ entries: { 'core:layout': { disabled: false } } });
+    assert.ok(web.ctx.harnessPluginCatalog.browser().some(({ id }) => id === 'core:layout'));
+    await web.ctx.harnessSettingsStore.update({ entries: { 'file-preview': { disabled: true } } });
     assert.match(readFileSync(configure('web'), 'utf8'), /id: file-preview\s+disabled: true/);
   } finally {
     await web.close();
@@ -85,10 +89,7 @@ export default {
   },
 };`,
   );
-  writeText(
-    join(bundle, 'disabled.mjs'),
-    "throw new Error('A disabled entry was imported');",
-  );
+  writeText(join(bundle, 'disabled.mjs'), "throw new Error('A disabled entry was imported');");
   writeJson(join(directory, 'node_modules', 'profile-consumer', 'package.json'), {
     name: 'profile-consumer',
     type: 'module',
@@ -161,7 +162,22 @@ export function apply(ctx, config) {
   assert.ok(persisted.includes('name: ./waiting.mjs'));
   assert.equal(readFileSync(fragment, 'utf8').includes('value: base'), true);
   assert.equal(readFileSync(join(directory, 'cordis.yml'), 'utf8'), 'plugins: []\n');
-  await assert.rejects(bootProfile(file, paths, launch), /Invalid Profile name/);
+  const standalone = join(root, 'standalone.yml');
+  writeText(standalone, 'include: [' + JSON.stringify(fragment) + ']\n');
+  await assert.rejects(bootProfile(standalone, paths, launch), /Invalid Profile name/);
+  writeText(
+    standalone,
+    'plugins:\n  - id: provider\n    config:\n      value: temporary\n  - id: consumer\n    name: profile-consumer\n',
+  );
+  const patched = await bootProfile('custom', paths, { ...launch, patches: [standalone] });
+  try {
+    assert.equal(patched.ctx.get('profileResult'), 'temporary!');
+    const profile = patched.ctx.harnessProfile;
+    profile.commit({ ...profile.read(), readOnlyTools: { example: ['read', 'search'] } });
+    assert.doesNotMatch(readFileSync(file, 'utf8'), /temporary/);
+  } finally {
+    await patched.close();
+  }
   const reopened = await bootProfile('custom', paths, launch);
   try {
     assert.equal(reopened.ctx.get('profileResult'), 'patched!');
@@ -171,4 +187,29 @@ export function apply(ctx, config) {
 
   writeText(fragment, 'include: [' + JSON.stringify(fragment) + ']\n');
   await assert.rejects(bootProfile('custom', paths, launch), /Cyclic Profile include/);
+});
+
+test('launcher inspects and recreates named Profile packages without mounting', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'mini-harness-cli-profile-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const env = { ...process.env, MINI_HARNESS_HOME: join(root, 'home') };
+  const cli = (...args: string[]) =>
+    execFileSync(process.execPath, ['dist/bin/mini-harness.js', ...args], { env, encoding: 'utf8' });
+  const extra = join(root, 'extra.yml');
+  writeText(extra, 'plugins:\n  - id: git-diff\n    disabled: true\n');
+  const config = cli('rescue', '--from-default-profile', 'web', '--patch', extra, '--dump-config');
+  const gitDiff = (yaml: string) => parse(yaml).plugins.find(({ id }: { id: string }) => id === 'git-diff');
+  assert.equal(gitDiff(config).disabled, true);
+  assert.notEqual(gitDiff(cli('--dump-default-config')).disabled, true);
+  assert.equal(JSON.parse(cli('--dump-config-schema')).properties.plugins.type, 'array');
+  const patch = join(env.MINI_HARNESS_HOME, 'profiles', 'rescue', 'cordis.patch.yml');
+  writeText(patch, 'not: a valid layer');
+  assert.doesNotThrow(() => cli('rescue', '--dump-default-config'));
+  assert.throws(() => cli('rescue', '--dump-config'), /Expected a Profile object/);
+  writeText(patch, 'plugins: []\n');
+  assert.doesNotMatch(
+    readFileSync(join(env.MINI_HARNESS_HOME, 'profiles', 'rescue', 'cordis.patch.yml'), 'utf8'),
+    /git-diff/,
+  );
+  assert.throws(() => cli('--profile', extra, '--dump-config'), /Invalid Profile name/);
 });

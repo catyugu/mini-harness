@@ -19,7 +19,7 @@
       "./browser/api"
     ],
     "profileModules": {
-      "@mini-harness/file-preview": "./src/manifest.ts#manifest"
+      "@mini-harness/file-preview": "./src/manifest.ts"
     }
   }
 }

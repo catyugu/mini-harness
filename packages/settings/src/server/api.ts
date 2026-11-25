@@ -1,11 +1,10 @@
 import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
 import type { PluginConfigurationPort, SettingsManager } from './manager.ts';
-import type { Settings } from '../shared/settings.ts';
+import type { ProfileConfiguration } from '@mini-harness/plugin-api/configuration';
 
 export interface SettingsPort {
-  readonly settings: Settings;
-  update(patch: unknown): Promise<Settings>;
-  forgetPlugin: SettingsManager['forgetPlugin'];
+  readonly settings: ProfileConfiguration;
+  update(patch: unknown): Promise<ProfileConfiguration>;
   forgetScopes(keys: ScopeKey[]): Promise<void>;
   writePlugin: SettingsManager['writePlugin'];
   subscribe(listener: () => void): () => void;

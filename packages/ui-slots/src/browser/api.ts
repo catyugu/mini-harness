@@ -1,4 +1,3 @@
-
 /** Plugins declare their own slot names via TypeScript module augmentation. */
 export interface SlotMap {}
 export type SlotName = keyof SlotMap & string;

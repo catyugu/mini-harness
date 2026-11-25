@@ -1,3 +1,5 @@
+import { Context } from 'mini-harness/cordis';
+import { agentContext, sessionEvent } from '@mini-harness/plugin-api/instance';
 import type { ThinkingLevel, ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { ScopeKey, ScopePort } from '@mini-harness/plugin-api/scopes';
 import { DomainError } from '@mini-harness/platform/errors';
@@ -31,6 +33,7 @@ interface Activity {
   done?: Promise<unknown>;
   events?: RunEvents;
   inputSignal?: AbortSignal;
+  context?: Context;
 }
 
 export class Runs implements RunPort {
@@ -154,28 +157,30 @@ export class Runs implements RunPort {
       this.observe({ type: 'run-started', sessionId: id, run: running }, cancellation);
       if (!preparedScope) await this.scopes.prepare(`session:${id}`, cancellation);
       cancellation.throwIfAborted();
-      activity.inputSignal = cancellation;
-      try {
-        return await this.agent(id).prompt(record, prepared.text, publish, {
-          fallback,
-          beginSubmission: () => {
-            info.inputEntryId = null;
-          },
-          signal: cancellation,
-          source,
-          submissionId: info.id,
-          choice: model,
-          images: prepared.images,
-          input: prepared.input,
-          thinkingLevel,
-          revision,
-          changed: (path) => {
-            info.changedFiles = [...new Set([...(info.changedFiles ?? []), path])];
-          },
-        });
-      } finally {
-        activity.inputSignal = undefined;
-      }
+      return this.withAgentContext(id, activity, cancellation, async (ctx, signal) => {
+        activity.inputSignal = signal;
+        try {
+          return await ctx.harnessAgent.prompt(ctx, record, prepared.text, publish, {
+            fallback,
+            beginSubmission: () => {
+              info.inputEntryId = null;
+            },
+            signal,
+            source,
+            submissionId: info.id,
+            choice: model,
+            images: prepared.images,
+            input: prepared.input,
+            thinkingLevel,
+            revision,
+            changed: (path) => {
+              info.changedFiles = [...new Set([...(info.changedFiles ?? []), path])];
+            },
+          });
+        } finally {
+          activity.inputSignal = undefined;
+        }
+      });
     };
     const finish = (state: RunInfo['state'], error?: string) => {
       for (const item of log.inbox()) {
@@ -436,10 +441,11 @@ export class Runs implements RunPort {
     { message, mode, attachments, model, thinkingLevel }: Parameters<RunPort['queueInput']>[1],
   ) {
     this.mutations.admit(this.scopes.address(`session:${id}`));
-    const signal = this.work.get(id)?.inputSignal;
-    if (!signal || signal.aborted)
+    const activity = this.work.get(id);
+    const signal = activity?.inputSignal;
+    if (!activity?.context || !signal || signal.aborted)
       throw new DomainError('conflict', 'The agent is not streaming; send a new message');
-    return this.agent(id).queueInput(id, message, mode, attachments, {
+    return activity.context.harnessAgent.queueInput(activity.context, id, message, mode, attachments, {
       model,
       thinkingLevel,
       fallback: this.preference.recent(),
@@ -469,11 +475,59 @@ export class Runs implements RunPort {
     const { signal } = activity.controller;
     const done = (activity.done = this.scopes
       .prepare(`session:${id}`, signal)
-      .then(() => this.agent(id).compact(id, signal)));
+      .then(() =>
+        this.withAgentContext(id, activity, signal, (ctx, signal) =>
+          ctx.harnessAgent.compact(ctx, id, signal),
+        ),
+      ));
     try {
       await done;
     } finally {
       this.work.delete(id);
+    }
+  }
+
+  private async withAgentContext<T>(
+    id: string,
+    activity: Activity,
+    signal: AbortSignal,
+    work: (ctx: Context, signal: AbortSignal) => Promise<T>,
+  ) {
+    const key = `session:${id}` as const;
+    const scope = this.scopes.context(key);
+    let parent = scope;
+    for (const ancestor of [...this.scopes.address(key)].reverse()) {
+      if (ancestor === key || !ancestor.startsWith('session:')) continue;
+      const running = this.work.get(ancestor.slice(8))?.context;
+      if (!running || running.fiber.signal.aborted) continue;
+      // Preserve child session overrides while inheriting the live parent's Fiber.
+      const inherited = this.scopes.context(ancestor);
+      parent = running;
+      for (const name in scope[Context.isolate])
+        if (scope[Context.isolate][name] !== inherited[Context.isolate][name])
+          parent = parent.isolate(name, scope[Context.isolate][name]);
+      for (const name in scope[Context.intercept])
+        if (scope[Context.intercept][name] !== inherited[Context.intercept][name])
+          parent = parent.intercept(name, scope[Context.intercept][name]);
+      break;
+    }
+    const fiber = agentContext(parent, id).inject(['harnessAgent'], function agentRun() {});
+    try {
+      await fiber;
+      if (!fiber.ctx.get('harnessAgent'))
+        throw new DomainError('unavailable', 'Required service is unavailable: harnessAgent');
+      activity.context = fiber.ctx;
+      return await fiber.run(async (signal) => {
+        for (const { context, callback } of fiber.ctx.events.listeners(
+          'agent/setup',
+          sessionEvent(fiber.ctx, id),
+        ))
+          await context.fiber.run((signal) => callback(fiber.ctx, id, signal), signal);
+        return work(fiber.ctx, signal);
+      }, signal);
+    } finally {
+      activity.context = undefined;
+      await fiber.dispose();
     }
   }
 

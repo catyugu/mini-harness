@@ -13,7 +13,7 @@
       "./api"
     ],
     "profileModules": {
-      "@mini-harness/sandbox": "./src/manifest.ts#manifest"
+      "@mini-harness/sandbox": "./src/manifest.ts"
     }
   },
   "dependencies": {

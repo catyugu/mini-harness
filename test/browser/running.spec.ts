@@ -4,7 +4,7 @@ import { rmSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs';
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.ts';
 import { startIsolatedHost, settingsSection } from '../support/browser.ts';
 import { join } from 'node:path';
-import { readJson, writeJson } from '@mini-harness/platform/json';
+import { writeJson } from '@mini-harness/platform/json';
 
 test('refresh and navigation preserve a run while another conversation completes', async ({ browser }) => {
   for (const viewport of [
@@ -148,11 +148,8 @@ test('running messages can queue follow-ups and approve shell commands from the 
     return 'Finished';
   });
   const { root, paths } = createFixturePaths(mock.url);
-  const config = readJson<any>(paths.settings, {});
-  writeJson(paths.settings, {
-    ...config,
-    plugins: { shell: true },
-    pluginConfig: { ...config.pluginConfig, shell: { mode: 'host', timeoutSeconds: 60 } },
+  writeJson(join(paths.home, 'profiles', 'web', 'cordis.patch.yml'), {
+    plugins: [{ id: 'shell', disabled: false, config: { mode: 'host', timeoutSeconds: 60 } }],
   });
   const workspace = join(root, 'Workspace path with spaces ' + 'x'.repeat(100));
   mkdirSync(workspace);

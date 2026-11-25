@@ -5,7 +5,7 @@ export interface BrowserEntry {
   styles?: string[];
   preload?: string;
   config: Record<string, unknown>;
-  liveConfig?: boolean;
+  live?: boolean;
 }
 
 export interface BrowserBootstrap {

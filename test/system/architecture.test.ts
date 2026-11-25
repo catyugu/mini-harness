@@ -69,7 +69,10 @@ test('tracked TypeScript uses source specifiers and named type imports', () => {
       if (!item.name.endsWith('.ts')) continue;
       const ast = ts.createSourceFile(path, readFileSync(path, 'utf8'), ts.ScriptTarget.Latest, true);
       for (const { literal } of moduleReferences(ast)) {
-        assert.ok(!literal.text.startsWith('.') || !/\.[cm]?js$/.test(literal.text), 'JavaScript source specifier: ' + path + ': ' + literal.text);
+        assert.ok(
+          !literal.text.startsWith('.') || !/\.[cm]?js$/.test(literal.text),
+          'JavaScript source specifier: ' + path + ': ' + literal.text,
+        );
       }
       for (const statement of ast.statements) {
         if (!ts.isImportDeclaration(statement)) continue;

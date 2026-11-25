@@ -1,3 +1,4 @@
+import type { Context } from 'mini-harness/cordis';
 import type { NativeAssistantMessage, NativeMessage } from '@mini-harness/llm/api';
 import type { ModelRequestContent } from './events.ts';
 import type { InboxItem } from '@mini-harness/sessions/log-api';
@@ -16,6 +17,7 @@ export interface RevisionTarget {
 export interface AgentPort {
   revisionTarget(id: string, sourceEntryId: string, expectedLeafId: string | null): RevisionTarget;
   prompt(
+    ctx: Context,
     record: SessionRecord,
     prompt: string,
     emit: (event: AgentEvent) => void | Promise<void>,
@@ -33,8 +35,9 @@ export interface AgentPort {
       revision?: { parentId: string | null; expectedLeafId: string | null };
     },
   ): Promise<string>;
-  compact(id: string, signal: AbortSignal): Promise<void>;
+  compact(ctx: Context, id: string, signal: AbortSignal): Promise<void>;
   queueInput(
+    ctx: Context,
     id: string,
     text: string,
     mode: 'steer' | 'followUp',

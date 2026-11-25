@@ -9,11 +9,7 @@
     "rewriteRelativeImportExtensions": true,
     "rootDir": ".",
     "outDir": "../../dist/docs/examples",
-    "lib": [
-      "ES2022",
-      "DOM",
-      "DOM.Iterable"
-    ]
+    "lib": ["ES2022", "DOM", "DOM.Iterable"]
   },
   "include": [
     "browser-panel/**/*.ts",

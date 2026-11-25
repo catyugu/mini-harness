@@ -11,8 +11,7 @@ test('shell approval gates execution, handles rejection and cancellation', async
       : { tool: 'sandbox_shell', args: { command: 'echo approved' } },
   );
   await app.runtime.configuration.update({
-    plugins: { shell: true },
-    pluginConfig: { shell: { mode: 'host' } },
+    entries: { shell: { disabled: false, config: { mode: 'host' } } },
   });
   const { body: session } = await request('/sessions', 'POST', {});
   for (const allow of [false, true]) {
@@ -106,8 +105,7 @@ test('full access bypasses Shell prompts only for its conversation and applies t
       : { tool: 'sandbox_shell', args: { command: 'echo permitted' } },
   );
   await app.runtime.configuration.update({
-    plugins: { shell: true },
-    pluginConfig: { shell: { mode: 'host' } },
+    entries: { shell: { disabled: false, config: { mode: 'host' } } },
   });
 
   const { body: full } = await request('/sessions', 'POST', { permission: 'fullAccess' });
@@ -191,8 +189,7 @@ test(
       return { tool: 'sandbox_shell', args: { command: 'echo must-not-run' } };
     });
     await app.runtime.configuration.update({
-      plugins: { shell: true },
-      pluginConfig: { shell: { mode: 'host' } },
+      entries: { shell: { disabled: false, config: { mode: 'host' } } },
     });
     const shell = app.runtime.plugins.ctx.harnessRegistry.create();
     const other = app.runtime.plugins.ctx.harnessRegistry.create();
@@ -204,7 +201,10 @@ test(
         () => request('/approvals'),
         (result) => result.body.length === 1,
       );
-      assert.equal((await request('/settings', 'PATCH', { plugins: { shell: false } })).status, 409);
+      assert.equal(
+        (await request('/settings', 'PATCH', { entries: { shell: { disabled: true } } })).status,
+        409,
+      );
       const approval = (await request('/approvals')).body[0];
       assert.equal((await request('/approvals', 'POST', { id: approval.id, allow: false })).status, 200);
       assert.ok(app.runtime.plugins.ctx.harnessRuns.active(other.id));
@@ -221,7 +221,10 @@ test(
       release();
     }
     assert.equal(await pending, 'Unrelated task completed');
-    assert.equal((await request('/settings', 'PATCH', { plugins: { shell: false } })).status, 200);
+    assert.equal(
+      (await request('/settings', 'PATCH', { entries: { shell: { disabled: true } } })).status,
+      200,
+    );
     assert.deepEqual((await request('/approvals')).body, []);
     const graph = (await request('/bootstrap')).body.ui;
     assert.ok(!graph.some(({ id }: { id: string }) => id === 'shell'));
@@ -238,8 +241,7 @@ test('repeating a denied command in the same run does not open a new approval', 
       : { tool: 'sandbox_shell', args: { command: 'echo repeated' } },
   );
   await app.runtime.configuration.update({
-    plugins: { shell: true },
-    pluginConfig: { shell: { mode: 'host' } },
+    entries: { shell: { disabled: false, config: { mode: 'host' } } },
   });
   const { body: session } = await request('/sessions', 'POST', {});
   const url = '/sessions/' + session.id;

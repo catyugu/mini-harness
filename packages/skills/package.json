@@ -16,7 +16,7 @@
   },
   "miniHarness": {
     "profileModules": {
-      "@mini-harness/skills": "./src/manifest.ts#manifest"
+      "@mini-harness/skills": "./src/manifest.ts"
     }
   }
 }

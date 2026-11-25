@@ -20,8 +20,8 @@
       "./record"
     ],
     "profileModules": {
-      "@mini-harness/workspaces": "./src/manifests/workspaces.ts#manifest",
-      "@mini-harness/workspaces-data": "./src/manifests/data.ts#manifest"
+      "@mini-harness/workspaces": "./src/manifests/workspaces.ts",
+      "@mini-harness/workspaces-data": "./src/manifests/data.ts"
     }
   },
   "dependencies": {

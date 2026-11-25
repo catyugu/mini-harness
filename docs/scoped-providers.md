@@ -10,8 +10,9 @@ should be isolated from the parent. For example:
 ```yaml
 scopes:
   workspace:0123456789abcdef0123456789abcdef:
-    plugins:
-      workspace-greeting: true
+    entries:
+      workspace-greeting:
+        disabled: false
 ```
 
 Scopes inherit services from application → workspace → ancestor session →

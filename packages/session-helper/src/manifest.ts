@@ -1,10 +1,8 @@
-import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
+import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 
 /** One metadata definition for the host, settings, and browser loader. */
-export const manifest: PluginDescriptor = {
+export const metadata: PluginInfo = {
   scope: 'application',
-  defaultEnabled: true,
-  id: 'session-helper',
   title: 'Session helper',
   description: 'Copy messages and edit/resend prompts on a session branch.',
   icon: 'edit',

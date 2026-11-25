@@ -1,4 +1,3 @@
-import { storedProfile } from '../support/profile.ts';
 import { expectPresent } from '../support/required.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -19,29 +18,42 @@ test('external services and their declared consumers compose through Cordis serv
   copyExample(paths.plugins, 'greeting-service');
   const patch = (data: unknown) => request('/settings', 'PATCH', data);
   const endpoint = '/extensions/greeting-route/hello?name=Harness';
-  assert.equal((await patch({ plugins: { 'greeting-route': true } })).status, 200);
+  assert.equal((await patch({ entries: { 'greeting-route': { disabled: false } } })).status, 200);
   assert.equal((await request(endpoint)).status, 404);
-  assert.equal((await patch({ plugins: { 'greeting-route': true, 'greeting-service': true } })).status, 200);
+  assert.equal(
+    (
+      await patch({
+        entries: { 'greeting-route': { disabled: false }, 'greeting-service': { disabled: false } },
+      })
+    ).status,
+    200,
+  );
   assert.equal((await request(endpoint)).body.greeting, 'Hello, Harness');
   writePlugin(
     paths.plugins,
     'suffix',
-    { provides: ['exampleSuffix'] },
+    {},
     "export const provide = [\"exampleSuffix\"];\nexport const apply = (ctx) => { ctx.provide('exampleSuffix', '!'); };",
   );
-  assert.equal((await patch({ plugins: { suffix: true } })).status, 200);
+  assert.equal((await patch({ entries: { suffix: { disabled: false } } })).status, 200);
   assert.equal((await request(endpoint)).body.greeting, 'Hello, Harness!');
 
   writePlugin(
     paths.plugins,
     'greeting-alt',
-    { provides: ['exampleGreeting'] },
+    {},
     "export const provide = [\"exampleGreeting\"];\nexport const apply = (ctx) => { ctx.provide('exampleGreeting', { greet: (name) => 'Welcome, ' + name }); };",
   );
-  assert.match((await patch({ plugins: { 'greeting-alt': true } })).body.error, /has been registered/);
+  assert.match(
+    (await patch({ entries: { 'greeting-alt': { disabled: false } } })).body.error,
+    /has been registered/,
+  );
   assert.equal(
-    (await patch({ plugins: { 'greeting-service': false, 'greeting-alt': true } }))
-      .status,
+    (
+      await patch({
+        entries: { 'greeting-service': { disabled: true }, 'greeting-alt': { disabled: false } },
+      })
+    ).status,
     200,
   );
   assert.equal((await request(endpoint)).body.greeting, 'Welcome, Harness!');
@@ -53,7 +65,14 @@ test('external services and their declared consumers compose through Cordis serv
     ).services.exampleGreeting,
     'greeting-alt',
   );
-  assert.equal((await patch({ plugins: { 'greeting-alt': false, 'greeting-service': true } })).status, 200);
+  assert.equal(
+    (
+      await patch({
+        entries: { 'greeting-alt': { disabled: true }, 'greeting-service': { disabled: false } },
+      })
+    ).status,
+    200,
+  );
   assert.equal((await request(endpoint)).body.greeting, 'Hello, Harness!');
 });
 
@@ -61,8 +80,11 @@ test('Shell delegates to a selected external process provider and still requires
   const { paths, app, request } = await fixture(t);
   copyExample(paths.plugins, 'process-preview');
   const result = await request('/settings', 'PATCH', {
-    plugins: { shell: true, 'core:process': false, 'process-preview': true },
-
+    entries: {
+      shell: { disabled: false },
+      'core:process': { disabled: true },
+      'process-preview': { disabled: false },
+    },
   });
   assert.equal(result.status, 200, JSON.stringify(result.body));
   const { id } = app.runtime.plugins.ctx.harnessRegistry.create();
@@ -89,7 +111,7 @@ test('scoped plugins inherit declared services and tool policies, and release th
   writePlugin(
     paths.plugins,
     'workspace-greeting',
-    { scope: 'workspace', provides: ['exampleGreeting'] },
+    { scope: 'workspace' },
     `
 export const provide = ["exampleGreeting"];
 export const inject = ["harnessSessions","harnessPluginRoutes","harnessPluginData","harnessPluginChanges","harnessTools"];
@@ -120,8 +142,8 @@ export const apply = (ctx, config) => {
   const workspaceKey = 'workspace:' + parent.workspaceId;
   const sessionKey = 'session:' + parent.id;
   const scopes = {
-    [workspaceKey]: { plugins: { 'workspace-greeting': true } },
-    [sessionKey]: { plugins: { 'scoped-tool': true }, disabledTools: ['read'] },
+    [workspaceKey]: { entries: { 'workspace-greeting': { disabled: false } } },
+    [sessionKey]: { entries: { 'scoped-tool': { disabled: false } }, disabledTools: ['read'] },
   };
   const enabled = await request('/settings', 'PATCH', { scopes });
   assert.equal(enabled.status, 200, JSON.stringify(enabled.body));
@@ -190,7 +212,7 @@ export const apply = (ctx, config) => {
       ...scopes,
       [workspaceKey]: {
         ...scopes[workspaceKey],
-        pluginConfig: { 'workspace-greeting': { fail: true } },
+        entries: { 'workspace-greeting': { disabled: false, config: { fail: true } } },
       },
     },
   });
@@ -212,7 +234,7 @@ test('read-only permissions are bound to the selected tool registration', async 
   writePlugin(
     paths.plugins,
     'replacement',
-    { scope: 'session', inject: ['harnessTools'] },
+    { scope: 'session' },
     `
 export const inject = ["harnessTools"];
 export const apply = (ctx) => {
@@ -236,7 +258,7 @@ export const apply = (ctx) => {
   assert.equal(
     (
       await request('/settings', 'PATCH', {
-        scopes: { ['session:' + child.id]: { plugins: { replacement: true } } },
+        scopes: { ['session:' + child.id]: { entries: { replacement: { disabled: false } } } },
       })
     ).status,
     200,
@@ -274,46 +296,34 @@ export const apply = (ctx) => {
   await assert.rejects(granted.execute('revoked', {}), /Tool denied/);
 });
 
-test('the host tool authorization service cannot be replaced at either scope', async (t) => {
+test('explicit Profile composition can replace the default tool policy without a provider whitelist', async (t) => {
   const { app, paths, request } = await fixture(t);
-  for (const scope of ['application', 'session']) {
-    writePlugin(
-      paths.plugins,
-      'tools-' + scope,
-      { scope, provides: ['harnessTools'] },
-      `
-export const provide = ['harnessTools'];
-export function apply() { throw new Error('Protected provider must never mount'); }
+  writePlugin(
+    paths.plugins,
+    'deny-tools',
+    {},
+    `
+export const provide = ['harnessToolPolicy'];
+export function apply(ctx) {
+  ctx.provide('harnessToolPolicy', () => false);
+}
 `,
-    );
-  }
-  const session = app.runtime.plugins.ctx.harnessRegistry.create();
-  const application = await request('/settings', 'PATCH', {
-    plugins: { 'tools-application': true },
-
+  );
+  const root = app.runtime.plugins.ctx;
+  const session = root.harnessRegistry.create();
+  assert.ok(root.harnessTools.forSession(session.id).some(({ name }) => name === 'read'));
+  const duplicate = await request('/settings', 'PATCH', { entries: { 'deny-tools': { disabled: false } } });
+  assert.notEqual(duplicate.status, 200);
+  const replacement = await request('/settings', 'PATCH', {
+    entries: { 'core:tool-policy': { disabled: true }, 'deny-tools': { disabled: false } },
   });
-  assert.equal(application.status, 400);
-  assert.match(application.body.error, /Protected service cannot be overridden: harnessTools/);
-  const implicit = await request('/settings', 'PATCH', {
-    plugins: { 'core:tools': false, 'tools-application': true },
+  assert.equal(replacement.status, 200, JSON.stringify(replacement.body));
+  assert.deepEqual(root.harnessTools.forSession(session.id), []);
+  const restored = await request('/settings', 'PATCH', {
+    entries: { 'core:tool-policy': { disabled: false }, 'deny-tools': { disabled: true } },
   });
-  assert.equal(implicit.status, 400);
-  assert.match(implicit.body.error, /Protected service cannot be overridden: harnessTools/);
-  assert.equal(app.runtime.settings.plugins['core:tools'], true);
-  assert.equal(app.runtime.settings.plugins['tools-application'], undefined);
-  assert.equal((await storedProfile(paths)).plugins['core:tools'], true);
-  assert.equal((await storedProfile(paths)).plugins['tools-application'], undefined);
-  const scoped = await request('/settings', 'PATCH', {
-    scopes: {
-      ['session:' + session.id]: {
-        plugins: { 'tools-session': true },
-
-      },
-    },
-  });
-  assert.equal(scoped.status, 400);
-  assert.match(scoped.body.error, /Protected service cannot be overridden: harnessTools/);
-  assert.ok(app.runtime.plugins.ctx.harnessTools.forSession(session.id).some(({ name }) => name === 'read'));
+  assert.equal(restored.status, 200, JSON.stringify(restored.body));
+  assert.ok(root.harnessTools.forSession(session.id).some(({ name }) => name === 'read'));
 });
 
 test('file tools and HTTP preview consume the same selected File Access provider', async (t) => {
@@ -321,7 +331,7 @@ test('file tools and HTTP preview consume the same selected File Access provider
   writePlugin(
     paths.plugins,
     'virtual-files',
-    { provides: ['harnessFileAccess'] },
+    {},
     `
 export const provide = ["harnessFileAccess"];
 export function apply(ctx) {
@@ -336,7 +346,9 @@ export function apply(ctx) {
     }
 `,
   );
-  const selection = { plugins: { 'core:file-access': false, 'virtual-files': true } };
+  const selection = {
+    entries: { 'core:file-access': { disabled: true }, 'virtual-files': { disabled: false } },
+  };
   assert.equal((await request('/settings', 'PATCH', selection)).status, 200);
   const session = app.runtime.plugins.ctx.harnessRegistry.create();
   const preview = await request('/workspaces/' + session.workspaceId + '/files/preview?path=virtual.txt');
@@ -358,7 +370,7 @@ test('native runs use the nearest scoped LLM provider while siblings retain the 
   writePlugin(
     paths.plugins,
     'scoped-llm',
-    { scope: 'session', provides: ['harnessLlm'] },
+    { scope: 'session' },
     `
 export const provide = ["harnessLlm"];
 export const apply = (ctx, config) => { ctx.provide('harnessLlm', {
@@ -375,9 +387,7 @@ export const apply = (ctx, config) => { ctx.provide('harnessLlm', {
   const child = app.runtime.plugins.ctx.harnessRegistry.create({ parentId: parent.id });
   const sibling = app.runtime.plugins.ctx.harnessRegistry.create();
   const scope = (answer: string) => ({
-    plugins: { 'scoped-llm': true },
-
-    pluginConfig: { 'scoped-llm': { answer } },
+    entries: { 'scoped-llm': { disabled: false, config: { answer } } },
   });
   const scopes = {
     ['session:' + parent.id]: scope('Parent adapter'),
@@ -428,7 +438,7 @@ test('native file and shell tools use scoped file, process and sandbox services 
   writePlugin(
     paths.plugins,
     'application-sandbox',
-    { provides: ['harnessSandbox'] },
+    {},
     `
 export const provide = ["harnessSandbox"];
 export const apply = (ctx) => { ctx.provide('harnessSandbox', ${isolated('application sandbox')}); };
@@ -437,7 +447,7 @@ export const apply = (ctx) => { ctx.provide('harnessSandbox', ${isolated('applic
   writePlugin(
     paths.plugins,
     'scoped-environment',
-    { scope: 'session', provides: ['harnessFileAccess', 'harnessSandbox'] },
+    { scope: 'session' },
     `
 export const provide = ["harnessFileAccess","harnessSandbox"];
 export const apply = (ctx) => {
@@ -454,7 +464,7 @@ export const apply = (ctx) => {
   writePlugin(
     paths.plugins,
     'scoped-process',
-    { scope: 'session', provides: ['harnessProcess'] },
+    { scope: 'session' },
     `
 export const provide = ["harnessProcess"];
 export const apply = (ctx) => { ctx.provide('harnessProcess', {
@@ -469,17 +479,18 @@ export const apply = (ctx) => { ctx.provide('harnessProcess', {
   const child = app.runtime.plugins.ctx.harnessRegistry.create({ parentId: parent.id });
   const sibling = app.runtime.plugins.ctx.harnessRegistry.create();
   const configured = await request('/settings', 'PATCH', {
-    plugins: { shell: true, 'core:sandbox': false, 'application-sandbox': true },
-    pluginConfig: { shell: { mode: 'isolated' } },
+    entries: {
+      shell: { disabled: false, config: { mode: 'isolated' } },
+      'core:sandbox': { disabled: true },
+      'application-sandbox': { disabled: false },
+    },
 
     scopes: {
       ['session:' + parent.id]: {
-        plugins: { 'scoped-environment': true },
-
+        entries: { 'scoped-environment': { disabled: false } },
       },
       ['session:' + child.id]: {
-        plugins: { 'scoped-process': true },
-
+        entries: { 'scoped-process': { disabled: false } },
       },
     },
   });
@@ -531,7 +542,7 @@ test('scoped model catalogs govern explicit runs and inherited or model-selected
   writePlugin(
     paths.plugins,
     'scoped-models',
-    { scope: 'session', provides: ['harnessModels', 'harnessLlm'] },
+    { scope: 'session' },
     `
 export const provide = ["harnessModels","harnessLlm"];
 export const apply = (ctx) => {
@@ -581,8 +592,7 @@ export const apply = (ctx) => {
   const configured = await request('/settings', 'PATCH', {
     scopes: {
       ['session:' + parent.id]: {
-        plugins: { 'scoped-models': true },
-
+        entries: { 'scoped-models': { disabled: false } },
       },
     },
   });
@@ -640,4 +650,80 @@ export const apply = (ctx) => {
     applicationChoice,
   );
   assert.equal(mock.requests.length, 1);
+});
+
+test('a replacement Agent receives a scoped run Fiber and releases its resources on success and failure', async (t) => {
+  const { app, paths, request } = await fixture(t);
+  const file = join(paths.plugins, 'agent-lifetime.log');
+  writePlugin(
+    paths.plugins,
+    'custom-agent',
+    { scope: 'session' },
+    `
+import { appendFileSync } from 'node:fs';
+export const provide = ['harnessAgent', 'agentMarker'];
+export function apply(ctx) {
+  ctx.provide('agentMarker', 'session service');
+  ctx.provide('harnessAgent', {
+    async prompt(run, record, text) {
+      if (run.fiber === ctx.fiber || run.get('agentMarker') !== 'session service')
+        throw new Error('Missing isolated run context');
+      run.effect(() => () => appendFileSync(${JSON.stringify(file)}, text + '\\n'));
+      if (text === 'fail') throw new Error('Expected custom agent failure');
+      return 'Custom answer';
+    },
+  });
+}
+`,
+  );
+  const root = app.runtime.plugins.ctx;
+  const session = root.harnessRegistry.create();
+  const sibling = root.harnessRegistry.create();
+  const configured = await request('/settings', 'PATCH', {
+    scopes: { ['session:' + session.id]: { entries: { 'custom-agent': { disabled: false } } } },
+  });
+  assert.equal(configured.status, 200, JSON.stringify(configured.body));
+  assert.equal(await root.harnessRuns.send(session.id, 'success'), 'Custom answer');
+  assert.equal(readFileSync(file, 'utf8'), 'success\n');
+  await assert.rejects(root.harnessRuns.send(session.id, 'fail'), /Expected custom agent failure/);
+  assert.equal(readFileSync(file, 'utf8'), 'success\nfail\n');
+  assert.notEqual(await root.harnessRuns.send(sibling.id, 'Default loop'), 'Custom answer');
+});
+
+test('Agent setup owns temporary tools and prompt sections and isolates sibling runs', async (t) => {
+  const { app, paths, mock, request } = await fixture(t);
+  writePlugin(
+    paths.plugins,
+    'run-capabilities',
+    {},
+    `
+export function apply(ctx) {
+  ctx.on('agent/setup', (run, id) => {
+    const tools = run.get('harnessTools');
+    const prompt = run.get('harnessPrompt');
+    if (!tools || !prompt) throw new Error('Missing run services');
+    run.effect(() => tools.register({
+      name: 'run_marker',
+      description: 'A run-local tool',
+      parameters: { type: 'object', properties: {} },
+      async execute() { return { content: [{ type: 'text', text: id }] }; }
+    }));
+    run.effect(() => prompt.register({ id: 'run-marker', render: () => 'Run marker ' + id }));
+  });
+}
+`,
+  );
+  const configured = await request('/settings', 'PATCH', {
+    entries: { 'run-capabilities': { disabled: false } },
+  });
+  assert.equal(configured.status, 200, JSON.stringify(configured.body));
+  const root = app.runtime.plugins.ctx;
+  const first = root.harnessRegistry.create();
+  const second = root.harnessRegistry.create();
+  await root.harnessRuns.send(first.id, 'First run');
+  assert.ok(!root.harnessTools.forSession(first.id).some(({ name }) => name === 'run_marker'));
+  await root.harnessRuns.send(second.id, 'Second run');
+  assert.match(JSON.stringify(mock.requests[0]), new RegExp('Run marker ' + first.id));
+  assert.match(JSON.stringify(mock.requests[1]), new RegExp('Run marker ' + second.id));
+  assert.doesNotMatch(JSON.stringify(mock.requests[1]), new RegExp('Run marker ' + first.id));
 });

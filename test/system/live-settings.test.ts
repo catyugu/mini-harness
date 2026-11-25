@@ -36,38 +36,40 @@ test('appearance, parallelism and child defaults update without interrupting a r
   await waiting;
   const original = runtime.plugins.ctx.harnessRegistry.log(item.id);
   await runtime.configuration.update({
-    pluginConfig: { 'core:theme': { appearance: 'dark' }, subagents: { maxParallel: 2 } },
+    entries: { 'core:theme': { config: { appearance: 'dark' } }, subagents: { config: { maxParallel: 2 } } },
   });
-  assert.equal(runtime.settings.pluginConfig['core:theme'].appearance, 'dark');
+  assert.equal(runtime.settings.entries['core:theme']?.config?.appearance, 'dark');
   assert.strictEqual(runtime.plugins.ctx.harnessRegistry.log(item.id), original);
-  assert.equal(runtime.settings.pluginConfig.subagents.maxParallel, 2);
+  assert.equal(runtime.settings.entries.subagents?.config?.maxParallel, 2);
   assert.equal(runtime.plugins.ctx.harnessRuns.active(item.id), true);
   await assert.rejects(
     runtime.configuration.update({
-      pluginConfig: { subagents: { model: { provider: 'missing', id: 'unavailable' } } },
+      entries: { subagents: { config: { model: { provider: 'missing', id: 'unavailable' } } } },
     }),
     /Unknown child model/,
   );
   await assert.rejects(
     runtime.configuration.update({
-      pluginConfig: { subagents: { model: { provider: 'local-mock', id: 'unavailable' } } },
+      entries: { subagents: { config: { model: { provider: 'local-mock', id: 'unavailable' } } } },
     }),
     /Unknown child model/,
   );
-  assert.equal(runtime.settings.pluginConfig.subagents.model, null);
-  assert.equal(runtime.settings.pluginConfig.subagents.maxParallel, 2);
+  assert.equal(runtime.settings.entries.subagents?.config?.model, undefined);
+  assert.equal(runtime.settings.entries.subagents?.config?.maxParallel, 2);
   const target = 'session:' + item.id;
   await assert.rejects(
-    runtime.configuration.update({ plugins: { files: false } }),
+    runtime.configuration.update({ entries: { files: { disabled: true } } }),
     /Stop the affected conversations/,
   );
-  assert.equal(runtime.settings.plugins.files, true);
+  assert.equal(runtime.settings.entries.files?.disabled, false);
   await runtime.configuration.update({ scopes: { [target]: { disabledTools: ['shell'] } } });
   assert.equal(runtime.plugins.ctx.harnessRuns.active(item.id), true);
   release();
   assert.equal(await pending, 'Done');
   const firstMessage = runtime.plugins.ctx.harnessRegistry.log(item.id).projection().messages[0].id;
-  await runtime.configuration.update({ plugins: { files: false, 'session-helper': false } });
+  await runtime.configuration.update({
+    entries: { files: { disabled: true }, 'session-helper': { disabled: true } },
+  });
   await runtime.plugins.ctx.harnessRuns.send(item.id, 'After the policy changes');
   assert.equal(runtime.plugins.ctx.harnessRegistry.log(item.id).projection().messages[0].id, firstMessage);
   assert.strictEqual(runtime.plugins.ctx.harnessRegistry.log(item.id), original);
@@ -132,7 +134,7 @@ test(
     const workspace = `workspace:${target.workspaceId}` as const;
     const updating = runtime.configuration.update({
       scopes: {
-        [workspace]: { plugins: { staged: true } },
+        [workspace]: { entries: { staged: { disabled: false } } },
         [obsoleteScope]: obsoleteConfig,
       },
     });
@@ -153,7 +155,7 @@ test(
     await updating;
     assert.deepEqual(await deletion, [obsolete.id]);
     assert.equal((await storedProfile(paths)).scopes[obsoleteScope], undefined);
-    assert.equal((await storedProfile(paths)).scopes[workspace]?.plugins?.staged, true);
+    assert.equal((await storedProfile(paths)).scopes[workspace]?.entries?.staged?.disabled, false);
     assert.equal(await sibling, 'Mock response');
     assert.equal(await runtime.plugins.ctx.harnessRuns.send(target.id, 'After commit'), 'Mock response');
   },

@@ -1,19 +1,24 @@
 # Profiles
 
 A Profile is an independent private npm package under `~/.mini-harness/profiles/<name>/`
-(or `MINI_HARNESS_HOME`). The launcher always selects the package by name and loads
+(or `MINI_HARNESS_HOME`). The launcher selects the package by name and loads
 its `cordis.yml` root, followed by its ordered bundle layers and its
 `cordis.patch.yml` user layer. The first launch creates the default Web Profile.
 
 ```sh
 mini-harness
-mini-harness --profile web
-mini-harness profile init custom --from web
-mini-harness --profile custom
+mini-harness web
+mini-harness rescue --from-default-profile web
+mini-harness --profile rescue --patch ./extra.yml
+mini-harness rescue --dump-config
+mini-harness rescue --dump-default-config
+mini-harness --dump-config-schema
+mini-harness web --help
 ```
 
-Omit `--from web` to create an empty application. The directory is a standard
-npm dependency environment:
+A Profile must be a named package. YAML files are layers, never standalone launch targets.
+The explicit `--from-default-profile web` option replaces the selected Profile directory with a fresh template; it does not remove session data or credentials outside that directory.
+Repeat `--patch` to apply temporary overlays after the user layer. Relative module names resolve from the declaring file. Dumps do not mount plugins, and the default dump excludes user and extra overlays. The schema describes the YAML Entry and patch envelope. The directory is a standard npm dependency environment:
 
 ```text
 profiles/custom/
@@ -58,26 +63,27 @@ plugins:
     disabled: true
   - id: custom-provider
     name: '@example/custom-provider'
+    live: true
     config:
       label: Progress
   - id: local-tool
     name: ./plugins/tool.mjs
+  - id: local-panel
+    name: /absolute/path/to/local-panel
+    client: true
 ```
 
-Install ordinary npm dependencies in the Profile directory with
-`npm install --ignore-scripts <package>`, then add entries or bundles explicitly.
+Install ordinary npm dependencies with `mini-harness plugin --profile rescue add <package>`, then add entries or bundles explicitly. The command forwards npm arguments in the Profile directory; use `remove`, `update`, local directories, tarballs or Git references as needed. npm lifecycle scripts are disabled by default; explicitly pass `--ignore-scripts=false` to authorize them.
 Installing a package does not activate it. A module may export a native Cordis
 function, class, or object with `apply(ctx, config)`; no plugin.json is needed
 for these entries. Disabled external entries are not imported. Local modules
-resolve relative to the layer that declares the name. YAML layers may include
+resolve relative to the layer that declares the name. A directory entry loads the package's server and browser modules; it can be managed in the Web Plugins page. YAML layers may include
 other fragments using `include`; they cannot use executable YAML tags or cyclic
 references. The final entry ID determines the configuration override.
 
-Native entries are currently edited in the Profile package and reloaded on
-restart. The existing Web Plugins page edits the same user patch for managed
-entries. Scoped overrides and the installed bundle
+All declared server modules use the same Cordis EntryTree and configuration path.
+The Web Plugins page edits the user patch, including ordinary module entries.
+Changes to services currently executing the configuration transaction require a
+Profile restart. Scoped overrides and the installed bundle
 format remain described in [scoped providers](scoped-providers.md) and
-[plugins](plugins.md). The package layout migration moves the old Web
-`cordis.yml` user configuration into `cordis.patch.yml` before creating the
-manifest. Session data, credentials and plugin data remain in their existing
-locations.
+[plugins](plugins.md). The Profile package must be initialized explicitly or by the first Web launch. Only YAML layers define plugin configuration; `settings.json` contains domain tool policy. Session data, credentials and plugin data remain in their existing locations.

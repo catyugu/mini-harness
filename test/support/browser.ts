@@ -10,7 +10,7 @@ export function readWebProfile(paths: { home: string }) {
   const yaml = readFileSync(join(paths.home, 'profiles', 'web', 'cordis.patch.yml'), 'utf8');
   const { plugins = [], scopes = {} } = parse(yaml) as {
     plugins?: { id: string; config?: Record<string, unknown> }[];
-    scopes?: Record<string, { pluginConfig: Record<string, Record<string, unknown>> }>;
+    scopes?: Record<string, { entries: Record<string, { config?: Record<string, unknown> }> }>;
   };
   return { scopes, configuration: (id: string) => plugins.find((item) => item.id === id)?.config };
 }

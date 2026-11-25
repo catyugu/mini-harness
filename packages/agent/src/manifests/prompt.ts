@@ -1,19 +1,19 @@
-import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
-import { Service } from 'mini-harness/cordis';
+import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
+import { Service, type Plugin } from 'mini-harness/cordis';
 import { Prompt } from '../prompt.ts';
 
-export const manifest: PluginDescriptor = {
+export const metadata: PluginInfo = {
   scope: 'application',
-  id: 'core:prompt',
   title: 'Prompt',
   description: 'System prompt sections and workspace instructions',
-  defaultEnabled: true,
+};
 
-  plugin: {
-    inject: ['harnessState'],
-    provide: ['harnessPrompt'],
-    apply(ctx) {
-      ctx.provide('harnessPrompt', Service.track(new Prompt(ctx.harnessState.paths.home)));
-    },
+const plugin: Plugin.Object = {
+  inject: ['harnessState'],
+  provide: ['harnessPrompt'],
+  apply(ctx) {
+    ctx.provide('harnessPrompt', Service.track(new Prompt(ctx.harnessState.paths.home)));
   },
 };
+
+export default plugin;

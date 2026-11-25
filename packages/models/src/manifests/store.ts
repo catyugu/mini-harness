@@ -1,21 +1,22 @@
-import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
+import type { Plugin } from 'mini-harness/cordis';
+import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 import { PiModelStore } from '../server/pi-adapter.ts';
 
-export const manifest: PluginDescriptor = {
-  id: 'core:model-store',
+export const metadata: PluginInfo = {
   scope: 'application',
-  defaultEnabled: true,
   title: 'Model store',
   description: 'Shared provider definitions and credentials',
+};
 
-  plugin: {
-    inject: ['harnessState'],
-    provide: ['harnessModelStore'],
-    async apply(ctx) {
-      const store = new PiModelStore(ctx.harnessState.paths.home);
-      ctx.effect(() => () => store.close());
-      await store.refresh();
-      ctx.provide('harnessModelStore', store);
-    },
+const plugin: Plugin.Object = {
+  inject: ['harnessState'],
+  provide: ['harnessModelStore'],
+  async apply(ctx) {
+    const store = new PiModelStore(ctx.harnessState.paths.home);
+    ctx.effect(() => () => store.close());
+    await store.refresh();
+    ctx.provide('harnessModelStore', store);
   },
 };
+
+export default plugin;

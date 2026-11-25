@@ -15,7 +15,7 @@
   },
   "miniHarness": {
     "profileModules": {
-      "@mini-harness/git-diff": "./src/manifest.ts#manifest"
+      "@mini-harness/git-diff": "./src/manifest.ts"
     }
   }
 }

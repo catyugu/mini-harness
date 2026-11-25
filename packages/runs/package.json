@@ -16,7 +16,7 @@
       "./execution"
     ],
     "profileModules": {
-      "@mini-harness/runs": "./src/manifest.ts#manifest"
+      "@mini-harness/runs": "./src/manifest.ts"
     }
   },
   "dependencies": {

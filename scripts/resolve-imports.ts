@@ -27,7 +27,11 @@ function rewrite(file: string) {
   const edits: { from: number; to: number; value: string }[] = [];
   for (const { literal } of moduleReferences(ast)) {
     if (literal.text.startsWith('.') && /\.ts$/.test(literal.text)) {
-      edits.push({ from: literal.getStart(ast), to: literal.end, value: JSON.stringify(literal.text.replace(/\.ts$/, '.js')) });
+      edits.push({
+        from: literal.getStart(ast),
+        to: literal.end,
+        value: JSON.stringify(literal.text.replace(/\.ts$/, '.js')),
+      });
       continue;
     }
     if (literal.text !== cordis && !literal.text.startsWith(prefix)) continue;

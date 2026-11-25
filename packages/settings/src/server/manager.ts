@@ -9,11 +9,14 @@ import { isDeepStrictEqual } from 'node:util';
 import { mergeSettings } from './config.ts';
 import type { ProfileRuntime } from '@mini-harness/plugin-api/profile';
 import type { SettingsPort } from './api.ts';
-import type { Settings } from '../shared/settings.ts';
+import type { ProfileConfiguration } from '@mini-harness/plugin-api/configuration';
 
 export interface PluginConfigurationPort {
-  effective(settings: Settings): Settings;
-  configure(settings: Settings, commit?: () => void, released?: ReadonlySet<ScopeKey>): Promise<void>;
+  configure(
+    settings: ProfileConfiguration,
+    commit?: () => void,
+    released?: ReadonlySet<ScopeKey>,
+  ): Promise<void>;
 }
 
 export class SettingsManager implements SettingsPort {
@@ -22,8 +25,8 @@ export class SettingsManager implements SettingsPort {
   private readonly listeners = new Set<() => void>();
 
   constructor(
-    private readonly profile: Pick<ProfileRuntime, 'read' | 'commit' | 'installed'>,
-    private readonly host: () => PluginConfigurationPort,
+    private readonly profile: Pick<ProfileRuntime, 'read' | 'commit'>,
+    private readonly host: () => PluginConfigurationPort | undefined,
   ) {}
 
   private get stored() {
@@ -31,7 +34,7 @@ export class SettingsManager implements SettingsPort {
   }
 
   get settings() {
-    return this.host().effective(this.stored);
+    return this.stored;
   }
 
   subscribe(listener: () => void) {
@@ -51,49 +54,8 @@ export class SettingsManager implements SettingsPort {
     }
   }
 
-  private save(next: Settings) {
+  private save(next: ProfileConfiguration) {
     this.profile.commit(next);
-  }
-
-  forgetPlugin<T>(id: string, stage: (ids: readonly string[]) => { commit(): T; rollback(): void }) {
-    assertOutsidePluginRequest();
-    return this.enqueue(() => {
-      const ids = [
-        id,
-        ...[...this.profile.installed].flatMap(([entry, module]) =>
-          module === id && entry !== id ? [entry] : [],
-        ),
-      ];
-      const plugins = { ...this.stored.plugins };
-      const pluginConfig = { ...this.stored.pluginConfig };
-      const readOnlyTools = { ...this.stored.readOnlyTools };
-      const scopes = Object.fromEntries(
-        Object.entries(this.stored.scopes).map(([key, entry]) => {
-          const scopedPlugins = { ...entry?.plugins };
-          const scopedConfig = { ...entry?.pluginConfig };
-          for (const id of ids) {
-            delete scopedPlugins[id];
-            delete scopedConfig[id];
-          }
-          return [key, { ...entry, plugins: scopedPlugins, pluginConfig: scopedConfig }];
-        }),
-      );
-      for (const id of ids) {
-        delete plugins[id];
-        delete pluginConfig[id];
-        delete readOnlyTools[id];
-      }
-      const removal = stage(ids);
-      try {
-        this.save({ ...this.stored, plugins, pluginConfig, scopes, readOnlyTools });
-      } catch (error) {
-        removal.rollback();
-        throw error;
-      }
-      const result = removal.commit();
-      this.publish();
-      return result;
-    });
   }
 
   forgetScopes(keys: ScopeKey[]) {
@@ -108,8 +70,9 @@ export class SettingsManager implements SettingsPort {
       const next = { ...this.stored, scopes };
       const changed = !isDeepStrictEqual(next, this.stored);
       const host = this.host();
+      if (!host) throw new DomainError('unavailable', 'Live Profile configuration is unavailable');
       await host.configure(
-        host.effective(next),
+        next,
         () => {
           if (changed) this.save(next);
         },
@@ -128,14 +91,20 @@ export class SettingsManager implements SettingsPort {
     return this.transact(() => {
       check();
       const values = configurationPatch(patch);
-      if (!key) return { pluginConfig: { [id]: { ...this.stored.pluginConfig[id], ...values } } };
+      if (!key) return { entries: { [id]: { config: { ...this.stored.entries[id]?.config, ...values } } } };
       const scope = this.stored.scopes[key];
       return {
         scopes: {
           ...this.stored.scopes,
           [key]: {
             ...scope,
-            pluginConfig: { ...scope?.pluginConfig, [id]: { ...scope?.pluginConfig?.[id], ...values } },
+            entries: {
+              ...scope?.entries,
+              [id]: {
+                ...scope?.entries?.[id],
+                config: { ...scope?.entries?.[id]?.config, ...values },
+              },
+            },
           },
         },
       };
@@ -152,7 +121,8 @@ export class SettingsManager implements SettingsPort {
       const next = mergeSettings(this.stored, patch());
       if (skipUnchanged && isDeepStrictEqual(next, this.stored)) return this.settings;
       const host = this.host();
-      await host.configure(host.effective(next), () => this.save(next));
+      if (!host) throw new DomainError('unavailable', 'Live Profile configuration is unavailable');
+      await host.configure(next, () => this.save(next));
       this.publish();
       return this.settings;
     });

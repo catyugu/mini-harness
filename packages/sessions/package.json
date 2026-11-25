@@ -30,9 +30,9 @@
       "./display-record"
     ],
     "profileModules": {
-      "@mini-harness/sessions": "./src/manifest.ts#manifest",
-      "@mini-harness/tool-policy": "./src/permission-policy.ts#manifest",
-      "@mini-harness/ui-permission-settings": "./src/permission-policy.ts#permissionSettingsManifest"
+      "@mini-harness/sessions": "./src/manifest.ts",
+      "@mini-harness/tool-policy": "./src/permission-policy.ts",
+      "@mini-harness/ui-permission-settings": "./src/permission-policy.ts#permissionSettings"
     }
   },
   "dependencies": {

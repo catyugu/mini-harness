@@ -17,7 +17,7 @@
   },
   "miniHarness": {
     "profileModules": {
-      "@mini-harness/files": "./src/manifest.ts#manifest"
+      "@mini-harness/files": "./src/manifest.ts"
     }
   }
 }

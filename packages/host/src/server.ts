@@ -80,12 +80,7 @@ export function authorize(request: IncomingMessage, token: string) {
 
 function openAsset(path: string) {
   const before = lstatSync(path, { throwIfNoEntry: false });
-  if (
-    !before?.isFile() ||
-    before.nlink !== 1 ||
-    before.size > 1024 * 1024 ||
-    relative(path, realpathSync(path))
-  )
+  if (!before?.isFile() || before.nlink !== 1 || relative(path, realpathSync(path)))
     throw new HttpError('not_found', 'Not found');
   const fd = openSync(path, constants.O_RDONLY | (process.platform === 'win32' ? 0 : constants.O_NOFOLLOW));
   try {
@@ -187,7 +182,8 @@ export function webServer(ctx: Context, token: string, shutdown: () => void) {
         if (nonce) {
           const page = readFileSync(path, 'utf8')
             .replace('EDITOR_STYLE_NONCE', nonce)
-            .replace('<!-- MINI_HARNESS_IMPORT_MAP -->',
+            .replace(
+              '<!-- MINI_HARNESS_IMPORT_MAP -->',
               '<script type="importmap" nonce="' + nonce + '">' + JSON.stringify(importMap) + '</script>',
             );
           res.writeHead(200, {

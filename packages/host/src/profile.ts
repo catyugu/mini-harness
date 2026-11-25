@@ -1,25 +1,23 @@
-import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync } from 'node:fs';
-import { registerHooks } from 'node:module';
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import { parseDocument, stringify } from 'yaml';
-import { Context, EntryTree, type EntryOptions, type Plugin } from 'mini-harness/cordis';
+import { Context, EntryTree, type Plugin } from 'mini-harness/cordis';
 import { readJson, writeJson, writeText } from '@mini-harness/platform/json';
 import type { Paths } from '@mini-harness/platform/runtime-paths';
-import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
-import { bindInstance } from '@mini-harness/plugin-api/instance';
-import { bindPluginImports } from '@mini-harness/plugins/module-resolution';
-import { isScopeKey, localPluginIdPattern, pluginIdPattern } from '@mini-harness/plugin-api/selection';
-import type { ProfileConfiguration, ProfileRuntime } from '@mini-harness/plugin-api/profile';
+import type { ResolvedPlugin, PluginInfo } from '@mini-harness/plugin-api/descriptor';
+import { PluginCatalog } from '@mini-harness/plugins/catalog';
+import { bindPluginImports, resolveModule } from '@mini-harness/plugins/module-resolution';
+import { localPluginIdPattern, pluginIdPattern } from '@mini-harness/plugin-api/selection';
+import type { ProfileRuntime } from '@mini-harness/plugin-api/profile';
+import type { EntryConfiguration, ProfileConfiguration } from '@mini-harness/plugin-api/configuration';
 import { parseSettings } from '@mini-harness/settings/config';
 
-interface Row {
+interface Row extends EntryConfiguration {
   id: string;
   name?: string;
-  disabled?: boolean;
   client?: boolean;
-  config?: Record<string, unknown>;
 }
 
 interface Layer {
@@ -49,7 +47,7 @@ const ROOT = 'cordis.yml';
 const PATCH = 'cordis.patch.yml';
 const MANIFEST = 'package.json';
 
-function profileDirectory(name: string, paths: Paths) {
+export function profileDirectory(name: string, paths: Paths) {
   if (!/^[a-z0-9][a-z0-9._-]*$/i.test(name) || name.toLowerCase() === 'node_modules')
     throw new Error('Invalid Profile name: ' + name);
   return join(paths.home, 'profiles', name);
@@ -63,9 +61,9 @@ export function initializeProfile(name: string, paths: Paths, bundles: readonly 
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   const root = join(directory, ROOT);
   const patch = join(directory, PATCH);
-  // Before Profiles were packages, the user configuration lived in cordis.yml.
-  // Move it to the user patch before writing the package manifest.
-  if (!existsSync(patch)) writeText(patch, existsSync(root) ? readFileSync(root, 'utf8') : 'plugins: []\n');
+  if (existsSync(root) || existsSync(patch))
+    throw new Error('Profile directory already contains configuration: ' + name);
+  writeText(patch, 'plugins: []\n');
   writeText(root, 'plugins: []\n');
   writeJson(manifest, {
     name: 'mini-harness-profile-' + name.toLowerCase(),
@@ -83,10 +81,7 @@ function bundleLayers(name: string, directory: string): LoadedLayer[] {
   if (!/^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/i.test(name))
     throw new Error('Invalid Profile bundle package name: ' + name);
   const root = join(directory, 'node_modules', name);
-  const manifest = readJson<{ miniHarness?: { bundle?: { patch?: unknown } } }>(
-    join(root, MANIFEST),
-    {},
-  );
+  const manifest = readJson<{ miniHarness?: { bundle?: { patch?: unknown } } }>(join(root, MANIFEST), {});
   const declared = manifest.miniHarness?.bundle?.patch;
   const patches = typeof declared === 'string' ? [declared] : declared;
   if (!Array.isArray(patches) || !patches.length || patches.some((file) => typeof file !== 'string'))
@@ -135,16 +130,14 @@ function load(file: string, optional = false): Layer | undefined {
       if (
         !object(row) ||
         Object.keys(row).some(
-          (key) => !['id', 'name', 'disabled', 'client', 'config'].includes(key),
+          (key) => !['id', 'name', 'disabled', 'client', 'live', 'config'].includes(key),
         ) ||
         typeof row.id !== 'string' ||
         !pluginIdPattern.test(row.id) ||
         ids.has(row.id) ||
         (row.name !== undefined && (typeof row.name !== 'string' || !row.name.trim())) ||
         (row.config !== undefined && !object(row.config)) ||
-        ['disabled', 'client'].some(
-          (key) => row[key] !== undefined && typeof row[key] !== 'boolean',
-        )
+        ['disabled', 'client', 'live'].some((key) => row[key] !== undefined && typeof row[key] !== 'boolean')
       )
         throw new Error('Invalid or duplicate plugin entry: ' + (object(row) ? row.id : row));
       ids.add(row.id);
@@ -188,13 +181,39 @@ function rows(layers: readonly LoadedLayer[]) {
   return result;
 }
 
-function profileLayers(name: string, paths: Paths) {
+function installedPath(file: string, directory: string) {
+  const path = relative(dirname(file), directory).split(sep).join('/');
+  return isAbsolute(path) || path.startsWith('../') ? path : './' + path;
+}
+
+function localDirectory(row: ResolvedRow, paths: Paths) {
+  const name = row.name!;
+  if (!isAbsolute(name) && !name.startsWith('./') && !name.startsWith('../')) return;
+  const directory = resolve(dirname(row.source!), name);
+  const location = relative(paths.plugins, directory);
+  if (localPluginIdPattern.test(location) || statSync(directory, { throwIfNoEntry: false })?.isDirectory())
+    return location;
+}
+
+export function recreateProfile(name: string, template: string, paths: Paths) {
+  if (template !== 'web') throw new Error('Unknown shipped Profile template: ' + template);
   const directory = profileDirectory(name, paths);
-  const manifestPath = join(directory, MANIFEST);
-  if (!existsSync(manifestPath)) {
+  rmSync(directory, { recursive: true, force: true });
+  return initializeProfile(name, paths, WEB_BUNDLES);
+}
+
+export function ensureProfile(name: string, paths: Paths) {
+  const directory = profileDirectory(name, paths);
+  if (!existsSync(join(directory, MANIFEST))) {
     if (name !== 'web') throw new Error('Unknown Profile package: ' + name);
     initializeProfile(name, paths, WEB_BUNDLES);
   }
+  return directory;
+}
+
+function profileLayers(name: string, paths: Paths, patches: readonly string[] = [], defaults = false) {
+  const directory = ensureProfile(name, paths);
+  const manifestPath = join(directory, MANIFEST);
   const manifest = readJson<{ miniHarness?: { profile?: { bundles?: unknown } } }>(manifestPath, {});
   const bundles = manifest.miniHarness?.profile?.bundles;
   if (!Array.isArray(bundles) || bundles.some((bundle) => typeof bundle !== 'string'))
@@ -207,13 +226,77 @@ function profileLayers(name: string, paths: Paths) {
       ...layers(join(directory, ROOT)),
       ...bundles.flatMap((bundle: string) => bundleLayers(bundle, directory)),
     ],
-    userLayers: layers(file),
+    userLayers: defaults ? [] : layers(file),
+    overlays: patches.flatMap((patch) => layers(resolve(patch))),
   };
 }
 
-export function allowsDetachment(name: string, paths: Paths) {
-  const { shipped, userLayers } = profileLayers(name, paths);
-  return Object.assign({}, ...shipped, ...userLayers).detached === true;
+export function allowsDetachment(name: string, paths: Paths, patches: readonly string[] = []) {
+  const { shipped, userLayers, overlays } = profileLayers(name, paths, patches);
+  return Object.assign({}, ...shipped, ...userLayers, ...overlays).detached === true;
+}
+
+/** Print the actual layer composition without importing or mounting a plugin. */
+export function dumpProfile(name: string, paths: Paths, patches: readonly string[], defaults = false) {
+  const { shipped, userLayers, overlays } = profileLayers(name, paths, defaults ? [] : patches, defaults);
+  const selected = defaults ? shipped : [...shipped, ...userLayers, ...overlays];
+  const { detached, scopes } = Object.assign({}, ...selected) as Layer;
+  return stringify({
+    ...(detached === undefined ? {} : { detached }),
+    plugins: [...rows(selected).values()].map(({ source, ...row }) => ({
+      ...row,
+      name:
+        row.name!.startsWith('./') || row.name!.startsWith('../')
+          ? resolve(dirname(source!), row.name!)
+          : row.name,
+    })),
+    ...(scopes === undefined ? {} : { scopes }),
+  });
+}
+
+/** The YAML layer and Entry envelope, independent of executable plugin schemas. */
+export const profileSchema = {
+  $schema: 'https://json-schema.org/draft/2020-12/schema',
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    include: { type: 'array', items: { type: 'string', minLength: 1 } },
+    detached: { type: 'boolean' },
+    plugins: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['id'],
+        additionalProperties: false,
+        properties: {
+          id: { type: 'string', pattern: pluginIdPattern.source },
+          name: { type: 'string', minLength: 1 },
+          disabled: { type: 'boolean' },
+          client: { type: 'boolean' },
+          live: { type: 'boolean' },
+          config: { type: 'object' },
+        },
+      },
+    },
+    scopes: { type: 'object' },
+  },
+};
+
+/** Apply only changes made during this run to the underlying persistent projection. */
+function changedValues(base: unknown, before: unknown, after: unknown): unknown {
+  if (isDeepStrictEqual(before, after)) return base;
+  if (!object(before) || !object(after)) return after;
+  const result = { ...(object(base) ? base : {}) };
+  for (const key of new Set([...Object.keys(before), ...Object.keys(after)])) {
+    if (
+      isDeepStrictEqual(before[key], after[key]) &&
+      Object.hasOwn(before, key) === Object.hasOwn(after, key)
+    )
+      continue;
+    if (!Object.hasOwn(after, key)) delete result[key];
+    else result[key] = changedValues(result[key], before[key], after[key]);
+  }
+  return result;
 }
 
 export function readProfile(name: string, paths?: Paths) {
@@ -225,208 +308,146 @@ export function readProfile(name: string, paths?: Paths) {
   return rows([...shipped, ...userLayers]);
 }
 
-async function moduleFor(name: string) {
-  const target = packagedModules.get(name);
-  if (!target) throw new Error('Unknown packaged Profile plugin: ' + name);
-  const exports = await import(new URL(target.path, installed).href);
-  const value: unknown = exports[target.exportName];
-  if (value == null) throw new Error('Profile module export not found: ' + name);
-  return value;
-}
-
 function isPlugin(value: unknown): value is Plugin {
   return typeof value === 'function' || (object(value) && typeof value.apply === 'function');
 }
 
-/** Ask Node's ESM resolver to use the declaring Profile as the parent URL. */
-function resolveModule(name: string, source: string) {
-  const specifier = isAbsolute(name) ? pathToFileURL(name).href : name;
-  const parentURL = pathToFileURL(source).href;
-  const hook = registerHooks({
-    resolve(request, context, next) {
-      return next(
-        request,
-        request === specifier && context.parentURL === import.meta.url
-          ? { ...context, parentURL }
-          : context,
-      );
-    },
-  });
-  try {
-    return import.meta.resolve(specifier);
-  } finally {
-    hook.deregister();
-  }
+async function moduleFor(
+  name: string,
+): Promise<{ plugin?: Plugin; metadata?: PluginInfo; Config?: Plugin.Base['Config'] }> {
+  const target = packagedModules.get(name);
+  if (!target) throw new Error('Unknown packaged Profile plugin: ' + name);
+  const exports = await import(new URL(target.path, installed).href);
+  const value: unknown = exports[target.exportName];
+  const metadata: PluginInfo | undefined =
+    exports[target.exportName === 'default' ? 'metadata' : target.exportName + 'Metadata'];
+  if (value !== undefined && !isPlugin(value))
+    throw new Error('Profile module must export a Cordis plugin: ' + name);
+  if (!value && !metadata?.browser) throw new Error('Profile module export not found: ' + name);
+  const Config =
+    value?.Config ?? exports[target.exportName === 'default' ? 'Config' : target.exportName + 'Config'];
+  return { plugin: value, metadata, Config };
 }
 
-async function nativeModule(row: ResolvedRow, module: string) {
-  const name = row.name!;
-  const value: unknown = packagedModules.has(name)
-    ? await moduleFor(name)
-    : await import(module).then((exports) => exports.default ?? exports);
-  if (!isPlugin(value)) throw new Error('Profile module must export a Cordis plugin: ' + name);
-  return { row, module, plugin: value };
-}
-
-export async function profileDescriptors(entries: ReadonlyMap<string, Row>) {
+export async function profileDescriptors(entries: ReadonlyMap<string, Row>): Promise<ResolvedPlugin[]> {
   const descriptors = await Promise.all(
     [...entries.values()]
       .filter((row) => row.name && packagedModules.has(row.name))
       .map(async (row) => {
-        const value = await moduleFor(row.name!);
-        if (isPlugin(value)) return;
-        const descriptor = value as PluginDescriptor;
+        const { plugin, metadata, Config } = await moduleFor(row.name!);
         return {
-          ...descriptor,
+          title: row.id,
+          description: '',
+          scope: 'application' as const,
+          ...metadata,
+          plugin,
+          Config,
           id: row.id,
           defaultEnabled: !row.disabled,
-          browser: row.client ? descriptor.browser : undefined,
-          browserStyles: row.client ? descriptor.browserStyles : undefined,
+          browser: row.client ? metadata?.browser : undefined,
+          browserStyles: row.client ? metadata?.browserStyles : undefined,
         };
       }),
   );
-  return descriptors.filter((descriptor) => descriptor !== undefined);
+  return descriptors;
 }
 
-export async function loadProfile(name: string, paths: Paths, context: Context): Promise<ProfileRuntime> {
-  const { directory, file, shipped, userLayers } = profileLayers(name, paths);
+export async function loadProfile(
+  name: string,
+  paths: Paths,
+  context: Context,
+  patches: readonly string[] = [],
+): Promise<ProfileRuntime> {
+  const { directory, file, shipped, userLayers, overlays } = profileLayers(name, paths, patches);
   const user: Layer = userLayers.at(-1) ?? {};
   const baseLayers = [...shipped, ...userLayers.slice(0, -1)];
   const official = rows(baseLayers);
-  const resolved = rows([...shipped, ...userLayers]);
-  const merged: Layer = Object.assign({}, ...shipped, ...userLayers);
+  const persistentRows = rows([...shipped, ...userLayers]);
+  const resolved = rows([...shipped, ...userLayers, ...overlays]);
+  const aliases = new Map<string, string>();
   for (const row of resolved.values()) {
-    if (
-      row.name?.startsWith('installed:') &&
-      (!localPluginIdPattern.test(row.name.slice(10)) || !localPluginIdPattern.test(row.id))
-    )
-      throw new Error(file + ': installed entries use the installed module ID: ' + row.id);
+    const location = localDirectory(row, paths);
+    if (location !== undefined) aliases.set(row.id, location);
   }
   const descriptors = await profileDescriptors(resolved);
   const managedIds = new Set(descriptors.map(({ id }) => id));
-  const nativeRows = [...resolved.values()].filter(
-    (row) => !managedIds.has(row.id) && !row.name?.startsWith('installed:'),
+  const overlayFiles = new Set(overlays.map(({ file }) => file));
+  const modules = new Map(
+    [...resolved.values()]
+      .filter((row) => !managedIds.has(row.id) && !aliases.has(row.id))
+      .map((row) => {
+        const name = row.name!;
+        // Command-line overlays can live outside the Profile's npm environment.
+        // Relative paths still belong to the file that declares them.
+        const bare = !isAbsolute(name) && !name.startsWith('./') && !name.startsWith('../');
+        const source = bare && overlayFiles.has(row.source!) ? join(directory, MANIFEST) : row.source!;
+        return [row.id, { name, source }];
+      }),
   );
-  const nativeIds = new Set(nativeRows.map(({ id }) => id));
-  const { legacy: previousSettings, product, scopedTools, migration: pendingMigration, raw } =
-    legacySettings(paths);
-  const legacy = name === 'web' ? previousSettings : parseSettings({});
-  const migration = name === 'web' && pendingMigration;
-  const overrides = {
-    plugins: Object.fromEntries(
-      [...resolved.values()].filter((row) => !nativeIds.has(row.id)).map((row) => [row.id, !row.disabled]),
-    ),
-    pluginConfig: Object.fromEntries(
-      [...resolved.values()]
-        .filter((row) => !nativeIds.has(row.id) && Object.keys(row.config ?? {}).length)
-        .map((row) => [row.id, { ...row.config, ...legacy.pluginConfig[row.id] }]),
-    ),
-    scopes: legacy.scopes,
-  };
-  Object.assign(overrides.plugins, legacy.plugins);
-  for (const [id, config] of Object.entries(legacy.pluginConfig))
-    if (!nativeIds.has(id)) overrides.pluginConfig[id] ??= config;
-  for (const layer of userLayers)
-    for (const row of layer.plugins ?? []) {
-      if (nativeIds.has(row.id)) continue;
-      if (row.disabled !== undefined) overrides.plugins[row.id] = !row.disabled;
-      if (row.config) overrides.pluginConfig[row.id] = { ...overrides.pluginConfig[row.id], ...row.config };
-    }
-  for (const id of nativeIds) {
-    delete overrides.plugins[id];
-    delete overrides.pluginConfig[id];
+  const policy = readJson<{ readOnlyTools?: unknown; scopedTools?: unknown }>(paths.settings, {});
+  const scopedTools = object(policy.scopedTools) ? policy.scopedTools : {};
+  function configurationFor(selected: ReadonlyMap<string, ResolvedRow>, selectedLayers: readonly Layer[]) {
+    return parseSettings({
+      entries: Object.fromEntries(
+        [...selected.values()].map((row) => [
+          row.id,
+          {
+            disabled: Boolean(row.disabled),
+            ...(row.live === undefined ? {} : { live: row.live }),
+            ...(row.config === undefined ? {} : { config: row.config }),
+          },
+        ]),
+      ),
+      readOnlyTools: policy.readOnlyTools,
+      scopes: withToolRules(Object.assign({}, ...shipped, ...selectedLayers).scopes ?? {}, scopedTools),
+    });
   }
-  const configuredPort = resolved.get('core:web-server')?.config?.port;
-  const effective = parseSettings({
-    ...product,
-    ...overrides,
-    port: configuredPort ?? legacy.port,
-    scopes: withToolRules(merged.scopes ?? overrides.scopes, scopedTools),
-  });
-  if (
-    migration &&
-    configuredPort !== undefined &&
-    !user.plugins?.some((row) => row.id === 'core:web-server' && row.config?.port !== undefined)
-  ) {
-    effective.port = legacy.port;
-    if (resolved.has('core:web-server')) {
-      effective.pluginConfig['core:web-server'] = {
-        ...effective.pluginConfig['core:web-server'],
-        port: legacy.port,
-      };
-    }
-  }
-  // Disabled external modules are never resolved or imported.
-  const sources = nativeRows
-    .filter((row) => !row.disabled)
-    .map((row) => ({
-      row,
-      module: packagedModules.has(row.name!) ? row.name! : resolveModule(row.name!, row.source!),
-    }));
+  let persistent = configurationFor(persistentRows, userLayers);
+  const effective = overlays.length ? configurationFor(resolved, [...userLayers, ...overlays]) : persistent;
   const roots = [
     directory,
-    ...sources.flatMap(({ row, module }) =>
-      packagedModules.has(row.name!) ? [] : [dirname(fileURLToPath(module))],
-    ),
+    ...[...aliases.values()].flatMap((location) => {
+      const directory = resolve(paths.plugins, location);
+      return existsSync(directory) ? [directory, realpathSync(directory)] : [directory];
+    }),
+    ...[...modules.values()].flatMap(({ name, source }) => {
+      try {
+        return [dirname(fileURLToPath(resolveModule(name, source)))];
+      } catch {
+        return [dirname(source)];
+      }
+    }),
   ];
   const imports = bindPluginImports(roots);
-  let modules: Awaited<ReturnType<typeof nativeModule>>[];
-  try {
-    modules = await Promise.all(sources.map(({ row, module }) => nativeModule(row, module)));
-  } catch (error) {
-    imports.deregister();
-    throw error;
-  }
-  const infrastructure = modules.flatMap(({ plugin }) =>
-    typeof plugin.provide === 'string' ? [plugin.provide] : (plugin.provide ?? []),
-  );
-  const nativeEntries: EntryOptions[] = modules.map(({ row, module, plugin }) => ({
-    id: row.id,
-    module,
-    context,
-    config: row.config ?? {},
-    load: () => plugin,
-    prepare: packagedModules.has(row.name!)
-      ? undefined
-      : (ctx) => {
-          bindInstance(ctx.fiber.entry!, {
-            pluginId: row.id,
-            scope: { kind: 'application' },
-            trusted: false,
-            writableConfig: false,
-          });
-        },
-  }));
   const entries = new EntryTree();
-  const aliases = new Map(
-    [...resolved.values()].flatMap((row) =>
-      row.name?.startsWith('installed:') ? [[row.id, row.name.slice(10)]] : [],
-    ),
-  );
   let current = effective;
-  let migrate = migration;
-  function commit(settings: ProfileConfiguration) {
-    // Native Entries belong to the selected YAML and are not editable through the
-    // managed Settings projection. Preserve their root declarations verbatim.
-    const plugins: Row[] = (user.plugins ?? []).filter(({ id }) => nativeIds.has(id));
-    for (const id of nativeIds)
-      if (Object.hasOwn(settings.plugins, id) || Object.hasOwn(settings.pluginConfig, id))
-        throw new Error('Edit the native Profile entry and restart to configure: ' + id);
+  function commit(runtime: ProfileConfiguration) {
+    const settings = overlays.length
+      ? parseSettings(changedValues(persistent, current, runtime))
+      : structuredClone(runtime);
+    for (const id of resolved.keys()) {
+      if (persistentRows.has(id)) continue;
+      delete settings.entries[id];
+    }
+    const plugins: Row[] = [];
     for (const id of new Set([
-      ...Object.keys(settings.plugins),
-      ...Object.keys(settings.pluginConfig),
-      ...(user.plugins ?? [])
-        .filter((row) => !nativeIds.has(row.id) && !row.name?.startsWith('installed:'))
-        .map((row) => row.id),
+      ...Object.keys(settings.entries),
+      ...(user.plugins ?? []).filter((row) => !aliases.has(row.id)).map((row) => row.id),
     ])) {
       const base = official.get(id);
-      if (nativeIds.has(id)) continue;
-      const existing = resolved.get(id);
-      const config = settings.pluginConfig[id];
+      const existing = persistentRows.get(id);
+      const config = settings.entries[id]?.config;
       const row: Row = { id };
-      if (!base || existing?.name !== base.name) row.name = existing?.name ?? 'installed:' + id;
-      const disabled = settings.plugins[id] === undefined ? undefined : !settings.plugins[id];
+      if (!base || existing?.name !== base.name)
+        row.name = existing?.name
+          ? existing.name.startsWith('./') || existing.name.startsWith('../')
+            ? installedPath(file, resolve(dirname(existing.source!), existing.name))
+            : existing.name
+          : installedPath(file, join(paths.plugins, id));
+      const disabled = settings.entries[id]?.disabled;
       if (disabled !== undefined && (!base || disabled !== Boolean(base.disabled))) row.disabled = disabled;
+      const live = settings.entries[id]?.live;
+      if (live !== undefined && live !== base?.live) row.live = live;
       const changed = Object.fromEntries(
         Object.entries(config ?? {}).filter(([key, value]) => !isDeepStrictEqual(value, base?.config?.[key])),
       );
@@ -453,20 +474,17 @@ export async function loadProfile(name: string, paths: Paths, context: Context):
       scopes,
     };
     const text = stringify(next);
-    // The YAML commit happens before removing legacy settings, so a crash is recoverable
-    // from the YAML layer. Ordinary product settings are saved only when they change.
+    // Domain tool policy is stored separately from the Profile configuration.
     const previous = readProfileText(file);
     if (previous !== text) writeText(file, text);
     const domain = {
-      ...(pendingMigration && name !== 'web' ? raw : {}),
       readOnlyTools: settings.readOnlyTools,
       scopedTools: rules,
     };
     try {
       if (
-        migrate ||
-        !isDeepStrictEqual(current.readOnlyTools, settings.readOnlyTools) ||
-        !isDeepStrictEqual(scopedRules(current.scopes), rules)
+        !isDeepStrictEqual(persistent.readOnlyTools, settings.readOnlyTools) ||
+        !isDeepStrictEqual(scopedRules(persistent.scopes), rules)
       )
         writeJson(paths.settings, domain);
     } catch (error) {
@@ -474,27 +492,43 @@ export async function loadProfile(name: string, paths: Paths, context: Context):
       else if (previous !== text) writeText(file, previous);
       throw error;
     }
-    migrate = false;
-    for (const id of aliases.keys())
-      if (!Object.hasOwn(settings.plugins, id) && !Object.hasOwn(settings.pluginConfig, id))
-        aliases.delete(id);
-    current = settings;
+    for (const id of aliases.keys()) if (!Object.hasOwn(runtime.entries, id)) aliases.delete(id);
+    persistent = settings;
+    current = runtime;
   }
-  return {
+  const profile: ProfileRuntime = {
     directory,
     descriptors,
-    nativeEntries,
+    modules,
     entries,
-    infrastructure,
+    async start() {
+      const catalog = new PluginCatalog(paths.plugins, descriptors, profile);
+      const settings = current;
+      const errors = new Map<string, unknown>();
+      const { plans } = catalog.plans(
+        settings,
+        await catalog.runtimeDescriptors(settings),
+        'application',
+        undefined,
+        (id, error) => {
+          errors.set(id, error);
+          return true;
+        },
+      );
+      for (const [id, error] of await entries.update(
+        plans
+          .filter(({ descriptor }) => descriptor.plugin)
+          .map((plan) => catalog.entry(plan, context, { kind: 'application' })),
+      ))
+        errors.set(id, error);
+      return errors;
+    },
     installed: aliases,
     client(id) {
       return resolved.get(id)?.client ?? descriptors.some((row) => row.browser);
     },
     read: () => current,
     commit,
-    finishMigration() {
-      if (migrate) commit(current);
-    },
     async close() {
       try {
         await entries.close();
@@ -503,6 +537,7 @@ export async function loadProfile(name: string, paths: Paths, context: Context):
       }
     },
   };
+  return profile;
 }
 
 function readProfileText(file: string) {
@@ -534,18 +569,4 @@ function withToolRules(scopes: ProfileConfiguration['scopes'], rules: Record<str
       ]),
     ),
   };
-}
-
-function legacySettings(paths: Paths) {
-  const raw = readJson<Record<string, unknown>>(paths.settings, {});
-  const migration = ['plugins', 'pluginConfig', 'providers', 'scopes', 'port'].some(
-    (key) => Object.hasOwn(raw, key),
-  );
-  if (object(raw.providers) && Object.keys(raw.providers).length)
-    throw new Error('Plugin provider selections are no longer supported. Enable the desired entries and disable conflicting entries in the Profile.');
-  const legacy = parseSettings(raw);
-  const scopedTools = object(raw.scopedTools) ? raw.scopedTools : scopedRules(legacy.scopes);
-  if (Object.keys(scopedTools).some((key) => !isScopeKey(key)))
-    throw new Error('Invalid scoped tool settings');
-  return { raw, migration, legacy, scopedTools, product: { readOnlyTools: legacy.readOnlyTools } };
 }
