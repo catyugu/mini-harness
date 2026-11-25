@@ -16,6 +16,7 @@ test('prompt contributions coexist, override within a session tree and are remov
     `
 export const inject = ["harnessPrompt"];
 export const apply = (ctx) => {
+    ctx.effect(() => ctx.harnessPrompt.register({ id: 'base', render: () => '[Custom persona]' }));
     ctx.effect(() => ctx.harnessPrompt.register({ id: 'workspace-status', order: 600, render: () => '[App status]' }));
     ctx.effect(() => ctx.harnessPrompt.register({ id: 'plan', order: 500, render: async ({ tools }) => tools.some(({ name }) => name === 'load_skill') ? '[Plan]' : undefined }));
   };
@@ -59,7 +60,10 @@ export const apply = (ctx) => {
     scopes: { ['session:' + parent.id]: { entries: { 'child-prompt': { disabled: false } } } },
   });
   assert.equal(configured.status, 200, JSON.stringify(configured.body));
-  assert.match(await prompt(child.id), /\[Plan\]\s+\[Extra\]\s+\[Child status\]/);
+  const childPrompt = await prompt(child.id);
+  assert.match(childPrompt, /\[Plan\]\s+\[Extra\]\s+\[Child status\]/);
+  assert.match(childPrompt, /\[Custom persona\]/);
+  assert.doesNotMatch(childPrompt, /You are mini-harness/);
   assert.match(await prompt(sibling.id), /\[Plan\]\s+\[Extra\]\s+\[App status\]/);
   assert.equal(
     (await request('/settings', 'PATCH', { entries: { 'more-prompt': { disabled: true } }, scopes: {} }))

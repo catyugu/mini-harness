@@ -9,13 +9,11 @@ export interface PromptContext {
 export interface PromptSection {
   id: string;
   order?: number;
+  /** Higher priority replaces a section with the same ID at the same scope. Equal priorities conflict. */
+  priority?: number;
   render(context: PromptContext): string | undefined | Promise<string | undefined>;
 }
 
-export interface ScopedPromptSection extends PromptSection {
-  depth: number;
-  pluginId: string;
-}
 
 export interface PromptPort {
   build(request: PromptContext): Promise<string>;
