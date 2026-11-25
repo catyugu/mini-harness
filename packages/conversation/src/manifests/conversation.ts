@@ -13,6 +13,9 @@ const Config = defineConfig(
   ),
 );
 
+// Queue mode is an explicitly public UI preference, not an implicit server-config export.
+export const browserConfig = (config: Readonly<Record<string, unknown>>) => ({ queueMode: config.queueMode });
+
 export const metadata: PluginInfo = {
   scope: 'application',
   title: 'Conversation',

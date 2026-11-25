@@ -17,7 +17,7 @@ test('frontend plugins own UI contributions and clean up on disable and reconfig
   mkdirSync(folder);
   writeFileSync(
     join(folder, 'plugin.js'),
-    "import { defineConfig } from 'mini-harness/configuration';\nimport { readFileSync } from 'node:fs';\nexport const Config = defineConfig(JSON.parse(readFileSync(new URL('./plugin.json', import.meta.url), 'utf8')).configSchema);\nexport function apply() {}",
+    "import { defineConfig } from 'mini-harness/configuration';\nimport { readFileSync } from 'node:fs';\nexport const Config = defineConfig(JSON.parse(readFileSync(new URL('./plugin.json', import.meta.url), 'utf8')).configSchema);",
   );
   writeFileSync(
     join(folder, 'plugin.json'),
@@ -189,12 +189,11 @@ test('a failed browser plugin reports the saved state and can be retried', async
   mkdirSync(folder);
   writeFileSync(
     join(folder, 'plugin.js'),
-    "import { defineConfig } from 'mini-harness/configuration';\nimport { readFileSync } from 'node:fs';\nexport const Config = defineConfig(JSON.parse(readFileSync(new URL('./plugin.json', import.meta.url), 'utf8')).configSchema);\nexport function apply() {}",
+    "import { defineConfig } from 'mini-harness/configuration';\nimport { readFileSync } from 'node:fs';\nexport const Config = defineConfig(JSON.parse(readFileSync(new URL('./plugin.json', import.meta.url), 'utf8')).configSchema);",
   );
   writeJson(join(folder, 'plugin.json'), {
     title: 'Retry UI',
     browserDirectory: 'web',
-    browserPreload: 'web/preload.js',
     configSchema: {
       type: 'object',
       properties: { ready: { type: 'boolean', title: 'Ready', default: false } },
@@ -202,20 +201,15 @@ test('a failed browser plugin reports the saved state and can be retried', async
   });
   mkdirSync(join(folder, 'web'));
   writeFileSync(
-    join(folder, 'web/preload.js'),
-    `
-export default (signal) => {
-    document.body.dataset.retryPreload = 'mounted';
-    return () => { document.body.dataset.retryPreload = signal.aborted ? 'released' : 'active'; };
-  };
-`,
-  );
-  writeFileSync(
     join(folder, 'web.js'),
     `
 export const inject = ["miniSlots"];
 
 export const apply = (ctx, config) => {
+    ctx.effect(() => {
+      document.body.dataset.retryEffect = 'mounted';
+      return () => { document.body.dataset.retryEffect = 'released'; };
+    });
     const node = document.createElement('button');
     node.textContent = 'Recovered UI';
     ctx.effect(() => ctx.miniSlots.register('conversation.composer', node));
@@ -233,14 +227,14 @@ export const apply = (ctx, config) => {
     await expect(control).toBeChecked();
     await expect(page.getByRole('button', { name: 'Recovered UI', includeHidden: true })).toHaveCount(0);
     await expect(page.getByText(/Browser setup failed.*Not ready/)).toBeVisible();
-    await expect(page.locator('body')).toHaveAttribute('data-retry-preload', 'released');
+    await expect(page.locator('body')).toHaveAttribute('data-retry-effect', 'released');
     await page.getByRole('button', { name: 'Retry UI settings' }).click();
     await page.getByLabel('Ready · retry-ui').check();
     await page.getByRole('button', { name: 'Save configuration' }).click();
     await expect(page.getByText('Saved.', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'New conversation' }).click();
     await expect(page.getByRole('button', { name: 'Recovered UI' })).toHaveCount(1);
-    await expect(page.locator('body')).toHaveAttribute('data-retry-preload', 'mounted');
+    await expect(page.locator('body')).toHaveAttribute('data-retry-effect', 'mounted');
   } finally {
     await page.close();
     await service.stop();

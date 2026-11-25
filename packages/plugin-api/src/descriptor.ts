@@ -26,4 +26,6 @@ export interface ResolvedPlugin extends PluginInfo {
   defaultEnabled?: boolean;
   plugin?: Plugin;
   Config?: Plugin.Base['Config'];
+  /** Explicit public projection for a module with both server and browser implementations. */
+  browserConfig?: (config: Readonly<Record<string, unknown>>) => Record<string, unknown>;
 }

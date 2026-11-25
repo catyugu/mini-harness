@@ -26,7 +26,7 @@ export function describePlugin(id: string, folder: string, entry?: string): Disc
     version?: string;
     main?: string;
     exports?: unknown;
-    miniHarness?: { plugin?: Partial<PluginInfo> & { browserDirectory?: unknown; browserPreload?: unknown } };
+    miniHarness?: { plugin?: Partial<PluginInfo> & { browserDirectory?: unknown } };
   }>(packageFile, {});
   let source = entry;
   if (!source && packageInfo.name && (packageInfo.exports !== undefined || packageInfo.main !== undefined)) {
@@ -49,7 +49,7 @@ export function describePlugin(id: string, folder: string, entry?: string): Disc
   }
   const descriptor = join(folder, 'plugin.json');
   const manifest = isRegularFile(descriptor)
-    ? readJson<(Partial<PluginInfo> & { browserDirectory?: unknown; browserPreload?: unknown }) | null>(
+    ? readJson<(Partial<PluginInfo> & { browserDirectory?: unknown }) | null>(
         descriptor,
         null,
       )
@@ -69,11 +69,11 @@ export function describePlugin(id: string, folder: string, entry?: string): Disc
   if (scope !== 'application' && scope !== 'workspace' && scope !== 'session')
     throw new Error('Invalid plugin scope');
   if (scope !== 'application' && hasWeb) throw new Error('Browser entries belong to the application scope');
-  if (!hasWeb && (manifest.browserDirectory !== undefined || manifest.browserPreload !== undefined))
+  if (!hasWeb && manifest.browserDirectory !== undefined)
     throw new Error('Browser assets require a browser entry');
   const resources =
     browser !== undefined
-      ? readBrowserAssets(id, folder, browser, manifest.browserDirectory, manifest.browserPreload)
+      ? readBrowserAssets(id, folder, browser, manifest.browserDirectory)
       : undefined;
   const configSchema = manifest.configSchema;
   if (

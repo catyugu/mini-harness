@@ -323,7 +323,7 @@ function isPlugin(value: unknown): value is Plugin {
 
 async function moduleFor(
   name: string,
-): Promise<{ plugin?: Plugin; metadata?: PluginInfo; Config?: Plugin.Base['Config'] }> {
+): Promise<{ plugin?: Plugin; metadata?: PluginInfo; Config?: Plugin.Base['Config']; browserConfig?: ResolvedPlugin['browserConfig'] }> {
   const target = packagedModules.get(name);
   if (!target) throw new Error('Unknown packaged Profile plugin: ' + name);
   const exports = await import(new URL(target.path, installed).href);
@@ -335,7 +335,8 @@ async function moduleFor(
   if (!value && !metadata?.browser) throw new Error('Profile module export not found: ' + name);
   const Config =
     value?.Config ?? exports[target.exportName === 'default' ? 'Config' : target.exportName + 'Config'];
-  return { plugin: value, metadata, Config };
+  const browserConfig = exports[target.exportName === 'default' ? 'browserConfig' : target.exportName + 'BrowserConfig'];
+  return { plugin: value, metadata, Config, browserConfig };
 }
 
 export async function profileDescriptors(entries: ReadonlyMap<string, Row>): Promise<ResolvedPlugin[]> {
@@ -343,7 +344,7 @@ export async function profileDescriptors(entries: ReadonlyMap<string, Row>): Pro
     [...entries.values()]
       .filter((row) => row.name && packagedModules.has(row.name))
       .map(async (row) => {
-        const { plugin, metadata, Config } = await moduleFor(row.name!);
+        const { plugin, metadata, Config, browserConfig } = await moduleFor(row.name!);
         return {
           title: row.id,
           description: '',
@@ -351,6 +352,7 @@ export async function profileDescriptors(entries: ReadonlyMap<string, Row>): Pro
           ...metadata,
           plugin,
           Config,
+          browserConfig,
           id: row.id,
           defaultEnabled: !row.disabled,
           browser: row.client ? metadata?.browser : undefined,

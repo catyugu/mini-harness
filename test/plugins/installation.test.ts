@@ -141,7 +141,6 @@ test(
       'plugin.json': JSON.stringify({
         browser: 'web/main.js',
         browserDirectory: 'web',
-        browserPreload: 'web/preload.js',
       }),
       'server/entry.mjs': `
 export const inject = ["harnessPluginRoutes"];
@@ -150,7 +149,6 @@ export const apply = (ctx) => { ctx.harnessPluginRoutes.register('GET', '/label'
 `,
       'web/main.js': "export const inject = ['miniPages']; export function apply() {}",
       'web/panel.css': '.panel { color: inherit; }',
-      'web/preload.js': 'export default (signal) => { signal.throwIfAborted(); };',
       'private.js': 'export const privateValue = "not published";',
       'web/chunks/feature.mjs': 'export const feature = true;',
     };
@@ -170,7 +168,7 @@ export const apply = (ctx) => { ctx.harnessPluginRoutes.register('GET', '/label'
     assert.equal(lock.packages['node_modules/' + name].version, '1.1.0');
     assert.ok(!existsSync(join(directory, 'node_modules', name, 'installed-by-npm')));
     writeJson(join(directory, 'cordis.patch.yml'), {
-      plugins: [{ id, name, client: true, disabled: true, config: { greeting: 'preserved' } }],
+      plugins: [{ id, name, client: true, disabled: true, config: { greeting: 'preserved', secret: 'server-only-value' } }],
     });
 
     app = await createMiniHarnessServer(paths);
@@ -192,12 +190,13 @@ export const apply = (ctx) => { ctx.harnessPluginRoutes.register('GET', '/label'
     assert.equal(await (await request('/extensions/' + id + '/label')).json(), 'From dependency');
     const bootstrap = await (await request('/bootstrap')).json();
     const entry = bootstrap.ui.find((entry: { id: string }) => entry.id === id);
+    assert.deepEqual(entry.config, {});
+    assert.doesNotMatch(JSON.stringify(bootstrap), /server-only-value/);
     const asset = (path: string) => fetch('http://127.0.0.1:' + port + path);
     assert.equal(await (await asset(entry.browser)).text(), files['web/main.js']);
     const css = await asset(entry.styles[0]);
     assert.match(css.headers.get('Content-Type') ?? '', /^text\/css/);
     assert.equal(await css.text(), files['web/panel.css']);
-    assert.equal(await (await asset(entry.preload)).text(), files['web/preload.js']);
     assert.equal((await asset(entry.browser.replace(/web\/main\.js$/, 'private.js'))).status, 404);
     assert.equal(
       await (await asset(entry.browser.replace(/main\.js$/, 'chunks/feature.mjs'))).text(),

@@ -27,31 +27,18 @@ function stylesheet(href: string, ctx: Context) {
 }
 
 function entry(item: BrowserEntry, context: Context): EntryOptions {
-  const { id, browser, preload, styles = [], config, live } = item;
+  const { id, browser, styles = [], config, live } = item;
   return {
     id,
     context,
     config,
     live,
-    module: JSON.stringify([browser, styles, preload, live]),
+    module: JSON.stringify([browser, styles, live]),
     async load() {
       const exports = await import(browser);
       return (exports.default ?? exports) as Plugin;
     },
     async prepare(ctx) {
-      if (preload)
-        await ctx.effect(async () => {
-          try {
-            const { default: start } = await import(preload);
-            if (typeof start !== 'function') throw new Error('Expected a default pre-start function: ' + id);
-            const cleanup: unknown = await start(ctx.fiber.signal);
-            if (cleanup === undefined) return;
-            if (typeof cleanup !== 'function') throw new Error('Invalid pre-start cleanup: ' + id);
-            return cleanup as () => void;
-          } catch (error) {
-            throw new Error('Browser preload failed: ' + String(error), { cause: error });
-          }
-        });
       await Promise.all(styles.map((href) => stylesheet(href, ctx)));
     },
   };

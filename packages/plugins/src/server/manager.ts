@@ -501,11 +501,10 @@ export class PluginHost implements ScopePort {
           throw error;
       }
       {
-        const clientOnly = new Set(plans.filter(({ descriptor }) => !descriptor.plugin).map(({ id }) => id));
         const browserState = publishBrowser(
           planBrowser(plans, (id) => this.entries.get(id)?.fiber?.effectiveConfig),
           plans,
-          (id) => !failures.has(id) && (clientOnly.has(id) || this.entries.get(id)?.active === true),
+          (id) => !failures.has(id),
         );
         commit();
         this.started = true;

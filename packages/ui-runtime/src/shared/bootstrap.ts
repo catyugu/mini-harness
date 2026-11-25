@@ -3,7 +3,6 @@ export interface BrowserEntry {
   id: string;
   browser: string;
   styles?: string[];
-  preload?: string;
   config: Record<string, unknown>;
   live?: boolean;
 }

@@ -138,9 +138,9 @@ export class PluginCatalog {
           const plugin: Plugin | undefined =
             typeof value === 'function' || typeof value?.apply === 'function' ? value : undefined;
           const Config = plugin ? plugin.Config : exports.Config;
-          if (!plugin && !(descriptor.resources && Config))
+          if (!plugin && !descriptor.resources)
             throw new Error('Plugin ' + id + ' must export a Cordis plugin with apply(ctx, config)');
-          return this.withSchema({ ...descriptor, plugin, module, Config });
+          return this.withSchema({ ...descriptor, plugin, module, Config, browserConfig: exports.browserConfig });
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           return { ...descriptor, error: message };
@@ -172,6 +172,7 @@ export class PluginCatalog {
           plugin: _plugin,
           browserStyles,
           Config: _Config,
+          browserConfig: _browserConfig,
           module: _module,
           ...metadata
         } = descriptor;
