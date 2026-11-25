@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs, { readFileSync, rmSync } from 'node:fs';
 import { syncBuiltinESMExports } from 'node:module';
-import { createMiniHarnessServer } from '@mini-harness/host/server';
+import { createMiniHarnessServer } from '../../../test/support/profile.js';
 import { SessionRegistry } from '@mini-harness/sessions/registry';
 import { WorkspaceCatalog } from '@mini-harness/workspaces/catalog';
 import type { RunEvent } from '../src/stream.js';

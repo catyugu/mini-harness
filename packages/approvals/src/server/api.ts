@@ -1,3 +1,4 @@
+import type { Approval } from "../shared/request.js";
 import type {} from 'mini-harness/cordis';
 
 export interface ApprovalPrompt {
@@ -20,6 +21,8 @@ declare module 'mini-harness/cordis' {
 export interface ApprovalPort {
   readonly events: EventTarget;
   has(id: string): boolean;
+  list(): Approval[];
+  decide(id: string, allowed: boolean): void;
   approveSession(id: string): void;
 }
 

@@ -3,26 +3,25 @@ import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
 import { assertOutsideMountTransaction, assertOutsidePluginRequest } from '@mini-harness/plugin-api/mutation-api';
 import { DomainError } from '@mini-harness/platform/errors';
 import { isDeepStrictEqual } from 'node:util';
-import { mergeSettings, readSettings } from './config.js';
-import { writeJson } from '@mini-harness/platform/json';
-import type { Paths } from '@mini-harness/platform/runtime-paths';
+import { mergeSettings } from './config.js';
+import type { ProfileRuntime } from '@mini-harness/plugin-api/profile';
 import type { SettingsPort } from './api.js';
 import type { Settings } from '../shared/settings.js';
 
-interface PluginConfigurationPort {
+export interface PluginConfigurationPort {
   effective(settings: Settings): Settings;
   configure(settings: Settings, commit?: () => void, released?: ReadonlySet<ScopeKey>): Promise<void>;
 }
 
 export class SettingsManager implements SettingsPort {
-  private stored: Settings;
   private pending = Promise.resolve();
   private closing = false;
   private readonly listeners = new Set<() => void>();
 
-  constructor(private readonly paths: Paths, private readonly host: () => PluginConfigurationPort) {
-    this.stored = readSettings(paths);
-  }
+  constructor(private readonly profile: Pick<ProfileRuntime, 'read' | 'commit'>,
+    private readonly host: () => PluginConfigurationPort) {}
+
+  private get stored() { return this.profile.read(); }
 
   get settings() { return this.host().effective(this.stored); }
 
@@ -38,8 +37,7 @@ export class SettingsManager implements SettingsPort {
   }
 
   private save(next: Settings) {
-    writeJson(this.paths.settings, next);
-    this.stored = next;
+    this.profile.commit(next);
   }
 
   forgetPlugin<T>(id: string, uninstall: () => T) {

@@ -1,0 +1,18 @@
+{
+  "name": "@mini-harness/git-diff",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./manifest": "./src/manifest.ts"
+  },
+  "dependencies": {
+    "@mini-harness/file-access": "workspace:*",
+    "@mini-harness/platform": "workspace:*",
+    "@mini-harness/plugin-api": "workspace:*",
+    "@mini-harness/transport": "workspace:*",
+    "@mini-harness/ui-layout": "workspace:*",
+    "@mini-harness/ui-primitives": "workspace:*",
+    "@mini-harness/ui-runtime": "workspace:*"
+  }
+}

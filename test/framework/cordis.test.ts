@@ -76,7 +76,7 @@ test('EntryTree distinguishes configuration, dependency changes and failed setup
   const tree = new EntryTree();
   let starts = 0;
   const load: EntryOptions['load'] = () => ({
-    apply(_ctx, config) {
+    apply(_ctx: Context, config: Record<string, unknown>) {
       starts++;
       if (config.fail) throw new Error('rejected config');
     },

@@ -68,5 +68,7 @@ export function describePlugin(id: string, folder: string): DiscoveredPlugin {
     (icon.viewBox === undefined || typeof icon.viewBox === 'string' && icon.viewBox.length <= 100)
   )) throw new Error('Invalid plugin icon: ' + id);
   return { source: hasHost ? source : undefined, resources, scope, id, title, description,
-    requires, provides, inject, optional, browserRequires, browserProvides, configSchema, configGroups, configHint, configChanges: manifest.configChanges, icon, web: hasWeb, trustedCode: true };
+    requires, provides: manifest.provides === undefined ? undefined : provides,
+    inject: manifest.inject === undefined ? undefined : inject, optional, browserRequires,
+    browserProvides, configSchema, configGroups, configHint, configChanges: manifest.configChanges, icon, web: hasWeb, trustedCode: true };
 }

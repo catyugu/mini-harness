@@ -54,7 +54,7 @@ A service provider declares `provide = ['exampleGreeting']` and calls `ctx.provi
 | `harnessPluginSettings` | Read the current effective config, subscribe to committed changes or write this instance's configuration when it declares a live schema. |
 | `harnessPluginChanges` | Invalidate the plugin's browser projection after a domain mutation. |
 
-Use `sessionContext(ctx, sessionId, signal)` to prepare a visible session's context and `scopedService(ctx, sessionId, name)` for a declared service in the prepared scope. Session writes and scope preparation belong in runtime calls after plugin setup. See [scoped providers](scoped-providers.md).
+Use `await sessionService(ctx, sessionId, serviceName, signal)` to prepare a visible conversation and access a declared service with the caller's identity. Session writes and scope preparation belong in runtime calls after plugin setup. See [scoped providers](scoped-providers.md).
 
 ### Events
 
@@ -91,9 +91,14 @@ export function apply(ctx) {
 Declare the services you use:
 
 - `miniSlots` defines outlets and registers elements or keyed renderers. Keyed renderers receive a signal for the view's lifetime.
-- `miniPages`, `miniDialogs`, and `miniTabs` own page, dialog and tab resources.
+- `miniPages`, `miniDialogs`, and `miniTabs` own page, dialog and tab resources. `miniTabs.register(type, definition)` returns a typed handle that accepts an owner, stable key, and payload. `miniTabs.contribute` adds an entry to the workspace panel.
+- `miniFilePreview.open(resource, placement)` renders a workspace file, conversation attachment or temporary resource. Declare `miniFilePreview` for a required dependency or use optional access for integrations that also work with previews disabled.
 - `miniComposer` handles drafts, commands and completions. `miniMessages` owns actions and renderers for history.
 - `miniSettingsRegistry` registers settings sections and plugin-specific controls. Use `browserPluginSettings(ctx)` to bind configuration.
 - `miniProjections` subscribes to state revisions. Use `browserRequest(ctx, path, options)` for authenticated requests bound to the activation.
 
 The [Task notes example](examples/task-notes/) uses both entry points. The [browser panel](examples/browser-panel/) shows a keyed composer renderer. The [scoped examples](scoped-providers.md) show local service replacement.
+
+### Profile entries
+
+Installing a plugin makes it available in the catalog. To enable it, use the Web Plugins page or add an `installed:<id>` entry to the [active Profile](profiles.md). The server entry's `inject` and `provide` declarations govern Cordis. Optional manifest declarations are verified against the module. Browser service declarations are checked against both the published module and its registrations.

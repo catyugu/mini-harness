@@ -1,0 +1,51 @@
+plugins:
+  - id: core:transport
+    name: packages/transport/src/runtime.js
+    bootstrap: true
+  - id: core:settings-runtime
+    name: packages/settings/src/server/runtime.js
+    bootstrap: true
+  - id: core:plugins-runtime
+    name: packages/plugins/src/server/runtime.js
+    bootstrap: true
+  - id: core:workspace
+    name: packages/workspaces/src/manifests/workspaces.js#manifest
+  - id: core:tool-policy
+    name: packages/sessions/src/permission-policy.js#manifest
+  - id: core:sessions
+    name: packages/sessions/src/manifest.js#manifest
+  - id: core:agent
+    name: packages/agent/src/manifests/agent.js#manifest
+  - id: core:prompt
+    name: packages/agent/src/manifests/prompt.js#manifest
+  - id: core:model-store
+    name: packages/models/src/manifests/store.js#manifest
+  - id: core:model-catalog
+    name: packages/models/src/manifests/catalog.js#manifest
+  - id: core:llm
+    name: packages/models/src/manifests/llm.js#manifest
+  - id: core:runs
+    name: packages/runs/src/manifest.js#manifest
+  - id: core:models
+    name: packages/models/src/manifests/models.js#manifest
+  - id: core:file-access
+    name: packages/file-access/src/manifest.js#manifest
+  - id: files
+    name: packages/files/src/manifest.js#manifest
+  - id: skills
+    name: packages/skills/src/manifest.js#manifest
+  - id: subagents
+    name: packages/subagents/src/manifest.js#manifest
+  - id: shell
+    name: packages/shell/src/manifest.js#manifest
+    disabled: true
+  - id: session-helper
+    name: packages/session-helper/src/manifest.js#manifest
+  - id: core:approvals
+    name: packages/approvals/src/manifest.js#manifest
+  - id: core:sandbox
+    name: packages/sandbox/src/manifest.js#manifest
+  - id: core:process
+    name: packages/process-execution/src/manifest.js#manifest
+  - id: core:tools
+    name: packages/tools/src/manifest.js#manifest

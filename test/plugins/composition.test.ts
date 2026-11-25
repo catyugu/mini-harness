@@ -1,3 +1,4 @@
+import { storedProfile } from "../support/profile.js";
 import { expectPresent } from '../support/required.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -5,7 +6,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, write
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { PluginCatalog } from '@mini-harness/plugins/catalog';
-import { DEFAULTS, readSettings, mergeSettings, validateSettings } from '@mini-harness/settings/config';
+import { DEFAULTS, mergeSettings, validateSettings } from '@mini-harness/settings/config';
 import { writePlugin } from '../support/plugin-fixture.js';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -61,7 +62,7 @@ test('scoped plugins inherit declared services and tool policies, and release th
     messages.at(-1)?.role === 'tool' ? 'Finished greeting' : { tool: 'scoped_greeting', args: {} });
   copyExample(paths.plugins, 'scoped-tool');
   const cleaned = join(root, 'released');
-  writePlugin(paths.plugins, 'workspace-greeting', { scope: 'workspace', inject: ['harnessSessions'], provides: ['exampleGreeting'] }, `
+  writePlugin(paths.plugins, 'workspace-greeting', { scope: 'workspace', provides: ['exampleGreeting'] }, `
 export const provide = ["exampleGreeting"];
 export const inject = ["harnessSessions","harnessPluginRoutes","harnessPluginData","harnessPluginChanges","harnessTools"];
 import { pluginScope } from "${new URL("../../packages/sdk/src/plugin.js", import.meta.url).href}";
@@ -184,7 +185,8 @@ test('the host tool authorization service cannot be replaced at either scope', a
   const { app, paths, request } = await fixture(t);
   for (const scope of ['application', 'session']) {
     writePlugin(paths.plugins, 'tools-' + scope, { scope, provides: ['harnessTools'] }, `
-export default () => { throw new Error('Protected provider must never mount'); };
+export const provide = ['harnessTools'];
+export function apply() { throw new Error('Protected provider must never mount'); }
 `);
   }
   const session = app.runtime.plugins.ctx.harnessRegistry.create();
@@ -200,8 +202,8 @@ export default () => { throw new Error('Protected provider must never mount'); }
   assert.match(implicit.body.error, /Protected service cannot be overridden: harnessTools/);
   assert.equal(app.runtime.settings.plugins['core:tools'], true);
   assert.equal(app.runtime.settings.plugins['tools-application'], undefined);
-  assert.equal(readSettings(paths).plugins['core:tools'], undefined);
-  assert.equal(readSettings(paths).plugins['tools-application'], undefined);
+  assert.equal((await storedProfile(paths)).plugins['core:tools'], true);
+  assert.equal((await storedProfile(paths)).plugins['tools-application'], undefined);
   const scoped = await request('/settings', 'PATCH', { scopes: { ['session:' + session.id]: {
     plugins: { 'tools-session': true }, providers: { harnessTools: 'tools-session' }
   } } });
@@ -219,7 +221,7 @@ export function apply(ctx) {
       ctx.provide('harnessFileAccess', { open: () => ({
         access: async () => {},
         readFile: async () => data,
-        imageType: async () => null,
+        stat: async () => ({ size: data.length, isDirectory: () => false }),
         async *chunks() { yield data; }
       }) });
     }
@@ -228,7 +230,7 @@ export function apply(ctx) {
   assert.equal((await request('/settings', 'PATCH', selection)).status, 200);
   const session = app.runtime.plugins.ctx.harnessRegistry.create();
   const preview = await request('/workspaces/' + session.workspaceId + '/files/preview?path=virtual.txt');
-  assert.equal(preview.body.content, 'Provided file content');
+  assert.equal(preview.body.text, 'Provided file content');
   const tool = expectPresent(app.runtime.plugins.ctx.harnessTools.forSession(session.id).find(({ name }) => name === 'read'), 'read tool');
   assert.match(JSON.stringify((await tool.execute('virtual', { path: 'virtual.txt' }, undefined, undefined, undefined)).content), /Provided file content/);
 });
@@ -287,7 +289,7 @@ export const apply = (ctx) => { ctx.provide('harnessSandbox', ${isolated('applic
 export const provide = ["harnessFileAccess","harnessSandbox"];
 export const apply = (ctx) => {
       ctx.provide('harnessFileAccess', { open: () => ({
-        access: async () => {}, imageType: async () => null,
+        access: async () => {}, stat: async () => ({ isDirectory: () => false }),
         readFile: async () => Buffer.from('scoped file'),
         async *chunks() { yield Buffer.from('scoped file'); }
       }) });
@@ -317,8 +319,8 @@ export const apply = (ctx) => { ctx.provide('harnessProcess', {
   });
   assert.equal(configured.status, 200, JSON.stringify(configured.body));
   const preview = (id: string) => request('/workspaces/' + parent.workspaceId + '/files/preview?path=note.txt&sessionId=' + id);
-  assert.equal((await preview(parent.id)).body.content, 'scoped file', 'HTTP inspection prepares the lazy scope');
-  assert.equal((await preview(sibling.id)).body.content, 'application file');
+  assert.equal((await preview(parent.id)).body.text, 'scoped file', 'HTTP inspection prepares the lazy scope');
+  assert.equal((await preview(sibling.id)).body.text, 'application file');
   const lastTool = (id: string) => expectPresent(app.runtime.plugins.ctx.harnessRegistry.log(id).projection().messages.filter(({ role }) => role === 'toolResult').at(-1), 'tool result');
   await app.runtime.plugins.ctx.harnessRuns.send(child.id, 'read in inherited scope');
   assert.match(JSON.stringify(lastTool(child.id).content), /scoped file/);

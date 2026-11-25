@@ -27,29 +27,20 @@ function configDefaults(schema: Record<string, any>, value: any): any {
   return value;
 }
 
-export interface PluginPlan {
+export interface ConfiguredPlugin {
   descriptor: DiscoveredPlugin;
   id: string;
   source?: string;
   config?: Record<string, unknown>;
 }
 
-export interface ApplicationRequirements {
-  fixedPlugins?: ReadonlySet<string>;
-  requiredServices?: ReadonlySet<string>;
-  requiredBrowserServices?: ReadonlySet<string>;
-  protectedProviders?: ReadonlyMap<string, string>;
-}
-
 export class PluginCatalog {
   private readonly builtins: Map<string, DiscoveredPlugin>;
   readonly lockedPlugins: ReadonlySet<string>;
-  readonly fixedPlugins: ReadonlySet<string>;
-  readonly requiredServices: ReadonlySet<string>;
-  readonly requiredBrowserServices: ReadonlySet<string>;
+  readonly requiredClientCapabilities: ReadonlySet<string>;
   private readonly protectedProviders: ReadonlyMap<string, string>;
   constructor(private readonly directory: string, builtins: PluginDescriptor[], rootServices: string[],
-    private readonly devPlugin?: string, requirements: ApplicationRequirements = {}) {
+    private readonly devPlugin?: string, private readonly profile?: Pick<import('@mini-harness/plugin-api/profile').ProfileRuntime, 'installed' | 'client'>) {
     this.builtins = new Map(builtins.map((descriptor) => {
       const { plugin } = descriptor;
       return [descriptor.id, { ...descriptor,
@@ -57,10 +48,8 @@ export class PluginCatalog {
         provides: typeof plugin?.provide === 'string' ? [plugin.provide] : plugin?.provide ?? descriptor.provides,
         resources: builtinBrowserAssets(descriptor) }];
     }));
-    this.fixedPlugins = requirements.fixedPlugins ?? new Set();
-    this.requiredServices = requirements.requiredServices ?? new Set();
-    this.requiredBrowserServices = requirements.requiredBrowserServices ?? new Set();
-    this.protectedProviders = new Map([...rootServices.map((name) => [name, 'application'] as const), ...requirements.protectedProviders ?? []]);
+    this.requiredClientCapabilities = new Set(builtins.filter(row => row.required).flatMap(row => row.browserProvides ?? []));
+    this.protectedProviders = new Map([...rootServices.map((name) => [name, 'application'] as const), ...builtins.flatMap(row => row.protectServices?.map(name => [name, row.id] as const) ?? [])]);
     this.lockedPlugins = new Set(this.protectedProviders.values());
     if (this.builtins.size !== builtins.length) throw new Error('Duplicate builtin plugin ID');
     const services = new Set([...this.builtins.values()].flatMap(({ provides }) => provides ?? []));
@@ -76,15 +65,17 @@ export class PluginCatalog {
   effective<Settings extends PluginSettings>(settings: Settings): Settings {
     const plugins = { ...settings.plugins };
     const pluginConfig = { ...settings.pluginConfig };
-    for (const { id, scope, configSchema, defaultEnabled } of this.builtins.values()) {
-      if (scope === 'application' && !this.fixedPlugins.has(id)) plugins[id] ??= defaultEnabled ?? false;
+    for (const { id, scope, configSchema, defaultEnabled, required } of this.builtins.values()) {
+      if (scope === 'application' && !required) plugins[id] ??= defaultEnabled ?? false;
       if (configSchema) pluginConfig[id] = configDefaults(configSchema, structuredClone(pluginConfig[id] ?? {}));
     }
     return { ...settings, plugins, pluginConfig };
   }
 
   enabled(descriptor: PluginDescriptor, settings: PluginSettings) {
-    return this.fixedPlugins.has(descriptor.id) || (settings.plugins[descriptor.id] ?? descriptor.defaultEnabled) === true;
+    if (descriptor.required && settings.plugins[descriptor.id] === false)
+      throw new DomainError('invalid_input', 'Required Profile entry cannot be disabled: ' + descriptor.id);
+    return descriptor.required || (settings.plugins[descriptor.id] ?? descriptor.defaultEnabled) === true;
   }
 
   reserved(id: string) { return this.builtins.has(id); }
@@ -95,17 +86,22 @@ export class PluginCatalog {
       if (!localPluginIdPattern.test(id) || this.builtins.has(id)) throw new Error('Invalid development plugin ID');
       return [this.describe(id, this.devPlugin)];
     }
-    return readdirSync(this.directory, { withFileTypes: true }).flatMap((entry): DiscoveredPlugin[] => {
-      const id = entry.name;
-      if (!entry.isDirectory() || !localPluginIdPattern.test(id) || this.builtins.has(id)) return [];
-      return [this.describe(id, join(this.directory, id))];
-    });
+    const directories = new Map(readdirSync(this.directory, { withFileTypes: true }).flatMap(entry =>
+      entry.isDirectory() && localPluginIdPattern.test(entry.name) ? [[entry.name, entry.name]] : []));
+    for (const [id, module] of this.profile?.installed ?? []) directories.set(id, module);
+    return [...directories].flatMap(([id, module]) => this.builtins.has(id) ? [] : [this.describe(id, join(this.directory, module))]);
   }
 
   private describe(id: string, directory: string): DiscoveredPlugin {
     try {
       const { folder, package: installedPackage } = pluginBundle(directory);
-      return { ...describePlugin(id, folder), package: installedPackage };
+      const descriptor = describePlugin(id, folder);
+      if (this.profile && !this.profile.client(id)) {
+        delete descriptor.resources;
+        delete descriptor.browserProvides;
+        delete descriptor.browserRequires;
+      }
+      return { ...descriptor, package: installedPackage };
     } catch (error) {
       return { scope: 'application', id, title: id, description: 'Plugin manifest cannot be loaded.',
         trustedCode: true, error: error instanceof Error ? error.message : String(error), web: false };
@@ -128,16 +124,19 @@ export class PluginCatalog {
         if (typeof plugin !== 'function' && typeof plugin?.apply !== 'function')
           throw new Error('Plugin ' + id + ' must export a Cordis plugin with apply(ctx, config)');
         const inject = Object.keys(Inject.resolve(plugin.inject));
-        const provide = typeof plugin.provide === 'string' ? [plugin.provide] : plugin.provide;
-        if (provide && descriptor.provides?.length &&
-            !isDeepStrictEqual([...provide].sort(), [...descriptor.provides].sort()))
-          throw new Error('Service declarations disagree with the manifest for ' + id);
+        const provides = typeof plugin.provide === 'string' ? [plugin.provide] : plugin.provide ?? [];
+        if (descriptor.inject && !isDeepStrictEqual([...inject].sort(), [...descriptor.inject].sort()))
+          throw new Error('Injected service declarations disagree with the manifest for ' + id);
+        if (descriptor.provides && !isDeepStrictEqual([...provides].sort(), [...descriptor.provides].sort()))
+          throw new Error('Provided service declarations disagree with the manifest for ' + id);
+        if (descriptor.optional?.some(name => inject.includes(name) || provides.includes(name)))
+          throw new Error('Conflicting service declarations for ' + id);
         if (scope !== 'application' && inject.some(name => name === 'harnessRoutes' || name === 'harnessNetwork'))
           throw new Error('Scoped plugins cannot register application routes');
         const validateConfig = exports.validateConfig;
         if (validateConfig !== undefined && (typeof validateConfig !== 'function' || !descriptor.configSchema))
           throw new Error('Export a validateConfig function with a configSchema in plugin.json');
-        return { ...descriptor, plugin, module, inject, provides: provide ?? descriptor.provides, validateConfig };
+        return { ...descriptor, plugin, module, inject, provides, validateConfig };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         return { ...descriptor, error: message };
@@ -147,7 +146,7 @@ export class PluginCatalog {
 
   metadata(settings: PluginSettings, failures: ReadonlyMap<string, string>,
     mounted: (id: string) => boolean, context: (scope?: ScopeKey) => Context): PluginMetadata[] {
-    return this.descriptors().filter(({ id }) => !this.fixedPlugins.has(id) && !this.lockedPlugins.has(id) && localPluginIdPattern.test(id)).map((descriptor) => {
+    return this.descriptors().filter(({ id, required }) => !required && !this.lockedPlugins.has(id) && localPluginIdPattern.test(id)).map((descriptor) => {
       const { id, source, resources, inject, plugin: _plugin, optional, browserStyles, browserRequires,
         browserProvides, configChanges, validateConfig, ...metadata } = descriptor;
       const configurationError = (key?: ScopeKey) => {
@@ -265,7 +264,7 @@ export class PluginCatalog {
         throw new DomainError('invalid_input', error instanceof Error ? error.message : 'Invalid provider selection');
       }
     })();
-    const plans: PluginPlan[] = [];
+    const plans: ConfiguredPlugin[] = [];
     for (const descriptor of selected) {
       const { id, source } = descriptor;
       const config = configs.get(id);

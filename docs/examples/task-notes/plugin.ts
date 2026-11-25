@@ -1,6 +1,6 @@
 export const provide = ["taskNotes"];
 export const inject = ["harnessSessions","harnessExecution","harnessApprovalRequests","harnessPluginSettings","harnessPluginData","harnessPluginSecrets","harnessPrompt","harnessTools","harnessPluginRoutes", "harnessModels"];
-import { sessionContext, scopedService } from "mini-harness/plugin";
+import { sessionService } from "mini-harness/plugin";
 import { HttpError, type ConfigValidationContext, type Context } from 'mini-harness/plugin';
 declare module 'mini-harness/cordis' {
   interface Context {
@@ -50,9 +50,9 @@ export function apply(ctx: Context) {
     const { parentId, message, requireApproval } = (await body()) ?? {};
     if (typeof parentId !== 'string' || typeof message !== 'string' || !message.trim() || !sessions.get(parentId))
       throw new HttpError('invalid_input', 'Provide a parent conversation and a follow-up message');
-    await sessionContext(ctx, parentId, signal);
+    const models = await sessionService(ctx, parentId, 'harnessModels', signal);
     const model = sessions.history(parentId).model;
-    if (!model || !scopedService(ctx, parentId, 'harnessModels').resolve(model)) throw new HttpError('invalid_input', 'Send a message to the parent conversation first');
+    if (!model || !models.resolve(model)) throw new HttpError('invalid_input', 'Send a message to the parent conversation first');
     if (requireApproval === true)
       await confirm(parentId, { title: 'Start a follow-up', message }, signal);
     const child = sessions.create({ parentId, title: 'Task follow-up' });

@@ -7,6 +7,7 @@ import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
 
 export const manifest: PluginDescriptor = {
   scope: 'application',
+  protectServices: ['harnessToolPolicy'],
   id: 'core:tool-policy', title: 'Tool permissions', description: 'Inherited restrictions and user tool grants', defaultEnabled: true,
 
   plugin: {

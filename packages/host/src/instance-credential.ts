@@ -1,3 +1,6 @@
+import type { Context } from 'mini-harness/cordis';
+import type {} from '@mini-harness/plugin-api/profile';
+import type {} from '@mini-harness/platform/runtime-paths';
 import { protectLocal } from '@mini-harness/platform/local-secret';
 import { randomBytes } from 'node:crypto';
 import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync, realpathSync } from 'node:fs';
@@ -42,4 +45,19 @@ export function instanceCredential(home: string, reset = false) {
   const token = randomBytes(32).toString('hex');
   writeJson(credentialPath(home), windows ? protectLocal('Protect', Buffer.from(token)).toString('base64') : token);
   return token;
+}
+
+
+export const authentication = {
+  inject: ['harnessState', 'harnessLaunch'],
+  provide: ['harnessWebToken'],
+  apply(ctx: Context) {
+    const launch = ctx.harnessLaunch;
+    ctx.provide('harnessWebToken', launch.token ?? (launch.interactive
+      ? instanceCredential(ctx.harnessState.paths.home) : randomBytes(32).toString('hex')));
+  },
+};
+
+declare module 'mini-harness/cordis' {
+  interface Context { harnessWebToken: string }
 }

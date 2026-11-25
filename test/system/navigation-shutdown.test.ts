@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { rmSync } from 'node:fs';
-import { createMiniHarnessServer } from '@mini-harness/host/server';
+import { createMiniHarnessServer } from '../support/profile.js';
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
 
 test('HTTP shutdown cancels active requests and closes projection streams', { timeout: 15000 }, async (t) => {

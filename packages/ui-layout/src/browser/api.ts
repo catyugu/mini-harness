@@ -1,18 +1,36 @@
 import type {} from 'mini-harness/cordis';
 
 export interface TabScope { workspaceId: string; sessionId?: string }
-export interface TabAddress extends TabScope { type: string; path?: string; mode?: string }
-export interface RightTabType {
-  title(address: TabAddress): string;
-  create(address: TabAddress, signal: AbortSignal): HTMLElement;
-  default?: boolean;
+export type TabOwner =
+  | { workspaceId: string; sessionId?: never }
+  | { workspaceId: string; sessionId: string };
+
+export interface RightTab<T> {
+  owner: TabOwner;
+  key: string;
+  data: T;
+  signal?: AbortSignal;
 }
 
-/** Browser plugin contract; independent from the concrete right panel implementation. */
+export interface RightTabType<T> {
+  title(data: T): string;
+  create(data: T, scope: TabScope, signal: AbortSignal): HTMLElement;
+}
+
+export interface RightPanelEntry {
+  title: string;
+  icon: string;
+  description: string;
+  order?: number;
+  open(scope: TabScope): void;
+}
+
+/** Layout owns tab state while the registered type owns its payload and view. */
 export interface RightTabsPort {
-  register(type: string, definition: RightTabType): () => void;
-  open(type: string, path?: string, scope?: TabScope, mode?: string): void;
-  inspect(owner: string, title: string, node: HTMLElement, signal: AbortSignal): void;
+  register<T>(type: string, definition: RightTabType<T>): { open(tab: RightTab<T>): void };
+  contribute(id: string, entry: RightPanelEntry): void;
+  onScopeChange(listener: () => void, signal: AbortSignal): () => void;
+  inspect(title: string, node: HTMLElement, signal: AbortSignal): void;
 }
 
 export interface PageContribution { title: string; content: HTMLElement; order?: number }

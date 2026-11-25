@@ -54,7 +54,7 @@ test('workspace registration, session navigation and scoped tools leave an activ
       assert.equal((await request(second + '/files/preview?path=note.txt&sessionId=' + session.id)).status, 404);
       const preview = await request(second + '/files/preview?path=note.txt&sessionId=' + other.id);
       assert.equal(preview.status, 200, JSON.stringify(preview.body));
-      assert.equal(preview.body.content, 'only in second');
+      assert.equal(preview.body.text, 'only in second');
       await request('/sessions/' + other.id + '/runs', 'POST', { message: 'Write a file' });
       assert.equal((await finish(other.id)).body.run.state, 'completed');
       assert.equal(readFileSync(join(next, 'isolated.txt'), 'utf8'), 'second workspace');

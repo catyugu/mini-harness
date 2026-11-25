@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
 import type { BrowserEntry } from '@mini-harness/ui-runtime/bootstrap';
 import { selectProviders } from './providers.js';
-import type { PluginPlan } from './catalog.js';
+import type { ConfiguredPlugin } from './catalog.js';
 
 export interface Asset { path: string; mime: string }
 export interface BrowserAssets {
@@ -66,8 +66,8 @@ export function readBrowserAssets(id: string, folder: string, declared: unknown,
     styles: files.filter((file) => extname(file) === '.css').map((file) => prefix + file), urls };
 }
 
-export function planBrowser(plans: PluginPlan[], choices: Record<string, string>,
-  requiredServices: ReadonlySet<string>, fixedPlugins: ReadonlySet<string>): BrowserEntry[] {
+export function planBrowser(plans: ConfiguredPlugin[], choices: Record<string, string>,
+  required: ReadonlySet<string>): BrowserEntry[] {
   const browser = new Map(plans.filter(({ descriptor }) => descriptor.resources).map((plan) => [plan.id, plan]));
   const runtime = new Map(['miniProjections', 'miniSwitch', 'miniBrowserFailures'].map((name) => [name, 'browser-runtime']));
   const { selected } = selectProviders([...browser.values()].map(({ id, descriptor }) => ({
@@ -79,11 +79,11 @@ export function planBrowser(plans: PluginPlan[], choices: Record<string, string>
     if (!plan || !resources) throw new Error('Composed browser capability is unavailable: ' + descriptor.id);
     return { id: plan.id, requires: plan.descriptor.browserRequires, provides: plan.descriptor.browserProvides, browser: resources.entry,
       styles: resources.styles, preload: resources.preload, config: plan.config ?? {},
-      liveConfig: plan.descriptor.configChanges === 'live', required: fixedPlugins.has(plan.id) || plan.descriptor.browserProvides?.some((name) => requiredServices.has(name)) };
+      liveConfig: plan.descriptor.configChanges === 'live', required: plan.descriptor.required || plan.descriptor.browserProvides?.some((name) => required.has(name)) };
   });
 }
 
-export function publishBrowser(browser: BrowserEntry[], plans: PluginPlan[], mounted: (id: string) => boolean) {
+export function publishBrowser(browser: BrowserEntry[], plans: ConfiguredPlugin[], mounted: (id: string) => boolean) {
   const entries = browser.filter(({ id }) => mounted(id));
   const ready = new Set(entries.map(({ id }) => id));
   const resources = plans.filter(({ id }) => ready.has(id));

@@ -1,5 +1,6 @@
 {
   "title": "Greeting route",
-  "inject": ["exampleGreeting"],
-  "optional": ["exampleSuffix"]
+  "optional": [
+    "exampleSuffix"
+  ]
 }

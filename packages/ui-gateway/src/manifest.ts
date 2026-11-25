@@ -6,6 +6,7 @@ export const manifest: PluginDescriptor = {
   id: 'core:ui', title: 'Browser transport', description: 'Browser startup and projections', defaultEnabled: true,
    plugin: {
                                                                          inject: ['harnessPluginCatalog', 'harnessRoutes', 'harnessChanges'],
+                                                                         provide: ['harnessGateway'],
                                                                          apply: setup
                                                                        }
 };

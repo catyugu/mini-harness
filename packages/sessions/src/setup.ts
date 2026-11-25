@@ -23,8 +23,10 @@ export function setup(ctx: Context) {
   ctx.effect(() => ctx.harnessWorkspaces.beforeRemove((id) => registry.removeWorkspaceSessions(id)));
   ctx.on('harness/ready', () => registry.recoverDeletion());
   ctx.on('harness/quiesce', () => registry.close());
-  ctx.effect(() => ctx.harnessRoutes.register('GET', '/api/status', () =>
-    ({ pid: process.pid, sessionDiagnostics: registry.diagnostics() })));
+  ctx.inject(['harnessRoutes'], web => {
+    web.effect(() => web.harnessRoutes.register('GET', '/api/status', () =>
+      ({ pid: process.pid, sessionDiagnostics: registry.diagnostics() })));
+  });
   ctx.provide('harnessRegistry', registry);
   ctx.provide('harnessSessions', sessionDirectory({
       get: (id) => registry.get(id),

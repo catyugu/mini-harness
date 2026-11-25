@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, renameSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { MiniHarnessRuntime } from '@mini-harness/host/application';
+import { MiniHarnessRuntime } from '../../../test/support/profile.js';
 import { readJson, writeJson } from '@mini-harness/platform/json';
 import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.js';
 
@@ -61,9 +61,10 @@ test('a failed recent-model write does not delay accepted input or terminate exe
   await runtime.start();
   const { harnessRegistry: registry, harnessRuns: runs } = runtime.plugins.ctx;
   const session = registry.create();
-  const old = paths.settings + '.original';
-  renameSync(paths.settings, old);
-  mkdirSync(paths.settings);
+  const config = join(paths.home, 'profiles', 'web', 'cordis.yml');
+  const old = config + '.original';
+  renameSync(config, old);
+  mkdirSync(config);
   try {
     const run = runs.startRun(session.id, 'Accept this despite the unwritable setting', { model: { provider: 'local-mock', id: 'second-model' } });
     assert.equal(run.state, 'queued');
@@ -75,7 +76,7 @@ test('a failed recent-model write does not delay accepted input or terminate exe
     await runtime.stop();
     assert.ok(runtime.plugins.ctx.logger.buffer.some(({ args }) => args[0] === 'Could not save recent model: %s'));
   } finally {
-    rmSync(paths.settings, { recursive: true, force: true });
-    renameSync(old, paths.settings);
+    rmSync(config, { recursive: true, force: true });
+    renameSync(old, config);
   }
 });

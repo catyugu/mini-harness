@@ -13,3 +13,5 @@ The Pi model transport package (`@earendil-works/pi-ai`) is distributed under th
 No bundled DeepSeek commercial integrations or branding assets are used in mini-harness. When importing upstream source code into this repository, preserve its required copyright notices and license text. Installing mini-harness with npm also installs standard third-party runtime dependencies subject to their own licenses.
 
 The npm tarball includes the Cordis notices under `dist/vendor/cordis/` and the licenses for Marked (MIT) and DOMPurify (Apache-2.0 OR MPL-2.0) under `dist/packages/ui-primitives/src/browser/vendor/`.
+
+The prompt editor bundles CodeMirror and its browser dependencies. Their notices are included in `dist/packages/conversation/src/browser/vendor/`. Profile parsing uses the `yaml` npm package (ISC).

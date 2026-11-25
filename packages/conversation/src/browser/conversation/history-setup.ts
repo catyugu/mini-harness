@@ -6,4 +6,4 @@ const setup = (ctx: Context) => {
   ctx.provide('miniMessages', extensions);
   ctx.effect(() => ctx.miniSlots.registerKeyed('conversation.history', 'history', (signal) => mountHistory(ctx, extensions, signal), { order: -1 }));
 };
-export default { inject: ['miniConversation','miniComposer','miniSlots','miniDialogs'], provide: ['miniMessages'], apply: setup };
+export default { inject: ['miniConversation','miniComposer','miniSlots'], provide: ['miniMessages'], apply: setup };

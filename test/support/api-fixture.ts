@@ -1,6 +1,6 @@
 import { rmSync } from 'node:fs';
 import type { TestContext } from 'node:test';
-import { createMiniHarnessServer } from '@mini-harness/host/server';
+import { createMiniHarnessServer } from './profile.js';
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
 
 export async function waitUntil<T>(read: () => T | Promise<T>, accept: (value: T) => boolean) {

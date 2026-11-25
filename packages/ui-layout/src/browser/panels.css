@@ -32,3 +32,8 @@
   .right-panel > header { padding-top: env(safe-area-inset-top); }
   .panel-resize { display: none; }
 }
+
+.right-start { display: grid; gap: .65rem; padding: 1rem; }
+.right-start[hidden] { display: none; }
+.right-start button { display: flex; gap: .75rem; align-items: center; text-align: left; border: 1px solid var(--border); border-radius: .65rem; padding: .8rem; }
+.right-start small { display: block; margin-top: .2rem; color: var(--muted); }

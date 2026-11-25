@@ -1,26 +1,14 @@
 import { spawn } from 'node:child_process';
 import { realpath } from 'node:fs/promises';
 import { DomainError } from '@mini-harness/platform/errors';
-import { resolve, relative } from 'node:path';
+import { relative } from 'node:path';
 import type { WorkspaceFileAccess } from '@mini-harness/file-access/api';
 
 const diffLimit = 1024 * 1024;
 const statusLimit = 8 * 1024 * 1024;
 
-export class Inspection {
+export class GitInspection {
   constructor(private readonly cwd: string, readonly files: WorkspaceFileAccess, private readonly signal?: AbortSignal) {}
-  async tree(path = '.') {
-    return (await this.files.entries(resolve(this.cwd, path))).filter(({ name }) => name !== '.git');
-  }
-  async preview(path: string) {
-    const bytes = await this.files.readFile(path);
-    if (bytes.length > 512 * 1024) throw new DomainError('invalid_input', 'Preview is limited to 512 KiB');
-    const image = await this.files.imageType(path);
-    if (image) return { path, content: bytes.toString('base64'), image };
-    if (bytes.includes(0)) throw new DomainError('invalid_input', 'Binary file: attach or open it in a local application');
-    return { path, content: bytes.toString('utf8') };
-  }
-
   private async git(args: string[], limit: number) {
     const timeout = AbortSignal.timeout(10000);
     const signal = this.signal ? AbortSignal.any([this.signal, timeout]) : timeout;
@@ -67,7 +55,7 @@ export class Inspection {
     const reason = await this.repository();
     if (reason) return { available: false, files: [], reason };
     try {
-      const { content, truncated } = await this.git(['status', '--porcelain=v1', '-z', '--untracked-files=normal'], statusLimit);
+      const { content, truncated } = await this.git(['status', '--porcelain=v1', '-z', '--untracked-files=all'], statusLimit);
       const records = content.split('\0');
       records.pop();
       const files: { path: string; status: string }[] = [];

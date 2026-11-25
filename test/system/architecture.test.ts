@@ -4,7 +4,7 @@ import { dirname, join, relative, resolve, sep } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
-import { plugins } from '@mini-harness/host/composition';
+import { profileDescriptors, readProfile } from '@mini-harness/host/profile';
 import { moduleReferences } from '../../scripts/module-references.js';
 
 interface Manifest {
@@ -50,7 +50,7 @@ function checkCycles(graph: Map<string, Set<string>>, kind: string) {
   for (const name of graph.keys()) visit(name);
 }
 
-test('workspace dependencies use domain APIs and keep providers at the application boundary', () => {
+test('workspace dependencies use domain APIs and keep providers at the application boundary', async () => {
   assert.ok(!manifests.has('kernel'), 'Business plugins must use the vendored Cordis runtime directly');
   const browserModules = new Map<string, string[]>();
   const browserRoots = [join(packages, 'sdk', 'src', 'browser-plugin.ts')];
@@ -86,6 +86,10 @@ test('workspace dependencies use domain APIs and keep providers at the applicati
         }
         if (specifier === 'mini-harness/cordis') continue;
         assert.ok(specifier !== 'mini-harness/plugin' && specifier !== 'mini-harness/browser-plugin', reason);
+        if (['@codemirror/commands', '@codemirror/state', '@codemirror/view'].includes(specifier)) {
+          assert.equal(file, join(packages, 'conversation', 'src', 'browser', 'conversation', 'editor-vendor.ts'), reason);
+          continue;
+        }
         if (!specifier.startsWith(prefix)) {
           if (!typeOnly) imports.push(specifier);
           continue;
@@ -129,18 +133,10 @@ test('workspace dependencies use domain APIs and keep providers at the applicati
   }
   for (const file of browserRoots) checkBrowser(file);
 
+  const entries = readProfile('web');
+  const plugins = await profileDescriptors(entries);
   const browserIds = new Set(plugins.filter(({ browser }) => browser).map(({ id }) => id));
-  const descriptorOwners = new Map<string, string>();
-  const composition = join(packages, 'host', 'src', 'composition.ts');
-  const source = ts.createSourceFile(composition, readFileSync(composition, 'utf8'), ts.ScriptTarget.Latest, true);
-  for (const node of source.statements) {
-    if (!ts.isImportDeclaration(node) || !ts.isStringLiteral(node.moduleSpecifier)) continue;
-    const [owner, ...parts] = node.moduleSpecifier.text.slice(prefix.length).split('/');
-    const entry = manifests.get(owner)?.exports?.['./' + parts.join('/')];
-    if (!entry) continue;
-    const manifest = readFileSync(join(packages, owner, entry), 'utf8');
-    for (const match of manifest.matchAll(/\bid: '([^']+)'/g)) descriptorOwners.set(match[1], owner);
-  }
+  const descriptorOwners = new Map([...entries].map(([id, row]) => [id, row.name?.split('/')[1]]));
   for (const { id, browser, browserStyles, browserRequires } of plugins) {
     if (!browser) { assert.ok(!browserStyles?.length, id + ' has styles without a browser entry'); continue; }
     const owner = descriptorOwners.get(id);

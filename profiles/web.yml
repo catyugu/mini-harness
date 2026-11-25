@@ -1,0 +1,98 @@
+detached: true
+include:
+  - ./base.yml
+plugins:
+  - id: core:http-routes
+    name: packages/transport/src/runtime.js#http
+    bootstrap: true
+  - id: core:web-auth
+    name: packages/host/src/instance-credential.js#authentication
+    bootstrap: true
+  - id: core:web-server
+    name: packages/host/src/web.js#manifest
+    required: true
+    config:
+      port: 3837
+  - id: core:slots
+    name: packages/ui-slots/src/manifest.js#manifest
+    required: true
+    client: true
+  - id: core:theme
+    name: packages/ui-theme/src/manifest.js#manifest
+    required: true
+    client: true
+  - id: core:primitives
+    name: packages/ui-primitives/src/manifest.js#manifest
+    required: true
+    client: true
+  - id: core:layout
+    name: packages/ui-layout/src/manifest.js#manifest
+    required: true
+    client: true
+  - id: core:permission-settings
+    name: packages/sessions/src/permission-policy.js#permissionSettingsManifest
+    required: true
+    client: true
+  - id: core:workspaces-data
+    name: packages/workspaces/src/manifests/data.js#manifest
+    required: true
+    client: true
+  - id: core:sessions-data
+    name: packages/conversation/src/manifests/session-data.js#manifest
+    required: true
+    client: true
+  - id: core:settings
+    name: packages/settings/src/manifest.js#manifest
+    required: true
+    client: true
+  - id: core:model-admin
+    name: packages/models/src/manifests/models.js#administrationManifest
+    required: true
+    client: true
+  - id: core:plugins
+    name: packages/plugins/src/manifest.js#manifest
+    required: true
+    client: true
+  - id: core:ui
+    name: packages/ui-gateway/src/manifest.js#manifest
+    required: true
+  - id: file-preview
+    name: packages/file-preview/src/manifest.js#manifest
+    client: true
+  - id: git-diff
+    name: packages/git-diff/src/manifest.js#manifest
+    client: true
+  - id: core:approval-data
+    name: packages/approvals/src/browser/manifest.js#manifest
+    required: true
+    client: true
+  - id: core:navigation
+    name: packages/conversation/src/manifests/navigation.js#manifest
+    required: true
+    client: true
+  - id: core:workspace-navigation
+    name: packages/conversation/src/manifests/workspace.js#manifest
+    required: true
+    client: true
+  - id: core:conversation
+    name: packages/conversation/src/manifests/conversation.js#manifest
+    required: true
+    client: true
+  - id: core:composer
+    name: packages/conversation/src/manifests/conversation.js#composerManifest
+    required: true
+    client: true
+  - id: core:history
+    name: packages/conversation/src/manifests/conversation.js#historyManifest
+    required: true
+    client: true
+  - id: files
+    client: true
+  - id: session-helper
+    client: true
+  - id: shell
+    client: true
+  - id: skills
+    client: true
+  - id: subagents
+    client: true

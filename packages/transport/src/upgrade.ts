@@ -1,6 +1,6 @@
 import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
-import type { UpgradeHandler } from '@mini-harness/transport/routes';
+import type { UpgradeHandler } from './routes.js';
 
 export class Upgrades {
   private readonly admission = new AbortController();

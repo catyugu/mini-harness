@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { createMiniHarnessServer } from '@mini-harness/host/server';
+import { createMiniHarnessServer } from '../../../test/support/profile.js';
 import { fixture, waitUntil } from '../../../test/support/api-fixture.js';
 import { expectPresent } from '../../../test/support/required.js';
 import { createMockProvider, createFixturePaths } from '../../../test/helpers/mock-provider.js';

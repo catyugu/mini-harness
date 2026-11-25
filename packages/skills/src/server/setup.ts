@@ -32,7 +32,8 @@ export function setup(ctx: Context) {
     return [...parts, { type: 'text', text: invocation.instruction }];
   });
   ctx.effect(() => ctx.harnessPrompt.register({ id: 'skills', order: 400, render: ({ cwd }) => loader.prompt(cwd) }));
-  ctx.effect(() => ctx.harnessRoutes.register('GET', '/api/workspaces/:id/skills', async ({ params, url, signal }) => {
+  ctx.inject(['harnessRoutes'], web => {
+  web.effect(() => web.harnessRoutes.register('GET', '/api/workspaces/:id/skills', async ({ params, url, signal }) => {
     const workspace = ctx.harnessWorkspaces.get(params.id);
     const sessionId = url.searchParams.get('sessionId');
     if (sessionId) {
@@ -44,6 +45,7 @@ export function setup(ctx: Context) {
     }
     return loader.list(ctx.harnessWorkspaces.resolveRoot(workspace.path, workspace.id));
   }));
+  });
   ctx.effect(() => ctx.harnessTools.register({ name: 'load_skill', bind: (sessionId) => defineTool({
     name: 'load_skill', label: 'Load skill', description: 'Read the instructions for an available skill by name.',
     parameters: Type.Object({ name: Type.String({ minLength: 1, maxLength: 64 }) }, { additionalProperties: false }),

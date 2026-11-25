@@ -85,7 +85,7 @@ export const apply = (ctx) => {
     await expect(page.getByRole('button', { name: 'Stop response' })).toBeVisible();
     await page.getByRole('button', { name: 'Stop response' }).click();
     await expect(page.getByLabel('Latest run')).toHaveAttribute('data-state', 'cancelled');
-    await expect(prompt).toHaveValue('Stop before acceptance');
+    await expect(prompt).toHaveText('Stop before acceptance');
     expect(mock.requests.length).toBe(requests);
   } finally {
     release();

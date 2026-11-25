@@ -7,7 +7,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { MiniHarnessRuntime } from '@mini-harness/host/application';
+import { MiniHarnessRuntime, storedProfile } from '../support/profile.js';
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
 import { DEFAULTS, mergeSettings, readSettings } from '@mini-harness/settings/config';
 import { writeJson } from '@mini-harness/platform/json';
@@ -138,7 +138,7 @@ export function apply(ctx) {
   await assert.rejects(runtime.configuration.update({ plugins: { 'named-entry': true } }), /must export a Cordis plugin/);
   assert.equal(runtime.settings.plugins['function-entry'], true);
   assert.equal(runtime.settings.plugins['named-entry'], undefined);
-  assert.equal(readSettings(paths).plugins['named-entry'], undefined);
+  assert.equal((await storedProfile(paths)).plugins['named-entry'], undefined);
 });
 
 test('plugin JSON Schema applies defaults and rejects invalid changes before setup', async (t) => {
@@ -148,7 +148,7 @@ test('plugin JSON Schema applies defaults and rejects invalid changes before set
   t.after(async () => { await runtime.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
   const folder = join(paths.plugins, 'schema');
   mkdirSync(folder);
-  writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ inject: ['harnessTools'], configChanges: 'live', configSchema: {
+  writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ configChanges: 'live', configSchema: {
     type: 'object', additionalProperties: false, required: ['count'],
     properties: { count: { type: 'integer', minimum: 1, maximum: 10, default: 3 },
       options: { type: 'object', default: {}, properties: { enabled: { type: 'boolean', default: true } } } }
@@ -180,9 +180,9 @@ export const apply = (ctx) => {
     tool.execute('set-count', { count: 7 }, undefined, undefined, undefined),
     tool.execute('set-options', { options: { enabled: false } }, undefined, undefined, undefined),
   ]);
-  assert.deepEqual(readSettings(paths).pluginConfig.schema, { count: 7, options: { enabled: false } });
+  assert.deepEqual((await storedProfile(paths)).pluginConfig.schema, { count: 7, options: { enabled: false } });
   await assert.rejects(tool.execute('rejected-semantics', { count: 5 }), /Five is reserved/);
-  assert.deepEqual(readSettings(paths).pluginConfig.schema, { count: 7, options: { enabled: false } });
+  assert.deepEqual((await storedProfile(paths)).pluginConfig.schema, { count: 7, options: { enabled: false } });
   await assert.rejects(tool.execute('invalid-count', { count: 0 }, undefined, undefined, undefined), /Invalid configuration/);
   assert.match(JSON.stringify(await tool.execute('committed', {}, undefined, undefined, undefined)), /7:false:7/);
   await assert.rejects(runtime.configuration.update({ pluginConfig: { schema: { count: 0 } } }), /Invalid configuration/);
@@ -252,8 +252,8 @@ test('malformed plugin manifests fail discovery instead of silently dropping the
   mkdirSync(folder);
   writeFileSync(join(folder, 'plugin.js'), "export default () => {};");
   writeFileSync(join(folder, 'plugin.json'), '{"requires": [');
-  assert.match(runtime.plugins.metadata().find(({ id }) => id === 'broken-manifest')?.error ?? '', /JSON|Unexpected|parse/i);
   await runtime.start();
+  assert.match(runtime.plugins.metadata().find(({ id }) => id === 'broken-manifest')?.error ?? '', /JSON|Unexpected|parse/i);
   await assert.rejects(runtime.configuration.update({ plugins: { 'broken-manifest': true } }), /Invalid plugin/);
   assert.equal(runtime.settings.plugins['broken-manifest'], undefined);
 });
@@ -314,7 +314,7 @@ test('unloading cancels and drains HTTP, scoped requests and upgrades before dis
       mark(name + ':drained');
     };
   `;
-  writePlugin(paths.plugins, 'drain', { inject: ['harnessSettingsStore'] }, lifecycle + `
+  writePlugin(paths.plugins, 'drain', {}, lifecycle + `
 export const inject = ["harnessPluginRoutes","harnessSettingsStore"];
 export const apply = (ctx) => {
       ctx.effect(() => () => mark('app:disposed'));
@@ -410,8 +410,7 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
   } };
   const ctx = new Context();
   ctx.provide('authority', {});
-  const host = new PluginHost(ctx, directory, builtins, ['authority'], () => settings, undefined, undefined, undefined,
-    { requiredServices: new Set(['greeting', 'extra']) });
+  const host = new PluginHost(ctx, directory, builtins, ['authority'], () => settings);
   host.register('workspace', (id) => ({ scope: { kind: 'workspace', workspaceId: id } }), true);
   host.register('session', (id) => {
     const record = records.get(id);
@@ -534,14 +533,13 @@ test('required browser services must survive server mounting, including replacem
   const directory = mkdtempSync(join(tmpdir(), 'mini-required-browser-'));
   const browser = '/packages/ui-runtime/src/browser/boot.js';
   const builtins: PluginDescriptor[] = [
-    { id: 'ui', scope: 'application', title: 'UI', description: '', defaultEnabled: true, browser, browserProvides: ['miniTest'] },
+    { id: 'ui', scope: 'application', title: 'UI', description: '', defaultEnabled: true, required: true, browser, browserProvides: ['miniTest'] },
     { id: 'replacement', scope: 'application', title: 'Replacement', description: '', browser, browserProvides: ['miniTest'],
       plugin: { apply(_ctx: Context, config: Record<string, unknown>) { if (config.fail) throw new Error('Unavailable replacement'); } } }
   ];
   const settings = { ...structuredClone(DEFAULTS), plugins: { replacement: true },
     browserProviders: { miniTest: 'replacement' }, pluginConfig: { replacement: { fail: true } } };
-  const host = new PluginHost(new Context(), directory, builtins, [], () => settings, undefined, undefined, undefined,
-    { requiredBrowserServices: new Set(['miniTest']) });
+  const host = new PluginHost(new Context(), directory, builtins, [], () => settings);
   t.after(async () => { await host.close(); rmSync(directory, { recursive: true, force: true }); });
   await assert.rejects(host.start(settings), /Required browser service is unavailable: miniTest/);
 });

@@ -3,8 +3,8 @@ import { setup } from './server/setup.js';
 
 /** One metadata definition for the host, settings, and browser loader. */
 export const manifest: PluginDescriptor = {
-  scope: 'application', plugin: {
-    inject: ['harnessState', 'harnessRoutes', 'harnessWorkspaces', 'harnessSessions', 'harnessTools', 'harnessPrompt', 'harnessScopes'],
+  scope: 'application', trustedContributor: true, plugin: {
+    inject: ['harnessState', 'harnessWorkspaces', 'harnessSessions', 'harnessTools', 'harnessPrompt', 'harnessScopes'],
     apply: setup
   }, defaultEnabled: true,
   id: 'skills', title: 'Skills', description: 'Discover Agent Skills from home and the workspace.',

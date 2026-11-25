@@ -28,7 +28,7 @@ export function apply(ctx, config) {
       if (node.tagName === 'BUTTON') node.type = 'button';
       node.dataset.exampleSlot = slot; node.textContent = slot === 'sidebar' ? config.label : 'Plugin ' + slot;
       if (slot === 'composer') node.onclick = () => miniComposer.insert('Inserted by plugin');
-      if (slot === 'inspector') node.onclick = () => {const p = document.createElement('p');p.textContent='Plugin preview';ctx.miniTabs.inspect(browserPluginId(ctx), 'Example', p, signal);};
+      if (slot === 'inspector') node.onclick = () => {const p = document.createElement('p');p.textContent='Plugin preview';ctx.miniTabs.inspect('Example', p, signal);};
       ctx.effect(() => ctx.miniSlots.register({sidebar:'sidebar.actions',composer:'conversation.composer',inspector:'conversation.header'}[slot], node));
     }
     ctx.effect(() => ctx.miniSettingsRegistry.register(browserPluginId(ctx), { section: 'General', id: 'preferences', order: 10, render({ bind }) {
@@ -74,7 +74,7 @@ export function apply(ctx) {
     await expect(page.getByRole('button', { name: 'Plugin entry', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Dependent Plugin entry', exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Plugin composer', exact: true }).click();
-    await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toHaveValue('Inserted by plugin');
+    await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toHaveText('Inserted by plugin');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.getByText('Custom listing result')).toBeHidden();
     await expect(page.locator('.message.assistant')).toHaveText('Done');
@@ -367,7 +367,7 @@ export const apply = (ctx) => {
     await expect(replacement).toHaveCount(0);
     await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toBeVisible();
     await expect(page.locator('.message-image-dialog')).toHaveCount(1);
-    await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toHaveValue('New draft after submission');
+    await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toHaveText('New draft after submission');
     const submitted = page.locator('#messages .message.user');
     await expect(submitted).toContainText('Hello from replacement');
     await expect(page.locator('#messages .message-row.user .message-attachments').getByRole('button', { name: 'Download keep.txt' })).toContainText('keep.txt');

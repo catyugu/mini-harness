@@ -1,5 +1,4 @@
 {
   "title": "Scoped greeting",
-  "scope": "session",
-  "inject": ["exampleGreeting", "harnessTools"]
+  "scope": "session"
 }

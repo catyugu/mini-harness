@@ -2,12 +2,10 @@ import type {} from '@mini-harness/transport/projection-api';
 import type {} from '@mini-harness/settings/api';
 import { assertOutsideMountTransaction, withMountTransaction } from '@mini-harness/plugin-api/mutation-api';
 import { DomainError } from '@mini-harness/platform/errors';
-import { dirname, join, relative } from 'node:path';
+import { dirname, join } from 'node:path';
 import { EntryGroup, EntryTree, Service, type Context, type EntryOptions } from 'mini-harness/cordis';
-import { createHash } from 'node:crypto';
 import { localPluginIdPattern, isScopeKey } from '@mini-harness/plugin-api/selection';
 import { isDeepStrictEqual } from 'node:util';
-import { lstatSync, readdirSync, realpathSync, rmSync } from 'node:fs';
 import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
 import type { HostServices, PluginScope, ScopeAddress, ScopeKey, ScopePort } from '@mini-harness/plugin-api/scopes';
 import { planBrowser, publishBrowser } from './browser-assets.js';
@@ -16,19 +14,19 @@ import type { UpgradeHandler } from '@mini-harness/transport/routes';
 import { scopeKeys, type PluginSettings } from '@mini-harness/plugin-api/configuration';
 import { ProtectedProviderError } from './providers.js';
 import { bindPluginImports } from './module-resolution.js';
-import { pluginData, pluginSecrets } from './data.js';
+import { pluginData, pluginSecrets, removeScopeData } from './data.js';
 import { PluginRouteRegistry, scopeOperation } from './routes.js';
 import { pluginSettings } from './plugin-settings.js';
 import type {} from '@mini-harness/plugin-api/services';
 import { bindInstance, pluginInstance } from '@mini-harness/plugin-api/instance';
-import { changedSelection, PluginCatalog, type ApplicationRequirements, type PluginPlan } from './catalog.js';
+import { changedSelection, PluginCatalog, type ConfiguredPlugin } from './catalog.js';
 
 const appScope: PluginScope = { kind: 'application' };
 
 /** The descriptor and its resolved graph are the source of both server and browser mounts. */
 export class PluginHost implements ScopePort {
   private readonly catalog: PluginCatalog;
-  private readonly entries = new EntryTree();
+  private readonly entries: EntryTree;
   private readonly root: ReadonlyMap<string, string>;
   private readonly pluginRoutes: PluginRouteRegistry;
   private readonly imports: ReturnType<typeof bindPluginImports>;
@@ -42,7 +40,8 @@ export class PluginHost implements ScopePort {
     private readonly settings: () => PluginSettings,
     upgrade?: (path: string, handler: UpgradeHandler) => () => Promise<void>, devPlugin?: string,
     private readonly writePlugin?: (id: string, key: ScopeKey | undefined, patch: unknown, check: () => void) => Promise<void>,
-    private readonly composition: ApplicationRequirements & { trustedContributors?: ReadonlySet<string> } = {}) {
+    private readonly bootstrap: readonly EntryOptions[] = [], owner = ctx, entries = new EntryTree()) {
+    this.entries = entries;
     this.pluginRoutes = new PluginRouteRegistry(ctx, upgrade);
     const directoryData = join(dirname(directory), 'plugin-data');
     const services = {
@@ -60,9 +59,9 @@ export class PluginHost implements ScopePort {
         }
       })
     };
-    for (const [name, value] of Object.entries(services)) ctx.provide(name, value);
+    for (const [name, value] of Object.entries(services)) owner.provide(name, value);
     const provided = [...rootServices, ...Object.keys(services)];
-    this.catalog = new PluginCatalog(directory, builtins, provided, devPlugin, composition);
+    this.catalog = new PluginCatalog(directory, builtins, provided, devPlugin, ctx.get('harnessProfile'));
     this.root = new Map(provided.map((name) => [name, 'application']));
     this.imports = bindPluginImports(directory, devPlugin);
   }
@@ -84,7 +83,7 @@ export class PluginHost implements ScopePort {
 
   diagnostics() {
     return [...this.entries.values()].flatMap(({ active, options, fiber }) => {
-      if (!active || !fiber) return [];
+      if (!active || !fiber || this.bootstrap.some(entry => entry.id === options.id)) return [];
       const identity = pluginInstance(fiber.ctx);
       const inject = Object.keys(fiber.inject);
       const services = Object.fromEntries(inject.filter(name => !name.startsWith('entry:')).flatMap(name => {
@@ -136,12 +135,21 @@ export class PluginHost implements ScopePort {
     return [...ancestors].reverse();
   }
 
-  context(key?: ScopeKey | null) { return this.configurationContext(key ?? undefined); }
+  context(key?: ScopeKey | null) {
+    if (!key) return this.ctx;
+    const ancestry = this.ancestry(key);
+    if (!ancestry.length) throw new DomainError('not_found', 'Plugin scope not found: ' + key);
+    const settings = this.settings();
+    for (const ancestor of ancestry)
+      if (Object.hasOwn(settings.scopes, ancestor) && !this.scopes.has(ancestor))
+        throw new DomainError('unavailable', 'Plugin scope is not prepared: ' + ancestor);
+    return this.configurationContext(key);
+  }
 
   address(key: ScopeKey) { return this.ancestry(key); }
 
   require<Name extends keyof HostServices & string>(key: ScopeKey | null | undefined, service: Name): NonNullable<HostServices[Name]> {
-    const value = this.optional(key, service);
+    const value = this.context(key).get(service);
     if (value == null) {
       const settings = this.settings();
       for (const ancestor of key ? [...this.address(key)].reverse() : []) {
@@ -152,11 +160,6 @@ export class PluginHost implements ScopePort {
       throw new Error('Required service is unavailable: ' + service + (key ? ' in ' + key : ''));
     }
     return value;
-  }
-
-  optional<Name extends keyof HostServices & string>(key: ScopeKey | null | undefined, service: Name): HostServices[Name] | undefined {
-    const scope = key && this.address(key).reverse().map((ancestor) => this.scopes.get(ancestor)).find(Boolean);
-    return ((scope || undefined)?.context ?? this.ctx).get(service) as HostServices[Name] | undefined;
   }
 
   async prepare(key: ScopeKey, signal?: AbortSignal) {
@@ -175,16 +178,19 @@ export class PluginHost implements ScopePort {
     }
     signal?.throwIfAborted();
     if (this.closing) throw new Error('Plugin host is closing');
+    const ancestry = this.ancestry(key);
+    if (!ancestry.length) throw new DomainError('not_found', 'Plugin scope not found: ' + key);
     if (!this.started) return;
     const settings = this.settings();
-    if (!this.ancestry(key).some((item) => Object.hasOwn(settings.scopes, item) && !this.scopes.has(item))) return;
+    if (!ancestry.some((item) => Object.hasOwn(settings.scopes, item) && !this.scopes.has(item))) return;
     await this.apply(settings, () => {}, false, key);
     signal?.throwIfAborted();
   }
 
   private scopedEntries(settings: PluginSettings, descriptors: ReturnType<PluginCatalog['descriptors']>,
     appProviders: ReadonlyMap<string, string>, unavailable: (id: string, error: unknown, key?: ScopeKey) => boolean,
-    preparing?: ScopeKey, released: ReadonlySet<ScopeKey> = new Set(), validating: readonly ScopeKey[] = []) {
+    requestedIdentities: ReadonlySet<string>, preparing?: ScopeKey,
+    released: ReadonlySet<ScopeKey> = new Set(), validating: readonly ScopeKey[] = []) {
     const contexts = new Map<ScopeKey, EntryGroup>();
     const entries: EntryOptions[] = [];
     const instances = new Map<string, { key: ScopeKey; plugin: string }>();
@@ -214,7 +220,7 @@ export class PluginHost implements ScopePort {
       const parent = address.parent ? visit(address.parent) : root;
       if (!overrides) return parent;
       const enabled = descriptors.filter(({ id, scope }) => scope === address.scope.kind && overrides.plugins?.[id]);
-      let plans: PluginPlan[] = [];
+      let plans: ConfiguredPlugin[] = [];
       let providers = parent.providers;
       try {
         ({ plans, providers } = this.catalog.plans(settings, descriptors, address.scope.kind, parent.providers, overrides,
@@ -231,7 +237,7 @@ export class PluginHost implements ScopePort {
       }
       for (const { id, provides } of enabled) {
         for (const service of provides ?? []) if (providers.get(service) === id || !parent.providers.has(service)) isolated.add(service);
-        isolated.add('entry:' + id);
+        if (requestedIdentities.has(id)) isolated.add('entry:' + id);
       }
       const isolates = [...isolated].sort();
       const existing = this.scopes.get(key);
@@ -241,7 +247,7 @@ export class PluginHost implements ScopePort {
         contexts.set(key, group);
         for (const plan of plans) {
           const id = key + '/' + plan.id;
-          entries.push(this.entry(plan, address.scope, id, key, context));
+          entries.push(this.entry(plan, address.scope, requestedIdentities.has(plan.id), id, key, context));
           instances.set(id, { key, plugin: plan.id });
         }
       }
@@ -256,18 +262,17 @@ export class PluginHost implements ScopePort {
     return { contexts, entries, instances };
   }
 
-  private entry(plan: PluginPlan, scope: PluginScope, id = plan.id, scopeKey?: ScopeKey, context = this.ctx): EntryOptions {
+  private entry(plan: ConfiguredPlugin, scope: PluginScope, identity: boolean, id = plan.id, scopeKey?: ScopeKey, context = this.ctx): EntryOptions {
     const { source, descriptor } = plan;
     return {
-      id, context, config: plan.config ?? {}, module: descriptor.module ?? plan.id,
+      id, context, config: plan.config ?? {}, module: (descriptor.module ?? plan.id) + (identity ? ':identity' : ''),
       inject: descriptor.requires?.map(dependency => 'entry:' + dependency),
       live: descriptor.configChanges === 'live',
       load: () => descriptor.plugin ?? { apply() {} },
       prepare: (ctx) => {
         bindInstance(ctx.fiber.entry!, { pluginId: plan.id, scope, scopeKey,
           writableConfig: descriptor.configChanges === 'live' && descriptor.configSchema !== undefined,
-          trusted: !source && this.composition.trustedContributors?.has(plan.id) === true });
-        ctx.provide('entry:' + plan.id, true);
+          trusted: !source && descriptor.trustedContributor === true });
         const changes = this.ctx.get('harnessChanges');
         if (changes) ctx.effect(() => changes.register('plugin:' + plan.id));
         this.catalog.validateConfig(descriptor, ctx.fiber.config, 'mount', ctx, descriptor.validateConfig, id);
@@ -278,6 +283,7 @@ export class PluginHost implements ScopePort {
         const unexpected = [...registered].find(name => !declared.includes(name));
         if (unexpected) throw new Error('Undeclared service: ' + unexpected);
         if (declared.some(name => !registered.has(name))) throw new Error('Plugin did not publish all declared services: ' + id);
+        if (identity) ctx.provide('entry:' + plan.id, true);
       }
     };
   }
@@ -298,18 +304,6 @@ export class PluginHost implements ScopePort {
     return handler(input, signal);
   }
 
-  private removeScopeData(keys: ReadonlySet<ScopeKey>) {
-    const root = join(dirname(this.directory), 'plugin-data');
-    const info = lstatSync(root, { throwIfNoEntry: false });
-    if (!info) return;
-    if (!info.isDirectory() || relative(root, realpathSync(root))) throw new Error('Plugin data directory has been redirected');
-    const instances = [...keys].map((key) => createHash('sha256').update(key).digest('hex'));
-    for (const entry of readdirSync(root, { withFileTypes: true })) {
-      if (!entry.isDirectory()) continue;
-      for (const instance of instances) rmSync(join(root, entry.name, instance), { recursive: true, force: true });
-    }
-  }
-
   browserAsset(url: string) { return this.browserState.assets.get(url); }
 
   async start(settings: PluginSettings) {
@@ -323,7 +317,7 @@ export class PluginHost implements ScopePort {
     while (this.applying) await this.applying.catch(() => {});
     if (this.closing) throw new Error('Plugin host is closing');
     await this.apply(settings, commit, false, undefined, released);
-    if (released?.size) this.removeScopeData(released);
+    if (released?.size) removeScopeData(join(dirname(this.directory), 'plugin-data'), released);
   }
 
   private apply(settings: PluginSettings, commit: () => void, starting: boolean, preparing?: ScopeKey, released?: ReadonlySet<ScopeKey>) {
@@ -335,7 +329,8 @@ export class PluginHost implements ScopePort {
 
   private async configureGraph(settings: PluginSettings, commit: () => void, starting: boolean, preparing?: ScopeKey, released?: ReadonlySet<ScopeKey>) {
     const oldEntries = [...this.entries.values()];
-    const previousActive = new Set(oldEntries.filter((entry) => entry.active).map(({ options }) => options.id));
+    const bootstrapIds = new Set(this.bootstrap.map(({ id }) => id));
+    const previousActive = new Set(oldEntries.filter((entry) => entry.active && !bootstrapIds.has(entry.options.id)).map(({ options }) => options.id));
     const previousEntries = oldEntries.map(({ options }) => options);
     const failures = new Map<string, string>();
     const previous = this.settings();
@@ -348,18 +343,18 @@ export class PluginHost implements ScopePort {
       if (updating && changedSelection(id, previous, settings, key))
         throw new DomainError(error instanceof DomainError ? error.code : 'invalid_input',
           'Plugin ' + instance + ': ' + message, { cause: error });
-      if (this.catalog.fixedPlugins.has(id) || this.catalog.lockedPlugins.has(id) || previousActive.has(instance)) return false;
+      if (descriptors.some(row => row.id === id && row.required) || this.catalog.lockedPlugins.has(id) || previousActive.has(instance)) return false;
       failures.set(instance, message);
       return true;
     };
     const { plans, providers } = this.catalog.plans(settings, descriptors, 'application', this.root, undefined, unavailable);
     const requiredScopes = new Set(updating ? scopeKeys(settings).filter((key) =>
-      Object.entries(settings.scopes[key]?.providers ?? {}).some(([service, provider]) =>
-        this.catalog.requiredServices.has(service) && changedSelection(provider, previous, settings, key))) : []);
-    const scoped = this.scopedEntries(settings, descriptors, providers, unavailable, preparing, released,
+      Object.values(settings.scopes[key]?.providers ?? {}).some(provider => changedSelection(provider, previous, settings, key))) : []);
+    const requestedIdentities = new Set(descriptors.flatMap(row => row.requires ?? []));
+    const scoped = this.scopedEntries(settings, descriptors, providers, unavailable, requestedIdentities, preparing, released,
       [...requiredScopes, ...validations.flatMap(({ key }) => key ? [key] : [])]);
-    const browser = planBrowser(plans, settings.browserProviders ?? {}, this.catalog.requiredBrowserServices, this.catalog.fixedPlugins);
-    const mounts = [...plans.filter(({ id }) => !failures.has(id)).map((plan) => this.entry(plan, appScope)), ...scoped.entries];
+    const browser = planBrowser(plans, settings.browserProviders ?? {}, this.catalog.requiredClientCapabilities);
+    const mounts = [...plans.filter(({ id }) => !failures.has(id)).map((plan) => this.entry(plan, appScope, requestedIdentities.has(plan.id))), ...scoped.entries];
     const appChanged = !isDeepStrictEqual(previous.providers, settings.providers) ||
       descriptors.some((descriptor) => {
         const { id, configChanges, scope, plugin, source } = descriptor;
@@ -380,27 +375,19 @@ export class PluginHost implements ScopePort {
     const release = !starting && !preparing && !released && (appChanged || scopeChanges.size)
       ? this.ctx.get('harnessMutations')?.protect(appChanged ? undefined : scopeChanges) : undefined;
     try {
-      await this.entries.update(mounts);
+      const activationErrors = await this.entries.update([...this.bootstrap, ...mounts]);
       for (const mounted of mounts) {
         const entry = this.entries.get(mounted.id)!;
         if (entry.active && !entry.error) continue;
         const scope = scoped.instances.get(mounted.id);
         const missing = Object.keys(entry.fiber?.inject ?? {}).filter((service) => entry.options.context.get(service) == null);
-        const error = entry.error ?? new Error('No enabled provider for ' + missing.join(', ') + ' (' + mounted.id + ')');
+        const error = activationErrors.get(mounted.id) ?? new Error('No enabled provider for ' + missing.join(', ') + ' (' + mounted.id + ')');
         if (!(scope ? unavailable(scope.plugin, error, scope.key) : unavailable(mounted.id, error))) throw error;
       }
-        for (const service of this.catalog.requiredServices) {
-          const provider = providers.get(service);
-          if (!provider || (provider !== 'application' && !this.entries.get(provider)?.active) || this.ctx.get(service) == null) {
-            const diagnostic = provider && failures.get(provider);
-            throw new DomainError('unavailable', 'Required service ' + service + ' is unavailable' +
-              (diagnostic ? ': ' + provider + ': ' + diagnostic : ''));
-          }
-        }
         for (const key of requiredScopes) {
           const context = this.configurationContext(key, scoped.contexts);
-          for (const service of this.catalog.requiredServices) if (context.get(service) == null)
-            throw new DomainError('unavailable', 'Required service ' + service + ' is unavailable in ' + key);
+          for (const service of Object.keys(settings.scopes[key]?.providers ?? {})) if (context.get(service) == null)
+            throw new DomainError('unavailable', 'Selected service ' + service + ' is unavailable in ' + key);
         }
         for (const { descriptor, config, key } of validations) {
           const instance = key ? key + '/' + descriptor.id : descriptor.id;
@@ -410,7 +397,7 @@ export class PluginHost implements ScopePort {
       {
         const browserState = publishBrowser(browser, plans, (id) => this.entries.get(id)?.active === true);
         const provided = new Set(browserState.entries.flatMap(({ provides }) => provides ?? []));
-        for (const service of this.catalog.requiredBrowserServices)
+        for (const service of this.catalog.requiredClientCapabilities)
           if (!provided.has(service)) throw new DomainError('unavailable', 'Required browser service is unavailable: ' + service);
         commit();
         this.started = true;
@@ -437,7 +424,7 @@ export class PluginHost implements ScopePort {
   async close() {
     this.closing = true;
     await this.applying?.catch(() => {});
-    try { await withMountTransaction(() => this.entries.close()); }
+    try { if (!this.bootstrap.length) await withMountTransaction(() => this.entries.close()); }
     finally {
       this.imports.deregister();
       this.scopes.clear();

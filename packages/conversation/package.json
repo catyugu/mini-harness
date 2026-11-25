@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "@mini-harness/approvals": "workspace:*",
+    "@mini-harness/file-preview": "workspace:*",
     "@mini-harness/input": "workspace:*",
     "@mini-harness/llm": "workspace:*",
     "@mini-harness/models": "workspace:*",

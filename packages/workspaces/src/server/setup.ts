@@ -23,8 +23,9 @@ export function setup(ctx: Context) {
   });
   ctx.provide('harnessWorkspaces', catalog);
   ctx.on('harness/quiesce', () => catalog.close());
-  const add = (method: string, path: string, handler: Parameters<typeof ctx.harnessRoutes.register>[2]) =>
-    ctx.effect(() => ctx.harnessRoutes.register(method, path, handler));
+  ctx.inject(['harnessRoutes'], web => {
+  const add = (method: string, path: string, handler: Parameters<typeof web.harnessRoutes.register>[2]) =>
+    web.effect(() => web.harnessRoutes.register(method, path, handler));
   const requireId = (id: string) => {
     if (!validId.test(id)) throw new HttpError('not_found', 'Workspace not found');
     catalog.get(id);
@@ -42,5 +43,6 @@ export function setup(ctx: Context) {
   add('DELETE', '/api/workspaces/:id', ({ params }) => {
     const id = requireId(params.id);
     return catalog.remove(id, () => ctx.harnessSettingsStore.forgetScopes([`workspace:${id}`]));
+  });
   });
 }

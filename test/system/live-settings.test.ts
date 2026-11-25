@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { readSettings } from '@mini-harness/settings/config';
-import { MiniHarnessRuntime } from '@mini-harness/host/application';
+import { storedProfile } from '../support/profile.js';
+import { MiniHarnessRuntime } from '../support/profile.js';
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
 
 test('appearance, parallelism and child defaults update without interrupting a running session', async (t) => {
@@ -88,8 +88,8 @@ test('a scoped plugin transaction excludes new runs in its subtree until commit'
   } finally { release(); }
   await updating;
   assert.deepEqual(await deletion, [obsolete.id]);
-  assert.equal(readSettings(paths).scopes[obsoleteScope], undefined);
-  assert.equal(readSettings(paths).scopes[workspace]?.plugins?.staged, true);
+  assert.equal((await storedProfile(paths)).scopes[obsoleteScope], undefined);
+  assert.equal((await storedProfile(paths)).scopes[workspace]?.plugins?.staged, true);
   assert.equal(await sibling, 'Mock response');
   assert.equal(await runtime.plugins.ctx.harnessRuns.send(target.id, 'After commit'), 'Mock response');
 });

@@ -10,7 +10,7 @@ import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { readSettings } from '@mini-harness/settings/config';
 import { writeJson } from '@mini-harness/platform/json';
-import { createMiniHarnessServer } from '@mini-harness/host/server';
+import { createMiniHarnessServer } from '../support/profile.js';
 import { createFixturePaths } from '../helpers/mock-provider.js';
 import { parseNpmPackResult } from '../../scripts/npm-pack.js';
 
@@ -89,7 +89,7 @@ test('npm registry installation resolves dependencies, updates atomically and se
   const id = 'npm-plugin';
   const files = {
     'plugin.json': JSON.stringify({
-      inject: ['harnessRoutes'], browserAssets: ['web/panel.css', 'web/preload.js'],
+      inject: ['harnessPluginRoutes'], browserAssets: ['web/panel.css', 'web/preload.js'],
       browserPreload: 'web/preload.js'
     }),
     'plugin.js': `
@@ -166,7 +166,7 @@ test('local and browser-only plugins install disabled, mount when enabled and un
   const { paths, request, base } = await fixture(t);
   const route = '/extensions/gui-plugin/echo';
   const bundle = { id: 'gui-plugin', files: [
-    { name: 'plugin.json', content: JSON.stringify({ inject: ['harnessRoutes'] }) },
+    { name: 'plugin.json', content: JSON.stringify({ inject: ['harnessPluginRoutes'] }) },
     { name: 'plugin.js', content: `
 export const inject = ["harnessPluginRoutes"];
 export function apply(ctx, config) {

@@ -1,106 +1,143 @@
+import { icon } from '@mini-harness/ui-primitives/icons';
 import { button, iconButton } from '@mini-harness/ui-primitives/primitives';
+import { Service } from 'mini-harness/cordis';
 import type { createLayout } from './layout.js';
+import type { RightPanelEntry, RightTab, RightTabType, TabOwner, TabScope } from './api.js';
 
-import type { TabScope, TabAddress, RightTabType } from './api.js';
-
-type Tab = {
+interface Tab {
+  id: string;
+  type: symbol;
   key: string;
+  owner: TabOwner;
   title: string;
-  address?: TabAddress;
+  create(scope: TabScope, signal: AbortSignal): HTMLElement;
   view?: { node: HTMLElement; controller: AbortController };
-};
-type ScopeTabs = { scope?: TabScope; open: boolean; active?: Tab; tabs: Tab[] };
-const scopeKey = (scope?: TabScope) => scope?.workspaceId ?? '';
+  stop?: () => void;
+}
+
+interface WorkspaceTabs {
+  open: boolean;
+  tabs: Tab[];
+  active: Map<string, Tab>;
+}
 
 export function createRightTabs(view: {
   root: HTMLElement; bar: HTMLElement; body: HTMLElement; toggle: HTMLButtonElement;
 }, layout: ReturnType<typeof createLayout>, signal: AbortSignal) {
-  const types = new Map<string, RightTabType>();
-  const states = new Map<string, ScopeTabs>();
-  let current = state();
+  const states = new Map<string, WorkspaceTabs>();
+  const entries = new Set<RightPanelEntry>();
+  const scopeChanges = new EventTarget();
+  let scope: TabScope | undefined;
   let nextId = 0;
+  let selection = new AbortController();
+  const inspector = Symbol('inspector');
 
-  function state(scope?: TabScope): ScopeTabs {
-    const key = scopeKey(scope);
-    let selected = states.get(key);
-    if (!selected) {
-      selected = { scope, open: false, tabs: [] };
-      states.set(key, selected);
+  const state = (id: string) => {
+    let workspace = states.get(id);
+    if (!workspace) {
+      workspace = { open: false, tabs: [], active: new Map() };
+      states.set(id, workspace);
     }
-    return selected;
-  }
+    return workspace;
+  };
+  const current = () => scope && states.get(scope.workspaceId);
+  const selected = () => current()?.active.get(scope?.sessionId ?? '');
+  const visible = () => (current()?.tabs ?? []).filter(tab => !tab.owner.sessionId || tab.owner.sessionId === scope?.sessionId);
+  const home = document.createElement('div');
+  home.className = 'right-start';
 
   function render(focus = false) {
-    const { active, tabs } = current;
-    view.bar.replaceChildren(...tabs.map((tab) => {
+    const tabs = visible();
+    const active = selected();
+    const start = iconButton('Workspace panel home', 'plus');
+    start.onclick = () => {
+      current()?.active.delete(scope?.sessionId ?? '');
+      render(true);
+    };
+    view.bar.replaceChildren(...tabs.map(tab => {
       const item = document.createElement('div');
       item.className = 'right-tab';
       const select = button(tab.title, 'quiet');
-      select.id = tab.key + '-select';
-      select.title = tab.address?.path ?? tab.title;
+      select.id = tab.id + '-select';
+      select.title = tab.title;
       select.setAttribute('role', 'tab');
       select.setAttribute('aria-selected', String(tab === active));
-      select.setAttribute('aria-controls', tab.key);
-      select.tabIndex = tab === active ? 0 : -1;
+      select.setAttribute('aria-controls', tab.id);
+      select.tabIndex = tab === active || !active && tab === tabs[0] ? 0 : -1;
       select.onclick = () => activate(tab);
       const close = iconButton('Close tab ' + tab.title, 'close');
-      close.onclick = () => { remove(current, tab); render(true); };
+      close.onclick = () => { remove(tab); render(true); };
       item.append(select, close);
       return item;
     }));
-    for (const tab of tabs) {
-      const node = tab.view?.node ?? mount(tab, (signal) => {
-        const address = tab.address;
-        if (!address) throw new Error('Tab has no registered address');
-        const factory = types.get(address.type);
-        if (!factory) throw new Error('Tab type is not available: ' + address.type);
-        return factory.create(address, signal);
-      });
-      node.hidden = tab !== active;
-      if (node.parentElement !== view.body) view.body.append(node);
+    if (tabs.length) view.bar.append(start);
+    home.hidden = Boolean(active);
+    const selectedScope = scope;
+    home.replaceChildren(...(selectedScope ? [...entries].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map(entry => {
+      const card = button('', 'quiet');
+      const label = document.createElement('span');
+      const title = document.createElement('strong');
+      title.textContent = entry.title;
+      const description = document.createElement('small');
+      description.textContent = entry.description;
+      label.append(title, description);
+      card.append(icon(entry.icon), label);
+      card.onclick = () => entry.open(selectedScope);
+      return card;
+    }) : []));
+    if (home.parentElement !== view.body) view.body.append(home);
+    if (selectedScope) for (const tab of tabs) {
+      if (!tab.view && tab === active) mount(tab, selectedScope);
+      if (!tab.view) continue;
+      tab.view.node.hidden = tab !== active;
+      if (tab.view.node.parentElement !== view.body) view.body.append(tab.view.node);
     }
-    if (focus) (active ? document.getElementById(active.key + '-select') : view.root.querySelector<HTMLElement>('#inspectorClose'))?.focus();
+    if (focus) (active ? document.getElementById(active.id + '-select') :
+      home.querySelector('button') ?? view.root.querySelector<HTMLElement>('#inspectorClose'))?.focus();
   }
 
   function activate(tab: Tab) {
-    current.active = tab;
+    current()?.active.set(scope?.sessionId ?? '', tab);
     render(true);
     tab.view?.node.dispatchEvent(new Event('tab-activate'));
   }
 
-  function selectScope(scope?: TabScope) {
-    if (scopeKey(scope) === scopeKey(current.scope) && scope?.sessionId === current.scope?.sessionId) return;
-    current.open = layout.panelOpen();
-    // The frame can open before workspace selection and the default tab provider are ready.
-    const openedBeforeSelection = !current.scope && Boolean(scope) && current.open;
-    for (const tab of [...current.tabs]) {
-      if (tab.address) unmount(tab);
-      else remove(current, tab);
+  function selectScope(next?: TabScope) {
+    if (scope?.workspaceId === next?.workspaceId && scope?.sessionId === next?.sessionId) return;
+    selection.abort();
+    selection = new AbortController();
+    const workspace = current();
+    const open = layout.panelOpen();
+    if (workspace) workspace.open = open;
+    for (const tab of visible()) unmount(tab);
+    const openedBeforeSelection = !scope && open;
+    const previous = selected();
+    scope = next;
+    scopeChanges.dispatchEvent(new Event('change'));
+    if (next) {
+      const target = state(next.workspaceId);
+      if (openedBeforeSelection) target.open = true;
+      if (previous && !previous.owner.sessionId && previous.owner.workspaceId === next.workspaceId &&
+        !target.active.has(next.sessionId ?? '')) target.active.set(next.sessionId ?? '', previous);
     }
-    current = state(scope);
-    current.scope = scope;
-    if (openedBeforeSelection) current.open = true;
-    for (const tab of current.tabs) if (tab.address) tab.address.sessionId = scope?.sessionId;
     render();
-    layout.setPanel(current.open);
-    if (openedBeforeSelection) openDefault();
+    layout.setPanel(current()?.open ?? false);
   }
 
-  function mount(tab: Tab, create: (signal: AbortSignal) => HTMLElement) {
+  function mount(tab: Tab, scope: TabScope) {
     const controller = new AbortController();
     let node: HTMLElement;
-    try { node = create(controller.signal); }
+    try { node = tab.create(scope, controller.signal); }
     catch (error) {
       controller.abort();
       node = document.createElement('p');
       node.textContent = error instanceof Error ? error.message : String(error);
     }
-    node.id = tab.key;
+    node.id = tab.id;
     node.setAttribute('role', 'tabpanel');
-    node.setAttribute('aria-labelledby', tab.key + '-select');
+    node.setAttribute('aria-labelledby', tab.id + '-select');
     node.classList.add('right-tab-content');
     tab.view = { node, controller };
-    return node;
   }
 
   function unmount(tab: Tab) {
@@ -109,68 +146,68 @@ export function createRightTabs(view: {
     tab.view = undefined;
   }
 
-  function reveal(tab: Tab) {
-    layout.closeDrawer(false);
-    layout.setPanel(true, true);
-    activate(tab);
-  }
-
-  function open(type: string, path?: string, scope = current.scope, mode?: string) {
-    const definition = types.get(type);
-    if (!definition || !scope) return;
-    const target = state(scope);
-    let tab = target.tabs.find(({ address }) => address?.type === type && address.path === path);
+  function open<T>(type: symbol, definition: RightTabType<T>, { owner, key, data, signal }: RightTab<T>) {
+    if (signal?.aborted) return;
+    const target = state(owner.workspaceId);
+    let tab = target.tabs.find(item => item.type === type && item.key === key && item.owner.sessionId === owner.sessionId);
     if (!tab) {
-      const address = { ...scope, type, path, mode };
-      tab = { key: 'right-tab-' + ++nextId, title: definition.title(address), address };
+      const created: Tab = {
+        id: 'right-tab-' + ++nextId, type, key, owner: { ...owner }, title: definition.title(data),
+        create: (scope, signal) => definition.create(data, scope, signal),
+      };
+      tab = created;
       target.tabs.push(tab);
+      if (signal) {
+        const close = () => { remove(created); render(); };
+        signal.addEventListener('abort', close, { once: true });
+        created.stop = () => signal.removeEventListener('abort', close);
+      }
     }
-    if (mode !== undefined && tab.address) tab.address.mode = mode;
-    target.active = tab;
-    if (target === current) reveal(tab);
+    if (visible().includes(tab)) {
+      layout.closeDrawer(false);
+      layout.setPanel(true, true);
+      activate(tab);
+    } else {
+      target.active.set(owner.sessionId ?? '', tab);
+      target.open = true;
+    }
   }
 
-  function remove(target: ScopeTabs, tab: Tab) {
-    const index = target.tabs.indexOf(tab);
-    if (index === -1) return;
+  function remove(tab: Tab) {
+    const target = states.get(tab.owner.workspaceId);
+    const index = target?.tabs.indexOf(tab) ?? -1;
+    if (!target || index < 0) return;
     target.tabs.splice(index, 1);
-    if (target.active === tab) target.active = target.tabs[index] ?? target.tabs[index - 1];
+    for (const [id, active] of target.active) if (active === tab) {
+      const next = target.tabs.filter(item => !item.owner.sessionId || item.owner.sessionId === id).at(-1);
+      if (next) target.active.set(id, next);
+      else target.active.delete(id);
+    }
+    tab.stop?.();
     unmount(tab);
   }
 
   function prune(sessions: ReadonlySet<string>, workspaces: ReadonlySet<string>) {
-    for (const [key, target] of states) {
-      const scope = target.scope;
-      if (!scope) continue;
-      if (workspaces.has(scope.workspaceId)) {
-        if (target === current && scope.sessionId && !sessions.has(scope.sessionId)) selectScope({ workspaceId: scope.workspaceId });
-        continue;
-      }
-      for (const tab of target.tabs) unmount(tab);
-      states.delete(key);
-      if (target === current) selectScope();
+    for (const [id, target] of states) {
+      for (const tab of [...target.tabs])
+        if (!workspaces.has(id) || tab.owner.sessionId && !sessions.has(tab.owner.sessionId)) remove(tab);
+      if (!workspaces.has(id)) states.delete(id);
+      else for (const session of target.active.keys()) if (session && !sessions.has(session)) target.active.delete(session);
     }
-  }
-
-  function openDefault() {
-    if (!current.scope || current.tabs.length) return false;
-    const entry = [...types].find(([, type]) => type.default);
-    if (!entry) return false;
-    open(entry[0]);
-    return true;
+    if (scope && !workspaces.has(scope.workspaceId)) selectScope();
+    else if (scope?.sessionId && !sessions.has(scope.sessionId)) selectScope({ workspaceId: scope.workspaceId });
+    else render();
   }
 
   view.toggle.onclick = () => {
-    if (!layout.panelOpen() && openDefault()) return;
     const opening = !layout.panelOpen();
     layout.setPanel(opening, true);
-    if (opening) current.active?.view?.node.dispatchEvent(new Event('tab-activate'));
+    if (opening) selected()?.view?.node.dispatchEvent(new Event('tab-activate'));
   };
-  view.bar.addEventListener('keydown', (event) => {
+  view.bar.addEventListener('keydown', event => {
     if (!(event.target as HTMLElement).matches('[role=tab]')) return;
-    const { tabs } = current;
-    if (!tabs.length) return;
-    const index = current.active ? tabs.indexOf(current.active) : 0;
+    const tabs = visible();
+    const index = [...view.bar.querySelectorAll('[role=tab]')].indexOf(event.target as Element);
     const target = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 :
       event.key === 'ArrowLeft' ? (index + tabs.length - 1) % tabs.length :
         event.key === 'ArrowRight' ? (index + 1) % tabs.length : undefined;
@@ -179,43 +216,41 @@ export function createRightTabs(view: {
     activate(tabs[target]);
   }, { signal });
   signal.addEventListener('abort', () => {
-    for (const tab of current.tabs) unmount(tab);
+    for (const target of states.values()) for (const tab of [...target.tabs]) remove(tab);
     states.clear();
   }, { once: true });
 
-  return {
-    selectScope, open, prune,
-    register(type: string, definition: RightTabType) {
-      if (types.has(type)) throw new Error('Duplicate right panel tab type: ' + type);
-      types.set(type, definition);
-      // A plugin can register after a user has opened the empty right panel.
-      // Materialize its default tab when the scope is already selected.
-      if (definition.default && layout.panelOpen() && !current.tabs.length && current.scope)
-        open(type);
-      else render();
-      return () => {
-        types.delete(type);
-        for (const target of states.values()) for (const tab of [...target.tabs]) {
-          if (tab.address?.type === type) remove(target, tab);
-        }
+  return Service.track({
+    selectScope, prune,
+    register<T>(type: string, definition: RightTabType<T>) {
+      const identity = Symbol(type);
+      const owner = Service.caller(this).fiber;
+      const signal = owner.signal;
+      owner.effect(() => () => {
+        for (const target of states.values()) for (const tab of [...target.tabs])
+          if (tab.type === identity) remove(tab);
         render();
-      };
+      });
+      return { open(tab: RightTab<T>) { if (!signal.aborted) open(identity, definition, tab); } };
     },
-    inspect(owner: string, title: string, node: HTMLElement, signal: AbortSignal) {
-      const target = current;
-      const key = 'inspect-' + owner;
-      const previous = target.tabs.find((tab) => tab.key === key);
-      if (previous) remove(target, previous);
-      const tab: Tab = { key, title };
-      target.tabs.push(tab);
-      mount(tab, () => node);
-      if (!tab.view) throw new Error('Inspector tab failed to mount');
-      const lifetime = tab.view.controller.signal;
-      signal.addEventListener('abort', () => {
-        remove(target, tab);
-        if (target === current) render();
-      }, { once: true, signal: lifetime });
-      reveal(tab);
-    }
-  };
+    contribute(id: string, entry: RightPanelEntry) {
+      Service.caller(this).effect(() => {
+        entries.add(entry);
+        render();
+        return () => { entries.delete(entry); render(); };
+      }, 'Workspace panel entry: ' + id);
+    },
+    onScopeChange(listener: () => void, signal: AbortSignal) {
+      scopeChanges.addEventListener('change', listener, { signal });
+      return () => scopeChanges.removeEventListener('change', listener);
+    },
+    inspect(title: string, node: HTMLElement, lifetime: AbortSignal) {
+      if (!scope) return;
+      const owner = Service.caller(this).fiber;
+      open(inspector, { title: () => title, create: () => node }, {
+        owner: { ...scope }, key: String(owner.uid),
+        data: undefined, signal: AbortSignal.any([owner.signal, selection.signal, lifetime]),
+      });
+    },
+  });
 }

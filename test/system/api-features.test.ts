@@ -18,7 +18,7 @@ test('GUI APIs configure providers, persist keys privately, discover Skills and 
   const search = await request(scope + '/files/search?q=note');
   assert.equal(search.status, 200, JSON.stringify(search.body));
   assert.ok(search.body.includes('note.md'));
-  assert.equal((await request(scope + '/files/preview?path=note.md')).body.content, 'workspace note');
+  assert.equal((await request(scope + '/files/preview?path=note.md')).body.text, 'workspace note');
   assert.equal((await request(scope + '/files/preview?path=' + encodeURIComponent(paths.settings))).status, 403);
   assert.equal((await request(scope + '/files/tree?path=..')).status, 403);
   assert.equal((await request('/settings', 'PATCH', { plugins: { files: false, skills: false } })).status, 200);

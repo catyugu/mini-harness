@@ -1,10 +1,11 @@
 import { createHash } from 'node:crypto';
-import { lstatSync, mkdirSync, realpathSync, rmSync } from 'node:fs';
+import { lstatSync, mkdirSync, readdirSync, realpathSync, rmSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { Service } from 'mini-harness/cordis';
 import { pluginInstance } from '@mini-harness/plugin-api/instance';
 import { protectLocal } from '@mini-harness/platform/local-secret';
 import { readJson, writeJson } from '@mini-harness/platform/json';
+import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
 import type { PluginData, PluginSecrets } from '@mini-harness/plugin-api/services';
 
 function storagePath(service: object, directory: string, name: string, secret = false) {
@@ -46,4 +47,15 @@ export function pluginSecrets(directory: string): PluginSecrets {
     },
     remove(name) { rmSync(storagePath(this, directory, name, true), { force: true }); }
   });
+}
+
+export function removeScopeData(root: string, keys: ReadonlySet<ScopeKey>) {
+  const info = lstatSync(root, { throwIfNoEntry: false });
+  if (!info) return;
+  if (!info.isDirectory() || relative(root, realpathSync(root))) throw new Error('Plugin data directory has been redirected');
+  const instances = [...keys].map((key) => createHash('sha256').update(key).digest('hex'));
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    for (const instance of instances) rmSync(join(root, entry.name, instance), { recursive: true, force: true });
+  }
 }

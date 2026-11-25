@@ -35,5 +35,5 @@ export function setup(ctx: Context) {
       await Promise.allSettled(ids.map((id) => runs.completion(id)));
     }
   }));
-  registerRoutes(ctx);
+  ctx.inject(['harnessRoutes'], registerRoutes);
 }

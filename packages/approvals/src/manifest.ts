@@ -15,7 +15,7 @@ export const manifest: PluginDescriptor = {
   id: 'core:approvals', title: 'Approvals', description: 'Pending user decisions', defaultEnabled: true,
 
   plugin: {
-    inject: ['harnessChanges', 'harnessRoutes', 'harnessRuns', 'harnessRegistry'],
+    inject: ['harnessChanges', 'harnessRuns', 'harnessRegistry'],
     provide: ['harnessApprovals', 'harnessApprovalRequests'],
     apply(ctx) {
       const approvals = new Approvals();
@@ -55,13 +55,15 @@ export const manifest: PluginDescriptor = {
         runs.events.addEventListener('change', changed);
         return () => { runs.events.removeEventListener('change', changed); approvals.close(); };
       });
-      ctx.effect(() => ctx.harnessRoutes.register('GET', '/api/approvals', () => approvals.list()));
-      ctx.effect(() => ctx.harnessRoutes.register('POST', '/api/approvals', async ({ body }) => {
+      ctx.inject(['harnessRoutes'], web => {
+      web.effect(() => web.harnessRoutes.register('GET', '/api/approvals', () => approvals.list()));
+      web.effect(() => web.harnessRoutes.register('POST', '/api/approvals', async ({ body }) => {
         const input = await body() as { id?: string; allow?: boolean } | null;
         if (typeof input?.id !== 'string' || typeof input.allow !== 'boolean') throw new DomainError('invalid_input', 'Choose allow or deny');
         approvals.decide(input.id, input.allow);
         return { ok: true };
       }));
+      });
     }
   }
 };

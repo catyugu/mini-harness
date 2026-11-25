@@ -1,15 +1,15 @@
 import { DomainError } from '@mini-harness/platform/errors';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { closeSync, constants, createReadStream, existsSync, fstatSync, openSync, lstatSync, readdirSync, realpathSync, statSync } from 'node:fs';
+import { closeSync, constants, createReadStream, existsSync, fstatSync, openSync, lstatSync, readFileSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { dirname, join, resolve, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
-import type { Paths } from '@mini-harness/platform/runtime-paths';
-import { Upgrades } from './upgrade.js';
+import type { Context } from 'mini-harness/cordis';
+import type {} from '@mini-harness/transport/runtime';
+import type {} from '@mini-harness/plugins/api-types';
 import { errorStatus, HttpError, type GatewayRequest } from '@mini-harness/transport/routes';
 import { json } from '@mini-harness/transport/http';
-import { MiniHarnessRuntime } from './application.js';
 
 const FEATURE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const WEB_DIR = join(FEATURE_DIR, 'ui-runtime', 'src', 'assets');
@@ -74,9 +74,11 @@ function remoteRoute(method: string | undefined, path: string) {
     /^\/api\/workspaces\/[a-f0-9]{32}\/(?:sessions|skills|files\/(?:tree|search|preview|changes|diff))$/.test(path);
 }
 
-export async function createMiniHarnessServer(paths: Paths, options: { token?: string; shutdown?: () => void } = {}) {
-  const upgrades = new Upgrades();
-  const runtime = new MiniHarnessRuntime(paths, {
+export function webServer(ctx: Context, token: string, shutdown: () => void) {
+  const routes = ctx.harnessRoutes;
+  const upgrades = ctx.harnessUpgrades;
+  const plugins = ctx.harnessPluginCatalog;
+  ctx.provide('harnessNetwork', {
     async forward(req, res, access) {
       if (access.signal.aborted) { res.destroy(); return; }
       const abort = () => { res.destroy(); };
@@ -84,8 +86,7 @@ export async function createMiniHarnessServer(paths: Paths, options: { token?: s
       res.once('close', () => access.signal.removeEventListener('abort', abort));
       await route(req, res, access);
     }
-  }, (path, handler) => upgrades.register(path, handler));
-  const token = options.token ?? randomBytes(32).toString('hex');
+  });
   const route = async (req: IncomingMessage, res: ServerResponse, remote?: GatewayRequest): Promise<void> => {
     try {
       const url = new URL(req.url || '/', 'http://localhost');
@@ -102,11 +103,22 @@ export async function createMiniHarnessServer(paths: Paths, options: { token?: s
         let requested: string;
         try { requested = pathname === '/' ? 'index.html' : decodeURIComponent(pathname.slice(1)); }
         catch { throw new HttpError('invalid_input', 'Invalid URL encoding'); }
-        const extension = runtime.plugins.browserAsset(pathname);
+        const extension = plugins.browserAsset(pathname);
         const mime = extension?.mime ?? assets.get(requested);
         if (!mime) throw new HttpError('not_found', 'Not found');
         const path = extension?.path ?? (requested.startsWith('packages/') || requested.startsWith('vendor/')
           ? join(FEATURE_DIR, '..', requested) : join(WEB_DIR, requested));
+        const nonce = requested === 'index.html' ? randomBytes(18).toString('base64') : undefined;
+        const csp = "default-src 'self'; script-src 'self'; style-src 'self'" + (nonce ? " 'nonce-" + nonce + "'" : '') +
+          "; img-src 'self' data: blob:; media-src 'self' blob:; object-src 'none'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'";
+        if (nonce) {
+          const page = readFileSync(path, 'utf8').replace('EDITOR_STYLE_NONCE', nonce);
+          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8',
+            'Content-Length': Buffer.byteLength(page), 'Cache-Control': 'no-cache',
+            'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': csp, 'Referrer-Policy': 'no-referrer' });
+          res.end(req.method === 'HEAD' ? undefined : page);
+          return;
+        }
         const opened = extension ? openAsset(path) : undefined;
         const size = opened?.size ?? statSync(path).size;
         const stream = req.method === 'HEAD' ? undefined : createReadStream(path, { fd: opened?.fd });
@@ -116,7 +128,7 @@ export async function createMiniHarnessServer(paths: Paths, options: { token?: s
         } else if (opened) closeSync(opened.fd);
         res.writeHead(200, { 'Content-Type': mime + '; charset=utf-8',
           'Content-Length': size, 'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff',
-          'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'",
+          'Content-Security-Policy': csp,
           'Referrer-Policy': 'no-referrer' });
         if (stream) stream.pipe(res);
         else res.end();
@@ -126,11 +138,11 @@ export async function createMiniHarnessServer(paths: Paths, options: { token?: s
       if (!remote && req.method !== 'GET' && req.headers.origin && req.headers.origin !== 'http://' + req.headers.host) {
         throw new HttpError('forbidden', 'Origin not allowed');
       }
-      if (pathname === '/api/shutdown' && req.method === 'POST' && options.shutdown) {
-        res.once('finish', options.shutdown);
+      if (pathname === '/api/shutdown' && req.method === 'POST') {
+        res.once('finish', shutdown);
         return json(res, 202, { pid: process.pid });
       }
-      const result = runtime.plugins.ctx.harnessRoutes.dispatch(req, res, url);
+      const result = routes.dispatch(req, res, url);
       if (result) return await result;
       throw new HttpError('not_found', 'Not found');
     } catch (error) {
@@ -139,12 +151,11 @@ export async function createMiniHarnessServer(paths: Paths, options: { token?: s
         if (res.headersSent) { res.end(); return; }
         return json(res, errorStatus[error.code], { code: error.code, error: error.message });
       }
-      runtime.plugins.ctx.logger.error('HTTP %s failed: %s', req.method, error instanceof Error ? error.stack ?? error.message : String(error));
+      ctx.logger.error('HTTP %s failed: %s', req.method, error instanceof Error ? error.stack ?? error.message : String(error));
       if (res.headersSent) { res.end(); return; }
       json(res, 500, { code: 'internal_error', error: 'Internal server error' });
     }
   };
-  await runtime.start();
   const server = createServer((req, res) => { void route(req, res); });
   server.on('upgrade', (request, socket, head) => {
     const reject = (status: string) => socket.end('HTTP/1.1 ' + status + '\r\nConnection: close\r\n\r\n');
@@ -155,8 +166,8 @@ export async function createMiniHarnessServer(paths: Paths, options: { token?: s
   });
   let closing: Promise<void>;
   return {
-    server, get runtime() { return runtime; }, token,
-    async listen(port = runtime.settings.port) {
+    server, token,
+    async listen(port: number) {
       await new Promise<void>((resolve, reject) => {
         server.once('error', reject);
         server.listen(port, '127.0.0.1', () => { server.off('error', reject); resolve(); });
@@ -167,13 +178,8 @@ export async function createMiniHarnessServer(paths: Paths, options: { token?: s
       if (closing) return closing;
       const closed = new Promise<void>((done) => server.close(() => done()));
       upgrades.close();
-      const drained = runtime.stop().finally(() => {
-        // Request and plugin work has drained. End any remaining HTTP connections,
-        // including streams or keep-alive sockets which finished during shutdown.
-        server.closeAllConnections();
-      });
-      closing = Promise.all([closed, drained]).then(() => {});
-      return closing;
+      server.closeAllConnections();
+      return closing = closed;
     }
   };
 }

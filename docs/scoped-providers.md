@@ -30,8 +30,7 @@ New or changed required provider selections must mount successfully before setti
 shadow its ancestor.
 
 Plugins declare required services in their Cordis `inject` declaration. A running
-plugin can prepare a visible session with `sessionContext(ctx, sessionId, signal)`
-and use `scopedService(ctx, sessionId, name)` for a declared service. The native
+plugin can use `await sessionService(ctx, sessionId, name, signal)` to access a declared service in a visible session. The native
 agent uses the selected LLM, tools, and environment through the session context.
 
 Cordis deactivates consumers when a required provider leaves and activates them
@@ -45,3 +44,5 @@ The selected plugin declares its offered services in `browserProvides`.
 A user can grant specific registered tools to a trusted local plugin in that plugin’s Settings detail, or through `readOnlyTools` in `settings.json` or the settings API. For example, `{ "readOnlyTools": { "workspace-greeting": ["greet"] } }` allows its `greet` registration to be considered in read-only conversations when it declares read-only access. Update the map to revoke a grant. Descendant and workspace restrictions still apply before invocation.
 
 Setup and live configuration callbacks register and update plugin resources. Scope preparation, session writes, execution submission and configuration writes are available from runtime handlers after the configuration commits. Use those operations from normal runtime handlers. A prepared scoped service is a current provider reference, not a stable proxy: resolve it again after configuration changes. The browser bootstrap is published only when its required capabilities remain available after server mounting, including replacements.
+
+Provider selections and scoped plugin configuration are written to the active [Profile](profiles.md). Tool grants and scoped tool restrictions are saved as domain settings.

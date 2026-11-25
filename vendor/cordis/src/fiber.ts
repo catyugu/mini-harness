@@ -746,14 +746,14 @@ export class Fiber {
         await this.entry?.options.prepare?.(this.ctx)
         this.signal.throwIfAborted()
         await this._execute(this._runner)
+        this.signal.throwIfAborted()
         await this.entry?.options.verify?.(this.ctx)
       }
     } catch (reason) {
-      // impl guarantees that the error is non-null (?)
-      this.ctx.logger.error(reason)
       // A superseded load still needs cleanup, but cannot fail the new target.
       if (this._runner.epoch === oldEpoch) {
-        this._error = reason
+        this.ctx.logger.error(reason)
+        this._error = reason ?? new Error('Plugin setup failed')
         this._runner.epoch = INACTIVE
       }
     }

@@ -8,7 +8,7 @@ test('an extension owns its authenticated routes and native branch records witho
   const { app, paths, request } = await fixture(t);
   const folder = join(paths.plugins, 'records');
   mkdirSync(folder);
-  writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ inject: ['harnessSessions'] }));
+  writeFileSync(join(folder, 'plugin.json'), JSON.stringify({}));
   writeFileSync(join(folder, 'plugin.js'), `
 export const inject = ["harnessPluginRoutes","harnessSessions"];
 

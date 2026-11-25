@@ -22,7 +22,6 @@ export interface ScopePort {
   prepare(key: ScopeKey, signal?: AbortSignal): Promise<void>;
   /** Read the nearest prepared Cordis service without changing a parent or sibling scope. */
   require<Name extends keyof HostServices & string>(key: ScopeKey | null | undefined, service: Name): NonNullable<HostServices[Name]>;
-  optional<Name extends keyof HostServices & string>(key: ScopeKey | null | undefined, service: Name): HostServices[Name] | undefined;
   context(key?: ScopeKey | null): Context;
   address(key: ScopeKey): readonly ScopeKey[];
 }

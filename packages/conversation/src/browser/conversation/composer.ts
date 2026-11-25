@@ -1,38 +1,69 @@
 import { scopedElements } from '@mini-harness/ui-primitives/primitives';
 import { icon } from '@mini-harness/ui-primitives/icons';
-import { fileCard, decodedSize, imageMime } from './attachment-card.js';
+import type { Context } from 'mini-harness/cordis';
+import type { Attachment } from '@mini-harness/input/message';
+import type { PreviewResource } from '@mini-harness/file-preview/browser/api';
+import { decodedSize } from './attachment-card.js';
+import { attachmentView } from './attachment-view.js';
+import type { PromptEditor } from './prompt-editor.js';
 import type { ComposerCommand, ComposerModel, Suggestion } from '../composer-api.js';
 
-export function createComposer(root: HTMLElement, model: ComposerModel, report: (error: Error) => void, signal: AbortSignal) {
+export function createComposer(ctx: Context, root: HTMLElement, editor: PromptEditor, model: ComposerModel, report: (error: Error) => void, signal: AbortSignal) {
   const { element } = scopedElements(root);
-  const prompt = element<'textarea'>('prompt'), form = element<'form'>('composer');
+  const prompt = editor.element, form = element<'form'>('composer');
   const attachmentList = element('attachments'), suggestions = element('suggestions');
   let completion: AbortController;
-  let files: ReturnType<ComposerModel['draft']>['attachments'] | undefined;
+  let files: { file: Attachment; controller: AbortController; key: string }[] = [];
+  let attachmentViews: AbortController | undefined;
+  let previousScope = '';
+  let nextAttachment = 0;
+  const same = (left: Attachment, right: Attachment) =>
+    left.name === right.name && left.mimeType === right.mimeType && left.data === right.data;
+  signal.addEventListener('abort', () => {
+    attachmentViews?.abort();
+    files.forEach(({ controller }) => controller.abort());
+  }, { once: true });
   const render = (pending: boolean) => {
     const current = model.draft();
     element<'button'>('send').disabled = current.loading || current.awaitingAcceptance || pending;
     element<'button'>('queueSend').disabled = current.loading || current.awaitingAcceptance || pending;
-    if (files?.length === current.attachments.length && files.every((file, index) => {
-      const next = current.attachments[index];
-      return file.name === next.name && file.mimeType === next.mimeType && file.data === next.data;
-    })) return;
-    files = current.attachments;
-    attachmentList.replaceChildren(...files.map((file, index) => {
-      const card = fileCard({ ...file, size: decodedSize(file.data) });
-      card.classList.add('attachment');
-      if (imageMime.test(file.mimeType)) {
-        const image = document.createElement('img');
-        image.src = 'data:' + file.mimeType + ';base64,' + file.data;
-        image.alt = file.name;
-        card.firstElementChild?.replaceWith(image);
-      }
-      const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'icon-button';
-      remove.setAttribute('aria-label', 'Remove ' + file.name); remove.append(icon('close'));
-      remove.onclick = () => model.removeAttachment(index); card.append(remove); return card;
+    const scope = ctx.miniSelection.scope();
+    const identity = JSON.stringify(scope);
+    if (previousScope === identity && files.length === current.attachments.length &&
+      files.every(({ file }, index) => same(file, current.attachments[index]))) return;
+    if (previousScope !== identity) {
+      files.forEach(({ controller }) => controller.abort());
+      files = [];
+      previousScope = identity;
+    }
+    const previous = [...files];
+    files = current.attachments.map(file => {
+      const index = previous.findIndex(item => !item.controller.signal.aborted && same(item.file, file));
+      if (index >= 0) return previous.splice(index, 1)[0];
+      return { file, controller: new AbortController(), key: 'draft:' + ++nextAttachment };
+    });
+    previous.forEach(({ controller }) => controller.abort());
+    const thumbnails = new AbortController();
+    attachmentViews?.abort();
+    attachmentViews = thumbnails;
+    attachmentList.replaceChildren(...files.map(({ file, controller, key }, index) => {
+      const size = decodedSize(file.data);
+      const resource: PreviewResource | undefined = scope ? {
+        kind: 'memory', ...scope, ...file, key, size, signal: controller.signal,
+      } : undefined;
+      const wrapper = document.createElement('div');
+      wrapper.className = 'attachment';
+      const card = attachmentView(ctx, { ...file, size }, resource, thumbnails.signal);
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'icon-button';
+      remove.setAttribute('aria-label', 'Remove ' + file.name);
+      remove.append(icon('close'));
+      remove.onclick = () => { controller.abort(); model.removeAttachment(index); };
+      wrapper.append(card, remove);
+      return wrapper;
     }));
     attachmentList.hidden = !files.length;
-    prompt.required = !files.length;
   };
   const addFiles = (files: File[]) => model.addFiles(files).catch((error) => {
     if (!signal.aborted) report(error instanceof Error ? error : new Error(String(error)));
@@ -42,8 +73,8 @@ export function createComposer(root: HTMLElement, model: ComposerModel, report: 
   form.addEventListener('drop', (event) => { event.preventDefault(); form.classList.remove('dragging'); void addFiles([...(event.dataTransfer?.files ?? [])]); });
   prompt.addEventListener('paste', (event) => {
     const images = [...(event.clipboardData?.files ?? [])];
-    if (images.length) { event.preventDefault(); void addFiles(images); }
-  });
+    if (images.length) { event.preventDefault(); event.stopPropagation(); void addFiles(images); }
+  }, { capture: true, signal });
   const input = document.createElement('input'); input.type = 'file'; input.multiple = true; input.hidden = true;
   input.onchange = () => { void addFiles([...(input.files ?? [])]); input.value = ''; };
   form.append(input);
@@ -53,13 +84,14 @@ export function createComposer(root: HTMLElement, model: ComposerModel, report: 
   let buttons: HTMLButtonElement[] = [], selected = -1;
 
   function currentToken(): Token | undefined {
-    if (prompt.selectionStart !== prompt.selectionEnd) return;
-    const cursor = prompt.selectionStart;
-    const match = /(?:^|\s)([^\s\p{L}\p{N}])([^\s]*)$/u.exec(prompt.value.slice(0, cursor));
+    if (editor.start !== editor.end) return;
+    const cursor = editor.start;
+    const match = /(?:^|\s)([^\s\p{L}\p{N}])([^\s]*)$/u.exec(editor.value.slice(0, cursor));
     if (!match) return;
     const [, marker, query] = match;
+    if (marker === '@' && query.startsWith('"')) return;
     if (marker !== '/' && !model.completer(marker)) return;
-    const tail = /^\S*/.exec(prompt.value.slice(cursor))?.[0] ?? '';
+    const tail = /^\S*/.exec(editor.value.slice(cursor))?.[0] ?? '';
     if (marker === '/' && !/^[\w:-]*$/.test(query + tail)) return;
 
     return { start: cursor - query.length - 1, end: cursor + tail.length, query, kind: marker as Token['kind'] };
@@ -76,10 +108,9 @@ export function createComposer(root: HTMLElement, model: ComposerModel, report: 
   }
 
   function replace(text: string, match: Token) {
-    prompt.setRangeText(text, match.start, match.end, 'end');
     hide();
-    prompt.focus();
-    prompt.dispatchEvent(new Event('input'));
+    editor.focus();
+    editor.replace(match.start, match.end, text);
   }
 
   function useCommand(command: ComposerCommand, match: Token, complete = false) {
@@ -88,7 +119,7 @@ export function createComposer(root: HTMLElement, model: ComposerModel, report: 
       try { void Promise.resolve(command.run()).catch(report); }
       catch (error) { report(error instanceof Error ? error : new Error(String(error))); }
     } else {
-      const space = !complete && !/^\s/.test(prompt.value.slice(match.end)) ? ' ' : '';
+      const space = !complete && !/^\s/.test(editor.value.slice(match.end)) ? ' ' : '';
       replace('/' + command.name + space, match);
       if (!complete) hide();
     }
@@ -195,22 +226,26 @@ export function createComposer(root: HTMLElement, model: ComposerModel, report: 
           if (!controller.signal.aborted) renderOptions(entries, Math.max(selected, 0), emptyText);
         },
         replace: (text) => {
-          if (!controller.signal.aborted) replace(text + (/^\s/.test(prompt.value.slice(match.end)) ? '' : ' '), match);
+          if (!controller.signal.aborted) replace(text + (/^\s/.test(editor.value.slice(match.end)) ? '' : ' '), match);
         }
       })).catch((error) => { if (!controller.signal.aborted) renderOptions([], 0, error.message); });
     }
   }
 
-  prompt.addEventListener('input', () => { refresh(true); requestAnimationFrame(positionSuggestions); });
+  prompt.addEventListener('draft-change', () => {
+    if (!editor.composing) refresh();
+    requestAnimationFrame(positionSuggestions);
+  }, { signal });
   window.addEventListener('resize', positionSuggestions, { signal });
   window.visualViewport?.addEventListener('resize', positionSuggestions, { signal });
-  prompt.addEventListener('click', () => refresh(true));
+  prompt.addEventListener('compositionend', () => queueMicrotask(() => refresh()), { signal });
+  prompt.addEventListener('click', () => refresh(), { signal });
   prompt.addEventListener('keyup', (event) => {
     if (!suggestions.hidden && buttons.length && ['ArrowDown', 'ArrowUp'].includes(event.key)) return;
     if (['ArrowLeft', 'ArrowRight', 'ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) refresh();
   });
   prompt.addEventListener('keydown', (event) => {
-    if (event.isComposing || suggestions.hidden) return;
+    if (event.isComposing || editor.composing || suggestions.hidden) return;
     if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); hide(); return; }
     if (!buttons.length) return;
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
@@ -221,9 +256,9 @@ export function createComposer(root: HTMLElement, model: ComposerModel, report: 
       if (event.key === 'Tab') completeSelected[selected]?.();
       else buttons[selected]?.click();
     }
-  });
+  }, { capture: true, signal });
   document.addEventListener('pointerdown', (event) => {
-    if (event.target !== prompt && !suggestions.contains(event.target as Node)) hide();
+    if (!prompt.contains(event.target as Node) && !suggestions.contains(event.target as Node)) hide();
   }, { signal });
   signal.addEventListener('abort', hide, { once: true });
   return {

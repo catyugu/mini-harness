@@ -1,18 +1,17 @@
 import type { Context } from 'mini-harness/cordis';
-import type {} from '@mini-harness/ui-layout/browser/api';
 import type { SessionDisplayRecord } from '@mini-harness/sessions/display-record';
 import type { MessageContent, ViewMessage } from '@mini-harness/sessions/message';
 import type { StreamEvent } from '@mini-harness/runs/stream';
 import type { ToolView, MessageAction, MessageActionContext } from '../history-api.js';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { renderMarkdown } from '@mini-harness/ui-primitives/markdown';
-import { button } from '@mini-harness/ui-primitives/primitives';
-import { data } from '@mini-harness/ui-runtime/http';
-import { fileCard, imageMime } from './attachment-card.js';
+import { imageMime } from './attachment-card.js';
+import { attachmentView } from './attachment-view.js';
+import { renderReferences } from './file-references.js';
 
-export function createMessageView(dialogs: Context['miniDialogs'], signal: AbortSignal, messages: HTMLElement,
+export function createMessageView(ctx: Context, signal: AbortSignal, messages: HTMLElement,
   extensions: { render(tool: ToolView, signal: AbortSignal, action?: boolean): HTMLElement | undefined; messageActions(): MessageAction[]; report(error: unknown): void },
-  current: () => { sessionId?: string; leafId?: string | null }, retryLast: () => void) {
+  current: () => { workspaceId?: string; sessionId?: string; leafId?: string | null }, retryLast: () => void) {
 const toolItems = new WeakMap<HTMLDetailsElement, Parameters<typeof toolCard>[0]>();
 const resources = new Map<HTMLElement, AbortController>();
 signal.addEventListener('abort', () => { for (const resource of resources.values()) resource.abort(); resources.clear(); }, { once: true });
@@ -21,42 +20,6 @@ const actionOwners = new WeakMap<HTMLButtonElement, MessageAction>();
 const saved = new Map<string, { node: HTMLElement; source: ViewMessage }>();
 let previewAnswer: { node: HTMLElement; bubble: HTMLElement } | undefined;
 const liveTools = new Map<string, HTMLDetailsElement>();
-
-const preview = document.createElement('figure');
-preview.className = 'message-image-preview';
-const previewViewport = document.createElement('div');
-previewViewport.className = 'message-image-viewport';
-previewViewport.setAttribute('role', 'region');
-previewViewport.setAttribute('aria-label', 'Image');
-const previewImage = document.createElement('img');
-previewViewport.append(previewImage);
-const caption = document.createElement('figcaption');
-const filename = document.createElement('span');
-const actualSize = button('Actual size', 'quiet');
-caption.append(filename, actualSize);
-preview.append(previewViewport, caption);
-const { node: previewDialog, dispose } = dialogs.create('Image preview', preview);
-signal.addEventListener('abort', dispose, { once: true });
-previewDialog.classList.add('message-image-dialog');
-
-function setActualSize(enabled: boolean) {
-  actualSize.setAttribute('aria-pressed', String(enabled));
-  previewViewport.classList.toggle('actual-size', enabled);
-  previewViewport.tabIndex = enabled ? 0 : -1;
-  previewViewport.scrollTo(0, 0);
-}
-
-actualSize.onclick = () => setActualSize(actualSize.getAttribute('aria-pressed') !== 'true');
-previewDialog.addEventListener('close', () => {
-  if (!previewDialog.open) previewImage.removeAttribute('src');
-}, { signal });
-
-function openImage(thumbnail: HTMLImageElement) {
-  previewImage.alt = filename.textContent = thumbnail.alt;
-  previewImage.src = thumbnail.src;
-  if (!previewDialog.open) previewDialog.showModal();
-  setActualSize(false);
-}
 
 function textOf(value?: MessageContent) {
   if (typeof value === 'string') return value;
@@ -74,6 +37,10 @@ function addMessage(role: 'user' | 'assistant' | 'error', text: string, timestam
   const item = document.createElement('article');
   item.className = 'message ' + role;
   if (role === 'assistant') renderMarkdown(item, text);
+  else if (role === 'user') renderReferences(item, text, path => {
+    const { workspaceId } = current();
+    if (workspaceId) ctx.get('miniFilePreview')?.open({ kind: 'workspace', workspaceId, path }, 'sidebar');
+  });
   else item.textContent = text;
   const wrapper = document.createElement('div');
   wrapper.className = 'message-row ' + role;
@@ -262,48 +229,26 @@ function renderEntry(message: ViewMessage, node?: HTMLElement) {
     const list = document.createElement('div');
     list.className = 'message-attachments';
     list.setAttribute('aria-label', 'Attachments');
-    const sessionId = current().sessionId;
+    const { workspaceId, sessionId } = current();
     const remaining = [...images];
+    const resource = new AbortController();
+    resources.set(entry, resource);
+    const signal = resource.signal;
+    const memory = (image: typeof images[number], name: string, mimeType: string, key: string) =>
+      workspaceId && image.data ? { kind: 'memory' as const, workspaceId, sessionId, key, name, mimeType, data: image.data, signal } : undefined;
 
-    function thumbnail(block: typeof images[number], name: string) {
-      const image = document.createElement('img');
-      image.alt = name;
-      image.loading = 'lazy';
-      image.src = 'data:' + block.mimeType + ';base64,' + block.data;
-      const trigger = document.createElement('button');
-      trigger.type = 'button';
-      trigger.className = 'message-image-trigger';
-      trigger.setAttribute('aria-label', 'Preview ' + name);
-      trigger.setAttribute('aria-haspopup', 'dialog');
-      trigger.title = 'Preview ' + name;
-      trigger.append(image);
-      trigger.onclick = () => openImage(image);
-      return trigger;
-    }
-
-    for (const file of attachments) {
+    for (const [index, file] of attachments.entries()) {
       const image = imageMime.test(file.mimeType) ? remaining.shift() : undefined;
-      if (image) { list.append(thumbnail(image, file.name)); continue; }
-      const attachmentId = file.id;
-      const card = fileCard(file, Boolean(attachmentId && sessionId));
-      if (card instanceof HTMLButtonElement && attachmentId && sessionId) {
-        card.setAttribute('aria-label', 'Download ' + file.name);
-        card.onclick = async () => {
-          card.disabled = true;
-          try {
-            const upload = await data<{ data: string }>('/sessions/' + sessionId + '/attachments/' + attachmentId, { signal });
-            const bytes = Uint8Array.from(atob(upload.data), (char) => char.charCodeAt(0));
-            const url = URL.createObjectURL(new Blob([bytes], { type: 'application/octet-stream' }));
-            const link = document.createElement('a');
-            link.href = url; link.download = file.name; link.click();
-            setTimeout(() => URL.revokeObjectURL(url), 2000);
-          } catch (error) { if (!signal.aborted) extensions.report(error); }
-          finally { card.disabled = false; }
-        };
-      }
-      list.append(card);
+      const stored = file.id && workspaceId && sessionId
+        ? { ...file, kind: 'attachment' as const, id: file.id, workspaceId, sessionId }
+        : undefined;
+      list.append(attachmentView(ctx, file, stored ?? (image && memory(image, file.name, file.mimeType, 'image:' + index)), signal));
     }
-    for (const [index, image] of remaining.entries()) list.append(thumbnail(image, 'Attached image ' + (index + 1)));
+    for (const [index, image] of remaining.entries()) {
+      const name = 'Attached image ' + (index + 1);
+      const mimeType = image.mimeType!;
+      list.append(attachmentView(ctx, { name, mimeType }, memory(image, name, mimeType, 'inline:' + index), signal));
+    }
     if (list.childElementCount) bubble.before(list);
 
   }
@@ -342,7 +287,6 @@ function remove(node: HTMLElement) {
 function history(entries: readonly ViewMessage[], records: readonly { record: SessionDisplayRecord; node: HTMLElement }[], error?: string, reset = false) {
   preserveScroll(() => {
     if (reset) {
-      previewDialog.close();
       for (const node of resources.keys()) remove(node);
       messages.replaceChildren();
       saved.clear();

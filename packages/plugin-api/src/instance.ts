@@ -55,19 +55,20 @@ export function pluginScope(ctx: Context): PluginScope {
   return pluginInstance(ctx).scope;
 }
 
-export async function sessionContext(ctx: Context, id: string, signal?: AbortSignal): Promise<Context> {
+/** Prepare a visible conversation before accessing a declared service as the caller. */
+export async function sessionService<Name extends keyof HostServices & string>(
+  ctx: Context, id: string, name: Name, signal?: AbortSignal,
+) {
   const lifetime = ctx.fiber.signal;
   lifetime.throwIfAborted();
   if (!sessionAddress(ctx, id).length || !sessionVisible(ctx, id)) throw new Error('Conversation outside plugin scope');
+  let fiber = ctx.fiber;
+  while (fiber.runtime && !(name in fiber.inject)) fiber = fiber.parent.fiber;
+  if (!(name in fiber.inject)) throw new Error('Required service is not declared: ' + name);
   const scopes = ctx.get('harnessScopes')!;
   const key = `session:${id}` as const;
   await scopes.prepare(key, signal ? AbortSignal.any([signal, lifetime]) : lifetime);
-  return ctx.extend({ [Context.isolate]: scopes.context(key)[Context.isolate] });
-}
-
-export function scopedService<Name extends keyof HostServices & string>(ctx: Context, id: string, name: Name) {
-  ctx.fiber.signal.throwIfAborted();
+  lifetime.throwIfAborted();
   if (!sessionVisible(ctx, id)) throw new Error('Conversation outside plugin scope');
-  if (!(name in ctx.fiber.inject)) throw new Error('Required service is not declared: ' + name);
-  return getTraceable(ctx, ctx.get('harnessScopes')!.require(`session:${id}`, name));
+  return getTraceable(ctx, scopes.require(key, name));
 }

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import ts from 'typescript';
 import type { BrowserBootstrap } from '@mini-harness/ui-runtime/bootstrap';
-import { composition, plugins } from '@mini-harness/host/composition';
+import { profileDescriptors, readProfile } from '@mini-harness/host/profile';
 import { moduleReferences } from '../../scripts/module-references.js';
 import { fixture } from '../support/api-fixture.js';
 
@@ -11,8 +11,9 @@ test('the composed browser graph serves its runtime dependencies and excludes se
   const { body: snapshot }: { body: BrowserBootstrap } = await request('/bootstrap');
   const mounted = new Map(snapshot.ui.map((entry) => [entry.id, entry]));
   assert.equal(mounted.size, snapshot.ui.length);
+  const plugins = await profileDescriptors(readProfile('web'));
   for (const { id, browser, defaultEnabled } of plugins)
-    if (browser && (composition.fixedPlugins.has(id) || defaultEnabled)) assert.equal(mounted.get(id)?.browser, browser);
+    if (browser && defaultEnabled) assert.equal(mounted.get(id)?.browser, browser);
 
   for (const asset of [
     '/packages/host/src/application.js',

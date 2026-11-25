@@ -12,7 +12,7 @@ Validates identifiers and user selections. Associates host-issued identity and s
 
 ## API
 
-The SDK exposes `pluginScope`, `sessionContext`, `scopedService` and configuration validation types. Plugin registration and lifetime use Cordis directly.
+The SDK exposes `pluginScope`, `sessionService` and configuration validation types. Plugin registration and lifetime use Cordis directly.
 
 ## Testing
 

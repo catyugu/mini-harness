@@ -16,7 +16,11 @@ both from Cordis commit `01b396240ce47cf2779c40af9bc445bb748fe112`.
   configuration, context tracing, service isolation, and typed events.
 - Bind an abort signal and tracked asynchronous calls to each fiber activation.
 - Use a small in-memory Entry Tree with module resolution supplied by each
-  host. The application owns persistent settings and configuration transactions.
+  host. The Profile adapter supplies parsed configuration and owns persistence.
+- Treat config key order as immaterial, replace entries when injection
+  requirements change, and report setup failures to the caller.
+- Use one listener selection path for priority and scope filtering. Cancel
+  dispatch to a listener whose owning activation or registration has ended.
 - Exclude YAML expressions, HMR, module interop hooks, and volatile schemas.
 - Type-check with the application's strict settings and include only the
   Cosmokit utilities the runtime uses.

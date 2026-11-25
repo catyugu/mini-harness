@@ -1,3 +1,4 @@
+import type {} from "mini-harness/cordis";
 /** Browser entry wire contract; independent of any UI renderer or Host implementation. */
 export interface BrowserEntry {
   id: string;
@@ -12,3 +13,7 @@ export interface BrowserEntry {
 }
 
 export interface BrowserBootstrap { ui: BrowserEntry[] }
+
+declare module 'mini-harness/cordis' {
+  interface Context { harnessGateway: { bootstrap(): BrowserBootstrap } }
+}
