@@ -4,7 +4,14 @@ import { join, resolve } from 'node:path';
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.ts';
 import { workspaceId } from '@mini-harness/workspaces/identity';
 import { writeJson } from '@mini-harness/platform/json';
-import { readWebProfile, startIsolatedHost, settingsSection, suggestions, modelButton, modelSearch } from '../support/browser.ts';
+import {
+  readWebProfile,
+  startIsolatedHost,
+  settingsSection,
+  suggestions,
+  modelButton,
+  modelSearch,
+} from '../support/browser.ts';
 
 test('frontend plugins own UI contributions and clean up on disable and reconfiguration', async ({
   page,
@@ -565,7 +572,9 @@ test('the open model picker follows local plugin installation, enablement and re
     const folder = join(paths.plugins, 'live-model');
     mkdirSync(folder);
     writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ title: 'Live model' }));
-    writeFileSync(join(folder, 'plugin.js'), `
+    writeFileSync(
+      join(folder, 'plugin.js'),
+      `
 export const inject = ['harnessModels'];
 export function apply(ctx) {
   const model = { provider: 'live-plugin', id: 'live' };
@@ -581,7 +590,8 @@ export function apply(ctx) {
     },
   }));
 }
-`);
+`,
+    );
     const toggle = async (disabled: boolean) => {
       const response = await fetch(service.url + '/api/settings', {
         method: 'PATCH',

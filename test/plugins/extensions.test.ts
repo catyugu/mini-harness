@@ -524,7 +524,12 @@ test('model contributions select matching capabilities and transport, and reject
   const { app, paths, request } = await fixture(t);
   const model = { provider: 'local-mock', id: app.runtime.plugins.ctx.harnessModelPreference.recent().id };
   const ctx = app.runtime.plugins.ctx;
-  const plugin = (name: string, priority: number, input: string[]) => writePlugin(paths.plugins, name, {}, `
+  const plugin = (name: string, priority: number, input: string[]) =>
+    writePlugin(
+      paths.plugins,
+      name,
+      {},
+      `
 export const inject = ['harnessModels'];
 export function apply(ctx) {
   const model = ${JSON.stringify(model)};
@@ -541,7 +546,8 @@ export function apply(ctx) {
     },
   }, ${priority}));
 }
-`);
+`,
+    );
   plugin('model-low', 0, ['text']);
   plugin('model-high', 1, ['text', 'image']);
   plugin('model-tie', 1, ['text']);
@@ -551,7 +557,8 @@ export function apply(ctx) {
     });
     assert.equal(response.status, 200, JSON.stringify(response.body));
   };
-  const list = () => ctx.harnessModels.list().filter(({ provider, id }) => provider === model.provider && id === model.id);
+  const list = () =>
+    ctx.harnessModels.list().filter(({ provider, id }) => provider === model.provider && id === model.id);
   const session = ctx.harnessSessions.create();
   await toggle('model-low', false);
   assert.equal(list()[0]?.name, 'model-low');
@@ -567,7 +574,9 @@ export function apply(ctx) {
   assert.equal(ctx.harnessModels.capabilities(model), undefined);
   assert.equal(ctx.harnessLlm.select(model), null);
   await assert.rejects(
-    Array.fromAsync(ctx.harnessLlm.stream({ model, messages: [], systemPrompt: '', signal: new AbortController().signal })),
+    Array.fromAsync(
+      ctx.harnessLlm.stream({ model, messages: [], systemPrompt: '', signal: new AbortController().signal }),
+    ),
     /Multiple model adapters/,
   );
   await toggle('model-tie', true);
