@@ -20,6 +20,7 @@ test('the composed browser graph serves its runtime dependencies and excludes se
     '/packages/platform/src/local-secret.js',
     '/packages/input/src/prepare.js',
     '/packages/sdk/src/plugin.js',
+    '/packages/sdk/src/browser-plugin.js',
     '/packages/settings/src/server/manager.js',
     '/packages/transport/src/router.js',
     '/packages/shell/src/server/setup.js',
@@ -28,7 +29,7 @@ test('the composed browser graph serves its runtime dependencies and excludes se
   ])
     assert.equal((await fetch(base + asset)).status, 404, asset);
 
-  const pending = ['/packages/ui-runtime/src/browser/boot.js', '/packages/sdk/src/browser-plugin.js'];
+  const pending = ['/packages/ui-runtime/src/browser/boot.js', '/packages/ui-runtime/src/browser/plugin-settings.js'];
   for (const { browser } of plugins) if (browser) pending.push(browser);
   const seenModules = new Set<string>();
   for (const path of pending) {

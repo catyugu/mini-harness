@@ -112,7 +112,12 @@ async function checkPackage() {
     const manifest = JSON.parse(await readFile(join(published, 'package.json'), 'utf8'));
     for (const section of ['dependencies', 'optionalDependencies', 'peerDependencies'])
       assert.doesNotMatch(JSON.stringify(manifest[section] ?? {}), /@mini-harness\/|workspace:\*/);
-    assert.deepEqual(Object.keys(manifest.exports).sort(), ['./browser-plugin', './cordis', './plugin']);
+    const publicExports = manifest.exports as Record<string, { types: string; default: string }>;
+    assert.ok(!Object.hasOwn(publicExports, './plugin') && !Object.hasOwn(publicExports, './browser-plugin'));
+    for (const target of Object.values(publicExports)) {
+      for (const path of [target.types, target.default])
+        assert.ok(files.some((file) => file.path === path.slice(2)), 'Missing public module: ' + path);
+    }
     for (const { path } of files.filter(({ path }) => /\.(?:js|d\.ts)$/.test(path))) {
       const emitted = await readFile(join(published, path), 'utf8');
       const source = ts.createSourceFile(path, emitted, ts.ScriptTarget.Latest, true);
@@ -124,20 +129,27 @@ async function checkPackage() {
       [
         '--input-type=module',
         '-e',
-        "import 'mini-harness/plugin'; import 'mini-harness/browser-plugin'; import { Context } from 'mini-harness/cordis'; new Context();",
+        "import 'mini-harness/tools'; import 'mini-harness/ui-runtime/plugin-settings'; import { Context } from 'mini-harness/cordis'; new Context();",
       ],
       { cwd: installed },
     );
-    for (const path of ['sdk/src/plugin.d.ts', 'sdk/src/browser-plugin.d.ts'])
-      assert.ok(
-        files.some((file) => file.path === 'dist/types/packages/' + path),
-        'Missing SDK declarations: ' + path,
-      );
     await writeFile(
       join(installed, 'plugin-types.mts'),
       `
       import { Context, type Plugin } from 'mini-harness/cordis';
-      import { type LlmPort, type ScopeSettings, defineTool } from 'mini-harness/plugin';
+      import type { LlmPort } from 'mini-harness/llm';
+      import type { ScopeSettings } from 'mini-harness/scopes';
+      import { defineTool } from 'mini-harness/tools';
+      import type {} from 'mini-harness/settings';
+      import type {} from 'mini-harness/plugin-data';
+      import type {} from 'mini-harness/sessions';
+      import type {} from 'mini-harness/execution';
+      import type {} from 'mini-harness/agent/events';
+      import type {} from 'mini-harness/agent/prompt';
+      import type {} from 'mini-harness/observations';
+      import type {} from 'mini-harness/conversation/display-events';
+      import type {} from 'mini-harness/tools/events';
+      import type {} from 'mini-harness/transport';
       declare module 'mini-harness/cordis' {
         interface Context { example: { greet(name: string): string } }
       }
@@ -182,9 +194,14 @@ async function checkPackage() {
     await writeFile(
       join(installed, 'browser-types.mts'),
       `
-      import { browserPluginSettings, type SlotRenderer } from 'mini-harness/browser-plugin';
+      import { browserPluginSettings } from 'mini-harness/ui-runtime/plugin-settings';
+      import type { SlotRenderer } from 'mini-harness/ui-slots';
+      import type {} from 'mini-harness/conversation/composer';
+      import type {} from 'mini-harness/conversation/controller';
+      import type {} from 'mini-harness/ui-settings';
+      import type {} from 'mini-harness/ui-primitives';
       import type { Context } from 'mini-harness/cordis';
-      declare module 'mini-harness/browser-plugin' {
+      declare module 'mini-harness/ui-slots' {
         interface SlotMap { 'example.panel': { kind: 'single' } }
       }
       declare const render: SlotRenderer;
@@ -251,7 +268,7 @@ async function checkPackage() {
     for (const asset of [
       '/',
       '/packages/ui-runtime/src/browser/boot.js',
-      '/packages/sdk/src/browser-plugin.js',
+      '/packages/ui-runtime/src/browser/plugin-settings.js',
       '/packages/ui-primitives/src/browser/vendor/marked.js',
       '/packages/ui-primitives/src/browser/vendor/purify.js',
       '/logo.svg',

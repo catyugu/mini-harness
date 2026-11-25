@@ -3,7 +3,7 @@ import { dirname, join, resolve, sep } from 'node:path';
 import ts from 'typescript';
 import { moduleReferences } from './module-references.js';
 
-// Retain the two SDKs' declaration dependencies without publishing private provider types.
+// Retain public domain declaration dependencies without publishing private provider types.
 const declarationRoot = resolve('dist/types');
 const manifest: { exports: Record<string, { types: string }> } = JSON.parse(
   readFileSync('package.json', 'utf8'),

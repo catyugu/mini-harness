@@ -59,7 +59,7 @@ function checkCycles(graph: Map<string, Set<string>>, kind: string) {
 test('workspace dependencies use domain APIs and keep providers at the application boundary', async () => {
   assert.ok(!manifests.has('kernel'), 'Business plugins must use the vendored Cordis runtime directly');
   const browserModules = new Map<string, string[]>();
-  const browserRoots = [join(packages, 'sdk', 'src', 'browser-plugin.ts')];
+  const browserRoots: string[] = [];
   const runtime = new Map<string, Set<string>>();
   const declared = new Map<string, Set<string>>();
   for (const [name, manifest] of manifests) {
@@ -99,7 +99,6 @@ test('workspace dependencies use domain APIs and keep providers at the applicati
           continue;
         }
         if (specifier === 'mini-harness/cordis') continue;
-        assert.ok(specifier !== 'mini-harness/plugin' && specifier !== 'mini-harness/browser-plugin', reason);
         if (['@codemirror/commands', '@codemirror/state', '@codemirror/view'].includes(specifier)) {
           assert.equal(
             file,
@@ -119,7 +118,6 @@ test('workspace dependencies use domain APIs and keep providers at the applicati
         assert.ok(target && target.startsWith(join(packages, owner) + sep) && existsSync(target), reason);
         assert.notEqual(name, owner, reason);
         assert.notEqual(owner, 'host', reason);
-        assert.notEqual(owner, 'sdk', reason);
         if (name !== 'host') assert.ok(dependency?.miniHarness?.api?.includes(entry), reason);
         actual.add(owner);
         if (area === 'browser' || area === 'shared')

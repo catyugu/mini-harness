@@ -24,6 +24,6 @@ Layout registers typed views and opens tabs by their stable key and workspace or
 
 ## Plugin SDK
 
-The single npm package exports `mini-harness/cordis`, `mini-harness/plugin`, and `mini-harness/browser-plugin`. Plugins use services, events and domain registries. The browser SDK includes the tab and preview contracts, and the Node.js SDK exposes scoped service access and plugin configuration.
+The single npm package exports Cordis and domain contracts directly, including `mini-harness/agent`, `mini-harness/llm`, `mini-harness/tools`, `mini-harness/sessions` and `mini-harness/ui-slots`. Plugins import the services and events they consume. Browser modules use an import map restricted to public browser-safe modules.
 
 See the [plugin guide](plugins.md), [scoped providers](scoped-providers.md) and [session log](session-log.md).

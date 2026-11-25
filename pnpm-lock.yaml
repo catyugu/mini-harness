@@ -449,69 +449,6 @@ importers:
         specifier: workspace:*
         version: link:../plugin-api
 
-  packages/sdk:
-    dependencies:
-      '@mini-harness/agent':
-        specifier: workspace:*
-        version: link:../agent
-      '@mini-harness/approvals':
-        specifier: workspace:*
-        version: link:../approvals
-      '@mini-harness/conversation':
-        specifier: workspace:*
-        version: link:../conversation
-      '@mini-harness/file-access':
-        specifier: workspace:*
-        version: link:../file-access
-      '@mini-harness/file-preview':
-        specifier: workspace:*
-        version: link:../file-preview
-      '@mini-harness/input':
-        specifier: workspace:*
-        version: link:../input
-      '@mini-harness/llm':
-        specifier: workspace:*
-        version: link:../llm
-      '@mini-harness/models':
-        specifier: workspace:*
-        version: link:../models
-      '@mini-harness/plugin-api':
-        specifier: workspace:*
-        version: link:../plugin-api
-      '@mini-harness/process-execution':
-        specifier: workspace:*
-        version: link:../process-execution
-      '@mini-harness/runs':
-        specifier: workspace:*
-        version: link:../runs
-      '@mini-harness/sandbox':
-        specifier: workspace:*
-        version: link:../sandbox
-      '@mini-harness/sessions':
-        specifier: workspace:*
-        version: link:../sessions
-      '@mini-harness/settings':
-        specifier: workspace:*
-        version: link:../settings
-      '@mini-harness/tools':
-        specifier: workspace:*
-        version: link:../tools
-      '@mini-harness/transport':
-        specifier: workspace:*
-        version: link:../transport
-      '@mini-harness/ui-layout':
-        specifier: workspace:*
-        version: link:../ui-layout
-      '@mini-harness/ui-primitives':
-        specifier: workspace:*
-        version: link:../ui-primitives
-      '@mini-harness/ui-runtime':
-        specifier: workspace:*
-        version: link:../ui-runtime
-      '@mini-harness/ui-slots':
-        specifier: workspace:*
-        version: link:../ui-slots
-
   packages/session-helper:
     dependencies:
       '@mini-harness/plugin-api':
