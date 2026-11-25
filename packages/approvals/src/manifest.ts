@@ -12,10 +12,13 @@ import { Approvals } from './server/approvals.js';
 
 export const manifest: PluginDescriptor = {
   scope: 'application',
-  id: 'core:approvals', title: 'Approvals', description: 'Pending user decisions', defaultEnabled: true,
+  id: 'core:approvals',
+  title: 'Approvals',
+  description: 'Pending user decisions',
+  defaultEnabled: true,
 
   plugin: {
-    inject: ['harnessChanges', 'harnessRoutes', 'harnessRuns', 'harnessRegistry'],
+    inject: ['harnessChanges', 'harnessRuns', 'harnessRegistry'],
     provide: ['harnessApprovals', 'harnessApprovalRequests'],
     apply(ctx) {
       const approvals = new Approvals();
@@ -37,14 +40,27 @@ export const manifest: PluginDescriptor = {
           ctx.harnessRegistry.assertAvailable(id);
           if (!ctx.harnessRegistry.get(id)) throw new DomainError('not_found', 'Conversation not found');
           const run = ctx.harnessRuns.info(id);
-          return caller.fiber.run(lifetime => approvals.request(id, isRunning(run) ? run?.id : undefined,
-            instanceId, prompt, ctx.harnessRuns.signal(id, lifetime) ?? lifetime), signal);
-        }
+          return caller.fiber.run(
+            (lifetime) =>
+              approvals.request(
+                id,
+                isRunning(run) ? run?.id : undefined,
+                instanceId,
+                prompt,
+                ctx.harnessRuns.signal(id, lifetime) ?? lifetime,
+              ),
+            signal,
+          );
+        },
       });
       ctx.provide('harnessApprovalRequests', requests);
-      ctx.effect(() => ctx.harnessRegistry.beforeDelete({
-        async quiesce(ids) { for (const id of ids) approvals.cancelSession(id); }
-      }));
+      ctx.effect(() =>
+        ctx.harnessRegistry.beforeDelete({
+          async quiesce(ids) {
+            for (const id of ids) approvals.cancelSession(id);
+          },
+        }),
+      );
       ctx.effect(() => {
         const runs = ctx.harnessRuns;
         const changed = (event: Event) => {
@@ -53,15 +69,23 @@ export const manifest: PluginDescriptor = {
           if (run && run.state !== 'queued' && run.state !== 'running') approvals.finishRun(run.id);
         };
         runs.events.addEventListener('change', changed);
-        return () => { runs.events.removeEventListener('change', changed); approvals.close(); };
+        return () => {
+          runs.events.removeEventListener('change', changed);
+          approvals.close();
+        };
       });
-      ctx.effect(() => ctx.harnessRoutes.register('GET', '/api/approvals', () => approvals.list()));
-      ctx.effect(() => ctx.harnessRoutes.register('POST', '/api/approvals', async ({ body }) => {
-        const input = await body() as { id?: string; allow?: boolean } | null;
-        if (typeof input?.id !== 'string' || typeof input.allow !== 'boolean') throw new DomainError('invalid_input', 'Choose allow or deny');
-        approvals.decide(input.id, input.allow);
-        return { ok: true };
-      }));
-    }
-  }
+      ctx.inject(['harnessRoutes'], (web) => {
+        web.effect(() => web.harnessRoutes.register('GET', '/api/approvals', () => approvals.list()));
+        web.effect(() =>
+          web.harnessRoutes.register('POST', '/api/approvals', async ({ body }) => {
+            const input = (await body()) as { id?: string; allow?: boolean } | null;
+            if (typeof input?.id !== 'string' || typeof input.allow !== 'boolean')
+              throw new DomainError('invalid_input', 'Choose allow or deny');
+            approvals.decide(input.id, input.allow);
+            return { ok: true };
+          }),
+        );
+      });
+    },
+  },
 };

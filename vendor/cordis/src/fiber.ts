@@ -1,16 +1,26 @@
-import { defineProperty, isNullable } from './utilities.js'
-import type { Awaitable, Dict } from './utilities.js'
+import { defineProperty, isNullable } from '@mini-harness/cosmokit'
+import type { Awaitable, Dict } from '@mini-harness/cosmokit'
 import { Context } from './context.js'
-import type { Plugin } from './registry.js'
+import type { Inject, Plugin } from './registry.js'
 import { buildOuterStack, composeError, DisposableList, getTraceable, isConstructor, isObject, symbols } from './utils.js'
 import type { Impl } from './reflect.js'
-import type { Entry } from './loader/entry.js'
 import type { StandardSchemaV1 } from '@standard-schema/spec'
 
 declare module './context.js' {
   export interface Context extends Pick<Fiber, 'effect'> {
     /** The fiber (plugin runtime instance) that owns this context. */
     fiber: Fiber
+  }
+}
+
+/** Entry metadata used by core without depending on a particular loader. */
+export interface FiberEntry {
+  readonly options: {
+    id: string
+    inject?: Inject
+    live?: boolean
+    prepare?(ctx: Context): void | Promise<void>
+    verify?(ctx: Context): void | Promise<void>
   }
 }
 
@@ -288,7 +298,7 @@ export class Fiber {
     public inject: Dict<any>,
     public runtime: Plugin.Runtime | null,
     getOuterStack: () => string[],
-    public readonly entry?: Entry,
+    public readonly entry?: FiberEntry,
   ) {
     this.config = config
     const collect = (dispose: Disposable) => {
@@ -746,14 +756,14 @@ export class Fiber {
         await this.entry?.options.prepare?.(this.ctx)
         this.signal.throwIfAborted()
         await this._execute(this._runner)
+        this.signal.throwIfAborted()
         await this.entry?.options.verify?.(this.ctx)
       }
     } catch (reason) {
-      // impl guarantees that the error is non-null (?)
-      this.ctx.logger.error(reason)
       // A superseded load still needs cleanup, but cannot fail the new target.
       if (this._runner.epoch === oldEpoch) {
-        this._error = reason
+        this.ctx.logger.error(reason)
+        this._error = reason ?? new Error('Plugin setup failed')
         this._runner.epoch = INACTIVE
       }
     }

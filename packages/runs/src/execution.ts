@@ -20,20 +20,31 @@ export interface ExecutionHandle {
 
 export interface Execution {
   /** The run starts through normal admission. A scheduler can supply a cancellation-aware slot lease. */
-  submit(id: string, input: ExecutionInput, options?: {
-    signal?: AbortSignal;
-    acquire?: (signal: AbortSignal) => Promise<() => void>;
-  }): ExecutionHandle;
+  submit(
+    id: string,
+    input: ExecutionInput,
+    options?: {
+      signal?: AbortSignal;
+      acquire?: (signal: AbortSignal) => Promise<() => void>;
+    },
+  ): ExecutionHandle;
   status(id: string): RunInfo | undefined;
 }
 
 declare module 'mini-harness/cordis' {
-  interface Context { harnessExecution: Execution }
+  interface Context {
+    harnessExecution: Execution;
+  }
 }
 
 export function sessionExecution(
-  launch: (id: string, input: ExecutionInput, signal: AbortSignal, acquire?: (signal: AbortSignal) => Promise<() => void>) => ExecutionHandle,
-  info: (id: string) => RunInfo | undefined
+  launch: (
+    id: string,
+    input: ExecutionInput,
+    signal: AbortSignal,
+    acquire?: (signal: AbortSignal) => Promise<() => void>,
+  ) => ExecutionHandle,
+  info: (id: string) => RunInfo | undefined,
 ): Execution {
   return Service.track({
     submit(id, input, options = {}) {
@@ -52,7 +63,7 @@ export function sessionExecution(
       ctx.fiber.signal.throwIfAborted();
       if (!sessionVisible(ctx, id)) throw new Error('Conversation outside plugin scope');
       return info(id);
-    }
+    },
   });
 }
 

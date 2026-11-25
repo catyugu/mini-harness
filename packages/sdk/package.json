@@ -8,6 +8,7 @@
     "@mini-harness/approvals": "workspace:*",
     "@mini-harness/conversation": "workspace:*",
     "@mini-harness/file-access": "workspace:*",
+    "@mini-harness/file-preview": "workspace:*",
     "@mini-harness/input": "workspace:*",
     "@mini-harness/llm": "workspace:*",
     "@mini-harness/models": "workspace:*",

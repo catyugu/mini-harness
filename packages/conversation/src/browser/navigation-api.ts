@@ -12,5 +12,7 @@ export interface ConversationBrowserPort {
 }
 
 declare module 'mini-harness/cordis' {
-  interface Context { harnessBrowser: ConversationBrowserPort }
+  interface Context {
+    harnessBrowser: ConversationBrowserPort;
+  }
 }

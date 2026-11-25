@@ -23,20 +23,34 @@ test('workspace tools share one policy for reads, searches and writes', async (t
   writeFileSync(join(cwd, '.gitignore'), 'hidden.txt\n');
   writeFileSync(join(cwd, 'hidden.txt'), 'marked text');
   const workspace = new Workspace(cwd, state);
-  const execute = (name: string, value: object) => expectPresent(fileTools(cwd, () => workspace).find((tool) => tool.name === name), 'file tool ' + name)
-    .execute('test', value as never, undefined, undefined, undefined);
-  assert.match(JSON.stringify(await execute('write', { path: 'src/note.txt', content: 'good text' })), /wrote/i);
+  const execute = (name: string, value: object) =>
+    expectPresent(
+      fileTools(cwd, () => workspace).find((tool) => tool.name === name),
+      'file tool ' + name,
+    ).execute('test', value as never, undefined, undefined, undefined);
+  assert.match(
+    JSON.stringify(await execute('write', { path: 'src/note.txt', content: 'good text' })),
+    /wrote/i,
+  );
   await execute('edit', { path: 'src/note.txt', edits: [{ oldText: 'good', newText: 'marked' }] });
   assert.match(JSON.stringify(await execute('read', { path: 'src/note.txt' })), /marked text/);
-  assert.match(JSON.stringify(await execute('grep', { path: '.', pattern: 'marked text', glob: '*.txt' })), /src\/note.txt/);
+  assert.match(
+    JSON.stringify(await execute('grep', { path: '.', pattern: 'marked text', glob: '*.txt' })),
+    /src\/note.txt/,
+  );
   const found = await execute('find', { path: '.', pattern: '*.txt' });
   assert.deepEqual(found.content, [{ type: 'text', text: join(cwd, 'src', 'note.txt') }]);
   assert.deepEqual((await execute('find', { path: '.', pattern: 'src/**/*.txt' })).content, found.content);
   const cancel = new AbortController();
   cancel.abort();
-  await assert.rejects(workspace.writeFile('src/note.txt', 'replacement', false, cancel.signal), { name: 'AbortError' });
+  await assert.rejects(workspace.writeFile('src/note.txt', 'replacement', false, cancel.signal), {
+    name: 'AbortError',
+  });
   assert.equal((await workspace.readFile('src/note.txt')).toString(), 'marked text');
-  assert.doesNotMatch(JSON.stringify(await execute('grep', { path: '.', pattern: 'marked text' })), /hidden\.txt/);
+  assert.doesNotMatch(
+    JSON.stringify(await execute('grep', { path: '.', pattern: 'marked text' })),
+    /hidden\.txt/,
+  );
   assert.doesNotMatch(JSON.stringify(await execute('ls', { path: '.' })), /linked|state/);
   await assert.rejects(execute('read', { path: '../private/secret.txt' }), /permitted workspace/);
   await assert.rejects(execute('read', { path: 'state/secret.txt' }), /permitted workspace/);
@@ -72,5 +86,8 @@ test('failed or superseded atomic writes preserve the existing file and remove t
   await assert.rejects(workspace.writeFile('edit.txt', 'replacement'), /changed during write/);
   replacement.mock.restore();
   assert.equal((await workspace.readFile('edit.txt')).toString(), 'new target');
-  assert.deepEqual((await workspace.entries()).map(({ name }) => name), ['edit.txt']);
+  assert.deepEqual(
+    (await workspace.entries()).map(({ name }) => name),
+    ['edit.txt'],
+  );
 });

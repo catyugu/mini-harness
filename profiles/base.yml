@@ -1,0 +1,51 @@
+plugins:
+  - id: core:transport
+    name: '@mini-harness/transport-runtime'
+    bootstrap: true
+  - id: core:settings-runtime
+    name: '@mini-harness/settings-runtime'
+    bootstrap: true
+  - id: core:plugins-runtime
+    name: '@mini-harness/plugins-runtime'
+    bootstrap: true
+  - id: core:workspace
+    name: '@mini-harness/workspaces'
+  - id: core:tool-policy
+    name: '@mini-harness/tool-policy'
+  - id: core:sessions
+    name: '@mini-harness/sessions'
+  - id: core:agent
+    name: '@mini-harness/agent'
+  - id: core:prompt
+    name: '@mini-harness/agent-prompt'
+  - id: core:model-store
+    name: '@mini-harness/model-store'
+  - id: core:model-catalog
+    name: '@mini-harness/model-catalog'
+  - id: core:llm
+    name: '@mini-harness/llm'
+  - id: core:runs
+    name: '@mini-harness/runs'
+  - id: core:models
+    name: '@mini-harness/models'
+  - id: core:file-access
+    name: '@mini-harness/file-access'
+  - id: files
+    name: '@mini-harness/files'
+  - id: skills
+    name: '@mini-harness/skills'
+  - id: subagents
+    name: '@mini-harness/subagents'
+  - id: shell
+    name: '@mini-harness/shell'
+    disabled: true
+  - id: session-helper
+    name: '@mini-harness/session-helper'
+  - id: core:approvals
+    name: '@mini-harness/approvals'
+  - id: core:sandbox
+    name: '@mini-harness/sandbox'
+  - id: core:process
+    name: '@mini-harness/process-execution'
+  - id: core:tools
+    name: '@mini-harness/tools'

@@ -7,7 +7,11 @@ test('settings stay reachable across viewport sizes and theme changes persist', 
   await page.goto(host.url + '/#token=' + host.token);
   const dialog = page.getByRole('dialog', { name: 'Settings' });
   const theme = dialog.getByRole('combobox', { name: 'Theme', exact: true });
-  for (const viewport of [{ width: 1366, height: 900 }, { width: 768, height: 1024 }, { width: 320, height: 568 }]) {
+  for (const viewport of [
+    { width: 1366, height: 900 },
+    { width: 768, height: 1024 },
+    { width: 320, height: 568 },
+  ]) {
     await page.setViewportSize(viewport);
     if (viewport.width <= 860) await page.getByRole('button', { name: 'Toggle navigation' }).click();
     await page.getByRole('button', { name: 'Settings', exact: true }).click();

@@ -11,5 +11,10 @@
     "@mini-harness/plugins": "workspace:*",
     "@mini-harness/transport": "workspace:*",
     "@mini-harness/ui-runtime": "workspace:*"
+  },
+  "miniHarness": {
+    "profileModules": {
+      "@mini-harness/web-gateway": "./src/manifest.ts#manifest"
+    }
   }
 }

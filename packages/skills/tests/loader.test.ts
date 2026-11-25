@@ -6,22 +6,34 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SkillLoader, defaultSkillRoots, parseSkill } from '../src/server/loader.js';
 
-const loaderFrom = (...roots: string[]) => new SkillLoader(() => roots, (path, error) => {
-  assert.fail('Unexpected skill diagnostic at ' + path + ': ' + String(error));
-});
+const loaderFrom = (...roots: string[]) =>
+  new SkillLoader(
+    () => roots,
+    (path, error) => {
+      assert.fail('Unexpected skill diagnostic at ' + path + ': ' + String(error));
+    },
+  );
 
 function writeSkill(directory: string, name: string, text: string) {
   mkdirSync(directory, { recursive: true });
-  writeFileSync(join(directory, 'SKILL.md'),
-    `---\nname: ${name}\ndescription: >\n  Review the task\n  with care\n---\n${text}`);
+  writeFileSync(
+    join(directory, 'SKILL.md'),
+    `---\nname: ${name}\ndescription: >\n  Review the task\n  with care\n---\n${text}`,
+  );
 }
 
 test('four default roots override by priority and keep the user home independent', async (t) => {
   const root = mkdtempSync(join(tmpdir(), 'mini-harness-skills-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  const home = join(root, 'home'), app = join(root, 'custom-app-home'), cwd = join(root, 'project');
-  const paths = [join(home, '.agents', 'skills'), join(app, 'skills'),
-    join(cwd, '.agents', 'skills'), join(cwd, '.mini-harness', 'skills')];
+  const home = join(root, 'home'),
+    app = join(root, 'custom-app-home'),
+    cwd = join(root, 'project');
+  const paths = [
+    join(home, '.agents', 'skills'),
+    join(app, 'skills'),
+    join(cwd, '.agents', 'skills'),
+    join(cwd, '.mini-harness', 'skills'),
+  ];
   const roots = defaultSkillRoots(app, home);
   assert.deepEqual(roots(cwd), paths);
   for (const [index, path] of paths.entries()) {
@@ -29,7 +41,10 @@ test('four default roots override by priority and keep the user home independent
     writeSkill(join(path, 'skill-' + index), 'skill-' + index, 'Unique skill');
   }
   const loader = new SkillLoader(roots, () => assert.fail('Unexpected scan diagnostic'));
-  assert.deepEqual((await loader.list(cwd)).map(({ name }) => name), ['review', 'skill-0', 'skill-1', 'skill-2', 'skill-3']);
+  assert.deepEqual(
+    (await loader.list(cwd)).map(({ name }) => name),
+    ['review', 'skill-0', 'skill-1', 'skill-2', 'skill-3'],
+  );
   assert.equal((await loader.load(cwd, 'review')).description, 'Review the task with care');
   const invocation = await loader.invocation(cwd, 'Please /skill:review inspect the change');
   assert.equal(invocation?.task, 'Please inspect the change');
@@ -47,8 +62,10 @@ test('root, parent and directory links are followed once per file, including Win
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const outside = join(root, 'outside');
   writeSkill(join(outside, 'nested'), 'linked', 'External instructions');
-  const low = join(root, 'low'), high = join(root, 'high');
-  mkdirSync(low); mkdirSync(high);
+  const low = join(root, 'low'),
+    high = join(root, 'high');
+  mkdirSync(low);
+  mkdirSync(high);
   symlinkSync(outside, join(low, 'direct'), 'junction');
   symlinkSync(outside, join(high, 'multiple'), 'junction');
   symlinkSync(join(high, 'multiple'), join(high, 'alias'), 'junction');
@@ -62,7 +79,10 @@ test('root, parent and directory links are followed once per file, including Win
   const roots = [join(linkedParent, 'low'), join(linkedParent, 'high', 'multiple')];
   const loader = loaderFrom(...roots);
   const [skill] = await loader.discover(root);
-  assert.deepEqual((await loader.list(root)).map(({ name }) => name), ['linked']);
+  assert.deepEqual(
+    (await loader.list(root)).map(({ name }) => name),
+    ['linked'],
+  );
   assert.equal(skill.root, roots[1]);
   assert.equal(skill.content, 'External instructions');
   if (process.platform !== 'win32') {
@@ -87,12 +107,15 @@ test('skill discovery ignores oversized files and invalid frontmatter', async (t
 test('a skill that grows after opening is rejected with an actual bounded read', async (t) => {
   const root = mkdtempSync(join(tmpdir(), 'mini-harness-skill-growth-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  const skills = join(root, 'skills'); mkdirSync(skills);
+  const skills = join(root, 'skills');
+  mkdirSync(skills);
   const file = join(skills, 'SKILL.md');
   writeFileSync(file, '---\nname: growing\ndescription: Changes during reading\n---\nInitial content');
   const expected = fs.statSync(file, { bigint: true });
   const originalOpen = fs.promises.open;
-  let readBytes = 0, intercepted = false, grew = false;
+  let readBytes = 0,
+    intercepted = false,
+    grew = false;
   const mock = t.mock.method(fs.promises, 'open', (async (...args: Parameters<typeof fs.promises.open>) => {
     const handle = await originalOpen(...args);
     // Windows temp roots can have short-name aliases while discovery opens the canonical path.
@@ -100,10 +123,14 @@ test('a skill that grows after opening is rejected with an actual bounded read',
     const identity = await handle.stat({ bigint: true });
     if (identity.dev === expected.dev && identity.ino === expected.ino) {
       intercepted = true;
-      const originalStat = handle.stat.bind(handle), originalRead = handle.read.bind(handle);
+      const originalStat = handle.stat.bind(handle),
+        originalRead = handle.read.bind(handle);
       t.mock.method(handle, 'stat', (async () => {
         const stat = await originalStat();
-        if (!grew) { appendFileSync(file, 'x'.repeat(512 * 1024)); grew = true; }
+        if (!grew) {
+          appendFileSync(file, 'x'.repeat(512 * 1024));
+          grew = true;
+        }
         return stat;
       }) as typeof handle.stat);
       t.mock.method(handle, 'read', (async (...readArgs: any[]) => {
@@ -117,33 +144,59 @@ test('a skill that grows after opening is rejected with an actual bounded read',
   syncBuiltinESMExports();
   try {
     const discovered = await loaderFrom(skills).discover(join(root, 'workspace'));
-    assert.equal(intercepted, true, 'The opened skill file must be intercepted even through a canonical path');
+    assert.equal(
+      intercepted,
+      true,
+      'The opened skill file must be intercepted even through a canonical path',
+    );
     assert.equal(grew, true, 'The fixture must grow the file after the open-file size check');
     assert.deepEqual(discovered, []);
-    assert.ok(readBytes > 0 && readBytes <= 128 * 1024 + 1, 'Reading must remain bounded after the size check races a writer');
-  } finally { mock.mock.restore(); syncBuiltinESMExports(); }
+    assert.ok(
+      readBytes > 0 && readBytes <= 128 * 1024 + 1,
+      'Reading must remain bounded after the size check races a writer',
+    );
+  } finally {
+    mock.mock.restore();
+    syncBuiltinESMExports();
+  }
 });
 
 test('large directories have a bounded discovery budget and their iterators are closed', async (t) => {
   const root = mkdtempSync(join(tmpdir(), 'mini-harness-skill-budget-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  const skills = join(root, 'skills'), secondRoot = join(root, 'more-skills');
-  mkdirSync(skills); mkdirSync(secondRoot);
-  let inspected = 0, closed = false;
+  const skills = join(root, 'skills'),
+    secondRoot = join(root, 'more-skills');
+  mkdirSync(skills);
+  mkdirSync(secondRoot);
+  let inspected = 0,
+    closed = false;
   const mock = t.mock.method(fs.promises, 'opendir', (async () => {
     return (async function* () {
       try {
         for (let index = 0; index < 100000; index++) {
           inspected++;
-          yield { name: 'irrelevant-' + index, isSymbolicLink: () => false, isFile: () => true, isDirectory: () => false };
+          yield {
+            name: 'irrelevant-' + index,
+            isSymbolicLink: () => false,
+            isFile: () => true,
+            isDirectory: () => false,
+          };
         }
-      } finally { closed = true; }
+      } finally {
+        closed = true;
+      }
     })();
   }) as any);
   syncBuiltinESMExports();
   try {
     assert.deepEqual(await loaderFrom(secondRoot, skills).discover(join(root, 'workspace')), []);
-    assert.ok(inspected > 0 && inspected < 10000, 'Discovery must stop before exhausting an oversized directory');
+    assert.ok(
+      inspected > 0 && inspected < 10000,
+      'Discovery must stop before exhausting an oversized directory',
+    );
     assert.equal(closed, true);
-  } finally { mock.mock.restore(); syncBuiltinESMExports(); }
+  } finally {
+    mock.mock.restore();
+    syncBuiltinESMExports();
+  }
 });

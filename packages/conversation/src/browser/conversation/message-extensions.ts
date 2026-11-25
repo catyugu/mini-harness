@@ -30,22 +30,35 @@ export class MessageExtensions {
     this.events.addEventListener('records', listener, { signal });
   }
 
-  recordRenderer(plugin: string) { return this.records.get(plugin); }
+  recordRenderer(plugin: string) {
+    return this.records.get(plugin);
+  }
 
   private renderWithLifetime(parent: AbortSignal, render: (signal: AbortSignal) => HTMLElement | undefined) {
     const lifetime = new AbortController();
     try {
       const node = render(AbortSignal.any([parent, lifetime.signal]));
       if (node) return node;
-    } catch (error) { this.report(error); }
+    } catch (error) {
+      this.report(error);
+    }
     lifetime.abort();
   }
 
-  renderRecord(render: RecordRenderer | undefined, record: SessionDisplayRecord, context: { sessionId: string; signal: AbortSignal }) {
-    if (render) return this.renderWithLifetime(context.signal, (signal) => render(structuredClone(record), { ...context, signal }));
+  renderRecord(
+    render: RecordRenderer | undefined,
+    record: SessionDisplayRecord,
+    context: { sessionId: string; signal: AbortSignal },
+  ) {
+    if (render)
+      return this.renderWithLifetime(context.signal, (signal) =>
+        render(structuredClone(record), { ...context, signal }),
+      );
   }
 
-  actionsForMessage() { return [...this.actions.values()].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)); }
+  actionsForMessage() {
+    return [...this.actions.values()].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  }
 
   subscribe(listener: () => void, signal: AbortSignal) {
     this.events.addEventListener('change', listener, { signal });
@@ -55,7 +68,10 @@ export class MessageExtensions {
     if (this.actions.has(action.id)) throw new Error('Duplicate message action: ' + action.id);
     this.actions.set(action.id, action);
     this.events.dispatchEvent(new Event('change'));
-    return () => { this.actions.delete(action.id); this.events.dispatchEvent(new Event('change')); };
+    return () => {
+      this.actions.delete(action.id);
+      this.events.dispatchEvent(new Event('change'));
+    };
   }
 
   registerTool(name: string, render: ToolRenderer, action = false) {
@@ -64,7 +80,13 @@ export class MessageExtensions {
   }
 
   subscribeToTools(listener: (name: string) => void, signal: AbortSignal) {
-    this.events.addEventListener('tools', (event) => { if (event instanceof CustomEvent && typeof event.detail === 'string') listener(event.detail); }, { signal });
+    this.events.addEventListener(
+      'tools',
+      (event) => {
+        if (event instanceof CustomEvent && typeof event.detail === 'string') listener(event.detail);
+      },
+      { signal },
+    );
   }
 
   render(tool: ToolView, signal: AbortSignal, action = false) {

@@ -1,64 +1,47 @@
 import { Context } from 'mini-harness/cordis';
-import { composition, plugins } from './composition.js';
-import { SettingsManager } from '@mini-harness/settings/manager';
-import { PluginHost } from '@mini-harness/plugins/manager';
-import { RouteRegistry } from '@mini-harness/transport/router';
-import { ProjectionChanges } from '@mini-harness/transport/projections';
-import { MutationGate } from './mutations.js';
-import type { NetworkPort } from '@mini-harness/transport/routes';
 import type { Paths } from '@mini-harness/platform/runtime-paths';
+import type { LaunchOptions } from '@mini-harness/plugin-api/profile';
+import { loadProfile } from './profile.js';
 
-export class MiniHarnessRuntime {
-  readonly plugins: PluginHost;
-  readonly configuration: SettingsManager;
-  private readonly mutations = new MutationGate();
-  private readonly routes = new RouteRegistry();
-  private stopping?: Promise<void>;
-
-  constructor(readonly paths: Paths, network?: NetworkPort,
-    upgrade?: (path: string, handler: import('@mini-harness/transport/routes').UpgradeHandler) => () => Promise<void>) {
-    const ctx = new Context();
-    this.configuration = new SettingsManager(paths, () => this.plugins);
-    const changes = new ProjectionChanges();
-    const root = {
-      harnessState: { paths },
-      harnessSettingsStore: this.configuration,
-      harnessRoutes: this.routes,
-      ...(network ? { harnessNetwork: network } : {}),
-      harnessMutations: this.mutations,
-      harnessChanges: changes
-    };
-    for (const [name, service] of Object.entries(root)) ctx.provide(name, service);
-    this.plugins = new PluginHost(ctx, paths.plugins, plugins, [...Object.keys(root), 'harnessScopes', 'harnessPluginCatalog'],
-      () => this.settings, upgrade, paths.devPlugin,
-      (id, key, patch, check) => this.configuration.writePlugin(id, key, patch, check).then(() => {}), composition);
-    ctx.provide('harnessScopes', this.plugins);
-    ctx.provide('harnessPluginCatalog', this.plugins);
+/** The launcher supplies process state and loads the selected Profile onto a fresh Cordis tree. */
+export async function bootProfile(name: string, paths: Paths, launch: LaunchOptions) {
+  const ctx = new Context();
+  const profile = await loadProfile(name, paths, ctx);
+  ctx.provide('harnessState', { paths });
+  ctx.provide('harnessProfile', profile);
+  ctx.provide('harnessLaunch', launch);
+  let stopping: Promise<void> | undefined;
+  const close = () =>
+    (stopping ??= (async () => {
+      ctx.emit('harness/seal');
+      try {
+        await ctx.parallel('harness/quiesce');
+      } finally {
+        try {
+          await ctx.parallel('harness/drain');
+        } finally {
+          await profile.entries.close();
+        }
+      }
+    })());
+  try {
+    const errors = await profile.entries.update(profile.bootstrap);
+    if (errors.size)
+      throw new AggregateError(
+        [...errors.values()],
+        'Profile infrastructure failed: ' + [...errors.keys()].join(', '),
+      );
+    for (const { id } of profile.bootstrap)
+      if (!profile.entries.get(id)?.active)
+        throw new Error('Profile infrastructure is waiting for a dependency: ' + id);
+    await ctx.parallel('harness/start');
+    await ctx.parallel('harness/open');
+    profile.finishMigration();
+  } catch (error) {
+    await close();
+    const issues =
+      error instanceof AggregateError ? ': ' + error.errors.map((issue) => String(issue)).join('; ') : '';
+    throw new Error(String(error) + issues, { cause: error });
   }
-
-  get settings() { return this.configuration.settings; }
-  async start() {
-    try { await this.plugins.start(this.settings); }
-    catch (error) {
-      try { await this.stop(); }
-      catch (cleanup) { throw new AggregateError([error, cleanup], 'Application startup and cleanup failed'); }
-      throw error;
-    }
-  }
-
-  stop() {
-    return this.stopping ??= this.shutdown();
-  }
-
-  private async shutdown() {
-    this.mutations.seal();
-    this.routes.seal();
-    try {
-      await this.plugins.ctx.parallel('harness/quiesce');
-    } finally {
-      await Promise.all([this.mutations.drain(), this.routes.drain()]);
-      await this.configuration.close();
-      await this.plugins.close();
-    }
-  }
+  return { ctx, close };
 }

@@ -29,4 +29,7 @@ export interface ProviderInfo {
   models: ProviderModel[];
 }
 
-export interface ModelCatalog { models: ModelSummary[]; providers: ProviderInfo[] }
+export interface ModelCatalog {
+  models: ModelSummary[];
+  providers: ProviderInfo[];
+}

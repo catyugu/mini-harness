@@ -14,8 +14,13 @@ const run = (command: string, mode: 'host' | 'isolated', timeoutSeconds = 60, si
 test('isolation refuses unsupported hosts without falling back to host execution', async () => {
   assert.equal(supportsIsolation('win32'), false);
   assert.equal(supportsIsolation('darwin'), false);
-  await assert.rejects(executeProcess({ command: 'echo must not run', cwd: process.cwd(), mode: 'isolated', timeoutSeconds: 1 },
-    new LinuxSandbox(tmpdir(), 'win32')), /requires Linux/);
+  await assert.rejects(
+    executeProcess(
+      { command: 'echo must not run', cwd: process.cwd(), mode: 'isolated', timeoutSeconds: 1 },
+      new LinuxSandbox(tmpdir(), 'win32'),
+    ),
+    /requires Linux/,
+  );
   await assert.rejects(run('', 'host'), /Invalid command/);
   await assert.rejects(run('echo must not run', 'invalid' as 'host'), /Unknown sandbox mode/);
 });
@@ -23,7 +28,9 @@ test('isolation refuses unsupported hosts without falling back to host execution
 test('shell reports cancellation and timeouts and bounds output', { timeout: 15000 }, async () => {
   const windows = process.platform === 'win32';
   const long = windows ? 'ping -n 10 127.0.0.1' : 'sleep 10 & wait';
-  const noisy = windows ? 'for /L %i in (1,1,25000) do @echo 01234567890123456789012345678901234567890123456789' : 'yes x';
+  const noisy = windows
+    ? 'for /L %i in (1,1,25000) do @echo 01234567890123456789012345678901234567890123456789'
+    : 'yes x';
   const controller = new AbortController();
   const cancelled = run(long, 'host', 60, controller.signal);
   setTimeout(() => controller.abort(), 200);
@@ -34,20 +41,31 @@ test('shell reports cancellation and timeouts and bounds output', { timeout: 150
   assert.ok(Buffer.byteLength(result.stdout) <= 1024 * 1024);
 });
 
-test('isolated shell runs without provider process environment', { skip: process.env.MINI_HARNESS_REQUIRE_ISOLATION !== '1' && !supportsIsolation() }, async () => {
-  const shell = await run('printf "%s|%s" "$PWD" "$HOME"', 'isolated');
-  assert.equal(shell.code, 0);
-  assert.equal(shell.stdout, '/workspace|/tmp');
-});
+test(
+  'isolated shell runs without provider process environment',
+  { skip: process.env.MINI_HARNESS_REQUIRE_ISOLATION !== '1' && !supportsIsolation() },
+  async () => {
+    const shell = await run('printf "%s|%s" "$PWD" "$HOME"', 'isolated');
+    assert.equal(shell.code, 0);
+    assert.equal(shell.stdout, '/workspace|/tmp');
+  },
+);
 
-test('conversation uploads are visible to Shell but mounted read-only in isolated mode',
-  { skip: process.env.MINI_HARNESS_REQUIRE_ISOLATION !== '1' && !supportsIsolation() }, async (t) => {
+test(
+  'conversation uploads are visible to Shell but mounted read-only in isolated mode',
+  { skip: process.env.MINI_HARNESS_REQUIRE_ISOLATION !== '1' && !supportsIsolation() },
+  async (t) => {
     const directory = mkdtempSync(join(tmpdir(), 'mini-harness-uploads-'));
     t.after(() => rmSync(directory, { recursive: true, force: true }));
     writeFileSync(join(directory, 'upload'), 'original');
-    const request = { command: 'cat "$MINI_HARNESS_ATTACHMENTS/upload"; printf modified > "$MINI_HARNESS_ATTACHMENTS/upload"', cwd: process.cwd(),
-      mode: 'isolated' as const, timeoutSeconds: 10 };
+    const request = {
+      command: 'cat "$MINI_HARNESS_ATTACHMENTS/upload"; printf modified > "$MINI_HARNESS_ATTACHMENTS/upload"',
+      cwd: process.cwd(),
+      mode: 'isolated' as const,
+      timeoutSeconds: 10,
+    };
     const result = await executeProcess(request, sandbox, directory);
     assert.equal(result.stdout, 'original');
     assert.notEqual(result.code, 0);
-  });
+  },
+);

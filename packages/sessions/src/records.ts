@@ -5,8 +5,14 @@ import { assertOutsideMountTransaction } from '@mini-harness/plugin-api/mutation
 import { Service, type Context } from 'mini-harness/cordis';
 import { pluginInstance, sessionVisible } from '@mini-harness/plugin-api/instance';
 
-export interface RecordDisplay { title: string; content?: unknown }
-export interface RecordOwner { pluginId: string; instanceId: string }
+export interface RecordDisplay {
+  title: string;
+  content?: unknown;
+}
+export interface RecordOwner {
+  pluginId: string;
+  instanceId: string;
+}
 
 export interface SessionRecords {
   list(): { id: string; timestamp: string; data: unknown }[];
@@ -33,7 +39,10 @@ export interface SessionDirectory {
   records(id: string): SessionRecords;
 }
 
-export function sessionDirectory(sessions: SessionAccess, open: (id: string, owner: RecordOwner) => SessionRecords): SessionDirectory {
+export function sessionDirectory(
+  sessions: SessionAccess,
+  open: (id: string, owner: RecordOwner) => SessionRecords,
+): SessionDirectory {
   return Service.track({
     access() {
       const ctx: Context = Service.caller(this);
@@ -71,9 +80,18 @@ export function sessionDirectory(sessions: SessionAccess, open: (id: string, own
           check(id);
           return sessions.rename(id, title);
         },
-        depth(id) { check(id); return sessions.depth(id); },
-        workspacePath(id) { check(id); return sessions.workspacePath(id); },
-        history(id) { check(id); return sessions.history(id); }
+        depth(id) {
+          check(id);
+          return sessions.depth(id);
+        },
+        workspacePath(id) {
+          check(id);
+          return sessions.workspacePath(id);
+        },
+        history(id) {
+          check(id);
+          return sessions.history(id);
+        },
       };
     },
     records(id: string) {
@@ -90,12 +108,14 @@ export function sessionDirectory(sessions: SessionAccess, open: (id: string, own
         append(data: unknown, display?: RecordDisplay) {
           assertOutsideMountTransaction();
           return ctx.fiber.run(() => records().append(data, display), signal);
-        }
+        },
       };
-    }
+    },
   });
 }
 
 declare module 'mini-harness/cordis' {
-  interface Context { harnessSessions: SessionDirectory }
+  interface Context {
+    harnessSessions: SessionDirectory;
+  }
 }

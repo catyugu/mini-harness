@@ -28,15 +28,20 @@ interface DraftOwner {
 
 export function createComposerModel(ctx: Context): ComposerModel {
   const signal = ctx.fiber.signal;
-  const control = ctx.miniConversation, selection = ctx.miniSelection;
+  const control = ctx.miniConversation,
+    selection = ctx.miniSelection;
   const changes = new EventTarget();
-  const commands = new CommandRegistry(), completions = new Map<string, Completer>();
+  const commands = new CommandRegistry(),
+    completions = new Map<string, Completer>();
   const blank = (): Draft => ({ text: '', attachments: [], version: 0, loading: 0 });
   const drafts = new Map<string, DraftOwner>();
   const key = () => control.get().session?.id ?? 'workspace:' + selection.selectedWorkspace;
   function entryFor(key: string) {
     let entry = drafts.get(key);
-    if (!entry) { entry = { input: blank() }; drafts.set(key, entry); }
+    if (!entry) {
+      entry = { input: blank() };
+      drafts.set(key, entry);
+    }
     return entry;
   }
   const entry = () => entryFor(key());
@@ -54,7 +59,10 @@ export function createComposerModel(ctx: Context): ComposerModel {
   let selected = key();
   selection.subscribe(() => {
     const next = key();
-    if (next !== selected) { selected = next; change(); }
+    if (next !== selected) {
+      selected = next;
+      change();
+    }
   }, signal);
   function clearAccepted(owner: DraftOwner, current: Draft, version: number) {
     if (current.version === version) {
@@ -66,10 +74,12 @@ export function createComposerModel(ctx: Context): ComposerModel {
   function reconcileSubmission() {
     const { session, history, run, interaction } = control.get();
     if (!session || interaction.operation === 'open') return;
-    const owner = drafts.get(session.id), submission = owner?.submission;
+    const owner = drafts.get(session.id),
+      submission = owner?.submission;
     if (!owner || !submission?.runId) return;
-    const accepted = history.messages.some((message) => message.role === 'user' &&
-      message.submissionId === submission.runId && !message.inboxId);
+    const accepted = history.messages.some(
+      (message) => message.role === 'user' && message.submissionId === submission.runId && !message.inboxId,
+    );
     if (!accepted && run?.id === submission.runId && isRunning(run)) return;
     delete owner.submission;
     if (accepted) clearAccepted(owner, submission.draft, submission.version);
@@ -81,27 +91,52 @@ export function createComposerModel(ctx: Context): ComposerModel {
   }
   control.subscribe(['session', 'history', 'run', 'interaction'], reconcileSubmission, signal);
   const register: ComposerModel['command'] = (command) => {
-    const dispose = commands.register(command); change();
-    return () => { dispose(); change(); };
+    const dispose = commands.register(command);
+    change();
+    return () => {
+      dispose();
+      change();
+    };
   };
-  ctx.effect(() => register({ name: 'export', group: 'Conversation', description: 'Export the current conversation', run: () => {
-    const id = control.get().session?.id;
-    if (!id) throw new Error('Open a conversation to export it.');
-    return exportSessions([id], signal);
-  } }));
-  ctx.effect(() => register({ name: 'compact', group: 'Conversation', description: 'Summarize earlier messages to free context', run: control.compact }));
+  ctx.effect(() =>
+    register({
+      name: 'export',
+      group: 'Conversation',
+      description: 'Export the current conversation',
+      run: () => {
+        const id = control.get().session?.id;
+        if (!id) throw new Error('Open a conversation to export it.');
+        return exportSessions([id], signal);
+      },
+    }),
+  );
+  ctx.effect(() =>
+    register({
+      name: 'compact',
+      group: 'Conversation',
+      description: 'Summarize earlier messages to free context',
+      run: control.compact,
+    }),
+  );
 
   async function send(queued = false) {
-    const origin = key(), owner = entry(), current = draft();
+    const origin = key(),
+      owner = entry(),
+      current = draft();
     if (owner.submission) throw new Error('Wait for the submitted input to be accepted.');
     if (current.loading) throw new Error('Files are still loading');
     if (queued && current.revision) throw new Error('Finish editing before queuing a message');
     const { revision, version, text } = current;
-    const attachments = current.attachments.filter(({ originalIndex }) => originalIndex === undefined)
+    const attachments = current.attachments
+      .filter(({ originalIndex }) => originalIndex === undefined)
       .map(({ name, mimeType, data }) => ({ name, mimeType, data }));
-    const originalImages = current.attachments.flatMap(({ originalIndex }) => originalIndex === undefined ? [] : [originalIndex]);
-    const removedImages = revision?.images?.flatMap((_, index) => originalImages.includes(index) ? [] : [index]) ?? [];
-    if (!text.trim() && !attachments.length && (revision?.images?.length ?? 0) === removedImages.length) return;
+    const originalImages = current.attachments.flatMap(({ originalIndex }) =>
+      originalIndex === undefined ? [] : [originalIndex],
+    );
+    const removedImages =
+      revision?.images?.flatMap((_, index) => (originalImages.includes(index) ? [] : [index])) ?? [];
+    if (!text.trim() && !attachments.length && (revision?.images?.length ?? 0) === removedImages.length)
+      return;
     const input = { message: text, attachments, model: current.model, thinkingLevel: current.thinkingLevel };
     if (queued) {
       await control.queue(input);
@@ -112,10 +147,17 @@ export function createComposerModel(ctx: Context): ComposerModel {
     owner.submission = submission;
     change();
     try {
-      const run = await control.submit({ ...input, permission: owner.permission, revision: revision && { ...revision.revision, removedImages } }, (id) => {
-        drafts.set(id, owner);
-        if (drafts.get(origin) === owner) drafts.delete(origin);
-      });
+      const run = await control.submit(
+        {
+          ...input,
+          permission: owner.permission,
+          revision: revision && { ...revision.revision, removedImages },
+        },
+        (id) => {
+          drafts.set(id, owner);
+          if (drafts.get(origin) === owner) drafts.delete(origin);
+        },
+      );
       submission.runId = run.id;
       reconcileSubmission();
     } catch (error) {
@@ -127,40 +169,70 @@ export function createComposerModel(ctx: Context): ComposerModel {
 
   return {
     draft(): ComposerDraft {
-      const current = draft(), awaitingAcceptance = Boolean(entry().submission);
-      if (snapshot?.owner === current && snapshot.version === current.version && snapshot.value.awaitingAcceptance === awaitingAcceptance) return snapshot.value;
+      const current = draft(),
+        awaitingAcceptance = Boolean(entry().submission);
+      if (
+        snapshot?.owner === current &&
+        snapshot.version === current.version &&
+        snapshot.value.awaitingAcceptance === awaitingAcceptance
+      )
+        return snapshot.value;
       const value = Object.freeze({
-        text: current.text, editTitle: current.revision?.title, loading: current.loading > 0, awaitingAcceptance,
-        model: current.model && Object.freeze({ ...current.model }), thinkingLevel: current.thinkingLevel,
-        attachments: Object.freeze(current.attachments.map(({ name, mimeType, data }) => Object.freeze({ name, mimeType, data })))
+        text: current.text,
+        editTitle: current.revision?.title,
+        loading: current.loading > 0,
+        awaitingAcceptance,
+        model: current.model && Object.freeze({ ...current.model }),
+        thinkingLevel: current.thinkingLevel,
+        attachments: Object.freeze(
+          current.attachments.map(({ name, mimeType, data }) => Object.freeze({ name, mimeType, data })),
+        ),
       });
       snapshot = { owner: current, version: current.version, value };
       return value;
     },
     subscribe(listener, signal) {
-      changes.addEventListener('change', (event) => { if (event instanceof CustomEvent) listener(event.detail === true); }, { signal });
+      changes.addEventListener(
+        'change',
+        (event) => {
+          if (event instanceof CustomEvent) listener(event.detail === true);
+        },
+        { signal },
+      );
     },
     permission: () => control.get().session?.permission ?? entry().permission ?? 'standard',
     async setPermission(value) {
       if (control.get().session) await control.setPermission(value);
-      else { entry().permission = value; change(); }
+      else {
+        entry().permission = value;
+        change();
+      }
     },
     choose(model) {
       const current = draft();
       if (current.model?.provider === model?.provider && current.model?.id === model?.id) return;
-      current.model = model && { ...model }; current.thinkingLevel = undefined; edited(current, false, false);
+      current.model = model && { ...model };
+      current.thinkingLevel = undefined;
+      edited(current, false, false);
     },
     chooseThinking(level) {
       const current = draft();
-      if (current.thinkingLevel !== level) { current.thinkingLevel = level; edited(current, false, false); }
+      if (current.thinkingLevel !== level) {
+        current.thinkingLevel = level;
+        edited(current, false, false);
+      }
     },
     setText(text, start = text.length, end = start) {
       const current = draft();
       current.cursor = { start, end };
-      if (current.text !== text) { current.text = text; edited(current); }
+      if (current.text !== text) {
+        current.text = text;
+        edited(current);
+      }
     },
     insert(text) {
-      const current = draft(), position = current.cursor ?? { start: current.text.length, end: current.text.length };
+      const current = draft(),
+        position = current.cursor ?? { start: current.text.length, end: current.text.length };
       const before = current.text.slice(0, position.start);
       if (text.startsWith('/') && /\S$/.test(before)) text = ' ' + text;
       current.text = before + text + current.text.slice(position.end);
@@ -168,26 +240,36 @@ export function createComposerModel(ctx: Context): ComposerModel {
       current.cursor = { start: cursor, end: cursor };
       edited(current, true);
     },
-    cursor() { const current = draft(); return current.cursor?.start ?? current.text.length; },
+    cursor() {
+      const current = draft();
+      return current.cursor?.start ?? current.text.length;
+    },
     async addFiles(incoming) {
       if (!incoming.length) return;
-      const owner = entry(), current = owner.edit ?? owner.input;
-      if (current.attachments.length + current.loading + incoming.length > 8) throw new Error('Attach at most eight files');
+      const owner = entry(),
+        current = owner.edit ?? owner.input;
+      if (current.attachments.length + current.loading + incoming.length > 8)
+        throw new Error('Attach at most eight files');
       current.loading += incoming.length;
       edited(current);
       try {
-        const added = await Promise.all(incoming.map(async (file) => {
-          if (file.size > 6 * 1024 * 1024) throw new Error('Files: up to 6 MiB each');
-          const data = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(String(reader.result).split(',')[1]);
-            reader.onerror = () => reject(new Error('Could not read ' + file.name));
-            reader.readAsDataURL(file);
-          });
-          signal.throwIfAborted();
-          return { name: file.name, mimeType: file.type || 'application/octet-stream', data };
-        }));
-        if ([...current.attachments, ...added].reduce((total, file) => total + file.data.length * .75, 0) > 12 * 1024 * 1024)
+        const added = await Promise.all(
+          incoming.map(async (file) => {
+            if (file.size > 6 * 1024 * 1024) throw new Error('Files: up to 6 MiB each');
+            const data = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(String(reader.result).split(',')[1]);
+              reader.onerror = () => reject(new Error('Could not read ' + file.name));
+              reader.readAsDataURL(file);
+            });
+            signal.throwIfAborted();
+            return { name: file.name, mimeType: file.type || 'application/octet-stream', data };
+          }),
+        );
+        if (
+          [...current.attachments, ...added].reduce((total, file) => total + file.data.length * 0.75, 0) >
+          12 * 1024 * 1024
+        )
           throw new Error('Attachments exceed 12 MiB per message');
         current.attachments.push(...added);
       } finally {
@@ -197,15 +279,30 @@ export function createComposerModel(ctx: Context): ComposerModel {
     },
     removeAttachment(index) {
       const current = draft();
-      if (Number.isInteger(index) && index >= 0 && index < current.attachments.length) { current.attachments.splice(index, 1); edited(current); }
+      if (Number.isInteger(index) && index >= 0 && index < current.attachments.length) {
+        current.attachments.splice(index, 1);
+        edited(current);
+      }
     },
-    cancelEdit() { delete entry().edit; change(true); },
+    cancelEdit() {
+      delete entry().edit;
+      change(true);
+    },
     beginDraftMode(mode) {
-      if (isRunning(control.get().run) || control.get().interaction.operation || !control.get().session) return () => {};
+      if (isRunning(control.get().run) || control.get().interaction.operation || !control.get().session)
+        return () => {};
       const owner = entry();
-      const edit: Draft = { ...blank(), text: mode.text, revision: structuredClone(mode),
-        attachments: [...(mode.images ?? []).map((file, originalIndex) => ({ ...file, originalIndex })), ...(mode.attachments ?? [])] };
-      owner.edit = edit; change(true);
+      const edit: Draft = {
+        ...blank(),
+        text: mode.text,
+        revision: structuredClone(mode),
+        attachments: [
+          ...(mode.images ?? []).map((file, originalIndex) => ({ ...file, originalIndex })),
+          ...(mode.attachments ?? []),
+        ],
+      };
+      owner.edit = edit;
+      change(true);
       return () => {
         if (owner.edit !== edit) return;
         delete owner.edit;
@@ -216,9 +313,14 @@ export function createComposerModel(ctx: Context): ComposerModel {
     completer: (trigger) => completions.get(trigger),
     command: register,
     completion(trigger, complete) {
-      if (trigger === '/' || !/^[!#$%&*?@^~]$/.test(trigger) || completions.has(trigger)) throw new Error('Invalid or duplicate completion trigger: ' + trigger);
-      completions.set(trigger, complete); change();
-      return () => { completions.delete(trigger); change(); };
+      if (trigger === '/' || !/^[!#$%&*?@^~]$/.test(trigger) || completions.has(trigger))
+        throw new Error('Invalid or duplicate completion trigger: ' + trigger);
+      completions.set(trigger, complete);
+      change();
+      return () => {
+        completions.delete(trigger);
+        change();
+      };
     },
     send,
     async retry() {
@@ -232,13 +334,19 @@ export function createComposerModel(ctx: Context): ComposerModel {
       const { missing, ...submission } = input;
       if (missing.length) {
         if (current === draft() && !current.text && !current.attachments.length && !current.revision) {
-          current.text = submission.message; current.attachments = submission.attachments;
+          current.text = submission.message;
+          current.attachments = submission.attachments;
           current.model ??= submission.model;
-          if (current.thinkingLevel === undefined) current.thinkingLevel = submission.thinkingLevel; edited(current, true);
+          if (current.thinkingLevel === undefined) current.thinkingLevel = submission.thinkingLevel;
+          edited(current, true);
         }
         throw new Error('Reattach ' + missing.join(', ') + ' before sending this message again.');
       }
-      await control.submit({ ...submission, model: current.model ?? submission.model, thinkingLevel: current.thinkingLevel === undefined ? submission.thinkingLevel : current.thinkingLevel });
-    }
+      await control.submit({
+        ...submission,
+        model: current.model ?? submission.model,
+        thinkingLevel: current.thinkingLevel === undefined ? submission.thinkingLevel : current.thinkingLevel,
+      });
+    },
   };
 }

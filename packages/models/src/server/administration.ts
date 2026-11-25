@@ -10,9 +10,10 @@ export function setupAdministration(ctx: Context) {
   const { recent, remember } = ctx.harnessModelPreference;
   const host = {
     paths: ctx.harnessState.paths,
-    recent, remember,
+    recent,
+    remember,
     catalog: ctx.harnessModels,
-    admin: ctx.harnessModelStore
+    admin: ctx.harnessModelStore,
   };
   const add = (method: string, path: string, handler: Parameters<typeof ctx.harnessRoutes.register>[2]) =>
     ctx.effect(() => ctx.harnessRoutes.register(method, path, handler));
@@ -25,8 +26,13 @@ export function setupAdministration(ctx: Context) {
       const input = await body();
       return ctx.harnessMutations.run(async () => {
         const release = ctx.harnessMutations.protect();
-        try { const result = await saveProvider(host, input, method === 'DELETE'); changed(); return result; }
-        finally { release(); }
+        try {
+          const result = await saveProvider(host, input, method === 'DELETE');
+          changed();
+          return result;
+        } finally {
+          release();
+        }
       });
     });
   }
@@ -36,18 +42,27 @@ export function setupAdministration(ctx: Context) {
       return ctx.harnessMutations.run(async () => {
         if (typeof input?.provider !== 'string' || !/^[a-z0-9-]+$/.test(input.provider))
           throw new DomainError('invalid_input', 'Invalid provider');
-        if (!host.admin.hasProvider(input.provider)) throw new DomainError('invalid_input', 'Unknown provider');
+        if (!host.admin.hasProvider(input.provider))
+          throw new DomainError('invalid_input', 'Unknown provider');
         if (method === 'DELETE') {
           const release = ctx.harnessMutations.protect();
-          try { await host.admin.removeCredential(input.provider); }
-          finally { release(); }
+          try {
+            await host.admin.removeCredential(input.provider);
+          } finally {
+            release();
+          }
         } else {
-          if (typeof input.key !== 'string' || !input.key.trim()) throw new DomainError('invalid_input', 'Invalid credential');
+          if (typeof input.key !== 'string' || !input.key.trim())
+            throw new DomainError('invalid_input', 'Invalid credential');
           await host.admin.storeCredential(input.provider, input.key.trim());
         }
         changed();
-        return { ok: true, persisted: true, models: host.catalog.list(),
-          status: host.admin.authStatus(input.provider) };
+        return {
+          ok: true,
+          persisted: true,
+          models: host.catalog.list(),
+          status: host.admin.authStatus(input.provider),
+        };
       });
     });
   }

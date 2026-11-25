@@ -14,6 +14,9 @@
   "miniHarness": {
     "api": [
       "./browser/api"
-    ]
+    ],
+    "profileModules": {
+      "@mini-harness/ui-theme": "./src/manifest.ts#manifest"
+    }
   }
 }

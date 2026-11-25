@@ -1,31 +1,29 @@
 # Architecture
 
-mini-harness has two layers. Product plugins and their Node.js and browser entry points sit above the shared Cordis runtime in [vendor/cordis](../vendor/cordis/README.md).
+The Web application is assembled from [YAML Profile entries](profiles.md) and Cordis plugins. The launcher provides a context, process controls and paths. It resolves the requested modules and starts an Entry Tree. The Web HTTP listener and browser gateway are Profile plugins with their own dependencies.
 
-| Layer | Responsibilities |
-| --- | --- |
-| Product | Sessions, Runs, Agent, Tools, file access, settings, transport, and UI services. The host supplies configured plugin entries, module resolution, scope addresses and persistence. |
-| Cordis | Context and service inheritance, dependency injection, the Entry Tree, Fiber activation and disposal, typed events and effects. |
+| Boundary | Responsibilities                                                                                               |
+| -------- | -------------------------------------------------------------------------------------------------------------- |
+| Profile  | Entry identities, module resolution, configuration layers, provider selections and browser projections         |
+| Cordis   | Contexts, service isolation, injection, Entry Tree reconciliation, Fiber activation, typed events and disposal |
+| Product  | Conversation identity and persistence, Agent execution, tool authorization, transport, and UI                  |
 
-The runtime has no product dependencies. Workspaces and Sessions own domain identities and ancestry. The plugin manager turns those addresses and user selections into Cordis contexts and Entry Tree entries. Cordis isolates selected services in a child context and activates consumers when their injected services are available. The browser owns a separate Context and uses the same Entry Tree with URL-based module resolution.
-
-## Service composition
-
-Internal and installed plugins declare `inject`, optional `provide`, and `apply(ctx, config)`. Cordis registers each entry as a Fiber, invokes it when dependencies are available, and removes its effects when the Fiber deactivates. The plugin manager handles discovery, package installation, metadata and product-level provider selection. Diagnostics use Entry and Fiber state.
-
-Plugins collaborate through services, typed events and domain registries. Tool registration belongs to Tools, prompt sections to Prompt, session records to Sessions, and DOM outlets to UI Slots. Services that use a caller's identity derive it from the Cordis call context and the host-assigned entry.
+Shipped and installed plugins declare `inject`, `provide` and `apply(ctx, config)`. Cordis activates consumers when the requested services are available. Workspaces and Sessions own identity and ancestry, and the plugin manager represents scoped provider selections as Cordis Contexts and Entry Groups. The browser loads its entries with the same Cordis implementation.
 
 ## Configuration and lifecycle
 
-Settings persists `~/.mini-harness/settings.json`. It supplies a candidate configuration to the host and writes it after required services and configuration validators succeed. An unsuccessful transaction restores the previously committed entries. Runs guards structural changes to the application or affected scopes while conversations are active. A plugin may accept live configuration using the Fiber update event.
+Settings submits configuration candidates to the active Profile. Runs guards structural changes while affected conversations are active. A rejected candidate restores the prior entries. Live configuration can update a running Fiber, and configuration subscribers read committed values from the owning Entry. Nested fibers keep their own lifetime while reading their Entry's configuration.
 
-An activation owns an abort signal. Teardown aborts and drains work registered with `fiber.run()` before releasing effects. Cordis retains injected services while dependent fibers dispose. Runs, transport requests and views retain their own domain state and cancellation rules.
+Each activation has an abort signal. Teardown aborts and drains work registered with `fiber.run()` and then releases effects. Cordis retains injected services while dependents dispose. Transport routes, long-running work and browser views also have lifetimes owned by their domains.
 
-## Domain boundaries
+## File interaction
 
-- Runs admits and schedules executions. Agent owns the model and tool pipeline. Sessions owns the event log, attachments, branching, recovery and deletion.
-- Tools checks registration, argument schemas and authorization at execution. Approvals resolves user decisions and provider-specific execution remains behind process and sandbox services.
-- Transport owns authenticated routes and revisions. UI Gateway publishes bootstrap entries and change notices. UI Layout owns the view hierarchy, UI Slots owns outlet registration, and browser feature plugins own their controls and projections.
-- The root npm tarball publishes the CLI and three public subpaths: `mini-harness/cordis`, `mini-harness/plugin`, and `mini-harness/browser-plugin`. Built-ins and the SDK use the same Cordis source.
+File Access owns workspace path constraints and publishes the file change projection shared by Files, File Preview and Git Diff. Files owns file browsing, search and composer completion. File Preview renders workspace resources, stored attachments and draft bytes. Git Diff owns the Git changes list and diff tabs. Sessions owns the stored attachment bytes and their conversation identity.
 
-See the [plugin guide](plugins.md), [scoped providers](scoped-providers.md) and [session log reference](session-log.md).
+Layout registers typed views and opens tabs by their stable key and workspace or conversation owner. File Preview renders the selected resource in a tab or a media dialog. Conversation keeps the normalized reference in raw draft and history text while rendering it as an inline action.
+
+## Plugin SDK
+
+The single npm package exports `mini-harness/cordis`, `mini-harness/plugin`, and `mini-harness/browser-plugin`. Plugins use services, events and domain registries. The browser SDK includes the tab and preview contracts, and the Node.js SDK exposes scoped service access and plugin configuration.
+
+See the [plugin guide](plugins.md), [scoped providers](scoped-providers.md) and [session log](session-log.md).

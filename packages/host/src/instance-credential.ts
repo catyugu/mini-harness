@@ -1,3 +1,6 @@
+import type { Context } from 'mini-harness/cordis';
+import type {} from '@mini-harness/plugin-api/profile';
+import type {} from '@mini-harness/platform/runtime-paths';
 import { protectLocal } from '@mini-harness/platform/local-secret';
 import { randomBytes } from 'node:crypto';
 import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync, realpathSync } from 'node:fs';
@@ -9,9 +12,15 @@ const format = /^[a-f0-9]{64}$/;
 
 function credentialPath(home: string) {
   const directory = lstatSync(home);
-  if (!directory.isDirectory() || directory.isSymbolicLink() || relative(home, realpathSync(home)) ||
-      (!windows && (directory.uid !== process.getuid?.() || (directory.mode & 0o022) !== 0)))
-    throw new Error('MINI_HARNESS_HOME must be owned by the current user and protected against other users writing to it');
+  if (
+    !directory.isDirectory() ||
+    directory.isSymbolicLink() ||
+    relative(home, realpathSync(home)) ||
+    (!windows && (directory.uid !== process.getuid?.() || (directory.mode & 0o022) !== 0))
+  )
+    throw new Error(
+      'MINI_HARNESS_HOME must be owned by the current user and protected against other users writing to it',
+    );
   return join(home, 'instance-credential.json');
 }
 
@@ -19,20 +28,33 @@ export function readInstanceCredential(home: string) {
   const file = credentialPath(home);
   const before = lstatSync(file, { throwIfNoEntry: false });
   if (!before) return;
-  if (!before.isFile() || before.nlink !== 1 || before.size > 8192 ||
-      (!windows && (before.uid !== process.getuid?.() || (before.mode & 0o077) !== 0)))
+  if (
+    !before.isFile() ||
+    before.nlink !== 1 ||
+    before.size > 8192 ||
+    (!windows && (before.uid !== process.getuid?.() || (before.mode & 0o077) !== 0))
+  )
     throw new Error('Instance credential must be a private file owned by the current user');
   const handle = openSync(file, constants.O_RDONLY | (windows ? 0 : constants.O_NOFOLLOW));
   try {
     const actual = fstatSync(handle);
-    if (actual.ino !== before.ino || actual.dev !== before.dev || actual.size !== before.size ||
-        relative(file, realpathSync(file))) throw new Error('Instance credential file changed while opening');
+    if (
+      actual.ino !== before.ino ||
+      actual.dev !== before.dev ||
+      actual.size !== before.size ||
+      relative(file, realpathSync(file))
+    )
+      throw new Error('Instance credential file changed while opening');
     const stored: unknown = JSON.parse(readFileSync(handle, 'utf8'));
     if (typeof stored !== 'string') throw new Error('Invalid instance credential');
-    const token = windows ? protectLocal('Unprotect', Buffer.from(stored, 'base64')).toString('utf8') : stored;
+    const token = windows
+      ? protectLocal('Unprotect', Buffer.from(stored, 'base64')).toString('utf8')
+      : stored;
     if (!format.test(token)) throw new Error('Invalid instance credential');
     return token;
-  } finally { closeSync(handle); }
+  } finally {
+    closeSync(handle);
+  }
 }
 
 /** Call while holding the instance lock. */
@@ -40,6 +62,30 @@ export function instanceCredential(home: string, reset = false) {
   const current = readInstanceCredential(home);
   if (current && !reset) return current;
   const token = randomBytes(32).toString('hex');
-  writeJson(credentialPath(home), windows ? protectLocal('Protect', Buffer.from(token)).toString('base64') : token);
+  writeJson(
+    credentialPath(home),
+    windows ? protectLocal('Protect', Buffer.from(token)).toString('base64') : token,
+  );
   return token;
+}
+
+export const authentication = {
+  inject: ['harnessState', 'harnessLaunch'],
+  provide: ['harnessWebToken'],
+  apply(ctx: Context) {
+    const launch = ctx.harnessLaunch;
+    ctx.provide(
+      'harnessWebToken',
+      launch.token ??
+        (launch.interactive
+          ? instanceCredential(ctx.harnessState.paths.home)
+          : randomBytes(32).toString('hex')),
+    );
+  },
+};
+
+declare module 'mini-harness/cordis' {
+  interface Context {
+    harnessWebToken: string;
+  }
 }

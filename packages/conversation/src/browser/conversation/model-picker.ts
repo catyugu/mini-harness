@@ -4,17 +4,26 @@ import { icon } from '@mini-harness/ui-primitives/icons';
 import { positionPicker } from './picker-position.js';
 import type { ModelSummary } from '@mini-harness/models/catalog';
 
-export function createModelPicker(root: HTMLElement, onSelect: (model: ModelChoice) => void, signal: AbortSignal) {
+export function createModelPicker(
+  root: HTMLElement,
+  onSelect: (model: ModelChoice) => void,
+  signal: AbortSignal,
+) {
   const { element } = scopedElements(root);
-  const button = element<'button'>('modelSelect'), popup = element('modelPicker');
-  const search = element<'input'>('modelSearch'), results = element('modelResults'), empty = element('modelEmpty');
+  const button = element<'button'>('modelSelect'),
+    popup = element('modelPicker');
+  const search = element<'input'>('modelSearch'),
+    results = element('modelResults'),
+    empty = element('modelEmpty');
   let models: ModelSummary[] = [];
   let providers = new Map<string, string>();
   let selected: ModelSummary | undefined;
   let options: HTMLButtonElement[] = [];
   let cursor = -1;
 
-  function providerName(id: string) { return providers.get(id) ?? id; }
+  function providerName(id: string) {
+    return providers.get(id) ?? id;
+  }
 
   function position() {
     positionPicker(button, popup, 300);
@@ -34,7 +43,10 @@ export function createModelPicker(root: HTMLElement, onSelect: (model: ModelChoi
     options[cursor]?.classList.remove('highlighted');
     cursor = index;
     const active = options[index];
-    if (!active) { search.removeAttribute('aria-activedescendant'); return; }
+    if (!active) {
+      search.removeAttribute('aria-activedescendant');
+      return;
+    }
     active.classList.add('highlighted');
     search.setAttribute('aria-activedescendant', active.id);
     if (scroll) active.scrollIntoView({ block: 'nearest' });
@@ -92,10 +104,14 @@ export function createModelPicker(root: HTMLElement, onSelect: (model: ModelChoi
       options.push(option);
       group.append(option);
     }
-    empty.textContent = models.length ? 'No matching models.' : 'Configure a provider in Settings to use a model.';
+    empty.textContent = models.length
+      ? 'No matching models.'
+      : 'Configure a provider in Settings to use a model.';
     empty.hidden = options.length > 0;
     cursor = -1;
-    const selectedIndex = search.value.trim() ? -1 : options.findIndex((option) => option.getAttribute('aria-selected') === 'true');
+    const selectedIndex = search.value.trim()
+      ? -1
+      : options.findIndex((option) => option.getAttribute('aria-selected') === 'true');
     highlight(options.length ? Math.max(0, selectedIndex) : -1, false);
   }
 
@@ -110,7 +126,10 @@ export function createModelPicker(root: HTMLElement, onSelect: (model: ModelChoi
     options[cursor]?.scrollIntoView({ block: 'nearest' });
   }
 
-  button.onclick = () => { if (popup.matches(':popover-open')) popup.hidePopover(); else open(); };
+  button.onclick = () => {
+    if (popup.matches(':popover-open')) popup.hidePopover();
+    else open();
+  };
   search.oninput = render;
   search.onkeydown = (event) => {
     if (event.isComposing) return;
@@ -127,7 +146,9 @@ export function createModelPicker(root: HTMLElement, onSelect: (model: ModelChoi
       highlight((cursor + (event.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length);
     }
   };
-  popup.addEventListener('toggle', () => button.setAttribute('aria-expanded', String(popup.matches(':popover-open'))));
+  popup.addEventListener('toggle', () =>
+    button.setAttribute('aria-expanded', String(popup.matches(':popover-open'))),
+  );
   window.addEventListener('resize', position, { signal });
   window.visualViewport?.addEventListener('resize', position, { signal });
 
@@ -136,9 +157,17 @@ export function createModelPicker(root: HTMLElement, onSelect: (model: ModelChoi
     selected: () => selected,
     update(catalog: ModelSummary[], names: { id: string; name: string }[], choice: ModelChoice) {
       providers = new Map(names.map(({ id, name }) => [id, name]));
-      models = catalog.filter((model) => model.configured).sort((a, b) =>
-        providerName(a.provider).localeCompare(providerName(b.provider)) || a.provider.localeCompare(b.provider) || a.name.localeCompare(b.name));
-      selected = models.find((model) => model.provider === choice.provider && (!choice.id || model.id === choice.id));
+      models = catalog
+        .filter((model) => model.configured)
+        .sort(
+          (a, b) =>
+            providerName(a.provider).localeCompare(providerName(b.provider)) ||
+            a.provider.localeCompare(b.provider) ||
+            a.name.localeCompare(b.name),
+        );
+      selected = models.find(
+        (model) => model.provider === choice.provider && (!choice.id || model.id === choice.id),
+      );
       const label = document.createElement('span');
       label.textContent = selected?.name ?? 'Choose model';
       button.replaceChildren(label, icon('chevron'));
@@ -146,6 +175,6 @@ export function createModelPicker(root: HTMLElement, onSelect: (model: ModelChoi
       button.setAttribute('aria-label', selected ? 'Model: ' + selected.name : 'Choose model');
       if (popup.matches(':popover-open')) render();
       return selected;
-    }
+    },
   };
 }

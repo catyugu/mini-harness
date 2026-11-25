@@ -9,17 +9,24 @@
     "./projection-notice": "./src/shared/projection-notice.ts",
     "./projections": "./src/projections.ts",
     "./router": "./src/router.ts",
-    "./routes": "./src/routes.ts"
+    "./routes": "./src/routes.ts",
+    "./runtime": "./src/runtime.ts"
   },
   "miniHarness": {
     "api": [
       "./http",
       "./projection-api",
       "./projection-notice",
-      "./routes"
-    ]
+      "./routes",
+      "./runtime"
+    ],
+    "profileModules": {
+      "@mini-harness/http-routing": "./src/runtime.ts#http",
+      "@mini-harness/transport-runtime": "./src/runtime.ts"
+    }
   },
   "dependencies": {
-    "@mini-harness/platform": "workspace:*"
+    "@mini-harness/platform": "workspace:*",
+    "@mini-harness/plugin-api": "workspace:*"
   }
 }

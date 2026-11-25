@@ -5,24 +5,56 @@ import { ToolApprovalDenied } from '@mini-harness/tools/api';
 type Decision = 'allow' | 'automatic' | 'deny' | 'expired' | 'cancelled';
 
 export class Approvals {
-  private pending = new Map<string, { info: Approval; followFullAccess: boolean; settle: (decision: Decision) => void }>();
+  private pending = new Map<
+    string,
+    { info: Approval; followFullAccess: boolean; settle: (decision: Decision) => void }
+  >();
   private readonly denials = new Map<string, Set<string>>();
   readonly events = new EventTarget();
-  private changed(id: string) { this.events.dispatchEvent(new CustomEvent('change', { detail: { id } })); }
-  has(sessionId: string) { return [...this.pending.values()].some(({ info }) => info.sessionId === sessionId); }
-  list() { return [...this.pending.values()].map(({ info }) => ({ ...info })); }
-  request(sessionId: string, runId: string | undefined, plugin: string, prompt: ApprovalPrompt, signal: AbortSignal): Promise<boolean> {
+  private changed(id: string) {
+    this.events.dispatchEvent(new CustomEvent('change', { detail: { id } }));
+  }
+  has(sessionId: string) {
+    return [...this.pending.values()].some(({ info }) => info.sessionId === sessionId);
+  }
+  list() {
+    return [...this.pending.values()].map(({ info }) => ({ ...info }));
+  }
+  request(
+    sessionId: string,
+    runId: string | undefined,
+    plugin: string,
+    prompt: ApprovalPrompt,
+    signal: AbortSignal,
+  ): Promise<boolean> {
     signal.throwIfAborted();
     const { title, message, context, followFullAccess = false } = prompt;
-    if (typeof title !== 'string' || !title.trim() || title.length > 140 ||
-        typeof message !== 'string' || !message.trim() || message.length > 16000)
+    if (
+      typeof title !== 'string' ||
+      !title.trim() ||
+      title.length > 140 ||
+      typeof message !== 'string' ||
+      !message.trim() ||
+      message.length > 16000
+    )
       throw new Error('Invalid approval prompt');
     const key = context === undefined ? undefined : JSON.stringify([sessionId, plugin, context, message]);
-    if (runId && key && this.denials.get(runId)?.has(key)) return Promise.reject(new ToolApprovalDenied('Operation denied by user'));
+    if (runId && key && this.denials.get(runId)?.has(key))
+      return Promise.reject(new ToolApprovalDenied('Operation denied by user'));
     return new Promise<boolean>((resolve, reject) => {
-      const info = { id: randomUUID(), sessionId, runId, plugin, title, message, createdAt: new Date().toISOString() };
+      const info = {
+        id: randomUUID(),
+        sessionId,
+        runId,
+        plugin,
+        title,
+        message,
+        createdAt: new Date().toISOString(),
+      };
       const finish = (decision: Decision) => {
-        this.pending.delete(info.id); clearTimeout(timer); signal?.removeEventListener('abort', abort);
+        this.pending.delete(info.id);
+        clearTimeout(timer);
+        signal?.removeEventListener('abort', abort);
         this.changed(sessionId);
         if (decision === 'allow' || decision === 'automatic') resolve(decision === 'automatic');
         else if (decision === 'deny') {
@@ -35,7 +67,8 @@ export class Approvals {
         } else reject(new Error(decision === 'expired' ? 'User approval expired' : 'Operation cancelled'));
       };
       const abort = () => finish('cancelled');
-      const timer = setTimeout(() => finish('expired'), 5 * 60 * 1000); timer.unref();
+      const timer = setTimeout(() => finish('expired'), 5 * 60 * 1000);
+      timer.unref();
       signal?.addEventListener('abort', abort, { once: true });
       this.pending.set(info.id, { info, followFullAccess, settle: finish });
       this.changed(sessionId);

@@ -14,7 +14,10 @@
       "./api",
       "./stream",
       "./execution"
-    ]
+    ],
+    "profileModules": {
+      "@mini-harness/runs": "./src/manifest.ts#manifest"
+    }
   },
   "dependencies": {
     "@mini-harness/agent": "workspace:*",

@@ -3,7 +3,9 @@ import type { Context } from 'mini-harness/cordis';
 import type {} from './api.js';
 
 const setup = (ctx: Context) => {
-  const apply = (theme: string) => { document.documentElement.dataset.theme = theme; };
+  const apply = (theme: string) => {
+    document.documentElement.dataset.theme = theme;
+  };
   apply(browserPluginSettings(ctx).get<string>('appearance'));
   const unsubscribe = browserPluginSettings(ctx).subscribe<string>('appearance', apply);
   ctx.provide('miniAppearance', browserPluginSettings(ctx));

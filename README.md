@@ -65,8 +65,16 @@ pnpm run test:playwright
 pnpm run pack:verify
 ```
 
-Each private package has a README covering its purpose, interfaces, configuration and tests. Start from the [package directory](packages/) or the [application composition](packages/host/src/composition.ts).
+Each private package has a README covering its purpose, interfaces, configuration and tests. Start from the [package directory](packages/) or the [Web Profile](profiles/web.yml).
 
 The test suites cover native execution, persistence, plugin lifecycles, model providers, file policy, shell approval, and desktop, tablet and mobile browser workflows. Each verification command above reuses the strict build. The local shortcuts `pnpm test`, `pnpm run test:browser` and `pnpm run pack:check` include a build. Use `pnpm run typecheck` for a compile-only check. The package check installs the tarball in a clean project, exercises the plugin SDK and runs a detached server against a local mock model.
 
 MIT. See [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+## Profiles and development
+
+The default Web app is composed from the shipped YAML and the optional user overlay at `~/.mini-harness/profiles/web/cordis.yml`. See [Profiles](docs/profiles.md) for the Entry format, provider selection and migration.
+
+The workspace panel has separate **Workspace files** and **Git changes** entries. Click a text attachment to open it in the workspace panel, or a photo or video to open a media dialog. Workspace file references from `@` completion open in the panel.
+
+Use `pnpm install --frozen-lockfile` to install dependencies, `pnpm run build` to compile, `pnpm run format` to apply formatting, and `pnpm run check` to verify formatting and run the Node tests.

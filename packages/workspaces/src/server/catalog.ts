@@ -7,7 +7,9 @@ import { readJson, writeJson } from '@mini-harness/platform/json';
 import { type getPaths, containsPath } from '@mini-harness/platform/paths';
 
 import type { WorkspaceRecord } from '../shared/record.js';
-interface CatalogState { records: WorkspaceRecord[] }
+interface CatalogState {
+  records: WorkspaceRecord[];
+}
 
 // Use the same native resolver as fs/promises.realpath, including Windows long path names.
 export const canonicalWorkspacePath = realpathSync.native;
@@ -46,7 +48,8 @@ export class WorkspaceCatalog {
   }
 
   private directory(path: string) {
-    if (typeof path !== 'string' || !isAbsolute(path)) throw new DomainError('invalid_input', 'Enter an absolute directory path');
+    if (typeof path !== 'string' || !isAbsolute(path))
+      throw new DomainError('invalid_input', 'Enter an absolute directory path');
     const target = canonicalWorkspacePath(path);
     if (!statSync(target).isDirectory() || containsPath(this.stateRoot, target))
       throw new DomainError('invalid_input', 'Select a directory outside mini-harness configuration');
@@ -57,7 +60,9 @@ export class WorkspaceCatalog {
     return this.records.find(({ id }) => id === this.startupId)?.id ?? this.records[0]?.id;
   }
 
-  list() { return this.records.map((record) => ({ ...record })); }
+  list() {
+    return this.records.map((record) => ({ ...record }));
+  }
 
   get(id: string) {
     const record = this.records.find((item) => item.id === id);
@@ -76,7 +81,11 @@ export class WorkspaceCatalog {
     const id = workspaceId(target);
     const existing = this.records.find((item) => item.id === id);
     if (existing) return { ...existing };
-    const record = { id, path: target, name: name === undefined ? basename(target) || target : this.name(name) };
+    const record = {
+      id,
+      path: target,
+      name: name === undefined ? basename(target) || target : this.name(name),
+    };
     this.save([...this.records, record]);
     return { ...record };
   }
@@ -89,7 +98,7 @@ export class WorkspaceCatalog {
 
   rename(id: string, name: string) {
     const record = { ...this.get(id), name: this.name(name) };
-    this.save(this.records.map((item) => item.id === id ? record : item));
+    this.save(this.records.map((item) => (item.id === id ? record : item)));
     return { ...record };
   }
 
@@ -106,19 +115,23 @@ export class WorkspaceCatalog {
 
   beforeRemove(handler: (id: string) => Promise<string[]>) {
     this.removalHooks.add(handler);
-    return () => { this.removalHooks.delete(handler); };
+    return () => {
+      this.removalHooks.delete(handler);
+    };
   }
 
   remove(id: string, release: () => Promise<void>) {
     if (this.closing) throw new DomainError('unavailable', 'Workspaces are closing');
     this.assertAvailable(id);
     this.get(id);
-    const work = Promise.resolve().then(async () => {
-      const groups = await Promise.all([...this.removalHooks].map((hook) => hook(id)));
-      await release();
-      this.save(this.records.filter((record) => record.id !== id));
-      return { removed: id, deleted: groups.flat() };
-    }).finally(() => this.removing.delete(id));
+    const work = Promise.resolve()
+      .then(async () => {
+        const groups = await Promise.all([...this.removalHooks].map((hook) => hook(id)));
+        await release();
+        this.save(this.records.filter((record) => record.id !== id));
+        return { removed: id, deleted: groups.flat() };
+      })
+      .finally(() => this.removing.delete(id));
     this.removing.set(id, work);
     return work;
   }
@@ -131,14 +144,18 @@ export class WorkspaceCatalog {
   browse(path: string) {
     const target = this.directory(path || this.records[0]?.path || homedir());
     const parent = dirname(target);
-    const directories = readdirSync(target, { withFileTypes: true }).flatMap((entry) => {
-      const child = resolve(target, entry.name);
-      if (!entry.isDirectory() || containsPath(this.stateRoot, child)) return [];
-      try {
-        if (lstatSync(child).isSymbolicLink() || relative(child, canonicalWorkspacePath(child))) return [];
-        return [{ name: entry.name, path: child }];
-      } catch { return []; }
-    }).sort((a, b) => a.name.localeCompare(b.name));
+    const directories = readdirSync(target, { withFileTypes: true })
+      .flatMap((entry) => {
+        const child = resolve(target, entry.name);
+        if (!entry.isDirectory() || containsPath(this.stateRoot, child)) return [];
+        try {
+          if (lstatSync(child).isSymbolicLink() || relative(child, canonicalWorkspacePath(child))) return [];
+          return [{ name: entry.name, path: child }];
+        } catch {
+          return [];
+        }
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
     return { path: target, parent: parent === target ? null : parent, directories };
   }
 }

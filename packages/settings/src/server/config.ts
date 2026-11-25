@@ -1,7 +1,12 @@
 import { DomainError } from '@mini-harness/platform/errors';
 import type { Paths } from '@mini-harness/platform/runtime-paths';
 import type { Settings } from '../shared/settings.js';
-import { localPluginIdPattern, isScopeKey, validatePluginSettings, validateProviderChoices } from '@mini-harness/plugin-api/selection';
+import {
+  localPluginIdPattern,
+  isScopeKey,
+  validatePluginSettings,
+  validateProviderChoices,
+} from '@mini-harness/plugin-api/selection';
 import { toolNamePattern } from '@mini-harness/llm/vocabulary';
 import { readJson } from '@mini-harness/platform/json';
 
@@ -12,7 +17,7 @@ export const DEFAULTS = Object.freeze({
   providers: {},
   browserProviders: {},
   scopes: {},
-  readOnlyTools: {}
+  readOnlyTools: {},
 });
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -34,18 +39,33 @@ export function validateSettings(input: unknown): asserts input is Settings {
   validateProviderChoices(section(providers, 'providers'));
   validateProviderChoices(section(browserProviders, 'browserProviders'));
   for (const [key, scope] of Object.entries(section(scopes, 'scopes'))) {
-    if (!isScopeKey(key) || !isObject(scope) ||
-        Object.keys(scope).some((field) => !['plugins', 'pluginConfig', 'disabledTools', 'providers'].includes(field)))
+    if (
+      !isScopeKey(key) ||
+      !isObject(scope) ||
+      Object.keys(scope).some(
+        (field) => !['plugins', 'pluginConfig', 'disabledTools', 'providers'].includes(field),
+      )
+    )
       throw new DomainError('invalid_input', 'Invalid plugin scope: ' + key);
     const { disabledTools } = scope;
-    if (disabledTools !== undefined && (!Array.isArray(disabledTools) || !disabledTools.every((name: unknown) => typeof name === 'string' && toolNamePattern.test(name))))
+    if (
+      disabledTools !== undefined &&
+      (!Array.isArray(disabledTools) ||
+        !disabledTools.every((name: unknown) => typeof name === 'string' && toolNamePattern.test(name)))
+    )
       throw new DomainError('invalid_input', 'Invalid scoped tool restriction: ' + key);
-    validatePluginSettings(section(scope.plugins, key + '.plugins'), section(scope.pluginConfig, key + '.pluginConfig'));
+    validatePluginSettings(
+      section(scope.plugins, key + '.plugins'),
+      section(scope.pluginConfig, key + '.pluginConfig'),
+    );
     validateProviderChoices(section(scope.providers, key + '.providers'));
   }
   for (const [plugin, tools] of Object.entries(section(readOnlyTools, 'readOnlyTools'))) {
-    if (!localPluginIdPattern.test(plugin) || !Array.isArray(tools) ||
-        !tools.every((name: unknown) => typeof name === 'string' && toolNamePattern.test(name)))
+    if (
+      !localPluginIdPattern.test(plugin) ||
+      !Array.isArray(tools) ||
+      !tools.every((name: unknown) => typeof name === 'string' && toolNamePattern.test(name))
+    )
       throw new DomainError('invalid_input', 'Invalid read-only tool grant: ' + plugin);
   }
   if (typeof port !== 'number' || !Number.isInteger(port) || port < 1024 || port > 65535)
@@ -65,7 +85,7 @@ export function parseSettings(input: unknown): Settings {
     providers: section(input.providers, 'providers'),
     browserProviders: section(input.browserProviders, 'browserProviders'),
     scopes: section(input.scopes, 'scopes'),
-    readOnlyTools: section(input.readOnlyTools, 'readOnlyTools')
+    readOnlyTools: section(input.readOnlyTools, 'readOnlyTools'),
   };
   validateSettings(settings);
   return settings;
@@ -82,10 +102,13 @@ export function mergeSettings(current: Settings, patch: unknown): Settings {
     ...current,
     ...patch,
     providers: patch.providers === undefined ? current.providers : section(patch.providers, 'providers'),
-    browserProviders: patch.browserProviders === undefined ? current.browserProviders : section(patch.browserProviders, 'browserProviders'),
+    browserProviders:
+      patch.browserProviders === undefined
+        ? current.browserProviders
+        : section(patch.browserProviders, 'browserProviders'),
     scopes: patch.scopes === undefined ? current.scopes : section(patch.scopes, 'scopes'),
     plugins: { ...current.plugins, ...plugins },
-    pluginConfig: { ...current.pluginConfig, ...pluginConfig }
+    pluginConfig: { ...current.pluginConfig, ...pluginConfig },
   };
   validateSettings(next);
   return next;

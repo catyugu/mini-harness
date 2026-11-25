@@ -4,12 +4,15 @@ import { setup } from './server/setup.js';
 export const manifest: PluginDescriptor = {
   scope: 'application',
   browserProvides: ['miniSettings', 'miniSettingsData', 'miniSettingsRegistry'],
-  id: 'core:settings', title: 'Settings', description: 'Application settings', defaultEnabled: true,
-    plugin: {
-                                                                                                           inject: ['harnessChanges', 'harnessSettingsStore', 'harnessRoutes', 'harnessMutations'],
-                                                                                                           provide: [],
-                                                                                                           apply: setup
-                                                                                                         },
+  id: 'core:settings',
+  title: 'Settings',
+  description: 'Application settings',
+  defaultEnabled: true,
+  plugin: {
+    inject: ['harnessChanges', 'harnessSettingsStore', 'harnessRoutes', 'harnessMutations'],
+    provide: [],
+    apply: setup,
+  },
   browserStyles: ['/packages/settings/src/browser/style.css'],
   browser: '/packages/settings/src/browser/setup.js',
 };

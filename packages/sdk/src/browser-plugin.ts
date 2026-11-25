@@ -4,11 +4,51 @@ export { browserPluginId, browserPluginSettings } from '@mini-harness/ui-runtime
 export type { BrowserPrimitives } from '@mini-harness/ui-primitives/api';
 export type { BrowserProjection, BrowserProjectionPort } from '@mini-harness/ui-runtime/projection-api';
 export type { ConversationBrowserPort } from '@mini-harness/conversation/browser/navigation-api';
-export type { Completer, Completion, ComposerCommand, ComposerDraft, ComposerModel, DraftMode, Suggestion } from '@mini-harness/conversation/browser/composer-api';
-export type { ConversationController, ConversationState, ConversationSubmission, ConversationRevision, RetryInput } from '@mini-harness/conversation/browser/conversation-api';
-export type { MessageAction, MessageActionContext, RecordRenderer, ToolRenderer, ToolView } from '@mini-harness/conversation/browser/history-api';
+export type {
+  Completer,
+  Completion,
+  ComposerCommand,
+  ComposerDraft,
+  ComposerModel,
+  DraftMode,
+  Suggestion,
+} from '@mini-harness/conversation/browser/composer-api';
+export type {
+  ConversationController,
+  ConversationState,
+  ConversationSubmission,
+  ConversationRevision,
+  RetryInput,
+} from '@mini-harness/conversation/browser/conversation-api';
+export type {
+  MessageAction,
+  MessageActionContext,
+  RecordRenderer,
+  ToolRenderer,
+  ToolView,
+} from '@mini-harness/conversation/browser/history-api';
 export type { SessionDisplayRecord } from '@mini-harness/sessions/display-record';
-export type { PageContribution, RightTabType, TabAddress, TabScope } from '@mini-harness/ui-layout/browser/api';
-export type { PluginSettingsContribution, SettingsContext, SettingsContribution, SettingsSection } from '@mini-harness/settings/browser/api';
-export type { KeyedSlotOptions, SlotMap, SlotName, SlotKind, SlotMount, SlotRenderer } from '@mini-harness/ui-slots/browser/api';
+export type { PreviewPlacement, PreviewResource } from '@mini-harness/file-preview/browser/api';
+export type {
+  PageContribution,
+  RightPanelEntry,
+  RightTab,
+  RightTabType,
+  TabOwner,
+  TabScope,
+} from '@mini-harness/ui-layout/browser/api';
+export type {
+  PluginSettingsContribution,
+  SettingsContext,
+  SettingsContribution,
+  SettingsSection,
+} from '@mini-harness/settings/browser/api';
+export type {
+  KeyedSlotOptions,
+  SlotMap,
+  SlotName,
+  SlotKind,
+  SlotMount,
+  SlotRenderer,
+} from '@mini-harness/ui-slots/browser/api';
 export type { PluginConfiguration } from '@mini-harness/plugin-api/plugin-configuration';

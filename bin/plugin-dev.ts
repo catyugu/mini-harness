@@ -23,7 +23,11 @@ async function terminate(child?: ChildProcess) {
   const closed = new Promise<void>((done) => child.once('close', () => done()));
   const force = setTimeout(() => child.kill('SIGKILL'), 5000);
   child.kill();
-  try { await closed; } finally { clearTimeout(force); }
+  try {
+    await closed;
+  } finally {
+    clearTimeout(force);
+  }
 }
 
 export async function pluginDev(input: string, executable: string) {
@@ -50,35 +54,58 @@ export async function pluginDev(input: string, executable: string) {
     building = true;
     try {
       if (lstatSync(join(folder, 'package.json'), { throwIfNoEntry: false })?.isFile()) {
-        const npm = env.MINI_HARNESS_NPM_CLI ?? join(dirname(process.execPath),
-          process.platform === 'win32' ? 'node_modules/npm/bin/npm-cli.js' : '../lib/node_modules/npm/bin/npm-cli.js');
-        const build = spawn(process.execPath, [npm, 'run', 'build', '--if-present'], { cwd: folder, stdio: 'inherit', signal: lifetime.signal });
+        const npm =
+          env.MINI_HARNESS_NPM_CLI ??
+          join(
+            dirname(process.execPath),
+            process.platform === 'win32'
+              ? 'node_modules/npm/bin/npm-cli.js'
+              : '../lib/node_modules/npm/bin/npm-cli.js',
+          );
+        const build = spawn(process.execPath, [npm, 'run', 'build', '--if-present'], {
+          cwd: folder,
+          stdio: 'inherit',
+          signal: lifetime.signal,
+        });
         await new Promise<void>((done, reject) => {
           build.once('error', reject);
-          build.once('close', (code) => code === 0 ? done() : reject(new Error('Plugin build failed')));
+          build.once('close', (code) => (code === 0 ? done() : reject(new Error('Plugin build failed'))));
         });
       }
       lifetime.signal.throwIfAborted();
       await terminate(server);
       lifetime.signal.throwIfAborted();
-      server = spawn(process.execPath, [executable, '--no-open', '--port', String(selected)], { env, stdio: 'inherit' });
+      server = spawn(process.execPath, [executable, '--no-open', '--port', String(selected)], {
+        env,
+        stdio: 'inherit',
+      });
       server.once('error', (error) => console.error('Could not start plugin host:', error.message));
     } catch (error) {
-      if (!lifetime.signal.aborted) console.error('Plugin development:', error instanceof Error ? error.message : String(error));
-    } finally { building = false; }
+      if (!lifetime.signal.aborted)
+        console.error('Plugin development:', error instanceof Error ? error.message : String(error));
+    } finally {
+      building = false;
+    }
   }
 
   const watcher = watch(folder, { recursive: true }, (_event, file) => {
     if (building || !file || /(?:^|[/\\])(?:node_modules|\.git)(?:[/\\]|$)/.test(file)) return;
     clearTimeout(timer);
-    timer = setTimeout(() => { update = rebuild(); }, 200);
+    timer = setTimeout(() => {
+      update = rebuild();
+    }, 200);
   });
-  watcher.on('error', (error) => { console.error(error.message); stop(); });
+  watcher.on('error', (error) => {
+    console.error(error.message);
+    stop();
+  });
   try {
     console.log('Developing ' + id + ' in an isolated instance at port ' + selected);
     update = rebuild();
     if (!lifetime.signal.aborted)
-      await new Promise<void>((done) => lifetime.signal.addEventListener('abort', () => done(), { once: true }));
+      await new Promise<void>((done) =>
+        lifetime.signal.addEventListener('abort', () => done(), { once: true }),
+      );
   } finally {
     clearTimeout(timer);
     watcher.close();

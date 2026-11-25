@@ -9,7 +9,14 @@ declare module 'mini-harness/cordis' {
       reserved(id: string): boolean;
       diagnostics(): unknown;
       browser(): BrowserEntry[];
-      requestScope(plugin: string, key: string, operation: string, input: unknown, signal: AbortSignal): Promise<unknown>;
+      browserAsset(path: string): { path: string; mime: string } | undefined;
+      requestScope(
+        plugin: string,
+        key: string,
+        operation: string,
+        input: unknown,
+        signal: AbortSignal,
+      ): Promise<unknown>;
       writeBrowserConfig(id: string, patch: unknown, signal: AbortSignal): Promise<void>;
     };
   }

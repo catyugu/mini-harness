@@ -10,14 +10,21 @@ export interface SlotMount {
 }
 export type SlotRenderer = (signal: AbortSignal) => HTMLElement | SlotMount;
 
-export interface KeyedSlotOptions { order?: number }
+export interface KeyedSlotOptions {
+  order?: number;
+}
 
 declare module 'mini-harness/cordis' {
   interface Context {
     miniSlots: {
       define(name: SlotName, container: HTMLElement, kind?: SlotKind): () => void;
       register(name: SlotName, node: HTMLElement, order?: number): () => void;
-      registerKeyed(name: SlotName, key: string, render: SlotRenderer, options?: KeyedSlotOptions): () => void;
+      registerKeyed(
+        name: SlotName,
+        key: string,
+        render: SlotRenderer,
+        options?: KeyedSlotOptions,
+      ): () => void;
     };
   }
 }

@@ -6,8 +6,11 @@ import { join } from 'node:path';
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
 import { startIsolatedHost, settingsSection, expectInViewport } from '../support/browser.js';
 
-test('file inspection, responsive themes and reduced viewport height keep controls reachable', async ({ browser }) => {
-  const mock = await createMockProvider(), { root, paths } = createFixturePaths(mock.url);
+test('file inspection, responsive themes and reduced viewport height keep controls reachable', async ({
+  browser,
+}) => {
+  const mock = await createMockProvider(),
+    { root, paths } = createFixturePaths(mock.url);
   const note = join(paths.cwd, 'notes.md');
   writeFileSync(note, '# Visible file\nBefore edits');
   const git = (...args: string[]) => execFileSync('git', args, { cwd: paths.cwd });
@@ -22,7 +25,9 @@ test('file inspection, responsive themes and reduced viewport height keep contro
         await page.goto(service.url + '/#token=' + service.token);
         if (width <= 860) {
           const navigation = page.getByRole('button', { name: 'Toggle navigation' });
-          const close = page.getByRole('dialog', { name: 'Conversations' }).getByRole('button', { name: 'Close navigation' });
+          const close = page
+            .getByRole('dialog', { name: 'Conversations' })
+            .getByRole('button', { name: 'Close navigation' });
           await navigation.click();
           await expect(close).toBeFocused();
           await close.press('Shift+Tab');
@@ -34,24 +39,34 @@ test('file inspection, responsive themes and reduced viewport height keep contro
         if (width <= 860) await page.keyboard.press('Escape');
         await page.getByRole('button', { name: 'Open workspace panel', exact: true }).click();
         const panel = page.locator('#inspector');
+        await panel.getByRole('button', { name: /Workspace files/ }).click();
         await expect(panel.getByRole('tab', { name: 'Files', exact: true })).toBeVisible();
-        await expect(panel.getByRole('button', { name: 'Browse files', exact: true })).toHaveCount(0);
-        await expect(panel.getByRole('button', { name: 'Git changes', exact: true })).toHaveCount(0);
-        const file = panel.getByRole('button', { name: 'notes.md AM', exact: true });
-        await expect(file).toBeVisible();
+        const file = panel.getByRole('button', { name: 'notes.md', exact: true });
         await expect(file).toHaveCSS('justify-content', 'flex-start');
-        expect(await file.evaluate((node) => {
-          const image = node.querySelector('svg');
-          if (!image) throw new Error('Missing file icon');
-          return image.getBoundingClientRect().left - node.getBoundingClientRect().left;
-        })).toBeLessThan(32);
+        expect(
+          await file.evaluate((node) => {
+            const image = node.querySelector('svg');
+            if (!image) throw new Error('Missing file icon');
+            return image.getBoundingClientRect().left - node.getBoundingClientRect().left;
+          }),
+        ).toBeLessThan(32);
         await file.click();
-        await panel.getByRole('button', { name: 'Diff', exact: true }).click();
-        await expect(panel.locator('.diff .added')).toHaveText(['+# Visible file', '+Before edits', '+Workspace content']);
-        await panel.getByRole('button', { name: 'Preview', exact: true }).click();
-        await expect(panel.getByRole('tab', { name: 'notes.md', exact: true })).toHaveCount(1);
-        await expect(panel.getByRole('tab', { name: 'notes.md', exact: true })).toHaveAttribute('aria-selected', 'true');
-        await expect(panel.getByRole('button', { name: 'Diff', exact: true })).toBeFocused();
+        await expect(panel.getByRole('heading', { name: 'Visible file' })).toBeVisible();
+        await expect(panel.getByRole('button', { name: 'Diff', exact: true })).toHaveCount(0);
+        await panel.getByRole('button', { name: 'Workspace panel home' }).click();
+        await panel.getByRole('button', { name: /Git changes/ }).click();
+        await panel.getByRole('button', { name: /^notes.md/ }).click();
+        await expect(panel.locator('.diff .added')).toHaveText([
+          '+# Visible file',
+          '+Before edits',
+          '+Workspace content',
+        ]);
+        await expect(panel.getByRole('tab', { name: 'Diff: notes.md', exact: true })).toBeVisible();
+        await panel.getByRole('tab', { name: 'notes.md', exact: true }).click();
+        await expect(panel.getByRole('tab', { name: 'notes.md', exact: true })).toHaveAttribute(
+          'aria-selected',
+          'true',
+        );
         await expect(panel.getByRole('heading', { name: 'Visible file' })).toBeVisible();
         await panel.getByRole('button', { name: 'Source', exact: true }).click();
         await expect(panel.locator('.file-preview')).toHaveText('# Visible file\nWorkspace content');
@@ -69,22 +84,37 @@ test('file inspection, responsive themes and reduced viewport height keep contro
         await page.setViewportSize({ width, height: 380 });
         await page.getByRole('textbox', { name: 'Message', exact: true }).fill('A long task '.repeat(100));
         const send = await page.getByRole('button', { name: 'Send', exact: true }).boundingBox();
-        expect(expectPresent(send, 'send button bounds').y + expectPresent(send, 'send button bounds').height).toBeLessThanOrEqual(380);
+        expect(
+          expectPresent(send, 'send button bounds').y + expectPresent(send, 'send button bounds').height,
+        ).toBeLessThanOrEqual(380);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-      } finally { await page.close(); }
+      } finally {
+        await page.close();
+      }
     }
-  } finally { await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
+  } finally {
+    await service.stop();
+    await mock.close();
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('an open file preview and diff refresh after an agent write', async ({ page }) => {
-  const mock = await createMockProvider(({ messages }) => messages.at(-1)?.role === 'tool' ? 'Done' :
-    { tool: 'write', args: { path: 'update.js', content: 'const updated = 2;\n' } });
+  const mock = await createMockProvider(({ messages }) =>
+    messages.at(-1)?.role === 'tool'
+      ? 'Done'
+      : { tool: 'write', args: { path: 'update.js', content: 'const updated = 2;\n' } },
+  );
   const { root, paths } = createFixturePaths(mock.url);
   const file = join(paths.cwd, 'update.js');
   writeFileSync(file, 'const updated = 1;\n');
+  execFileSync('git', ['init', '--quiet'], { cwd: paths.cwd });
+  execFileSync('git', ['add', 'update.js'], { cwd: paths.cwd });
   const service = await startIsolatedHost(paths);
   let finishSettings = () => {};
-  const settingsReady = new Promise<void>((resolve) => { finishSettings = resolve; });
+  const settingsReady = new Promise<void>((resolve) => {
+    finishSettings = resolve;
+  });
   await page.route('**/api/settings', async (route) => {
     await settingsReady;
     await route.continue();
@@ -93,8 +123,15 @@ test('an open file preview and diff refresh after an agent write', async ({ page
     await page.goto(service.url + '/#token=' + service.token);
     try {
       await page.getByRole('button', { name: 'Open workspace panel', exact: true }).click();
-    } finally { finishSettings(); }
+    } finally {
+      finishSettings();
+    }
     const panel = page.getByRole('complementary', { name: 'Workspace panel' });
+    await panel.getByRole('button', { name: /Git changes/ }).click();
+    await panel.getByRole('button', { name: /^update.js/ }).click();
+    await expect(panel.locator('.diff:visible')).toContainText('const updated = 1;');
+    await panel.getByRole('button', { name: 'Workspace panel home' }).click();
+    await panel.getByRole('button', { name: /Workspace files/ }).click();
     await panel.getByRole('button', { name: 'update.js', exact: true }).click();
     await expect(panel.locator('.file-preview')).toContainText('const updated = 1;');
     await expect(panel.locator('.file-preview')).toHaveAttribute('aria-hidden', 'true');
@@ -102,7 +139,8 @@ test('an open file preview and diff refresh after an agent write', async ({ page
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Update the file');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(panel.locator('.file-preview')).toContainText('const updated = 2;');
-    await panel.getByRole('button', { name: 'Diff', exact: true }).click();
+    await panel.getByRole('tab', { name: 'Diff: update.js', exact: true }).click();
+    await expect(panel.locator('.diff .added')).toContainText(['+const updated = 1;', '+const updated = 2;']);
     await expect(panel.getByRole('tab', { name: 'update.js', exact: true })).toHaveCount(1);
   } finally {
     await page.close();

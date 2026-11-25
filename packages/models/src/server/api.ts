@@ -22,5 +22,7 @@ declare module 'mini-harness/cordis' {
 }
 
 declare module 'mini-harness/cordis' {
-  interface Context { harnessModels: ModelCatalogPort }
+  interface Context {
+    harnessModels: ModelCatalogPort;
+  }
 }

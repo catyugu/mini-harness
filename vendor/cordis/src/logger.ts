@@ -1,4 +1,4 @@
-import { defineProperty, hyphenate } from './utilities.js'
+import { defineProperty, hyphenate } from '@mini-harness/cosmokit'
 import { Context } from './context.js'
 import { Fiber } from './fiber.js'
 import { Service } from './service.js'

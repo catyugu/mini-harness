@@ -10,7 +10,12 @@ export class RemoteStore<T> extends EventTarget {
   private readonly dirty = new Set<string>();
   private pending?: Promise<void>;
 
-  constructor(private readonly fetchSnapshot: () => Promise<T>, private readonly scoped?: ScopedRefresh<T>) { super(); }
+  constructor(
+    private readonly fetchSnapshot: () => Promise<T>,
+    private readonly scoped?: ScopedRefresh<T>,
+  ) {
+    super();
+  }
 
   get = (): T => {
     if (this.snapshot === undefined) throw new Error('Remote snapshot has not loaded');
@@ -36,7 +41,9 @@ export class RemoteStore<T> extends EventTarget {
   };
 
   private schedule() {
-    this.pending ??= this.load().finally(() => { this.pending = undefined; });
+    this.pending ??= this.load().finally(() => {
+      this.pending = undefined;
+    });
     return this.pending;
   }
 

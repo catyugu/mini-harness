@@ -1,20 +1,18 @@
-import { DomainError } from '@mini-harness/platform/errors';
 import type {} from '@mini-harness/platform/runtime-paths';
 import type {} from '@mini-harness/settings/api';
 import type {} from '@mini-harness/transport/projection-api';
 import type {} from '@mini-harness/plugin-api/mutation-api';
-import { lstatSync, realpathSync, rmSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { join } from 'node:path';
 import type { Context } from 'mini-harness/cordis';
 import { HttpReply } from '@mini-harness/transport/routes';
-import { installPlugin, uninstallPlugin } from './files.js';
+import { installPlugin, stagePluginRemoval } from './files.js';
 
 /** All local plugin filesystem mutations belong to Plugins. */
 export function setup(ctx: Context) {
   const host = () => ({
     paths: { plugins: ctx.harnessState.paths.plugins },
     settings: ctx.harnessSettingsStore.settings,
-    plugins: ctx.harnessPluginCatalog
+    plugins: ctx.harnessPluginCatalog,
   });
   const add = (method: string, path: string, handler: Parameters<typeof ctx.harnessRoutes.register>[2]) =>
     ctx.effect(() => ctx.harnessRoutes.register(method, path, handler));
@@ -29,7 +27,14 @@ export function setup(ctx: Context) {
     });
   });
   add('POST', '/api/plugins/:id/scopes/:scope/:operation', async ({ params, body, signal }) =>
-    ctx.harnessPluginCatalog.requestScope(params.id, params.scope, params.operation, (await body())?.input, signal));
+    ctx.harnessPluginCatalog.requestScope(
+      params.id,
+      params.scope,
+      params.operation,
+      (await body())?.input,
+      signal,
+    ),
+  );
   add('GET', '/api/plugins/diagnostics', () => ctx.harnessPluginCatalog.diagnostics());
   add('GET', '/api/plugins', () => ctx.harnessPluginCatalog.metadata());
   add('POST', '/api/plugins/install', async ({ body }) => {
@@ -43,15 +48,11 @@ export function setup(ctx: Context) {
   add('DELETE', '/api/plugins/:id', ({ params }) =>
     ctx.harnessMutations.run(async () => {
       const root = join(ctx.harnessState.paths.home, 'plugin-data');
-      const directory = lstatSync(root, { throwIfNoEntry: false });
-      if (directory && (!directory.isDirectory() || relative(root, realpathSync(root))))
-        throw new DomainError('conflict', 'Plugin data directory has been redirected');
-      const metadata = await ctx.harnessSettingsStore.forgetPlugin(params.id, () => {
-        const remaining = uninstallPlugin(host(), params.id);
-        if (directory) rmSync(join(root, params.id), { recursive: true, force: true });
-        return remaining;
-      });
+      const metadata = await ctx.harnessSettingsStore.forgetPlugin(params.id, (entries) =>
+        stagePluginRemoval(host(), params.id, entries, root),
+      );
       changed();
       return metadata;
-    }));
+    }),
+  );
 }

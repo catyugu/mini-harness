@@ -16,7 +16,10 @@
       "./icons",
       "./markdown",
       "./primitives"
-    ]
+    ],
+    "profileModules": {
+      "@mini-harness/ui-primitives": "./src/manifest.ts#manifest"
+    }
   },
   "dependencies": {
     "@mini-harness/plugin-api": "workspace:*"

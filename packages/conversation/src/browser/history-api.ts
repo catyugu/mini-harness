@@ -4,7 +4,13 @@ import type { SessionDisplayRecord } from '@mini-harness/sessions/display-record
 import type { MessageContent, ViewMessage } from '@mini-harness/sessions/message';
 
 export type ToolRenderer = (tool: ToolView, signal: AbortSignal) => HTMLElement | undefined;
-export interface ToolView { name: string; state: string; content?: MessageContent; arguments?: unknown; sessionId?: string }
+export interface ToolView {
+  name: string;
+  state: string;
+  content?: MessageContent;
+  arguments?: unknown;
+  sessionId?: string;
+}
 export interface MessageActionContext {
   readonly signal: AbortSignal;
   readonly sessionId?: string;
@@ -21,8 +27,10 @@ export interface MessageAction {
   visible(context: MessageActionContext): boolean;
   run(context: MessageActionContext): void | Promise<void>;
 }
-export type RecordRenderer = (record: SessionDisplayRecord, context: { sessionId: string; signal: AbortSignal }) =>
-  HTMLElement | undefined;
+export type RecordRenderer = (
+  record: SessionDisplayRecord,
+  context: { sessionId: string; signal: AbortSignal },
+) => HTMLElement | undefined;
 
 declare module 'mini-harness/cordis' {
   interface Context {

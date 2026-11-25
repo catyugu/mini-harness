@@ -1,6 +1,6 @@
 # @mini-harness/files
 
-Provides file tools and the workspace file browser.
+Provides workspace file tools, the file tree and `@` completion. File Preview and Git Diff contribute their own independent views.
 
 ## Responsibilities
 

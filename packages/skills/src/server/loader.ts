@@ -7,15 +7,20 @@ type Skill = { name: string; description: string; content: string; file: string;
 export type SkillRoots = (cwd: string) => readonly string[];
 
 export function defaultSkillRoots(appHome: string, userHome = homedir()): SkillRoots {
-  return (cwd) => [join(userHome, '.agents', 'skills'), join(appHome, 'skills'),
-    join(cwd, '.agents', 'skills'), join(cwd, '.mini-harness', 'skills')];
+  return (cwd) => [
+    join(userHome, '.agents', 'skills'),
+    join(appHome, 'skills'),
+    join(cwd, '.agents', 'skills'),
+    join(cwd, '.mini-harness', 'skills'),
+  ];
 }
 
 const maximumSize = 128 * 1024;
 const maximumEntries = 8192;
 const maximumDirectories = 1024;
 const maximumSkills = 256;
-const unavailable = (error: unknown) => ['ENOENT', 'ENOTDIR', 'ELOOP', 'EACCES', 'EPERM'].includes((error as NodeJS.ErrnoException).code ?? '');
+const unavailable = (error: unknown) =>
+  ['ENOENT', 'ENOTDIR', 'ELOOP', 'EACCES', 'EPERM'].includes((error as NodeJS.ErrnoException).code ?? '');
 const sameFile = (before: Stats, after: Stats) => before.dev === after.dev && before.ino === after.ino;
 
 async function readSkill(file: string) {
@@ -23,10 +28,14 @@ async function readSkill(file: string) {
     const actual = await realpath(file);
     const before = await stat(actual);
     if (!before.isFile() || before.nlink !== 1 || before.size > maximumSize) return;
-    const handle = await open(actual, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0));
+    const handle = await open(
+      actual,
+      constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0),
+    );
     try {
       const opened = await handle.stat();
-      if (!opened.isFile() || opened.nlink !== 1 || !sameFile(before, opened) || opened.size > maximumSize) return;
+      if (!opened.isFile() || opened.nlink !== 1 || !sameFile(before, opened) || opened.size > maximumSize)
+        return;
       // Read at most one byte beyond the limit, even if the file grows after stat.
       const buffer = Buffer.alloc(maximumSize + 1);
       let bytes = 0;
@@ -35,19 +44,27 @@ async function readSkill(file: string) {
         if (!result.bytesRead) break;
         bytes += result.bytesRead;
       }
-      if (bytes > maximumSize || await realpath(file) !== actual) return;
+      if (bytes > maximumSize || (await realpath(file)) !== actual) return;
       const after = await stat(actual);
       if (!after.isFile() || after.nlink !== 1 || !sameFile(opened, after) || after.size !== bytes) return;
       const parsed = parseSkill(buffer.subarray(0, bytes).toString('utf8'), basename(dirname(file)));
       return parsed && { ...parsed, file: actual };
-    } finally { await handle.close(); }
-  } catch (error) { if (!unavailable(error)) throw error; }
+    } finally {
+      await handle.close();
+    }
+  } catch (error) {
+    if (!unavailable(error)) throw error;
+  }
 }
-const xml = (text: string) => text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
+const xml = (text: string) =>
+  text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
 
 /** Roots are ordered from lowest to highest priority. Each scan shares a single budget. */
 export class SkillLoader {
-  constructor(private readonly roots: SkillRoots, private readonly diagnose: (path: string, error: unknown) => void) {}
+  constructor(
+    private readonly roots: SkillRoots,
+    private readonly diagnose: (path: string, error: unknown) => void,
+  ) {}
 
   async discover(cwd: string): Promise<Skill[]> {
     const skills = new Map<string, Skill>();
@@ -71,7 +88,7 @@ export class SkillLoader {
             entries.push(entry);
             if (--entriesLeft === 0) break;
           }
-          if (await realpath(path) !== directory || !sameFile(before, await stat(directory))) return;
+          if ((await realpath(path)) !== directory || !sameFile(before, await stat(directory))) return;
           for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name, 'en'))) {
             if (skillsLeft <= 0) break;
             if (entry.name.startsWith('.')) continue;
@@ -83,12 +100,16 @@ export class SkillLoader {
                 if (!skill || files.has(skill.file)) continue;
                 files.add(skill.file);
                 if (!skills.has(skill.name)) skills.set(skill.name, { ...skill, root });
-              } catch (error) { this.diagnose(child, error); }
+              } catch (error) {
+                this.diagnose(child, error);
+              }
             } else if (entry.isDirectory() || entry.isSymbolicLink()) {
               await visit(child, depth + 1);
             }
           }
-        } catch (error) { if (!unavailable(error)) this.diagnose(path, error); }
+        } catch (error) {
+          if (!unavailable(error)) this.diagnose(path, error);
+        }
       };
       await visit(root, 0);
     }
@@ -108,8 +129,14 @@ export class SkillLoader {
   async prompt(cwd: string) {
     const skills = await this.list(cwd);
     if (!skills.length) return '';
-    return 'Available skills describe task-specific instructions. When a skill matches the task, call load_skill with its name and follow its instructions.\n' +
-      '<available_skills>\n' + skills.map((skill) => `  <skill name="${xml(skill.name)}">${xml(skill.description)}</skill>`).join('\n') + '\n</available_skills>';
+    return (
+      'Available skills describe task-specific instructions. When a skill matches the task, call load_skill with its name and follow its instructions.\n' +
+      '<available_skills>\n' +
+      skills
+        .map((skill) => `  <skill name="${xml(skill.name)}">${xml(skill.description)}</skill>`)
+        .join('\n') +
+      '\n</available_skills>'
+    );
   }
   async invocation(cwd: string, text: string) {
     const match = /(?<!\S)\/skill:([a-z0-9-]+)(?=\s|$)/.exec(text);
@@ -119,13 +146,16 @@ export class SkillLoader {
     const after = text.slice(match.index + match[0].length).trimStart();
     return {
       task: [before, after].filter(Boolean).join(' '),
-      instruction: `<skill name="${xml(skill.name)}" source="${xml(skill.file)}">\n${skill.content}\n</skill>`
+      instruction: `<skill name="${xml(skill.name)}" source="${xml(skill.file)}">\n${skill.content}\n</skill>`,
     };
   }
 }
 
 /** Deliberately narrow frontmatter: no executable tags, aliases or object coercion. */
-export function parseSkill(source: string, fallback: string): Pick<Skill, 'name' | 'description' | 'content'> | undefined {
+export function parseSkill(
+  source: string,
+  fallback: string,
+): Pick<Skill, 'name' | 'description' | 'content'> | undefined {
   const match = source.replace(/^\uFEFF/, '').match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)([\s\S]*)$/);
   if (!match) return;
   const fields: Record<string, string> = {};
@@ -136,15 +166,26 @@ export function parseSkill(source: string, fallback: string): Pick<Skill, 'name'
     let value = field[2];
     if (/^[>|][-+]?$/.test(value)) {
       const parts: string[] = [];
-      while (i + 1 < lines.length && (/^\s+\S/.test(lines[i + 1]) || !lines[i + 1].trim())) parts.push(lines[++i].trim());
+      while (i + 1 < lines.length && (/^\s+\S/.test(lines[i + 1]) || !lines[i + 1].trim()))
+        parts.push(lines[++i].trim());
       value = parts.join(value.startsWith('>') ? ' ' : '\n').trim();
     } else if (value.startsWith('"') && value.endsWith('"')) {
-      try { value = JSON.parse(value); } catch { return; }
+      try {
+        value = JSON.parse(value);
+      } catch {
+        return;
+      }
     } else if (value.startsWith("'") && value.endsWith("'")) value = value.slice(1, -1).replaceAll("''", "'");
     else value = value.replace(/\s+#.*$/, '').trim();
     fields[field[1]] = value;
   }
   const name = fields.name || fallback;
-  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name) || name.length > 64 || !fields.description || fields.description.length > 2048) return;
+  if (
+    !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name) ||
+    name.length > 64 ||
+    !fields.description ||
+    fields.description.length > 2048
+  )
+    return;
   return { name, description: fields.description, content: match[2].trim() };
 }

@@ -7,8 +7,11 @@ const mountTransaction = new AsyncLocalStorage<{ active: boolean }>();
 
 export async function withMountTransaction<T>(operation: () => Promise<T>): Promise<T> {
   const transaction = { active: true };
-  try { return await mountTransaction.run(transaction, operation); }
-  finally { transaction.active = false; }
+  try {
+    return await mountTransaction.run(transaction, operation);
+  } finally {
+    transaction.active = false;
+  }
 }
 
 export function assertOutsideMountTransaction() {
@@ -20,8 +23,11 @@ const pluginRequest = new AsyncLocalStorage<{ signal: AbortSignal; active: boole
 
 export async function withPluginRequest<T>(signal: AbortSignal, work: () => T | Promise<T>): Promise<T> {
   const request = { signal, active: true };
-  try { return await pluginRequest.run(request, work); }
-  finally { request.active = false; }
+  try {
+    return await pluginRequest.run(request, work);
+  } finally {
+    request.active = false;
+  }
 }
 
 export function pluginRequestSignal() {
@@ -30,8 +36,7 @@ export function pluginRequestSignal() {
 }
 
 export function assertOutsidePluginRequest() {
-  if (pluginRequestSignal())
-    throw new Error('Structural settings cannot be changed during a plugin request');
+  if (pluginRequestSignal()) throw new Error('Structural settings cannot be changed during a plugin request');
 }
 
 export interface MutationPort {
@@ -41,9 +46,10 @@ export interface MutationPort {
   run<T>(operation: () => Promise<T> | T): Promise<T>;
 }
 
-
 declare module 'mini-harness/cordis' {
-  interface Context { harnessMutations: MutationPort }
+  interface Context {
+    harnessMutations: MutationPort;
+  }
   interface Events {
     'harness/ready'(): void | Promise<void>;
     'harness/quiesce'(): void | Promise<void>;

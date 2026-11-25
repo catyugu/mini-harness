@@ -26,7 +26,7 @@ export function setup(ctx: Context) {
       return () => source.removeEventListener('change', listener);
     });
   };
-  track(ctx.harnessRegistry.events, (event) => event.detail.queue ? 'queue' : 'sessions');
+  track(ctx.harnessRegistry.events, (event) => (event.detail.queue ? 'queue' : 'sessions'));
   track(ctx.harnessRuns.events, () => 'sessions');
   track(ctx.harnessApprovals.events, () => 'sessions');
   registerSessionRoutes(ctx, (id): ConversationView => {
@@ -36,11 +36,17 @@ export function setup(ctx: Context) {
     sessions.assertAvailable(id);
     const history = sessions.inspectLog(id, (log) => ({ ...log.projection(), queue: log.queue() }));
     const { partial, tools } = harnessRuns.activity(id);
-    return { ...projectSession(ctx, record),
-      messages: projectHistory(ctx, id, history?.messages ?? []), leafId: history?.leafId ?? null,
+    return {
+      ...projectSession(ctx, record),
+      messages: projectHistory(ctx, id, history?.messages ?? []),
+      leafId: history?.leafId ?? null,
       records: history?.records ?? [],
-      model: history?.model, thinkingLevel: history?.thinkingLevel,
-      queue: history?.queue ?? [], partial, tools: tools.map((tool) => projectToolEvent(ctx, id, tool)),
-      logError: sessions.logError(id) };
+      model: history?.model,
+      thinkingLevel: history?.thinkingLevel,
+      queue: history?.queue ?? [],
+      partial,
+      tools: tools.map((tool) => projectToolEvent(ctx, id, tool)),
+      logError: sessions.logError(id),
+    };
   });
 }

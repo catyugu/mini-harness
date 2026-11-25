@@ -11,5 +11,7 @@ export interface ToolAccess {
 export type ToolPolicy = (sessionId: string, tool: Readonly<ToolAccess>) => boolean;
 
 declare module 'mini-harness/cordis' {
-  interface Context { harnessToolPolicy: ToolPolicy }
+  interface Context {
+    harnessToolPolicy: ToolPolicy;
+  }
 }

@@ -24,7 +24,7 @@ The application selects required capabilities and fixed features independently o
 
 ## Configuration
 
-`settings.json` selects plugins and providers by scope. Installed plugins declare dependency injection in their Cordis entry. `plugin.json` describes schema and browser assets. Plugin detail pages display settings contributions, including tool grant controls owned by Sessions.
+The active YAML Profile selects plugins and providers by scope. Installed plugins declare dependency injection in their Cordis entry. `plugin.json` describes schema and browser assets. Plugin detail pages display settings contributions, including tool grant controls owned by Sessions.
 
 Scoped requests target a mounted plugin address and use its invocation lease. Discovery checks npm peer ranges, and mounted plugins may export a synchronous semantic validator.
 

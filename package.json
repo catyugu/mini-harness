@@ -10,6 +10,7 @@
   "files": [
     "dist/bin/",
     "dist/packages/",
+    "profiles/",
     "dist/vendor/",
     "dist/types/vendor/",
     "dist/types/packages/",
@@ -31,13 +32,15 @@
     "start": "pnpm run build && node dist/bin/mini-harness.js",
     "test": "pnpm run build && pnpm run test:node",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "check": "pnpm run test",
+    "check": "pnpm run format:check && pnpm run test",
     "pack:check": "pnpm run build && pnpm run pack:verify",
     "test:browser": "pnpm run build && pnpm run test:playwright",
     "check:deps": "pnpm run build && node --test dist/test/system/architecture.test.js",
     "test:node": "node dist/scripts/run-node-tests.js",
     "pack:verify": "node dist/scripts/check-package.js",
-    "test:playwright": "playwright test -c playwright.config.ts"
+    "test:playwright": "playwright test -c playwright.config.ts",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "dependencies": {
     "@earendil-works/pi-ai": "1.6.0",
@@ -45,9 +48,13 @@
     "ignore": "7.0.8",
     "re2-wasm": "1.0.2",
     "semver": "7.7.4",
-    "typebox": "1.3.27"
+    "typebox": "1.3.27",
+    "yaml": "2.8.2"
   },
   "devDependencies": {
+    "@codemirror/commands": "6.10.3",
+    "@codemirror/state": "6.7.6",
+    "@codemirror/view": "6.43.15",
     "@mini-harness/file-access": "workspace:*",
     "@mini-harness/host": "workspace:*",
     "@mini-harness/input": "workspace:*",
@@ -64,10 +71,12 @@
     "@mini-harness/workspaces": "workspace:*",
     "@playwright/test": "1.56.0",
     "@types/node": "^22.15.0",
+    "@types/semver": "^7.7.0",
     "dompurify": "3.4.18",
+    "esbuild": "0.25.12",
     "marked": "18.2.1",
-    "typescript": "~5.9.3",
-    "@types/semver": "^7.7.0"
+    "prettier": "3.6.2",
+    "typescript": "~5.9.3"
   },
   "repository": {
     "type": "git",
@@ -90,8 +99,8 @@
       "default": "./dist/packages/sdk/src/browser-plugin.js"
     },
     "./cordis": {
-      "types": "./dist/types/vendor/cordis/src/index.d.ts",
-      "default": "./dist/vendor/cordis/src/index.js"
+      "types": "./dist/types/vendor/cordis-runtime/src/index.d.ts",
+      "default": "./dist/vendor/cordis-runtime/src/index.js"
     }
   },
   "packageManager": "pnpm@10.34.9"

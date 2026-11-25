@@ -23,10 +23,19 @@
       "./browser/navigation-api",
       "./display-events",
       "./view"
-    ]
+    ],
+    "profileModules": {
+      "@mini-harness/conversation": "./src/manifests/conversation.ts#manifest",
+      "@mini-harness/conversation-composer": "./src/manifests/conversation.ts#composerManifest",
+      "@mini-harness/conversation-history": "./src/manifests/conversation.ts#historyManifest",
+      "@mini-harness/conversation-navigation": "./src/manifests/navigation.ts#manifest",
+      "@mini-harness/sessions-data": "./src/manifests/session-data.ts#manifest",
+      "@mini-harness/workspace-navigation": "./src/manifests/workspace.ts#manifest"
+    }
   },
   "dependencies": {
     "@mini-harness/approvals": "workspace:*",
+    "@mini-harness/file-preview": "workspace:*",
     "@mini-harness/input": "workspace:*",
     "@mini-harness/llm": "workspace:*",
     "@mini-harness/models": "workspace:*",

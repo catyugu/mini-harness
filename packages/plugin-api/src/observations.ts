@@ -11,10 +11,13 @@ declare module 'mini-harness/cordis' {
 }
 
 export function observe(ctx: Context, event: CapabilityObservation, request?: AbortSignal) {
-  const scope = event.type === 'session-deleted' ? scopedEvent(ctx, event.scopeKeys) : sessionEvent(ctx, event.sessionId);
+  const scope =
+    event.type === 'session-deleted' ? scopedEvent(ctx, event.scopeKeys) : sessionEvent(ctx, event.sessionId);
   for (const { context, callback } of ctx.events.listeners('harness/observe', scope)) {
-    void context.fiber.run(signal => callback(structuredClone(event), signal), request).catch(error => {
-      if (!context.fiber.signal.aborted && !request?.aborted) context.logger.warn(String(error));
-    });
+    void context.fiber
+      .run((signal) => callback(structuredClone(event), signal), request)
+      .catch((error) => {
+        if (!context.fiber.signal.aborted && !request?.aborted) context.logger.warn(String(error));
+      });
   }
 }

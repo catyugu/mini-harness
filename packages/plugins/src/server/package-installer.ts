@@ -8,10 +8,22 @@ import { writeJson } from '@mini-harness/platform/json';
 import { describePlugin } from './descriptor.js';
 import { assertDisabled } from './files.js';
 import { installRegistryPackage } from './registry-client.js';
-import { generationPattern, packageBundle, packageMarker, packageSource, packageSpecPattern } from './source.js';
+import {
+  generationPattern,
+  packageBundle,
+  packageMarker,
+  packageSource,
+  packageSpecPattern,
+} from './source.js';
 
 /** CLI holds the instance lock for all inspection, installation and publication. */
-export async function installPackagedPlugin(paths: Paths, operation: 'install' | 'update', id: string, requested: string | undefined, options: { settings: Settings; reserved(id: string): boolean; signal?: AbortSignal }) {
+export async function installPackagedPlugin(
+  paths: Paths,
+  operation: 'install' | 'update',
+  id: string,
+  requested: string | undefined,
+  options: { settings: Settings; reserved(id: string): boolean; signal?: AbortSignal },
+) {
   const { settings, reserved, signal } = options;
   if (!localPluginIdPattern.test(id) || reserved(id)) throw new Error('Invalid plugin ID');
   const target = join(paths.plugins, id);

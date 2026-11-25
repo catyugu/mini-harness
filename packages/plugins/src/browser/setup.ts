@@ -13,12 +13,27 @@ import type { PluginMetadata } from '../shared/metadata.js';
 import { RemoteStore } from '@mini-harness/ui-runtime/remote-store';
 import { payload } from '@mini-harness/ui-runtime/http';
 import { icon } from '@mini-harness/ui-primitives/icons';
-import { button, field, fromMarkup, iconButton, saveToggle, toggle, confirmAction, required } from '@mini-harness/ui-primitives/primitives';
+import {
+  button,
+  field,
+  fromMarkup,
+  iconButton,
+  saveToggle,
+  toggle,
+  confirmAction,
+  required,
+} from '@mini-harness/ui-primitives/primitives';
 import { readPluginValues, schemaFields } from './fields.js';
 
 const setup = async (ctx: Context) => {
   const signal = ctx.fiber.signal;
-  const { miniSettingsData: settings, miniPages: pages, miniSwitch: syncPlugins, miniBrowserFailures: browserFailures, miniModels: models } = ctx;
+  const {
+    miniSettingsData: settings,
+    miniPages: pages,
+    miniSwitch: syncPlugins,
+    miniBrowserFailures: browserFailures,
+    miniModels: models,
+  } = ctx;
   const plugins = new RemoteStore(() => browserRequest<PluginMetadata[]>(ctx, '/plugins'));
   await plugins.refresh();
   ctx.effect(() => ctx.miniProjections.register('plugins', plugins));
@@ -27,13 +42,20 @@ const setup = async (ctx: Context) => {
     const failures = await syncPlugins();
     if (failures.size) throw new Error('Browser plugins failed: ' + [...failures.keys()].join(', '));
   };
-  const catalog = pluginCatalog(ctx, () => ({
-    plugins: plugins.get().map((plugin) => {
-      const error = browserFailures.get(plugin.id);
-      return error ? { ...plugin, state: 'failed' as const, error } : plugin;
+  const catalog = pluginCatalog(
+    ctx,
+    () => ({
+      plugins: plugins.get().map((plugin) => {
+        const error = browserFailures.get(plugin.id);
+        return error ? { ...plugin, state: 'failed' as const, error } : plugin;
+      }),
+      settings: settings.get(),
     }),
-    settings: settings.get()
-  }), refresh, pages, () => models.get(), ctx.miniSettingsRegistry);
+    refresh,
+    pages,
+    () => models.get(),
+    ctx.miniSettingsRegistry,
+  );
   plugins.subscribe(catalog.refresh, signal);
   settings.subscribe(catalog.refresh, signal);
   browserFailures.subscribe(catalog.refresh, signal);
@@ -54,7 +76,9 @@ function installer(ctx: Context, installed: () => Promise<void>) {
   </form>`);
   const { node: modal, dispose } = ctx.miniDialogs.create('Install plugin', form);
   ctx.effect(() => dispose);
-  const id = fromMarkup<HTMLInputElement>('<input pattern="[a-z](?:[a-z0-9]|-){0,63}" placeholder="my-plugin" required>');
+  const id = fromMarkup<HTMLInputElement>(
+    '<input pattern="[a-z](?:[a-z0-9]|-){0,63}" placeholder="my-plugin" required>',
+  );
   form.prepend(field('Plugin ID', id));
   const input = required(form.querySelector<HTMLInputElement>('.bundle-input'));
   const drop = required(form.querySelector<HTMLElement>('.bundle-drop'));
@@ -78,20 +102,29 @@ function installer(ctx: Context, installed: () => Promise<void>) {
     if (names.some((name) => !bundleNames.includes(name)) || new Set(names).size !== names.length)
       error = 'Choose one copy each of plugin.js, plugin.json and web.js.';
     else if (!names.includes('plugin.json')) error = 'Include plugin.json.';
-    else if (!names.includes('plugin.js') && !names.includes('web.js')) error = 'Include plugin.js or web.js (or both).';
-    else if (selection.reduce((total, file) => total + file.size, 0) > 1024 * 1024) error = 'Plugin bundle exceeds 1 MiB.';
+    else if (!names.includes('plugin.js') && !names.includes('web.js'))
+      error = 'Include plugin.js or web.js (or both).';
+    else if (selection.reduce((total, file) => total + file.size, 0) > 1024 * 1024)
+      error = 'Plugin bundle exceeds 1 MiB.';
     outcome.textContent = error;
     submit.disabled = installing || Boolean(error);
-    list.replaceChildren(...selection.map((file) => {
-      const item = document.createElement('li');
-      item.textContent = file.name;
-      return item;
-    }));
+    list.replaceChildren(
+      ...selection.map((file) => {
+        const item = document.createElement('li');
+        item.textContent = file.name;
+        return item;
+      }),
+    );
   }
 
   input.onchange = () => setFiles([...(input.files ?? [])]);
-  drop.ondragover = (event) => { event.preventDefault(); if (!installing) drop.dataset.dragging = 'true'; };
-  drop.ondragleave = (event) => { if (!drop.contains(event.relatedTarget as Node)) delete drop.dataset.dragging; };
+  drop.ondragover = (event) => {
+    event.preventDefault();
+    if (!installing) drop.dataset.dragging = 'true';
+  };
+  drop.ondragleave = (event) => {
+    if (!drop.contains(event.relatedTarget as Node)) delete drop.dataset.dragging;
+  };
   drop.ondrop = (event) => {
     event.preventDefault();
     delete drop.dataset.dragging;
@@ -102,28 +135,45 @@ function installer(ctx: Context, installed: () => Promise<void>) {
     setFiles([]);
     outcome.textContent = '';
   });
-  modal.addEventListener('cancel', (event) => { if (installing) event.preventDefault(); });
+  modal.addEventListener('cancel', (event) => {
+    if (installing) event.preventDefault();
+  });
   form.onsubmit = async (event) => {
     event.preventDefault();
     if (submit.disabled) return;
     installing = submit.disabled = choose.disabled = cancel.disabled = true;
     try {
-      const bundle = await Promise.all(files.map(async (file) => ({ name: file.name, content: await file.text() })));
+      const bundle = await Promise.all(
+        files.map(async (file) => ({ name: file.name, content: await file.text() })),
+      );
       await browserRequest(ctx, '/plugins/install', payload('POST', { id: id.value.trim(), files: bundle }));
       await installed();
       modal.close();
-    } catch (error) { outcome.textContent = (error instanceof Error ? error.message : String(error)); }
-    finally { installing = submit.disabled = choose.disabled = cancel.disabled = false; }
+    } catch (error) {
+      outcome.textContent = error instanceof Error ? error.message : String(error);
+    } finally {
+      installing = submit.disabled = choose.disabled = cancel.disabled = false;
+    }
   };
   submit.disabled = true;
   return modal;
 }
 
-function pluginCatalog(ctx: Context, snapshot: () => { plugins: PluginMetadata[]; settings: Settings }, refresh: () => Promise<void>, pages: { open(id?: string): void; register(id: string, node: HTMLElement): () => void }, modelCatalog: () => ModelCatalog, registry: Context['miniSettingsRegistry']) {
+function pluginCatalog(
+  ctx: Context,
+  snapshot: () => { plugins: PluginMetadata[]; settings: Settings },
+  refresh: () => Promise<void>,
+  pages: { open(id?: string): void; register(id: string, node: HTMLElement): () => void },
+  modelCatalog: () => ModelCatalog,
+  registry: Context['miniSettingsRegistry'],
+) {
   const signal = ctx.fiber.signal;
-  const entry = fromMarkup<HTMLButtonElement>('<button type="button" class="nav-action" aria-label="Browse plugins" aria-controls="pluginCatalog"><span class="nav-label">Plugins</span></button>');
+  const entry = fromMarkup<HTMLButtonElement>(
+    '<button type="button" class="nav-action" aria-label="Browse plugins" aria-controls="pluginCatalog"><span class="nav-label">Plugins</span></button>',
+  );
   entry.prepend(icon('plugin'));
-  const page = fromMarkup(`<section id="pluginCatalog" class="catalog-page" tabindex="-1" aria-label="Plugin catalog">
+  const page =
+    fromMarkup(`<section id="pluginCatalog" class="catalog-page" tabindex="-1" aria-label="Plugin catalog">
     <header class="catalog-header">
       <div class="catalog-heading"><h1>Plugins</h1><p class="hint">Install, enable, and configure plugins.</p></div>
     </header>
@@ -146,7 +196,7 @@ function pluginCatalog(ctx: Context, snapshot: () => { plugins: PluginMetadata[]
   ctx.effect(() => pages.register('plugins', page));
 
   let detailLifetime: AbortController | undefined;
-  ctx.effect(() => (() => detailLifetime?.abort()));
+  ctx.effect(() => () => detailLifetime?.abort());
   let busy = false;
   let savingSwitch = false;
   async function mutate(operation: () => Promise<unknown>, failed: (error: Error) => void) {
@@ -154,11 +204,18 @@ function pluginCatalog(ctx: Context, snapshot: () => { plugins: PluginMetadata[]
     busy = true;
     try {
       await operation();
-      try { await refresh(); }
-      catch (error) { failed(new Error('Saved on the server. ' + (error instanceof Error ? error.message : String(error)))); }
+      try {
+        await refresh();
+      } catch (error) {
+        failed(new Error('Saved on the server. ' + (error instanceof Error ? error.message : String(error))));
+      }
       return true;
-    } catch (error) { failed(error instanceof Error ? error : new Error(String(error))); return false; }
-    finally { busy = false; }
+    } catch (error) {
+      failed(error instanceof Error ? error : new Error(String(error)));
+      return false;
+    } finally {
+      busy = false;
+    }
   }
 
   function detail(plugin: PluginMetadata) {
@@ -172,7 +229,10 @@ function pluginCatalog(ctx: Context, snapshot: () => { plugins: PluginMetadata[]
     const back = button('All plugins', 'quiet');
     back.classList.add('catalog-back');
     back.prepend(icon('chevron'));
-    back.onclick = () => { render(); rowButton(plugin.id)?.focus(); };
+    back.onclick = () => {
+      render();
+      rowButton(plugin.id)?.focus();
+    };
     section.prepend(back);
     required(section.querySelector('.plugin-symbol')).append(icon(plugin.icon ?? 'plugin'));
     required(section.querySelector('h1')).textContent = plugin.title;
@@ -183,7 +243,9 @@ function pluginCatalog(ctx: Context, snapshot: () => { plugins: PluginMetadata[]
     diagnostics.className = 'hint';
     diagnostics.textContent = plugin.error ?? '';
     section.append(diagnostics);
-    const form = fromMarkup<HTMLFormElement>('<form><div class="detail-fields"></div><p class="hint" role="status"></p></form>');
+    const form = fromMarkup<HTMLFormElement>(
+      '<form><div class="detail-fields"></div><p class="hint" role="status"></p></form>',
+    );
     const save = button('Save configuration', 'primary');
     save.type = 'submit';
     form.append(save);
@@ -198,13 +260,22 @@ function pluginCatalog(ctx: Context, snapshot: () => { plugins: PluginMetadata[]
     fields.append(scopedControls, configFields);
     const locationsByKey = new Map<string, ScopeKey>();
     const currentKey = () => locationsByKey.get(scopePicker.value);
-    const currentScope = () => { const key = currentKey(); return key && snapshot().settings.scopes[key] || undefined; };
-    const values = () => ({ ...snapshot().settings.pluginConfig[plugin.id], ...currentScope()?.pluginConfig?.[plugin.id] });
+    const currentScope = () => {
+      const key = currentKey();
+      return (key && snapshot().settings.scopes[key]) || undefined;
+    };
+    const values = () => ({
+      ...snapshot().settings.pluginConfig[plugin.id],
+      ...currentScope()?.pluginConfig?.[plugin.id],
+    });
     function renderFields() {
       configFields.replaceChildren();
       if (scoped) {
-        const instance = snapshot().plugins.find(({ id }) => id === plugin.id)?.instances?.find(({ scope }) => scope === scopePicker.value);
-        diagnostics.textContent = instance?.error ?? (instance?.state === 'inactive' ? 'Waiting for this scope to activate.' : '');
+        const instance = snapshot()
+          .plugins.find(({ id }) => id === plugin.id)
+          ?.instances?.find(({ scope }) => scope === scopePicker.value);
+        diagnostics.textContent =
+          instance?.error ?? (instance?.state === 'inactive' ? 'Waiting for this scope to activate.' : '');
         enabled.checked = currentScope()?.plugins?.[plugin.id] === true;
         services.clear();
         provision.replaceChildren();
@@ -239,30 +310,51 @@ function pluginCatalog(ctx: Context, snapshot: () => { plugins: PluginMetadata[]
     }
     if (scoped) {
       scopedControls.className = 'plugin-fields';
-      scopedControls.append(field(plugin.scope === 'workspace' ? 'Workspace' : 'Conversation', scopePicker),
-        field('Enabled in this scope', enabled), provision);
+      scopedControls.append(
+        field(plugin.scope === 'workspace' ? 'Workspace' : 'Conversation', scopePicker),
+        field('Enabled in this scope', enabled),
+        provision,
+      );
       save.disabled = true;
       scopePicker.add(new Option('Choose a scope', ''));
-      scopedControls.querySelectorAll('input').forEach((control) => { control.disabled = true; });
-      const locations: Promise<{ key: ScopeKey; name: string }[]> = plugin.scope === 'workspace'
-        ? browserRequest<WorkspaceRecord[]>(ctx, '/workspaces').then((items) => items.map(({ id, name }) => ({ key: `workspace:${id}`, name })))
-        : browserRequest<Conversation[]>(ctx, '/sessions').then((items) => items.map(({ id, title }) => ({ key: `session:${id}`, name: title })));
-      void locations.then((items) => {
-        for (const { key, name } of items) { locationsByKey.set(key, key); scopePicker.add(new Option(name, key)); }
-        for (const { scope } of plugin.instances ?? [])
-          if (scope !== 'application' && !locationsByKey.has(scope)) {
-            locationsByKey.set(scope, scope);
-            scopePicker.add(new Option(scope, scope));
+      scopedControls.querySelectorAll('input').forEach((control) => {
+        control.disabled = true;
+      });
+      const locations: Promise<{ key: ScopeKey; name: string }[]> =
+        plugin.scope === 'workspace'
+          ? browserRequest<WorkspaceRecord[]>(ctx, '/workspaces').then((items) =>
+              items.map(({ id, name }) => ({ key: `workspace:${id}`, name })),
+            )
+          : browserRequest<Conversation[]>(ctx, '/sessions').then((items) =>
+              items.map(({ id, title }) => ({ key: `session:${id}`, name: title })),
+            );
+      void locations
+        .then((items) => {
+          for (const { key, name } of items) {
+            locationsByKey.set(key, key);
+            scopePicker.add(new Option(name, key));
           }
-        scopePicker.value = plugin.instances?.find(({ error }) => error)?.scope ?? items[0]?.key ?? plugin.instances?.[0]?.scope ?? '';
-        const sync = () => {
-          save.disabled = !scopePicker.value;
-          enabled.disabled = !scopePicker.value;
-          renderFields();
-        };
-        scopePicker.onchange = sync;
-        sync();
-      }).catch((error: Error) => { outcome.textContent = error.message; });
+          for (const { scope } of plugin.instances ?? [])
+            if (scope !== 'application' && !locationsByKey.has(scope)) {
+              locationsByKey.set(scope, scope);
+              scopePicker.add(new Option(scope, scope));
+            }
+          scopePicker.value =
+            plugin.instances?.find(({ error }) => error)?.scope ??
+            items[0]?.key ??
+            plugin.instances?.[0]?.scope ??
+            '';
+          const sync = () => {
+            save.disabled = !scopePicker.value;
+            enabled.disabled = !scopePicker.value;
+            renderFields();
+          };
+          scopePicker.onchange = sync;
+          sync();
+        })
+        .catch((error: Error) => {
+          outcome.textContent = error.message;
+        });
     } else renderFields();
     form.onsubmit = async (event) => {
       event.preventDefault();
@@ -280,22 +372,40 @@ function pluginCatalog(ctx: Context, snapshot: () => { plugins: PluginMetadata[]
             if (box.checked && enabled.checked) providers[service] = plugin.id;
             else if (providers[service] === plugin.id) delete providers[service];
           }
-          patch = { scopes: { ...snapshot().settings.scopes, [key]: { ...current, providers,
-            plugins: { ...current.plugins, [plugin.id]: enabled.checked },
-            pluginConfig: { ...current.pluginConfig, [plugin.id]: config } } } };
+          patch = {
+            scopes: {
+              ...snapshot().settings.scopes,
+              [key]: {
+                ...current,
+                providers,
+                plugins: { ...current.plugins, [plugin.id]: enabled.checked },
+                pluginConfig: { ...current.pluginConfig, [plugin.id]: config },
+              },
+            },
+          };
         }
-        const saved = await mutate(() => browserRequest(ctx, '/settings', payload('PATCH', patch)),
-          (error) => { outcome.textContent = error.message; });
+        const saved = await mutate(
+          () => browserRequest(ctx, '/settings', payload('PATCH', patch)),
+          (error) => {
+            outcome.textContent = error.message;
+          },
+        );
         if (saved && !outcome.textContent) {
           const latest = snapshot().plugins.find(({ id }) => id === plugin.id);
           const state = scoped ? latest?.instances?.find(({ scope }) => scope === key) : latest;
           diagnostics.textContent = state?.error ?? '';
-          outcome.textContent = state?.error && (state.state === 'failed' || state.state === 'partial')
-            ? 'Configuration saved. Plugin failed to start: ' + state.error
-            : state?.state === 'inactive' ? 'Configuration saved. Waiting for this scope to activate.' : 'Saved.';
+          outcome.textContent =
+            state?.error && (state.state === 'failed' || state.state === 'partial')
+              ? 'Configuration saved. Plugin failed to start: ' + state.error
+              : state?.state === 'inactive'
+                ? 'Configuration saved. Waiting for this scope to activate.'
+                : 'Saved.';
         }
-      } catch (error) { outcome.textContent = (error instanceof Error ? error.message : String(error)); }
-      finally { save.disabled = false; }
+      } catch (error) {
+        outcome.textContent = error instanceof Error ? error.message : String(error);
+      } finally {
+        save.disabled = false;
+      }
     };
     if (schema || scoped) section.append(form);
     registry.mountPlugin(plugin.id, section, detailLifetime.signal);
@@ -303,7 +413,8 @@ function pluginCatalog(ctx: Context, snapshot: () => { plugins: PluginMetadata[]
     back.focus();
   }
 
-  const rowButton = (id: string) => content.querySelector<HTMLButtonElement>('[data-plugin-row="' + id + '"]');
+  const rowButton = (id: string) =>
+    content.querySelector<HTMLButtonElement>('[data-plugin-row="' + id + '"]');
 
   function render() {
     const focused = document.activeElement as HTMLElement;
@@ -315,87 +426,142 @@ function pluginCatalog(ctx: Context, snapshot: () => { plugins: PluginMetadata[]
     const { settings, plugins } = snapshot();
     const groups = [
       { title: 'Built-in capabilities', plugins: plugins.filter((plugin) => !plugin.trustedCode) },
-      { title: 'Local plugins', plugins: plugins.filter((plugin) => plugin.trustedCode) }
+      { title: 'Local plugins', plugins: plugins.filter((plugin) => plugin.trustedCode) },
     ];
-    content.replaceChildren(...groups.map((group) => {
-      const list = fromMarkup('<section class="catalog-group"><h2></h2></section>');
-      required(list.querySelector('h2')).textContent = group.title;
-      if (!group.plugins.length) list.append(fromMarkup('<p class="hint">No local plugins installed.</p>'));
-      for (const plugin of group.plugins) {
-        const row = fromMarkup(`<article class="catalog-row">
+    content.replaceChildren(
+      ...groups.map((group) => {
+        const list = fromMarkup('<section class="catalog-group"><h2></h2></section>');
+        required(list.querySelector('h2')).textContent = group.title;
+        if (!group.plugins.length) list.append(fromMarkup('<p class="hint">No local plugins installed.</p>'));
+        for (const plugin of group.plugins) {
+          const row = fromMarkup(`<article class="catalog-row">
           <button class="catalog-description ui-list-item" type="button">
             <span class="plugin-symbol"></span><span><strong></strong><small></small></span>
           </button>
           <div class="catalog-controls"></div>
         </article>`);
-        const open = required(row.querySelector('button'));
-        open.dataset.pluginRow = plugin.id;
-        open.setAttribute('aria-label', plugin.title + ' settings');
-        open.onclick = () => detail(plugin);
-        required(row.querySelector('.plugin-symbol')).append(icon(plugin.icon ?? 'plugin'));
-        required(row.querySelector('strong')).textContent = plugin.title;
-        const state = { ready: 'Ready', failed: 'Failed', partial: 'Partially ready', inactive: 'Inactive', disabled: 'Disabled' }[plugin.state ?? 'disabled'];
-        required(row.querySelector('small')).textContent = state + ' · ' + (plugin.error ?? plugin.description);
-        const controls = required(row.querySelector('.catalog-controls'));
-        const scoped = plugin.scope && plugin.scope !== 'application';
-        const checked = scoped ? Object.values(settings.scopes).some((scope) => scope?.plugins?.[plugin.id]) :
-          Boolean(settings.plugins[plugin.id]);
-        const control = toggle(plugin.title, checked);
-        control.dataset.pluginToggle = plugin.id;
-        if (scoped) {
-          control.disabled = true;
-          control.title = 'Open plugin settings to select a scope';
-        }
-        const remove = plugin.trustedCode ? iconButton('Uninstall ' + plugin.title, 'trash', 'icon-button danger') : undefined;
-        if (remove) {
-          remove.hidden = checked;
-          remove.onclick = async () => {
-            if (!await confirmAction('Permanently uninstall ' + plugin.title + '?',
-              { title: 'Uninstall plugin', confirmLabel: 'Uninstall', signal })) return;
-            remove.disabled = true;
-            status.textContent = '';
-            const deleted = await mutate(() => browserRequest(ctx, '/plugins/' + plugin.id, { method: 'DELETE' }),
-              (error) => { status.textContent = error.message; });
-            if (deleted) { status.textContent ||= 'Plugin uninstalled.'; openInstall.focus(); }
-            remove.disabled = false;
-          };
-          controls.append(remove);
-        }
-        saveToggle(control, async (next) => {
-          if (busy) return false;
-          savingSwitch = true;
-          status.textContent = '';
-          const peers = [...content.querySelectorAll<HTMLInputElement>('input.toggle')].filter((toggle) => toggle !== control && !toggle.disabled);
-          for (const peer of peers) peer.disabled = true;
-          try {
-            const saved = await mutate(() => browserRequest(ctx, '/settings', payload('PATCH', { plugins: { [plugin.id]: next } })),
-              (error) => { status.textContent = error.message; });
-            if (saved) {
-              const state = snapshot().plugins.find(({ id }) => id === plugin.id);
-              if (next && state?.error && !status.textContent)
-                status.textContent = 'Configuration saved. Plugin failed to start: ' + state.error;
-              render();
-            }
-            return saved;
-          } finally {
-            savingSwitch = false;
-            for (const peer of peers) peer.disabled = false;
+          const open = required(row.querySelector('button'));
+          open.dataset.pluginRow = plugin.id;
+          open.setAttribute('aria-label', plugin.title + ' settings');
+          open.onclick = () => detail(plugin);
+          required(row.querySelector('.plugin-symbol')).append(icon(plugin.icon ?? 'plugin'));
+          required(row.querySelector('strong')).textContent = plugin.title;
+          const state = {
+            ready: 'Ready',
+            failed: 'Failed',
+            partial: 'Partially ready',
+            inactive: 'Inactive',
+            disabled: 'Disabled',
+          }[plugin.state ?? 'disabled'];
+          required(row.querySelector('small')).textContent =
+            state + ' · ' + (plugin.error ?? plugin.description);
+          const controls = required(row.querySelector('.catalog-controls'));
+          const scoped = plugin.scope && plugin.scope !== 'application';
+          const checked = scoped
+            ? Object.values(settings.scopes).some((scope) => scope?.plugins?.[plugin.id])
+            : Boolean(settings.plugins[plugin.id]);
+          const control = toggle(plugin.title, checked);
+          control.dataset.pluginToggle = plugin.id;
+          if (scoped) {
+            control.disabled = true;
+            control.title = 'Open plugin settings to select a scope';
           }
-        });
-        controls.append(control);
-        list.append(row);
-      }
-      return list;
-    }));
+          const remove = plugin.trustedCode
+            ? iconButton('Uninstall ' + plugin.title, 'trash', 'icon-button danger')
+            : undefined;
+          if (remove) {
+            remove.hidden = checked;
+            remove.onclick = async () => {
+              if (
+                !(await confirmAction('Permanently uninstall ' + plugin.title + '?', {
+                  title: 'Uninstall plugin',
+                  confirmLabel: 'Uninstall',
+                  signal,
+                }))
+              )
+                return;
+              remove.disabled = true;
+              status.textContent = '';
+              const deleted = await mutate(
+                () => browserRequest(ctx, '/plugins/' + plugin.id, { method: 'DELETE' }),
+                (error) => {
+                  status.textContent = error.message;
+                },
+              );
+              if (deleted) {
+                status.textContent ||= 'Plugin uninstalled.';
+                openInstall.focus();
+              }
+              remove.disabled = false;
+            };
+            controls.append(remove);
+          }
+          saveToggle(control, async (next) => {
+            if (busy) return false;
+            savingSwitch = true;
+            status.textContent = '';
+            const peers = [...content.querySelectorAll<HTMLInputElement>('input.toggle')].filter(
+              (toggle) => toggle !== control && !toggle.disabled,
+            );
+            for (const peer of peers) peer.disabled = true;
+            try {
+              const saved = await mutate(
+                () => browserRequest(ctx, '/settings', payload('PATCH', { plugins: { [plugin.id]: next } })),
+                (error) => {
+                  status.textContent = error.message;
+                },
+              );
+              if (saved) {
+                const state = snapshot().plugins.find(({ id }) => id === plugin.id);
+                if (next && state?.error && !status.textContent)
+                  status.textContent = 'Configuration saved. Plugin failed to start: ' + state.error;
+                render();
+              }
+              return saved;
+            } finally {
+              savingSwitch = false;
+              for (const peer of peers) peer.disabled = false;
+            }
+          });
+          controls.append(control);
+          list.append(row);
+        }
+        return list;
+      }),
+    );
     if (focusId) {
-      const next = isToggle ? content.querySelector<HTMLElement>('[data-plugin-toggle="' + focusId + '"]') : rowButton(focusId);
+      const next = isToggle
+        ? content.querySelector<HTMLElement>('[data-plugin-toggle="' + focusId + '"]')
+        : rowButton(focusId);
       next?.focus();
     }
   }
-  function open() { status.textContent = ''; render(); pages.open('plugins'); }
+  function open() {
+    status.textContent = '';
+    render();
+    pages.open('plugins');
+  }
   entry.onclick = open;
-  return { open, refresh: () => { if (!detailLifetime && !savingSwitch) render(); } };
+  return {
+    open,
+    refresh: () => {
+      if (!detailLifetime && !savingSwitch) render();
+    },
+  };
 }
 
-
-export default { inject: ['miniProjections','miniSettingsData','miniSettingsRegistry','miniPages','miniSwitch','miniBrowserFailures','miniModels','miniDialogs','miniSlots'], provide: [], apply: setup };
+export default {
+  inject: [
+    'miniProjections',
+    'miniSettingsData',
+    'miniSettingsRegistry',
+    'miniPages',
+    'miniSwitch',
+    'miniBrowserFailures',
+    'miniModels',
+    'miniDialogs',
+    'miniSlots',
+  ],
+  provide: [],
+  apply: setup,
+};

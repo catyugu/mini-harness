@@ -2,7 +2,11 @@ import type { Execution } from '@mini-harness/runs/execution';
 import type { SessionAccess } from '@mini-harness/sessions/records';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 
-export interface SubagentPolicy { maxDepth: number; maxParallel: number; model: ModelChoice | null }
+export interface SubagentPolicy {
+  maxDepth: number;
+  maxParallel: number;
+  model: ModelChoice | null;
+}
 
 interface Waiter {
   cancel(): void;
@@ -48,7 +52,7 @@ export class Semaphore {
             this.active--;
             this.drain();
           });
-        }
+        },
       };
       signal?.addEventListener('abort', waiter.cancel, { once: true });
       this.queue.push(waiter);
@@ -61,13 +65,16 @@ export class Semaphore {
     let waiting = 0;
     const semaphore = this;
     return {
-      release: () => { release?.(); },
+      release: () => {
+        release?.();
+      },
       async pause<T>(task: () => Promise<T>) {
         waiting++;
         release?.();
         release = undefined;
-        try { return await task(); }
-        finally {
+        try {
+          return await task();
+        } finally {
           waiting--;
           if (!waiting && !signal?.aborted) {
             const next = await semaphore.acquire(signal);
@@ -75,15 +82,18 @@ export class Semaphore {
             else release = next;
           }
         }
-      }
+      },
     };
   }
 }
 
 type ChildLease = Awaited<ReturnType<Semaphore['lease']>>;
 
-export function selectChildModel(request: { provider?: string; model?: string },
-    defaults: ModelChoice | null, parent?: ModelChoice): ModelChoice {
+export function selectChildModel(
+  request: { provider?: string; model?: string },
+  defaults: ModelChoice | null,
+  parent?: ModelChoice,
+): ModelChoice {
   const provider = request.provider?.trim();
   const model = request.model?.trim();
   if (provider) return { provider, id: model ?? '' };
@@ -94,7 +104,10 @@ export function selectChildModel(request: { provider?: string; model?: string },
 
 /** Prefer the action over an injected workspace preamble in delegated task titles. */
 export function childTitle(task: string) {
-  const action = task.trim().replace(/^in the workspace at [^,\n]+,\s*/i, '').trim();
+  const action = task
+    .trim()
+    .replace(/^in the workspace at [^,\n]+,\s*/i, '')
+    .trim();
   const firstLine = action.split(/\r?\n/).find((line) => line.trim()) ?? action;
   return (firstLine || 'Subagent task').slice(0, 72);
 }
@@ -103,17 +116,21 @@ export function requireChildDepth(parentDepth: number, maxDepth = 1): void {
   if (parentDepth >= maxDepth) throw new Error('Recursive subagents reached the configured depth limit');
 }
 
-
 export class Delegation {
   readonly semaphore: Semaphore;
   private readonly leases = new Map<string, ChildLease>();
 
-  constructor(private readonly sessions: SessionAccess,
-    private readonly execution: Execution, private readonly settings: () => SubagentPolicy) {
+  constructor(
+    private readonly sessions: SessionAccess,
+    private readonly execution: Execution,
+    private readonly settings: () => SubagentPolicy,
+  ) {
     this.semaphore = new Semaphore(settings().maxParallel);
   }
 
-  visible(id: string) { return this.sessions.depth(id) < this.settings().maxDepth; }
+  visible(id: string) {
+    return this.sessions.depth(id) < this.settings().maxDepth;
+  }
 
   private async acquire(id: string, signal: AbortSignal) {
     const lease = await this.semaphore.lease(signal);
@@ -137,18 +154,29 @@ export class Delegation {
     if (!parent) throw new Error('Parent conversation not found');
     requireChildDepth(this.sessions.depth(parentId), this.settings().maxDepth);
     const record = this.sessions.create({
-      parentId, workspaceId: parent.workspaceId, title: childTitle(task)
+      parentId,
+      workspaceId: parent.workspaceId,
+      title: childTitle(task),
     });
     try {
-      const { result } = this.execution.submit(record.id, { message: task, model: choice }, {
-        signal,
-        acquire: (cancellation) => this.acquire(record.id, cancellation)
-      });
+      const { result } = this.execution.submit(
+        record.id,
+        { message: task, model: choice },
+        {
+          signal,
+          acquire: (cancellation) => this.acquire(record.id, cancellation),
+        },
+      );
       const text = await result;
       return { id: record.id, text };
     } catch (error) {
-      if (this.sessions.get(record.id)) this.sessions.rename(record.id,
-        (signal?.aborted || this.execution.status(record.id)?.state === 'cancelled' ? '[Cancelled] ' : '[Failed] ') + childTitle(task).slice(0, 60));
+      if (this.sessions.get(record.id))
+        this.sessions.rename(
+          record.id,
+          (signal?.aborted || this.execution.status(record.id)?.state === 'cancelled'
+            ? '[Cancelled] '
+            : '[Failed] ') + childTitle(task).slice(0, 60),
+        );
       throw error;
     }
   }

@@ -5,7 +5,8 @@ export interface ProcessExecutionPort {
   run(request: ProcessRequest): Promise<ProcessResult>;
 }
 
-
 declare module 'mini-harness/cordis' {
-  interface Context { harnessProcess: ProcessExecutionPort }
+  interface Context {
+    harnessProcess: ProcessExecutionPort;
+  }
 }

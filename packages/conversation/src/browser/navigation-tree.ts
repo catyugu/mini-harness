@@ -45,12 +45,18 @@ export function workspaceTree(workspaces: WorkspaceRecord[], sessions: Conversat
   return { parents, children, grouped, labels };
 }
 
-export function sessionHierarchy(sessions: Conversation[], query: string, matches?: { has(id: string): boolean }) {
+export function sessionHierarchy(
+  sessions: Conversation[],
+  query: string,
+  matches?: { has(id: string): boolean },
+) {
   const byId = new Map(sessions.map((item) => [item.id, item]));
   const included = new Set<string>();
-  for (const item of sessions) if (!query || item.title.toLowerCase().includes(query) || matches?.has(item.id)) {
-    for (let id: string | null = item.id; id && !included.has(id); id = byId.get(id)?.parentId ?? null) included.add(id);
-  }
+  for (const item of sessions)
+    if (!query || item.title.toLowerCase().includes(query) || matches?.has(item.id)) {
+      for (let id: string | null = item.id; id && !included.has(id); id = byId.get(id)?.parentId ?? null)
+        included.add(id);
+    }
   const visible = sessions.filter((item) => included.has(item.id));
   const children = new Map<string | null, Conversation[]>();
   for (const item of visible) {

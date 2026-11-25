@@ -19,11 +19,14 @@ export class Selection extends EventTarget {
   initialConversation(sessions: Conversation[], workspaces: WorkspaceRecord[]) {
     const remembered = sessionStorage.getItem('mini-harness-active');
     const available = sessions.filter(({ workspaceId }) => workspaces.some(({ id }) => id === workspaceId));
-    return available.find(({ id }) => id === remembered) ??
-      available.find(({ parentId, workspaceId }) => !parentId && workspaceId === this.selectedWorkspace);
+    return (
+      available.find(({ id }) => id === remembered) ??
+      available.find(({ parentId, workspaceId }) => !parentId && workspaceId === this.selectedWorkspace)
+    );
   }
 
-  scope = () => this.selectedWorkspace && { workspaceId: this.selectedWorkspace, sessionId: this.activeConversation };
+  scope = () =>
+    this.selectedWorkspace && { workspaceId: this.selectedWorkspace, sessionId: this.activeConversation };
 
   selectConversation(item?: Conversation, revealWorkspace = true) {
     this.activeConversation = item?.id;
@@ -35,6 +38,9 @@ export class Selection extends EventTarget {
     this.changed();
   }
 
-  changed() { this.dispatchEvent(new Event('change')); }
-  subscribe = (listener: () => void, signal: AbortSignal) => this.addEventListener('change', listener, { signal });
+  changed() {
+    this.dispatchEvent(new Event('change'));
+  }
+  subscribe = (listener: () => void, signal: AbortSignal) =>
+    this.addEventListener('change', listener, { signal });
 }

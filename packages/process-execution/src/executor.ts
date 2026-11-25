@@ -16,18 +16,30 @@ async function hostCommand(command: string, cwd: string, attachments?: string): 
 export async function executeProcess(request: ProcessRequest, sandbox: SandboxPort, attachments?: string) {
   const { command, cwd, mode, timeoutSeconds, signal } = request;
   signal?.throwIfAborted();
-  if (typeof command !== 'string' || !command.trim() || command.length > 16000) throw new Error('Invalid command');
-  if (!Number.isInteger(timeoutSeconds) || timeoutSeconds < 1 || timeoutSeconds > 300) throw new Error('Invalid shell timeout');
+  if (typeof command !== 'string' || !command.trim() || command.length > 16000)
+    throw new Error('Invalid command');
+  if (!Number.isInteger(timeoutSeconds) || timeoutSeconds < 1 || timeoutSeconds > 300)
+    throw new Error('Invalid shell timeout');
   if (mode !== 'host' && mode !== 'isolated') throw new Error('Unknown sandbox mode');
-  const { file, args, cwd: root, env } = mode === 'isolated' ? await sandbox.prepare(request, attachments) : await hostCommand(command, cwd, attachments);
+  const {
+    file,
+    args,
+    cwd: root,
+    env,
+  } = mode === 'isolated'
+    ? await sandbox.prepare(request, attachments)
+    : await hostCommand(command, cwd, attachments);
   signal?.throwIfAborted();
   const windows = process.platform === 'win32';
 
   return await new Promise<ProcessResult>((resolve, reject) => {
     const child = spawn(file, args, {
-      cwd: root, env,
-      stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, windowsVerbatimArguments: windows,
-      detached: !windows
+      cwd: root,
+      env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+      windowsVerbatimArguments: windows,
+      detached: !windows,
     });
     const streams = { stdout: [] as Buffer[], stderr: [] as Buffer[] };
     const limit = 1024 * 1024;
@@ -36,8 +48,11 @@ export async function executeProcess(request: ProcessRequest, sandbox: SandboxPo
     let termination: Promise<void> | undefined;
     const killGroup = () => {
       if (!child.pid) return;
-      try { process.kill(-child.pid, 'SIGKILL'); }
-      catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') child.kill('SIGKILL'); }
+      try {
+        process.kill(-child.pid, 'SIGKILL');
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ESRCH') child.kill('SIGKILL');
+      }
     };
     if (!windows) child.once('exit', killGroup);
     const terminate = (cause: typeof reason) => {
@@ -46,8 +61,14 @@ export async function executeProcess(request: ProcessRequest, sandbox: SandboxPo
       if (!child.pid) return;
       if (windows) {
         termination = new Promise<void>((done) => {
-          const killer = spawn('taskkill.exe', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true });
-          const finish = () => { if (child.exitCode === null) child.kill(); done(); };
+          const killer = spawn('taskkill.exe', ['/pid', String(child.pid), '/T', '/F'], {
+            stdio: 'ignore',
+            windowsHide: true,
+          });
+          const finish = () => {
+            if (child.exitCode === null) child.kill();
+            done();
+          };
           killer.once('error', finish);
           killer.once('exit', finish);
         });
@@ -66,13 +87,25 @@ export async function executeProcess(request: ProcessRequest, sandbox: SandboxPo
     };
     child.stdout.on('data', (chunk) => collect('stdout', chunk));
     child.stderr.on('data', (chunk) => collect('stderr', chunk));
-    const cleanup = () => { clearTimeout(timer); signal?.removeEventListener('abort', abort); };
-    child.once('error', (error) => { cleanup(); reject(error); });
+    const cleanup = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', abort);
+    };
+    child.once('error', (error) => {
+      cleanup();
+      reject(error);
+    });
     child.once('close', async (code, terminatedBy) => {
       cleanup();
       await termination;
-      resolve({ code, signal: terminatedBy, reason, stdout: Buffer.concat(streams.stdout).toString('utf8'),
-        stderr: Buffer.concat(streams.stderr).toString('utf8'), truncated: reason === 'output-limit' });
+      resolve({
+        code,
+        signal: terminatedBy,
+        reason,
+        stdout: Buffer.concat(streams.stdout).toString('utf8'),
+        stderr: Buffer.concat(streams.stderr).toString('utf8'),
+        truncated: reason === 'output-limit',
+      });
     });
   });
 }

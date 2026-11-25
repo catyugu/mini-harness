@@ -15,7 +15,10 @@
       "./api",
       "./events",
       "./policy"
-    ]
+    ],
+    "profileModules": {
+      "@mini-harness/tools": "./src/manifest.ts#manifest"
+    }
   },
   "dependencies": {
     "@mini-harness/llm": "workspace:*",

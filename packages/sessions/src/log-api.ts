@@ -32,7 +32,15 @@ export type RecordedModelRequest = Omit<ModelRequestSnapshot, 'messages' | 'tool
 
 /** The durable session protocol is independent of any model SDK. */
 export type SessionEvent =
-  | { type: 'message'; message: NativeMessage; presentation?: PreparedMessage; elapsedMs?: number; submissionId?: string; inboxId?: string; selection?: { model: ModelChoice; thinkingLevel?: ThinkingLevel } }
+  | {
+      type: 'message';
+      message: NativeMessage;
+      presentation?: PreparedMessage;
+      elapsedMs?: number;
+      submissionId?: string;
+      inboxId?: string;
+      selection?: { model: ModelChoice; thinkingLevel?: ThinkingLevel };
+    }
   /** Tool definitions are written once per distinct content and referenced by model requests. */
   | { type: 'tool-schema'; hash: string; tools: ToolSchema[] }
   /** The request references its parent branch's context and an optional minimal splice. */
@@ -83,7 +91,11 @@ export interface SessionLogPort {
   /** Returns only after the complete record has been flushed to durable storage. */
   append(event: SessionEvent, expectedLeafId?: string | null): SessionEntry;
   /** Commits a replacement message and makes its branch active in one record. */
-  revise(event: Extract<SessionEvent, { type: 'message' }>, parentId: string | null, expectedLeafId: string | null): SessionEntry;
+  revise(
+    event: Extract<SessionEvent, { type: 'message' }>,
+    parentId: string | null,
+    expectedLeafId: string | null,
+  ): SessionEntry;
   projection(leafId?: string | null): SessionProjection;
   /** Reconstruct exact model-visible inputs for audits, including distinct tool schemas. */
   requestSnapshot(id: string): ModelRequestSnapshot & { messages: NativeMessage[] };

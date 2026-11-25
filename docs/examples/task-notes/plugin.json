@@ -1,13 +1,23 @@
 {
   "title": "Task notes",
   "description": "Record progress and run a follow-up in a child conversation.",
-  "inject": ["harnessSessions", "harnessTools", "harnessExecution", "harnessApprovalRequests", "harnessModels"],
   "provides": ["taskNotes"],
   "configChanges": "live",
-  "configGroups": [{ "title": "Task notes", "fields": ["label"] }],
+  "configGroups": [
+    {
+      "title": "Task notes",
+      "fields": ["label"]
+    }
+  ],
   "configSchema": {
     "type": "object",
-    "properties": { "label": { "type": "string", "title": "Note label", "default": "Task progress" } },
+    "properties": {
+      "label": {
+        "type": "string",
+        "title": "Note label",
+        "default": "Task progress"
+      }
+    },
     "additionalProperties": false
   }
 }

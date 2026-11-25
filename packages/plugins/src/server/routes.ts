@@ -12,9 +12,11 @@ function networkEffect(ctx: Context, register: () => () => Promise<void>) {
   return ctx.effect(() => {
     const release = register();
     let closing: Promise<void> | undefined;
-    const close = () => closing ??= release();
+    const close = () => (closing ??= release());
     // Closing the transport also aborts body reads and WebSocket I/O.
-    const abort = () => { void close().catch(() => {}); };
+    const abort = () => {
+      void close().catch(() => {});
+    };
     signal.addEventListener('abort', abort, { once: true });
     return () => {
       signal.removeEventListener('abort', abort);
@@ -26,9 +28,14 @@ function networkEffect(ctx: Context, register: () => () => Promise<void>) {
 export class PluginRouteRegistry {
   private readonly requests = new Map<string, (input: unknown, signal: AbortSignal) => Promise<unknown>>();
 
-  constructor(private readonly ctx: Context, private readonly upgrade?: (path: string, handler: UpgradeHandler) => () => Promise<void>) {}
+  constructor(
+    private readonly ctx: Context,
+    private readonly upgrade?: (path: string, handler: UpgradeHandler) => () => Promise<void>,
+  ) {}
 
-  get(id: string, name: string) { return this.requests.get(id + '/' + name); }
+  get(id: string, name: string) {
+    return this.requests.get(id + '/' + name);
+  }
 
   service(): PluginRoutes {
     const { ctx, upgrade, requests } = this;
@@ -39,19 +46,33 @@ export class PluginRouteRegistry {
         if (scopeKey || !routePath.test(path) || !['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method))
           throw new Error('Invalid plugin route');
         const lifetime = caller.fiber.signal;
-        return networkEffect(caller, () => ctx.harnessRoutes.register(method, '/api/extensions/' + pluginId + path,
-          request => caller.fiber.run(signal => withPluginRequest(signal, () => handler({ ...request, signal })), request.signal)
-            .catch(error => {
-              if (lifetime.aborted) throw new DomainError('invalid_input', 'Route is no longer available', { cause: error });
-              throw error;
-            })));
+        return networkEffect(caller, () =>
+          ctx.harnessRoutes.register(method, '/api/extensions/' + pluginId + path, (request) =>
+            caller.fiber
+              .run(
+                (signal) => withPluginRequest(signal, () => handler({ ...request, signal })),
+                request.signal,
+              )
+              .catch((error) => {
+                if (lifetime.aborted)
+                  throw new DomainError('invalid_input', 'Route is no longer available', { cause: error });
+                throw error;
+              }),
+          ),
+        );
       },
       upgrade(path, handler) {
         const caller = Service.caller(this);
         const { pluginId, scopeKey } = pluginInstance(caller);
         if (scopeKey || !routePath.test(path) || !upgrade) throw new Error('Invalid WebSocket route');
-        return networkEffect(caller, () => upgrade('/api/extensions/' + pluginId + path, (request, socket, head, signal) =>
-          caller.fiber.run(lifetime => withPluginRequest(lifetime, () => handler(request, socket, head, lifetime)), signal)));
+        return networkEffect(caller, () =>
+          upgrade('/api/extensions/' + pluginId + path, (request, socket, head, signal) =>
+            caller.fiber.run(
+              (lifetime) => withPluginRequest(lifetime, () => handler(request, socket, head, lifetime)),
+              signal,
+            ),
+          ),
+        );
       },
       scope(name, handler) {
         const caller = Service.caller(this);
@@ -62,14 +83,22 @@ export class PluginRouteRegistry {
         return caller.effect(() => {
           if (requests.has(key)) throw new Error('Duplicate scoped request: ' + name);
           const lifetime = caller.fiber.signal;
-          requests.set(key, (input, request) => caller.fiber.run(
-            signal => withPluginRequest(signal, () => handler(input, signal)), request).catch(error => {
-              if (lifetime.aborted) throw new DomainError('unavailable', 'Scoped plugin is no longer available', { cause: error });
-              throw error;
-            }));
-          return () => { requests.delete(key); };
+          requests.set(key, (input, request) =>
+            caller.fiber
+              .run((signal) => withPluginRequest(signal, () => handler(input, signal)), request)
+              .catch((error) => {
+                if (lifetime.aborted)
+                  throw new DomainError('unavailable', 'Scoped plugin is no longer available', {
+                    cause: error,
+                  });
+                throw error;
+              }),
+          );
+          return () => {
+            requests.delete(key);
+          };
         });
-      }
+      },
     });
   }
 }

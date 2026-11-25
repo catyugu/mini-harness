@@ -14,8 +14,9 @@ import { SkillLoader, defaultSkillRoots } from './loader.js';
 
 export function setup(ctx: Context) {
   const sessions = ctx.harnessSessions.access();
-  const loader = new SkillLoader(defaultSkillRoots(ctx.harnessState.paths.home),
-    (path, error) => ctx.logger.warn('Could not discover skill at %s: %s', path, String(error)));
+  const loader = new SkillLoader(defaultSkillRoots(ctx.harnessState.paths.home), (path, error) =>
+    ctx.logger.warn('Could not discover skill at %s: %s', path, String(error)),
+  );
   ctx.on('agent/prepare-input', async (content, { source, original, cwd, signal }) => {
     if (source !== 'user') return;
     const invocation = await loader.invocation(cwd, original.userText);
@@ -31,27 +32,47 @@ export function setup(ctx: Context) {
     }
     return [...parts, { type: 'text', text: invocation.instruction }];
   });
-  ctx.effect(() => ctx.harnessPrompt.register({ id: 'skills', order: 400, render: ({ cwd }) => loader.prompt(cwd) }));
-  ctx.effect(() => ctx.harnessRoutes.register('GET', '/api/workspaces/:id/skills', async ({ params, url, signal }) => {
-    const workspace = ctx.harnessWorkspaces.get(params.id);
-    const sessionId = url.searchParams.get('sessionId');
-    if (sessionId) {
-      if (sessions.get(sessionId)?.workspaceId !== workspace.id)
-        throw new DomainError('not_found', 'Conversation not found');
-      await ctx.harnessScopes.prepare(`session:${sessionId}`, signal);
-      if (ctx.fiber.signal.aborted) return [];
-      return loader.list(sessions.workspacePath(sessionId));
-    }
-    return loader.list(ctx.harnessWorkspaces.resolveRoot(workspace.path, workspace.id));
-  }));
-  ctx.effect(() => ctx.harnessTools.register({ name: 'load_skill', bind: (sessionId) => defineTool({
-    name: 'load_skill', label: 'Load skill', description: 'Read the instructions for an available skill by name.',
-    parameters: Type.Object({ name: Type.String({ minLength: 1, maxLength: 64 }) }, { additionalProperties: false }),
-    async execute(_callId, { name }, signal) {
-      signal?.throwIfAborted();
-      const skill = await loader.load(sessions.workspacePath(sessionId), name);
-      signal?.throwIfAborted();
-      return { content: [{ type: 'text', text: skill.content }], details: { skill: skill.name } };
-    }
-  }) }, { access: 'readOnly' }));
+  ctx.effect(() =>
+    ctx.harnessPrompt.register({ id: 'skills', order: 400, render: ({ cwd }) => loader.prompt(cwd) }),
+  );
+  ctx.inject(['harnessRoutes'], (web) => {
+    web.effect(() =>
+      web.harnessRoutes.register('GET', '/api/workspaces/:id/skills', async ({ params, url, signal }) => {
+        const workspace = ctx.harnessWorkspaces.get(params.id);
+        const sessionId = url.searchParams.get('sessionId');
+        if (sessionId) {
+          if (sessions.get(sessionId)?.workspaceId !== workspace.id)
+            throw new DomainError('not_found', 'Conversation not found');
+          await ctx.harnessScopes.prepare(`session:${sessionId}`, signal);
+          if (ctx.fiber.signal.aborted) return [];
+          return loader.list(sessions.workspacePath(sessionId));
+        }
+        return loader.list(ctx.harnessWorkspaces.resolveRoot(workspace.path, workspace.id));
+      }),
+    );
+  });
+  ctx.effect(() =>
+    ctx.harnessTools.register(
+      {
+        name: 'load_skill',
+        bind: (sessionId) =>
+          defineTool({
+            name: 'load_skill',
+            label: 'Load skill',
+            description: 'Read the instructions for an available skill by name.',
+            parameters: Type.Object(
+              { name: Type.String({ minLength: 1, maxLength: 64 }) },
+              { additionalProperties: false },
+            ),
+            async execute(_callId, { name }, signal) {
+              signal?.throwIfAborted();
+              const skill = await loader.load(sessions.workspacePath(sessionId), name);
+              signal?.throwIfAborted();
+              return { content: [{ type: 'text', text: skill.content }], details: { skill: skill.name } };
+            },
+          }),
+      },
+      { access: 'readOnly' },
+    ),
+  );
 }

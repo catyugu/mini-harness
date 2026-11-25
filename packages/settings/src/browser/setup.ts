@@ -6,7 +6,12 @@ import type {} from '@mini-harness/ui-layout/browser/api';
 import type { Settings } from '../shared/settings.js';
 import { RemoteStore } from '@mini-harness/ui-runtime/remote-store';
 import { icon } from '@mini-harness/ui-primitives/icons';
-import { closeOnBackdrop, fromMarkup, required, scopedElements } from '@mini-harness/ui-primitives/primitives';
+import {
+  closeOnBackdrop,
+  fromMarkup,
+  required,
+  scopedElements,
+} from '@mini-harness/ui-primitives/primitives';
 
 import { SettingsRegistry } from './registry.js';
 
@@ -18,36 +23,53 @@ const setup = async (ctx: Context) => {
   const registry = new SettingsRegistry();
   const layout = ctx.miniLayout;
   ctx.provide('miniSettingsRegistry', registry);
-  ctx.effect(() => registry.register('core:theme', {
-    id: 'theme',
-    section: { title: 'Appearance', icon: 'theme', order: 30 },
-    render({ bind }) {
-      const content = document.createElement('div');
-      content.className = 'settings-field';
-      const label = document.createElement('label');
-      label.textContent = 'Theme';
-      const theme = document.createElement('select');
-      theme.add(new Option('System', 'system'));
-      theme.add(new Option('Light', 'light'));
-      theme.add(new Option('Dark', 'dark'));
-      label.append(theme);
-      content.append(label, bind<string>(theme, 'appearance', {
-        read: (value) => { theme.value = value; },
-        write: () => theme.value,
-      }));
-      return content;
-    }
-  }, ctx.miniAppearance));
+  ctx.effect(() =>
+    registry.register(
+      'core:theme',
+      {
+        id: 'theme',
+        section: { title: 'Appearance', icon: 'theme', order: 30 },
+        render({ bind }) {
+          const content = document.createElement('div');
+          content.className = 'settings-field';
+          const label = document.createElement('label');
+          label.textContent = 'Theme';
+          const theme = document.createElement('select');
+          theme.add(new Option('System', 'system'));
+          theme.add(new Option('Light', 'light'));
+          theme.add(new Option('Dark', 'dark'));
+          label.append(theme);
+          content.append(
+            label,
+            bind<string>(theme, 'appearance', {
+              read: (value) => {
+                theme.value = value;
+              },
+              write: () => theme.value,
+            }),
+          );
+          return content;
+        },
+      },
+      ctx.miniAppearance,
+    ),
+  );
   const settings = mountSettings(ctx, registry);
   ctx.provide('miniSettings', settings);
-  const launcher = fromMarkup<HTMLButtonElement>('<button type="button" aria-label="Settings"><span data-icon="settings"></span><span class="nav-label">Settings</span></button>');
-  launcher.onclick = () => { layout.closeDrawer(); settings.open(); };
+  const launcher = fromMarkup<HTMLButtonElement>(
+    '<button type="button" aria-label="Settings"><span data-icon="settings"></span><span class="nav-label">Settings</span></button>',
+  );
+  launcher.onclick = () => {
+    layout.closeDrawer();
+    settings.open();
+  };
   ctx.effect(() => ctx.miniSlots.register('sidebar.footer', launcher));
 };
 
 function mountSettings(ctx: Context, registry: SettingsRegistry) {
   const signal = ctx.fiber.signal;
-  const panel = fromMarkup<HTMLDialogElement>(`<dialog id="settingsPanel" class="settings-panel" aria-labelledby="settingsTitle">
+  const panel =
+    fromMarkup<HTMLDialogElement>(`<dialog id="settingsPanel" class="settings-panel" aria-labelledby="settingsTitle">
     <header class="settings-header">
       <h2 id="settingsTitle">Settings</h2>
       <button id="settingsClose" class="icon-button" type="button" aria-label="Close settings"></button>
@@ -122,12 +144,14 @@ function mountSettings(ctx: Context, registry: SettingsRegistry) {
         if (nextSymbol === undefined) delete trigger.dataset.symbol;
         else trigger.dataset.symbol = nextSymbol;
       }
-      if (sections.children[index] !== section) sections.insertBefore(section, sections.children[index] ?? null);
+      if (sections.children[index] !== section)
+        sections.insertBefore(section, sections.children[index] ?? null);
       if (nav.children[index] !== trigger) nav.insertBefore(trigger, nav.children[index] ?? null);
       const desired = new Set(nodes);
       for (const node of [...content.children]) if (!desired.has(node as HTMLElement)) node.remove();
       nodes.forEach((node, position) => {
-        if (content.children[position] !== node) content.insertBefore(node, content.children[position] ?? null);
+        if (content.children[position] !== node)
+          content.insertBefore(node, content.children[position] ?? null);
       });
     });
     if (selected === undefined || !pages.has(selected)) select();
@@ -144,8 +168,13 @@ function mountSettings(ctx: Context, registry: SettingsRegistry) {
       select(title, Boolean(title));
       if (!panel.open) panel.showModal();
     },
-    onClose: (listener: () => void, signal: AbortSignal) => panel.addEventListener('close', listener, { signal }),
+    onClose: (listener: () => void, signal: AbortSignal) =>
+      panel.addEventListener('close', listener, { signal }),
   };
 }
 
-export default { inject: ['miniLayout','miniSlots','miniProjections','miniAppearance'], provide: ['miniSettings','miniSettingsData','miniSettingsRegistry'], apply: setup };
+export default {
+  inject: ['miniLayout', 'miniSlots', 'miniProjections', 'miniAppearance'],
+  provide: ['miniSettings', 'miniSettingsData', 'miniSettingsRegistry'],
+  apply: setup,
+};

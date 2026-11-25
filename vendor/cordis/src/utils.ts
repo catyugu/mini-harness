@@ -1,4 +1,4 @@
-import { defineProperty } from './utilities.js'
+import { defineProperty } from '@mini-harness/cosmokit'
 import type { Context } from './context.js'
 import type { Service } from './service.js'
 

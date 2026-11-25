@@ -6,13 +6,15 @@ import type { Context } from 'mini-harness/cordis';
 import { eventStream } from '@mini-harness/transport/http';
 
 export function setup(ctx: Context) {
-  ctx.effect(() => ctx.harnessRoutes.register('GET', '/api/bootstrap', (): BrowserBootstrap => ({
-    ui: ctx.harnessPluginCatalog.browser()
-  })));
-  ctx.effect(() => ctx.harnessRoutes.register('GET', '/api/changes', ({ response }) => {
-    const { send } = eventStream(response);
-    const changes = ctx.harnessChanges;
-    response.once('close', changes.subscribe(send));
-    send(changes.snapshot());
-  }));
+  const bootstrap = (): BrowserBootstrap => ({ ui: ctx.harnessPluginCatalog.browser() });
+  ctx.provide('harnessGateway', { bootstrap });
+  ctx.effect(() => ctx.harnessRoutes.register('GET', '/api/bootstrap', bootstrap));
+  ctx.effect(() =>
+    ctx.harnessRoutes.register('GET', '/api/changes', ({ response }) => {
+      const { send } = eventStream(response);
+      const changes = ctx.harnessChanges;
+      response.once('close', changes.subscribe(send));
+      send(changes.snapshot());
+    }),
+  );
 }

@@ -9,5 +9,10 @@
   "dependencies": {
     "@mini-harness/plugin-api": "workspace:*",
     "@mini-harness/ui-runtime": "workspace:*"
+  },
+  "miniHarness": {
+    "profileModules": {
+      "@mini-harness/session-helper": "./src/manifest.ts#manifest"
+    }
   }
 }

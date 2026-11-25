@@ -1,27 +1,10 @@
-# @mini-harness/host
+# Host
 
-Composes the runnable application and manages its HTTP server and process lifetime.
+Loads the shipped Profile and user YAML, provides launch paths and options, and coordinates the Cordis Entry Tree. The Web server and browser credential are explicit Profile plugins. The CLI uses a configuration-directory lock and process metadata to manage detached instances.
 
-## Responsibilities
+- `src/profile.ts` reads the shipped and user layers and persists the selected Profile.
+- `src/application.ts` boots and closes a Profile.
+- `src/web.ts` and `src/server.ts` own the HTTP listener and static assets.
+- `src/process.ts` owns the OS lock and detached process commands.
 
-Owns the root Cordis context, built-in descriptor list, local instance credentials, detached process control, upgrade dispatch and mutation coordination.
-
-## Structure
-
-`src/composition.ts` selects built-ins and specifies required capabilities and protected provider identities. `application.ts` owns the runtime, `server.ts` handles HTTP and static delivery, and `process.ts` handles detached instances.
-
-## API
-
-Host entry points serve the CLI and system fixtures. Feature packages receive capability services rather than importing Host.
-
-## Dependencies
-
-Combines [Plugins](../plugins/README.md), [Settings](../settings/README.md), [Transport](../transport/README.md) and feature descriptors. Provides trusted tool registration authority during assembly.
-
-## Lifecycle
-
-Waits for capability readiness before serving requests. Shutdown seals HTTP and mutation admission, waits for capability quiescence and drains outstanding requests and configuration transactions before releasing the graph. Upgrades use connection signals and wait for their asynchronous handlers.
-
-## Testing
-
-[Detached and shutdown tests](../../test/system/) and `pnpm run pack:verify` exercise the executable entry points.
+The [system tests](../../test/system/) exercise Profile composition, process shutdown, browser assets and HTTP. See [Profiles](../../docs/profiles.md) for configuration.

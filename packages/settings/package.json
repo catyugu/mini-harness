@@ -16,7 +16,11 @@
       "./api",
       "./browser/api",
       "./settings"
-    ]
+    ],
+    "profileModules": {
+      "@mini-harness/settings-runtime": "./src/server/runtime.ts",
+      "@mini-harness/ui-settings": "./src/manifest.ts#manifest"
+    }
   },
   "dependencies": {
     "@mini-harness/llm": "workspace:*",

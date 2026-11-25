@@ -1,1 +1,5 @@
-export interface WorkspaceRecord { id: string; path: string; name: string }
+export interface WorkspaceRecord {
+  id: string;
+  path: string;
+  name: string;
+}

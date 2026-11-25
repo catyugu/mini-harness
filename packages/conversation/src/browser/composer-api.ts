@@ -72,5 +72,7 @@ export interface ComposerModel {
 }
 
 declare module 'mini-harness/cordis' {
-  interface Context { miniComposer: ComposerModel }
+  interface Context {
+    miniComposer: ComposerModel;
+  }
 }

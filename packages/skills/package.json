@@ -17,5 +17,10 @@
     "@mini-harness/ui-primitives": "workspace:*",
     "@mini-harness/ui-runtime": "workspace:*",
     "@mini-harness/workspaces": "workspace:*"
+  },
+  "miniHarness": {
+    "profileModules": {
+      "@mini-harness/skills": "./src/manifest.ts#manifest"
+    }
   }
 }

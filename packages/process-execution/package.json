@@ -10,7 +10,10 @@
   "miniHarness": {
     "api": [
       "./api"
-    ]
+    ],
+    "profileModules": {
+      "@mini-harness/process-execution": "./src/manifest.ts#manifest"
+    }
   },
   "dependencies": {
     "@mini-harness/execution": "workspace:*",

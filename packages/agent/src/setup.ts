@@ -23,15 +23,25 @@ export function setup(ctx: Context) {
     toolResultHooks: (id) => ctx.events.listeners('agent/tool-result', sessionEvent(ctx, id)),
     async retryModel(failure) {
       const { signal, ...input } = failure;
-      for (const { context, callback } of ctx.events.listeners('agent/model-retry', sessionEvent(ctx, failure.sessionId))) {
-        const retry = await context.fiber.run(signal => callback({ ...structuredClone(input), signal }), signal);
+      for (const { context, callback } of ctx.events.listeners(
+        'agent/model-retry',
+        sessionEvent(ctx, failure.sessionId),
+      )) {
+        const retry = await context.fiber.run(
+          (signal) => callback({ ...structuredClone(input), signal }),
+          signal,
+        );
         if (retry === undefined) continue;
-        if (!retry || typeof retry !== 'object' ||
-            (retry.delayMs !== undefined && (!Number.isFinite(retry.delayMs) || retry.delayMs < 0 || retry.delayMs > 30000)))
+        if (
+          !retry ||
+          typeof retry !== 'object' ||
+          (retry.delayMs !== undefined &&
+            (!Number.isFinite(retry.delayMs) || retry.delayMs < 0 || retry.delayMs > 30000))
+        )
           throw new Error('Invalid model retry decision');
         return { delayMs: retry.delayMs };
       }
-    }
+    },
   });
   ctx.provide('harnessAgent', agent);
 }

@@ -10,6 +10,10 @@ export interface PluginDescriptor {
   description: string;
   scope: PluginScope['kind'];
   defaultEnabled?: boolean;
+  /** Runtime constraints declared by the active Profile and trusted built-in modules. */
+  required?: boolean;
+  protectServices?: readonly string[];
+  trustedContributor?: boolean;
   web?: boolean;
   browser?: string;
   /** Styles shipped with a built-in browser entry. Local plugins declare browserAssets in plugin.json. */

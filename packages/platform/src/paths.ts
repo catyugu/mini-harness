@@ -12,13 +12,20 @@ export function containsPath(root: string, candidate: string) {
 export function getPaths(cwd: string = process.cwd(), env: NodeJS.ProcessEnv = process.env): Paths {
   const project = resolve(cwd);
   const home = resolve(env.MINI_HARNESS_HOME || join(homedir(), '.mini-harness'));
-  const key = createHash('sha256').update(process.platform === 'win32' ? project.toLowerCase() : project).digest('hex').slice(0, 16);
+  const key = createHash('sha256')
+    .update(process.platform === 'win32' ? project.toLowerCase() : project)
+    .digest('hex')
+    .slice(0, 16);
   return {
-    home, cwd: project, settings: join(home, 'settings.json'),
-    registry: join(home, 'sessions.json'), sessions: join(home, 'sessions', key),
-    pid: join(home, 'server.json'), log: join(home, 'server.log'),
+    home,
+    cwd: project,
+    settings: join(home, 'settings.json'),
+    registry: join(home, 'sessions.json'),
+    sessions: join(home, 'sessions', key),
+    pid: join(home, 'server.json'),
+    log: join(home, 'server.log'),
     plugins: join(home, 'plugins'),
-    ...(env.MINI_HARNESS_DEV_PLUGIN ? { devPlugin: resolve(env.MINI_HARNESS_DEV_PLUGIN) } : {})
+    ...(env.MINI_HARNESS_DEV_PLUGIN ? { devPlugin: resolve(env.MINI_HARNESS_DEV_PLUGIN) } : {}),
   };
 }
 

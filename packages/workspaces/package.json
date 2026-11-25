@@ -18,7 +18,11 @@
       "./browser/api",
       "./browser/route",
       "./record"
-    ]
+    ],
+    "profileModules": {
+      "@mini-harness/workspaces": "./src/manifests/workspaces.ts#manifest",
+      "@mini-harness/workspaces-data": "./src/manifests/data.ts#manifest"
+    }
   },
   "dependencies": {
     "@mini-harness/platform": "workspace:*",

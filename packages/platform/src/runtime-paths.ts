@@ -14,5 +14,7 @@ export interface Paths {
 }
 
 declare module 'mini-harness/cordis' {
-  interface Context { harnessState: { paths: Paths } }
+  interface Context {
+    harnessState: { paths: Paths };
+  }
 }

@@ -17,7 +17,11 @@
       "./events",
       "./prompt-api",
       "./stream"
-    ]
+    ],
+    "profileModules": {
+      "@mini-harness/agent": "./src/manifests/agent.ts#manifest",
+      "@mini-harness/agent-prompt": "./src/manifests/prompt.ts#manifest"
+    }
   },
   "dependencies": {
     "@mini-harness/input": "workspace:*",

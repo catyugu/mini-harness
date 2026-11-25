@@ -6,16 +6,25 @@
   "exports": {
     "./api": "./src/api.ts",
     "./manifest": "./src/manifest.ts",
-    "./workspace": "./src/workspace.ts"
+    "./workspace": "./src/workspace.ts",
+    "./request": "./src/request.ts",
+    "./browser/views": "./src/browser/views.ts"
   },
   "miniHarness": {
     "api": [
-      "./api"
-    ]
+      "./api",
+      "./request",
+      "./browser/views"
+    ],
+    "profileModules": {
+      "@mini-harness/file-access": "./src/manifest.ts#manifest"
+    }
   },
   "dependencies": {
     "@mini-harness/platform": "workspace:*",
     "@mini-harness/plugin-api": "workspace:*",
+    "@mini-harness/transport": "workspace:*",
+    "@mini-harness/ui-runtime": "workspace:*",
     "@mini-harness/workspaces": "workspace:*"
   }
 }
