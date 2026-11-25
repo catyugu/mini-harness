@@ -330,6 +330,22 @@ test('plugin catalog applies configuration and removes disabled browser capabili
     await expect(catalog.getByRole('spinbutton', { name: 'Maximum child depth · subagents' })).toHaveValue(
       '2',
     );
+    await catalog.getByRole('button', { name: /All plugins/ }).click();
+    const models = catalog.getByRole('switch', { name: 'Models', exact: true });
+    await models.uncheck();
+    await expect(models).not.toBeChecked();
+    await expect(models).toBeEnabled();
+    await catalog.getByRole('button', { name: 'Subagents settings' }).click();
+    await expect(catalog.getByRole('textbox', { name: 'Child model · subagents' })).toHaveValue(
+      JSON.stringify({ provider: 'local-mock', id: 'mock-model' }, null, 2),
+    );
+    await catalog.getByRole('button', { name: /All plugins/ }).click();
+    await models.check();
+    await expect(models).toBeEnabled();
+    await catalog.getByRole('button', { name: 'Subagents settings' }).click();
+    await expect(catalog.getByRole('combobox', { name: 'Child model · subagents' })).toHaveValue(
+      JSON.stringify({ provider: 'local-mock', id: 'mock-model' }),
+    );
     await page.getByRole('button', { name: 'Toggle navigation' }).click();
     await page.getByRole('button', { name: 'New conversation' }).click();
     await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toBeVisible();
