@@ -1,9 +1,8 @@
-import { defineProperty } from './utilities.js'
-import type { Dict } from './utilities.js'
+import { defineProperty } from '@mini-harness/cosmokit'
+import type { Dict } from '@mini-harness/cosmokit'
 import type { StandardSchemaV1 } from '@standard-schema/spec'
 import { Context } from './context.js'
-import { Fiber } from './fiber.js'
-import type { Entry } from './loader/entry.js'
+import { Fiber, type FiberEntry } from './fiber.js'
 import { buildOuterStack, DisposableList, symbols, withProps } from './utils.js'
 
 function isApplicable(object: Plugin) {
@@ -314,7 +313,7 @@ export class RegistryService {
    * @param getOuterStack — captures the caller stack for effect diagnostics.
    * @returns the fiber; awaiting it settles once loading finished.
    */
-  plugin(plugin: Plugin, config?: any, getOuterStack = buildOuterStack(), entry?: Entry) {
+  plugin(plugin: Plugin, config?: any, getOuterStack = buildOuterStack(), entry?: FiberEntry) {
     // check if it's a valid plugin
     const callback = this.resolve(plugin)
     if (!callback) throw new Error('invalid plugin, expect function or object with an "apply" method, received ' + typeof plugin)

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { Context, EntryTree, FiberState, type EntryOptions } from 'mini-harness/cordis';
+import { Context, EntryTree, Fiber, FiberState, type EntryOptions } from 'mini-harness/cordis';
 
 declare module 'mini-harness/cordis' {
   interface Context {
@@ -48,7 +48,8 @@ test('Cordis activates consumers after their provider and drains them before it 
   assert.equal(tree.get('consumer')?.fiber?.state, FiberState.PENDING);
   await tree.update([consumer, provider('first')]);
   const fiber = tree.get('consumer')?.fiber;
-  assert.equal(fiber?.state, FiberState.ACTIVE);
+  assert.ok(fiber instanceof Fiber);
+  assert.equal(fiber.state, FiberState.ACTIVE);
   await tree.update([provider('second'), consumer]);
   assert.equal(tree.get('consumer')?.fiber, fiber);
   assert.deepEqual(effects, [

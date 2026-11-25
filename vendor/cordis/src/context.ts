@@ -1,4 +1,4 @@
-import type { Dict } from './utilities.js'
+import type { Dict } from '@mini-harness/cosmokit'
 import { EventsService } from './events.js'
 import { LoggerService } from './logger.js'
 import { ReflectService } from './reflect.js'

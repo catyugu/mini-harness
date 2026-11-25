@@ -56,8 +56,12 @@ copyFileSync(
   'dist/packages/ui-primitives/src/browser/vendor/purify.LICENSE',
 );
 
-for (const name of ['LICENSE', 'COSMOKIT.LICENSE', 'README.md']) {
-  copyFileSync(join('vendor/cordis', name), join('dist/vendor/cordis', name));
+for (const owner of readdirSync('vendor', { withFileTypes: true })) {
+  if (!owner.isDirectory()) continue;
+  for (const notice of ['LICENSE', 'README.md']) {
+    const source = join('vendor', owner.name, notice);
+    if (existsSync(source)) copyFileSync(source, join('dist/vendor', owner.name, notice));
+  }
 }
 
 const editor = await build({

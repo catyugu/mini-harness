@@ -1,4 +1,4 @@
-import { Context, getTraceable, type Entry } from 'mini-harness/cordis';
+import { Context, getTraceable, type FiberEntry } from 'mini-harness/cordis';
 import type { HostServices, PluginScope, ScopeKey } from './scopes.js';
 
 interface PluginInstance {
@@ -9,9 +9,9 @@ interface PluginInstance {
   writableConfig: boolean;
 }
 
-const identities = new WeakMap<Entry, PluginInstance>();
+const identities = new WeakMap<FiberEntry, PluginInstance>();
 
-export function bindInstance(entry: Entry, identity: PluginInstance) {
+export function bindInstance(entry: FiberEntry, identity: PluginInstance) {
   identities.set(entry, Object.freeze(identity));
 }
 

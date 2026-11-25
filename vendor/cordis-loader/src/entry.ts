@@ -1,4 +1,4 @@
-import { FiberState, Inject, type Context, type Fiber, type Plugin } from '../index.js'
+import { FiberState, Inject, type Context, type Fiber, type FiberEntry, type Plugin } from '@mini-harness/cordis'
 
 // Loader config is JSON data. Object key order has no effect on activation.
 function sameData(left: unknown, right: unknown): boolean {
@@ -18,20 +18,15 @@ function sameData(left: unknown, right: unknown): boolean {
 }
 
 /** An in-memory loader entry. The host supplies module resolution and its scope. */
-export interface EntryOptions {
-  id: string
+export type EntryOptions = FiberEntry['options'] & {
   context: Context
   /** Changes to the module or its resource declarations replace the entry. */
   module: string
   load(): Plugin | Promise<Plugin>
   config: Record<string, unknown>
-  inject?: Inject
-  live?: boolean
-  prepare?(ctx: Context): void | Promise<void>
-  verify?(ctx: Context): void | Promise<void>
 }
 
-export class Entry {
+export class Entry implements FiberEntry {
   fiber?: Fiber
   private failure?: unknown
 

@@ -1,4 +1,4 @@
-import { defineProperty, isNullable } from './utilities.js'
+import { defineProperty, isNullable } from '@mini-harness/cosmokit'
 import { Context } from './context.js'
 import { locate } from './reflect.js'
 import { createCallable, joinPrototype, symbols, type Tracker } from './utils.js'

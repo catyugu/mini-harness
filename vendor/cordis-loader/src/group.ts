@@ -1,4 +1,4 @@
-import type { Context } from '../context.js'
+import type { Context } from '@mini-harness/cordis'
 
 /** Shared context for entries inheriting the same parent and service isolation. */
 export class EntryGroup {

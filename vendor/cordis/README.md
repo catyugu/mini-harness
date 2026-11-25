@@ -1,7 +1,17 @@
 # Cordis
 
-Shared framework source for the Node.js and browser runtimes. The root npm
-package exports this source's build as `mini-harness/cordis`.
+Node.js and the browser use the same Cordis implementation. The private
+workspace packages are built into the single `mini-harness` npm package.
+
+| Workspace package | Source | Responsibility |
+| --- | --- | --- |
+| `@mini-harness/cosmokit` | [cosmokit](../cosmokit/) | Shared utility types and functions |
+| `@mini-harness/cordis` | [cordis](./) | Context, services, injection, events and fibers |
+| `@mini-harness/cordis-loader` | [cordis-loader](../cordis-loader/) | Entry identity, reconciliation and scope groups |
+| `@mini-harness/cordis-runtime` | [cordis-runtime](../cordis-runtime/) | The public `mini-harness/cordis` export |
+
+The Loader depends on core. Core reads the fiber's entry metadata through a
+core-owned type. YAML and Profile persistence stay in the host adapter.
 
 ## Origin
 
@@ -9,6 +19,8 @@ The framework is derived from DeepSeek Harness commit
 [4b399c39a6d1479cd84ca591b4d7c88e24d38a96](https://github.com/deepseek-ai/deepseek-harness/tree/4b399c39a6d1479cd84ca591b4d7c88e24d38a96/vendor).
 DSH based its core on Cordis 4.0.0-rc.12 and its Loader on 1.0.0-rc.9,
 both from Cordis commit `01b396240ce47cf2779c40af9bc445bb748fe112`.
+The Cosmokit package copies the used types, `isNullable` and `defineProperty`
+from DSH's vendored Cosmokit 1.8.1 `misc.ts`.
 
 ## Local changes
 

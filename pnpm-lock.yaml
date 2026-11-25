@@ -767,6 +767,32 @@ importers:
         specifier: workspace:*
         version: link:../ui-runtime
 
+  vendor/cordis:
+    dependencies:
+      '@mini-harness/cosmokit':
+        specifier: workspace:*
+        version: link:../cosmokit
+      '@standard-schema/spec':
+        specifier: 1.1.0
+        version: 1.1.0
+
+  vendor/cordis-loader:
+    dependencies:
+      '@mini-harness/cordis':
+        specifier: workspace:*
+        version: link:../cordis
+
+  vendor/cordis-runtime:
+    dependencies:
+      '@mini-harness/cordis':
+        specifier: workspace:*
+        version: link:../cordis
+      '@mini-harness/cordis-loader':
+        specifier: workspace:*
+        version: link:../cordis-loader
+
+  vendor/cosmokit: {}
+
 packages:
 
   '@anthropic-ai/sdk@0.129.0':

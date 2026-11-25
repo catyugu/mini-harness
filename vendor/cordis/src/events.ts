@@ -1,4 +1,4 @@
-import { defineProperty, type Awaitable, type Promisify } from './utilities.js'
+import { defineProperty, type Awaitable, type Promisify } from '@mini-harness/cosmokit'
 import { Context } from './context.js'
 import { Fiber, FiberState, resolveConfig } from './fiber.js'
 import { DisposableList, symbols } from './utils.js'

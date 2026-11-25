@@ -51,11 +51,15 @@ for (const owner of readdirSync(FEATURE_DIR, { withFileTypes: true })) {
   }
 }
 
-const cordisRoot = resolve(FEATURE_DIR, '../vendor/cordis/src');
-for (const file of readdirSync(cordisRoot, { recursive: true, withFileTypes: true })) {
-  if (!file.isFile() || !file.name.endsWith('.js')) continue;
-  const path = relative(cordisRoot, join(file.parentPath, file.name)).split(sep).join('/');
-  assets.set('vendor/cordis/src/' + path, 'text/javascript');
+const vendor = resolve(FEATURE_DIR, '../vendor');
+for (const owner of readdirSync(vendor, { withFileTypes: true })) {
+  if (!owner.isDirectory()) continue;
+  const source = join(vendor, owner.name, 'src');
+  for (const file of readdirSync(source, { recursive: true, withFileTypes: true })) {
+    if (!file.isFile() || !file.name.endsWith('.js')) continue;
+    const path = relative(vendor, join(file.parentPath, file.name)).split(sep).join('/');
+    assets.set('vendor/' + path, 'text/javascript');
+  }
 }
 
 export function authorize(request: IncomingMessage, token: string) {

@@ -56,15 +56,28 @@ async function checkPackage() {
         files.some(({ path }: { path: string }) => path === 'profiles/' + profile + '.yml'),
         'Missing shipped Profile: ' + profile,
       );
+    for (const path of [
+      'dist/vendor/cordis/LICENSE',
+      'dist/vendor/cordis-loader/LICENSE',
+      'dist/vendor/cosmokit/LICENSE',
+      'dist/vendor/cordis/src/index.js',
+      'dist/vendor/cordis-loader/src/index.js',
+      'dist/vendor/cordis-runtime/src/index.js',
+      'dist/vendor/cosmokit/src/index.js',
+    ])
+      assert.ok(
+        files.some((file) => file.path === path),
+        'Missing vendored framework file: ' + path,
+      );
     assert.ok(
       files.every(
         ({ path }: { path: string }) =>
           !/^dist\/(?:scripts|test)\//.test(path) &&
-          !/^dist\/packages\/[^/]+\/package\.json$/.test(path) &&
+          !/^dist\/(?:packages|vendor)\/[^/]+\/package\.json$/.test(path) &&
           !/^dist\/.*\/tests\//.test(path) &&
           !/\.(?:test|spec)\.js$/.test(path),
       ),
-      'Published package must exclude test artifacts',
+      'Published package must exclude private manifests and test artifacts',
     );
     await mkdir(installed);
     const tarball = 'file:../' + filename;

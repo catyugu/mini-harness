@@ -99,8 +99,8 @@
       "default": "./dist/packages/sdk/src/browser-plugin.js"
     },
     "./cordis": {
-      "types": "./dist/types/vendor/cordis/src/index.d.ts",
-      "default": "./dist/vendor/cordis/src/index.js"
+      "types": "./dist/types/vendor/cordis-runtime/src/index.d.ts",
+      "default": "./dist/vendor/cordis-runtime/src/index.js"
     }
   },
   "packageManager": "pnpm@10.34.9"

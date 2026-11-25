@@ -1,0 +1,13 @@
+{
+  "name": "@mini-harness/cordis",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@mini-harness/cosmokit": "workspace:*",
+    "@standard-schema/spec": "1.1.0"
+  }
+}

@@ -6,4 +6,6 @@ playwright-report/
 pnpm-lock.yaml
 **/fixtures/
 vendor/cordis/
+vendor/cordis-loader/src/
+vendor/cosmokit/src/
 LICENSE
