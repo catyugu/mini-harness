@@ -37,7 +37,10 @@ export interface PluginSettingsContribution {
 
 declare module 'mini-harness/cordis' {
   interface Events {
-    'settings/options'(schema: Record<string, any>, value: unknown): { label: string; value: unknown; disabled?: boolean }[] | undefined;
+    'settings/options'(
+      schema: Record<string, any>,
+      value: unknown,
+    ): { label: string; value: unknown; disabled?: boolean }[] | undefined;
   }
   interface Context {
     miniSettings: {

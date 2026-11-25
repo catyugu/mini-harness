@@ -18,11 +18,7 @@ import { readPluginValues, schemaFields } from './fields.ts';
 
 const setup = async (ctx: Context) => {
   const signal = ctx.fiber.signal;
-  const {
-    miniSettingsData: settings,
-    miniSwitch: syncPlugins,
-    miniBrowserFailures: browserFailures,
-  } = ctx;
+  const { miniSettingsData: settings, miniSwitch: syncPlugins, miniBrowserFailures: browserFailures } = ctx;
   const plugins = new RemoteStore(() => browserRequest<PluginMetadata[]>(ctx, '/plugins'));
   await plugins.refresh();
   ctx.effect(() => ctx.miniProjections.register('plugins', plugins));
@@ -134,7 +130,8 @@ function pluginCatalog(
     const enabled = toggle('Enabled in this scope', false);
     const configFields = document.createElement('div');
     fields.append(scopedControls, configFields);
-    const currentKey = () => scopePicker.value && scopePicker.value !== 'application' ? scopePicker.value as ScopeKey : undefined;
+    const currentKey = () =>
+      scopePicker.value && scopePicker.value !== 'application' ? (scopePicker.value as ScopeKey) : undefined;
     const currentScope = () => {
       const key = currentKey();
       return (key && snapshot().settings.scopes[key]) || undefined;
