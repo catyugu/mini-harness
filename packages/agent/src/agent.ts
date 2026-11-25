@@ -727,7 +727,7 @@ export class NativeAgent implements AgentPort {
       validate,
     );
     context.signal.throwIfAborted();
-    const prepared = present ? present(transformed) : transformed;
+    const prepared: ModelRequestContent & { tools?: LlmRequest['tools'] } = present ? present(transformed) : transformed;
     const { systemPrompt, thinkingLevel, maxTokens } = validate(prepared);
     const input = capabilities?.input.includes('image')
       ? prepared.messages
@@ -735,7 +735,7 @@ export class NativeAgent implements AgentPort {
     const snapshot: Omit<LlmRequest, 'signal' | 'sessionId'> = JSON.parse(
       JSON.stringify({
         ...base,
-        tools: 'tools' in prepared ? prepared.tools : undefined,
+        tools: prepared.tools,
         messages: input,
         systemPrompt,
         thinkingLevel,

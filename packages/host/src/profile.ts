@@ -227,14 +227,6 @@ export function ensureProfile(name: string, paths: Paths) {
   return directory;
 }
 
-interface ProfileManifest {
-  dependencies?: Record<string, string>;
-  devDependencies?: Record<string, string>;
-  optionalDependencies?: Record<string, string>;
-  miniHarness?: { profile?: { bundles?: string[] } };
-}
-
-/** npm remains responsible for package operations. Only explicit CLI adds/removes change composition. */
 function profileLayers(name: string, paths: Paths, patches: readonly string[] = [], defaults = false) {
   const directory = ensureProfile(name, paths);
   const manifestPath = join(directory, MANIFEST);

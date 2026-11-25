@@ -3,7 +3,7 @@ import { createRequire } from 'node:module';
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
+import type { ResolvedPlugin } from '@mini-harness/plugin-api/descriptor';
 import { loadPluginModule } from '@mini-harness/plugins/module-resolution';
 
 const require = createRequire(import.meta.url);
@@ -43,10 +43,10 @@ writeFileSync(
 
 // Produce display data separately from the module locator. Loading an inactive
 // Entry at runtime never requires importing its executable module.
-const profileMetadata = new Map<string, Partial<PluginInfo>>();
+const profileMetadata = new Map<string, Partial<ResolvedPlugin>>();
 for (const [name, { path, exportName }] of profileModules) {
   const { metadata, Config } = await loadPluginModule(pathToFileURL(resolve('dist', path)).href, exportName);
-  const schema = (Config as { jsonSchema?: PluginInfo['configSchema'] } | undefined)?.jsonSchema;
+  const schema = (Config as { jsonSchema?: ResolvedPlugin['configSchema'] } | undefined)?.jsonSchema;
   profileMetadata.set(name, { ...metadata, ...(schema ? { configSchema: schema } : {}) });
 }
 writeFileSync(
