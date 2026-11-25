@@ -75,7 +75,7 @@ test('custom Profiles load native local and npm entries without the plugin manag
   });
   const manifest = join(directory, 'package.json');
   const metadata = JSON.parse(readFileSync(manifest, 'utf8'));
-  metadata.dependencies = { 'profile-bundle': '1.0.0', 'profile-consumer': '1.0.0' };
+  metadata.dependencies = { 'profile-bundle': '1.0.0', '@example/profile-consumer': '1.0.0' };
   metadata.miniHarness.profile.bundles = ['profile-bundle'];
   writeJson(manifest, metadata);
   writeText(
@@ -90,13 +90,13 @@ export default {
 };`,
   );
   writeText(join(bundle, 'disabled.mjs'), "throw new Error('A disabled entry was imported');");
-  writeJson(join(directory, 'node_modules', 'profile-consumer', 'package.json'), {
-    name: 'profile-consumer',
+  writeJson(join(directory, 'node_modules', '@example/profile-consumer', 'package.json'), {
+    name: '@example/profile-consumer',
     type: 'module',
     exports: { import: './entry.js' },
   });
   writeText(
-    join(directory, 'node_modules', 'profile-consumer', 'entry.js'),
+    join(directory, 'node_modules', '@example/profile-consumer', 'entry.js'),
     `export const inject = ['profileValue'];
 export const provide = 'profileResult';
 export function apply(ctx, config) {
@@ -106,16 +106,14 @@ export function apply(ctx, config) {
   writeText(
     fragment,
     `plugins:
-  - id: consumer
-    name: profile-consumer
+  - name: '@example/profile-consumer'
     config:
       suffix: '!'
   - id: provider
     name: ./provider.mjs
     config:
       value: base
-  - id: disabled
-    name: ./disabled.mjs
+  - name: ./disabled.mjs
     disabled: true
 `,
   );
@@ -142,6 +140,7 @@ export function apply(ctx, config) {
     try {
       assert.equal(app.ctx.get('harnessPluginCatalog'), undefined);
       assert.equal(app.ctx.get('profileResult'), 'patched!');
+      assert.ok(app.ctx.harnessProfile.entries.get('@example/profile-consumer')?.active);
       assert.equal(app.ctx.harnessProfile.entries.get('disabled'), undefined);
       assert.equal(app.ctx.harnessProfile.entries.get('waiting')?.active, false);
       assert.equal(allowsDetachment(name, paths), false);
@@ -167,7 +166,7 @@ export function apply(ctx, config) {
   await assert.rejects(bootProfile(standalone, paths, launch), /Invalid Profile name/);
   writeText(
     standalone,
-    'plugins:\n  - id: provider\n    config:\n      value: temporary\n  - id: consumer\n    name: profile-consumer\n',
+    'plugins:\n  - id: provider\n    config:\n      value: temporary\n  - name: \'@example/profile-consumer\'\n',
   );
   const patched = await bootProfile('custom', paths, { ...launch, patches: [standalone] });
   try {

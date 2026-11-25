@@ -62,7 +62,7 @@ export class RouteRegistry implements RoutePort {
   >();
 
   register(method: string, path: string, handler: RouteHandler) {
-    if (!['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method) || !/^\/[a-zA-Z0-9_:/-]+$/.test(path))
+    if (!['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method) || !path.startsWith('/'))
       throw new Error('Invalid route: ' + method + ' ' + path);
     const key = method + ' ' + path;
     if (this.routes.has(key)) throw new Error('Duplicate route: ' + key);
@@ -76,8 +76,9 @@ export class RouteRegistry implements RoutePort {
           names.push(segment.slice(1));
           return '([^/]+)';
         }
-        if (!/^[a-zA-Z0-9_-]+$/.test(segment)) throw new Error('Invalid route segment');
-        return segment;
+        if (!/^(?:[a-zA-Z0-9_.-]|%[0-9a-fA-F]{2})+$/.test(segment) || segment === '.' || segment === '..')
+          throw new Error('Invalid route segment');
+        return segment.replace(/\./g, '\\.');
       });
     const controller = new AbortController();
     const entry = {

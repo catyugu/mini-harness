@@ -9,7 +9,7 @@ import {
   type Context,
   type EntryOptions,
 } from 'mini-harness/cordis';
-import { localPluginIdPattern, isScopeKey } from '@mini-harness/plugin-api/selection';
+import { pluginIdPattern, isScopeKey } from '@mini-harness/plugin-api/selection';
 import { isDeepStrictEqual } from 'node:util';
 import type { ResolvedPlugin } from '@mini-harness/plugin-api/descriptor';
 import type {
@@ -327,7 +327,7 @@ export class PluginHost implements ScopePort {
   }
 
   async requestScope(plugin: string, key: string, operation: string, input: unknown, signal: AbortSignal) {
-    if (!isScopeKey(key) || !localPluginIdPattern.test(plugin) || !scopeOperation.test(operation))
+    if (!isScopeKey(key) || !pluginIdPattern.test(plugin) || !scopeOperation.test(operation))
       throw new DomainError('invalid_input', 'Invalid scoped plugin request');
     if (!this.lookup(key)) throw new DomainError('not_found', 'Plugin scope not found');
     await this.prepare(key, signal);

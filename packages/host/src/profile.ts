@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs';
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import { parseDocument, stringify } from 'yaml';
@@ -105,6 +106,13 @@ const packagedModules = new Map(
 const object = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
 
+function defaultEntryId(name: string) {
+  if (pluginIdPattern.test(name)) return name;
+  const stem = basename(name).replace(/\.(?:[cm]?js|ts)$/, '').toLowerCase();
+  if (localPluginIdPattern.test(stem)) return stem;
+  return 'module-' + createHash('sha256').update(name).digest('hex').slice(0, 32);
+}
+
 function load(file: string, optional = false): Layer | undefined {
   try {
     const doc = parseDocument(readFileSync(file, 'utf8'), { schema: 'core', strict: true, uniqueKeys: true });
@@ -132,15 +140,16 @@ function load(file: string, optional = false): Layer | undefined {
         Object.keys(row).some(
           (key) => !['id', 'name', 'disabled', 'client', 'live', 'config'].includes(key),
         ) ||
-        typeof row.id !== 'string' ||
-        !pluginIdPattern.test(row.id) ||
-        ids.has(row.id) ||
         (row.name !== undefined && (typeof row.name !== 'string' || !row.name.trim())) ||
         (row.config !== undefined && !object(row.config)) ||
         ['disabled', 'client', 'live'].some((key) => row[key] !== undefined && typeof row[key] !== 'boolean')
       )
         throw new Error('Invalid or duplicate plugin entry: ' + (object(row) ? row.id : row));
-      ids.add(row.id);
+      const id = row.id === undefined && typeof row.name === 'string' ? defaultEntryId(row.name) : row.id;
+      if (typeof id !== 'string' || !pluginIdPattern.test(id) || ids.has(id))
+        throw new Error('Invalid or duplicate plugin entry: ' + id);
+      row.id = id;
+      ids.add(id);
     }
     return value as Layer;
   } catch (error) {
@@ -266,7 +275,7 @@ export const profileSchema = {
       type: 'array',
       items: {
         type: 'object',
-        required: ['id'],
+        anyOf: [{ required: ['id'] }, { required: ['name'] }],
         additionalProperties: false,
         properties: {
           id: { type: 'string', pattern: pluginIdPattern.source },

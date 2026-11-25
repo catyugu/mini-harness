@@ -2,7 +2,8 @@ import type { ScopeKey } from './scopes.ts';
 import { DomainError } from '@mini-harness/platform/errors';
 
 export const localPluginIdPattern = /^[a-z][a-z0-9-]{0,63}$/;
-export const pluginIdPattern = /^(?:core:)?[a-z][a-z0-9-]{0,63}$/;
+export const pluginIdPattern =
+  /^(?=.{1,214}$)(?:core:[a-z][a-z0-9-]{0,63}|(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*(?:\/[a-z0-9_][a-z0-9._-]*)*)$/;
 export function isScopeKey(value: string): value is ScopeKey {
   return /^(?:workspace:[a-f0-9]{32}|session:[a-f0-9-]{36})$/.test(value);
 }

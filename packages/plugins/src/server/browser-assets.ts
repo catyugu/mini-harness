@@ -115,7 +115,7 @@ export function readBrowserAssets(
     (typeof preload !== 'string' || !entries.has(preload) || !['.js', '.mjs'].includes(extname(preload)))
   )
     throw new Error('browserPreload must reference a published JavaScript asset: ' + id);
-  const prefix = '/plugin-assets/' + id + '/' + signature.digest('hex').slice(0, 20) + '/';
+  const prefix = '/plugin-assets/' + encodeURIComponent(id) + '/' + signature.digest('hex').slice(0, 20) + '/';
   const urls = new Map([...entries].map(([file, info]) => [prefix + file, info]));
   return {
     entry: prefix + entry,

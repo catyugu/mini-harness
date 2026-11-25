@@ -162,7 +162,7 @@ export class PluginCatalog {
     mounted: (id: string) => boolean,
   ): PluginMetadata[] {
     return this.descriptors()
-      .filter(({ id }) => localPluginIdPattern.test(id))
+      .filter(({ id }) => !id.startsWith('core:'))
       .map((discovered) => {
         const descriptor = this.resolved.get(discovered.id) ?? discovered;
         const {

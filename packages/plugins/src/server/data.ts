@@ -3,6 +3,7 @@ import { lstatSync, mkdirSync, readdirSync, realpathSync, rmSync } from 'node:fs
 import { join, relative } from 'node:path';
 import { Service } from 'mini-harness/cordis';
 import { pluginInstance } from '@mini-harness/plugin-api/instance';
+import { localPluginIdPattern } from '@mini-harness/plugin-api/selection';
 import { protectLocal } from '@mini-harness/platform/local-secret';
 import { readJson, writeJson } from '@mini-harness/platform/json';
 import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
@@ -14,7 +15,10 @@ function storagePath(service: object, directory: string, name: string, secret = 
   ctx.fiber.signal.throwIfAborted();
   if (!/^[a-z][a-z0-9-]{0,63}$/.test(name)) throw new Error('Invalid private data name');
   const instance = scopeKey ? createHash('sha256').update(scopeKey).digest('hex') : 'application';
-  const root = join(directory, pluginId, instance);
+  const namespace = localPluginIdPattern.test(pluginId)
+    ? pluginId
+    : '@' + createHash('sha256').update(pluginId).digest('hex');
+  const root = join(directory, namespace, instance);
   mkdirSync(root, { recursive: true, mode: 0o700 });
   if (relative(root, realpathSync(root))) throw new Error('Plugin data directory was redirected');
   const file = join(root, (secret ? '.' : '') + name + '.json');

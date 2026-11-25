@@ -47,7 +47,7 @@ export class PluginRouteRegistry {
           throw new Error('Invalid plugin route');
         const lifetime = caller.fiber.signal;
         return networkEffect(caller, () =>
-          ctx.harnessRoutes.register(method, '/api/extensions/' + pluginId + path, (request) =>
+          ctx.harnessRoutes.register(method, '/api/extensions/' + encodeURIComponent(pluginId) + path, (request) =>
             caller.fiber
               .run(
                 (signal) => withPluginRequest(signal, () => handler({ ...request, signal })),
@@ -66,7 +66,7 @@ export class PluginRouteRegistry {
         const { pluginId, scopeKey } = pluginInstance(caller);
         if (scopeKey || !routePath.test(path) || !upgrade) throw new Error('Invalid WebSocket route');
         return networkEffect(caller, () =>
-          upgrade('/api/extensions/' + pluginId + path, (request, socket, head, signal) =>
+          upgrade('/api/extensions/' + encodeURIComponent(pluginId) + path, (request, socket, head, signal) =>
             caller.fiber.run(
               (lifetime) => withPluginRequest(lifetime, () => handler(request, socket, head, lifetime)),
               signal,

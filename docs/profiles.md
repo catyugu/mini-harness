@@ -61,13 +61,11 @@ plugins:
       port: 3838
   - id: git-diff
     disabled: true
-  - id: custom-provider
-    name: '@example/custom-provider'
+  - name: '@example/custom-provider'
     live: true
     config:
       label: Progress
-  - id: local-tool
-    name: ./plugins/tool.mjs
+  - name: ./plugins/tool.mjs
   - id: local-panel
     name: /absolute/path/to/local-panel
     client: true
@@ -79,7 +77,7 @@ function, class, or object with `apply(ctx, config)`; no plugin.json is needed
 for these entries. Disabled external entries are not imported. Local modules
 resolve relative to the layer that declares the name. A directory entry loads the package's server and browser modules; it can be managed in the Web Plugins page. YAML layers may include
 other fragments using `include`; they cannot use executable YAML tags or cyclic
-references. The final entry ID determines the configuration override.
+references. The final entry ID determines the configuration override. When omitted, the module name is the ID for npm entries; local file paths use their filename stem when it is a valid local ID, or a stable ID derived from the path. Explicit IDs distinguish multiple instances. Duplicate IDs in one layer are rejected.
 
 All declared server modules use the same Cordis EntryTree and configuration path.
 The Web Plugins page edits the user patch, including ordinary module entries.
