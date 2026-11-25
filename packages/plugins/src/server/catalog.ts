@@ -129,10 +129,7 @@ export class PluginCatalog {
         }
         try {
           const url = location?.url ?? pathToFileURL(source!).href + '?v=' + lstatSync(source!).mtimeMs;
-          const { plugin, Config, metadata } = await loadPluginModule(
-            url,
-            location?.exportName,
-          );
+          const { plugin, Config, metadata } = await loadPluginModule(url, location?.exportName);
           if (!plugin && !descriptor.resources && !metadata?.browser)
             throw new Error('Plugin ' + id + ' must export a Cordis plugin with apply(ctx, config)');
           return this.withSchema({
