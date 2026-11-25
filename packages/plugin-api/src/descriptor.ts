@@ -1,28 +1,26 @@
-import type { Plugin } from 'mini-harness/cordis';
-
 /** A symbolic icon name or an inline SVG path for plugin-defined artwork. */
 export type PluginIcon = string | { path: string; viewBox?: string };
 
-/** Optional display and configuration information; not a Cordis plugin wrapper. */
+/** Optional presentation and resource declarations, independent of Cordis activation. */
 export interface PluginInfo {
   title: string;
   description: string;
-  web?: boolean;
+  /** Paths relative to the plugin's distribution root. */
   browser?: string;
-  /** Styles shipped with a built-in browser entry. Local plugins may declare a browser build directory. */
+  browserDirectory?: string;
+  /** Explicit stylesheet order; otherwise styles in the public build directory are used. */
   browserStyles?: string[];
   icon?: PluginIcon;
   configGroups?: { title: string; fields: string[] }[];
   configHint?: string;
+  /** Optional static form schema for an entry that has not been imported. */
+  configSchema?: Record<string, any>;
 }
 
-/** Internal resolved entry, with the module and its display metadata kept distinct. */
-export interface ResolvedPlugin extends PluginInfo {
-  id: string;
-  defaultEnabled?: boolean;
-  location?: { url: string; exportName?: string };
-  plugin?: Plugin;
-  Config?: Plugin.Base['Config'];
-  /** JSON form projection of the module's native Config, when available. */
-  configSchema?: Record<string, any>;
+/** A physical module location, without presentation or runtime metadata. */
+export interface PluginLocation {
+  folder: string;
+  entry?: string;
+  exportName?: string;
+  clientOnly?: boolean;
 }

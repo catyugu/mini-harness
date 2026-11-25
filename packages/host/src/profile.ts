@@ -7,7 +7,7 @@ import { parseDocument, stringify } from 'yaml';
 import { Context, EntryTree } from 'mini-harness/cordis';
 import { readJson, writeJson, writeText } from '@mini-harness/platform/json';
 import type { Paths } from '@mini-harness/platform/runtime-paths';
-import type { ResolvedPlugin } from '@mini-harness/plugin-api/descriptor';
+import type { PluginLocation } from '@mini-harness/plugin-api/descriptor';
 import { PluginCatalog } from '@mini-harness/plugins/catalog';
 import { bindPluginImports } from '@mini-harness/plugins/module-resolution';
 import { localPluginIdPattern, pluginIdPattern, parseSettings } from '@mini-harness/plugin-api/selection';
@@ -322,43 +322,16 @@ export function readProfile(name: string, paths?: Paths) {
   return rows([...shipped, ...userLayers]);
 }
 
-const displayMetadata = readJson<Record<string, Partial<ResolvedPlugin>>>(
-  fileURLToPath(new URL('./profile-metadata.json', import.meta.url)),
-  {},
-);
-
-function builtin(id: string, name: string, client: boolean): ResolvedPlugin | undefined {
-  const base = name.endsWith('/client') ? name.slice(0, -7) : name;
-  const target = packagedModules.get(base);
-  if (!target) return;
-  const info = displayMetadata[base];
-  if (base !== name) {
-    if (!client || !info?.browser) return;
+function locate(name: string): PluginLocation | undefined {
+  const clientOnly = name.endsWith('/client');
+  const target = packagedModules.get(clientOnly ? name.slice(0, -7) : name);
+  if (target)
     return {
-      id,
-      title: info.title ?? id,
-      description: info.description ?? '',
-      icon: info.icon,
-      browser: info.browser,
-      browserStyles: info.browserStyles,
+      folder: fileURLToPath(new URL('./clients/', import.meta.url)),
+      entry: fileURLToPath(new URL(target.path, installed)),
+      exportName: target.exportName,
+      clientOnly,
     };
-  }
-  return {
-    title: id,
-    description: '',
-    ...info,
-    id,
-    location: { url: new URL(target.path, installed).href, exportName: target.exportName },
-    browser: client ? info?.browser : undefined,
-    browserStyles: client ? info?.browserStyles : undefined,
-  };
-}
-
-export function profileDescriptors(entries: ReadonlyMap<string, Row>): ResolvedPlugin[] {
-  return [...entries.values()].flatMap((row) => {
-    const descriptor = builtin(row.id, row.name!, row.client ?? true);
-    return descriptor ? [{ ...descriptor, defaultEnabled: !row.disabled }] : [];
-  });
 }
 
 export async function loadProfile(
@@ -456,7 +429,7 @@ export async function loadProfile(
   }
   const profile: ProfileRuntime = {
     directory,
-    builtin,
+    locate,
     source,
     entries,
     async start() {
@@ -473,7 +446,7 @@ export async function loadProfile(
         },
       );
       for (const [id, error] of await entries.update(
-        plans.filter(({ descriptor }) => descriptor.plugin).map((plan) => catalog.entry(plan, context)),
+        plans.filter(({ descriptor }) => descriptor.native?.plugin).map((plan) => catalog.entry(plan, context)),
       ))
         errors.set(id, error);
       return errors;

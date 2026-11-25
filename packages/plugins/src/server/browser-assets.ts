@@ -1,8 +1,6 @@
 import { createHash } from 'node:crypto';
 import { lstatSync, readdirSync, realpathSync } from 'node:fs';
 import { extname, join, relative } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import type { ResolvedPlugin } from '@mini-harness/plugin-api/descriptor';
 import type { BrowserEntry } from '@mini-harness/ui-runtime/bootstrap';
 import type { ConfiguredPlugin } from './catalog.ts';
 
@@ -14,32 +12,6 @@ export interface BrowserAssets {
   entry: string;
   styles: string[];
   urls: Map<string, Asset>;
-}
-
-const packageRoot = fileURLToPath(new URL('../../../', import.meta.url));
-
-export function builtinBrowserAssets({
-  id,
-  browser,
-  browserStyles = [],
-}: ResolvedPlugin): BrowserAssets | undefined {
-  if (!browser) {
-    if (browserStyles.length) throw new Error('Browser styles require an entry: ' + id);
-    return;
-  }
-  const root = /^\/packages\/([a-z][a-z0-9-]*)\/src\/browser\//.exec(browser)?.[0];
-  if (!root || !browser.endsWith('.js')) throw new Error('Invalid built-in browser entry: ' + id);
-  const urls = new Map<string, Asset>();
-  for (const url of browserStyles) {
-    if (
-      !url.startsWith(root) ||
-      !/^(?:[a-z0-9-]+\/)*[a-z0-9-]+\.css$/.test(url.slice(root.length)) ||
-      urls.has(url)
-    )
-      throw new Error('Invalid built-in browser stylesheet: ' + id);
-    urls.set(url, { path: join(packageRoot, url.slice('/packages/'.length)), mime: 'text/css' });
-  }
-  return { entry: browser, styles: browserStyles, urls };
 }
 
 const mimeTypes = new Map([
@@ -72,6 +44,7 @@ export function readBrowserAssets(
   folder: string,
   entry: string,
   directory: unknown,
+  styles?: string[],
 ): BrowserAssets {
   if (
     !publicPath(entry) ||
@@ -79,7 +52,7 @@ export function readBrowserAssets(
     (directory !== undefined && (typeof directory !== 'string' || !publicPath(directory)))
   )
     throw new Error('Invalid browser entry or build directory: ' + id);
-  if (entry.includes('/') && (typeof directory !== 'string' || !entry.startsWith(directory + '/')))
+  if (typeof directory === 'string' && !entry.startsWith(directory + '/'))
     throw new Error('Browser entry must be inside its build directory: ' + id);
   const root = realpathSync(folder);
   const entries = new Map<string, Asset>();
@@ -108,11 +81,15 @@ export function readBrowserAssets(
   }
   if (typeof directory === 'string') scan(directory);
   if (!entries.has(entry)) add(entry);
+  for (const style of styles ?? []) {
+    if (!publicPath(style) || extname(style) !== '.css') throw new Error('Invalid browser stylesheet: ' + style);
+    if (!entries.has(style)) add(style);
+  }
   const prefix = '/plugin-assets/' + id + '/' + signature.digest('hex').slice(0, 20) + '/';
   const urls = new Map([...entries].map(([file, info]) => [prefix + file, info]));
   return {
     entry: prefix + entry,
-    styles: [...entries.keys()].filter((file) => extname(file) === '.css').map((file) => prefix + file),
+    styles: (styles ?? [...entries.keys()].filter((file) => extname(file) === '.css')).map((file) => prefix + file),
     urls,
   };
 }
@@ -145,7 +122,7 @@ export function publishBrowser(
     entries,
     assets: new Map(resources.flatMap(({ descriptor }) => [...(descriptor.resources?.urls ?? [])])),
     configurable: new Set(
-      resources.filter(({ descriptor }) => descriptor.Config || descriptor.configSchema).map(({ id }) => id),
+      resources.filter(({ descriptor }) => descriptor.native?.Config || descriptor.info.configSchema).map(({ id }) => id),
     ),
   };
 }

@@ -50,7 +50,7 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
   constructor(
     readonly ctx: Context,
     private readonly directory: string,
-    private readonly profile: Pick<ProfileRuntime, 'builtin' | 'source' | 'read' | 'commit'>,
+    private readonly profile: Pick<ProfileRuntime, 'locate' | 'source' | 'read' | 'commit'>,
     private readonly owner = ctx,
     entries?: EntryTree,
   ) {
@@ -369,7 +369,7 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
       if (active.has(key)) {
         contexts.set(key, group);
         for (const plan of plans) {
-          if (!plan.descriptor.plugin) continue;
+          if (!plan.descriptor.native?.plugin) continue;
           entries.push(this.catalog.entry(plan, context, key + '/' + plan.id));
         }
       }
@@ -457,7 +457,7 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
     const scoped = this.scopedEntries(settings, descriptors, unavailable, preparing, released, changedScopes);
     const mounts = [
       ...plans
-        .filter(({ id, descriptor }) => descriptor.plugin && !failures.has(id))
+        .filter(({ id, descriptor }) => descriptor.native?.plugin && !failures.has(id))
         .map((plan) => this.catalog.entry(plan, this.ctx)),
       ...scoped.entries,
     ];

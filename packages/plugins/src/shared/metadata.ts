@@ -1,20 +1,8 @@
 import type { ScopeAddress } from '@mini-harness/plugin-api/configuration';
-import type { ResolvedPlugin } from '@mini-harness/plugin-api/descriptor';
+import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 
-export interface PluginMetadata
-  extends Pick<
-    ResolvedPlugin,
-    | 'id'
-    | 'title'
-    | 'description'
-    | 'defaultEnabled'
-    | 'web'
-    | 'browser'
-    | 'icon'
-    | 'configGroups'
-    | 'configHint'
-    | 'configSchema'
-  > {
+export interface PluginMetadata extends Pick<PluginInfo, 'title' | 'description' | 'icon' | 'configGroups' | 'configHint' | 'configSchema'> {
+  id: string;
   external?: boolean;
   name?: string;
   package?: { name: string; version: string };
