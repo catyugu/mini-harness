@@ -1,17 +1,18 @@
-import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
+import type { Plugin } from 'mini-harness/cordis';
+import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 
-export const manifest: PluginDescriptor = {
-  id: 'core:llm',
+export const metadata: PluginInfo = {
   scope: 'application',
-  defaultEnabled: true,
   title: 'Model transport',
   description: 'Native LLM streaming via the Pi adapter',
+};
 
-  plugin: {
-    inject: ['harnessModelStore'],
-    provide: ['harnessLlm'],
-    apply(ctx) {
-      ctx.provide('harnessLlm', ctx.harnessModelStore.llm);
-    },
+const plugin: Plugin.Object = {
+  inject: ['harnessModelStore'],
+  provide: ['harnessLlm'],
+  apply(ctx) {
+    ctx.provide('harnessLlm', ctx.harnessModelStore.llm);
   },
 };
+
+export default plugin;

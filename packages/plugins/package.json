@@ -17,7 +17,7 @@
     ],
     "profileModules": {
       "@mini-harness/plugins-runtime": "./src/server/runtime.ts",
-      "@mini-harness/ui-plugins": "./src/manifest.ts#manifest"
+      "@mini-harness/ui-plugins": "./src/manifest.ts"
     }
   },
   "dependencies": {

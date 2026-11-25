@@ -12,7 +12,7 @@
       "./browser/api"
     ],
     "profileModules": {
-      "@mini-harness/ui-layout": "./src/manifest.ts#manifest"
+      "@mini-harness/ui-layout": "./src/manifest.ts"
     }
   },
   "dependencies": {

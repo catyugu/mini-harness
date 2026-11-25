@@ -7,7 +7,7 @@ import { parseDocument, stringify } from 'yaml';
 import { Context, EntryTree, type EntryOptions, type Plugin } from 'mini-harness/cordis';
 import { readJson, writeJson, writeText } from '@mini-harness/platform/json';
 import type { Paths } from '@mini-harness/platform/runtime-paths';
-import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
+import type { PluginDescriptor, PluginInfo } from '@mini-harness/plugin-api/descriptor';
 import { bindInstance } from '@mini-harness/plugin-api/instance';
 import { bindPluginImports } from '@mini-harness/plugins/module-resolution';
 import { isScopeKey, localPluginIdPattern, pluginIdPattern } from '@mini-harness/plugin-api/selection';
@@ -225,17 +225,21 @@ export function readProfile(name: string, paths?: Paths) {
   return rows([...shipped, ...userLayers]);
 }
 
-async function moduleFor(name: string) {
+function isPlugin(value: unknown): value is Plugin {
+  return typeof value === 'function' || (object(value) && typeof value.apply === 'function');
+}
+
+async function moduleFor(name: string): Promise<{ plugin?: Plugin; metadata?: PluginInfo }> {
   const target = packagedModules.get(name);
   if (!target) throw new Error('Unknown packaged Profile plugin: ' + name);
   const exports = await import(new URL(target.path, installed).href);
   const value: unknown = exports[target.exportName];
-  if (value == null) throw new Error('Profile module export not found: ' + name);
-  return value;
-}
-
-function isPlugin(value: unknown): value is Plugin {
-  return typeof value === 'function' || (object(value) && typeof value.apply === 'function');
+  const metadata: PluginInfo | undefined =
+    exports[target.exportName === 'default' ? 'metadata' : target.exportName + 'Metadata'];
+  if (value !== undefined && !isPlugin(value))
+    throw new Error('Profile module must export a Cordis plugin: ' + name);
+  if (!value && !metadata?.browser) throw new Error('Profile module export not found: ' + name);
+  return { plugin: value, metadata };
 }
 
 /** Ask Node's ESM resolver to use the declaring Profile as the parent URL. */
@@ -262,26 +266,26 @@ function resolveModule(name: string, source: string) {
 async function nativeModule(row: ResolvedRow, module: string) {
   const name = row.name!;
   const value: unknown = packagedModules.has(name)
-    ? await moduleFor(name)
+    ? (await moduleFor(name)).plugin
     : await import(module).then((exports) => exports.default ?? exports);
   if (!isPlugin(value)) throw new Error('Profile module must export a Cordis plugin: ' + name);
   return { row, module, plugin: value };
 }
 
-export async function profileDescriptors(entries: ReadonlyMap<string, Row>) {
+export async function profileDescriptors(entries: ReadonlyMap<string, Row>): Promise<PluginDescriptor[]> {
   const descriptors = await Promise.all(
     [...entries.values()]
       .filter((row) => row.name && packagedModules.has(row.name))
       .map(async (row) => {
-        const value = await moduleFor(row.name!);
-        if (isPlugin(value)) return;
-        const descriptor = value as PluginDescriptor;
+        const { plugin, metadata } = await moduleFor(row.name!);
+        if (!metadata) return;
         return {
-          ...descriptor,
+          ...metadata,
+          plugin,
           id: row.id,
           defaultEnabled: !row.disabled,
-          browser: row.client ? descriptor.browser : undefined,
-          browserStyles: row.client ? descriptor.browserStyles : undefined,
+          browser: row.client ? metadata.browser : undefined,
+          browserStyles: row.client ? metadata.browserStyles : undefined,
         };
       }),
   );

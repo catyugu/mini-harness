@@ -1,10 +1,8 @@
-import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
+import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 
-export const manifest: PluginDescriptor = {
+export const metadata: PluginInfo = {
   scope: 'application',
-  id: 'core:workspaces-data',
   title: 'Workspace data',
   description: 'Live workspaces projection',
-  defaultEnabled: true,
   browser: '/packages/workspaces/src/browser/setup.js',
 };

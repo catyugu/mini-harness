@@ -1,15 +1,17 @@
-import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
+import type { Plugin } from 'mini-harness/cordis';
+import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 import { setup } from './setup.ts';
 
-export const manifest: PluginDescriptor = {
+export const metadata: PluginInfo = {
   scope: 'application',
-  id: 'core:ui',
   title: 'Browser transport',
   description: 'Browser startup and projections',
-  defaultEnabled: true,
-  plugin: {
-    inject: ['harnessPluginCatalog', 'harnessRoutes', 'harnessChanges'],
-    provide: ['harnessGateway'],
-    apply: setup,
-  },
 };
+
+const plugin: Plugin.Object = {
+  inject: ['harnessPluginCatalog', 'harnessRoutes', 'harnessChanges'],
+  provide: ['harnessGateway'],
+  apply: setup,
+};
+
+export default plugin;

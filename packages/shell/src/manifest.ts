@@ -1,25 +1,13 @@
-import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
+import type { Plugin } from 'mini-harness/cordis';
+import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 import { setup } from './server/setup.ts';
 import { Type } from 'typebox';
 import { supportsIsolation } from '@mini-harness/platform/isolation';
 
 export const defaultShellMode = supportsIsolation() ? 'isolated' : 'host';
 
-export const manifest: PluginDescriptor = {
+export const metadata: PluginInfo = {
   scope: 'application',
-  plugin: {
-    inject: [
-      'harnessSessions',
-      'harnessApprovalRequests',
-      'harnessProcess',
-      'harnessTools',
-      'harnessChanges',
-      'harnessScopes',
-    ],
-    apply: setup,
-  },
-  defaultEnabled: false,
-  id: 'shell',
   title: 'Shell',
   description: 'Run commands using the configured execution policy.',
   icon: 'terminal',
@@ -41,3 +29,17 @@ export const manifest: PluginDescriptor = {
     ),
   },
 };
+
+const plugin: Plugin.Object = {
+  inject: [
+    'harnessSessions',
+    'harnessApprovalRequests',
+    'harnessProcess',
+    'harnessTools',
+    'harnessChanges',
+    'harnessScopes',
+  ],
+  apply: setup,
+};
+
+export default plugin;

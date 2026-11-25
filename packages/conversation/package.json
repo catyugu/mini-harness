@@ -25,12 +25,12 @@
       "./view"
     ],
     "profileModules": {
-      "@mini-harness/conversation": "./src/manifests/conversation.ts#manifest",
-      "@mini-harness/conversation-composer": "./src/manifests/conversation.ts#composerManifest",
-      "@mini-harness/conversation-history": "./src/manifests/conversation.ts#historyManifest",
-      "@mini-harness/conversation-navigation": "./src/manifests/navigation.ts#manifest",
-      "@mini-harness/sessions-data": "./src/manifests/session-data.ts#manifest",
-      "@mini-harness/workspace-navigation": "./src/manifests/workspace.ts#manifest"
+      "@mini-harness/conversation": "./src/manifests/conversation.ts",
+      "@mini-harness/conversation-composer": "./src/manifests/conversation.ts#composer",
+      "@mini-harness/conversation-history": "./src/manifests/conversation.ts#history",
+      "@mini-harness/conversation-navigation": "./src/manifests/navigation.ts",
+      "@mini-harness/sessions-data": "./src/manifests/session-data.ts",
+      "@mini-harness/workspace-navigation": "./src/manifests/workspace.ts"
     }
   },
   "dependencies": {

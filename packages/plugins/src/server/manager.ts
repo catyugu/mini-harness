@@ -151,7 +151,7 @@ export class PluginHost implements ScopePort {
     return this.catalog.metadata(
       this.settings(),
       this.failures,
-      (id) => this.entries.get(id)?.active === true,
+      (id) => this.entries.get(id)?.active === true || this.browserState.entries.some((entry) => entry.id === id),
       (key) => this.configurationContext(key),
     );
   }
@@ -314,6 +314,7 @@ export class PluginHost implements ScopePort {
       if (active.has(key)) {
         contexts.set(key, group);
         for (const plan of plans) {
+          if (!plan.descriptor.plugin) continue;
           const id = key + '/' + plan.id;
           entries.push(this.entry(plan, address.scope, id, key, context));
           instances.set(id, { key, plugin: plan.id });
@@ -337,13 +338,15 @@ export class PluginHost implements ScopePort {
     context = this.ctx,
   ): EntryOptions {
     const { source, descriptor } = plan;
+    const plugin = descriptor.plugin;
+    if (!plugin) throw new Error('Missing server module: ' + plan.id);
     return {
       id,
       context,
       config: plan.config ?? {},
       module: descriptor.module ?? plan.id,
       live: descriptor.configChanges === 'live',
-      load: () => descriptor.plugin ?? { apply() {} },
+      load: () => plugin,
       prepare: (ctx) => {
         bindInstance(ctx.fiber.entry!, {
           pluginId: plan.id,
@@ -471,7 +474,7 @@ export class PluginHost implements ScopePort {
     const browser = planBrowser(plans);
     const mounts = [
       ...plans
-        .filter(({ id }) => !failures.has(id))
+        .filter(({ id, descriptor }) => descriptor.plugin && !failures.has(id))
         .map((plan) => this.entry(plan, appScope)),
       ...scoped.entries,
     ];
@@ -528,7 +531,12 @@ export class PluginHost implements ScopePort {
         );
       }
       {
-        const browserState = publishBrowser(browser, plans, (id) => this.entries.get(id)?.active === true);
+        const clientOnly = new Set(plans.filter(({ descriptor }) => !descriptor.plugin).map(({ id }) => id));
+        const browserState = publishBrowser(
+          browser,
+          plans,
+          (id) => !failures.has(id) && (clientOnly.has(id) || this.entries.get(id)?.active === true),
+        );
         commit();
         this.started = true;
         this.scopes = scoped.contexts;

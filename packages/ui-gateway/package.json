@@ -13,7 +13,7 @@
   },
   "miniHarness": {
     "profileModules": {
-      "@mini-harness/web-gateway": "./src/manifest.ts#manifest"
+      "@mini-harness/web-gateway": "./src/manifest.ts"
     }
   }
 }

@@ -29,6 +29,8 @@ test('YAML Profile composes through Cordis and persists Web entry changes', asyn
     assert.ok(web.ctx.get('harnessWeb'));
     assert.ok(web.ctx.get('harnessGateway'));
     assert.ok(web.ctx.harnessPluginCatalog.browser().some(({ id }) => id === 'files'));
+    assert.equal(web.ctx.harnessProfile.entries.get('core:layout'), undefined);
+    assert.ok(web.ctx.harnessPluginCatalog.browser().some(({ id }) => id === 'core:layout'));
     assert.ok(!web.ctx.harnessPluginCatalog.browser().some(({ id }) => id === 'git-diff'));
     assert.doesNotMatch(readFileSync(paths.settings, 'utf8'), /pluginConfig|providers|"plugins"/);
     await web.ctx.harnessSettingsStore.update({ plugins: { 'core:layout': false } });

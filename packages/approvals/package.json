@@ -15,8 +15,8 @@
       "./browser/api"
     ],
     "profileModules": {
-      "@mini-harness/approvals": "./src/manifest.ts#manifest",
-      "@mini-harness/approvals-data": "./src/browser/manifest.ts#manifest"
+      "@mini-harness/approvals": "./src/manifest.ts",
+      "@mini-harness/approvals-data": "./src/browser/manifest.ts"
     }
   },
   "dependencies": {

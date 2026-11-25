@@ -1,11 +1,9 @@
-import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
+import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 
-export const manifest: PluginDescriptor = {
+export const metadata: PluginInfo = {
   scope: 'application',
-  id: 'core:layout',
   title: 'Layout',
   description: 'Application layout',
-  defaultEnabled: true,
   browserStyles: [
     '/packages/ui-layout/src/browser/frame.css',
     '/packages/ui-layout/src/browser/responsive.css',

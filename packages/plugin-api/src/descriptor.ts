@@ -4,12 +4,11 @@ import type { PluginScope } from './scopes.ts';
 /** A symbolic icon name or an inline SVG path for plugin-defined artwork. */
 export type PluginIcon = string | { path: string; viewBox?: string };
 
-export interface PluginDescriptor {
-  id: string;
+/** Optional display and configuration information; not a Cordis plugin wrapper. */
+export interface PluginInfo {
   title: string;
   description: string;
   scope: PluginScope['kind'];
-  defaultEnabled?: boolean;
   /** Protected host and authorization service ownership. */
   protectServices?: readonly string[];
   trustedContributor?: boolean;
@@ -20,11 +19,17 @@ export interface PluginDescriptor {
   icon?: PluginIcon;
   configGroups?: { title: string; fields: string[] }[];
   configHint?: string;
-  provides?: string[];
   configSchema?: Record<string, any>;
   /** A mounted plugin may opt in to configuration updates without a restart. */
   configChanges?: 'live';
   validateConfig?(config: Readonly<Record<string, unknown>>, context: ConfigValidationContext): void;
+}
+
+/** Internal resolved entry, with the module and its display metadata kept distinct. */
+export interface PluginDescriptor extends PluginInfo {
+  id: string;
+  defaultEnabled?: boolean;
+  provides?: string[];
   inject?: string[];
   optional?: string[];
   plugin?: Plugin;

@@ -1,11 +1,9 @@
-import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
+import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 
-export const manifest: PluginDescriptor = {
+export const metadata: PluginInfo = {
   scope: 'application',
-  id: 'core:workspace-navigation',
   title: 'Workspace navigation',
   description: 'Workspace picker and browser panels',
-  defaultEnabled: true,
   browserStyles: ['/packages/conversation/src/browser/workspace/style.css'],
   browser: '/packages/conversation/src/browser/workspace/setup.js',
 };

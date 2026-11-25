@@ -1,15 +1,17 @@
-import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
+import type { Plugin } from 'mini-harness/cordis';
+import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 import { setup } from '../server/setup.ts';
 
-export const manifest: PluginDescriptor = {
+export const metadata: PluginInfo = {
   scope: 'application',
-  id: 'core:workspace',
   title: 'Workspaces',
   description: 'Workspace identity and registry',
-  defaultEnabled: true,
-  plugin: {
-    inject: ['harnessChanges', 'harnessState', 'harnessScopes', 'harnessSettingsStore'],
-    provide: ['harnessWorkspaces'],
-    apply: setup,
-  },
 };
+
+const plugin: Plugin.Object = {
+  inject: ['harnessChanges', 'harnessState', 'harnessScopes', 'harnessSettingsStore'],
+  provide: ['harnessWorkspaces'],
+  apply: setup,
+};
+
+export default plugin;

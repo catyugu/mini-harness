@@ -17,7 +17,7 @@
       "./policy"
     ],
     "profileModules": {
-      "@mini-harness/tools": "./src/manifest.ts#manifest"
+      "@mini-harness/tools": "./src/manifest.ts"
     }
   },
   "dependencies": {

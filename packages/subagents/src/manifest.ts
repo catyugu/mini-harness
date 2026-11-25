@@ -1,18 +1,13 @@
-import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
+import type { Plugin } from 'mini-harness/cordis';
+import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 import { setup } from './server/setup.ts';
 import { Type } from 'typebox';
 import { DomainError } from '@mini-harness/platform/errors';
 
 /** One self-contained plugin schema. Changes to child limits are safe during active runs. */
-export const manifest: PluginDescriptor = {
+export const metadata: PluginInfo = {
   scope: 'application',
-  plugin: {
-    inject: ['harnessTools', 'harnessSessions', 'harnessModels', 'harnessExecution'],
-    apply: setup,
-  },
-  defaultEnabled: true,
   configChanges: 'live',
-  id: 'subagents',
   title: 'Subagents',
   description: 'Delegate tasks to child conversations.',
   icon: 'delegate',
@@ -53,3 +48,10 @@ export const manifest: PluginDescriptor = {
     }
   },
 };
+
+const plugin: Plugin.Object = {
+  inject: ['harnessTools', 'harnessSessions', 'harnessModels', 'harnessExecution'],
+  apply: setup,
+};
+
+export default plugin;

@@ -19,7 +19,7 @@
     ],
     "profileModules": {
       "@mini-harness/settings-runtime": "./src/server/runtime.ts",
-      "@mini-harness/ui-settings": "./src/manifest.ts#manifest"
+      "@mini-harness/ui-settings": "./src/manifest.ts"
     }
   },
   "dependencies": {

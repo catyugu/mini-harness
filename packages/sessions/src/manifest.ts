@@ -1,15 +1,17 @@
-import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
+import type { Plugin } from 'mini-harness/cordis';
+import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 import { setup } from './setup.ts';
 
-export const manifest: PluginDescriptor = {
+export const metadata: PluginInfo = {
   scope: 'application',
-  id: 'core:sessions',
   title: 'Sessions',
   description: 'Session identity and durable history',
-  defaultEnabled: true,
-  plugin: {
-    inject: ['harnessScopes', 'harnessSettingsStore', 'harnessState', 'harnessWorkspaces'],
-    provide: ['harnessRegistry', 'harnessSessions'],
-    apply: setup,
-  },
 };
+
+const plugin: Plugin.Object = {
+  inject: ['harnessScopes', 'harnessSettingsStore', 'harnessState', 'harnessWorkspaces'],
+  provide: ['harnessRegistry', 'harnessSessions'],
+  apply: setup,
+};
+
+export default plugin;

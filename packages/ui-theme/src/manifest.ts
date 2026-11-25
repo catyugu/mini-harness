@@ -1,12 +1,10 @@
 import { Type } from 'typebox';
-import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
+import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 
-export const manifest: PluginDescriptor = {
+export const metadata: PluginInfo = {
   scope: 'application',
-  id: 'core:theme',
   title: 'Theme',
   description: 'Application theme',
-  defaultEnabled: true,
   configChanges: 'live',
   configSchema: Type.Object(
     {
