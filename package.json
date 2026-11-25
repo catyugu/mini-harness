@@ -1,5 +1,5 @@
 {
-  "name"   :   "mini-harness",
+  "name": "mini-harness",
   "version": "0.4.0",
   "description": "A minimal, plugin-first Web harness with a native agent kernel",
   "license": "MIT",
