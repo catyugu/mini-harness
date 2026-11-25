@@ -120,7 +120,9 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
     if (
       entry.type === 'compaction' &&
       entry.keepFromId !== null &&
-      !this.branchEntries(entry.parentId).some((item) => item.id === entry.keepFromId && item.type === 'message')
+      !this.branchEntries(entry.parentId).some(
+        (item) => item.id === entry.keepFromId && item.type === 'message',
+      )
     )
       throw new Error('Compaction boundary is not a message on the selected branch');
     if (entry.type === 'context-edit') {
@@ -164,10 +166,14 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
   }
 
   private project(leafId?: string | null) {
-    return projectLog(this.branchEntries(leafId), (id) => {
-      const raw = this.byId.get(id);
-      return raw?.type === 'tool-execution' ? raw.result : undefined;
-    }, this.run);
+    return projectLog(
+      this.branchEntries(leafId),
+      (id) => {
+        const raw = this.byId.get(id);
+        return raw?.type === 'tool-execution' ? raw.result : undefined;
+      },
+      this.run,
+    );
   }
 
   projection(leafId?: string | null) {
