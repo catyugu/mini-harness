@@ -99,12 +99,9 @@ export class PluginCatalog {
   }
 
   async runtimeDescriptors(settings: ProfileConfiguration): Promise<DiscoveredPlugin[]> {
-    const client = Object.values(settings.entries).some(
-      ({ name, disabled }) => name === '@mini-harness/web-gateway' && !disabled,
-    );
     const declarations = [
       ...Object.entries(settings.entries).map(([id, entry]) =>
-        this.describe(id, entry, entry.client ?? (client || !!entry.name?.endsWith('/client'))),
+        this.describe(id, entry, entry.client ?? true),
       ),
       ...scopeAddresses(settings).flatMap((key) =>
         Object.entries(settings.scopes[key]?.entries ?? {}).map(([id, entry]) =>

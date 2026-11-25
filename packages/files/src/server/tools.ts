@@ -3,6 +3,7 @@ import { TextDecoder } from 'node:util';
 import { Type } from 'typebox';
 import { defineTool, type ToolDefinition, type ToolResult } from '@mini-harness/tools/api';
 import type { RootedFileAccess } from '@mini-harness/file-access/api';
+import { WorkspaceSearch, readLimited } from './search.ts';
 
 export const fileToolNames = ['read', 'write', 'edit', 'ls', 'find', 'grep'] as const;
 const outputLimit = 48 * 1024;
@@ -26,7 +27,15 @@ function textFile(bytes: Buffer) {
   }
 }
 
-/** All file operations stay behind RootedFileAccess, including metadata and searches. */
+function imageType(prefix: Buffer) {
+  if (prefix.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex'))) return 'image/png';
+  if (prefix.subarray(0, 3).equals(Buffer.from('ffd8ff', 'hex'))) return 'image/jpeg';
+  if (/^GIF8[79]a/.test(prefix.toString('ascii', 0, 6))) return 'image/gif';
+  if (prefix.toString('ascii', 0, 4) === 'RIFF' && prefix.toString('ascii', 8, 12) === 'WEBP')
+    return 'image/webp';
+  return null;
+}
+
 export function fileTools(cwd: string, access: () => RootedFileAccess): ToolDefinition[] {
   return [
     defineTool({
@@ -41,12 +50,12 @@ export function fileTools(cwd: string, access: () => RootedFileAccess): ToolDefi
       async execute(_id, { path, offset = 1, limit = 2000 }, signal) {
         const files = access();
         signal?.throwIfAborted();
-        const imageType = await files.imageType(path);
-        const bytes = await files.readFile(path);
+        const bytes = await readLimited(files, path, undefined, signal);
+        const mimeType = imageType(bytes.subarray(0, 12));
         signal?.throwIfAborted();
-        if (imageType) {
+        if (mimeType) {
           if (bytes.length > 6 * 1024 * 1024) throw new Error('Image exceeds the 6 MiB input limit');
-          return { content: [{ type: 'image', mimeType: imageType, data: bytes.toString('base64') }] };
+          return { content: [{ type: 'image', mimeType, data: bytes.toString('base64') }] };
         }
         const lines = textFile(bytes).split('\n');
         if (offset > lines.length) throw new Error('Offset exceeds file length (' + lines.length + ' lines)');
@@ -103,7 +112,7 @@ export function fileTools(cwd: string, access: () => RootedFileAccess): ToolDefi
       async execute(_id, { path, edits }, signal) {
         const files = access();
         signal?.throwIfAborted();
-        let text = textFile(await files.readFile(path));
+        let text = textFile(await readLimited(files, path, undefined, signal));
         for (const { oldText, newText } of edits) {
           const index = text.indexOf(oldText);
           if (index === -1) throw new Error('Text to replace was not found in ' + path);
@@ -156,7 +165,7 @@ export function fileTools(cwd: string, access: () => RootedFileAccess): ToolDefi
       async execute(_id, { pattern, path = '.', limit = 1000 }, signal) {
         const files = access();
         signal?.throwIfAborted();
-        const matches = await files.find(pattern, path, limit);
+        const matches = await new WorkspaceSearch(cwd, files).find(pattern, path, limit, signal);
         signal?.throwIfAborted();
         return textResult(matches.join('\n') || 'No matches found');
       },
@@ -182,7 +191,7 @@ export function fileTools(cwd: string, access: () => RootedFileAccess): ToolDefi
       async execute(_id, input, signal) {
         const files = access();
         signal?.throwIfAborted();
-        const { matches, limited } = await files.grep(input, signal);
+        const { matches, limited } = await new WorkspaceSearch(cwd, files).grep(input, signal);
         return textResult(
           (matches.join('\n') || 'No matches found') + (limited ? '\n[Results limited]' : ''),
         );

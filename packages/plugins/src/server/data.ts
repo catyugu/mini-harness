@@ -17,18 +17,18 @@ function storagePath(service: object, directory: string, name: string, secret = 
   const instance = scope ? createHash('sha256').update(scope).digest('hex') : 'application';
   const root = join(directory, id, instance);
   mkdirSync(root, { recursive: true, mode: 0o700 });
-  if (relative(root, realpathSync(root))) throw new Error('Plugin data directory was redirected');
   const file = join(root, (secret ? '.' : '') + name + '.json');
-  const entry = lstatSync(file, { throwIfNoEntry: false });
-  if (
-    entry &&
-    (!entry.isFile() ||
-      entry.nlink !== 1 ||
-      (secret &&
-        process.platform !== 'win32' &&
-        (entry.uid !== process.getuid?.() || (entry.mode & 0o077) !== 0)))
-  )
-    throw new Error('Invalid plugin data file');
+  if (secret) {
+    if (relative(root, realpathSync(root))) throw new Error('Plugin data directory was redirected');
+    const entry = lstatSync(file, { throwIfNoEntry: false });
+    if (
+      entry &&
+      (!entry.isFile() ||
+        entry.nlink !== 1 ||
+        (process.platform !== 'win32' && (entry.uid !== process.getuid?.() || (entry.mode & 0o077) !== 0)))
+    )
+      throw new Error('Invalid protected plugin data file');
+  }
   return file;
 }
 

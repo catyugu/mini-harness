@@ -1,4 +1,5 @@
-import type { LlmPort } from '@mini-harness/llm/api';
+import type { ModelChoice } from '@mini-harness/llm/vocabulary';
+import type { Model, MutableModels, Api } from '@earendil-works/pi-ai';
 import type { ModelCatalogPort } from './api.ts';
 import type { ProviderInfo } from '../shared/catalog.ts';
 
@@ -12,7 +13,7 @@ export interface ProviderAdministration {
 }
 
 export interface ModelStorePort extends ModelCatalogPort, ProviderAdministration {
-  readonly llm: LlmPort;
+  piConnection(choice: ModelChoice): { model: Model<Api>; runtime: MutableModels } | undefined;
 }
 
 declare module 'mini-harness/cordis' {

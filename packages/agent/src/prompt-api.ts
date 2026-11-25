@@ -2,10 +2,10 @@ import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
 import type { ToolDefinition } from '@mini-harness/tools/api';
 
 export interface PromptContext {
-  sessionId: string;
-  cwd: string;
+  sessionId?: string;
+  cwd?: string;
   signal: AbortSignal;
-  tools: readonly Omit<ToolDefinition, 'execute' | 'isConcurrencySafe'>[];
+  tools?: readonly Omit<ToolDefinition, 'execute' | 'isConcurrencySafe'>[];
 }
 export interface PromptSection {
   id: string;

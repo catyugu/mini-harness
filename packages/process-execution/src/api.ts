@@ -1,3 +1,5 @@
+import type { Readable, Writable } from 'node:stream';
+
 export interface ProcessCommand {
   file: string;
   args?: readonly string[];
@@ -6,22 +8,21 @@ export interface ProcessCommand {
   windowsVerbatimArguments?: boolean;
 }
 
-export interface ProcessRequest extends ProcessCommand {
-  timeoutSeconds: number;
-  signal?: AbortSignal;
-}
-
-export interface ProcessResult {
+export interface ProcessExit {
   code: number | null;
   signal: NodeJS.Signals | null;
-  reason?: 'timeout' | 'cancelled' | 'output-limit';
-  stdout: string;
-  stderr: string;
-  truncated: boolean;
+}
+
+export interface RunningProcess {
+  readonly stdin: Writable;
+  readonly stdout: Readable;
+  readonly stderr: Readable;
+  /** Settles after the child and its stdio close. */
+  readonly finished: Promise<ProcessExit>;
 }
 
 export interface ProcessExecutionPort {
-  run(request: ProcessRequest): Promise<ProcessResult>;
+  start(command: ProcessCommand, signal?: AbortSignal): RunningProcess;
 }
 
 declare module 'mini-harness/cordis' {

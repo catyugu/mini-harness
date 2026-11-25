@@ -15,11 +15,11 @@ function failedMessage({ model, signal }: LlmRequest, error: unknown, partial = 
 }
 
 export async function requestModel(
-  llm: LlmPort,
+  llm: Pick<LlmPort, 'stream'>,
   request: LlmRequest,
   options: {
-    delta(text: string): void;
-    ended(attempt: number, failed: boolean): void;
+    delta?(text: string): void;
+    ended?(attempt: number, failed: boolean): void;
     retry?(failure: Omit<ModelFailure, 'sessionId'>): Promise<ModelRetry | undefined>;
   },
 ): Promise<NativeAssistantMessage> {
@@ -37,7 +37,7 @@ export async function requestModel(
           streamed = true;
           if (event.type === 'text-delta') {
             partial += event.text;
-            options.delta(event.text);
+            options.delta?.(event.text);
           }
         }
       }
@@ -47,15 +47,8 @@ export async function requestModel(
     }
     const failed =
       !!message.errorMessage || message.stopReason === 'error' || message.stopReason === 'aborted';
-    options.ended(attempt, failed);
-    if (
-      !failed ||
-      streamed ||
-      message.content.length ||
-      signal.aborted ||
-      message.stopReason === 'aborted' ||
-      attempt >= 3
-    )
+    options.ended?.(attempt, failed);
+    if (!failed || streamed || message.content.length || signal.aborted || message.stopReason === 'aborted')
       return message;
     try {
       const retry = await options.retry?.({

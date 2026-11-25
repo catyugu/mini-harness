@@ -14,7 +14,6 @@ export function conversationTools(
   registry: ToolPort = ctx.harnessTools,
 ) {
   const allowed = (tool: ToolDefinition) => ctx.get('harnessToolPolicy')?.(sessionId, tool) ?? true;
-  const available = (tool: ToolDefinition) => registry.isAvailable(tool) && allowed(tool);
   const denied = (tool: ToolDefinition) =>
     new Error('Tool denied by conversation or plugin policy: ' + tool.name);
 
@@ -26,19 +25,14 @@ export function conversationTools(
         ...tool,
         async execute(callId, args, signal, update, context) {
           const assertAuthorized = () => {
-            if (!registry.isAvailable(tool)) throw new Error('Tool is no longer available: ' + tool.name);
             if (!allowed(tool)) throw denied(tool);
           };
-          assertAuthorized();
           const input = { sessionId, tool: tool.name, callId, arguments: args };
           for (const { context: owner, callback } of ctx.events.listeners(
             'agent/tool-decision',
             scopeTarget(ctx, scope),
           )) {
-            const decision = await owner.fiber.run(
-              (signal) => callback({ ...structuredClone(input), signal }),
-              signal,
-            );
+            const decision = await owner.fiber.run((signal) => callback({ ...input, signal }), signal);
             if (decision === undefined) continue;
             if (decision === 'deny') throw denied(tool);
             throw new Error('Invalid tool policy decision');
@@ -48,7 +42,7 @@ export function conversationTools(
           return tool.execute(callId, args, signal, update, context && { ...context, assertAuthorized });
         },
         // Preserve the selected lease when the caller rechecks the advertised list.
-        available: () => available(tool),
+        available: () => tool.available() && allowed(tool),
       }),
     );
 }

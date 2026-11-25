@@ -1,13 +1,10 @@
-import { realpath } from 'node:fs/promises';
-import { relative } from 'node:path';
-import { containsPath } from '@mini-harness/platform/paths';
 import type { SandboxOptions, SandboxPort } from './api.ts';
 import type { ProcessCommand } from '@mini-harness/process-execution/api';
 import { supportsIsolation, bubblewrap } from '@mini-harness/platform/isolation';
 
 function isolationCommand(
   { file, args = [], cwd, env }: ProcessCommand,
-  { cpuSeconds, mounts = [] }: SandboxOptions,
+  { workingDirectory, limits, mounts = [] }: SandboxOptions,
 ): ProcessCommand {
   return {
     file: bubblewrap,
@@ -43,32 +40,29 @@ function isolationCommand(
       '/dev',
       '--tmpfs',
       '/tmp',
-      '--bind',
-      cwd,
-      '/workspace',
-      '--chdir',
-      '/workspace',
       ...mounts.flatMap(({ source, target, readOnly }) => [
         readOnly ? '--ro-bind' : '--bind',
         source,
         target,
       ]),
-      '--setenv',
-      'PATH',
-      '/usr/local/bin:/usr/bin:/bin',
-      '--setenv',
-      'HOME',
-      '/tmp',
+      '--chdir',
+      workingDirectory,
       ...Object.entries(env ?? {}).flatMap(([name, value]) =>
         value === undefined ? [] : ['--setenv', name, value],
       ),
       '--',
-      '/usr/bin/prlimit',
-      '--nofile=1024',
-      '--fsize=268435456',
-      '--cpu=' + cpuSeconds,
-      '--core=0',
-      '--',
+      ...(limits
+        ? [
+            '/usr/bin/prlimit',
+            ...[
+              ['cpu', limits.cpuSeconds],
+              ['nofile', limits.openFiles],
+              ['fsize', limits.fileBytes],
+              ['core', limits.coreBytes],
+            ].flatMap(([name, value]) => (value === undefined ? [] : ['--' + name + '=' + value])),
+            '--',
+          ]
+        : []),
       file,
       ...args,
     ],
@@ -76,22 +70,13 @@ function isolationCommand(
 }
 
 export class LinuxSandbox implements SandboxPort {
-  constructor(
-    private readonly protectedRoot: string,
-    private readonly platform = process.platform,
-  ) {}
+  constructor(private readonly platform = process.platform) {}
 
   async prepare(command: ProcessCommand, options: SandboxOptions) {
-    const { cwd } = command;
-    const { signal } = options;
-    signal?.throwIfAborted();
-    if (this.platform !== 'linux') throw new Error('Isolated shell requires Linux and bubblewrap');
-    const [root, protectedRoot] = await Promise.all([realpath(cwd), realpath(this.protectedRoot)]);
-    if (relative(root, cwd) || containsPath(root, protectedRoot) || containsPath(protectedRoot, root))
-      throw new Error('Use a canonical working directory separate from protected storage');
+    options.signal?.throwIfAborted();
+    if (this.platform !== 'linux') throw new Error('Isolation requires Linux and bubblewrap');
     if (!supportsIsolation())
       throw new Error('Isolation unavailable: Linux bubblewrap namespaces and prlimit are required');
-    signal?.throwIfAborted();
-    return isolationCommand({ ...command, cwd: root }, options);
+    return isolationCommand(command, options);
   }
 }

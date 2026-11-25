@@ -8,28 +8,6 @@ import { Type } from 'typebox';
 import { defineTool } from '../src/api.ts';
 import { ToolRegistry } from '../src/registry.ts';
 
-test('tool registry validates native JSON schemas before executing a plugin', async () => {
-  const registry = new ToolRegistry();
-  let calls = 0;
-  registry.register(
-    defineTool({
-      name: 'inspect',
-      description: 'Inspect',
-      parameters: Type.Object({ path: Type.String({ minLength: 1 }) }, { additionalProperties: false }),
-      async execute(_id, args) {
-        calls++;
-        return { content: [{ type: 'text', text: args.path }] };
-      },
-    }),
-  );
-  const tool = registry.list()[0];
-  await assert.rejects(tool.execute('call', { path: 1 }), /Invalid arguments/);
-  await assert.rejects(tool.execute('call', { path: 'ok', extra: true }), /Invalid arguments/);
-  assert.equal(calls, 0);
-  assert.equal((await tool.execute('call', { path: 'ok' })).content[0].type, 'text');
-  assert.equal(calls, 1);
-});
-
 test('scoped tools inherit locally and disposal aborts and drains active execution', async () => {
   const workspace = createScopeKey();
   const child = createScopeKey(workspace);
@@ -97,7 +75,7 @@ test('a scoped replacement invalidates existing leases and removal restores inhe
   const original = registry.list({ scope: child })[0];
   const remove = registry.register(make('scoped'), { scope: parent });
   assert.throws(() => registry.register(make('duplicate'), { scope: parent }), /Duplicate entry in scope/);
-  assert.equal(registry.isAvailable(original), false);
+  assert.equal(original.available(), false);
   await assert.rejects(original.execute('old', {}), /no longer available/);
   const replacement = registry.list({ scope: child })[0];
   assert.deepEqual((await replacement.execute('call', {})).content, [{ type: 'text', text: 'scoped' }]);

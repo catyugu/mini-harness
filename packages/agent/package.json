@@ -9,16 +9,15 @@
     "./manifests/agent": "./src/manifests/agent.ts",
     "./manifests/prompt": "./src/manifests/prompt.ts",
     "./prompt-api": "./src/prompt-api.ts",
-    "./stream": "./src/stream.ts",
-    "./tool-selection": "./src/tool-selection.ts"
+    "./model-request": "./src/model-request.ts",
+    "./tool-pipeline": "./src/tool-pipeline.ts",
+    "./compaction": "./src/compaction.ts"
   },
   "miniHarness": {
     "api": [
       "./api",
       "./events",
-      "./prompt-api",
-      "./stream",
-      "./tool-selection"
+      "./prompt-api"
     ],
     "profileModules": {
       "@mini-harness/agent": "./src/manifests/agent.ts",
@@ -31,10 +30,7 @@
   "dependencies": {
     "@mini-harness/input": "workspace:*",
     "@mini-harness/llm": "workspace:*",
-    "@mini-harness/models": "workspace:*",
-    "@mini-harness/platform": "workspace:*",
     "@mini-harness/plugin-api": "workspace:*",
-    "@mini-harness/sessions": "workspace:*",
     "@mini-harness/tools": "workspace:*"
   }
 }

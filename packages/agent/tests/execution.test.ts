@@ -7,8 +7,8 @@ import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { rmSync } from 'node:fs';
 import { Type } from 'typebox';
-import { NativeAgent } from '../src/agent.ts';
-import { dispatchTools, scheduleTools } from '../src/tool-pipeline.ts';
+import { AgentLoop } from '../src/agent.ts';
+import { SessionRun } from '../../runs/src/session-run.ts';
 import { nativeExecutor } from '../src/strategies.ts';
 import { basicCompaction } from '../src/compaction.ts';
 import { SessionRegistry } from '@mini-harness/sessions/registry';
@@ -42,7 +42,7 @@ const toolsAnswer = (...calls: ToolCallPart[]): NativeAssistantMessage => ({
 
 function fixture(
   t: TestContext,
-  llm: LlmPort,
+  llm: Pick<LlmPort, 'stream'>,
   retryModel?: () => Promise<ModelRetry>,
   thinkingLevels: (id: string) => ThinkingLevel[] | undefined = () => undefined,
   executor = nativeExecutor,
@@ -58,6 +58,8 @@ function fixture(
   ctx.provide('harnessTools', tools.service());
   ctx.provide('harnessModels', {
     list: () => [],
+    connection: () => undefined,
+    apiKey: async () => undefined,
     available: async () => [],
     resolve: (choice) => choice,
     capabilities: (choice) => ({
@@ -70,17 +72,18 @@ function fixture(
       thinkingLevels: thinkingLevels(choice.id),
     }),
   });
-  ctx.provide('harnessLlm', llm);
+  ctx.provide('harnessLlm', { ...llm, register: () => () => {} });
   ctx.provide('harnessToolExecutor', executor);
   ctx.provide('harnessCompaction', basicCompaction);
   ctx.provide('harnessPrompt', { build: async () => 'Fixture', register: () => () => {} });
   if (retryModel) ctx.on('agent/model-retry', retryModel);
-  const agent = new NativeAgent(sessions, () => ({ maxTurns: 8, autoCompact: false }));
+  ctx.provide('harnessAgent', new AgentLoop(() => 8));
+  const agent = new SessionRun(sessions, () => ({ autoCompact: false }));
   const record = sessions.create();
   return { agent, ctx, sessions, tools, record };
 }
 
-test('an alternative executor translates a model protocol through the same tool lease', async (t) => {
+test('an alternative executor owns the model protocol and executes without the registered implementation', async (t) => {
   let requests = 0,
     executions = 0;
   const { agent, ctx, tools, record, sessions } = fixture(
@@ -104,6 +107,22 @@ test('an alternative executor translates a model protocol through the same tool 
         message.content.some((part) => part.type === 'text' && part.text === 'call change')
           ? toolsAnswer(call('custom-call', 'change'))
           : message,
+      async execute(calls, _tools, execution) {
+        for (const call of calls) {
+          assert.equal(execution.start(call), undefined);
+          await execution.deliver(
+            {
+              role: 'toolResult',
+              toolCallId: call.id,
+              toolName: call.name,
+              content: [{ type: 'text', text: 'changed externally' }],
+              timestamp: Date.now(),
+              isError: false,
+            },
+            execution.signal,
+          );
+        }
+      },
     },
   );
   tools.register(
@@ -121,7 +140,7 @@ test('an alternative executor translates a model protocol through the same tool 
     fallback: model,
     signal: new AbortController().signal,
   });
-  assert.equal(executions, 1);
+  assert.equal(executions, 0);
   assert.equal(requests, 2);
   assert.ok(
     sessions
@@ -613,21 +632,24 @@ test('a fatal pipeline failure stops dispatch and drains active calls', async ()
   const started: string[] = [];
   let drained = 0;
   await assert.rejects(
-    dispatchTools(
-      { schedule: scheduleTools },
-      calls,
-      tools,
-      new AbortController().signal,
-      async (call, _tool, signal) => {
+    nativeExecutor.execute(calls, tools, {
+      cwd: process.cwd(),
+      signal: new AbortController().signal,
+      start(call) {
         started.push(call.id);
-        if (call.id === '0') throw new Error('Log write failed');
+        return undefined;
+      },
+      phase() {},
+      update() {},
+      async deliver(result, signal) {
+        if (result.toolCallId === '0') throw new Error('Log write failed');
         await new Promise<void>((resolve) => {
           if (signal.aborted) return resolve();
           signal.addEventListener('abort', () => resolve(), { once: true });
         });
         drained++;
       },
-    ),
+    }),
     /Log write failed/,
   );
   assert.equal(started.length, 16);
@@ -709,7 +731,7 @@ test('text models see historical placeholders in the request and audit snapshot,
 
 test('native compaction reduces context and preserves message identities and history', async (t) => {
   const { app, mock, request } = await httpFixture(t);
-  await app.runtime.configuration.update({ entries: { 'core:agent': { config: { autoCompact: false } } } });
+  await app.runtime.configuration.update({ entries: { 'core:runs': { config: { autoCompact: false } } } });
   const { body: session } = await request('/sessions', 'POST', {});
   const compact = () => request('/sessions/' + session.id + '/compact', 'POST');
   const small = await compact();
@@ -770,39 +792,4 @@ test('attachments enforce encoding, format and byte limits without creating file
   assert.match(binary.text, /Uploaded file: "b.pdf"/);
   assert.deepEqual(binary.files[0].bytes, Buffer.from([0, 1, 2]));
   assert.throws(() => prepareInput('a', new Array(9).fill({})), /eight/);
-});
-
-test('custom scheduling cannot substitute or duplicate an advertised tool call', async () => {
-  const calls = [call('one', 'first'), call('two', 'second')];
-  const signal = new AbortController().signal;
-  const seen: string[] = [];
-  await dispatchTools(
-    {
-      async schedule(calls, signal, execute) {
-        for (const item of [...calls].reverse()) await execute(item.id, signal);
-      },
-    },
-    calls,
-    new Map(),
-    signal,
-    async (call) => {
-      seen.push(call.id);
-    },
-  );
-  assert.deepEqual(seen, ['two', 'one']);
-  await assert.rejects(
-    dispatchTools(
-      {
-        async schedule(_calls, signal, execute) {
-          await execute('one', signal);
-          await execute('one', signal);
-        },
-      },
-      calls,
-      new Map(),
-      signal,
-      async () => {},
-    ),
-    /already scheduled/,
-  );
 });

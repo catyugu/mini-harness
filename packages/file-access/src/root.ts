@@ -13,14 +13,11 @@ import {
   unlink,
   type FileHandle,
 } from 'node:fs/promises';
-import { basename, dirname, matchesGlob, parse, relative, resolve, sep } from 'node:path';
-import type { SearchInput, RootedFileAccess } from './api.ts';
-import { RE2 } from 're2-wasm';
-import ignore from 'ignore';
+import { basename, dirname, parse, relative, resolve, sep } from 'node:path';
+import type { RootedFileAccess } from './api.ts';
 
 const linux = process.platform === 'linux';
 const windows = process.platform === 'win32';
-const readLimit = 16 * 1024 * 1024;
 const noFollow = linux ? constants.O_NOFOLLOW | constants.O_NONBLOCK : 0;
 const directories = linux ? noFollow | constants.O_DIRECTORY : 0;
 const descriptor = (handle: FileHandle) => '/proc/self/fd/' + handle.fd;
@@ -47,7 +44,7 @@ const missing = (error: unknown) => (error as NodeJS.ErrnoException).code === 'E
 export class RootedFiles implements RootedFileAccess {
   constructor(
     private readonly cwd: string,
-    private readonly state: string,
+    private readonly exclude?: (absolutePath: string) => boolean,
   ) {}
 
   private async location(path: string) {
@@ -56,11 +53,10 @@ export class RootedFiles implements RootedFileAccess {
     if (!containsPath(from, requested)) throw denied();
     const root = await realpath(from);
     if (!samePath(root, from)) throw denied();
-    const state = await realpath(this.state);
     const parts = relative(from, requested).split(sep).filter(Boolean);
     parts.forEach(checkName);
     const target = resolve(root, ...parts);
-    if (containsPath(state, target) || containsPath(this.state, requested)) throw denied();
+    if (this.exclude?.(target)) throw denied();
     return { root, parts };
   }
 
@@ -157,14 +153,8 @@ export class RootedFiles implements RootedFileAccess {
   async *chunks(path: string, signal?: AbortSignal): AsyncGenerator<Uint8Array> {
     const handle = await this.openFile(path);
     try {
-      const size = Math.min((await handle.stat()).size, readLimit);
-      for (let offset = 0; offset < size; ) {
-        signal?.throwIfAborted();
-        const buffer = Buffer.allocUnsafe(Math.min(64 * 1024, size - offset));
-        const { bytesRead } = await handle.read(buffer, 0, buffer.length, offset);
-        if (!bytesRead) break;
-        offset += bytesRead;
-        yield buffer.subarray(0, bytesRead);
+      for await (const chunk of handle.createReadStream({ autoClose: false, signal })) {
+        yield chunk as Buffer;
       }
     } finally {
       await handle.close();
@@ -172,18 +162,7 @@ export class RootedFiles implements RootedFileAccess {
   }
 
   readFile(path: string) {
-    return this.file(path, async (handle) => {
-      const size = (await handle.stat()).size;
-      if (size > readLimit) throw new DomainError('invalid_input', 'File exceeds the 16 MiB read limit');
-      const buffer = Buffer.allocUnsafe(size);
-      let offset = 0;
-      while (offset < size) {
-        const { bytesRead } = await handle.read(buffer, offset, size - offset, offset);
-        if (!bytesRead) break;
-        offset += bytesRead;
-      }
-      return buffer.subarray(0, offset);
-    });
+    return this.file(path, (handle) => handle.readFile());
   }
 
   async validatePath(path: string) {
@@ -195,7 +174,7 @@ export class RootedFiles implements RootedFileAccess {
     return this.file(path, async () => {});
   }
 
-  async writeFile(path: string, content: string, create = true, signal?: AbortSignal) {
+  async writeFile(path: string, content: string | Uint8Array, create = true, signal?: AbortSignal) {
     signal?.throwIfAborted();
     path = resolve(this.cwd, path);
     await this.location(path);
@@ -286,150 +265,11 @@ export class RootedFiles implements RootedFileAccess {
       for await (const entry of await opendir(dir)) {
         if (!(entry.isFile() || entry.isDirectory())) continue;
         const child = resolve(path, entry.name);
-        if (containsPath(this.state, child)) continue;
+        if (this.exclude?.(child)) continue;
         checkName(entry.name);
-        if (result.length >= 20000)
-          throw new DomainError('invalid_input', 'Directory exceeds the listing limit');
         result.push({ name: entry.name, directory: entry.isDirectory() });
       }
       return result.sort((a, b) => a.name.localeCompare(b.name));
     });
-  }
-
-  private async *walk(root: string, signal?: AbortSignal) {
-    type Rules = { dir: string; matcher: ReturnType<typeof ignore> };
-    const withRules = async (dir: string, inherited: Rules[]) => {
-      try {
-        const rules = await this.readFile(resolve(dir, '.gitignore'));
-        if (rules.length <= 128 * 1024)
-          return [...inherited, { dir, matcher: ignore().add(rules.toString('utf8')) }];
-      } catch {
-        /* An absent or unreadable optional ignore file adds no rules. */
-      }
-      return inherited;
-    };
-    root = resolve(this.cwd, root);
-    await this.location(root);
-    const ancestors: string[] = [];
-    for (let dir = root; !samePath(dir, resolve(this.cwd)); ) {
-      dir = dirname(dir);
-      ancestors.unshift(dir);
-    }
-    let inherited: Rules[] = [];
-    for (const dir of ancestors) inherited = await withRules(dir, inherited);
-    const pending = [{ dir: root, inherited }];
-    let visited = 0;
-    while (pending.length) {
-      signal?.throwIfAborted();
-      const item = pending.pop();
-      if (!item) break;
-      const { dir, inherited } = item;
-      const rules = await withRules(dir, inherited);
-      for (const entry of await this.entries(dir)) {
-        signal?.throwIfAborted();
-        if (++visited > 20000)
-          throw new DomainError('invalid_input', 'Search limit reached. Select a narrower directory.');
-        if (entry.name === '.git') continue;
-        const path = resolve(dir, entry.name);
-        let ignored = false;
-        for (const { dir, matcher } of rules) {
-          const result = matcher.test(
-            relative(dir, path).split(sep).join('/') + (entry.directory ? '/' : ''),
-          );
-          if (result.ignored || result.unignored) ignored = result.ignored;
-        }
-        if (ignored) continue;
-        if (entry.directory) pending.push({ dir: path, inherited: rules });
-        yield { path, ...entry };
-      }
-    }
-  }
-
-  async searchFiles(query: string, signal?: AbortSignal) {
-    if (query.length > 200) throw new Error('Search is too long');
-    const files: string[] = [];
-    for await (const entry of this.walk('.', signal)) {
-      const path = relative(this.cwd, entry.path).split(sep).join('/');
-      if (!entry.directory && path.toLowerCase().includes(query.toLowerCase())) files.push(path);
-      if (files.length >= 100) break;
-    }
-    return files;
-  }
-
-  imageType(path: string) {
-    return this.file(path, async (handle) => {
-      const buffer = Buffer.alloc(12);
-      const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
-      const prefix = buffer.subarray(0, bytesRead);
-      if (prefix.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex'))) return 'image/png';
-      if (prefix.subarray(0, 3).equals(Buffer.from('ffd8ff', 'hex'))) return 'image/jpeg';
-      if (/^GIF8[79]a/.test(prefix.toString('ascii', 0, 6))) return 'image/gif';
-      if (prefix.toString('ascii', 0, 4) === 'RIFF' && prefix.toString('ascii', 8, 12) === 'WEBP')
-        return 'image/webp';
-      return null;
-    });
-  }
-
-  async find(pattern: string, root: string, limit: number) {
-    if (pattern.length > 512) throw new Error('Glob is too long');
-    const base = resolve(this.cwd, root);
-    const files = [];
-    for await (const entry of this.walk(base)) {
-      if (
-        matchesGlob(
-          pattern.includes('/') ? relative(base, entry.path).split(sep).join('/') : entry.name,
-          pattern,
-        )
-      ) {
-        files.push(entry.path);
-        if (files.length >= limit) break;
-      }
-    }
-    return files;
-  }
-
-  async grep(input: SearchInput, signal?: AbortSignal) {
-    const { pattern, glob, literal, ignoreCase } = input;
-    if (!pattern || pattern.length > 4096 || (glob?.length ?? 0) > 512)
-      throw new DomainError('invalid_input', 'Invalid search pattern');
-    const expression = new RE2(
-      literal ? pattern.replace(/[.*+?^$${}()|[\]\\]/g, '\\$&') : pattern,
-      ignoreCase ? 'ui' : 'u',
-    );
-    const path = resolve(this.cwd, input.path || '.');
-    const directory = (await this.stat(path)).isDirectory();
-    const files = directory ? this.walk(path, signal) : [{ path, directory: false, name: basename(path) }];
-    const matches: string[] = [];
-    const limit = Math.max(1, Math.min(1000, Math.floor(input.limit ?? 100)));
-    const context = Math.max(0, Math.min(20, Math.floor(input.context ?? 0)));
-    let total = 0;
-    let count = 0;
-    search: for await (const entry of files) {
-      signal?.throwIfAborted();
-      const name = directory ? relative(path, entry.path).split(sep).join('/') : entry.name;
-      if (entry.directory || (glob && !matchesGlob(glob.includes('/') ? name : entry.name, glob))) continue;
-      const size = (await this.stat(entry.path)).size;
-      if (size > readLimit) continue;
-      const buffer = await this.readFile(entry.path);
-      total += buffer.length;
-      if (total > 32 * 1024 * 1024)
-        throw new Error('Search byte limit reached. Select a narrower directory.');
-      if (buffer.includes(0)) continue;
-      const lines = buffer.toString('utf8').split(/\r?\n/);
-      let previous = -1;
-      for (const [index, line] of lines.entries()) {
-        if (!expression.test(line)) continue;
-        for (
-          let i = Math.max(previous + 1, index - context, 0);
-          i <= Math.min(lines.length - 1, index + context);
-          i++
-        ) {
-          matches.push(name + (i === index ? ':' : '-') + (i + 1) + ': ' + lines[i].slice(0, 500));
-          previous = i;
-        }
-        if (++count >= limit) break search;
-      }
-    }
-    return { matches, limited: count >= limit };
   }
 }

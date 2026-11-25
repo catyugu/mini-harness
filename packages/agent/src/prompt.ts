@@ -41,10 +41,7 @@ export class Prompt implements PromptPort {
     )) {
       context.signal.throwIfAborted();
       const { signal, ...input } = context;
-      const text = await owner.fiber.run(
-        (signal) => section.render({ ...structuredClone(input), signal }),
-        signal,
-      );
+      const text = await owner.fiber.run((signal) => section.render({ ...input, signal }), signal);
       if (text !== undefined && typeof text !== 'string')
         throw new Error('Invalid prompt section output: ' + section.id);
       if (text?.trim()) parts.push(text);

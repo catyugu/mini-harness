@@ -8,7 +8,8 @@ import { imageMimeType } from '@mini-harness/input/prepare';
 import { validateModelOptions } from '@mini-harness/llm/options';
 import type { Attachment, InputSource } from '@mini-harness/input/message';
 import type { CapabilityObservation } from '@mini-harness/plugin-api/observations';
-import { RunInterrupted } from '@mini-harness/agent/stream';
+import { SessionRun } from './session-run.ts';
+import { RunInterrupted } from './stream.ts';
 import type { StreamEvent, RunEvent } from './stream.ts';
 import { isRunning, type RunInfo } from '@mini-harness/sessions/run-state';
 import { RunEvents } from './events.ts';
@@ -45,6 +46,7 @@ export class Runs implements RunPort {
     private readonly scopes: ProfileScopes,
     private readonly observe: (event: CapabilityObservation, signal?: AbortSignal) => void,
     private readonly preference: ModelPreference,
+    private readonly sessionRun: SessionRun,
   ) {}
 
   private changed(id: string) {
@@ -163,7 +165,7 @@ export class Runs implements RunPort {
       return this.withAgentContext(id, activity, cancellation, async (ctx, signal) => {
         activity.inputSignal = signal;
         try {
-          return await ctx.harnessAgent.prompt(ctx, record, prepared.text, publish, {
+          return await this.sessionRun.prompt(ctx, record, prepared.text, publish, {
             fallback,
             beginSubmission: () => {
               info.inputEntryId = null;
@@ -314,7 +316,7 @@ export class Runs implements RunPort {
     reservation.done = prepare;
     try {
       await prepare;
-      const target = this.agent(id).revisionTarget(id, input.sourceEntryId, input.expectedLeafId);
+      const target = this.sessionRun.revisionTarget(id, input.sourceEntryId, input.expectedLeafId);
       const removed = input.removedImages ?? [];
       if (
         !Array.isArray(removed) ||
@@ -448,7 +450,7 @@ export class Runs implements RunPort {
     const signal = activity?.inputSignal;
     if (!activity?.context || !signal || signal.aborted)
       throw new DomainError('conflict', 'The agent is not streaming; send a new message');
-    return activity.context.harnessAgent.queueInput(activity.context, id, message, mode, attachments, {
+    return this.sessionRun.queueInput(activity.context, id, message, mode, attachments, {
       model,
       thinkingLevel,
       fallback: this.preference.recent(),
@@ -456,10 +458,9 @@ export class Runs implements RunPort {
   }
 
   async cancelQueue(id: string, itemId?: string, signal?: AbortSignal) {
-    const key = `session:${id}` as const;
-    if (!this.work.get(id)?.inputSignal) await this.scopes.prepare(key, signal);
+    signal?.throwIfAborted();
     this.assertOpen();
-    return this.agent(id).cancelQueue(id, itemId);
+    return this.sessionRun.cancelQueue(id, itemId);
   }
 
   cancel(id: string) {
@@ -480,7 +481,7 @@ export class Runs implements RunPort {
       .prepare(`session:${id}`, signal)
       .then(() =>
         this.withAgentContext(id, activity, signal, (ctx, signal) =>
-          ctx.harnessAgent.compact(ctx, id, signal),
+          this.sessionRun.compact(ctx, id, signal),
         ),
       ));
     try {
@@ -532,10 +533,6 @@ export class Runs implements RunPort {
       activity.context = undefined;
       await fiber.dispose();
     }
-  }
-
-  private agent(id: string) {
-    return this.scopes.require(`session:${id}`, 'harnessAgent');
   }
 
   async stop() {

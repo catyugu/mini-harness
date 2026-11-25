@@ -8,10 +8,9 @@ export const metadata: PluginInfo = {
 };
 
 const plugin: Plugin.Object = {
-  inject: ['harnessState'],
   provide: ['harnessSandbox'],
   apply(ctx) {
-    ctx.provide('harnessSandbox', new LinuxSandbox(ctx.harnessState.paths.home));
+    ctx.provide('harnessSandbox', new LinuxSandbox());
   },
 };
 

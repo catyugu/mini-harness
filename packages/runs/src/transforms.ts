@@ -6,11 +6,7 @@ export interface AgentListener<Handler> {
   callback: Handler;
 }
 
-export async function applyTransforms<
-  Value,
-  Input extends { sessionId: string; signal: AbortSignal },
-  Result,
->(
+export async function applyTransforms<Value, Input extends { signal: AbortSignal }, Result>(
   hooks: AgentListener<(value: Value, context: Input) => Result | undefined | Promise<Result | undefined>>[],
   value: Value,
   input: Input,
@@ -21,10 +17,10 @@ export async function applyTransforms<
     signal.throwIfAborted();
     try {
       const result = await context.fiber.run(
-        (signal) => callback(structuredClone(value), { ...structuredClone(data), signal } as Input),
+        (signal) => callback(structuredClone(value), { ...data, signal } as Input),
         signal,
       );
-      if (result !== undefined) value = validate(structuredClone(result));
+      if (result !== undefined) value = validate(result);
     } catch (error) {
       signal.throwIfAborted();
       const instanceId = entryFiber(context)?.entry?.options.id ?? 'fiber:' + context.fiber.uid;

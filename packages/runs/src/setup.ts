@@ -2,6 +2,7 @@ import { observe } from '@mini-harness/plugin-api/observations';
 import type { Context } from 'mini-harness/cordis';
 import { registerRoutes } from './routes.ts';
 import { sessionExecution } from './execution.ts';
+import { SessionRun } from './session-run.ts';
 import { Runs } from './runs.ts';
 
 export function setup(ctx: Context) {
@@ -11,6 +12,7 @@ export function setup(ctx: Context) {
     scopes,
     (event, signal) => observe(ctx, event, signal, catalog.runScope(event.sessionId)),
     ctx.harnessModelPreference,
+    new SessionRun(catalog, () => ctx.fiber.effectiveConfig as { autoCompact: boolean }),
   );
   ctx.provide('harnessRuns', runs);
   ctx.provide(

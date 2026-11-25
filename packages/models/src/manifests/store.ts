@@ -1,6 +1,6 @@
 import type { Plugin } from 'mini-harness/cordis';
 import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
-import { PiModelStore } from '../server/pi-adapter.ts';
+import { PiModelStore } from '../server/store.ts';
 
 export const metadata: PluginInfo = {
   title: 'Model store',

@@ -213,14 +213,29 @@ test('a third-party plugin uses tools, models and subprocesses from a Profile wi
     await mock.close();
     rmSync(root, { recursive: true, force: true });
   });
+  const configFile = join(paths.home, 'models.json');
+  const config = JSON.parse(readFileSync(configFile, 'utf8'));
+  for (const provider of ['adapter-one', 'adapter-two']) {
+    config.providers[provider] = {
+      api: provider + '-protocol',
+      baseUrl: mock.url,
+      apiKey: 'fixture-key',
+      models: [{ id: 'fixture' }],
+    };
+  }
+  writeJson(configFile, config);
   const directory = initializeProfile('capabilities', paths);
   writeText(
     join(directory, 'cordis.patch.yml'),
     `plugins:
   - name: '@mini-harness/tools'
   - name: '@mini-harness/model-store'
+  - name: '@mini-harness/model-catalog'
   - name: '@mini-harness/llm'
+  - name: '@mini-harness/pi-adapter'
   - name: '@mini-harness/process-execution'
+  - name: '@mini-harness/agent'
+  - name: '@mini-harness/tool-executor'
   - id: consumer
     name: ./consumer.mjs
 `,
@@ -229,25 +244,42 @@ test('a third-party plugin uses tools, models and subprocesses from a Profile wi
     join(directory, 'consumer.mjs'),
     `
     import { defineTool } from 'mini-harness/tools';
-    export const inject = ['harnessTools', 'harnessLlm', 'harnessProcess', 'harnessState'];
+    export const inject = ['harnessTools', 'harnessLlm', 'harnessModels', 'harnessProcess', 'harnessState'];
     export function apply(ctx) {
+      for (const id of ['adapter-one', 'adapter-two'])
+        ctx.effect(() => ctx.harnessLlm.register({
+          accepts: (model) => ctx.harnessModels.connection(model)?.api === id + '-protocol',
+          async *stream(request) {
+            if (await ctx.harnessModels.apiKey(request.model) !== 'fixture-key')
+              throw new Error('Adapter could not resolve the configured key');
+            const last = request.messages.at(-1);
+            const content = last?.role === 'toolResult'
+              ? [{ type: 'text', text: id + ': ' + last.content[0].text }]
+              : [{ type: 'toolCall', id: 'standalone-call', name: 'read_model', arguments: {} }];
+            yield { type: 'done', message: { role: 'assistant', content, timestamp: Date.now() } };
+          },
+        }));
       ctx.effect(() => ctx.harnessTools.register(defineTool({
         name: 'read_model',
         description: 'Read the model response',
         parameters: { type: 'object', properties: {} },
         async execute(_call, _args, signal) {
-          const child = await ctx.harnessProcess.run({
+          const child = ctx.harnessProcess.start({
             file: process.execPath,
             args: ['-e', 'process.stdout.write(process.env.QUERY)'],
             cwd: ctx.harnessState.paths.cwd,
             env: { QUERY: 'standalone' },
-            timeoutSeconds: 10,
-            signal,
-          });
-          if (child.code !== 0) throw new Error(child.stderr);
+          }, AbortSignal.any([AbortSignal.timeout(10000), ...(signal ? [signal] : [])]));
+          child.stdin.end();
+          const [stdout, stderr, status] = await Promise.all([
+            Array.fromAsync(child.stdout),
+            Array.fromAsync(child.stderr),
+            child.finished,
+          ]);
+          if (status.code !== 0) throw new Error(Buffer.concat(stderr).toString());
           const stream = ctx.harnessLlm.stream({
             model: { provider: 'local-mock', id: 'mock-model' },
-            messages: [{ role: 'user', content: child.stdout, timestamp: Date.now() }],
+            messages: [{ role: 'user', content: Buffer.concat(stdout).toString(), timestamp: Date.now() }],
             systemPrompt: '',
             signal,
           });
@@ -267,6 +299,28 @@ test('a third-party plugin uses tools, models and subprocesses from a Profile wi
     assert.equal(tool.name, 'read_model');
     assert.deepEqual((await tool.execute('call', {})).content, [{ type: 'text', text: 'Mock response' }]);
     assert.match(JSON.stringify(mock.requests[0]), /standalone/);
+    for (const provider of ['adapter-one', 'adapter-two']) {
+      const model = { provider, id: 'fixture' };
+      assert.deepEqual(app.ctx.harnessModels.resolve(model), model);
+      const signal = AbortSignal.timeout(10000);
+      const result = await app.ctx.harnessAgent.run(app.ctx, {
+        signal,
+        messages: [{ role: 'user', content: 'Use the tool', timestamp: Date.now() }],
+        prepare(_turn, history) {
+          const tools = app.ctx.harnessTools.list();
+          return {
+            request: {
+              model,
+              systemPrompt: '',
+              messages: [...history],
+            },
+            executor: app.ctx.harnessToolExecutor,
+            tools: new Map(tools.map((tool) => [tool.name, tool])),
+          };
+        },
+      });
+      assert.deepEqual(result.content, [{ type: 'text', text: provider + ': Mock response' }]);
+    }
   } finally {
     await app.close();
   }

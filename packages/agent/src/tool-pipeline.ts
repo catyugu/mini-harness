@@ -1,40 +1,20 @@
-import {
-  ToolApprovalDenied,
-  isToolContent,
-  type ToolDefinition,
-  type ToolResult,
-} from '@mini-harness/tools/api';
+import { ToolApprovalDenied, isToolContent, type ToolDefinition } from '@mini-harness/tools/api';
 import { Check } from 'typebox/value';
 import type { ToolCallPart, NativeToolMessage } from '@mini-harness/llm/api';
-import type { ToolDispatch, ToolScheduler } from './api.ts';
+import type { ToolExecutorPort } from './api.ts';
 
 const parallelLimit = 16;
 
-function safeToRunTogether(call: ToolCallPart, tool?: ToolDefinition) {
-  if (!tool?.isConcurrencySafe || call.argumentsError) return false;
-  try {
-    return (
-      Check(tool.parameters, call.arguments) &&
-      tool.isConcurrencySafe(structuredClone(call.arguments)) === true
-    );
-  } catch {
-    return false;
-  }
-}
-
-/** A serial call is a barrier. Each running call can persist its own result immediately. */
-export async function scheduleTools(
-  calls: readonly ToolDispatch[],
-  signal: AbortSignal,
-  run: (id: string, signal: AbortSignal) => Promise<void>,
-) {
+export const executeTools: ToolExecutorPort['execute'] = async (calls, tools, execution) => {
+  const { signal } = execution;
   const controller = new AbortController();
   const batchSignal = AbortSignal.any([signal, controller.signal]);
   const active = new Set<Promise<void>>();
   let failure: { error: unknown } | undefined;
-  const start = (call: ToolDispatch) => {
+  const start = (run: () => Promise<NativeToolMessage>) => {
     const task = Promise.resolve()
-      .then(() => run(call.id, batchSignal))
+      .then(run)
+      .then((result) => execution.deliver(result, batchSignal))
       .catch((error) => {
         if (!failure) {
           failure = { error };
@@ -47,95 +27,69 @@ export async function scheduleTools(
   };
   for (const call of calls) {
     if (failure) break;
-    if (call.parallel) {
-      start(call);
+    const tool = tools.get(call.name);
+    let invalid = call.argumentsError;
+    if (!invalid && tool && !Check(tool.parameters, call.arguments)) invalid = 'Schema mismatch';
+    let parallel = false;
+    if (!invalid && tool?.isConcurrencySafe) {
+      try {
+        parallel = tool.isConcurrencySafe(call.arguments);
+      } catch {
+        // A scheduling hint that fails leaves the call serial.
+      }
+    }
+    const run = async () => {
+      const skip = execution.start(call);
+      if (skip) return failedTool(call, skip);
+      return executeTool(call, tool, execution, batchSignal, invalid);
+    };
+    if (parallel) {
+      start(run);
       if (active.size === parallelLimit) await Promise.race(active);
     } else {
       await Promise.all(active);
       if (failure) break;
-      await start(call);
+      await start(run);
     }
   }
   await Promise.all(active);
   if (failure) throw failure.error;
-}
+};
 
-/** A scheduler cannot change an advertised call or substitute its authorized tool lease. */
-export async function dispatchTools(
-  executor: ToolScheduler,
-  calls: ToolCallPart[],
-  tools: ReadonlyMap<string, ToolDefinition>,
-  signal: AbortSignal,
-  run: (call: ToolCallPart, tool: ToolDefinition | undefined, signal: AbortSignal) => Promise<void>,
-) {
-  const pending = new Map(calls.map((call) => [call.id, call]));
-  const controller = new AbortController();
-  const lifetime = AbortSignal.any([signal, controller.signal]);
-  const active: Promise<void>[] = [];
-  let failure: { error: unknown } | undefined;
-  try {
-    await executor.schedule(
-      calls.map((call) => ({
-        id: call.id,
-        name: call.name,
-        parallel: safeToRunTogether(call, tools.get(call.name)),
-      })),
-      lifetime,
-      (id, scheduledSignal) => {
-        const call = pending.get(id);
-        if (!call) throw new Error('Unknown or already scheduled tool call: ' + id);
-        pending.delete(id);
-        const task = Promise.resolve().then(() =>
-          run(call, tools.get(call.name), AbortSignal.any([lifetime, scheduledSignal])),
-        );
-        active.push(task);
-        void task.catch((error) => {
-          failure ??= { error };
-          controller.abort(error);
-        });
-        return task;
-      },
-    );
-    if (pending.size) throw new Error('Tool executor omitted calls: ' + [...pending.keys()].join(', '));
-  } catch (error) {
-    failure ??= { error };
-    controller.abort(error);
-  } finally {
-    await Promise.allSettled(active);
-  }
-  if (failure) throw failure.error;
-}
+export const failedTool = (call: ToolCallPart, reason: string): NativeToolMessage => ({
+  role: 'toolResult',
+  toolCallId: call.id,
+  toolName: call.name,
+  content: [{ type: 'text', text: reason }],
+  isError: true,
+  timestamp: Date.now(),
+});
 
-/** Arguments, execution, errors and outputs pass through one native tool boundary. */
-export async function executeTool(
+async function executeTool(
   call: ToolCallPart,
   tool: ToolDefinition | undefined,
-  options: {
-    cwd: string;
-    signal: AbortSignal;
-    phase(state: 'approval' | 'running'): void;
-    update(result: ToolResult): void;
-  },
+  execution: Parameters<ToolExecutorPort['execute']>[2],
+  signal: AbortSignal,
+  invalid?: string,
 ): Promise<NativeToolMessage> {
   let start = performance.now();
   let approvalMs: number | undefined;
   let inApproval = false;
   try {
-    options.signal.throwIfAborted();
+    signal.throwIfAborted();
     if (!tool) throw new Error('Tool is no longer available: ' + call.name);
-    if (call.argumentsError) throw new Error('Invalid tool arguments: ' + call.argumentsError);
-    if (!Check(tool.parameters, call.arguments)) throw new Error('Invalid arguments for tool: ' + call.name);
+    if (invalid) throw new Error('Invalid arguments for ' + call.name + ': ' + invalid);
     const result = await tool.execute(
       call.id,
-      structuredClone(call.arguments),
-      options.signal,
-      options.update,
+      call.arguments,
+      signal,
+      (result) => execution.update(call, result),
       {
-        cwd: options.cwd,
+        cwd: execution.cwd,
         async waitForApproval(request) {
           inApproval = true;
           const requestedAt = performance.now();
-          options.phase('approval');
+          execution.phase(call, 'approval');
           try {
             await request();
           } finally {
@@ -143,31 +97,24 @@ export async function executeTool(
           }
           inApproval = false;
           start = performance.now();
-          options.phase('running');
+          execution.phase(call, 'running');
         },
       },
     );
     if (!result || !isToolContent(result.content)) throw new Error('Invalid result from tool: ' + call.name);
-    // JSON serialization rejects cycles and non-durable values before the caller acknowledges completion.
-    const stored: ToolResult = JSON.parse(JSON.stringify(result));
     return {
       role: 'toolResult',
       toolCallId: call.id,
       toolName: call.name,
-      content: stored.content,
-      details: approvalMs === undefined ? stored.details : { ...stored.details, approvalMs },
+      content: result.content,
+      details: approvalMs === undefined ? result.details : { ...result.details, approvalMs },
       isError: false,
       timestamp: Date.now(),
       elapsedMs: performance.now() - start,
     };
   } catch (error) {
     return {
-      role: 'toolResult',
-      toolCallId: call.id,
-      toolName: call.name,
-      content: [{ type: 'text', text: error instanceof Error ? error.message : String(error) }],
-      isError: true,
-      timestamp: Date.now(),
+      ...failedTool(call, error instanceof Error ? error.message : String(error)),
       elapsedMs: inApproval ? 0 : performance.now() - start,
       details:
         approvalMs === undefined

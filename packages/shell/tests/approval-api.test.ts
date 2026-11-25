@@ -1,4 +1,4 @@
-import { conversationTools } from '@mini-harness/agent/tool-selection';
+import { conversationTools } from '@mini-harness/runs/tool-selection';
 import { expectPresent } from '../../../test/support/required.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';

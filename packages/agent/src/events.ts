@@ -5,8 +5,8 @@ import type { NativeUserMessage, LlmRequest } from '@mini-harness/llm/api';
 import type { ToolResult } from '@mini-harness/tools/api';
 
 export interface StepContext {
-  readonly sessionId: string;
-  readonly cwd: string;
+  readonly sessionId?: string;
+  readonly cwd?: string;
   readonly model: Readonly<ModelChoice>;
   readonly turn: number;
   readonly phase: 'turn' | 'compaction';

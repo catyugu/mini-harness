@@ -271,6 +271,8 @@ function customEndpoint(provider?: ProviderInfo) {
   const url = required(element.querySelector<HTMLInputElement>('[name="url"]'));
   id.value = provider?.id ?? '';
   id.readOnly = Boolean(provider);
+  if (provider?.api && ![...api.options].some((option) => option.value === provider.api))
+    api.add(new Option(provider.api, provider.api));
   api.value = provider?.api ?? 'openai-completions';
   url.value = provider?.baseUrl ?? '';
   const models = required(element.querySelector('.endpoint-models'));

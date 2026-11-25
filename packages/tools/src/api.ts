@@ -10,7 +10,7 @@ export interface ToolResult {
   details?: Record<string, unknown>;
 }
 export interface ToolContext {
-  cwd: string;
+  cwd?: string;
   assertAuthorized?(): void;
   waitForApproval?(request: () => Promise<void>): Promise<void>;
 }
@@ -42,10 +42,13 @@ export interface ToolSelection {
   resourceId?: string;
 }
 
+export interface RegisteredTool extends ToolDefinition {
+  available(): boolean;
+}
+
 export interface ToolPort {
   register(tool: ToolDefinition | ToolFactory): () => Promise<void>;
-  list(selection?: ToolSelection): ToolDefinition[];
-  isAvailable(tool: ToolDefinition): boolean;
+  list(selection?: ToolSelection): RegisteredTool[];
 }
 
 export function isToolContent(value: unknown): value is ToolResult['content'] {

@@ -1,4 +1,4 @@
-/** Lowest priority wins. Contributions with the same key and priority conflict. */
+/** Highest priority wins. Contributions with the same key and priority conflict. */
 export class KeyedRegistry<Key, Value> {
   private readonly entries = new Map<Key, Set<{ value: Value; priority: number }>>();
 
@@ -17,7 +17,7 @@ export class KeyedRegistry<Key, Value> {
   get(key: Key) {
     let selected: { value: Value; priority: number } | undefined;
     for (const entry of this.entries.get(key) ?? [])
-      if (!selected || entry.priority < selected.priority) selected = entry;
+      if (!selected || entry.priority > selected.priority) selected = entry;
     return selected?.value;
   }
 

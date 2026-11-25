@@ -16,6 +16,8 @@ const plugin: Plugin.Object = {
       available: () => store.available(),
       resolve: (choice) => store.resolve(choice),
       capabilities: (choice) => store.capabilities(choice),
+      connection: (choice) => store.connection(choice),
+      apiKey: (choice) => store.apiKey(choice),
     });
   },
 };

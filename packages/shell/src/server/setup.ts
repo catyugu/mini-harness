@@ -2,6 +2,10 @@ import { defineTool } from '@mini-harness/tools/api';
 import type { Context } from 'mini-harness/cordis';
 import type { ProcessCommand } from '@mini-harness/process-execution/api';
 import { Type } from 'typebox';
+import { realpath } from 'node:fs/promises';
+import { relative } from 'node:path';
+import { containsPath } from '@mini-harness/platform/paths';
+import { runShellCommand } from './command.ts';
 
 export function setup(ctx: Context) {
   ctx.effect(() => ctx.harnessChanges.register('files'));
@@ -46,16 +50,27 @@ export function setup(ctx: Context) {
         let command: ProcessCommand;
         if (mode === 'isolated') {
           const sandbox = ctx.harnessProfileScopes.require(key, 'harnessSandbox');
+          const [root, state] = await Promise.all([realpath(cwd), realpath(ctx.harnessState.paths.home)]);
+          if (relative(root, cwd) || containsPath(root, state) || containsPath(state, root))
+            throw new Error('Use a canonical working directory separate from protected storage');
           command = await sandbox.prepare(
             {
               file: '/bin/sh',
               args: ['-c', args.command],
               cwd,
-              env: attachments ? { MINI_HARNESS_ATTACHMENTS: '/attachments' } : undefined,
+              env: {
+                PATH: '/usr/local/bin:/usr/bin:/bin',
+                HOME: '/tmp',
+                ...(attachments && { MINI_HARNESS_ATTACHMENTS: '/attachments' }),
+              },
             },
             {
-              cpuSeconds: timeoutSeconds,
-              mounts: attachments ? [{ source: attachments, target: '/attachments', readOnly: true }] : [],
+              workingDirectory: '/workspace',
+              limits: { cpuSeconds: timeoutSeconds, openFiles: 1024, fileBytes: 268435456, coreBytes: 0 },
+              mounts: [
+                { source: root, target: '/workspace' },
+                ...(attachments ? [{ source: attachments, target: '/attachments', readOnly: true }] : []),
+              ],
               signal,
             },
           );
@@ -75,7 +90,7 @@ export function setup(ctx: Context) {
               : { file: '/bin/sh', args: ['-c', args.command], cwd, env };
         }
         try {
-          const output = await execution.run({ ...command, timeoutSeconds, signal });
+          const output = await runShellCommand(execution, command, timeoutSeconds, signal);
           return {
             content: [{ type: 'text', text: JSON.stringify(output) }],
             details: { ...output, exitCode: output.code },

@@ -3,11 +3,15 @@ import { relative, resolve, sep } from 'node:path';
 import type { Context } from 'mini-harness/cordis';
 import { workspaceFiles } from '@mini-harness/workspaces/file-request';
 import { fileTools, fileToolNames } from './tools.ts';
+import { WorkspaceSearch } from './search.ts';
+import { containsPath } from '@mini-harness/platform/paths';
+import { realpathSync } from 'node:fs';
 
 export function setup(ctx: Context) {
   const { harnessChanges: changes } = ctx;
   ctx.effect(() => changes.register('files'));
   const sessions = ctx.harnessSessions;
+  const state = realpathSync.native(ctx.harnessState.paths.home);
 
   for (const [index, name] of fileToolNames.entries()) {
     const writes = name === 'edit' || name === 'write';
@@ -19,7 +23,9 @@ export function setup(ctx: Context) {
           const session = sessions.get(id);
           if (!session) throw new DomainError('not_found', 'Conversation not found');
           const tool = fileTools(root, () =>
-            ctx.harnessProfileScopes.require(`session:${id}`, 'harnessFileAccess').open(root),
+            ctx.harnessProfileScopes
+              .require(`session:${id}`, 'harnessFileAccess')
+              .open(root, { exclude: (path) => containsPath(state, path) }),
           )[index];
           return {
             ...tool,
@@ -49,8 +55,8 @@ export function setup(ctx: Context) {
     );
     web.effect(() =>
       web.harnessRoutes.register('GET', '/api/workspaces/:id/files/search', async (req) => {
-        const { files } = await workspaceFiles(ctx, req);
-        return files.searchFiles(req.url.searchParams.get('q') ?? '', req.signal);
+        const { files, root } = await workspaceFiles(ctx, req);
+        return new WorkspaceSearch(root, files).searchFiles(req.url.searchParams.get('q') ?? '', req.signal);
       }),
     );
   });

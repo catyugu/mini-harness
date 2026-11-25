@@ -9,6 +9,9 @@
     "./vocabulary": "./src/vocabulary.ts"
   },
   "miniHarness": {
+    "profileModules": {
+      "@mini-harness/llm": "./src/manifest.ts"
+    },
     "api": [
       "./api",
       "./options",

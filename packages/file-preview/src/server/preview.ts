@@ -31,7 +31,6 @@ export async function workspacePreview(
   }
   const bytes = Buffer.concat(chunks);
   if (mimeType) {
-    // File Access chunks are bounded. Never pass a partial media resource to the decoder.
     if (truncated || (info.size ?? bytes.length) > limit) return { kind: 'binary' };
     return { kind: 'bytes', mimeType, data: bytes.toString('base64') };
   }
@@ -40,9 +39,13 @@ export async function workspacePreview(
 }
 
 export async function downloadWorkspaceFile(files: RootedFileAccess, path: string, signal: AbortSignal) {
-  const bytes = await files.readFile(path);
-  signal.throwIfAborted();
-  if (bytes.length > workspaceReadLimit)
-    throw new DomainError('invalid_input', 'File exceeds the 16 MiB download limit');
-  return { data: bytes.toString('base64') };
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for await (const chunk of files.chunks(path, signal)) {
+    size += chunk.length;
+    if (size > workspaceReadLimit)
+      throw new DomainError('invalid_input', 'File exceeds the 16 MiB download limit');
+    chunks.push(chunk);
+  }
+  return { data: Buffer.concat(chunks).toString('base64') };
 }

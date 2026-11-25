@@ -102,7 +102,7 @@ test('overrides restore the previous contribution and release its node', () => {
       node: node(replacement),
       dispose: () => disposed.push('replacement'),
     }),
-    { priority: -1 },
+    { priority: 1 },
   );
   assert.deepEqual(disposed, ['base']);
   assert.ok(lifetimes.slice(0, 1).every(({ aborted }) => aborted));
@@ -134,7 +134,7 @@ test('a failed keyed replacement retains the mounted instance', () => {
         () => {
           throw new Error('render failed');
         },
-        { priority: -1 },
+        { priority: 1 },
       ),
     /render failed/,
   );
@@ -153,13 +153,13 @@ test('keyed priority is independent of display order and activation order', () =
   const stop = registry.define('sidebar.primary', node(outlet));
   const removeReplacement = registry.registerKeyed('sidebar.primary', 'button', () => node(replacement), {
     order: 30,
-    priority: -1,
+    priority: 1,
   });
   const removeBase = registry.registerKeyed('sidebar.primary', 'button', () => node(base), { order: 0 });
   registry.register('sidebar.primary', node(sibling), 20);
   assert.deepEqual(outlet.children, [sibling, replacement]);
   assert.throws(
-    () => registry.registerKeyed('sidebar.primary', 'button', () => node(element()), { priority: -1 }),
+    () => registry.registerKeyed('sidebar.primary', 'button', () => node(element()), { priority: 1 }),
     /Conflicting contribution priority/,
   );
   removeReplacement();

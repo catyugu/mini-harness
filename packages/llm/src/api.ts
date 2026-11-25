@@ -156,7 +156,15 @@ export type LlmEvent =
   | { type: 'thinking-delta'; text: string }
   | { type: 'tool-call'; call: ToolCallPart }
   | { type: 'done'; message: NativeAssistantMessage };
+export interface LlmAdapter {
+  /** Select using the same model choice that the caller supplies to stream(). */
+  accepts(model: Readonly<ModelChoice>): boolean;
+  stream(request: LlmRequest): AsyncIterable<LlmEvent>;
+}
+
 export interface LlmPort {
+  /** The highest-priority matching adapter is used. Equal matching priorities are ambiguous. */
+  register(adapter: LlmAdapter, priority?: number): () => void;
   stream(request: LlmRequest): AsyncIterable<LlmEvent>;
 }
 

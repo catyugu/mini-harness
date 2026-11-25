@@ -1,27 +1,21 @@
 import { ScopedLayers, scopeOf, type ScopeKey } from '@mini-harness/plugin-api/scopes';
 import { toolNamePattern } from '@mini-harness/llm/vocabulary';
-import { Check, Errors } from 'typebox/value';
 import { Service, type Context } from 'mini-harness/cordis';
 import {
-  isToolContent,
   type ToolDefinition,
+  type RegisteredTool,
   type ToolPort,
   type ToolFactory,
   type ToolSelection,
 } from './api.ts';
 interface ToolRegistration {
   name: string;
-  resolve(selection: ToolSelection): ToolDefinition;
+  resolve(selection: ToolSelection): RegisteredTool;
   visible(resourceId?: string): boolean;
 }
 
 export class ToolRegistry {
   private readonly tools = new ScopedLayers<ToolRegistration>();
-  private readonly leases = new WeakMap<
-    ToolDefinition,
-    { selection: ToolSelection; entry: ToolRegistration }
-  >();
-
   service(): ToolPort {
     const registry = this;
     return Service.track<ToolPort>({
@@ -30,7 +24,6 @@ export class ToolRegistry {
         return registry.register(definition, { context, scope: scopeOf(context) });
       },
       list: registry.list.bind(registry),
-      isAvailable: registry.isAvailable.bind(registry),
     });
   }
 
@@ -53,30 +46,16 @@ export class ToolRegistry {
       resolve(selection) {
         const tool = 'resolve' in definition ? definition.resolve(selection.resourceId!) : definition;
         if (tool.name !== name) throw new Error('Tool binding changed its registered name: ' + name);
-        const assertAvailable = () => {
-          if (!registry.isAvailable(leased)) throw new Error('Tool is no longer available: ' + name);
-        };
-        const leased: ToolDefinition = {
+        const available = () => registry.selected(name, selection) === entry;
+        return {
           ...tool,
+          available,
           async execute(call, args, signal, update, context) {
-            assertAvailable();
             const combined = signal ? AbortSignal.any([signal, lifetime.signal]) : lifetime.signal;
             const execute = async (signal: AbortSignal) => {
               signal.throwIfAborted();
-              assertAvailable();
-              const inputs = args;
-              if (!Check(tool.parameters, inputs)) {
-                const issue = [...Errors(tool.parameters, inputs)][0];
-                throw new Error(
-                  'Invalid arguments for ' +
-                    name +
-                    (issue ? ': ' + issue.instancePath + ' ' + issue.message : ''),
-                );
-              }
-              const result = await tool.execute(call, inputs, signal, update, context);
-              if (!result || !isToolContent(result.content))
-                throw new Error('Invalid result from tool: ' + name);
-              return result;
+              if (!available()) throw new Error('Tool is no longer available: ' + name);
+              return tool.execute(call, args, signal, update, context);
             };
             const work = owner
               ? owner.fiber.run(execute, combined)
@@ -89,8 +68,6 @@ export class ToolRegistry {
             }
           },
         };
-        registry.leases.set(leased, { selection, entry });
-        return leased;
       },
     };
     const remove = this.tools.add(scope, name, entry);
@@ -108,11 +85,6 @@ export class ToolRegistry {
     }
   }
 
-  isAvailable(tool: ToolDefinition) {
-    const lease = this.leases.get(tool);
-    return !!lease && this.selected(lease.entry.name, lease.selection) === lease.entry;
-  }
-
   list(selection: ToolSelection = {}) {
     selection = { ...selection };
     const names = new Set(
@@ -121,7 +93,7 @@ export class ToolRegistry {
         .reverse()
         .flatMap((layer) => [...layer.keys()]),
     );
-    const available: ToolDefinition[] = [];
+    const available: RegisteredTool[] = [];
     for (const name of names) {
       const selected = this.selected(name, selection);
       if (selected) available.push(selected.resolve(selection));

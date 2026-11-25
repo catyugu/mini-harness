@@ -25,6 +25,8 @@ plugins:
     name: '@mini-harness/model-catalog'
   - id: core:llm
     name: '@mini-harness/llm'
+  - id: core:pi-adapter
+    name: '@mini-harness/pi-adapter'
   - id: core:runs
     name: '@mini-harness/runs'
   - id: core:models

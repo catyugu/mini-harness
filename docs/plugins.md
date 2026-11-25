@@ -49,9 +49,9 @@ A service provider declares `provide = ['exampleGreeting']` and calls `ctx.provi
 | Service                                        | Contract                                                                                                                                                                                                        |
 | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `harnessTools`                                 | Register a definition or a `{ name, resolve(resourceId) }` factory. Use `list()` to select standalone tools and `list({ scope, resourceId })` for scoped or resource-specific tools.                            |
-| `harnessLlm`                                   | Stream a model response with `stream({ model, systemPrompt, messages, signal })`.                                                                                                                               |
-| `harnessProcess`                               | Run an executable with arguments, a working directory, and an optional explicit environment.                                                                                                                    |
-| `harnessFileAccess`                            | Open a file access handle with `open(root)`.                                                                                                                                                                    |
+| `harnessLlm`                                   | Register model streaming adapters and stream harness messages. Higher priority wins among matching adapters.                                                                                                    |
+| `harnessProcess`                               | Start an executable with `start(command, signal)` and use its stdio streams and exit promise.                                                                                                                   |
+| `harnessFileAccess`                            | Use Node operations through `native` or open a directory view with `open(root, options)`.                                                                                                                       |
 | `harnessPrompt`                                | Register a named section, with an optional order and a render callback. The nearest scope wins for a shared ID.                                                                                                 |
 | `harnessSessions`                              | Direct conversation methods accept explicit IDs. `records(id, owner)` reads or appends records for the selected owner on the active branch. Use `append(data, { title, content })` to publish a display record. |
 | `harnessExecution`                             | `submit(id, input, { signal })` goes through normal admission and returns a handle with its own result and cancellation.                                                                                        |
@@ -66,6 +66,10 @@ Runtime scopes use opaque object identities. Use `scopeOf(ctx)` from `mini-harne
 The Agent recognizes the `readOnly` tool tag when selecting tools for read-only conversations. An alternative `harnessToolExecutor` can present tools and interpret model messages in another protocol, while scheduling and executing only authorized calls.
 
 ### Events
+
+A server plugin can add a model protocol by declaring a provider in `models.json` with its own `api` identifier and registering a matching adapter. The existing model catalog lists those models and manages their credentials. The adapter can query `harnessModels.connection(model)` and resolve a key with `harnessModels.apiKey(model)`.
+
+An independent Profile can compose `@mini-harness/agent` and `@mini-harness/llm` with its chosen adapter and Tool Executor. Invoke `harnessAgent.run(ctx, input)` to run against an in-memory transcript. In the Web Profile, Runs supplies the transcript and persists it through Sessions.
 
 Use `agent/setup` to register capabilities for a particular running Agent. The callback receives its Cordis context, session ID and cancellation signal. Register run-local tools and prompt sections with `run.effect(() => run.get('harnessTools')!.register(...))` and `run.effect(() => run.get('harnessPrompt')!.register(...))`. These contributions are disposed with the run; child runs inherit active parent capabilities and keep their own overrides.
 

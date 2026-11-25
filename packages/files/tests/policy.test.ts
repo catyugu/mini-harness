@@ -1,3 +1,4 @@
+import { containsPath } from '@mini-harness/platform/paths';
 import { expectPresent } from '../../../test/support/required.ts';
 import test from 'node:test';
 import { fileTools } from '../src/server/tools.ts';
@@ -22,7 +23,7 @@ test('workspace tools share one policy for reads, searches and writes', async (t
   symlinkSync(privateDir, join(cwd, 'linked'), 'junction');
   writeFileSync(join(cwd, '.gitignore'), 'hidden.txt\n');
   writeFileSync(join(cwd, 'hidden.txt'), 'marked text');
-  const workspace = new RootedFiles(cwd, state);
+  const workspace = new RootedFiles(cwd, (path) => containsPath(state, path));
   const execute = (name: string, value: object) =>
     expectPresent(
       fileTools(cwd, () => workspace).find((tool) => tool.name === name),
@@ -66,7 +67,7 @@ test('failed or superseded atomic writes preserve the existing file and remove t
   mkdirSync(state);
   const file = join(root, 'edit.txt');
   writeFileSync(file, 'original');
-  const workspace = new RootedFiles(root, state);
+  const workspace = new RootedFiles(root, (path) => containsPath(state, path));
   const probe = await open(file);
   const handles: { writeFile: typeof probe.writeFile } = Object.getPrototypeOf(probe);
   await probe.close();

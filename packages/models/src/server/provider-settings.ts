@@ -1,7 +1,7 @@
 import { DomainError } from '@mini-harness/platform/errors';
 import { join } from 'node:path';
 import { readJson, writeJson } from '@mini-harness/platform/json';
-import type { ProviderInfo } from '../shared/catalog.ts';
+import { providerApiPattern, type ProviderInfo } from '../shared/catalog.ts';
 
 import type { ProviderAdministration } from './store-api.ts';
 
@@ -42,12 +42,8 @@ export async function saveProvider(runtime: ProviderHost, input: any, remove = f
       throw new DomainError('conflict', 'A provider with this ID already exists');
     if (input.key !== undefined && typeof input.key !== 'string')
       throw new DomainError('invalid_input', 'Invalid credential');
-    if (
-      !['openai-completions', 'openai-responses', 'anthropic-messages', 'google-generative-ai'].includes(
-        input.api,
-      )
-    )
-      throw new DomainError('invalid_input', 'Unsupported API type');
+    if (typeof input.api !== 'string' || !providerApiPattern.test(input.api))
+      throw new DomainError('invalid_input', 'Invalid API type');
     let url: URL;
     try {
       url = new URL(input.baseUrl);

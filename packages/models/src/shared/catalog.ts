@@ -1,5 +1,7 @@
 import type { ThinkingLevel, ModelChoice } from '@mini-harness/llm/vocabulary';
 
+export const providerApiPattern = /^[a-z][a-z0-9-]{0,79}$/;
+
 export interface ModelSummary extends ModelChoice {
   name: string;
   configured: boolean;
