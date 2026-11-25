@@ -58,7 +58,7 @@ export function createRightTabs(
   home.append(menu);
   const homeTitle = document.createElement('span');
   homeTitle.className = 'right-start-title';
-  homeTitle.append(icon('compass'), 'Start');
+  homeTitle.textContent = 'Start';
   view.bar.before(homeTitle);
 
   function render(focus = false) {
@@ -95,7 +95,6 @@ export function createRightTabs(
     homeTitle.hidden = Boolean(active);
     const selectedScope = scope;
     menu.replaceChildren(
-      ...(selectedScope && entries.size ? [icon('compass')] : []),
       ...(selectedScope
         ? [...entries]
             .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
