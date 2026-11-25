@@ -31,7 +31,7 @@ export class Selection extends EventTarget {
   selectConversation(item?: Conversation, revealWorkspace = true) {
     this.activeConversation = item?.id;
     if (item) {
-      this.selectWorkspace(item.workspaceId);
+      this.selectWorkspace(item.workspaceId ?? undefined);
       sessionStorage.setItem('mini-harness-active', item.id);
     } else sessionStorage.removeItem('mini-harness-active');
     this.dispatchEvent(new CustomEvent('selection', { detail: { item, revealWorkspace } }));

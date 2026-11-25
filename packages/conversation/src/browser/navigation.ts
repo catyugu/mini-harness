@@ -256,6 +256,29 @@ export function sessionNavigation(ctx: Context, options: NavigationServices) {
         options.report(error instanceof Error ? error : new Error(String(error)));
       }
     }
+    function sessionBranch(items: Conversation[], matches: boolean) {
+      return sessionTree(items, {
+      active: state.activeConversation,
+      expanded,
+      selection,
+      selecting,
+      query: matches ? '' : query,
+      highlight: query,
+      matches: contentMatches,
+      render,
+      selectionChanged,
+      activate: options.activate,
+      rename,
+      remove(item) {
+        void confirmAction('Permanently delete "' + item.title + '" and all child conversations?', {
+          title: 'Delete conversation',
+          signal,
+        })
+          .then((confirmed) => (confirmed ? remove([item.id]) : undefined))
+          .catch(options.report);
+      },
+    });
+    }
     function workspaceBranch(parent?: string) {
       const list = document.createElement('ul');
       list.className = 'workspace-branch';
@@ -263,27 +286,7 @@ export function sessionNavigation(ctx: Context, options: NavigationServices) {
         const { id, name, path } = record;
         const matches = !query || name.toLowerCase().includes(query) || path.toLowerCase().includes(query);
         const current = state.selectedWorkspace === id;
-        const tree = sessionTree(grouped.get(id) ?? [], {
-          active: state.activeConversation,
-          expanded,
-          selection,
-          selecting,
-          query: matches ? '' : query,
-          highlight: query,
-          matches: contentMatches,
-          render,
-          selectionChanged,
-          activate: options.activate,
-          rename,
-          remove(item) {
-            void confirmAction('Permanently delete "' + item.title + '" and all child conversations?', {
-              title: 'Delete conversation',
-              signal,
-            })
-              .then((confirmed) => (confirmed ? remove([item.id]) : undefined))
-              .catch(options.report);
-          },
-        });
+        const tree = sessionBranch(grouped.get(id) ?? [], matches);
         const branches = workspaceBranch(id);
         if (!matches && !tree.visible.length && !branches.childElementCount) continue;
         visible.push(...tree.visible);
@@ -391,6 +394,16 @@ export function sessionNavigation(ctx: Context, options: NavigationServices) {
       return list;
     }
     const tree = workspaceBranch();
+    const unbound = sessionBranch(grouped.get(null) ?? [], false);
+    if (unbound.visible.length) {
+      visible.push(...unbound.visible);
+      const section = document.createElement('li');
+      const heading = document.createElement('span');
+      heading.className = 'workspace-name';
+      heading.textContent = 'Without workspace';
+      section.append(heading, unbound.list);
+      tree.append(section);
+    }
     container.replaceChildren(tree);
     if (!tree.childElementCount) {
       const empty = document.createElement('p');
@@ -408,7 +421,7 @@ export function sessionNavigation(ctx: Context, options: NavigationServices) {
       workspaces = workspaceStore.get();
     const registered = new Set(workspaces.map(({ id }) => id));
     const available = new Set(
-      sessions.filter(({ workspaceId }) => registered.has(workspaceId)).map(({ id }) => id),
+      sessions.filter(({ workspaceId }) => (workspaceId === null || registered.has(workspaceId))).map(({ id }) => id),
     );
     for (const id of selection) if (!available.has(id)) selection.delete(id);
     const active = sessions.find(({ id }) => id === state.activeConversation);
@@ -429,7 +442,7 @@ export function sessionNavigation(ctx: Context, options: NavigationServices) {
         revealWorkspace: boolean;
       };
       if (!item) return;
-      if (workspace) revealWorkspace(item.workspaceId);
+      if (workspace && item.workspaceId) revealWorkspace(item.workspaceId);
       for (
         let parent = item.parentId;
         parent && !expanded.has(parent);

@@ -151,7 +151,7 @@ test('a corrupt log is isolated, remains deletable and never creates a log for a
     restored.inspectLog(unopened.id, (log) => log.entries()),
     undefined,
   );
-  assert.equal(existsSync(nativeFile(paths, new WorkspaceCatalog(paths), unopened, false)), false);
+  assert.equal(existsSync(nativeFile(paths, unopened, false)), false);
   assert.equal(restored.log(healthy.id).projection().messages[0].content, 'intact');
   assert.throws(() => restored.log(damaged.id), /session diagnostics/);
   assert.deepEqual(restored.diagnostics(), [{ id: damaged.id, message: 'Corrupt session log checksum' }]);

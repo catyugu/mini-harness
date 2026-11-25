@@ -34,7 +34,7 @@ export function workspaceTree(workspaces: WorkspaceRecord[], sessions: Conversat
     group.push(record);
     children.set(parent, group);
   }
-  const grouped = new Map<string, Conversation[]>();
+  const grouped = new Map<string | null, Conversation[]>();
   for (const session of sessions) {
     const group = grouped.get(session.workspaceId) ?? [];
     group.push(session);
