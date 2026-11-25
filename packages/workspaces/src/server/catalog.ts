@@ -1,6 +1,6 @@
 import { createScopeKey, type ScopeKey } from '@mini-harness/plugin-api/scopes';
 import { DomainError } from '@mini-harness/platform/errors';
-import { lstatSync, mkdirSync, readdirSync, realpathSync, statSync } from 'node:fs';
+import { lstatSync, mkdirSync, readdirSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { readJson, writeJson } from '@mini-harness/platform/json';
