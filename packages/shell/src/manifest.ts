@@ -33,13 +33,7 @@ export const metadata: PluginInfo = {
 
 const plugin: Plugin.Object = {
   Config,
-  inject: [
-    'harnessSessions',
-    'harnessProcess',
-    'harnessTools',
-    'harnessChanges',
-    'harnessScopes',
-  ],
+  inject: ['harnessSessions', 'harnessProcess', 'harnessTools', 'harnessChanges', 'harnessScopes'],
   apply: setup,
 };
 

@@ -3,7 +3,13 @@ import { toolNamePattern } from '@mini-harness/llm/vocabulary';
 import { Check, Errors } from 'typebox/value';
 import { Service, type Context } from 'mini-harness/cordis';
 import { agentScopeOf, findInstance, sessionVisible } from '@mini-harness/plugin-api/instance';
-import { isToolContent, type ToolDefinition, type ToolPort, type ToolRegistrationOptions, type ToolApproval } from './api.ts';
+import {
+  isToolContent,
+  type ToolDefinition,
+  type ToolPort,
+  type ToolRegistrationOptions,
+  type ToolApproval,
+} from './api.ts';
 import type { ToolDecision, ToolDecisionResult } from './events.ts';
 import type { ToolAccess, ToolPolicy } from './policy.ts';
 
@@ -21,7 +27,11 @@ export class ToolRegistry {
     private readonly address: (id: string) => readonly ScopeKey[] = () => [],
     private readonly decide?: (request: ToolDecision) => Promise<ToolDecisionResult>,
     private readonly authorize: ToolPolicy = () => true,
-    private readonly approve?: (request: ToolDecision, prompt: ToolApproval, owner?: Context) => Promise<boolean>,
+    private readonly approve?: (
+      request: ToolDecision,
+      prompt: ToolApproval,
+      owner?: Context,
+    ) => Promise<boolean>,
   ) {}
 
   service(): ToolPort {
@@ -103,13 +113,16 @@ export class ToolRegistry {
               }
               const request = { sessionId: id, tool: name, callId: call, arguments: inputs, signal };
               const decision = await registry.decide?.(request);
-              if (decision === 'deny') throw new Error('Tool denied by conversation or plugin policy: ' + name);
+              if (decision === 'deny')
+                throw new Error('Tool denied by conversation or plugin policy: ' + name);
               const ask = async (prompt: ToolApproval) => {
                 if (!registry.approve) throw new Error('User approval is unavailable');
                 signal.throwIfAborted();
                 assertAuthorized();
                 let automatic = false;
-                const confirm = async () => { automatic = await registry.approve!(request, prompt, owner); };
+                const confirm = async () => {
+                  automatic = await registry.approve!(request, prompt, owner);
+                };
                 if (context?.waitForApproval) await context.waitForApproval(confirm);
                 else await confirm();
                 signal.throwIfAborted();
