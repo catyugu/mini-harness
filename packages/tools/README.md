@@ -26,7 +26,7 @@ Uses Cordis fibers for plugin-owned calls and session ancestry for tool visibili
 
 Scoped `disabledTools` can restrict tools through an entire descendant tree.
 
-The registry receives the mandatory tool policy through `harnessToolPolicy`. Sessions interprets inherited permissions and user grants, and the registry checks the selected registration again before execution.
+The registry receives the mandatory tool policy through `harnessToolPolicy`. Sessions interprets inherited permissions and user restrictions, and the registry checks the selected registration again before execution.
 
 ## Testing
 

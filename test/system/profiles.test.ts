@@ -152,7 +152,7 @@ export function apply(ctx, config) {
   }
   const profile = await loadProfile('custom', paths, new Context());
   try {
-    profile.commit({ ...profile.read(), readOnlyTools: { example: ['read'] } });
+    profile.commit(profile.read());
   } finally {
     await profile.close();
   }
@@ -173,7 +173,7 @@ export function apply(ctx, config) {
   try {
     assert.equal(patched.ctx.get('profileResult'), 'temporary!');
     const profile = patched.ctx.harnessProfile;
-    profile.commit({ ...profile.read(), readOnlyTools: { example: ['read', 'search'] } });
+    profile.commit(profile.read());
     assert.doesNotMatch(readFileSync(file, 'utf8'), /temporary/);
   } finally {
     await patched.close();
