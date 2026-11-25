@@ -1,4 +1,3 @@
-import type { Context } from 'mini-harness/cordis';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { InputSource, PreparedMessage } from '@mini-harness/input/message';
 import type { NativeUserMessage, LlmRequest } from '@mini-harness/llm/api';

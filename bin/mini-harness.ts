@@ -18,7 +18,7 @@ function help() {
   console.log(`mini-harness — minimal native agent harness
 
 Usage:
-  mini-harness [--profile name] [--port 3837]              Start the local web interface
+  mini-harness [--profile name-or-yaml] [--port 3837]              Start the local web interface
   mini-harness --detached [--port 3837]   Run independently of this terminal
   mini-harness --no-open                 Start without opening a browser
   mini-harness status                    Show server status

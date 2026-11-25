@@ -83,7 +83,6 @@ function openAsset(path: string) {
   if (
     !before?.isFile() ||
     before.nlink !== 1 ||
-    before.size > 1024 * 1024 ||
     relative(path, realpathSync(path))
   )
     throw new HttpError('not_found', 'Not found');

@@ -1,7 +1,7 @@
 # Profiles
 
 A Profile is an independent private npm package under `~/.mini-harness/profiles/<name>/`
-(or `MINI_HARNESS_HOME`). The launcher always selects the package by name and loads
+(or `MINI_HARNESS_HOME`). The launcher normally selects the package by name and loads
 its `cordis.yml` root, followed by its ordered bundle layers and its
 `cordis.patch.yml` user layer. The first launch creates the default Web Profile.
 
@@ -10,9 +10,10 @@ mini-harness
 mini-harness --profile web
 mini-harness profile init custom --from web
 mini-harness --profile custom
+mini-harness --profile ./custom.yml
 ```
 
-Omit `--from web` to create an empty application. The directory is a standard
+An explicitly selected local YAML file is also a complete Profile, without a package manifest. Includes and relative module names resolve from their declaring file. Omit `--from web` to create an empty application. The directory is a standard
 npm dependency environment:
 
 ```text

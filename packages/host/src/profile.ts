@@ -198,10 +198,14 @@ function localDirectory(row: ResolvedRow, paths: Paths) {
   const directory = resolve(dirname(row.source!), name);
   const location = relative(paths.plugins, directory);
   if (localPluginIdPattern.test(location) || statSync(directory, { throwIfNoEntry: false })?.isDirectory())
-    return relative(paths.plugins, existsSync(directory) ? realpathSync(directory) : directory);
+    return location;
 }
 
 function profileLayers(name: string, paths: Paths) {
+  if (isAbsolute(name) || name.startsWith('./') || name.startsWith('../') || /\.ya?ml$/i.test(name)) {
+    const file = resolve(paths.cwd, name);
+    return { directory: dirname(file), file, shipped: [], userLayers: layers(file) };
+  }
   const directory = profileDirectory(name, paths);
   const manifestPath = join(directory, MANIFEST);
   if (!existsSync(manifestPath)) {
@@ -370,7 +374,10 @@ export async function loadProfile(name: string, paths: Paths, context: Context):
     }));
   const roots = [
     directory,
-    ...[...aliases.values()].map((location) => resolve(paths.plugins, location)),
+    ...[...aliases.values()].flatMap((location) => {
+      const directory = resolve(paths.plugins, location);
+      return existsSync(directory) ? [directory, realpathSync(directory)] : [directory];
+    }),
     ...sources.flatMap(({ row, module }) =>
       packagedModules.has(row.name!) ? [] : [dirname(fileURLToPath(module))],
     ),
