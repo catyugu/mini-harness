@@ -17,7 +17,10 @@ const plugin: Plugin.Object = {
       scope?: ScopeKey;
     }>();
     const changed = () => ctx.get('harnessChanges')?.invalidate('models');
-    function matches(caller: import('mini-harness/cordis').Context, model: import('./vocabulary.ts').ModelChoice) {
+    function matches(
+      caller: import('mini-harness/cordis').Context,
+      model: import('./vocabulary.ts').ModelChoice,
+    ) {
       return rankScoped(scopeOf(caller), adapters).filter(
         ({ adapter, owner }) => !owner.aborted && adapter.accepts(model),
       );

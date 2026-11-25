@@ -23,7 +23,10 @@ export function scopeChainOf(key?: ScopeKey): ScopeKey[] {
 }
 
 /** Rank visible contributions by nearest scope, then descending priority. */
-export function rankScoped<T extends { scope?: ScopeKey; priority: number }>(key: ScopeKey | undefined, entries: Iterable<T>) {
+export function rankScoped<T extends { scope?: ScopeKey; priority: number }>(
+  key: ScopeKey | undefined,
+  entries: Iterable<T>,
+) {
   const ancestry = [...scopeChainOf(key), undefined];
   return [...entries]
     .filter(({ scope }) => ancestry.includes(scope))

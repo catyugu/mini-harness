@@ -70,12 +70,18 @@ const plugin: Plugin.Object = {
         list() {
           const caller = Service.caller(this);
           const entries = visible(caller);
-          return merge(caller, entries, entries.map(({ source }) => source.list()));
+          return merge(
+            caller,
+            entries,
+            entries.map(({ source }) => source.list()),
+          );
         },
         async available() {
           const caller = Service.caller(this);
           const entries = visible(caller);
-          const groups = await Promise.all(entries.map(({ source }) => source.available?.() ?? source.list()));
+          const groups = await Promise.all(
+            entries.map(({ source }) => source.available?.() ?? source.list()),
+          );
           return merge(caller, entries, groups);
         },
         resolve(choice) {
