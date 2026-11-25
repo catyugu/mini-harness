@@ -674,3 +674,33 @@ export function apply(ctx) {
   assert.equal(readFileSync(file, 'utf8'), 'success\nfail\n');
   assert.notEqual(await root.harnessRuns.send(sibling.id, 'Default loop'), 'Custom answer');
 });
+
+
+test('Agent setup owns temporary tools and prompt sections and isolates sibling runs', async (t) => {
+  const { app, paths, mock, request } = await fixture(t);
+  writePlugin(paths.plugins, 'run-capabilities', {}, `
+export function apply(ctx) {
+  ctx.on('agent/setup', (run, id) => {
+    if (!run.get('harnessTools') || !run.get('harnessPrompt')) throw new Error('Missing run services');
+    run.effect(() => run.harnessTools.register({
+      name: 'run_marker',
+      description: 'A run-local tool',
+      parameters: { type: 'object', properties: {} },
+      async execute() { return { content: [{ type: 'text', text: id }] }; }
+    }));
+    run.effect(() => run.harnessPrompt.register({ id: 'run-marker', render: () => 'Run marker ' + id }));
+  });
+}
+`);
+  const configured = await request('/settings', 'PATCH', { plugins: { 'run-capabilities': true } });
+  assert.equal(configured.status, 200, JSON.stringify(configured.body));
+  const root = app.runtime.plugins.ctx;
+  const first = root.harnessRegistry.create();
+  const second = root.harnessRegistry.create();
+  await root.harnessRuns.send(first.id, 'First run');
+  assert.ok(!root.harnessTools.forSession(first.id).some(({ name }) => name === 'run_marker'));
+  await root.harnessRuns.send(second.id, 'Second run');
+  assert.match(JSON.stringify(mock.requests[0]), new RegExp('Run marker ' + first.id));
+  assert.match(JSON.stringify(mock.requests[1]), new RegExp('Run marker ' + second.id));
+  assert.doesNotMatch(JSON.stringify(mock.requests[1]), new RegExp('Run marker ' + first.id));
+});

@@ -1,3 +1,4 @@
+import type { Context } from 'mini-harness/cordis';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { InputSource, PreparedMessage } from '@mini-harness/input/message';
 import type { NativeUserMessage, LlmRequest } from '@mini-harness/llm/api';
@@ -63,6 +64,8 @@ export type ToolResultTransform = Transform<ToolResult['content'], ToolResultCon
 
 declare module 'mini-harness/cordis' {
   interface Events {
+    /** Configure capabilities owned by a single Agent run before its first step. */
+    'agent/setup'(ctx: Context, sessionId: string, signal: AbortSignal): void | Promise<void>;
     'agent/tool-result': ToolResultTransform;
     'agent/prepare-input': InputPreparation;
     'agent/model-request': ModelRequestTransform;

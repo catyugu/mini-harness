@@ -1,5 +1,5 @@
-import type { Context } from 'mini-harness/cordis';
-import { agentContext } from '@mini-harness/plugin-api/instance';
+import { Context } from 'mini-harness/cordis';
+import { agentContext, sessionEvent } from '@mini-harness/plugin-api/instance';
 import type { ThinkingLevel, ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { ScopeKey, ScopePort } from '@mini-harness/plugin-api/scopes';
 import { DomainError } from '@mini-harness/platform/errors';
@@ -160,7 +160,7 @@ export class Runs implements RunPort {
       return this.withAgentContext(id, activity, cancellation, async (ctx, signal) => {
         activity.inputSignal = signal;
         try {
-          return await this.agent(id).prompt(ctx, record, prepared.text, publish, {
+          return await ctx.harnessAgent.prompt(ctx, record, prepared.text, publish, {
             fallback,
             beginSubmission: () => {
               info.inputEntryId = null;
@@ -445,7 +445,7 @@ export class Runs implements RunPort {
     const signal = activity?.inputSignal;
     if (!activity?.context || !signal || signal.aborted)
       throw new DomainError('conflict', 'The agent is not streaming; send a new message');
-    return this.agent(id).queueInput(activity.context, id, message, mode, attachments, {
+    return activity.context.harnessAgent.queueInput(activity.context, id, message, mode, attachments, {
       model,
       thinkingLevel,
       fallback: this.preference.recent(),
@@ -476,7 +476,7 @@ export class Runs implements RunPort {
     const done = (activity.done = this.scopes
       .prepare(`session:${id}`, signal)
       .then(() =>
-        this.withAgentContext(id, activity, signal, (ctx, signal) => this.agent(id).compact(ctx, id, signal)),
+        this.withAgentContext(id, activity, signal, (ctx, signal) => ctx.harnessAgent.compact(ctx, id, signal)),
       ));
     try {
       await done;
@@ -491,12 +491,33 @@ export class Runs implements RunPort {
     signal: AbortSignal,
     work: (ctx: Context, signal: AbortSignal) => Promise<T>,
   ) {
-    const scope = this.scopes.context(`session:${id}`);
-    const fiber = agentContext(scope, id).plugin(function agentRun() {});
+    const key = `session:${id}` as const;
+    const scope = this.scopes.context(key);
+    let parent = scope;
+    for (const ancestor of [...this.scopes.address(key)].reverse()) {
+      if (ancestor === key || !ancestor.startsWith('session:')) continue;
+      const running = this.work.get(ancestor.slice(8))?.context;
+      if (!running || running.fiber.signal.aborted) continue;
+      // Preserve child session overrides while inheriting the live parent's Fiber.
+      const inherited = this.scopes.context(ancestor);
+      parent = running;
+      for (const name in scope[Context.isolate])
+        if (scope[Context.isolate][name] !== inherited[Context.isolate][name])
+          parent = parent.isolate(name, scope[Context.isolate][name]);
+      for (const name in scope[Context.intercept])
+        if (scope[Context.intercept][name] !== inherited[Context.intercept][name])
+          parent = parent.intercept(name, scope[Context.intercept][name]);
+      break;
+    }
+    const fiber = agentContext(parent, id).plugin(function agentRun() {});
     try {
       await fiber;
       activity.context = fiber.ctx;
-      return await fiber.run((signal) => work(fiber.ctx, signal), signal);
+      return await fiber.run(async (signal) => {
+        for (const { context, callback } of fiber.ctx.events.listeners('agent/setup', sessionEvent(fiber.ctx, id)))
+          await context.fiber.run((signal) => callback(fiber.ctx, id, signal), signal);
+        return work(fiber.ctx, signal);
+      }, signal);
     } finally {
       activity.context = undefined;
       await fiber.dispose();

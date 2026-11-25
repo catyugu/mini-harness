@@ -17,7 +17,7 @@ export function agentContext(ctx: Context, sessionId: string) {
   return ctx.extend({ [agentScope]: `session:${sessionId}` });
 }
 
-function agentScopeOf(ctx: Context): ScopeKey | undefined {
+export function agentScopeOf(ctx: Context): ScopeKey | undefined {
   return (ctx as Context & { [agentScope]?: ScopeKey })[agentScope];
 }
 
@@ -25,7 +25,7 @@ export function bindInstance(entry: FiberEntry, identity: PluginInstance) {
   identities.set(entry, Object.freeze(identity));
 }
 
-function findInstance(ctx: Context) {
+export function findInstance(ctx: Context) {
   for (let fiber = ctx.fiber; fiber.runtime; fiber = fiber.parent.fiber) {
     if (!fiber.entry) continue;
     const identity = identities.get(fiber.entry);
