@@ -300,25 +300,7 @@ test('plugin catalog applies configuration and removes disabled browser capabili
       release();
       await page.unroute('**/api/settings');
     }
-    await catalog.getByRole('button', { name: 'Install plugin', exact: true }).click();
-    const install = page.getByRole('dialog', { name: 'Install plugin' });
-    await install.getByLabel('Plugin ID', { exact: true }).fill('local-example');
-    await expect(install.getByRole('button', { name: 'Install plugin', exact: true })).toBeDisabled();
-    await install.getByLabel('Plugin bundle files').setInputFiles([
-      {
-        name: 'plugin.js',
-        mimeType: 'text/javascript',
-        buffer: Buffer.from('export function apply() {}'),
-      },
-      { name: 'plugin.json', mimeType: 'application/json', buffer: Buffer.from('{}') },
-    ]);
-    await expect(install.getByRole('list', { name: 'Selected files' }).getByRole('listitem')).toHaveText([
-      'plugin.js',
-      'plugin.json',
-    ]);
-    await install.getByRole('button', { name: 'Install plugin', exact: true }).click();
-    await expect(install).toBeHidden();
-    await expect(catalog.getByRole('switch', { name: 'local-example', exact: true })).not.toBeChecked();
+    await expect(catalog.getByRole('button', { name: 'Install plugin' })).toHaveCount(0);
     await catalog.getByRole('button', { name: 'Subagents settings' }).click();
     await catalog.getByRole('spinbutton', { name: 'Maximum child depth · subagents' }).fill('2');
     await catalog.getByRole('button', { name: 'Save configuration' }).click();

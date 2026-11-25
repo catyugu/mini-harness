@@ -5,7 +5,6 @@ import type { Settings } from '../shared/settings.ts';
 export interface SettingsPort {
   readonly settings: Settings;
   update(patch: unknown): Promise<Settings>;
-  forgetPlugin: SettingsManager['forgetPlugin'];
   forgetScopes(keys: ScopeKey[]): Promise<void>;
   writePlugin: SettingsManager['writePlugin'];
   subscribe(listener: () => void): () => void;

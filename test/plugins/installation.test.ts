@@ -1,4 +1,4 @@
-import { fixture, waitUntil } from '../support/api-fixture.ts';
+import { fixture } from '../support/api-fixture.ts';
 import { expectPresent } from '../support/required.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -210,135 +210,39 @@ export const apply = (ctx) => { ctx.harnessPluginRoutes.register('GET', '/label'
   },
 );
 
-test('local and browser-only plugins install disabled, mount when enabled and uninstall permanently', async (t) => {
+test('local modules mount and unmount without a separate installer', async (t) => {
   const { paths, request, base } = await fixture(t);
-  const route = '/extensions/gui-plugin/echo';
-  const bundle = {
-    id: 'gui-plugin',
-    files: [
-      { name: 'plugin.json', content: JSON.stringify({}) },
-      {
-        name: 'plugin.js',
-        content: `
-export const inject = ["harnessPluginRoutes"];
-export function apply(ctx, config) {
-      ctx.harnessPluginRoutes.register('POST', '/echo', async ({ body }) => ({ echo: await body() }));
-      if (config.fail) throw new Error('Setup failed after registering a route');
-    }
-`,
-      },
-      { name: 'web.js', content: 'export function apply(ctx) {}' },
-    ],
-  };
-  assert.equal((await request('/plugins/install', 'POST', bundle)).status, 201);
-  assert.ok(!(await request('/bootstrap')).body.ui.some((entry: { id: string }) => entry.id === bundle.id));
-  assert.equal((await request(route, 'POST', { value: 1 })).status, 404);
-  assert.equal((await request('/settings', 'PATCH', { plugins: { 'gui-plugin': true } })).status, 200);
-  const browser = (await request('/bootstrap')).body.ui.find(
-    (entry: { id: string }) => entry.id === bundle.id,
-  ).browser;
-  assert.match(await (await fetch(base + browser)).text(), /function/);
-  assert.deepEqual((await request(route, 'POST', { value: 1 })).body, { echo: { value: 1 } });
-  const failure = await request('/settings', 'PATCH', { pluginConfig: { 'gui-plugin': { fail: true } } });
-  assert.equal(failure.status, 400);
-  assert.match(failure.body.error, /Setup failed after registering a route/);
-  assert.deepEqual((await request(route, 'POST', { value: 2 })).body, { echo: { value: 2 } });
-  assert.equal((await request('/plugins/gui-plugin', 'DELETE')).status, 409);
-  await request('/settings', 'PATCH', { plugins: { 'gui-plugin': false } });
-  assert.equal((await request(route, 'POST', { value: 2 })).status, 404);
-  assert.equal((await request('/plugins/gui-plugin', 'DELETE')).status, 200);
-  assert.equal(existsSync(join(paths.plugins, 'gui-plugin')), false);
-  const after = (await request('/settings')).body;
-  assert.equal(after.plugins['gui-plugin'], undefined);
-  assert.equal(after.pluginConfig['gui-plugin'], undefined);
-  assert.equal(
-    (await request('/plugins/install', 'POST', { ...bundle, files: [{ name: '../escape.js', content: '' }] }))
-      .status,
-    400,
-  );
-  const installWithManifest = (content: string) =>
-    request('/plugins/install', 'POST', {
-      ...bundle,
-      files: [{ name: 'plugin.json', content }, ...bundle.files.slice(1)],
-    });
-  assert.match((await installWithManifest('[]')).body.error, /Expected an object in plugin.json/);
-  assert.match((await installWithManifest('{"scope":"invalid"}')).body.error, /Invalid plugin scope/);
-  assert.match(
-    (await request('/plugins/install', 'POST', { ...bundle, files: bundle.files.slice(1) })).body.error,
-    /Include plugin.json/,
-  );
-  assert.equal((await request('/bootstrap')).status, 200);
-  assert.equal(existsSync(join(paths.plugins, 'gui-plugin')), false);
-
-  assert.equal(
-    (
-      await request('/plugins/install', 'POST', {
-        id: 'browser-only',
-        files: [
-          { name: 'plugin.json', content: JSON.stringify({}) },
-          {
-            name: 'web.js',
-            content:
-              'export const inject = ["miniComposer"];\n\nexport const apply = (ctx) => { ctx.effect(() => ctx.miniComposer.command({name:"browser-only",description:"Test"})); };',
-          },
-        ],
-      })
-    ).status,
-    201,
-  );
-  assert.ok(
-    !(await request('/bootstrap')).body.ui.some((entry: { id: string }) => entry.id === 'browser-only'),
-  );
-  assert.equal((await request('/settings', 'PATCH', { plugins: { 'browser-only': true } })).status, 200);
-  const webEntry = (await request('/bootstrap')).body.ui.find(
-    (entry: { id: string }) => entry.id === 'browser-only',
-  ).browser;
-  assert.match(await (await fetch(base + webEntry)).text(), /browser-only/);
-  assert.equal((await request('/settings', 'PATCH', { plugins: { 'browser-only': false } })).status, 200);
-  assert.equal((await fetch(base + webEntry)).status, 404);
-  assert.equal((await request('/plugins/browser-only', 'DELETE')).status, 200);
-  const settings = (await request('/settings')).body;
-  assert.equal(settings.plugins['browser-only'], undefined);
-  assert.equal(settings.pluginConfig['browser-only'], undefined);
-});
-
-test('plugin file writes wait for an in-flight plugin configuration', async (t) => {
-  const { paths, request } = await fixture(t);
-  const folder = join(paths.plugins, 'slow-plugin');
-  const entered = join(folder, 'entered');
-  const release = join(folder, 'release');
+  const folder = join(paths.plugins, 'local-module');
   mkdirSync(folder);
-  writeFileSync(join(folder, 'plugin.json'), JSON.stringify({}));
+  writeJson(join(folder, 'plugin.json'), {});
   writeFileSync(
     join(folder, 'plugin.js'),
     `
-import { existsSync, writeFileSync } from 'node:fs';
-export const apply = async () => {
-      writeFileSync(${JSON.stringify(entered)}, 'ready');
-      while (!existsSync(${JSON.stringify(release)})) await new Promise((done) => setTimeout(done, 10));
-    };
+export const inject = ['harnessPluginRoutes'];
+export function apply(ctx, config) {
+  ctx.harnessPluginRoutes.register('POST', '/echo', async ({ body }) => ({ echo: await body() }));
+  if (config.fail) throw new Error('Setup failed after registering a route');
+}
 `,
   );
-  const updating = request('/settings', 'PATCH', { plugins: { 'slow-plugin': true } });
-  try {
-    await waitUntil(() => existsSync(entered), Boolean);
-    const installation = await request('/plugins/install', 'POST', {
-      id: 'another-plugin',
-      files: [{ name: 'plugin.js', content: 'export default () => {};' }],
-    });
-    assert.equal(installation.status, 409);
-    assert.match(installation.body.error, /Configuration is already changing/);
-    const removal = await request('/plugins/slow-plugin', 'DELETE');
-    assert.equal(removal.status, 409);
-    assert.match(removal.body.error, /Configuration is already changing/);
-    assert.equal(existsSync(folder), true);
-  } finally {
-    writeFileSync(release, 'done');
-    assert.equal((await updating).status, 200);
-  }
-  assert.equal((await request('/settings', 'PATCH', { plugins: { 'slow-plugin': false } })).status, 200);
-  assert.equal((await request('/plugins/slow-plugin', 'DELETE')).status, 200);
-  assert.equal(existsSync(folder), false);
+  writeFileSync(join(folder, 'web.js'), 'export function apply() {}');
+  const route = '/extensions/local-module/echo';
+  const id = 'local-module';
+  assert.equal((await request(route, 'POST', { value: 1 })).status, 404);
+  assert.equal((await request('/settings', 'PATCH', { plugins: { [id]: true } })).status, 200);
+  const browser = (await request('/bootstrap')).body.ui.find(
+    (entry: { id: string }) => entry.id === id,
+  ).browser;
+  assert.match(await (await fetch(base + browser)).text(), /function/);
+  assert.deepEqual((await request(route, 'POST', { value: 1 })).body, { echo: { value: 1 } });
+  const failure = await request('/settings', 'PATCH', { pluginConfig: { [id]: { fail: true } } });
+  assert.equal(failure.status, 400);
+  assert.match(failure.body.error, /Setup failed after registering a route/);
+  assert.deepEqual((await request(route, 'POST', { value: 2 })).body, { echo: { value: 2 } });
+  assert.equal((await request('/settings', 'PATCH', { plugins: { [id]: false } })).status, 200);
+  assert.equal((await request(route, 'POST', { value: 2 })).status, 404);
+  assert.equal((await fetch(base + browser)).status, 404);
+  assert.ok(existsSync(folder));
 });
 
 test('browser entries receive and edit their configuration without a field allowlist', async (t) => {

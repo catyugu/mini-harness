@@ -4,7 +4,7 @@ Discovers plugins and publishes configured Cordis entries and browser assets.
 
 ## Responsibilities
 
-Owns catalog discovery, installed plugin files, scoped entry composition, diagnostics, browser asset publication and the plugin settings UI.
+Owns catalog discovery, scoped entry composition, diagnostics, browser asset publication and the plugin settings UI.
 
 ## Structure
 

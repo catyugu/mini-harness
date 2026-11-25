@@ -13,10 +13,8 @@ import {
   button,
   field,
   fromMarkup,
-  iconButton,
   saveToggle,
   toggle,
-  confirmAction,
   required,
 } from '@mini-harness/ui-primitives/primitives';
 import { readPluginValues, schemaFields } from './fields.ts';
@@ -57,104 +55,6 @@ const setup = async (ctx: Context) => {
   browserFailures.subscribe(catalog.refresh, signal);
 };
 
-const bundleNames = ['plugin.js', 'plugin.json', 'web.js'];
-
-function installer(ctx: Context, installed: () => Promise<void>) {
-  const form = fromMarkup<HTMLFormElement>(`<form class="install-plugin">
-    <input class="bundle-input" type="file" multiple accept=".js,.json" aria-label="Plugin bundle files" tabindex="-1">
-    <div class="bundle-drop">
-      <span>Drop plugin files here or</span>
-      <ul class="bundle-files" aria-label="Selected files"></ul>
-    </div>
-    <p class="bundle-trust">Local plugins run with your user permissions. Install code you trust.</p>
-    <p class="hint form-error" role="alert"></p>
-    <div class="ui-actions"></div>
-  </form>`);
-  const { node: modal, dispose } = ctx.miniDialogs.create('Install plugin', form);
-  ctx.effect(() => dispose);
-  const id = fromMarkup<HTMLInputElement>(
-    '<input pattern="[a-z](?:[a-z0-9]|-){0,63}" placeholder="my-plugin" required>',
-  );
-  form.prepend(field('Plugin ID', id));
-  const input = required(form.querySelector<HTMLInputElement>('.bundle-input'));
-  const drop = required(form.querySelector<HTMLElement>('.bundle-drop'));
-  const list = required(form.querySelector('.bundle-files'));
-  const outcome = required(form.querySelector<HTMLElement>('[role="alert"]'));
-  const choose = button('Choose files');
-  choose.onclick = () => input.click();
-  drop.insertBefore(choose, list);
-  const cancel = button('Cancel', 'quiet');
-  cancel.onclick = () => modal.close();
-  const submit = button('Install plugin', 'primary');
-  submit.type = 'submit';
-  required(form.querySelector('.ui-actions')).append(cancel, submit);
-  let files: File[] = [];
-  let installing = false;
-
-  function setFiles(selection: File[]) {
-    files = selection;
-    const names = selection.map((file) => file.name);
-    let error = '';
-    if (names.some((name) => !bundleNames.includes(name)) || new Set(names).size !== names.length)
-      error = 'Choose one copy each of plugin.js, plugin.json and web.js.';
-    else if (!names.includes('plugin.json')) error = 'Include plugin.json.';
-    else if (!names.includes('plugin.js') && !names.includes('web.js'))
-      error = 'Include plugin.js or web.js (or both).';
-    else if (selection.reduce((total, file) => total + file.size, 0) > 1024 * 1024)
-      error = 'Plugin bundle exceeds 1 MiB.';
-    outcome.textContent = error;
-    submit.disabled = installing || Boolean(error);
-    list.replaceChildren(
-      ...selection.map((file) => {
-        const item = document.createElement('li');
-        item.textContent = file.name;
-        return item;
-      }),
-    );
-  }
-
-  input.onchange = () => setFiles([...(input.files ?? [])]);
-  drop.ondragover = (event) => {
-    event.preventDefault();
-    if (!installing) drop.dataset.dragging = 'true';
-  };
-  drop.ondragleave = (event) => {
-    if (!drop.contains(event.relatedTarget as Node)) delete drop.dataset.dragging;
-  };
-  drop.ondrop = (event) => {
-    event.preventDefault();
-    delete drop.dataset.dragging;
-    if (!installing) setFiles([...(event.dataTransfer?.files ?? [])]);
-  };
-  modal.addEventListener('close', () => {
-    form.reset();
-    setFiles([]);
-    outcome.textContent = '';
-  });
-  modal.addEventListener('cancel', (event) => {
-    if (installing) event.preventDefault();
-  });
-  form.onsubmit = async (event) => {
-    event.preventDefault();
-    if (submit.disabled) return;
-    installing = submit.disabled = choose.disabled = cancel.disabled = true;
-    try {
-      const bundle = await Promise.all(
-        files.map(async (file) => ({ name: file.name, content: await file.text() })),
-      );
-      await browserRequest(ctx, '/plugins/install', payload('POST', { id: id.value.trim(), files: bundle }));
-      await installed();
-      modal.close();
-    } catch (error) {
-      outcome.textContent = error instanceof Error ? error.message : String(error);
-    } finally {
-      installing = submit.disabled = choose.disabled = cancel.disabled = false;
-    }
-  };
-  submit.disabled = true;
-  return modal;
-}
-
 function pluginCatalog(
   ctx: Context,
   snapshot: () => { plugins: PluginMetadata[]; settings: Settings },
@@ -163,7 +63,6 @@ function pluginCatalog(
   modelCatalog: () => ModelCatalog,
   registry: Context['miniSettingsRegistry'],
 ) {
-  const signal = ctx.fiber.signal;
   const entry = fromMarkup<HTMLButtonElement>(
     '<button type="button" class="nav-action" aria-label="Browse plugins" aria-controls="pluginCatalog"><span class="nav-label">Plugins</span></button>',
   );
@@ -171,22 +70,14 @@ function pluginCatalog(
   const page =
     fromMarkup(`<section id="pluginCatalog" class="catalog-page" tabindex="-1" aria-label="Plugin catalog">
     <header class="catalog-header">
-      <div class="catalog-heading"><h1>Plugins</h1><p class="hint">Install, enable, and configure plugins.</p></div>
+      <div class="catalog-heading"><h1>Plugins</h1><p class="hint">Enable and configure Profile plugins.</p></div>
     </header>
     <p class="hint catalog-status" role="status"></p>
     <div class="catalog-content"></div>
   </section>`);
-  const openInstall = button('Install plugin', 'primary');
-  openInstall.prepend(icon('plus'));
   const header = required(page.querySelector('header'));
   const content = required(page.querySelector('.catalog-content'));
   const status = required(page.querySelector<HTMLElement>('.catalog-status'));
-  header.append(openInstall);
-  const modal = installer(ctx, async () => {
-    await refresh();
-    status.textContent = 'Plugin installed. Enable it to load it.';
-  });
-  openInstall.onclick = () => modal.showModal();
   entry.dataset.pageLink = 'plugins';
   ctx.effect(() => ctx.miniSlots.register('sidebar.actions', entry, -10));
   ctx.effect(() => pages.register('plugins', page));
@@ -406,7 +297,7 @@ function pluginCatalog(
       ...groups.map((group) => {
         const list = fromMarkup('<section class="catalog-group"><h2></h2></section>');
         required(list.querySelector('h2')).textContent = group.title;
-        if (!group.plugins.length) list.append(fromMarkup('<p class="hint">No local plugins installed.</p>'));
+        if (!group.plugins.length) list.append(fromMarkup('<p class="hint">No external plugins available.</p>'));
         for (const plugin of group.plugins) {
           const row = fromMarkup(`<article class="catalog-row">
           <button class="catalog-description ui-list-item" type="button">
@@ -439,36 +330,6 @@ function pluginCatalog(
           if (scoped) {
             control.disabled = true;
             control.title = 'Open plugin settings to select a scope';
-          }
-          const remove = plugin.trustedCode && !plugin.package
-            ? iconButton('Uninstall ' + plugin.title, 'trash', 'icon-button danger')
-            : undefined;
-          if (remove) {
-            remove.hidden = checked;
-            remove.onclick = async () => {
-              if (
-                !(await confirmAction('Permanently uninstall ' + plugin.title + '?', {
-                  title: 'Uninstall plugin',
-                  confirmLabel: 'Uninstall',
-                  signal,
-                }))
-              )
-                return;
-              remove.disabled = true;
-              status.textContent = '';
-              const deleted = await mutate(
-                () => browserRequest(ctx, '/plugins/' + plugin.id, { method: 'DELETE' }),
-                (error) => {
-                  status.textContent = error.message;
-                },
-              );
-              if (deleted) {
-                status.textContent ||= 'Plugin uninstalled.';
-                openInstall.focus();
-              }
-              remove.disabled = false;
-            };
-            controls.append(remove);
           }
           saveToggle(control, async (next) => {
             if (busy) return false;
@@ -533,7 +394,6 @@ export default {
     'miniSwitch',
     'miniBrowserFailures',
     'miniModels',
-    'miniDialogs',
     'miniSlots',
   ],
   provide: [],

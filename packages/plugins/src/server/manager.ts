@@ -153,10 +153,6 @@ export class PluginHost implements ScopePort {
       (key) => this.configurationContext(key),
     );
   }
-  reserved(id: string) {
-    return this.catalog.reserved(id);
-  }
-
   register(
     kind: ScopeAddress['scope']['kind'],
     resolve: (id: string) => ScopeAddress | undefined,

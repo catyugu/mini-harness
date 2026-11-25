@@ -13,8 +13,6 @@ export const metadata: PluginInfo = {
 const plugin: Plugin.Object = {
   inject: [
     'harnessPluginCatalog',
-    'harnessSettingsStore',
-    'harnessState',
     'harnessRoutes',
     'harnessMutations',
     'harnessChanges',
