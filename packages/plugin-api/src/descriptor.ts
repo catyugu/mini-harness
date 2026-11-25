@@ -10,8 +10,7 @@ export interface PluginDescriptor {
   description: string;
   scope: PluginScope['kind'];
   defaultEnabled?: boolean;
-  /** Runtime constraints declared by the active Profile and trusted built-in modules. */
-  required?: boolean;
+  /** Protected host and authorization service ownership. */
   protectServices?: readonly string[];
   trustedContributor?: boolean;
   web?: boolean;

@@ -923,7 +923,6 @@ test('a failed server entry does not publish its browser module', async (t) => {
       title: 'UI',
       description: '',
       defaultEnabled: true,
-      required: true,
       browser,
     },
     {

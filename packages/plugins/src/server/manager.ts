@@ -445,7 +445,6 @@ export class PluginHost implements ScopePort {
           { cause: error },
         );
       if (
-        descriptors.some((row) => row.id === id && row.required) ||
         this.catalog.lockedPlugins.has(id) ||
         previousActive.has(instance)
       )

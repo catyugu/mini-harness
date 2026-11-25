@@ -6,52 +6,40 @@ plugins:
     name: '@mini-harness/web-authentication'
   - id: core:web-server
     name: '@mini-harness/web-server'
-    required: true
     config:
       port: 3837
   - id: core:slots
     name: '@mini-harness/ui-slots'
-    required: true
     client: true
   - id: core:theme
     name: '@mini-harness/ui-theme'
-    required: true
     client: true
   - id: core:primitives
     name: '@mini-harness/ui-primitives'
-    required: true
     client: true
   - id: core:layout
     name: '@mini-harness/ui-layout'
-    required: true
     client: true
   - id: core:permission-settings
     name: '@mini-harness/ui-permission-settings'
-    required: true
     client: true
   - id: core:workspaces-data
     name: '@mini-harness/workspaces-data'
-    required: true
     client: true
   - id: core:sessions-data
     name: '@mini-harness/sessions-data'
-    required: true
     client: true
   - id: core:settings
     name: '@mini-harness/ui-settings'
-    required: true
     client: true
   - id: core:model-admin
     name: '@mini-harness/ui-models'
-    required: true
     client: true
   - id: core:plugins
     name: '@mini-harness/ui-plugins'
-    required: true
     client: true
   - id: core:ui
     name: '@mini-harness/web-gateway'
-    required: true
   - id: file-preview
     name: '@mini-harness/file-preview'
     client: true
@@ -60,27 +48,21 @@ plugins:
     client: true
   - id: core:approval-data
     name: '@mini-harness/approvals-data'
-    required: true
     client: true
   - id: core:navigation
     name: '@mini-harness/conversation-navigation'
-    required: true
     client: true
   - id: core:workspace-navigation
     name: '@mini-harness/workspace-navigation'
-    required: true
     client: true
   - id: core:conversation
     name: '@mini-harness/conversation'
-    required: true
     client: true
   - id: core:composer
     name: '@mini-harness/conversation-composer'
-    required: true
     client: true
   - id: core:history
     name: '@mini-harness/conversation-history'
-    required: true
     client: true
   - id: files
     client: true

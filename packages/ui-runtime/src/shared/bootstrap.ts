@@ -4,7 +4,6 @@ export interface BrowserEntry {
   browser: string;
   styles?: string[];
   preload?: string;
-  required?: boolean;
   config: Record<string, unknown>;
   liveConfig?: boolean;
 }

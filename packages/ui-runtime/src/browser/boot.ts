@@ -81,14 +81,11 @@ async function boot() {
       [...nextFailures].some(([id, message]) => currentFailures.get(id) !== message);
     if (changed) for (const [id, error] of failures) console.warn('Browser plugin ' + id, error);
     currentFailures = nextFailures;
-    const coreFailure = [...failures].find(([id]) =>
-      graph.get().ui.some((entry) => entry.id === id && entry.required),
-    );
     const status = document.getElementById('startupStatus');
-    if (coreFailure && status) {
+    if (failures.size && status) {
       status.hidden = false;
-      status.textContent = 'Required UI plugin failed: ' + coreFailure[0] + ': ' + String(coreFailure[1]);
-    } else if (status?.textContent?.startsWith('Required UI plugin failed: ')) {
+      status.textContent = 'Browser entries failed: ' + [...nextFailures].map(([id, message]) => id + ': ' + message).join('; ');
+    } else if (status?.textContent?.startsWith('Browser entries failed: ')) {
       status.hidden = true;
       status.textContent = '';
     }

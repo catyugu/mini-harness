@@ -85,8 +85,8 @@ export class PluginCatalog {
   effective<Settings extends PluginSettings>(settings: Settings): Settings {
     const plugins = { ...settings.plugins };
     const pluginConfig = { ...settings.pluginConfig };
-    for (const { id, scope, configSchema, defaultEnabled, required } of this.builtins.values()) {
-      if (scope === 'application' && !required) plugins[id] ??= defaultEnabled ?? false;
+    for (const { id, scope, configSchema, defaultEnabled } of this.builtins.values()) {
+      if (scope === 'application') plugins[id] ??= defaultEnabled ?? false;
       if (configSchema)
         pluginConfig[id] = configDefaults(configSchema, structuredClone(pluginConfig[id] ?? {}));
     }
@@ -94,9 +94,7 @@ export class PluginCatalog {
   }
 
   enabled(descriptor: PluginDescriptor, settings: PluginSettings) {
-    if (descriptor.required && settings.plugins[descriptor.id] === false)
-      throw new DomainError('invalid_input', 'Required Profile entry cannot be disabled: ' + descriptor.id);
-    return descriptor.required || (settings.plugins[descriptor.id] ?? descriptor.defaultEnabled) === true;
+    return (settings.plugins[descriptor.id] ?? descriptor.defaultEnabled) === true;
   }
 
   reserved(id: string) {
@@ -195,7 +193,7 @@ export class PluginCatalog {
     context: (scope?: ScopeKey) => Context,
   ): PluginMetadata[] {
     return this.descriptors()
-      .filter(({ id, required }) => !required && !this.lockedPlugins.has(id) && localPluginIdPattern.test(id))
+      .filter(({ id }) => !this.lockedPlugins.has(id) && localPluginIdPattern.test(id))
       .map((descriptor) => {
         const {
           id,

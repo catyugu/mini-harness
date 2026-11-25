@@ -20,7 +20,6 @@ interface Row {
   disabled?: boolean;
   client?: boolean;
   config?: Record<string, unknown>;
-  required?: boolean;
 }
 
 interface Layer {
@@ -136,14 +135,14 @@ function load(file: string, optional = false): Layer | undefined {
       if (
         !object(row) ||
         Object.keys(row).some(
-          (key) => !['id', 'name', 'disabled', 'client', 'config', 'required'].includes(key),
+          (key) => !['id', 'name', 'disabled', 'client', 'config'].includes(key),
         ) ||
         typeof row.id !== 'string' ||
         !pluginIdPattern.test(row.id) ||
         ids.has(row.id) ||
         (row.name !== undefined && (typeof row.name !== 'string' || !row.name.trim())) ||
         (row.config !== undefined && !object(row.config)) ||
-        ['disabled', 'client', 'required'].some(
+        ['disabled', 'client'].some(
           (key) => row[key] !== undefined && typeof row[key] !== 'boolean',
         )
       )
@@ -281,7 +280,6 @@ export async function profileDescriptors(entries: ReadonlyMap<string, Row>) {
           ...descriptor,
           id: row.id,
           defaultEnabled: !row.disabled,
-          required: row.required,
           browser: row.client ? descriptor.browser : undefined,
           browserStyles: row.client ? descriptor.browserStyles : undefined,
         };
@@ -434,8 +432,6 @@ export async function loadProfile(name: string, paths: Paths, context: Context):
       );
       if (Object.keys(changed).length) row.config = changed;
       if (existing?.client !== undefined && existing.client !== base?.client) row.client = existing.client;
-      if (existing?.required !== undefined && existing.required !== base?.required)
-        row.required = existing.required;
       if (Object.keys(row).length > 1) plugins.push(row);
     }
     const rules = Object.fromEntries(

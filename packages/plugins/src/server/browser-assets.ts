@@ -118,7 +118,6 @@ export function planBrowser(plans: ConfiguredPlugin[]): BrowserEntry[] {
       preload: resources.preload,
       config: config ?? {},
       liveConfig: descriptor.configChanges === 'live',
-      required: descriptor.required,
     }];
   });
 }
