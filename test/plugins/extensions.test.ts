@@ -471,3 +471,52 @@ export const apply = (ctx) => {
   await run;
   assert.equal(state.cleaned, true);
 });
+
+test('Web runs with an independent model contribution and no Pi model store', async (t) => {
+  const { app, paths, request } = await fixture(t);
+  writePlugin(
+    paths.plugins,
+    'independent-model',
+    {},
+    `
+export const inject = ['harnessModels', 'harnessLlm'];
+export function apply(ctx) {
+  const resolve = (choice) => choice.provider === 'local-fixture'
+    ? { provider: 'local-fixture', id: choice.id || 'one' }
+    : undefined;
+  ctx.effect(() => ctx.harnessModels.register({
+    list: () => [{ provider: 'local-fixture', id: 'one', name: 'One', configured: true, thinkingLevels: [], input: ['text'] }],
+    resolve,
+    capabilities: (choice) => ({ ...choice, name: choice.id, input: ['text'], contextWindow: 32000, maxTokens: 1024, reasoning: false }),
+  }));
+  ctx.effect(() => ctx.harnessLlm.register({
+    accepts: (choice) => choice.provider === 'local-fixture',
+    async *stream() {
+      yield { type: 'done', message: { role: 'assistant', content: [{ type: 'text', text: 'Independent response' }], timestamp: Date.now() } };
+    },
+  }));
+}
+`,
+  );
+  const configured = await request('/settings', 'PATCH', {
+    entries: {
+      'core:model-store': { disabled: true },
+      'core:pi-adapter': { disabled: true },
+      'core:models': { disabled: true },
+      'core:fixture-model': { name: '../../plugins/independent-model', disabled: false },
+    },
+  });
+  assert.equal(configured.status, 200, JSON.stringify(configured.body));
+  assert.equal(app.runtime.plugins.ctx.get('harnessModelStore'), undefined);
+  const models = await request('/models');
+  assert.equal(models.status, 200);
+  assert.equal(models.body.canManageProviders, false);
+  assert.ok(models.body.models.some((model: { provider: string }) => model.provider === 'local-fixture'));
+  const session = app.runtime.plugins.ctx.harnessSessions.create({ workspaceId: null });
+  assert.equal(
+    await app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Use a dynamic model', undefined, {
+      model: { provider: 'local-fixture', id: 'dynamic' },
+    }),
+    'Independent response',
+  );
+});

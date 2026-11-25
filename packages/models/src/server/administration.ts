@@ -34,7 +34,7 @@ export function setupAdministration(ctx: Context) {
       return write(async () => {
         signal.throwIfAborted();
         const result = await saveProvider(
-          { paths: ctx.harnessState.paths, catalog, admin: admin() },
+          { paths: ctx.harnessState.paths, admin: admin() },
           input,
           method === 'DELETE',
         );
