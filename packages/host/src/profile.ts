@@ -338,7 +338,14 @@ function builtin(id: string, name: string, client: boolean): ResolvedPlugin | un
   const info = displayMetadata[base];
   if (base !== name) {
     if (!client || !info?.browser) return;
-    return { id, title: info.title ?? id, description: info.description ?? '', icon: info.icon, browser: info.browser, browserStyles: info.browserStyles };
+    return {
+      id,
+      title: info.title ?? id,
+      description: info.description ?? '',
+      icon: info.icon,
+      browser: info.browser,
+      browserStyles: info.browserStyles,
+    };
   }
   return {
     title: id,
