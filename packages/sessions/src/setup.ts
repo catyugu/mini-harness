@@ -1,5 +1,4 @@
 import { observe } from '@mini-harness/plugin-api/observations';
-import type { SessionDirectory } from './records.ts';
 import type { Context } from 'mini-harness/cordis';
 import { SessionRegistry } from './registry.ts';
 
@@ -37,35 +36,6 @@ export function setup(ctx: Context) {
       })),
     );
   });
-  ctx.provide('harnessRegistry', registry);
-  const sessions: SessionDirectory = {
-    get: (id) => registry.get(id),
-    scope: (id) => registry.scope(id),
-    runScope: (id) => registry.runScope(id),
-    list: (id) => registry.list(id),
-    create: (input) => registry.create(input),
-    rename: (id, title) => {
-      registry.assertAvailable(id);
-      return registry.rename(id, title);
-    },
-    depth: (id) => registry.depth(id),
-    workspacePath: (id) => registry.workspacePath(id),
-    history(id) {
-      registry.assertAvailable(id);
-      if (!registry.get(id)) throw new Error('Conversation not found');
-      return (
-        registry.inspectLog(
-          id,
-          (log) => {
-            const { messages, leafId, model } = log.projection();
-            return structuredClone({ messages, leafId, model });
-          },
-          true,
-        ) ?? { messages: [], leafId: null }
-      );
-    },
-    records: (id, owner) => registry.records(id, owner),
-  };
-  ctx.provide('harnessSessions', sessions);
+  ctx.provide('harnessSessions', registry);
   ctx.effect(() => () => registry.dispose());
 }

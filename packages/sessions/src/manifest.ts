@@ -9,7 +9,7 @@ export const metadata: PluginInfo = {
 
 const plugin: Plugin.Object = {
   inject: ['harnessProfileScopes', 'harnessProfileConfig', 'harnessState', 'harnessWorkspaces'],
-  provide: ['harnessRegistry', 'harnessSessions'],
+  provide: ['harnessSessions'],
   apply: setup,
 };
 

@@ -16,7 +16,7 @@ import { isRunning, type RunInfo } from '@mini-harness/sessions/run-state';
 import { RunEvents } from './events.ts';
 import type { ExecutionInput } from './execution.ts';
 import type { RunPort } from './api.ts';
-import type { SessionStore } from '@mini-harness/sessions/store';
+import type { SessionStore } from '@mini-harness/sessions/records';
 
 interface RunOptions {
   signal?: AbortSignal;

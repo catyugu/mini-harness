@@ -20,7 +20,7 @@ const plugin: Plugin.Object = {
   ),
   inject: [
     'harnessProfileScopes',
-    'harnessRegistry',
+    'harnessSessions',
     'harnessAgent',
     'harnessModels',
     'harnessPrompt',

@@ -5,7 +5,7 @@ export function registerRoutes(ctx: Context) {
   const add = (method: string, path: string, handler: Parameters<typeof ctx.harnessRoutes.register>[2]) =>
     ctx.effect(() => ctx.harnessRoutes.register(method, path, handler));
   const session = (id: string) => {
-    if (!ctx.harnessRegistry.get(id)) throw new HttpError('not_found', 'Conversation not found');
+    if (!ctx.harnessSessions.get(id)) throw new HttpError('not_found', 'Conversation not found');
     return id;
   };
   add('POST', '/api/sessions/:id/queue', async ({ params, body }) => {

@@ -4,7 +4,7 @@ import { scopeTarget } from '@mini-harness/plugin-api/scopes';
 import type { InputContext, ModelFailure, StepContext } from '@mini-harness/agent/events';
 import { DomainError } from '@mini-harness/platform/errors';
 import { isDeepStrictEqual } from 'node:util';
-import type { SessionCatalog, SessionLifecycle, SessionStore } from '@mini-harness/sessions/store';
+import type { SessionCatalog, SessionLifecycle, SessionStore } from '@mini-harness/sessions/records';
 import type { ModelChoice, ThinkingLevel } from '@mini-harness/llm/vocabulary';
 import type { SessionRecord } from '@mini-harness/sessions/identity';
 import {

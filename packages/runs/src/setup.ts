@@ -6,7 +6,7 @@ import { SessionRun } from './session-run.ts';
 import { Runs } from './runs.ts';
 
 export function setup(ctx: Context) {
-  const { harnessRegistry: catalog, harnessProfileScopes: scopes } = ctx;
+  const { harnessSessions: catalog, harnessProfileScopes: scopes } = ctx;
   const runs = new Runs(
     catalog,
     scopes,

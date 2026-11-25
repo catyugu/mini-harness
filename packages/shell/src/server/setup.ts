@@ -60,7 +60,7 @@ export function setup(ctx: Context) {
         signal?.throwIfAborted();
         const execution = caller.get('harnessProcess');
         if (!execution) throw new Error('Process execution is unavailable');
-        const attachments = ctx.harnessRegistry.attachmentDirectory(sessionId);
+        const attachments = ctx.harnessSessions.attachmentDirectory(sessionId);
         const { mode, timeoutSeconds } = options;
         let command: ProcessCommand;
         if (mode === 'isolated') {

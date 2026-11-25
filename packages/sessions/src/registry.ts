@@ -6,9 +6,8 @@ import { lstatSync, unlinkSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { writeJson } from '@mini-harness/platform/json';
 import type { Paths } from '@mini-harness/platform/runtime-paths';
-import type { SessionStore } from './store.ts';
 import type { WorkspacePort } from '@mini-harness/workspaces/api';
-import type { RecordDisplay, RecordOwner, SessionRecords } from './records.ts';
+import type { RecordDisplay, RecordOwner, SessionRecords, SessionStore } from './records.ts';
 import { createScopeKey, scopeParentOf, type ScopeKey } from '@mini-harness/plugin-api/scopes';
 import type { ScopeAddress } from '@mini-harness/plugin-api/configuration';
 import type { CapabilityObservation } from '@mini-harness/plugin-api/observations';
@@ -171,6 +170,7 @@ export class SessionRegistry implements SessionStore {
   }
 
   rename(id: string, title: string, source: SessionRecord['titleSource'] = 'manual') {
+    this.assertAvailable(id);
     const record = this.get(id);
     if (!record) throw new DomainError('not_found', 'Conversation not found');
     if (source === 'auto' && (record.titleSource === 'manual' || record.title !== 'New conversation'))
@@ -358,6 +358,21 @@ export class SessionRegistry implements SessionStore {
       if (!strict && error instanceof DomainError && error.code === 'unavailable') return;
       throw error;
     }
+  }
+
+  history(id: string) {
+    this.assertAvailable(id);
+    if (!this.get(id)) throw new DomainError('not_found', 'Conversation not found');
+    return (
+      this.inspectLog(
+        id,
+        (log) => {
+          const { messages, leafId, model } = log.projection();
+          return structuredClone({ messages, leafId, model });
+        },
+        true,
+      ) ?? { messages: [], leafId: null }
+    );
   }
 
   records(id: string, owner: RecordOwner): SessionRecords {
