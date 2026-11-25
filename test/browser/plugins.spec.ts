@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.ts';
 import { workspaceId } from '@mini-harness/workspaces/identity';
 import { writeJson } from '@mini-harness/platform/json';
-import { readWebProfile, startIsolatedHost, settingsSection, suggestions } from '../support/browser.ts';
+import { readWebProfile, startIsolatedHost, settingsSection, suggestions, modelButton, modelSearch } from '../support/browser.ts';
 
 test('frontend plugins own UI contributions and clean up on disable and reconfiguration', async ({
   page,
@@ -547,6 +547,65 @@ export const apply = (ctx) => {
     await expect(page.locator('body')).toHaveAttribute('data-slot-events', '1');
   } finally {
     await server?.stop();
+    await mock.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('the open model picker follows local plugin installation, enablement and removal', async ({ page }) => {
+  const mock = await createMockProvider();
+  const { root, paths } = createFixturePaths(mock.url);
+  const service = await startIsolatedHost(paths);
+  try {
+    await page.goto(service.url + '/#token=' + service.token);
+    await modelButton(page).click();
+    await modelSearch(page).fill('Live plugin model');
+    const options = page.getByRole('listbox', { name: 'Configured models' }).getByRole('option');
+    await expect(options).toHaveCount(0);
+    const folder = join(paths.plugins, 'live-model');
+    mkdirSync(folder);
+    writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ title: 'Live model' }));
+    writeFileSync(join(folder, 'plugin.js'), `
+export const inject = ['harnessModels'];
+export function apply(ctx) {
+  const model = { provider: 'live-plugin', id: 'live' };
+  const resolve = (choice) => choice.provider === model.provider ? model : undefined;
+  ctx.effect(() => ctx.harnessModels.register({
+    list: () => [{ ...model, name: 'Live plugin model', configured: true, input: ['text'], thinkingLevels: [] }],
+    resolve,
+    capabilities: () => ({ id: model.id, name: 'Live plugin model', input: ['text'], contextWindow: 32000, maxTokens: 1024, reasoning: false }),
+  }, {
+    accepts: (choice) => Boolean(resolve(choice)),
+    async *stream() {
+      yield { type: 'done', message: { role: 'assistant', content: [{ type: 'text', text: 'Live model answer' }], timestamp: Date.now() } };
+    },
+  }));
+}
+`);
+    const toggle = async (disabled: boolean) => {
+      const response = await fetch(service.url + '/api/settings', {
+        method: 'PATCH',
+        headers: { Authorization: 'Bearer ' + service.token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entries: { 'live-model': { name: '../../plugins/live-model', disabled } } }),
+      });
+      expect(response.status, await response.text()).toBe(200);
+    };
+    await toggle(false);
+    await expect(options).toHaveCount(1);
+    await expect(options.first()).toContainText('Live plugin model');
+    await toggle(true);
+    await expect(options).toHaveCount(0);
+    await toggle(false);
+    await expect(options).toHaveCount(1);
+    await modelSearch(page).press('Enter');
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Use the live plugin');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.locator('.message.assistant')).toHaveText('Live model answer');
+    await toggle(true);
+    await expect(modelButton(page)).toHaveText('Choose model');
+  } finally {
+    await page.close();
+    await service.stop();
     await mock.close();
     rmSync(root, { recursive: true, force: true });
   }

@@ -29,6 +29,7 @@ const plugin: Plugin.Object = {
     }
     function match(caller: Context, entries: Contribution[], choice: ModelChoice) {
       const matches = entries.flatMap((entry) => {
+        if (entry.owner.aborted || !sources.has(entry)) return [];
         const model = entry.source.resolve(choice);
         return model ? [{ entry, model }] : [];
       });

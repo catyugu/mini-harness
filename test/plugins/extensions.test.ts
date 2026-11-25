@@ -519,3 +519,61 @@ export function apply(ctx) {
     'Independent response',
   );
 });
+
+test('model contributions select matching capabilities and transport, and reject equal-ranked conflicts', async (t) => {
+  const { app, paths, request } = await fixture(t);
+  const model = { provider: 'local-mock', id: app.runtime.plugins.ctx.harnessModelPreference.recent().id };
+  const ctx = app.runtime.plugins.ctx;
+  const plugin = (name: string, priority: number, input: string[]) => writePlugin(paths.plugins, name, {}, `
+export const inject = ['harnessModels'];
+export function apply(ctx) {
+  const model = ${JSON.stringify(model)};
+  const input = ${JSON.stringify(input)};
+  const resolve = (choice) => choice.provider === model.provider && (!choice.id || choice.id === model.id) ? model : undefined;
+  ctx.effect(() => ctx.harnessModels.register({
+    list: () => [{ ...model, name: ${JSON.stringify(name)}, configured: true, input, thinkingLevels: [] }],
+    resolve,
+    capabilities: () => ({ id: model.id, name: ${JSON.stringify(name)}, input, contextWindow: 64000, maxTokens: 4096, reasoning: false }),
+  }, {
+    accepts: (choice) => Boolean(resolve(choice)),
+    async *stream() {
+      yield { type: 'done', message: { role: 'assistant', content: [{ type: 'text', text: ${JSON.stringify(name)} }], timestamp: Date.now() } };
+    },
+  }, ${priority}));
+}
+`);
+  plugin('model-low', 0, ['text']);
+  plugin('model-high', 1, ['text', 'image']);
+  plugin('model-tie', 1, ['text']);
+  const toggle = async (name: string, disabled: boolean) => {
+    const response = await request('/settings', 'PATCH', {
+      entries: { [name]: { name: '../../plugins/' + name, disabled } },
+    });
+    assert.equal(response.status, 200, JSON.stringify(response.body));
+  };
+  const list = () => ctx.harnessModels.list().filter(({ provider, id }) => provider === model.provider && id === model.id);
+  const session = ctx.harnessSessions.create();
+  await toggle('model-low', false);
+  assert.equal(list()[0]?.name, 'model-low');
+  assert.deepEqual(ctx.harnessModels.capabilities(model)?.input, ['text']);
+  assert.equal(await ctx.harnessRuns.send(session.id, 'Low priority', undefined, { model }), 'model-low');
+  await toggle('model-high', false);
+  assert.equal(list()[0]?.name, 'model-high');
+  assert.deepEqual(ctx.harnessModels.capabilities(model)?.input, ['text', 'image']);
+  assert.equal(await ctx.harnessRuns.send(session.id, 'High priority', undefined, { model }), 'model-high');
+  await toggle('model-tie', false);
+  assert.deepEqual(list(), []);
+  assert.equal(ctx.harnessModels.resolve(model), undefined);
+  assert.equal(ctx.harnessModels.capabilities(model), undefined);
+  assert.equal(ctx.harnessLlm.select(model), null);
+  await assert.rejects(
+    Array.fromAsync(ctx.harnessLlm.stream({ model, messages: [], systemPrompt: '', signal: new AbortController().signal })),
+    /Multiple model adapters/,
+  );
+  await toggle('model-tie', true);
+  assert.equal(list()[0]?.name, 'model-high');
+  await toggle('model-high', true);
+  assert.equal(list()[0]?.name, 'model-low');
+  await toggle('model-low', true);
+  assert.equal(await ctx.harnessRuns.send(session.id, 'Restore Pi', undefined, { model }), 'Mock response');
+});

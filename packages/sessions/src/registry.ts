@@ -83,12 +83,10 @@ export class SessionRegistry implements SessionStore {
     if (!record) return;
     let key = this.runtimeScopes.get(id);
     if (!key) {
-      const standing = createScopeKey(() =>
+      const standing = createScopeKey(
         record.parentId
           ? this.runScope(record.parentId)
-          : record.workspaceId
-            ? this.workspaceService()?.scope(record.workspaceId)
-            : undefined,
+          : () => record.workspaceId ? this.workspaceService()?.scope(record.workspaceId) : undefined,
       );
       this.runtimeScopes.set(id, (key = createScopeKey(standing)));
     }
