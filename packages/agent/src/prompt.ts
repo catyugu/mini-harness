@@ -5,7 +5,6 @@ import type { PromptPort, PromptContext, PromptSection, ScopedPromptSection } fr
 export class Prompt implements PromptPort {
   private readonly sections = new Map<string, { context: Context; section: PromptSection }>();
 
-
   register(section: PromptSection) {
     const context = Service.caller(this);
     const { id, order = 500, priority = 0, render } = section;
@@ -49,7 +48,9 @@ export class Prompt implements PromptPort {
       if (
         !current ||
         section.depth > current.depth ||
-        (section.depth === current.depth && ((section.priority ?? 0) > (current.priority ?? 0) || ((section.priority ?? 0) === (current.priority ?? 0) && section.pluginId < current.pluginId)))
+        (section.depth === current.depth &&
+          ((section.priority ?? 0) > (current.priority ?? 0) ||
+            ((section.priority ?? 0) === (current.priority ?? 0) && section.pluginId < current.pluginId)))
       )
         sections.set(section.id, section);
     }
