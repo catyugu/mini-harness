@@ -81,8 +81,9 @@ export function publicConfigSchema(schema: Record<string, any> | undefined): Rec
       .filter(([, property]) => !property.writeOnly && property.format !== 'password')
       .map(([key, property]) => [key, property.properties ? publicConfigSchema(property) : property]),
   );
+  const { default: _default, ...form } = schema;
   return {
-    ...schema,
+    ...form,
     properties,
     ...(Array.isArray(schema.required)
       ? { required: schema.required.filter((key: string) => Object.hasOwn(properties, key)) }

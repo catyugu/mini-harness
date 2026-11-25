@@ -47,10 +47,7 @@ export function setup(ctx: Context) {
       .get('harnessPluginCatalog')
       ?.metadata()
       .find((item) => item.id === id);
-    return (
-      plugin?.instances?.find((item) => item.scope === (scope ?? 'application'))?.configSchema ??
-      plugin?.configSchema
-    );
+    return plugin?.instances?.find((item) => item.scope === (scope ?? 'application'))?.configSchema;
   };
   const view = (settings: ProfileConfiguration) => {
     const result = structuredClone(settings);

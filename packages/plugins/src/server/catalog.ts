@@ -5,6 +5,8 @@ import { existsSync, lstatSync, realpathSync, statSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import {
+  defineConfig,
+  publicConfigSchema,
   scopeKeys,
   type CompositionConfig,
   type EntryConfiguration,
@@ -15,7 +17,6 @@ import type { ResolvedPlugin } from '@mini-harness/plugin-api/descriptor';
 import { builtinBrowserAssets } from './browser-assets.ts';
 import { describePlugin, type DiscoveredPlugin } from './descriptor.ts';
 import { loadPluginModule, resolveModule } from './module-resolution.ts';
-import { defineConfig, publicConfigSchema } from '@mini-harness/plugin-api/configuration';
 import { bindInstance } from '@mini-harness/plugin-api/instance';
 
 export interface ConfiguredPlugin {
