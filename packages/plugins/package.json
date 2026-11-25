@@ -9,7 +9,7 @@
     "./manager": "./src/server/manager.ts",
     "./module-resolution": "./src/server/module-resolution.ts",
     "./manifest": "./src/manifest.ts",
-    "./package-installer": "./src/server/package-installer.ts"
+    "./registry-client": "./src/server/registry-client.ts"
   },
   "miniHarness": {
     "api": [

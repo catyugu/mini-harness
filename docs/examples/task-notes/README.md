@@ -9,7 +9,7 @@ Copy this directory to an independent project named `task-notes`, then install i
 ```sh
 npm install
 npm run build
-npx mini-harness profile init development --from web
+npx mini-harness development --from-default-profile web --dump-config
 ```
 
 In the generated Profile's `cordis.patch.yml`, add:

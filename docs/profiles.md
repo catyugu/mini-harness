@@ -72,8 +72,7 @@ plugins:
     client: true
 ```
 
-Install ordinary npm dependencies in the Profile directory with
-`npm install --ignore-scripts <package>`, then add entries or bundles explicitly.
+Install ordinary npm dependencies with `mini-harness plugin --profile rescue add <package>`, then add entries or bundles explicitly. The command forwards npm arguments in the Profile directory; use `remove`, `update`, local directories, tarballs or Git references as needed. npm lifecycle scripts are disabled by default; explicitly pass `--ignore-scripts=false` to authorize them.
 Installing a package does not activate it. A module may export a native Cordis
 function, class, or object with `apply(ctx, config)`; no plugin.json is needed
 for these entries. Disabled external entries are not imported. Local modules

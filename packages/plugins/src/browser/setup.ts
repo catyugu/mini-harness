@@ -440,7 +440,7 @@ function pluginCatalog(
             control.disabled = true;
             control.title = 'Open plugin settings to select a scope';
           }
-          const remove = plugin.trustedCode
+          const remove = plugin.trustedCode && !plugin.package
             ? iconButton('Uninstall ' + plugin.title, 'trash', 'icon-button danger')
             : undefined;
           if (remove) {

@@ -8,15 +8,12 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
-  readdirSync,
   rmSync,
-  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { createServer } from 'node:http';
 import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
-import { readSettings } from '@mini-harness/settings/config';
 import { writeJson } from '@mini-harness/platform/json';
 import { createMiniHarnessServer } from '../support/profile.ts';
 import { createFixturePaths } from '../helpers/mock-provider.ts';
@@ -47,7 +44,7 @@ test('npm pack output accepts both array and npm 12 keyed objects', () => {
 });
 
 test(
-  'npm registry installation resolves dependencies, updates atomically and serves both entrypoints',
+  'Profile npm dependencies resolve ordinary modules and browser build output',
   { timeout: 45000 },
   async (t) => {
     const { paths, root } = createFixturePaths('http://127.0.0.1:1/v1');
@@ -103,7 +100,7 @@ test(
       npm_config_prefer_online: 'true',
     };
     const run = (...args: string[]) =>
-      execFile(process.execPath, [cli, 'plugin', ...args], { env, cwd: paths.cwd, timeout: 12000 });
+      execFile(process.execPath, [cli, 'plugin', '--profile', 'web', ...args], { env, cwd: paths.cwd, timeout: 12000 });
 
     async function publish(
       name: string,
@@ -158,30 +155,18 @@ export const apply = (ctx) => { ctx.harnessPluginRoutes.register('GET', '/label'
       'index.js': 'export const label = "From dependency";',
     });
     await publish(name, '1.0.0', files, { 'mini-setup-helper': '1.0.0' });
-    await assert.rejects(run('install', 'files', name), /Invalid plugin ID/);
-    assert.match((await run('install', id, name + '@latest')).stdout, /harness-plugin@1\.0\.0/);
-    await publish(name, '1.1.0', files, { 'mini-setup-helper': '1.0.0' });
-    assert.match((await run('update', id)).stdout, /harness-plugin@1\.1\.0/);
-    const directory = join(paths.plugins, id);
-    const installed = readdirSync(directory);
-    const source = JSON.parse(readFileSync(join(directory, '.package-source.json'), 'utf8'));
-    const lock = JSON.parse(readFileSync(join(directory, source.generation, 'package-lock.json'), 'utf8'));
+    await run('add', name + '@latest', '--no-audit', '--no-fund');
+    const directory = join(paths.home, 'profiles', 'web');
+    let lock = JSON.parse(readFileSync(join(directory, 'package-lock.json'), 'utf8'));
     assert.equal(lock.packages['node_modules/mini-setup-helper'].version, '1.0.0');
-    assert.equal(installed.length, 2);
-
-    const settings = readSettings(paths);
-    writeJson(paths.settings, {
-      ...settings,
-      plugins: { [id]: true },
-      pluginConfig: { [id]: { greeting: 'preserved' } },
+    assert.equal(lock.packages['node_modules/' + name].version, '1.0.0');
+    await publish(name, '1.1.0', files, { 'mini-setup-helper': '1.0.0' });
+    await run('add', name + '@1.1.0', '--no-audit', '--no-fund');
+    lock = JSON.parse(readFileSync(join(directory, 'package-lock.json'), 'utf8'));
+    assert.equal(lock.packages['node_modules/' + name].version, '1.1.0');
+    writeJson(join(directory, 'cordis.patch.yml'), {
+      plugins: [{ id, name, client: true, disabled: true, config: { greeting: 'preserved' } }],
     });
-    await assert.rejects(run('update', id), /Disable and save/);
-    writeJson(paths.settings, { ...readSettings(paths), plugins: { [id]: false } });
-
-    await publish(name, '1.2.0', { 'invalid.txt': 'No Cordis module' }, { 'mini-setup-helper': '1.0.0' });
-    await assert.rejects(run('update', id), /Provide a server or browser module/);
-    assert.deepEqual(readdirSync(directory), installed);
-    assert.equal(readSettings(paths).pluginConfig[id].greeting, 'preserved');
 
     app = await createMiniHarnessServer(paths);
     const port = await app.listen(0);
@@ -216,17 +201,12 @@ export const apply = (ctx) => { ctx.harnessPluginRoutes.register('GET', '/label'
     assert.equal((await request('/settings', 'PATCH', { plugins: { [id]: false } })).status, 200);
     assert.equal((await asset(entry.browser)).status, 404);
     assert.equal((await asset(entry.styles[0])).status, 404);
-    const active = join(directory, source.generation);
-    const link = join(active, 'node_modules', '@fixture', 'harness-plugin');
-    rmSync(link, { recursive: true });
-    symlinkSync(paths.cwd, link, 'junction');
-    const invalid = (await (await request('/plugins')).json()).find(
-      (plugin: { id: string }) => plugin.id === id,
-    );
-    assert.equal(invalid.state, 'disabled');
-    assert.match(invalid.error, /outside its installation directory/);
-    assert.equal((await request('/plugins/' + id, 'DELETE')).status, 200);
-    assert.ok(!readdirSync(paths.plugins).includes(id));
+    await app.close();
+    app = undefined;
+    await run('remove', name, '--no-audit', '--no-fund');
+    const manifest = JSON.parse(readFileSync(join(directory, 'package.json'), 'utf8'));
+    assert.equal(manifest.dependencies?.[name], undefined);
+    assert.ok(!existsSync(join(directory, 'node_modules', name)));
   },
 );
 

@@ -264,7 +264,7 @@ async function checkPackage() {
     await execFile(process.execPath, [resolve('node_modules/typescript/bin/tsc'), '-p', 'tsconfig.json'], {
       cwd: plugin,
     });
-    await cli('profile', 'init', 'web', '--from', 'web');
+    await cli('web', '--dump-config');
     await writeFile(
       join(paths.home, 'profiles', 'web', 'cordis.patch.yml'),
       JSON.stringify({ plugins: [{ id: 'task-notes', name: plugin, client: true }] }),

@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import { bootProfile } from '@mini-harness/host/application';
-import { allowsDetachment, dumpProfile, initializeProfile, loadProfile, profileSchema, readProfile, recreateProfile, WEB_BUNDLES } from '@mini-harness/host/profile';
-import { Context } from 'mini-harness/cordis';
+import { allowsDetachment, dumpProfile, ensureProfile, profileSchema, recreateProfile } from '@mini-harness/host/profile';
 import { spawn } from 'node:child_process';
 import { openSync, closeSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -181,55 +180,17 @@ async function serve(
 
 async function main() {
   const argv = process.argv.slice(2);
-  if (argv[0] === 'profile' && argv[1] === 'init') {
-    const [, , name, ...flags] = argv;
-    if (!name || (flags.length && (flags.length !== 2 || flags[0] !== '--from' || flags[1] !== 'web')))
-      throw new Error('Usage: mini-harness profile init <name> [--from web]');
-    const paths = getPaths();
-    ensurePaths(paths);
-    const unlock = await lockInstance(paths.home);
-    try {
-      console.log(initializeProfile(name, paths, flags.length ? WEB_BUNDLES : []));
-    } finally {
-      await unlock();
-    }
-    return;
-  }
   if (argv[0] === 'plugin') {
-    const [, operation, id, spec, ...extra] = argv;
-    if (
-      (operation !== 'install' && operation !== 'update') ||
-      !id ||
-      extra.length ||
-      (operation === 'install' && !spec)
-    )
-      throw new Error(
-        'Usage: mini-harness plugin install <id> <package> or mini-harness plugin update <id> [package]',
-      );
+    const [, option, name, ...npmArgs] = argv;
+    if (option !== '--profile' || !name || !npmArgs.length)
+      throw new Error('Usage: mini-harness plugin --profile <name> <npm-args...>');
     const paths = getPaths();
     ensurePaths(paths);
     const unlock = await lockInstance(paths.home);
-    const cancellation = new AbortController();
-    const abort = () => cancellation.abort();
-    process.on('SIGINT', abort);
-    process.on('SIGTERM', abort);
     try {
-      const { installPackagedPlugin } = await import('@mini-harness/plugins/package-installer');
-      const profile = await loadProfile('web', paths, new Context());
-      try {
-        const reserved = readProfile('web');
-        const { name, version } = await installPackagedPlugin(paths, operation, id, spec, {
-          settings: profile.read(),
-          reserved: (id) => reserved.has(id),
-          signal: cancellation.signal,
-        });
-        console.log(id + ': ' + name + '@' + version);
-      } finally {
-        await profile.close();
-      }
+      const { runPackageManager } = await import('@mini-harness/plugins/registry-client');
+      await runPackageManager(ensureProfile(name, paths), npmArgs);
     } finally {
-      process.off('SIGINT', abort);
-      process.off('SIGTERM', abort);
       await unlock();
     }
     return;

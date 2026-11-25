@@ -23,6 +23,7 @@ export function describePlugin(id: string, folder: string, entry?: string): Disc
   const packageFile = join(folder, 'package.json');
   const packageInfo = readJson<{
     name?: string;
+    version?: string;
     main?: string;
     exports?: unknown;
     miniHarness?: { plugin?: Partial<PluginInfo> & { browserDirectory?: unknown; browserPreload?: unknown } };
@@ -113,6 +114,7 @@ export function describePlugin(id: string, folder: string, entry?: string): Disc
   return {
     source,
     resources,
+    package: packageInfo.name && packageInfo.version ? { name: packageInfo.name, version: packageInfo.version } : undefined,
     scope,
     id,
     title,

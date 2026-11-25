@@ -80,8 +80,8 @@ export function stagePluginRemoval(
   dataRoot: string,
 ) {
   const plugin = runtime.plugins.metadata().find((item) => item.id === id && item.trustedCode);
-  if (!plugin || !localPluginIdPattern.test(id))
-    throw new DomainError('invalid_input', 'Unknown local plugin');
+  if (!plugin || !localPluginIdPattern.test(id) || runtime.plugins.reserved(id))
+    throw new DomainError('invalid_input', 'Remove Profile dependencies with the Profile package manager');
   for (const entry of entries) assertDisabled(runtime.settings, entry);
   const folder = join(runtime.paths.plugins, id);
   if (lstatSync(folder).isSymbolicLink())

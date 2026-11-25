@@ -7,12 +7,12 @@ An npm plugin can expose an ordinary Cordis module through its package.json `exp
 Use Settings → Plugins to install local files and configure or enable a plugin. For npm packages, use:
 
 ```sh
-mini-harness plugin install <id> <package>
-mini-harness plugin update <id>
-mini-harness plugin uninstall <id>
+mini-harness plugin --profile web add <package>
+mini-harness plugin --profile web update <package>
+mini-harness plugin --profile web remove <package>
 ```
 
-Disable an npm plugin and save before updating it. Installed plugins start disabled. To develop locally, declare the built package directory as an entry name in a Profile. Multiple local packages can run together.
+Installing a package changes only the selected Profile's npm dependencies. Declare an Entry in the Profile to activate it; restart before updating or removing packages used by a running application. npm lifecycle scripts default to disabled; authorize them explicitly with `--ignore-scripts=false`. To develop locally, declare the built package directory as an entry name in a Profile. Multiple local packages can run together.
 
 The manifest supplies display information, scope (`application`, `workspace`, or `session`), and optional JSON Schema and configuration-form metadata. Browser modules declare their dependencies and services directly with Cordis `inject` and `provide`. A browser entry receives its configuration as a whole and can update it through `browserPluginSettings(ctx)` when a configuration schema is present. Keep server-only secrets in `harnessPluginSecrets` or a separate server entry; do not put them in browser entry configuration. Set `browser` to the browser entry module and `browserDirectory` to its dedicated build output directory. JavaScript chunks, styles, fonts and other supported assets inside that directory are published together; never put private files there. Use `browserPreload` for a published module that exports a function receiving an activation signal and optionally returning cleanup.
 
@@ -107,4 +107,4 @@ The [Task notes example](examples/task-notes/) uses both entry points. The [brow
 
 ### Profile entries
 
-Installing a plugin makes it available in the catalog. To enable it, use the Web Plugins page or declare the installed directory path as an entry to the [active Profile](profiles.md). The server entry's `inject` and `provide` declarations govern Cordis. Missing required services leave the consuming entry waiting until Cordis can activate it.
+Declare npm modules by their package name in the [active Profile](profiles.md). Local file bundles can be enabled in the Web Plugins page or declared by their directory path. The server entry's `inject` and `provide` declarations govern Cordis. Missing required services leave the consuming entry waiting until Cordis can activate it.

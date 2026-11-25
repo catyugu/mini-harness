@@ -208,13 +208,18 @@ export function recreateProfile(name: string, template: string, paths: Paths) {
   return initializeProfile(name, paths, WEB_BUNDLES);
 }
 
-function profileLayers(name: string, paths: Paths, patches: readonly string[] = []) {
+export function ensureProfile(name: string, paths: Paths) {
   const directory = profileDirectory(name, paths);
-  const manifestPath = join(directory, MANIFEST);
-  if (!existsSync(manifestPath)) {
+  if (!existsSync(join(directory, MANIFEST))) {
     if (name !== 'web') throw new Error('Unknown Profile package: ' + name);
     initializeProfile(name, paths, WEB_BUNDLES);
   }
+  return directory;
+}
+
+function profileLayers(name: string, paths: Paths, patches: readonly string[] = []) {
+  const directory = ensureProfile(name, paths);
+  const manifestPath = join(directory, MANIFEST);
   const manifest = readJson<{ miniHarness?: { profile?: { bundles?: unknown } } }>(manifestPath, {});
   const bundles = manifest.miniHarness?.profile?.bundles;
   if (!Array.isArray(bundles) || bundles.some((bundle) => typeof bundle !== 'string'))
@@ -372,7 +377,7 @@ export async function loadProfile(
   const legacy = name === 'web' ? previousSettings : parseSettings({});
   const migration = name === 'web' && pendingMigration;
   function configurationFor(selected: ReadonlyMap<string, ResolvedRow>, selectedLayers: readonly Layer[]) {
-      const overrides = {
+    const overrides = {
       plugins: Object.fromEntries(
         [...selected.values()].map((row) => [row.id, !row.disabled]),
       ),
@@ -396,12 +401,12 @@ export async function loadProfile(
       ...product,
       ...overrides,
       port: configuredPort ?? legacy.port,
-      scopes: withToolRules(Object.assign({}, ...selectedLayers).scopes ?? overrides.scopes, scopedTools),
+      scopes: withToolRules(Object.assign({}, ...shipped, ...selectedLayers).scopes ?? overrides.scopes, scopedTools),
     });
     if (
       migration &&
       configuredPort !== undefined &&
-      !user.plugins?.some((row) => row.id === 'core:web-server' && row.config?.port !== undefined)
+      !selectedLayers.some((layer) => layer.plugins?.some((row) => row.id === 'core:web-server' && row.config?.port !== undefined))
     ) {
       effective.port = legacy.port;
       if (selected.has('core:web-server')) {
@@ -413,9 +418,9 @@ export async function loadProfile(
     }
     return effective;
   }
-  let persistent = configurationFor(persistentRows, [...shipped, ...userLayers]);
+  let persistent = configurationFor(persistentRows, userLayers);
   const effective = overlays.length
-    ? configurationFor(resolved, [...shipped, ...userLayers, ...overlays])
+    ? configurationFor(resolved, [...userLayers, ...overlays])
     : persistent;
   const roots = [
     directory,

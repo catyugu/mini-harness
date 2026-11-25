@@ -8,7 +8,6 @@ import { dirname, join, resolve } from 'node:path';
 import { Check } from 'typebox/value';
 import { scopeKeys, type PluginSettings } from '@mini-harness/plugin-api/configuration';
 import type { PluginScope, ScopeKey, ScopeSettings } from '@mini-harness/plugin-api/scopes';
-import { pluginBundle } from './source.ts';
 import type { Context, EntryOptions, Plugin } from 'mini-harness/cordis';
 import type { ConfigValidationContext, ResolvedPlugin } from '@mini-harness/plugin-api/descriptor';
 import { builtinBrowserAssets } from './browser-assets.ts';
@@ -97,12 +96,11 @@ export class PluginCatalog {
 
   private describe(id: string, directory: string): DiscoveredPlugin {
     try {
-      const { folder, package: installedPackage } = pluginBundle(directory);
-      const descriptor = describePlugin(id, folder);
+      const descriptor = describePlugin(id, directory);
       if (this.profile && !this.profile.client(id)) {
         delete descriptor.resources;
       }
-      return { ...descriptor, package: installedPackage };
+      return descriptor;
     } catch (error) {
       return {
         scope: 'application',
