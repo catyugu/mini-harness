@@ -112,10 +112,7 @@ export class PluginCatalog {
     );
   }
 
-  metadata(
-    failures: ReadonlyMap<string, string>,
-    mounted: (id: string) => boolean,
-  ): PluginMetadata[] {
+  metadata(failures: ReadonlyMap<string, string>, mounted: (id: string) => boolean): PluginMetadata[] {
     const groups = new Map<string, ResolvedPlugin[]>();
     for (const item of this.descriptors()) {
       const group = groups.get(item.id) ?? [];
@@ -188,10 +185,7 @@ export class PluginCatalog {
   }
 
   /** Disabled entries with a known schema can still reject malformed input without mounting. */
-  validateDisabled(
-    descriptors: ResolvedPlugin[],
-    previous: ProfileConfiguration,
-  ) {
+  validateDisabled(descriptors: ResolvedPlugin[], previous: ProfileConfiguration) {
     for (const descriptor of descriptors) {
       const { id, scopeAddress } = descriptor;
       const before = scopeAddress ? previous.scopes[scopeAddress]?.entries?.[id] : previous.entries[id];

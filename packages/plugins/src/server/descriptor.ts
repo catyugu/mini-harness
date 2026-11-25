@@ -111,7 +111,9 @@ export async function describePlugin(
         : undefined;
   const info = { ...staticInfo, ...native?.metadata };
   const browser =
-    (clientOnly ? standardClient : undefined) ?? info.browser ?? standardClient ??
+    (clientOnly ? standardClient : undefined) ??
+    info.browser ??
+    standardClient ??
     (isRegularFile(join(folder, 'web.js')) ? 'web.js' : undefined);
   if (browser !== undefined && typeof browser !== 'string') throw new Error('Invalid browser entry');
   if (!source && !browser) throw new Error('Provide a server or browser module');

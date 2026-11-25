@@ -357,9 +357,7 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
       }
       const parent = address.parent ? visit(address.parent) : root;
       if (!hasComposition(overrides)) return parent;
-      const plans = this.catalog.plans(descriptors, key, (id, error) =>
-        unavailable(id, error, key),
-      );
+      const plans = this.catalog.plans(descriptors, key, (id, error) => unavailable(id, error, key));
       const isolates = [...new Set(overrides.isolate)].sort();
       const existing = this.scopes.get(key);
       const group = existing?.matches(parent, isolates) ? existing : new EntryGroup(parent, isolates);

@@ -436,14 +436,10 @@ export async function loadProfile(
       const catalog = new PluginCatalog(profile);
       const settings = current;
       const errors = new Map<string, unknown>();
-      const plans = catalog.plans(
-        await catalog.runtimeDescriptors(settings),
-        undefined,
-        (id, error) => {
-          errors.set(id, error);
-          return true;
-        },
-      );
+      const plans = catalog.plans(await catalog.runtimeDescriptors(settings), undefined, (id, error) => {
+        errors.set(id, error);
+        return true;
+      });
       for (const [id, error] of await entries.update(
         plans
           .filter(({ descriptor }) => descriptor.native?.plugin)

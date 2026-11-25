@@ -263,10 +263,7 @@ test('tool execution stays auditable while accepted content is stored as a compa
   log = open();
   assert.deepEqual(log.projection().contextMessages[0], before);
   assert.equal(log.entries().filter((entry) => entry.type === 'tool-execution').length, 1);
-  assert.throws(
-    () => log.acceptToolResult('a'.repeat(32), []),
-    /missing execution/,
-  );
+  assert.throws(() => log.acceptToolResult('a'.repeat(32), []), /missing execution/);
 });
 
 test('historical plugin records normalize to one owner without changing identity or the selected branch', (t) => {

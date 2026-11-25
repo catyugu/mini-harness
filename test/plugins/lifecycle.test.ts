@@ -1212,7 +1212,9 @@ test('shipped, local and npm entries share metadata, configuration and resource 
   const trace = join(directory, 'effects.log');
   const configKey = entry + '#config';
   Object.defineProperty(globalThis, configKey, { value: defineConfig(schema), configurable: true });
-  writeFileSync(entry, `
+  writeFileSync(
+    entry,
+    `
     import { appendFileSync } from 'node:fs';
     const trace = ${JSON.stringify(trace)};
     appendFileSync(trace, 'import\\n');
@@ -1224,7 +1226,8 @@ test('shipped, local and npm entries share metadata, configuration and resource 
         return () => appendFileSync(trace, 'close:' + config.label + '\\n');
       });
     }
-  `);
+  `,
+  );
   writeFileSync(join(web, 'main.js'), 'export function apply() {}');
   writeFileSync(join(web, 'a.css'), '.a {}');
   writeFileSync(join(web, 'b.css'), '.b {}');
@@ -1237,10 +1240,12 @@ test('shipped, local and npm entries share metadata, configuration and resource 
     },
   });
   const host = new PluginHost(new Context(), join(directory, 'plugins'), {
-    locate: (name) => name === 'shipped-parity' ? { folder, entry } : undefined,
+    locate: (name) => (name === 'shipped-parity' ? { folder, entry } : undefined),
     source: () => join(directory, 'package.json'),
     read: () => settings,
-    commit: (next) => { settings = next; },
+    commit: (next) => {
+      settings = next;
+    },
   });
   t.after(async () => {
     await host.close();
@@ -1256,18 +1261,30 @@ test('shipped, local and npm entries share metadata, configuration and resource 
     entries: { bundled: { disabled: false }, local: { disabled: false }, npm: { disabled: false } },
   });
   assert.ok(host.metadata().every((item) => item.title === 'Native title' && item.state === 'ready'));
-  assert.equal(readFileSync(trace, 'utf8').split('\n').filter((line) => line === 'import').length, 1);
+  assert.equal(
+    readFileSync(trace, 'utf8')
+      .split('\n')
+      .filter((line) => line === 'import').length,
+    1,
+  );
   const browserEntries = () => host.browser().sort((a, b) => a.id.localeCompare(b.id));
   assert.equal(browserEntries().length, 3);
   for (const item of browserEntries()) {
     const asset = expectPresent(host.browserAsset(item.browser), 'entry asset');
     assert.equal(readFileSync(asset.path, 'utf8'), 'export function apply() {}');
-    assert.deepEqual(item.styles?.map((path) => path.split('/').at(-1)), ['b.css', 'a.css']);
+    assert.deepEqual(
+      item.styles?.map((path) => path.split('/').at(-1)),
+      ['b.css', 'a.css'],
+    );
     assert.equal(host.browserAsset(item.browser.replace(/web\/main\.js$/, 'private.js')), undefined);
   }
   await assert.rejects(host.update({ entries: { local: { config: { label: 42 } } } }));
   await host.update({
-    entries: { bundled: { config: { label: 'B' } }, local: { config: { label: 'L' } }, npm: { config: { label: 'N' } } },
+    entries: {
+      bundled: { config: { label: 'B' } },
+      local: { config: { label: 'L' } },
+      npm: { config: { label: 'N' } },
+    },
   });
   const before = browserEntries();
   writeFileSync(join(web, 'b.css'), '.b { color: red; }');
@@ -1277,7 +1294,10 @@ test('shipped, local and npm entries share metadata, configuration and resource 
   for (const [index, item] of after.entries()) {
     assert.notEqual(item.browser, before[index].browser);
     assert.equal(host.browserAsset(before[index].browser), undefined);
-    const css = expectPresent(host.browserAsset(expectPresent(item.styles?.[0], 'stylesheet')), 'stylesheet asset');
+    const css = expectPresent(
+      host.browserAsset(expectPresent(item.styles?.[0], 'stylesheet')),
+      'stylesheet asset',
+    );
     assert.equal(readFileSync(css.path, 'utf8'), '.b { color: red; }');
   }
   await host.update({
@@ -1285,5 +1305,8 @@ test('shipped, local and npm entries share metadata, configuration and resource 
   });
   assert.deepEqual(host.browser(), []);
   const events = readFileSync(trace, 'utf8').split('\n');
-  assert.equal(events.filter((line) => line.startsWith('open:')).length, events.filter((line) => line.startsWith('close:')).length);
+  assert.equal(
+    events.filter((line) => line.startsWith('open:')).length,
+    events.filter((line) => line.startsWith('close:')).length,
+  );
 });
