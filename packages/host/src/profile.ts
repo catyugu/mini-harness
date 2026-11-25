@@ -519,7 +519,7 @@ export async function loadProfile(
   };
   const policy = readJson<{ scopedTools?: unknown }>(paths.settings, {});
   const scopedTools = object(policy.scopedTools) ? policy.scopedTools : {};
-  function configurationFor(selected: ReadonlyMap<string, ResolvedRow>, selectedLayers: readonly Layer[]) {
+  function configurationFor(selected: ReadonlyMap<string, ResolvedRow>, selectedLayers: readonly LoadedLayer[]) {
     return parseSettings({
       entries: Object.fromEntries(
         [...selected.values()].map((row) => [

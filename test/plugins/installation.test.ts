@@ -221,6 +221,7 @@ export const apply = (ctx) => { ctx.harnessPluginRoutes.register('GET', '/label'
     await app.close();
     app = undefined;
     await run('remove', name, '--no-audit', '--no-fund');
+    assert.ok(!parse(readFileSync(join(directory, 'cordis.patch.yml'), 'utf8')).plugins.some((row: { name?: string }) => row.name === name));
     const manifest = JSON.parse(readFileSync(join(directory, 'package.json'), 'utf8'));
     assert.equal(manifest.dependencies?.[name], undefined);
     assert.ok(!existsSync(join(directory, 'node_modules', name)));

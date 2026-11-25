@@ -169,7 +169,8 @@ function pluginCatalog(
         enabled.checked = !!selected && selected.disabled !== true;
         schema = instance?.configSchema ?? plugin.configSchema;
       }
-      if (!schema) return;
+      const currentSchema = schema;
+      if (!currentSchema) return;
       if (plugin.configHint) {
         const note = document.createElement('p');
         note.className = 'hint';
@@ -180,11 +181,11 @@ function pluginCatalog(
         for (const group of plugin.configGroups) {
           const block = fromMarkup('<section class="ui-section"><h3></h3></section>');
           required(block.querySelector('h3')).textContent = group.title;
-          const properties = Object.fromEntries(group.fields.map((id) => [id, schema.properties[id]]));
-          block.append(schemaFields(plugin.id, { ...schema, properties }, values(), modelCatalog()));
+          const properties = Object.fromEntries(group.fields.filter((id) => currentSchema.properties?.[id]).map((id) => [id, currentSchema.properties[id]]));
+          block.append(schemaFields(plugin.id, { ...currentSchema, properties }, values(), modelCatalog()));
           configFields.append(block);
         }
-      } else configFields.append(schemaFields(plugin.id, schema, values(), modelCatalog()));
+      } else configFields.append(schemaFields(plugin.id, currentSchema, values(), modelCatalog()));
     }
     if (scoped || application) {
       scopedControls.className = 'plugin-fields';
@@ -237,7 +238,7 @@ function pluginCatalog(
       save.disabled = true;
       outcome.textContent = '';
       try {
-        const config = readPluginValues({ [plugin.id]: {} }, configFields)[plugin.id];
+        const config = schema ? readPluginValues({ [plugin.id]: {} }, configFields)[plugin.id] : values();
         let patch: Partial<ProfileConfiguration> = {
           entries: { [plugin.id]: { config, disabled: !enabled.checked } },
         };
