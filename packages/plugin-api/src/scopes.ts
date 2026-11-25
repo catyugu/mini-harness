@@ -22,6 +22,21 @@ export function scopeChainOf(key?: ScopeKey): ScopeKey[] {
   return chain;
 }
 
+/** Rank visible contributions by nearest scope, then descending priority. */
+export function rankScoped<T extends { scope?: ScopeKey; priority: number }>(key: ScopeKey | undefined, entries: Iterable<T>) {
+  const ancestry = [...scopeChainOf(key), undefined];
+  return [...entries]
+    .filter(({ scope }) => ancestry.includes(scope))
+    .sort((a, b) => ancestry.indexOf(a.scope) - ancestry.indexOf(b.scope) || b.priority - a.priority);
+}
+
+export function sameRank(
+  a: { scope?: ScopeKey; priority: number },
+  b?: { scope?: ScopeKey; priority: number },
+) {
+  return b !== undefined && a.scope === b.scope && a.priority === b.priority;
+}
+
 /** Tag a newly created context whose lifetime is already owned by Cordis. */
 export function tagScope(ctx: Context, key: ScopeKey) {
   Object.defineProperty(ctx, scopeTag, { value: key });

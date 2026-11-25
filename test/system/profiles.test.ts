@@ -250,8 +250,7 @@ test('a third-party plugin uses tools, models and subprocesses from a Profile wi
         ctx.effect(() => ctx.harnessModels.register({
           list: () => [{ provider: id, id: 'fixture', name: 'fixture', configured: true, thinkingLevels: [], input: ['text'] }],
           resolve, capabilities,
-        }));
-        ctx.effect(() => ctx.harnessLlm.register({
+        }, {
           accepts: (model) => model.provider === id,
           async *stream(request) {
             const last = request.messages.at(-1);

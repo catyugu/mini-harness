@@ -488,8 +488,7 @@ export function apply(ctx) {
     list: () => [{ provider: 'local-fixture', id: 'one', name: 'One', configured: true, thinkingLevels: [], input: ['text'] }],
     resolve,
     capabilities: (choice) => ({ ...choice, name: choice.id, input: ['text'], contextWindow: 32000, maxTokens: 1024, reasoning: false }),
-  }));
-  ctx.effect(() => ctx.harnessLlm.register({
+  }, {
     accepts: (choice) => choice.provider === 'local-fixture',
     async *stream() {
       yield { type: 'done', message: { role: 'assistant', content: [{ type: 'text', text: 'Independent response' }], timestamp: Date.now() } };

@@ -80,7 +80,7 @@ function fixture(
       thinkingLevels: thinkingLevels(choice.id),
     }),
   });
-  ctx.provide('harnessLlm', { ...llm, register: () => () => {} });
+  ctx.provide('harnessLlm', { ...llm, register: () => () => {}, select: () => undefined });
   ctx.provide('harnessToolExecutor', executor);
   ctx.provide('harnessCompaction', { ...basicCompaction, shouldCompact: () => false });
   ctx.provide('harnessPrompt', { build: async () => 'Fixture', register: () => () => {} });

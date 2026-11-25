@@ -12,7 +12,7 @@ Maintains one credential and provider store. Publishes independent catalog and L
 
 ## API
 
-`harnessModels` and `harnessLlm` are independent replaceable capabilities. `@mini-harness/model-catalog` aggregates model sources registered through `harnessModels.register(source, priority)`, including dynamically resolved model IDs. The Pi provider store contributes through this same contract and keeps its connection and credential details private. Third-party adapters can own their provider configuration without installing the Pi store. `harnessModelPreference` is optional. `core:model-admin` serves provider settings and the browser catalog.
+`harnessModels` and `harnessLlm` are independent replaceable capabilities. `@mini-harness/model-catalog` aggregates model sources registered through `harnessModels.register(source, adapter, priority)`, including dynamically resolved model IDs. The catalog registers the source and adapter with one scope, priority and lifetime. Equal-ranked matches are ambiguous and omitted from discovery; they cannot silently select different metadata and transport. Adapter-only overrides via `harnessLlm.register` deliberately reuse the selected source's capabilities. Pi contributes its store through this same paired registration, keeping connection and credentials private. Third-party adapters can own their provider configuration without installing the Pi store. `harnessModelPreference` is optional. `core:model-admin` serves provider settings and the browser catalog.
 
 ## Dependencies
 
