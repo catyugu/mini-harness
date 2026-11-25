@@ -4,7 +4,7 @@ import { readFileSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
 import { readJson, writeJson } from '@mini-harness/platform/json';
-import { startIsolatedHost } from '../support/browser.js';
+import { readWebProfile, startIsolatedHost } from '../support/browser.js';
 
 test('plugin schema controls, recursive tree navigation, batch export and permanent deletion', async ({
   page,
@@ -70,7 +70,7 @@ test('plugin schema controls, recursive tree navigation, batch export and perman
         .getByRole('status')
         .filter({ hasText: /Saved|Bad prefix/ }),
     ).toHaveText('Saved.');
-    expect(readJson<any>(paths.settings, {}).pluginConfig.example).toEqual({
+    expect(readWebProfile(paths).configuration('example')).toEqual({
       prefix: 'Total',
       count: 5,
       mode: 'full',
@@ -86,7 +86,7 @@ test('plugin schema controls, recursive tree navigation, batch export and perman
         .getByRole('status')
         .filter({ hasText: /Saved|Bad prefix/ }),
     ).toContainText('Plugin example: Bad prefix');
-    expect(readJson<any>(paths.settings, {}).pluginConfig.example.prefix).toBe('Total');
+    expect(readWebProfile(paths).configuration('example')?.prefix).toBe('Total');
     await page.getByRole('button', { name: 'New conversation', exact: true }).click();
     await page.getByRole('textbox', { name: 'Message' }).fill('Parent task');
     await page.getByRole('button', { name: 'Send', exact: true }).click();

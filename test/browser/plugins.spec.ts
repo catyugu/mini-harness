@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
 import { workspaceId } from '@mini-harness/workspaces/catalog';
 import { readJson, writeJson } from '@mini-harness/platform/json';
-import { startIsolatedHost, settingsSection, suggestions } from '../support/browser.js';
+import { readWebProfile, startIsolatedHost, settingsSection, suggestions } from '../support/browser.js';
 
 test('frontend plugins own UI contributions and clean up on disable and reconfiguration', async ({
   page,
@@ -120,7 +120,7 @@ export function apply(ctx) {
     await preferences.check();
     await expect(preferences).toBeEnabled();
     await expect(preferences).toBeChecked();
-    expect(readJson<any>(paths.settings, {}).pluginConfig['ui-example']).toEqual({ showDetails: true });
+    expect(readWebProfile(paths).configuration('ui-example')).toEqual({ showDetails: true });
     await settingsSection(page, 'Model').click();
     await expect(page.getByRole('button', { name: 'Add provider' })).toBeVisible();
     await expect(page.getByText('Plugin model preferences')).toBeVisible();
@@ -314,11 +314,11 @@ test('plugin catalog applies configuration and removes disabled browser capabili
     await expect(catalog.getByText('Saved.', { exact: true })).toBeVisible();
     const model = catalog.getByRole('combobox', { name: 'Child model · subagents' });
     await expect(model).toHaveValue('null');
-    expect(readJson<any>(paths.settings, {}).pluginConfig.subagents.model).toBeNull();
+    expect(readWebProfile(paths).configuration('subagents')?.model).toBeNull();
     await model.selectOption({ label: 'Mock Model · local-mock' });
     await catalog.getByRole('button', { name: 'Save configuration' }).click();
     await expect(catalog.getByText('Saved.', { exact: true })).toBeVisible();
-    expect(readJson<any>(paths.settings, {}).pluginConfig.subagents.model).toEqual({
+    expect(readWebProfile(paths).configuration('subagents')?.model).toEqual({
       provider: 'local-mock',
       id: 'mock-model',
     });
@@ -381,9 +381,7 @@ test('the Plugins page keeps stored settings when a workspace plugin setup fails
     await expect(
       page.getByText(/Plugin workspace:.*\/workspace-example: Workspace setup failed/),
     ).toBeVisible();
-    expect(
-      readJson<typeof initial>(paths.settings, initial).scopes[key].pluginConfig['workspace-example'].value,
-    ).toBe('invalid');
+    expect(readWebProfile(paths).scopes[key].pluginConfig['workspace-example'].value).toBe('invalid');
     await value.fill('2');
     await page.getByRole('button', { name: 'Save configuration' }).click();
     await expect(page.getByText('Saved.', { exact: true })).toBeVisible();
@@ -450,7 +448,7 @@ export const apply = (ctx) => {
     ]);
     await page.getByRole('button', { name: 'Remove remove.txt' }).click();
     await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toHaveCount(0);
-    await expect(page.locator('.message-image-dialog')).toHaveCount(0);
+    await expect(page.getByRole('region', { name: 'Messages' })).toHaveCount(0);
     let releaseResponse = () => {};
     const responseHeld = new Promise<void>((resume) => {
       releaseResponse = resume;
@@ -499,7 +497,7 @@ export const apply = (ctx) => {
     await expect(page.getByRole('button', { name: 'Replacement conversation' })).toHaveCount(0);
     await expect(replacement).toHaveCount(0);
     await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toBeVisible();
-    await expect(page.locator('.message-image-dialog')).toHaveCount(1);
+    await expect(page.getByRole('region', { name: 'Messages' })).toBeVisible();
     await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toHaveText(
       'New draft after submission',
     );
@@ -508,7 +506,7 @@ export const apply = (ctx) => {
     await expect(
       page
         .locator('#messages .message-row.user .message-attachments')
-        .getByRole('button', { name: 'Download keep.txt' }),
+        .getByRole('button', { name: 'Preview keep.txt' }),
     ).toContainText('keep.txt');
     await expect(page.getByRole('button', { name: 'New conversation', exact: true })).toBeVisible();
     await expect(page.locator('body')).toHaveAttribute('data-slot-disposed', 'yes');

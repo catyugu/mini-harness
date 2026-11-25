@@ -50,7 +50,7 @@ export const manifest: PluginDescriptor = {
           const address = url + '/#token=' + web.token;
           writeJson(paths.pid, { pid: process.pid, url, startedAt: new Date().toISOString() });
           console.log('mini-harness listening at ' + (launch.detached ? url : address));
-          if (open && process.stdout.isTTY) {
+          if (open) {
             const command =
               process.platform === 'win32' ? 'rundll32' : process.platform === 'darwin' ? 'open' : 'xdg-open';
             const child = spawn(

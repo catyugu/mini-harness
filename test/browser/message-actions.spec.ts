@@ -45,7 +45,7 @@ export const apply = (ctx) => {
       const records = writePlugin(
         paths.plugins,
         'record-writer',
-        { inject: ['harnessSessions'] },
+        {},
         `
 export const inject = ["harnessPluginRoutes","harnessSessions"];
 export const apply = (ctx) => {
@@ -125,7 +125,7 @@ export const apply = (ctx) => {
   const thumbnail = user.getByRole('button', { name: 'Preview reference.png' });
   await thumbnail.focus();
   await page.keyboard.press('Enter');
-  const preview = page.getByRole('dialog', { name: 'Image preview' });
+  const preview = page.getByRole('dialog', { name: 'reference.png' });
   await expectInViewport(preview, mobile);
   const image = preview.getByRole('img', { name: 'reference.png' });
   await expect(image).toHaveJSProperty('naturalWidth', 480);

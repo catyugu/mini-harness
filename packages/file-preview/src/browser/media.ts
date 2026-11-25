@@ -70,6 +70,7 @@ export function mediaDialog(name: string, signal: AbortSignal) {
       content.replaceChildren(media);
       if (media instanceof HTMLImageElement) {
         const actual = button('Actual size', 'quiet');
+        actual.setAttribute('aria-pressed', 'false');
         actual.onclick = () => {
           const expanded = viewport.classList.toggle('actual-size');
           actual.textContent = expanded ? 'Fit to window' : 'Actual size';

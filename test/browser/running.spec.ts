@@ -306,6 +306,7 @@ test('switching workspaces preserves running conversations and each workspace’
     await waiting;
     await expect(nav.getByRole('button', { name: 'Keep working here', exact: true })).toBeVisible();
     await open.click();
+    await panel.getByRole('button', { name: /Workspace files/ }).click();
     await panel.locator('summary').filter({ hasText: /^src$/ }).click();
     await panel.getByRole('button', { name: 'common.ts', exact: true }).click();
     await expect(panel.locator('.syntax-string')).toHaveText('"first"');
@@ -334,6 +335,7 @@ test('switching workspaces preserves running conversations and each workspace’
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.locator('.message.assistant')).toHaveText('Second workspace finished');
     await open.click();
+    await panel.getByRole('button', { name: /Workspace files/ }).click();
     await panel.locator('summary').filter({ hasText: /^src$/ }).click();
     await panel.getByRole('button', { name: 'common.ts', exact: true }).click();
     await expect(panel.locator('.syntax-string')).toHaveText('"second"');
