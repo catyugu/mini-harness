@@ -87,7 +87,8 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
     if (entry.type === 'tool-schema' && digest(entry.tools) !== entry.hash)
       throw new Error('Tool schema digest does not match its content');
     if (entry.type === 'model-request') {
-      if (!recovery || entry.request.messagesPatch !== undefined) validateRequestSnapshot(this.materializeRequest(entry));
+      if (!recovery || entry.request.messagesPatch !== undefined)
+        validateRequestSnapshot(this.materializeRequest(entry));
       else {
         validateRequestSnapshot(this.requestMetadata(entry));
         this.validateRecoveryContext(entry.parentId, recovery);
