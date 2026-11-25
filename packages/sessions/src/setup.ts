@@ -15,7 +15,8 @@ export function setup(ctx: Context) {
       const record = registry.get(id);
       const key = registry.scope(id);
       return (
-        record && key && {
+        record &&
+        key && {
           key,
           parent: record.parentId ? `session:${record.parentId}` : `workspace:${record.workspaceId}`,
         }

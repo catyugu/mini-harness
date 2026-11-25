@@ -54,10 +54,7 @@ function requireService<K extends keyof Context & string>(ctx: Context, name: K)
 
 async function retryModel(ctx: Context, failure: ModelFailure) {
   const { signal, ...input } = failure;
-  for (const { context, callback } of ctx.events.listeners(
-    'agent/model-retry',
-    scopeTarget(ctx),
-  )) {
+  for (const { context, callback } of ctx.events.listeners('agent/model-retry', scopeTarget(ctx))) {
     const retry = await context.fiber.run(
       (signal) => callback({ ...structuredClone(input), signal }),
       signal,
@@ -504,7 +501,10 @@ export class NativeAgent implements AgentPort {
           }),
         );
         const promptService: PromptPort = requireService(ctx, 'harnessPrompt');
-        const systemPrompt = await promptService.build({ sessionId: id, cwd, tools: toolMetadata, signal }, scopeOf(ctx));
+        const systemPrompt = await promptService.build(
+          { sessionId: id, cwd, tools: toolMetadata, signal },
+          scopeOf(ctx),
+        );
         const request = await this.prepareRequest(
           ctx,
           log,

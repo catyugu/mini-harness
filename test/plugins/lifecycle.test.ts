@@ -113,10 +113,15 @@ export const apply = (ctx, config) => {
     viewBox: '0 0 24 24',
   });
   await runtime.plugins.prepare(`session:${item.id}`);
-  const activeNames = () => runtime.plugins.ctx.harnessTools.forSession(item.id, runtime.plugins.ctx.harnessRegistry.runScope(item.id)).map(({ name }) => name);
+  const activeNames = () =>
+    runtime.plugins.ctx.harnessTools
+      .forSession(item.id, runtime.plugins.ctx.harnessRegistry.runScope(item.id))
+      .map(({ name }) => name);
   assert.ok(activeNames().includes('example_count'));
   const tool = expectPresent(
-    runtime.plugins.ctx.harnessTools.forSession(item.id, runtime.plugins.ctx.harnessRegistry.runScope(item.id)).find(({ name }) => name === 'example_count'),
+    runtime.plugins.ctx.harnessTools
+      .forSession(item.id, runtime.plugins.ctx.harnessRegistry.runScope(item.id))
+      .find(({ name }) => name === 'example_count'),
     'example count tool',
   );
   assert.equal((await tool.execute('test', {}, undefined, undefined, undefined)).content[0].type, 'text');
@@ -185,7 +190,10 @@ export const apply = (ctx) => {
   await runtime.start();
   const item = runtime.plugins.ctx.harnessRegistry.create();
   await runtime.plugins.prepare(`session:${item.id}`);
-  const activeNames = () => runtime.plugins.ctx.harnessTools.forSession(item.id, runtime.plugins.ctx.harnessRegistry.runScope(item.id)).map(({ name }) => name);
+  const activeNames = () =>
+    runtime.plugins.ctx.harnessTools
+      .forSession(item.id, runtime.plugins.ctx.harnessRegistry.runScope(item.id))
+      .map(({ name }) => name);
   assert.ok(activeNames().includes('read'));
   await runtime.configuration.update({ entries: { files: { disabled: true } } });
   assert.ok(!activeNames().includes('read'));
@@ -312,7 +320,9 @@ export const apply = (ctx) => {
   });
   const item = runtime.plugins.ctx.harnessRegistry.create();
   const tool = expectPresent(
-    runtime.plugins.ctx.harnessTools.forSession(item.id, runtime.plugins.ctx.harnessRegistry.runScope(item.id)).find(({ name }) => name === 'schema_value'),
+    runtime.plugins.ctx.harnessTools
+      .forSession(item.id, runtime.plugins.ctx.harnessRegistry.runScope(item.id))
+      .find(({ name }) => name === 'schema_value'),
     'schema tool',
   );
   assert.match(JSON.stringify(await tool.execute('test', {}, undefined, undefined, undefined)), /3:true/);
@@ -344,7 +354,9 @@ export const apply = (ctx) => {
   assert.deepEqual(
     await tool.execute('test', {}, undefined, undefined, undefined),
     await expectPresent(
-      runtime.plugins.ctx.harnessTools.forSession(item.id, runtime.plugins.ctx.harnessRegistry.runScope(item.id)).find(({ name }) => name === 'schema_value'),
+      runtime.plugins.ctx.harnessTools
+        .forSession(item.id, runtime.plugins.ctx.harnessRegistry.runScope(item.id))
+        .find(({ name }) => name === 'schema_value'),
       'registered schema tool',
     ).execute('test', {}, undefined, undefined, undefined),
   );
@@ -399,7 +411,9 @@ export const apply = (ctx, config) => {
   );
   const item = runtime.plugins.ctx.harnessRegistry.create();
   assert.equal(
-    runtime.plugins.ctx.harnessTools.forSession(item.id, runtime.plugins.ctx.harnessRegistry.runScope(item.id)).filter(({ name }) => name === 'base_tool').length,
+    runtime.plugins.ctx.harnessTools
+      .forSession(item.id, runtime.plugins.ctx.harnessRegistry.runScope(item.id))
+      .filter(({ name }) => name === 'base_tool').length,
     1,
   );
   const next = mergeSettings(runtime.settings, { entries: { base: { config: { value: 'replacement' } } } });
@@ -410,7 +424,9 @@ export const apply = (ctx, config) => {
     /Persistence failed/,
   );
   const restored = expectPresent(
-    runtime.plugins.ctx.harnessTools.forSession(item.id, runtime.plugins.ctx.harnessRegistry.runScope(item.id)).find(({ name }) => name === 'base_tool'),
+    runtime.plugins.ctx.harnessTools
+      .forSession(item.id, runtime.plugins.ctx.harnessRegistry.runScope(item.id))
+      .find(({ name }) => name === 'base_tool'),
     'restored tool',
   );
   assert.match(
@@ -418,7 +434,9 @@ export const apply = (ctx, config) => {
     /original/,
   );
   assert.ok(
-    runtime.plugins.ctx.harnessTools.forSession(item.id, runtime.plugins.ctx.harnessRegistry.runScope(item.id)).some(({ name }) => name === 'dependent_tool'),
+    runtime.plugins.ctx.harnessTools
+      .forSession(item.id, runtime.plugins.ctx.harnessRegistry.runScope(item.id))
+      .some(({ name }) => name === 'dependent_tool'),
   );
 });
 
@@ -522,7 +540,9 @@ test('disabled optional builtins cannot block boot or reload because their confi
     entries: { subagents: { disabled: false, config: { maxDepth: 2 } } },
   });
   assert.ok(
-    restored.plugins.ctx.harnessTools.forSession(conversation.id, restored.plugins.ctx.harnessRegistry.runScope(conversation.id)).some(({ name }) => name === 'delegate'),
+    restored.plugins.ctx.harnessTools
+      .forSession(conversation.id, restored.plugins.ctx.harnessRegistry.runScope(conversation.id))
+      .some(({ name }) => name === 'delegate'),
   );
 });
 

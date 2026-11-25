@@ -14,7 +14,10 @@ interface ToolRegistration extends ToolAccess {
 
 export class ToolRegistry {
   private readonly tools = new ScopedLayers<ToolRegistration>();
-  private readonly leases = new WeakMap<ToolDefinition, { id: string; scope?: ScopeKey; entry: ToolRegistration }>();
+  private readonly leases = new WeakMap<
+    ToolDefinition,
+    { id: string; scope?: ScopeKey; entry: ToolRegistration }
+  >();
 
   constructor(
     private readonly decide?: (request: ToolDecision, scope?: ScopeKey) => Promise<'deny' | undefined>,
@@ -84,13 +87,16 @@ export class ToolRegistry {
                 );
               }
               if (
-                (await registry.decide?.({
-                  sessionId: id,
-                  tool: name,
-                  callId: call,
-                  arguments: inputs,
-                  signal,
-                }, scope)) === 'deny'
+                (await registry.decide?.(
+                  {
+                    sessionId: id,
+                    tool: name,
+                    callId: call,
+                    arguments: inputs,
+                    signal,
+                  },
+                  scope,
+                )) === 'deny'
               )
                 throw new Error('Tool denied by conversation or plugin policy: ' + name);
               signal.throwIfAborted();
@@ -156,7 +162,12 @@ export class ToolRegistry {
   }
 
   forSession(id: string, scope?: ScopeKey) {
-    const names = new Set(this.tools.chain(scope).reverse().flatMap((layer) => [...layer.keys()]));
+    const names = new Set(
+      this.tools
+        .chain(scope)
+        .reverse()
+        .flatMap((layer) => [...layer.keys()]),
+    );
     const available: ToolDefinition[] = [];
     for (const name of names) {
       const selected = this.selected(id, name, scope);

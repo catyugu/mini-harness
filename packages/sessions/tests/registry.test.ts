@@ -92,14 +92,9 @@ test('restart finishes a journaled deletion after partial cleanup', async (t) =>
     }),
   );
   const forgotten: string[] = [];
-  const restored = new SessionRegistry(
-    paths,
-    new WorkspaceCatalog(paths),
-    undefined,
-    async (keys) => {
-      forgotten.push(...keys);
-    },
-  );
+  const restored = new SessionRegistry(paths, new WorkspaceCatalog(paths), undefined, async (keys) => {
+    forgotten.push(...keys);
+  });
   t.after(() => restored.dispose());
   await restored.recoverDeletion();
   assert.deepEqual(

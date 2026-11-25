@@ -535,7 +535,9 @@ export function apply(ctx) {
   const tools = app.runtime.plugins.ctx.harnessTools;
   const call = (id: string) =>
     expectPresent(
-      tools.forSession(id, app.runtime.plugins.ctx.harnessRegistry.runScope(id)).find(({ name }) => name === 'ls'),
+      tools
+        .forSession(id, app.runtime.plugins.ctx.harnessRegistry.runScope(id))
+        .find(({ name }) => name === 'ls'),
       'ls tool',
     ).execute('policy', { path: '.' }, undefined, undefined, undefined);
   await assert.rejects(call(child.id), /Tool denied by conversation or plugin policy/);

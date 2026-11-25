@@ -131,7 +131,9 @@ function pluginCatalog(
     const configFields = document.createElement('div');
     fields.append(scopedControls, configFields);
     const currentKey = () =>
-      scopePicker.value && scopePicker.value !== 'application' ? (scopePicker.value as ScopeAddress) : undefined;
+      scopePicker.value && scopePicker.value !== 'application'
+        ? (scopePicker.value as ScopeAddress)
+        : undefined;
     const currentScope = () => {
       const key = currentKey();
       return (key && snapshot().settings.scopes[key]) || undefined;

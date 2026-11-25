@@ -15,24 +15,18 @@ const plugin: Plugin.Object = {
     const { harnessToolPolicy } = ctx;
     ctx.provide(
       'harnessTools',
-      new ToolRegistry(
-        async (request, scope) => {
-          const { signal, ...input } = request;
-          for (const { context, callback } of ctx.events.listeners(
-            'tools/decide',
-            scopeTarget(ctx, scope),
-          )) {
-            const decision = await context.fiber.run(
-              (signal) => callback({ ...structuredClone(input), signal }),
-              signal,
-            );
-            if (decision === undefined) continue;
-            if (decision !== 'deny') throw new Error('Invalid tool policy decision');
-            return decision;
-          }
-        },
-        harnessToolPolicy,
-      ).service(),
+      new ToolRegistry(async (request, scope) => {
+        const { signal, ...input } = request;
+        for (const { context, callback } of ctx.events.listeners('tools/decide', scopeTarget(ctx, scope))) {
+          const decision = await context.fiber.run(
+            (signal) => callback({ ...structuredClone(input), signal }),
+            signal,
+          );
+          if (decision === undefined) continue;
+          if (decision !== 'deny') throw new Error('Invalid tool policy decision');
+          return decision;
+        }
+      }, harnessToolPolicy).service(),
     );
   },
 };

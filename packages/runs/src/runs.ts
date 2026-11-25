@@ -512,17 +512,17 @@ export class Runs implements RunPort {
           parent = parent.intercept(name, scope[Context.intercept][name]);
       break;
     }
-    const fiber = tagScope(parent.extend(), this.registry.runScope(id)!).inject(['harnessAgent'], function agentRun() {});
+    const fiber = tagScope(parent.extend(), this.registry.runScope(id)!).inject(
+      ['harnessAgent'],
+      function agentRun() {},
+    );
     try {
       await fiber;
       if (!fiber.ctx.get('harnessAgent'))
         throw new DomainError('unavailable', 'Required service is unavailable: harnessAgent');
       activity.context = fiber.ctx;
       return await fiber.run(async (signal) => {
-        for (const { context, callback } of fiber.ctx.events.listeners(
-          'agent/setup',
-          scopeTarget(fiber.ctx),
-        ))
+        for (const { context, callback } of fiber.ctx.events.listeners('agent/setup', scopeTarget(fiber.ctx)))
           await context.fiber.run((signal) => callback(fiber.ctx, id, signal), signal);
         return work(fiber.ctx, signal);
       }, signal);

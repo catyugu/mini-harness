@@ -170,7 +170,9 @@ test(
     const parent = app.runtime.plugins.ctx.harnessRegistry.create();
     const tools = app.runtime.plugins.ctx.harnessTools;
     const delegate = expectPresent(
-      tools.forSession(parent.id, app.runtime.plugins.ctx.harnessRegistry.runScope(parent.id)).find(({ name }) => name === 'delegate'),
+      tools
+        .forSession(parent.id, app.runtime.plugins.ctx.harnessRegistry.runScope(parent.id))
+        .find(({ name }) => name === 'delegate'),
       'delegate tool',
     );
     const start = (task: string) =>
@@ -205,7 +207,9 @@ test(
     const child = app.runtime.plugins.ctx.harnessRegistry.list().find(({ title }) => title === 'First child');
     assert.ok(child);
     assert.equal(
-      tools.forSession(child.id, app.runtime.plugins.ctx.harnessRegistry.runScope(child.id)).some(({ name }) => name === 'delegate'),
+      tools
+        .forSession(child.id, app.runtime.plugins.ctx.harnessRegistry.runScope(child.id))
+        .some(({ name }) => name === 'delegate'),
       false,
     );
     assert.ok(held[0] && held[1]);

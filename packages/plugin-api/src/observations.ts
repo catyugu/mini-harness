@@ -10,7 +10,12 @@ declare module 'mini-harness/cordis' {
   }
 }
 
-export function observe(ctx: Context, event: CapabilityObservation, request?: AbortSignal, scope: ScopeKey | undefined = scopeOf(ctx)) {
+export function observe(
+  ctx: Context,
+  event: CapabilityObservation,
+  request?: AbortSignal,
+  scope: ScopeKey | undefined = scopeOf(ctx),
+) {
   for (const { context, callback } of ctx.events.listeners('harness/observe', scopeTarget(ctx, scope))) {
     void context.fiber
       .run((signal) => callback(structuredClone(event), signal), request)

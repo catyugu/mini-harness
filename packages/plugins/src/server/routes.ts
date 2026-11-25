@@ -43,7 +43,11 @@ export class PluginRouteRegistry {
       register(method, path, handler) {
         const caller = Service.caller(this);
         const { pluginId, scopeAddress } = pluginInstance(caller);
-        if (scopeAddress || !routePath.test(path) || !['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method))
+        if (
+          scopeAddress ||
+          !routePath.test(path) ||
+          !['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method)
+        )
           throw new Error('Invalid plugin route');
         const lifetime = caller.fiber.signal;
         return networkEffect(caller, () =>

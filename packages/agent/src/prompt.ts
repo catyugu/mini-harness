@@ -24,8 +24,8 @@ export class Prompt implements PromptPort {
   async build(context: PromptContext, scope?: ScopeKey) {
     const sections = new Map<string, { context: Context; section: PromptSection }>();
     for (const layer of this.sections.chain(scope)) {
-      const candidates = [...layer.values()].filter(({ context, section }) =>
-        !context.fiber.signal.aborted && !sections.has(section.id),
+      const candidates = [...layer.values()].filter(
+        ({ context, section }) => !context.fiber.signal.aborted && !sections.has(section.id),
       );
       candidates.sort((a, b) => (b.section.priority ?? 0) - (a.section.priority ?? 0));
       for (const item of candidates) {
@@ -41,7 +41,10 @@ export class Prompt implements PromptPort {
     )) {
       context.signal.throwIfAborted();
       const { signal, ...input } = context;
-      const text = await owner.fiber.run((signal) => section.render({ ...structuredClone(input), signal }), signal);
+      const text = await owner.fiber.run(
+        (signal) => section.render({ ...structuredClone(input), signal }),
+        signal,
+      );
       if (text !== undefined && typeof text !== 'string')
         throw new Error('Invalid prompt section output: ' + section.id);
       if (text?.trim()) parts.push(text);

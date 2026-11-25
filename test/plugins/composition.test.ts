@@ -109,7 +109,9 @@ test('Shell delegates to a selected external process provider and still requires
   assert.equal(result.status, 200, JSON.stringify(result.body));
   const { id } = app.runtime.plugins.ctx.harnessRegistry.create();
   const tool = expectPresent(
-    app.runtime.plugins.ctx.harnessTools.forSession(id, app.runtime.plugins.ctx.harnessRegistry.runScope(id)).find(({ name }) => name === 'sandbox_shell'),
+    app.runtime.plugins.ctx.harnessTools
+      .forSession(id, app.runtime.plugins.ctx.harnessRegistry.runScope(id))
+      .find(({ name }) => name === 'sandbox_shell'),
     'shell tool',
   );
   const execution = tool.execute('preview', { command: 'Preview command' }, undefined, undefined, undefined);
@@ -205,7 +207,8 @@ export const apply = (ctx, config) => {
   for (const id of [parent.id, child.id, sibling.id, outside.id])
     await app.runtime.plugins.prepare(`session:${id}`);
   const tools = app.runtime.plugins.ctx.harnessTools;
-  const names = (id: string) => tools.forSession(id, app.runtime.plugins.ctx.harnessRegistry.runScope(id)).map(({ name }) => name);
+  const names = (id: string) =>
+    tools.forSession(id, app.runtime.plugins.ctx.harnessRegistry.runScope(id)).map(({ name }) => name);
   assert.ok(names(parent.id).includes('scoped_greeting'));
   assert.ok(
     (await request(operation(workspaceKey, 'tools'), 'POST', { input: parent.id })).body.includes(
@@ -222,7 +225,9 @@ export const apply = (ctx, config) => {
     assert.ok(names(id).includes('read'));
   }
   const tool = expectPresent(
-    tools.forSession(child.id, app.runtime.plugins.ctx.harnessRegistry.runScope(child.id)).find(({ name }) => name === 'scoped_greeting'),
+    tools
+      .forSession(child.id, app.runtime.plugins.ctx.harnessRegistry.runScope(child.id))
+      .find(({ name }) => name === 'scoped_greeting'),
     'scoped greeting tool',
   );
   assert.match(
@@ -369,7 +374,11 @@ export function apply(ctx) {
   );
   const root = app.runtime.plugins.ctx;
   const session = root.harnessRegistry.create();
-  assert.ok(root.harnessTools.forSession(session.id, root.harnessRegistry.runScope(session.id)).some(({ name }) => name === 'read'));
+  assert.ok(
+    root.harnessTools
+      .forSession(session.id, root.harnessRegistry.runScope(session.id))
+      .some(({ name }) => name === 'read'),
+  );
   const duplicate = await request('/settings', 'PATCH', {
     entries: { 'deny-tools': { name: '../../plugins/deny-tools', disabled: false } },
   });
@@ -389,7 +398,11 @@ export function apply(ctx) {
     },
   });
   assert.equal(restored.status, 200, JSON.stringify(restored.body));
-  assert.ok(root.harnessTools.forSession(session.id, root.harnessRegistry.runScope(session.id)).some(({ name }) => name === 'read'));
+  assert.ok(
+    root.harnessTools
+      .forSession(session.id, root.harnessRegistry.runScope(session.id))
+      .some(({ name }) => name === 'read'),
+  );
 });
 
 test('file tools and HTTP preview consume the same selected File Access provider', async (t) => {
@@ -423,7 +436,9 @@ export function apply(ctx) {
   const preview = await request('/workspaces/' + session.workspaceId + '/files/preview?path=virtual.txt');
   assert.equal(preview.body.text, 'Provided file content');
   const tool = expectPresent(
-    app.runtime.plugins.ctx.harnessTools.forSession(session.id, app.runtime.plugins.ctx.harnessRegistry.runScope(session.id)).find(({ name }) => name === 'read'),
+    app.runtime.plugins.ctx.harnessTools
+      .forSession(session.id, app.runtime.plugins.ctx.harnessRegistry.runScope(session.id))
+      .find(({ name }) => name === 'read'),
     'read tool',
   );
   assert.match(
@@ -799,7 +814,11 @@ export function apply(ctx) {
   const first = root.harnessRegistry.create();
   const second = root.harnessRegistry.create();
   await root.harnessRuns.send(first.id, 'First run');
-  assert.ok(!root.harnessTools.forSession(first.id, root.harnessRegistry.runScope(first.id)).some(({ name }) => name === 'run_marker'));
+  assert.ok(
+    !root.harnessTools
+      .forSession(first.id, root.harnessRegistry.runScope(first.id))
+      .some(({ name }) => name === 'run_marker'),
+  );
   await root.harnessRuns.send(second.id, 'Second run');
   assert.match(JSON.stringify(mock.requests[0]), new RegExp('Run marker ' + first.id));
   assert.match(JSON.stringify(mock.requests[1]), new RegExp('Run marker ' + second.id));
