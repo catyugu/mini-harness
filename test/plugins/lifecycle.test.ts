@@ -1255,7 +1255,7 @@ test('shipped, local and npm entries share metadata, configuration and resource 
   await host.update({
     entries: { bundled: { disabled: false }, local: { disabled: false }, npm: { disabled: false } },
   });
-  assert.ok(host.metadata().every((item) => item.title === 'Native title' && item.state === 'active'));
+  assert.ok(host.metadata().every((item) => item.title === 'Native title' && item.state === 'ready'));
   assert.equal(readFileSync(trace, 'utf8').split('\n').filter((line) => line === 'import').length, 1);
   const browserEntries = () => host.browser().sort((a, b) => a.id.localeCompare(b.id));
   assert.equal(browserEntries().length, 3);
