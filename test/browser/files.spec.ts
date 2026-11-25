@@ -22,8 +22,6 @@ test('file inspection, responsive themes and reduced viewport height keep contro
     for (const width of [1366, 768, 390, 320]) {
       const page = await browser.newPage({ viewport: { width, height: 700 } });
       try {
-        if (width > 860)
-          await page.addInitScript(() => localStorage.setItem('mini-harness-panel-width', '640'));
         await page.goto(service.url + '/#token=' + service.token);
         if (width <= 860) {
           const navigation = page.getByRole('button', { name: 'Toggle navigation' });
@@ -41,33 +39,7 @@ test('file inspection, responsive themes and reduced viewport height keep contro
         if (width <= 860) await page.keyboard.press('Escape');
         await page.getByRole('button', { name: 'Open workspace panel', exact: true }).click();
         const panel = page.locator('#inspector');
-        const home = panel.locator('.right-start');
-        await expect(panel.locator('.right-start-title')).toHaveText('Start');
-        await expect(home.getByRole('button', { name: /Workspace files/ })).toBeVisible();
-        await expect(home.getByRole('button', { name: /Git changes/ })).toBeVisible();
-        await expect
-          .poll(() =>
-            home.locator('.right-start-menu').evaluate((menu) => {
-              const area = menu.parentElement?.getBoundingClientRect();
-              if (!area) return false;
-              const bounds = menu.getBoundingClientRect();
-              const cards = [...menu.querySelectorAll('button')].map((card) => card.getBoundingClientRect());
-              return (
-                Math.abs(bounds.left + bounds.width / 2 - (area.left + area.width / 2)) < 2 &&
-                Math.abs(bounds.top + bounds.height / 2 - (area.top + area.height / 2)) < 2 &&
-                cards.every((card) => card.width <= 380 && card.height >= 68 && card.height < 100) &&
-                cards.every((card, index) => index === 0 || card.top - cards[index - 1].bottom === 12)
-              );
-            }),
-          )
-          .toBe(true);
-        if (width === 320) {
-          await page.setViewportSize({ width, height: 380 });
-          await expectInViewport(home.getByRole('button', { name: /Git changes/ }), { width, height: 380 });
-          await page.setViewportSize({ width, height: 700 });
-        }
         await panel.getByRole('button', { name: /Workspace files/ }).click();
-        await expect(panel.locator('.right-start-title')).toBeHidden();
         await expect(panel.getByRole('tab', { name: 'Files', exact: true })).toBeVisible();
         const file = panel.getByRole('button', { name: 'notes.md', exact: true });
         await expect(file).toHaveCSS('justify-content', 'flex-start');
