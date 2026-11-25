@@ -205,7 +205,7 @@ async function checkPackage() {
         if (event.type === 'run-ended') void event.run.id;
       });
       ctx.on('conversation/tool-projection', ({ content }: ToolProjection) => content);
-      void records.append({ seen: true });
+      void records.append({ note: 'seen' });
       // @ts-expect-error Input listeners return native user content.
       ctx.on('agent/prepare-input', () => ({ arbitrary: true }));
       void ctx.harnessPluginSettings.set('showDetails', true);

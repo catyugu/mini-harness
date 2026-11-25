@@ -5,10 +5,12 @@ import { saveProvider } from './provider-settings.ts';
 
 export function setupAdministration(ctx: Context) {
   const recent = () => ctx.get('harnessModelPreference')?.recent() ?? { provider: '', id: '' };
-  const host = {
-    paths: ctx.harnessState.paths,
-    catalog: ctx.harnessModels,
-    admin: ctx.harnessModelStore,
+  const catalog = ctx.harnessModels;
+  const providerAdministration = () => ctx.get('harnessModelStore');
+  const admin = () => {
+    const store = providerAdministration();
+    if (!store) throw new DomainError('unavailable', 'Provider administration is disabled');
+    return store;
   };
   const add = (method: string, path: string, handler: Parameters<typeof ctx.harnessRoutes.register>[2]) =>
     ctx.effect(() => ctx.harnessRoutes.register(method, path, handler));
@@ -25,16 +27,16 @@ export function setupAdministration(ctx: Context) {
     return work;
   };
   ctx.effect(() => () => pending);
-  add('GET', '/api/providers', () => host.admin.providers());
+  add('GET', '/api/providers', () => providerAdministration()?.providers() ?? []);
   for (const method of ['PUT', 'DELETE']) {
     add(method, '/api/providers', async ({ body, signal }) => {
       const input = await body();
       return write(async () => {
         signal.throwIfAborted();
-        const result = await saveProvider(host, input, method === 'DELETE');
+        const result = await saveProvider({ paths: ctx.harnessState.paths, catalog, admin: admin() }, input, method === 'DELETE');
         changed();
         const choice = recent();
-        if (choice.provider === input.id && !host.catalog.resolve(choice))
+        if (choice.provider === input.id && !catalog.resolve(choice))
           await waitFor(
             ctx.get('harnessModelPreference')?.remember({ provider: '', id: '' }) ?? Promise.resolve(),
             signal,
@@ -50,24 +52,25 @@ export function setupAdministration(ctx: Context) {
         signal.throwIfAborted();
         if (typeof input?.provider !== 'string' || !/^[a-z0-9-]+$/.test(input.provider))
           throw new DomainError('invalid_input', 'Invalid provider');
-        if (!host.admin.hasProvider(input.provider))
+        const store = admin();
+        if (!store.hasProvider(input.provider))
           throw new DomainError('invalid_input', 'Unknown provider');
         if (method === 'DELETE') {
-          await host.admin.removeCredential(input.provider);
+          await store.removeCredential(input.provider);
         } else {
           if (typeof input.key !== 'string' || !input.key.trim())
             throw new DomainError('invalid_input', 'Invalid credential');
-          await host.admin.storeCredential(input.provider, input.key.trim());
+          await store.storeCredential(input.provider, input.key.trim());
         }
         changed();
         return {
           ok: true,
           persisted: true,
-          models: host.catalog.list(),
-          status: host.admin.authStatus(input.provider),
+          models: catalog.list(),
+          status: store.authStatus(input.provider),
         };
       });
     });
   }
-  add('GET', '/api/models', async () => ({ models: await host.catalog.available(), recent: recent() }));
+  add('GET', '/api/models', async () => ({ models: await catalog.available(), recent: recent(), canManageProviders: Boolean(providerAdministration()) }));
 }

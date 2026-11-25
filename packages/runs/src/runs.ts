@@ -183,7 +183,7 @@ export class Runs implements RunPort {
         } finally {
           activity.inputSignal = undefined;
         }
-      });
+      }, Boolean(preparedScope));
     };
     const finish = (state: RunInfo['state'], error?: string) => {
       const inbox = new Inbox(log);
@@ -493,9 +493,10 @@ export class Runs implements RunPort {
     activity: Activity,
     signal: AbortSignal,
     work: (ctx: Context, signal: AbortSignal) => Promise<T>,
+    prepared = false,
   ) {
     const key = `session:${id}` as const;
-    await this.scopes.prepare(key, signal);
+    if (!prepared) await this.scopes.prepare(key, signal);
     signal.throwIfAborted();
     const scope = this.scopes.context(key);
     const fiber = tagScope(scope.extend(), this.registry.runScope(id)!).inject(['harnessAgent'], () => {});
