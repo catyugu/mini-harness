@@ -40,7 +40,7 @@
     "pack:verify": "node dist/scripts/check-package.js",
     "test:playwright": "playwright test -c playwright.config.ts",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier packages/host/src/profile.ts && prettier --check ."
   },
   "dependencies": {
     "@earendil-works/pi-ai": "1.6.0",
