@@ -454,8 +454,8 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
       if (entry && (!next || !entry.matches(next) || !isDeepStrictEqual(entry.options.config, next.config)))
         throw new DomainError('conflict', 'Changing ' + owner.options.id + ' requires a Profile restart');
     }
+    const generation = this.scopeGeneration;
     try {
-      const generation = this.scopeGeneration;
       let activationErrors = await this.entries.update(mounts);
       // Domain providers may register or remove scope resolvers during graph activation.
       // Reconcile their dependent groups against the settled bindings before publishing.
@@ -491,6 +491,18 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
     } catch (error) {
       try {
         await this.entries.update(previousEntries);
+        if (generation !== this.scopeGeneration && !starting) {
+          const restored = this.scopedEntries(
+            previous,
+            this.catalog.descriptors(),
+            (id, _error, key) => !previousActive.has(key ? key + '/' + id : id),
+          );
+          await this.entries.update([
+            ...previousEntries.filter(({ id }) => !entryAddress(id).scope),
+            ...restored.entries,
+          ]);
+          this.scopes = restored.contexts;
+        }
         for (const id of previousActive) {
           const restored = this.entries.get(id);
           if (!restored?.active || restored.error)
