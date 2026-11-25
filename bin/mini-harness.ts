@@ -3,7 +3,7 @@ import { bootProfile } from '@mini-harness/host/application';
 import {
   allowsDetachment,
   dumpProfile,
-  ensureProfile,
+  manageProfilePackages,
   profileSchema,
   recreateProfile,
 } from '@mini-harness/host/profile';
@@ -220,7 +220,7 @@ async function main() {
     const unlock = await lockInstance(paths.home);
     try {
       const { runPackageManager } = await import('@mini-harness/plugins/registry-client');
-      await runPackageManager(ensureProfile(name, paths), npmArgs);
+      await manageProfilePackages(name, paths, npmArgs, runPackageManager);
     } finally {
       await unlock();
     }

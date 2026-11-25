@@ -8,6 +8,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { createServer } from 'node:http';
 import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
+import { parse } from 'yaml';
 import { writeJson } from '@mini-harness/platform/json';
 import { createMiniHarnessServer } from '../support/profile.ts';
 import { createFixturePaths } from '../helpers/mock-provider.ts';
@@ -116,9 +117,10 @@ test(
         dependencies,
         exports: files['index.js']
           ? './index.js'
-          : files['server/entry.mjs']
-            ? './server/entry.mjs'
-            : undefined,
+          : {
+              ...(files['server/entry.mjs'] ? { '.': './server/entry.mjs' } : {}),
+              ...(files['web/main.js'] ? { './client': './web/main.js' } : {}),
+            },
         scripts: { postinstall: "node -e \"require('node:fs').writeFileSync('installed-by-npm', 'yes')\"" },
       };
       writeJson(join(cwd, 'package.json'), manifest);
@@ -138,10 +140,6 @@ test(
     const name = '@fixture/harness-plugin';
     const id = 'npm-plugin';
     const files = {
-      'plugin.json': JSON.stringify({
-        browser: 'web/main.js',
-        browserDirectory: 'web',
-      }),
       'server/entry.mjs': `
 export const inject = ["harnessPluginRoutes"];
 import { label } from 'mini-setup-helper';
@@ -158,6 +156,9 @@ export const apply = (ctx) => { ctx.harnessPluginRoutes.register('GET', '/label'
     await publish(name, '1.0.0', files, { 'mini-setup-helper': '1.0.0' });
     await run('add', name + '@latest', '--no-audit', '--no-fund');
     const directory = join(paths.home, 'profiles', 'web');
+    const added = parse(readFileSync(join(directory, 'cordis.patch.yml'), 'utf8'));
+    assert.equal(added.plugins.length, 1);
+    assert.equal(added.plugins[0].name, name);
     let lock = JSON.parse(readFileSync(join(directory, 'package-lock.json'), 'utf8'));
     assert.equal(lock.packages['node_modules/mini-setup-helper'].version, '1.0.0');
     assert.equal(lock.packages['node_modules/' + name].version, '1.0.0');
@@ -167,6 +168,7 @@ export const apply = (ctx) => { ctx.harnessPluginRoutes.register('GET', '/label'
     lock = JSON.parse(readFileSync(join(directory, 'package-lock.json'), 'utf8'));
     assert.equal(lock.packages['node_modules/' + name].version, '1.1.0');
     assert.ok(!existsSync(join(directory, 'node_modules', name, 'installed-by-npm')));
+    assert.deepEqual(parse(readFileSync(join(directory, 'cordis.patch.yml'), 'utf8')), added);
     writeJson(join(directory, 'cordis.patch.yml'), {
       plugins: [
         {

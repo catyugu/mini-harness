@@ -226,6 +226,107 @@ export function ensureProfile(name: string, paths: Paths) {
   return directory;
 }
 
+interface ProfileManifest {
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+  optionalDependencies?: Record<string, string>;
+  miniHarness?: { profile?: { bundles?: string[] } };
+}
+
+/** npm remains responsible for package operations. Only explicit CLI adds/removes change composition. */
+export async function manageProfilePackages(
+  name: string,
+  paths: Paths,
+  args: readonly string[],
+  npm: (directory: string, args: readonly string[]) => Promise<void>,
+) {
+  const directory = ensureProfile(name, paths);
+  const manifestPath = join(directory, MANIFEST);
+  const read = () => readJson<ProfileManifest>(manifestPath, {});
+  const dependencies = (manifest: ProfileManifest) =>
+    new Set(Object.keys({ ...manifest.dependencies, ...manifest.devDependencies, ...manifest.optionalDependencies }));
+  const before = read();
+  const installed = dependencies(before);
+  const add = ['add', 'install', 'i', 'in'].includes(args[0]);
+  const remove = ['remove', 'uninstall', 'rm', 'un', 'unlink'].includes(args[0]);
+  if (!add && !remove) return npm(directory, args);
+  const selected = new Set([...installed].filter((dependency) =>
+    args.slice(1).some((argument) => argument === dependency || argument.startsWith(dependency + '@')),
+  ));
+  const { shipped, userLayers } = profileLayers(name, paths);
+  const effective = rows([...shipped, ...userLayers]);
+  const rootPath = join(directory, ROOT);
+  const patchPath = join(directory, PATCH);
+  const root = load(rootPath) ?? {};
+  const patch = load(patchPath) ?? {};
+  const references = (module: string | undefined, dependency: string) =>
+    module === dependency || module?.startsWith(dependency + '/');
+  const refers = (module: string | undefined, set: ReadonlySet<string>) =>
+    [...set].some((dependency) => references(module, dependency));
+  if (remove) {
+    // An included, user-owned layer must be edited by its author rather than rewritten.
+    for (const layer of [...shipped, ...userLayers]) {
+      if ([rootPath, patchPath].includes(layer.file)) continue;
+      if ([...selected].some((dependency) =>
+        layer.file.startsWith(join(directory, 'node_modules', dependency) + sep),
+      )) continue;
+      if (layer.plugins?.some((row) => refers(row.name, selected)) ||
+          Object.values(layer.scopes ?? {}).some((scope) =>
+            Object.values(scope?.entries ?? {}).some((entry) => refers(entry.name, selected))))
+        throw new Error('Remove plugin references from ' + layer.file + ' before uninstalling');
+    }
+  }
+  await npm(directory, args);
+  const after = read();
+  const current = dependencies(after);
+  const bundles = [...(after.miniHarness?.profile?.bundles ?? [])];
+  let rootChanged = false;
+  let patchChanged = false;
+  if (add) {
+    for (const dependency of current) {
+      if (installed.has(dependency) && !selected.has(dependency)) continue;
+      const info = readJson<{ miniHarness?: { bundle?: { patch?: unknown } } }>(join(directory, 'node_modules', dependency, MANIFEST), {});
+      if (info.miniHarness?.bundle?.patch !== undefined) {
+        bundleLayers(dependency, directory);
+        if (!bundles.includes(dependency)) bundles.push(dependency);
+      } else if (![...effective.values()].some((row) => row.name === dependency) &&
+        !Object.values(scopedEntries([...shipped, ...userLayers])).some((scope) =>
+          Object.values(scope.entries).some((entry) => entry.name === dependency))) {
+        const id = entryId(dependency);
+        if (effective.has(id) || patch.plugins?.some((row) => row.id === id))
+          throw new Error('Profile Entry ID already exists: ' + id);
+        (patch.plugins ??= []).push({ id, name: dependency });
+        patchChanged = true;
+      }
+    }
+  } else {
+    const removed = new Set([...installed].filter((dependency) => !current.has(dependency)));
+    const ids = new Set([...effective].filter(([, row]) => refers(row.name, removed)).map(([id]) => id));
+    for (let index = bundles.length - 1; index >= 0; index--)
+      if (removed.has(bundles[index])) bundles.splice(index, 1);
+    function clean(layer: Layer) {
+      const previous = stringify(layer);
+      if (layer.plugins) layer.plugins = layer.plugins.filter((row) => !ids.has(row.id) && !refers(row.name, removed));
+      for (const scope of Object.values(layer.scopes ?? {}))
+        if (scope?.entries) {
+          for (const [id, entry] of Object.entries(scope.entries))
+            if (refers(entry.name, removed)) delete scope.entries[id];
+        }
+      return previous !== stringify(layer);
+    }
+    rootChanged = clean(root);
+    patchChanged = clean(patch);
+  }
+  if (!isDeepStrictEqual(bundles, after.miniHarness?.profile?.bundles)) {
+    after.miniHarness ??= {};
+    after.miniHarness.profile ??= {};
+    after.miniHarness.profile.bundles = bundles;
+    writeJson(manifestPath, after);
+  }
+  if (rootChanged) writeText(rootPath, stringify(root));
+  if (patchChanged) writeText(patchPath, stringify(patch));
+}
+
 function profileLayers(name: string, paths: Paths, patches: readonly string[] = [], defaults = false) {
   const directory = ensureProfile(name, paths);
   const manifestPath = join(directory, MANIFEST);
