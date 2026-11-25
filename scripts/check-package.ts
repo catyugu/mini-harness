@@ -226,10 +226,10 @@ async function checkPackage() {
       declare const render: SlotRenderer;
       export function apply(ctx: Context) {
         const signal = ctx.fiber.signal;
-        ctx.effect(() => ctx.miniSlots.registerKeyed('sidebar.primary', 'example', render));
-        ctx.effect(() => ctx.miniSlots.registerKeyed('example.panel', 'example', render));
-        // @ts-expect-error A keyed registration needs a renderer.
-        ctx.effect(() => ctx.miniSlots.registerKeyed('sidebar.primary', 'example', document.body));
+        ctx.effect(() => ctx.miniSlots.register('sidebar.primary', render, { key: 'example' }));
+        ctx.effect(() => ctx.miniSlots.register('example.panel', render, { key: 'example' }));
+        // @ts-expect-error The contribution must be an element or a renderer.
+        ctx.effect(() => ctx.miniSlots.register('sidebar.primary', 'example', { key: 'example' }));
         const model: ComposerModel = ctx.miniComposer;
         const conversation: ConversationController = ctx.miniConversation;
         const primitives: BrowserPrimitives = ctx.miniPrimitives;
@@ -252,24 +252,21 @@ async function checkPackage() {
       }
     `,
     );
-    await Promise.all(
-      ['plugin-types.mts', 'browser-types.mts'].map((file) =>
-        execFile(
-          process.execPath,
-          [
-            resolve('node_modules/typescript/bin/tsc'),
-            '--strict',
-            '--noEmit',
-            '--target',
-            'ES2022',
-            '--module',
-            'NodeNext',
-            file,
-          ],
-          { cwd: installed },
-        ),
-      ),
-    );
+    for (const file of ['plugin-types.mts', 'browser-types.mts'])
+      await execFile(
+        process.execPath,
+        [
+          resolve('node_modules/typescript/bin/tsc'),
+          '--strict',
+          '--noEmit',
+          '--target',
+          'ES2022',
+          '--module',
+          'NodeNext',
+          file,
+        ],
+        { cwd: installed },
+      );
     assert.match((await cli('--help')).stdout, /minimal native agent harness/);
     await cp(resolve('docs/examples/task-notes'), plugin, { recursive: true });
     await execFile(process.execPath, [resolve('node_modules/typescript/bin/tsc'), '-p', 'tsconfig.json'], {

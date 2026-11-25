@@ -223,6 +223,14 @@ test('a third-party plugin uses tools, models and subprocesses from a Profile wi
       models: [{ id: 'fixture' }],
     };
   }
+  const blankKey = 'MINI_HARNESS_EMPTY_FIXTURE_KEY';
+  const previousKey = process.env[blankKey];
+  process.env[blankKey] = '';
+  t.after(() => {
+    if (previousKey === undefined) delete process.env[blankKey];
+    else process.env[blankKey] = previousKey;
+  });
+  config.providers['adapter-no-key'] = { ...config.providers['adapter-one'], apiKey: blankKey };
   writeJson(configFile, config);
   const directory = initializeProfile('capabilities', paths);
   writeText(
@@ -291,6 +299,12 @@ test('a third-party plugin uses tools, models and subprocesses from a Profile wi
     assert.equal(
       app.ctx.harnessModels.list().some(({ provider }) => provider === 'anthropic'),
       false,
+    );
+    const unconfigured = app.ctx.harnessModels.list().find(({ provider }) => provider === 'adapter-no-key');
+    assert.equal(unconfigured?.configured, false);
+    assert.equal(
+      await app.ctx.harnessModels.apiKey({ provider: 'adapter-no-key', id: 'fixture' }),
+      undefined,
     );
     for (const provider of ['adapter-one', 'adapter-two']) {
       const model = { provider, id: 'fixture' };

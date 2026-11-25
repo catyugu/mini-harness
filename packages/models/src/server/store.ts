@@ -190,7 +190,7 @@ export class ModelStore implements ModelStorePort {
         canSetKey,
         custom,
         baseUrl: custom ? models[0].baseUrl : '',
-        api: custom ? models[0].api : 'openai-completions',
+        api: models[0]?.api ?? '',
         models: models.map(capabilities),
       };
     });
@@ -244,10 +244,10 @@ export class ModelStore implements ModelStorePort {
 
   private async providerKey(provider: CatalogProvider) {
     const stored = await this.credentials.read(provider.id);
-    return (
+    const key =
       (stored?.type === 'api_key' ? stored.key : undefined) ??
-      (provider.key ? (process.env[provider.key] ?? provider.key) : undefined)
-    );
+      (provider.key ? (process.env[provider.key] ?? provider.key) : undefined);
+    return key || undefined;
   }
 
   async apiKey(choice: ModelChoice) {
