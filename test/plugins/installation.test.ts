@@ -118,7 +118,7 @@ test(
         version,
         type: 'module',
         dependencies,
-        main: files['index.js'] ? 'index.js' : undefined,
+        exports: files['index.js'] ? './index.js' : files['server/entry.mjs'] ? './server/entry.mjs' : undefined,
         scripts: { postinstall: 'node -e "process.exit(13)"' },
       };
       writeJson(join(cwd, 'package.json'), manifest);
@@ -143,7 +143,7 @@ test(
         browserDirectory: 'web',
         browserPreload: 'web/preload.js',
       }),
-      'plugin.js': `
+      'server/entry.mjs': `
 export const inject = ["harnessPluginRoutes"];
 import { label } from 'mini-setup-helper';
 export const apply = (ctx) => { ctx.harnessPluginRoutes.register('GET', '/label', () => label); };
@@ -178,8 +178,8 @@ export const apply = (ctx) => { ctx.harnessPluginRoutes.register('GET', '/label'
     await assert.rejects(run('update', id), /Disable and save/);
     writeJson(paths.settings, { ...readSettings(paths), plugins: { [id]: false } });
 
-    await publish(name, '1.2.0', { 'plugin.js': files['plugin.js'] }, { 'mini-setup-helper': '1.0.0' });
-    await assert.rejects(run('update', id), /Expected an object in plugin\.json/);
+    await publish(name, '1.2.0', { 'invalid.txt': 'No Cordis module' }, { 'mini-setup-helper': '1.0.0' });
+    await assert.rejects(run('update', id), /Provide a server or browser module/);
     assert.deepEqual(readdirSync(directory), installed);
     assert.equal(readSettings(paths).pluginConfig[id].greeting, 'preserved');
 

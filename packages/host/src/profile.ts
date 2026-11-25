@@ -1,7 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync } from 'node:fs';
-import { registerHooks } from 'node:module';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import { parseDocument, stringify } from 'yaml';
 import { Context, EntryTree, type EntryOptions, type Plugin } from 'mini-harness/cordis';
@@ -9,7 +8,7 @@ import { readJson, writeJson, writeText } from '@mini-harness/platform/json';
 import type { Paths } from '@mini-harness/platform/runtime-paths';
 import type { ResolvedPlugin, PluginInfo } from '@mini-harness/plugin-api/descriptor';
 import { bindInstance } from '@mini-harness/plugin-api/instance';
-import { bindPluginImports } from '@mini-harness/plugins/module-resolution';
+import { bindPluginImports, resolveModule } from '@mini-harness/plugins/module-resolution';
 import { isScopeKey, localPluginIdPattern, pluginIdPattern } from '@mini-harness/plugin-api/selection';
 import type { ProfileConfiguration, ProfileRuntime } from '@mini-harness/plugin-api/profile';
 import { parseSettings } from '@mini-harness/settings/config';
@@ -240,27 +239,6 @@ async function moduleFor(name: string): Promise<{ plugin?: Plugin; metadata?: Pl
     throw new Error('Profile module must export a Cordis plugin: ' + name);
   if (!value && !metadata?.browser) throw new Error('Profile module export not found: ' + name);
   return { plugin: value, metadata };
-}
-
-/** Ask Node's ESM resolver to use the declaring Profile as the parent URL. */
-function resolveModule(name: string, source: string) {
-  const specifier = isAbsolute(name) ? pathToFileURL(name).href : name;
-  const parentURL = pathToFileURL(source).href;
-  const hook = registerHooks({
-    resolve(request, context, next) {
-      return next(
-        request,
-        request === specifier && context.parentURL === import.meta.url
-          ? { ...context, parentURL }
-          : context,
-      );
-    },
-  });
-  try {
-    return import.meta.resolve(specifier);
-  } finally {
-    hook.deregister();
-  }
 }
 
 async function nativeModule(row: ResolvedRow, module: string) {

@@ -70,8 +70,6 @@ export function packageBundle(directory: string, spec: string) {
     install.dependencies?.[name] !== manifest.version
   )
     throw new Error('Plugin package identity does not match ' + name);
-  if (isRegularFile(join(folder, 'plugin.js')) && manifest.type !== 'module')
-    throw new Error('Server npm plugins must declare "type": "module"');
   return { folder, package: { name, version: manifest.version } };
 }
 

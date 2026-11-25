@@ -54,7 +54,7 @@ Conversation permissions can be changed at any time from the left side of the co
 
 ## Develop
 
-Each local plugin bundle has a `plugin.json` descriptor and a server or browser Cordis entry, or both. Services can be replaced by enabling entries at application, workspace and nested session scopes. Third-party plugins can register tools, record progress, run child conversations, request confirmations and add keyed browser components. The standalone [Task notes example](docs/examples/task-notes) uses both SDK entry points. Parent and sibling scopes retain their own providers. See the [architecture](docs/architecture.md), [plugin guide](docs/plugins.md), [scoped provider examples](docs/scoped-providers.md), and [session log reference](docs/session-log.md).
+Plugins use native Cordis modules. npm plugins can expose their server entry through standard package exports and optionally supply presentation metadata. Services can be replaced by enabling entries at application, workspace and nested session scopes. Third-party plugins can register tools, record progress, run child conversations, request confirmations and add keyed browser components. The standalone [Task notes example](docs/examples/task-notes) uses both SDK entry points. Parent and sibling scopes retain their own providers. See the [architecture](docs/architecture.md), [plugin guide](docs/plugins.md), [scoped provider examples](docs/scoped-providers.md), and [session log reference](docs/session-log.md).
 
 ```sh
 pnpm install --frozen-lockfile

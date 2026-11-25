@@ -1,6 +1,6 @@
 # Plugins
 
-A plugin bundle contains `plugin.json` and at least one of `plugin.js` and `web.js`. Local and npm plugins run trusted JavaScript. Review the code, dependencies and browser assets before installing it. See [SECURITY.md](../SECURITY.md).
+An npm plugin can expose an ordinary Cordis module through its package.json `exports` or `main`. Presentation metadata is optional and may be declared in `miniHarness.plugin` in package.json. A local file bundle can also include optional `plugin.json` metadata. Local and npm plugins run trusted JavaScript. Review the code, dependencies and browser assets before installing it. See [SECURITY.md](../SECURITY.md).
 
 ## Install and enable
 

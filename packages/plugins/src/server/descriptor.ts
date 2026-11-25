@@ -1,7 +1,10 @@
-import { join } from 'node:path';
+import { isAbsolute, join, relative, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { realpathSync } from 'node:fs';
 import { readJson } from '@mini-harness/platform/json';
 import type { PluginInfo, ResolvedPlugin } from '@mini-harness/plugin-api/descriptor';
 import { readBrowserAssets, type BrowserAssets } from './browser-assets.ts';
+import { resolveModule } from './module-resolution.ts';
 import { assertPeerCompatibility, isRegularFile } from './source.ts';
 
 import type { PluginMetadata } from '../shared/metadata.ts';
@@ -16,21 +19,37 @@ export interface DiscoveredPlugin
 
 export function describePlugin(id: string, folder: string): DiscoveredPlugin {
   assertPeerCompatibility(folder);
-  const source = join(folder, 'plugin.js');
-  const hasHost = isRegularFile(source);
+  const packageFile = join(folder, 'package.json');
+  const packageInfo = readJson<{
+    name?: string;
+    main?: string;
+    exports?: unknown;
+    miniHarness?: { plugin?: Partial<PluginInfo> & { browserDirectory?: unknown; browserPreload?: unknown } };
+  }>(packageFile, {});
+  let source: string | undefined;
+  if (packageInfo.name && (packageInfo.exports !== undefined || packageInfo.main !== undefined)) {
+    const resolved = fileURLToPath(resolveModule(packageInfo.name, packageFile));
+    const physical = realpathSync(resolved);
+    const location = relative(realpathSync(folder), physical);
+    if (isAbsolute(location) || location === '..' || location.startsWith('..' + sep) || !isRegularFile(physical))
+      throw new Error('Plugin entry must resolve inside its package');
+    source = physical;
+  } else if (isRegularFile(join(folder, 'plugin.js'))) {
+    source = join(folder, 'plugin.js');
+  }
   const descriptor = join(folder, 'plugin.json');
   const manifest = isRegularFile(descriptor)
     ? readJson<(Partial<PluginInfo> & { browserDirectory?: unknown; browserPreload?: unknown }) | null>(
         descriptor,
         null,
       )
-    : null;
+    : packageInfo.miniHarness?.plugin ?? {};
   if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest))
     throw new Error('Expected an object in plugin.json');
   const browser = manifest.browser ?? (isRegularFile(join(folder, 'web.js')) ? 'web.js' : undefined);
   if (browser !== undefined && typeof browser !== 'string') throw new Error('Invalid browser entry');
   const hasWeb = browser !== undefined;
-  if (!hasHost && !hasWeb) throw new Error('Provide a server or browser module');
+  if (!source && !hasWeb) throw new Error('Provide a server or browser module');
   const title = typeof manifest.title === 'string' ? manifest.title.slice(0, 100) : id;
   const description =
     typeof manifest.description === 'string'
@@ -89,7 +108,7 @@ export function describePlugin(id: string, folder: string): DiscoveredPlugin {
   )
     throw new Error('Invalid plugin icon: ' + id);
   return {
-    source: hasHost ? source : undefined,
+    source,
     resources,
     scope,
     id,
