@@ -108,7 +108,9 @@ const object = (value: unknown): value is Record<string, unknown> =>
 
 function defaultEntryId(name: string) {
   if (pluginIdPattern.test(name)) return name;
-  const stem = basename(name).replace(/\.(?:[cm]?js|ts)$/, '').toLowerCase();
+  const stem = basename(name)
+    .replace(/\.(?:[cm]?js|ts)$/, '')
+    .toLowerCase();
   if (localPluginIdPattern.test(stem)) return stem;
   return 'module-' + createHash('sha256').update(name).digest('hex').slice(0, 32);
 }
