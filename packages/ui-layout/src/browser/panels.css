@@ -45,18 +45,10 @@
   border-bottom: 1px solid var(--border);
 }
 .right-start-title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
   flex-shrink: 0;
   padding-inline: 8px;
   font-size: 13px;
   font-weight: 550;
-}
-.right-start-title svg {
-  width: 15px;
-  height: 15px;
-  color: var(--muted);
 }
 .right-panel > header:has(.right-start-title:not([hidden])) {
   border-bottom-color: transparent;
@@ -168,14 +160,6 @@
   width: min(100%, 380px);
   gap: 12px;
   margin: auto;
-}
-.right-start-menu > svg {
-  justify-self: center;
-  width: 44px;
-  height: 44px;
-  margin-bottom: 20px;
-  color: var(--muted);
-  opacity: 0.35;
 }
 .right-start .ui-button {
   justify-content: flex-start;
