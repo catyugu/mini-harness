@@ -119,7 +119,7 @@ test(
           : files['server/entry.mjs']
             ? './server/entry.mjs'
             : undefined,
-        scripts: { postinstall: 'node -e "require(\'node:fs\').writeFileSync(\'installed-by-npm\', \'yes\')"' },
+        scripts: { postinstall: "node -e \"require('node:fs').writeFileSync('installed-by-npm', 'yes')\"" },
       };
       writeJson(join(cwd, 'package.json'), manifest);
       for (const [file, source] of Object.entries(files)) {

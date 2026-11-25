@@ -75,7 +75,9 @@ export class Prompt implements PromptPort {
   register(section: PromptSection) {
     const context = Service.caller(this);
     const runScope = agentScopeOf(context);
-    const instanceId = runScope ? 'agent:' + context.fiber.uid : findInstance(context)?.instanceId ?? 'fiber:' + context.fiber.uid;
+    const instanceId = runScope
+      ? 'agent:' + context.fiber.uid
+      : (findInstance(context)?.instanceId ?? 'fiber:' + context.fiber.uid);
     const { id, order = 500, render } = section;
     if (
       !/^[a-zA-Z][a-zA-Z0-9_.:-]{0,95}$/.test(id) ||
