@@ -25,7 +25,6 @@
     "@mini-harness/models": "workspace:*",
     "@mini-harness/platform": "workspace:*",
     "@mini-harness/plugin-api": "workspace:*",
-    "@mini-harness/settings": "workspace:*",
     "@mini-harness/transport": "workspace:*",
     "@mini-harness/ui-primitives": "workspace:*",
     "@mini-harness/ui-runtime": "workspace:*",
