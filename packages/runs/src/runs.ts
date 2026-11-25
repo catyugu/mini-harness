@@ -160,30 +160,36 @@ export class Runs implements RunPort {
       this.changed(id);
       publish({ type: 'run', run: running });
       this.observe({ type: 'run-started', sessionId: id, run: running }, cancellation);
-      return this.withAgentContext(id, activity, cancellation, async (ctx, signal) => {
-        activity.inputSignal = signal;
-        try {
-          return await this.sessionRun.prompt(ctx, record, prepared.text, publish, {
-            fallback,
-            beginSubmission: () => {
-              info.inputEntryId = null;
-            },
-            signal,
-            source,
-            submissionId: info.id,
-            choice: model,
-            images: prepared.images,
-            input: prepared.input,
-            thinkingLevel,
-            revision,
-            changed: (path) => {
-              info.changedFiles = [...new Set([...(info.changedFiles ?? []), path])];
-            },
-          });
-        } finally {
-          activity.inputSignal = undefined;
-        }
-      }, Boolean(preparedScope));
+      return this.withAgentContext(
+        id,
+        activity,
+        cancellation,
+        async (ctx, signal) => {
+          activity.inputSignal = signal;
+          try {
+            return await this.sessionRun.prompt(ctx, record, prepared.text, publish, {
+              fallback,
+              beginSubmission: () => {
+                info.inputEntryId = null;
+              },
+              signal,
+              source,
+              submissionId: info.id,
+              choice: model,
+              images: prepared.images,
+              input: prepared.input,
+              thinkingLevel,
+              revision,
+              changed: (path) => {
+                info.changedFiles = [...new Set([...(info.changedFiles ?? []), path])];
+              },
+            });
+          } finally {
+            activity.inputSignal = undefined;
+          }
+        },
+        Boolean(preparedScope),
+      );
     };
     const finish = (state: RunInfo['state'], error?: string) => {
       const inbox = new Inbox(log);

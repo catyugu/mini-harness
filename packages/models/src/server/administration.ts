@@ -33,7 +33,11 @@ export function setupAdministration(ctx: Context) {
       const input = await body();
       return write(async () => {
         signal.throwIfAborted();
-        const result = await saveProvider({ paths: ctx.harnessState.paths, catalog, admin: admin() }, input, method === 'DELETE');
+        const result = await saveProvider(
+          { paths: ctx.harnessState.paths, catalog, admin: admin() },
+          input,
+          method === 'DELETE',
+        );
         changed();
         const choice = recent();
         if (choice.provider === input.id && !catalog.resolve(choice))
@@ -53,8 +57,7 @@ export function setupAdministration(ctx: Context) {
         if (typeof input?.provider !== 'string' || !/^[a-z0-9-]+$/.test(input.provider))
           throw new DomainError('invalid_input', 'Invalid provider');
         const store = admin();
-        if (!store.hasProvider(input.provider))
-          throw new DomainError('invalid_input', 'Unknown provider');
+        if (!store.hasProvider(input.provider)) throw new DomainError('invalid_input', 'Unknown provider');
         if (method === 'DELETE') {
           await store.removeCredential(input.provider);
         } else {
@@ -72,5 +75,9 @@ export function setupAdministration(ctx: Context) {
       });
     });
   }
-  add('GET', '/api/models', async () => ({ models: await catalog.available(), recent: recent(), canManageProviders: Boolean(providerAdministration()) }));
+  add('GET', '/api/models', async () => ({
+    models: await catalog.available(),
+    recent: recent(),
+    canManageProviders: Boolean(providerAdministration()),
+  }));
 }

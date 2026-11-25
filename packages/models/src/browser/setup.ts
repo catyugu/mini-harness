@@ -12,7 +12,10 @@ const setup = async (ctx: Context) => {
   const { miniSettings: settings } = ctx;
   const state = new RemoteStore(async () => {
     const [{ models, recent, canManageProviders }, providers] = await Promise.all([
-      browserRequest<Pick<ModelCatalog, 'models'> & { recent: ModelChoice; canManageProviders: boolean }>(ctx, '/models'),
+      browserRequest<Pick<ModelCatalog, 'models'> & { recent: ModelChoice; canManageProviders: boolean }>(
+        ctx,
+        '/models',
+      ),
       browserRequest<ModelCatalog['providers']>(ctx, '/providers'),
     ]);
     return { models, providers, recent, canManageProviders };
