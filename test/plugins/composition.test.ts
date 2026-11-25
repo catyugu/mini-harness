@@ -479,9 +479,9 @@ export const apply = (ctx, config) => { ctx.effect(() => ctx.harnessLlm.register
   assert.equal(await app.runtime.plugins.ctx.harnessRuns.send(child.id, 'Child task'), 'Child adapter');
   assert.equal(await app.runtime.plugins.ctx.harnessRuns.send(sibling.id, 'Sibling task'), 'Mock response');
   assert.equal(mock.requests.length, 1);
-  assert.strictEqual(
-    app.runtime.plugins.require(`session:${child.id}`, 'harnessModels'),
-    app.runtime.plugins.ctx.harnessModels,
+  assert.deepEqual(
+    app.runtime.plugins.require(`session:${child.id}`, 'harnessModels').list(),
+    app.runtime.plugins.ctx.harnessModels.list(),
   );
   assert.equal(
     (

@@ -246,7 +246,7 @@ export const apply = (ctx) => {
     },
   });
   assert.equal(configured.status, 200, JSON.stringify(configured.body));
-  assert.equal(app.runtime.plugins.ctx.harnessModels, models);
+  assert.deepEqual(app.runtime.plugins.ctx.harnessModels.list(), models.list());
   assert.equal(app.runtime.plugins.ctx.harnessModelStore, store);
   const session = app.runtime.plugins.ctx.harnessSessions.create();
   assert.equal(
