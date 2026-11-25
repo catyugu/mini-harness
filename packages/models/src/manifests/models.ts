@@ -90,8 +90,8 @@ export default plugin;
 export const administrationMetadata: PluginInfo = {
   title: 'Models',
   description: 'Model endpoints and credentials',
-  browserStyles: ['/packages/models/src/browser/style.css'],
-  browser: '/packages/models/src/browser/setup.js',
+  browserStyles: ['packages/models/src/browser/style.css'],
+  browser: 'packages/models/src/browser/setup.js',
 };
 
 export const administration: Plugin.Object = {

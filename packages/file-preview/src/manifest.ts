@@ -6,8 +6,8 @@ export const metadata: PluginInfo = {
   title: 'File preview',
   description: 'Preview and download workspace files and attachments.',
   icon: 'file-image',
-  browser: '/packages/file-preview/src/browser/setup.js',
-  browserStyles: ['/packages/file-preview/src/browser/style.css'],
+  browser: 'packages/file-preview/src/browser/setup.js',
+  browserStyles: ['packages/file-preview/src/browser/style.css'],
 };
 
 const plugin: Plugin.Object = {
