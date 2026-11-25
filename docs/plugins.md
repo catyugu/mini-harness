@@ -68,15 +68,15 @@ Use `agent/setup` to register capabilities for a particular running Agent. The c
 
 Register listeners with `ctx.on(event, handler, { order })`. Listeners are owned by the Fiber and visibility follows the target session's ancestry. Pipeline order is ascending, then by plugin instance ID.
 
-| Event                          | Behavior                                                                                                                |
-| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
-| `agent/prepare-input`          | Transform delivered user content or return `{ reject: reason }`. Read `original.userText` for text entered by the user. |
-| `agent/model-request`          | Transform the system prompt, model-visible messages, thinking level or token limit.                                     |
-| `agent/model-retry`            | Return `{ delayMs }` to retry a model attempt before output has streamed. The first decision applies.                   |
-| `agent/tool-result`            | Transform successful results after persistence of the original execution.                                               |
-| `tools/decide`                 | Return `'deny'`, `'ask'`, `'allow'` or `undefined`; denial and explicit approval requirements cannot be overridden by allow.                                                        |
-| `conversation/tool-projection` | Synchronously transform tool output in the conversation display.                                                        |
-| `harness/observe`              | Observe session, run or turn events with an activation-bound cancellation signal.                                       |
+| Event                          | Behavior                                                                                                                     |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| `agent/prepare-input`          | Transform delivered user content or return `{ reject: reason }`. Read `original.userText` for text entered by the user.      |
+| `agent/model-request`          | Transform the system prompt, model-visible messages, thinking level or token limit.                                          |
+| `agent/model-retry`            | Return `{ delayMs }` to retry a model attempt before output has streamed. The first decision applies.                        |
+| `agent/tool-result`            | Transform successful results after persistence of the original execution.                                                    |
+| `tools/decide`                 | Return `'deny'`, `'ask'`, `'allow'` or `undefined`; denial and explicit approval requirements cannot be overridden by allow. |
+| `conversation/tool-projection` | Synchronously transform tool output in the conversation display.                                                             |
+| `harness/observe`              | Observe session, run or turn events with an activation-bound cancellation signal.                                            |
 
 ### Configuration
 
