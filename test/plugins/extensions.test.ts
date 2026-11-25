@@ -189,7 +189,7 @@ export const apply = (ctx) => {
     let attempts = 0;
     const modelCatalog = ctx.harnessModels;
     ctx.effect(() => ctx.harnessLlm.register({
-    accepts: (choice) => !!modelCatalog.resolve(choice),
+    accepts: (choice) => choice.provider === 'local-mock',
     async *stream(request) {
       if (!modelCatalog.resolve(request.model)) throw new Error('missing catalog');
       const terminal = (content, stopReason = 'stop') => ({ type: 'done', message: { role: 'assistant', timestamp: Date.now(), content, stopReason } });

@@ -163,7 +163,7 @@ export type LlmEvent =
   | { type: 'tool-call'; call: ToolCallPart }
   | { type: 'done'; message: NativeAssistantMessage };
 export interface LlmAdapter {
-  /** Select using the same model choice that the caller supplies to stream(). */
+  /** Pure predicate on the model choice; do not re-enter aggregate catalog or adapter selection. */
   accepts(model: Readonly<ModelChoice>): boolean;
   stream(request: LlmRequest): AsyncIterable<LlmEvent>;
 }

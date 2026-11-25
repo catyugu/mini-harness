@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdirSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { createMiniHarnessServer } from '../support/profile.ts';
+import { nativeFile } from '../../packages/sessions/src/storage.ts';
 import { createMockProvider, createFixturePaths } from '../helpers/mock-provider.ts';
 
 test(
@@ -83,7 +84,7 @@ test(
 
     const stored = await (await get('/api/sessions/' + session.id)).json();
     assert.equal(stored.title, 'Test native integration');
-    const file = app.runtime.plugins.ctx.harnessSessions.log(session.id).file;
+    const file = nativeFile(paths, session);
     assert.ok(file && existsSync(file));
     assert.ok(stored.messages.some((m: { role: string }) => m.role === 'assistant'));
 

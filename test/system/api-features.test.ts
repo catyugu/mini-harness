@@ -114,11 +114,8 @@ test('GUI APIs configure providers, persist keys privately, discover Skills and 
       { name: 'note.md', mimeType: 'text/plain' },
     ],
   );
-  const directory = join(
-    dirname(app.runtime.plugins.ctx.harnessSessions.log(session.id).file),
-    session.id,
-    'attachments',
-  );
+  const directory = app.runtime.plugins.ctx.harnessSessions.attachmentDirectory(session.id);
+  assert.ok(directory);
   for (const [index, file] of user.attachments.entries()) {
     const data = index === 0 ? png : Buffer.from('ATTACHED CONTENT').toString('base64');
     assert.equal(readFileSync(join(directory, file.id)).toString('base64'), data);

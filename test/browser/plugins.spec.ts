@@ -612,7 +612,9 @@ export function apply(ctx) {
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.locator('.message.assistant')).toHaveText('Live model answer');
     await toggle(true);
-    await expect(modelButton(page)).toHaveText('Choose model');
+    await modelButton(page).click();
+    await modelSearch(page).fill('Live plugin model');
+    await expect(options).toHaveCount(0);
   } finally {
     await page.close();
     await service.stop();
