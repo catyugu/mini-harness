@@ -16,14 +16,17 @@ export function setup(ctx: Context) {
       scopes.get(id)?.();
       scopes.delete(id);
     } else if (!scopes.has(id)) {
-      scopes.set(id, ctx.harnessProfileScopes.register(ctx, `session:${id}`, {
-        key: registry.scope(id)!,
-        parent: record.parentId
-          ? `session:${record.parentId}`
-          : record.workspaceId
-            ? `workspace:${record.workspaceId}`
-            : undefined,
-      }));
+      scopes.set(
+        id,
+        ctx.harnessProfileScopes.register(ctx, `session:${id}`, {
+          key: registry.scope(id)!,
+          parent: record.parentId
+            ? `session:${record.parentId}`
+            : record.workspaceId
+              ? `workspace:${record.workspaceId}`
+              : undefined,
+        }),
+      );
     }
   };
   for (const { id } of registry.list()) syncScope(id);

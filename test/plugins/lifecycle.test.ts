@@ -1442,39 +1442,60 @@ test('configured compositions follow individual resources created after their ow
   let mounts = 0;
   let releases = 0;
   const task = createScopeKey();
-  const host = new PluginHost(ctx, directory, fixtureProfile(directory, [
-    {
-      id: 'source', title: 'Projects', description: '',
-      plugin: {
-        inject: ['harnessProfileScopes'],
-        apply(context) {
-          owner = context;
-          ownerLoads++;
-          context.harnessProfileScopes.register(context, 'project:beta', { key: createScopeKey() });
-          context.harnessProfileScopes.register(context, 'task:child', { key: task, parent: 'project:alpha' });
+  const host = new PluginHost(
+    ctx,
+    directory,
+    fixtureProfile(
+      directory,
+      [
+        {
+          id: 'source',
+          title: 'Projects',
+          description: '',
+          plugin: {
+            inject: ['harnessProfileScopes'],
+            apply(context) {
+              owner = context;
+              ownerLoads++;
+              context.harnessProfileScopes.register(context, 'project:beta', { key: createScopeKey() });
+              context.harnessProfileScopes.register(context, 'task:child', {
+                key: task,
+                parent: 'project:alpha',
+              });
+            },
+          },
         },
-      },
-    },
-    {
-      id: 'local', title: 'Local greeting', description: '',
-      plugin: {
-        provide: ['greeting'],
-        apply(context) {
-          mounts++;
-          context.provide('greeting', 'project');
-          context.effect(() => () => { releases++; });
+        {
+          id: 'local',
+          title: 'Local greeting',
+          description: '',
+          plugin: {
+            provide: ['greeting'],
+            apply(context) {
+              mounts++;
+              context.provide('greeting', 'project');
+              context.effect(() => () => {
+                releases++;
+              });
+            },
+          },
         },
-      },
-    },
-    {
-      id: 'consumer', title: 'Child consumer', description: '',
-      plugin: {
-        inject: ['greeting'],
-        provide: ['extra'],
-        apply(context) { context.provide('extra', context.greeting + ' child'); },
-      },
-    },
-  ], () => settings));
+        {
+          id: 'consumer',
+          title: 'Child consumer',
+          description: '',
+          plugin: {
+            inject: ['greeting'],
+            provide: ['extra'],
+            apply(context) {
+              context.provide('extra', context.greeting + ' child');
+            },
+          },
+        },
+      ],
+      () => settings,
+    ),
+  );
   ctx.provide('harnessProfileScopes', host);
   t.after(async () => {
     await host.close();
