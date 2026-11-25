@@ -37,7 +37,7 @@ export default {
       async (id, key, patch, check) => {
         await settings.writePlugin(id, key, patch, check);
       },
-      profile.bootstrap,
+      profile.nativeEntries,
       ctx,
       profile.entries,
     );

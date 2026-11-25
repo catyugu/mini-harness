@@ -4,10 +4,8 @@ include:
 plugins:
   - id: core:http-routes
     name: '@mini-harness/http-routing'
-    bootstrap: true
   - id: core:web-auth
     name: '@mini-harness/web-authentication'
-    bootstrap: true
   - id: core:web-server
     name: '@mini-harness/web-server'
     required: true

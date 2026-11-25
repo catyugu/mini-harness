@@ -59,7 +59,7 @@ export class PluginHost implements ScopePort {
       patch: unknown,
       check: () => void,
     ) => Promise<void>,
-    private readonly bootstrap: readonly EntryOptions[] = [],
+    private readonly nativeEntries: readonly EntryOptions[] = [],
     owner = ctx,
     entries = new EntryTree(),
   ) {
@@ -115,7 +115,7 @@ export class PluginHost implements ScopePort {
 
   diagnostics() {
     return [...this.entries.values()].flatMap(({ active, options, fiber }) => {
-      if (!active || !fiber || this.bootstrap.some((entry) => entry.id === options.id)) return [];
+      if (!active || !fiber || this.nativeEntries.some((entry) => entry.id === options.id)) return [];
       const identity = pluginInstance(fiber.ctx);
       const inject = Object.keys(fiber.inject);
       const services = Object.fromEntries(
@@ -478,10 +478,10 @@ export class PluginHost implements ScopePort {
     released?: ReadonlySet<ScopeKey>,
   ) {
     const oldEntries = [...this.entries.values()];
-    const bootstrapIds = new Set(this.bootstrap.map(({ id }) => id));
+    const nativeIds = new Set(this.nativeEntries.map(({ id }) => id));
     const previousActive = new Set(
       oldEntries
-        .filter((entry) => entry.active && !bootstrapIds.has(entry.options.id))
+        .filter((entry) => entry.active && !nativeIds.has(entry.options.id))
         .map(({ options }) => options.id),
     );
     const previousEntries = oldEntries.map(({ options }) => options);
@@ -582,7 +582,7 @@ export class PluginHost implements ScopePort {
         ? this.ctx.get('harnessMutations')?.protect(appChanged ? undefined : scopeChanges)
         : undefined;
     try {
-      const activationErrors = await this.entries.update([...this.bootstrap, ...mounts]);
+      const activationErrors = await this.entries.update([...this.nativeEntries, ...mounts]);
       for (const mounted of mounts) {
         const entry = this.entries.get(mounted.id)!;
         if (entry.active && !entry.error) continue;
@@ -647,7 +647,7 @@ export class PluginHost implements ScopePort {
     this.closing = true;
     await this.applying?.catch(() => {});
     try {
-      if (!this.bootstrap.length) await withMountTransaction(() => this.entries.close());
+      if (!this.nativeEntries.length) await withMountTransaction(() => this.entries.close());
     } finally {
       this.imports.deregister();
       this.scopes.clear();

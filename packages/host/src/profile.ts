@@ -1,12 +1,14 @@
-import { readFileSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { readFileSync, realpathSync, rmSync } from 'node:fs';
+import { registerHooks } from 'node:module';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import { parseDocument, stringify } from 'yaml';
 import { Context, EntryTree, type EntryOptions, type Plugin } from 'mini-harness/cordis';
 import { readJson, writeJson, writeText } from '@mini-harness/platform/json';
 import type { Paths } from '@mini-harness/platform/runtime-paths';
 import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
+import { bindInstance } from '@mini-harness/plugin-api/instance';
 import { isScopeKey, localPluginIdPattern, pluginIdPattern } from '@mini-harness/plugin-api/selection';
 import type { ProfileConfiguration, ProfileRuntime } from '@mini-harness/plugin-api/profile';
 import { parseSettings } from '@mini-harness/settings/config';
@@ -17,7 +19,6 @@ interface Row {
   disabled?: boolean;
   client?: boolean;
   config?: Record<string, unknown>;
-  bootstrap?: boolean;
   required?: boolean;
 }
 
@@ -28,6 +29,14 @@ interface Layer {
   providers?: ProfileConfiguration['providers'];
   browserProviders?: ProfileConfiguration['browserProviders'];
   scopes?: ProfileConfiguration['scopes'];
+}
+
+interface LoadedLayer extends Layer {
+  file: string;
+}
+
+interface ResolvedRow extends Row {
+  source?: string;
 }
 
 const bundled = new URL('../../../../profiles/', import.meta.url);
@@ -43,7 +52,7 @@ const packagedModules = new Map(
 const object = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
 
-function load(file: string, user = false): Layer {
+function load(file: string, optional = false): Layer | undefined {
   try {
     const doc = parseDocument(readFileSync(file, 'utf8'), { schema: 'core', strict: true, uniqueKeys: true });
     if (doc.errors.length || doc.warnings.length)
@@ -53,13 +62,14 @@ function load(file: string, user = false): Layer {
     const fields = ['include', 'detached', 'plugins', 'providers', 'browserProviders', 'scopes'];
     if (!object(value) || Object.keys(value).some((key) => !fields.includes(key)))
       throw new Error('Expected a Profile object');
-    if (value.detached !== undefined && (user || typeof value.detached !== 'boolean'))
+    if (value.detached !== undefined && typeof value.detached !== 'boolean')
       throw new Error('Invalid detached setting');
     if (
       value.include !== undefined &&
-      (user || !Array.isArray(value.include) || value.include.some((path) => path !== './base.yml'))
+      (!Array.isArray(value.include) ||
+        value.include.some((path) => typeof path !== 'string' || !path.trim()))
     )
-      throw new Error('Only shipped Profiles may include ./base.yml');
+      throw new Error('include must be a list of YAML paths');
     if (value.plugins !== undefined && !Array.isArray(value.plugins))
       throw new Error('plugins must be a list');
     const ids = new Set<string>();
@@ -67,54 +77,84 @@ function load(file: string, user = false): Layer {
       if (
         !object(row) ||
         Object.keys(row).some(
-          (key) => !['id', 'name', 'disabled', 'client', 'config', 'bootstrap', 'required'].includes(key),
+          (key) => !['id', 'name', 'disabled', 'client', 'config', 'required'].includes(key),
         ) ||
         typeof row.id !== 'string' ||
         !pluginIdPattern.test(row.id) ||
         ids.has(row.id) ||
-        (row.name !== undefined && typeof row.name !== 'string') ||
+        (row.name !== undefined && (typeof row.name !== 'string' || !row.name.trim())) ||
         (row.config !== undefined && !object(row.config)) ||
-        ['disabled', 'client', 'bootstrap', 'required'].some(
+        ['disabled', 'client', 'required'].some(
           (key) => row[key] !== undefined && typeof row[key] !== 'boolean',
-        ) ||
-        (user && (row.bootstrap !== undefined || row.required !== undefined))
+        )
       )
         throw new Error('Invalid or duplicate plugin entry: ' + (object(row) ? row.id : row));
       ids.add(row.id);
     }
     return value as Layer;
   } catch (error) {
-    if (user && (error as NodeJS.ErrnoException).code === 'ENOENT') return {};
+    if (optional && (error as NodeJS.ErrnoException).code === 'ENOENT') return;
     throw new Error(file + ': ' + (error instanceof Error ? error.message : String(error)), { cause: error });
   }
 }
 
-function rows(layers: readonly Layer[]) {
-  const result = new Map<string, Row>();
+/** Resolve includes relative to the declaring YAML, detecting aliases of the same physical file. */
+function layers(file: string, optional = false, ancestors: readonly string[] = []): LoadedLayer[] {
+  const layer = load(file, optional);
+  if (!layer) return [];
+  const physical = realpathSync(file);
+  if (ancestors.includes(physical))
+    throw new Error('Cyclic Profile include: ' + [...ancestors, physical].join(' -> '));
+  return [
+    ...(layer.include ?? []).flatMap((path) =>
+      layers(resolve(dirname(file), path), false, [...ancestors, physical]),
+    ),
+    { ...layer, file },
+  ];
+}
+
+function rows(layers: readonly LoadedLayer[]) {
+  const result = new Map<string, ResolvedRow>();
   for (const layer of layers)
     for (const row of layer.plugins ?? []) {
       const existing = result.get(row.id);
-      result.set(row.id, { ...existing, ...row, config: { ...existing?.config, ...row.config } });
+      result.set(row.id, {
+        ...existing,
+        ...row,
+        source: row.name === undefined ? existing?.source : layer.file,
+        config: { ...existing?.config, ...row.config },
+      });
     }
+  for (const row of result.values())
+    if (!row.name) throw new Error('Profile entry requires a module name: ' + row.id);
   return result;
 }
 
-function profileFile(name: string) {
-  if (!/^[a-z][a-z0-9-]{0,31}$/.test(name) || name === 'base')
-    throw new Error('Invalid Profile name: ' + name);
-  return load(fileURLToPath(new URL(name + '.yml', bundled)));
+function profileFile(name: string, paths?: Paths) {
+  if (name === 'web') return fileURLToPath(new URL('web.yml', bundled));
+  if (/^[a-z][a-z0-9-]*$/.test(name) && paths)
+    return join(paths.home, 'profiles', name, 'cordis.yml');
+  return resolve(name);
 }
 
-export function allowsDetachment(name: string) {
-  return profileFile(name).detached === true;
+function profileLayers(name: string, paths: Paths) {
+  if (name !== 'web') {
+    const file = profileFile(name, paths);
+    return { file, shipped: [], userLayers: layers(file) };
+  }
+  const file = join(paths.home, 'profiles', name, 'cordis.yml');
+  return { file, shipped: layers(profileFile(name)), userLayers: layers(file, true) };
 }
 
-export function readProfile(name: string) {
-  const surface = profileFile(name);
-  return rows([
-    ...(surface.include?.length ? [load(fileURLToPath(new URL('base.yml', bundled)))] : []),
-    surface,
-  ]);
+export function allowsDetachment(name: string, paths: Paths) {
+  const { shipped, userLayers } = profileLayers(name, paths);
+  return Object.assign({}, ...shipped, ...userLayers).detached === true;
+}
+
+export function readProfile(name: string, paths?: Paths) {
+  if (!paths) return rows(layers(profileFile(name)));
+  const { shipped, userLayers } = profileLayers(name, paths);
+  return rows([...shipped, ...userLayers]);
 }
 
 async function moduleFor(name: string) {
@@ -126,12 +166,49 @@ async function moduleFor(name: string) {
   return value;
 }
 
+function isPlugin(value: unknown): value is Plugin {
+  return typeof value === 'function' || (object(value) && typeof value.apply === 'function');
+}
+
+/** Ask Node's ESM resolver to use the declaring Profile as the parent URL. */
+function resolveModule(name: string, source: string) {
+  const specifier = isAbsolute(name) ? pathToFileURL(name).href : name;
+  const parentURL = pathToFileURL(source).href;
+  const hook = registerHooks({
+    resolve(request, context, next) {
+      return next(
+        request,
+        request === specifier && context.parentURL === import.meta.url
+          ? { ...context, parentURL }
+          : context,
+      );
+    },
+  });
+  try {
+    return import.meta.resolve(specifier);
+  } finally {
+    hook.deregister();
+  }
+}
+
+async function nativeModule(row: ResolvedRow) {
+  const name = row.name!;
+  const module = packagedModules.has(name) ? name : resolveModule(name, row.source!);
+  const value: unknown = packagedModules.has(name)
+    ? await moduleFor(name)
+    : await import(module).then((exports) => exports.default ?? exports);
+  if (!isPlugin(value)) throw new Error('Profile module must export a Cordis plugin: ' + name);
+  return { row, module, plugin: value };
+}
+
 export async function profileDescriptors(entries: ReadonlyMap<string, Row>) {
-  return Promise.all(
+  const descriptors = await Promise.all(
     [...entries.values()]
-      .filter((row) => !row.bootstrap && row.name && !row.name.startsWith('installed:'))
+      .filter((row) => row.name && packagedModules.has(row.name))
       .map(async (row) => {
-        const descriptor = (await moduleFor(row.name!)) as PluginDescriptor;
+        const value = await moduleFor(row.name!);
+        if (isPlugin(value)) return;
+        const descriptor = value as PluginDescriptor;
         return {
           ...descriptor,
           id: row.id,
@@ -144,36 +221,40 @@ export async function profileDescriptors(entries: ReadonlyMap<string, Row>) {
         };
       }),
   );
+  return descriptors.filter((descriptor) => descriptor !== undefined);
 }
 
 export async function loadProfile(name: string, paths: Paths, context: Context): Promise<ProfileRuntime> {
-  const official = readProfile(name);
-  const file = join(paths.home, 'profiles', name, 'cordis.yml');
-  const user = load(file, true);
-  for (const row of user.plugins ?? []) {
-    const base = official.get(row.id);
-    if (
-      base?.bootstrap ||
-      (base?.required && (row.disabled || (base.client && row.client === false))) ||
-      (base && row.name && base.name !== row.name)
-    )
-      throw new Error(file + ': entry cannot be replaced or disabled: ' + row.id);
-    if (!base && !row.name) throw new Error(file + ': new entry requires a module name: ' + row.id);
+  const { file, shipped, userLayers } = profileLayers(name, paths);
+  const user: Layer = userLayers.at(-1) ?? {};
+  const baseLayers = [...shipped, ...userLayers.slice(0, -1)];
+  const official = rows(baseLayers);
+  const resolved = rows([...shipped, ...userLayers]);
+  const merged: Layer = Object.assign({}, ...shipped, ...userLayers);
+  for (const row of resolved.values()) {
     if (
       row.name?.startsWith('installed:') &&
       (!localPluginIdPattern.test(row.name.slice(10)) || !localPluginIdPattern.test(row.id))
     )
       throw new Error(file + ': installed entries use the installed module ID: ' + row.id);
   }
-  const resolved = rows([{ plugins: [...official.values()] }, user]);
-  const { legacy, product, scopedTools, migration } = legacySettings(paths);
+  const descriptors = await profileDescriptors(resolved);
+  const managedIds = new Set(descriptors.map(({ id }) => id));
+  const nativeRows = [...resolved.values()].filter(
+    (row) => !managedIds.has(row.id) && !row.name?.startsWith('installed:'),
+  );
+  const nativeIds = new Set(nativeRows.map(({ id }) => id));
+  const { legacy: previousSettings, product, scopedTools, migration: pendingMigration, raw } =
+    legacySettings(paths);
+  const legacy = name === 'web' ? previousSettings : parseSettings({});
+  const migration = name === 'web' && pendingMigration;
   const overrides = {
     plugins: Object.fromEntries(
-      [...resolved.values()].filter((row) => !row.bootstrap).map((row) => [row.id, !row.disabled]),
+      [...resolved.values()].filter((row) => !nativeIds.has(row.id)).map((row) => [row.id, !row.disabled]),
     ),
     pluginConfig: Object.fromEntries(
       [...resolved.values()]
-        .filter((row) => Object.keys(row.config ?? {}).length)
+        .filter((row) => !nativeIds.has(row.id) && Object.keys(row.config ?? {}).length)
         .map((row) => [row.id, { ...row.config, ...legacy.pluginConfig[row.id] }]),
     ),
     providers: legacy.providers,
@@ -181,19 +262,26 @@ export async function loadProfile(name: string, paths: Paths, context: Context):
     scopes: legacy.scopes,
   };
   Object.assign(overrides.plugins, legacy.plugins);
-  for (const [id, config] of Object.entries(legacy.pluginConfig)) overrides.pluginConfig[id] ??= config;
-  for (const row of user.plugins ?? []) {
-    if (row.disabled !== undefined) overrides.plugins[row.id] = !row.disabled;
-    if (row.config) overrides.pluginConfig[row.id] = { ...overrides.pluginConfig[row.id], ...row.config };
+  for (const [id, config] of Object.entries(legacy.pluginConfig))
+    if (!nativeIds.has(id)) overrides.pluginConfig[id] ??= config;
+  for (const layer of userLayers)
+    for (const row of layer.plugins ?? []) {
+      if (nativeIds.has(row.id)) continue;
+      if (row.disabled !== undefined) overrides.plugins[row.id] = !row.disabled;
+      if (row.config) overrides.pluginConfig[row.id] = { ...overrides.pluginConfig[row.id], ...row.config };
+    }
+  for (const id of nativeIds) {
+    delete overrides.plugins[id];
+    delete overrides.pluginConfig[id];
   }
   const configuredPort = resolved.get('core:web-server')?.config?.port;
   const effective = parseSettings({
     ...product,
     ...overrides,
     port: configuredPort ?? legacy.port,
-    providers: user.providers ?? overrides.providers,
-    browserProviders: user.browserProviders ?? overrides.browserProviders,
-    scopes: withToolRules(user.scopes ?? overrides.scopes, scopedTools),
+    providers: merged.providers ?? overrides.providers,
+    browserProviders: merged.browserProviders ?? overrides.browserProviders,
+    scopes: withToolRules(merged.scopes ?? overrides.scopes, scopedTools),
   });
   if (
     migration &&
@@ -208,24 +296,27 @@ export async function loadProfile(name: string, paths: Paths, context: Context):
       };
     }
   }
-  const descriptors = await profileDescriptors(resolved);
-  const modules = await Promise.all(
-    [...resolved.values()]
-      .filter((row) => row.bootstrap)
-      .map(async (row) => ({
-        row,
-        plugin: (await moduleFor(row.name!)) as Plugin,
-      })),
-  );
+  // Disabled external modules are never resolved or imported.
+  const modules = await Promise.all(nativeRows.filter((row) => !row.disabled).map(nativeModule));
   const infrastructure = modules.flatMap(({ plugin }) =>
     typeof plugin.provide === 'string' ? [plugin.provide] : (plugin.provide ?? []),
   );
-  const bootstrap: EntryOptions[] = modules.map(({ row, plugin }) => ({
+  const nativeEntries: EntryOptions[] = modules.map(({ row, module, plugin }) => ({
     id: row.id,
-    module: row.name!,
+    module,
     context,
     config: row.config ?? {},
     load: () => plugin,
+    prepare: packagedModules.has(row.name!)
+      ? undefined
+      : (ctx) => {
+          bindInstance(ctx.fiber.entry!, {
+            pluginId: row.id,
+            scope: { kind: 'application' },
+            trusted: false,
+            writableConfig: false,
+          });
+        },
   }));
   const entries = new EntryTree();
   const aliases = new Map(
@@ -236,18 +327,25 @@ export async function loadProfile(name: string, paths: Paths, context: Context):
   let current = effective;
   let migrate = migration;
   function commit(settings: ProfileConfiguration) {
-    const plugins: Row[] = [];
+    // Native Entries belong to the selected YAML and are not editable through the
+    // managed Settings projection. Preserve their root declarations verbatim.
+    const plugins: Row[] = (user.plugins ?? []).filter(({ id }) => nativeIds.has(id));
+    for (const id of nativeIds)
+      if (Object.hasOwn(settings.plugins, id) || Object.hasOwn(settings.pluginConfig, id))
+        throw new Error('Edit the native Profile entry and restart to configure: ' + id);
     for (const id of new Set([
       ...Object.keys(settings.plugins),
       ...Object.keys(settings.pluginConfig),
-      ...(user.plugins ?? []).filter((row) => !row.name?.startsWith('installed:')).map((row) => row.id),
+      ...(user.plugins ?? [])
+        .filter((row) => !nativeIds.has(row.id) && !row.name?.startsWith('installed:'))
+        .map((row) => row.id),
     ])) {
       const base = official.get(id);
-      if (base?.bootstrap) continue;
+      if (nativeIds.has(id)) continue;
       const existing = resolved.get(id);
       const config = settings.pluginConfig[id];
       const row: Row = { id };
-      if (!base) row.name = existing?.name ?? 'installed:' + id;
+      if (!base || existing?.name !== base.name) row.name = existing?.name ?? 'installed:' + id;
       const disabled = settings.plugins[id] === undefined ? undefined : !settings.plugins[id];
       if (disabled !== undefined && (!base || disabled !== Boolean(base.disabled))) row.disabled = disabled;
       const changed = Object.fromEntries(
@@ -255,6 +353,7 @@ export async function loadProfile(name: string, paths: Paths, context: Context):
       );
       if (Object.keys(changed).length) row.config = changed;
       if (existing?.client !== undefined && existing.client !== base?.client) row.client = existing.client;
+      if (existing?.required !== undefined && existing.required !== base?.required) row.required = existing.required;
       if (Object.keys(row).length > 1) plugins.push(row);
     }
     const rules = Object.fromEntries(
@@ -270,6 +369,8 @@ export async function loadProfile(name: string, paths: Paths, context: Context):
       }),
     );
     const next = {
+      ...(user.include === undefined ? {} : { include: user.include }),
+      ...(user.detached === undefined ? {} : { detached: user.detached }),
       plugins,
       providers: settings.providers,
       browserProviders: settings.browserProviders ?? {},
@@ -280,7 +381,11 @@ export async function loadProfile(name: string, paths: Paths, context: Context):
     // from the YAML layer. Ordinary product settings are saved only when they change.
     const previous = readProfileText(file);
     if (previous !== text) writeText(file, text);
-    const domain = { readOnlyTools: settings.readOnlyTools, scopedTools: rules };
+    const domain = {
+      ...(pendingMigration && name !== 'web' ? raw : {}),
+      readOnlyTools: settings.readOnlyTools,
+      scopedTools: rules,
+    };
     try {
       if (
         migrate ||
@@ -301,7 +406,7 @@ export async function loadProfile(name: string, paths: Paths, context: Context):
   }
   return {
     descriptors,
-    bootstrap,
+    nativeEntries,
     entries,
     infrastructure,
     installed: aliases,
@@ -356,5 +461,5 @@ function legacySettings(paths: Paths) {
   const scopedTools = object(raw.scopedTools) ? raw.scopedTools : scopedRules(legacy.scopes);
   if (Object.keys(scopedTools).some((key) => !isScopeKey(key)))
     throw new Error('Invalid scoped tool settings');
-  return { migration, legacy, scopedTools, product: { readOnlyTools: legacy.readOnlyTools } };
+  return { raw, migration, legacy, scopedTools, product: { readOnlyTools: legacy.readOnlyTools } };
 }

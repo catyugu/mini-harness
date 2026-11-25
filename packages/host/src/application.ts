@@ -25,16 +25,19 @@ export async function bootProfile(name: string, paths: Paths, launch: LaunchOpti
       }
     })());
   try {
-    const errors = await profile.entries.update(profile.bootstrap);
+    const errors = await profile.entries.update(profile.nativeEntries);
     if (errors.size)
       throw new AggregateError(
         [...errors.values()],
-        'Profile infrastructure failed: ' + [...errors.keys()].join(', '),
+        'Profile entries failed: ' + [...errors.keys()].join(', '),
       );
-    for (const { id } of profile.bootstrap)
-      if (!profile.entries.get(id)?.active)
-        throw new Error('Profile infrastructure is waiting for a dependency: ' + id);
     await ctx.parallel('harness/start');
+    for (const { id } of profile.nativeEntries) {
+      const entry = profile.entries.get(id);
+      if (entry?.error) throw new Error('Profile entry failed: ' + id, { cause: entry.error });
+    }
+    if (name === 'web' && !ctx.get('harnessWeb'))
+      throw new Error('The Web Profile requires an available HTTP server');
     await ctx.parallel('harness/open');
     profile.finishMigration();
   } catch (error) {

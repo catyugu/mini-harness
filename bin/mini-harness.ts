@@ -18,7 +18,7 @@ function help() {
   console.log(`mini-harness — minimal native agent harness
 
 Usage:
-  mini-harness [--profile web] [--port 3837]              Start the local web interface
+  mini-harness [--profile web|name|path.yml] [--port 3837]              Start the local web interface
   mini-harness --detached [--port 3837]   Run independently of this terminal
   mini-harness --no-open                 Start without opening a browser
   mini-harness status                    Show server status
@@ -54,7 +54,7 @@ function parse(argv: string[]) {
       if (!argv[i + 1]) throw new Error('--cwd requires a value');
       args.cwd = resolve(argv[++i]);
     } else if (flag === '--profile') {
-      if (!argv[i + 1]) throw new Error('--profile requires a name');
+      if (!argv[i + 1]) throw new Error('--profile requires a name or YAML path');
       args.profile = argv[++i];
     } else if (flag === 'status' || flag === 'stop' || flag === 'reset-token') {
       if (args.command) throw new Error('Specify one command');
@@ -67,7 +67,7 @@ function parse(argv: string[]) {
 }
 
 async function detached(paths: ReturnType<typeof getPaths>, profile: string, flags: string[]) {
-  if (!allowsDetachment(profile)) throw new Error('Profile ' + profile + ' does not support --detached');
+  if (!allowsDetachment(profile, paths)) throw new Error('Profile ' + profile + ' does not support --detached');
   const running = await serverStatus(paths.home, paths.pid);
   if (running) throw new Error('mini-harness is already running (PID ' + running.pid + ')');
   const output = openSync(paths.log, 'a', 0o600);

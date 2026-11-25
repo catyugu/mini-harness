@@ -1,13 +1,10 @@
 plugins:
   - id: core:transport
     name: '@mini-harness/transport-runtime'
-    bootstrap: true
   - id: core:settings-runtime
     name: '@mini-harness/settings-runtime'
-    bootstrap: true
   - id: core:plugins-runtime
     name: '@mini-harness/plugins-runtime'
-    bootstrap: true
   - id: core:workspace
     name: '@mini-harness/workspaces'
   - id: core:tool-policy
