@@ -3,7 +3,7 @@ import type { Context } from 'mini-harness/cordis';
 import { browserPluginId, browserPluginSettings } from 'mini-harness/ui-runtime/plugin-settings';
 import type { BrowserPrimitives } from 'mini-harness/ui-primitives';
 import type { RecordRenderer } from 'mini-harness/conversation/history';
-import type { PluginSettingsContribution } from 'mini-harness/ui-settings';
+import type { SettingsContribution } from 'mini-harness/ui-settings';
 
 export const inject = ['miniPrimitives', 'miniMessages', 'miniSettingsRegistry'];
 
@@ -37,7 +37,7 @@ export function apply(ctx: Context) {
           );
           return field;
         },
-      } satisfies PluginSettingsContribution,
+      } satisfies SettingsContribution,
       browserPluginSettings(ctx),
     ),
   );

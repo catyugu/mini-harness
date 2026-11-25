@@ -139,6 +139,7 @@ async function checkPackage() {
       import { Context, type Plugin } from 'mini-harness/cordis';
       import type { LlmPort } from 'mini-harness/llm';
       import type { ScopeSettings } from 'mini-harness/scopes';
+      import type { Settings } from 'mini-harness/settings';
       import { defineTool } from 'mini-harness/tools';
       import type { PluginData, PluginSecrets } from 'mini-harness/plugin-data';
       import type { SessionRecords } from 'mini-harness/sessions';
@@ -154,6 +155,8 @@ async function checkPackage() {
       }
       declare const ctx: Context;
       const scope: ScopeSettings = { disabledTools: ['write'] };
+      const scopedSettings: Settings['scopes'] = { 'session:example': scope };
+      void scopedSettings;
       const llm: LlmPort | undefined = ctx.harnessLlm;
       const plugin: Plugin = {
         apply(ctx) { ctx.provide('example', { greet: (name: string) => name.toUpperCase() }); }
@@ -180,7 +183,7 @@ async function checkPackage() {
         if (event.type === 'run-ended') void event.run.id;
       });
       ctx.on('conversation/tool-projection', ({ content }: ToolProjection) => content);
-      ctx.on('tools/decide', ({ tool }): ToolDecision | undefined => tool === 'change' ? 'deny' : undefined);
+      ctx.on('tools/decide', ({ tool }: ToolDecision) => tool === 'change' ? 'deny' : undefined);
       void records.append({ seen: true });
       // @ts-expect-error Input listeners return native user content or a rejection.
       ctx.on('agent/prepare-input', () => ({ arbitrary: true }));

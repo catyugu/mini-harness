@@ -56,6 +56,30 @@ function checkCycles(graph: Map<string, Set<string>>, kind: string) {
   for (const name of graph.keys()) visit(name);
 }
 
+test('tracked TypeScript uses source specifiers and named type imports', () => {
+  const roots = ['bin', 'packages', 'vendor', 'test', 'scripts', 'docs/examples'];
+  function visit(directory: string) {
+    for (const item of readdirSync(directory, { withFileTypes: true })) {
+      const path = join(directory, item.name);
+      if (item.isDirectory()) {
+        if (item.name !== 'node_modules') visit(path);
+        continue;
+      }
+      if (!item.name.endsWith('.ts')) continue;
+      const ast = ts.createSourceFile(path, readFileSync(path, 'utf8'), ts.ScriptTarget.Latest, true);
+      for (const statement of ast.statements) {
+        if (!ts.isImportDeclaration(statement)) continue;
+        const bindings = statement.importClause?.namedBindings;
+        assert.ok(
+          !bindings || !ts.isNamedImports(bindings) || bindings.elements.length !== 0,
+          'Empty import declaration: ' + path,
+        );
+      }
+    }
+  }
+  for (const directory of roots) visit(join(root, directory));
+});
+
 test('workspace dependencies use domain APIs and keep providers at the application boundary', async () => {
   assert.ok(!manifests.has('kernel'), 'Business plugins must use the vendored Cordis runtime directly');
   const browserModules = new Map<string, string[]>();
