@@ -1,4 +1,6 @@
 import type {} from 'mini-harness/cordis';
+import type { NativeAssistantMessage, NativeMessage } from '@mini-harness/llm/api';
+import type { ModelRequestContent } from './events.js';
 import type { InboxItem } from '@mini-harness/sessions/log-api';
 import type { QueueEntry } from '@mini-harness/sessions/queue';
 import type { SessionRecord } from '@mini-harness/sessions/identity';
@@ -43,8 +45,45 @@ export interface AgentPort {
   cancelQueue(id: string, itemId?: string): QueueEntry[];
 }
 
+/** A scheduling strategy only receives call identities, not raw tool implementations. */
+export interface ToolDispatch {
+  readonly id: string;
+  readonly name: string;
+  readonly parallel: boolean;
+}
+
+export interface ToolExecutorPort {
+  schedule(
+    calls: readonly ToolDispatch[],
+    signal: AbortSignal,
+    execute: (id: string, signal: AbortSignal) => Promise<void>,
+  ): Promise<void>;
+}
+
+export interface CompactionInput {
+  messages: NativeMessage[];
+  entryIds: string[];
+  userEntryIds: string[];
+  automatic: boolean;
+  signal: AbortSignal;
+  request(content: ModelRequestContent): Promise<NativeAssistantMessage>;
+}
+
+export interface CompactionResult {
+  summary: string;
+  keepFromId: string;
+  tokensBefore?: number;
+}
+
+export interface CompactionPort {
+  shouldCompact(messages: NativeMessage[], budget: number): boolean;
+  compact(input: CompactionInput): Promise<CompactionResult | undefined>;
+}
+
 declare module 'mini-harness/cordis' {
   interface Context {
     harnessAgent: AgentPort;
+    harnessToolExecutor: ToolExecutorPort;
+    harnessCompaction: CompactionPort;
   }
 }

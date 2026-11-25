@@ -8,7 +8,8 @@ import assert from 'node:assert/strict';
 import { rmSync } from 'node:fs';
 import { Type } from 'typebox';
 import { NativeAgent } from '../src/agent.js';
-import { scheduleTools } from '../src/tool-pipeline.js';
+import { dispatchTools, scheduleTools } from '../src/tool-pipeline.js';
+import { basicCompaction } from '../src/compaction.js';
 import { SessionRegistry } from '@mini-harness/sessions/registry';
 import { WorkspaceCatalog } from '@mini-harness/workspaces/catalog';
 import { ToolRegistry } from '@mini-harness/tools/registry';
@@ -70,6 +71,8 @@ function fixture(
     }),
     llm: () => llm,
     tools: () => ctx.harnessTools,
+    executor: () => ({ schedule: scheduleTools }),
+    compaction: () => basicCompaction,
     prompt: () => ({ build: async () => 'Fixture', register: () => () => {} }),
     policy: () => ({ maxTurns: 8, autoCompact: false }),
     retryModel,
@@ -551,7 +554,7 @@ test('a fatal pipeline failure stops dispatch and drains active calls', async ()
   const started: string[] = [];
   let drained = 0;
   await assert.rejects(
-    scheduleTools(calls, tools, new AbortController().signal, async (call, _tool, signal) => {
+    dispatchTools({ schedule: scheduleTools }, calls, tools, new AbortController().signal, async (call, _tool, signal) => {
       started.push(call.id);
       if (call.id === '0') throw new Error('Log write failed');
       await new Promise<void>((resolve) => {
@@ -702,4 +705,37 @@ test('attachments enforce encoding, format and byte limits without creating file
   assert.match(binary.text, /Uploaded file: "b.pdf"/);
   assert.deepEqual(binary.files[0].bytes, Buffer.from([0, 1, 2]));
   assert.throws(() => prepareInput('a', new Array(9).fill({})), /eight/);
+});
+
+test('custom scheduling cannot substitute or duplicate an advertised tool call', async () => {
+  const calls = [call('one', 'first'), call('two', 'second')];
+  const signal = new AbortController().signal;
+  const seen: string[] = [];
+  await dispatchTools(
+    {
+      async schedule(calls, signal, execute) {
+        for (const item of [...calls].reverse()) await execute(item.id, signal);
+      },
+    },
+    calls,
+    new Map(),
+    signal,
+    async (call) => { seen.push(call.id); },
+  );
+  assert.deepEqual(seen, ['two', 'one']);
+  await assert.rejects(
+    dispatchTools(
+      {
+        async schedule(_calls, signal, execute) {
+          await execute('one', signal);
+          await execute('one', signal);
+        },
+      },
+      calls,
+      new Map(),
+      signal,
+      async () => {},
+    ),
+    /already scheduled/,
+  );
 });

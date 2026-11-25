@@ -13,6 +13,10 @@ plugins:
     name: '@mini-harness/sessions'
   - id: core:agent
     name: '@mini-harness/agent'
+  - id: core:tool-executor
+    name: '@mini-harness/tool-executor'
+  - id: core:compaction
+    name: '@mini-harness/compaction'
   - id: core:prompt
     name: '@mini-harness/agent-prompt'
   - id: core:model-store

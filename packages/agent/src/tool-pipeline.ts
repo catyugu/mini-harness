@@ -6,6 +6,7 @@ import {
 } from '@mini-harness/tools/api';
 import { Check } from 'typebox/value';
 import type { ToolCallPart, NativeToolMessage } from '@mini-harness/llm/api';
+import type { ToolDispatch, ToolExecutorPort } from './api.js';
 
 const parallelLimit = 16;
 
@@ -23,18 +24,17 @@ function safeToRunTogether(call: ToolCallPart, tool?: ToolDefinition) {
 
 /** A serial call is a barrier. Each running call can persist its own result immediately. */
 export async function scheduleTools(
-  calls: ToolCallPart[],
-  tools: ReadonlyMap<string, ToolDefinition>,
+  calls: readonly ToolDispatch[],
   signal: AbortSignal,
-  run: (call: ToolCallPart, tool: ToolDefinition | undefined, signal: AbortSignal) => Promise<void>,
+  run: (id: string, signal: AbortSignal) => Promise<void>,
 ) {
   const controller = new AbortController();
   const batchSignal = AbortSignal.any([signal, controller.signal]);
   const active = new Set<Promise<void>>();
   let failure: { error: unknown } | undefined;
-  const start = (call: ToolCallPart, tool: ToolDefinition | undefined) => {
+  const start = (call: ToolDispatch) => {
     const task = Promise.resolve()
-      .then(() => run(call, tool, batchSignal))
+      .then(() => run(call.id, batchSignal))
       .catch((error) => {
         if (!failure) {
           failure = { error };
@@ -47,17 +47,62 @@ export async function scheduleTools(
   };
   for (const call of calls) {
     if (failure) break;
-    const tool = tools.get(call.name);
-    if (safeToRunTogether(call, tool)) {
-      start(call, tool);
+    if (call.parallel) {
+      start(call);
       if (active.size === parallelLimit) await Promise.race(active);
     } else {
       await Promise.all(active);
       if (failure) break;
-      await start(call, tool);
+      await start(call);
     }
   }
   await Promise.all(active);
+  if (failure) throw failure.error;
+}
+
+/** A scheduler cannot change an advertised call or substitute its authorized tool lease. */
+export async function dispatchTools(
+  executor: ToolExecutorPort,
+  calls: ToolCallPart[],
+  tools: ReadonlyMap<string, ToolDefinition>,
+  signal: AbortSignal,
+  run: (call: ToolCallPart, tool: ToolDefinition | undefined, signal: AbortSignal) => Promise<void>,
+) {
+  const pending = new Map(calls.map((call) => [call.id, call]));
+  const controller = new AbortController();
+  const lifetime = AbortSignal.any([signal, controller.signal]);
+  const active: Promise<void>[] = [];
+  let failure: { error: unknown } | undefined;
+  try {
+    await executor.schedule(
+      calls.map((call) => ({
+        id: call.id,
+        name: call.name,
+        parallel: safeToRunTogether(call, tools.get(call.name)),
+      })),
+      lifetime,
+      (id, scheduledSignal) => {
+        const call = pending.get(id);
+        if (!call) throw new Error('Unknown or already scheduled tool call: ' + id);
+        pending.delete(id);
+        const task = Promise.resolve().then(() =>
+          run(call, tools.get(call.name), AbortSignal.any([lifetime, scheduledSignal])),
+        );
+        active.push(task);
+        void task.catch((error) => {
+          failure ??= { error };
+          controller.abort(error);
+        });
+        return task;
+      },
+    );
+    if (pending.size) throw new Error('Tool executor omitted calls: ' + [...pending.keys()].join(', '));
+  } catch (error) {
+    failure ??= { error };
+    controller.abort(error);
+  } finally {
+    await Promise.allSettled(active);
+  }
   if (failure) throw failure.error;
 }
 

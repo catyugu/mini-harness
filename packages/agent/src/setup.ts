@@ -16,6 +16,8 @@ export function setup(ctx: Context) {
     llm: (id) => scopes.require(`session:${id}`, 'harnessLlm'),
     tools: (id) => scopes.require(`session:${id}`, 'harnessTools'),
     prompt: (id) => scopes.require(`session:${id}`, 'harnessPrompt'),
+    executor: (id) => scopes.require(`session:${id}`, 'harnessToolExecutor'),
+    compaction: (id) => scopes.context(`session:${id}`).get('harnessCompaction'),
     policy: () => ctx.fiber.effectiveConfig as { maxTurns: number; autoCompact: boolean },
     observe: (event, signal) => observe(ctx, event, signal),
     inputHooks: (id) => ctx.events.listeners('agent/prepare-input', sessionEvent(ctx, id)),

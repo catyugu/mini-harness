@@ -23,6 +23,7 @@ export const manifest: PluginDescriptor = {
       'harnessModels',
       'harnessLlm',
       'harnessPrompt',
+      'harnessToolExecutor',
     ],
     provide: ['harnessAgent'],
     apply: setup,
