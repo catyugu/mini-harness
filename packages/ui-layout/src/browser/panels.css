@@ -7,7 +7,7 @@
   min-width: 0;
   overflow: hidden;
   visibility: hidden;
-  background: var(--panel);
+  background: var(--bg);
   transition:
     flex-basis var(--motion-panel) ease-out,
     width var(--motion-panel) ease-out,
@@ -43,6 +43,15 @@
   min-height: 52px;
   padding-inline: 8px;
   border-bottom: 1px solid var(--border);
+}
+.right-start-title {
+  flex-shrink: 0;
+  padding-inline: 8px;
+  font-size: 13px;
+  font-weight: 550;
+}
+.right-panel > header:has(.right-start-title:not([hidden])) {
+  border-bottom-color: transparent;
 }
 .right-tab-list {
   display: flex;
@@ -137,24 +146,45 @@
 }
 
 .right-start {
-  display: grid;
-  gap: 0.65rem;
-  padding: 1rem;
-}
-.right-start[hidden] {
-  display: none;
-}
-.right-start button {
   display: flex;
-  gap: 0.75rem;
-  align-items: center;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 24px 16px;
+}
+.right-start-menu {
+  display: grid;
+  flex: none;
+  width: min(100%, 380px);
+  gap: 12px;
+  margin: auto;
+}
+.right-start .ui-button {
+  justify-content: flex-start;
+  gap: 16px;
+  width: 100%;
+  min-width: 0;
+  min-height: 68px;
+  padding: 12px 20px;
   text-align: left;
-  border: 1px solid var(--border);
-  border-radius: 0.65rem;
-  padding: 0.8rem;
+  border-radius: var(--radius-lg);
+}
+.right-start .ui-button > svg {
+  flex: 0 0 18px;
+  color: var(--muted);
+}
+.right-start .ui-button > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.right-start strong {
+  font-weight: 550;
 }
 .right-start small {
   display: block;
-  margin-top: 0.2rem;
+  margin-top: 3px;
+  font-size: 12px;
   color: var(--muted);
 }
