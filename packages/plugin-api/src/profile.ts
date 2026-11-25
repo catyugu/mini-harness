@@ -4,12 +4,10 @@ import type { ProfileConfiguration } from './configuration.ts';
 
 export interface ProfileRuntime {
   readonly directory: string;
-  readonly descriptors: ResolvedPlugin[];
-  readonly modules: ReadonlyMap<string, { name: string; source: string }>;
+  builtin(id: string, name: string, client: boolean): ResolvedPlugin | undefined;
+  source(id: string, name: string): string;
   start(): Promise<Map<string, unknown>>;
   readonly entries: EntryTree;
-  readonly installed: ReadonlyMap<string, string>;
-  client(id: string): boolean;
   read(): ProfileConfiguration;
   commit(settings: ProfileConfiguration): void;
   close(): Promise<void>;

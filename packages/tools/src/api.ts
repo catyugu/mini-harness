@@ -30,7 +30,7 @@ export interface ToolDefinition<Arguments = Record<string, any>> extends ToolSch
 }
 
 export interface ToolRegistrationOptions {
-  /** The host only honors a read-only declaration from an authorized source. */
+  /** Read-only tools require an explicit grant for the registered instance and module. */
   access?: 'readOnly' | 'standard';
   visible?(sessionId: string): boolean;
 }
@@ -41,7 +41,7 @@ export interface ToolPort {
     options?: ToolRegistrationOptions,
   ): () => Promise<void>;
   forSession(id: string): ToolDefinition[];
-  readOnlyRegistrations(pluginId: string): string[];
+  readOnlyRegistrations(pluginId: string): { instanceId: string; module: string; name: string }[];
   isAvailable(id: string, tool: ToolDefinition): boolean;
 }
 

@@ -4,7 +4,6 @@ import type { ToolPolicy } from '@mini-harness/tools/policy';
 import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 
 export const metadata: PluginInfo = {
-  scope: 'application',
   title: 'Tool permissions',
   description: 'Inherited restrictions and user tool grants',
 };
@@ -13,7 +12,7 @@ const plugin: Plugin.Object = {
   inject: ['harnessRegistry', 'harnessScopes', 'harnessSettingsStore'],
   provide: ['harnessToolPolicy'],
   apply(ctx) {
-    const authorize: ToolPolicy = (id, { name, readOnly, pluginId, trusted }) => {
+    const authorize: ToolPolicy = (id, { name, readOnly, instanceId, module }) => {
       const address = ctx.harnessScopes.address(`session:${id}`);
       const settings = ctx.harnessSettingsStore.settings;
       if (address.some((key) => settings.scopes[key]?.disabledTools?.includes(name))) return false;
@@ -22,13 +21,10 @@ const plugin: Plugin.Object = {
           key.startsWith('session:') &&
           ctx.harnessRegistry.get(key.slice('session:'.length))?.permission === 'readOnly',
       );
-      const grants = settings.readOnlyTools;
-      return (
-        !requiresReadOnly ||
-        (readOnly &&
-          (trusted ||
-            Boolean(pluginId && Object.hasOwn(grants, pluginId) && grants[pluginId].includes(name))))
-      );
+      const grant = instanceId && Object.hasOwn(settings.readOnlyTools, instanceId)
+        ? settings.readOnlyTools[instanceId]
+        : undefined;
+      return !requiresReadOnly || Boolean(readOnly && grant && grant.module === module && grant.tools.includes(name));
     };
     ctx.provide('harnessToolPolicy', authorize);
   },
@@ -37,7 +33,6 @@ const plugin: Plugin.Object = {
 export default plugin;
 
 export const permissionSettingsMetadata: PluginInfo = {
-  scope: 'application',
   title: 'Tool grants',
   description: 'Manage read-only tool grants from a plugin’s settings',
   browser: '/packages/sessions/src/browser/permission-settings.js',

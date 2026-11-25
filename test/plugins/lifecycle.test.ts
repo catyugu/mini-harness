@@ -39,12 +39,15 @@ test('an installed Cordis plugin can use services, configure a tool, and release
   const log = join(folder, 'effects.log');
   mkdirSync(folder);
   writeFileSync(
+    join(folder, 'schema.json'),
+    JSON.stringify({
+      type: 'object',
+      properties: { prefix: { type: 'string', default: 'Count' } },
+    }),
+  );
+  writeFileSync(
     join(folder, 'plugin.json'),
     JSON.stringify({
-      configSchema: {
-        type: 'object',
-        properties: { prefix: { type: 'string', default: 'Count' } },
-      },
       title: 'Example plugin',
       icon: {
         path: 'M2 2h20v20H2z',
@@ -57,7 +60,7 @@ test('an installed Cordis plugin can use services, configure a tool, and release
     `
 import { defineConfig } from 'mini-harness/configuration';
 import { readFileSync } from 'node:fs';
-export const Config = defineConfig(JSON.parse(readFileSync(new URL('./plugin.json', import.meta.url), 'utf8')).configSchema);
+export const Config = defineConfig(JSON.parse(readFileSync(new URL('./schema.json', import.meta.url), 'utf8')));
 export const inject = ["harnessSessions","harnessTools"];
 
 import { appendFileSync } from 'node:fs';
@@ -78,13 +81,17 @@ export const apply = (ctx, config) => {
   );
   await runtime.start();
   const item = runtime.plugins.ctx.harnessRegistry.create();
+  assert.equal(
+    runtime.plugins.metadata().find(({ id }) => id === 'example'),
+    undefined,
+  );
+  await runtime.configuration.update({
+    entries: { example: { name: '../../plugins/example', disabled: false, config: { prefix: 'Total' } } },
+  });
   assert.equal(runtime.plugins.metadata().find(({ id }) => id === 'example')?.title, 'Example plugin');
   assert.deepEqual(runtime.plugins.metadata().find(({ id }) => id === 'example')?.icon, {
     path: 'M2 2h20v20H2z',
     viewBox: '0 0 24 24',
-  });
-  await runtime.configuration.update({
-    entries: { example: { disabled: false, config: { prefix: 'Total' } } },
   });
   await runtime.plugins.prepare(`session:${item.id}`);
   const activeNames = () => runtime.plugins.ctx.harnessTools.forSession(item.id).map(({ name }) => name);
@@ -112,14 +119,18 @@ export const apply = (ctx, config) => {
     { code: 'ENOENT' },
     'Unrelated switches and invalid config preserve an active plugin',
   );
-  await runtime.configuration.update({ entries: { example: { disabled: true } } });
+  await runtime.configuration.update({
+    entries: { example: { name: '../../plugins/example', disabled: true } },
+  });
   assert.equal(readFileSync(log, 'utf8'), 'dispose\n');
   assert.ok(!activeNames().includes('example_count'));
   await assert.rejects(
     tool.execute('after-unload', {}, undefined, undefined, undefined),
     /no longer available/,
   );
-  await runtime.configuration.update({ entries: { example: { disabled: false } } });
+  await runtime.configuration.update({
+    entries: { example: { name: '../../plugins/example', disabled: false } },
+  });
   assert.ok(activeNames().includes('example_count'));
 });
 
@@ -160,18 +171,22 @@ export const apply = (ctx) => {
   await runtime.configuration.update({ entries: { files: { disabled: true } } });
   assert.ok(!activeNames().includes('read'));
   await runtime.configuration.update({
-    entries: { files: { disabled: false }, dependent: { disabled: false } },
+    entries: { files: { disabled: false }, dependent: { name: '../../plugins/dependent', disabled: false } },
   });
   assert.ok(!activeNames().includes('dependent_tool'));
-  await runtime.configuration.update({ entries: { base: { disabled: false } } });
+  await runtime.configuration.update({ entries: { base: { name: '../../plugins/base', disabled: false } } });
   assert.ok(activeNames().includes('dependent_tool'));
-  await runtime.configuration.update({ entries: { base: { disabled: true } } });
+  await runtime.configuration.update({ entries: { base: { name: '../../plugins/base', disabled: true } } });
   assert.ok(!activeNames().includes('dependent_tool'));
   assert.ok(activeNames().includes('read'));
-  await runtime.configuration.update({ entries: { base: { disabled: false } } });
+  await runtime.configuration.update({ entries: { base: { name: '../../plugins/base', disabled: false } } });
   assert.ok(activeNames().includes('dependent_tool'));
   await runtime.configuration.update({
-    entries: { files: { disabled: true }, base: { disabled: true }, dependent: { disabled: true } },
+    entries: {
+      files: { disabled: true },
+      base: { name: '../../plugins/base', disabled: true },
+      dependent: { name: '../../plugins/dependent', disabled: true },
+    },
   });
   assert.equal(
     runtime.plugins.ctx.harnessTools
@@ -208,9 +223,13 @@ export function apply(ctx) {
     writeFileSync(join(paths.plugins, id, 'plugin.json'), JSON.stringify({}));
   }
   await runtime.start();
-  await runtime.configuration.update({ entries: { 'function-entry': { disabled: false } } });
+  await runtime.configuration.update({
+    entries: { 'function-entry': { name: '../../plugins/function-entry', disabled: false } },
+  });
   await assert.rejects(
-    runtime.configuration.update({ entries: { 'named-entry': { disabled: false } } }),
+    runtime.configuration.update({
+      entries: { 'named-entry': { name: '../../plugins/named-entry', disabled: false } },
+    }),
     /must export a Cordis plugin/,
   );
   assert.equal(runtime.settings.entries['function-entry']?.disabled, false);
@@ -230,23 +249,22 @@ test('native Cordis Config applies defaults and rejects invalid changes before s
   const folder = join(paths.plugins, 'schema');
   mkdirSync(folder);
   writeFileSync(
-    join(folder, 'plugin.json'),
+    join(folder, 'schema.json'),
     JSON.stringify({
-      configSchema: {
-        type: 'object',
-        additionalProperties: false,
-        required: ['count'],
-        properties: {
-          count: { type: 'integer', minimum: 1, maximum: 10, default: 3 },
-          options: {
-            type: 'object',
-            default: {},
-            properties: { enabled: { type: 'boolean', default: true } },
-          },
+      type: 'object',
+      additionalProperties: false,
+      required: ['count'],
+      properties: {
+        count: { type: 'integer', minimum: 1, maximum: 10, default: 3 },
+        options: {
+          type: 'object',
+          default: {},
+          properties: { enabled: { type: 'boolean', default: true } },
         },
       },
     }),
   );
+  writeFileSync(join(folder, 'plugin.json'), JSON.stringify({}));
   writeFileSync(
     join(folder, 'plugin.js'),
     `
@@ -254,7 +272,7 @@ export const inject = ["harnessPluginSettings","harnessTools"];
 
 import { defineConfig } from 'mini-harness/configuration';
 import { readFileSync } from 'node:fs';
-export const Config = defineConfig(JSON.parse(readFileSync(new URL('./plugin.json', import.meta.url), 'utf8')).configSchema, (config) => config.count === 5 ? 'Five is reserved' : undefined);
+export const Config = defineConfig(JSON.parse(readFileSync(new URL('./schema.json', import.meta.url), 'utf8')), (config) => config.count === 5 ? 'Five is reserved' : undefined);
 
 export const apply = (ctx) => {
     const changes = [];
@@ -270,7 +288,9 @@ export const apply = (ctx) => {
 `,
   );
   await runtime.start();
-  await runtime.configuration.update({ entries: { schema: { disabled: false, live: true } } });
+  await runtime.configuration.update({
+    entries: { schema: { name: '../../plugins/schema', disabled: false, live: true } },
+  });
   const item = runtime.plugins.ctx.harnessRegistry.create();
   const tool = expectPresent(
     runtime.plugins.ctx.harnessTools.forSession(item.id).find(({ name }) => name === 'schema_value'),
@@ -345,7 +365,10 @@ export const apply = (ctx, config) => {
   }
   await runtime.start();
   await runtime.configuration.update({
-    entries: { base: { disabled: false }, dependent: { disabled: false } },
+    entries: {
+      base: { name: '../../plugins/base', disabled: false },
+      dependent: { name: '../../plugins/dependent', disabled: false },
+    },
   });
   await assert.rejects(
     runtime.configuration.update({ entries: { base: { config: { fail: true } } } }),
@@ -403,14 +426,17 @@ test('cyclic services stay waiting without activating either plugin', async (t) 
   }
   await runtime.start();
   await runtime.configuration.update({
-    entries: { first: { disabled: false }, second: { disabled: false } },
+    entries: {
+      first: { name: '../../plugins/first', disabled: false },
+      second: { name: '../../plugins/second', disabled: false },
+    },
   });
   assert.equal(runtime.settings.entries.first?.disabled, false);
   for (const id of ['first', 'second'])
     assert.equal(runtime.plugins.metadata().find((plugin) => plugin.id === id)?.state, 'inactive');
 });
 
-test('malformed plugin manifests fail discovery instead of silently dropping their metadata', async (t) => {
+test('malformed plugin metadata is diagnosed when explicitly declared', async (t) => {
   const mock = await createMockProvider();
   const { root, paths } = createFixturePaths(mock.url);
   const runtime = new MiniHarnessRuntime(paths);
@@ -424,12 +450,14 @@ test('malformed plugin manifests fail discovery instead of silently dropping the
   writeFileSync(join(folder, 'plugin.js'), 'export default () => {};');
   writeFileSync(join(folder, 'plugin.json'), '{"requires": [');
   await runtime.start();
-  assert.match(
-    runtime.plugins.metadata().find(({ id }) => id === 'broken-manifest')?.error ?? '',
-    /JSON|Unexpected|parse/i,
+  assert.equal(
+    runtime.plugins.metadata().find(({ id }) => id === 'broken-manifest'),
+    undefined,
   );
   await assert.rejects(
-    runtime.configuration.update({ entries: { 'broken-manifest': { disabled: false } } }),
+    runtime.configuration.update({
+      entries: { 'broken-manifest': { name: '../../plugins/broken-manifest', disabled: false } },
+    }),
     /Invalid plugin/,
   );
   assert.equal(runtime.settings.entries['broken-manifest']?.disabled, undefined);
@@ -545,7 +573,7 @@ export const apply = (ctx) => {
         finally { mark('body:drained'); }
       });
       ctx.harnessPluginRoutes.register('POST', '/disable', async () => {
-        try { await ctx.harnessSettingsStore.update({ entries: { drain: { disabled: true } } }); }
+        try { await ctx.harnessSettingsStore.update({ entries: { drain: { name: '../../plugins/drain', disabled: true } } }); }
         catch (error) { return { error: error.message }; }
       });
       ctx.harnessPluginRoutes.upgrade('/socket', async (_request, _socket, _head, signal) => wait('ws', signal));
@@ -555,7 +583,7 @@ export const apply = (ctx) => {
   writePlugin(
     paths.plugins,
     'scoped-drain',
-    { scope: 'session' },
+    {},
     lifecycle +
       `
 export const inject = ["harnessPluginRoutes"];
@@ -569,8 +597,10 @@ export const apply = (ctx) => {
   const scope = `session:${session.id}`;
   const toggle = (active: boolean) =>
     request('/settings', 'PATCH', {
-      entries: { drain: { disabled: !active } },
-      scopes: { [scope]: { entries: { 'scoped-drain': { disabled: !active } } } },
+      entries: { drain: { name: '../../plugins/drain', disabled: !active } },
+      scopes: {
+        [scope]: { entries: { 'scoped-drain': { name: '../../plugins/scoped-drain', disabled: !active } } },
+      },
     });
   assert.equal((await toggle(true)).status, 200);
   const attempted = await request('/extensions/drain/disable', 'POST');
@@ -654,7 +684,6 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
   const builtins: ResolvedPlugin[] = [
     {
       id: 'global',
-      scope: 'application',
       title: 'Global',
       description: '',
       defaultEnabled: true,
@@ -668,7 +697,6 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
     },
     {
       id: 'workspace',
-      scope: 'workspace',
       title: 'Workspace',
       description: '',
       plugin: {
@@ -685,7 +713,6 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
     },
     {
       id: 'layer',
-      scope: 'session',
       title: 'Layer',
       description: '',
       plugin: {
@@ -702,6 +729,7 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
   ];
   const workspaceKey = 'workspace:' + workspaceId;
   const workspace = {
+    isolate: ['greeting'],
     entries: { workspace: { disabled: false, config: { value: 'workspace' } } },
   };
   let settings: typeof DEFAULTS = {
@@ -738,9 +766,11 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
     });
   };
   const parent = {
+    isolate: ['greeting'],
     entries: { layer: { disabled: false, config: { value: 'parent' } } },
   };
   const child = {
+    isolate: ['greeting'],
     entries: { layer: { disabled: false, config: { value: 'child' } } },
   };
   const broken = { ...parent, entries: { layer: { disabled: false, config: { fail: true } } } };
@@ -806,7 +836,6 @@ test('configuration validation resolves the staged scope provider and rejects in
   const builtins: ResolvedPlugin[] = [
     {
       id: 'global',
-      scope: 'application',
       title: 'Default',
       description: '',
       defaultEnabled: true,
@@ -819,7 +848,6 @@ test('configuration validation resolves the staged scope provider and rejects in
     },
     {
       id: 'local',
-      scope: 'workspace',
       title: 'Local',
       description: '',
       plugin: {
@@ -831,7 +859,6 @@ test('configuration validation resolves the staged scope provider and rejects in
     },
     {
       id: 'consumer',
-      scope: 'workspace',
       title: 'Consumer',
       description: '',
       plugin: {
@@ -859,6 +886,7 @@ test('configuration validation resolves the staged scope provider and rejects in
       ...settings,
       scopes: {
         [key]: {
+          isolate: ['greeting'],
           entries: { consumer: { disabled: false, config: { expected } }, local: { disabled: false } },
         },
       },
@@ -881,7 +909,6 @@ test('setup and live configuration cannot await their own graph transaction', as
   const builtins: ResolvedPlugin[] = [
     {
       id: 'reentrant',
-      scope: 'application',
       title: 'Reentrant',
       description: '',
       plugin: {
@@ -926,7 +953,6 @@ test('a failed server entry does not publish its browser module', async (t) => {
   const builtins: ResolvedPlugin[] = [
     {
       id: 'ui',
-      scope: 'application',
       title: 'UI',
       description: '',
       defaultEnabled: true,
@@ -934,7 +960,6 @@ test('a failed server entry does not publish its browser module', async (t) => {
     },
     {
       id: 'replacement',
-      scope: 'application',
       title: 'Replacement',
       description: '',
       browser,

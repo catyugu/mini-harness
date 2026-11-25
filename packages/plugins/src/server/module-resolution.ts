@@ -1,6 +1,6 @@
 import { registerHooks } from 'node:module';
 import { readFileSync } from 'node:fs';
-import { isAbsolute, join } from 'node:path';
+import { isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { Plugin } from 'mini-harness/cordis';
 import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
@@ -17,13 +17,10 @@ const sdk = new Map(
 );
 
 /** Resolve the public server SDK from this host for local, npm and development plugins. */
-export function bindPluginImports(directories: readonly string[]) {
-  const roots = directories.map((root) => pathToFileURL(join(root, '.')).href.replace(/\/$/, '') + '/');
+export function bindPluginImports() {
   return registerHooks({
     resolve(name, context, next) {
-      const entry = sdk.get(name);
-      const parent = context.parentURL;
-      return next(entry && parent && roots.some((root) => parent.startsWith(root)) ? entry : name, context);
+      return next(sdk.get(name) ?? name, context);
     },
   });
 }
@@ -60,5 +57,7 @@ export async function loadPluginModule(url: string, exportName = 'default') {
     exports[exportName === 'default' ? 'metadata' : exportName + 'Metadata'];
   const Config: Plugin.Base['Config'] =
     plugin?.Config ?? exports[exportName === 'default' ? 'Config' : exportName + 'Config'];
-  return { plugin, metadata, Config };
+  const browserConfig: import('@mini-harness/plugin-api/descriptor').ResolvedPlugin['browserConfig'] =
+    exports[exportName === 'default' ? 'browserConfig' : exportName + 'BrowserConfig'];
+  return { plugin, metadata, Config, browserConfig };
 }

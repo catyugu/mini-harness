@@ -1,14 +1,15 @@
-import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
+import { createHash } from 'node:crypto';
 import { parseDocument, stringify } from 'yaml';
 import { Context, EntryTree } from 'mini-harness/cordis';
 import { readJson, writeJson, writeText } from '@mini-harness/platform/json';
 import type { Paths } from '@mini-harness/platform/runtime-paths';
 import type { ResolvedPlugin, PluginInfo } from '@mini-harness/plugin-api/descriptor';
 import { PluginCatalog } from '@mini-harness/plugins/catalog';
-import { bindPluginImports, resolveModule } from '@mini-harness/plugins/module-resolution';
+import { bindPluginImports } from '@mini-harness/plugins/module-resolution';
 import { localPluginIdPattern, pluginIdPattern } from '@mini-harness/plugin-api/selection';
 import type { ProfileRuntime } from '@mini-harness/plugin-api/profile';
 import type { EntryConfiguration, ProfileConfiguration } from '@mini-harness/plugin-api/configuration';
@@ -16,8 +17,6 @@ import { parseSettings } from '@mini-harness/settings/config';
 
 interface Row extends EntryConfiguration {
   id: string;
-  name?: string;
-  client?: boolean;
 }
 
 interface Layer {
@@ -25,6 +24,7 @@ interface Layer {
   include?: string[];
   plugins?: Row[];
   scopes?: ProfileConfiguration['scopes'];
+  readOnlyTools?: ProfileConfiguration['readOnlyTools'];
 }
 
 interface LoadedLayer extends Layer {
@@ -105,6 +105,12 @@ const packagedModules = new Map(
 const object = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
 
+/** Module-only rows use a stable ID without requiring a second name. */
+function entryId(name: string) {
+  if (localPluginIdPattern.test(name)) return name;
+  return 'plugin-' + createHash('sha256').update(name).digest('hex').slice(0, 24);
+}
+
 function load(file: string, optional = false): Layer | undefined {
   try {
     const doc = parseDocument(readFileSync(file, 'utf8'), { schema: 'core', strict: true, uniqueKeys: true });
@@ -112,7 +118,7 @@ function load(file: string, optional = false): Layer | undefined {
       throw new Error([...doc.errors, ...doc.warnings].map((error) => error.message).join('\n'));
     const value: unknown = doc.toJS({ maxAliasCount: 0 });
     if (value == null) return {};
-    const fields = ['include', 'detached', 'plugins', 'scopes'];
+    const fields = ['include', 'detached', 'plugins', 'scopes', 'readOnlyTools'];
     if (!object(value) || Object.keys(value).some((key) => !fields.includes(key)))
       throw new Error('Expected a Profile object');
     if (value.detached !== undefined && typeof value.detached !== 'boolean')
@@ -127,6 +133,8 @@ function load(file: string, optional = false): Layer | undefined {
       throw new Error('plugins must be a list');
     const ids = new Set<string>();
     for (const row of (value.plugins as unknown[]) ?? []) {
+      if (object(row) && row.id === undefined && typeof row.name === 'string' && row.name.trim())
+        row.id = entryId(row.name);
       if (
         !object(row) ||
         Object.keys(row).some(
@@ -181,18 +189,26 @@ function rows(layers: readonly LoadedLayer[]) {
   return result;
 }
 
-function installedPath(file: string, directory: string) {
-  const path = relative(dirname(file), directory).split(sep).join('/');
-  return isAbsolute(path) || path.startsWith('../') ? path : './' + path;
+function moduleName(name: string, source: string) {
+  return name.startsWith('./') || name.startsWith('../') ? resolve(dirname(source), name) : name;
 }
 
-function localDirectory(row: ResolvedRow, paths: Paths) {
-  const name = row.name!;
-  if (!isAbsolute(name) && !name.startsWith('./') && !name.startsWith('../')) return;
-  const directory = resolve(dirname(row.source!), name);
-  const location = relative(paths.plugins, directory);
-  if (localPluginIdPattern.test(location) || statSync(directory, { throwIfNoEntry: false })?.isDirectory())
-    return location;
+function scopedEntries(selected: readonly LoadedLayer[]) {
+  const layer = [...selected].reverse().find(({ scopes }) => scopes !== undefined);
+  return Object.fromEntries(
+    Object.entries(layer?.scopes ?? {}).map(([key, scope]) => [
+      key,
+      {
+        ...scope,
+        entries: Object.fromEntries(
+          Object.entries(scope?.entries ?? {}).map(([id, entry]) => [
+            id,
+            { ...entry, ...(entry.name ? { name: moduleName(entry.name, layer!.file) } : {}) },
+          ]),
+        ),
+      },
+    ]),
+  );
 }
 
 export function recreateProfile(name: string, template: string, paths: Paths) {
@@ -211,6 +227,14 @@ export function ensureProfile(name: string, paths: Paths) {
   return directory;
 }
 
+interface ProfileManifest {
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+  optionalDependencies?: Record<string, string>;
+  miniHarness?: { profile?: { bundles?: string[] } };
+}
+
+/** npm remains responsible for package operations. Only explicit CLI adds/removes change composition. */
 function profileLayers(name: string, paths: Paths, patches: readonly string[] = [], defaults = false) {
   const directory = ensureProfile(name, paths);
   const manifestPath = join(directory, MANIFEST);
@@ -250,7 +274,8 @@ export function dumpProfile(name: string, paths: Paths, patches: readonly string
           ? resolve(dirname(source!), row.name!)
           : row.name,
     })),
-    ...(scopes === undefined ? {} : { scopes }),
+    ...(scopes === undefined ? {} : { scopes: scopedEntries(selected) }),
+    readOnlyTools: Object.assign({}, ...selected.map((layer) => layer.readOnlyTools)),
   });
 }
 
@@ -266,7 +291,7 @@ export const profileSchema = {
       type: 'array',
       items: {
         type: 'object',
-        required: ['id'],
+        anyOf: [{ required: ['id'] }, { required: ['name'] }],
         additionalProperties: false,
         properties: {
           id: { type: 'string', pattern: pluginIdPattern.source },
@@ -279,6 +304,7 @@ export const profileSchema = {
       },
     },
     scopes: { type: 'object' },
+    readOnlyTools: { type: 'object' },
   },
 };
 
@@ -308,30 +334,31 @@ export function readProfile(name: string, paths?: Paths) {
   return rows([...shipped, ...userLayers]);
 }
 
-/** Resolve shipped module locations and static display metadata without executing plugin code. */
+const displayMetadata = readJson<Record<string, Partial<PluginInfo>>>(
+  fileURLToPath(new URL('./profile-metadata.json', import.meta.url)),
+  {},
+);
+
+function builtin(id: string, name: string, client: boolean): ResolvedPlugin | undefined {
+  const target = packagedModules.get(name);
+  if (!target) return;
+  const info = displayMetadata[name];
+  return {
+    title: id,
+    description: '',
+    ...info,
+    id,
+    location: { url: new URL(target.path, installed).href, exportName: target.exportName },
+    browser: client ? info?.browser : undefined,
+    browserStyles: client ? info?.browserStyles : undefined,
+  };
+}
+
 export function profileDescriptors(entries: ReadonlyMap<string, Row>): ResolvedPlugin[] {
-  const metadata = readJson<Record<string, Partial<PluginInfo>>>(
-    fileURLToPath(new URL('./profile-metadata.json', import.meta.url)),
-    {},
-  );
+  const client = [...entries.values()].some(({ name, disabled }) => name === '@mini-harness/web-gateway' && !disabled);
   return [...entries.values()].flatMap((row) => {
-    const name = row.name!;
-    const target = packagedModules.get(name);
-    if (!target) return [];
-    const info = metadata[name];
-    return [
-      {
-        title: row.id,
-        description: '',
-        scope: 'application' as const,
-        ...info,
-        location: { url: new URL(target.path, installed).href, exportName: target.exportName },
-        id: row.id,
-        defaultEnabled: !row.disabled,
-        browser: row.client ? info?.browser : undefined,
-        browserStyles: row.client ? info?.browserStyles : undefined,
-      },
-    ];
+    const descriptor = builtin(row.id, row.name!, row.client ?? client);
+    return descriptor ? [{ ...descriptor, defaultEnabled: !row.disabled }] : [];
   });
 }
 
@@ -347,61 +374,39 @@ export async function loadProfile(
   const official = rows(baseLayers);
   const persistentRows = rows([...shipped, ...userLayers]);
   const resolved = rows([...shipped, ...userLayers, ...overlays]);
-  const aliases = new Map<string, string>();
-  for (const row of resolved.values()) {
-    const location = localDirectory(row, paths);
-    if (location !== undefined) aliases.set(row.id, location);
-  }
-  const descriptors = profileDescriptors(resolved);
-  const managedIds = new Set(descriptors.map(({ id }) => id));
   const overlayFiles = new Set(overlays.map(({ file }) => file));
-  const modules = new Map(
-    [...resolved.values()]
-      .filter((row) => !managedIds.has(row.id) && !aliases.has(row.id))
-      .map((row) => {
-        const name = row.name!;
-        // Command-line overlays can live outside the Profile's npm environment.
-        // Relative paths still belong to the file that declares them.
-        const bare = !isAbsolute(name) && !name.startsWith('./') && !name.startsWith('../');
-        const source = bare && overlayFiles.has(row.source!) ? join(directory, MANIFEST) : row.source!;
-        return [row.id, { name, source }];
-      }),
-  );
-  const policy = readJson<{ readOnlyTools?: unknown; scopedTools?: unknown }>(paths.settings, {});
+  const source = (id: string, name: string) => {
+    const row = resolved.get(id);
+    if (row?.name && moduleName(row.name, row.source!) === name && !overlayFiles.has(row.source!))
+      return row.source!;
+    return join(directory, MANIFEST);
+  };
+  const policy = readJson<{ scopedTools?: unknown }>(paths.settings, {});
   const scopedTools = object(policy.scopedTools) ? policy.scopedTools : {};
-  function configurationFor(selected: ReadonlyMap<string, ResolvedRow>, selectedLayers: readonly Layer[]) {
+  function configurationFor(
+    selected: ReadonlyMap<string, ResolvedRow>,
+    selectedLayers: readonly LoadedLayer[],
+  ) {
     return parseSettings({
       entries: Object.fromEntries(
         [...selected.values()].map((row) => [
           row.id,
           {
+            name: moduleName(row.name!, row.source!),
             disabled: Boolean(row.disabled),
+            ...(row.client === undefined ? {} : { client: row.client }),
             ...(row.live === undefined ? {} : { live: row.live }),
             ...(row.config === undefined ? {} : { config: row.config }),
           },
         ]),
       ),
-      readOnlyTools: policy.readOnlyTools,
-      scopes: withToolRules(Object.assign({}, ...shipped, ...selectedLayers).scopes ?? {}, scopedTools),
+      scopes: withToolRules(scopedEntries([...shipped, ...selectedLayers]), scopedTools),
+      readOnlyTools: Object.assign({}, ...[...shipped, ...selectedLayers].map((layer) => layer.readOnlyTools)),
     });
   }
   let persistent = configurationFor(persistentRows, userLayers);
   const effective = overlays.length ? configurationFor(resolved, [...userLayers, ...overlays]) : persistent;
-  const roots = [
-    directory,
-    ...[...aliases.values()].flatMap((location) => {
-      const directory = resolve(paths.plugins, location);
-      return existsSync(directory) ? [directory, realpathSync(directory)] : [directory];
-    }),
-    ...[...modules.values()].flatMap(({ name, source }) => {
-      try {
-        return [dirname(fileURLToPath(resolveModule(name, source)))];
-      } catch {
-        return [dirname(source)];
-      }
-    }),
-  ];
-  const imports = bindPluginImports(roots);
+  const imports = bindPluginImports();
   const entries = new EntryTree();
   let current = effective;
   function commit(runtime: ProfileConfiguration) {
@@ -413,20 +418,21 @@ export async function loadProfile(
       delete settings.entries[id];
     }
     const plugins: Row[] = [];
-    for (const id of new Set([
-      ...Object.keys(settings.entries),
-      ...(user.plugins ?? []).filter((row) => !aliases.has(row.id)).map((row) => row.id),
-    ])) {
+    for (const [id, entry] of Object.entries(settings.entries)) {
       const base = official.get(id);
-      const existing = persistentRows.get(id);
-      const config = settings.entries[id]?.config;
+      const config = entry.config;
       const row: Row = { id };
-      if (!base || existing?.name !== base.name)
-        row.name = existing?.name
-          ? existing.name.startsWith('./') || existing.name.startsWith('../')
-            ? installedPath(file, resolve(dirname(existing.source!), existing.name))
-            : existing.name
-          : installedPath(file, join(paths.plugins, id));
+      if (!entry.name) throw new Error('Profile entry requires a module name: ' + id);
+      if (!base || entry.name !== moduleName(base.name!, base.source!)) {
+        const original = persistentRows.get(id);
+        const local = isAbsolute(entry.name) ? relative(dirname(file), entry.name).split(sep).join('/') : '';
+        row.name =
+          original?.name && moduleName(original.name, original.source!) === entry.name && original.source === file
+            ? original.name
+            : local && !isAbsolute(local)
+              ? local.startsWith('../') ? local : './' + local
+              : entry.name;
+      }
       const disabled = settings.entries[id]?.disabled;
       if (disabled !== undefined && (!base || disabled !== Boolean(base.disabled))) row.disabled = disabled;
       const live = settings.entries[id]?.live;
@@ -435,7 +441,7 @@ export async function loadProfile(
         Object.entries(config ?? {}).filter(([key, value]) => !isDeepStrictEqual(value, base?.config?.[key])),
       );
       if (Object.keys(changed).length) row.config = changed;
-      if (existing?.client !== undefined && existing.client !== base?.client) row.client = existing.client;
+      if (entry.client !== undefined && entry.client !== base?.client) row.client = entry.client;
       if (Object.keys(row).length > 1) plugins.push(row);
     }
     const rules = Object.fromEntries(
@@ -455,40 +461,35 @@ export async function loadProfile(
       ...(user.detached === undefined ? {} : { detached: user.detached }),
       plugins,
       scopes,
+      readOnlyTools: settings.readOnlyTools,
     };
     const text = stringify(next);
     // Domain tool policy is stored separately from the Profile configuration.
     const previous = readProfileText(file);
     if (previous !== text) writeText(file, text);
     const domain = {
-      readOnlyTools: settings.readOnlyTools,
       scopedTools: rules,
     };
     try {
-      if (
-        !isDeepStrictEqual(persistent.readOnlyTools, settings.readOnlyTools) ||
-        !isDeepStrictEqual(scopedRules(persistent.scopes), rules)
-      )
-        writeJson(paths.settings, domain);
+      if (!isDeepStrictEqual(scopedRules(persistent.scopes), rules)) writeJson(paths.settings, domain);
     } catch (error) {
       if (previous === undefined) rmSync(file, { force: true });
       else if (previous !== text) writeText(file, previous);
       throw error;
     }
-    for (const id of aliases.keys()) if (!Object.hasOwn(runtime.entries, id)) aliases.delete(id);
     persistent = settings;
     current = runtime;
   }
   const profile: ProfileRuntime = {
     directory,
-    descriptors,
-    modules,
+    builtin,
+    source,
     entries,
     async start() {
-      const catalog = new PluginCatalog(paths.plugins, descriptors, profile);
+      const catalog = new PluginCatalog([], profile);
       const settings = current;
       const errors = new Map<string, unknown>();
-      const { plans } = catalog.plans(
+      const plans = catalog.plans(
         settings,
         await catalog.runtimeDescriptors(settings),
         'application',
@@ -505,10 +506,6 @@ export async function loadProfile(
       ))
         errors.set(id, error);
       return errors;
-    },
-    installed: aliases,
-    client(id) {
-      return resolved.get(id)?.client ?? descriptors.some((row) => row.browser);
     },
     read: () => current,
     commit,

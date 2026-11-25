@@ -13,7 +13,6 @@ export interface Asset {
 export interface BrowserAssets {
   entry: string;
   styles: string[];
-  preload?: string;
   urls: Map<string, Asset>;
 }
 
@@ -73,7 +72,6 @@ export function readBrowserAssets(
   folder: string,
   entry: string,
   directory: unknown,
-  preload: unknown,
 ): BrowserAssets {
   if (
     !publicPath(entry) ||
@@ -110,16 +108,10 @@ export function readBrowserAssets(
   }
   if (typeof directory === 'string') scan(directory);
   if (!entries.has(entry)) add(entry);
-  if (
-    preload !== undefined &&
-    (typeof preload !== 'string' || !entries.has(preload) || !['.js', '.mjs'].includes(extname(preload)))
-  )
-    throw new Error('browserPreload must reference a published JavaScript asset: ' + id);
   const prefix = '/plugin-assets/' + id + '/' + signature.digest('hex').slice(0, 20) + '/';
   const urls = new Map([...entries].map(([file, info]) => [prefix + file, info]));
   return {
     entry: prefix + entry,
-    preload: typeof preload === 'string' ? prefix + preload : undefined,
     styles: [...entries.keys()].filter((file) => extname(file) === '.css').map((file) => prefix + file),
     urls,
   };
@@ -134,8 +126,9 @@ export function planBrowser(plans: ConfiguredPlugin[], effective: (id: string) =
         id,
         browser: resources.entry,
         styles: resources.styles,
-        preload: resources.preload,
-        config: (effective(id) ?? config) as Record<string, unknown>,
+        config: descriptor.plugin
+          ? (descriptor.browserConfig?.((effective(id) ?? config) as Record<string, unknown>) ?? {})
+          : config,
         live,
       },
     ];
@@ -154,7 +147,9 @@ export function publishBrowser(
     entries,
     assets: new Map(resources.flatMap(({ descriptor }) => [...(descriptor.resources?.urls ?? [])])),
     configurable: new Set(
-      resources.filter(({ descriptor }) => descriptor.Config || descriptor.configSchema).map(({ id }) => id),
+      resources
+        .filter(({ descriptor }) => descriptor.Config && (!descriptor.plugin || descriptor.browserConfig))
+        .map(({ id }) => id),
     ),
   };
 }

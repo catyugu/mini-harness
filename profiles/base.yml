@@ -19,6 +19,8 @@ plugins:
     name: '@mini-harness/compaction'
   - id: core:prompt
     name: '@mini-harness/agent-prompt'
+  - id: core:prompt-defaults
+    name: '@mini-harness/prompt-defaults'
   - id: core:model-store
     name: '@mini-harness/model-store'
   - id: core:model-catalog
@@ -52,3 +54,10 @@ plugins:
     name: '@mini-harness/process-execution'
   - id: core:tools
     name: '@mini-harness/tools'
+readOnlyTools:
+  files:
+    module: '@mini-harness/files'
+    tools: [read, ls, find, grep]
+  skills:
+    module: '@mini-harness/skills'
+    tools: [load_skill]

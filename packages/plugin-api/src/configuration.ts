@@ -4,6 +4,8 @@ import type { StandardSchemaV1 } from '@standard-schema/spec';
 
 /** Configuration of one Cordis Entry, indexed by its stable ID in a Profile. */
 export interface EntryConfiguration {
+  name?: string;
+  client?: boolean;
   disabled?: boolean;
   live?: boolean;
   config?: Record<string, unknown>;
@@ -15,7 +17,7 @@ export interface CompositionConfig {
 }
 
 export interface ProfileConfiguration extends CompositionConfig {
-  readOnlyTools: Record<string, string[]>;
+  readOnlyTools: Record<string, { module: string; tools: string[] }>;
 }
 
 export function scopeKeys(configuration: CompositionConfig) {

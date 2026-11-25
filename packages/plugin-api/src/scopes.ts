@@ -8,6 +8,8 @@ export type PluginScope =
 
 export interface ScopeSettings {
   entries?: Record<string, EntryConfiguration>;
+  /** Services isolated from the parent even if a local provider fails or is disabled. */
+  isolate?: string[];
   disabledTools?: string[];
 }
 

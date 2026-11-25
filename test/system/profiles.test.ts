@@ -106,8 +106,7 @@ export function apply(ctx, config) {
   writeText(
     fragment,
     `plugins:
-  - id: consumer
-    name: profile-consumer
+  - name: profile-consumer
     config:
       suffix: '!'
   - id: provider
@@ -152,7 +151,10 @@ export function apply(ctx, config) {
   }
   const profile = await loadProfile('custom', paths, new Context());
   try {
-    profile.commit({ ...profile.read(), readOnlyTools: { example: ['read'] } });
+    profile.commit({
+      ...profile.read(),
+      scopes: { ['workspace:' + 'a'.repeat(32)]: { disabledTools: ['read'] } },
+    });
   } finally {
     await profile.close();
   }
@@ -167,13 +169,16 @@ export function apply(ctx, config) {
   await assert.rejects(bootProfile(standalone, paths, launch), /Invalid Profile name/);
   writeText(
     standalone,
-    'plugins:\n  - id: provider\n    config:\n      value: temporary\n  - id: consumer\n    name: profile-consumer\n',
+    'plugins:\n  - id: provider\n    config:\n      value: temporary\n  - name: profile-consumer\n',
   );
   const patched = await bootProfile('custom', paths, { ...launch, patches: [standalone] });
   try {
     assert.equal(patched.ctx.get('profileResult'), 'temporary!');
     const profile = patched.ctx.harnessProfile;
-    profile.commit({ ...profile.read(), readOnlyTools: { example: ['read', 'search'] } });
+    profile.commit({
+      ...profile.read(),
+      scopes: { ['workspace:' + 'a'.repeat(32)]: { disabledTools: ['read', 'search'] } },
+    });
     assert.doesNotMatch(readFileSync(file, 'utf8'), /temporary/);
   } finally {
     await patched.close();

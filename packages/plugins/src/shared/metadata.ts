@@ -5,7 +5,6 @@ export interface PluginMetadata
   extends Pick<
     ResolvedPlugin,
     | 'id'
-    | 'scope'
     | 'title'
     | 'description'
     | 'defaultEnabled'
@@ -16,12 +15,15 @@ export interface PluginMetadata
     | 'configHint'
     | 'configSchema'
   > {
-  trustedCode?: boolean;
+  external?: boolean;
+  name?: string;
   package?: { name: string; version: string };
   error?: string;
   state?: 'disabled' | 'inactive' | 'ready' | 'partial' | 'failed';
   instances?: {
     scope: 'application' | ScopeKey;
+    name?: string;
+    configSchema?: Record<string, any>;
     state: 'ready' | 'failed' | 'inactive' | 'disabled';
     error?: string;
   }[];

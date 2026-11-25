@@ -23,7 +23,6 @@ const Config = defineConfig({
 });
 
 export const metadata: PluginInfo = {
-  scope: 'application',
   title: 'Shell',
   description: 'Run commands using the configured execution policy.',
   icon: 'terminal',

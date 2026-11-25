@@ -22,7 +22,6 @@ const Config = defineConfig(
 );
 
 export const metadata: PluginInfo = {
-  scope: 'application',
   title: 'Recent model',
   description: 'Accepted user model selection',
 };
@@ -89,7 +88,6 @@ const plugin: Plugin.Object = {
 export default plugin;
 
 export const administrationMetadata: PluginInfo = {
-  scope: 'application',
   title: 'Models',
   description: 'Model endpoints and credentials',
   browserStyles: ['/packages/models/src/browser/style.css'],

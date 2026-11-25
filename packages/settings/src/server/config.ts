@@ -1,6 +1,6 @@
 import { DomainError } from '@mini-harness/platform/errors';
 import type { ProfileConfiguration } from '@mini-harness/plugin-api/configuration';
-import { localPluginIdPattern, isScopeKey, validateEntries } from '@mini-harness/plugin-api/selection';
+import { pluginIdPattern, isScopeKey, validateEntries } from '@mini-harness/plugin-api/selection';
 import { toolNamePattern } from '@mini-harness/llm/vocabulary';
 
 export const DEFAULTS = Object.freeze({
@@ -31,10 +31,12 @@ export function validateSettings(input: unknown): asserts input is ProfileConfig
     if (
       !isScopeKey(key) ||
       !isObject(scope) ||
-      Object.keys(scope).some((field) => !['entries', 'disabledTools'].includes(field))
+      Object.keys(scope).some((field) => !['entries', 'disabledTools', 'isolate'].includes(field))
     )
       throw new DomainError('invalid_input', 'Invalid plugin scope: ' + key);
-    const { disabledTools } = scope;
+    const { disabledTools, isolate } = scope;
+    if (isolate !== undefined && (!Array.isArray(isolate) || !isolate.every((name: unknown) => typeof name === 'string' && !!name.trim())))
+      throw new DomainError('invalid_input', 'Invalid service isolation: ' + key);
     if (
       disabledTools !== undefined &&
       (!Array.isArray(disabledTools) ||
@@ -43,13 +45,17 @@ export function validateSettings(input: unknown): asserts input is ProfileConfig
       throw new DomainError('invalid_input', 'Invalid scoped tool restriction: ' + key);
     validateEntries(section(scope.entries, key + '.entries'));
   }
-  for (const [plugin, tools] of Object.entries(section(readOnlyTools, 'readOnlyTools'))) {
+  for (const [instance, grant] of Object.entries(section(readOnlyTools, 'readOnlyTools'))) {
+    const [scope, id, extra] = instance.split('/');
     if (
-      !localPluginIdPattern.test(plugin) ||
-      !Array.isArray(tools) ||
-      !tools.every((name: unknown) => typeof name === 'string' && toolNamePattern.test(name))
+      (id ? !isScopeKey(scope) || !pluginIdPattern.test(id) || extra !== undefined : !pluginIdPattern.test(scope)) ||
+      !isObject(grant) ||
+      typeof grant.module !== 'string' ||
+      !grant.module ||
+      !Array.isArray(grant.tools) ||
+      !grant.tools.every((name: unknown) => typeof name === 'string' && toolNamePattern.test(name))
     )
-      throw new DomainError('invalid_input', 'Invalid read-only tool grant: ' + plugin);
+      throw new DomainError('invalid_input', 'Invalid read-only tool grant: ' + instance);
   }
 }
 

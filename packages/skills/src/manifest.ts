@@ -4,8 +4,6 @@ import { setup } from './server/setup.ts';
 
 /** One metadata definition for the host, settings, and browser loader. */
 export const metadata: PluginInfo = {
-  scope: 'application',
-  trustedContributor: true,
   title: 'Skills',
   description: 'Discover Agent Skills from home and the workspace.',
   icon: 'skills',

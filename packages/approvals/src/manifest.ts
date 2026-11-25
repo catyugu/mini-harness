@@ -7,7 +7,6 @@ import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 import { Approvals } from './server/approvals.ts';
 
 export const metadata: PluginInfo = {
-  scope: 'application',
   title: 'Approvals',
   description: 'Pending user decisions',
 };

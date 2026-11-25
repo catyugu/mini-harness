@@ -21,7 +21,7 @@ export default {
     const host = new PluginHost(
       root,
       paths.plugins,
-      profile.descriptors,
+      [],
       () => settings.settings,
       (path, handler) => {
         const upgrades = root.get('harnessUpgrades');

@@ -9,21 +9,19 @@ const setup = (ctx: Context) => {
     ctx.miniSettingsRegistry.registerPlugin(browserPluginId(ctx), {
       id: 'read-only-tools',
       render(pluginId, signal) {
-        if (pluginId.startsWith('core:')) return;
         const path = '/permissions/plugins/' + encodeURIComponent(pluginId);
         const section = fromMarkup(
           '<section class="ui-section" hidden><h3>Read-only conversation tools</h3><p class="hint">Grant access only to tools you trust to leave files and other state unchanged. Scope restrictions still apply.</p><p class="hint" role="status"></p></section>',
         );
         const status = required(section.querySelector<HTMLElement>('[role="status"]'));
-        void browserRequest<{ tools: string[]; grants: string[] }>(ctx, path, { signal })
-          .then(({ tools, grants }) => {
-            for (const name of new Set([...tools, ...grants])) {
-              const control = toggle('Allow ' + name + ' in read-only conversations', grants.includes(name));
-              control.disabled = !grants.includes(name) && !tools.includes(name);
+        void browserRequest<{ instanceId: string; module: string; name: string; granted: boolean }[]>(ctx, path, { signal })
+          .then((registrations) => {
+            for (const { instanceId, module, name, granted } of registrations) {
+              const control = toggle('Allow ' + name + ' in read-only conversations', granted);
               saveToggle(control, async (allowed) => {
                 status.textContent = '';
                 try {
-                  await browserRequest(ctx, path, { ...payload('PATCH', { tool: name, allowed }), signal });
+                  await browserRequest(ctx, path, { ...payload('PATCH', { instanceId, module, tools: [name], allowed }), signal });
                   return true;
                 } catch (error) {
                   if (!signal.aborted)
@@ -31,9 +29,9 @@ const setup = (ctx: Context) => {
                   return false;
                 }
               });
-              section.insertBefore(field(name, control), status);
+              section.insertBefore(field(name + ' · ' + instanceId, control), status);
             }
-            section.hidden = !tools.length && !grants.length;
+            section.hidden = !registrations.length;
           })
           .catch((error: unknown) => {
             if (signal.aborted) return;

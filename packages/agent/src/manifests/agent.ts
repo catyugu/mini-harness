@@ -15,7 +15,6 @@ const Config = defineConfig(
 );
 
 export const metadata: PluginInfo = {
-  scope: 'application',
   title: 'Agent',
   description: 'Native agent execution, inbox and tool pipeline',
 };

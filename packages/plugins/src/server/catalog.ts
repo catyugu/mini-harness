@@ -1,17 +1,21 @@
 import { isDeepStrictEqual } from 'node:util';
 import type { PluginMetadata } from '../shared/metadata.ts';
-import { localPluginIdPattern } from '@mini-harness/plugin-api/selection';
 import { DomainError } from '@mini-harness/platform/errors';
-import { existsSync, lstatSync, readdirSync } from 'node:fs';
+import { existsSync, lstatSync, realpathSync, statSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { dirname, join, resolve } from 'node:path';
-import { scopeKeys, type CompositionConfig } from '@mini-harness/plugin-api/configuration';
-import type { PluginScope, ScopeKey, ScopeSettings } from '@mini-harness/plugin-api/scopes';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
+import {
+  scopeKeys,
+  type CompositionConfig,
+  type EntryConfiguration,
+} from '@mini-harness/plugin-api/configuration';
+import type { PluginScope, ScopeKey } from '@mini-harness/plugin-api/scopes';
 import { resolveConfig, type Context, type EntryOptions } from 'mini-harness/cordis';
 import type { ResolvedPlugin } from '@mini-harness/plugin-api/descriptor';
 import { builtinBrowserAssets } from './browser-assets.ts';
 import { describePlugin, type DiscoveredPlugin } from './descriptor.ts';
 import { loadPluginModule, resolveModule } from './module-resolution.ts';
+import { defineConfig } from '@mini-harness/plugin-api/configuration';
 import { bindInstance } from '@mini-harness/plugin-api/instance';
 
 export interface ConfiguredPlugin {
@@ -26,11 +30,10 @@ export class PluginCatalog {
   private readonly builtins: Map<string, DiscoveredPlugin>;
   private resolved = new Map<string, DiscoveredPlugin>();
   constructor(
-    private readonly directory: string,
     builtins: ResolvedPlugin[],
     private readonly profile?: Pick<
       import('@mini-harness/plugin-api/profile').ProfileRuntime,
-      'installed' | 'modules' | 'client'
+      'builtin' | 'source' | 'directory'
     >,
   ) {
     this.builtins = new Map(
@@ -46,105 +49,128 @@ export class PluginCatalog {
     if (this.builtins.size !== builtins.length) throw new Error('Duplicate builtin plugin ID');
   }
 
-  enabled(descriptor: ResolvedPlugin, settings: CompositionConfig) {
-    const disabled = settings.entries[descriptor.id]?.disabled;
-    return disabled === undefined ? descriptor.defaultEnabled === true : !disabled;
+  enabled(descriptor: DiscoveredPlugin, settings: CompositionConfig) {
+    const entry = descriptor.scopeKey
+      ? settings.scopes[descriptor.scopeKey]?.entries?.[descriptor.id]
+      : settings.entries[descriptor.id];
+    return entry ? entry.disabled !== true : !descriptor.scopeKey && descriptor.defaultEnabled === true;
   }
 
   reserved(id: string) {
-    return this.builtins.has(id) || Boolean(this.profile?.modules.has(id));
-  }
-
-  private discover(): DiscoveredPlugin[] {
-    const directories = new Map(
-      readdirSync(this.directory, { withFileTypes: true }).flatMap((entry) =>
-        entry.isDirectory() && localPluginIdPattern.test(entry.name) ? [[entry.name, entry.name]] : [],
-      ),
-    );
-    for (const [id, module] of this.profile?.installed ?? []) directories.set(id, module);
-    return [...directories].flatMap(([id, module]) =>
-      this.reserved(id) ? [] : [this.describe(id, resolve(this.directory, module))],
-    );
-  }
-
-  private describe(id: string, directory: string): DiscoveredPlugin {
-    try {
-      const descriptor = describePlugin(id, directory);
-      if (this.profile && !this.profile.client(id)) {
-        delete descriptor.resources;
-      }
-      return descriptor;
-    } catch (error) {
-      return {
-        scope: 'application',
-        id,
-        title: id,
-        description: 'Plugin manifest cannot be loaded.',
-        trustedCode: true,
-        error: error instanceof Error ? error.message : String(error),
-        web: false,
-      };
-    }
+    return !this.resolved.get(id)?.external;
   }
 
   private describeModule(id: string, name: string, source: string): DiscoveredPlugin {
+    const local = isAbsolute(name) || name.startsWith('./') || name.startsWith('../');
+    if (local) {
+      const path = resolve(dirname(source), name);
+      if (statSync(path, { throwIfNoEntry: false })?.isDirectory()) return describePlugin(id, path);
+    }
+    let entry: string | undefined;
+    let directory: string;
     try {
-      const entry = fileURLToPath(resolveModule(name, source));
-      let directory = dirname(entry);
+      entry = fileURLToPath(resolveModule(name, source));
+      directory = dirname(entry);
+    } catch (error) {
+      if (local) throw error;
+      directory = dirname(fileURLToPath(resolveModule(name + '/client', source)));
+    }
+    if (!local)
       while (!existsSync(join(directory, 'package.json')) && dirname(directory) !== directory)
         directory = dirname(directory);
-      const descriptor = describePlugin(id, directory, entry);
-      if (!this.profile?.client(id)) delete descriptor.resources;
-      return descriptor;
+    return describePlugin(id, directory, entry);
+  }
+
+  private async describe(
+    id: string,
+    entry: EntryConfiguration,
+    client: boolean,
+    scopeKey?: ScopeKey,
+  ): Promise<DiscoveredPlugin> {
+    const name = entry.name;
+    try {
+      const supplied = this.builtins.get(name ?? id);
+      const builtin = supplied ?? (name && this.profile?.builtin(id, name, client));
+      let descriptor: DiscoveredPlugin;
+      if (builtin) {
+        descriptor = { ...builtin, id, resources: client ? builtinBrowserAssets(builtin) : undefined };
+      } else {
+        if (!name || !this.profile) throw new Error('Profile entry requires a module name: ' + id);
+        descriptor = this.describeModule(id, name, this.profile.source(id, name));
+      }
+      if (!client || scopeKey) delete descriptor.resources;
+      return this.withSchema({ ...descriptor, name, scopeKey, defaultEnabled: entry.disabled !== true });
     } catch (error) {
       return {
         id,
-        scope: 'application',
+        name,
+        scopeKey,
         title: id,
-        description: name,
-        trustedCode: true,
+        description: name ?? '',
+        external: true,
+        defaultEnabled: entry.disabled !== true,
         error: error instanceof Error ? error.message : String(error),
       };
     }
   }
 
-  descriptors(): DiscoveredPlugin[] {
-    return [
-      ...this.builtins.values(),
-      ...[...(this.profile?.modules ?? [])].map(([id, { name, source }]) =>
-        this.describeModule(id, name, source),
-      ),
-      ...this.discover(),
-    ];
-  }
-
   async runtimeDescriptors(settings: CompositionConfig): Promise<DiscoveredPlugin[]> {
-    const descriptors = await Promise.all(
-      this.descriptors().map(async (descriptor) => {
-        const { id, source, scope, location } = descriptor;
+    const client =
+      !this.profile ||
+      Object.values(settings.entries).some(
+        ({ name, disabled }) => name === '@mini-harness/web-gateway' && !disabled,
+      );
+    const declarations = [
+      ...Object.entries(settings.entries).map(([id, entry]) =>
+        this.describe(id, entry, entry.client ?? client),
+      ),
+      ...[...this.builtins.values()]
+        .filter(({ id, defaultEnabled }) => defaultEnabled && !settings.entries[id])
+        .map((descriptor) => Promise.resolve(descriptor)),
+      ...scopeKeys(settings).flatMap((key) =>
+        Object.entries(settings.scopes[key]?.entries ?? {}).map(([id, entry]) =>
+          this.describe(id, entry, false, key),
+        ),
+      ),
+    ];
+    return Promise.all(
+      (await Promise.all(declarations)).map(async (descriptor) => {
+        const { id, source, location } = descriptor;
         if ((!source && !location) || descriptor.error) return descriptor;
-        const enabled =
-          scope === 'application'
-            ? this.enabled(descriptor, settings)
-            : scopeKeys(settings).some(
-                (key) =>
-                  key.startsWith(scope + ':') && settings.scopes[key]?.entries?.[id]?.disabled === false,
-              );
-        if (!enabled) return descriptor;
+        if (!this.enabled(descriptor, settings)) {
+          const key = descriptor.scopeKey ? descriptor.scopeKey + '/' + id : id;
+          const previous = this.resolved.get(key);
+          return previous && previous.source === source && previous.location?.url === location?.url && previous.location?.exportName === location?.exportName
+            ? this.withSchema({ ...descriptor, Config: previous.Config })
+            : descriptor;
+        }
         try {
-          const module = location?.url ?? pathToFileURL(source!).href + '?v=' + lstatSync(source!).mtimeMs;
-          const { plugin, Config, metadata } = await loadPluginModule(module, location?.exportName);
+          const url = location?.url ?? pathToFileURL(source!).href + '?v=' + lstatSync(source!).mtimeMs;
+          const { plugin, Config, browserConfig, metadata } = await loadPluginModule(url, location?.exportName);
           if (!plugin && !descriptor.resources && !metadata?.browser)
             throw new Error('Plugin ' + id + ' must export a Cordis plugin with apply(ctx, config)');
-          return this.withSchema({ ...descriptor, plugin, module, Config });
+          return this.withSchema({
+            ...descriptor,
+            plugin,
+            module: url + '#' + (location?.exportName ?? 'default'),
+            Config,
+            browserConfig,
+          });
         } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          return { ...descriptor, error: message };
+          return { ...descriptor, error: error instanceof Error ? error.message : String(error) };
         }
       }),
     );
-    this.resolved = new Map(descriptors.map((descriptor) => [descriptor.id, descriptor]));
-    return descriptors;
+  }
+
+  descriptors() {
+    return [...this.resolved.values()];
+  }
+
+  commit(descriptors: DiscoveredPlugin[]) {
+    this.resolved = new Map(
+      descriptors.map((item) => [item.scopeKey ? item.scopeKey + '/' + item.id : item.id, item]),
+    );
   }
 
   private withSchema(descriptor: DiscoveredPlugin): DiscoveredPlugin {
@@ -157,71 +183,67 @@ export class PluginCatalog {
     failures: ReadonlyMap<string, string>,
     mounted: (id: string) => boolean,
   ): PluginMetadata[] {
-    return this.descriptors()
-      .filter(({ id }) => localPluginIdPattern.test(id))
-      .map((discovered) => {
-        const descriptor = this.resolved.get(discovered.id) ?? discovered;
-        const {
-          id,
-          source,
-          resources,
-          plugin: _plugin,
-          browserStyles,
-          Config: _Config,
-          location: _location,
-          module: _module,
-          ...metadata
-        } = descriptor;
-        const configurationError = (key?: ScopeKey) => {
+    const groups = new Map<string, DiscoveredPlugin[]>();
+    for (const item of this.descriptors()) {
+      const group = groups.get(item.id) ?? [];
+      group.push(item);
+      groups.set(item.id, group);
+    }
+    return [...groups.values()].map((group) => {
+      const descriptor = group.find((item) => !item.scopeKey) ?? group[0];
+      const {
+        source,
+        resources,
+        plugin: _plugin,
+        browserStyles,
+        Config: _Config,
+        location: _location,
+        browserConfig: _browserConfig,
+        module: _module,
+        scopeKey: _scopeKey,
+        ...metadata
+      } = descriptor;
+      const instances: NonNullable<PluginMetadata['instances']> = group.map((item) => {
+        const key = item.scopeKey ? item.scopeKey + '/' + item.id : item.id;
+        const enabled = this.enabled(item, settings);
+        let error = failures.get(key) ?? item.error;
+        if (!error && !mounted(key) && (item.Config || item.configSchema)) {
           try {
-            const values = key
-              ? { ...settings.entries[id]?.config, ...settings.scopes[key]?.entries?.[id]?.config }
-              : settings.entries[id]?.config;
-            this.configValues(descriptor, values);
-          } catch (error) {
-            return error instanceof Error ? error.message : String(error);
+            const config = item.scopeKey
+              ? settings.scopes[item.scopeKey]?.entries?.[item.id]?.config
+              : settings.entries[item.id]?.config;
+            this.configValues(item, config);
+          } catch (cause) {
+            error = cause instanceof Error ? cause.message : String(cause);
           }
-        };
-        const scopes: { scope: 'application' | ScopeKey; enabled: boolean }[] =
-          metadata.scope === 'application'
-            ? [{ scope: 'application', enabled: this.enabled(descriptor, settings) }]
-            : scopeKeys(settings).flatMap((scope) => {
-                const value = settings.scopes[scope];
-                if (!value || !scope.startsWith(metadata.scope + ':')) return [];
-                const enabled = value.entries?.[id]?.disabled === false;
-                return enabled || Object.hasOwn(value.entries ?? {}, id) ? [{ scope, enabled }] : [];
-              });
-        const instances = scopes.map(
-          ({ scope, enabled }): NonNullable<PluginMetadata['instances']>[number] => {
-            const key = scope === 'application' ? id : scope + '/' + id;
-            const error =
-              failures.get(key) ??
-              metadata.error ??
-              (!mounted(key) ? configurationError(scope === 'application' ? undefined : scope) : undefined);
-            const state = !enabled ? 'disabled' : error ? 'failed' : mounted(key) ? 'ready' : 'inactive';
-            return { scope, error, state };
-          },
-        );
-        const enabled = instances.filter(({ state }) => state !== 'disabled');
-        const failed = enabled.find(({ state }) => state === 'failed');
-        const ready = enabled.filter(({ state }) => state === 'ready').length;
-        const state = ready
-          ? ready === enabled.length
-            ? 'ready'
-            : 'partial'
-          : failed
-            ? 'failed'
-            : enabled.length
-              ? 'inactive'
-              : 'disabled';
+        }
         return {
-          ...metadata,
-          id,
-          instances,
-          state,
-          error: failed?.error ?? instances.find(({ error }) => error)?.error ?? metadata.error,
+          scope: item.scopeKey ?? 'application',
+          name: item.name,
+          configSchema: item.configSchema,
+          error,
+          state: !enabled ? 'disabled' : error ? 'failed' : mounted(key) ? 'ready' : 'inactive',
         };
       });
+      const enabled = instances.filter(({ state }) => state !== 'disabled');
+      const failed = enabled.find(({ state }) => state === 'failed');
+      const ready = enabled.filter(({ state }) => state === 'ready').length;
+      const state = ready
+        ? ready === enabled.length
+          ? 'ready'
+          : 'partial'
+        : failed
+          ? 'failed'
+          : enabled.length
+            ? 'inactive'
+            : 'disabled';
+      return {
+        ...metadata,
+        instances,
+        state,
+        error: failed?.error ?? instances.find((instance) => instance.error)?.error ?? metadata.error,
+      };
+    });
   }
 
   entry(
@@ -231,14 +253,14 @@ export class PluginCatalog {
     id = plan.id,
     scopeKey?: ScopeKey,
   ): EntryOptions {
-    const { source, descriptor } = plan;
+    const { descriptor } = plan;
     const plugin = descriptor.plugin;
     if (!plugin) throw new Error('Missing server module: ' + plan.id);
     return {
       id,
       context,
       config: plan.config ?? {},
-      module: descriptor.module ?? plan.id,
+      module: descriptor.module ?? descriptor.name ?? plan.id,
       live: plan.live,
       load: () => plugin,
       prepare: (ctx) => {
@@ -247,7 +269,7 @@ export class PluginCatalog {
           scope,
           scopeKey,
           writableConfig: plan.live,
-          trusted: !source && descriptor.trustedContributor === true,
+          module: descriptor.source ? pathToFileURL(realpathSync(descriptor.source)).href : descriptor.name ?? plan.id,
         });
         const changes = context.get('harnessChanges');
         if (changes) ctx.effect(() => changes.register('plugin:' + plan.id));
@@ -262,19 +284,11 @@ export class PluginCatalog {
     settings: CompositionConfig,
   ) {
     for (const descriptor of descriptors) {
-      const { id, scope } = descriptor;
-      const before = previous.entries[id]?.config;
-      const after = settings.entries[id]?.config;
-      if (scope === 'application' && !this.enabled(descriptor, settings) && !isDeepStrictEqual(before, after))
-        this.configValues(descriptor, after);
-      if (scope !== 'application')
-        for (const key of scopeKeys(settings)) {
-          if (!key.startsWith(scope + ':') || settings.scopes[key]?.entries?.[id]?.disabled === false)
-            continue;
-          const prior = { ...before, ...previous.scopes[key]?.entries?.[id]?.config };
-          const next = { ...after, ...settings.scopes[key]?.entries?.[id]?.config };
-          if (!isDeepStrictEqual(prior, next)) this.configValues(descriptor, next);
-        }
+      const { id, scopeKey } = descriptor;
+      const before = scopeKey ? previous.scopes[scopeKey]?.entries?.[id] : previous.entries[id];
+      const after = scopeKey ? settings.scopes[scopeKey]?.entries?.[id] : settings.entries[id];
+      if (!this.enabled(descriptor, settings) && !isDeepStrictEqual(before?.config, after?.config))
+        this.configValues(descriptor, after?.config);
     }
   }
 
@@ -282,59 +296,31 @@ export class PluginCatalog {
     settings: CompositionConfig,
     descriptors: DiscoveredPlugin[],
     scope: PluginScope['kind'],
-    overrides?: ScopeSettings,
+    scopeKey?: ScopeKey,
     unavailable?: (id: string, error: unknown) => boolean,
   ) {
-    const isApp = scope === 'application';
     const plans: ConfiguredPlugin[] = [];
-    const declared = new Set<string>();
-    for (const [id, entry] of Object.entries(overrides?.entries ?? {})) {
-      if (entry.disabled === false && !descriptors.some((item) => item.id === id && item.scope === scope)) {
-        const error = new DomainError(
-          'invalid_input',
-          'Plugin ' + id + ' is unavailable in ' + scope + ' scope',
-        );
-        if (!unavailable?.(id, error)) throw error;
-      }
-    }
-    if (isApp)
-      for (const [id, entry] of Object.entries(settings.entries)) {
-        if (
-          entry.disabled === false &&
-          descriptors.some((item) => item.id === id && item.scope !== 'application')
-        )
-          throw new DomainError('invalid_input', 'Select a scope for plugin ' + id);
-      }
     for (const item of descriptors) {
-      const { id, scope: kind } = item;
-      if (
-        kind !== scope ||
-        !(isApp ? this.enabled(item, settings) : overrides?.entries?.[id]?.disabled === false)
-      )
-        continue;
-      // Child groups isolate the services declared by their Cordis modules.
-      const provide = item.plugin?.provide;
-      for (const service of typeof provide === 'string' ? [provide] : (provide ?? [])) declared.add(service);
+      const { id } = item;
+      if (item.scopeKey !== scopeKey || !this.enabled(item, settings)) continue;
+      const entry =
+        scope === 'application' ? settings.entries[id] : settings.scopes[scopeKey!]?.entries?.[id];
       try {
         if (item.error) throw new DomainError('invalid_input', 'Invalid plugin ' + id + ': ' + item.error);
-        const values = isApp
-          ? settings.entries[id]?.config
-          : { ...settings.entries[id]?.config, ...overrides?.entries?.[id]?.config };
-        const live =
-          (isApp ? undefined : overrides?.entries?.[id]?.live) ?? settings.entries[id]?.live ?? false;
+        const values = entry?.config;
         const config = item.plugin ? structuredClone(values ?? {}) : this.configValues(item, values);
-        plans.push({ descriptor: item, id, source: item.source, config, live });
+        plans.push({ descriptor: item, id, source: item.source, config, live: entry?.live ?? false });
       } catch (error) {
         if (!unavailable?.(id, error)) throw error;
       }
     }
-    return { plans, declared };
+    return plans;
   }
 
   configValues(descriptor: ResolvedPlugin, values: Record<string, unknown> | undefined) {
     try {
       return resolveConfig(
-        descriptor.Config ?? descriptor.plugin?.Config,
+        descriptor.Config ?? descriptor.plugin?.Config ?? (descriptor.configSchema ? defineConfig(descriptor.configSchema) : undefined),
         structuredClone(values ?? {}),
       ) as Record<string, unknown>;
     } catch (error) {
@@ -353,19 +339,7 @@ export function changedSelection(
   settings: CompositionConfig,
   key?: ScopeKey,
 ) {
-  if (!key)
-    return (
-      settings.entries[id]?.disabled !== previous.entries[id]?.disabled ||
-      settings.entries[id]?.live !== previous.entries[id]?.live ||
-      !isDeepStrictEqual(previous.entries[id]?.config, settings.entries[id]?.config)
-    );
-  const before = previous.scopes[key],
-    after = settings.scopes[key];
-  return (
-    before?.entries?.[id]?.disabled !== after?.entries?.[id]?.disabled ||
-    before?.entries?.[id]?.live !== after?.entries?.[id]?.live ||
-    !isDeepStrictEqual(before?.entries?.[id]?.config, after?.entries?.[id]?.config) ||
-    previous.entries[id]?.live !== settings.entries[id]?.live ||
-    !isDeepStrictEqual(previous.entries[id]?.config, settings.entries[id]?.config)
-  );
+  const before = key ? previous.scopes[key]?.entries?.[id] : previous.entries[id];
+  const after = key ? settings.scopes[key]?.entries?.[id] : settings.entries[id];
+  return !isDeepStrictEqual(before, after);
 }

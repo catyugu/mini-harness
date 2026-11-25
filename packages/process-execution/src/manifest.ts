@@ -3,7 +3,6 @@ import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 import { executeProcess } from './executor.ts';
 
 export const metadata: PluginInfo = {
-  scope: 'application',
   title: 'Process execution',
   description: 'Isolated and explicitly authorized host processes',
 };

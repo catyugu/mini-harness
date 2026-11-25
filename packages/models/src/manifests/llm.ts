@@ -2,7 +2,6 @@ import type { Plugin } from 'mini-harness/cordis';
 import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 
 export const metadata: PluginInfo = {
-  scope: 'application',
   title: 'Model transport',
   description: 'Native LLM streaming via the Pi adapter',
 };

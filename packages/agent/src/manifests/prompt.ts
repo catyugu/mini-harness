@@ -3,16 +3,14 @@ import { Service, type Plugin } from 'mini-harness/cordis';
 import { Prompt } from '../prompt.ts';
 
 export const metadata: PluginInfo = {
-  scope: 'application',
   title: 'Prompt',
-  description: 'System prompt sections and workspace instructions',
+  description: 'System prompt composition',
 };
 
 const plugin: Plugin.Object = {
-  inject: ['harnessState'],
   provide: ['harnessPrompt'],
   apply(ctx) {
-    ctx.provide('harnessPrompt', Service.track(new Prompt(ctx.harnessState.paths.home)));
+    ctx.provide('harnessPrompt', Service.track(new Prompt()));
   },
 };
 
