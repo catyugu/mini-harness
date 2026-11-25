@@ -113,7 +113,7 @@ test('GUI APIs configure providers, persist keys privately, discover Skills and 
     ],
   );
   const directory = join(
-    dirname(app.runtime.plugins.ctx.harnessRegistry.log(session.id).file),
+    dirname(app.runtime.plugins.ctx.harnessSessions.log(session.id).file),
     session.id,
     'attachments',
   );

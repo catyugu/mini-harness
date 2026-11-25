@@ -54,17 +54,17 @@ test('shell approval gates execution, handles rejection and cancellation', async
   assert.equal((await request('/sessions/' + other.id)).body.permission, 'standard');
   const ctx = app.runtime.plugins.ctx;
   assert.ok(
-    conversationTools(ctx, session.id, ctx.harnessRegistry.runScope(session.id)).some(
+    conversationTools(ctx, session.id, ctx.harnessSessions.runScope(session.id)).some(
       ({ name }) => name === 'read',
     ),
   );
   assert.ok(
-    !conversationTools(ctx, session.id, ctx.harnessRegistry.runScope(session.id)).some(
+    !conversationTools(ctx, session.id, ctx.harnessSessions.runScope(session.id)).some(
       ({ name }) => name === 'sandbox_shell' || name === 'write',
     ),
   );
   assert.ok(
-    conversationTools(ctx, other.id, ctx.harnessRegistry.runScope(other.id)).some(
+    conversationTools(ctx, other.id, ctx.harnessSessions.runScope(other.id)).some(
       ({ name }) => name === 'sandbox_shell',
     ),
   );
@@ -166,8 +166,8 @@ test('full access bypasses Shell prompts only for its conversation and applies t
   await request('/approvals', 'POST', { id: pending.body[0].id, allow: true });
   await finish(standard.id);
 
-  const parent = app.runtime.plugins.ctx.harnessRegistry.create({ permission: 'readOnly' });
-  const child = app.runtime.plugins.ctx.harnessRegistry.create({
+  const parent = app.runtime.plugins.ctx.harnessSessions.create({ permission: 'readOnly' });
+  const child = app.runtime.plugins.ctx.harnessSessions.create({
     parentId: parent.id,
     permission: 'fullAccess',
   });
@@ -175,7 +175,7 @@ test('full access bypasses Shell prompts only for its conversation and applies t
     conversationTools(
       app.runtime.plugins.ctx,
       child.id,
-      app.runtime.plugins.ctx.harnessRegistry.runScope(child.id),
+      app.runtime.plugins.ctx.harnessSessions.runScope(child.id),
     ).some(({ name }) => name === 'sandbox_shell'),
     false,
   );
@@ -208,8 +208,8 @@ test(
     await app.runtime.configuration.update({
       entries: { shell: { disabled: false, config: { mode: 'host' } } },
     });
-    const shell = app.runtime.plugins.ctx.harnessRegistry.create();
-    const other = app.runtime.plugins.ctx.harnessRegistry.create();
+    const shell = app.runtime.plugins.ctx.harnessSessions.create();
+    const other = app.runtime.plugins.ctx.harnessSessions.create();
     const pending = app.runtime.plugins.ctx.harnessRuns.send(other.id, 'Unrelated task');
     try {
       await running;
@@ -226,7 +226,7 @@ test(
       assert.ok(app.runtime.plugins.ctx.harnessRuns.active(other.id));
       assert.equal((await finish(shell.id)).body.run.state, 'completed');
       const tool = expectPresent(
-        app.runtime.plugins.ctx.harnessRegistry
+        app.runtime.plugins.ctx.harnessSessions
           .log(shell.id)
           .projection()
           .messages.find(({ role }) => role === 'toolResult'),
@@ -243,7 +243,7 @@ test(
       !conversationTools(
         app.runtime.plugins.ctx,
         shell.id,
-        app.runtime.plugins.ctx.harnessRegistry.runScope(shell.id),
+        app.runtime.plugins.ctx.harnessSessions.runScope(shell.id),
       ).some(({ name }) => name === 'sandbox_shell'),
     );
   },

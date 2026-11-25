@@ -48,7 +48,7 @@ test('YAML Profile composes through Cordis and persists Web entry changes', asyn
   try {
     assert.equal(reopened.ctx.harnessProfile.entries.get('file-preview'), undefined);
     assert.ok(reopened.ctx.harnessProfile.entries.get('files')?.active);
-    const session = reopened.ctx.harnessRegistry.create();
+    const session = reopened.ctx.harnessSessions.create();
     assert.equal(await reopened.ctx.harnessRuns.send(session.id, 'Profile after restart'), 'Mock response');
   } finally {
     await reopened.close();
@@ -291,7 +291,7 @@ test('a third-party plugin uses tools, models and subprocesses from a Profile wi
   );
   const app = await bootProfile('capabilities', paths, { interactive: false, shutdown() {} });
   try {
-    assert.equal(app.ctx.get('harnessRegistry'), undefined);
+    assert.equal(app.ctx.get('harnessSessions'), undefined);
     assert.equal(app.ctx.get('harnessProfileScopes'), undefined);
     const [tool] = app.ctx.harnessTools.list();
     assert.equal(tool.name, 'read_model');

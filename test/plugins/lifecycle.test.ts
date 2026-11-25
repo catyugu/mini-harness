@@ -131,7 +131,7 @@ export const apply = (ctx, config) => {
 `,
   );
   await runtime.start();
-  const item = runtime.plugins.ctx.harnessRegistry.create();
+  const item = runtime.plugins.ctx.harnessSessions.create();
   assert.equal(
     runtime.plugins.metadata().find(({ id }) => id === 'example'),
     undefined,
@@ -147,12 +147,12 @@ export const apply = (ctx, config) => {
   await runtime.plugins.prepare(`session:${item.id}`);
   const activeNames = () =>
     runtime.plugins.ctx.harnessTools
-      .list({ resourceId: item.id, scope: runtime.plugins.ctx.harnessRegistry.runScope(item.id) })
+      .list({ resourceId: item.id, scope: runtime.plugins.ctx.harnessSessions.runScope(item.id) })
       .map(({ name }) => name);
   assert.ok(activeNames().includes('example_count'));
   const tool = expectPresent(
     runtime.plugins.ctx.harnessTools
-      .list({ resourceId: item.id, scope: runtime.plugins.ctx.harnessRegistry.runScope(item.id) })
+      .list({ resourceId: item.id, scope: runtime.plugins.ctx.harnessSessions.runScope(item.id) })
       .find(({ name }) => name === 'example_count'),
     'example count tool',
   );
@@ -214,11 +214,11 @@ export const apply = (ctx) => {
 `,
   );
   await runtime.start();
-  const item = runtime.plugins.ctx.harnessRegistry.create();
+  const item = runtime.plugins.ctx.harnessSessions.create();
   await runtime.plugins.prepare(`session:${item.id}`);
   const activeNames = () =>
     runtime.plugins.ctx.harnessTools
-      .list({ resourceId: item.id, scope: runtime.plugins.ctx.harnessRegistry.runScope(item.id) })
+      .list({ resourceId: item.id, scope: runtime.plugins.ctx.harnessSessions.runScope(item.id) })
       .map(({ name }) => name);
   assert.ok(activeNames().includes('read'));
   await runtime.configuration.update({ entries: { files: { disabled: true } } });
@@ -243,7 +243,7 @@ export const apply = (ctx) => {
   });
   assert.equal(
     runtime.plugins.ctx.harnessTools
-      .list({ resourceId: item.id, scope: runtime.plugins.ctx.harnessRegistry.runScope(item.id) })
+      .list({ resourceId: item.id, scope: runtime.plugins.ctx.harnessSessions.runScope(item.id) })
       .some(({ name }) => name === 'read' || name === 'dependent_tool'),
     false,
   );
@@ -344,10 +344,10 @@ export const apply = (ctx) => {
   await runtime.configuration.update({
     entries: { schema: { name: '../../plugins/schema', disabled: false, live: true } },
   });
-  const item = runtime.plugins.ctx.harnessRegistry.create();
+  const item = runtime.plugins.ctx.harnessSessions.create();
   const tool = expectPresent(
     runtime.plugins.ctx.harnessTools
-      .list({ resourceId: item.id, scope: runtime.plugins.ctx.harnessRegistry.runScope(item.id) })
+      .list({ resourceId: item.id, scope: runtime.plugins.ctx.harnessSessions.runScope(item.id) })
       .find(({ name }) => name === 'schema_value'),
     'schema tool',
   );
@@ -375,7 +375,7 @@ export const apply = (ctx) => {
     await tool.execute('test', {}),
     await expectPresent(
       runtime.plugins.ctx.harnessTools
-        .list({ resourceId: item.id, scope: runtime.plugins.ctx.harnessRegistry.runScope(item.id) })
+        .list({ resourceId: item.id, scope: runtime.plugins.ctx.harnessSessions.runScope(item.id) })
         .find(({ name }) => name === 'schema_value'),
       'registered schema tool',
     ).execute('test', {}),
@@ -429,10 +429,10 @@ export const apply = (ctx, config) => {
     readFileSync(log, 'utf8'),
     /stop dependent\nstop base\nstart base\nstop base\nstart base\nstart dependent/,
   );
-  const item = runtime.plugins.ctx.harnessRegistry.create();
+  const item = runtime.plugins.ctx.harnessSessions.create();
   assert.equal(
     runtime.plugins.ctx.harnessTools
-      .list({ resourceId: item.id, scope: runtime.plugins.ctx.harnessRegistry.runScope(item.id) })
+      .list({ resourceId: item.id, scope: runtime.plugins.ctx.harnessSessions.runScope(item.id) })
       .filter(({ name }) => name === 'base_tool').length,
     1,
   );
@@ -451,14 +451,14 @@ export const apply = (ctx, config) => {
   }
   const restored = expectPresent(
     runtime.plugins.ctx.harnessTools
-      .list({ resourceId: item.id, scope: runtime.plugins.ctx.harnessRegistry.runScope(item.id) })
+      .list({ resourceId: item.id, scope: runtime.plugins.ctx.harnessSessions.runScope(item.id) })
       .find(({ name }) => name === 'base_tool'),
     'restored tool',
   );
   assert.match(JSON.stringify(await restored.execute('test', {})), /original/);
   assert.ok(
     runtime.plugins.ctx.harnessTools
-      .list({ resourceId: item.id, scope: runtime.plugins.ctx.harnessRegistry.runScope(item.id) })
+      .list({ resourceId: item.id, scope: runtime.plugins.ctx.harnessSessions.runScope(item.id) })
       .some(({ name }) => name === 'dependent_tool'),
   );
 });
@@ -555,7 +555,7 @@ test('disabled optional builtins cannot block boot or reload because their confi
     /Unknown child model/,
   );
   await restored.configuration.update({ entries: { 'core:theme': { config: { appearance: 'dark' } } } });
-  const conversation = restored.plugins.ctx.harnessRegistry.create();
+  const conversation = restored.plugins.ctx.harnessSessions.create();
   assert.equal(
     await restored.plugins.ctx.harnessRuns.send(conversation.id, 'Main agent still works'),
     'Mock response',
@@ -567,7 +567,7 @@ test('disabled optional builtins cannot block boot or reload because their confi
     restored.plugins.ctx.harnessTools
       .list({
         resourceId: conversation.id,
-        scope: restored.plugins.ctx.harnessRegistry.runScope(conversation.id),
+        scope: restored.plugins.ctx.harnessSessions.runScope(conversation.id),
       })
       .some(({ name }) => name === 'delegate'),
   );
@@ -672,7 +672,7 @@ export const apply = (ctx) => {
     };
 `,
   );
-  const session = app.runtime.plugins.ctx.harnessRegistry.create();
+  const session = app.runtime.plugins.ctx.harnessSessions.create();
   const scope = `session:${session.id}` as const;
   const toggle = (active: boolean) =>
     request('/settings', 'PATCH', {

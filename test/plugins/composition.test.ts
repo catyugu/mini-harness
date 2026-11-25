@@ -108,10 +108,10 @@ test('Shell delegates to a selected external process provider and still requires
     },
   });
   assert.equal(result.status, 200, JSON.stringify(result.body));
-  const { id } = app.runtime.plugins.ctx.harnessRegistry.create();
+  const { id } = app.runtime.plugins.ctx.harnessSessions.create();
   const tool = expectPresent(
     app.runtime.plugins.ctx.harnessTools
-      .list({ resourceId: id, scope: app.runtime.plugins.ctx.harnessRegistry.runScope(id) })
+      .list({ resourceId: id, scope: app.runtime.plugins.ctx.harnessSessions.runScope(id) })
       .find(({ name }) => name === 'sandbox_shell'),
     'shell tool',
   );
@@ -166,10 +166,10 @@ export const apply = (ctx, config) => {
   const secondWorkspace = join(root, 'other');
   mkdirSync(secondWorkspace);
   const workspace = (await request('/workspaces', 'POST', { path: secondWorkspace })).body;
-  const parent = app.runtime.plugins.ctx.harnessRegistry.create();
-  const child = app.runtime.plugins.ctx.harnessRegistry.create({ parentId: parent.id });
-  const sibling = app.runtime.plugins.ctx.harnessRegistry.create();
-  const outside = app.runtime.plugins.ctx.harnessRegistry.create({ workspaceId: workspace.id });
+  const parent = app.runtime.plugins.ctx.harnessSessions.create();
+  const child = app.runtime.plugins.ctx.harnessSessions.create({ parentId: parent.id });
+  const sibling = app.runtime.plugins.ctx.harnessSessions.create();
+  const outside = app.runtime.plugins.ctx.harnessSessions.create({ workspaceId: workspace.id });
   const workspaceKey = 'workspace:' + parent.workspaceId;
   const sessionKey = 'session:' + parent.id;
   const locations = (await request('/plugins/scopes')).body;
@@ -214,7 +214,7 @@ export const apply = (ctx, config) => {
   const tools = app.runtime.plugins.ctx.harnessTools;
   const names = (id: string) =>
     tools
-      .list({ resourceId: id, scope: app.runtime.plugins.ctx.harnessRegistry.runScope(id) })
+      .list({ resourceId: id, scope: app.runtime.plugins.ctx.harnessSessions.runScope(id) })
       .map(({ name }) => name);
   assert.ok(names(parent.id).includes('scoped_greeting'));
   assert.ok(
@@ -233,7 +233,7 @@ export const apply = (ctx, config) => {
   }
   const tool = expectPresent(
     tools
-      .list({ resourceId: child.id, scope: app.runtime.plugins.ctx.harnessRegistry.runScope(child.id) })
+      .list({ resourceId: child.id, scope: app.runtime.plugins.ctx.harnessSessions.runScope(child.id) })
       .find(({ name }) => name === 'scoped_greeting'),
     'scoped greeting tool',
   );
@@ -299,7 +299,7 @@ export const apply = (ctx) => {
 `,
   );
   const { plugins } = app.runtime;
-  const registry = plugins.ctx.harnessRegistry;
+  const registry = plugins.ctx.harnessSessions;
   const parent = registry.create({ permission: 'readOnly' });
   const child = registry.create({ parentId: parent.id, permission: 'fullAccess' });
   const list = (id: string) => conversationTools(plugins.ctx, id, registry.runScope(id));
@@ -353,9 +353,9 @@ export function apply(ctx) {
 `,
   );
   const root = app.runtime.plugins.ctx;
-  const session = root.harnessRegistry.create();
+  const session = root.harnessSessions.create();
   assert.ok(
-    conversationTools(root, session.id, root.harnessRegistry.runScope(session.id)).some(
+    conversationTools(root, session.id, root.harnessSessions.runScope(session.id)).some(
       ({ name }) => name === 'read',
     ),
   );
@@ -370,10 +370,10 @@ export function apply(ctx) {
     },
   });
   assert.equal(replacement.status, 200, JSON.stringify(replacement.body));
-  assert.deepEqual(conversationTools(root, session.id, root.harnessRegistry.runScope(session.id)), []);
+  assert.deepEqual(conversationTools(root, session.id, root.harnessSessions.runScope(session.id)), []);
   assert.ok(
     root.harnessTools
-      .list({ resourceId: session.id, scope: root.harnessRegistry.runScope(session.id) })
+      .list({ resourceId: session.id, scope: root.harnessSessions.runScope(session.id) })
       .some(({ name }) => name === 'read'),
   );
   assert.equal(
@@ -385,7 +385,7 @@ export function apply(ctx) {
     200,
   );
   assert.ok(
-    conversationTools(root, session.id, root.harnessRegistry.runScope(session.id)).some(
+    conversationTools(root, session.id, root.harnessSessions.runScope(session.id)).some(
       ({ name }) => name === 'read',
     ),
   );
@@ -397,7 +397,7 @@ export function apply(ctx) {
   });
   assert.equal(restored.status, 200, JSON.stringify(restored.body));
   assert.ok(
-    conversationTools(root, session.id, root.harnessRegistry.runScope(session.id)).some(
+    conversationTools(root, session.id, root.harnessSessions.runScope(session.id)).some(
       ({ name }) => name === 'read',
     ),
   );
@@ -429,12 +429,12 @@ export function apply(ctx) {
     },
   };
   assert.equal((await request('/settings', 'PATCH', selection)).status, 200);
-  const session = app.runtime.plugins.ctx.harnessRegistry.create();
+  const session = app.runtime.plugins.ctx.harnessSessions.create();
   const preview = await request('/workspaces/' + session.workspaceId + '/files/preview?path=virtual.txt');
   assert.equal(preview.body.text, 'Provided file content');
   const tool = expectPresent(
     app.runtime.plugins.ctx.harnessTools
-      .list({ resourceId: session.id, scope: app.runtime.plugins.ctx.harnessRegistry.runScope(session.id) })
+      .list({ resourceId: session.id, scope: app.runtime.plugins.ctx.harnessSessions.runScope(session.id) })
       .find(({ name }) => name === 'read'),
     'read tool',
   );
@@ -463,9 +463,9 @@ export const apply = (ctx, config) => { ctx.effect(() => ctx.harnessLlm.register
     })); };
 `,
   );
-  const parent = app.runtime.plugins.ctx.harnessRegistry.create();
-  const child = app.runtime.plugins.ctx.harnessRegistry.create({ parentId: parent.id });
-  const sibling = app.runtime.plugins.ctx.harnessRegistry.create();
+  const parent = app.runtime.plugins.ctx.harnessSessions.create();
+  const child = app.runtime.plugins.ctx.harnessSessions.create({ parentId: parent.id });
+  const sibling = app.runtime.plugins.ctx.harnessSessions.create();
   const scope = (answer: string) => ({
     entries: { 'scoped-llm': { name: '../../plugins/scoped-llm', disabled: false, config: { answer } } },
   });
@@ -560,9 +560,9 @@ export const apply = (ctx) => { ctx.provide('harnessProcess', {
     }); };
 `,
   );
-  const parent = app.runtime.plugins.ctx.harnessRegistry.create();
-  const child = app.runtime.plugins.ctx.harnessRegistry.create({ parentId: parent.id });
-  const sibling = app.runtime.plugins.ctx.harnessRegistry.create();
+  const parent = app.runtime.plugins.ctx.harnessSessions.create();
+  const child = app.runtime.plugins.ctx.harnessSessions.create({ parentId: parent.id });
+  const sibling = app.runtime.plugins.ctx.harnessSessions.create();
   const configured = await request('/settings', 'PATCH', {
     entries: {
       shell: { disabled: false, config: { mode: 'isolated' } },
@@ -592,7 +592,7 @@ export const apply = (ctx) => { ctx.provide('harnessProcess', {
   assert.equal((await preview(sibling.id)).body.text, 'application file');
   const lastTool = (id: string) =>
     expectPresent(
-      app.runtime.plugins.ctx.harnessRegistry
+      app.runtime.plugins.ctx.harnessSessions
         .log(id)
         .projection()
         .messages.filter(({ role }) => role === 'toolResult')
@@ -671,8 +671,8 @@ export const apply = (ctx) => {
     };
 `,
   );
-  const parent = app.runtime.plugins.ctx.harnessRegistry.create();
-  const sibling = app.runtime.plugins.ctx.harnessRegistry.create();
+  const parent = app.runtime.plugins.ctx.harnessSessions.create();
+  const sibling = app.runtime.plugins.ctx.harnessSessions.create();
   const scopedChoice = { provider: 'scoped-only', id: 'parent-model' };
   const applicationChoice = { ...app.runtime.plugins.ctx.harnessModelPreference.recent() };
   assert.equal(app.runtime.plugins.ctx.harnessModels.resolve(scopedChoice), undefined);
@@ -703,7 +703,7 @@ export const apply = (ctx) => {
     await app.runtime.plugins.ctx.harnessRuns.send(parent.id, 'Continue without an explicit model'),
     'Scoped parent-model',
   );
-  const children = app.runtime.plugins.ctx.harnessRegistry
+  const children = app.runtime.plugins.ctx.harnessSessions
     .list()
     .filter(({ parentId }) => parentId === parent.id);
   assert.equal(children.length, 2);
@@ -712,17 +712,17 @@ export const apply = (ctx) => {
   assert.ok(inherited);
   assert.ok(explicit);
   assert.deepEqual(
-    app.runtime.plugins.ctx.harnessRegistry.log(inherited.id).projection().model,
+    app.runtime.plugins.ctx.harnessSessions.log(inherited.id).projection().model,
     scopedChoice,
   );
-  assert.deepEqual(app.runtime.plugins.ctx.harnessRegistry.log(explicit.id).projection().model, {
+  assert.deepEqual(app.runtime.plugins.ctx.harnessSessions.log(explicit.id).projection().model, {
     provider: 'scoped-only',
     id: 'child-model',
   });
   assert.equal(app.runtime.plugins.ctx.harnessRuns.info(inherited.id)?.state, 'completed');
   assert.equal(app.runtime.plugins.ctx.harnessRuns.info(explicit.id)?.state, 'completed');
   assert.ok(
-    app.runtime.plugins.ctx.harnessRegistry
+    app.runtime.plugins.ctx.harnessSessions
       .log(parent.id)
       .projection()
       .messages.filter(({ role }) => role === 'toolResult')
@@ -734,7 +734,7 @@ export const apply = (ctx) => {
     'Mock response',
   );
   assert.deepEqual(
-    app.runtime.plugins.ctx.harnessRegistry.log(sibling.id).projection().model,
+    app.runtime.plugins.ctx.harnessSessions.log(sibling.id).projection().model,
     applicationChoice,
   );
   assert.equal(mock.requests.length, 1);
@@ -768,8 +768,8 @@ export function apply(ctx) {
 `,
   );
   const root = app.runtime.plugins.ctx;
-  const session = root.harnessRegistry.create();
-  const sibling = root.harnessRegistry.create();
+  const session = root.harnessSessions.create();
+  const sibling = root.harnessSessions.create();
   const configured = await request('/settings', 'PATCH', {
     scopes: {
       ['session:' + session.id]: {
@@ -814,12 +814,12 @@ export function apply(ctx) {
   });
   assert.equal(configured.status, 200, JSON.stringify(configured.body));
   const root = app.runtime.plugins.ctx;
-  const first = root.harnessRegistry.create();
-  const second = root.harnessRegistry.create();
+  const first = root.harnessSessions.create();
+  const second = root.harnessSessions.create();
   await root.harnessRuns.send(first.id, 'First run');
   assert.ok(
     !root.harnessTools
-      .list({ resourceId: first.id, scope: root.harnessRegistry.runScope(first.id) })
+      .list({ resourceId: first.id, scope: root.harnessSessions.runScope(first.id) })
       .some(({ name }) => name === 'run_marker'),
   );
   await root.harnessRuns.send(second.id, 'Second run');
