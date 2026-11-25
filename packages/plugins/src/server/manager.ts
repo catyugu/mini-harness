@@ -219,7 +219,7 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
       if (!scopeAddress) continue;
       const instance = scopeAddress + '/' + id;
       const error = this.entry(instance)?.error ?? this.scopeFailures.get(scopeAddress);
-      if (error !== undefined) failures.set(instance, String(error instanceof Error ? error.message : error));
+      if (error !== undefined) failures.set(instance, failureMessage(id, error));
       else if (this.entry(instance)?.active) failures.delete(instance);
     }
     return this.catalog.metadata(
@@ -358,12 +358,7 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
     const updating = !starting && !released;
     const unavailable = (id: string, error: unknown, key?: ScopeAddress) => {
       const instance = key ? key + '/' + id : id;
-      const message =
-        error instanceof ValidationError
-          ? 'Invalid configuration for plugin: ' + id + ': ' + error.message
-          : error instanceof Error
-            ? error.message
-            : String(error);
+      const message = failureMessage(id, error);
       if (updating && changedSelection(id, previous, settings, key))
         throw new DomainError(
           error instanceof DomainError ? error.code : 'invalid_input',
@@ -464,4 +459,9 @@ function configurationPatch(patch: unknown): Record<string, unknown> {
   } catch {
     throw new DomainError('invalid_input', 'Plugin settings must be JSON values');
   }
+}
+
+function failureMessage(id: string, error: unknown) {
+  if (error instanceof ValidationError) return 'Invalid configuration for plugin: ' + id + ': ' + error.message;
+  return error instanceof Error ? error.message : String(error);
 }
