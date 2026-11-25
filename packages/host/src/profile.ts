@@ -134,19 +134,23 @@ function load(file: string, optional = false): Layer | undefined {
     if (value.plugins !== undefined && !Array.isArray(value.plugins))
       throw new Error('plugins must be a list');
     const ids = new Set<string>();
-    const entryFields = ['id', 'name', 'disabled', 'client', 'live', 'config'];
     for (const row of (value.plugins as unknown[]) ?? []) {
+      if (object(row) && row.id === undefined && typeof row.name === 'string') {
+        row.id = defaultEntryId(row.name);
+      }
       if (
         !object(row) ||
-        Object.keys(row).some((key) => !entryFields.includes(key)) ||
+        Object.keys(row).some(
+          (key) => !['id', 'name', 'disabled', 'client', 'live', 'config'].includes(key),
+        ) ||
+        typeof row.id !== 'string' ||
+        !pluginIdPattern.test(row.id) ||
+        ids.has(row.id) ||
         (row.name !== undefined && (typeof row.name !== 'string' || !row.name.trim())) ||
         (row.config !== undefined && !object(row.config)) ||
         ['disabled', 'client', 'live'].some((key) => row[key] !== undefined && typeof row[key] !== 'boolean')
       )
         throw new Error('Invalid or duplicate plugin entry: ' + (object(row) ? row.id : row));
-      if (row.id === undefined && typeof row.name === 'string') row.id = defaultEntryId(row.name);
-      if (typeof row.id !== 'string' || !pluginIdPattern.test(row.id) || ids.has(row.id))
-        throw new Error('Invalid or duplicate plugin entry: ' + row.id);
       ids.add(row.id);
     }
     return value as Layer;
@@ -483,12 +487,9 @@ export async function loadProfile(
     // Domain tool policy is stored separately from the Profile configuration.
     const previous = readProfileText(file);
     if (previous !== text) writeText(file, text);
-    const domain = {
-      scopedTools: rules,
-    };
+    const domain = { scopedTools: rules };
     try {
-      const changed = !isDeepStrictEqual(scopedRules(persistent.scopes), rules);
-      if (changed) writeJson(paths.settings, domain);
+      if (!isDeepStrictEqual(scopedRules(persistent.scopes), rules)) writeJson(paths.settings, domain);
     } catch (error) {
       if (previous === undefined) rmSync(file, { force: true });
       else if (previous !== text) writeText(file, previous);
