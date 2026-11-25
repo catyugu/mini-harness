@@ -229,7 +229,7 @@ export const apply = (ctx, config) => {
   assert.ok(names(outside.id).includes('read'));
 });
 
-test('read-only permissions are bound to the selected tool registration', async (t) => {
+test('read-only tools follow the same policy regardless of registration source', async (t) => {
   const { app, mock, paths, request } = await fixture(t);
   writePlugin(
     paths.plugins,
@@ -238,10 +238,10 @@ test('read-only permissions are bound to the selected tool registration', async 
     `
 export const inject = ["harnessTools"];
 export const apply = (ctx) => {
-      for (const name of ['read', 'custom']) ctx.effect(() => ctx.harnessTools.register({
+      for (const name of ['read', 'custom', 'write_like']) ctx.effect(() => ctx.harnessTools.register({
         name, description: 'replacement', parameters: { type: 'object' },
         async execute() { return { content: [{ type: 'text', text: 'Authorized local read' }] }; }
-      }, { access: 'readOnly' }));
+      }, name === 'write_like' ? undefined : { access: 'readOnly' }));
     };
 `,
   );
@@ -264,36 +264,37 @@ export const apply = (ctx) => {
     200,
   );
   await plugins.prepare(`session:${child.id}`);
-  assert.equal(
-    list(child.id).some(({ name }) => name === 'read' || name === 'custom'),
-    false,
-  );
+  assert.ok(list(child.id).some(({ name }) => name === 'read'));
+  assert.ok(list(child.id).some(({ name }) => name === 'custom'));
+  assert.ok(!list(child.id).some(({ name }) => name === 'write_like'));
   assert.ok(list(parent.id).some(({ name }) => name === 'read'));
   await assert.rejects(original.execute('old', { path: 'README.md' }), /Tool denied/);
   await app.runtime.plugins.ctx.harnessRuns.send(child.id, 'Continue');
   const sent = expectPresent(mock.requests.at(-1), 'request with tools');
-  assert.equal(JSON.stringify(sent.tools).includes('"name":"read"'), false);
+  assert.equal(JSON.stringify(sent.tools).includes('"name":"read"'), true);
+  assert.equal(JSON.stringify(sent.tools).includes('"name":"custom"'), true);
+  assert.equal(JSON.stringify(sent.tools).includes('"name":"write_like"'), false);
   assert.equal(JSON.stringify(sent.tools).includes('"name":"load_skill"'), true);
-  assert.deepEqual((await request('/permissions/plugins/replacement')).body.tools, ['custom', 'read']);
-  assert.equal(
-    (await request('/permissions/plugins/replacement', 'PATCH', { tool: 'unknown', allowed: true })).status,
-    400,
-  );
-  assert.equal(
-    (await request('/permissions/plugins/replacement', 'PATCH', { tool: 'custom', allowed: true })).status,
-    200,
-  );
-  const granted = expectPresent(
+  const custom = expectPresent(
     list(child.id).find(({ name }) => name === 'custom'),
-    'granted registration',
+    'read-only registration',
   );
-  assert.match(JSON.stringify(await granted.execute('granted', {})), /Authorized local read/);
-  assert.ok(!list(child.id).some(({ name }) => name === 'read'));
+  assert.match(JSON.stringify(await custom.execute('read', {})), /Authorized local read/);
   assert.equal(
-    (await request('/permissions/plugins/replacement', 'PATCH', { tool: 'custom', allowed: false })).status,
+    (
+      await request('/settings', 'PATCH', {
+        scopes: {
+          ['session:' + child.id]: {
+            entries: { replacement: { disabled: false } },
+            disabledTools: ['custom'],
+          },
+        },
+      })
+    ).status,
     200,
   );
-  await assert.rejects(granted.execute('revoked', {}), /Tool denied/);
+  assert.ok(!list(child.id).some(({ name }) => name === 'custom'));
+  await assert.rejects(custom.execute('restricted', {}), /Tool denied/);
 });
 
 test('explicit Profile composition can replace the default tool policy without a provider whitelist', async (t) => {

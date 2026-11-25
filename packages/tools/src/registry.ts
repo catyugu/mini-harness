@@ -4,7 +4,6 @@ import { Check, Errors } from 'typebox/value';
 import { Service, type Context } from 'mini-harness/cordis';
 import {
   agentScopeOf,
-  findInstance,
   pluginInstance,
   sessionVisible,
 } from '@mini-harness/plugin-api/instance';
@@ -47,7 +46,6 @@ export class ToolRegistry {
       isAvailable(id, tool) {
         return visibleToCaller(this, id) && registry.isAvailable(id, tool);
       },
-      readOnlyRegistrations: this.readOnlyRegistrations.bind(this),
     });
   }
 
@@ -69,14 +67,11 @@ export class ToolRegistry {
     const registry = this;
     const active = new Set<Promise<unknown>>();
     const signal = owner?.fiber.signal;
-    const identity = owner && (runScope ? findInstance(owner) : pluginInstance(owner));
     const expired = () => lifetime.signal.aborted || signal?.aborted === true;
     const entry: ToolRegistration = {
       name,
       scope,
       readOnly: access === 'readOnly',
-      pluginId: identity?.pluginId,
-      trusted: identity?.trusted ?? false,
       visible: (id) =>
         !expired() && (!scope || registry.address(id).includes(scope)) && (visible?.(id) ?? true),
       bind(id) {
@@ -170,15 +165,6 @@ export class ToolRegistry {
     );
   }
 
-  readOnlyRegistrations(pluginId: string): string[] {
-    return [
-      ...new Set(
-        [...this.tools.values()]
-          .filter((entry) => entry.pluginId === pluginId && entry.readOnly && !entry.trusted)
-          .map(({ name }) => name),
-      ),
-    ].sort();
-  }
 
   forSession(id: string) {
     const names = new Set([...this.tools.values()].map(({ name }) => name));

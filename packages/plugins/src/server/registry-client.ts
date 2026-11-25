@@ -27,7 +27,7 @@ export function runPackageManager(directory: string, args: readonly string[]) {
   return new Promise<void>((resolve, reject) => {
     const child = spawn(process.execPath, [npmCli(), ...args], {
       cwd: directory,
-      env: { ...process.env, npm_config_ignore_scripts: process.env.npm_config_ignore_scripts ?? 'true' },
+      env: process.env,
       stdio: 'inherit',
       windowsHide: true,
     });

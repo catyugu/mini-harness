@@ -5,7 +5,6 @@ interface PluginInstance {
   pluginId: string;
   scope: PluginScope;
   scopeKey?: ScopeKey;
-  trusted: boolean;
   writableConfig: boolean;
 }
 

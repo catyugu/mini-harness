@@ -37,8 +37,8 @@ Optional instance failures are shown in Plugins and can be repaired there.
 
 Browser services use Cordis dependency injection directly. Enable the browser modules that supply the desired services.
 
-A user can grant specific registered tools to a trusted local plugin in that plugin’s Settings detail, or through `readOnlyTools` in `settings.json` or the settings API. For example, `{ "readOnlyTools": { "workspace-greeting": ["greet"] } }` allows its `greet` registration to be considered in read-only conversations when it declares read-only access. Update the map to revoke a grant. Descendant and workspace restrictions still apply before invocation.
+Read-only conversations admit any tool registration that declares read-only access. Descendant and workspace tool restrictions still apply before invocation. Tool declarations are semantic promises of trusted plugin code, not process isolation.
 
 Setup and live configuration callbacks register and update plugin resources. Scope preparation, session writes, execution submission and configuration writes are available from runtime handlers after the configuration commits. Use those operations from normal runtime handlers. A prepared scoped service is a current provider reference, not a stable proxy: resolve it again after configuration changes. Browser entries are published for active server entries; the browser resolves its own dependencies through Cordis.
 
-Enabled entries and scoped plugin configuration are written to the active [Profile](profiles.md). Tool grants and scoped tool restrictions are saved as domain settings.
+Enabled entries and scoped plugin configuration are written to the active [Profile](profiles.md). Scoped tool restrictions are saved as domain settings.

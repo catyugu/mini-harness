@@ -24,9 +24,9 @@ Uses [Plugin API](../plugin-api/README.md) for selection contracts and [Platform
 
 ## Configuration
 
-The active YAML Profile owns plugin configuration and scoped composition. The settings API operates on Entry IDs, with each Entry holding its `disabled` and `live` flags and `config` object together. `settings.json` stores domain policy, including tool grants and restrictions.
+The active YAML Profile owns plugin configuration and scoped composition. The settings API operates on Entry IDs, with each Entry holding its `disabled` and `live` flags and `config` object together. `settings.json` stores domain policy, including scoped tool restrictions.
 
-`readOnlyTools` holds user grants indexed by plugin ID. Browser services are composed directly through Cordis.
+Browser services are composed directly through Cordis.
 
 Plugin detail content can be contributed through the settings registry and is tied to the lifetime of the displayed detail.
 

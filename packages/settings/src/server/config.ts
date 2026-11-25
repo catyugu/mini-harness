@@ -1,12 +1,11 @@
 import { DomainError } from '@mini-harness/platform/errors';
 import type { ProfileConfiguration } from '@mini-harness/plugin-api/configuration';
-import { localPluginIdPattern, isScopeKey, validateEntries } from '@mini-harness/plugin-api/selection';
+import { isScopeKey, validateEntries } from '@mini-harness/plugin-api/selection';
 import { toolNamePattern } from '@mini-harness/llm/vocabulary';
 
 export const DEFAULTS = Object.freeze({
   entries: {},
   scopes: {},
-  readOnlyTools: {},
 });
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -23,8 +22,8 @@ export function validateSettings(input: unknown): asserts input is ProfileConfig
   if (!isObject(input)) throw new DomainError('invalid_input', 'Invalid settings object');
   if (Object.keys(input).some((key) => !Object.hasOwn(DEFAULTS, key)))
     throw new DomainError('invalid_input', 'Unknown settings field');
-  const { entries, scopes, readOnlyTools } = input;
-  for (const [key, value] of Object.entries({ entries, scopes, readOnlyTools }))
+  const { entries, scopes } = input;
+  for (const [key, value] of Object.entries({ entries, scopes }))
     if (!isObject(value)) throw new DomainError('invalid_input', 'Invalid settings section: ' + key);
   validateEntries(section(entries, 'entries'));
   for (const [key, scope] of Object.entries(section(scopes, 'scopes'))) {
@@ -42,14 +41,6 @@ export function validateSettings(input: unknown): asserts input is ProfileConfig
     )
       throw new DomainError('invalid_input', 'Invalid scoped tool restriction: ' + key);
     validateEntries(section(scope.entries, key + '.entries'));
-  }
-  for (const [plugin, tools] of Object.entries(section(readOnlyTools, 'readOnlyTools'))) {
-    if (
-      !localPluginIdPattern.test(plugin) ||
-      !Array.isArray(tools) ||
-      !tools.every((name: unknown) => typeof name === 'string' && toolNamePattern.test(name))
-    )
-      throw new DomainError('invalid_input', 'Invalid read-only tool grant: ' + plugin);
   }
 }
 

@@ -250,7 +250,6 @@ export class PluginCatalog {
           scope,
           scopeKey,
           writableConfig: plan.live,
-          trusted: !source && descriptor.trustedContributor === true,
         });
         const changes = context.get('harnessChanges');
         if (changes) ctx.effect(() => changes.register('plugin:' + plan.id));
