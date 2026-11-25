@@ -12,7 +12,9 @@ export default {
     ctx.provide('harnessMutations', mutations);
     ctx.provide('harnessChanges', new ProjectionChanges());
     ctx.on('harness/seal', () => mutations.seal());
-    ctx.on('harness/drain', async () => { await mutations.drain(); });
+    ctx.on('harness/drain', async () => {
+      await mutations.drain();
+    });
   },
 };
 
@@ -23,11 +25,16 @@ export const http = {
     const upgrades = new Upgrades();
     ctx.provide('harnessRoutes', routes);
     ctx.provide('harnessUpgrades', upgrades);
-    ctx.on('harness/seal', () => { routes.seal(); upgrades.close(); });
+    ctx.on('harness/seal', () => {
+      routes.seal();
+      upgrades.close();
+    });
     ctx.on('harness/drain', () => routes.drain());
   },
 };
 
 declare module 'mini-harness/cordis' {
-  interface Context { harnessUpgrades: Pick<Upgrades, 'register' | 'dispatch' | 'close'> }
+  interface Context {
+    harnessUpgrades: Pick<Upgrades, 'register' | 'dispatch' | 'close'>;
+  }
 }

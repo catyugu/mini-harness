@@ -12,7 +12,18 @@ interface LayoutElements {
 }
 
 export function createLayout(view: LayoutElements, signal: AbortSignal) {
-  const { root, sidebar, sidebarButton, sidebarClose, main, overlay, panel, panelButton, panelClose, resizeHandle } = view;
+  const {
+    root,
+    sidebar,
+    sidebarButton,
+    sidebarClose,
+    main,
+    overlay,
+    panel,
+    panelButton,
+    panelClose,
+    resizeHandle,
+  } = view;
   const narrow = matchMedia('(max-width: 860px)');
   const widthKey = 'mini-harness-panel-width';
   let width = Number(localStorage.getItem(widthKey)) || 380;
@@ -23,7 +34,9 @@ export function createLayout(view: LayoutElements, signal: AbortSignal) {
   const viewport = window.visualViewport;
 
   function clamp(value: number) {
-    return Math.round(Math.max(260, Math.min(value, innerWidth * .48, innerWidth - (desktopSidebar ? 280 : 56) - 300)));
+    return Math.round(
+      Math.max(260, Math.min(value, innerWidth * 0.48, innerWidth - (desktopSidebar ? 280 : 56) - 300)),
+    );
   }
   function measure(value = width) {
     const size = clamp(value);
@@ -73,7 +86,8 @@ export function createLayout(view: LayoutElements, signal: AbortSignal) {
     panelOpen = open;
     render();
     if (open && (focus || narrow.matches)) panelClose.focus();
-    if (!open && focus) (panelTrigger?.isConnected && !panelTrigger.closest('[inert]') ? panelTrigger : panelButton).focus();
+    if (!open && focus)
+      (panelTrigger?.isConnected && !panelTrigger.closest('[inert]') ? panelTrigger : panelButton).focus();
   }
   sidebarButton.onclick = () => {
     if (narrow.matches) {
@@ -92,53 +106,96 @@ export function createLayout(view: LayoutElements, signal: AbortSignal) {
   };
   sidebarClose.onclick = () => closeDrawer();
   panelClose.onclick = () => setPanel(false, true);
-  overlay.onclick = () => { if (panelOpen) setPanel(false, true); else closeDrawer(); };
-  narrow.addEventListener('change', () => { drawer = false; render(); }, { signal });
+  overlay.onclick = () => {
+    if (panelOpen) setPanel(false, true);
+    else closeDrawer();
+  };
+  narrow.addEventListener(
+    'change',
+    () => {
+      drawer = false;
+      render();
+    },
+    { signal },
+  );
 
-  document.addEventListener('keydown', (event) => {
-    if (event.defaultPrevented || document.querySelector('dialog[open]')) return;
-    if (event.key === 'Escape' && (panelOpen || drawer)) {
-      if (document.querySelector(':popover-open')) return;
-      event.preventDefault();
-      if (panelOpen) setPanel(false, true);
-      else closeDrawer();
-    }
-    if (event.key !== 'Tab' || !narrow.matches || (!drawer && !panelOpen)) return;
-    const container = panelOpen ? panel : sidebar;
-    const controls = [...container.querySelectorAll<HTMLElement>('button, a[href], input, select, textarea, summary, [tabindex]')]
-      .filter((node) => node.tabIndex >= 0 && !node.matches(':disabled') && node.getClientRects().length && !node.closest('[inert]'));
-    const first = controls[0], last = controls.at(-1);
-    if (!container.contains(document.activeElement) || document.activeElement === (event.shiftKey ? first : last)) {
-      event.preventDefault();
-      (event.shiftKey ? last : first)?.focus();
-    }
-  }, { signal });
+  document.addEventListener(
+    'keydown',
+    (event) => {
+      if (event.defaultPrevented || document.querySelector('dialog[open]')) return;
+      if (event.key === 'Escape' && (panelOpen || drawer)) {
+        if (document.querySelector(':popover-open')) return;
+        event.preventDefault();
+        if (panelOpen) setPanel(false, true);
+        else closeDrawer();
+      }
+      if (event.key !== 'Tab' || !narrow.matches || (!drawer && !panelOpen)) return;
+      const container = panelOpen ? panel : sidebar;
+      const controls = [
+        ...container.querySelectorAll<HTMLElement>(
+          'button, a[href], input, select, textarea, summary, [tabindex]',
+        ),
+      ].filter(
+        (node) =>
+          node.tabIndex >= 0 &&
+          !node.matches(':disabled') &&
+          node.getClientRects().length &&
+          !node.closest('[inert]'),
+      );
+      const first = controls[0],
+        last = controls.at(-1);
+      if (
+        !container.contains(document.activeElement) ||
+        document.activeElement === (event.shiftKey ? first : last)
+      ) {
+        event.preventDefault();
+        (event.shiftKey ? last : first)?.focus();
+      }
+    },
+    { signal },
+  );
 
   let drag: { id: number; start: number; width: number } | undefined;
-  resizeHandle.addEventListener('pointerdown', (event) => {
-    if (event.button !== 0) return;
-    event.preventDefault();
-    drag = { id: event.pointerId, start: event.clientX, width: panel.getBoundingClientRect().width };
-    root.classList.add('resizing-panel');
-    resizeHandle.setPointerCapture(event.pointerId);
-  }, { signal });
-  resizeHandle.addEventListener('pointermove', (event) => {
-    if (drag?.id !== event.pointerId) return;
-    width = clamp(drag.width + drag.start - event.clientX);
-    measure();
-  }, { signal });
-  resizeHandle.addEventListener('lostpointercapture', () => {
-    drag = undefined;
-    root.classList.remove('resizing-panel');
-    localStorage.setItem(widthKey, String(width));
-  }, { signal });
-  resizeHandle.addEventListener('keydown', (event) => {
-    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
-    event.preventDefault();
-    width = clamp(clamp(width) + (event.key === 'ArrowLeft' ? 20 : -20));
-    measure();
-    localStorage.setItem(widthKey, String(width));
-  }, { signal });
+  resizeHandle.addEventListener(
+    'pointerdown',
+    (event) => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      drag = { id: event.pointerId, start: event.clientX, width: panel.getBoundingClientRect().width };
+      root.classList.add('resizing-panel');
+      resizeHandle.setPointerCapture(event.pointerId);
+    },
+    { signal },
+  );
+  resizeHandle.addEventListener(
+    'pointermove',
+    (event) => {
+      if (drag?.id !== event.pointerId) return;
+      width = clamp(drag.width + drag.start - event.clientX);
+      measure();
+    },
+    { signal },
+  );
+  resizeHandle.addEventListener(
+    'lostpointercapture',
+    () => {
+      drag = undefined;
+      root.classList.remove('resizing-panel');
+      localStorage.setItem(widthKey, String(width));
+    },
+    { signal },
+  );
+  resizeHandle.addEventListener(
+    'keydown',
+    (event) => {
+      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+      event.preventDefault();
+      width = clamp(clamp(width) + (event.key === 'ArrowLeft' ? 20 : -20));
+      measure();
+      localStorage.setItem(widthKey, String(width));
+    },
+    { signal },
+  );
 
   function resize() {
     document.documentElement.style.setProperty('--app-height', (viewport?.height ?? innerHeight) + 'px');

@@ -13,10 +13,17 @@ import { waitUntil } from '../test/support/api-fixture.js';
 import { createFixturePaths, createMockProvider } from '../test/helpers/mock-provider.js';
 
 const execFile = promisify(exec);
-const npmPath = process.env.MINI_HARNESS_NPM_CLI ?? resolve(dirname(process.execPath),
-  process.platform === 'win32' ? 'node_modules/npm/bin/npm-cli.js' : '../lib/node_modules/npm/bin/npm-cli.js');
+const npmPath =
+  process.env.MINI_HARNESS_NPM_CLI ??
+  resolve(
+    dirname(process.execPath),
+    process.platform === 'win32'
+      ? 'node_modules/npm/bin/npm-cli.js'
+      : '../lib/node_modules/npm/bin/npm-cli.js',
+  );
 await access(npmPath);
-const npm = (args: string[], options = {}) => execFile(process.execPath, [npmPath, ...args], { timeout: 120000, ...options });
+const npm = (args: string[], options = {}) =>
+  execFile(process.execPath, [npmPath, ...args], { timeout: 120000, ...options });
 
 async function availablePort() {
   const listener = createServer();
@@ -32,40 +39,60 @@ async function checkPackage() {
   const mock = await createMockProvider(({ messages }) =>
     messages.at(-1)?.content === 'Pack smoke test'
       ? { tool: 'save_task_note', args: { note: 'Installed SDK recorded progress' } }
-      : 'Mock response');
+      : 'Mock response',
+  );
   const { root, paths } = createFixturePaths(mock.url);
   const installed = join(work, 'install');
   const plugin = join(installed, 'task-notes');
   const env = { ...process.env, MINI_HARNESS_HOME: paths.home, MINI_HARNESS_DEV_PLUGIN: plugin };
   let started = false;
-  const cli = (...args: string[]) => npm(['exec', '--offline', '--', 'mini-harness', ...args], { cwd: installed, env });
+  const cli = (...args: string[]) =>
+    npm(['exec', '--offline', '--', 'mini-harness', ...args], { cwd: installed, env });
   try {
     const packed = await npm(['pack', '--json', '--pack-destination', work], { cwd: resolve('.') });
     const { name, filename, files } = parseNpmPackResult(packed.stdout);
     for (const profile of ['base', 'web'])
-      assert.ok(files.some(({ path }: { path: string }) => path === 'profiles/' + profile + '.yml'), 'Missing shipped Profile: ' + profile);
-    assert.ok(files.every(({ path }: { path: string }) =>
-      !/^dist\/(?:scripts|test)\//.test(path) &&
-      !/^dist\/packages\/[^/]+\/package\.json$/.test(path) &&
-      !/^dist\/.*\/tests\//.test(path) &&
-      !/\.(?:test|spec)\.js$/.test(path)), 'Published package must exclude test artifacts');
+      assert.ok(
+        files.some(({ path }: { path: string }) => path === 'profiles/' + profile + '.yml'),
+        'Missing shipped Profile: ' + profile,
+      );
+    assert.ok(
+      files.every(
+        ({ path }: { path: string }) =>
+          !/^dist\/(?:scripts|test)\//.test(path) &&
+          !/^dist\/packages\/[^/]+\/package\.json$/.test(path) &&
+          !/^dist\/.*\/tests\//.test(path) &&
+          !/\.(?:test|spec)\.js$/.test(path),
+      ),
+      'Published package must exclude test artifacts',
+    );
     await mkdir(installed);
     const tarball = 'file:../' + filename;
-    const { version: nodeTypes } = JSON.parse(await readFile(resolve('node_modules/@types/node/package.json'), 'utf8'));
+    const { version: nodeTypes } = JSON.parse(
+      await readFile(resolve('node_modules/@types/node/package.json'), 'utf8'),
+    );
     // Use the Bedrock middleware version already selected by the workspace lockfile.
     const pi = createRequire(import.meta.resolve('@earendil-works/pi-ai'));
     const bedrock = createRequire(pi.resolve('@aws-sdk/client-bedrock-runtime'));
     const { version: websocketMiddleware } = bedrock('@aws-sdk/middleware-websocket/package.json');
     const fixture = {
-      name: 'mini-harness-install-check', private: true, type: 'module', version: '0.0.0',
-      dependencies: { [name]: tarball }, devDependencies: { '@types/node': nodeTypes },
-      overrides: { '@aws-sdk/middleware-websocket': websocketMiddleware }
+      name: 'mini-harness-install-check',
+      private: true,
+      type: 'module',
+      version: '0.0.0',
+      dependencies: { [name]: tarball },
+      devDependencies: { '@types/node': nodeTypes },
+      overrides: { '@aws-sdk/middleware-websocket': websocketMiddleware },
     };
     await writeFile(join(installed, 'package.json'), JSON.stringify(fixture));
     console.log('Installing ' + filename + ' in a standalone npm project');
-    await npm(['install', '--prefer-offline', '--include=dev', '--ignore-scripts', '--no-audit', '--no-fund'], {
-      cwd: installed, timeout: 240000
-    });
+    await npm(
+      ['install', '--prefer-offline', '--include=dev', '--ignore-scripts', '--no-audit', '--no-fund'],
+      {
+        cwd: installed,
+        timeout: 240000,
+      },
+    );
     const published = join(installed, 'node_modules', name);
     const manifest = JSON.parse(await readFile(join(published, 'package.json'), 'utf8'));
     for (const section of ['dependencies', 'optionalDependencies', 'peerDependencies'])
@@ -75,11 +102,23 @@ async function checkPackage() {
       const emitted = await readFile(join(published, path), 'utf8');
       assert.doesNotMatch(emitted, /['"]@mini-harness\//, path + ' depends on a private workspace');
     }
-    await execFile(process.execPath, ['--input-type=module', '-e',
-      "import 'mini-harness/plugin'; import 'mini-harness/browser-plugin'; import { Context } from 'mini-harness/cordis'; new Context();"], { cwd: installed });
+    await execFile(
+      process.execPath,
+      [
+        '--input-type=module',
+        '-e',
+        "import 'mini-harness/plugin'; import 'mini-harness/browser-plugin'; import { Context } from 'mini-harness/cordis'; new Context();",
+      ],
+      { cwd: installed },
+    );
     for (const path of ['sdk/src/plugin.d.ts', 'sdk/src/browser-plugin.d.ts'])
-      assert.ok(files.some((file) => file.path === 'dist/types/packages/' + path), 'Missing SDK declarations: ' + path);
-    await writeFile(join(installed, 'plugin-types.mts'), `
+      assert.ok(
+        files.some((file) => file.path === 'dist/types/packages/' + path),
+        'Missing SDK declarations: ' + path,
+      );
+    await writeFile(
+      join(installed, 'plugin-types.mts'),
+      `
       import { Context, type Plugin } from 'mini-harness/cordis';
       import { type LlmPort, type ScopeSettings, defineTool } from 'mini-harness/plugin';
       declare module 'mini-harness/cordis' {
@@ -121,8 +160,11 @@ async function checkPackage() {
       ctx.undeclared;
       // @ts-expect-error Execution handles own cancellation.
       ctx.harnessExecution.cancel('session');
-    `);
-    await writeFile(join(installed, 'browser-types.mts'), `
+    `,
+    );
+    await writeFile(
+      join(installed, 'browser-types.mts'),
+      `
       import { browserPluginSettings, type SlotRenderer } from 'mini-harness/browser-plugin';
       import type { Context } from 'mini-harness/cordis';
       declare module 'mini-harness/browser-plugin' {
@@ -151,13 +193,31 @@ async function checkPackage() {
           ctx.miniPrimitives.status(String(configuration.get<boolean>('showDetails')))
         }, browserPluginSettings(ctx)));
       }
-    `);
-    await Promise.all(['plugin-types.mts', 'browser-types.mts'].map((file) => execFile(process.execPath,
-      [resolve('node_modules/typescript/bin/tsc'), '--strict', '--noEmit', '--target', 'ES2022', '--module', 'NodeNext', file],
-      { cwd: installed })));
+    `,
+    );
+    await Promise.all(
+      ['plugin-types.mts', 'browser-types.mts'].map((file) =>
+        execFile(
+          process.execPath,
+          [
+            resolve('node_modules/typescript/bin/tsc'),
+            '--strict',
+            '--noEmit',
+            '--target',
+            'ES2022',
+            '--module',
+            'NodeNext',
+            file,
+          ],
+          { cwd: installed },
+        ),
+      ),
+    );
     assert.match((await cli('--help')).stdout, /minimal native agent harness/);
     await cp(resolve('docs/examples/task-notes'), plugin, { recursive: true });
-    await execFile(process.execPath, [resolve('node_modules/typescript/bin/tsc'), '-p', 'tsconfig.json'], { cwd: plugin });
+    await execFile(process.execPath, [resolve('node_modules/typescript/bin/tsc'), '-p', 'tsconfig.json'], {
+      cwd: plugin,
+    });
     const settings = readJson<Record<string, unknown>>(paths.settings, {});
     writeJson(paths.settings, { ...settings, plugins: { 'task-notes': true } });
     const launch = await cli('--detached', '--cwd', paths.cwd, '--port', String(await availablePort()));
@@ -171,16 +231,34 @@ async function checkPackage() {
     const get = (path: string) => fetch(info.url + path, { headers });
     const write = (path: string, method: string, body: unknown) =>
       fetch(info.url + path, { method, headers, body: JSON.stringify(body) });
-    for (const asset of ['/', '/packages/ui-runtime/src/browser/boot.js', '/packages/sdk/src/browser-plugin.js',
-      '/packages/ui-primitives/src/browser/vendor/marked.js', '/packages/ui-primitives/src/browser/vendor/purify.js',
-      '/logo.svg', '/manifest.webmanifest', '/startup.css', '/icon-192.png', '/icon-512.png', '/favicon.ico']) {
+    for (const asset of [
+      '/',
+      '/packages/ui-runtime/src/browser/boot.js',
+      '/packages/sdk/src/browser-plugin.js',
+      '/packages/ui-primitives/src/browser/vendor/marked.js',
+      '/packages/ui-primitives/src/browser/vendor/purify.js',
+      '/logo.svg',
+      '/manifest.webmanifest',
+      '/startup.css',
+      '/icon-192.png',
+      '/icon-512.png',
+      '/favicon.ico',
+    ]) {
       const response = await get(asset);
       assert.equal(response.status, 200, asset);
       await response.arrayBuffer();
     }
     const plugins = await (await get('/api/plugins')).json();
-    assert.ok(plugins.some(({ id, state }: { id: string; state: string }) => id === 'task-notes' && state === 'ready'));
-    assert.deepEqual(await (await get('/api/extensions/task-notes/smoke')).json(), { label: 'Task progress', ready: true, credential: false });
+    assert.ok(
+      plugins.some(
+        ({ id, state }: { id: string; state: string }) => id === 'task-notes' && state === 'ready',
+      ),
+    );
+    assert.deepEqual(await (await get('/api/extensions/task-notes/smoke')).json(), {
+      label: 'Task progress',
+      ready: true,
+      credential: false,
+    });
     const patchLabel = (label: string) => write('/api/settings/plugins/task-notes', 'PATCH', { label });
     assert.equal((await patchLabel('   ')).status, 400);
     assert.equal((await patchLabel('Progress update')).status, 200);
@@ -188,9 +266,14 @@ async function checkPackage() {
     const credential = await write('/api/extensions/task-notes/credential', 'PUT', { token: secret });
     assert.equal(credential.status, 200);
     assert.deepEqual(await credential.json(), { credential: true });
-    assert.deepEqual(await (await get('/api/extensions/task-notes/smoke')).json(),
-      { label: 'Progress update', ready: true, credential: true });
-    const bootstrap: import('@mini-harness/ui-runtime/bootstrap').BrowserBootstrap = await (await get('/api/bootstrap')).json();
+    assert.deepEqual(await (await get('/api/extensions/task-notes/smoke')).json(), {
+      label: 'Progress update',
+      ready: true,
+      credential: true,
+    });
+    const bootstrap: import('@mini-harness/ui-runtime/bootstrap').BrowserBootstrap = await (
+      await get('/api/bootstrap')
+    ).json();
     assert.doesNotMatch(JSON.stringify(bootstrap), new RegExp(secret));
     assert.equal(bootstrap.ui.find(({ id }) => id === 'task-notes')?.config.label, 'Progress update');
     for (const { browser, styles } of bootstrap.ui) {
@@ -204,9 +287,15 @@ async function checkPackage() {
     }
     assert.ok(bootstrap.ui.some(({ id }: { id: string }) => id === 'core:conversation'));
     assert.ok(!bootstrap.ui.some(({ id }: { id: string }) => id === 'shell'));
-    const item = await (await fetch(info.url + '/api/sessions', { method: 'POST', headers, body: '{}' })).json();
+    const item = await (
+      await fetch(info.url + '/api/sessions', { method: 'POST', headers, body: '{}' })
+    ).json();
     const url = info.url + '/api/sessions/' + item.id;
-    const startedRun = await fetch(url + '/runs', { method: 'POST', headers, body: JSON.stringify({ message: 'Pack smoke test' }) });
+    const startedRun = await fetch(url + '/runs', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ message: 'Pack smoke test' }),
+    });
     assert.equal(startedRun.status, 202);
     const run = await startedRun.json();
     const chat = await fetch(url + '/events?run=' + run.id, { headers });
@@ -215,15 +304,26 @@ async function checkPackage() {
     const status = await (await fetch(url + '/runs', { headers })).json();
     assert.equal(status.run.state, 'completed');
     const conversation = await (await fetch(url, { headers })).json();
-    assert.deepEqual(conversation.records.map(({ title, content }: { title: string; content: string }) => ({ title, content })),
-      [{ title: 'Progress update', content: 'Installed SDK recorded progress' }]);
-    const followUp = write('/api/extensions/task-notes/follow-up', 'POST',
-      { parentId: item.id, message: 'Follow up', requireApproval: true });
+    assert.deepEqual(
+      conversation.records.map(({ title, content }: { title: string; content: string }) => ({
+        title,
+        content,
+      })),
+      [{ title: 'Progress update', content: 'Installed SDK recorded progress' }],
+    );
+    const followUp = write('/api/extensions/task-notes/follow-up', 'POST', {
+      parentId: item.id,
+      message: 'Follow up',
+      requireApproval: true,
+    });
     void followUp.catch(() => {});
-    const approvals = await waitUntil(async () => {
-      const response = await get('/api/approvals');
-      return await response.json() as { id: string; sessionId: string; plugin: string }[];
-    }, (pending) => pending.length === 1);
+    const approvals = await waitUntil(
+      async () => {
+        const response = await get('/api/approvals');
+        return (await response.json()) as { id: string; sessionId: string; plugin: string }[];
+      },
+      (pending) => pending.length === 1,
+    );
     const [approval] = approvals;
     assert.equal(approval.sessionId, item.id);
     assert.equal(approval.plugin, 'task-notes');
@@ -237,7 +337,7 @@ async function checkPackage() {
 
     assert.equal((await write('/api/settings', 'PATCH', { plugins: { 'task-notes': false } })).status, 200);
     assert.equal((await get('/api/extensions/task-notes/smoke')).status, 404);
-    const withoutPlugin = await (await get('/api/bootstrap')).json() as typeof bootstrap;
+    const withoutPlugin = (await (await get('/api/bootstrap')).json()) as typeof bootstrap;
     assert.ok(!withoutPlugin.ui.some(({ id }) => id === 'task-notes'));
     assert.deepEqual((await (await get('/api/sessions/' + item.id)).json()).records, conversation.records);
 
@@ -248,7 +348,10 @@ async function checkPackage() {
   } finally {
     if (started) await cli('stop').catch(() => {});
     await mock.close();
-    await Promise.all([rm(work, { recursive: true, force: true }), rm(root, { recursive: true, force: true })]);
+    await Promise.all([
+      rm(work, { recursive: true, force: true }),
+      rm(root, { recursive: true, force: true }),
+    ]);
   }
 }
 

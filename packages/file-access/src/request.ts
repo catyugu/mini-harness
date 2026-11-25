@@ -11,8 +11,9 @@ export async function workspaceFiles(ctx: Context, { params, url, signal }: Rout
   const scopes = ctx.harnessScopes;
   const session = url.searchParams.get('sessionId');
   const owner = `workspace:${workspace.id}` as const;
-  const key = session ? `session:${session}` as const : owner;
-  if (session && !scopes.address(key).includes(owner)) throw new DomainError('not_found', 'Conversation not found');
+  const key = session ? (`session:${session}` as const) : owner;
+  if (session && !scopes.address(key).includes(owner))
+    throw new DomainError('not_found', 'Conversation not found');
   await scopes.prepare(key, signal);
   return {
     files: scopes.require(key, 'harnessFileAccess').open(workspace.id),

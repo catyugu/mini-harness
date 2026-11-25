@@ -8,25 +8,43 @@ import type { QueueEntry } from '@mini-harness/sessions/queue';
 export class Inbox {
   constructor(private readonly log: SessionLogPort) {}
 
-  list() { return this.log.inbox(); }
-  view(): QueueEntry[] { return this.log.queue(); }
+  list() {
+    return this.log.inbox();
+  }
+  view(): QueueEntry[] {
+    return this.log.queue();
+  }
 
-  enqueue(mode: InboxItem['mode'], prepare: () => { text: string; images: ImageInput[]; input: PreparedMessage },
-    options: Pick<InboxItem, 'model' | 'thinkingLevel'> = {}) {
+  enqueue(
+    mode: InboxItem['mode'],
+    prepare: () => { text: string; images: ImageInput[]; input: PreparedMessage },
+    options: Pick<InboxItem, 'model' | 'thinkingLevel'> = {},
+  ) {
     if (mode !== 'steer' && mode !== 'followUp') throw new DomainError('invalid_input', 'Invalid queue mode');
     if (this.list().length >= 16) throw new DomainError('conflict', 'Queue is full');
     const prepared = prepare();
-    this.log.append({ type: 'inbox-enqueued', item: {
-      id: randomBytes(16).toString('hex'), mode, text: prepared.text, images: prepared.images,
-      input: prepared.input, ...options
-    } });
+    this.log.append({
+      type: 'inbox-enqueued',
+      item: {
+        id: randomBytes(16).toString('hex'),
+        mode,
+        text: prepared.text,
+        images: prepared.images,
+        input: prepared.input,
+        ...options,
+      },
+    });
     return this.view();
   }
 
-  next(mode: InboxItem['mode']) { return this.list().find((item) => item.mode === mode); }
+  next(mode: InboxItem['mode']) {
+    return this.list().find((item) => item.mode === mode);
+  }
 
   cancel(reason: string, id?: string) {
-    const ids = this.list().filter((item) => id === undefined || item.id === id).map((item) => item.id);
+    const ids = this.list()
+      .filter((item) => id === undefined || item.id === id)
+      .map((item) => item.id);
     if (ids.length) this.log.append({ type: 'inbox-cancelled', ids, reason });
     return this.view();
   }

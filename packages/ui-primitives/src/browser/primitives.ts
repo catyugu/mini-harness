@@ -10,11 +10,20 @@ export function closeOnBackdrop(dialog: HTMLDialogElement) {
   let startedOutside = false;
   const outside = (event: MouseEvent) => {
     const bounds = dialog.getBoundingClientRect();
-    return event.target === dialog && (event.clientX < bounds.left || event.clientX >= bounds.right ||
-      event.clientY < bounds.top || event.clientY >= bounds.bottom);
+    return (
+      event.target === dialog &&
+      (event.clientX < bounds.left ||
+        event.clientX >= bounds.right ||
+        event.clientY < bounds.top ||
+        event.clientY >= bounds.bottom)
+    );
   };
-  dialog.addEventListener('pointerdown', (event) => { startedOutside = outside(event); });
-  dialog.addEventListener('click', (event) => { if (startedOutside && outside(event)) dialog.close(); });
+  dialog.addEventListener('pointerdown', (event) => {
+    startedOutside = outside(event);
+  });
+  dialog.addEventListener('click', (event) => {
+    if (startedOutside && outside(event)) dialog.close();
+  });
 }
 
 export function button(label: string, variant: 'primary' | 'secondary' | 'quiet' | 'danger' = 'secondary') {
@@ -91,7 +100,10 @@ export function dialog(title: string, content: HTMLElement) {
 }
 
 /** One accessible, app-styled confirmation instead of platform-specific window.confirm(). */
-export function confirmAction(message: string, options: { title?: string; confirmLabel?: string; signal?: AbortSignal } = {}): Promise<boolean> {
+export function confirmAction(
+  message: string,
+  options: { title?: string; confirmLabel?: string; signal?: AbortSignal } = {},
+): Promise<boolean> {
   if (options.signal?.aborted) return Promise.resolve(false);
   const actions = document.createElement('form');
   actions.className = 'ui-confirm';
@@ -112,11 +124,15 @@ export function confirmAction(message: string, options: { title?: string; confir
   return new Promise((resolve) => {
     const abort = () => modal.close();
     options.signal?.addEventListener('abort', abort, { once: true });
-    modal.addEventListener('close', () => {
-      options.signal?.removeEventListener('abort', abort);
-      resolve(modal.returnValue === 'confirmed');
-      modal.remove();
-    }, { once: true });
+    modal.addEventListener(
+      'close',
+      () => {
+        options.signal?.removeEventListener('abort', abort);
+        resolve(modal.returnValue === 'confirmed');
+        modal.remove();
+      },
+      { once: true },
+    );
     modal.showModal();
     cancel.focus();
   });

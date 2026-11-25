@@ -1,1 +1,2 @@
-export const workspaceRoute = (id: string, resource = '') => '/workspaces/' + encodeURIComponent(id) + resource;
+export const workspaceRoute = (id: string, resource = '') =>
+  '/workspaces/' + encodeURIComponent(id) + resource;

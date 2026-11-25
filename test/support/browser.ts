@@ -14,18 +14,30 @@ async function availablePort(): Promise<number> {
   return address.port;
 }
 
-export async function startIsolatedHost(paths: ReturnType<typeof createFixturePaths>['paths'], port?: number) {
-  const selected = port ?? await availablePort();
-  const child: ChildProcess = spawn(process.execPath, [
-    resolve('dist/bin/mini-harness.js'), '--no-open', '--cwd', paths.cwd, '--port', String(selected)
-  ], {
-    env: { ...process.env, MINI_HARNESS_HOME: paths.home },
-    stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true
+export async function startIsolatedHost(
+  paths: ReturnType<typeof createFixturePaths>['paths'],
+  port?: number,
+) {
+  const selected = port ?? (await availablePort());
+  const child: ChildProcess = spawn(
+    process.execPath,
+    [resolve('dist/bin/mini-harness.js'), '--no-open', '--cwd', paths.cwd, '--port', String(selected)],
+    {
+      env: { ...process.env, MINI_HARNESS_HOME: paths.home },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+    },
+  );
+  const closed = new Promise<void>((resolve) => {
+    child.once('close', () => resolve());
   });
-  const closed = new Promise<void>((resolve) => { child.once('close', () => resolve()); });
   let output = '';
-  child.stdout?.on('data', (data) => { output += data.toString(); });
-  child.stderr?.on('data', (data) => { output += data.toString(); });
+  child.stdout?.on('data', (data) => {
+    output += data.toString();
+  });
+  child.stderr?.on('data', (data) => {
+    output += data.toString();
+  });
   const pidPath = join(paths.home, 'server.json');
   for (let attempt = 0; attempt < 200; attempt++) {
     if (existsSync(pidPath)) {
@@ -38,24 +50,37 @@ export async function startIsolatedHost(paths: ReturnType<typeof createFixturePa
           async stop() {
             if (child.exitCode !== null || child.signalCode !== null) return closed;
             const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(new Error('mini-harness shutdown timed out')), 5000);
+            const timer = setTimeout(
+              () => controller.abort(new Error('mini-harness shutdown timed out')),
+              5000,
+            );
             try {
               const response = await fetch(info.url + '/api/shutdown', {
-                method: 'POST', headers: { Authorization: 'Bearer ' + token }, signal: controller.signal
+                method: 'POST',
+                headers: { Authorization: 'Bearer ' + token },
+                signal: controller.signal,
               });
               await response.arrayBuffer();
               if (!response.ok) throw new Error('mini-harness shutdown returned ' + response.status);
-              await Promise.race([closed, new Promise<never>((_, reject) => {
-                if (controller.signal.aborted) reject(controller.signal.reason);
-                else controller.signal.addEventListener('abort', () => reject(controller.signal.reason), { once: true });
-              })]);
+              await Promise.race([
+                closed,
+                new Promise<never>((_, reject) => {
+                  if (controller.signal.aborted) reject(controller.signal.reason);
+                  else
+                    controller.signal.addEventListener('abort', () => reject(controller.signal.reason), {
+                      once: true,
+                    });
+                }),
+              ]);
             } catch (error) {
               if (child.exitCode !== null || child.signalCode !== null) return closed;
               child.kill('SIGTERM');
               await closed;
               throw error;
-            } finally { clearTimeout(timer); }
-          }
+            } finally {
+              clearTimeout(timer);
+            }
+          },
         };
       }
     }
@@ -79,7 +104,10 @@ export async function chooseModel(page: Page, query: string) {
   await modelSearch(page).press('Enter');
 }
 
-export async function expectInViewport(panel: ReturnType<Page['locator']>, viewport: { width: number; height: number }) {
+export async function expectInViewport(
+  panel: ReturnType<Page['locator']>,
+  viewport: { width: number; height: number },
+) {
   await expect(panel).toBeInViewport({ ratio: 0.99 });
   const bounds = await panel.boundingBox();
   if (!bounds) throw new Error('Expected panel bounding box');
@@ -100,17 +128,21 @@ async function launchBrowser({ reply, prepare }: BrowserSetup = {}) {
   let directory: string | undefined;
   let host: Awaited<ReturnType<typeof startIsolatedHost>> | undefined;
   const close = async () => {
-    try { await host?.stop(); }
-    finally {
-      try { await mock.close(); }
-      finally { if (directory) rmSync(directory, { recursive: true, force: true }); }
+    try {
+      await host?.stop();
+    } finally {
+      try {
+        await mock.close();
+      } finally {
+        if (directory) rmSync(directory, { recursive: true, force: true });
+      }
     }
   };
   try {
     const { paths, root } = createFixturePaths(mock.url);
     directory = root;
     await prepare?.(paths, root);
-    const server = host = await startIsolatedHost(paths);
+    const server = (host = await startIsolatedHost(paths));
     return { mock, paths, root, host: server, close };
   } catch (error) {
     await close();
@@ -118,7 +150,9 @@ async function launchBrowser({ reply, prepare }: BrowserSetup = {}) {
   }
 }
 
-export const browserTest = test.extend<{ launch: (setup?: BrowserSetup) => Promise<Awaited<ReturnType<typeof launchBrowser>>> }>({
+export const browserTest = test.extend<{
+  launch: (setup?: BrowserSetup) => Promise<Awaited<ReturnType<typeof launchBrowser>>>;
+}>({
   launch: async ({}, use) => {
     const active: Awaited<ReturnType<typeof launchBrowser>>[] = [];
     try {
@@ -127,6 +161,8 @@ export const browserTest = test.extend<{ launch: (setup?: BrowserSetup) => Promi
         active.push(fixture);
         return fixture;
       });
-    } finally { await Promise.all(active.reverse().map((fixture) => fixture.close())); }
-  }
+    } finally {
+      await Promise.all(active.reverse().map((fixture) => fixture.close()));
+    }
+  },
 });

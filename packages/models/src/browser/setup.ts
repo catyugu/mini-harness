@@ -9,28 +9,34 @@ import { RemoteStore } from '@mini-harness/ui-runtime/remote-store';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { button, field, fromMarkup, confirmAction, required } from '@mini-harness/ui-primitives/primitives';
 
-
 const setup = async (ctx: Context) => {
   const { miniSettings: settings } = ctx;
   const state = new RemoteStore(async () => {
     const [{ models, recent }, providers] = await Promise.all([
-      browserRequest<Pick<ModelCatalog, 'models'> & { recent: ModelChoice }>(ctx, '/models'), browserRequest<ModelCatalog['providers']>(ctx, '/providers')
+      browserRequest<Pick<ModelCatalog, 'models'> & { recent: ModelChoice }>(ctx, '/models'),
+      browserRequest<ModelCatalog['providers']>(ctx, '/providers'),
     ]);
     return { models, providers, recent };
   });
   await state.refresh();
   ctx.effect(() => ctx.miniProjections.register('models', state));
   ctx.provide('miniModels', state);
-  ctx.effect(() => ctx.miniSettingsRegistry.register(browserPluginId(ctx), {
-    id: 'providers',
-    section: { title: 'Model', icon: 'model', order: 10 },
-    render({ signal }) {
-      const manager = providerManager(ctx, () => state.get().providers, state.refresh);
-      settings.onClose(manager.reset, signal);
-      state.subscribe(manager.render, signal);
-      return manager.content;
-    }
-  }, browserPluginSettings(ctx)));
+  ctx.effect(() =>
+    ctx.miniSettingsRegistry.register(
+      browserPluginId(ctx),
+      {
+        id: 'providers',
+        section: { title: 'Model', icon: 'model', order: 10 },
+        render({ signal }) {
+          const manager = providerManager(ctx, () => state.get().providers, state.refresh);
+          settings.onClose(manager.reset, signal);
+          state.subscribe(manager.render, signal);
+          return manager.content;
+        },
+      },
+      browserPluginSettings(ctx),
+    ),
+  );
   if (!state.get().models.some((model) => model.configured)) settings.open('Model');
 };
 
@@ -60,11 +66,13 @@ function providerManager(ctx: Context, providers: () => ProviderInfo[], refresh:
     const form = fromMarkup<HTMLFormElement>('<form class="provider-editor"></form>');
     form.setAttribute('aria-label', provider ? 'Edit ' + provider.name : 'Add provider');
     form.noValidate = true; // Render validation feedback inline instead of platform-native bubbles.
-    const mode = fromMarkup<HTMLFieldSetElement>(`<fieldset class="provider-mode"><legend>Provider type</legend>
+    const mode =
+      fromMarkup<HTMLFieldSetElement>(`<fieldset class="provider-mode"><legend>Provider type</legend>
       <label><input type="radio" name="provider-type" value="catalog" checked> Built-in provider</label>
       <label><input type="radio" name="provider-type" value="custom"> Custom API</label>
     </fieldset>`);
-    const available = providers().filter(({ configured, custom, canSetKey }) => canSetKey && !configured && !custom)
+    const available = providers()
+      .filter(({ configured, custom, canSetKey }) => canSetKey && !configured && !custom)
       .sort((a, b) => a.name.localeCompare(b.name));
     const picker = document.createElement('select');
     picker.required = true;
@@ -80,10 +88,15 @@ function providerManager(ctx: Context, providers: () => ProviderInfo[], refresh:
     save.type = 'submit';
     const actions = fromMarkup('<div class="ui-actions"></div>');
     const error = fromMarkup('<p class="hint form-error" role="alert"></p>');
-    cancel.onclick = () => { closeEditor(); mount.closest('.ui-card')?.querySelector('button')?.focus(); if (!provider) add.focus(); };
+    cancel.onclick = () => {
+      closeEditor();
+      mount.closest('.ui-card')?.querySelector('button')?.focus();
+      if (!provider) add.focus();
+    };
     actions.append(cancel, save);
     form.append(mode, catalog, endpoint.element, credentials, error, actions);
-    const custom = () => provider?.custom ?? (form.elements.namedItem('provider-type') as RadioNodeList).value === 'custom';
+    const custom = () =>
+      provider?.custom ?? (form.elements.namedItem('provider-type') as RadioNodeList).value === 'custom';
     function updateMode() {
       mode.hidden = Boolean(provider);
       catalog.hidden = Boolean(provider) || custom();
@@ -98,8 +111,9 @@ function providerManager(ctx: Context, providers: () => ProviderInfo[], refresh:
       event.preventDefault();
       if (save.disabled) return;
       error.textContent = '';
-      const invalid = [...form.querySelectorAll<HTMLInputElement | HTMLSelectElement>('input, select')]
-        .find((control) => !control.disabled && !control.checkValidity());
+      const invalid = [...form.querySelectorAll<HTMLInputElement | HTMLSelectElement>('input, select')].find(
+        (control) => !control.disabled && !control.checkValidity(),
+      );
       if (invalid) {
         error.textContent = invalid.validationMessage || 'Please complete the required fields.';
         invalid.focus();
@@ -109,70 +123,114 @@ function providerManager(ctx: Context, providers: () => ProviderInfo[], refresh:
       try {
         const secret = key.value.trim();
         if (custom()) {
-          await browserRequest(ctx, '/providers', payload('PUT', { ...endpoint.read(), key: secret || undefined, create: !provider }));
+          await browserRequest(
+            ctx,
+            '/providers',
+            payload('PUT', { ...endpoint.read(), key: secret || undefined, create: !provider }),
+          );
         } else if (secret) {
-          await browserRequest(ctx, '/credentials', payload('POST', { provider: provider?.id ?? picker.value, key: secret }));
+          await browserRequest(
+            ctx,
+            '/credentials',
+            payload('POST', { provider: provider?.id ?? picker.value, key: secret }),
+          );
         }
         closeEditor();
         await refresh();
         status.textContent = 'Provider saved.';
-        list.querySelector<HTMLButtonElement>('[data-provider="' + (provider?.id ?? (custom() ? endpoint.id.value : picker.value)) + '"]')?.focus();
+        list
+          .querySelector<HTMLButtonElement>(
+            '[data-provider="' + (provider?.id ?? (custom() ? endpoint.id.value : picker.value)) + '"]',
+          )
+          ?.focus();
       } catch (failure) {
-        (form.isConnected ? error : status).textContent = (failure instanceof Error ? failure.message : String(failure));
-      } finally { save.disabled = false; }
+        (form.isConnected ? error : status).textContent =
+          failure instanceof Error ? failure.message : String(failure);
+      } finally {
+        save.disabled = false;
+      }
     };
     activeEditor = form;
     add.hidden = !provider;
     mount.append(form);
-    (provider ? provider.custom ? endpoint.url : key : picker).focus();
+    (provider ? (provider.custom ? endpoint.url : key) : picker).focus();
   }
 
   function render() {
     closeEditor();
-    const configured = providers().filter(({ configured, custom }) => configured || custom)
+    const configured = providers()
+      .filter(({ configured, custom }) => configured || custom)
       .sort((a, b) => a.name.localeCompare(b.name));
-    list.replaceChildren(...configured.map((provider) => {
-      const card = fromMarkup(`<article class="ui-card provider-card">
+    list.replaceChildren(
+      ...configured.map((provider) => {
+        const card = fromMarkup(`<article class="ui-card provider-card">
         <div class="provider-row"><div><strong></strong><small class="provider-state"></small></div><div class="ui-actions"></div></div>
         <div class="provider-inline"></div>
       </article>`);
-      required(card.querySelector('strong')).textContent = provider.name;
-      const summary = required(card.querySelector<HTMLElement>('.provider-state'));
-      summary.textContent = provider.configured ? 'Configured · ' + provider.models.length + (provider.models.length === 1 ? ' model' : ' models') : 'API key needed';
-      summary.dataset.connected = String(provider.configured);
-      const actions = required(card.querySelector('.ui-actions'));
-      const editButton = button('Edit', 'quiet');
-      editButton.dataset.provider = provider.id;
-      editButton.setAttribute('aria-label', 'Edit ' + provider.name);
-      editButton.onclick = () => edit(required(card.querySelector<HTMLElement>('.provider-inline')), provider);
-      if (provider.custom || provider.canSetKey) actions.append(editButton);
-      if (provider.custom || provider.storedCredential) {
-        const remove = button('Remove', 'quiet');
-        remove.classList.add('danger');
-        remove.setAttribute('aria-label', 'Remove ' + provider.name);
-        remove.onclick = async () => {
-          if (!await confirmAction(provider.custom ? 'Remove endpoint ' + provider.name + '?' : 'Remove the saved credentials for ' + provider.name + '?',
-            { title: 'Remove provider', confirmLabel: 'Remove', signal })) return;
-          remove.disabled = true;
-          try {
-            await browserRequest(ctx, provider.custom ? '/providers' : '/credentials', payload('DELETE',
-              provider.custom ? { id: provider.id } : { provider: provider.id }));
-            await refresh();
-            status.textContent = 'Provider removed.';
-            add.focus();
-          } catch (error) { status.textContent = (error instanceof Error ? error.message : String(error)); }
-          finally { remove.disabled = false; }
-        };
-        actions.append(remove);
-      }
-      return card;
-    }));
-    if (!configured.length) list.append(fromMarkup('<p class="hint">Add a provider to make its models available in the composer.</p>'));
+        required(card.querySelector('strong')).textContent = provider.name;
+        const summary = required(card.querySelector<HTMLElement>('.provider-state'));
+        summary.textContent = provider.configured
+          ? 'Configured · ' + provider.models.length + (provider.models.length === 1 ? ' model' : ' models')
+          : 'API key needed';
+        summary.dataset.connected = String(provider.configured);
+        const actions = required(card.querySelector('.ui-actions'));
+        const editButton = button('Edit', 'quiet');
+        editButton.dataset.provider = provider.id;
+        editButton.setAttribute('aria-label', 'Edit ' + provider.name);
+        editButton.onclick = () =>
+          edit(required(card.querySelector<HTMLElement>('.provider-inline')), provider);
+        if (provider.custom || provider.canSetKey) actions.append(editButton);
+        if (provider.custom || provider.storedCredential) {
+          const remove = button('Remove', 'quiet');
+          remove.classList.add('danger');
+          remove.setAttribute('aria-label', 'Remove ' + provider.name);
+          remove.onclick = async () => {
+            if (
+              !(await confirmAction(
+                provider.custom
+                  ? 'Remove endpoint ' + provider.name + '?'
+                  : 'Remove the saved credentials for ' + provider.name + '?',
+                { title: 'Remove provider', confirmLabel: 'Remove', signal },
+              ))
+            )
+              return;
+            remove.disabled = true;
+            try {
+              await browserRequest(
+                ctx,
+                provider.custom ? '/providers' : '/credentials',
+                payload('DELETE', provider.custom ? { id: provider.id } : { provider: provider.id }),
+              );
+              await refresh();
+              status.textContent = 'Provider removed.';
+              add.focus();
+            } catch (error) {
+              status.textContent = error instanceof Error ? error.message : String(error);
+            } finally {
+              remove.disabled = false;
+            }
+          };
+          actions.append(remove);
+        }
+        return card;
+      }),
+    );
+    if (!configured.length)
+      list.append(
+        fromMarkup('<p class="hint">Add a provider to make its models available in the composer.</p>'),
+      );
   }
   add.onclick = () => edit(addArea);
   addArea.append(add);
   render();
-  return { content, render, reset: () => { closeEditor(); status.textContent = ''; } };
+  return {
+    content,
+    render,
+    reset: () => {
+      closeEditor();
+      status.textContent = '';
+    },
+  };
 }
 
 function customEndpoint(provider?: ProviderInfo) {
@@ -198,7 +256,8 @@ function customEndpoint(provider?: ProviderInfo) {
   const readModels = new Map<HTMLElement, () => ProviderModel>();
   function syncButtons() {
     add.disabled = readModels.size >= 50;
-    for (const remove of models.querySelectorAll<HTMLButtonElement>('button')) remove.disabled = readModels.size === 1;
+    for (const remove of models.querySelectorAll<HTMLButtonElement>('button'))
+      remove.disabled = readModels.size === 1;
   }
   function modelRow(model?: ProviderModel) {
     const row = fromMarkup(`<fieldset class="endpoint-model">
@@ -224,12 +283,20 @@ function customEndpoint(provider?: ProviderInfo) {
     image.checked = model?.input.includes('image') ?? false;
     reasoning.checked = model?.reasoning ?? false;
     const remove = button('Remove model', 'quiet');
-    remove.onclick = () => { row.remove(); readModels.delete(row); syncButtons(); add.focus(); };
+    remove.onclick = () => {
+      row.remove();
+      readModels.delete(row);
+      syncButtons();
+      add.focus();
+    };
     row.append(remove);
     readModels.set(row, () => ({
-      id: id.value.trim(), name: name.value.trim() || id.value.trim(),
-      contextWindow: context.valueAsNumber, maxTokens: tokens.valueAsNumber,
-      input: image.checked ? ['text', 'image'] : ['text'], reasoning: reasoning.checked
+      id: id.value.trim(),
+      name: name.value.trim() || id.value.trim(),
+      contextWindow: context.valueAsNumber,
+      maxTokens: tokens.valueAsNumber,
+      input: image.checked ? ['text', 'image'] : ['text'],
+      reasoning: reasoning.checked,
     }));
     models.append(row);
     syncButtons();
@@ -238,9 +305,21 @@ function customEndpoint(provider?: ProviderInfo) {
   add.onclick = () => modelRow().focus();
   if (provider?.models.length) for (const model of provider.models) modelRow(model);
   else modelRow();
-  return { element, id, url, read: () => ({
-    id: id.value.trim(), api: api.value, baseUrl: url.value.trim(), models: [...readModels.values()].map((read) => read())
-  }) };
+  return {
+    element,
+    id,
+    url,
+    read: () => ({
+      id: id.value.trim(),
+      api: api.value,
+      baseUrl: url.value.trim(),
+      models: [...readModels.values()].map((read) => read()),
+    }),
+  };
 }
 
-export default { inject: ['miniSettings','miniProjections','miniSettingsRegistry'], provide: ['miniModels'], apply: setup };
+export default {
+  inject: ['miniSettings', 'miniProjections', 'miniSettingsRegistry'],
+  provide: ['miniModels'],
+  apply: setup,
+};

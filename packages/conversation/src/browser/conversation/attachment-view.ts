@@ -3,8 +3,12 @@ import type { InputAttachment } from '@mini-harness/input/message';
 import type { Context } from 'mini-harness/cordis';
 import { fileCard, imageMime } from './attachment-card.js';
 
-export function attachmentView(ctx: Context, file: InputAttachment,
-  resource: Exclude<PreviewResource, { kind: 'workspace' }> | undefined, signal: AbortSignal) {
+export function attachmentView(
+  ctx: Context,
+  file: InputAttachment,
+  resource: Exclude<PreviewResource, { kind: 'workspace' }> | undefined,
+  signal: AbortSignal,
+) {
   const preview = ctx.get('miniFilePreview');
   if (resource && imageMime.test(file.mimeType)) {
     const image = document.createElement('img');

@@ -9,8 +9,10 @@ export function setup(ctx: Context) {
   ctx.effect(() => ctx.harnessSettingsStore.subscribe(() => changes.invalidate('settings')));
   const { harnessSettingsStore: store, harnessMutations: mutations, harnessRoutes: routes } = ctx;
   ctx.effect(() => routes.register('GET', '/api/settings', () => store.settings));
-  ctx.effect(() => routes.register('PATCH', '/api/settings', async ({ body }) => {
-    const patch = await body();
-    return mutations.run(() => store.update(patch));
-  }));
+  ctx.effect(() =>
+    routes.register('PATCH', '/api/settings', async ({ body }) => {
+      const patch = await body();
+      return mutations.run(() => store.update(patch));
+    }),
+  );
 }

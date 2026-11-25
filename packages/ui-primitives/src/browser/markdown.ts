@@ -7,10 +7,35 @@ export function renderMarkdown(target: HTMLElement, text: string, interactive = 
   markdownSource.set(target, text);
   const fragment = purify.sanitize(marked.parse(text, { async: false, gfm: true }), {
     RETURN_DOM_FRAGMENT: true,
-    ALLOWED_TAGS: ['a', 'blockquote', 'br', 'code', 'del', 'em', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'hr',
-      'li', 'ol', 'p', 'pre', 'strong', 'table', 'tbody', 'td', 'th', 'thead', 'tr', 'ul'],
+    ALLOWED_TAGS: [
+      'a',
+      'blockquote',
+      'br',
+      'code',
+      'del',
+      'em',
+      'h1',
+      'h2',
+      'h3',
+      'h4',
+      'h5',
+      'h6',
+      'hr',
+      'li',
+      'ol',
+      'p',
+      'pre',
+      'strong',
+      'table',
+      'tbody',
+      'td',
+      'th',
+      'thead',
+      'tr',
+      'ul',
+    ],
     ALLOWED_ATTR: ['href', 'title', 'class', 'start'],
-    ALLOW_DATA_ATTR: false
+    ALLOW_DATA_ATTR: false,
   });
   for (const element of fragment.querySelectorAll('[class]')) {
     const language = element.matches('pre > code')
@@ -41,7 +66,9 @@ export function renderMarkdown(target: HTMLElement, text: string, interactive = 
         try {
           await navigator.clipboard.writeText(code.textContent ?? '');
           copy.textContent = 'Copied';
-        } catch { copy.textContent = 'Copy unavailable'; }
+        } catch {
+          copy.textContent = 'Copy unavailable';
+        }
       };
       header.append(label, copy);
       pre.replaceWith(box);

@@ -1,6 +1,9 @@
 import type {} from 'mini-harness/cordis';
 
-export interface TabScope { workspaceId: string; sessionId?: string }
+export interface TabScope {
+  workspaceId: string;
+  sessionId?: string;
+}
 export type TabOwner =
   | { workspaceId: string; sessionId?: never }
   | { workspaceId: string; sessionId: string };
@@ -33,7 +36,11 @@ export interface RightTabsPort {
   inspect(title: string, node: HTMLElement, signal: AbortSignal): void;
 }
 
-export interface PageContribution { title: string; content: HTMLElement; order?: number }
+export interface PageContribution {
+  title: string;
+  content: HTMLElement;
+  order?: number;
+}
 
 declare module 'mini-harness/cordis' {
   interface Context {
@@ -53,7 +60,6 @@ declare module 'mini-harness/cordis' {
     };
   }
 }
-
 
 declare module '@mini-harness/ui-slots/browser/api' {
   interface SlotMap {

@@ -5,18 +5,27 @@ export function createRunSummary(root: HTMLElement, onDispose: (cleanup: () => v
   const status = required(root.querySelector('span'));
   const elapsed = required(root.querySelector('time'));
   const changedFiles = required(root.querySelector<HTMLDetailsElement>('#changedFiles'));
-  const states = { queued: 'Queued', running: 'Running', completed: 'Completed', failed: 'Failed',
-    cancelled: 'Cancelled', interrupted: 'Interrupted. You can continue this conversation. Unconfirmed tools will not rerun.' };
+  const states = {
+    queued: 'Queued',
+    running: 'Running',
+    completed: 'Completed',
+    failed: 'Failed',
+    cancelled: 'Cancelled',
+    interrupted: 'Interrupted. You can continue this conversation. Unconfirmed tools will not rerun.',
+  };
   let current: RunInfo | undefined;
 
   function renderElapsed() {
     if (!current) return;
     const end = current.finishedAt ? Date.parse(current.finishedAt) : Date.now();
     const seconds = Math.max(0, Math.floor((end - Date.parse(current.startedAt)) / 1000));
-    elapsed.textContent = seconds < 60 ? seconds + ' s' : Math.floor(seconds / 60) + ' min ' + seconds % 60 + ' s';
+    elapsed.textContent =
+      seconds < 60 ? seconds + ' s' : Math.floor(seconds / 60) + ' min ' + (seconds % 60) + ' s';
   }
 
-  const timer = setInterval(() => { if (isRunning(current)) renderElapsed(); }, 1000);
+  const timer = setInterval(() => {
+    if (isRunning(current)) renderElapsed();
+  }, 1000);
   onDispose(() => clearInterval(timer));
 
   return (run?: RunInfo) => {
@@ -29,12 +38,15 @@ export function createRunSummary(root: HTMLElement, onDispose: (cleanup: () => v
     changedFiles.hidden = paths.length === 0;
     if (!paths.length) changedFiles.open = false;
     else {
-      required(changedFiles.querySelector('summary')).textContent = paths.length + (paths.length === 1 ? ' file changed' : ' files changed');
-      required(changedFiles.querySelector('ul')).replaceChildren(...paths.map((path) => {
-        const item = document.createElement('li');
-        item.textContent = path;
-        return item;
-      }));
+      required(changedFiles.querySelector('summary')).textContent =
+        paths.length + (paths.length === 1 ? ' file changed' : ' files changed');
+      required(changedFiles.querySelector('ul')).replaceChildren(
+        ...paths.map((path) => {
+          const item = document.createElement('li');
+          item.textContent = path;
+          return item;
+        }),
+      );
     }
     renderElapsed();
   };

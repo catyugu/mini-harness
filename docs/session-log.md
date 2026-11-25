@@ -122,7 +122,6 @@ Deletion first marks the selected tree as unavailable, drains registered partici
 cascades through its conversations while retaining the user's project files.
 There is no archive state.
 
-
 Plugin records use a dedicated event with an explicit owner (plugin ID and instance ID), data, and optional display metadata. The storage reader converts old custom record envelopes after validating their original checksums, retaining IDs, parents and payloads. An unscoped historical plugin record belongs to the application instance. Unmapped historical envelopes remain available as diagnostic records in native exports. New records use explicit plugin owners or diagnostic codes. The browser receives the explicitly supplied display data and the preceding message identity on the selected branch. Model context omits these records. Deleting its owning conversation removes both the records and private data for that session’s plugin instances.
 
 A failed run records the stable entry ID for its active input, including inbox deliveries. An explicit retry can retrieve that input from the native log. A null ID indicates the run failed before accepting the current submission. Older records with ambiguous input or missing attachment content require user input before resubmission.

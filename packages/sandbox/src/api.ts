@@ -13,5 +13,7 @@ export interface SandboxPort {
 }
 
 declare module 'mini-harness/cordis' {
-  interface Context { harnessSandbox: SandboxPort }
+  interface Context {
+    harnessSandbox: SandboxPort;
+  }
 }

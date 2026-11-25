@@ -1,27 +1,110 @@
-.file-entry, .file-tree summary { display: flex; justify-content: flex-start; align-items: center; gap: 7px; width: 100%; min-width: 0; border: 0; background: transparent; padding: 4px 6px; text-align: left; font: 12px/1.5 ui-monospace, monospace; border-radius: 6px; }
-.file-entry:hover, .file-tree summary:hover { background: var(--hover); }
-.file-tree > .file-entry::before { content: ''; flex: 0 0 15px; }
-.file-entry span, .file-tree summary span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.file-entry svg, .file-tree svg { flex: 0 0 15px; height: 15px; color: var(--muted); }
-.file-tree .file-tree { margin-left: 11px; padding-left: 7px; border-left: 1px solid var(--border); }
-.file-tree summary { cursor: pointer; list-style: none; }
-.file-tree summary::-webkit-details-marker { display: none; }
-.file-tree details[open] > summary svg:first-child, .folder-chevron.expanded { transform: rotate(90deg); }
-.file-toolbar, .file-breadcrumbs { display: flex; align-items: center; gap: 2px; min-width: 0; }
-.file-toolbar { margin-bottom: 4px; }
-.file-breadcrumbs { flex: 1; overflow: auto; color: var(--muted); white-space: nowrap; font-size: 12px; }
-.file-breadcrumbs .ui-button { font: inherit; min-height: 30px; padding-inline: 4px; }
-.file-breadcrumbs svg { width: 12px; flex: 0 0 12px; }
-.file-tree summary > svg:first-child, .folder-chevron { transition: transform var(--motion-tree) ease-out; }
-.file-entry.ui-button { justify-content: flex-start; text-align: left; min-height: var(--control); }
+.file-entry,
+.file-tree summary {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  padding: 4px 6px;
+  text-align: left;
+  font:
+    12px/1.5 ui-monospace,
+    monospace;
+  border-radius: 6px;
+}
+.file-entry:hover,
+.file-tree summary:hover {
+  background: var(--hover);
+}
+.file-tree > .file-entry::before {
+  content: '';
+  flex: 0 0 15px;
+}
+.file-entry span,
+.file-tree summary span {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.file-entry svg,
+.file-tree svg {
+  flex: 0 0 15px;
+  height: 15px;
+  color: var(--muted);
+}
+.file-tree .file-tree {
+  margin-left: 11px;
+  padding-left: 7px;
+  border-left: 1px solid var(--border);
+}
+.file-tree summary {
+  cursor: pointer;
+  list-style: none;
+}
+.file-tree summary::-webkit-details-marker {
+  display: none;
+}
+.file-tree details[open] > summary svg:first-child,
+.folder-chevron.expanded {
+  transform: rotate(90deg);
+}
+.file-toolbar,
+.file-breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+.file-toolbar {
+  margin-bottom: 4px;
+}
+.file-breadcrumbs {
+  flex: 1;
+  overflow: auto;
+  color: var(--muted);
+  white-space: nowrap;
+  font-size: 12px;
+}
+.file-breadcrumbs .ui-button {
+  font: inherit;
+  min-height: 30px;
+  padding-inline: 4px;
+}
+.file-breadcrumbs svg {
+  width: 12px;
+  flex: 0 0 12px;
+}
+.file-tree summary > svg:first-child,
+.folder-chevron {
+  transition: transform var(--motion-tree) ease-out;
+}
+.file-entry.ui-button {
+  justify-content: flex-start;
+  text-align: left;
+  min-height: var(--control);
+}
 :where(.file-tree summary) {
-  transition: background-color var(--motion-button) ease-out, border-color var(--motion-button) ease-out,
-    color var(--motion-button) ease-out, opacity var(--motion-button) ease-out;
+  transition:
+    background-color var(--motion-button) ease-out,
+    border-color var(--motion-button) ease-out,
+    color var(--motion-button) ease-out,
+    opacity var(--motion-button) ease-out;
 }
 @media (max-width: 860px) {
-  .file-entry, .file-tree summary { min-height: 36px; }
-  .file-toolbar > .ui-button { min-height: 36px; }
+  .file-entry,
+  .file-tree summary {
+    min-height: 36px;
+  }
+  .file-toolbar > .ui-button {
+    min-height: 36px;
+  }
 }
 @media (max-width: 560px) {
-  .file-entry.ui-button { min-height: 44px; }
+  .file-entry.ui-button {
+    min-height: 44px;
+  }
 }

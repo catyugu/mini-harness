@@ -15,7 +15,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-24.04, windows-latest]
-        node: ["22", "24"]
+        node: ['22', '24']
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -52,7 +52,7 @@ jobs:
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "24"
+          node-version: '24'
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       # The pinned official image contains Chromium Headless Shell and system dependencies.
@@ -74,7 +74,7 @@ jobs:
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "24"
+          node-version: '24'
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       # Do not enable Media Foundation: the Chromium Headless Shell tests do not use media APIs.

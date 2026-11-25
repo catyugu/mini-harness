@@ -19,16 +19,29 @@ function storagePath(service: object, directory: string, name: string, secret = 
   if (relative(root, realpathSync(root))) throw new Error('Plugin data directory was redirected');
   const file = join(root, (secret ? '.' : '') + name + '.json');
   const entry = lstatSync(file, { throwIfNoEntry: false });
-  if (entry && (!entry.isFile() || entry.nlink !== 1 || (secret && process.platform !== 'win32' &&
-      (entry.uid !== process.getuid?.() || (entry.mode & 0o077) !== 0)))) throw new Error('Invalid plugin data file');
+  if (
+    entry &&
+    (!entry.isFile() ||
+      entry.nlink !== 1 ||
+      (secret &&
+        process.platform !== 'win32' &&
+        (entry.uid !== process.getuid?.() || (entry.mode & 0o077) !== 0)))
+  )
+    throw new Error('Invalid plugin data file');
   return file;
 }
 
 export function pluginData(directory: string): PluginData {
   return Service.track({
-    read(name, fallback) { return readJson(storagePath(this, directory, name), fallback); },
-    write(name, value) { writeJson(storagePath(this, directory, name), value); },
-    remove(name) { rmSync(storagePath(this, directory, name), { force: true }); }
+    read(name, fallback) {
+      return readJson(storagePath(this, directory, name), fallback);
+    },
+    write(name, value) {
+      writeJson(storagePath(this, directory, name), value);
+    },
+    remove(name) {
+      rmSync(storagePath(this, directory, name), { force: true });
+    },
   });
 }
 
@@ -42,20 +55,28 @@ export function pluginSecrets(directory: string): PluginSecrets {
       return windows ? protectLocal('Unprotect', Buffer.from(value, 'base64')).toString('utf8') : value;
     },
     write(name, value) {
-      if (typeof value !== 'string' || Buffer.byteLength(value) > 16384) throw new Error('Invalid protected plugin data');
-      writeJson(storagePath(this, directory, name, true), windows ? protectLocal('Protect', Buffer.from(value)).toString('base64') : value);
+      if (typeof value !== 'string' || Buffer.byteLength(value) > 16384)
+        throw new Error('Invalid protected plugin data');
+      writeJson(
+        storagePath(this, directory, name, true),
+        windows ? protectLocal('Protect', Buffer.from(value)).toString('base64') : value,
+      );
     },
-    remove(name) { rmSync(storagePath(this, directory, name, true), { force: true }); }
+    remove(name) {
+      rmSync(storagePath(this, directory, name, true), { force: true });
+    },
   });
 }
 
 export function removeScopeData(root: string, keys: ReadonlySet<ScopeKey>) {
   const info = lstatSync(root, { throwIfNoEntry: false });
   if (!info) return;
-  if (!info.isDirectory() || relative(root, realpathSync(root))) throw new Error('Plugin data directory has been redirected');
+  if (!info.isDirectory() || relative(root, realpathSync(root)))
+    throw new Error('Plugin data directory has been redirected');
   const instances = [...keys].map((key) => createHash('sha256').update(key).digest('hex'));
   for (const entry of readdirSync(root, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
-    for (const instance of instances) rmSync(join(root, entry.name, instance), { recursive: true, force: true });
+    for (const instance of instances)
+      rmSync(join(root, entry.name, instance), { recursive: true, force: true });
   }
 }

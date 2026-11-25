@@ -8,12 +8,49 @@ export const textLimit = 512 * 1024;
 export const workspaceReadLimit = 16 * 1024 * 1024;
 export const imageMime = /^image\/(?:png|jpeg|gif|webp|avif)$/;
 export const videoMime = /^video\/(?:mp4|webm|ogg|quicktime|x-m4v)$/;
-export const extension = (name: string) => name.split('/').at(-1)?.match(/\.([^.]*)$/)?.[1].toLowerCase() ?? '';
-export const codeExtensions = new Set(['ts', 'tsx', 'js', 'jsx', 'mjs', 'py', 'rs', 'go', 'c', 'cpp', 'h', 'hpp', 'java', 'cs', 'css', 'html', 'json', 'yaml', 'yml', 'toml', 'sh', 'sql']);
+export const extension = (name: string) =>
+  name
+    .split('/')
+    .at(-1)
+    ?.match(/\.([^.]*)$/)?.[1]
+    .toLowerCase() ?? '';
+export const codeExtensions = new Set([
+  'ts',
+  'tsx',
+  'js',
+  'jsx',
+  'mjs',
+  'py',
+  'rs',
+  'go',
+  'c',
+  'cpp',
+  'h',
+  'hpp',
+  'java',
+  'cs',
+  'css',
+  'html',
+  'json',
+  'yaml',
+  'yml',
+  'toml',
+  'sh',
+  'sql',
+]);
 
 const mediaByExtension: Record<string, string> = {
-  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', avif: 'image/avif',
-  mp4: 'video/mp4', m4v: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm', ogv: 'video/ogg',
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  avif: 'image/avif',
+  mp4: 'video/mp4',
+  m4v: 'video/mp4',
+  mov: 'video/quicktime',
+  webm: 'video/webm',
+  ogv: 'video/ogg',
 };
 
 export function mediaType(name: string, mimeType = '') {

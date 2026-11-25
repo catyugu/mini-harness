@@ -3,20 +3,31 @@ import type { LlmPort, LlmRequest, NativeAssistantMessage } from '@mini-harness/
 import type { ModelFailure, ModelRetry } from './events.js';
 
 function failedMessage({ model, signal }: LlmRequest, error: unknown, partial = ''): NativeAssistantMessage {
-  return { role: 'assistant', content: partial ? [{ type: 'text', text: partial }] : [], timestamp: Date.now(),
-    provider: model.provider, model: model.id, stopReason: signal.aborted ? 'aborted' : 'error',
-    errorMessage: error instanceof Error ? error.message : String(error) };
+  return {
+    role: 'assistant',
+    content: partial ? [{ type: 'text', text: partial }] : [],
+    timestamp: Date.now(),
+    provider: model.provider,
+    model: model.id,
+    stopReason: signal.aborted ? 'aborted' : 'error',
+    errorMessage: error instanceof Error ? error.message : String(error),
+  };
 }
 
-export async function requestModel(llm: LlmPort, request: LlmRequest, options: {
-  delta(text: string): void;
-  ended(attempt: number, failed: boolean): void;
-  retry?(failure: ModelFailure): Promise<ModelRetry | undefined>;
-}): Promise<NativeAssistantMessage> {
+export async function requestModel(
+  llm: LlmPort,
+  request: LlmRequest,
+  options: {
+    delta(text: string): void;
+    ended(attempt: number, failed: boolean): void;
+    retry?(failure: ModelFailure): Promise<ModelRetry | undefined>;
+  },
+): Promise<NativeAssistantMessage> {
   const { signal, model, sessionId } = request;
   for (let attempt = 1; ; attempt++) {
     let message: NativeAssistantMessage | undefined;
-    let streamed = false, partial = '';
+    let streamed = false,
+      partial = '';
     try {
       signal.throwIfAborted();
       for await (const event of llm.stream(request)) {
@@ -34,13 +45,27 @@ export async function requestModel(llm: LlmPort, request: LlmRequest, options: {
     } catch (error) {
       message = failedMessage(request, error, partial);
     }
-    const failed = !!message.errorMessage || message.stopReason === 'error' || message.stopReason === 'aborted';
+    const failed =
+      !!message.errorMessage || message.stopReason === 'error' || message.stopReason === 'aborted';
     options.ended(attempt, failed);
-    if (!failed || streamed || message.content.length || signal.aborted || message.stopReason === 'aborted' || attempt >= 3)
+    if (
+      !failed ||
+      streamed ||
+      message.content.length ||
+      signal.aborted ||
+      message.stopReason === 'aborted' ||
+      attempt >= 3
+    )
       return message;
     try {
       if (!sessionId) return message; // A plugin retry requires an owned conversation.
-      const retry = await options.retry?.({ sessionId, model, attempt, signal, error: message.errorMessage || 'Model request failed' });
+      const retry = await options.retry?.({
+        sessionId,
+        model,
+        attempt,
+        signal,
+        error: message.errorMessage || 'Model request failed',
+      });
       if (!retry) return message;
       if (retry.delayMs) await sleep(retry.delayMs, undefined, { signal });
     } catch (error) {

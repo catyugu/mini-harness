@@ -10,7 +10,8 @@ export interface BrowserPrimitives {
   menu(label: string, items: HTMLElement[]): HTMLElement;
 }
 
-
 declare module 'mini-harness/cordis' {
-  interface Context { miniPrimitives: BrowserPrimitives }
+  interface Context {
+    miniPrimitives: BrowserPrimitives;
+  }
 }

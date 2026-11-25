@@ -14,11 +14,14 @@ export class KeyedRegistry<Key, Value> {
 
   get(key: Key) {
     let selected: { value: Value; order: number } | undefined;
-    for (const entry of this.entries.get(key) ?? []) if (!selected || entry.order >= selected.order) selected = entry;
+    for (const entry of this.entries.get(key) ?? [])
+      if (!selected || entry.order >= selected.order) selected = entry;
     return selected?.value;
   }
 
-  get size() { return this.entries.size; }
+  get size() {
+    return this.entries.size;
+  }
 
   *values() {
     for (const key of this.entries.keys()) yield this.get(key)!;

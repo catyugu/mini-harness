@@ -4,7 +4,8 @@ export function references(text: string) {
   for (const match of text.matchAll(/(?<!\S)@("(?:\\[^\r\n]|[^"\\\r\n])*")/g)) {
     try {
       const path: string = JSON.parse(match[1]);
-      if (path && !path.includes('\0')) result.push({ start: match.index, end: match.index + match[0].length, path });
+      if (path && !path.includes('\0'))
+        result.push({ start: match.index, end: match.index + match[0].length, path });
     } catch {
       // Keep unfinished or malformed input as literal text.
     }
@@ -18,7 +19,7 @@ export function referenceButton(path: string, open: (path: string) => void) {
   button.className = 'file-reference';
   button.textContent = path;
   button.title = path;
-  button.addEventListener('mousedown', event => event.preventDefault());
+  button.addEventListener('mousedown', (event) => event.preventDefault());
   button.addEventListener('click', () => open(path));
   return button;
 }

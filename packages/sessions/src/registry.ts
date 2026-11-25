@@ -14,7 +14,14 @@ import type { CapabilityObservation } from '@mini-harness/plugin-api/observation
 import type { ConversationPermission, SessionRecord } from './shared/identity.js';
 import { SessionLog, syncDirectory } from './log.js';
 import { loadCatalog, type CatalogState } from './catalog.js';
-import { attachmentDirectory, deleteAttachments, missing, nativeFile, readAttachmentFile, storeAttachments } from './storage.js';
+import {
+  attachmentDirectory,
+  deleteAttachments,
+  missing,
+  nativeFile,
+  readAttachmentFile,
+  storeAttachments,
+} from './storage.js';
 import { prepareInput } from '@mini-harness/input/prepare';
 import type { Attachment } from '@mini-harness/input/message';
 
@@ -32,13 +39,20 @@ export class SessionRegistry implements SessionStore {
   private pendingDeletion = Promise.resolve();
   readonly events = new EventTarget();
 
-  constructor(private readonly paths: Paths, private readonly workspaces: WorkspacePort,
-    private readonly scopes?: ScopePort, private readonly observe?: (event: CapabilityObservation) => void,
-    private readonly forgetScopes?: (keys: ScopeKey[]) => Promise<void>) {
+  constructor(
+    private readonly paths: Paths,
+    private readonly workspaces: WorkspacePort,
+    private readonly scopes?: ScopePort,
+    private readonly observe?: (event: CapabilityObservation) => void,
+    private readonly forgetScopes?: (keys: ScopeKey[]) => Promise<void>,
+  ) {
     this.state = loadCatalog(paths, workspaces);
     for (const record of this.state.sessions) {
-      try { this.openLog(record, 'recover')?.close(); }
-      catch (error) { if (!(error instanceof DomainError && error.code === 'unavailable')) throw error; }
+      try {
+        this.openLog(record, 'recover')?.close();
+      } catch (error) {
+        if (!(error instanceof DomainError && error.code === 'unavailable')) throw error;
+      }
     }
   }
 
@@ -53,7 +67,8 @@ export class SessionRegistry implements SessionStore {
   }
 
   list(workspaceId?: string) {
-    return this.state.sessions.filter((entry) => !workspaceId || entry.workspaceId === workspaceId)
+    return this.state.sessions
+      .filter((entry) => !workspaceId || entry.workspaceId === workspaceId)
       .map((entry) => ({ ...entry }));
   }
 
@@ -70,7 +85,9 @@ export class SessionRegistry implements SessionStore {
 
   beforeDelete(handler: Participant) {
     this.participants.add(handler);
-    return () => { this.participants.delete(handler); };
+    return () => {
+      this.participants.delete(handler);
+    };
   }
 
   /** Stop accepting work; existing writers remain available while runs drain. */
@@ -85,19 +102,31 @@ export class SessionRegistry implements SessionStore {
     this.logs.clear();
   }
 
-  create({ parentId = null, title, workspaceId, permission = 'standard' }: Parameters<SessionStore['create']>[0] = {}) {
+  create({
+    parentId = null,
+    title,
+    workspaceId,
+    permission = 'standard',
+  }: Parameters<SessionStore['create']>[0] = {}) {
     const parent = parentId ? this.get(parentId) : undefined;
     if (parentId && !parent) throw new DomainError('not_found', 'Parent conversation not found');
     if (parent && workspaceId !== undefined && workspaceId !== parent.workspaceId)
       throw new DomainError('invalid_input', 'Conversation workspace does not match its parent');
     const targetWorkspace = parent?.workspaceId ?? workspaceId ?? this.workspaces.defaultId;
-    if (!targetWorkspace) throw new DomainError('invalid_input', 'Create a workspace before starting a conversation');
+    if (!targetWorkspace)
+      throw new DomainError('invalid_input', 'Create a workspace before starting a conversation');
     const workspace = this.workspaces.get(targetWorkspace);
     this.assertAvailable(parentId ?? undefined, workspace.id);
     this.workspaces.resolveRoot(workspace.path, workspace.id);
-    const session: SessionRecord = { id: randomUUID(), title: title?.slice(0, 140) || 'New conversation',
-      titleSource: title ? 'manual' : 'auto', workspaceId: workspace.id, parentId, createdAt: new Date().toISOString(),
-      permission };
+    const session: SessionRecord = {
+      id: randomUUID(),
+      title: title?.slice(0, 140) || 'New conversation',
+      titleSource: title ? 'manual' : 'auto',
+      workspaceId: workspace.id,
+      parentId,
+      createdAt: new Date().toISOString(),
+      permission,
+    };
     this.commit({ ...this.state, sessions: [...this.state.sessions, session] });
     this.notify(session.id);
     this.observe?.({ type: 'session-created', sessionId: session.id });
@@ -108,7 +137,10 @@ export class SessionRegistry implements SessionStore {
     const item = this.get(id);
     if (!item) throw new DomainError('not_found', 'Conversation not found');
     const updated = { ...item, ...patch };
-    this.commit({ ...this.state, sessions: this.state.sessions.map((entry) => entry.id === id ? updated : entry) });
+    this.commit({
+      ...this.state,
+      sessions: this.state.sessions.map((entry) => (entry.id === id ? updated : entry)),
+    });
     this.notify(id);
     return { ...updated };
   }
@@ -121,11 +153,14 @@ export class SessionRegistry implements SessionStore {
   rename(id: string, title: string, source: SessionRecord['titleSource'] = 'manual') {
     const record = this.get(id);
     if (!record) throw new DomainError('not_found', 'Conversation not found');
-    if (source === 'auto' && (record.titleSource === 'manual' || record.title !== 'New conversation')) return record;
+    if (source === 'auto' && (record.titleSource === 'manual' || record.title !== 'New conversation'))
+      return record;
     return this.replace(id, { title, titleSource: source });
   }
 
-  private nativeFile(record: Pick<SessionRecord, 'id' | 'workspaceId'>) { return nativeFile(this.paths, this.workspaces, record); }
+  private nativeFile(record: Pick<SessionRecord, 'id' | 'workspaceId'>) {
+    return nativeFile(this.paths, this.workspaces, record);
+  }
 
   prepareInput(id: string, text: unknown, attachments?: Attachment[]) {
     this.assertAvailable(id);
@@ -159,9 +194,13 @@ export class SessionRegistry implements SessionStore {
     return run && structuredClone(run);
   }
 
-  logError(id: string) { return this.logErrors.get(id); }
+  logError(id: string) {
+    return this.logErrors.get(id);
+  }
 
-  diagnostics() { return [...this.logErrors].map(([id, message]) => ({ id, message })); }
+  diagnostics() {
+    return [...this.logErrors].map(([id, message]) => ({ id, message }));
+  }
 
   private fault(id: string, error: unknown) {
     const detail = error instanceof Error ? error.message : String(error);
@@ -177,7 +216,7 @@ export class SessionRegistry implements SessionStore {
     const onChange = (entry: SessionEntry) => {
       if (entry.type === 'run') this.latestRuns.set(id, entry.run);
       const inbox = entry.type.startsWith('inbox-');
-      if (inbox || entry.type === 'message' && entry.inboxId) this.notify(id, false, true);
+      if (inbox || (entry.type === 'message' && entry.inboxId)) this.notify(id, false, true);
       if (!inbox && entry.type !== 'model-request' && entry.type !== 'tool-schema')
         this.notify(id, false, false, entry.type === 'plugin-record');
     };
@@ -185,11 +224,18 @@ export class SessionRegistry implements SessionStore {
     try {
       const file = nativeFile(this.paths, this.workspaces, record, mode === 'write');
       if (mode === 'recover') lstatSync(file);
-      log = new SessionLog(file, id, record.createdAt, writable ? onChange : undefined, !writable, (error) => {
-        if (this.logs.get(id) === log) this.logs.delete(id);
-        this.latestRuns.delete(id);
-        this.fault(id, error);
-      });
+      log = new SessionLog(
+        file,
+        id,
+        record.createdAt,
+        writable ? onChange : undefined,
+        !writable,
+        (error) => {
+          if (this.logs.get(id) === log) this.logs.delete(id);
+          this.latestRuns.delete(id);
+          this.fault(id, error);
+        },
+      );
       if (writable) {
         log.recover();
         const run = log.latestRun;
@@ -201,8 +247,12 @@ export class SessionRegistry implements SessionStore {
     } catch (error) {
       log?.close();
       if (mode !== 'write' && missing(error)) return;
-      this.fault(id, error instanceof Error ? error.cause ?? error : error);
-      throw new DomainError('unavailable', 'This conversation log could not be opened. See session diagnostics.', { cause: error });
+      this.fault(id, error instanceof Error ? (error.cause ?? error) : error);
+      throw new DomainError(
+        'unavailable',
+        'This conversation log could not be opened. See session diagnostics.',
+        { cause: error },
+      );
     }
   }
 
@@ -238,8 +288,11 @@ export class SessionRegistry implements SessionStore {
     try {
       const log = this.openLog(record, 'read');
       if (!log) return;
-      try { return read(log); }
-      finally { log.close(); }
+      try {
+        return read(log);
+      } finally {
+        log.close();
+      }
     } catch (error) {
       if (!strict && error instanceof DomainError && error.code === 'unavailable') return;
       throw error;
@@ -250,16 +303,28 @@ export class SessionRegistry implements SessionStore {
     this.assertAvailable(id);
     if (!this.get(id)) throw new DomainError('not_found', 'Conversation not found');
     return {
-      list: () => this.inspectLog(id, (log) => log.branch().flatMap((entry) => {
-        return entry.type === 'plugin-record' && entry.owner.instanceId === owner.instanceId && entry.owner.pluginId === owner.pluginId
-          ? [{ id: entry.id, timestamp: entry.timestamp, data: structuredClone(entry.data) }] : [];
-      }), true) ?? [],
+      list: () =>
+        this.inspectLog(
+          id,
+          (log) =>
+            log.branch().flatMap((entry) => {
+              return entry.type === 'plugin-record' &&
+                entry.owner.instanceId === owner.instanceId &&
+                entry.owner.pluginId === owner.pluginId
+                ? [{ id: entry.id, timestamp: entry.timestamp, data: structuredClone(entry.data) }]
+                : [];
+            }),
+          true,
+        ) ?? [],
       append: async (data, display?: RecordDisplay) => {
         this.assertAvailable(id);
-        if (display && (typeof display.title !== 'string' || !display.title.trim() || display.title.length > 140))
+        if (
+          display &&
+          (typeof display.title !== 'string' || !display.title.trim() || display.title.length > 140)
+        )
           throw new DomainError('invalid_input', 'Invalid session display title');
         return this.log(id).append({ type: 'plugin-record', owner, data, display }).id;
-      }
+      },
     };
   }
 
@@ -284,7 +349,8 @@ export class SessionRegistry implements SessionStore {
   }
 
   descendants(ids: string[]) {
-    if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string' || !this.get(id))) throw new DomainError('invalid_input', 'Unknown conversation');
+    if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string' || !this.get(id)))
+      throw new DomainError('invalid_input', 'Unknown conversation');
     const children = new Map<string | null, string[]>();
     for (const { id, parentId } of this.state.sessions) {
       const siblings = children.get(parentId) ?? [];
@@ -297,8 +363,11 @@ export class SessionRegistry implements SessionStore {
   }
 
   modifiedAt(record: SessionRecord) {
-    try { return lstatSync(nativeFile(this.paths, this.workspaces, record, false)).mtime.toISOString(); }
-    catch { return record.createdAt; }
+    try {
+      return lstatSync(nativeFile(this.paths, this.workspaces, record, false)).mtime.toISOString();
+    } catch {
+      return record.createdAt;
+    }
   }
 
   export(ids: string[]) {
@@ -312,7 +381,12 @@ export class SessionRegistry implements SessionStore {
       const log = this.log(id);
       const attachments: Record<string, string> = {};
       for (const entry of log.entries()) {
-        const input = entry.type === 'message' ? entry.presentation : entry.type === 'inbox-enqueued' ? entry.item.input : undefined;
+        const input =
+          entry.type === 'message'
+            ? entry.presentation
+            : entry.type === 'inbox-enqueued'
+              ? entry.item.input
+              : undefined;
         for (const file of input?.attachments ?? []) {
           if (!file.id || Object.hasOwn(attachments, file.id)) continue;
           const bytes = this.readAttachment(id, file.id);
@@ -342,7 +416,8 @@ export class SessionRegistry implements SessionStore {
 
   private async deleteTree(ids: string[]) {
     const all = this.descendants(ids);
-    if (all.some((id) => this.deleting.has(id))) throw new DomainError('conflict', 'Conversation is being deleted');
+    if (all.some((id) => this.deleting.has(id)))
+      throw new DomainError('conflict', 'Conversation is being deleted');
     for (const id of all) this.deleting.add(id);
     try {
       const participants = [...this.participants];
@@ -351,7 +426,9 @@ export class SessionRegistry implements SessionStore {
       this.pendingDeletion = operation.catch(() => {});
       await operation;
       return all;
-    } finally { for (const id of all) this.deleting.delete(id); }
+    } finally {
+      for (const id of all) this.deleting.delete(id);
+    }
   }
 
   private async deleteRecords(all: string[]) {
@@ -369,7 +446,11 @@ export class SessionRegistry implements SessionStore {
     });
     if (all.length) {
       const locations = all.map((id) => ({ id, keys: this.scopes?.address(`session:${id}`) ?? [] }));
-      this.commit({ ...this.state, sessions: this.state.sessions.filter((entry) => !chosen.has(entry.id)), pendingDelete });
+      this.commit({
+        ...this.state,
+        sessions: this.state.sessions.filter((entry) => !chosen.has(entry.id)),
+        pendingDelete,
+      });
       await this.recoverDeletion();
       for (const { id, keys } of locations) {
         this.notify(id, true);
@@ -383,11 +464,15 @@ export class SessionRegistry implements SessionStore {
     if (!pending?.length) return;
     await this.forgetScopes?.(pending.map<ScopeKey>(({ id }) => `session:${id}`));
     for (const entry of pending) {
-      if (this.state.sessions.some((record) => record.id === entry.id)) throw new Error('Deletion journal includes an active conversation');
+      if (this.state.sessions.some((record) => record.id === entry.id))
+        throw new Error('Deletion journal includes an active conversation');
       const file = this.nativeFile(entry);
       deleteAttachments(file);
-      try { unlinkSync(file); }
-      catch (error) { if (!missing(error)) throw error; }
+      try {
+        unlinkSync(file);
+      } catch (error) {
+        if (!missing(error)) throw error;
+      }
       syncDirectory(dirname(file));
     }
     this.commit({ sessions: this.state.sessions });

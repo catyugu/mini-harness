@@ -13,32 +13,15 @@
     "skipLibCheck": true,
     "esModuleInterop": true,
     "resolveJsonModule": true,
-    "lib": [
-      "ES2022",
-      "DOM",
-      "DOM.Iterable"
-    ],
-    "types": [
-      "node"
-    ],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["node"],
     "declaration": true,
     "declarationDir": "dist/types",
     "rewriteRelativeImportExtensions": true,
     "paths": {
-      "mini-harness/cordis": [
-        "./vendor/cordis/src/index.ts"
-      ]
+      "mini-harness/cordis": ["./vendor/cordis/src/index.ts"]
     }
   },
-  "include": [
-    "vendor/**/*.ts",
-    "bin/**/*.ts",
-    "packages/**/*.ts",
-    "test/**/*.ts",
-    "scripts/**/*.ts"
-  ],
-  "exclude": [
-    "dist",
-    "node_modules"
-  ]
+  "include": ["vendor/**/*.ts", "bin/**/*.ts", "packages/**/*.ts", "test/**/*.ts", "scripts/**/*.ts"],
+  "exclude": ["dist", "node_modules"]
 }

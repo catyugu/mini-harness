@@ -8,10 +8,12 @@ export class ProjectionChanges implements ProjectionPort {
 
   register(domain: string) {
     let state = this.domains.get(domain);
-    if (!state) this.domains.set(domain, state = { mounts: 0, revision: 0 });
+    if (!state) this.domains.set(domain, (state = { mounts: 0, revision: 0 }));
     state.mounts++;
     const registered = state;
-    return () => { registered.mounts--; };
+    return () => {
+      registered.mounts--;
+    };
   }
 
   invalidate(domain: string, scope: { sessionId?: string; workspaceId?: string } = {}) {
@@ -22,12 +24,16 @@ export class ProjectionChanges implements ProjectionPort {
   }
 
   snapshot(): ProjectionNotice {
-    return { type: 'snapshot', revisions: Object.fromEntries(
-      [...this.domains].map(([domain, { revision }]) => [domain, revision])) };
+    return {
+      type: 'snapshot',
+      revisions: Object.fromEntries([...this.domains].map(([domain, { revision }]) => [domain, revision])),
+    };
   }
 
   subscribe(listener: ChangesListener) {
     this.listeners.add(listener);
-    return () => { this.listeners.delete(listener); };
+    return () => {
+      this.listeners.delete(listener);
+    };
   }
 }

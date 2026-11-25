@@ -14,24 +14,41 @@ const slots = {
   'conversation.header': 'conversationExtensions',
   'workspace.header': 'workspaceHeader',
   'conversation.body': 'conversationSlot',
-  'dialog.root': 'dialogSlot'
+  'dialog.root': 'dialogSlot',
 } as const;
 
 const setup = (ctx: Context) => {
   const signal = ctx.fiber.signal;
-  const { layout, pages, header, tabs, dialogs, outlet } = createAppFrame(ctx.miniPrimitives, ctx.miniSlots, signal);
+  const { layout, pages, header, tabs, dialogs, outlet } = createAppFrame(
+    ctx.miniPrimitives,
+    ctx.miniSlots,
+    signal,
+  );
   ctx.provide('miniLayout', layout);
   ctx.provide('miniPages', pages);
   ctx.provide('miniHeader', header);
   ctx.provide('miniTabs', tabs);
   ctx.provide('miniDialogs', dialogs);
   for (const name of Object.keys(slots) as Array<keyof typeof slots>)
-    ctx.effect(() => ctx.miniSlots.define(name, outlet(name), name === 'conversation.body' || name === 'workspace.header' ? 'single' : 'list'));
-
+    ctx.effect(() =>
+      ctx.miniSlots.define(
+        name,
+        outlet(name),
+        name === 'conversation.body' || name === 'workspace.header' ? 'single' : 'list',
+      ),
+    );
 };
-export default { inject: ['miniSlots','miniPrimitives'], provide: ['miniLayout','miniPages','miniHeader','miniTabs','miniDialogs'], apply: setup };
+export default {
+  inject: ['miniSlots', 'miniPrimitives'],
+  provide: ['miniLayout', 'miniPages', 'miniHeader', 'miniTabs', 'miniDialogs'],
+  apply: setup,
+};
 
-function createAppFrame(primitives: BrowserPrimitives, slotRegistry: Context['miniSlots'], signal: AbortSignal) {
+function createAppFrame(
+  primitives: BrowserPrimitives,
+  slotRegistry: Context['miniSlots'],
+  signal: AbortSignal,
+) {
   const root = fromMarkup(`<div id="app" class="app">
   <aside id="sidebar" class="sidebar" aria-label="Conversations">
     <div class="sidebar-top">
@@ -66,15 +83,31 @@ function createAppFrame(primitives: BrowserPrimitives, slotRegistry: Context['mi
   document.body.append(root);
   signal.addEventListener('abort', () => root.remove(), { once: true });
   const { element } = scopedElements(root);
-  const layout = createLayout({
-    root, sidebar: element('sidebar'), sidebarButton: element('sidebarOpen'), sidebarClose: element('sidebarClose'),
-    main: element('main'), overlay: element('overlay'), panel: element('inspector'),
-    panelButton: element('inspectorOpen'), panelClose: element('inspectorClose'), resizeHandle: element('panelResize')
-  }, signal);
-  const tabs = createRightTabs({
-    root: element('inspector'), bar: element('rightTabList'),
-    body: element('inspectorContent'), toggle: element<'button'>('inspectorOpen')
-  }, layout, signal);
+  const layout = createLayout(
+    {
+      root,
+      sidebar: element('sidebar'),
+      sidebarButton: element('sidebarOpen'),
+      sidebarClose: element('sidebarClose'),
+      main: element('main'),
+      overlay: element('overlay'),
+      panel: element('inspector'),
+      panelButton: element('inspectorOpen'),
+      panelClose: element('inspectorClose'),
+      resizeHandle: element('panelResize'),
+    },
+    signal,
+  );
+  const tabs = createRightTabs(
+    {
+      root: element('inspector'),
+      bar: element('rightTabList'),
+      body: element('inspectorContent'),
+      toggle: element<'button'>('inspectorOpen'),
+    },
+    layout,
+    signal,
+  );
 
   const pageViews = new Map<string, HTMLElement>();
   let selectedPage: string | undefined;
@@ -89,7 +122,11 @@ function createAppFrame(primitives: BrowserPrimitives, slotRegistry: Context['mi
       if (entry.dataset.pageLink === id) entry.setAttribute('aria-current', 'page');
       else entry.removeAttribute('aria-current');
     }
-    if (id) { layout.setPanel(false); layout.closeDrawer(false); pageViews.get(id)?.focus(); }
+    if (id) {
+      layout.setPanel(false);
+      layout.closeDrawer(false);
+      pageViews.get(id)?.focus();
+    }
   }
   const pages = {
     open: selectPage,
@@ -109,32 +146,57 @@ function createAppFrame(primitives: BrowserPrimitives, slotRegistry: Context['mi
       entry.classList.add('nav-action');
       entry.dataset.pageLink = id;
       entry.addEventListener('click', () => selectPage(id), { signal: lifetime });
-      const frame = fromMarkup('<section class="plugin-page" tabindex="-1"><header><h1></h1></header><div class="plugin-page-body"></div></section>');
+      const frame = fromMarkup(
+        '<section class="plugin-page" tabindex="-1"><header><h1></h1></header><div class="plugin-page-body"></div></section>',
+      );
       required(frame.querySelector('h1')).textContent = title;
       required(frame.querySelector('.plugin-page-body')).append(content);
       const unregister = pages.register(id, frame);
       try {
         const release = slotRegistry.register('sidebar.actions', entry, order);
-        return () => { try { release(); } finally { unregister(); } };
+        return () => {
+          try {
+            release();
+          } finally {
+            unregister();
+          }
+        };
       } catch (error) {
         unregister();
         throw error;
       }
-    }
+    },
   };
   const dialogs = {
     create(title: string, content: HTMLElement) {
       const node = primitives.dialog(title, content);
       const release = slotRegistry.register('dialog.root', node);
-      return { node, dispose() { node.close(); release(); } };
-    }
+      return {
+        node,
+        dispose() {
+          node.close();
+          release();
+        },
+      };
+    },
   };
   const header = {
-    setTitle: (title: string) => { element('conversationTitle').textContent = title; },
-    showWorkspace: (show: boolean) => { element('workspaceHeader').hidden = !show; }
+    setTitle: (title: string) => {
+      element('conversationTitle').textContent = title;
+    },
+    showWorkspace: (show: boolean) => {
+      element('workspaceHeader').hidden = !show;
+    },
   };
   const ui = {
-    closeDrawer: layout.closeDrawer
+    closeDrawer: layout.closeDrawer,
   };
-  return { layout: ui, header, pages, tabs, dialogs, outlet: (name: keyof typeof slots) => element(slots[name]) };
+  return {
+    layout: ui,
+    header,
+    pages,
+    tabs,
+    dialogs,
+    outlet: (name: keyof typeof slots) => element(slots[name]),
+  };
 }

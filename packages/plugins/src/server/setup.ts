@@ -12,7 +12,7 @@ export function setup(ctx: Context) {
   const host = () => ({
     paths: { plugins: ctx.harnessState.paths.plugins },
     settings: ctx.harnessSettingsStore.settings,
-    plugins: ctx.harnessPluginCatalog
+    plugins: ctx.harnessPluginCatalog,
   });
   const add = (method: string, path: string, handler: Parameters<typeof ctx.harnessRoutes.register>[2]) =>
     ctx.effect(() => ctx.harnessRoutes.register(method, path, handler));
@@ -27,7 +27,14 @@ export function setup(ctx: Context) {
     });
   });
   add('POST', '/api/plugins/:id/scopes/:scope/:operation', async ({ params, body, signal }) =>
-    ctx.harnessPluginCatalog.requestScope(params.id, params.scope, params.operation, (await body())?.input, signal));
+    ctx.harnessPluginCatalog.requestScope(
+      params.id,
+      params.scope,
+      params.operation,
+      (await body())?.input,
+      signal,
+    ),
+  );
   add('GET', '/api/plugins/diagnostics', () => ctx.harnessPluginCatalog.diagnostics());
   add('GET', '/api/plugins', () => ctx.harnessPluginCatalog.metadata());
   add('POST', '/api/plugins/install', async ({ body }) => {
@@ -41,9 +48,11 @@ export function setup(ctx: Context) {
   add('DELETE', '/api/plugins/:id', ({ params }) =>
     ctx.harnessMutations.run(async () => {
       const root = join(ctx.harnessState.paths.home, 'plugin-data');
-      const metadata = await ctx.harnessSettingsStore.forgetPlugin(params.id, entries =>
-        stagePluginRemoval(host(), params.id, entries, root));
+      const metadata = await ctx.harnessSettingsStore.forgetPlugin(params.id, (entries) =>
+        stagePluginRemoval(host(), params.id, entries, root),
+      );
       changed();
       return metadata;
-    }));
+    }),
+  );
 }

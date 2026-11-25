@@ -1,5 +1,7 @@
 export class AuthenticationError extends Error {
-  constructor() { super('Session authorization expired. Open the current URL printed by mini-harness.'); }
+  constructor() {
+    super('Session authorization expired. Open the current URL printed by mini-harness.');
+  }
 }
 export async function api(path: string, options: RequestInit = {}) {
   const token = sessionStorage.getItem('mini-harness-token');
@@ -15,7 +17,9 @@ export async function api(path: string, options: RequestInit = {}) {
   }
   return response;
 }
-export async function data<T>(path: string, options?: RequestInit): Promise<T> { return (await api(path, options)).json(); }
+export async function data<T>(path: string, options?: RequestInit): Promise<T> {
+  return (await api(path, options)).json();
+}
 export const payload = (method: string, body: unknown) => ({ method, body: JSON.stringify(body) });
 
 export async function readEvents<T>(response: Response, accept: (event: T) => void) {
@@ -31,20 +35,33 @@ export async function readEvents<T>(response: Response, accept: (event: T) => vo
       buffer = lines.pop() ?? '';
       for (const line of lines) if (line.trim()) accept(JSON.parse(line));
     }
-  } finally { await reader.cancel().catch(() => {}); }
+  } finally {
+    await reader.cancel().catch(() => {});
+  }
 }
 
 export function wait(ms: number, signal: AbortSignal) {
   if (signal.aborted) return Promise.resolve();
   return new Promise<void>((resolve) => {
-    const finish = () => { clearTimeout(timer); signal.removeEventListener('abort', finish); resolve(); };
+    const finish = () => {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', finish);
+      resolve();
+    };
     const timer = setTimeout(finish, ms);
     signal.addEventListener('abort', finish, { once: true });
   });
 }
 
 /** Authenticated request cancelled with both the caller and its UI plugin. */
-export function browserRequest<T>(ctx: import('mini-harness/cordis').Context, path: string, options?: RequestInit) {
+export function browserRequest<T>(
+  ctx: import('mini-harness/cordis').Context,
+  path: string,
+  options?: RequestInit,
+) {
   const lifetime = ctx.fiber.signal;
-  return data<T>(path, { ...options, signal: options?.signal ? AbortSignal.any([lifetime, options.signal]) : lifetime });
+  return data<T>(path, {
+    ...options,
+    signal: options?.signal ? AbortSignal.any([lifetime, options.signal]) : lifetime,
+  });
 }

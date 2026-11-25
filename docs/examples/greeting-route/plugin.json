@@ -1,6 +1,4 @@
 {
   "title": "Greeting route",
-  "optional": [
-    "exampleSuffix"
-  ]
+  "optional": ["exampleSuffix"]
 }

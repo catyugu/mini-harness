@@ -14,10 +14,14 @@ export interface SettingsContext {
   readonly signal: AbortSignal;
   readonly configuration: PluginConfiguration;
   /** Keep a control synchronized and return its inline error status. */
-  bind<T>(control: HTMLInputElement | HTMLSelectElement, key: string, binding: {
-    read(value: T): void;
-    write(): T;
-  }): HTMLElement;
+  bind<T>(
+    control: HTMLInputElement | HTMLSelectElement,
+    key: string,
+    binding: {
+      read(value: T): void;
+      write(): T;
+    },
+  ): HTMLElement;
 }
 
 export interface SettingsContribution {
@@ -40,7 +44,11 @@ declare module 'mini-harness/cordis' {
     };
     miniSettingsData: RemoteStore<Settings>;
     miniSettingsRegistry: {
-      register(owner: string, contribution: SettingsContribution, configuration: PluginConfiguration): () => void;
+      register(
+        owner: string,
+        contribution: SettingsContribution,
+        configuration: PluginConfiguration,
+      ): () => void;
       registerPlugin(owner: string, contribution: PluginSettingsContribution): () => void;
       mountPlugin(pluginId: string, container: HTMLElement, signal: AbortSignal): void;
     };

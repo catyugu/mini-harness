@@ -8,7 +8,10 @@ export const manifest: PluginDescriptor = {
   icon: 'list-checks',
   scope: 'application',
   defaultEnabled: true,
-  plugin: { inject: ['harnessRoutes', 'harnessWorkspaces', 'harnessScopes', 'harnessFileAccess'], apply: setup },
+  plugin: {
+    inject: ['harnessRoutes', 'harnessWorkspaces', 'harnessScopes', 'harnessFileAccess'],
+    apply: setup,
+  },
   browser: '/packages/git-diff/src/browser/setup.js',
   browserStyles: ['/packages/git-diff/src/browser/style.css'],
 };

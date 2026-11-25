@@ -8,11 +8,23 @@ function highlight(node: HTMLElement, text: string, start: number, end: number) 
   node.replaceChildren(text.slice(0, start), mark, text.slice(end));
 }
 
-export function sessionTree(sessions: Conversation[], options: {
-  active?: string; expanded: Set<string>; selection: Set<string>; selecting: boolean;
-  query: string; highlight: string; matches: ReadonlyMap<string, SessionSearchResult>; render(): void; selectionChanged(): void;
-  activate(id: string): void; rename(item: Conversation): void; remove(item: Conversation): void;
-}) {
+export function sessionTree(
+  sessions: Conversation[],
+  options: {
+    active?: string;
+    expanded: Set<string>;
+    selection: Set<string>;
+    selecting: boolean;
+    query: string;
+    highlight: string;
+    matches: ReadonlyMap<string, SessionSearchResult>;
+    render(): void;
+    selectionChanged(): void;
+    activate(id: string): void;
+    rename(item: Conversation): void;
+    remove(item: Conversation): void;
+  },
+) {
   const { active, expanded, selection, selecting, query } = options;
   const { children, visible } = sessionHierarchy(sessions, query, options.matches);
 
@@ -72,7 +84,7 @@ export function sessionTree(sessions: Conversation[], options: {
         actions.className = 'session-actions';
         for (const [name, image, action] of [
           ['Rename', 'edit', () => options.rename(item)],
-          ['Delete', 'trash', () => options.remove(item)]
+          ['Delete', 'trash', () => options.remove(item)],
         ] as const) {
           const control = iconButton(name + ' ' + item.title, image);
           control.id = name.toLowerCase() + '-' + item.id;
@@ -87,7 +99,7 @@ export function sessionTree(sessions: Conversation[], options: {
         marker.className = 'run-state';
         marker.dataset.state = status;
         marker.textContent = item.waitingApproval ? 'Approval' : status;
-        marker.title = item.waitingApproval ? 'Waiting for approval' : item.run?.error ?? status;
+        marker.title = item.waitingApproval ? 'Waiting for approval' : (item.run?.error ?? status);
         row.append(marker);
       }
       entry.append(row);

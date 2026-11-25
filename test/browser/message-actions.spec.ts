@@ -5,21 +5,29 @@ import { readJson, writeJson } from '@mini-harness/platform/json';
 import { browserTest as test, chooseModel, expectInViewport } from '../support/browser.js';
 import { writePlugin } from '../support/plugin-fixture.js';
 
-test('copy, preview and revise a message with its image, and release editing drafts by owner', async ({ page, launch }) => {
+test('copy, preview and revise a message with its image, and release editing drafts by owner', async ({
+  page,
+  launch,
+}) => {
   const { host, mock } = await launch({
     reply: ({ messages }) => 'Response: ' + messages.filter((entry) => entry.role === 'user').at(-1)?.content,
     prepare(paths) {
       const modelFile = join(paths.home, 'models.json');
       const models = readJson<{ providers: { 'local-mock': { models: { input: string[] }[] } } }>(modelFile, {
-        providers: { 'local-mock': { models: [] } }
+        providers: { 'local-mock': { models: [] } },
       });
       models.providers['local-mock'].models[0].input.push('image');
       writeJson(modelFile, models);
-      for (const [id, label] of [['old-editor', 'Older draft'], ['new-editor', 'Newer draft']]) {
+      for (const [id, label] of [
+        ['old-editor', 'Older draft'],
+        ['new-editor', 'Newer draft'],
+      ]) {
         const folder = join(paths.plugins, id);
         mkdirSync(folder);
         writeJson(join(folder, 'plugin.json'), {});
-        writeFileSync(join(folder, 'web.js'), `
+        writeFileSync(
+          join(folder, 'web.js'),
+          `
 export const inject = ["miniComposer","miniSlots"];
 
 export const apply = (ctx) => {
@@ -31,9 +39,14 @@ export const apply = (ctx) => {
             }));
             ctx.effect(() => ctx.miniSlots.register('sidebar.actions', control));
           };
-`);
+`,
+        );
       }
-      const records = writePlugin(paths.plugins, 'record-writer', { inject: ['harnessSessions'] }, `
+      const records = writePlugin(
+        paths.plugins,
+        'record-writer',
+        { inject: ['harnessSessions'] },
+        `
 export const inject = ["harnessPluginRoutes","harnessSessions"];
 export const apply = (ctx) => {
           ctx.harnessPluginRoutes.register('POST', '/record', async ({ body }) => {
@@ -41,8 +54,11 @@ export const apply = (ctx) => {
             return ctx.harnessSessions.records(id).append( 'fixture', visible ? { title: 'Saved record' } : undefined);
           });
         };
-`);
-      writeFileSync(join(records, 'web.js'), `
+`,
+      );
+      writeFileSync(
+        join(records, 'web.js'),
+        `
 export const inject = ["miniConversation","miniMessages"];
 import { browserPluginId } from "/packages/sdk/src/browser-plugin.js";
 
@@ -62,10 +78,14 @@ export const apply = (ctx) => {
             throw new Error('fixture record rendering failure');
           }));
         };
-`);
+`,
+      );
       const settings = readJson<Record<string, unknown>>(paths.settings, {});
-      writeJson(paths.settings, { ...settings, plugins: { 'old-editor': true, 'new-editor': true, 'record-writer': true } });
-    }
+      writeJson(paths.settings, {
+        ...settings,
+        plugins: { 'old-editor': true, 'new-editor': true, 'record-writer': true },
+      });
+    },
   });
   const mobile = { width: 390, height: 844 };
   await page.setViewportSize(mobile);
@@ -77,18 +97,25 @@ export const apply = (ctx) => {
   await prompt.fill('Original prompt');
   const picture = await page.evaluate(() => {
     const canvas = document.createElement('canvas');
-    canvas.width = 480; canvas.height = 280;
+    canvas.width = 480;
+    canvas.height = 280;
     return canvas.toDataURL('image/png').split(',')[1];
   });
   await page.locator('#composer input[type=file]').setInputFiles({
-    name: 'reference.png', mimeType: 'image/png', buffer: Buffer.from(picture, 'base64')
+    name: 'reference.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(picture, 'base64'),
   });
   await send.click();
   await expect(assistant.locator('.message')).toHaveText('Response: Original prompt');
   await page.evaluate(() => {
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
-      value: { writeText: async (text: string) => { document.body.dataset.copiedMessage = text; } }
+      value: {
+        writeText: async (text: string) => {
+          document.body.dataset.copiedMessage = text;
+        },
+      },
     });
   });
   await assistant.getByRole('button', { name: 'Copy message' }).click();
@@ -116,7 +143,8 @@ export const apply = (ctx) => {
   expect(sessionId).toBeTruthy();
   for (const visible of [true, false]) {
     const response = await page.request.post(host.url + '/api/extensions/record-writer/record', {
-      headers: { Authorization: 'Bearer ' + host.token }, data: { id: sessionId, visible }
+      headers: { Authorization: 'Bearer ' + host.token },
+      data: { id: sessionId, visible },
     });
     expect(response.ok()).toBe(true);
     const leaf: string = await response.json();
@@ -149,7 +177,8 @@ export const apply = (ctx) => {
   await expect(prompt).toHaveText('Newer draft');
   async function disablePlugin(id: string) {
     const response = await page.request.patch(host.url + '/api/settings', {
-      headers: { Authorization: 'Bearer ' + host.token }, data: { plugins: { [id]: false } }
+      headers: { Authorization: 'Bearer ' + host.token },
+      data: { plugins: { [id]: false } },
     });
     expect(response.ok()).toBe(true);
   }
@@ -175,15 +204,17 @@ test('retry keeps the attachment when switching to an image-capable model', asyn
     prepare(paths) {
       const file = join(paths.home, 'models.json');
       const config = readJson<{ providers: { 'local-mock': { models: Record<string, unknown>[] } } }>(file, {
-        providers: { 'local-mock': { models: [] } }
+        providers: { 'local-mock': { models: [] } },
       });
       const models = config.providers['local-mock'].models;
       models.push({ ...models[0], id: 'vision-model', input: ['text', 'image'] });
       writeJson(file, config);
-    }
+    },
   });
   await page.goto(host.url + '/#token=' + host.token);
-  await page.locator('#composer input[type=file]').setInputFiles(resolve('packages/ui-runtime/src/assets/icon-192.png'));
+  await page
+    .locator('#composer input[type=file]')
+    .setInputFiles(resolve('packages/ui-runtime/src/assets/icon-192.png'));
   const attachment = page.getByRole('button', { name: 'Remove icon-192.png' });
   await expect(attachment).toBeVisible();
   await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Read the picture');
@@ -194,6 +225,8 @@ test('retry keeps the attachment when switching to an image-capable model', asyn
   await page.getByRole('button', { name: 'Retry', exact: true }).click();
   await expect(page.locator('.message.assistant')).toHaveText('Mock response');
   expect(JSON.stringify(mock.requests.at(-1))).toContain('image_url');
-  await expect(page.locator('.message-row.user .message-attachments').getByRole('img', { name: 'icon-192.png' })).toHaveCount(1);
+  await expect(
+    page.locator('.message-row.user .message-attachments').getByRole('img', { name: 'icon-192.png' }),
+  ).toHaveCount(1);
   await expect(attachment).toHaveCount(0);
 });

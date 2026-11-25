@@ -18,9 +18,11 @@ interface Manifest {
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const packages = join(root, 'packages');
 const prefix = '@mini-harness/';
-const manifests = new Map(readdirSync(packages, { withFileTypes: true })
-  .filter((entry) => entry.isDirectory())
-  .map(({ name }) => [name, readManifest(join(packages, name, 'package.json'))]));
+const manifests = new Map(
+  readdirSync(packages, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map(({ name }) => [name, readManifest(join(packages, name, 'package.json'))]),
+);
 
 function readManifest(file: string): Manifest {
   return JSON.parse(readFileSync(file, 'utf8'));
@@ -31,8 +33,12 @@ function sources(directory: string): string[] {
     const { name } = entry;
     const path = join(directory, name);
     return entry.isDirectory()
-      ? name === 'node_modules' || name === 'tests' ? [] : sources(path)
-      : name.endsWith('.ts') && !/\.(?:test|spec)\.ts$/.test(name) ? [path] : [];
+      ? name === 'node_modules' || name === 'tests'
+        ? []
+        : sources(path)
+      : name.endsWith('.ts') && !/\.(?:test|spec)\.ts$/.test(name)
+        ? [path]
+        : [];
   });
 }
 
@@ -60,9 +66,14 @@ test('workspace dependencies use domain APIs and keep providers at the applicati
     assert.equal(manifest.name, prefix + name);
     assert.equal(manifest.private, true, 'Only the root package is published');
     assert.ok(existsSync(join(packages, name, 'README.md')), name + ' is missing its README');
-    assert.ok(readdirSync(join(packages, name)).every((entry) =>
-      ['README.md', 'package.json', 'src', 'tests', 'node_modules'].includes(entry)), name + ' has files outside its package layout');
-    for (const entry of manifest.miniHarness?.api ?? []) assert.ok(manifest.exports?.[entry], name + ' API ' + entry);
+    assert.ok(
+      readdirSync(join(packages, name)).every((entry) =>
+        ['README.md', 'package.json', 'src', 'tests', 'node_modules'].includes(entry),
+      ),
+      name + ' has files outside its package layout',
+    );
+    for (const entry of manifest.miniHarness?.api ?? [])
+      assert.ok(manifest.exports?.[entry], name + ' API ' + entry);
     const directory = join(packages, name);
     const actual = new Set<string>();
     const loaded = new Set<string>();
@@ -72,7 +83,10 @@ test('workspace dependencies use domain APIs and keep providers at the applicati
       browserModules.set(file, imports);
       const area = relative(directory, file).split(sep)[1];
       if (area === 'browser' && !file.endsWith('.d.ts')) browserRoots.push(file);
-      for (const { literal: { text: specifier }, typeOnly } of moduleReferences(source)) {
+      for (const {
+        literal: { text: specifier },
+        typeOnly,
+      } of moduleReferences(source)) {
         const reason = file + ' ' + (typeOnly ? 'references ' : 'loads ') + specifier;
         if (specifier.startsWith('@earendil-works/pi-'))
           assert.equal(file, join(packages, 'models', 'src', 'server', 'pi-adapter.ts'), reason);
@@ -87,7 +101,11 @@ test('workspace dependencies use domain APIs and keep providers at the applicati
         if (specifier === 'mini-harness/cordis') continue;
         assert.ok(specifier !== 'mini-harness/plugin' && specifier !== 'mini-harness/browser-plugin', reason);
         if (['@codemirror/commands', '@codemirror/state', '@codemirror/view'].includes(specifier)) {
-          assert.equal(file, join(packages, 'conversation', 'src', 'browser', 'conversation', 'editor-vendor.ts'), reason);
+          assert.equal(
+            file,
+            join(packages, 'conversation', 'src', 'browser', 'conversation', 'editor-vendor.ts'),
+            reason,
+          );
           continue;
         }
         if (!specifier.startsWith(prefix)) {
@@ -106,11 +124,17 @@ test('workspace dependencies use domain APIs and keep providers at the applicati
         actual.add(owner);
         if (area === 'browser' || area === 'shared')
           assert.ok(!relative(join(packages, owner), target).split(sep).includes('server'), reason);
-        if (!typeOnly) { loaded.add(owner); imports.push(target); }
+        if (!typeOnly) {
+          loaded.add(owner);
+          imports.push(target);
+        }
       }
     }
-    assert.deepEqual(manifest.dependencies ?? {},
-      Object.fromEntries([...actual].map((owner) => [prefix + owner, 'workspace:*'])), name);
+    assert.deepEqual(
+      manifest.dependencies ?? {},
+      Object.fromEntries([...actual].map((owner) => [prefix + owner, 'workspace:*'])),
+      name,
+    );
     declared.set(name, actual);
     runtime.set(name, loaded);
   }
@@ -121,8 +145,10 @@ test('workspace dependencies use domain APIs and keep providers at the applicati
     visited.add(file);
     if (importer) {
       const path = relative(packages, file).split(sep);
-      assert.ok(path[1] === 'src' && (path[2] === 'browser' || path[2] === 'shared'),
-        'Browser module loads ' + file + ' from ' + importer);
+      assert.ok(
+        path[1] === 'src' && (path[2] === 'browser' || path[2] === 'shared'),
+        'Browser module loads ' + file + ' from ' + importer,
+      );
     }
     const imports = browserModules.get(file);
     if (!imports) {
@@ -138,21 +164,31 @@ test('workspace dependencies use domain APIs and keep providers at the applicati
   const browserIds = new Set(plugins.filter(({ browser }) => browser).map(({ id }) => id));
   const descriptorOwners = new Map([...entries].map(([id, row]) => [id, row.name?.split('/')[1]]));
   for (const { id, browser, browserStyles, browserRequires } of plugins) {
-    if (!browser) { assert.ok(!browserStyles?.length, id + ' has styles without a browser entry'); continue; }
+    if (!browser) {
+      assert.ok(!browserStyles?.length, id + ' has styles without a browser entry');
+      continue;
+    }
     const owner = descriptorOwners.get(id);
     assert.ok(owner, id + ' is missing its descriptor owner');
     const prefix = '/packages/' + owner + '/src/browser/';
     for (const resource of [browser, ...(browserStyles ?? [])]) {
       assert.ok(resource.startsWith(prefix), id + ' references a foreign resource: ' + resource);
-      assert.ok(existsSync(join(root, resource.slice(1).replace(/\.js$/, '.ts'))), id + ' is missing ' + resource);
+      assert.ok(
+        existsSync(join(root, resource.slice(1).replace(/\.js$/, '.ts'))),
+        id + ' is missing ' + resource,
+      );
     }
-    for (const dependency of browserRequires ?? []) assert.ok(browserIds.has(dependency), id + ' requires ' + dependency);
+    for (const dependency of browserRequires ?? [])
+      assert.ok(browserIds.has(dependency), id + ' requires ' + dependency);
   }
 
   assert.equal(declared.get('platform')?.size, 0);
-  for (const dependency of declared.get('plugin-api') ?? [])
-    assert.equal(dependency, 'platform');
+  for (const dependency of declared.get('plugin-api') ?? []) assert.equal(dependency, 'platform');
   checkCycles(runtime, 'Runtime dependency');
   checkCycles(declared, 'Workspace dependency');
-  assert.ok(Object.keys(readManifest(join(root, 'package.json')).dependencies ?? {}).every((name) => !name.startsWith(prefix)));
+  assert.ok(
+    Object.keys(readManifest(join(root, 'package.json')).dependencies ?? {}).every(
+      (name) => !name.startsWith(prefix),
+    ),
+  );
 });

@@ -1,5 +1,15 @@
 import { randomUUID } from 'node:crypto';
-import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  closeSync,
+  existsSync,
+  fsyncSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname } from 'node:path';
 
 export function readJson<T>(file: string, fallback: T): T {
@@ -19,7 +29,11 @@ export function writeText(file: string, value: string) {
     try {
       writeFileSync(handle, value);
       fsyncSync(handle);
-    } finally { closeSync(handle); }
+    } finally {
+      closeSync(handle);
+    }
     renameSync(temp, file);
-  } finally { rmSync(temp, { force: true }); }
+  } finally {
+    rmSync(temp, { force: true });
+  }
 }

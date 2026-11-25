@@ -11,14 +11,23 @@ import type {} from '@mini-harness/transport/projection-api';
 
 export const manifest: PluginDescriptor = {
   scope: 'application',
-  id: 'core:models', title: 'Recent model', description: 'Accepted user model selection', defaultEnabled: true,
+  id: 'core:models',
+  title: 'Recent model',
+  description: 'Accepted user model selection',
+  defaultEnabled: true,
   configChanges: 'live',
-  configSchema: Type.Object({
-    model: Type.Object({
-      provider: Type.String({ maxLength: 160, default: '' }),
-      id: Type.String({ maxLength: 160, default: '' }),
-    }, { default: {}, additionalProperties: false }),
-  }, { additionalProperties: false }),
+  configSchema: Type.Object(
+    {
+      model: Type.Object(
+        {
+          provider: Type.String({ maxLength: 160, default: '' }),
+          id: Type.String({ maxLength: 160, default: '' }),
+        },
+        { default: {}, additionalProperties: false },
+      ),
+    },
+    { additionalProperties: false },
+  ),
   validateConfig(config, { service, operation }) {
     const model = config.model as ModelChoice;
     if (operation !== 'mount' && (model.provider || model.id) && !service('harnessModels').resolve(model))
@@ -32,7 +41,8 @@ export const manifest: PluginDescriptor = {
       let pending = Promise.resolve();
       let current = ctx.harnessPluginSettings.get<ModelChoice>('model');
       let saving: ModelChoice | undefined;
-      const same = (left: ModelChoice, right?: ModelChoice) => left.provider === right?.provider && left.id === right.id;
+      const same = (left: ModelChoice, right?: ModelChoice) =>
+        left.provider === right?.provider && left.id === right.id;
       const select = (model: ModelChoice) => {
         if (same(model, current)) return;
         current = { ...model };
@@ -49,28 +59,51 @@ export const manifest: PluginDescriptor = {
         const write = pending.then(async () => {
           if (choice !== current) return;
           saving = choice;
-          try { await ctx.harnessPluginSettings.set('model', choice); }
-          finally { saving = undefined; }
+          try {
+            await ctx.harnessPluginSettings.set('model', choice);
+          } finally {
+            saving = undefined;
+          }
         });
-        pending = write.catch((error) => { ctx.logger.warn('Could not save recent model: %s', String(error)); });
+        pending = write.catch((error) => {
+          ctx.logger.warn('Could not save recent model: %s', String(error));
+        });
         return write;
       };
       ctx.provide('harnessModelPreference', { recent: () => ({ ...current }), remember });
       ctx.on('harness/observe', (event) => {
-        if (event.type === 'input-accepted' && event.source === 'user' && event.runSource === 'user' && !event.parentId) {
-          void remember(event.model).catch(() => { /* The preference owner reports failed writes. */ });
+        if (
+          event.type === 'input-accepted' &&
+          event.source === 'user' &&
+          event.runSource === 'user' &&
+          !event.parentId
+        ) {
+          void remember(event.model).catch(() => {
+            /* The preference owner reports failed writes. */
+          });
         }
       });
       ctx.on('harness/quiesce', () => pending);
-    }
-  }
+    },
+  },
 };
 
 export const administrationManifest: PluginDescriptor = {
-  scope: 'application', id: 'core:model-admin', title: 'Models', description: 'Model endpoints and credentials',
+  scope: 'application',
+  id: 'core:model-admin',
+  title: 'Models',
+  description: 'Model endpoints and credentials',
   plugin: {
-    inject: ['harnessModels', 'harnessModelStore', 'harnessModelPreference', 'harnessState', 'harnessRoutes', 'harnessMutations', 'harnessChanges'],
-    apply: setupAdministration
+    inject: [
+      'harnessModels',
+      'harnessModelStore',
+      'harnessModelPreference',
+      'harnessState',
+      'harnessRoutes',
+      'harnessMutations',
+      'harnessChanges',
+    ],
+    apply: setupAdministration,
   },
   browserProvides: ['miniModels'],
   browserStyles: ['/packages/models/src/browser/style.css'],

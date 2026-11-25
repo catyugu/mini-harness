@@ -5,9 +5,20 @@
 import { KeyedRegistry } from '@mini-harness/ui-runtime/keyed-registry';
 import type { KeyedSlotOptions, SlotKind, SlotName, SlotRenderer } from './api.js';
 
-interface Entry { node?: HTMLElement; render?: SlotRenderer; order: number }
-interface Mounted { node: HTMLElement; release(): void }
-interface Outlet { container: HTMLElement; kind: SlotKind; active: Map<Entry, Mounted> }
+interface Entry {
+  node?: HTMLElement;
+  render?: SlotRenderer;
+  order: number;
+}
+interface Mounted {
+  node: HTMLElement;
+  release(): void;
+}
+interface Outlet {
+  container: HTMLElement;
+  kind: SlotKind;
+  active: Map<Entry, Mounted>;
+}
 
 export class SlotRegistry {
   private readonly owners = new Map<SlotName, Outlet>();
@@ -24,18 +35,26 @@ export class SlotRegistry {
       for (const [entry, active] of owner.active) this.unmount(owner, entry, active);
       container.replaceChildren();
     };
-    try { this.render(name); }
-    catch (error) { dispose(); throw error; }
+    try {
+      this.render(name);
+    } catch (error) {
+      dispose();
+      throw error;
+    }
     return dispose;
   }
 
   register(name: SlotName, node: HTMLElement, order = 0): () => void {
-    if (this.entries.get(name)?.get(node))
-      throw new Error('Duplicate node contribution: ' + name);
+    if (this.entries.get(name)?.get(node)) throw new Error('Duplicate node contribution: ' + name);
     return this.add(name, node, { node, order });
   }
 
-  registerKeyed(name: SlotName, key: string, render: SlotRenderer, { order = 0 }: KeyedSlotOptions = {}): () => void {
+  registerKeyed(
+    name: SlotName,
+    key: string,
+    render: SlotRenderer,
+    { order = 0 }: KeyedSlotOptions = {},
+  ): () => void {
     if (!key || !Number.isFinite(order)) throw new Error('Invalid keyed slot contribution');
     return this.add(name, key, { render, order });
   }
@@ -50,8 +69,12 @@ export class SlotRegistry {
       if (this.entries.get(name) === entries && !entries.size) this.entries.delete(name);
       if (prior !== entries.get(key)) this.render(name);
     };
-    try { this.render(name); }
-    catch (error) { dispose(); throw error; }
+    try {
+      this.render(name);
+    } catch (error) {
+      dispose();
+      throw error;
+    }
     return dispose;
   }
 
@@ -64,12 +87,19 @@ export class SlotRegistry {
         node: mount.node,
         release: () => {
           lifetime.abort();
-          try { mount.dispose?.(); }
-          catch (error) { console.error('Slot cleanup failed', error); }
-          finally { mount.node.remove(); }
-        }
+          try {
+            mount.dispose?.();
+          } catch (error) {
+            console.error('Slot cleanup failed', error);
+          } finally {
+            mount.node.remove();
+          }
+        },
       };
-    } catch (error) { lifetime.abort(); throw error; }
+    } catch (error) {
+      lifetime.abort();
+      throw error;
+    }
   }
 
   private unmount(outlet: Outlet, entry: Entry, active: Mounted) {
@@ -80,18 +110,21 @@ export class SlotRegistry {
   private render(name: SlotName) {
     const owner = this.owners.get(name);
     if (!owner) return;
-    const entries = [...this.entries.get(name)?.values() ?? []].sort((a, b) => a.order - b.order);
-    if (owner.kind === 'single' && entries.length > 1) throw new Error('Multiple entries for single slot: ' + name);
+    const entries = [...(this.entries.get(name)?.values() ?? [])].sort((a, b) => a.order - b.order);
+    if (owner.kind === 'single' && entries.length > 1)
+      throw new Error('Multiple entries for single slot: ' + name);
     const visible = new Set(entries);
     for (const [entry, active] of owner.active) if (!visible.has(entry)) this.unmount(owner, entry, active);
     const staged = new Map<Entry, Mounted>();
     try {
       for (const entry of entries) {
         if (owner.active.has(entry)) continue;
-        const renderer: SlotRenderer = entry.render ?? (() => {
-          if (!entry.node) throw new Error('Slot contribution has no node or renderer');
-          return entry.node;
-        });
+        const renderer: SlotRenderer =
+          entry.render ??
+          (() => {
+            if (!entry.node) throw new Error('Slot contribution has no node or renderer');
+            return entry.node;
+          });
         staged.set(entry, this.mount(renderer));
       }
     } catch (error) {

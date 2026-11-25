@@ -9,13 +9,25 @@ export function moduleReferences(source: ts.SourceFile) {
       literal = node.moduleSpecifier;
       const { importClause: clause } = node;
       const bindings = clause?.namedBindings;
-      typeOnly = Boolean(clause?.isTypeOnly || (!clause?.name && bindings && ts.isNamedImports(bindings) &&
-        bindings.elements.length && bindings.elements.every((item) => item.isTypeOnly)));
+      typeOnly = Boolean(
+        clause?.isTypeOnly ||
+          (!clause?.name &&
+            bindings &&
+            ts.isNamedImports(bindings) &&
+            bindings.elements.length &&
+            bindings.elements.every((item) => item.isTypeOnly)),
+      );
     } else if (ts.isExportDeclaration(node)) {
       literal = node.moduleSpecifier;
       const { exportClause: clause } = node;
-      typeOnly = node.isTypeOnly || Boolean(clause && ts.isNamedExports(clause) &&
-        clause.elements.length && clause.elements.every((item) => item.isTypeOnly));
+      typeOnly =
+        node.isTypeOnly ||
+        Boolean(
+          clause &&
+            ts.isNamedExports(clause) &&
+            clause.elements.length &&
+            clause.elements.every((item) => item.isTypeOnly),
+        );
     } else if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument)) {
       literal = node.argument.literal;
       typeOnly = true;

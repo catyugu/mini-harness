@@ -1,6 +1,10 @@
 import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
 import { DomainError } from '@mini-harness/platform/errors';
-import { assertOutsideMountTransaction, assertOutsidePluginRequest, type MutationPort } from '@mini-harness/plugin-api/mutation-api';
+import {
+  assertOutsideMountTransaction,
+  assertOutsidePluginRequest,
+  type MutationPort,
+} from '@mini-harness/plugin-api/mutation-api';
 
 /** One transaction gate for HTTP settings and installed plugin operations. */
 export class MutationGate implements MutationPort {
@@ -12,16 +16,22 @@ export class MutationGate implements MutationPort {
 
   guard(check: (scopes?: ReadonlySet<ScopeKey>) => void) {
     this.guards.add(check);
-    return () => { this.guards.delete(check); };
+    return () => {
+      this.guards.delete(check);
+    };
   }
 
-  seal() { this.closing = true; }
+  seal() {
+    this.closing = true;
+  }
 
   protect(scopes?: ReadonlySet<ScopeKey>) {
     for (const check of this.guards) check(scopes);
     const guard = { scopes };
     this.structural.add(guard);
-    return () => { this.structural.delete(guard); };
+    return () => {
+      this.structural.delete(guard);
+    };
   }
 
   admit(scopeKeys: readonly ScopeKey[]) {
@@ -37,8 +47,11 @@ export class MutationGate implements MutationPort {
     if (this.active) throw new DomainError('conflict', 'Configuration is already changing');
     const work = Promise.resolve().then(operation);
     this.active = work;
-    try { return await work; }
-    finally { this.active = undefined; }
+    try {
+      return await work;
+    } finally {
+      this.active = undefined;
+    }
   }
 
   drain() {

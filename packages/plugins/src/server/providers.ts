@@ -7,13 +7,17 @@ export interface Capability {
 }
 
 export class ProtectedProviderError extends Error {
-  constructor(service: string) { super('Protected service cannot be overridden: ' + service); }
+  constructor(service: string) {
+    super('Protected service cannot be overridden: ' + service);
+  }
 }
 
 /** Select providers according to application policy. */
 export function selectProviders<T extends Capability>(
-  descriptors: T[], inherited: ReadonlyMap<string, string>, choices: Readonly<Record<string, string>> = {},
-  protectedProviders: ReadonlyMap<string, string> = new Map()
+  descriptors: T[],
+  inherited: ReadonlyMap<string, string>,
+  choices: Readonly<Record<string, string>> = {},
+  protectedProviders: ReadonlyMap<string, string> = new Map(),
 ) {
   const byId = new Map(descriptors.map((descriptor) => [descriptor.id, descriptor]));
   if (byId.size !== descriptors.length) throw new Error('Duplicate plugin ID in capability graph');
@@ -27,15 +31,21 @@ export function selectProviders<T extends Capability>(
   }
   for (const descriptor of descriptors) {
     const services = descriptor.provides ?? [];
-    const replaced = services.filter((service) => Object.hasOwn(choices, service) && choices[service] !== descriptor.id);
+    const replaced = services.filter(
+      (service) => Object.hasOwn(choices, service) && choices[service] !== descriptor.id,
+    );
     if (!replaced.length) continue;
-    if (replaced.length !== services.length) throw new Error('Provider ' + descriptor.id + ' must be replaced as a unit');
+    if (replaced.length !== services.length)
+      throw new Error('Provider ' + descriptor.id + ' must be replaced as a unit');
     shadowed.add(descriptor.id);
   }
   for (const { id, provides = [] } of descriptors) {
     if (shadowed.has(id)) continue;
     for (const service of provides) {
-      if (protectedProviders.has(service) && (protectedProviders.get(service) !== id || inherited.has(service)))
+      if (
+        protectedProviders.has(service) &&
+        (protectedProviders.get(service) !== id || inherited.has(service))
+      )
         throw new ProtectedProviderError(service);
       const previous = providers.get(service);
       if (previous && (previous !== id || inherited.has(service))) {

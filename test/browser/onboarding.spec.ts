@@ -11,10 +11,11 @@ function canonicalPath(path: string) {
   return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
 }
 
-
 test('custom provider onboarding and registering a workspace work entirely in the GUI', async ({ page }) => {
-  const mock = await createMockProvider(), { root, paths } = createFixturePaths(mock.url);
-  const second = join(root, 'another-workspace'); mkdirSync(second);
+  const mock = await createMockProvider(),
+    { root, paths } = createFixturePaths(mock.url);
+  const second = join(root, 'another-workspace');
+  mkdirSync(second);
   const service = await startIsolatedHost(paths);
   try {
     await page.goto(service.url + '/#token=' + service.token);
@@ -50,16 +51,27 @@ test('custom provider onboarding and registering a workspace work entirely in th
     await page.getByRole('button', { name: 'Add workspace', exact: true }).click();
     const picker = page.getByRole('dialog', { name: 'Add workspace' });
     const absolutePath = picker.getByLabel('Absolute directory path');
-    await expect.poll(async () => canonicalPath(await absolutePath.inputValue())).toBe(canonicalPath(paths.cwd));
+    await expect
+      .poll(async () => canonicalPath(await absolutePath.inputValue()))
+      .toBe(canonicalPath(paths.cwd));
     await picker.getByRole('button', { name: 'Up', exact: true }).click();
     await picker.getByRole('button', { name: 'another-workspace', exact: true }).click();
     await expect.poll(async () => canonicalPath(await absolutePath.inputValue())).toBe(canonicalPath(second));
     await picker.getByRole('button', { name: 'Add workspace', exact: true }).click();
     const workspaceButton = page.locator('.workspace-button:visible');
-    await expect.poll(async () => canonicalPath(await workspaceButton.innerText())).toBe(canonicalPath(second));
+    await expect
+      .poll(async () => canonicalPath(await workspaceButton.innerText()))
+      .toBe(canonicalPath(second));
     await expect(page.locator('#sessions .session-row')).toHaveCount(1);
     await page.getByRole('button', { name: 'Configured from GUI', exact: true }).click();
-    await expect.poll(async () => canonicalPath(await workspaceButton.innerText())).toBe(canonicalPath(paths.cwd));
+    await expect
+      .poll(async () => canonicalPath(await workspaceButton.innerText()))
+      .toBe(canonicalPath(paths.cwd));
     await expect(page.locator('.message.assistant')).toHaveText('Mock response');
-  } finally { await page.close(); await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
+  } finally {
+    await page.close();
+    await service.stop();
+    await mock.close();
+    rmSync(root, { recursive: true, force: true });
+  }
 });

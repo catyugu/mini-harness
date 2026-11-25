@@ -36,8 +36,15 @@ Access: localhost only; bearer token required for all API endpoints.
 }
 
 function parse(argv: string[]) {
-  const args: { help?: boolean; detached: boolean; serve: boolean; cwd: string; profile: string; flags: string[]; command?: 'status' | 'stop' | 'reset-token' } =
-    { detached: false, serve: false, cwd: process.cwd(), profile: 'web', flags: [] };
+  const args: {
+    help?: boolean;
+    detached: boolean;
+    serve: boolean;
+    cwd: string;
+    profile: string;
+    flags: string[];
+    command?: 'status' | 'stop' | 'reset-token';
+  } = { detached: false, serve: false, cwd: process.cwd(), profile: 'web', flags: [] };
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i];
     if (flag === '--help' || flag === '-h') args.help = true;
@@ -54,7 +61,8 @@ function parse(argv: string[]) {
       args.command = flag;
     } else args.flags.push(flag);
   }
-  if (args.command && (args.detached || args.serve || args.flags.length)) throw new Error('Server startup flags require the start command');
+  if (args.command && (args.detached || args.serve || args.flags.length))
+    throw new Error('Server startup flags require the start command');
   return args;
 }
 
@@ -65,12 +73,23 @@ async function detached(paths: ReturnType<typeof getPaths>, profile: string, fla
   const output = openSync(paths.log, 'a', 0o600);
   let child;
   try {
-    child = spawn(process.execPath, [executable, '--serve', '--profile', profile, '--cwd', paths.cwd, ...flags], {
-      cwd: paths.cwd, detached: true, stdio: ['ignore', output, output], windowsHide: true
-    });
-  } finally { closeSync(output); }
+    child = spawn(
+      process.execPath,
+      [executable, '--serve', '--profile', profile, '--cwd', paths.cwd, ...flags],
+      {
+        cwd: paths.cwd,
+        detached: true,
+        stdio: ['ignore', output, output],
+        windowsHide: true,
+      },
+    );
+  } finally {
+    closeSync(output);
+  }
   let failure: Error | undefined;
-  child.on('error', (error) => { failure = error; });
+  child.on('error', (error) => {
+    failure = error;
+  });
   child.unref();
   for (let attempt = 0; attempt < 120; attempt++) {
     if (failure) throw failure;
@@ -90,7 +109,12 @@ async function detached(paths: ReturnType<typeof getPaths>, profile: string, fla
   throw new Error('Detached server failed to become ready. See ' + paths.log);
 }
 
-async function serve(paths: ReturnType<typeof getPaths>, profile: string, flags: string[], detached: boolean) {
+async function serve(
+  paths: ReturnType<typeof getPaths>,
+  profile: string,
+  flags: string[],
+  detached: boolean,
+) {
   const unlock = await lockInstance(paths.home);
   let boot: ReturnType<typeof bootProfile>;
   let ending: Promise<void> | undefined;
@@ -101,14 +125,27 @@ async function serve(paths: ReturnType<typeof getPaths>, profile: string, flags:
     await unlock();
   };
   const stop = () => {
-    ending ??= boot.then(app => app.close(), () => {}).finally(release);
-    ending.catch(error => { console.error('mini-harness:', error.message); process.exitCode = 1; });
+    ending ??= boot
+      .then(
+        (app) => app.close(),
+        () => {},
+      )
+      .finally(release);
+    ending.catch((error) => {
+      console.error('mini-harness:', error.message);
+      process.exitCode = 1;
+    });
   };
   process.once('SIGTERM', stop);
   process.once('SIGINT', stop);
   boot = bootProfile(profile, paths, { interactive: true, flags, detached, shutdown: stop });
-  try { await boot; }
-  catch (error) { stop(); await ending; throw error; }
+  try {
+    await boot;
+  } catch (error) {
+    stop();
+    await ending;
+    throw error;
+  }
 }
 
 async function main() {
@@ -121,8 +158,15 @@ async function main() {
   }
   if (argv[0] === 'plugin') {
     const [, operation, id, spec, ...extra] = argv;
-    if ((operation !== 'install' && operation !== 'update') || !id || extra.length || (operation === 'install' && !spec))
-      throw new Error('Usage: mini-harness plugin install <id> <package> or mini-harness plugin update <id> [package]');
+    if (
+      (operation !== 'install' && operation !== 'update') ||
+      !id ||
+      extra.length ||
+      (operation === 'install' && !spec)
+    )
+      throw new Error(
+        'Usage: mini-harness plugin install <id> <package> or mini-harness plugin update <id> [package]',
+      );
     const paths = getPaths();
     ensurePaths(paths);
     const unlock = await lockInstance(paths.home);
@@ -135,7 +179,9 @@ async function main() {
       const profile = await loadProfile('web', paths, new Context());
       const reserved = readProfile('web');
       const { name, version } = await installPackagedPlugin(paths, operation, id, spec, {
-        settings: profile.read(), reserved: (id) => reserved.has(id), signal: cancellation.signal
+        settings: profile.read(),
+        reserved: (id) => reserved.has(id),
+        signal: cancellation.signal,
       });
       console.log(id + ': ' + name + '@' + version);
     } finally {
@@ -154,19 +200,26 @@ async function main() {
     if (args.command === 'status') {
       if (info) {
         console.log('mini-harness is running (PID ' + info.pid + ') at ' + info.url);
-        for (const diagnostic of info.sessionDiagnostics) console.log('Conversation ' + diagnostic.id + ': ' + diagnostic.message);
-      } else { console.log('mini-harness is not running'); process.exitCode = 1; }
+        for (const diagnostic of info.sessionDiagnostics)
+          console.log('Conversation ' + diagnostic.id + ': ' + diagnostic.message);
+      } else {
+        console.log('mini-harness is not running');
+        process.exitCode = 1;
+      }
       return;
     }
     if (info) {
-      if (!await requestShutdown(info)) throw new Error('Could not request mini-harness shutdown');
+      if (!(await requestShutdown(info))) throw new Error('Could not request mini-harness shutdown');
       for (let i = 0; i < 100 && readServerInfo(paths.pid)?.pid === info.pid; i++) await sleep(100);
       if (readServerInfo(paths.pid)?.pid === info.pid) throw new Error('mini-harness is still shutting down');
     }
     if (args.command === 'reset-token') {
       const unlock = await lockInstance(paths.home);
-      try { instanceCredential(paths.home, true); }
-      finally { await unlock(); }
+      try {
+        instanceCredential(paths.home, true);
+      } finally {
+        await unlock();
+      }
       console.log('Browser credential reset. Start mini-harness and open the new URL.');
     } else console.log(info ? 'mini-harness stopped' : 'mini-harness is not running');
     return;
@@ -175,4 +228,7 @@ async function main() {
   else await serve(paths, args.profile, args.flags, args.serve);
 }
 
-main().catch((error) => { console.error('mini-harness:', error.message); process.exitCode = 1; });
+main().catch((error) => {
+  console.error('mini-harness:', error.message);
+  process.exitCode = 1;
+});

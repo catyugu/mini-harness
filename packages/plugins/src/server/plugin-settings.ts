@@ -6,7 +6,12 @@ import { pluginConfiguration, type PluginConfiguration } from '@mini-harness/plu
 import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
 import type {} from '@mini-harness/settings/api';
 
-type ConfigWriter = (id: string, key: ScopeKey | undefined, patch: unknown, check: () => void) => Promise<void>;
+type ConfigWriter = (
+  id: string,
+  key: ScopeKey | undefined,
+  patch: unknown,
+  check: () => void,
+) => Promise<void>;
 
 export function pluginSettings(root: Context, writer?: ConfigWriter): PluginConfiguration {
   const handles = new WeakMap<AbortSignal, PluginConfiguration>();
@@ -14,28 +19,41 @@ export function pluginSettings(root: Context, writer?: ConfigWriter): PluginConf
     const lifetime = caller.fiber.signal;
     let handle = handles.get(lifetime);
     if (handle) return handle;
-    handle = pluginConfiguration(caller, async (values, signal) => {
-      assertOutsideMountTransaction();
-      const request = pluginRequestSignal();
-      const active = request ? AbortSignal.any([signal, request]) : signal;
-      const { pluginId, scopeKey, writableConfig } = pluginInstance(caller);
-      const check = () => active.throwIfAborted();
-      check();
-      if (!writer || !writableConfig) throw new Error('Plugin configuration writes require a live schema');
-      let listener: ReturnType<typeof addAbortListener> | undefined;
-      const aborted = new Promise<never>((_, reject) => {
-        listener = addAbortListener(active, () => reject(active.reason));
-      });
-      try { await Promise.race([writer(pluginId, scopeKey, structuredClone(values), check), aborted]); }
-      finally { listener?.[Symbol.dispose](); }
-    }, notify => root.harnessSettingsStore.subscribe(notify));
+    handle = pluginConfiguration(
+      caller,
+      async (values, signal) => {
+        assertOutsideMountTransaction();
+        const request = pluginRequestSignal();
+        const active = request ? AbortSignal.any([signal, request]) : signal;
+        const { pluginId, scopeKey, writableConfig } = pluginInstance(caller);
+        const check = () => active.throwIfAborted();
+        check();
+        if (!writer || !writableConfig) throw new Error('Plugin configuration writes require a live schema');
+        let listener: ReturnType<typeof addAbortListener> | undefined;
+        const aborted = new Promise<never>((_, reject) => {
+          listener = addAbortListener(active, () => reject(active.reason));
+        });
+        try {
+          await Promise.race([writer(pluginId, scopeKey, structuredClone(values), check), aborted]);
+        } finally {
+          listener?.[Symbol.dispose]();
+        }
+      },
+      (notify) => root.harnessSettingsStore.subscribe(notify),
+    );
     handles.set(lifetime, handle);
     return handle;
   }
   return Service.track({
-    get<T>(key: string) { return configuration(Service.caller(this)).get<T>(key); },
-    patch(values) { return configuration(Service.caller(this)).patch(values); },
-    set(key, value) { return configuration(Service.caller(this)).set(key, value); },
+    get<T>(key: string) {
+      return configuration(Service.caller(this)).get<T>(key);
+    },
+    patch(values) {
+      return configuration(Service.caller(this)).patch(values);
+    },
+    set(key, value) {
+      return configuration(Service.caller(this)).set(key, value);
+    },
     subscribe<T>(key: string, listener: (value: T) => void) {
       return configuration(Service.caller(this)).subscribe(key, listener);
     },

@@ -43,17 +43,27 @@ export class Runs implements RunPort {
     private readonly scopes: ScopePort,
     private readonly mutations: MutationPort,
     private readonly observe: (event: CapabilityObservation, signal?: AbortSignal) => void,
-    private readonly preference: ModelPreference
+    private readonly preference: ModelPreference,
   ) {}
 
-  private changed(id: string) { this.events.dispatchEvent(new CustomEvent('change', { detail: { id } })); }
-
-  get size() { return this.work.size; }
-  active(id: string) { return this.work.has(id); }
-  activeInScope(scopes: ReadonlySet<ScopeKey>) {
-    return [...this.work.keys()].some((id) => this.scopes.address(`session:${id}`).some((key) => scopes.has(key)));
+  private changed(id: string) {
+    this.events.dispatchEvent(new CustomEvent('change', { detail: { id } }));
   }
-  completion(id: string) { return this.work.get(id)?.done; }
+
+  get size() {
+    return this.work.size;
+  }
+  active(id: string) {
+    return this.work.has(id);
+  }
+  activeInScope(scopes: ReadonlySet<ScopeKey>) {
+    return [...this.work.keys()].some((id) =>
+      this.scopes.address(`session:${id}`).some((key) => scopes.has(key)),
+    );
+  }
+  completion(id: string) {
+    return this.work.get(id)?.done;
+  }
 
   activity(id: string) {
     const events = this.work.get(id)?.events;
@@ -62,7 +72,7 @@ export class Runs implements RunPort {
 
   signal(id: string, signal?: AbortSignal) {
     const owner = this.work.get(id)?.controller.signal;
-    return owner && signal ? AbortSignal.any([owner, signal]) : owner ?? signal;
+    return owner && signal ? AbortSignal.any([owner, signal]) : (owner ?? signal);
   }
 
   branchChanged(id: string) {
@@ -81,8 +91,13 @@ export class Runs implements RunPort {
     return activity;
   }
 
-  private launch(id: string, prompt: string, emit: ((event: StreamEvent) => void) | undefined,
-    { signal, source, model, attachments, thinkingLevel, revision, acquire }: RunOptions, preparedScope?: Activity) {
+  private launch(
+    id: string,
+    prompt: string,
+    emit: ((event: StreamEvent) => void) | undefined,
+    { signal, source, model, attachments, thinkingLevel, revision, acquire }: RunOptions,
+    preparedScope?: Activity,
+  ) {
     validateModelOptions(model, thinkingLevel);
     const fallback = this.preference.recent();
     const record = this.registry.get(id);
@@ -91,8 +106,15 @@ export class Runs implements RunPort {
     const activity = preparedScope ?? this.reserve(id);
     const { controller } = activity;
     const cancellation = signal ? AbortSignal.any([controller.signal, signal]) : controller.signal;
-    const info: RunInfo = { id: randomUUID(), sessionId: id, state: 'queued', startedAt: new Date().toISOString(), sequence: 0, inputEntryId: null };
-    const events = activity.events = new RunEvents(info);
+    const info: RunInfo = {
+      id: randomUUID(),
+      sessionId: id,
+      state: 'queued',
+      startedAt: new Date().toISOString(),
+      sequence: 0,
+      inputEntryId: null,
+    };
+    const events = (activity.events = new RunEvents(info));
     let log: ReturnType<SessionStore['log']>;
     let prepared: ReturnType<SessionStore['prepareInput']>;
     try {
@@ -100,14 +122,27 @@ export class Runs implements RunPort {
       prepared = this.registry.prepareInput(id, prompt, attachments);
       log = this.registry.log(id);
       log.append({ type: 'run', run: info });
-    } catch (error) { this.work.delete(id); throw error; }
+    } catch (error) {
+      this.work.delete(id);
+      throw error;
+    }
     const publish = (event: StreamEvent) => {
       if (event.type === 'user') info.inputEntryId = event.id;
       const item = events.publish(event);
-      try { emit?.(item); } catch { /* An observer cannot terminate the run. */ }
+      try {
+        emit?.(item);
+      } catch {
+        /* An observer cannot terminate the run. */
+      }
       if (event.type === 'user') {
-        this.observe({ type: 'input-accepted', sessionId: id, parentId: record.parentId,
-          source: event.source, runSource: source ?? 'user', model: event.model });
+        this.observe({
+          type: 'input-accepted',
+          sessionId: id,
+          parentId: record.parentId,
+          source: event.source,
+          runSource: source ?? 'user',
+          model: event.model,
+        });
       }
     };
     const promptSession = async () => {
@@ -123,61 +158,121 @@ export class Runs implements RunPort {
       activity.inputSignal = cancellation;
       try {
         return await this.agent(id).prompt(record, prepared.text, publish, {
-          fallback, beginSubmission: () => { info.inputEntryId = null; },
-          signal: cancellation, source, submissionId: info.id, choice: model, images: prepared.images, input: prepared.input, thinkingLevel, revision,
-          changed: (path) => { info.changedFiles = [...new Set([...(info.changedFiles ?? []), path])]; }
+          fallback,
+          beginSubmission: () => {
+            info.inputEntryId = null;
+          },
+          signal: cancellation,
+          source,
+          submissionId: info.id,
+          choice: model,
+          images: prepared.images,
+          input: prepared.input,
+          thinkingLevel,
+          revision,
+          changed: (path) => {
+            info.changedFiles = [...new Set([...(info.changedFiles ?? []), path])];
+          },
         });
-      } finally { activity.inputSignal = undefined; }
+      } finally {
+        activity.inputSignal = undefined;
+      }
     };
     const finish = (state: RunInfo['state'], error?: string) => {
       for (const item of log.inbox()) {
-        if (item.mode === 'steer') log.append({ type: 'inbox-failed', inboxId: item.id,
-          reason: state === 'interrupted' ? 'The target run was interrupted before delivery' : 'The target run ended before delivery' });
+        if (item.mode === 'steer')
+          log.append({
+            type: 'inbox-failed',
+            inboxId: item.id,
+            reason:
+              state === 'interrupted'
+                ? 'The target run was interrupted before delivery'
+                : 'The target run ended before delivery',
+          });
       }
-      const terminal = { ...info, state, error, finishedAt: new Date().toISOString(), sequence: info.sequence + 1 };
+      const terminal = {
+        ...info,
+        state,
+        error,
+        finishedAt: new Date().toISOString(),
+        sequence: info.sequence + 1,
+      };
       log.append({ type: 'run', run: terminal });
       Object.assign(info, terminal, { sequence: info.sequence });
       publish({ type: 'run', run: terminal });
       this.observe({ type: 'run-ended', sessionId: id, run: terminal });
     };
-    const done = Promise.resolve().then(async () => {
-      const release = await acquire?.(cancellation);
-      try { return await promptSession(); }
-      finally { release?.(); }
-    }).then((text) => {
-      finish('completed');
-      return text;
-    }, (error) => {
-      const state = cancellation.reason instanceof RunInterrupted ? 'interrupted' : cancellation.aborted ? 'cancelled' : 'failed';
-      const reason = cancellation.aborted ? cancellation.reason?.message ?? 'Agent run cancelled' :
-        error instanceof Error ? error.message : String(error);
-      if (this.registry.logError(id)) throw error;
-      if (state === 'failed') publish({ type: 'error', error: reason });
-      finish(state, reason);
-      throw new Error(reason, { cause: error });
-    }).catch((error) => {
-      const fault = this.registry.logError(id);
-      if (fault) publish({ type: 'error', error: fault });
-      throw error;
-    }).finally(() => {
-      this.work.delete(id);
-      events.close();
-      this.changed(id);
-    });
+    const done = Promise.resolve()
+      .then(async () => {
+        const release = await acquire?.(cancellation);
+        try {
+          return await promptSession();
+        } finally {
+          release?.();
+        }
+      })
+      .then(
+        (text) => {
+          finish('completed');
+          return text;
+        },
+        (error) => {
+          const state =
+            cancellation.reason instanceof RunInterrupted
+              ? 'interrupted'
+              : cancellation.aborted
+                ? 'cancelled'
+                : 'failed';
+          const reason = cancellation.aborted
+            ? (cancellation.reason?.message ?? 'Agent run cancelled')
+            : error instanceof Error
+              ? error.message
+              : String(error);
+          if (this.registry.logError(id)) throw error;
+          if (state === 'failed') publish({ type: 'error', error: reason });
+          finish(state, reason);
+          throw new Error(reason, { cause: error });
+        },
+      )
+      .catch((error) => {
+        const fault = this.registry.logError(id);
+        if (fault) publish({ type: 'error', error: fault });
+        throw error;
+      })
+      .finally(() => {
+        this.work.delete(id);
+        events.close();
+        this.changed(id);
+      });
     // Server-owned runs may outlive every observer.
     activity.done = done;
     this.changed(id);
     void done.catch(() => {});
-    return { info, done, cancel: () => {
-      if (this.work.get(id) !== activity || cancellation.aborted) return false;
-      controller.abort(new Error('Agent run cancelled'));
-      return true;
-    } };
+    return {
+      info,
+      done,
+      cancel: () => {
+        if (this.work.get(id) !== activity || cancellation.aborted) return false;
+        controller.abort(new Error('Agent run cancelled'));
+        return true;
+      },
+    };
   }
 
-  submit(id: string, { message, model, attachments, thinkingLevel }: ExecutionInput,
-    signal: AbortSignal, acquire?: RunOptions['acquire']) {
-    const { info, done, cancel } = this.launch(id, message, undefined, { model, attachments, thinkingLevel, source: 'plugin', signal, acquire });
+  submit(
+    id: string,
+    { message, model, attachments, thinkingLevel }: ExecutionInput,
+    signal: AbortSignal,
+    acquire?: RunOptions['acquire'],
+  ) {
+    const { info, done, cancel } = this.launch(id, message, undefined, {
+      model,
+      attachments,
+      thinkingLevel,
+      source: 'plugin',
+      signal,
+      acquire,
+    });
     return { id: info.id, result: done, cancel };
   }
 
@@ -185,13 +280,27 @@ export class Runs implements RunPort {
     return this.launch(id, prompt, emit, options).done;
   }
 
-  startRun(id: string, prompt: string, { model, attachments, thinkingLevel }: Pick<RunOptions, 'model' | 'attachments' | 'thinkingLevel'> = {}) {
+  startRun(
+    id: string,
+    prompt: string,
+    { model, attachments, thinkingLevel }: Pick<RunOptions, 'model' | 'attachments' | 'thinkingLevel'> = {},
+  ) {
     return { ...this.launch(id, prompt, undefined, { model, attachments, thinkingLevel }).info };
   }
 
   /** A run reservation protects branch navigation from concurrent submissions. */
-  async reviseAndStart(id: string, input: { sourceEntryId: string; expectedLeafId: string | null; message: string; removedImages?: number[];
-    attachments?: Attachment[]; model?: ModelChoice; thinkingLevel?: ThinkingLevel | null }) {
+  async reviseAndStart(
+    id: string,
+    input: {
+      sourceEntryId: string;
+      expectedLeafId: string | null;
+      message: string;
+      removedImages?: number[];
+      attachments?: Attachment[];
+      model?: ModelChoice;
+      thinkingLevel?: ThinkingLevel | null;
+    },
+  ) {
     const reservation = this.reserve(id);
     const { signal } = reservation.controller;
     const prepare = this.scopes.prepare(`session:${id}`, signal);
@@ -200,37 +309,72 @@ export class Runs implements RunPort {
       await prepare;
       const target = this.agent(id).revisionTarget(id, input.sourceEntryId, input.expectedLeafId);
       const removed = input.removedImages ?? [];
-      if (!Array.isArray(removed) || removed.some((index) => !Number.isInteger(index) || index < 0 || index >= target.images.length))
+      if (
+        !Array.isArray(removed) ||
+        removed.some((index) => !Number.isInteger(index) || index < 0 || index >= target.images.length)
+      )
         throw new DomainError('invalid_input', 'Invalid original image selection');
       const attached = input.attachments ?? [];
       if (!Array.isArray(attached)) throw new DomainError('invalid_input', 'Invalid attachments');
-      const missing = target.textFiles.filter((name) => !attached.some((file) => file?.name === name && typeof file.mimeType === 'string' && !imageMimeType.test(file.mimeType)));
-      if (missing.length) throw new DomainError('invalid_input', 'Reattach the original text files: ' + missing.join(', '));
+      const missing = target.textFiles.filter(
+        (name) =>
+          !attached.some(
+            (file) =>
+              file?.name === name && typeof file.mimeType === 'string' && !imageMimeType.test(file.mimeType),
+          ),
+      );
+      if (missing.length)
+        throw new DomainError('invalid_input', 'Reattach the original text files: ' + missing.join(', '));
       const attachments = [...target.images.filter((_, index) => !removed.includes(index)), ...attached];
-      return { ...this.launch(id, input.message, undefined, {
-        attachments, model: input.model, thinkingLevel: input.thinkingLevel,
-        revision: { parentId: target.parentId, expectedLeafId: input.expectedLeafId }
-      }, reservation).info };
-    } catch (error) { this.work.delete(id); throw error; }
+      return {
+        ...this.launch(
+          id,
+          input.message,
+          undefined,
+          {
+            attachments,
+            model: input.model,
+            thinkingLevel: input.thinkingLevel,
+            revision: { parentId: target.parentId, expectedLeafId: input.expectedLeafId },
+          },
+          reservation,
+        ).info,
+      };
+    } catch (error) {
+      this.work.delete(id);
+      throw error;
+    }
   }
 
   retryInput(id: string, runId: string) {
     const run = this.info(id);
-    if (run?.id !== runId || run.state !== 'failed') throw new DomainError('conflict', 'This run is no longer the failed conversation run');
+    if (run?.id !== runId || run.state !== 'failed')
+      throw new DomainError('conflict', 'This run is no longer the failed conversation run');
     return this.registry.inspectLog(id, (log) => {
       const entries = log.entries();
-      const start = entries.findIndex((entry) => entry.type === 'run' && entry.run.id === runId && entry.run.state === 'queued');
-      const end = entries.findIndex((entry, index) => index > start && entry.type === 'run' && entry.run.id === runId && entry.run.state === 'failed');
+      const start = entries.findIndex(
+        (entry) => entry.type === 'run' && entry.run.id === runId && entry.run.state === 'queued',
+      );
+      const end = entries.findIndex(
+        (entry, index) =>
+          index > start && entry.type === 'run' && entry.run.id === runId && entry.run.state === 'failed',
+      );
       if (start < 0 || end < 0) return;
-      const delivered = entries.slice(start + 1, end).filter((entry) => entry.type === 'message' && entry.message.role === 'user');
-      const input = run.inputEntryId === undefined
-        ? delivered.length === 1 && delivered[0].type === 'message' && delivered[0].submissionId === runId ? delivered[0] : undefined
-        : delivered.find(({ id }) => id === run.inputEntryId);
+      const delivered = entries
+        .slice(start + 1, end)
+        .filter((entry) => entry.type === 'message' && entry.message.role === 'user');
+      const input =
+        run.inputEntryId === undefined
+          ? delivered.length === 1 && delivered[0].type === 'message' && delivered[0].submissionId === runId
+            ? delivered[0]
+            : undefined
+          : delivered.find(({ id }) => id === run.inputEntryId);
       if (input?.type !== 'message' || input.message.role !== 'user') return;
       const { message, presentation, selection } = input;
       const parts = typeof message.content === 'string' ? [] : message.content;
-      const images = [...presentation?.images ?? parts.filter((part) => part.type === 'image')];
-      const attachments: Attachment[] = [], missing: string[] = [];
+      const images = [...(presentation?.images ?? parts.filter((part) => part.type === 'image'))];
+      const attachments: Attachment[] = [],
+        missing: string[] = [];
       for (const { name, mimeType, id: attachmentId } of presentation?.attachments ?? []) {
         const image = imageMimeType.test(mimeType) ? images.shift() : undefined;
         const bytes = attachmentId && this.registry.readAttachment(id, attachmentId);
@@ -239,8 +383,17 @@ export class Runs implements RunPort {
         else missing.push(name);
       }
       if (images.length) missing.push('the original images');
-      const text = typeof message.content === 'string' ? message.content : parts.flatMap((part) => part.type === 'text' ? [part.text] : []).join('\n');
-      return { message: presentation?.userText ?? text, attachments, missing, model: selection?.model, thinkingLevel: selection?.thinkingLevel };
+      const text =
+        typeof message.content === 'string'
+          ? message.content
+          : parts.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('\n');
+      return {
+        message: presentation?.userText ?? text,
+        attachments,
+        missing,
+        model: selection?.model,
+        thinkingLevel: selection?.thinkingLevel,
+      };
     });
   }
 
@@ -258,21 +411,40 @@ export class Runs implements RunPort {
       throw new DomainError('invalid_input', 'Invalid event cursor');
     const history = () => {
       const projection = this.registry.inspectLog(id, (log) => log.projection(), true);
-      return { messages: projection?.messages ?? [], records: projection?.records ?? [], leafId: projection?.leafId ?? null,
-        model: projection?.model, thinkingLevel: projection?.thinkingLevel };
+      return {
+        messages: projection?.messages ?? [],
+        records: projection?.records ?? [],
+        leafId: projection?.leafId ?? null,
+        model: projection?.model,
+        thinkingLevel: projection?.thinkingLevel,
+      };
     };
     if (events) return events.watch(after, emit, history, end);
-    emit({ type: 'snapshot', ...history(), tools: [], run: info, sequence: info.sequence, runId: info.id, runSessionId: id });
+    emit({
+      type: 'snapshot',
+      ...history(),
+      tools: [],
+      run: info,
+      sequence: info.sequence,
+      runId: info.id,
+      runSessionId: id,
+    });
     return () => {};
   }
 
-  queueInput(id: string, { message, mode, attachments, model, thinkingLevel }: Parameters<RunPort['queueInput']>[1]) {
+  queueInput(
+    id: string,
+    { message, mode, attachments, model, thinkingLevel }: Parameters<RunPort['queueInput']>[1],
+  ) {
     this.mutations.admit(this.scopes.address(`session:${id}`));
     const signal = this.work.get(id)?.inputSignal;
     if (!signal || signal.aborted)
       throw new DomainError('conflict', 'The agent is not streaming; send a new message');
-    return this.agent(id).queueInput(id, message, mode, attachments,
-      { model, thinkingLevel, fallback: this.preference.recent() });
+    return this.agent(id).queueInput(id, message, mode, attachments, {
+      model,
+      thinkingLevel,
+      fallback: this.preference.recent(),
+    });
   }
 
   async cancelQueue(id: string, itemId?: string, signal?: AbortSignal) {
@@ -296,12 +468,19 @@ export class Runs implements RunPort {
   async compact(id: string) {
     const activity = this.reserve(id);
     const { signal } = activity.controller;
-    const done = activity.done = this.scopes.prepare(`session:${id}`, signal).then(() => this.agent(id).compact(id, signal));
-    try { await done; }
-    finally { this.work.delete(id); }
+    const done = (activity.done = this.scopes
+      .prepare(`session:${id}`, signal)
+      .then(() => this.agent(id).compact(id, signal)));
+    try {
+      await done;
+    } finally {
+      this.work.delete(id);
+    }
   }
 
-  private agent(id: string) { return this.scopes.require(`session:${id}`, 'harnessAgent'); }
+  private agent(id: string) {
+    return this.scopes.require(`session:${id}`, 'harnessAgent');
+  }
 
   async stop() {
     const active = [...this.work.values()];

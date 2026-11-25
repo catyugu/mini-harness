@@ -13,7 +13,6 @@ export interface PluginSecrets {
   remove(name: string): void;
 }
 
-
 declare module 'mini-harness/cordis' {
   interface Context {
     harnessPluginData: PluginData;

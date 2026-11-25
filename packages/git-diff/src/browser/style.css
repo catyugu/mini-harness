@@ -1,6 +1,31 @@
-.git-inspection-header { display: flex; align-items: center; justify-content: space-between; gap: .5rem; overflow-wrap: anywhere; }
-.git-change.ui-button { display: flex; justify-content: space-between; gap: .5rem; width: 100%; text-align: left; overflow-wrap: anywhere; }
-.git-change span { color: var(--focus); font-family: monospace; white-space: pre; }
-.diff .added { color: light-dark(#176638, #91e0ac); background: #16834b0d; }
-.diff .removed { color: var(--danger); background: #b22c3910; }
-.diff :is(.diff-hunk, .diff-header) { color: var(--muted); }
+.git-inspection-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  overflow-wrap: anywhere;
+}
+.git-change.ui-button {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.git-change span {
+  color: var(--focus);
+  font-family: monospace;
+  white-space: pre;
+}
+.diff .added {
+  color: light-dark(#176638, #91e0ac);
+  background: #16834b0d;
+}
+.diff .removed {
+  color: var(--danger);
+  background: #b22c3910;
+}
+.diff :is(.diff-hunk, .diff-header) {
+  color: var(--muted);
+}

@@ -32,12 +32,21 @@ export interface ConversationSubmission {
 
 export interface ConversationState {
   session?: Omit<Conversation, 'run'> & { thinkingLevel?: ThinkingLevel };
-  history: { readonly messages: readonly ViewMessage[]; readonly records: readonly SessionDisplayRecord[]; leafId: string | null };
+  history: {
+    readonly messages: readonly ViewMessage[];
+    readonly records: readonly SessionDisplayRecord[];
+    leafId: string | null;
+  };
   run?: RunInfo;
   partial: string;
   tools: readonly Extract<StreamEvent, { type: 'tool' }>[];
   queue: readonly ConversationView['queue'][number][];
-  interaction: { operation?: 'open' | 'submit' | 'queue' | 'compact'; cancelling?: boolean; status: string; error?: boolean };
+  interaction: {
+    operation?: 'open' | 'submit' | 'queue' | 'compact';
+    cancelling?: boolean;
+    status: string;
+    error?: boolean;
+  };
 }
 
 export interface ConversationController {
@@ -48,7 +57,10 @@ export interface ConversationController {
   report(error: Error): void;
   submit(input: ConversationSubmission, created?: (sessionId: string) => void): Promise<RunInfo>;
   retryInput(): Promise<RetryInput | null>;
-  queue(input: Omit<ConversationSubmission, 'revision' | 'permission'>, mode?: 'steer' | 'followUp'): Promise<void>;
+  queue(
+    input: Omit<ConversationSubmission, 'revision' | 'permission'>,
+    mode?: 'steer' | 'followUp',
+  ): Promise<void>;
   cancel(): Promise<void>;
   cancelQueue(id?: string): Promise<void>;
   setPermission(permission: ConversationPermission): Promise<void>;
@@ -56,7 +68,9 @@ export interface ConversationController {
 }
 
 declare module 'mini-harness/cordis' {
-  interface Context { miniConversation: ConversationController }
+  interface Context {
+    miniConversation: ConversationController;
+  }
 }
 
 declare module '@mini-harness/ui-slots/browser/api' {

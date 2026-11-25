@@ -13,20 +13,28 @@ test('config directories are independent and default safe', () => {
     assert.ok(paths.sessions.startsWith(paths.home));
     assert.deepEqual(readSettings(paths).plugins, {});
     assert.deepEqual(readSettings(paths).pluginConfig, {});
-  } finally { rmSync(folder, { recursive: true, force: true }); }
+  } finally {
+    rmSync(folder, { recursive: true, force: true });
+  }
 });
 
 test('settings merge preserves other sections and validates bounds', () => {
   const before = structuredClone(DEFAULTS) as import('../src/shared/settings.js').Settings;
   before.plugins.example = true;
-  const after = mergeSettings(before, { plugins: { shell: true }, pluginConfig: { subagents: { maxParallel: 4 } } });
+  const after = mergeSettings(before, {
+    plugins: { shell: true },
+    pluginConfig: { subagents: { maxParallel: 4 } },
+  });
   assert.equal(after.plugins.example, true);
   assert.equal(after.plugins.shell, true);
   assert.equal(after.pluginConfig.subagents.maxParallel, 4);
   assert.equal(before.plugins.shell, undefined);
   assert.throws(() => mergeSettings(before, { queueMode: 'steer' }), /Unknown settings field/);
   assert.throws(() => mergeSettings(before, { model: { provider: 'example' } }), /Unknown settings field/);
-  assert.throws(() => validateSettings({ ...before, pluginConfig: { shell: null } }), /Invalid plugin configuration/);
+  assert.throws(
+    () => validateSettings({ ...before, pluginConfig: { shell: null } }),
+    /Invalid plugin configuration/,
+  );
   assert.throws(() => mergeSettings(before, { sandbox: { mode: 'host' } }), /Unknown settings field/);
   assert.throws(() => mergeSettings(before, { bogus: true }), /Unknown/);
   assert.throws(() => validateSettings({ ...before, plugins: { shell: 'true' } }), /boolean/);

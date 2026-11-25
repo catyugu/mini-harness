@@ -34,10 +34,26 @@ export function mountConversationLayout(ctx: Context) {
   function render() {
     const state = control.get();
     if (previous?.run !== state.run || !previous) showRun(state.run);
-    if (previous?.queue !== state.queue) renderQueue(element('queuedMessages'), state.queue, (id) => void control.cancelQueue(id).catch(control.report));
-    const welcome = !isRunning(state.run) && state.interaction.operation !== 'submit' && !state.history.records.length &&
-      !state.history.messages.some((message) => message.role === 'toolResult' || (typeof message.content === 'string' ? message.content : message.content.some((part) => part.type === 'text' && part.text)) || message.attachments?.length ||
-        message.error || (Array.isArray(message.content) && message.content.some((part) => part.type === 'image'))) &&
+    if (previous?.queue !== state.queue)
+      renderQueue(
+        element('queuedMessages'),
+        state.queue,
+        (id) => void control.cancelQueue(id).catch(control.report),
+      );
+    const welcome =
+      !isRunning(state.run) &&
+      state.interaction.operation !== 'submit' &&
+      !state.history.records.length &&
+      !state.history.messages.some(
+        (message) =>
+          message.role === 'toolResult' ||
+          (typeof message.content === 'string'
+            ? message.content
+            : message.content.some((part) => part.type === 'text' && part.text)) ||
+          message.attachments?.length ||
+          message.error ||
+          (Array.isArray(message.content) && message.content.some((part) => part.type === 'image')),
+      ) &&
       !(state.run?.state === 'failed' && state.run.error);
     element('welcome').hidden = !welcome;
     element('conversationHistory').hidden = welcome;

@@ -16,11 +16,22 @@ for (const { name, parentPath } of readdirSync('packages', { withFileTypes: true
 }
 
 mkdirSync('dist/packages/ui-primitives/src/browser/vendor', { recursive: true });
-copyFileSync(join(dirname(require.resolve('marked')), 'marked.esm.js'), 'dist/packages/ui-primitives/src/browser/vendor/marked.js');
-copyFileSync(join(dirname(require.resolve('dompurify')), 'purify.es.mjs'), 'dist/packages/ui-primitives/src/browser/vendor/purify.js');
-copyFileSync(join(dirname(require.resolve('marked')), '..', 'LICENSE'), 'dist/packages/ui-primitives/src/browser/vendor/marked.LICENSE');
-copyFileSync(join(dirname(require.resolve('dompurify')), '..', 'LICENSE'), 'dist/packages/ui-primitives/src/browser/vendor/purify.LICENSE');
-
+copyFileSync(
+  join(dirname(require.resolve('marked')), 'marked.esm.js'),
+  'dist/packages/ui-primitives/src/browser/vendor/marked.js',
+);
+copyFileSync(
+  join(dirname(require.resolve('dompurify')), 'purify.es.mjs'),
+  'dist/packages/ui-primitives/src/browser/vendor/purify.js',
+);
+copyFileSync(
+  join(dirname(require.resolve('marked')), '..', 'LICENSE'),
+  'dist/packages/ui-primitives/src/browser/vendor/marked.LICENSE',
+);
+copyFileSync(
+  join(dirname(require.resolve('dompurify')), '..', 'LICENSE'),
+  'dist/packages/ui-primitives/src/browser/vendor/purify.LICENSE',
+);
 
 for (const name of ['LICENSE', 'COSMOKIT.LICENSE', 'README.md']) {
   copyFileSync(join('vendor/cordis', name), join('dist/vendor/cordis', name));
@@ -43,7 +54,7 @@ for (const path of Object.keys(editor.metafile.inputs)) {
   let directory = dirname(path);
   while (!existsSync(join(directory, 'package.json'))) directory = dirname(directory);
   const { name } = JSON.parse(readFileSync(join(directory, 'package.json'), 'utf8'));
-  const license = readdirSync(directory).find(file => /^licen[sc]e(?:\.|$)/i.test(file));
+  const license = readdirSync(directory).find((file) => /^licen[sc]e(?:\.|$)/i.test(file));
   if (!license) throw new Error('Missing license for bundled dependency: ' + name);
   copyFileSync(join(directory, license), join(notices, name.replace(/[^a-zA-Z0-9-]/g, '-') + '.LICENSE'));
 }

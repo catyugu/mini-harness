@@ -18,10 +18,10 @@ In PowerShell, set `$env:MINI_HARNESS_DEV_PLUGIN = (Get-Location).Path` before r
 
 The extension endpoints accept local authenticated requests under `/api/extensions/task-notes`.
 
-| Method and path | Input and effect |
-| - | - |
-| `PUT /credential` | Stores a `token` using protected storage and returns whether a credential is present. |
-| `GET /smoke` | Shows the current label, instance setup state and credential presence. |
+| Method and path   | Input and effect                                                                                                                                                       |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PUT /credential` | Stores a `token` using protected storage and returns whether a credential is present.                                                                                  |
+| `GET /smoke`      | Shows the current label, instance setup state and credential presence.                                                                                                 |
 | `POST /follow-up` | Takes `parentId` and `message`. Set `requireApproval` to `true` to show a user confirmation before creating a child. The child uses the parent’s last committed model. |
 
 Disable the plugin to remove its tool, routes and browser contributions. Previously saved display records remain visible in the conversation.

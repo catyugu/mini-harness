@@ -28,7 +28,9 @@ async function observe(projections: BrowserProjections, signal: AbortSignal) {
   while (!signal.aborted) {
     try {
       const connectedAt = performance.now();
-      await readEvents<ProjectionNotice>(await api('/changes', { signal }), (event) => { void projections.dispatch(event); });
+      await readEvents<ProjectionNotice>(await api('/changes', { signal }), (event) => {
+        void projections.dispatch(event);
+      });
       if (performance.now() - connectedAt > 10000) backoff = 300;
     } catch (error) {
       if (signal.aborted) break;
@@ -51,10 +53,16 @@ async function boot() {
   });
   const ctx = new Context();
   const graph = new RemoteStore(() => data<BrowserBootstrap>('/bootstrap', { signal: lifetime.signal }));
-  const report = (error: Error) => window.dispatchEvent(new CustomEvent('mini-harness:error', { detail: error }));
+  const report = (error: Error) =>
+    window.dispatchEvent(new CustomEvent('mini-harness:error', { detail: error }));
   const projections = new BrowserProjections((domain, error) => {
     if (error instanceof AuthenticationError) showAuthenticationError(error);
-    else report(new Error('Could not refresh ' + domain + ': ' + (error instanceof Error ? error.message : String(error))));
+    else
+      report(
+        new Error(
+          'Could not refresh ' + domain + ': ' + (error instanceof Error ? error.message : String(error)),
+        ),
+      );
   });
   const sync = browserModules(ctx);
   const dispose = async () => {
@@ -65,12 +73,17 @@ async function boot() {
   let currentFailures = new Map<string, string>();
   const applyGraph = async () => {
     const failures = await sync(graph.get());
-    const nextFailures = new Map([...failures].map(([id, error]) => [id, error instanceof Error ? error.message : String(error)]));
-    const changed = nextFailures.size !== currentFailures.size ||
+    const nextFailures = new Map(
+      [...failures].map(([id, error]) => [id, error instanceof Error ? error.message : String(error)]),
+    );
+    const changed =
+      nextFailures.size !== currentFailures.size ||
       [...nextFailures].some(([id, message]) => currentFailures.get(id) !== message);
     if (changed) for (const [id, error] of failures) console.warn('Browser plugin ' + id, error);
     currentFailures = nextFailures;
-    const coreFailure = [...failures].find(([id]) => graph.get().ui.some((entry) => entry.id === id && entry.required));
+    const coreFailure = [...failures].find(([id]) =>
+      graph.get().ui.some((entry) => entry.id === id && entry.required),
+    );
     const status = document.getElementById('startupStatus');
     if (coreFailure && status) {
       status.hidden = false;
@@ -85,9 +98,13 @@ async function boot() {
   ctx.provide('miniProjections', projections);
   ctx.provide('miniBrowserFailures', {
     get: (id: string) => currentFailures.get(id),
-    subscribe: (listener: () => void, signal: AbortSignal) => failuresChanged.addEventListener('change', listener, { signal })
+    subscribe: (listener: () => void, signal: AbortSignal) =>
+      failuresChanged.addEventListener('change', listener, { signal }),
   });
-  ctx.provide('miniSwitch', async () => { await graph.refresh(); return applyGraph(); });
+  ctx.provide('miniSwitch', async () => {
+    await graph.refresh();
+    return applyGraph();
+  });
   try {
     await graph.refresh();
     const failures = await applyGraph();
@@ -97,13 +114,17 @@ async function boot() {
         await graph.sync(revision, reconnect);
         const failures = await applyGraph();
         if (failures.size) report(new Error('Browser plugins failed: ' + [...failures.keys()].join(', ')));
-      }
+      },
     });
     lifetime.signal.addEventListener('abort', release, { once: true });
     void observe(projections, lifetime.signal);
-    window.addEventListener('pagehide', (event) => {
-      if (!event.persisted) void dispose();
-    }, { signal: lifetime.signal });
+    window.addEventListener(
+      'pagehide',
+      (event) => {
+        if (!event.persisted) void dispose();
+      },
+      { signal: lifetime.signal },
+    );
   } catch (error) {
     await dispose();
     throw error;

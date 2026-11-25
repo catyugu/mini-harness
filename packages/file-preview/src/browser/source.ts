@@ -1,4 +1,5 @@
-const tokens = /("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|(\/\/.*$|#.*$)|(\b(?:const|let|var|function|return|export|import|async|await|class|interface|def|fn|if|else|for|while|true|false|null|None|void|public|private)\b)|(\b\d+(?:\.\d+)?\b)/g;
+const tokens =
+  /("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|(\/\/.*$|#.*$)|(\b(?:const|let|var|function|return|export|import|async|await|class|interface|def|fn|if|else|for|while|true|false|null|None|void|public|private)\b)|(\b\d+(?:\.\d+)?\b)/g;
 export function source(content: string, highlight: boolean) {
   const node = document.createElement('pre');
   node.className = 'file-preview';
@@ -11,7 +12,13 @@ export function source(content: string, highlight: boolean) {
     if (highlight && text.length <= 2048) {
       for (const match of text.matchAll(tokens)) {
         const token = document.createElement('span');
-        token.className = match[1] ? 'syntax-string' : match[2] ? 'syntax-comment' : match[3] ? 'syntax-keyword' : 'syntax-number';
+        token.className = match[1]
+          ? 'syntax-string'
+          : match[2]
+            ? 'syntax-comment'
+            : match[3]
+              ? 'syntax-keyword'
+              : 'syntax-number';
         token.textContent = match[0];
         line.append(text.slice(offset, match.index), token);
         offset = match.index + match[0].length;
@@ -32,4 +39,3 @@ export function source(content: string, highlight: boolean) {
   wrapper.append(node, plain);
   return wrapper;
 }
-

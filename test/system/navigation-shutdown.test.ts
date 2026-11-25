@@ -17,12 +17,20 @@ test('HTTP shutdown cancels active requests and closes projection streams', { ti
   const base = 'http://127.0.0.1:' + port;
   const headers = { Authorization: 'Bearer ' + app.token };
   let markEntered = () => {};
-  const requestEntered = new Promise<void>((resolve) => { markEntered = resolve; });
-  const release = app.runtime.plugins.ctx.harnessRoutes.register('GET', '/api/fixture-pending', async ({ signal }) => {
-    const cancelled = new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
-    markEntered();
-    await cancelled;
+  const requestEntered = new Promise<void>((resolve) => {
+    markEntered = resolve;
   });
+  const release = app.runtime.plugins.ctx.harnessRoutes.register(
+    'GET',
+    '/api/fixture-pending',
+    async ({ signal }) => {
+      const cancelled = new Promise<void>((resolve) =>
+        signal.addEventListener('abort', () => resolve(), { once: true }),
+      );
+      markEntered();
+      await cancelled;
+    },
+  );
   t.after(release);
   const response = await fetch(base + '/api/changes', { headers });
   assert.equal(response.status, 200);
@@ -32,13 +40,14 @@ test('HTTP shutdown cancels active requests and closes projection streams', { ti
   assert.equal(first.done, false, 'the initial snapshot arrives on an open stream');
 
   let alarm: NodeJS.Timeout;
-  const bounded = <T>(promise: Promise<T>): Promise<T> => Promise.race([
-    promise,
-    new Promise<T>((_resolve, reject) => {
-      alarm = setTimeout(() => reject(new Error('Projection stream held the server open')), 10000);
-      alarm.unref();
-    })
-  ]).finally(() => clearTimeout(alarm));
+  const bounded = <T>(promise: Promise<T>): Promise<T> =>
+    Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        alarm = setTimeout(() => reject(new Error('Projection stream held the server open')), 10000);
+        alarm.unref();
+      }),
+    ]).finally(() => clearTimeout(alarm));
 
   try {
     const pending = fetch(base + '/api/fixture-pending', { headers });

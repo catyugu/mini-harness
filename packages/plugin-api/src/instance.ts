@@ -46,7 +46,7 @@ export function scopedEvent(ctx: Context, scopes: readonly string[]) {
         if (identity) return !identity.scopeKey || scopes.includes(identity.scopeKey);
       }
       return true;
-    }
+    },
   });
 }
 
@@ -57,11 +57,15 @@ export function pluginScope(ctx: Context): PluginScope {
 
 /** Prepare a visible conversation before accessing a declared service as the caller. */
 export async function sessionService<Name extends keyof HostServices & string>(
-  ctx: Context, id: string, name: Name, signal?: AbortSignal,
+  ctx: Context,
+  id: string,
+  name: Name,
+  signal?: AbortSignal,
 ) {
   const lifetime = ctx.fiber.signal;
   lifetime.throwIfAborted();
-  if (!sessionAddress(ctx, id).length || !sessionVisible(ctx, id)) throw new Error('Conversation outside plugin scope');
+  if (!sessionAddress(ctx, id).length || !sessionVisible(ctx, id))
+    throw new Error('Conversation outside plugin scope');
   let fiber = ctx.fiber;
   while (fiber.runtime && !(name in fiber.inject)) fiber = fiber.parent.fiber;
   if (!(name in fiber.inject)) throw new Error('Required service is not declared: ' + name);

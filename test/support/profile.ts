@@ -11,11 +11,24 @@ export async function storedProfile(paths: Paths, name = 'web') {
 export class MiniHarnessRuntime {
   private profile?: Awaited<ReturnType<typeof bootProfile>>;
   constructor(readonly paths: Paths) {}
-  async start() { this.profile = await bootProfile('web', this.paths, { interactive: false, shutdown: () => void this.stop() }); }
-  get plugins() { return this.profile!.ctx.harnessPluginCatalog as PluginHost; }
-  get configuration() { return this.profile!.ctx.harnessSettingsStore; }
-  get settings() { return this.configuration.settings; }
-  stop() { return this.profile?.close() ?? Promise.resolve(); }
+  async start() {
+    this.profile = await bootProfile('web', this.paths, {
+      interactive: false,
+      shutdown: () => void this.stop(),
+    });
+  }
+  get plugins() {
+    return this.profile!.ctx.harnessPluginCatalog as PluginHost;
+  }
+  get configuration() {
+    return this.profile!.ctx.harnessSettingsStore;
+  }
+  get settings() {
+    return this.configuration.settings;
+  }
+  stop() {
+    return this.profile?.close() ?? Promise.resolve();
+  }
 }
 
 export async function createMiniHarnessServer(paths: Paths) {

@@ -24,8 +24,9 @@ test('the composed browser graph serves its runtime dependencies and excludes se
     '/packages/transport/src/router.js',
     '/packages/shell/src/server/setup.js',
     '/packages/subagents/src/server/delegation.js',
-    '/packages/sessions/tests/log.test.js'
-  ]) assert.equal((await fetch(base + asset)).status, 404, asset);
+    '/packages/sessions/tests/log.test.js',
+  ])
+    assert.equal((await fetch(base + asset)).status, 404, asset);
 
   const pending = ['/packages/ui-runtime/src/browser/boot.js', '/packages/sdk/src/browser-plugin.js'];
   for (const { browser } of plugins) if (browser) pending.push(browser);
@@ -35,11 +36,19 @@ test('the composed browser graph serves its runtime dependencies and excludes se
     seenModules.add(path);
     const response = await fetch(base + path);
     assert.equal(response.status, 200, 'Missing browser module: ' + path);
-    const source = ts.createSourceFile(path, await response.text(), ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+    const source = ts.createSourceFile(
+      path,
+      await response.text(),
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.JS,
+    );
     for (const { literal, typeOnly } of moduleReferences(source)) {
       if (typeOnly) continue;
-      assert.ok(literal.text.startsWith('.') || literal.text.startsWith('/'),
-        'Unbundled browser import in ' + path + ': ' + literal.text);
+      assert.ok(
+        literal.text.startsWith('.') || literal.text.startsWith('/'),
+        'Unbundled browser import in ' + path + ': ' + literal.text,
+      );
       const target = new URL(literal.text, response.url);
       assert.equal(target.origin, base, 'Browser module has an off-origin import: ' + path);
       pending.push(target.pathname);
@@ -48,7 +57,10 @@ test('the composed browser graph serves its runtime dependencies and excludes se
 
   assert.equal((await request('/settings', 'PATCH', { plugins: { files: false, shell: true } })).status, 200);
   const { body: changed }: { body: BrowserBootstrap } = await request('/bootstrap');
-  assert.equal(changed.ui.some(({ id }) => id === 'files'), false);
+  assert.equal(
+    changed.ui.some(({ id }) => id === 'files'),
+    false,
+  );
   const shell = changed.ui.find(({ id }) => id === 'shell');
   assert.ok(shell);
   assert.match(await (await fetch(base + shell.browser)).text(), /inject: \['miniMessages'\]/);

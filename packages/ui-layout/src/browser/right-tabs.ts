@@ -21,9 +21,16 @@ interface WorkspaceTabs {
   active: Map<string, Tab>;
 }
 
-export function createRightTabs(view: {
-  root: HTMLElement; bar: HTMLElement; body: HTMLElement; toggle: HTMLButtonElement;
-}, layout: ReturnType<typeof createLayout>, signal: AbortSignal) {
+export function createRightTabs(
+  view: {
+    root: HTMLElement;
+    bar: HTMLElement;
+    body: HTMLElement;
+    toggle: HTMLButtonElement;
+  },
+  layout: ReturnType<typeof createLayout>,
+  signal: AbortSignal,
+) {
   const states = new Map<string, WorkspaceTabs>();
   const entries = new Set<RightPanelEntry>();
   const scopeChanges = new EventTarget();
@@ -42,7 +49,8 @@ export function createRightTabs(view: {
   };
   const current = () => scope && states.get(scope.workspaceId);
   const selected = () => current()?.active.get(scope?.sessionId ?? '');
-  const visible = () => (current()?.tabs ?? []).filter(tab => !tab.owner.sessionId || tab.owner.sessionId === scope?.sessionId);
+  const visible = () =>
+    (current()?.tabs ?? []).filter((tab) => !tab.owner.sessionId || tab.owner.sessionId === scope?.sessionId);
   const home = document.createElement('div');
   home.className = 'right-start';
 
@@ -54,46 +62,61 @@ export function createRightTabs(view: {
       current()?.active.delete(scope?.sessionId ?? '');
       render(true);
     };
-    view.bar.replaceChildren(...tabs.map(tab => {
-      const item = document.createElement('div');
-      item.className = 'right-tab';
-      const select = button(tab.title, 'quiet');
-      select.id = tab.id + '-select';
-      select.title = tab.title;
-      select.setAttribute('role', 'tab');
-      select.setAttribute('aria-selected', String(tab === active));
-      select.setAttribute('aria-controls', tab.id);
-      select.tabIndex = tab === active || !active && tab === tabs[0] ? 0 : -1;
-      select.onclick = () => activate(tab);
-      const close = iconButton('Close tab ' + tab.title, 'close');
-      close.onclick = () => { remove(tab); render(true); };
-      item.append(select, close);
-      return item;
-    }));
+    view.bar.replaceChildren(
+      ...tabs.map((tab) => {
+        const item = document.createElement('div');
+        item.className = 'right-tab';
+        const select = button(tab.title, 'quiet');
+        select.id = tab.id + '-select';
+        select.title = tab.title;
+        select.setAttribute('role', 'tab');
+        select.setAttribute('aria-selected', String(tab === active));
+        select.setAttribute('aria-controls', tab.id);
+        select.tabIndex = tab === active || (!active && tab === tabs[0]) ? 0 : -1;
+        select.onclick = () => activate(tab);
+        const close = iconButton('Close tab ' + tab.title, 'close');
+        close.onclick = () => {
+          remove(tab);
+          render(true);
+        };
+        item.append(select, close);
+        return item;
+      }),
+    );
     if (tabs.length) view.bar.append(start);
     home.hidden = Boolean(active);
     const selectedScope = scope;
-    home.replaceChildren(...(selectedScope ? [...entries].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map(entry => {
-      const card = button('', 'quiet');
-      const label = document.createElement('span');
-      const title = document.createElement('strong');
-      title.textContent = entry.title;
-      const description = document.createElement('small');
-      description.textContent = entry.description;
-      label.append(title, description);
-      card.append(icon(entry.icon), label);
-      card.onclick = () => entry.open(selectedScope);
-      return card;
-    }) : []));
+    home.replaceChildren(
+      ...(selectedScope
+        ? [...entries]
+            .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+            .map((entry) => {
+              const card = button('', 'quiet');
+              const label = document.createElement('span');
+              const title = document.createElement('strong');
+              title.textContent = entry.title;
+              const description = document.createElement('small');
+              description.textContent = entry.description;
+              label.append(title, description);
+              card.append(icon(entry.icon), label);
+              card.onclick = () => entry.open(selectedScope);
+              return card;
+            })
+        : []),
+    );
     if (home.parentElement !== view.body) view.body.append(home);
-    if (selectedScope) for (const tab of tabs) {
-      if (!tab.view && tab === active) mount(tab, selectedScope);
-      if (!tab.view) continue;
-      tab.view.node.hidden = tab !== active;
-      if (tab.view.node.parentElement !== view.body) view.body.append(tab.view.node);
-    }
-    if (focus) (active ? document.getElementById(active.id + '-select') :
-      home.querySelector('button') ?? view.root.querySelector<HTMLElement>('#inspectorClose'))?.focus();
+    if (selectedScope)
+      for (const tab of tabs) {
+        if (!tab.view && tab === active) mount(tab, selectedScope);
+        if (!tab.view) continue;
+        tab.view.node.hidden = tab !== active;
+        if (tab.view.node.parentElement !== view.body) view.body.append(tab.view.node);
+      }
+    if (focus)
+      (active
+        ? document.getElementById(active.id + '-select')
+        : (home.querySelector('button') ?? view.root.querySelector<HTMLElement>('#inspectorClose'))
+      )?.focus();
   }
 
   function activate(tab: Tab) {
@@ -117,8 +140,13 @@ export function createRightTabs(view: {
     if (next) {
       const target = state(next.workspaceId);
       if (openedBeforeSelection) target.open = true;
-      if (previous && !previous.owner.sessionId && previous.owner.workspaceId === next.workspaceId &&
-        !target.active.has(next.sessionId ?? '')) target.active.set(next.sessionId ?? '', previous);
+      if (
+        previous &&
+        !previous.owner.sessionId &&
+        previous.owner.workspaceId === next.workspaceId &&
+        !target.active.has(next.sessionId ?? '')
+      )
+        target.active.set(next.sessionId ?? '', previous);
     }
     render();
     layout.setPanel(current()?.open ?? false);
@@ -127,8 +155,9 @@ export function createRightTabs(view: {
   function mount(tab: Tab, scope: TabScope) {
     const controller = new AbortController();
     let node: HTMLElement;
-    try { node = tab.create(scope, controller.signal); }
-    catch (error) {
+    try {
+      node = tab.create(scope, controller.signal);
+    } catch (error) {
       controller.abort();
       node = document.createElement('p');
       node.textContent = error instanceof Error ? error.message : String(error);
@@ -149,16 +178,25 @@ export function createRightTabs(view: {
   function open<T>(type: symbol, definition: RightTabType<T>, { owner, key, data, signal }: RightTab<T>) {
     if (signal?.aborted) return;
     const target = state(owner.workspaceId);
-    let tab = target.tabs.find(item => item.type === type && item.key === key && item.owner.sessionId === owner.sessionId);
+    let tab = target.tabs.find(
+      (item) => item.type === type && item.key === key && item.owner.sessionId === owner.sessionId,
+    );
     if (!tab) {
       const created: Tab = {
-        id: 'right-tab-' + ++nextId, type, key, owner: { ...owner }, title: definition.title(data),
+        id: 'right-tab-' + ++nextId,
+        type,
+        key,
+        owner: { ...owner },
+        title: definition.title(data),
         create: (scope, signal) => definition.create(data, scope, signal),
       };
       tab = created;
       target.tabs.push(tab);
       if (signal) {
-        const close = () => { remove(created); render(); };
+        const close = () => {
+          remove(created);
+          render();
+        };
         signal.addEventListener('abort', close, { once: true });
         created.stop = () => signal.removeEventListener('abort', close);
       }
@@ -178,11 +216,14 @@ export function createRightTabs(view: {
     const index = target?.tabs.indexOf(tab) ?? -1;
     if (!target || index < 0) return;
     target.tabs.splice(index, 1);
-    for (const [id, active] of target.active) if (active === tab) {
-      const next = target.tabs.filter(item => !item.owner.sessionId || item.owner.sessionId === id).at(-1);
-      if (next) target.active.set(id, next);
-      else target.active.delete(id);
-    }
+    for (const [id, active] of target.active)
+      if (active === tab) {
+        const next = target.tabs
+          .filter((item) => !item.owner.sessionId || item.owner.sessionId === id)
+          .at(-1);
+        if (next) target.active.set(id, next);
+        else target.active.delete(id);
+      }
     tab.stop?.();
     unmount(tab);
   }
@@ -190,12 +231,15 @@ export function createRightTabs(view: {
   function prune(sessions: ReadonlySet<string>, workspaces: ReadonlySet<string>) {
     for (const [id, target] of states) {
       for (const tab of [...target.tabs])
-        if (!workspaces.has(id) || tab.owner.sessionId && !sessions.has(tab.owner.sessionId)) remove(tab);
+        if (!workspaces.has(id) || (tab.owner.sessionId && !sessions.has(tab.owner.sessionId))) remove(tab);
       if (!workspaces.has(id)) states.delete(id);
-      else for (const session of target.active.keys()) if (session && !sessions.has(session)) target.active.delete(session);
+      else
+        for (const session of target.active.keys())
+          if (session && !sessions.has(session)) target.active.delete(session);
     }
     if (scope && !workspaces.has(scope.workspaceId)) selectScope();
-    else if (scope?.sessionId && !sessions.has(scope.sessionId)) selectScope({ workspaceId: scope.workspaceId });
+    else if (scope?.sessionId && !sessions.has(scope.sessionId))
+      selectScope({ workspaceId: scope.workspaceId });
     else render();
   }
 
@@ -204,40 +248,63 @@ export function createRightTabs(view: {
     layout.setPanel(opening, true);
     if (opening) selected()?.view?.node.dispatchEvent(new Event('tab-activate'));
   };
-  view.bar.addEventListener('keydown', event => {
-    if (!(event.target as HTMLElement).matches('[role=tab]')) return;
-    const tabs = visible();
-    const index = [...view.bar.querySelectorAll('[role=tab]')].indexOf(event.target as Element);
-    const target = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 :
-      event.key === 'ArrowLeft' ? (index + tabs.length - 1) % tabs.length :
-        event.key === 'ArrowRight' ? (index + 1) % tabs.length : undefined;
-    if (target === undefined) return;
-    event.preventDefault();
-    activate(tabs[target]);
-  }, { signal });
-  signal.addEventListener('abort', () => {
-    for (const target of states.values()) for (const tab of [...target.tabs]) remove(tab);
-    states.clear();
-  }, { once: true });
+  view.bar.addEventListener(
+    'keydown',
+    (event) => {
+      if (!(event.target as HTMLElement).matches('[role=tab]')) return;
+      const tabs = visible();
+      const index = [...view.bar.querySelectorAll('[role=tab]')].indexOf(event.target as Element);
+      const target =
+        event.key === 'Home'
+          ? 0
+          : event.key === 'End'
+            ? tabs.length - 1
+            : event.key === 'ArrowLeft'
+              ? (index + tabs.length - 1) % tabs.length
+              : event.key === 'ArrowRight'
+                ? (index + 1) % tabs.length
+                : undefined;
+      if (target === undefined) return;
+      event.preventDefault();
+      activate(tabs[target]);
+    },
+    { signal },
+  );
+  signal.addEventListener(
+    'abort',
+    () => {
+      for (const target of states.values()) for (const tab of [...target.tabs]) remove(tab);
+      states.clear();
+    },
+    { once: true },
+  );
 
   return Service.track({
-    selectScope, prune,
+    selectScope,
+    prune,
     register<T>(type: string, definition: RightTabType<T>) {
       const identity = Symbol(type);
       const owner = Service.caller(this).fiber;
       const signal = owner.signal;
       owner.effect(() => () => {
-        for (const target of states.values()) for (const tab of [...target.tabs])
-          if (tab.type === identity) remove(tab);
+        for (const target of states.values())
+          for (const tab of [...target.tabs]) if (tab.type === identity) remove(tab);
         render();
       });
-      return { open(tab: RightTab<T>) { if (!signal.aborted) open(identity, definition, tab); } };
+      return {
+        open(tab: RightTab<T>) {
+          if (!signal.aborted) open(identity, definition, tab);
+        },
+      };
     },
     contribute(id: string, entry: RightPanelEntry) {
       Service.caller(this).effect(() => {
         entries.add(entry);
         render();
-        return () => { entries.delete(entry); render(); };
+        return () => {
+          entries.delete(entry);
+          render();
+        };
       }, 'Workspace panel entry: ' + id);
     },
     onScopeChange(listener: () => void, signal: AbortSignal) {
@@ -247,10 +314,16 @@ export function createRightTabs(view: {
     inspect(title: string, node: HTMLElement, lifetime: AbortSignal) {
       if (!scope) return;
       const owner = Service.caller(this).fiber;
-      open(inspector, { title: () => title, create: () => node }, {
-        owner: { ...scope }, key: String(owner.uid),
-        data: undefined, signal: AbortSignal.any([owner.signal, selection.signal, lifetime]),
-      });
+      open(
+        inspector,
+        { title: () => title, create: () => node },
+        {
+          owner: { ...scope },
+          key: String(owner.uid),
+          data: undefined,
+          signal: AbortSignal.any([owner.signal, selection.signal, lifetime]),
+        },
+      );
     },
   });
 }

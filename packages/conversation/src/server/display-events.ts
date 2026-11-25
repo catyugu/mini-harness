@@ -18,12 +18,17 @@ declare module 'mini-harness/cordis' {
 
 export function projectTool(ctx: Context, projection: ToolProjection) {
   let { content } = projection;
-  for (const { context, callback } of ctx.events.listeners('conversation/tool-projection', sessionEvent(ctx, projection.sessionId))) {
+  for (const { context, callback } of ctx.events.listeners(
+    'conversation/tool-projection',
+    sessionEvent(ctx, projection.sessionId),
+  )) {
     try {
       const result = callback(structuredClone({ ...projection, content }));
       if (result === undefined) continue;
-      if (typeof result !== 'string' && (!Array.isArray(result) ||
-          !result.every(block => block && typeof block.type === 'string')))
+      if (
+        typeof result !== 'string' &&
+        (!Array.isArray(result) || !result.every((block) => block && typeof block.type === 'string'))
+      )
         throw new Error('Invalid tool projection');
       content = structuredClone(result);
     } catch (error) {
@@ -34,13 +39,25 @@ export function projectTool(ctx: Context, projection: ToolProjection) {
 }
 
 export function projectHistory(ctx: Context, sessionId: string, messages: ViewMessage[]) {
-  return messages.map((message) => message.role === 'toolResult' && message.toolName
-    ? { ...message, content: projectTool(ctx, { sessionId, tool: message.toolName, content: message.content }) }
-    : message);
+  return messages.map((message) =>
+    message.role === 'toolResult' && message.toolName
+      ? {
+          ...message,
+          content: projectTool(ctx, { sessionId, tool: message.toolName, content: message.content }),
+        }
+      : message,
+  );
 }
 
-export function projectToolEvent<T extends { name: string; content?: MessageContent }>(ctx: Context, sessionId: string, event: T): T {
-  return event.content === undefined ? event : {
-    ...event, content: projectTool(ctx, { sessionId, tool: event.name, content: event.content })
-  };
+export function projectToolEvent<T extends { name: string; content?: MessageContent }>(
+  ctx: Context,
+  sessionId: string,
+  event: T,
+): T {
+  return event.content === undefined
+    ? event
+    : {
+        ...event,
+        content: projectTool(ctx, { sessionId, tool: event.name, content: event.content }),
+      };
 }

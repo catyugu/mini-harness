@@ -3,8 +3,11 @@ import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
 import { PiModelStore } from '../server/pi-adapter.js';
 
 export const manifest: PluginDescriptor = {
-  id: 'core:model-store', scope: 'application', defaultEnabled: true,
-  title: 'Model store', description: 'Shared provider definitions and credentials',
+  id: 'core:model-store',
+  scope: 'application',
+  defaultEnabled: true,
+  title: 'Model store',
+  description: 'Shared provider definitions and credentials',
 
   plugin: {
     inject: ['harnessState'],
@@ -14,6 +17,6 @@ export const manifest: PluginDescriptor = {
       ctx.effect(() => () => store.close());
       await store.refresh();
       ctx.provide('harnessModelStore', store);
-    }
-  }
+    },
+  },
 };

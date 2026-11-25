@@ -3,18 +3,26 @@ import type { RunEvent } from '@mini-harness/runs/stream';
 import { api, AuthenticationError, data, payload, readEvents, wait } from '@mini-harness/ui-runtime/http';
 import type { ConversationView } from '../shared/api.js';
 
-export const readConversation = (id: string, signal: AbortSignal) => data<ConversationView>('/sessions/' + id, { signal });
+export const readConversation = (id: string, signal: AbortSignal) =>
+  data<ConversationView>('/sessions/' + id, { signal });
 
-export async function observeRun(item: ConversationView, signal: AbortSignal, accept: (event: RunEvent) => void, reconnect: () => void) {
+export async function observeRun(
+  item: ConversationView,
+  signal: AbortSignal,
+  accept: (event: RunEvent) => void,
+  reconnect: () => void,
+) {
   const originalRun = item.run;
   if (!originalRun) throw new Error('Cannot observe a conversation without a run');
   const url = '/sessions/' + item.id + '/events?run=' + originalRun.id + '&after=';
-  let cursor = originalRun.sequence, retries = 0, ended = false;
+  let cursor = originalRun.sequence,
+    retries = 0,
+    ended = false;
   while (!signal.aborted && !ended) {
     try {
       const response = await api(url + cursor, { signal });
       await readEvents<RunEvent>(response, (event) => {
-        if (signal.aborted || event.sequence <= cursor && event.type !== 'snapshot') return;
+        if (signal.aborted || (event.sequence <= cursor && event.type !== 'snapshot')) return;
         cursor = event.sequence;
         accept(event);
         if (event.type === 'run' || event.type === 'snapshot') ended = !isRunning(event.run);

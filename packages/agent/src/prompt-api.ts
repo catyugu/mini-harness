@@ -24,5 +24,7 @@ export interface PromptPort {
 }
 
 declare module 'mini-harness/cordis' {
-  interface Context { harnessPrompt: PromptPort }
+  interface Context {
+    harnessPrompt: PromptPort;
+  }
 }

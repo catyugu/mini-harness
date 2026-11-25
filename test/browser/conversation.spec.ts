@@ -6,7 +6,8 @@ import { readJson, writeJson } from '@mini-harness/platform/json';
 import { startIsolatedHost, modelSearch, suggestions, modelButton, chooseModel } from '../support/browser.js';
 
 test('drafts isolate attachments and discover workspace files and skills', async ({ page }) => {
-  const mock = await createMockProvider(), { root, paths } = createFixturePaths(mock.url);
+  const mock = await createMockProvider(),
+    { root, paths } = createFixturePaths(mock.url);
   const modelsPath = join(paths.home, 'models.json');
   const models = readJson<any>(modelsPath, {});
   models.providers['local-mock'].models[0].input.push('image');
@@ -14,13 +15,20 @@ test('drafts isolate attachments and discover workspace files and skills', async
   writeFileSync(join(paths.cwd, 'notes.md'), '# Notes\nTask details');
   mkdirSync(join(paths.cwd, 'task files'));
   writeFileSync(join(paths.cwd, 'task files', 'draft.md'), '# Draft');
-  const skill = join(paths.home, 'skills', 'review'); mkdirSync(skill, { recursive: true }); writeFileSync(join(skill, 'SKILL.md'), '---\nname: review\ndescription: Review the work\n---\n\nReview carefully.');
+  const skill = join(paths.home, 'skills', 'review');
+  mkdirSync(skill, { recursive: true });
+  writeFileSync(
+    join(skill, 'SKILL.md'),
+    '---\nname: review\ndescription: Review the work\n---\n\nReview carefully.',
+  );
   const service = await startIsolatedHost(paths);
   try {
     await page.goto(service.url + '/#token=' + service.token);
-    for (let i = 0; i < 3; i++) await page.getByRole('button', { name: 'New conversation', exact: true }).click();
+    for (let i = 0; i < 3; i++)
+      await page.getByRole('button', { name: 'New conversation', exact: true }).click();
     await expect(page.locator('#sessions .session-row')).toHaveCount(0);
-    const index = readJson<any>(paths.registry, { sessions: [] }); expect(index.sessions).toHaveLength(0);
+    const index = readJson<any>(paths.registry, { sessions: [] });
+    expect(index.sessions).toHaveLength(0);
     const draft = page.getByRole('textbox', { name: 'Message', exact: true });
     await draft.fill('@');
     await suggestions(page).getByRole('option', { name: 'task files, expand folder' }).click();
@@ -44,7 +52,9 @@ test('drafts isolate attachments and discover workspace files and skills', async
     await draft.fill('Read this attachment  and keep this text');
     await draft.press('Home');
     for (let i = 0; i < 21; i++) await draft.press('ArrowRight');
-    await draft.press('/'); await draft.press('m'); await draft.press('o');
+    await draft.press('/');
+    await draft.press('m');
+    await draft.press('o');
     await expect(suggestions(page).getByRole('option', { name: /Choose a configured model/ })).toBeVisible();
     await draft.press('Tab');
     await expect(draft).toHaveText('Read this attachment /model and keep this text');
@@ -57,7 +67,10 @@ test('drafts isolate attachments and discover workspace files and skills', async
     await expect(suggestions(page)).toBeHidden();
     const refreshed = join(paths.cwd, '.agents', 'skills', 'fresh');
     mkdirSync(refreshed, { recursive: true });
-    writeFileSync(join(refreshed, 'SKILL.md'), '---\nname: fresh\ndescription: Added after connecting\n---\nFresh instructions.');
+    writeFileSync(
+      join(refreshed, 'SKILL.md'),
+      '---\nname: fresh\ndescription: Added after connecting\n---\nFresh instructions.',
+    );
     await draft.fill('');
     await page.getByRole('button', { name: 'Choose skill' }).click();
     await expect(suggestions(page).getByRole('option', { name: /Added after connecting/ })).toBeVisible();
@@ -65,28 +78,37 @@ test('drafts isolate attachments and discover workspace files and skills', async
     await draft.fill('Read this attachment  and keep this text');
     await draft.press('Home');
     for (let i = 0; i < 21; i++) await draft.press('ArrowRight');
-    await draft.press('/'); await draft.press('r'); await draft.press('e'); await draft.press('v');
+    await draft.press('/');
+    await draft.press('r');
+    await draft.press('e');
+    await draft.press('v');
     await expect(suggestions(page).getByRole('option', { name: /Review the work/ })).toBeVisible();
     await draft.press('Enter');
     await expect(draft).toHaveText('Read this attachment /skill:review and keep this text');
-    const images = await page.evaluate(() => [240, 480].map((width) => {
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = width * 7 / 12;
-      const context = canvas.getContext('2d')!;
-      context.fillStyle = '#137';
-      context.fillRect(0, 0, canvas.width, canvas.height);
-      return canvas.toDataURL('image/png').split(',')[1];
-    }));
+    const images = await page.evaluate(() =>
+      [240, 480].map((width) => {
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = (width * 7) / 12;
+        const context = canvas.getContext('2d')!;
+        context.fillStyle = '#137';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        return canvas.toDataURL('image/png').split(',')[1];
+      }),
+    );
     await draft.fill('Read this attachment /skill:review and keep this text /file');
-    await expect(suggestions(page).getByRole('option', { name: /Upload files from your device/ })).toBeVisible();
+    await expect(
+      suggestions(page).getByRole('option', { name: /Upload files from your device/ }),
+    ).toBeVisible();
     const chooser = page.waitForEvent('filechooser');
     await draft.press('Enter');
-    await (await chooser).setFiles([
+    await (
+      await chooser
+    ).setFiles([
       { name: 'task.txt', mimeType: 'text/plain', buffer: Buffer.from('ATTACHED TASK') },
       { name: 'document.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.7\n') },
       { name: 'blue.png', mimeType: 'image/png', buffer: Buffer.from(images[0], 'base64') },
-      { name: 'reference.png', mimeType: 'image/png', buffer: Buffer.from(images[1], 'base64') }
+      { name: 'reference.png', mimeType: 'image/png', buffer: Buffer.from(images[1], 'base64') },
     ]);
     await expect(page.getByRole('button', { name: 'Remove task.txt' })).toBeVisible();
     await page.getByRole('button', { name: 'Preview task.txt', exact: true }).click();
@@ -136,7 +158,11 @@ test('drafts isolate attachments and discover workspace files and skills', async
         window.setTimeout(() => read.call(this, file), 700);
       };
     });
-    await page.locator('#composer input[type=file]').setInputFiles({ name: 'private.txt', mimeType: 'text/plain', buffer: Buffer.from('ONLY FOR PROJECT REVIEW') });
+    await page.locator('#composer input[type=file]').setInputFiles({
+      name: 'private.txt',
+      mimeType: 'text/plain',
+      buffer: Buffer.from('ONLY FOR PROJECT REVIEW'),
+    });
     await page.getByRole('button', { name: 'New conversation', exact: true }).click();
     await expect(draft.locator('.cm-placeholder')).toBeVisible();
     await draft.fill('Different conversation @"notes.md"');
@@ -144,7 +170,9 @@ test('drafts isolate attachments and discover workspace files and skills', async
     await expect(page.locator('.message.assistant')).toHaveText('Mock response');
     expect(JSON.stringify(mock.requests.at(-1))).not.toContain('ONLY FOR PROJECT REVIEW');
     await expect(page.locator('.message-attachments')).toHaveCount(0);
-    const historyReference = page.locator('.message.user').getByRole('button', { name: 'notes.md', exact: true });
+    const historyReference = page
+      .locator('.message.user')
+      .getByRole('button', { name: 'notes.md', exact: true });
     await expect(historyReference).toBeVisible();
     await expect(page.locator('.message.user')).toHaveText('Different conversation notes.md');
     await historyReference.click();
@@ -155,9 +183,16 @@ test('drafts isolate attachments and discover workspace files and skills', async
     await expect(draft).toHaveText('Keep this draft');
     await expect(page.getByRole('button', { name: 'Remove private.txt' })).toBeVisible();
     await page.locator('.session-row').filter({ hasText: 'Different conversation' }).hover();
-    await page.getByRole('button', { name: 'Delete Different conversation @"notes.md"', exact: true }).click();
-    await page.getByRole('dialog', { name: 'Delete conversation' }).getByRole('button', { name: 'Delete', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'Different conversation @"notes.md"', exact: true })).toHaveCount(0);
+    await page
+      .getByRole('button', { name: 'Delete Different conversation @"notes.md"', exact: true })
+      .click();
+    await page
+      .getByRole('dialog', { name: 'Delete conversation' })
+      .getByRole('button', { name: 'Delete', exact: true })
+      .click();
+    await expect(
+      page.getByRole('button', { name: 'Different conversation @"notes.md"', exact: true }),
+    ).toHaveCount(0);
     await page.locator('.session-row').filter({ hasText: title }).hover();
     await page.getByRole('button', { name: 'Delete ' + title, exact: true }).click();
     const confirmation = page.getByRole('dialog', { name: 'Delete conversation' });
@@ -165,7 +200,12 @@ test('drafts isolate attachments and discover workspace files and skills', async
     await confirmation.getByRole('button', { name: 'Delete', exact: true }).click();
     await expect(page.locator('#sessions .session-row')).toHaveCount(0);
     await expect(page.getByRole('heading', { name: 'What are we working on?' })).toBeVisible();
-  } finally { await page.close(); await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); }
+  } finally {
+    await page.close();
+    await service.stop();
+    await mock.close();
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('the global recent model survives history navigation and page reload', async ({ page }) => {
@@ -173,9 +213,17 @@ test('the global recent model survives history navigation and page reload', asyn
   const { root, paths } = createFixturePaths(mock.url);
   const models = readJson<any>(join(paths.home, 'models.json'), {});
   const first = models.providers['local-mock'].models[0];
-  models.providers['local-mock'].models.push({ ...first, id: 'second-model', name: 'Second Model', reasoning: true });
-  models.providers['unconfigured-fixture'] = { baseUrl: mock.url, api: 'openai-completions',
-    models: [{ ...first, id: 'private-only', name: 'Private Only' }] };
+  models.providers['local-mock'].models.push({
+    ...first,
+    id: 'second-model',
+    name: 'Second Model',
+    reasoning: true,
+  });
+  models.providers['unconfigured-fixture'] = {
+    baseUrl: mock.url,
+    api: 'openai-completions',
+    models: [{ ...first, id: 'private-only', name: 'Private Only' }],
+  };
   writeJson(join(paths.home, 'models.json'), models);
   const service = await startIsolatedHost(paths);
   try {
@@ -221,7 +269,10 @@ test('the global recent model survives history navigation and page reload', asyn
     await expect(page.locator('.message.assistant')).toHaveCount(2);
     expect(mock.requests.at(-1)?.model).toBe('second-model');
   } finally {
-    await page.close(); await service.stop(); await mock.close(); rmSync(root, { recursive: true, force: true });
+    await page.close();
+    await service.stop();
+    await mock.close();
+    rmSync(root, { recursive: true, force: true });
   }
 });
 
@@ -235,14 +286,18 @@ test('video attachments play in a dialog and workspace references play in the pa
     await page.setViewportSize({ width: 390, height: 700 });
     await page.goto(service.url + '/#token=' + service.token);
     await page.locator('#composer input[type=file]').setInputFiles({
-      name: 'upload.webm', mimeType: 'video/webm', buffer: video,
+      name: 'upload.webm',
+      mimeType: 'video/webm',
+      buffer: video,
     });
     const card = page.getByRole('button', { name: 'Preview upload.webm' });
     await card.click();
     const media = page.getByRole('dialog', { name: 'upload.webm' });
     const playback = media.locator('video[controls]');
     await expect(playback).toBeVisible();
-    await expect.poll(() => playback.evaluate((node: HTMLVideoElement) => node.readyState)).toBeGreaterThan(1);
+    await expect
+      .poll(() => playback.evaluate((node: HTMLVideoElement) => node.readyState))
+      .toBeGreaterThan(1);
     await media.getByRole('button', { name: 'Close preview' }).click();
     await expect(card).toBeFocused();
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Watch @"clip.webm"');

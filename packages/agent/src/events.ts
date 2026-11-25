@@ -13,9 +13,15 @@ export interface StepContext {
   readonly signal: AbortSignal;
 }
 
-export type ModelRequestContent = Pick<LlmRequest, 'messages' | 'systemPrompt' | 'thinkingLevel' | 'maxTokens'>;
+export type ModelRequestContent = Pick<
+  LlmRequest,
+  'messages' | 'systemPrompt' | 'thinkingLevel' | 'maxTokens'
+>;
 
-type Transform<Value, Input> = (value: Value, context: Input) => Value | undefined | Promise<Value | undefined>;
+type Transform<Value, Input> = (
+  value: Value,
+  context: Input,
+) => Value | undefined | Promise<Value | undefined>;
 export type ModelRequestTransform = Transform<ModelRequestContent, StepContext>;
 
 export interface ModelFailure {
@@ -26,7 +32,9 @@ export interface ModelFailure {
   readonly signal: AbortSignal;
 }
 export type ModelRetry = { delayMs?: number };
-export type ModelRetryHandler = (failure: ModelFailure) => ModelRetry | undefined | Promise<ModelRetry | undefined>;
+export type ModelRetryHandler = (
+  failure: ModelFailure,
+) => ModelRetry | undefined | Promise<ModelRetry | undefined>;
 
 export interface InputContext {
   readonly sessionId: string;
@@ -37,9 +45,14 @@ export interface InputContext {
   readonly signal: AbortSignal;
 }
 
-export type InputPreparation = (content: NativeUserMessage['content'], context: InputContext) =>
-  NativeUserMessage['content'] | { reject: string } | undefined |
-  Promise<NativeUserMessage['content'] | { reject: string } | undefined>;
+export type InputPreparation = (
+  content: NativeUserMessage['content'],
+  context: InputContext,
+) =>
+  | NativeUserMessage['content']
+  | { reject: string }
+  | undefined
+  | Promise<NativeUserMessage['content'] | { reject: string } | undefined>;
 
 export interface ToolResultContext extends StepContext {
   readonly callId: string;
@@ -60,7 +73,19 @@ declare module 'mini-harness/cordis' {
 declare module '@mini-harness/plugin-api/observations' {
   interface CapabilityObservations {
     'step-started': { type: 'step-started'; sessionId: string; turn: number };
-    'model-attempt-ended': { type: 'model-attempt-ended'; sessionId: string; attempt: number; failed: boolean };
-    'tool-ended': { type: 'tool-ended'; sessionId: string; tool: string; callId: string; failed: boolean; elapsedMs?: number };
+    'model-attempt-ended': {
+      type: 'model-attempt-ended';
+      sessionId: string;
+      attempt: number;
+      failed: boolean;
+    };
+    'tool-ended': {
+      type: 'tool-ended';
+      sessionId: string;
+      tool: string;
+      callId: string;
+      failed: boolean;
+      elapsedMs?: number;
+    };
   }
 }

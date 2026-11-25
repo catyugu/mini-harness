@@ -13,13 +13,23 @@ function errorText(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
 
-function downloadButton(ctx: Context, resource: PreviewResource, scope: WorkspaceView, signal: AbortSignal, status: HTMLElement) {
+function downloadButton(
+  ctx: Context,
+  resource: PreviewResource,
+  scope: WorkspaceView,
+  signal: AbortSignal,
+  status: HTMLElement,
+) {
   const trigger = button('Download', 'quiet');
   trigger.onclick = async () => {
     trigger.disabled = true;
-    try { await download(ctx, resource, scope, signal); }
-    catch (error) { if (!signal.aborted) status.textContent = errorText(error); }
-    finally { trigger.disabled = false; }
+    try {
+      await download(ctx, resource, scope, signal);
+    } catch (error) {
+      if (!signal.aborted) status.textContent = errorText(error);
+    } finally {
+      trigger.disabled = false;
+    }
   };
   return trigger;
 }
@@ -67,7 +77,13 @@ function sidebar(ctx: Context, resource: PreviewResource, scope: WorkspaceView, 
         } else status.textContent = 'Workspace file browsing is unavailable.';
       } else if (preview.kind === 'bytes') {
         const media = mediaElement(preview.data, preview.mimeType, name, lifetime);
-        media.addEventListener('error', () => { status.textContent = 'This media could not be played. You can download the original file.'; }, { signal: lifetime });
+        media.addEventListener(
+          'error',
+          () => {
+            status.textContent = 'This media could not be played. You can download the original file.';
+          },
+          { signal: lifetime },
+        );
         content.append(media);
       } else if (preview.kind === 'binary') {
         status.textContent = 'Preview unavailable for this file.';
@@ -86,7 +102,10 @@ function sidebar(ctx: Context, resource: PreviewResource, scope: WorkspaceView, 
             markdown.hidden = showSource;
             raw.setAttribute('aria-pressed', String(showSource));
           };
-          raw.onclick = () => { showSource = !showSource; toggle(); };
+          raw.onclick = () => {
+            showSource = !showSource;
+            toggle();
+          };
           toggle();
         }
         if (preview.truncated) status.textContent = 'Preview shows the first 512 KiB.';
@@ -113,7 +132,10 @@ function setup(ctx: Context) {
       if (lifetime.aborted) return;
       if (resource.kind === 'workspace' && resource.path.endsWith('/')) {
         const files = ctx.get('miniFileTree');
-        if (files) { files.open(resource.path.replace(/\/$/, '') || '.', { workspaceId: resource.workspaceId }); return; }
+        if (files) {
+          files.open(resource.path.replace(/\/$/, '') || '.', { workspaceId: resource.workspaceId });
+          return;
+        }
       }
       const workspaceId = resource.workspaceId;
       const sessionId = resource.kind === 'workspace' ? undefined : resource.sessionId;
@@ -121,14 +143,30 @@ function setup(ctx: Context) {
       const signal = resource.kind === 'memory' ? AbortSignal.any([resource.signal, lifetime]) : lifetime;
       if (signal.aborted) return;
       if (placement === 'sidebar') {
-        const key = resource.kind === 'workspace' ? resource.path : resource.kind === 'attachment' ? resource.id + ':' + resource.name : resource.key;
-        tab.open({ owner: sessionId ? { workspaceId, sessionId } : { workspaceId }, key: resource.kind + ':' + key, data: resource, signal });
+        const key =
+          resource.kind === 'workspace'
+            ? resource.path
+            : resource.kind === 'attachment'
+              ? resource.id + ':' + resource.name
+              : resource.key;
+        tab.open({
+          owner: sessionId ? { workspaceId, sessionId } : { workspaceId },
+          key: resource.kind + ':' + key,
+          data: resource,
+          signal,
+        });
         return;
       }
 
       active?.close();
-      const dialog = active = mediaDialog(nameOf(resource), signal);
-      dialog.signal.addEventListener('abort', () => { if (active === dialog) active = undefined; }, { once: true });
+      const dialog = (active = mediaDialog(nameOf(resource), signal));
+      dialog.signal.addEventListener(
+        'abort',
+        () => {
+          if (active === dialog) active = undefined;
+        },
+        { once: true },
+      );
       // Layout owns the selected scope, including sessions with identical workspace IDs.
       const stop = ctx.miniTabs.onScopeChange(() => dialog.close(), dialog.signal);
       dialog.signal.addEventListener('abort', stop, { once: true });
@@ -138,22 +176,44 @@ function setup(ctx: Context) {
         status.textContent = message;
         dialog.content.replaceChildren(status, downloadButton(ctx, resource, scope, dialog.signal, status));
       };
-      void fetchContent(ctx, resource, scope, dialog.signal).then(preview => {
-        if (dialog.signal.aborted) return;
-        if (preview.kind !== 'bytes') { failure('This file has no media preview.'); return; }
-        const media = mediaElement(preview.data, preview.mimeType, nameOf(resource), dialog.signal);
-        media.addEventListener('error', () => failure('This media could not be played. You can download the original file.'), { signal: dialog.signal });
-        dialog.show(media);
-      }).catch(error => { if (!dialog.signal.aborted) failure(errorText(error)); });
+      void fetchContent(ctx, resource, scope, dialog.signal)
+        .then((preview) => {
+          if (dialog.signal.aborted) return;
+          if (preview.kind !== 'bytes') {
+            failure('This file has no media preview.');
+            return;
+          }
+          const media = mediaElement(preview.data, preview.mimeType, nameOf(resource), dialog.signal);
+          media.addEventListener(
+            'error',
+            () => failure('This media could not be played. You can download the original file.'),
+            { signal: dialog.signal },
+          );
+          dialog.show(media);
+        })
+        .catch((error) => {
+          if (!dialog.signal.aborted) failure(errorText(error));
+        });
     },
-    thumbnail(resource: Exclude<PreviewResource, { kind: 'workspace' }>, image: HTMLImageElement, caller: AbortSignal) {
+    thumbnail(
+      resource: Exclude<PreviewResource, { kind: 'workspace' }>,
+      image: HTMLImageElement,
+      caller: AbortSignal,
+    ) {
       const mimeType = mediaType(resource.name, resource.mimeType);
       if (!mimeType || !imageMime.test(mimeType)) return;
-      const signal = AbortSignal.any(resource.kind === 'memory' ? [caller, lifetime, resource.signal] : [caller, lifetime]);
+      const signal = AbortSignal.any(
+        resource.kind === 'memory' ? [caller, lifetime, resource.signal] : [caller, lifetime],
+      );
       const scope = { workspaceId: resource.workspaceId, sessionId: resource.sessionId };
-      void fetchContent(ctx, resource, scope, signal).then(preview => {
-        if (!signal.aborted && preview.kind === 'bytes') image.src = blobUrl(preview.data, mimeType, signal);
-      }).catch(() => { if (!signal.aborted) image.classList.add('thumbnail-unavailable'); });
+      void fetchContent(ctx, resource, scope, signal)
+        .then((preview) => {
+          if (!signal.aborted && preview.kind === 'bytes')
+            image.src = blobUrl(preview.data, mimeType, signal);
+        })
+        .catch(() => {
+          if (!signal.aborted) image.classList.add('thumbnail-unavailable');
+        });
     },
   });
 }

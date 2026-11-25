@@ -6,7 +6,10 @@ test('model-chosen provider overrides registered defaults', () => {
   const defaults = { provider: 'openai', id: 'gpt-x' };
   const parent = { provider: 'anthropic', id: 'claude' };
   assert.deepEqual(selectChildModel({}, defaults, parent), { provider: 'openai', id: 'gpt-x' });
-  assert.deepEqual(selectChildModel({ provider: 'custom', model: 'fast' }, defaults, parent), { provider: 'custom', id: 'fast' });
+  assert.deepEqual(selectChildModel({ provider: 'custom', model: 'fast' }, defaults, parent), {
+    provider: 'custom',
+    id: 'fast',
+  });
   assert.equal(selectChildModel({}, null, parent).provider, 'anthropic');
 });
 
@@ -17,19 +20,27 @@ test('child spawning is limited to one level', () => {
 
 test('semaphore caps concurrency and releases on errors', async () => {
   const sem = new Semaphore(2);
-  let active = 0, peak = 0;
-  const outputs = await Promise.all(Array.from({ length: 8 }, (_, i) => sem.lease().then(async (lease) => {
-    try {
-      active++;
-      peak = Math.max(peak, active);
-      await new Promise((resolve) => setTimeout(resolve, 5));
-      if (i === 2) throw new Error('expected');
-      return i;
-    } finally {
-      active--;
-      lease.release();
-    }
-  }).catch(() => 'error')));
+  let active = 0,
+    peak = 0;
+  const outputs = await Promise.all(
+    Array.from({ length: 8 }, (_, i) =>
+      sem
+        .lease()
+        .then(async (lease) => {
+          try {
+            active++;
+            peak = Math.max(peak, active);
+            await new Promise((resolve) => setTimeout(resolve, 5));
+            if (i === 2) throw new Error('expected');
+            return i;
+          } finally {
+            active--;
+            lease.release();
+          }
+        })
+        .catch(() => 'error'),
+    ),
+  );
   assert.equal(peak, 2);
   assert.equal(outputs[2], 'error');
   assert.equal(sem.active, 0);

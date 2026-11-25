@@ -8,17 +8,32 @@ const diffLimit = 1024 * 1024;
 const statusLimit = 8 * 1024 * 1024;
 
 export class GitInspection {
-  constructor(private readonly cwd: string, readonly files: WorkspaceFileAccess, private readonly signal?: AbortSignal) {}
+  constructor(
+    private readonly cwd: string,
+    readonly files: WorkspaceFileAccess,
+    private readonly signal?: AbortSignal,
+  ) {}
   private async git(args: string[], limit: number) {
     const timeout = AbortSignal.timeout(10000);
     const signal = this.signal ? AbortSignal.any([this.signal, timeout]) : timeout;
-    const child = spawn('git', ['--no-optional-locks', '--literal-pathspecs', '-c', 'core.fsmonitor=false', ...args], {
-      cwd: this.cwd, signal, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'],
-      env: { ...process.env, GIT_PAGER: 'cat', GIT_TERMINAL_PROMPT: '0' }
-    });
+    const child = spawn(
+      'git',
+      ['--no-optional-locks', '--literal-pathspecs', '-c', 'core.fsmonitor=false', ...args],
+      {
+        cwd: this.cwd,
+        signal,
+        windowsHide: true,
+        stdio: ['ignore', 'pipe', 'ignore'],
+        env: { ...process.env, GIT_PAGER: 'cat', GIT_TERMINAL_PROMPT: '0' },
+      },
+    );
     let failure: Error | undefined;
-    child.on('error', (error) => { failure = error; });
-    const closed = new Promise<number | null>((done) => { child.once('close', done); });
+    child.on('error', (error) => {
+      failure = error;
+    });
+    const closed = new Promise<number | null>((done) => {
+      child.once('close', done);
+    });
     const chunks: Buffer[] = [];
     let length = 0;
     let truncated = false;
@@ -30,11 +45,15 @@ export class GitInspection {
         chunks.push(piece);
         length += piece.length;
       }
-      if (piece.length < bytes.length && !truncated) { truncated = true; child.kill(); }
+      if (piece.length < bytes.length && !truncated) {
+        truncated = true;
+        child.kill();
+      }
     }
     const code = await closed;
     signal.throwIfAborted();
-    if (failure || !truncated && code !== 0) throw new Error('Git command failed: ' + args[0], { cause: failure });
+    if (failure || (!truncated && code !== 0))
+      throw new Error('Git command failed: ' + args[0], { cause: failure });
     return { content: Buffer.concat(chunks).toString('utf8'), truncated };
   }
 
@@ -42,7 +61,7 @@ export class GitInspection {
     try {
       const [workspaceRoot, repositoryRoot] = await Promise.all([
         realpath(this.cwd),
-        this.git(['rev-parse', '--show-toplevel'], 8192).then(({ content }) => realpath(content.trim()))
+        this.git(['rev-parse', '--show-toplevel'], 8192).then(({ content }) => realpath(content.trim())),
       ]);
       if (relative(workspaceRoot, repositoryRoot)) return 'Open the repository root to inspect Git changes.';
     } catch (error) {
@@ -55,7 +74,10 @@ export class GitInspection {
     const reason = await this.repository();
     if (reason) return { available: false, files: [], reason };
     try {
-      const { content, truncated } = await this.git(['status', '--porcelain=v1', '-z', '--untracked-files=all'], statusLimit);
+      const { content, truncated } = await this.git(
+        ['status', '--porcelain=v1', '-z', '--untracked-files=all'],
+        statusLimit,
+      );
       const records = content.split('\0');
       records.pop();
       const files: { path: string; status: string }[] = [];
@@ -68,7 +90,9 @@ export class GitInspection {
       return { available: true, files, truncated };
     } catch (error) {
       if (this.signal?.aborted) throw error;
-      throw new DomainError('unavailable', 'Git could not read the status for this workspace.', { cause: error });
+      throw new DomainError('unavailable', 'Git could not read the status for this workspace.', {
+        cause: error,
+      });
     }
   }
 
@@ -77,7 +101,10 @@ export class GitInspection {
     const reason = await this.repository();
     if (reason) return { path, content: reason };
     try {
-      const { content: status } = await this.git(['status', '--porcelain=v1', '-z', '--untracked-files=all', '--', path], 8192);
+      const { content: status } = await this.git(
+        ['status', '--porcelain=v1', '-z', '--untracked-files=all', '--', path],
+        8192,
+      );
       if (!status) return { path, content: 'No Git changes for this file.' };
       const state = status.slice(0, 2);
       // Deleted files have no live target to validate.
@@ -92,18 +119,29 @@ export class GitInspection {
           if (piece.includes(0)) return { path, content: 'Binary file.' };
           chunks.push(piece);
           remaining -= piece.length;
-          if (piece.length < bytes.length) { truncated = true; break; }
+          if (piece.length < bytes.length) {
+            truncated = true;
+            break;
+          }
         }
         return { path, content: Buffer.concat(chunks).toString('utf8'), truncated };
       }
       const args = ['--no-ext-diff', '--no-textconv', '--no-color', '--', path];
       const [staged, unstaged] = await Promise.all([
         this.git(['diff', '--cached', ...args], diffLimit),
-        this.git(['diff', ...args], diffLimit)
+        this.git(['diff', ...args], diffLimit),
       ]);
-      return { path, truncated: staged.truncated || unstaged.truncated,
-        content: [staged.content && 'Staged\n' + staged.content, unstaged.content && 'Working tree\n' + unstaged.content]
-          .filter(Boolean).join('\n') || 'Binary or metadata-only change.' };
+      return {
+        path,
+        truncated: staged.truncated || unstaged.truncated,
+        content:
+          [
+            staged.content && 'Staged\n' + staged.content,
+            unstaged.content && 'Working tree\n' + unstaged.content,
+          ]
+            .filter(Boolean)
+            .join('\n') || 'Binary or metadata-only change.',
+      };
     } catch (error) {
       if (this.signal?.aborted || error instanceof DomainError) throw error;
       throw new DomainError('unavailable', 'Git could not read the diff for this file.', { cause: error });

@@ -9,9 +9,15 @@ import { writePlugin } from '../support/plugin-fixture.js';
 
 test('renders Markdown and tool results, and stops a pending reply', async ({ page }) => {
   let markWaiting: () => void;
-  let release: () => void = () => { throw new Error('Not started'); };
-  const waiting = new Promise<void>((done) => { markWaiting = done; });
-  const delayed = new Promise<void>((done) => { release = done; });
+  let release: () => void = () => {
+    throw new Error('Not started');
+  };
+  const waiting = new Promise<void>((done) => {
+    markWaiting = done;
+  });
+  const delayed = new Promise<void>((done) => {
+    release = done;
+  });
   const mock = await createMockProvider(async ({ messages }) => {
     const last = expectPresent(messages.at(-1), 'model message');
     if (last.content === 'Stop this response') {
@@ -23,7 +29,11 @@ test('renders Markdown and tool results, and stops a pending reply', async ({ pa
     return '### Workspace\n\n```text\nExample\n```\n\n<img src=x onerror="alert(1)">\n\n<p class="overlay">A tool note</p>';
   });
   const { root, paths } = createFixturePaths(mock.url);
-  const folder = writePlugin(paths.plugins, 'bad-renderer', {}, `
+  const folder = writePlugin(
+    paths.plugins,
+    'bad-renderer',
+    {},
+    `
 export const apply = (ctx) => {
       ctx.on("agent/prepare-input", async (_content, { original, signal }) => {
         if (original.userText !== 'Stop before acceptance') return;
@@ -31,8 +41,11 @@ export const apply = (ctx) => {
         await new Promise((_, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true }));
       });
     };
-`);
-  writeFileSync(join(folder, 'web.js'), `
+`,
+  );
+  writeFileSync(
+    join(folder, 'web.js'),
+    `
 export const inject = ["miniMessages"];
 
 export const apply = (ctx) => {
@@ -44,11 +57,18 @@ export const apply = (ctx) => {
         throw new Error('broken fixture tool renderer');
       }));
     };
-`);
+`,
+  );
   writeJson(paths.settings, { ...readJson(paths.settings, {}), plugins: { 'bad-renderer': true } });
-  const failures: string[] = [], unhandled: string[] = [];
-  page.on('console', (message) => { if (message.type() === 'error' && message.text().includes('broken fixture tool renderer')) failures.push(message.text()); });
-  page.on('pageerror', (error) => { unhandled.push(error.message); });
+  const failures: string[] = [],
+    unhandled: string[] = [];
+  page.on('console', (message) => {
+    if (message.type() === 'error' && message.text().includes('broken fixture tool renderer'))
+      failures.push(message.text());
+  });
+  page.on('pageerror', (error) => {
+    unhandled.push(error.message);
+  });
   const service = await startIsolatedHost(paths);
   try {
     await page.goto(service.url + '/#token=' + service.token);
@@ -56,10 +76,15 @@ export const apply = (ctx) => {
     await page.getByRole('button', { name: 'Send' }).click();
     await expect(page.getByRole('heading', { name: 'Workspace' })).toBeVisible();
     await expect(page.locator('.code-block code')).toHaveText('Example');
-    await expect(page.locator('.code-block').getByRole('button', { name: 'Copy', exact: true })).toBeVisible();
+    await expect(
+      page.locator('.code-block').getByRole('button', { name: 'Copy', exact: true }),
+    ).toBeVisible();
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
     await page.locator('.message-row.assistant .message-actions button').click();
-    await expect(page.locator('.message-row.assistant .message-actions button')).toHaveAttribute('aria-label', 'Copied');
+    await expect(page.locator('.message-row.assistant .message-actions button')).toHaveAttribute(
+      'aria-label',
+      'Copied',
+    );
     const copied = (await page.evaluate(() => navigator.clipboard.readText())).replace(/\r\n?/g, '\n');
     expect(copied).toMatch(/```text[ \t]*\nExample[ \t]*\n```/);
     await expect(page.locator('.message img, .message .overlay')).toHaveCount(0);
@@ -96,10 +121,17 @@ export const apply = (ctx) => {
   }
 });
 
-test('a long response updates only its view and restores from current state when History remounts', async ({ page }) => {
-  let releaseMore = () => {}, finish = () => {};
-  const more = new Promise<void>((resolve) => { releaseMore = resolve; });
-  const end = new Promise<void>((resolve) => { finish = resolve; });
+test('a long response updates only its view and restores from current state when History remounts', async ({
+  page,
+}) => {
+  let releaseMore = () => {},
+    finish = () => {};
+  const more = new Promise<void>((resolve) => {
+    releaseMore = resolve;
+  });
+  const end = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
   const mock = await createMockProvider(async function* () {
     yield 'Beginning ';
     await more;
@@ -111,7 +143,9 @@ test('a long response updates only its view and restores from current state when
   const folder = join(paths.plugins, 'stream-observer');
   mkdirSync(folder);
   writeJson(join(folder, 'plugin.json'), {});
-  writeFileSync(join(folder, 'web.js'), `
+  writeFileSync(
+    join(folder, 'web.js'),
+    `
 export const inject = ["miniConversation","miniSlots"];
 
 export const apply = (ctx) => {
@@ -135,10 +169,14 @@ export const apply = (ctx) => {
       }));
       window.addEventListener('restore-history', remove, { once: true, signal: signal });
     };
-`);
+`,
+  );
   writeJson(paths.settings, { ...readJson(paths.settings, {}), plugins: { 'stream-observer': true } });
   const reported: string[] = [];
-  page.on('console', (message) => { if (message.type() === 'error' && message.text().includes('broken history subscriber')) reported.push(message.text()); });
+  page.on('console', (message) => {
+    if (message.type() === 'error' && message.text().includes('broken history subscriber'))
+      reported.push(message.text());
+  });
   const service = await startIsolatedHost(paths);
   try {
     await page.goto(service.url + '/#token=' + service.token);
@@ -150,11 +188,19 @@ export const apply = (ctx) => {
     await page.evaluate(() => {
       document.body.dataset.unrelatedUpdates = '0';
       const observer = new MutationObserver((records) => {
-        document.body.dataset.unrelatedUpdates = String(Number(document.body.dataset.unrelatedUpdates) + records.length);
+        document.body.dataset.unrelatedUpdates = String(
+          Number(document.body.dataset.unrelatedUpdates) + records.length,
+        );
       });
       for (const selector of ['#composer', '#queuedMessages', '#welcome']) {
         const element = document.querySelector(selector);
-        if (element) observer.observe(element, { attributes: true, subtree: true, childList: true, characterData: true });
+        if (element)
+          observer.observe(element, {
+            attributes: true,
+            subtree: true,
+            childList: true,
+            characterData: true,
+          });
       }
     });
     releaseMore();

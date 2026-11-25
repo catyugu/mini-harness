@@ -17,9 +17,11 @@ export class ToolRegistry {
   private readonly tools = new Map<string, ToolRegistration>();
   private readonly leases = new WeakMap<ToolDefinition, { id: string; entry: ToolRegistration }>();
 
-  constructor(private readonly address: (id: string) => readonly ScopeKey[] = () => [],
+  constructor(
+    private readonly address: (id: string) => readonly ScopeKey[] = () => [],
     private readonly decide?: (request: ToolDecision) => Promise<'deny' | undefined>,
-    private readonly authorize: ToolPolicy = () => true) {}
+    private readonly authorize: ToolPolicy = () => true,
+  ) {}
 
   service(): ToolPort {
     const registry = this;
@@ -34,14 +36,26 @@ export class ToolRegistry {
         const bind = 'bind' in definition ? definition.bind : () => definition;
         return registry.registerBinding(definition.name, bind, { ...options, context, scope: scopeKey });
       },
-      forSession(id) { return visibleToCaller(this, id) ? registry.forSession(id) : []; },
-      isAvailable(id, tool) { return visibleToCaller(this, id) && registry.isAvailable(id, tool); },
-      readOnlyRegistrations: this.readOnlyRegistrations.bind(this)
+      forSession(id) {
+        return visibleToCaller(this, id) ? registry.forSession(id) : [];
+      },
+      isAvailable(id, tool) {
+        return visibleToCaller(this, id) && registry.isAvailable(id, tool);
+      },
+      readOnlyRegistrations: this.readOnlyRegistrations.bind(this),
     });
   }
 
-  registerBinding(name: string, bind: (id: string) => ToolDefinition,
-    { visible, scope, context: owner, access }: ToolRegistrationOptions & { context?: Context; scope?: ScopeKey } = {}) {
+  registerBinding(
+    name: string,
+    bind: (id: string) => ToolDefinition,
+    {
+      visible,
+      scope,
+      context: owner,
+      access,
+    }: ToolRegistrationOptions & { context?: Context; scope?: ScopeKey } = {},
+  ) {
     if (!toolNamePattern.test(name)) throw new Error('Invalid tool name: ' + name);
     const key = (scope ?? '') + '/' + name;
     if (this.tools.has(key)) throw new Error('Duplicate tool in scope: ' + name);
@@ -51,15 +65,21 @@ export class ToolRegistry {
     const signal = owner?.fiber.signal;
     const identity = owner && pluginInstance(owner);
     const expired = () => lifetime.signal.aborted || signal?.aborted === true;
-    const entry: ToolRegistration = { name, scope, readOnly: access === 'readOnly', pluginId: identity?.pluginId,
+    const entry: ToolRegistration = {
+      name,
+      scope,
+      readOnly: access === 'readOnly',
+      pluginId: identity?.pluginId,
       trusted: identity?.trusted ?? false,
-      visible: (id) => !expired() && (!scope || registry.address(id).includes(scope)) && (visible?.(id) ?? true),
+      visible: (id) =>
+        !expired() && (!scope || registry.address(id).includes(scope)) && (visible?.(id) ?? true),
       bind(id) {
         const tool = bind(id);
         if (tool.name !== name) throw new Error('Tool binding changed its registered name: ' + name);
         const assertAuthorized = () => {
           if (expired()) throw new Error('Tool is no longer available: ' + name);
-          if (!registry.isAvailable(id, leased)) throw new Error('Tool denied by conversation or plugin policy: ' + name);
+          if (!registry.isAvailable(id, leased))
+            throw new Error('Tool denied by conversation or plugin policy: ' + name);
         };
         const leased: ToolDefinition = {
           ...tool,
@@ -72,25 +92,49 @@ export class ToolRegistry {
               const inputs = structuredClone(args);
               if (!Check(tool.parameters, inputs)) {
                 const issue = [...Errors(tool.parameters, inputs)][0];
-                throw new Error('Invalid arguments for ' + name + (issue ? ': ' + issue.instancePath + ' ' + issue.message : ''));
+                throw new Error(
+                  'Invalid arguments for ' +
+                    name +
+                    (issue ? ': ' + issue.instancePath + ' ' + issue.message : ''),
+                );
               }
-              if (await registry.decide?.({ sessionId: id, tool: name, callId: call, arguments: inputs, signal }) === 'deny')
+              if (
+                (await registry.decide?.({
+                  sessionId: id,
+                  tool: name,
+                  callId: call,
+                  arguments: inputs,
+                  signal,
+                })) === 'deny'
+              )
                 throw new Error('Tool denied by conversation or plugin policy: ' + name);
               signal.throwIfAborted();
               assertAuthorized();
-              const result = await tool.execute(call, inputs, signal, update, context && { ...context, assertAuthorized });
-              if (!result || !isToolContent(result.content)) throw new Error('Invalid result from tool: ' + name);
+              const result = await tool.execute(
+                call,
+                inputs,
+                signal,
+                update,
+                context && { ...context, assertAuthorized },
+              );
+              if (!result || !isToolContent(result.content))
+                throw new Error('Invalid result from tool: ' + name);
               return result;
             };
-            const work = owner ? owner.fiber.run(execute, combined) : Promise.resolve().then(() => execute(combined));
+            const work = owner
+              ? owner.fiber.run(execute, combined)
+              : Promise.resolve().then(() => execute(combined));
             active.add(work);
-            try { return await work; }
-            finally { active.delete(work); }
-          }
+            try {
+              return await work;
+            } finally {
+              active.delete(work);
+            }
+          },
         };
         registry.leases.set(leased, { id, entry });
         return leased;
-      }
+      },
     };
     this.tools.set(key, entry);
     return async () => {
@@ -111,12 +155,21 @@ export class ToolRegistry {
 
   isAvailable(id: string, tool: ToolDefinition) {
     const lease = this.leases.get(tool);
-    return lease?.id === id && this.selected(id, lease.entry.name) === lease.entry && this.authorize(id, lease.entry);
+    return (
+      lease?.id === id &&
+      this.selected(id, lease.entry.name) === lease.entry &&
+      this.authorize(id, lease.entry)
+    );
   }
 
   readOnlyRegistrations(pluginId: string): string[] {
-    return [...new Set([...this.tools.values()].filter((entry) =>
-      entry.pluginId === pluginId && entry.readOnly && !entry.trusted).map(({ name }) => name))].sort();
+    return [
+      ...new Set(
+        [...this.tools.values()]
+          .filter((entry) => entry.pluginId === pluginId && entry.readOnly && !entry.trusted)
+          .map(({ name }) => name),
+      ),
+    ].sort();
   }
 
   forSession(id: string) {

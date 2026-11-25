@@ -10,11 +10,15 @@ export function mediaElement(data: string, mimeType: string, name: string, signa
     media.controls = true;
     media.playsInline = true;
     media.setAttribute('aria-label', name);
-    signal.addEventListener('abort', () => {
-      media.pause();
-      media.removeAttribute('src');
-      media.load();
-    }, { once: true });
+    signal.addEventListener(
+      'abort',
+      () => {
+        media.pause();
+        media.removeAttribute('src');
+        media.load();
+      },
+      { once: true },
+    );
   }
   media.src = blobUrl(data, mimeType, signal);
   return media;
@@ -39,18 +43,28 @@ export function mediaDialog(name: string, signal: AbortSignal) {
   content.textContent = 'Loading preview…';
   viewport.append(content);
   dialog.append(viewport, controls);
-  dialog.addEventListener('cancel', event => { event.preventDefault(); controller.abort(); });
-  dialog.addEventListener('click', event => { if (event.target === dialog) controller.abort(); });
-  lifetime.addEventListener('abort', () => {
-    dialog.close();
-    dialog.remove();
-    if (restore instanceof HTMLElement && restore.isConnected) restore.focus();
-  }, { once: true });
+  dialog.addEventListener('cancel', (event) => {
+    event.preventDefault();
+    controller.abort();
+  });
+  dialog.addEventListener('click', (event) => {
+    if (event.target === dialog) controller.abort();
+  });
+  lifetime.addEventListener(
+    'abort',
+    () => {
+      dialog.close();
+      dialog.remove();
+      if (restore instanceof HTMLElement && restore.isConnected) restore.focus();
+    },
+    { once: true },
+  );
   document.body.append(dialog);
   dialog.showModal();
   close.focus();
   return {
-    signal: lifetime, content,
+    signal: lifetime,
+    content,
     close: () => controller.abort(),
     show(media: HTMLImageElement | HTMLVideoElement) {
       content.replaceChildren(media);

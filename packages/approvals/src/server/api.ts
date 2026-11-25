@@ -1,4 +1,4 @@
-import type { Approval } from "../shared/request.js";
+import type { Approval } from '../shared/request.js';
 import type {} from 'mini-harness/cordis';
 
 export interface ApprovalPrompt {
@@ -15,7 +15,9 @@ export interface ApprovalRequests {
 }
 
 declare module 'mini-harness/cordis' {
-  interface Context { harnessApprovalRequests: ApprovalRequests }
+  interface Context {
+    harnessApprovalRequests: ApprovalRequests;
+  }
 }
 
 export interface ApprovalPort {
@@ -27,5 +29,7 @@ export interface ApprovalPort {
 }
 
 declare module 'mini-harness/cordis' {
-  interface Context { harnessApprovals: ApprovalPort }
+  interface Context {
+    harnessApprovals: ApprovalPort;
+  }
 }

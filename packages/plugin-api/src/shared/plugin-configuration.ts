@@ -19,12 +19,17 @@ export function pluginEntryFiber(ctx: Context): Fiber {
 function fingerprint(value: unknown): string | undefined {
   return JSON.stringify(value, (_key, value: unknown) => {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
-    return Object.fromEntries(Object.entries(value).sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0));
+    return Object.fromEntries(
+      Object.entries(value).sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0)),
+    );
   });
 }
 
-export function pluginConfiguration(ctx: Context, write: (patch: Record<string, unknown>, signal: AbortSignal) => Promise<void>,
-  committed: (notify: () => void) => () => void): PluginConfiguration {
+export function pluginConfiguration(
+  ctx: Context,
+  write: (patch: Record<string, unknown>, signal: AbortSignal) => Promise<void>,
+  committed: (notify: () => void) => () => void,
+): PluginConfiguration {
   const fiber = pluginEntryFiber(ctx);
   const signal = AbortSignal.any([fiber.signal, ctx.fiber.signal]);
   const read = <T>(key: string): T => {
@@ -35,23 +40,30 @@ export function pluginConfiguration(ctx: Context, write: (patch: Record<string, 
   };
   const patch = async (values: Record<string, unknown>) => {
     signal.throwIfAborted();
-    if (fiber.state !== FiberState.ACTIVE) throw new Error('Plugin configuration cannot be written during setup');
+    if (fiber.state !== FiberState.ACTIVE)
+      throw new Error('Plugin configuration cannot be written during setup');
     await write(values, signal);
   };
   return {
-    get: read, patch,
+    get: read,
+    patch,
     set: (key, value) => patch({ [key]: value }),
     subscribe<T>(key: string, listener: (value: T) => void) {
       let previous = fingerprint(read(key));
-      return ctx.effect(() => committed(() => {
-        if (signal.aborted) return;
-        const value = read<T>(key);
-        const next = fingerprint(value);
-        if (next === previous) return;
-        previous = next;
-        try { listener(value); }
-        catch (error) { ctx.logger.error(error); }
-      }));
+      return ctx.effect(() =>
+        committed(() => {
+          if (signal.aborted) return;
+          const value = read<T>(key);
+          const next = fingerprint(value);
+          if (next === previous) return;
+          previous = next;
+          try {
+            listener(value);
+          } catch (error) {
+            ctx.logger.error(error);
+          }
+        }),
+      );
     },
   };
 }

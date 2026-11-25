@@ -30,5 +30,7 @@ export interface WorkspaceFileAccess {
 }
 
 declare module 'mini-harness/cordis' {
-  interface Context { harnessFileAccess: FileAccessPort }
+  interface Context {
+    harnessFileAccess: FileAccessPort;
+  }
 }

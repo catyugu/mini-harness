@@ -9,10 +9,12 @@ export function setup(ctx: Context) {
   const bootstrap = (): BrowserBootstrap => ({ ui: ctx.harnessPluginCatalog.browser() });
   ctx.provide('harnessGateway', { bootstrap });
   ctx.effect(() => ctx.harnessRoutes.register('GET', '/api/bootstrap', bootstrap));
-  ctx.effect(() => ctx.harnessRoutes.register('GET', '/api/changes', ({ response }) => {
-    const { send } = eventStream(response);
-    const changes = ctx.harnessChanges;
-    response.once('close', changes.subscribe(send));
-    send(changes.snapshot());
-  }));
+  ctx.effect(() =>
+    ctx.harnessRoutes.register('GET', '/api/changes', ({ response }) => {
+      const { send } = eventStream(response);
+      const changes = ctx.harnessChanges;
+      response.once('close', changes.subscribe(send));
+      send(changes.snapshot());
+    }),
+  );
 }

@@ -36,7 +36,9 @@ const setup = (ctx: Context) => {
 };
 
 declare module 'mini-harness/cordis' {
-  interface Context { miniWorkspace: ReturnType<typeof workspacePicker> }
+  interface Context {
+    miniWorkspace: ReturnType<typeof workspacePicker>;
+  }
 }
 
 interface DirectoryListing {
@@ -73,25 +75,37 @@ function workspacePicker(ctx: Context, sessions: () => { workspaceId: string }[]
 
   async function browse(target: string) {
     browsing?.abort();
-    const controller = browsing = new AbortController();
+    const controller = (browsing = new AbortController());
     status.textContent = '';
     list.setAttribute('aria-busy', 'true');
     try {
-      const result = await browserRequest<DirectoryListing>(ctx, '/workspaces/directories?path=' + encodeURIComponent(target), { signal: controller.signal });
+      const result = await browserRequest<DirectoryListing>(
+        ctx,
+        '/workspaces/directories?path=' + encodeURIComponent(target),
+        { signal: controller.signal },
+      );
       if (controller.signal.aborted) return;
       path.value = result.path;
       up.disabled = !result.parent;
-      up.onclick = () => { if (result.parent) void browse(result.parent); };
-      list.replaceChildren(...result.directories.map((entry) => {
-        const row = button('', 'quiet');
-        row.classList.add('file-entry');
-        fileLabel(row, entry.name, 'folder');
-        row.onclick = () => void browse(entry.path);
-        return row;
-      }));
+      up.onclick = () => {
+        if (result.parent) void browse(result.parent);
+      };
+      list.replaceChildren(
+        ...result.directories.map((entry) => {
+          const row = button('', 'quiet');
+          row.classList.add('file-entry');
+          fileLabel(row, entry.name, 'folder');
+          row.onclick = () => void browse(entry.path);
+          return row;
+        }),
+      );
       if (!result.directories.length) list.textContent = 'No subdirectories';
-    } catch (error) { if (!controller.signal.aborted) status.textContent = (error instanceof Error ? error.message : String(error)); }
-    finally { if (browsing === controller) list.removeAttribute('aria-busy'); }
+    } catch (error) {
+      if (!controller.signal.aborted)
+        status.textContent = error instanceof Error ? error.message : String(error);
+    } finally {
+      if (browsing === controller) list.removeAttribute('aria-busy');
+    }
   }
 
   path.addEventListener('input', () => {
@@ -105,11 +119,18 @@ function workspacePicker(ctx: Context, sessions: () => { workspaceId: string }[]
     if (register.disabled) return;
     register.disabled = true;
     try {
-      const record = await browserRequest<WorkspaceRecord>(ctx, '/workspaces', payload('POST', { path: path.value.trim() }));
+      const record = await browserRequest<WorkspaceRecord>(
+        ctx,
+        '/workspaces',
+        payload('POST', { path: path.value.trim() }),
+      );
       picker.close();
       selected(record);
-    } catch (error) { status.textContent = (error instanceof Error ? error.message : String(error)); }
-    finally { register.disabled = false; }
+    } catch (error) {
+      status.textContent = error instanceof Error ? error.message : String(error);
+    } finally {
+      register.disabled = false;
+    }
   };
 
   const editForm = document.createElement('form');
@@ -145,8 +166,11 @@ function workspacePicker(ctx: Context, sessions: () => { workspaceId: string }[]
     try {
       await browserRequest(ctx, workspaceRoute(editing.id), payload('PATCH', { name: name.value.trim() }));
       editor.close();
-    } catch (error) { editStatus.textContent = (error instanceof Error ? error.message : String(error)); }
-    finally { rename.disabled = false; }
+    } catch (error) {
+      editStatus.textContent = error instanceof Error ? error.message : String(error);
+    } finally {
+      rename.disabled = false;
+    }
   };
 
   return {
@@ -167,12 +191,26 @@ function workspacePicker(ctx: Context, sessions: () => { workspaceId: string }[]
     },
     async remove(record: WorkspaceRecord) {
       const count = sessions().filter((session) => session.workspaceId === record.id).length;
-      if (!await confirmAction('Permanently delete workspace "' + record.name + '" and its ' + count +
-        ' conversation' + (count === 1 ? '' : 's') + ' (including subagents)? Workspace files will be kept.',
-        { title: 'Delete workspace', signal })) return;
+      if (
+        !(await confirmAction(
+          'Permanently delete workspace "' +
+            record.name +
+            '" and its ' +
+            count +
+            ' conversation' +
+            (count === 1 ? '' : 's') +
+            ' (including subagents)? Workspace files will be kept.',
+          { title: 'Delete workspace', signal },
+        ))
+      )
+        return;
       await browserRequest(ctx, workspaceRoute(record.id), { method: 'DELETE' });
-    }
+    },
   };
 }
 
-export default { inject: ['miniSelection','miniSessions','miniWorkspaces','miniTabs','miniDialogs','miniSlots'], provide: ['miniWorkspace'], apply: setup };
+export default {
+  inject: ['miniSelection', 'miniSessions', 'miniWorkspaces', 'miniTabs', 'miniDialogs', 'miniSlots'],
+  provide: ['miniWorkspace'],
+  apply: setup,
+};

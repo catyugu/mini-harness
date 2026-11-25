@@ -11,5 +11,7 @@ export interface ProjectionPort {
 }
 
 declare module 'mini-harness/cordis' {
-  interface Context { harnessChanges: ProjectionPort }
+  interface Context {
+    harnessChanges: ProjectionPort;
+  }
 }

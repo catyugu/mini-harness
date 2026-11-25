@@ -6,7 +6,10 @@ import { hydrateIcons, icon } from './icons.js';
 /** Elements contributed by plugins are hydrated without a global app-entry pass. */
 const setup = (ctx: Context) => {
   const primitives: BrowserPrimitives = {
-    button, field, dialog, icon,
+    button,
+    field,
+    dialog,
+    icon,
     status(text, kind = 'status') {
       const node = document.createElement('p');
       node.className = 'hint';
@@ -20,16 +23,16 @@ const setup = (ctx: Context) => {
       summary.textContent = label;
       node.append(summary, ...items);
       return node;
-    }
+    },
   };
   ctx.provide('miniPrimitives', primitives);
   const observer = new MutationObserver((records) => {
-    for (const record of records) for (const node of record.addedNodes)
-      if (node instanceof HTMLElement) hydrateIcons(node);
+    for (const record of records)
+      for (const node of record.addedNodes) if (node instanceof HTMLElement) hydrateIcons(node);
   });
   observer.observe(document.body, { childList: true, subtree: true });
   hydrateIcons();
-  ctx.effect(() => (() => observer.disconnect()));
+  ctx.effect(() => () => observer.disconnect());
 };
 
 export default { inject: ['miniAppearance'], provide: ['miniPrimitives'], apply: setup };

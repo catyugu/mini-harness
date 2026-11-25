@@ -22,7 +22,7 @@ const setup = (ctx: Context) => {
     workspaceId = workspace;
     sessionId = conversation;
     request?.abort();
-    const controller = request = new AbortController();
+    const controller = (request = new AbortController());
     const previous = commands;
     commands = [];
     button.hidden = !workspace;
@@ -30,12 +30,26 @@ const setup = (ctx: Context) => {
     if (!workspace || controller.signal.aborted || signal.aborted) return;
     try {
       const query = sessionId ? '?' + new URLSearchParams({ sessionId }) : '';
-      const skills = await browserRequest<{ name: string; description: string }[]>(ctx, workspaceRoute(workspace, '/skills') + query, { signal: controller.signal });
+      const skills = await browserRequest<{ name: string; description: string }[]>(
+        ctx,
+        workspaceRoute(workspace, '/skills') + query,
+        { signal: controller.signal },
+      );
       if (controller.signal.aborted || signal.aborted) return;
       for (const skill of skills)
-        commands.push(ctx.effect(() => ctx.miniComposer.command({ name: 'skill:' + skill.name, aliases: [skill.name], description: skill.description, group: 'Skill' })));
+        commands.push(
+          ctx.effect(() =>
+            ctx.miniComposer.command({
+              name: 'skill:' + skill.name,
+              aliases: [skill.name],
+              description: skill.description,
+              group: 'Skill',
+            }),
+          ),
+        );
     } catch (error) {
-      if (!controller.signal.aborted && !signal.aborted) services.report(error instanceof Error ? error : new Error(String(error)));
+      if (!controller.signal.aborted && !signal.aborted)
+        services.report(error instanceof Error ? error : new Error(String(error)));
     }
   }
 
@@ -52,4 +66,8 @@ const setup = (ctx: Context) => {
   services.onConversationChange(() => void update(), signal);
   void update();
 };
-export default { inject: ['harnessBrowser','miniProjections','miniComposer','miniSlots'], provide: [], apply: setup };
+export default {
+  inject: ['harnessBrowser', 'miniProjections', 'miniComposer', 'miniSlots'],
+  provide: [],
+  apply: setup,
+};

@@ -5,7 +5,15 @@ import type { WorkspaceRecord } from '@mini-harness/workspaces/record';
 import { exportSessions } from './session-client.js';
 import type { ConversationSelection, ConversationSessions } from './session-data/api.js';
 import type { RemoteStore } from '@mini-harness/ui-runtime/remote-store';
-import { scopedElements, button, dialog, field, fromMarkup, iconButton, confirmAction } from '@mini-harness/ui-primitives/primitives';
+import {
+  scopedElements,
+  button,
+  dialog,
+  field,
+  fromMarkup,
+  iconButton,
+  confirmAction,
+} from '@mini-harness/ui-primitives/primitives';
 import { payload } from '@mini-harness/ui-runtime/http';
 import { workspaceTree } from './navigation-tree.js';
 import { sessionTree } from './sessions.js';
@@ -55,7 +63,8 @@ export function sessionNavigation(ctx: Context, options: NavigationServices) {
   const renameDialog = dialog('Rename conversation', renameForm);
   ctx.effect(() => ctx.miniSlots.register('dialog.root', renameDialog));
   let renaming: string;
-  const selection = new Set<string>(), expanded = new Set<string>();
+  const selection = new Set<string>(),
+    expanded = new Set<string>();
   const storageKey = 'mini-harness-collapsed-workspaces';
   const collapsed = new Set<string>(JSON.parse(localStorage.getItem(storageKey) ?? '[]'));
 
@@ -86,7 +95,10 @@ export function sessionNavigation(ctx: Context, options: NavigationServices) {
     closeMenu();
     menuTrigger = trigger;
     trigger.setAttribute('aria-expanded', 'true');
-    renameAction.onclick = () => { closeMenu(); options.renameWorkspace(record); };
+    renameAction.onclick = () => {
+      closeMenu();
+      options.renameWorkspace(record);
+    };
     removeAction.onclick = () => {
       closeMenu();
       void options.removeWorkspace(record).catch(options.report);
@@ -96,17 +108,33 @@ export function sessionNavigation(ctx: Context, options: NavigationServices) {
     const bounds = menu.getBoundingClientRect();
     menu.style.left = Math.max(8, Math.min(anchor.left, innerWidth - bounds.width - 8)) + 'px';
     const below = anchor.bottom + 4;
-    menu.style.top = (below + bounds.height > innerHeight - 8
-      ? Math.max(8, anchor.top - bounds.height - 4) : below) + 'px';
+    menu.style.top =
+      (below + bounds.height > innerHeight - 8 ? Math.max(8, anchor.top - bounds.height - 4) : below) + 'px';
     renameAction.focus({ preventScroll: true });
   }
-  document.addEventListener('pointerdown', (event) => {
-    if (!menu.hidden && event.target instanceof Node && !menu.contains(event.target) && !menuTrigger?.contains(event.target))
-      closeMenu();
-  }, { signal });
-  document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && !menu.hidden) { event.preventDefault(); closeMenu(true); }
-  }, { signal });
+  document.addEventListener(
+    'pointerdown',
+    (event) => {
+      if (
+        !menu.hidden &&
+        event.target instanceof Node &&
+        !menu.contains(event.target) &&
+        !menuTrigger?.contains(event.target)
+      )
+        closeMenu();
+    },
+    { signal },
+  );
+  document.addEventListener(
+    'keydown',
+    (event) => {
+      if (event.key === 'Escape' && !menu.hidden) {
+        event.preventDefault();
+        closeMenu(true);
+      }
+    },
+    { signal },
+  );
   window.addEventListener('resize', () => closeMenu(), { signal });
   element('sessions').addEventListener('scroll', () => closeMenu(), { signal });
 
@@ -140,12 +168,16 @@ export function sessionNavigation(ctx: Context, options: NavigationServices) {
   selectMode.setAttribute('aria-pressed', 'false');
   const addWorkspace = iconButton('Add workspace', 'plus');
   element('workspaceActions').append(searchToggle, selectMode, addWorkspace);
-  addWorkspace.onclick = () => options.chooseWorkspace((record) => {
-    void workspaceStore.refresh().then(() => {
-      revealWorkspace(record.id);
-      options.select(record.id);
-    }).catch(options.report);
-  });
+  addWorkspace.onclick = () =>
+    options.chooseWorkspace((record) => {
+      void workspaceStore
+        .refresh()
+        .then(() => {
+          revealWorkspace(record.id);
+          options.select(record.id);
+        })
+        .catch(options.report);
+    });
 
   async function remove(ids: string[]) {
     await browserRequest(ctx, '/sessions/delete', payload('POST', { ids }));
@@ -166,8 +198,11 @@ export function sessionNavigation(ctx: Context, options: NavigationServices) {
     try {
       await browserRequest(ctx, '/sessions/' + renaming, payload('PATCH', { title: title.value }));
       renameDialog.close();
-    } catch (error) { status.textContent = (error instanceof Error ? error.message : String(error)); }
-    finally { save.disabled = false; }
+    } catch (error) {
+      status.textContent = error instanceof Error ? error.message : String(error);
+    } finally {
+      save.disabled = false;
+    }
   };
 
   function selectionChanged() {
@@ -192,7 +227,8 @@ export function sessionNavigation(ctx: Context, options: NavigationServices) {
   }
 
   function render() {
-    const sessions = sessionStore.get(), workspaces = workspaceStore.get();
+    const sessions = sessionStore.get(),
+      workspaces = workspaceStore.get();
     const query = value('sessionSearch').toLowerCase();
     const container = element('sessions');
     const focused = document.activeElement;
@@ -212,11 +248,13 @@ export function sessionNavigation(ctx: Context, options: NavigationServices) {
       if (moved.every((id, index) => id === siblings[index])) return;
       const siblingSet = new Set(siblings);
       let next = 0;
-      const ids = workspaces.map(({ id }) => siblingSet.has(id) ? moved[next++] : id);
+      const ids = workspaces.map(({ id }) => (siblingSet.has(id) ? moved[next++] : id));
       try {
         await browserRequest(ctx, '/workspaces', payload('PUT', { ids }));
         await workspaceStore.refresh();
-      } catch (error) { options.report(error instanceof Error ? error : new Error(String(error))); }
+      } catch (error) {
+        options.report(error instanceof Error ? error : new Error(String(error)));
+      }
     }
     function workspaceBranch(parent?: string) {
       const list = document.createElement('ul');
@@ -226,13 +264,25 @@ export function sessionNavigation(ctx: Context, options: NavigationServices) {
         const matches = !query || name.toLowerCase().includes(query) || path.toLowerCase().includes(query);
         const current = state.selectedWorkspace === id;
         const tree = sessionTree(grouped.get(id) ?? [], {
-          active: state.activeConversation, expanded, selection, selecting, query: matches ? '' : query, highlight: query,
-          matches: contentMatches, render, selectionChanged, activate: options.activate, rename,
+          active: state.activeConversation,
+          expanded,
+          selection,
+          selecting,
+          query: matches ? '' : query,
+          highlight: query,
+          matches: contentMatches,
+          render,
+          selectionChanged,
+          activate: options.activate,
+          rename,
           remove(item) {
-            void confirmAction('Permanently delete "' + item.title + '" and all child conversations?',
-              { title: 'Delete conversation', signal })
-              .then((confirmed) => confirmed ? remove([item.id]) : undefined).catch(options.report);
-          }
+            void confirmAction('Permanently delete "' + item.title + '" and all child conversations?', {
+              title: 'Delete conversation',
+              signal,
+            })
+              .then((confirmed) => (confirmed ? remove([item.id]) : undefined))
+              .catch(options.report);
+          },
         });
         const branches = workspaceBranch(id);
         if (!matches && !tree.visible.length && !branches.childElementCount) continue;
@@ -243,19 +293,30 @@ export function sessionNavigation(ctx: Context, options: NavigationServices) {
         row.dataset.workspaceId = id;
         row.draggable = !selecting && !query;
         row.ondragstart = (event) => {
-          if (!row.draggable || event.target instanceof Element && event.target.closest('.workspace-actions, .tree-button')) {
+          if (
+            !row.draggable ||
+            (event.target instanceof Element && event.target.closest('.workspace-actions, .tree-button'))
+          ) {
             event.preventDefault();
             return;
           }
           closeMenu();
           draggingWorkspace = id;
           row.classList.add('workspace-dragging');
-          if (!event.dataTransfer) { event.preventDefault(); return; }
+          if (!event.dataTransfer) {
+            event.preventDefault();
+            return;
+          }
           event.dataTransfer.effectAllowed = 'move';
           event.dataTransfer.setData('text/plain', id);
         };
         row.ondragover = (event) => {
-          if (!draggingWorkspace || draggingWorkspace === id || parents.get(draggingWorkspace) !== parents.get(id)) return;
+          if (
+            !draggingWorkspace ||
+            draggingWorkspace === id ||
+            parents.get(draggingWorkspace) !== parents.get(id)
+          )
+            return;
           event.preventDefault();
           if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
           const bounds = row.getBoundingClientRect();
@@ -274,7 +335,11 @@ export function sessionNavigation(ctx: Context, options: NavigationServices) {
           void reorderWorkspace(source, id, side);
         };
         row.ondragend = clearDrag;
-        const toggle = iconButton((open ? 'Collapse workspace ' : 'Expand workspace ') + name, 'triangle', 'tree-button');
+        const toggle = iconButton(
+          (open ? 'Collapse workspace ' : 'Expand workspace ') + name,
+          'triangle',
+          'tree-button',
+        );
         toggle.id = 'workspace-toggle-' + id;
         toggle.setAttribute('aria-expanded', String(open));
         toggle.onclick = () => {
@@ -294,7 +359,10 @@ export function sessionNavigation(ctx: Context, options: NavigationServices) {
           shortPath.textContent = path.split(/[/\\]/).filter(Boolean).slice(-3).join('/');
           chooser.append(shortPath);
         }
-        chooser.onclick = () => { revealWorkspace(id); options.select(id); };
+        chooser.onclick = () => {
+          revealWorkspace(id);
+          options.select(id);
+        };
         const actions = document.createElement('div');
         actions.className = 'workspace-actions';
         const more = iconButton('Actions for ' + name, 'ellipsis');
@@ -308,7 +376,11 @@ export function sessionNavigation(ctx: Context, options: NavigationServices) {
         };
         const create = iconButton('New in ' + name, 'new-chat');
         create.id = 'workspace-new-' + id;
-        create.onclick = () => { closeMenu(); revealWorkspace(id); options.select(id, true); };
+        create.onclick = () => {
+          closeMenu();
+          revealWorkspace(id);
+          options.select(id, true);
+        };
         actions.append(more, create);
         row.append(toggle, chooser, actions);
         const entry = document.createElement('li');
@@ -332,9 +404,12 @@ export function sessionNavigation(ctx: Context, options: NavigationServices) {
   }
 
   function update() {
-    const sessions = sessionStore.get(), workspaces = workspaceStore.get();
+    const sessions = sessionStore.get(),
+      workspaces = workspaceStore.get();
     const registered = new Set(workspaces.map(({ id }) => id));
-    const available = new Set(sessions.filter(({ workspaceId }) => registered.has(workspaceId)).map(({ id }) => id));
+    const available = new Set(
+      sessions.filter(({ workspaceId }) => registered.has(workspaceId)).map(({ id }) => id),
+    );
     for (const id of selection) if (!available.has(id)) selection.delete(id);
     const active = sessions.find(({ id }) => id === state.activeConversation);
     if (state.activeConversation && !available.has(state.activeConversation)) options.clearConversation();
@@ -345,13 +420,25 @@ export function sessionNavigation(ctx: Context, options: NavigationServices) {
   }
   state.subscribe(update, signal);
   sessionStore.subscribe(update, signal);
-  state.addEventListener('selection', (event: Event) => {
-    if (!(event instanceof CustomEvent)) return;
-    const { item, revealWorkspace: workspace } = event.detail as { item?: Conversation; revealWorkspace: boolean };
-    if (!item) return;
-    if (workspace) revealWorkspace(item.workspaceId);
-    for (let parent = item.parentId; parent && !expanded.has(parent); parent = sessionStore.get().find(({ id }) => id === parent)?.parentId ?? null) expanded.add(parent);
-  }, { signal });
+  state.addEventListener(
+    'selection',
+    (event: Event) => {
+      if (!(event instanceof CustomEvent)) return;
+      const { item, revealWorkspace: workspace } = event.detail as {
+        item?: Conversation;
+        revealWorkspace: boolean;
+      };
+      if (!item) return;
+      if (workspace) revealWorkspace(item.workspaceId);
+      for (
+        let parent = item.parentId;
+        parent && !expanded.has(parent);
+        parent = sessionStore.get().find(({ id }) => id === parent)?.parentId ?? null
+      )
+        expanded.add(parent);
+    },
+    { signal },
+  );
 
   selectMode.onclick = () => toggleSelection(!selecting);
   function updateSearch() {
@@ -363,12 +450,18 @@ export function sessionNavigation(ctx: Context, options: NavigationServices) {
     render();
     if (query.length < 2) return;
     searchTimer = setTimeout(() => {
-      const request = searchRequest = new AbortController();
-      void browserRequest<SessionSearchResult[]>(ctx, '/sessions/search?q=' + encodeURIComponent(query), { signal: request.signal }).then((hits) => {
-        if (request.signal.aborted || revision !== searchRevision) return;
-        contentMatches = new Map(hits.map((hit) => [hit.id, hit]));
-        render();
-      }).catch((error) => { if (!request.signal.aborted && revision === searchRevision) options.report(error); });
+      const request = (searchRequest = new AbortController());
+      void browserRequest<SessionSearchResult[]>(ctx, '/sessions/search?q=' + encodeURIComponent(query), {
+        signal: request.signal,
+      })
+        .then((hits) => {
+          if (request.signal.aborted || revision !== searchRevision) return;
+          contentMatches = new Map(hits.map((hit) => [hit.id, hit]));
+          render();
+        })
+        .catch((error) => {
+          if (!request.signal.aborted && revision === searchRevision) options.report(error);
+        });
     }, 250);
   }
   searchInput.oninput = updateSearch;
@@ -390,18 +483,28 @@ export function sessionNavigation(ctx: Context, options: NavigationServices) {
       searchToggle.focus();
     }
   };
-  ctx.effect(() => (() => { clearTimeout(searchTimer); searchRequest?.abort(); }));
+  ctx.effect(() => () => {
+    clearTimeout(searchTimer);
+    searchRequest?.abort();
+  });
   cancel.onclick = () => toggleSelection(false);
-  selectAll.onclick = () => { for (const item of visible) selection.add(item.id); render(); };
+  selectAll.onclick = () => {
+    for (const item of visible) selection.add(item.id);
+    render();
+  };
   exportButton.onclick = () => void exportSessions([...selection], signal).catch(options.report);
   deleteButton.onclick = () => {
     const ids = [...selection];
-    void confirmAction('Permanently delete ' + ids.length + ' selected conversations and their descendants?',
-      { title: 'Delete conversations', signal }).then(async (confirmed) => {
+    void confirmAction(
+      'Permanently delete ' + ids.length + ' selected conversations and their descendants?',
+      { title: 'Delete conversations', signal },
+    )
+      .then(async (confirmed) => {
         if (!confirmed) return;
         await remove(ids);
         toggleSelection(false);
-      }).catch(options.report);
+      })
+      .catch(options.report);
   };
 
   render();

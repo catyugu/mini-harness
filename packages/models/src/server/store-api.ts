@@ -17,5 +17,7 @@ export interface ModelStorePort extends ModelCatalogPort, ProviderAdministration
 }
 
 declare module 'mini-harness/cordis' {
-  interface Context { harnessModelStore: ModelStorePort }
+  interface Context {
+    harnessModelStore: ModelStorePort;
+  }
 }

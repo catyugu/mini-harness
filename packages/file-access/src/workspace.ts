@@ -1,7 +1,18 @@
 import { DomainError } from '@mini-harness/platform/errors';
 import { randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
-import { link, lstat, mkdir, open, opendir, realpath, rename, stat, unlink, type FileHandle } from 'node:fs/promises';
+import {
+  link,
+  lstat,
+  mkdir,
+  open,
+  opendir,
+  realpath,
+  rename,
+  stat,
+  unlink,
+  type FileHandle,
+} from 'node:fs/promises';
 import { basename, dirname, matchesGlob, parse, relative, resolve, sep } from 'node:path';
 import type { SearchInput, WorkspaceFileAccess } from './api.js';
 import { RE2 } from 're2-wasm';
@@ -17,18 +28,27 @@ const descriptor = (handle: FileHandle) => '/proc/self/fd/' + handle.fd;
 import { containsPath } from '@mini-harness/platform/paths';
 
 function checkName(name: string) {
-  if (windows && (/[<>:"|?*\x00-\x1f]/.test(name) || /[ .]$/.test(name) ||
-    /^(?:con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/i.test(name))) {
+  if (
+    windows &&
+    (/[<>:"|?*\x00-\x1f]/.test(name) ||
+      /[ .]$/.test(name) ||
+      /^(?:con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/i.test(name))
+  ) {
     throw new DomainError('invalid_input', 'Unsupported workspace path component');
   }
 }
 
-function samePath(a: string, b: string) { return relative(a, b) === ''; }
+function samePath(a: string, b: string) {
+  return relative(a, b) === '';
+}
 const denied = () => new DomainError('forbidden', 'Path is outside the permitted workspace or is a link');
 const missing = (error: unknown) => (error as NodeJS.ErrnoException).code === 'ENOENT';
 
 export class Workspace implements WorkspaceFileAccess {
-  constructor(private readonly cwd: string, private readonly state: string) {}
+  constructor(
+    private readonly cwd: string,
+    private readonly state: string,
+  ) {}
 
   private async location(path: string) {
     const from = resolve(this.cwd);
@@ -65,8 +85,11 @@ export class Workspace implements WorkspaceFileAccess {
       for (const part of parts) {
         const next = resolve(dir, part);
         if (create) {
-          try { await mkdir(next); }
-          catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error; }
+          try {
+            await mkdir(next);
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+          }
         }
         if (linux) {
           const nextHandle = await open(next, directories);
@@ -76,13 +99,16 @@ export class Workspace implements WorkspaceFileAccess {
           await previous?.close();
         } else {
           const stat = await lstat(next);
-          if (stat.isSymbolicLink() || !stat.isDirectory() || !samePath(await realpath(next), next)) throw denied();
+          if (stat.isSymbolicLink() || !stat.isDirectory() || !samePath(await realpath(next), next))
+            throw denied();
           dir = next;
         }
       }
       if (linux && !samePath(await realpath(dir), resolve(root, ...parts))) throw denied();
       return await action(dir);
-    } finally { await handle?.close(); }
+    } finally {
+      await handle?.close();
+    }
   }
 
   private async openFile(path: string) {
@@ -94,16 +120,22 @@ export class Workspace implements WorkspaceFileAccess {
       const target = resolve(dir, name);
       // Check before opening so devices and FIFOs never act as regular files.
       const before = await lstat(target, { bigint: true });
-      if (!before.isFile() || before.nlink !== 1n || (!linux && !samePath(await realpath(target), target))) throw denied();
+      if (!before.isFile() || before.nlink !== 1n || (!linux && !samePath(await realpath(target), target)))
+        throw denied();
       const handle = await open(target, constants.O_RDONLY | noFollow);
       try {
         const actual = await handle.stat({ bigint: true });
-        if (!actual.isFile() || actual.nlink !== 1n ||
-            before.dev !== actual.dev || before.ino !== actual.ino) throw denied();
+        if (!actual.isFile() || actual.nlink !== 1n || before.dev !== actual.dev || before.ino !== actual.ino)
+          throw denied();
         if (linux && !samePath(await realpath(descriptor(handle)), path)) throw denied();
         if (!linux) {
           const current = await lstat(target, { bigint: true });
-          if (!samePath(await realpath(target), target) || current.dev !== actual.dev || current.ino !== actual.ino) throw denied();
+          if (
+            !samePath(await realpath(target), target) ||
+            current.dev !== actual.dev ||
+            current.ino !== actual.ino
+          )
+            throw denied();
         }
         return handle;
       } catch (error) {
@@ -115,15 +147,18 @@ export class Workspace implements WorkspaceFileAccess {
 
   private async file<T>(path: string, action: (handle: FileHandle) => Promise<T>) {
     const handle = await this.openFile(path);
-    try { return await action(handle); }
-    finally { await handle.close(); }
+    try {
+      return await action(handle);
+    } finally {
+      await handle.close();
+    }
   }
 
   async *chunks(path: string, signal?: AbortSignal): AsyncGenerator<Uint8Array> {
     const handle = await this.openFile(path);
     try {
       const size = Math.min((await handle.stat()).size, readLimit);
-      for (let offset = 0; offset < size;) {
+      for (let offset = 0; offset < size; ) {
         signal?.throwIfAborted();
         const buffer = Buffer.allocUnsafe(Math.min(64 * 1024, size - offset));
         const { bytesRead } = await handle.read(buffer, 0, buffer.length, offset);
@@ -131,7 +166,9 @@ export class Workspace implements WorkspaceFileAccess {
         offset += bytesRead;
         yield buffer.subarray(0, bytesRead);
       }
-    } finally { await handle.close(); }
+    } finally {
+      await handle.close();
+    }
   }
 
   readFile(path: string) {
@@ -154,7 +191,9 @@ export class Workspace implements WorkspaceFileAccess {
     await this.directory(dirname(resolve(this.cwd, path)), false, async () => {});
   }
 
-  access(path: string) { return this.file(path, async () => {}); }
+  access(path: string) {
+    return this.file(path, async () => {});
+  }
 
   async writeFile(path: string, content: string, create = true, signal?: AbortSignal) {
     signal?.throwIfAborted();
@@ -177,16 +216,24 @@ export class Workspace implements WorkspaceFileAccess {
         try {
           const actual = await writable.stat({ bigint: true });
           if (actual.ino !== before.ino || actual.dev !== before.dev) throw denied();
-        } finally { await writable.close(); }
+        } finally {
+          await writable.close();
+        }
       }
       const temporary = resolve(dir, '.mini-harness-' + randomUUID() + '.tmp');
-      const handle = await open(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | noFollow, 0o600);
+      const handle = await open(
+        temporary,
+        constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | noFollow,
+        0o600,
+      );
       try {
         try {
           await handle.writeFile(content, { encoding: 'utf8', signal });
           if (before && !windows) await handle.chmod(Number(before.mode & 0o777n));
           await handle.sync();
-        } finally { await handle.close(); }
+        } finally {
+          await handle.close();
+        }
         if (!samePath(await realpath(dir), parent)) throw denied();
         signal?.throwIfAborted();
         if (!before) {
@@ -194,19 +241,27 @@ export class Workspace implements WorkspaceFileAccess {
           await link(temporary, target);
         } else {
           const current = await identify();
-          if (current.ino !== before.ino || current.dev !== before.dev ||
-              current.mtimeNs !== before.mtimeNs || current.ctimeNs !== before.ctimeNs)
+          if (
+            current.ino !== before.ino ||
+            current.dev !== before.dev ||
+            current.mtimeNs !== before.mtimeNs ||
+            current.ctimeNs !== before.ctimeNs
+          )
             throw new DomainError('conflict', 'File changed during write: ' + basename(path));
           signal?.throwIfAborted();
           await rename(temporary, target);
         }
       } finally {
-        await unlink(temporary).catch((error: unknown) => { if (!missing(error)) throw error; });
+        await unlink(temporary).catch((error: unknown) => {
+          if (!missing(error)) throw error;
+        });
       }
     });
   }
 
-  mkdir(path: string) { return this.directory(path, true, async () => {}); }
+  mkdir(path: string) {
+    return this.directory(path, true, async () => {});
+  }
 
   async stat(path: string) {
     path = resolve(this.cwd, path);
@@ -215,8 +270,12 @@ export class Workspace implements WorkspaceFileAccess {
     return this.directory(dirname(path), false, async (dir) => {
       const target = resolve(dir, basename(path));
       const info = await lstat(target);
-      if (info.isSymbolicLink() || (!info.isDirectory() && (!info.isFile() || info.nlink !== 1)) ||
-          (!linux && !samePath(await realpath(target), target))) throw denied();
+      if (
+        info.isSymbolicLink() ||
+        (!info.isDirectory() && (!info.isFile() || info.nlink !== 1)) ||
+        (!linux && !samePath(await realpath(target), target))
+      )
+        throw denied();
       return info;
     });
   }
@@ -229,7 +288,8 @@ export class Workspace implements WorkspaceFileAccess {
         const child = resolve(path, entry.name);
         if (containsPath(this.state, child)) continue;
         checkName(entry.name);
-        if (result.length >= 20000) throw new DomainError('invalid_input', 'Directory exceeds the listing limit');
+        if (result.length >= 20000)
+          throw new DomainError('invalid_input', 'Directory exceeds the listing limit');
         result.push({ name: entry.name, directory: entry.isDirectory() });
       }
       return result.sort((a, b) => a.name.localeCompare(b.name));
@@ -241,14 +301,17 @@ export class Workspace implements WorkspaceFileAccess {
     const withRules = async (dir: string, inherited: Rules[]) => {
       try {
         const rules = await this.readFile(resolve(dir, '.gitignore'));
-        if (rules.length <= 128 * 1024) return [...inherited, { dir, matcher: ignore().add(rules.toString('utf8')) }];
-      } catch { /* An absent or unreadable optional ignore file adds no rules. */ }
+        if (rules.length <= 128 * 1024)
+          return [...inherited, { dir, matcher: ignore().add(rules.toString('utf8')) }];
+      } catch {
+        /* An absent or unreadable optional ignore file adds no rules. */
+      }
       return inherited;
     };
     root = resolve(this.cwd, root);
     await this.location(root);
     const ancestors: string[] = [];
-    for (let dir = root; !samePath(dir, resolve(this.cwd));) {
+    for (let dir = root; !samePath(dir, resolve(this.cwd)); ) {
       dir = dirname(dir);
       ancestors.unshift(dir);
     }
@@ -264,12 +327,15 @@ export class Workspace implements WorkspaceFileAccess {
       const rules = await withRules(dir, inherited);
       for (const entry of await this.entries(dir)) {
         signal?.throwIfAborted();
-        if (++visited > 20000) throw new DomainError('invalid_input', 'Search limit reached. Select a narrower directory.');
+        if (++visited > 20000)
+          throw new DomainError('invalid_input', 'Search limit reached. Select a narrower directory.');
         if (entry.name === '.git') continue;
         const path = resolve(dir, entry.name);
         let ignored = false;
         for (const { dir, matcher } of rules) {
-          const result = matcher.test(relative(dir, path).split(sep).join('/') + (entry.directory ? '/' : ''));
+          const result = matcher.test(
+            relative(dir, path).split(sep).join('/') + (entry.directory ? '/' : ''),
+          );
           if (result.ignored || result.unignored) ignored = result.ignored;
         }
         if (ignored) continue;
@@ -298,7 +364,8 @@ export class Workspace implements WorkspaceFileAccess {
       if (prefix.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex'))) return 'image/png';
       if (prefix.subarray(0, 3).equals(Buffer.from('ffd8ff', 'hex'))) return 'image/jpeg';
       if (/^GIF8[79]a/.test(prefix.toString('ascii', 0, 6))) return 'image/gif';
-      if (prefix.toString('ascii', 0, 4) === 'RIFF' && prefix.toString('ascii', 8, 12) === 'WEBP') return 'image/webp';
+      if (prefix.toString('ascii', 0, 4) === 'RIFF' && prefix.toString('ascii', 8, 12) === 'WEBP')
+        return 'image/webp';
       return null;
     });
   }
@@ -308,7 +375,12 @@ export class Workspace implements WorkspaceFileAccess {
     const base = resolve(this.cwd, root);
     const files = [];
     for await (const entry of this.walk(base)) {
-      if (matchesGlob(pattern.includes('/') ? relative(base, entry.path).split(sep).join('/') : entry.name, pattern)) {
+      if (
+        matchesGlob(
+          pattern.includes('/') ? relative(base, entry.path).split(sep).join('/') : entry.name,
+          pattern,
+        )
+      ) {
         files.push(entry.path);
         if (files.length >= limit) break;
       }
@@ -318,8 +390,12 @@ export class Workspace implements WorkspaceFileAccess {
 
   async grep(input: SearchInput, signal?: AbortSignal) {
     const { pattern, glob, literal, ignoreCase } = input;
-    if (!pattern || pattern.length > 4096 || (glob?.length ?? 0) > 512) throw new DomainError('invalid_input', 'Invalid search pattern');
-    const expression = new RE2(literal ? pattern.replace(/[.*+?^$${}()|[\]\\]/g, '\\$&') : pattern, ignoreCase ? 'ui' : 'u');
+    if (!pattern || pattern.length > 4096 || (glob?.length ?? 0) > 512)
+      throw new DomainError('invalid_input', 'Invalid search pattern');
+    const expression = new RE2(
+      literal ? pattern.replace(/[.*+?^$${}()|[\]\\]/g, '\\$&') : pattern,
+      ignoreCase ? 'ui' : 'u',
+    );
     const path = resolve(this.cwd, input.path || '.');
     const directory = (await this.stat(path)).isDirectory();
     const files = directory ? this.walk(path, signal) : [{ path, directory: false, name: basename(path) }];
@@ -336,13 +412,18 @@ export class Workspace implements WorkspaceFileAccess {
       if (size > readLimit) continue;
       const buffer = await this.readFile(entry.path);
       total += buffer.length;
-      if (total > 32 * 1024 * 1024) throw new Error('Search byte limit reached. Select a narrower directory.');
+      if (total > 32 * 1024 * 1024)
+        throw new Error('Search byte limit reached. Select a narrower directory.');
       if (buffer.includes(0)) continue;
       const lines = buffer.toString('utf8').split(/\r?\n/);
       let previous = -1;
       for (const [index, line] of lines.entries()) {
         if (!expression.test(line)) continue;
-        for (let i = Math.max(previous + 1, index - context, 0); i <= Math.min(lines.length - 1, index + context); i++) {
+        for (
+          let i = Math.max(previous + 1, index - context, 0);
+          i <= Math.min(lines.length - 1, index + context);
+          i++
+        ) {
           matches.push(name + (i === index ? ':' : '-') + (i + 1) + ': ' + lines[i].slice(0, 500));
           previous = i;
         }

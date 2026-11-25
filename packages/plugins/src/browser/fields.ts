@@ -1,6 +1,12 @@
 import type { ModelCatalog } from '@mini-harness/models/catalog';
 
-export function schemaFields(plugin: string, schema: Record<string, any>, values: any, models: ModelCatalog, path: string[] = []) {
+export function schemaFields(
+  plugin: string,
+  schema: Record<string, any>,
+  values: any,
+  models: ModelCatalog,
+  path: string[] = [],
+) {
   const group = document.createElement('div');
   group.className = 'plugin-fields';
   for (const [key, property] of Object.entries<Record<string, any>>(schema.properties ?? {})) {
@@ -52,7 +58,14 @@ export function schemaFields(plugin: string, schema: Record<string, any>, values
       input.dataset.kind = 'enum';
     } else if (['string', 'number', 'integer', 'boolean'].includes(property.type)) {
       const field = document.createElement('input');
-      field.type = property.type === 'boolean' ? 'checkbox' : property.type === 'string' ? (property.format === 'password' ? 'password' : 'text') : 'number';
+      field.type =
+        property.type === 'boolean'
+          ? 'checkbox'
+          : property.type === 'string'
+            ? property.format === 'password'
+              ? 'password'
+              : 'text'
+            : 'number';
       if (field.type === 'checkbox') field.checked = Boolean(current);
       else field.value = current === undefined ? '' : String(current);
       if (field.type === 'number') {
@@ -76,8 +89,12 @@ export function schemaFields(plugin: string, schema: Record<string, any>, values
     // valid unless minLength explicitly forbids it. HTML 'required' is stricter.
     const schemaRequired = schema.required?.includes(key) ?? false;
     if (schemaRequired) input.dataset.schemaRequired = 'true';
-    if (schemaRequired && input.dataset.kind !== 'boolean' &&
-        (input.dataset.kind !== 'string' || (property.minLength ?? 0) > 0)) input.required = true;
+    if (
+      schemaRequired &&
+      input.dataset.kind !== 'boolean' &&
+      (input.dataset.kind !== 'string' || (property.minLength ?? 0) > 0)
+    )
+      input.required = true;
     label.append(input);
     if (property.description) {
       const hint = document.createElement('small');
@@ -92,7 +109,9 @@ export function schemaFields(plugin: string, schema: Record<string, any>, values
 
 export function readPluginValues(current: Record<string, Record<string, unknown>>, container: HTMLElement) {
   const config = structuredClone(current);
-  for (const field of container.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('[data-plugin]')) {
+  for (const field of container.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(
+    '[data-plugin]',
+  )) {
     if (field.matches(':disabled')) continue;
     const plugin = field.dataset.plugin;
     const encoded = field.dataset.path;
@@ -102,12 +121,20 @@ export function readPluginValues(current: Record<string, Record<string, unknown>
       throw new Error('Invalid configuration field path');
     const key = path[path.length - 1];
     const kind = field.dataset.kind;
-    let target = config[plugin] ??= {};
+    let target = (config[plugin] ??= {});
     for (const key of path.slice(0, -1)) target = (target[key] ??= {}) as Record<string, unknown>;
-    if (kind !== 'boolean' && !field.value && field.dataset.schemaRequired !== 'true') { delete target[key]; continue; }
-    target[key] = kind === 'boolean' ? (field as HTMLInputElement).checked :
-      kind === 'number' || kind === 'integer' ? Number(field.value) :
-      kind === 'enum' || kind === 'json' ? JSON.parse(field.value) : field.value;
+    if (kind !== 'boolean' && !field.value && field.dataset.schemaRequired !== 'true') {
+      delete target[key];
+      continue;
+    }
+    target[key] =
+      kind === 'boolean'
+        ? (field as HTMLInputElement).checked
+        : kind === 'number' || kind === 'integer'
+          ? Number(field.value)
+          : kind === 'enum' || kind === 'json'
+            ? JSON.parse(field.value)
+            : field.value;
   }
   return config;
 }

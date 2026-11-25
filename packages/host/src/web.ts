@@ -1,4 +1,4 @@
-import type { Context } from "mini-harness/cordis";
+import type { Context } from 'mini-harness/cordis';
 import { spawn } from 'node:child_process';
 import { rmSync } from 'node:fs';
 import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
@@ -8,10 +8,21 @@ import type {} from './instance-credential.js';
 import { webServer } from './server.js';
 
 export const manifest: PluginDescriptor = {
-  id: 'core:web-server', configChanges: 'live', title: 'HTTP server', description: 'Serve the local Web application.', scope: 'application',
+  id: 'core:web-server',
+  configChanges: 'live',
+  title: 'HTTP server',
+  description: 'Serve the local Web application.',
+  scope: 'application',
   plugin: {
-    inject: ['harnessState', 'harnessLaunch', 'harnessWebToken', 'harnessRoutes', 'harnessUpgrades',
-      'harnessPluginCatalog', 'harnessGateway'],
+    inject: [
+      'harnessState',
+      'harnessLaunch',
+      'harnessWebToken',
+      'harnessRoutes',
+      'harnessUpgrades',
+      'harnessPluginCatalog',
+      'harnessGateway',
+    ],
     provide: ['harnessWeb', 'harnessNetwork'],
     apply(ctx: Context, config: { port?: number }) {
       const launch = ctx.harnessLaunch;
@@ -40,9 +51,13 @@ export const manifest: PluginDescriptor = {
           writeJson(paths.pid, { pid: process.pid, url, startedAt: new Date().toISOString() });
           console.log('mini-harness listening at ' + (launch.detached ? url : address));
           if (open && process.stdout.isTTY) {
-            const command = process.platform === 'win32' ? 'rundll32' : process.platform === 'darwin' ? 'open' : 'xdg-open';
-            const child = spawn(command, process.platform === 'win32' ? ['url.dll,FileProtocolHandler', address] : [address],
-              { stdio: 'ignore', detached: true, windowsHide: true });
+            const command =
+              process.platform === 'win32' ? 'rundll32' : process.platform === 'darwin' ? 'open' : 'xdg-open';
+            const child = spawn(
+              command,
+              process.platform === 'win32' ? ['url.dll,FileProtocolHandler', address] : [address],
+              { stdio: 'ignore', detached: true, windowsHide: true },
+            );
             child.on('error', () => {});
             child.unref();
           }
@@ -57,5 +72,7 @@ export const manifest: PluginDescriptor = {
 };
 
 declare module 'mini-harness/cordis' {
-  interface Context { harnessWeb: ReturnType<typeof webServer> }
+  interface Context {
+    harnessWeb: ReturnType<typeof webServer>;
+  }
 }

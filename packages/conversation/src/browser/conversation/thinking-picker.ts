@@ -4,16 +4,29 @@ import { icon } from '@mini-harness/ui-primitives/icons';
 import { positionPicker } from './picker-position.js';
 
 const labels: Record<ThinkingLevel, string> = {
-  off: 'Off', minimal: 'Minimal', low: 'Low', medium: 'Medium',
-  high: 'High', xhigh: 'Extra high', max: 'Max'
+  off: 'Off',
+  minimal: 'Minimal',
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
+  xhigh: 'Extra high',
+  max: 'Max',
 };
 
-export function createThinkingPicker(root: HTMLElement, onSelect: (level: ThinkingLevel | null) => void, signal: AbortSignal) {
+export function createThinkingPicker(
+  root: HTMLElement,
+  onSelect: (level: ThinkingLevel | null) => void,
+  signal: AbortSignal,
+) {
   const { element } = scopedElements(root);
-  const button = element<'button'>('thinkingLevel'), popup = element('thinkingPicker'), results = element('thinkingResults');
+  const button = element<'button'>('thinkingLevel'),
+    popup = element('thinkingPicker'),
+    results = element('thinkingResults');
   let options: HTMLButtonElement[] = [];
 
-  function position() { positionPicker(button, popup, 180, 320); }
+  function position() {
+    positionPicker(button, popup, 180, 320);
+  }
 
   function open() {
     if (button.hidden || popup.matches(':popover-open')) return;
@@ -22,7 +35,10 @@ export function createThinkingPicker(root: HTMLElement, onSelect: (level: Thinki
     (options.find((option) => option.getAttribute('aria-selected') === 'true') ?? options[0])?.focus();
   }
 
-  button.onclick = () => { if (popup.matches(':popover-open')) popup.hidePopover(); else open(); };
+  button.onclick = () => {
+    if (popup.matches(':popover-open')) popup.hidePopover();
+    else open();
+  };
   button.onkeydown = (event) => {
     if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
     event.preventDefault();
@@ -47,7 +63,11 @@ export function createThinkingPicker(root: HTMLElement, onSelect: (level: Thinki
       options[event.key === 'Home' ? 0 : options.length - 1]?.focus();
     }
   };
-  popup.addEventListener('toggle', () => button.setAttribute('aria-expanded', String(popup.matches(':popover-open'))), { signal });
+  popup.addEventListener(
+    'toggle',
+    () => button.setAttribute('aria-expanded', String(popup.matches(':popover-open'))),
+    { signal },
+  );
   window.addEventListener('resize', position, { signal });
   window.visualViewport?.addEventListener('resize', position, { signal });
 
@@ -64,7 +84,8 @@ export function createThinkingPicker(root: HTMLElement, onSelect: (level: Thinki
       if (button.hidden && popup.matches(':popover-open')) popup.hidePopover();
 
       const entries: Array<{ value: ThinkingLevel | null; label: string }> = [
-        { value: null, label: 'Default' }, ...levels.map((value) => ({ value, label: labels[value] }))
+        { value: null, label: 'Default' },
+        ...levels.map((value) => ({ value, label: labels[value] })),
       ];
       options = entries.map(({ value, label }) => {
         const option = document.createElement('button');
@@ -78,10 +99,14 @@ export function createThinkingPicker(root: HTMLElement, onSelect: (level: Thinki
         title.textContent = label;
         content.append(title);
         option.append(content);
-        option.onclick = () => { popup.hidePopover(); onSelect(value); button.focus(); };
+        option.onclick = () => {
+          popup.hidePopover();
+          onSelect(value);
+          button.focus();
+        };
         return option;
       });
       results.replaceChildren(...options);
-    }
+    },
   };
 }

@@ -3,18 +3,44 @@ import { pluginIdPattern, isScopeKey } from '@mini-harness/plugin-api/selection'
 import { DomainError } from '@mini-harness/platform/errors';
 import { isRunning, type RunInfo } from './shared/run-state.js';
 import { createHash, randomBytes } from 'node:crypto';
-import { closeSync, constants, fstatSync, fsyncSync, ftruncateSync, lstatSync, openSync, readFileSync, writeSync } from 'node:fs';
+import {
+  closeSync,
+  constants,
+  fstatSync,
+  fsyncSync,
+  ftruncateSync,
+  lstatSync,
+  openSync,
+  readFileSync,
+  writeSync,
+} from 'node:fs';
 import { dirname } from 'node:path';
-import { RequestMessages, validateNativeMessage, validateRequestSnapshot, type ModelRequestSnapshot } from '@mini-harness/llm/api';
+import {
+  RequestMessages,
+  validateNativeMessage,
+  validateRequestSnapshot,
+  type ModelRequestSnapshot,
+} from '@mini-harness/llm/api';
 import type { InboxItem, SessionEntry, SessionEvent, SessionLogPort, SessionProjection } from './log-api.js';
 import type { QueueEntry } from './shared/queue.js';
 import { projectLog, projectMessage } from './projection.js';
 import { applyContentDelta } from './content-delta.js';
 
-type StoredEntry = SessionEntry | (Pick<SessionEntry, 'version' | 'seq' | 'id' | 'parentId' | 'timestamp'> &
-  { type: 'custom'; namespace: unknown; data: unknown });
+type StoredEntry =
+  | SessionEntry
+  | (Pick<SessionEntry, 'version' | 'seq' | 'id' | 'parentId' | 'timestamp'> & {
+      type: 'custom';
+      namespace: unknown;
+      data: unknown;
+    });
 
-export interface SessionHeader { type: 'session'; version: 1; id: string; createdAt: string; importedFrom?: string }
+export interface SessionHeader {
+  type: 'session';
+  version: 1;
+  id: string;
+  createdAt: string;
+  importedFrom?: string;
+}
 const entryId = /^[a-f0-9]{8,64}$/i;
 const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 
@@ -34,9 +60,14 @@ export class SessionLog implements SessionLogPort {
   private closed = false;
   private length = 0;
 
-  constructor(readonly file: string, readonly sessionId: string, createdAt = new Date().toISOString(),
-    private readonly changed?: (entry: SessionEntry) => void, private readonly readOnly = false,
-    private readonly writeFailed?: (error: unknown) => void) {
+  constructor(
+    readonly file: string,
+    readonly sessionId: string,
+    createdAt = new Date().toISOString(),
+    private readonly changed?: (entry: SessionEntry) => void,
+    private readonly readOnly = false,
+    private readonly writeFailed?: (error: unknown) => void,
+  ) {
     // Windows append handles lack FILE_WRITE_DATA and cannot truncate a torn tail.
     // A single validated writer uses explicit positions at its verified end instead.
     this.header = { type: 'session', version: 1, id: sessionId, createdAt };
@@ -51,13 +82,23 @@ export class SessionLog implements SessionLogPort {
         this.write(this.header);
         syncDirectory(dirname(file));
       } else this.load(bytes);
-    } catch (error) { closeSync(this.handle); this.closed = true; throw error; }
+    } catch (error) {
+      closeSync(this.handle);
+      this.closed = true;
+      throw error;
+    }
   }
 
   private checkFile(expectedLength?: number) {
-    const descriptor = fstatSync(this.handle), path = lstatSync(this.file);
-    if (!descriptor.isFile() || descriptor.nlink !== 1 || path.isSymbolicLink() ||
-        descriptor.dev !== path.dev || descriptor.ino !== path.ino)
+    const descriptor = fstatSync(this.handle),
+      path = lstatSync(this.file);
+    if (
+      !descriptor.isFile() ||
+      descriptor.nlink !== 1 ||
+      path.isSymbolicLink() ||
+      descriptor.dev !== path.dev ||
+      descriptor.ino !== path.ino
+    )
       throw new Error('Session file outside managed storage or replaced while open');
     if (expectedLength !== undefined && descriptor.size !== expectedLength)
       throw new Error('Session file size changed outside its writer');
@@ -71,14 +112,22 @@ export class SessionLog implements SessionLogPort {
     const first = lines.shift();
     if (!first) throw new Error('Missing session log header');
     const header = JSON.parse(first);
-    if (header?.type !== 'session' || header.version !== 1 || header.id !== this.sessionId ||
-        typeof header.createdAt !== 'string') throw new Error('Invalid session log header');
+    if (
+      header?.type !== 'session' ||
+      header.version !== 1 ||
+      header.id !== this.sessionId ||
+      typeof header.createdAt !== 'string'
+    )
+      throw new Error('Invalid session log header');
     this.header = header;
     const recovery = { leaf: null as string | null, checker: new RequestMessages() };
     for (const line of lines) {
       let record: StoredEntry & { checksum: string };
-      try { record = JSON.parse(line); }
-      catch { throw new Error('Corrupt session log record'); }
+      try {
+        record = JSON.parse(line);
+      } catch {
+        throw new Error('Corrupt session log record');
+      }
       const { checksum, ...entry } = record;
       if (checksum !== digest(entry)) throw new Error('Corrupt session log checksum');
       const normalized = storedEntry(entry);
@@ -95,13 +144,21 @@ export class SessionLog implements SessionLogPort {
   }
 
   private validateEntry(entry: SessionEntry, recovery?: { leaf: string | null; checker: RequestMessages }) {
-    if (entry.version !== 1 || entry.seq !== this.records.length + 1 || !entryId.test(entry.id) ||
-        this.byId.has(entry.id) || (entry.parentId !== null && !this.byId.has(entry.parentId)) ||
-        typeof entry.timestamp !== 'string' || !Number.isFinite(Date.parse(entry.timestamp)))
+    if (
+      entry.version !== 1 ||
+      entry.seq !== this.records.length + 1 ||
+      !entryId.test(entry.id) ||
+      this.byId.has(entry.id) ||
+      (entry.parentId !== null && !this.byId.has(entry.parentId)) ||
+      typeof entry.timestamp !== 'string' ||
+      !Number.isFinite(Date.parse(entry.timestamp))
+    )
       throw new Error('Invalid session log sequence or ancestry');
     validateEvent(entry);
-    if (entry.type === 'tool-schema' &&
-        createHash('sha256').update(JSON.stringify(entry.tools)).digest('hex') !== entry.hash)
+    if (
+      entry.type === 'tool-schema' &&
+      createHash('sha256').update(JSON.stringify(entry.tools)).digest('hex') !== entry.hash
+    )
       throw new Error('Tool schema digest does not match its content');
     if (entry.type === 'model-request') {
       if (!recovery || entry.request.messagesPatch !== undefined) this.materializeRequest(entry);
@@ -115,22 +172,38 @@ export class SessionLog implements SessionLogPort {
       if (raw?.type !== 'tool-execution') throw new Error('Tool acceptance references a missing execution');
       const content = JSON.parse(applyContentDelta(JSON.stringify(raw.result.content), entry.contentDelta));
       validateNativeMessage({ ...raw.result, content });
-      if (entry.parentId !== raw.parentId &&
-          !this.branchEntries(entry.parentId).some((item) => item.id === raw.parentId))
+      if (
+        entry.parentId !== raw.parentId &&
+        !this.branchEntries(entry.parentId).some((item) => item.id === raw.parentId)
+      )
         throw new Error('Tool acceptance does not belong to the execution branch');
     }
-    if (entry.type === 'inbox-enqueued' && this.inboxIds.has(entry.item.id)) throw new Error('Inbox delivery ID already exists');
-    if (entry.type === 'inbox-failed' && !this.pendingInbox.has(entry.inboxId)) throw new Error('Inbox input is not pending');
-    if (entry.type === 'message' && entry.inboxId &&
-        (entry.message.role !== 'user' || !this.pendingInbox.has(entry.inboxId))) throw new Error('Inbox input is not pending');
-    if (entry.type === 'run' && entry.run.sessionId !== this.sessionId) throw new Error('Session run belongs to another conversation');
-    if (entry.type === 'compaction' && entry.keepFromId !== null &&
-        !this.branch(entry.parentId).some((item) => item.id === entry.keepFromId && item.type === 'message'))
+    if (entry.type === 'inbox-enqueued' && this.inboxIds.has(entry.item.id))
+      throw new Error('Inbox delivery ID already exists');
+    if (entry.type === 'inbox-failed' && !this.pendingInbox.has(entry.inboxId))
+      throw new Error('Inbox input is not pending');
+    if (
+      entry.type === 'message' &&
+      entry.inboxId &&
+      (entry.message.role !== 'user' || !this.pendingInbox.has(entry.inboxId))
+    )
+      throw new Error('Inbox input is not pending');
+    if (entry.type === 'run' && entry.run.sessionId !== this.sessionId)
+      throw new Error('Session run belongs to another conversation');
+    if (
+      entry.type === 'compaction' &&
+      entry.keepFromId !== null &&
+      !this.branch(entry.parentId).some((item) => item.id === entry.keepFromId && item.type === 'message')
+    )
       throw new Error('Compaction boundary is not a message on the selected branch');
     if (entry.type === 'context-edit') {
-      const target = this.branch(entry.parentId).find((item) => item.id === entry.targetId && item.type === 'message');
-      if (target?.type !== 'message') throw new Error('Context edit target is not a message on the selected branch');
-      if (entry.replacement !== null) validateNativeMessage({ ...target.message, content: entry.replacement } as typeof target.message);
+      const target = this.branch(entry.parentId).find(
+        (item) => item.id === entry.targetId && item.type === 'message',
+      );
+      if (target?.type !== 'message')
+        throw new Error('Context edit target is not a message on the selected branch');
+      if (entry.replacement !== null)
+        validateNativeMessage({ ...target.message, content: entry.replacement } as typeof target.message);
     }
   }
 
@@ -141,8 +214,12 @@ export class SessionLog implements SessionLogPort {
     this.records.push(entry);
     this.byId.set(entry.id, entry);
     if (!operational(entry)) this.currentLeafId = entry.id;
-    if (entry.type === 'inbox-enqueued') { this.inboxIds.add(entry.item.id); this.pendingInbox.set(entry.item.id, entry.item); }
-    if (entry.type === 'inbox-consumed' || entry.type === 'inbox-cancelled') for (const id of entry.ids) this.pendingInbox.delete(id);
+    if (entry.type === 'inbox-enqueued') {
+      this.inboxIds.add(entry.item.id);
+      this.pendingInbox.set(entry.item.id, entry.item);
+    }
+    if (entry.type === 'inbox-consumed' || entry.type === 'inbox-cancelled')
+      for (const id of entry.ids) this.pendingInbox.delete(id);
     if (entry.type === 'inbox-failed') {
       const item = this.pendingInbox.get(entry.inboxId);
       if (item) {
@@ -157,7 +234,7 @@ export class SessionLog implements SessionLogPort {
   private write(value: unknown) {
     this.checkFile(this.length);
     const bytes = Buffer.from(JSON.stringify(value) + '\n');
-    for (let offset = 0; offset < bytes.length;) {
+    for (let offset = 0; offset < bytes.length; ) {
       const written = writeSync(this.handle, bytes, offset, bytes.length - offset, this.length + offset);
       if (written <= 0) throw new Error('Session log write made no progress');
       offset += written;
@@ -166,23 +243,37 @@ export class SessionLog implements SessionLogPort {
     this.length += bytes.length;
   }
 
-  private get leafId() { return this.currentLeafId; }
+  private get leafId() {
+    return this.currentLeafId;
+  }
 
-  entries() { return structuredClone(this.records); }
+  entries() {
+    return structuredClone(this.records);
+  }
 
-  inbox() { return structuredClone([...this.pendingInbox.values()]); }
+  inbox() {
+    return structuredClone([...this.pendingInbox.values()]);
+  }
 
-  queue() { return [...Array.from(this.pendingInbox.values(), queueEntry), ...structuredClone(this.inboxFailures)]; }
+  queue() {
+    return [...Array.from(this.pendingInbox.values(), queueEntry), ...structuredClone(this.inboxFailures)];
+  }
 
   private branchEntries(leafId: string | null = this.leafId) {
     if (leafId !== null && !this.byId.has(leafId)) throw new Error('Unknown session branch');
     const entries: SessionEntry[] = [];
-    for (let entry = leafId && this.byId.get(leafId); entry; entry = entry.parentId && this.byId.get(entry.parentId))
+    for (
+      let entry = leafId && this.byId.get(leafId);
+      entry;
+      entry = entry.parentId && this.byId.get(entry.parentId)
+    )
       entries.push(entry);
     return entries.reverse();
   }
 
-  branch(leafId: string | null = this.leafId) { return structuredClone(this.branchEntries(leafId)); }
+  branch(leafId: string | null = this.leafId) {
+    return structuredClone(this.branchEntries(leafId));
+  }
 
   private persist(event: SessionEvent, parentId: string | null, expectedLeafId?: string | null) {
     if (this.closed) throw new Error('Session log is closed');
@@ -190,25 +281,43 @@ export class SessionLog implements SessionLogPort {
     if (expectedLeafId !== undefined && expectedLeafId !== this.leafId)
       throw new DomainError('conflict', 'Conversation changed; refresh before editing');
     const value = JSON.parse(JSON.stringify(event)) as SessionEvent;
-    const entry = { ...value, version: 1, seq: this.records.length + 1, id: randomBytes(16).toString('hex'),
-      parentId, timestamp: new Date().toISOString() } as SessionEntry;
+    const entry = {
+      ...value,
+      version: 1,
+      seq: this.records.length + 1,
+      id: randomBytes(16).toString('hex'),
+      parentId,
+      timestamp: new Date().toISOString(),
+    } as SessionEntry;
     this.validateEntry(entry);
-    try { this.write({ ...entry, checksum: digest(entry) }); }
-    catch (error) {
+    try {
+      this.write({ ...entry, checksum: digest(entry) });
+    } catch (error) {
       // The disk may contain a partial record. Prevent a later append from masking the damage.
-      try { this.close(); }
-      finally { this.writeFailed?.(error); }
+      try {
+        this.close();
+      } finally {
+        this.writeFailed?.(error);
+      }
       if (!this.writeFailed) throw error;
-      throw new DomainError('unavailable', 'Could not write conversation log. See session diagnostics.', { cause: error });
+      throw new DomainError('unavailable', 'Could not write conversation log. See session diagnostics.', {
+        cause: error,
+      });
     }
     this.remember(entry);
     this.changed?.(entry);
     return structuredClone(entry);
   }
 
-  append(event: SessionEvent, expectedLeafId?: string | null) { return this.persist(event, this.leafId, expectedLeafId); }
+  append(event: SessionEvent, expectedLeafId?: string | null) {
+    return this.persist(event, this.leafId, expectedLeafId);
+  }
 
-  revise(event: Extract<SessionEvent, { type: 'message' }>, parentId: string | null, expectedLeafId: string | null) {
+  revise(
+    event: Extract<SessionEvent, { type: 'message' }>,
+    parentId: string | null,
+    expectedLeafId: string | null,
+  ) {
     return this.persist(event, parentId, expectedLeafId);
   }
 
@@ -225,7 +334,10 @@ export class SessionLog implements SessionLogPort {
     return tools ? { ...request, tools } : request;
   }
 
-  private validateRecoveryContext(leaf: string | null, recovery: { leaf: string | null; checker: RequestMessages }) {
+  private validateRecoveryContext(
+    leaf: string | null,
+    recovery: { leaf: string | null; checker: RequestMessages },
+  ) {
     const tail: SessionEntry[] = [];
     let cursor = leaf;
     while (cursor !== null && cursor !== recovery.leaf) {
@@ -234,7 +346,10 @@ export class SessionLog implements SessionLogPort {
       tail.push(entry);
       cursor = entry.parentId;
     }
-    if (cursor !== recovery.leaf || tail.some(({ type }) => type === 'compaction' || type === 'context-edit')) {
+    if (
+      cursor !== recovery.leaf ||
+      tail.some(({ type }) => type === 'compaction' || type === 'context-edit')
+    ) {
       recovery.checker = new RequestMessages();
       recovery.checker.append(projectLog(this.records, this.branchEntries(leaf)).contextMessages);
     } else {
@@ -257,9 +372,16 @@ export class SessionLog implements SessionLogPort {
     let messages = context;
     if (messagesPatch) {
       const { start, deleteCount, insert } = messagesPatch;
-      if (!Number.isSafeInteger(start) || start < 0 || start > context.length ||
-          !Number.isSafeInteger(deleteCount) || deleteCount < 0 || start + deleteCount > context.length ||
-          !Array.isArray(insert)) throw new Error('Invalid model request message splice');
+      if (
+        !Number.isSafeInteger(start) ||
+        start < 0 ||
+        start > context.length ||
+        !Number.isSafeInteger(deleteCount) ||
+        deleteCount < 0 ||
+        start + deleteCount > context.length ||
+        !Array.isArray(insert)
+      )
+        throw new Error('Invalid model request message splice');
       messages = [...context.slice(0, start), ...insert, ...context.slice(start + deleteCount)];
     }
     const metadata = this.requestMetadata(entry);
@@ -268,7 +390,9 @@ export class SessionLog implements SessionLogPort {
     return snapshot;
   }
 
-  requestSnapshot(id: string): ModelRequestSnapshot & { messages: import('@mini-harness/llm/api').NativeMessage[] } {
+  requestSnapshot(
+    id: string,
+  ): ModelRequestSnapshot & { messages: import('@mini-harness/llm/api').NativeMessage[] } {
     const entry = this.byId.get(id);
     if (entry?.type !== 'model-request') throw new Error('Model request not found');
     return structuredClone(this.materializeRequest(entry));
@@ -280,28 +404,48 @@ export class SessionLog implements SessionLogPort {
     return encodeLog(this.header, this.records);
   }
 
-  get latestRun() { return this.run && structuredClone(this.run); }
+  get latestRun() {
+    return this.run && structuredClone(this.run);
+  }
 
   /** Opening an existing log resolves interrupted work before it becomes writable. */
   recover() {
     if (this.run && isRunning(this.run)) {
       for (const item of this.pendingInbox.values()) {
-        if (item.mode === 'steer') this.append({ type: 'inbox-failed', inboxId: item.id,
-          reason: 'The target run was interrupted before delivery' });
+        if (item.mode === 'steer')
+          this.append({
+            type: 'inbox-failed',
+            inboxId: item.id,
+            reason: 'The target run was interrupted before delivery',
+          });
       }
-      this.append({ type: 'run', run: { ...this.run, state: 'interrupted', finishedAt: new Date().toISOString(),
-        error: 'The run stopped before a terminal state was recorded' } });
+      this.append({
+        type: 'run',
+        run: {
+          ...this.run,
+          state: 'interrupted',
+          finishedAt: new Date().toISOString(),
+          error: 'The run stopped before a terminal state was recorded',
+        },
+      });
     }
   }
 
   close() {
-    if (!this.closed) { this.closed = true; closeSync(this.handle); }
+    if (!this.closed) {
+      this.closed = true;
+      closeSync(this.handle);
+    }
   }
 }
 
 function queueEntry(item: InboxItem): QueueEntry {
-  return { id: item.id, mode: item.mode, state: 'pending',
-    summary: (item.input?.userText || item.input?.attachments[0]?.name || item.text).slice(0, 180) };
+  return {
+    id: item.id,
+    mode: item.mode,
+    state: 'pending',
+    summary: (item.input?.userText || item.input?.attachments[0]?.name || item.text).slice(0, 180),
+  };
 }
 
 function validateEvent(event: SessionEvent) {
@@ -311,83 +455,142 @@ function validateEvent(event: SessionEvent) {
       if (event.selection) {
         if (event.message.role !== 'user') throw new Error('Invalid user model selection');
         validateEvent({ type: 'model', model: event.selection.model });
-        if (event.selection.thinkingLevel !== undefined) validateEvent({ type: 'thinking', level: event.selection.thinkingLevel });
+        if (event.selection.thinkingLevel !== undefined)
+          validateEvent({ type: 'thinking', level: event.selection.thinkingLevel });
       }
       return;
     case 'model-request':
-      if (!event.request || !event.request.model || typeof event.request.model.provider !== 'string' ||
-          !event.request.model.provider || typeof event.request.model.id !== 'string' ||
-          !event.request.model.id || typeof event.request.systemPrompt !== 'string' ||
-          (event.request.toolSchema !== undefined && !/^[a-f0-9]{64}$/.test(event.request.toolSchema)))
+      if (
+        !event.request ||
+        !event.request.model ||
+        typeof event.request.model.provider !== 'string' ||
+        !event.request.model.provider ||
+        typeof event.request.model.id !== 'string' ||
+        !event.request.model.id ||
+        typeof event.request.systemPrompt !== 'string' ||
+        (event.request.toolSchema !== undefined && !/^[a-f0-9]{64}$/.test(event.request.toolSchema))
+      )
         throw new Error('Invalid recorded model request');
       return;
     case 'tool-schema':
-      validateRequestSnapshot({ model: { provider: 'audit', id: 'audit' }, systemPrompt: '', tools: event.tools });
+      validateRequestSnapshot({
+        model: { provider: 'audit', id: 'audit' },
+        systemPrompt: '',
+        tools: event.tools,
+      });
       if (!/^[a-f0-9]{64}$/.test(event.hash)) throw new Error('Invalid tool schema hash');
       return;
     case 'tool-execution':
       validateNativeMessage(event.result);
-      if (event.result.role !== 'toolResult' || event.result.isError) throw new Error('Invalid completed tool execution');
+      if (event.result.role !== 'toolResult' || event.result.isError)
+        throw new Error('Invalid completed tool execution');
       return;
     case 'tool-accepted':
       if (!entryId.test(event.executionId)) throw new Error('Invalid tool execution reference');
       return;
     case 'model':
-      if (typeof event.model?.provider !== 'string' || typeof event.model.id !== 'string') throw new Error('Invalid session model');
+      if (typeof event.model?.provider !== 'string' || typeof event.model.id !== 'string')
+        throw new Error('Invalid session model');
       return;
     case 'thinking':
       if (event.level !== null && !isThinkingLevel(event.level)) throw new Error('Invalid thinking level');
       return;
     case 'plugin-record': {
       const { owner, display } = event;
-      if (!owner || typeof owner.pluginId !== 'string' || typeof owner.instanceId !== 'string' ||
-          !pluginIdPattern.test(owner.pluginId) || !ownsRecord(owner.pluginId, owner.instanceId) ||
-          (display !== undefined && (!display || typeof display.title !== 'string' || !display.title.trim() || display.title.length > 140)))
+      if (
+        !owner ||
+        typeof owner.pluginId !== 'string' ||
+        typeof owner.instanceId !== 'string' ||
+        !pluginIdPattern.test(owner.pluginId) ||
+        !ownsRecord(owner.pluginId, owner.instanceId) ||
+        (display !== undefined &&
+          (!display ||
+            typeof display.title !== 'string' ||
+            !display.title.trim() ||
+            display.title.length > 140))
+      )
         throw new Error('Invalid plugin record');
       return;
     }
     case 'diagnostic':
-      if (event.code !== 'invalid-tool-calls' && event.code !== 'historical-record') throw new Error('Invalid session diagnostic');
+      if (event.code !== 'invalid-tool-calls' && event.code !== 'historical-record')
+        throw new Error('Invalid session diagnostic');
       return;
     case 'compaction':
-      if (typeof event.summary !== 'string' || (event.keepFromId !== null && !entryId.test(event.keepFromId))) throw new Error('Invalid session compaction');
+      if (typeof event.summary !== 'string' || (event.keepFromId !== null && !entryId.test(event.keepFromId)))
+        throw new Error('Invalid session compaction');
       return;
     case 'context-edit':
-      if (!entryId.test(event.targetId) || (event.replacement !== null && typeof event.replacement !== 'string' && !Array.isArray(event.replacement)))
+      if (
+        !entryId.test(event.targetId) ||
+        (event.replacement !== null &&
+          typeof event.replacement !== 'string' &&
+          !Array.isArray(event.replacement))
+      )
         throw new Error('Invalid context edit');
       return;
     case 'inbox-enqueued':
-      if (typeof event.item?.id !== 'string' || !event.item.id || !['steer', 'followUp'].includes(event.item.mode) ||
-          typeof event.item.text !== 'string' || !Array.isArray(event.item.images)) throw new Error('Invalid session inbox item');
+      if (
+        typeof event.item?.id !== 'string' ||
+        !event.item.id ||
+        !['steer', 'followUp'].includes(event.item.mode) ||
+        typeof event.item.text !== 'string' ||
+        !Array.isArray(event.item.images)
+      )
+        throw new Error('Invalid session inbox item');
       return;
-    case 'inbox-consumed': case 'inbox-cancelled':
-      if (!Array.isArray(event.ids) || event.ids.some((id) => typeof id !== 'string')) throw new Error('Invalid session inbox acknowledgement');
+    case 'inbox-consumed':
+    case 'inbox-cancelled':
+      if (!Array.isArray(event.ids) || event.ids.some((id) => typeof id !== 'string'))
+        throw new Error('Invalid session inbox acknowledgement');
       return;
     case 'inbox-failed':
-      if (typeof event.inboxId !== 'string' || !event.inboxId || typeof event.reason !== 'string' || !event.reason)
+      if (
+        typeof event.inboxId !== 'string' ||
+        !event.inboxId ||
+        typeof event.reason !== 'string' ||
+        !event.reason
+      )
         throw new Error('Invalid inbox failure');
       return;
     case 'run':
-      if (!event.run || typeof event.run.id !== 'string' || typeof event.run.sessionId !== 'string' ||
-          !['queued', 'running', 'completed', 'failed', 'cancelled', 'interrupted'].includes(event.run.state) ||
-          !Number.isFinite(Date.parse(event.run.startedAt)) || !Number.isInteger(event.run.sequence) || event.run.sequence < 0 ||
-          (event.run.inputEntryId != null && !entryId.test(event.run.inputEntryId)))
+      if (
+        !event.run ||
+        typeof event.run.id !== 'string' ||
+        typeof event.run.sessionId !== 'string' ||
+        !['queued', 'running', 'completed', 'failed', 'cancelled', 'interrupted'].includes(event.run.state) ||
+        !Number.isFinite(Date.parse(event.run.startedAt)) ||
+        !Number.isInteger(event.run.sequence) ||
+        event.run.sequence < 0 ||
+        (event.run.inputEntryId != null && !entryId.test(event.run.inputEntryId))
+      )
         throw new Error('Invalid session run');
       return;
-    case 'branch': return;
-    default: throw new Error('Unknown session event');
+    case 'branch':
+      return;
+    default:
+      throw new Error('Unknown session event');
   }
 }
 
 export function syncDirectory(path: string) {
   if (process.platform === 'win32') return;
   const handle = openSync(path, constants.O_RDONLY);
-  try { fsyncSync(handle); } finally { closeSync(handle); }
+  try {
+    fsyncSync(handle);
+  } finally {
+    closeSync(handle);
+  }
 }
 
 /** Renders a complete log document for exports; live appends go through SessionLog. */
 export function encodeLog(header: SessionHeader, entries: SessionEntry[]) {
-  return [JSON.stringify(header), ...entries.map((entry) => JSON.stringify({ ...entry, checksum: digest(entry) }))].join('\n') + '\n';
+  return (
+    [
+      JSON.stringify(header),
+      ...entries.map((entry) => JSON.stringify({ ...entry, checksum: digest(entry) })),
+    ].join('\n') + '\n'
+  );
 }
 
 function ownsRecord(pluginId: string, instanceId: string) {
@@ -401,7 +604,8 @@ function storedEntry(entry: StoredEntry): SessionEntry {
   if (entry.type !== 'custom') return entry;
   const { type: _type, namespace, data, ...identity } = entry;
   if (typeof namespace !== 'string' || !namespace) throw new Error('Invalid historical record namespace');
-  if (namespace === 'agent.invalid-tool-calls') return { ...identity, type: 'diagnostic', code: 'invalid-tool-calls', data };
+  if (namespace === 'agent.invalid-tool-calls')
+    return { ...identity, type: 'diagnostic', code: 'invalid-tool-calls', data };
   const shown = namespace.startsWith('display:');
   const instanceId = shown ? namespace.slice('display:'.length) : namespace;
   const pluginId = instanceId.slice(instanceId.lastIndexOf('/') + 1);
@@ -411,9 +615,28 @@ function storedEntry(entry: StoredEntry): SessionEntry {
     const envelope = data as { data?: unknown; display?: { title?: unknown; content?: unknown } } | undefined;
     const { display } = envelope ?? {};
     if (typeof display?.title === 'string' && display.title.trim() && display.title.length <= 140)
-      return { ...identity, type: 'plugin-record', owner, data: envelope?.data, display: { title: display.title, content: display.content } };
+      return {
+        ...identity,
+        type: 'plugin-record',
+        owner,
+        data: envelope?.data,
+        display: { title: display.title, content: display.content },
+      };
   }
-  return { ...identity, type: 'diagnostic', code: 'historical-record', data: { label: namespace, payload: data } };
+  return {
+    ...identity,
+    type: 'diagnostic',
+    code: 'historical-record',
+    data: { label: namespace, payload: data },
+  };
 }
 
-function operational(entry: SessionEvent) { return entry.type === 'run' || entry.type === 'model-request' || entry.type === 'tool-schema' || entry.type === 'tool-execution' || entry.type.startsWith('inbox-'); }
+function operational(entry: SessionEvent) {
+  return (
+    entry.type === 'run' ||
+    entry.type === 'model-request' ||
+    entry.type === 'tool-schema' ||
+    entry.type === 'tool-execution' ||
+    entry.type.startsWith('inbox-')
+  );
+}

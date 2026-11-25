@@ -5,7 +5,10 @@ import type { Context } from 'mini-harness/cordis';
 import type { SessionRecord } from '@mini-harness/sessions/identity';
 import type { Conversation } from '../shared/api.js';
 
-export function projectSession(ctx: Pick<Context, 'harnessRegistry' | 'harnessRuns' | 'harnessApprovals'>, record: SessionRecord): Conversation {
+export function projectSession(
+  ctx: Pick<Context, 'harnessRegistry' | 'harnessRuns' | 'harnessApprovals'>,
+  record: SessionRecord,
+): Conversation {
   const run = ctx.harnessRuns.info(record.id);
   const modified = ctx.harnessRegistry.modifiedAt(record);
   const updatedAt = [modified, run?.finishedAt ?? run?.startedAt ?? ''].sort().at(-1) ?? modified;

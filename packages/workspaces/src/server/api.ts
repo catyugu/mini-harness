@@ -12,9 +12,15 @@ export interface WorkspacePort {
   reorder(ids: string[]): WorkspaceRecord[];
   assertAvailable(id: string): void;
   beforeRemove(handler: (id: string) => Promise<string[]>): () => void;
-  browse(path: string): { path: string; parent: string | null; directories: { name: string; path: string }[] };
+  browse(path: string): {
+    path: string;
+    parent: string | null;
+    directories: { name: string; path: string }[];
+  };
 }
 
 declare module 'mini-harness/cordis' {
-  interface Context { harnessWorkspaces: WorkspacePort }
+  interface Context {
+    harnessWorkspaces: WorkspacePort;
+  }
 }

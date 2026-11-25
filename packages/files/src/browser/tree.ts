@@ -6,24 +6,62 @@ import { icon } from '@mini-harness/ui-primitives/icons';
 import { button as control, iconButton } from '@mini-harness/ui-primitives/primitives';
 import type { Context } from 'mini-harness/cordis';
 
-interface FileEntry { name: string; directory: boolean }
+interface FileEntry {
+  name: string;
+  directory: boolean;
+}
 
 export async function readDirectory(ctx: Context, scope: WorkspaceView, path: string, signal?: AbortSignal) {
-  const entries = await browserRequest<FileEntry[]>(ctx, fileRoute(scope, '/files/tree', { path }), { signal });
-  return entries.sort((a, b) => Number(b.directory) - Number(a.directory)).map(({ name, directory }) => ({
-    name, directory, path: path === '.' ? name : path + '/' + name
-  }));
+  const entries = await browserRequest<FileEntry[]>(ctx, fileRoute(scope, '/files/tree', { path }), {
+    signal,
+  });
+  return entries
+    .sort((a, b) => Number(b.directory) - Number(a.directory))
+    .map(({ name, directory }) => ({
+      name,
+      directory,
+      path: path === '.' ? name : path + '/' + name,
+    }));
 }
 
 const base = (path: string) => path.split('/').at(-1) ?? '';
 const extension = (path: string) => (base(path).split('.').at(-1) ?? '').toLowerCase();
-const code = new Set(['ts', 'tsx', 'js', 'jsx', 'mjs', 'py', 'rs', 'go', 'c', 'cpp', 'h', 'hpp', 'java', 'cs', 'css', 'html', 'json', 'yaml', 'yml', 'toml', 'sh', 'sql']);
+const code = new Set([
+  'ts',
+  'tsx',
+  'js',
+  'jsx',
+  'mjs',
+  'py',
+  'rs',
+  'go',
+  'c',
+  'cpp',
+  'h',
+  'hpp',
+  'java',
+  'cs',
+  'css',
+  'html',
+  'json',
+  'yaml',
+  'yml',
+  'toml',
+  'sh',
+  'sql',
+]);
 const images = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg']);
 const documents = new Set(['md', 'markdown', 'txt', 'rst', 'log']);
 
 function fileIcon(path: string) {
   const ext = extension(path);
-  return images.has(ext) ? 'file-image' : code.has(ext) ? 'file-code' : documents.has(ext) ? 'file-text' : 'file';
+  return images.has(ext)
+    ? 'file-image'
+    : code.has(ext)
+      ? 'file-code'
+      : documents.has(ext)
+        ? 'file-text'
+        : 'file';
 }
 
 function hint(message: string) {
@@ -62,7 +100,8 @@ function fileEntry(ctx: Context, scope: WorkspaceView, path: string, label: stri
   row.title = path;
   const preview = ctx.get('miniFilePreview');
   row.disabled = !preview;
-  row.onclick = () => ctx.get('miniFilePreview')?.open({ kind: 'workspace', workspaceId: scope.workspaceId, path }, 'sidebar');
+  row.onclick = () =>
+    ctx.get('miniFilePreview')?.open({ kind: 'workspace', workspaceId: scope.workspaceId, path }, 'sidebar');
   row.append(icon(fileIcon(path)));
   const name = document.createElement('span');
   name.textContent = label;
@@ -70,7 +109,14 @@ function fileEntry(ctx: Context, scope: WorkspaceView, path: string, label: stri
   return row;
 }
 
-export function fileTree(ctx: Context, address: WorkspaceView, path: string, signal: AbortSignal, expanded: Set<string>, open: (path: string) => void) {
+export function fileTree(
+  ctx: Context,
+  address: WorkspaceView,
+  path: string,
+  signal: AbortSignal,
+  expanded: Set<string>,
+  open: (path: string) => void,
+) {
   const root = document.createElement('section');
   const toolbar = document.createElement('div');
   toolbar.className = 'file-toolbar';
@@ -100,15 +146,25 @@ export function fileTree(ctx: Context, address: WorkspaceView, path: string, sig
       async function expand() {
         if (loadSignal.aborted) return;
         summary.children.item(1)?.replaceWith(icon(details.open ? 'folder-open' : 'folder'));
-        if (!details.open) { expanded.delete(entry.path); return; }
+        if (!details.open) {
+          expanded.delete(entry.path);
+          return;
+        }
         expanded.add(entry.path);
         if (loaded || pending) return;
         pending = true;
         try {
           const branch = await tree(entry.path, loadSignal);
-          if (!loadSignal.aborted) { details.append(branch); loaded = true; }
-        } catch (error) { if (!loadSignal.aborted) details.append(hint((error instanceof Error ? error.message : String(error)))); }
-        finally { pending = false; }
+          if (!loadSignal.aborted) {
+            details.append(branch);
+            loaded = true;
+          }
+        } catch (error) {
+          if (!loadSignal.aborted)
+            details.append(hint(error instanceof Error ? error.message : String(error)));
+        } finally {
+          pending = false;
+        }
       }
       details.ontoggle = () => void expand();
       details.open = expanded.has(entry.path);
@@ -125,12 +181,15 @@ export function fileTree(ctx: Context, address: WorkspaceView, path: string, sig
     try {
       const listing = await tree(path, loadSignal);
       if (!loadSignal.aborted) content.replaceChildren(listing);
-    } catch (error) { if (!loadSignal.aborted) content.replaceChildren(hint((error instanceof Error ? error.message : String(error)))); }
-    finally { if (!loadSignal.aborted) content.removeAttribute('aria-busy'); }
+    } catch (error) {
+      if (!loadSignal.aborted)
+        content.replaceChildren(hint(error instanceof Error ? error.message : String(error)));
+    } finally {
+      if (!loadSignal.aborted) content.removeAttribute('aria-busy');
+    }
   }
   refresh.onclick = () => void load();
   refreshOnFileChange(ctx, address, root, signal, load);
   void load();
   return root;
 }
-

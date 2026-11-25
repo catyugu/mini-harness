@@ -6,7 +6,9 @@ import { Workspace } from './workspace.js';
 
 export const manifest: PluginDescriptor = {
   scope: 'application',
-  id: 'core:file-access', title: 'File access', description: 'Access paths within registered workspaces',
+  id: 'core:file-access',
+  title: 'File access',
+  description: 'Access paths within registered workspaces',
   defaultEnabled: true,
 
   plugin: {
@@ -20,8 +22,8 @@ export const manifest: PluginDescriptor = {
         open(id: string) {
           const { path } = workspaces.get(id);
           return new Workspace(workspaces.resolveRoot(path, id), home);
-        }
+        },
       });
-    }
-  }
+    },
+  },
 };

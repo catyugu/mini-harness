@@ -27,14 +27,18 @@ import { defineTool } from 'mini-harness/plugin';
 export const inject = ['harnessTools'];
 
 export function apply(ctx: Context) {
-  ctx.effect(() => ctx.harnessTools.register(defineTool({
-    name: 'hello',
-    description: 'Return a greeting.',
-    parameters: { type: 'object', properties: {} },
-    async execute() {
-      return { content: [{ type: 'text', text: 'Hello' }] };
-    }
-  })));
+  ctx.effect(() =>
+    ctx.harnessTools.register(
+      defineTool({
+        name: 'hello',
+        description: 'Return a greeting.',
+        parameters: { type: 'object', properties: {} },
+        async execute() {
+          return { content: [{ type: 'text', text: 'Hello' }] };
+        },
+      }),
+    ),
+  );
 }
 ```
 
@@ -42,17 +46,17 @@ A service provider declares `provide = ['exampleGreeting']` and calls `ctx.provi
 
 ## Server services
 
-| Service | Contract |
-| --- | --- |
-| `harnessTools` | Register a definition or a `{ name, bind(sessionId) }` factory. Read-only access also requires authorization for the selected registration. |
-| `harnessPrompt` | Register a named section, with an optional order and a render callback. The nearest scope wins for a shared ID. |
-| `harnessSessions` | `access()` returns the caller's visible conversation directory. `records(id)` reads or appends the instance's records on the active branch. Use `append(data, { title, content })` to publish a display record. |
-| `harnessExecution` | `submit(id, input, { signal })` goes through normal admission and returns a handle with its own result and cancellation. |
-| `harnessApprovalRequests` | `request(id, prompt, signal)` requests a user decision for a visible conversation. |
-| `harnessPluginRoutes` | `register()` and `upgrade()` publish authenticated routes under `/api/extensions/<id>` for application plugins. `scope()` registers a workspace or session RPC. |
-| `harnessPluginData` and `harnessPluginSecrets` | Read, write and remove data in the caller's own plugin and scope namespace. |
-| `harnessPluginSettings` | Read the current effective config, subscribe to committed changes or write this instance's configuration when it declares a live schema. |
-| `harnessPluginChanges` | Invalidate the plugin's browser projection after a domain mutation. |
+| Service                                        | Contract                                                                                                                                                                                                        |
+| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `harnessTools`                                 | Register a definition or a `{ name, bind(sessionId) }` factory. Read-only access also requires authorization for the selected registration.                                                                     |
+| `harnessPrompt`                                | Register a named section, with an optional order and a render callback. The nearest scope wins for a shared ID.                                                                                                 |
+| `harnessSessions`                              | `access()` returns the caller's visible conversation directory. `records(id)` reads or appends the instance's records on the active branch. Use `append(data, { title, content })` to publish a display record. |
+| `harnessExecution`                             | `submit(id, input, { signal })` goes through normal admission and returns a handle with its own result and cancellation.                                                                                        |
+| `harnessApprovalRequests`                      | `request(id, prompt, signal)` requests a user decision for a visible conversation.                                                                                                                              |
+| `harnessPluginRoutes`                          | `register()` and `upgrade()` publish authenticated routes under `/api/extensions/<id>` for application plugins. `scope()` registers a workspace or session RPC.                                                 |
+| `harnessPluginData` and `harnessPluginSecrets` | Read, write and remove data in the caller's own plugin and scope namespace.                                                                                                                                     |
+| `harnessPluginSettings`                        | Read the current effective config, subscribe to committed changes or write this instance's configuration when it declares a live schema.                                                                        |
+| `harnessPluginChanges`                         | Invalidate the plugin's browser projection after a domain mutation.                                                                                                                                             |
 
 Use `await sessionService(ctx, sessionId, serviceName, signal)` to prepare a visible conversation and access a declared service with the caller's identity. Session writes and scope preparation belong in runtime calls after plugin setup. See [scoped providers](scoped-providers.md).
 
@@ -60,15 +64,15 @@ Use `await sessionService(ctx, sessionId, serviceName, signal)` to prepare a vis
 
 Register listeners with `ctx.on(event, handler, { order })`. Listeners are owned by the Fiber and visibility follows the target session's ancestry. Pipeline order is ascending, then by plugin instance ID.
 
-| Event | Behavior |
-| --- | --- |
-| `agent/prepare-input` | Transform delivered user content or return `{ reject: reason }`. Read `original.userText` for text entered by the user. |
-| `agent/model-request` | Transform the system prompt, model-visible messages, thinking level or token limit. |
-| `agent/model-retry` | Return `{ delayMs }` to retry a model attempt before output has streamed. The first decision applies. |
-| `agent/tool-result` | Transform successful results after persistence of the original execution. |
-| `tools/decide` | Return `'deny'` to restrict a tool call or `undefined` to defer. |
-| `conversation/tool-projection` | Synchronously transform tool output in the conversation display. |
-| `harness/observe` | Observe session, run or turn events with an activation-bound cancellation signal. |
+| Event                          | Behavior                                                                                                                |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| `agent/prepare-input`          | Transform delivered user content or return `{ reject: reason }`. Read `original.userText` for text entered by the user. |
+| `agent/model-request`          | Transform the system prompt, model-visible messages, thinking level or token limit.                                     |
+| `agent/model-retry`            | Return `{ delayMs }` to retry a model attempt before output has streamed. The first decision applies.                   |
+| `agent/tool-result`            | Transform successful results after persistence of the original execution.                                               |
+| `tools/decide`                 | Return `'deny'` to restrict a tool call or `undefined` to defer.                                                        |
+| `conversation/tool-projection` | Synchronously transform tool output in the conversation display.                                                        |
+| `harness/observe`              | Observe session, run or turn events with an activation-bound cancellation signal.                                       |
 
 ### Configuration
 
