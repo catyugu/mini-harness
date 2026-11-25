@@ -4,7 +4,11 @@ import { DomainError } from '@mini-harness/platform/errors';
 import { existsSync, lstatSync, statSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
-import { scopeKeys, type CompositionConfig, type EntryConfiguration } from '@mini-harness/plugin-api/configuration';
+import {
+  scopeKeys,
+  type CompositionConfig,
+  type EntryConfiguration,
+} from '@mini-harness/plugin-api/configuration';
 import type { PluginScope, ScopeKey } from '@mini-harness/plugin-api/scopes';
 import { resolveConfig, type Context, type EntryOptions, type Plugin } from 'mini-harness/cordis';
 import type { ResolvedPlugin } from '@mini-harness/plugin-api/descriptor';
@@ -85,7 +89,7 @@ export class PluginCatalog {
     const name = entry.name;
     try {
       const supplied = this.builtins.get(name ?? id);
-      const builtin = supplied ?? (name && await this.profile?.builtin(id, name, client));
+      const builtin = supplied ?? (name && (await this.profile?.builtin(id, name, client)));
       let descriptor: DiscoveredPlugin;
       if (builtin) {
         descriptor = { ...builtin, id, resources: client ? builtinBrowserAssets(builtin) : undefined };
@@ -110,12 +114,17 @@ export class PluginCatalog {
   }
 
   async runtimeDescriptors(settings: CompositionConfig): Promise<DiscoveredPlugin[]> {
-    const client = !this.profile || Object.values(settings.entries).some(
-      ({ name, disabled }) => name === '@mini-harness/web-gateway' && !disabled,
-    );
+    const client =
+      !this.profile ||
+      Object.values(settings.entries).some(
+        ({ name, disabled }) => name === '@mini-harness/web-gateway' && !disabled,
+      );
     const declarations = [
-      ...Object.entries(settings.entries).map(([id, entry]) => this.describe(id, entry, entry.client ?? client)),
-      ...[...this.builtins.values()].filter(({ id, defaultEnabled }) => defaultEnabled && !settings.entries[id])
+      ...Object.entries(settings.entries).map(([id, entry]) =>
+        this.describe(id, entry, entry.client ?? client),
+      ),
+      ...[...this.builtins.values()]
+        .filter(({ id, defaultEnabled }) => defaultEnabled && !settings.entries[id])
         .map((descriptor) => Promise.resolve(descriptor)),
       ...scopeKeys(settings).flatMap((key) =>
         Object.entries(settings.scopes[key]?.entries ?? {}).map(([id, entry]) =>
@@ -123,28 +132,38 @@ export class PluginCatalog {
         ),
       ),
     ];
-    return Promise.all((await Promise.all(declarations)).map(async (descriptor) => {
-      const { id, source } = descriptor;
-      if (!source || descriptor.error) return descriptor;
-      if (!this.enabled(descriptor, settings)) {
-        const key = descriptor.scopeKey ? descriptor.scopeKey + '/' + id : id;
-        const previous = this.resolved.get(key);
-        return previous?.source === source ? this.withSchema({ ...descriptor, Config: previous.Config }) : descriptor;
-      }
-      try {
-        const module = pathToFileURL(source).href + '?v=' + lstatSync(source).mtimeMs;
-        const exports = await import(module);
-        const value = exports.default ?? exports;
-        const plugin: Plugin | undefined =
-          typeof value === 'function' || typeof value?.apply === 'function' ? value : undefined;
-        const Config = plugin?.Config ?? exports.Config;
-        if (!plugin && !descriptor.resources)
-          throw new Error('Plugin ' + id + ' must export a Cordis plugin with apply(ctx, config)');
-        return this.withSchema({ ...descriptor, plugin, module, Config, browserConfig: exports.browserConfig });
-      } catch (error) {
-        return { ...descriptor, error: error instanceof Error ? error.message : String(error) };
-      }
-    }));
+    return Promise.all(
+      (await Promise.all(declarations)).map(async (descriptor) => {
+        const { id, source } = descriptor;
+        if (!source || descriptor.error) return descriptor;
+        if (!this.enabled(descriptor, settings)) {
+          const key = descriptor.scopeKey ? descriptor.scopeKey + '/' + id : id;
+          const previous = this.resolved.get(key);
+          return previous?.source === source
+            ? this.withSchema({ ...descriptor, Config: previous.Config })
+            : descriptor;
+        }
+        try {
+          const module = pathToFileURL(source).href + '?v=' + lstatSync(source).mtimeMs;
+          const exports = await import(module);
+          const value = exports.default ?? exports;
+          const plugin: Plugin | undefined =
+            typeof value === 'function' || typeof value?.apply === 'function' ? value : undefined;
+          const Config = plugin?.Config ?? exports.Config;
+          if (!plugin && !descriptor.resources)
+            throw new Error('Plugin ' + id + ' must export a Cordis plugin with apply(ctx, config)');
+          return this.withSchema({
+            ...descriptor,
+            plugin,
+            module,
+            Config,
+            browserConfig: exports.browserConfig,
+          });
+        } catch (error) {
+          return { ...descriptor, error: error instanceof Error ? error.message : String(error) };
+        }
+      }),
+    );
   }
 
   descriptors() {
@@ -152,7 +171,9 @@ export class PluginCatalog {
   }
 
   commit(descriptors: DiscoveredPlugin[]) {
-    this.resolved = new Map(descriptors.map((item) => [item.scopeKey ? item.scopeKey + '/' + item.id : item.id, item]));
+    this.resolved = new Map(
+      descriptors.map((item) => [item.scopeKey ? item.scopeKey + '/' + item.id : item.id, item]),
+    );
   }
 
   private withSchema(descriptor: DiscoveredPlugin): DiscoveredPlugin {
@@ -174,8 +195,15 @@ export class PluginCatalog {
     return [...groups.values()].map((group) => {
       const descriptor = group.find((item) => !item.scopeKey) ?? group[0];
       const {
-        source, resources, plugin: _plugin, browserStyles, Config: _Config,
-        browserConfig: _browserConfig, module: _module, scopeKey: _scopeKey, ...metadata
+        source,
+        resources,
+        plugin: _plugin,
+        browserStyles,
+        Config: _Config,
+        browserConfig: _browserConfig,
+        module: _module,
+        scopeKey: _scopeKey,
+        ...metadata
       } = descriptor;
       const instances: NonNullable<PluginMetadata['instances']> = group.map((item) => {
         const key = item.scopeKey ? item.scopeKey + '/' + item.id : item.id;
@@ -183,7 +211,9 @@ export class PluginCatalog {
         let error = failures.get(key) ?? item.error;
         if (!error && !mounted(key) && item.Config) {
           try {
-            const config = item.scopeKey ? settings.scopes[item.scopeKey]?.entries?.[item.id]?.config : settings.entries[item.id]?.config;
+            const config = item.scopeKey
+              ? settings.scopes[item.scopeKey]?.entries?.[item.id]?.config
+              : settings.entries[item.id]?.config;
             this.configValues(item, config);
           } catch (cause) {
             error = cause instanceof Error ? cause.message : String(cause);
@@ -200,8 +230,21 @@ export class PluginCatalog {
       const enabled = instances.filter(({ state }) => state !== 'disabled');
       const failed = enabled.find(({ state }) => state === 'failed');
       const ready = enabled.filter(({ state }) => state === 'ready').length;
-      const state = ready ? ready === enabled.length ? 'ready' : 'partial' : failed ? 'failed' : enabled.length ? 'inactive' : 'disabled';
-      return { ...metadata, instances, state, error: failed?.error ?? instances.find((instance) => instance.error)?.error ?? metadata.error };
+      const state = ready
+        ? ready === enabled.length
+          ? 'ready'
+          : 'partial'
+        : failed
+          ? 'failed'
+          : enabled.length
+            ? 'inactive'
+            : 'disabled';
+      return {
+        ...metadata,
+        instances,
+        state,
+        error: failed?.error ?? instances.find((instance) => instance.error)?.error ?? metadata.error,
+      };
     });
   }
 
@@ -262,7 +305,8 @@ export class PluginCatalog {
     for (const item of descriptors) {
       const { id } = item;
       if (item.scopeKey !== scopeKey || !this.enabled(item, settings)) continue;
-      const entry = scope === 'application' ? settings.entries[id] : settings.scopes[scopeKey!]?.entries?.[id];
+      const entry =
+        scope === 'application' ? settings.entries[id] : settings.scopes[scopeKey!]?.entries?.[id];
       const provide = item.plugin?.provide;
       for (const service of typeof provide === 'string' ? [provide] : (provide ?? [])) declared.add(service);
       try {

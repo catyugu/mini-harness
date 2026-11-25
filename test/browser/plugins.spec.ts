@@ -19,13 +19,16 @@ test('frontend plugins own UI contributions and clean up on disable and reconfig
     join(folder, 'plugin.js'),
     "import { defineConfig } from 'mini-harness/configuration';\nimport { readFileSync } from 'node:fs';\nexport const Config = defineConfig(JSON.parse(readFileSync(new URL('./schema.json', import.meta.url), 'utf8')));",
   );
-  writeFileSync(join(folder, 'schema.json'), JSON.stringify({
-        type: 'object',
-        properties: {
-          label: { type: 'string', title: 'Button label', default: 'Plugin entry' },
-          showDetails: { type: 'boolean', default: false },
-        },
-      }));
+  writeFileSync(
+    join(folder, 'schema.json'),
+    JSON.stringify({
+      type: 'object',
+      properties: {
+        label: { type: 'string', title: 'Button label', default: 'Plugin entry' },
+        showDetails: { type: 'boolean', default: false },
+      },
+    }),
+  );
   writeFileSync(
     join(folder, 'plugin.json'),
     JSON.stringify({
@@ -191,10 +194,13 @@ test('a failed browser plugin reports the saved state and can be retried', async
     join(folder, 'plugin.js'),
     "import { defineConfig } from 'mini-harness/configuration';\nimport { readFileSync } from 'node:fs';\nexport const Config = defineConfig(JSON.parse(readFileSync(new URL('./schema.json', import.meta.url), 'utf8')));",
   );
-  writeFileSync(join(folder, 'schema.json'), JSON.stringify({
+  writeFileSync(
+    join(folder, 'schema.json'),
+    JSON.stringify({
       type: 'object',
       properties: { ready: { type: 'boolean', title: 'Ready', default: false } },
-    }));
+    }),
+  );
   writeJson(join(folder, 'plugin.json'), {
     title: 'Retry UI',
     browserDirectory: 'web',
@@ -341,11 +347,14 @@ test('the Plugins page keeps stored settings when a workspace plugin setup fails
     { root, paths } = createFixturePaths(mock.url);
   const folder = join(paths.plugins, 'workspace-example');
   mkdirSync(folder);
-  writeFileSync(join(folder, 'schema.json'), JSON.stringify({
+  writeFileSync(
+    join(folder, 'schema.json'),
+    JSON.stringify({
       type: 'object',
       properties: { value: { type: 'integer', minimum: 1 } },
       required: ['value'],
-    }));
+    }),
+  );
   writeJson(join(folder, 'plugin.json'), {
     title: 'Workspace example',
   });
@@ -357,7 +366,13 @@ test('the Plugins page keeps stored settings when a workspace plugin setup fails
   const initial = {
     scopes: {
       [key]: {
-        entries: { 'workspace-example': { name: '../../plugins/workspace-example', disabled: false, config: { value: 'invalid' } } },
+        entries: {
+          'workspace-example': {
+            name: '../../plugins/workspace-example',
+            disabled: false,
+            config: { value: 'invalid' },
+          },
+        },
       },
     },
   };

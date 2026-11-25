@@ -446,12 +446,18 @@ export class PluginHost implements ScopePort {
           !isDeepStrictEqual(
             Object.fromEntries(
               Object.entries(before?.entries ?? {})
-                .filter(([, entry]) => entry.name !== undefined || entry.disabled !== undefined || entry.live !== undefined)
+                .filter(
+                  ([, entry]) =>
+                    entry.name !== undefined || entry.disabled !== undefined || entry.live !== undefined,
+                )
                 .map(([id, entry]) => [id, [entry.name, entry.disabled, entry.live]]),
             ),
             Object.fromEntries(
               Object.entries(after?.entries ?? {})
-                .filter(([, entry]) => entry.name !== undefined || entry.disabled !== undefined || entry.live !== undefined)
+                .filter(
+                  ([, entry]) =>
+                    entry.name !== undefined || entry.disabled !== undefined || entry.live !== undefined,
+                )
                 .map(([id, entry]) => [id, [entry.name, entry.disabled, entry.live]]),
             ),
           ) ||

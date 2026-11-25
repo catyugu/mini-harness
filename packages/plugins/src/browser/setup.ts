@@ -151,7 +151,9 @@ function pluginCatalog(
       return (key && snapshot().settings.scopes[key]) || undefined;
     };
     const values = () => ({
-      ...(currentKey() ? currentScope()?.entries?.[plugin.id]?.config : snapshot().settings.entries[plugin.id]?.config),
+      ...(currentKey()
+        ? currentScope()?.entries?.[plugin.id]?.config
+        : snapshot().settings.entries[plugin.id]?.config),
     });
     function renderFields() {
       configFields.replaceChildren();
@@ -161,7 +163,9 @@ function pluginCatalog(
           ?.instances?.find(({ scope }) => scope === scopePicker.value);
         diagnostics.textContent =
           instance?.error ?? (instance?.state === 'inactive' ? 'Waiting for this scope to activate.' : '');
-        const selected = currentKey() ? currentScope()?.entries?.[plugin.id] : snapshot().settings.entries[plugin.id];
+        const selected = currentKey()
+          ? currentScope()?.entries?.[plugin.id]
+          : snapshot().settings.entries[plugin.id];
         enabled.checked = !!selected && selected.disabled !== true;
         schema = instance?.configSchema ?? plugin.configSchema;
       }
@@ -184,10 +188,7 @@ function pluginCatalog(
     }
     if (scoped || application) {
       scopedControls.className = 'plugin-fields';
-      scopedControls.append(
-        field('Scope', scopePicker),
-        field('Enabled in this scope', enabled),
-      );
+      scopedControls.append(field('Scope', scopePicker), field('Enabled in this scope', enabled));
       save.disabled = true;
       scopePicker.add(new Option('Choose a scope', ''));
       scopedControls.querySelectorAll('input').forEach((control) => {
@@ -237,7 +238,9 @@ function pluginCatalog(
       outcome.textContent = '';
       try {
         const config = readPluginValues({ [plugin.id]: {} }, configFields)[plugin.id];
-        let patch: Partial<ProfileConfiguration> = { entries: { [plugin.id]: { config, disabled: !enabled.checked } } };
+        let patch: Partial<ProfileConfiguration> = {
+          entries: { [plugin.id]: { config, disabled: !enabled.checked } },
+        };
         const key = currentKey();
         if (key) {
           const current = currentScope() ?? {};
@@ -248,7 +251,12 @@ function pluginCatalog(
                 ...current,
                 entries: {
                   ...current.entries,
-                  [plugin.id]: { ...current.entries?.[plugin.id], name: current.entries?.[plugin.id]?.name ?? plugin.name, disabled: !enabled.checked, config },
+                  [plugin.id]: {
+                    ...current.entries?.[plugin.id],
+                    name: current.entries?.[plugin.id]?.name ?? plugin.name,
+                    disabled: !enabled.checked,
+                    config,
+                  },
                 },
               },
             },
@@ -329,7 +337,9 @@ function pluginCatalog(
           const controls = required(row.querySelector('.catalog-controls'));
           const scoped = !plugin.instances?.some(({ scope }) => scope === 'application');
           const checked = scoped
-            ? Object.values(settings.scopes).some((scope) => scope?.entries?.[plugin.id] && scope.entries[plugin.id].disabled !== true)
+            ? Object.values(settings.scopes).some(
+                (scope) => scope?.entries?.[plugin.id] && scope.entries[plugin.id].disabled !== true,
+              )
             : !!settings.entries[plugin.id] && settings.entries[plugin.id].disabled !== true;
           const control = toggle(plugin.title, checked);
           control.dataset.pluginToggle = plugin.id;

@@ -38,10 +38,13 @@ test('an installed Cordis plugin can use services, configure a tool, and release
   const folder = join(paths.plugins, 'example');
   const log = join(folder, 'effects.log');
   mkdirSync(folder);
-  writeFileSync(join(folder, 'schema.json'), JSON.stringify({
-        type: 'object',
-        properties: { prefix: { type: 'string', default: 'Count' } },
-      }));
+  writeFileSync(
+    join(folder, 'schema.json'),
+    JSON.stringify({
+      type: 'object',
+      properties: { prefix: { type: 'string', default: 'Count' } },
+    }),
+  );
   writeFileSync(
     join(folder, 'plugin.json'),
     JSON.stringify({
@@ -78,8 +81,13 @@ export const apply = (ctx, config) => {
   );
   await runtime.start();
   const item = runtime.plugins.ctx.harnessRegistry.create();
-  assert.equal(runtime.plugins.metadata().find(({ id }) => id === 'example'), undefined);
-  await runtime.configuration.update({ entries: { example: { name: '../../plugins/example', disabled: false, config: { prefix: 'Total' } } } });
+  assert.equal(
+    runtime.plugins.metadata().find(({ id }) => id === 'example'),
+    undefined,
+  );
+  await runtime.configuration.update({
+    entries: { example: { name: '../../plugins/example', disabled: false, config: { prefix: 'Total' } } },
+  });
   assert.equal(runtime.plugins.metadata().find(({ id }) => id === 'example')?.title, 'Example plugin');
   assert.deepEqual(runtime.plugins.metadata().find(({ id }) => id === 'example')?.icon, {
     path: 'M2 2h20v20H2z',
@@ -111,14 +119,18 @@ export const apply = (ctx, config) => {
     { code: 'ENOENT' },
     'Unrelated switches and invalid config preserve an active plugin',
   );
-  await runtime.configuration.update({ entries: { example: { name: '../../plugins/example', disabled: true } } });
+  await runtime.configuration.update({
+    entries: { example: { name: '../../plugins/example', disabled: true } },
+  });
   assert.equal(readFileSync(log, 'utf8'), 'dispose\n');
   assert.ok(!activeNames().includes('example_count'));
   await assert.rejects(
     tool.execute('after-unload', {}, undefined, undefined, undefined),
     /no longer available/,
   );
-  await runtime.configuration.update({ entries: { example: { name: '../../plugins/example', disabled: false } } });
+  await runtime.configuration.update({
+    entries: { example: { name: '../../plugins/example', disabled: false } },
+  });
   assert.ok(activeNames().includes('example_count'));
 });
 
@@ -170,7 +182,11 @@ export const apply = (ctx) => {
   await runtime.configuration.update({ entries: { base: { name: '../../plugins/base', disabled: false } } });
   assert.ok(activeNames().includes('dependent_tool'));
   await runtime.configuration.update({
-    entries: { files: { disabled: true }, base: { name: '../../plugins/base', disabled: true }, dependent: { name: '../../plugins/dependent', disabled: true } },
+    entries: {
+      files: { disabled: true },
+      base: { name: '../../plugins/base', disabled: true },
+      dependent: { name: '../../plugins/dependent', disabled: true },
+    },
   });
   assert.equal(
     runtime.plugins.ctx.harnessTools
@@ -207,9 +223,13 @@ export function apply(ctx) {
     writeFileSync(join(paths.plugins, id, 'plugin.json'), JSON.stringify({}));
   }
   await runtime.start();
-  await runtime.configuration.update({ entries: { 'function-entry': { name: '../../plugins/function-entry', disabled: false } } });
+  await runtime.configuration.update({
+    entries: { 'function-entry': { name: '../../plugins/function-entry', disabled: false } },
+  });
   await assert.rejects(
-    runtime.configuration.update({ entries: { 'named-entry': { name: '../../plugins/named-entry', disabled: false } } }),
+    runtime.configuration.update({
+      entries: { 'named-entry': { name: '../../plugins/named-entry', disabled: false } },
+    }),
     /must export a Cordis plugin/,
   );
   assert.equal(runtime.settings.entries['function-entry']?.disabled, false);
@@ -228,24 +248,23 @@ test('native Cordis Config applies defaults and rejects invalid changes before s
   });
   const folder = join(paths.plugins, 'schema');
   mkdirSync(folder);
-  writeFileSync(join(folder, 'schema.json'), JSON.stringify({
-        type: 'object',
-        additionalProperties: false,
-        required: ['count'],
-        properties: {
-          count: { type: 'integer', minimum: 1, maximum: 10, default: 3 },
-          options: {
-            type: 'object',
-            default: {},
-            properties: { enabled: { type: 'boolean', default: true } },
-          },
-        },
-      }));
   writeFileSync(
-    join(folder, 'plugin.json'),
+    join(folder, 'schema.json'),
     JSON.stringify({
+      type: 'object',
+      additionalProperties: false,
+      required: ['count'],
+      properties: {
+        count: { type: 'integer', minimum: 1, maximum: 10, default: 3 },
+        options: {
+          type: 'object',
+          default: {},
+          properties: { enabled: { type: 'boolean', default: true } },
+        },
+      },
     }),
   );
+  writeFileSync(join(folder, 'plugin.json'), JSON.stringify({}));
   writeFileSync(
     join(folder, 'plugin.js'),
     `
@@ -269,7 +288,9 @@ export const apply = (ctx) => {
 `,
   );
   await runtime.start();
-  await runtime.configuration.update({ entries: { schema: { name: '../../plugins/schema', disabled: false, live: true } } });
+  await runtime.configuration.update({
+    entries: { schema: { name: '../../plugins/schema', disabled: false, live: true } },
+  });
   const item = runtime.plugins.ctx.harnessRegistry.create();
   const tool = expectPresent(
     runtime.plugins.ctx.harnessTools.forSession(item.id).find(({ name }) => name === 'schema_value'),
@@ -344,7 +365,10 @@ export const apply = (ctx, config) => {
   }
   await runtime.start();
   await runtime.configuration.update({
-    entries: { base: { name: '../../plugins/base', disabled: false }, dependent: { name: '../../plugins/dependent', disabled: false } },
+    entries: {
+      base: { name: '../../plugins/base', disabled: false },
+      dependent: { name: '../../plugins/dependent', disabled: false },
+    },
   });
   await assert.rejects(
     runtime.configuration.update({ entries: { base: { config: { fail: true } } } }),
@@ -402,7 +426,10 @@ test('cyclic services stay waiting without activating either plugin', async (t) 
   }
   await runtime.start();
   await runtime.configuration.update({
-    entries: { first: { name: '../../plugins/first', disabled: false }, second: { name: '../../plugins/second', disabled: false } },
+    entries: {
+      first: { name: '../../plugins/first', disabled: false },
+      second: { name: '../../plugins/second', disabled: false },
+    },
   });
   assert.equal(runtime.settings.entries.first?.disabled, false);
   for (const id of ['first', 'second'])
@@ -423,9 +450,14 @@ test('malformed plugin metadata is diagnosed when explicitly declared', async (t
   writeFileSync(join(folder, 'plugin.js'), 'export default () => {};');
   writeFileSync(join(folder, 'plugin.json'), '{"requires": [');
   await runtime.start();
-  assert.equal(runtime.plugins.metadata().find(({ id }) => id === 'broken-manifest'), undefined);
+  assert.equal(
+    runtime.plugins.metadata().find(({ id }) => id === 'broken-manifest'),
+    undefined,
+  );
   await assert.rejects(
-    runtime.configuration.update({ entries: { 'broken-manifest': { name: '../../plugins/broken-manifest', disabled: false } } }),
+    runtime.configuration.update({
+      entries: { 'broken-manifest': { name: '../../plugins/broken-manifest', disabled: false } },
+    }),
     /Invalid plugin/,
   );
   assert.equal(runtime.settings.entries['broken-manifest']?.disabled, undefined);
@@ -566,7 +598,9 @@ export const apply = (ctx) => {
   const toggle = (active: boolean) =>
     request('/settings', 'PATCH', {
       entries: { drain: { name: '../../plugins/drain', disabled: !active } },
-      scopes: { [scope]: { entries: { 'scoped-drain': { name: '../../plugins/scoped-drain', disabled: !active } } } },
+      scopes: {
+        [scope]: { entries: { 'scoped-drain': { name: '../../plugins/scoped-drain', disabled: !active } } },
+      },
     });
   assert.equal((await toggle(true)).status, 200);
   const attempted = await request('/extensions/drain/disable', 'POST');

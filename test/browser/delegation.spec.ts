@@ -25,23 +25,26 @@ test('plugin schema controls, recursive tree navigation, batch export and perman
   });
   const folder = join(paths.plugins, 'example');
   mkdirSync(folder);
-  writeFileSync(join(folder, 'schema.json'), JSON.stringify({
-        type: 'object',
-        required: ['prefix', 'count', 'mode'],
-        additionalProperties: false,
-        properties: {
-          prefix: { type: 'string', title: 'Prefix', default: 'Count' },
-          count: { type: 'integer', title: 'Count', minimum: 1, maximum: 9, default: 3 },
-          mode: { type: 'string', title: 'Mode', enum: ['brief', 'full'], default: 'brief' },
-          enabled: { type: 'boolean', title: 'Enabled', default: true },
-          limits: {
-            type: 'object',
-            title: 'Limits',
-            properties: { threshold: { type: 'number', title: 'Threshold', default: 0.5 } },
-          },
-          tags: { type: 'array', title: 'Tags', items: { type: 'string' }, default: ['base'] },
+  writeFileSync(
+    join(folder, 'schema.json'),
+    JSON.stringify({
+      type: 'object',
+      required: ['prefix', 'count', 'mode'],
+      additionalProperties: false,
+      properties: {
+        prefix: { type: 'string', title: 'Prefix', default: 'Count' },
+        count: { type: 'integer', title: 'Count', minimum: 1, maximum: 9, default: 3 },
+        mode: { type: 'string', title: 'Mode', enum: ['brief', 'full'], default: 'brief' },
+        enabled: { type: 'boolean', title: 'Enabled', default: true },
+        limits: {
+          type: 'object',
+          title: 'Limits',
+          properties: { threshold: { type: 'number', title: 'Threshold', default: 0.5 } },
         },
-      }));
+        tags: { type: 'array', title: 'Tags', items: { type: 'string' }, default: ['base'] },
+      },
+    }),
+  );
   writeFileSync(
     join(folder, 'plugin.json'),
     JSON.stringify({

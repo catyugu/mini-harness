@@ -18,12 +18,22 @@ test('external services and their declared consumers compose through Cordis serv
   copyExample(paths.plugins, 'greeting-service');
   const patch = (data: unknown) => request('/settings', 'PATCH', data);
   const endpoint = '/extensions/greeting-route/hello?name=Harness';
-  assert.equal((await patch({ entries: { 'greeting-route': { name: '../../plugins/greeting-route', disabled: false } } })).status, 200);
+  assert.equal(
+    (
+      await patch({
+        entries: { 'greeting-route': { name: '../../plugins/greeting-route', disabled: false } },
+      })
+    ).status,
+    200,
+  );
   assert.equal((await request(endpoint)).status, 404);
   assert.equal(
     (
       await patch({
-        entries: { 'greeting-route': { name: '../../plugins/greeting-route', disabled: false }, 'greeting-service': { name: '../../plugins/greeting-service', disabled: false } },
+        entries: {
+          'greeting-route': { name: '../../plugins/greeting-route', disabled: false },
+          'greeting-service': { name: '../../plugins/greeting-service', disabled: false },
+        },
       })
     ).status,
     200,
@@ -35,7 +45,10 @@ test('external services and their declared consumers compose through Cordis serv
     {},
     "export const provide = [\"exampleSuffix\"];\nexport const apply = (ctx) => { ctx.provide('exampleSuffix', '!'); };",
   );
-  assert.equal((await patch({ entries: { suffix: { name: '../../plugins/suffix', disabled: false } } })).status, 200);
+  assert.equal(
+    (await patch({ entries: { suffix: { name: '../../plugins/suffix', disabled: false } } })).status,
+    200,
+  );
   assert.equal((await request(endpoint)).body.greeting, 'Hello, Harness!');
 
   writePlugin(
@@ -45,13 +58,17 @@ test('external services and their declared consumers compose through Cordis serv
     "export const provide = [\"exampleGreeting\"];\nexport const apply = (ctx) => { ctx.provide('exampleGreeting', { greet: (name) => 'Welcome, ' + name }); };",
   );
   assert.match(
-    (await patch({ entries: { 'greeting-alt': { name: '../../plugins/greeting-alt', disabled: false } } })).body.error,
+    (await patch({ entries: { 'greeting-alt': { name: '../../plugins/greeting-alt', disabled: false } } }))
+      .body.error,
     /has been registered/,
   );
   assert.equal(
     (
       await patch({
-        entries: { 'greeting-service': { name: '../../plugins/greeting-service', disabled: true }, 'greeting-alt': { name: '../../plugins/greeting-alt', disabled: false } },
+        entries: {
+          'greeting-service': { name: '../../plugins/greeting-service', disabled: true },
+          'greeting-alt': { name: '../../plugins/greeting-alt', disabled: false },
+        },
       })
     ).status,
     200,
@@ -68,7 +85,10 @@ test('external services and their declared consumers compose through Cordis serv
   assert.equal(
     (
       await patch({
-        entries: { 'greeting-alt': { name: '../../plugins/greeting-alt', disabled: true }, 'greeting-service': { name: '../../plugins/greeting-service', disabled: false } },
+        entries: {
+          'greeting-alt': { name: '../../plugins/greeting-alt', disabled: true },
+          'greeting-service': { name: '../../plugins/greeting-service', disabled: false },
+        },
       })
     ).status,
     200,
@@ -142,8 +162,13 @@ export const apply = (ctx, config) => {
   const workspaceKey = 'workspace:' + parent.workspaceId;
   const sessionKey = 'session:' + parent.id;
   const scopes = {
-    [workspaceKey]: { entries: { 'workspace-greeting': { name: '../../plugins/workspace-greeting', disabled: false } } },
-    [sessionKey]: { entries: { 'scoped-tool': { name: '../../plugins/scoped-tool', disabled: false } }, disabledTools: ['read'] },
+    [workspaceKey]: {
+      entries: { 'workspace-greeting': { name: '../../plugins/workspace-greeting', disabled: false } },
+    },
+    [sessionKey]: {
+      entries: { 'scoped-tool': { name: '../../plugins/scoped-tool', disabled: false } },
+      disabledTools: ['read'],
+    },
   };
   const enabled = await request('/settings', 'PATCH', { scopes });
   assert.equal(enabled.status, 200, JSON.stringify(enabled.body));
@@ -212,7 +237,13 @@ export const apply = (ctx, config) => {
       ...scopes,
       [workspaceKey]: {
         ...scopes[workspaceKey],
-        entries: { 'workspace-greeting': { name: '../../plugins/workspace-greeting', disabled: false, config: { fail: true } } },
+        entries: {
+          'workspace-greeting': {
+            name: '../../plugins/workspace-greeting',
+            disabled: false,
+            config: { fail: true },
+          },
+        },
       },
     },
   });
@@ -258,7 +289,11 @@ export const apply = (ctx) => {
   assert.equal(
     (
       await request('/settings', 'PATCH', {
-        scopes: { ['session:' + child.id]: { entries: { replacement: { name: '../../plugins/replacement', disabled: false } } } },
+        scopes: {
+          ['session:' + child.id]: {
+            entries: { replacement: { name: '../../plugins/replacement', disabled: false } },
+          },
+        },
       })
     ).status,
     200,
@@ -313,15 +348,23 @@ export function apply(ctx) {
   const root = app.runtime.plugins.ctx;
   const session = root.harnessRegistry.create();
   assert.ok(root.harnessTools.forSession(session.id).some(({ name }) => name === 'read'));
-  const duplicate = await request('/settings', 'PATCH', { entries: { 'deny-tools': { name: '../../plugins/deny-tools', disabled: false } } });
+  const duplicate = await request('/settings', 'PATCH', {
+    entries: { 'deny-tools': { name: '../../plugins/deny-tools', disabled: false } },
+  });
   assert.notEqual(duplicate.status, 200);
   const replacement = await request('/settings', 'PATCH', {
-    entries: { 'core:tool-policy': { disabled: true }, 'deny-tools': { name: '../../plugins/deny-tools', disabled: false } },
+    entries: {
+      'core:tool-policy': { disabled: true },
+      'deny-tools': { name: '../../plugins/deny-tools', disabled: false },
+    },
   });
   assert.equal(replacement.status, 200, JSON.stringify(replacement.body));
   assert.deepEqual(root.harnessTools.forSession(session.id), []);
   const restored = await request('/settings', 'PATCH', {
-    entries: { 'core:tool-policy': { disabled: false }, 'deny-tools': { name: '../../plugins/deny-tools', disabled: true } },
+    entries: {
+      'core:tool-policy': { disabled: false },
+      'deny-tools': { name: '../../plugins/deny-tools', disabled: true },
+    },
   });
   assert.equal(restored.status, 200, JSON.stringify(restored.body));
   assert.ok(root.harnessTools.forSession(session.id).some(({ name }) => name === 'read'));
@@ -348,7 +391,10 @@ export function apply(ctx) {
 `,
   );
   const selection = {
-    entries: { 'core:file-access': { disabled: true }, 'virtual-files': { name: '../../plugins/virtual-files', disabled: false } },
+    entries: {
+      'core:file-access': { disabled: true },
+      'virtual-files': { name: '../../plugins/virtual-files', disabled: false },
+    },
   };
   assert.equal((await request('/settings', 'PATCH', selection)).status, 200);
   const session = app.runtime.plugins.ctx.harnessRegistry.create();
@@ -681,7 +727,11 @@ export function apply(ctx) {
   const session = root.harnessRegistry.create();
   const sibling = root.harnessRegistry.create();
   const configured = await request('/settings', 'PATCH', {
-    scopes: { ['session:' + session.id]: { entries: { 'custom-agent': { name: '../../plugins/custom-agent', disabled: false } } } },
+    scopes: {
+      ['session:' + session.id]: {
+        entries: { 'custom-agent': { name: '../../plugins/custom-agent', disabled: false } },
+      },
+    },
   });
   assert.equal(configured.status, 200, JSON.stringify(configured.body));
   assert.equal(await root.harnessRuns.send(session.id, 'success'), 'Custom answer');
