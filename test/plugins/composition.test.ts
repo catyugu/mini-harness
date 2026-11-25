@@ -311,8 +311,15 @@ export const apply = (ctx) => {
   assert.equal(JSON.stringify(sent.tools).includes('"name":"write_like"'), false);
   assert.equal(JSON.stringify(sent.tools).includes('"name":"load_skill"'), true);
   assert.deepEqual((await request('/permissions/plugins/replacement')).body.tools, ['custom', 'read']);
-  assert.equal((await request('/permissions/plugins/replacement', 'PATCH', { tool: 'write_like', allowed: true })).status, 400);
-  assert.equal((await request('/permissions/plugins/replacement', 'PATCH', { tool: 'custom', allowed: true })).status, 200);
+  assert.equal(
+    (await request('/permissions/plugins/replacement', 'PATCH', { tool: 'write_like', allowed: true }))
+      .status,
+    400,
+  );
+  assert.equal(
+    (await request('/permissions/plugins/replacement', 'PATCH', { tool: 'custom', allowed: true })).status,
+    200,
+  );
   const custom = expectPresent(
     list(child.id).find(({ name }) => name === 'custom'),
     'read-only registration',

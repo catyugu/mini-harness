@@ -24,8 +24,7 @@ const plugin: Plugin.Object = {
       const grants = settings.readOnlyTools;
       return (
         !requiresReadOnly ||
-        (readOnly &&
-          Boolean(pluginId && Object.hasOwn(grants, pluginId) && grants[pluginId].includes(name)))
+        (readOnly && Boolean(pluginId && Object.hasOwn(grants, pluginId) && grants[pluginId].includes(name)))
       );
     };
     ctx.provide('harnessToolPolicy', authorize);
