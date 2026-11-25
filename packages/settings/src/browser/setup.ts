@@ -20,37 +20,6 @@ const setup = async (ctx: Context) => {
   const registry = new SettingsRegistry();
   const layout = ctx.miniLayout;
   ctx.provide('miniSettingsRegistry', registry);
-  ctx.effect(() =>
-    registry.register(
-      'core:theme',
-      {
-        id: 'theme',
-        section: { title: 'Appearance', icon: 'theme', order: 30 },
-        render({ bind }) {
-          const content = document.createElement('div');
-          content.className = 'settings-field';
-          const label = document.createElement('label');
-          label.textContent = 'Theme';
-          const theme = document.createElement('select');
-          theme.add(new Option('System', 'system'));
-          theme.add(new Option('Light', 'light'));
-          theme.add(new Option('Dark', 'dark'));
-          label.append(theme);
-          content.append(
-            label,
-            bind<string>(theme, 'appearance', {
-              read: (value) => {
-                theme.value = value;
-              },
-              write: () => theme.value,
-            }),
-          );
-          return content;
-        },
-      },
-      ctx.miniAppearance,
-    ),
-  );
   const settings = mountSettings(ctx, registry);
   ctx.provide('miniSettings', settings);
   const launcher = fromMarkup<HTMLButtonElement>(
@@ -171,7 +140,7 @@ function mountSettings(ctx: Context, registry: SettingsRegistry) {
 }
 
 export default {
-  inject: ['miniLayout', 'miniSlots', 'miniProjections', 'miniAppearance'],
+  inject: ['miniLayout', 'miniSlots', 'miniProjections'],
   provide: ['miniSettings', 'miniSettingsData', 'miniSettingsRegistry'],
   apply: setup,
 };

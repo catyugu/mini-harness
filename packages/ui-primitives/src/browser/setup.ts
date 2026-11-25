@@ -35,4 +35,4 @@ const setup = (ctx: Context) => {
   ctx.effect(() => () => observer.disconnect());
 };
 
-export default { inject: ['miniAppearance'], provide: ['miniPrimitives'], apply: setup };
+export default { inject: [], provide: ['miniPrimitives'], apply: setup };

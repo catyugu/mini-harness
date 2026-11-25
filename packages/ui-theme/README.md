@@ -4,7 +4,7 @@ Owns visual tokens and applies the selected browser color scheme.
 
 ## Responsibilities
 
-Publishes theme variables and the appearance configuration consumed by the Settings dialog.
+Publishes theme variables and contributes its own appearance controls when Settings is installed.
 
 ## Structure
 
@@ -12,7 +12,7 @@ Publishes theme variables and the appearance configuration consumed by the Setti
 
 ## API
 
-`miniAppearance` supplies the theme plugin configuration to Settings.
+Appearance uses the theme Entry's native configuration and the Settings contribution API.
 
 ## Dependencies
 
@@ -20,7 +20,7 @@ Publishes theme variables and the appearance configuration consumed by the Setti
 
 ## Lifecycle
 
-`core:theme` loads before foundational controls. Its selected scheme and stylesheet are released at browser unmount.
+The theme applies independently of Settings. Its selected scheme and stylesheet are released at browser unmount.
 
 ## Configuration
 
