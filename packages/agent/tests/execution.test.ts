@@ -9,6 +9,7 @@ import { rmSync } from 'node:fs';
 import { Type } from 'typebox';
 import { NativeAgent } from '../src/agent.ts';
 import { dispatchTools, scheduleTools } from '../src/tool-pipeline.ts';
+import { nativeExecutor } from '../src/strategies.ts';
 import { basicCompaction } from '../src/compaction.ts';
 import { SessionRegistry } from '@mini-harness/sessions/registry';
 import { WorkspaceCatalog } from '@mini-harness/workspaces/catalog';
@@ -69,7 +70,7 @@ function fixture(
     }),
   });
   ctx.provide('harnessLlm', llm);
-  ctx.provide('harnessToolExecutor', { schedule: scheduleTools });
+  ctx.provide('harnessToolExecutor', nativeExecutor);
   ctx.provide('harnessCompaction', basicCompaction);
   ctx.provide('harnessPrompt', { build: async () => 'Fixture', register: () => () => {} });
   if (retryModel) ctx.on('agent/model-retry', retryModel);

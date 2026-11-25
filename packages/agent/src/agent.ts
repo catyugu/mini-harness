@@ -490,6 +490,7 @@ export class NativeAgent implements AgentPort {
           await this.compactLog(ctx, id, log, signal, true);
         const current = log.projection();
         const registry: ToolPort = requireService(ctx, 'harnessTools');
+        const executor: ToolExecutorPort = requireService(ctx, 'harnessToolExecutor');
         const tools = registry.forSession(id);
         const advertisedTools = new Map(tools.map((tool) => [tool.name, tool]));
         const toolMetadata = tools.map(
@@ -509,16 +510,25 @@ export class NativeAgent implements AgentPort {
           log,
           step,
           { systemPrompt, messages: current.contextMessages, thinkingLevel: current.thinkingLevel },
-          () => {
+          (content) => {
             for (const [name, tool] of advertisedTools)
               if (!registry.isAvailable(id, tool)) advertisedTools.delete(name);
-            return toolMetadata
+            const available = toolMetadata
               .filter(({ name }) => advertisedTools.has(name))
               .map(({ name, description, parameters }) => ({ name, description, parameters }));
+            return executor.present(structuredClone(content), structuredClone(available), step);
           },
         );
         emit({ type: 'assistant-start' });
         let result = await this.request(ctx, id, request, (text) => emit({ type: 'delta', text }));
+        if (!result.errorMessage && result.stopReason !== 'error' && result.stopReason !== 'aborted') {
+          const interpreted = executor.interpret(structuredClone(result), step);
+          validateNativeMessage(interpreted);
+          if (!isDeepStrictEqual(interpreted, result)) {
+            log.append({ type: 'diagnostic', code: 'executor-response', data: result });
+            result = interpreted;
+          }
+        }
         const knownCalls = new Set(
           [...current.contextMessages, ...request.messages].flatMap((message) =>
             message.role === 'assistant'
@@ -560,7 +570,6 @@ export class NativeAgent implements AgentPort {
           );
         signal.throwIfAborted();
         const calls = result.content.filter((part): part is ToolCallPart => part.type === 'toolCall');
-        const executor: ToolExecutorPort = requireService(ctx, 'harnessToolExecutor');
         await dispatchTools(executor, calls, advertisedTools, signal, async (call, tool, toolSignal) => {
           const steering = nextValid('steer');
           let output: NativeToolMessage;
@@ -581,7 +590,7 @@ export class NativeAgent implements AgentPort {
               phase: (state) =>
                 emit({ type: 'tool', id: call.id, name: call.name, state, arguments: call.arguments }),
               update: (value) => {
-                if (hooks.length) return;
+                if (hooks.length || executor.result) return;
                 emit({
                   type: 'tool',
                   id: call.id,
@@ -592,14 +601,17 @@ export class NativeAgent implements AgentPort {
                 });
               },
             });
-            if (!output.isError && hooks.length) {
+            if (!output.isError && (hooks.length || executor.result)) {
               executionId = log.append({ type: 'tool-execution', result: output }).id;
               originalContent = output.content;
               try {
+                const resultContext = { ...step, signal: toolSignal, tool: call.name, callId: call.id };
+                const initial = executor.result ? await executor.result(structuredClone(output), resultContext) : output.content;
+                if (!isToolContent(initial)) throw new Error('Invalid tool result content');
                 const content = await applyTransforms(
                   hooks,
-                  output.content,
-                  { ...step, signal: toolSignal, tool: call.name, callId: call.id },
+                  initial,
+                  resultContext,
                   (value) => {
                     if (!isToolContent(value)) throw new Error('Invalid tool result content');
                     return value;
@@ -697,7 +709,7 @@ export class NativeAgent implements AgentPort {
     log: SessionLogPort,
     context: StepContext,
     requestContent: ModelRequestContent,
-    tools?: () => LlmRequest['tools'],
+    present?: (content: ModelRequestContent) => ModelRequestContent & { tools?: LlmRequest['tools'] },
   ): Promise<LlmRequest> {
     const projected = log.projection();
     const base = { model: context.model };
@@ -715,14 +727,15 @@ export class NativeAgent implements AgentPort {
       validate,
     );
     context.signal.throwIfAborted();
-    const { systemPrompt, thinkingLevel, maxTokens } = transformed;
+    const prepared = present ? present(transformed) : transformed;
+    const { systemPrompt, thinkingLevel, maxTokens } = validate(prepared);
     const input = capabilities?.input.includes('image')
-      ? transformed.messages
-      : withoutImages(transformed.messages);
+      ? prepared.messages
+      : withoutImages(prepared.messages);
     const snapshot: Omit<LlmRequest, 'signal' | 'sessionId'> = JSON.parse(
       JSON.stringify({
         ...base,
-        tools: tools?.(),
+        tools: 'tools' in prepared ? prepared.tools : undefined,
         messages: input,
         systemPrompt,
         thinkingLevel,

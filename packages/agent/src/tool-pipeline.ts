@@ -6,7 +6,7 @@ import {
 } from '@mini-harness/tools/api';
 import { Check } from 'typebox/value';
 import type { ToolCallPart, NativeToolMessage } from '@mini-harness/llm/api';
-import type { ToolDispatch, ToolExecutorPort } from './api.ts';
+import type { ToolDispatch, ToolScheduler } from './api.ts';
 
 const parallelLimit = 16;
 
@@ -62,7 +62,7 @@ export async function scheduleTools(
 
 /** A scheduler cannot change an advertised call or substitute its authorized tool lease. */
 export async function dispatchTools(
-  executor: ToolExecutorPort,
+  executor: ToolScheduler,
   calls: ToolCallPart[],
   tools: ReadonlyMap<string, ToolDefinition>,
   signal: AbortSignal,
