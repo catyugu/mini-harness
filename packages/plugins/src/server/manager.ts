@@ -396,7 +396,7 @@ export class PluginHost implements ScopePort {
       const instance = key ? key + '/' + id : id;
       const message =
         error instanceof ValidationError
-          ? 'Invalid configuration for plugin: ' + instance + ': ' + error.message
+          ? 'Invalid configuration for plugin: ' + id + ': ' + error.message
           : error instanceof Error
             ? error.message
             : String(error);
