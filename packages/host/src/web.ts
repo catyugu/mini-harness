@@ -2,11 +2,11 @@ import type { Context, Plugin } from 'mini-harness/cordis';
 import { spawn } from 'node:child_process';
 import { rmSync } from 'node:fs';
 import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
+import { DomainError } from '@mini-harness/platform/errors';
 import { writeJson } from '@mini-harness/platform/json';
 import { webServer } from './server.ts';
 
 export const metadata: PluginInfo = {
-  configChanges: 'live',
   title: 'HTTP server',
   description: 'Serve the local Web application.',
   scope: 'application',
@@ -24,6 +24,9 @@ const plugin: Plugin.Object = {
   ],
   provide: ['harnessWeb', 'harnessNetwork'],
   apply(ctx: Context, config: { port?: number }) {
+    ctx.on('internal/update', () => {
+      throw new DomainError('conflict', 'Changing HTTP server configuration requires a Profile restart');
+    });
     const launch = ctx.harnessLaunch;
     const paths = ctx.harnessState.paths;
     let port = config.port ?? 3837;

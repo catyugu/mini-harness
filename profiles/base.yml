@@ -29,6 +29,7 @@ plugins:
     name: '@mini-harness/runs'
   - id: core:models
     name: '@mini-harness/models'
+    live: true
   - id: core:file-access
     name: '@mini-harness/file-access'
   - id: files
@@ -37,6 +38,7 @@ plugins:
     name: '@mini-harness/skills'
   - id: subagents
     name: '@mini-harness/subagents'
+    live: true
   - id: shell
     name: '@mini-harness/shell'
     disabled: true

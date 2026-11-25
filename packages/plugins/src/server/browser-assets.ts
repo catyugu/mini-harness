@@ -129,8 +129,8 @@ export function readBrowserAssets(
   };
 }
 
-export function planBrowser(plans: ConfiguredPlugin[]): BrowserEntry[] {
-  return plans.flatMap(({ id, descriptor, config }) => {
+export function planBrowser(plans: ConfiguredPlugin[], effective: (id: string) => unknown): BrowserEntry[] {
+  return plans.flatMap(({ id, descriptor, config, live }) => {
     const resources = descriptor.resources;
     if (!resources) return [];
     return [{
@@ -138,8 +138,8 @@ export function planBrowser(plans: ConfiguredPlugin[]): BrowserEntry[] {
       browser: resources.entry,
       styles: resources.styles,
       preload: resources.preload,
-      config: config ?? {},
-      liveConfig: descriptor.configChanges === 'live',
+      config: (effective(id) ?? config) as Record<string, unknown>,
+      live,
     }];
   });
 }
@@ -155,6 +155,6 @@ export function publishBrowser(
   return {
     entries,
     assets: new Map(resources.flatMap(({ descriptor }) => [...(descriptor.resources?.urls ?? [])])),
-    configurable: new Set(resources.filter(({ descriptor }) => descriptor.configSchema).map(({ id }) => id)),
+    configurable: new Set(resources.map(({ id }) => id)),
   };
 }

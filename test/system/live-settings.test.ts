@@ -54,7 +54,7 @@ test('appearance, parallelism and child defaults update without interrupting a r
     }),
     /Unknown child model/,
   );
-  assert.equal(runtime.settings.entries.subagents?.config?.model, null);
+  assert.equal(runtime.settings.entries.subagents?.config?.model, undefined);
   assert.equal(runtime.settings.entries.subagents?.config?.maxParallel, 2);
   const target = 'session:' + item.id;
   await assert.rejects(

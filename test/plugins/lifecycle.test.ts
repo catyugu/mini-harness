@@ -13,6 +13,7 @@ import { DEFAULTS, mergeSettings } from '@mini-harness/settings/config';
 import { writeJson } from '@mini-harness/platform/json';
 
 import { Context } from 'mini-harness/cordis';
+import { defineConfig } from '@mini-harness/plugin-api/configuration';
 import type { SessionRecord } from '@mini-harness/sessions/identity';
 import type { ResolvedPlugin } from '@mini-harness/plugin-api/descriptor';
 import { PluginHost } from '@mini-harness/plugins/manager';
@@ -54,6 +55,9 @@ test('an installed Cordis plugin can use services, configure a tool, and release
   writeFileSync(
     join(folder, 'plugin.js'),
     `
+import { defineConfig } from 'mini-harness/configuration';
+import { readFileSync } from 'node:fs';
+export const Config = defineConfig(JSON.parse(readFileSync(new URL('./plugin.json', import.meta.url), 'utf8')).configSchema);
 export const inject = ["harnessSessions","harnessTools"];
 
 import { appendFileSync } from 'node:fs';
@@ -208,7 +212,7 @@ export function apply(ctx) {
   assert.equal((await storedProfile(paths)).entries['named-entry']?.disabled, undefined);
 });
 
-test('plugin JSON Schema applies defaults and rejects invalid changes before setup', async (t) => {
+test('native Cordis Config applies defaults and rejects invalid changes before setup', async (t) => {
   const mock = await createMockProvider();
   const { root, paths } = createFixturePaths(mock.url);
   const runtime = new MiniHarnessRuntime(paths);
@@ -222,7 +226,6 @@ test('plugin JSON Schema applies defaults and rejects invalid changes before set
   writeFileSync(
     join(folder, 'plugin.json'),
     JSON.stringify({
-      configChanges: 'live',
       configSchema: {
         type: 'object',
         additionalProperties: false,
@@ -243,9 +246,10 @@ test('plugin JSON Schema applies defaults and rejects invalid changes before set
     `
 export const inject = ["harnessPluginSettings","harnessTools"];
 
-export function validateConfig(config) {
-  if (config.count === 5) throw new Error('Five is reserved');
-}
+import { defineConfig } from 'mini-harness/configuration';
+import { readFileSync } from 'node:fs';
+export const Config = defineConfig(JSON.parse(readFileSync(new URL('./plugin.json', import.meta.url), 'utf8')).configSchema, (config) => config.count === 5 ? 'Five is reserved' : undefined);
+
 export const apply = (ctx) => {
     const changes = [];
     ctx.harnessPluginSettings.subscribe('count', (value) => changes.push(value));
@@ -260,7 +264,7 @@ export const apply = (ctx) => {
 `,
   );
   await runtime.start();
-  await runtime.configuration.update({ entries: { schema: { disabled: false } } });
+  await runtime.configuration.update({ entries: { schema: { disabled: false, live: true } } });
   const item = runtime.plugins.ctx.harnessRegistry.create();
   const tool = expectPresent(
     runtime.plugins.ctx.harnessTools.forSession(item.id).find(({ name }) => name === 'schema_value'),
@@ -447,10 +451,11 @@ test('disabled optional builtins cannot block boot or reload because their confi
     restored.configuration.update({ entries: { subagents: { config: { maxDepth: 101 } } } }),
     /Invalid configuration/,
   );
+  await restored.configuration.update({
+    entries: { subagents: { config: { model: { provider: 'unknown', id: 'missing' } } } },
+  });
   await assert.rejects(
-    restored.configuration.update({
-      entries: { subagents: { config: { model: { provider: 'unknown', id: 'missing' } } } },
-    }),
+    restored.configuration.update({ entries: { subagents: { disabled: false } } }),
     /Unknown child model/,
   );
   await restored.configuration.update({ entries: { 'core:theme': { config: { appearance: 'dark' } } } });
@@ -659,8 +664,8 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
       scope: 'workspace',
       title: 'Workspace',
       description: '',
-      configSchema: { type: 'object', properties: { value: { type: 'string' } }, required: ['value'] },
       plugin: {
+        Config: defineConfig({ type: 'object', properties: { value: { type: 'string' } }, required: ['value'] }),
         provide: 'greeting',
         apply(ctx: Context, config: Record<string, unknown>) {
           ctx.provide('greeting', String(config.value));
@@ -818,11 +823,12 @@ test('configuration validation resolves the staged scope provider and rejects in
       scope: 'workspace',
       title: 'Consumer',
       description: '',
-      plugin: { inject: ['greeting'], apply() {} },
-      configSchema: { type: 'object', properties: { expected: { type: 'string' } }, required: ['expected'] },
-      validateConfig(config, { operation, service }) {
-        if (config.expected !== service('greeting'))
-          throw new Error('Wrong scoped greeting during ' + operation);
+      plugin: {
+        inject: ['greeting'],
+        Config: defineConfig({ type: 'object', properties: { expected: { type: 'string' } }, required: ['expected'] }),
+        apply(ctx, config) {
+          if (config.expected !== ctx.get('greeting')) throw new Error('Wrong scoped greeting');
+        },
       },
     },
   ];
@@ -863,7 +869,6 @@ test('setup and live configuration cannot await their own graph transaction', as
       scope: 'application',
       title: 'Reentrant',
       description: '',
-      configChanges: 'live',
       plugin: {
         async apply(ctx: Context, config: Record<string, unknown>) {
           if (config.prepare) await ctx.harnessScopes.prepare('session:session');
@@ -884,7 +889,7 @@ test('setup and live configuration cannot await their own graph transaction', as
   });
   await host.start(settings);
   const configure = (prepare: boolean) => {
-    const next = { ...settings, entries: { reentrant: { disabled: false, config: { prepare } } } };
+    const next = { ...settings, entries: { reentrant: { disabled: false, live: true, config: { prepare } } } };
     return host.configure(next, () => {
       settings = next;
     });

@@ -1,14 +1,4 @@
 {
   "title": "Example panel",
-  "browserDirectory": "web",
-  "configSchema": {
-    "type": "object",
-    "properties": {
-      "replaceComposer": {
-        "type": "boolean",
-        "default": false
-      }
-    },
-    "additionalProperties": false
-  }
+  "browserDirectory": "web"
 }

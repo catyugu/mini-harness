@@ -1,22 +1,11 @@
+import { defineConfig } from '@mini-harness/plugin-api/configuration';
 import type { Plugin } from 'mini-harness/cordis';
 import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 import { setup } from './server/setup.ts';
 import { Type } from 'typebox';
-import { DomainError } from '@mini-harness/platform/errors';
 
 /** One self-contained plugin schema. Changes to child limits are safe during active runs. */
-export const metadata: PluginInfo = {
-  scope: 'application',
-  configChanges: 'live',
-  title: 'Subagents',
-  description: 'Delegate tasks to child conversations.',
-  icon: 'delegate',
-  browser: '/packages/subagents/src/browser/setup.js',
-  configGroups: [
-    { title: 'Run limits', fields: ['maxDepth', 'maxParallel'] },
-    { title: 'Model selection', fields: ['model'] },
-  ],
-  configSchema: {
+const Config = defineConfig({
     ...Type.Object(
       {
         maxDepth: Type.Integer({ title: 'Maximum child depth', minimum: 0, maximum: 8, default: 1 }),
@@ -37,19 +26,23 @@ export const metadata: PluginInfo = {
       },
       { additionalProperties: false },
     ),
-  },
-  validateConfig({ model }, { service }) {
-    if (
-      model &&
-      !service('harnessModels').resolve(model as import('@mini-harness/llm/vocabulary').ModelChoice)
-    ) {
-      const { provider, id } = model as import('@mini-harness/llm/vocabulary').ModelChoice;
-      throw new DomainError('invalid_input', 'Unknown child model: ' + provider + '/' + id);
-    }
-  },
+  });
+
+export const metadata: PluginInfo = {
+  scope: 'application',
+  title: 'Subagents',
+  description: 'Delegate tasks to child conversations.',
+  icon: 'delegate',
+  browser: '/packages/subagents/src/browser/setup.js',
+  configGroups: [
+    { title: 'Run limits', fields: ['maxDepth', 'maxParallel'] },
+    { title: 'Model selection', fields: ['model'] },
+  ],
+
 };
 
 const plugin: Plugin.Object = {
+  Config,
   inject: ['harnessTools', 'harnessSessions', 'harnessModels', 'harnessExecution'],
   apply: setup,
 };

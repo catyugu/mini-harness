@@ -1,3 +1,4 @@
+import { defineConfig } from 'mini-harness/configuration';
 export const provide = ['taskNotes'];
 export const inject = [
   'harnessSessions',
@@ -27,9 +28,19 @@ declare module 'mini-harness/cordis' {
     taskNotes: { label(): string };
   }
 }
-export function validateConfig(config: Readonly<Record<string, unknown>>) {
-  if (typeof config.label !== 'string' || !config.label.trim()) throw new Error('Enter a note label');
-}
+export const Config = defineConfig({
+  "type": "object",
+  "properties": {
+    "label": {
+      "type": "string",
+      "title": "Note label",
+      "default": "Task progress"
+    }
+  },
+  "additionalProperties": false
+}, (config) =>
+  typeof config.label !== 'string' || !config.label.trim() ? 'Enter a note label' : undefined,
+);
 export function apply(ctx: Context) {
   const sessions: SessionAccess = ctx.harnessSessions.access();
   const execute: Execution = ctx.harnessExecution;

@@ -69,8 +69,6 @@ export function describePlugin(id: string, folder: string, entry?: string): Disc
   const resources = browser !== undefined
     ? readBrowserAssets(id, folder, browser, manifest.browserDirectory, manifest.browserPreload)
     : undefined;
-  if (manifest.configChanges !== undefined && manifest.configChanges !== 'live')
-    throw new Error('Invalid plugin configChanges: ' + id);
   const configSchema = manifest.configSchema;
   if (
     configSchema &&
@@ -122,7 +120,6 @@ export function describePlugin(id: string, folder: string, entry?: string): Disc
     configSchema,
     configGroups,
     configHint,
-    configChanges: manifest.configChanges,
     icon,
     web: hasWeb,
     trustedCode: true,

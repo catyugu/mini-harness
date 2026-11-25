@@ -250,6 +250,7 @@ test('browser entries receive and edit their configuration without a field allow
   const folder = join(paths.plugins, 'config-visibility');
   mkdirSync(folder);
   writeFileSync(join(folder, 'web.js'), 'export default () => {}');
+  writeFileSync(join(folder, 'plugin.js'), "import { defineConfig } from 'mini-harness/configuration';\nimport { readFileSync } from 'node:fs';\nexport const Config = defineConfig(JSON.parse(readFileSync(new URL('./plugin.json', import.meta.url), 'utf8')).configSchema);\n");
   writeJson(join(folder, 'plugin.json'), {
     configSchema: {
       type: 'object',

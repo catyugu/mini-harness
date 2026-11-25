@@ -12,10 +12,12 @@ export function validateEntries(entries: Record<string, unknown>) {
     if (!pluginIdPattern.test(id) || !value || typeof value !== 'object' || Array.isArray(value))
       throw new DomainError('invalid_input', 'Invalid plugin entry: ' + id);
     const entry = value as Record<string, unknown>;
-    if (Object.keys(entry).some((key) => key !== 'disabled' && key !== 'config'))
+    if (Object.keys(entry).some((key) => key !== 'disabled' && key !== 'live' && key !== 'config'))
       throw new DomainError('invalid_input', 'Unknown plugin entry field: ' + id);
     if (entry.disabled !== undefined && typeof entry.disabled !== 'boolean')
       throw new DomainError('invalid_input', 'Plugin disabled flags must be boolean');
+    if (entry.live !== undefined && typeof entry.live !== 'boolean')
+      throw new DomainError('invalid_input', 'Plugin live flags must be boolean');
     if (entry.config !== undefined && (!entry.config || typeof entry.config !== 'object' || Array.isArray(entry.config)))
       throw new DomainError('invalid_input', 'Invalid plugin configuration for ' + id);
   }

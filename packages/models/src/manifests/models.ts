@@ -1,3 +1,4 @@
+import { defineConfig } from '@mini-harness/plugin-api/configuration';
 import type { Plugin } from 'mini-harness/cordis';
 import { Type } from 'typebox';
 import { DomainError } from '@mini-harness/platform/errors';
@@ -5,12 +6,7 @@ import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 import { setupAdministration } from '../server/administration.ts';
 
-export const metadata: PluginInfo = {
-  scope: 'application',
-  title: 'Recent model',
-  description: 'Accepted user model selection',
-  configChanges: 'live',
-  configSchema: Type.Object(
+const Config = defineConfig(Type.Object(
     {
       model: Type.Object(
         {
@@ -21,18 +17,25 @@ export const metadata: PluginInfo = {
       ),
     },
     { additionalProperties: false },
-  ),
-  validateConfig(config, { service, operation }) {
-    const model = config.model as ModelChoice;
-    if (operation !== 'mount' && (model.provider || model.id) && !service('harnessModels').resolve(model))
-      throw new DomainError('invalid_input', 'Unknown model: ' + model.provider + '/' + model.id);
-  },
+  ));
+
+export const metadata: PluginInfo = {
+  scope: 'application',
+  title: 'Recent model',
+  description: 'Accepted user model selection',
+
 };
 
 const plugin: Plugin.Object = {
+  Config,
   inject: ['harnessModels', 'harnessChanges', 'harnessPluginSettings'],
   provide: ['harnessModelPreference'],
   apply(ctx) {
+    ctx.on('internal/update', (next) => {
+      const model = (next as { model: ModelChoice }).model;
+      if ((model.provider || model.id) && !ctx.harnessModels.resolve(model))
+        throw new DomainError('invalid_input', 'Unknown model: ' + model.provider + '/' + model.id);
+    });
     let pending = Promise.resolve();
     let current = ctx.harnessPluginSettings.get<ModelChoice>('model');
     let saving: ModelChoice | undefined;

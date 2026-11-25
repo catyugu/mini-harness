@@ -1,24 +1,27 @@
+import { defineConfig } from '@mini-harness/plugin-api/configuration';
 import type { Plugin } from 'mini-harness/cordis';
 import { Type } from 'typebox';
 import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 import { setup } from '../server/setup.ts';
 
-export const metadata: PluginInfo = {
-  scope: 'application',
-  title: 'Conversation',
-  description: 'Conversation interface',
-  configChanges: 'live',
-  configSchema: Type.Object(
+const Config = defineConfig(Type.Object(
     {
       queueMode: Type.Union([Type.Literal('steer'), Type.Literal('followUp')], { default: 'steer' }),
     },
     { additionalProperties: false },
-  ),
+  ));
+
+export const metadata: PluginInfo = {
+  scope: 'application',
+  title: 'Conversation',
+  description: 'Conversation interface',
+
   browserStyles: ['/packages/conversation/src/browser/conversation/style.css'],
   browser: '/packages/conversation/src/browser/conversation/setup.js',
 };
 
 const plugin: Plugin.Object = {
+  Config,
   inject: [
     'harnessChanges',
     'harnessRegistry',

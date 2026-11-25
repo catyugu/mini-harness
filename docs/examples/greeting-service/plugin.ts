@@ -1,3 +1,4 @@
+import { defineConfig } from 'mini-harness/configuration';
 import type { Context } from 'mini-harness/cordis';
 
 export interface Greeting {
@@ -10,6 +11,10 @@ declare module 'mini-harness/cordis' {
     exampleSuffix?: string;
   }
 }
+
+export const Config = defineConfig({
+  type: 'object', properties: { prefix: { type: 'string', default: 'Hello' } }, additionalProperties: false,
+});
 
 export const provide = ['exampleGreeting'];
 export function apply(ctx: Context, config: { prefix: string }) {

@@ -12,7 +12,6 @@ import type { SettingsPort } from './api.ts';
 import type { ProfileConfiguration } from '@mini-harness/plugin-api/configuration';
 
 export interface PluginConfigurationPort {
-  effective(settings: ProfileConfiguration): ProfileConfiguration;
   configure(settings: ProfileConfiguration, commit?: () => void, released?: ReadonlySet<ScopeKey>): Promise<void>;
 }
 
@@ -31,7 +30,7 @@ export class SettingsManager implements SettingsPort {
   }
 
   get settings() {
-    return this.host()?.effective(this.stored) ?? this.stored;
+    return this.stored;
   }
 
   subscribe(listener: () => void) {
@@ -69,7 +68,7 @@ export class SettingsManager implements SettingsPort {
       const host = this.host();
       if (!host) throw new DomainError('unavailable', 'Live Profile configuration is unavailable');
       await host.configure(
-        host.effective(next),
+        next,
         () => {
           if (changed) this.save(next);
         },
@@ -120,7 +119,7 @@ export class SettingsManager implements SettingsPort {
       if (skipUnchanged && isDeepStrictEqual(next, this.stored)) return this.settings;
       const host = this.host();
       if (!host) throw new DomainError('unavailable', 'Live Profile configuration is unavailable');
-      await host.configure(host.effective(next), () => this.save(next));
+      await host.configure(next, () => this.save(next));
       this.publish();
       return this.settings;
     });

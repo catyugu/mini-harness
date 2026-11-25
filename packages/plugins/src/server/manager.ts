@@ -1,7 +1,7 @@
 import { assertOutsideMountTransaction, withMountTransaction } from '@mini-harness/plugin-api/mutation-api';
 import { DomainError } from '@mini-harness/platform/errors';
 import { dirname, join } from 'node:path';
-import { EntryGroup, EntryTree, Service, type Context, type EntryOptions } from 'mini-harness/cordis';
+import { EntryGroup, EntryTree, Service, ValidationError, type Context, type EntryOptions } from 'mini-harness/cordis';
 import { localPluginIdPattern, isScopeKey } from '@mini-harness/plugin-api/selection';
 import { isDeepStrictEqual } from 'node:util';
 import type { ResolvedPlugin } from '@mini-harness/plugin-api/descriptor';
@@ -95,9 +95,6 @@ export class PluginHost implements ScopePort {
   private browserState = publishBrowser([], [], () => false);
   private failures = new Map<string, string>();
 
-  effective<Settings extends CompositionConfig>(settings: Settings) {
-    return this.catalog.effective(settings);
-  }
   browser() {
     return structuredClone(this.browserState.entries);
   }
@@ -150,7 +147,6 @@ export class PluginHost implements ScopePort {
       this.settings(),
       this.failures,
       (id) => this.entries.get(id)?.active === true || this.browserState.entries.some((entry) => entry.id === id),
-      (key) => this.configurationContext(key),
     );
   }
   register(
@@ -391,10 +387,12 @@ export class PluginHost implements ScopePort {
     const previous = this.settings();
     const descriptors = await this.catalog.runtimeDescriptors(settings);
     const updating = !starting && !preparing && !released;
-    const validations = updating ? this.catalog.changedConfig(descriptors, previous, settings) : [];
+    if (updating) this.catalog.validateDisabled(descriptors, previous, settings);
     const unavailable = (id: string, error: unknown, key?: ScopeKey) => {
       const instance = key ? key + '/' + id : id;
-      const message = error instanceof Error ? error.message : String(error);
+      const message = error instanceof ValidationError
+        ? 'Invalid configuration for plugin: ' + instance + ': ' + error.message
+        : error instanceof Error ? error.message : String(error);
       if (updating && changedSelection(id, previous, settings, key))
         throw new DomainError(
           error instanceof DomainError ? error.code : 'invalid_input',
@@ -420,9 +418,8 @@ export class PluginHost implements ScopePort {
       unavailable,
       preparing,
       released,
-      [...changedScopes, ...validations.flatMap(({ key }) => (key ? [key] : []))],
+      changedScopes,
     );
-    const browser = planBrowser(plans);
     const mounts = [
       ...plans
         .filter(({ id, descriptor }) => descriptor.plugin && !failures.has(id))
@@ -431,13 +428,14 @@ export class PluginHost implements ScopePort {
     ];
     const appChanged =
       descriptors.some((descriptor) => {
-        const { id, configChanges, scope, plugin, source } = descriptor;
+        const { id, scope, plugin, source } = descriptor;
         if (scope !== 'application' || !(plugin || source)) return false;
         const enabled = this.catalog.enabled(descriptor, settings);
         return (
           enabled !== this.catalog.enabled(descriptor, previous) ||
+          (enabled && settings.entries[id]?.live !== previous.entries[id]?.live) ||
           (enabled &&
-            configChanges !== 'live' &&
+            !settings.entries[id]?.live &&
             !isDeepStrictEqual(settings.entries[id]?.config, previous.entries[id]?.config))
         );
       });
@@ -447,12 +445,12 @@ export class PluginHost implements ScopePort {
           after = settings.scopes[key];
         return (
           !isDeepStrictEqual(
-            Object.fromEntries(Object.entries(before?.entries ?? {}).filter(([, entry]) => entry.disabled !== undefined).map(([id, entry]) => [id, entry.disabled])),
-            Object.fromEntries(Object.entries(after?.entries ?? {}).filter(([, entry]) => entry.disabled !== undefined).map(([id, entry]) => [id, entry.disabled])),
+            Object.fromEntries(Object.entries(before?.entries ?? {}).filter(([, entry]) => entry.disabled !== undefined).map(([id, entry]) => [id, [entry.disabled, entry.live]])),
+            Object.fromEntries(Object.entries(after?.entries ?? {}).filter(([, entry]) => entry.disabled !== undefined).map(([id, entry]) => [id, [entry.disabled, entry.live]])),
           ) ||
           descriptors.some(
-            ({ id, configChanges }) =>
-              configChanges !== 'live' &&
+            ({ id }) =>
+              !(after?.entries?.[id]?.live ?? settings.entries[id]?.live) &&
               after?.entries?.[id]?.disabled === false &&
               (!isDeepStrictEqual(before?.entries?.[id]?.config, after.entries?.[id]?.config) ||
                 !isDeepStrictEqual(previous.entries[id]?.config, settings.entries[id]?.config)),
@@ -491,21 +489,10 @@ export class PluginHost implements ScopePort {
         if (!(scope ? unavailable(scope.plugin, error, scope.key) : unavailable(mounted.id, error)))
           throw error;
       }
-      for (const { descriptor, config, key } of validations) {
-        const instance = key ? key + '/' + descriptor.id : descriptor.id;
-        this.catalog.validateConfig(
-          descriptor,
-          config,
-          'write',
-          this.configurationContext(key, scoped.contexts),
-          descriptor.validateConfig,
-          instance,
-        );
-      }
       {
         const clientOnly = new Set(plans.filter(({ descriptor }) => !descriptor.plugin).map(({ id }) => id));
         const browserState = publishBrowser(
-          browser,
+          planBrowser(plans, (id) => this.entries.get(id)?.fiber?.effectiveConfig),
           plans,
           (id) => !failures.has(id) && (clientOnly.has(id) || this.entries.get(id)?.active === true),
         );

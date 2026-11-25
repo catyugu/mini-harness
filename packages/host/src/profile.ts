@@ -11,15 +11,13 @@ import { PluginCatalog } from '@mini-harness/plugins/catalog';
 import { bindPluginImports, resolveModule } from '@mini-harness/plugins/module-resolution';
 import { localPluginIdPattern, pluginIdPattern } from '@mini-harness/plugin-api/selection';
 import type { ProfileRuntime } from '@mini-harness/plugin-api/profile';
-import type { ProfileConfiguration } from '@mini-harness/plugin-api/configuration';
+import type { EntryConfiguration, ProfileConfiguration } from '@mini-harness/plugin-api/configuration';
 import { parseSettings } from '@mini-harness/settings/config';
 
-interface Row {
+interface Row extends EntryConfiguration {
   id: string;
   name?: string;
-  disabled?: boolean;
   client?: boolean;
-  config?: Record<string, unknown>;
 }
 
 interface Layer {
@@ -134,14 +132,14 @@ function load(file: string, optional = false): Layer | undefined {
       if (
         !object(row) ||
         Object.keys(row).some(
-          (key) => !['id', 'name', 'disabled', 'client', 'config'].includes(key),
+          (key) => !['id', 'name', 'disabled', 'client', 'live', 'config'].includes(key),
         ) ||
         typeof row.id !== 'string' ||
         !pluginIdPattern.test(row.id) ||
         ids.has(row.id) ||
         (row.name !== undefined && (typeof row.name !== 'string' || !row.name.trim())) ||
         (row.config !== undefined && !object(row.config)) ||
-        ['disabled', 'client'].some(
+        ['disabled', 'client', 'live'].some(
           (key) => row[key] !== undefined && typeof row[key] !== 'boolean',
         )
       )
@@ -278,6 +276,7 @@ export const profileSchema = {
           name: { type: 'string', minLength: 1 },
           disabled: { type: 'boolean' },
           client: { type: 'boolean' },
+          live: { type: 'boolean' },
           config: { type: 'object' },
         },
       },
@@ -313,7 +312,7 @@ function isPlugin(value: unknown): value is Plugin {
   return typeof value === 'function' || (object(value) && typeof value.apply === 'function');
 }
 
-async function moduleFor(name: string): Promise<{ plugin?: Plugin; metadata?: PluginInfo }> {
+async function moduleFor(name: string): Promise<{ plugin?: Plugin; metadata?: PluginInfo; Config?: Plugin.Base['Config'] }> {
   const target = packagedModules.get(name);
   if (!target) throw new Error('Unknown packaged Profile plugin: ' + name);
   const exports = await import(new URL(target.path, installed).href);
@@ -323,7 +322,8 @@ async function moduleFor(name: string): Promise<{ plugin?: Plugin; metadata?: Pl
   if (value !== undefined && !isPlugin(value))
     throw new Error('Profile module must export a Cordis plugin: ' + name);
   if (!value && !metadata?.browser) throw new Error('Profile module export not found: ' + name);
-  return { plugin: value, metadata };
+  const Config = value?.Config ?? exports[target.exportName === 'default' ? 'Config' : target.exportName + 'Config'];
+  return { plugin: value, metadata, Config };
 }
 
 export async function profileDescriptors(entries: ReadonlyMap<string, Row>): Promise<ResolvedPlugin[]> {
@@ -331,13 +331,14 @@ export async function profileDescriptors(entries: ReadonlyMap<string, Row>): Pro
     [...entries.values()]
       .filter((row) => row.name && packagedModules.has(row.name))
       .map(async (row) => {
-        const { plugin, metadata } = await moduleFor(row.name!);
+        const { plugin, metadata, Config } = await moduleFor(row.name!);
         return {
           title: row.id,
           description: '',
           scope: 'application' as const,
           ...metadata,
           plugin,
+          Config,
           id: row.id,
           defaultEnabled: !row.disabled,
           browser: row.client ? metadata?.browser : undefined,
@@ -389,6 +390,7 @@ export async function loadProfile(
       entries: Object.fromEntries(
         [...selected.values()].map((row) => [row.id, {
           disabled: Boolean(row.disabled),
+          ...(row.live === undefined ? {} : { live: row.live }),
           ...(row.config === undefined ? {} : { config: row.config }),
         }]),
       ),
@@ -444,6 +446,8 @@ export async function loadProfile(
           : installedPath(file, join(paths.plugins, id));
       const disabled = settings.entries[id]?.disabled;
       if (disabled !== undefined && (!base || disabled !== Boolean(base.disabled))) row.disabled = disabled;
+      const live = settings.entries[id]?.live;
+      if (live !== undefined && live !== base?.live) row.live = live;
       const changed = Object.fromEntries(
         Object.entries(config ?? {}).filter(([key, value]) => !isDeepStrictEqual(value, base?.config?.[key])),
       );
@@ -501,7 +505,7 @@ export async function loadProfile(
     entries,
     async start() {
       const catalog = new PluginCatalog(paths.plugins, descriptors, profile);
-      const settings = catalog.effective(current);
+      const settings = current;
       const errors = new Map<string, unknown>();
       const { plans } = catalog.plans(settings, await catalog.runtimeDescriptors(settings), 'application', undefined,
         (id, error) => {

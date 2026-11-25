@@ -5,47 +5,26 @@ import { DomainError } from '@mini-harness/platform/errors';
 import { existsSync, lstatSync, readdirSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
-import { Check } from 'typebox/value';
 import { scopeKeys, type CompositionConfig } from '@mini-harness/plugin-api/configuration';
 import type { PluginScope, ScopeKey, ScopeSettings } from '@mini-harness/plugin-api/scopes';
-import type { Context, EntryOptions, Plugin } from 'mini-harness/cordis';
-import type { ConfigValidationContext, ResolvedPlugin } from '@mini-harness/plugin-api/descriptor';
+import { resolveConfig, type Context, type EntryOptions, type Plugin } from 'mini-harness/cordis';
+import type { ResolvedPlugin } from '@mini-harness/plugin-api/descriptor';
 import { builtinBrowserAssets } from './browser-assets.ts';
 import { describePlugin, type DiscoveredPlugin } from './descriptor.ts';
 import { resolveModule } from './module-resolution.ts';
 import { bindInstance } from '@mini-harness/plugin-api/instance';
 
-function configDefaults(schema: Record<string, any>, value: any): any {
-  if (value === undefined && Object.hasOwn(schema, 'default')) value = structuredClone(schema.default);
-  if (schema.type === 'object' && value && typeof value === 'object' && !Array.isArray(value)) {
-    for (const [key, property] of Object.entries(schema.properties ?? {})) {
-      if (!property || typeof property !== 'object' || Array.isArray(property))
-        throw new DomainError('invalid_input', 'Invalid plugin config property');
-      const item = configDefaults(
-        property as Record<string, unknown>,
-        Object.hasOwn(value, key) ? value[key] : undefined,
-      );
-      if (item !== undefined)
-        Object.defineProperty(value, key, {
-          value: item,
-          enumerable: true,
-          writable: true,
-          configurable: true,
-        });
-    }
-  }
-  return value;
-}
-
 export interface ConfiguredPlugin {
   descriptor: DiscoveredPlugin;
   id: string;
   source?: string;
-  config?: Record<string, unknown>;
+  config: Record<string, unknown>;
+  live: boolean;
 }
 
 export class PluginCatalog {
   private readonly builtins: Map<string, DiscoveredPlugin>;
+  private resolved = new Map<string, DiscoveredPlugin>();
   constructor(
     private readonly directory: string,
     builtins: ResolvedPlugin[],
@@ -57,22 +36,10 @@ export class PluginCatalog {
     this.builtins = new Map(
       builtins.map((descriptor) => [
         descriptor.id,
-        { ...descriptor, resources: builtinBrowserAssets(descriptor) },
+        this.withSchema({ ...descriptor, Config: descriptor.Config ?? descriptor.plugin?.Config, resources: builtinBrowserAssets(descriptor) }),
       ]),
     );
     if (this.builtins.size !== builtins.length) throw new Error('Duplicate builtin plugin ID');
-  }
-
-  effective<Settings extends CompositionConfig>(settings: Settings): Settings {
-    const entries = { ...settings.entries };
-    for (const { id, scope, configSchema, defaultEnabled } of this.builtins.values()) {
-      const entry = { ...entries[id] };
-      if (scope === 'application') entry.disabled ??= !defaultEnabled;
-      if (configSchema)
-        entry.config = configDefaults(configSchema, structuredClone(entry.config ?? {}));
-      if (Object.keys(entry).length) entries[id] = entry;
-    }
-    return { ...settings, entries };
   }
 
   enabled(descriptor: ResolvedPlugin, settings: CompositionConfig) {
@@ -146,7 +113,7 @@ export class PluginCatalog {
   }
 
   async runtimeDescriptors(settings: CompositionConfig): Promise<DiscoveredPlugin[]> {
-    return Promise.all(
+    const descriptors = await Promise.all(
       this.descriptors().map(async (descriptor) => {
         const { id, source, scope } = descriptor;
         if (!source || descriptor.error) return descriptor;
@@ -160,41 +127,46 @@ export class PluginCatalog {
         try {
           const module = pathToFileURL(source).href + '?v=' + lstatSync(source).mtimeMs;
           const exports = await import(module);
-          const plugin: Plugin = exports.default ?? exports;
-          if (typeof plugin !== 'function' && typeof plugin?.apply !== 'function')
+          const value = exports.default ?? exports;
+          const plugin: Plugin | undefined = typeof value === 'function' || typeof value?.apply === 'function'
+            ? value
+            : undefined;
+          const Config = plugin?.Config ?? exports.Config;
+          if (!plugin && !(descriptor.resources && Config))
             throw new Error('Plugin ' + id + ' must export a Cordis plugin with apply(ctx, config)');
-          const validateConfig = exports.validateConfig;
-          if (
-            validateConfig !== undefined &&
-            (typeof validateConfig !== 'function' || !descriptor.configSchema)
-          )
-            throw new Error('Export a validateConfig function with a configSchema in plugin.json');
-          return { ...descriptor, plugin, module, validateConfig };
+          return this.withSchema({ ...descriptor, plugin, module, Config });
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           return { ...descriptor, error: message };
         }
       }),
     );
+    this.resolved = new Map(descriptors.map((descriptor) => [descriptor.id, descriptor]));
+    return descriptors;
+  }
+
+  private withSchema(descriptor: DiscoveredPlugin): DiscoveredPlugin {
+    const schema = (descriptor.Config as { jsonSchema?: Record<string, any> } | undefined)?.jsonSchema;
+    return schema ? { ...descriptor, configSchema: schema } : descriptor;
   }
 
   metadata(
     settings: CompositionConfig,
     failures: ReadonlyMap<string, string>,
     mounted: (id: string) => boolean,
-    context: (scope?: ScopeKey) => Context,
   ): PluginMetadata[] {
     return this.descriptors()
       .filter(({ id }) => localPluginIdPattern.test(id))
-      .map((descriptor) => {
+      .map((discovered) => {
+        const descriptor = this.resolved.get(discovered.id) ?? discovered;
         const {
           id,
           source,
           resources,
           plugin: _plugin,
           browserStyles,
-          configChanges,
-          validateConfig,
+          Config: _Config,
+          module: _module,
           ...metadata
         } = descriptor;
         const configurationError = (key?: ScopeKey) => {
@@ -202,15 +174,7 @@ export class PluginCatalog {
             const values = key
               ? { ...settings.entries[id]?.config, ...settings.scopes[key]?.entries?.[id]?.config }
               : settings.entries[id]?.config;
-            const config = this.configValues(id, values, descriptor.configSchema);
-            this.validateConfig(
-              descriptor,
-              config,
-              'inspect',
-              context(key),
-              descriptor.validateConfig,
-              key ? key + '/' + id : id,
-            );
+            this.configValues(descriptor, values);
           } catch (error) {
             return error instanceof Error ? error.message : String(error);
           }
@@ -230,7 +194,7 @@ export class PluginCatalog {
             const error =
               failures.get(key) ??
               metadata.error ??
-              configurationError(scope === 'application' ? undefined : scope);
+              (!mounted(key) ? configurationError(scope === 'application' ? undefined : scope) : undefined);
             const state = !enabled ? 'disabled' : error ? 'failed' : mounted(key) ? 'ready' : 'inactive';
             return { scope, error, state };
           },
@@ -266,92 +230,38 @@ export class PluginCatalog {
       context,
       config: plan.config ?? {},
       module: descriptor.module ?? plan.id,
-      live: descriptor.configChanges === 'live',
+      live: plan.live,
       load: () => plugin,
       prepare: (ctx) => {
         bindInstance(ctx.fiber.entry!, {
           pluginId: plan.id,
           scope,
           scopeKey,
-          writableConfig: descriptor.configChanges === 'live' && descriptor.configSchema !== undefined,
+          writableConfig: plan.live,
           trusted: !source && descriptor.trustedContributor === true,
         });
         const changes = context.get('harnessChanges');
         if (changes) ctx.effect(() => changes.register('plugin:' + plan.id));
-        this.validateConfig(descriptor, ctx.fiber.config, 'mount', ctx, descriptor.validateConfig, id);
       },
     };
   }
 
-  validateConfig(
-    descriptor: ResolvedPlugin,
-    config: Record<string, unknown>,
-    operation: ConfigValidationContext['operation'],
-    ctx: Context,
-    validator = descriptor.validateConfig,
-    instance = descriptor.id,
-  ) {
-    if (!validator) return;
-    try {
-      const result: unknown = validator(Object.freeze(structuredClone(config)), {
-        operation,
-        service<Name extends keyof Context & string>(name: Name): NonNullable<Context[Name]> {
-          const service = ctx.get(name) as Context[Name] | undefined;
-          if (service == null)
-            throw new DomainError('unavailable', 'Configuration dependency is unavailable: ' + name);
-          return service;
-        },
-      });
-      if (result instanceof Promise) {
-        void result.catch(() => {});
-        throw new Error('Plugin configuration validators must be synchronous');
-      }
-    } catch (error) {
-      throw new DomainError(
-        error instanceof DomainError ? error.code : 'invalid_input',
-        'Plugin ' +
-          instance +
-          ' configuration ' +
-          operation +
-          ' failed: ' +
-          (error instanceof Error ? error.message : String(error)),
-        { cause: error },
-      );
-    }
-  }
-
-  changedConfig(descriptors: DiscoveredPlugin[], previous: CompositionConfig, settings: CompositionConfig) {
-    const validations: { descriptor: DiscoveredPlugin; config: Record<string, unknown>; key?: ScopeKey }[] =
-      [];
+  /** Disabled entries with a known schema can still reject malformed input without mounting. */
+  validateDisabled(descriptors: DiscoveredPlugin[], previous: CompositionConfig, settings: CompositionConfig) {
     for (const descriptor of descriptors) {
-      const { id, configSchema, scope } = descriptor;
-      const validate = (
-        values: Record<string, unknown> | undefined,
-        before: Record<string, unknown> | undefined,
-        key?: ScopeKey,
-      ) => {
-        if (isDeepStrictEqual(values, before)) return;
-        const config = this.configValues(id, values, configSchema);
-        if (descriptor.validateConfig || descriptor.source) validations.push({ descriptor, config, key });
-      };
-      if (scope === 'application') validate(settings.entries[id]?.config, previous.entries[id]?.config);
-      else {
-        validate(settings.entries[id]?.config, previous.entries[id]?.config);
+      const { id, scope } = descriptor;
+      const before = previous.entries[id]?.config;
+      const after = settings.entries[id]?.config;
+      if (scope === 'application' && !this.enabled(descriptor, settings) && !isDeepStrictEqual(before, after))
+        this.configValues(descriptor, after);
+      if (scope !== 'application')
         for (const key of scopeKeys(settings)) {
-          if (!key.startsWith(scope + ':')) continue;
-          const changed = settings.scopes[key]?.entries?.[id]?.config;
-          const before = previous.scopes[key]?.entries?.[id]?.config;
-          const selected = settings.scopes[key];
-          if (changed === undefined && selected?.entries?.[id]?.disabled !== false) continue;
-          validate(
-            { ...settings.entries[id]?.config, ...changed },
-            { ...previous.entries[id]?.config, ...before },
-            key,
-          );
+          if (!key.startsWith(scope + ':') || settings.scopes[key]?.entries?.[id]?.disabled === false) continue;
+          const prior = { ...before, ...previous.scopes[key]?.entries?.[id]?.config };
+          const next = { ...after, ...settings.scopes[key]?.entries?.[id]?.config };
+          if (!isDeepStrictEqual(prior, next)) this.configValues(descriptor, next);
         }
-      }
     }
-    return validations;
   }
 
   plans(
@@ -390,7 +300,9 @@ export class PluginCatalog {
         const values = isApp
           ? settings.entries[id]?.config
           : { ...settings.entries[id]?.config, ...overrides?.entries?.[id]?.config };
-        plans.push({ descriptor: item, id, source: item.source, config: this.configValues(id, values, item.configSchema) });
+        const live = (isApp ? undefined : overrides?.entries?.[id]?.live) ?? settings.entries[id]?.live ?? false;
+        const config = item.plugin ? structuredClone(values ?? {}) : this.configValues(item, values);
+        plans.push({ descriptor: item, id, source: item.source, config, live });
       } catch (error) {
         if (!unavailable?.(id, error)) throw error;
       }
@@ -398,13 +310,12 @@ export class PluginCatalog {
     return { plans, declared };
   }
 
-  configValues(id: string, values: Record<string, unknown> | undefined, schema?: Record<string, any>) {
-    const input = structuredClone(values && typeof values === 'object' ? values : {});
-    if (!schema) return input;
-    const config = configDefaults(schema, input) as Record<string, unknown>;
-    if (!Check(schema, config))
-      throw new DomainError('invalid_input', 'Invalid configuration for plugin: ' + id);
-    return config;
+  configValues(descriptor: ResolvedPlugin, values: Record<string, unknown> | undefined) {
+    try {
+      return resolveConfig(descriptor.Config ?? descriptor.plugin?.Config, structuredClone(values ?? {})) as Record<string, unknown>;
+    } catch (error) {
+      throw new DomainError('invalid_input', 'Invalid configuration for plugin: ' + descriptor.id + ': ' + String(error), { cause: error });
+    }
   }
 }
 
@@ -417,12 +328,14 @@ export function changedSelection(
   if (!key)
     return (
       settings.entries[id]?.disabled !== previous.entries[id]?.disabled ||
+      settings.entries[id]?.live !== previous.entries[id]?.live ||
       !isDeepStrictEqual(previous.entries[id]?.config, settings.entries[id]?.config)
     );
   const before = previous.scopes[key],
     after = settings.scopes[key];
   return (
     before?.entries?.[id]?.disabled !== after?.entries?.[id]?.disabled ||
+    before?.entries?.[id]?.live !== after?.entries?.[id]?.live ||
     !isDeepStrictEqual(before?.entries?.[id]?.config, after?.entries?.[id]?.config) ||
     !isDeepStrictEqual(previous.entries[id]?.config, settings.entries[id]?.config)
   );

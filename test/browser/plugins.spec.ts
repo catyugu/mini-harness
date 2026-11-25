@@ -15,7 +15,7 @@ test('frontend plugins own UI contributions and clean up on disable and reconfig
   const { root, paths } = createFixturePaths(mock.url),
     folder = join(paths.plugins, 'ui-example');
   mkdirSync(folder);
-  writeFileSync(join(folder, 'plugin.js'), 'export function apply() {}');
+  writeFileSync(join(folder, 'plugin.js'), "import { defineConfig } from 'mini-harness/configuration';\nimport { readFileSync } from 'node:fs';\nexport const Config = defineConfig(JSON.parse(readFileSync(new URL('./plugin.json', import.meta.url), 'utf8')).configSchema);\nexport function apply() {}");
   writeFileSync(
     join(folder, 'plugin.json'),
     JSON.stringify({
@@ -187,7 +187,7 @@ test('a failed browser plugin reports the saved state and can be retried', async
     { root, paths } = createFixturePaths(mock.url);
   const folder = join(paths.plugins, 'retry-ui');
   mkdirSync(folder);
-  writeFileSync(join(folder, 'plugin.js'), 'export default () => {}');
+  writeFileSync(join(folder, 'plugin.js'), "import { defineConfig } from 'mini-harness/configuration';\nimport { readFileSync } from 'node:fs';\nexport const Config = defineConfig(JSON.parse(readFileSync(new URL('./plugin.json', import.meta.url), 'utf8')).configSchema);\nexport function apply() {}");
   writeJson(join(folder, 'plugin.json'), {
     title: 'Retry UI',
     browserDirectory: 'web',
@@ -352,7 +352,7 @@ test('the Plugins page keeps stored settings when a workspace plugin setup fails
   });
   writeFileSync(
     join(folder, 'plugin.js'),
-    "export const apply = (ctx, config) => { if (config.value === 1) throw new Error('Workspace setup failed'); };",
+    "import { defineConfig } from 'mini-harness/configuration';\nimport { readFileSync } from 'node:fs';\nexport const Config = defineConfig(JSON.parse(readFileSync(new URL('./plugin.json', import.meta.url), 'utf8')).configSchema);\nexport const apply = (ctx, config) => { if (config.value === 1) throw new Error('Workspace setup failed'); };",
   );
   const key = 'workspace:' + workspaceId(realpathSync.native(paths.cwd));
   const initial = {

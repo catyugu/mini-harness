@@ -12,7 +12,7 @@ test('GUI APIs configure providers, persist keys privately, discover Skills and 
     entries: { subagents: { config: { model: { provider: 'nonexistent', id: 'missing' } } } },
   });
   assert.equal(invalidChildModel.status, 400, JSON.stringify(invalidChildModel.body));
-  assert.equal((await request('/settings')).body.entries.subagents?.config?.model, null);
+  assert.equal((await request('/settings')).body.entries.subagents?.config?.model, undefined);
   writeFileSync(join(paths.cwd, 'note.md'), 'workspace note');
   mkdirSync(join(paths.home, 'skills', 'verify'), { recursive: true });
   writeFileSync(
@@ -60,7 +60,7 @@ test('GUI APIs configure providers, persist keys privately, discover Skills and 
     400,
   );
   assert.equal((await request('/settings/plugins/files', 'PATCH', {})).status, 404);
-  assert.equal((await request('/settings')).body.entries['core:theme']?.config?.appearance, 'system');
+  assert.equal((await request('/bootstrap')).body.ui.find(({ id }: { id: string }) => id === 'core:theme')?.config.appearance, 'system');
   const bootstrap = await request('/bootstrap');
   assert.equal(JSON.stringify(bootstrap.body).includes('gui-private-key'), false);
   assert.ok(readFileSync(join(paths.home, 'auth.json'), 'utf8').includes('gui-private-key'));
