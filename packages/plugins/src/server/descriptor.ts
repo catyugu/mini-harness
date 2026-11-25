@@ -3,23 +3,32 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { lstatSync, realpathSync } from 'node:fs';
 import { readJson } from '@mini-harness/platform/json';
-import type { PluginInfo, ResolvedPlugin } from '@mini-harness/plugin-api/descriptor';
+import type { EntryConfiguration, ScopeAddress } from '@mini-harness/plugin-api/configuration';
+import type { PluginInfo, PluginLocation } from '@mini-harness/plugin-api/descriptor';
 import { readBrowserAssets, type BrowserAssets } from './browser-assets.ts';
-import { resolveModule } from './module-resolution.ts';
+import { loadPluginModule, resolveModule } from './module-resolution.ts';
 import { assertPeerCompatibility, isRegularFile } from './source.ts';
 
 import type { PluginMetadata } from '../shared/metadata.ts';
 
-export interface DiscoveredPlugin
-  extends ResolvedPlugin,
-    Pick<PluginMetadata, 'external' | 'package' | 'error'> {
-  scopeAddress?: import('@mini-harness/plugin-api/configuration').ScopeAddress;
-  name?: string;
-  module?: string;
+export interface ResolvedPlugin extends Pick<PluginMetadata, 'external' | 'package' | 'error'> {
+  id: string;
+  info: PluginInfo;
+  configuration: EntryConfiguration;
+  scopeAddress?: ScopeAddress;
+  location?: { url: string; exportName?: string };
+  native?: Awaited<ReturnType<typeof loadPluginModule>>;
   resources?: BrowserAssets;
 }
 
-export function describePlugin(id: string, folder: string, entry?: string): DiscoveredPlugin {
+/** Locate a native module first; then resolve its common metadata, schema and resources. */
+export async function describePlugin(
+  id: string,
+  { folder, entry, exportName, clientOnly: explicitClient }: PluginLocation,
+  client: boolean,
+  configuration: EntryConfiguration,
+  previous?: ResolvedPlugin,
+): Promise<ResolvedPlugin> {
   assertPeerCompatibility(folder);
   const packageFile = join(folder, 'package.json');
   const packageInfo = readJson<{
@@ -27,7 +36,7 @@ export function describePlugin(id: string, folder: string, entry?: string): Disc
     version?: string;
     main?: string;
     exports?: unknown;
-    miniHarness?: { plugin?: Partial<PluginInfo> & { browserDirectory?: unknown } };
+    miniHarness?: { plugin?: Partial<PluginInfo> };
   }>(packageFile, {});
   const exports = packageInfo.exports;
   const subpaths =
@@ -46,11 +55,9 @@ export function describePlugin(id: string, folder: string, entry?: string): Disc
           .split(sep)
           .join('/')
       : undefined;
-  const clientOnly = !!(
-    entry &&
-    standardClient &&
-    realpathSync(entry) === realpathSync(join(folder, standardClient))
-  );
+  const clientOnly =
+    explicitClient ||
+    !!(entry && standardClient && realpathSync(entry) === realpathSync(join(folder, standardClient)));
   let source = clientOnly ? undefined : entry;
   if (
     !clientOnly &&
@@ -73,33 +80,62 @@ export function describePlugin(id: string, folder: string, entry?: string): Disc
     )
       throw new Error('Plugin entry must resolve inside its package');
     source = physical;
-  } else if (!source && !standardClient && isRegularFile(join(folder, 'plugin.js'))) {
+  } else if (!clientOnly && !source && !standardClient && isRegularFile(join(folder, 'plugin.js'))) {
     source = join(folder, 'plugin.js');
   }
   const descriptor = join(folder, 'plugin.json');
   const manifest = isRegularFile(descriptor)
-    ? readJson<(Partial<PluginInfo> & { browserDirectory?: unknown }) | null>(descriptor, null)
+    ? readJson<Partial<PluginInfo> | null>(descriptor, null)
     : (packageInfo.miniHarness?.plugin ?? {});
   if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest))
     throw new Error('Expected an object in plugin.json');
+  // Optional module-specific static metadata uses the same contract as package metadata.
+  const sidecar = entry ?? source;
+  const staticInfo = {
+    ...manifest,
+    ...(sidecar
+      ? readJson<Partial<PluginInfo>>(sidecar + '.' + (exportName ?? 'default') + '.plugin.json', {})
+      : {}),
+  };
+  if (clientOnly) delete staticInfo.configSchema;
+  const location = source
+    ? { url: pathToFileURL(source).href + '?v=' + lstatSync(source).mtimeMs, exportName }
+    : undefined;
+  const enabled = !configuration.disabled;
+  const native = !location
+    ? undefined
+    : enabled
+      ? await loadPluginModule(location.url, exportName)
+      : previous?.location?.url === location.url && previous.location.exportName === exportName
+        ? previous.native
+        : undefined;
+  const info = { ...staticInfo, ...native?.metadata };
   const browser =
-    standardClient ?? manifest.browser ?? (isRegularFile(join(folder, 'web.js')) ? 'web.js' : undefined);
+    (clientOnly ? standardClient : undefined) ??
+    info.browser ??
+    standardClient ??
+    (isRegularFile(join(folder, 'web.js')) ? 'web.js' : undefined);
   if (browser !== undefined && typeof browser !== 'string') throw new Error('Invalid browser entry');
-  const hasWeb = browser !== undefined;
-  if (!source && !hasWeb) throw new Error('Provide a server or browser module');
-  const title = typeof manifest.title === 'string' ? manifest.title.slice(0, 100) : id;
-  const description =
-    typeof manifest.description === 'string'
-      ? manifest.description.slice(0, 300)
-      : 'Runs local JavaScript with your user permissions.';
-  if (!hasWeb && manifest.browserDirectory !== undefined)
+  if (!source && !browser) throw new Error('Provide a server or browser module');
+  const title = typeof info.title === 'string' ? info.title.slice(0, 100) : id;
+  const description = typeof info.description === 'string' ? info.description.slice(0, 300) : '';
+  if (!browser && (info.browserDirectory !== undefined || info.browserStyles?.length))
     throw new Error('Browser assets require a browser entry');
   const inferredDirectory =
-    standardClient && dirname(standardClient) !== '.' ? dirname(standardClient) : undefined;
-  const browserDirectory = manifest.browserDirectory ?? inferredDirectory;
+    browser === standardClient && standardClient && dirname(standardClient) !== '.'
+      ? dirname(standardClient)
+      : undefined;
   const resources =
-    browser !== undefined ? readBrowserAssets(id, folder, browser, browserDirectory) : undefined;
-  const { configGroups, configHint } = manifest;
+    client && browser
+      ? readBrowserAssets(id, folder, browser, info.browserDirectory ?? inferredDirectory, info.browserStyles)
+      : undefined;
+  if (enabled && !native?.plugin && !browser)
+    throw new Error(
+      'Plugin ' + id + ' must export a Cordis plugin with apply(ctx, config) or a browser entry',
+    );
+  const configSchema =
+    (native?.Config as { jsonSchema?: Record<string, any> } | undefined)?.jsonSchema ?? info.configSchema;
+  const { configGroups, configHint } = info;
   if (
     configGroups !== undefined &&
     (!Array.isArray(configGroups) ||
@@ -114,7 +150,7 @@ export function describePlugin(id: string, folder: string, entry?: string): Disc
     throw new Error('Invalid plugin configuration groups: ' + id);
   if (configHint !== undefined && typeof configHint !== 'string')
     throw new Error('Invalid plugin configuration hint: ' + id);
-  const icon = manifest.icon;
+  const icon = info.icon;
   if (
     icon !== undefined &&
     !(
@@ -130,19 +166,15 @@ export function describePlugin(id: string, folder: string, entry?: string): Disc
   )
     throw new Error('Invalid plugin icon: ' + id);
   return {
-    location: source ? { url: pathToFileURL(source).href + '?v=' + lstatSync(source).mtimeMs } : undefined,
+    id,
+    configuration,
+    location,
+    native,
     resources,
     package:
       packageInfo.name && packageInfo.version
         ? { name: packageInfo.name, version: packageInfo.version }
         : undefined,
-    id,
-    title,
-    description,
-    configGroups,
-    configHint,
-    icon,
-    web: hasWeb,
-    external: true,
+    info: { title, description, icon, configGroups, configHint, configSchema },
   };
 }

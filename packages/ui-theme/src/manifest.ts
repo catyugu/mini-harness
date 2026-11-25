@@ -17,6 +17,6 @@ export const metadata: PluginInfo = {
   title: 'Theme',
   description: 'Application theme',
 
-  browserStyles: ['/packages/ui-theme/src/browser/style.css'],
-  browser: '/packages/ui-theme/src/browser/setup.js',
+  browserStyles: ['packages/ui-theme/src/browser/style.css'],
+  browser: 'packages/ui-theme/src/browser/setup.js',
 };

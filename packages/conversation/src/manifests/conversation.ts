@@ -17,8 +17,8 @@ export const metadata: PluginInfo = {
   title: 'Conversation',
   description: 'Conversation interface',
 
-  browserStyles: ['/packages/conversation/src/browser/conversation/style.css'],
-  browser: '/packages/conversation/src/browser/conversation/setup.js',
+  browserStyles: ['packages/conversation/src/browser/conversation/style.css'],
+  browser: 'packages/conversation/src/browser/conversation/setup.js',
 };
 
 const plugin: Plugin.Object = {
@@ -39,11 +39,11 @@ export default plugin;
 export const composerMetadata: PluginInfo = {
   title: 'Composer',
   description: 'Conversation input and draft contributions',
-  browser: '/packages/conversation/src/browser/conversation/composer-setup.js',
+  browser: 'packages/conversation/src/browser/conversation/composer-setup.js',
 };
 
 export const historyMetadata: PluginInfo = {
   title: 'History',
   description: 'Conversation messages and record contributions',
-  browser: '/packages/conversation/src/browser/conversation/history-setup.js',
+  browser: 'packages/conversation/src/browser/conversation/history-setup.js',
 };

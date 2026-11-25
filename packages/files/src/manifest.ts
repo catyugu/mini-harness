@@ -6,9 +6,9 @@ import { setup } from './server/setup.ts';
 export const metadata: PluginInfo = {
   title: 'Workspace files',
   description: 'Read, search and edit files within the workspace.',
-  browserStyles: ['/packages/files/src/browser/style.css'],
+  browserStyles: ['packages/files/src/browser/style.css'],
   icon: 'files',
-  browser: '/packages/files/src/browser/setup.js',
+  browser: 'packages/files/src/browser/setup.js',
 };
 
 const plugin: Plugin.Object = {

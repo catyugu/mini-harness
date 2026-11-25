@@ -1,9 +1,11 @@
 import { build } from 'esbuild';
 import { createRequire } from 'node:module';
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import type { ResolvedPlugin } from '@mini-harness/plugin-api/descriptor';
+import ts from 'typescript';
+import { moduleReferences } from './module-references.ts';
+import { readBrowserAssets } from '../packages/plugins/src/server/browser-assets.ts';
 import { loadPluginModule } from '@mini-harness/plugins/module-resolution';
 
 const require = createRequire(import.meta.url);
@@ -39,19 +41,6 @@ for (const { name, parentPath } of readdirSync('packages', { withFileTypes: true
 writeFileSync(
   'dist/packages/host/src/profile-modules.json',
   JSON.stringify(Object.fromEntries(profileModules), null, 2) + '\n',
-);
-
-// Produce display data separately from the module locator. Loading an inactive
-// Entry at runtime never requires importing its executable module.
-const profileMetadata = new Map<string, Partial<ResolvedPlugin>>();
-for (const [name, { path, exportName }] of profileModules) {
-  const { metadata, Config } = await loadPluginModule(pathToFileURL(resolve('dist', path)).href, exportName);
-  const schema = (Config as { jsonSchema?: ResolvedPlugin['configSchema'] } | undefined)?.jsonSchema;
-  profileMetadata.set(name, { ...metadata, ...(schema ? { configSchema: schema } : {}) });
-}
-writeFileSync(
-  'dist/packages/host/src/profile-metadata.json',
-  JSON.stringify(Object.fromEntries(profileMetadata), null, 2) + '\n',
 );
 
 mkdirSync('dist/packages/ui-primitives/src/browser/vendor', { recursive: true });
@@ -100,6 +89,50 @@ for (const path of Object.keys(editor.metafile.inputs)) {
   const license = readdirSync(directory).find((file) => /^licen[sc]e(?:\.|$)/i.test(file));
   if (!license) throw new Error('Missing license for bundled dependency: ' + name);
   copyFileSync(join(directory, license), join(notices, name.replace(/[^a-zA-Z0-9-]/g, '-') + '.LICENSE'));
+}
+
+// The single npm distribution retains a shared browser runtime at /packages and /vendor.
+// Publish individual client entries through the same versioned asset pipeline as any plugin.
+const distribution = resolve('dist');
+const clients = join(distribution, 'packages/host/src/clients');
+mkdirSync(clients, { recursive: true });
+for (const [name, { path, exportName }] of profileModules) {
+  const entry = resolve(distribution, path);
+  const { metadata, Config } = await loadPluginModule(pathToFileURL(entry).href, exportName);
+  const configSchema = (Config as { jsonSchema?: Record<string, any> } | undefined)?.jsonSchema;
+  writeFileSync(
+    entry + '.' + exportName + '.plugin.json',
+    JSON.stringify({ ...metadata, configSchema }, null, 2) + '\n',
+  );
+  if (!metadata?.browser) continue;
+  const assets = readBrowserAssets(
+    name,
+    distribution,
+    metadata.browser,
+    metadata.browserDirectory,
+    metadata.browserStyles,
+  );
+  for (const { path: source, mime } of assets.urls.values()) {
+    const target = join(clients, relative(distribution, source));
+    mkdirSync(dirname(target), { recursive: true });
+    if (mime !== 'text/javascript') {
+      copyFileSync(source, target);
+      continue;
+    }
+    // Shared imports must keep their canonical identity (in particular Cordis).
+    let code = readFileSync(source, 'utf8');
+    const ast = ts.createSourceFile(source, code, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+    for (const { literal } of moduleReferences(ast).reverse()) {
+      if (!literal.text.startsWith('.')) continue;
+      const url =
+        '/' +
+        relative(distribution, resolve(dirname(source), literal.text))
+          .split(sep)
+          .join('/');
+      code = code.slice(0, literal.getStart(ast)) + JSON.stringify(url) + code.slice(literal.end);
+    }
+    writeFileSync(target, code);
+  }
 }
 
 // Examples are TypeScript sources; only compiled copies are loaded by integration tests.

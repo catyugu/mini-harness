@@ -254,15 +254,7 @@ test('tool execution stays auditable while accepted content is stored as a compa
       timestamp: 1,
     },
   });
-  const accepted = log.append({
-    type: 'tool-accepted',
-    executionId: raw.id,
-    contentDelta: {
-      prefix: JSON.stringify([{ type: 'text', text: content }]).length - 3,
-      suffix: 3,
-      insert: ' redacted',
-    },
-  });
+  const accepted = log.acceptToolResult(raw.id, [{ type: 'text', text: content + ' redacted' }]);
   assert.ok(readFileSync(file, 'utf8').length < 9000, 'Original content should not be duplicated');
   assert.equal(log.projection().leafId, accepted.id);
   const before = log.projection().contextMessages[0];
@@ -271,10 +263,7 @@ test('tool execution stays auditable while accepted content is stored as a compa
   log = open();
   assert.deepEqual(log.projection().contextMessages[0], before);
   assert.equal(log.entries().filter((entry) => entry.type === 'tool-execution').length, 1);
-  assert.throws(
-    () => log.append({ type: 'tool-accepted', executionId: 'a'.repeat(32) }),
-    /missing execution/,
-  );
+  assert.throws(() => log.acceptToolResult('a'.repeat(32), []), /missing execution/);
 });
 
 test('historical plugin records normalize to one owner without changing identity or the selected branch', (t) => {
@@ -351,4 +340,24 @@ test('historical plugin records normalize to one owner without changing identity
     restored.projection().contextMessages.map(({ content }) => content),
     ['before', 'after'],
   );
+});
+
+test('recorded requests reuse their tool schema and restore transformed input after reopening', (t) => {
+  const { open } = fixture(t);
+  let log = open();
+  log.append(user('original'));
+  const request = {
+    model: { provider: 'test', id: 'model' },
+    systemPrompt: 'system',
+    messages: [user('transformed').message],
+    tools: [{ name: 'read', description: 'Read a file', parameters: { type: 'object', properties: {} } }],
+  };
+  const first = log.recordRequest(request);
+  const second = log.recordRequest(request);
+  log.close();
+  log = open();
+  const third = log.recordRequest(request);
+  assert.equal(log.entries().filter(({ type }) => type === 'tool-schema').length, 1);
+  for (const { id } of [first, second, third]) assert.deepEqual(log.requestSnapshot(id), request);
+  assert.equal(log.projection().contextMessages[0].content, 'original');
 });

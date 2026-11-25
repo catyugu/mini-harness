@@ -14,7 +14,7 @@ import { isDeepStrictEqual } from 'node:util';
 import type { ProfileConfigurationPort, ProfileRuntime } from '@mini-harness/plugin-api/profile';
 import type { ScopeAddress, ScopeSettings } from '@mini-harness/plugin-api/configuration';
 import type { ScopeBinding, ProfileScopes } from '@mini-harness/plugin-api/configuration';
-import { planBrowser, publishBrowser } from './browser-assets.ts';
+import { publishBrowser } from './browser-assets.ts';
 import { waitFor } from '@mini-harness/platform/wait';
 import { scopeAddresses, type ProfileConfiguration } from '@mini-harness/plugin-api/configuration';
 import { pluginData, pluginSecrets, removeScopeData } from './data.ts';
@@ -50,7 +50,7 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
   constructor(
     readonly ctx: Context,
     private readonly directory: string,
-    private readonly profile: Pick<ProfileRuntime, 'builtin' | 'source' | 'read' | 'commit'>,
+    private readonly profile: Pick<ProfileRuntime, 'locate' | 'source' | 'read' | 'commit'>,
     private readonly owner = ctx,
     entries?: EntryTree,
   ) {
@@ -74,7 +74,7 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
     this.catalog = new PluginCatalog(profile);
   }
 
-  private browserState = publishBrowser([], [], () => false);
+  private browserState = publishBrowser([], () => false);
   private failures = new Map<string, string>();
 
   browser() {
@@ -193,7 +193,7 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
   diagnostics() {
     return [...this.entries.values()].flatMap(({ active, options, fiber }) => {
       if (!active || !fiber) return [];
-      const { id, scope } = entryAddress(options.id);
+      const { scope } = entryAddress(options.id);
       const inject = Object.keys(fiber.inject);
       const services = Object.fromEntries(
         inject.flatMap((name) => {
@@ -207,7 +207,7 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
           services,
           provides: [...fiber.provisions].map(({ name }) => name),
           scope: scope?.split(':')[0] ?? 'application',
-          source: this.catalog.reserved(id) ? 'built-in' : 'local',
+          source: this.catalog.origin(options.id),
         },
       ];
     });
@@ -226,7 +226,6 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
 
   metadata() {
     return this.catalog.metadata(
-      this.settings,
       this.failures,
       (id) =>
         this.entries.get(id)?.active === true || this.browserState.entries.some((entry) => entry.id === id),
@@ -358,9 +357,7 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
       }
       const parent = address.parent ? visit(address.parent) : root;
       if (!hasComposition(overrides)) return parent;
-      const plans = this.catalog.plans(settings, descriptors, key, (id, error) =>
-        unavailable(id, error, key),
-      );
+      const plans = this.catalog.plans(descriptors, key, (id, error) => unavailable(id, error, key));
       const isolates = [...new Set(overrides.isolate)].sort();
       const existing = this.scopes.get(key);
       const group = existing?.matches(parent, isolates) ? existing : new EntryGroup(parent, isolates);
@@ -369,7 +366,7 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
       if (active.has(key)) {
         contexts.set(key, group);
         for (const plan of plans) {
-          if (!plan.descriptor.plugin) continue;
+          if (!plan.descriptor.native?.plugin) continue;
           entries.push(this.catalog.entry(plan, context, key + '/' + plan.id));
         }
       }
@@ -427,7 +424,7 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
     const previous = this.settings;
     const descriptors = await this.catalog.runtimeDescriptors(settings);
     const updating = !starting && !preparing && !released;
-    if (updating) this.catalog.validateDisabled(descriptors, previous, settings);
+    if (updating) this.catalog.validateDisabled(descriptors, previous);
     const unavailable = (id: string, error: unknown, key?: ScopeAddress) => {
       const instance = key ? key + '/' + id : id;
       const message =
@@ -446,7 +443,7 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
       failures.set(instance, message);
       return true;
     };
-    const plans = this.catalog.plans(settings, descriptors, undefined, unavailable);
+    const plans = this.catalog.plans(descriptors, undefined, unavailable);
     const changedScopes = updating
       ? scopeAddresses(settings).filter((key) =>
           Object.entries(settings.scopes[key]?.entries ?? {}).some(
@@ -457,7 +454,7 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
     const scoped = this.scopedEntries(settings, descriptors, unavailable, preparing, released, changedScopes);
     const mounts = [
       ...plans
-        .filter(({ id, descriptor }) => descriptor.plugin && !failures.has(id))
+        .filter(({ id, descriptor }) => descriptor.native?.plugin && !failures.has(id))
         .map((plan) => this.catalog.entry(plan, this.ctx)),
       ...scoped.entries,
     ];
@@ -478,9 +475,9 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
       }
       {
         const browserState = publishBrowser(
-          planBrowser(plans, (id) => this.entries.get(id)?.fiber?.effectiveConfig),
           plans,
           (id) => !failures.has(id),
+          (id) => this.entries.get(id)?.fiber?.effectiveConfig,
         );
         if (!starting && !preparing && !isDeepStrictEqual(settings, previous)) this.profile.commit(settings);
         this.started = true;

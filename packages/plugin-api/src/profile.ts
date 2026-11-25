@@ -1,10 +1,10 @@
 import type { EntryTree } from 'mini-harness/cordis';
-import type { ResolvedPlugin } from './descriptor.ts';
+import type { PluginLocation } from './descriptor.ts';
 import type { ProfileConfiguration, ScopeAddress } from './configuration.ts';
 
 export interface ProfileRuntime {
   readonly directory: string;
-  builtin(id: string, name: string, client: boolean): ResolvedPlugin | undefined;
+  locate(name: string): PluginLocation | undefined;
   source(id: string, name: string): string;
   start(): Promise<Map<string, unknown>>;
   readonly entries: EntryTree;

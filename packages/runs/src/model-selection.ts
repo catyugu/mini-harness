@@ -36,21 +36,25 @@ export function selectModel(
     explicit?: ModelChoice;
     stored?: ModelChoice;
     fallback?: ModelChoice;
-    preferStored: boolean;
+    preferStored?: boolean;
+    thinkingLevel?: ThinkingLevel | null;
+    inherited?: ThinkingLevel;
+    unavailable?: string;
   },
 ) {
-  const { explicit, stored, fallback, preferStored } = options;
-  if (explicit) {
-    const selected = catalog.resolve(explicit);
-    if (!selected)
-      throw new DomainError('invalid_input', 'Unknown model: ' + explicit.provider + '/' + explicit.id);
-    return selected;
-  }
-  const choices = preferStored ? [stored, fallback] : [fallback, stored];
+  const { explicit, stored, fallback, preferStored, thinkingLevel, inherited, unavailable } = options;
+  const choices = explicit ? [explicit] : preferStored ? [stored, fallback] : [fallback, stored];
   for (const choice of choices) {
     if (!choice?.provider) continue;
-    const selected = catalog.resolve(choice);
-    if (selected) return selected;
+    const model = catalog.resolve(choice);
+    if (model)
+      return { model, thinkingLevel: resolveThinking(catalog.capabilities(model), thinkingLevel, inherited) };
   }
-  throw new DomainError('invalid_input', 'Configure a model before sending a message');
+  throw new DomainError(
+    'invalid_input',
+    unavailable ??
+      (explicit
+        ? 'Unknown model: ' + explicit.provider + '/' + explicit.id
+        : 'Configure a model before sending a message'),
+  );
 }

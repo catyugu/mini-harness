@@ -5,8 +5,8 @@ import { setup } from './server/setup.ts';
 export const metadata: PluginInfo = {
   title: 'Settings',
   description: 'Application settings',
-  browserStyles: ['/packages/settings/src/browser/style.css'],
-  browser: '/packages/settings/src/browser/setup.js',
+  browserStyles: ['packages/settings/src/browser/style.css'],
+  browser: 'packages/settings/src/browser/setup.js',
 };
 
 const plugin: Plugin.Object = {
