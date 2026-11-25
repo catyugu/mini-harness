@@ -42,6 +42,8 @@ async function checkPackage() {
   try {
     const packed = await npm(['pack', '--json', '--pack-destination', work], { cwd: resolve('.') });
     const { name, filename, files } = parseNpmPackResult(packed.stdout);
+    for (const profile of ['base', 'web'])
+      assert.ok(files.some(({ path }: { path: string }) => path === 'profiles/' + profile + '.yml'), 'Missing shipped Profile: ' + profile);
     assert.ok(files.every(({ path }: { path: string }) =>
       !/^dist\/(?:scripts|test)\//.test(path) &&
       !/^dist\/packages\/[^/]+\/package\.json$/.test(path) &&

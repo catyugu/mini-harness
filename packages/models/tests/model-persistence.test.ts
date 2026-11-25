@@ -59,7 +59,8 @@ test('a failed recent-model write does not delay accepted input or terminate exe
   const runtime = new MiniHarnessRuntime(paths);
   t.after(async () => { await runtime.stop(); await mock.close(); rmSync(root, { recursive: true, force: true }); });
   await runtime.start();
-  const { harnessRegistry: registry, harnessRuns: runs } = runtime.plugins.ctx;
+  const context = runtime.plugins.ctx;
+  const { harnessRegistry: registry, harnessRuns: runs } = context;
   const session = registry.create();
   const config = join(paths.home, 'profiles', 'web', 'cordis.yml');
   const old = config + '.original';
@@ -74,7 +75,7 @@ test('a failed recent-model write does not delay accepted input or terminate exe
     assert.equal(runs.info(session.id)?.state, 'completed');
     assert.equal(mock.requests.at(-1)?.model, 'second-model');
     await runtime.stop();
-    assert.ok(runtime.plugins.ctx.logger.buffer.some(({ args }) => args[0] === 'Could not save recent model: %s'));
+    assert.ok(context.logger.buffer.some(({ args }) => args[0] === 'Could not save recent model: %s'));
   } finally {
     rmSync(config, { recursive: true, force: true });
     renameSync(old, config);

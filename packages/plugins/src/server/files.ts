@@ -1,7 +1,7 @@
 import { localPluginIdPattern } from '@mini-harness/plugin-api/selection';
 import { DomainError } from '@mini-harness/platform/errors';
-import { mkdirSync, renameSync, rmSync, lstatSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { mkdirSync, renameSync, rmSync, lstatSync, realpathSync, writeFileSync } from 'node:fs';
+import { join, relative } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { writeJson } from '@mini-harness/platform/json';
 import type { PluginSettings } from '@mini-harness/plugin-api/configuration';
@@ -45,14 +45,36 @@ export function installPlugin(runtime: PluginFilesHost, input: any) {
   }
   catch (error) { rmSync(join(runtime.paths.plugins, input.id), { recursive: true, force: true }); throw error; }
 }
-export function uninstallPlugin(runtime: PluginFilesHost, id: string) {
-  const plugin = runtime.plugins.metadata().find((item) => item.id === id && item.trustedCode);
+export function stagePluginRemoval(runtime: PluginFilesHost, id: string, entries: readonly string[], dataRoot: string) {
+  const plugin = runtime.plugins.metadata().find(item => item.id === id && item.trustedCode);
   if (!plugin || !localPluginIdPattern.test(id)) throw new DomainError('invalid_input', 'Unknown local plugin');
-  assertDisabled(runtime.settings, id);
+  for (const entry of entries) assertDisabled(runtime.settings, entry);
   const folder = join(runtime.paths.plugins, id);
   if (lstatSync(folder).isSymbolicLink()) throw new DomainError('invalid_input', 'Linked plugins must be removed locally');
-  rmSync(folder, { recursive: true });
-  return runtime.plugins.metadata();
+  const info = lstatSync(dataRoot, { throwIfNoEntry: false });
+  if (info && (!info.isDirectory() || relative(dataRoot, realpathSync(dataRoot))))
+    throw new DomainError('conflict', 'Plugin data directory has been redirected');
+
+  const pending: { from: string; to: string }[] = [];
+  const rollback = () => {
+    for (const { from, to } of pending.reverse()) renameSync(to, from);
+  };
+  try {
+    for (const [root, name] of [[runtime.paths.plugins, id], ...entries.map(entry => [dataRoot, entry])]) {
+      const from = join(root, name);
+      if (!lstatSync(from, { throwIfNoEntry: false })) continue;
+      const to = join(root, '.' + randomUUID());
+      renameSync(from, to);
+      pending.push({ from, to });
+    }
+  } catch (error) { rollback(); throw error; }
+  return {
+    rollback,
+    commit() {
+      for (const { to } of pending) rmSync(to, { recursive: true, force: true });
+      return runtime.plugins.metadata();
+    },
+  };
 }
 export function assertDisabled(settings: PluginFilesHost['settings'], id: string) {
   if (settings.plugins[id] === true || Object.values(settings.scopes).some((scope) =>

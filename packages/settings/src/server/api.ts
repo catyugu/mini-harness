@@ -6,7 +6,7 @@ import type {} from 'mini-harness/cordis';
 export interface SettingsPort {
   readonly settings: Settings;
   update(patch: unknown): Promise<Settings>;
-  forgetPlugin<T>(id: string, uninstall: () => T): Promise<T>;
+  forgetPlugin: SettingsManager['forgetPlugin'];
   forgetScopes(keys: ScopeKey[]): Promise<void>;
   writePlugin: SettingsManager['writePlugin'];
   subscribe(listener: () => void): () => void;

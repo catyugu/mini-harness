@@ -47,4 +47,3 @@ for (const path of Object.keys(editor.metafile.inputs)) {
   if (!license) throw new Error('Missing license for bundled dependency: ' + name);
   copyFileSync(join(directory, license), join(notices, name.replace(/[^a-zA-Z0-9-]/g, '-') + '.LICENSE'));
 }
-

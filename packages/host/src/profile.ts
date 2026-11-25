@@ -115,7 +115,8 @@ export async function loadProfile(name: string, paths: Paths, context: Context):
   const user = load(file, true);
   for (const row of user.plugins ?? []) {
     const base = official.get(row.id);
-    if (base?.bootstrap || base?.required && row.disabled || base && row.name && base.name !== row.name)
+    if (base?.bootstrap || base?.required && (row.disabled || base.client && row.client === false) ||
+      base && row.name && base.name !== row.name)
       throw new Error(file + ': entry cannot be replaced or disabled: ' + row.id);
     if (!base && !row.name) throw new Error(file + ': new entry requires a module name: ' + row.id);
     if (row.name?.startsWith('installed:') && (!localPluginIdPattern.test(row.name.slice(10)) || !localPluginIdPattern.test(row.id)))
@@ -158,11 +159,12 @@ export async function loadProfile(name: string, paths: Paths, context: Context):
     id: row.id, module: row.name!, context, config: row.config ?? {}, load: () => plugin,
   }));
   const entries = new EntryTree();
+  const aliases = new Map([...resolved.values()].flatMap(row => row.name?.startsWith('installed:') ? [[row.id, row.name.slice(10)]] : []));
   let current = effective;
   let migrate = migration;
   function commit(settings: ProfileConfiguration) {
     const plugins: Row[] = [];
-    for (const id of new Set([...Object.keys(settings.plugins), ...Object.keys(settings.pluginConfig), ...(user.plugins ?? []).map(row => row.id)])) {
+    for (const id of new Set([...Object.keys(settings.plugins), ...Object.keys(settings.pluginConfig), ...(user.plugins ?? []).filter(row => !row.name?.startsWith('installed:')).map(row => row.id)])) {
       const base = official.get(id);
       if (base?.bootstrap) continue;
       const existing = resolved.get(id);
@@ -198,10 +200,12 @@ export async function loadProfile(name: string, paths: Paths, context: Context):
       throw error;
     }
     migrate = false;
+    for (const id of aliases.keys()) if (!Object.hasOwn(settings.plugins, id) && !Object.hasOwn(settings.pluginConfig, id))
+      aliases.delete(id);
     current = settings;
   }
   return { descriptors, bootstrap, entries, infrastructure,
-    installed: new Map([...resolved.values()].flatMap(row => row.name?.startsWith('installed:') ? [[row.id, row.name.slice(10)]] : [])),
+    installed: aliases,
     client(id) { return resolved.get(id)?.client ?? descriptors.some(row => row.browser); },
     read: () => current, commit,
     finishMigration() { if (migrate) commit(current); },

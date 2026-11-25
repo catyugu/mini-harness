@@ -18,7 +18,7 @@ export class SettingsManager implements SettingsPort {
   private closing = false;
   private readonly listeners = new Set<() => void>();
 
-  constructor(private readonly profile: Pick<ProfileRuntime, 'read' | 'commit'>,
+  constructor(private readonly profile: Pick<ProfileRuntime, 'read' | 'commit' | 'installed'>,
     private readonly host: () => PluginConfigurationPort) {}
 
   private get stored() { return this.profile.read(); }
@@ -40,24 +40,31 @@ export class SettingsManager implements SettingsPort {
     this.profile.commit(next);
   }
 
-  forgetPlugin<T>(id: string, uninstall: () => T) {
+  forgetPlugin<T>(id: string, stage: (ids: readonly string[]) => { commit(): T; rollback(): void }) {
     assertOutsidePluginRequest();
     return this.enqueue(() => {
+      const ids = [id, ...[...this.profile.installed].flatMap(([entry, module]) => module === id && entry !== id ? [entry] : [])];
       const plugins = { ...this.stored.plugins };
       const pluginConfig = { ...this.stored.pluginConfig };
       const readOnlyTools = { ...this.stored.readOnlyTools };
-      delete plugins[id];
-      delete pluginConfig[id];
-      delete readOnlyTools[id];
       const scopes = Object.fromEntries(Object.entries(this.stored.scopes).map(([key, entry]) => {
         const scopedPlugins = { ...entry?.plugins };
         const scopedConfig = { ...entry?.pluginConfig };
-        delete scopedPlugins[id];
-        delete scopedConfig[id];
+        for (const id of ids) {
+          delete scopedPlugins[id];
+          delete scopedConfig[id];
+        }
         return [key, { ...entry, plugins: scopedPlugins, pluginConfig: scopedConfig }];
       }));
-      const result = uninstall();
-      this.save({ ...this.stored, plugins, pluginConfig, scopes, readOnlyTools });
+      for (const id of ids) {
+        delete plugins[id];
+        delete pluginConfig[id];
+        delete readOnlyTools[id];
+      }
+      const removal = stage(ids);
+      try { this.save({ ...this.stored, plugins, pluginConfig, scopes, readOnlyTools }); }
+      catch (error) { removal.rollback(); throw error; }
+      const result = removal.commit();
       this.publish();
       return result;
     });

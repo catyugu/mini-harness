@@ -222,6 +222,7 @@ export function apply(ctx) {
         access: async () => {},
         readFile: async () => data,
         stat: async () => ({ size: data.length, isDirectory: () => false }),
+        imageType: async () => null,
         async *chunks() { yield data; }
       }) });
     }
@@ -290,6 +291,7 @@ export const provide = ["harnessFileAccess","harnessSandbox"];
 export const apply = (ctx) => {
       ctx.provide('harnessFileAccess', { open: () => ({
         access: async () => {}, stat: async () => ({ isDirectory: () => false }),
+        imageType: async () => null,
         readFile: async () => Buffer.from('scoped file'),
         async *chunks() { yield Buffer.from('scoped file'); }
       }) });
