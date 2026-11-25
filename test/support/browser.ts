@@ -31,8 +31,9 @@ export async function startIsolatedHost(
   const selected = port ?? (await availablePort());
   const child: ChildProcess = spawn(
     process.execPath,
-    [resolve('dist/bin/mini-harness.js'), '--no-open', '--cwd', paths.cwd, '--port', String(selected)],
+    [resolve('dist/bin/mini-harness.js'), '--no-open', '--port', String(selected)],
     {
+      cwd: paths.cwd,
       env: { ...process.env, MINI_HARNESS_HOME: paths.home },
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,

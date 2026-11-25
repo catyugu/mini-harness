@@ -194,6 +194,10 @@ test('launcher inspects and recreates named Profile packages without mounting', 
   const env = { ...process.env, MINI_HARNESS_HOME: join(root, 'home') };
   const cli = (...args: string[]) =>
     execFileSync(process.execPath, ['dist/bin/mini-harness.js', ...args], { env, encoding: 'utf8' });
+  assert.match(cli('--help'), /Usage: mini-harness \[--profile\]/);
+  assert.doesNotMatch(cli('--help'), /--enable|--cwd|--serve/);
+  assert.match(cli('web', '--help'), /Web options:/);
+  assert.match(cli('--profile', 'web', '--help'), /Web options:/);
   const extra = join(root, 'extra.yml');
   writeText(extra, 'plugins:\n  - id: git-diff\n    disabled: true\n');
   const config = cli('rescue', '--from-default-profile', 'web', '--patch', extra, '--dump-config');

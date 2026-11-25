@@ -16,6 +16,8 @@ mini-harness --dump-config-schema
 mini-harness web --help
 ```
 
+Launcher options precede application arguments. After the Profile name and launcher options, remaining arguments go directly to the selected application; use `--` to explicitly mark that boundary.
+
 A Profile must be a named package. YAML files are layers, never standalone launch targets.
 The explicit `--from-default-profile web` option replaces the selected Profile directory with a fresh template; it does not remove session data or credentials outside that directory.
 Repeat `--patch` to apply temporary overlays after the user layer. Relative module names resolve from the declaring file. Dumps do not mount plugins, and the default dump excludes user and extra overlays. The schema describes the YAML Entry and patch envelope. The directory is a standard npm dependency environment:
@@ -71,7 +73,7 @@ plugins:
     client: true
 ```
 
-Install ordinary npm dependencies with `mini-harness plugin --profile rescue add <package>`, then add entries or bundles explicitly. Use `add <package> --enable` to install and explicitly activate a module in one command. The command forwards npm arguments in the Profile directory; use `remove`, `update`, local directories, tarballs or Git references as needed. npm lifecycle scripts are disabled by default; explicitly pass `--ignore-scripts=false` to authorize them.
+Install ordinary npm dependencies with `mini-harness plugin --profile rescue add <package>`, then add entries or bundles explicitly. The command forwards npm arguments in the Profile directory; use `remove`, `update`, local directories, tarballs or Git references as needed. npm lifecycle scripts are disabled by default; explicitly pass `--ignore-scripts=false` to authorize them.
 Installing a package does not activate it. A module may export a native Cordis
 function, class, or object with `apply(ctx, config)`; no plugin.json is needed
 for these entries. Disabled external entries are not imported. Local modules

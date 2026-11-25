@@ -3,7 +3,6 @@ import { bootProfile } from '@mini-harness/host/application';
 import {
   allowsDetachment,
   dumpProfile,
-  enableProfileModules,
   ensureProfile,
   profileSchema,
   recreateProfile,
@@ -21,33 +20,33 @@ import { instanceCredential } from '@mini-harness/host/instance-credential';
 const executable = fileURLToPath(import.meta.url);
 
 function help() {
-  console.log(`mini-harness — minimal native agent harness
+  console.log(`Usage: mini-harness [--profile] <name> [options] [app-args...]
+       mini-harness plugin --profile <name> <npm-args...>
 
-Usage:
-  mini-harness [--profile] <name> [options] [app-args...]
-  mini-harness plugin --profile <name> <npm-args...>
-  mini-harness plugin --profile <name> add <package> --enable
+mini-harness: a minimal native agent harness. Boot a Profile — an ordered stack of plugin-bundle layers.
+
+Arguments:
+  args                           arguments for the selected app (see: mini-harness web --help)
 
 Options:
-  -V, --version                    Print version
-  --profile <name>                 Select a Profile package (default: web)
-  --from-default-profile <name>    Replace the selected Profile with a shipped template
-  --patch <path>                   Apply an extra YAML overlay (repeatable)
-  --dump-config                    Print the composed configuration without mounting
-  --dump-config-schema             Print the Profile layer JSON Schema
-  --dump-default-config            Print configuration without user or extra overlays
-  --detached                       Run independently of this terminal
-  --cwd <path>                     Select the workspace
-  -h, --help                       Show launcher help (or the selected application's help)
+  -V, --version                  output the version number
+  --profile <name>               select a Profile (default: web)
+  --from-default-profile <name>  recreate the Profile from a shipped template
+  --patch <path>                 apply an extra YAML overlay (repeatable)
+  --dump-config                  print the composed Profile and exit
+  --dump-config-schema           print the Profile JSON Schema without mounting
+  --dump-default-config          print the Profile without user or extra overlays
+  --detached                     run independently of this terminal
+  -h, --help                     show launcher help
 
 Examples:
   mini-harness web
   mini-harness rescue --from-default-profile web
   mini-harness web --patch ./extra.yml --port 3838
   mini-harness web --help
+  mini-harness plugin --profile web add <package>
 
-Commands: status, stop, reset-token
-Profiles: ~/.mini-harness/profiles/<name> (or MINI_HARNESS_HOME)
+Instance commands: status, stop, reset-token
 `);
 }
 
@@ -58,58 +57,35 @@ function parse(argv: string[]) {
     template?: string;
     dump?: 'config' | 'schema' | 'default';
     detached: boolean;
-    serve: boolean;
-    cwd: string;
-    profile: string;
+    profile?: string;
     patches: string[];
     flags: string[];
-    command?: 'status' | 'stop' | 'reset-token';
-  } = { detached: false, serve: false, cwd: process.cwd(), profile: 'web', patches: [], flags: [] };
-  let selected = false;
-  const value = (index: number, option: string) => {
-    const next = argv[index + 1];
-    if (!next || next.startsWith('--')) throw new Error(option + ' requires a value');
-    return next;
-  };
+  } = { detached: false, patches: [], flags: [] };
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i];
-    if (flag === '--') {
-      args.flags.push(...argv.slice(i + 1));
-      break;
-    } else if (flag === '--profile') {
-      if (selected) throw new Error('Specify one Profile');
-      args.profile = value(i++, flag);
-      selected = true;
-    } else if (flag === '--from-default-profile') args.template = value(i++, flag);
-    else if (flag === '--patch') args.patches.push(resolve(value(i++, flag)));
+    const value = () => {
+      const next = argv[++i];
+      if (!next || next.startsWith('--')) throw new Error(flag + ' requires a value');
+      return next;
+    };
+    if (flag === '--profile') {
+      if (args.profile) throw new Error('Specify one Profile');
+      args.profile = value();
+    } else if (flag === '--from-default-profile') args.template = value();
+    else if (flag === '--patch') args.patches.push(resolve(value()));
     else if (flag === '--dump-config') args.dump = 'config';
     else if (flag === '--dump-config-schema') args.dump = 'schema';
     else if (flag === '--dump-default-config') args.dump = 'default';
     else if (flag === '--version' || flag === '-V') args.version = true;
-    else if ((flag === '--help' || flag === '-h') && !selected) args.help = true;
+    else if ((flag === '--help' || flag === '-h') && !args.profile) args.help = true;
     else if (flag === '--detached') args.detached = true;
-    else if (flag === '--serve') args.serve = true;
-    else if (flag === '--cwd') args.cwd = resolve(value(i++, flag));
-    else if (!selected && !args.flags.length && ['status', 'stop', 'reset-token'].includes(flag)) {
-      if (args.command) throw new Error('Specify one command');
-      args.command = flag as NonNullable<typeof args.command>;
-    } else if (!selected && !args.command && !args.flags.length && !flag.startsWith('-')) {
-      args.profile = flag;
-      selected = true;
-    } else args.flags.push(flag);
+    else if (flag !== '--' && !args.profile && !flag.startsWith('-')) args.profile = flag;
+    else {
+      args.flags = argv.slice(i + Number(flag === '--'));
+      break;
+    }
   }
-  if (
-    args.command &&
-    (selected ||
-      args.detached ||
-      args.serve ||
-      args.flags.length ||
-      args.patches.length ||
-      args.template ||
-      args.dump)
-  )
-    throw new Error('Profile startup flags require the start command');
-  return args;
+  return { ...args, profile: args.profile ?? 'web' };
 }
 
 async function detached(
@@ -132,8 +108,6 @@ async function detached(
         '--serve',
         '--profile',
         profile,
-        '--cwd',
-        paths.cwd,
         ...patches.flatMap((patch) => ['--patch', patch]),
         '--',
         ...flags,
@@ -222,30 +196,17 @@ async function main() {
     const unlock = await lockInstance(paths.home);
     try {
       const { runPackageManager } = await import('@mini-harness/plugins/registry-client');
-      const directory = ensureProfile(name, paths);
-      const enable = npmArgs.includes('--enable');
-      const args = npmArgs.filter((arg) => arg !== '--enable');
-      if (enable && !['add', 'install', 'i'].includes(args[0]))
-        throw new Error('--enable requires npm add or install');
-      const dependencies = (): Record<string, string> =>
-        JSON.parse(readFileSync(resolve(directory, 'package.json'), 'utf8')).dependencies ?? {};
-      const before = enable ? dependencies() : {};
-      await runPackageManager(directory, args);
-      if (enable) {
-        const after = dependencies();
-        const names = Object.keys(after).filter((key) => before[key] !== after[key]);
-        const explicit = args[1]?.replace(/(?<=.)@[^@/]+$/, '');
-        if (explicit && Object.hasOwn(after, explicit) && !names.includes(explicit)) names.push(explicit);
-        if (!names.length)
-          throw new Error('No direct dependency selected for activation. Use an installed package name.');
-        enableProfileModules(name, paths, names);
-      }
+      await runPackageManager(ensureProfile(name, paths), npmArgs);
     } finally {
       await unlock();
     }
     return;
   }
-  const args = parse(argv);
+  const serving = argv[0] === '--serve';
+  if (serving) argv.shift();
+  const command = ['status', 'stop', 'reset-token'].includes(argv[0]) ? argv[0] : undefined;
+  if (command && argv.length !== 1) throw new Error('Instance commands do not accept arguments');
+  const args = parse(command ? [] : argv);
   if (args.version) {
     console.log(JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version);
     return;
@@ -255,7 +216,7 @@ async function main() {
     console.log(JSON.stringify(profileSchema, null, 2));
     return;
   }
-  const paths = getPaths(args.cwd);
+  const paths = getPaths();
   ensurePaths(paths);
   if (args.template) {
     const unlock = await lockInstance(paths.home);
@@ -269,9 +230,9 @@ async function main() {
     process.stdout.write(dumpProfile(args.profile, paths, args.patches, args.dump === 'default'));
     return;
   }
-  if (args.command) {
+  if (command) {
     const info = await serverStatus(paths.home, paths.pid);
-    if (args.command === 'status') {
+    if (command === 'status') {
       if (info) {
         console.log('mini-harness is running (PID ' + info.pid + ') at ' + info.url);
         for (const diagnostic of info.sessionDiagnostics)
@@ -287,7 +248,7 @@ async function main() {
       for (let i = 0; i < 100 && readServerInfo(paths.pid)?.pid === info.pid; i++) await sleep(100);
       if (readServerInfo(paths.pid)?.pid === info.pid) throw new Error('mini-harness is still shutting down');
     }
-    if (args.command === 'reset-token') {
+    if (command === 'reset-token') {
       const unlock = await lockInstance(paths.home);
       try {
         instanceCredential(paths.home, true);
@@ -298,8 +259,8 @@ async function main() {
     } else console.log(info ? 'mini-harness stopped' : 'mini-harness is not running');
     return;
   }
-  if (args.detached && !args.serve) await detached(paths, args.profile, args.flags, args.patches);
-  else await serve(paths, args.profile, args.flags, args.serve, args.patches);
+  if (args.detached && !serving) await detached(paths, args.profile, args.flags, args.patches);
+  else await serve(paths, args.profile, args.flags, serving, args.patches);
 }
 
 main().catch((error) => {

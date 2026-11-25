@@ -332,20 +332,6 @@ async function checkPackage() {
     const profileManifest = JSON.parse(await readFile(join(profileDirectory, 'package.json'), 'utf8'));
     assert.ok(profileManifest.dependencies[pluginPack.name]);
     await access(join(profileDirectory, 'node_modules', pluginPack.name, 'plugin.js'));
-    await writeFile(
-      join(paths.home, 'profiles', 'web', 'cordis.patch.yml'),
-      JSON.stringify({
-        plugins: [
-          { id: 'task-notes', name: pluginPack.name, client: true, live: true },
-          ...additional.map(({ id, name }) => ({
-            id,
-            name,
-            ...(id === 'scoped-tool' ? { disabled: true } : {}),
-            ...(id === 'browser-panel' ? { client: true } : {}),
-          })),
-        ],
-      }),
-    );
     const minimal = join(installed, 'minimal-tool');
     await mkdir(minimal);
     await writeFile(
@@ -379,12 +365,36 @@ export function apply(ctx) {
       'web',
       'add',
       join(work, minimalPack.filename),
-      '--enable',
       '--legacy-peer-deps',
       '--no-audit',
       '--no-fund',
     );
-    const launch = await cli('--detached', '--cwd', paths.cwd, '--port', String(await availablePort()));
+    assert.ok(!(await cli('--dump-config')).stdout.includes(minimalPack.name));
+    await writeFile(
+      join(paths.home, 'profiles', 'web', 'cordis.patch.yml'),
+      JSON.stringify({
+        plugins: [
+          { id: 'task-notes', name: pluginPack.name, client: true, live: true },
+          { name: minimalPack.name },
+          ...additional.map(({ id, name }) => ({
+            id,
+            name,
+            ...(id === 'scoped-tool' ? { disabled: true } : {}),
+            ...(id === 'browser-panel' ? { client: true } : {}),
+          })),
+        ],
+      }),
+    );
+    const launch = await execFile(
+      process.execPath,
+      [
+        join(installed, 'node_modules', 'mini-harness', 'dist', 'bin', 'mini-harness.js'),
+        '--detached',
+        '--port',
+        String(await availablePort()),
+      ],
+      { cwd: paths.cwd, env, timeout: 120000 },
+    );
     assert.match(launch.stdout, /started independently/);
     started = true;
     const info = readServerInfo(paths.pid);
