@@ -13,6 +13,7 @@ import type {
   ScopeAddress,
   ScopeKey,
   ScopePort,
+  ScopeSettings,
 } from '@mini-harness/plugin-api/scopes';
 import { planBrowser, publishBrowser } from './browser-assets.js';
 import { addAbortListener } from 'node:events';
@@ -28,6 +29,11 @@ import { bindInstance, pluginInstance } from '@mini-harness/plugin-api/instance'
 import { changedSelection, PluginCatalog, type ConfiguredPlugin } from './catalog.js';
 
 const appScope: PluginScope = { kind: 'application' };
+
+/** Permission-only settings do not require a separate plugin context. */
+function hasComposition(scope: ScopeSettings | undefined): scope is ScopeSettings {
+  return !!scope && [scope.plugins, scope.providers, scope.pluginConfig].some((map) => Object.keys(map ?? {}).length > 0);
+}
 
 /** The descriptor and its resolved graph are the source of both server and browser mounts. */
 export class PluginHost implements ScopePort {
@@ -203,7 +209,7 @@ export class PluginHost implements ScopePort {
     if (!ancestry.length) throw new DomainError('not_found', 'Plugin scope not found: ' + key);
     const settings = this.settings();
     for (const ancestor of ancestry)
-      if (Object.hasOwn(settings.scopes, ancestor) && !this.scopes.has(ancestor))
+      if (hasComposition(settings.scopes[ancestor]) && !this.scopes.has(ancestor))
         throw new DomainError('unavailable', 'Plugin scope is not prepared: ' + ancestor);
     return this.configurationContext(key);
   }
@@ -261,7 +267,7 @@ export class PluginHost implements ScopePort {
     if (!ancestry.length) throw new DomainError('not_found', 'Plugin scope not found: ' + key);
     if (!this.started) return;
     const settings = this.settings();
-    if (!ancestry.some((item) => Object.hasOwn(settings.scopes, item) && !this.scopes.has(item))) return;
+    if (!ancestry.some((item) => hasComposition(settings.scopes[item]) && !this.scopes.has(item))) return;
     await this.apply(settings, () => {}, false, key);
     signal?.throwIfAborted();
   }
@@ -309,7 +315,7 @@ export class PluginHost implements ScopePort {
         return root;
       }
       const parent = address.parent ? visit(address.parent) : root;
-      if (!overrides) return parent;
+      if (!hasComposition(overrides)) return parent;
       const enabled = descriptors.filter(
         ({ id, scope }) => scope === address.scope.kind && overrides.plugins?.[id],
       );
