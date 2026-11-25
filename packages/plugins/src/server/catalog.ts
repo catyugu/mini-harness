@@ -15,7 +15,7 @@ import type { ResolvedPlugin } from '@mini-harness/plugin-api/descriptor';
 import { builtinBrowserAssets } from './browser-assets.ts';
 import { describePlugin, type DiscoveredPlugin } from './descriptor.ts';
 import { loadPluginModule, resolveModule } from './module-resolution.ts';
-import { defineConfig } from '@mini-harness/plugin-api/configuration';
+import { defineConfig, publicConfigSchema } from '@mini-harness/plugin-api/configuration';
 import { bindInstance } from '@mini-harness/plugin-api/instance';
 
 export interface ConfiguredPlugin {
@@ -207,6 +207,7 @@ export class PluginCatalog {
         browserConfig: _browserConfig,
         module: _module,
         scopeKey: _scopeKey,
+        configSchema: schema,
         ...metadata
       } = descriptor;
       const instances: NonNullable<PluginMetadata['instances']> = group.map((item) => {
@@ -226,7 +227,7 @@ export class PluginCatalog {
         return {
           scope: item.scopeKey ?? 'application',
           name: item.name,
-          configSchema: item.configSchema,
+          configSchema: publicConfigSchema(item.configSchema),
           error,
           state: !enabled ? 'disabled' : error ? 'failed' : mounted(key) ? 'ready' : 'inactive',
         };
@@ -245,6 +246,7 @@ export class PluginCatalog {
             : 'disabled';
       return {
         ...metadata,
+        configSchema: publicConfigSchema(schema),
         instances,
         state,
         error: failed?.error ?? instances.find((instance) => instance.error)?.error ?? metadata.error,

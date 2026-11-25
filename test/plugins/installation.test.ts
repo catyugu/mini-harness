@@ -201,6 +201,8 @@ export const apply = (ctx) => { ctx.harnessPluginRoutes.register('GET', '/label'
     const entry = bootstrap.ui.find((entry: { id: string }) => entry.id === id);
     assert.deepEqual(entry.config, {});
     assert.doesNotMatch(JSON.stringify(bootstrap), /server-only-value/);
+    assert.doesNotMatch(await (await request('/settings')).text(), /server-only-value/);
+    assert.doesNotMatch(await (await request('/plugins')).text(), /server-only-value/);
     const asset = (path: string) => fetch('http://127.0.0.1:' + port + path);
     assert.equal(await (await asset(entry.browser)).text(), files['web/main.js']);
     const css = await asset(entry.styles[0]);
