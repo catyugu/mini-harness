@@ -9,7 +9,6 @@ const setup = (ctx: Context) => {
       'conversation.history',
       'history',
       (signal) => mountHistory(ctx, extensions, signal),
-      { order: -1 },
     ),
   );
 };

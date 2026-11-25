@@ -150,9 +150,9 @@ export const apply = (ctx) => {
   assert.deepEqual(readFileSync(trace, 'utf8').trimEnd().split('\n'), [
     'prepare Blocked',
     'prepare Recovered',
-    'model Recovered[a][z]',
+    'model Recovered[z][a]',
     'prepare Manual',
-    'model Manual[a][z]',
+    'model Manual[z][a]',
   ]);
   assert.equal(log.inbox().length, 0);
   assert.match(
@@ -174,7 +174,7 @@ export const apply = (ctx) => {
     message: 'Edited',
   });
   await plugins.ctx.harnessRuns.completion(edit.sessionId);
-  assert.match(readFileSync(trace, 'utf8'), /prepare Edited\nmodel Edited\[a\]\[z\]\n$/);
+  assert.match(readFileSync(trace, 'utf8'), /prepare Edited\nmodel Edited\[z\]\[a\]\n$/);
   const before = mock.requests.length;
   await assert.rejects(plugins.ctx.harnessRuns.send(session.id, 'Blocked'), /fixture input denied/);
   assert.equal(mock.requests.length, before);
@@ -221,11 +221,11 @@ export const apply = (ctx) => {
     `
 export const inject = ["harnessTools"];
 export const apply = (ctx) => {
-    ctx.on("agent/model-request", (request) => ({ ...request, systemPrompt: request.systemPrompt + '[second]' }), { order: 2 });
+    ctx.on("agent/model-request", (request) => ({ ...request, systemPrompt: request.systemPrompt + '[second]' }));
     ctx.on("agent/model-request", (request, { turn, phase }) => phase === 'turn' && turn === 1 ? ({
       ...request, systemPrompt: request.systemPrompt + '[first]',
       messages: [...request.messages, { role: 'user', content: 'Temporary context', timestamp: Date.now() }]
-    }) : undefined, { order: 1 });
+    }) : undefined, { prepend: true });
     ctx.on("agent/model-retry", ({ error, attempt }) => error === 'transient transport failure' && attempt === 1 ? {} : undefined);
     ctx.on("tools/decide", ({ tool, callId, arguments: args }) => tool === 'check' && callId === 'denied' && args.mode === 'denied' ? 'deny' : undefined);
     ctx.effect(() => ctx.harnessTools.register({ name: 'check', description: 'Check mode', parameters: { type: 'object' },

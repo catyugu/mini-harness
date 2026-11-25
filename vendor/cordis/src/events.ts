@@ -111,7 +111,6 @@ declare module './context.ts' {
 export interface EventOptions {
   /** Add the listener before existing listeners for the same event. */
   prepend?: boolean
-  order?: number
   /** Receive the event regardless of context filter checks. */
   global?: boolean
 }
@@ -164,13 +163,6 @@ export class EventsService {
     const filter = scope?.[Context.filter]
     return (this._hooks[name] ?? [])
       .filter(hook => !hook.ctx.fiber.signal.aborted && (hook.global || !filter || filter.call(scope, hook.ctx)))
-      .sort((a, b) => {
-        const order = (a.order ?? 0) - (b.order ?? 0) || Number(Boolean(b.prepend)) - Number(Boolean(a.prepend))
-        if (order) return order
-        const left = a.ctx.fiber.entry?.options.id ?? ''
-        const right = b.ctx.fiber.entry?.options.id ?? ''
-        return left < right ? -1 : left > right ? 1 : 0
-      })
   }
 
   private callback(name: keyof Events, hook: Hook, skip?: (...args: any[]) => unknown) {
@@ -332,7 +324,6 @@ export class EventsService {
 
     // handle special events
     this.ctx.fiber.assertActive()
-    if (options.order !== undefined && !Number.isFinite(options.order)) throw new Error('Invalid event order')
     listener = this.ctx.reflect.bind(listener)
     const result = this.bail(this.ctx, 'internal/listener', name, listener, options)
     if (result) return result

@@ -1,11 +1,13 @@
-/** Highest order wins. Equal orders prefer the most recently registered contribution. */
+/** Lowest priority wins. Contributions with the same key and priority conflict. */
 export class KeyedRegistry<Key, Value> {
-  private readonly entries = new Map<Key, Set<{ value: Value; order: number }>>();
+  private readonly entries = new Map<Key, Set<{ value: Value; priority: number }>>();
 
-  add(key: Key, value: Value, order = 0) {
+  add(key: Key, value: Value, priority = 0) {
     const current = this.entries.get(key) ?? new Set();
+    if ([...current].some((entry) => entry.priority === priority))
+      throw new Error('Conflicting contribution priority: ' + String(key));
     this.entries.set(key, current);
-    const entry = { value, order };
+    const entry = { value, priority };
     current.add(entry);
     return () => {
       if (current.delete(entry) && !current.size) this.entries.delete(key);
@@ -13,9 +15,9 @@ export class KeyedRegistry<Key, Value> {
   }
 
   get(key: Key) {
-    let selected: { value: Value; order: number } | undefined;
+    let selected: { value: Value; priority: number } | undefined;
     for (const entry of this.entries.get(key) ?? [])
-      if (!selected || entry.order >= selected.order) selected = entry;
+      if (!selected || entry.priority < selected.priority) selected = entry;
     return selected?.value;
   }
 

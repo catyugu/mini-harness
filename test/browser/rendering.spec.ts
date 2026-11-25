@@ -168,7 +168,7 @@ export const apply = (ctx) => {
         miniConversation.subscribe(['partial', 'history'], update, signal);
         update();
         return node;
-      }));
+      }, { priority: -1 }));
       window.addEventListener('restore-history', remove, { once: true, signal: signal });
     };
 `,

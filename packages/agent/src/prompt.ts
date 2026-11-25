@@ -1,6 +1,6 @@
 import { Service, type Context } from 'mini-harness/cordis';
 import { agentScopeOf, findInstance, sessionAddress } from '@mini-harness/plugin-api/instance';
-import type { PromptPort, PromptContext, PromptSection, ScopedPromptSection } from './prompt-api.ts';
+import type { PromptPort, PromptContext, PromptSection } from './prompt-api.ts';
 
 export class Prompt implements PromptPort {
   private readonly sections = new Map<string, { context: Context; section: PromptSection }>();
@@ -29,30 +29,24 @@ export class Prompt implements PromptPort {
       const runScope = agentScopeOf(owner);
       const identity = runScope ? undefined : findInstance(owner);
       const scopeKey = runScope ?? identity?.scopeKey;
-      const instanceId = identity?.instanceId ?? (runScope ? 'agent:' : 'fiber:') + owner.fiber.uid;
       const address = sessionAddress(owner, context.sessionId);
       if (scopeKey && !address.includes(scopeKey)) return [];
       return [
         {
           ...section,
-          pluginId: instanceId,
           depth: (scopeKey ? 2 * (address.indexOf(scopeKey) + 1) : 0) + (runScope ? 1 : 0),
           render: ({ signal, ...input }: PromptContext) =>
             owner.fiber.run((signal) => section.render({ ...structuredClone(input), signal }), signal),
         },
       ];
     });
-    const sections = new Map<string, ScopedPromptSection>();
+    const sections = new Map<string, (typeof contributed)[number]>();
+    contributed.sort((a, b) => b.depth - a.depth || (b.priority ?? 0) - (a.priority ?? 0));
     for (const section of contributed) {
       const current = sections.get(section.id);
-      if (
-        !current ||
-        section.depth > current.depth ||
-        (section.depth === current.depth &&
-          ((section.priority ?? 0) > (current.priority ?? 0) ||
-            ((section.priority ?? 0) === (current.priority ?? 0) && section.pluginId < current.pluginId)))
-      )
-        sections.set(section.id, section);
+      if (!current) sections.set(section.id, section);
+      else if (section.depth === current.depth && section.priority === current.priority)
+        throw new Error('Conflicting prompt section priority: ' + section.id);
     }
     const parts: string[] = [];
     for (const section of [...sections.values()].sort(

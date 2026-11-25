@@ -10,6 +10,8 @@ export type SlotRenderer = (signal: AbortSignal) => HTMLElement | SlotMount;
 
 export interface KeyedSlotOptions {
   order?: number;
+  /** Lower priority wins for the same key. Equal priorities conflict. */
+  priority?: number;
 }
 
 declare module 'mini-harness/cordis' {

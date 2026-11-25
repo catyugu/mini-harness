@@ -9,7 +9,6 @@ const setup = (ctx: Context) => {
       'conversation.composer-view',
       'composer',
       (signal) => mountComposer(ctx, signal),
-      { order: -1 },
     ),
   );
 };

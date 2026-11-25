@@ -66,7 +66,7 @@ An alternative `harnessToolExecutor` can present tools and interpret model messa
 
 Use `agent/setup` to register capabilities for a particular running Agent. The callback receives its Cordis context, session ID and cancellation signal. Register run-local tools and prompt sections with `run.effect(() => run.get('harnessTools')!.register(...))` and `run.effect(() => run.get('harnessPrompt')!.register(...))`. These contributions are disposed with the run; child runs inherit active parent capabilities and keep their own overrides.
 
-Register listeners with `ctx.on(event, handler, { order })`. Listeners are owned by the Fiber and visibility follows the target session's ancestry. Pipeline order is ascending, then by plugin instance ID.
+Register listeners with `ctx.on(event, handler)`. Listeners are owned by the Fiber; the domain selects the applicable context. Cordis uses registration order and supports `prepend` for an explicit leading listener. Dependencies, not Entry IDs or numeric event options, determine activation.
 
 | Event                          | Behavior                                                                                                                |
 | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
@@ -109,7 +109,7 @@ export function apply(ctx) {
 
 Declare the services you use:
 
-- `miniSlots` defines outlets and registers elements or keyed renderers. Keyed renderers receive a signal for the view's lifetime. Use an explicit higher `order` to replace an existing keyed contribution independently of activation order.
+- `miniSlots` defines outlets and registers elements or keyed renderers. Keyed renderers receive a signal for the view's lifetime. Use `order` for display sequence and a lower `priority` (for example `-1` against the default `0`) to replace a keyed contribution. Equal priorities at the same key conflict.
 - `miniPages`, `miniDialogs`, and `miniTabs` own page, dialog and tab resources. `miniTabs.register(type, definition)` returns a typed handle that accepts an owner, stable key, and payload. `miniTabs.contribute` adds an entry to the workspace panel.
 - `miniFilePreview.open(resource, placement)` renders a workspace file, conversation attachment or temporary resource. Declare `miniFilePreview` for a required dependency or use optional access for integrations that also work with previews disabled.
 - `miniComposer` handles drafts, commands and completions. `miniMessages` owns actions and renderers for history.

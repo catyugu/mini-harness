@@ -19,6 +19,16 @@ export interface SessionRecords {
 export interface RecordProjection<State> {
   initial(): State;
   reduce(state: State, record: ReturnType<SessionRecords['list']>[number]): State;
+}
+
+export interface SessionDirectory {
+  get(id: string): SessionRecord | undefined;
+  list(workspaceId?: string): SessionRecord[];
+  create(input?: { parentId?: string; title?: string; workspaceId?: string }): SessionRecord;
+  rename(id: string, title: string): SessionRecord;
+  depth(id: string): number;
+  workspacePath(id: string): string;
+  history(id: string): { messages: ViewMessage[]; leafId: string | null; model?: ModelChoice };
   records(id: string, owner: RecordOwner): SessionRecords;
 }
 
