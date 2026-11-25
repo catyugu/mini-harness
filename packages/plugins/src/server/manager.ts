@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { mergeSettings } from '@mini-harness/plugin-api/selection';
 import { DomainError } from '@mini-harness/platform/errors';
 import { dirname, join } from 'node:path';
-import { EntryTree, Service, ValidationError, type Context, type EntryOptions } from 'mini-harness/cordis';
+import { EntryTree, Service, ValidationError, Context } from 'mini-harness/cordis';
 import { isDeepStrictEqual } from 'node:util';
 import type { ProfileConfigurationPort, ProfileRuntime } from '@mini-harness/plugin-api/profile';
 import type { ScopeAddress, ScopeSettings } from '@mini-harness/plugin-api/configuration';
@@ -14,7 +14,7 @@ import { pluginData, pluginSecrets, removeScopeData } from './data.ts';
 import { pluginSettings } from './plugin-settings.ts';
 import { entryFiber } from '@mini-harness/plugin-api/plugin-configuration';
 import { entryAddress } from './entry-address.ts';
-import { scopeOf, tagScope } from '@mini-harness/plugin-api/scopes';
+import { tagScope } from '@mini-harness/plugin-api/scopes';
 import { changedSelection, PluginCatalog } from './catalog.ts';
 import { isScopeEntry, lookupScope, scopeEntry, sourceName, type MountedScope } from './scope-composition.ts';
 
@@ -254,7 +254,7 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
         .map((item) => this.scopes.get(item)?.context)
         .find(Boolean) ?? this.ctx;
     const scope = this.lookup(key)!.key;
-    return scopeOf(context) === scope ? context : tagScope(context.extend(), scope);
+    return tagScope(this.ctx.extend({ [Context.isolate]: context[Context.isolate] }), scope);
   }
 
   address(key: ScopeAddress) {

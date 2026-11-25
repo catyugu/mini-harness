@@ -9,23 +9,18 @@ export function setup(ctx: Context) {
     (event, key) => observe(ctx, event, undefined, key),
     (keys) => ctx.harnessProfileConfig.forgetScopes(keys),
   );
-  ctx.effect(() =>
-    ctx.harnessProfileScopes.register(ctx, 'session', (id) => {
-      const record = registry.get(id);
-      const key = registry.scope(id);
-      return (
-        record &&
-        key && {
-          key,
-          parent: record.parentId
-            ? `session:${record.parentId}`
-            : record.workspaceId
-              ? `workspace:${record.workspaceId}`
-              : undefined,
-        }
-      );
-    }),
-  );
+  ctx.harnessProfileScopes.register(ctx, 'session', (id) => {
+    const record = registry.get(id);
+    const key = registry.scope(id);
+    return record && key && {
+      key,
+      parent: record.parentId
+        ? `session:${record.parentId}`
+        : record.workspaceId
+          ? `workspace:${record.workspaceId}`
+          : undefined,
+    };
+  });
   ctx.on('settings/scopes', (options) => {
     for (const { id, title } of registry.list()) options.push({ key: `session:${id}`, name: title });
   });

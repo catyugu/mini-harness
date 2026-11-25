@@ -17,7 +17,7 @@ import { defineConfig } from '@mini-harness/plugin-api/configuration';
 import type { SessionRecord } from '@mini-harness/sessions/identity';
 import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 import { PluginHost } from '@mini-harness/plugins/manager';
-import { createScopeKey, scopeChainOf, scopeOf, type ScopeKey } from '@mini-harness/plugin-api/scopes';
+import { createScopeKey, scopeChainOf, scopeOf, scopeTarget, setScopeParent, tagScope, type ScopeKey } from '@mini-harness/plugin-api/scopes';
 
 declare module 'mini-harness/cordis' {
   interface Context {
@@ -1311,4 +1311,91 @@ test('shipped, local and npm entries share metadata, configuration and resource 
     events.filter((line) => line.startsWith('open:')).length,
     events.filter((line) => line.startsWith('close:')).length,
   );
+});
+
+test('runtime parent rebinding is acyclic and existing event targets use current ancestry', () => {
+  const ctx = new Context();
+  const left = createScopeKey();
+  const right = createScopeKey();
+  const child = createScopeKey(left);
+  const target = scopeTarget(ctx, child);
+  const filter = target[Context.filter]!;
+  const leftContext = tagScope(ctx.extend(), left);
+  const rightContext = tagScope(ctx.extend(), right);
+  assert.equal(filter(leftContext), true);
+  assert.equal(filter(rightContext), false);
+  setScopeParent(child, right);
+  assert.deepEqual(scopeChainOf(child), [child, right]);
+  assert.equal(filter(leftContext), false);
+  assert.equal(filter(rightContext), true);
+  assert.throws(() => setScopeParent(right, child), /Cyclic scope ancestry/);
+  assert.deepEqual(scopeChainOf(child), [child, right]);
+  setScopeParent(child);
+  assert.deepEqual(scopeChainOf(child), [child]);
+  assert.equal(filter(rightContext), false);
+});
+
+test('configured subtrees follow late scope owners, including owners installed by another scope', async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'mini-owned-scopes-'));
+  const ctx = new Context();
+  let settings = mergeSettings(structuredClone(DEFAULTS), {
+    entries: { source: { name: 'source', disabled: true } },
+    scopes: {
+      'project:alpha': { entries: { nested: { name: 'nested' } } },
+      'task:child': { isolate: ['greeting'], entries: { local: { name: 'local' } } },
+    },
+  });
+  const project = createScopeKey();
+  const task = createScopeKey(project);
+  const effects: string[] = [];
+  const host = new PluginHost(ctx, directory, fixtureProfile(directory, [
+    {
+      id: 'source', title: 'Source', description: '',
+      plugin: {
+        apply(owner) {
+          owner.harnessProfileScopes.register(owner, 'project', (id) => id === 'alpha' ? { key: project } : undefined);
+        },
+        inject: ['harnessProfileScopes'],
+      },
+    },
+    {
+      id: 'nested', title: 'Nested owner', description: '',
+      plugin: {
+        apply(owner) {
+          owner.harnessProfileScopes.register(owner, 'task', (id) =>
+            id === 'child' ? { key: task, parent: 'project:alpha' } : undefined,
+          );
+        },
+        inject: ['harnessProfileScopes'],
+      },
+    },
+    {
+      id: 'local', title: 'Local', description: '',
+      plugin: {
+        provide: ['greeting'],
+        apply(owner) {
+          effects.push('mounted');
+          owner.provide('greeting', 'nested');
+          owner.effect(() => () => { effects.push('disposed'); });
+        },
+      },
+    },
+  ], () => settings, (next) => { settings = next; }));
+  ctx.provide('harnessProfileScopes', host);
+  t.after(async () => {
+    await host.close();
+    rmSync(directory, { recursive: true, force: true });
+  });
+  await host.start();
+  assert.deepEqual(effects, []);
+  const toggle = (disabled: boolean) => host.update({ entries: { source: { disabled } } });
+  await toggle(false);
+  assert.equal(host.context('task:child').get('greeting'), 'nested');
+  assert.deepEqual(effects, ['mounted']);
+  await toggle(true);
+  assert.deepEqual(effects, ['mounted', 'disposed']);
+  assert.ok(settings.scopes['task:child']);
+  await toggle(false);
+  assert.equal(host.context('task:child').get('greeting'), 'nested');
+  assert.deepEqual(effects, ['mounted', 'disposed', 'mounted']);
 });

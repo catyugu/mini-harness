@@ -77,6 +77,17 @@ export function scopeEntry(
           await state.tree.update(options().plugins(state.context));
         }
 
+        async function activate(owner: Context, work: () => Promise<void>) {
+          try {
+            await work();
+          } catch (error) {
+            failures.set(key, error);
+            owner.effect(() => () => {
+              if (failures.get(key) === error) failures.delete(key);
+            });
+          }
+        }
+
         // Resolve topology through the owners' services. A configured ancestor
         // is itself a dependency, so its disposal also disposes this subtree.
         async function connect(
@@ -89,35 +100,29 @@ export function scopeEntry(
           if (!parent) {
             if (!nearest) return mount(owner, root, binding);
             await owner.inject([compositionName(nearest)], (child) =>
-              mount(child, child.get(compositionName(nearest)) as Context, binding),
+              activate(child, () => mount(child, child.get(compositionName(nearest)) as Context, binding)),
             );
             return;
           }
           if (seen.has(parent)) throw new Error('Cyclic scope ancestry: ' + parent);
           const address = parent;
-          await owner.inject([sourceName(address)], async (child) => {
-            const next = lookupScope(child, address);
-            if (!next) throw new Error('Configured scope does not exist: ' + address);
-            await connect(
-              child,
-              binding,
-              next.parent,
-              new Set([...seen, address]),
-              nearest ?? (options().configured.has(address) ? address : undefined),
-            );
-          });
+          await owner.inject([sourceName(address)], (child) =>
+            activate(child, async () => {
+              const next = lookupScope(child, address);
+              if (!next) throw new Error('Configured scope does not exist: ' + address);
+              await connect(
+                child, binding, next.parent, new Set([...seen, address]),
+                nearest ?? (options().configured.has(address) ? address : undefined),
+              );
+            }),
+          );
         }
 
-        try {
+        await activate(ctx, async () => {
           const binding = lookupScope(ctx, key);
           if (!binding) throw new Error('Configured scope does not exist: ' + key);
           await connect(ctx, binding, binding.parent, new Set([key]));
-        } catch (error) {
-          failures.set(key, error);
-          ctx.effect(() => () => {
-            failures.delete(key);
-          });
-        }
+        });
       },
     }),
   };
