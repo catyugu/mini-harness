@@ -839,9 +839,9 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
     ),
   );
   const workspaceKeys = fixtureKeys();
-  host.register('workspace', (id) => ({ key: workspaceKeys(id) }), true);
+  host.register(host.ctx, 'workspace', (id) => ({ key: workspaceKeys(id) }));
   const sessionKeys = fixtureKeys();
-  host.register('session', (id) => {
+  host.register(host.ctx, 'session', (id) => {
     const record = records.get(id);
     return (
       record && {
@@ -993,7 +993,7 @@ test('configuration validation resolves the staged scope provider and rejects in
     ),
   );
   const workspaceKeys = fixtureKeys();
-  host.register('workspace', (id) => ({ key: workspaceKeys(id) }), true);
+  host.register(host.ctx, 'workspace', (id) => ({ key: workspaceKeys(id) }));
   t.after(async () => {
     await host.close();
     rmSync(directory, { recursive: true, force: true });
@@ -1055,7 +1055,7 @@ test('setup and live configuration cannot await their own graph transaction', as
   );
   ctx.provide('harnessProfileScopes', host);
   const sessionKey = createScopeKey();
-  host.register('session', () => ({ key: sessionKey }));
+  host.register(host.ctx, 'session', () => ({ key: sessionKey }));
   t.after(async () => {
     await host.close();
     rmSync(directory, { recursive: true, force: true });
@@ -1168,8 +1168,8 @@ test('custom scope namespaces support normal Cordis composition and inheritance'
   );
   const projectKeys = fixtureKeys();
   const taskKey = createScopeKey(projectKeys('alpha'));
-  host.register('project', (id) => ({ key: projectKeys(id) }), true);
-  host.register('task', () => ({ key: taskKey, parent: 'project:alpha' }));
+  host.register(host.ctx, 'project', (id) => ({ key: projectKeys(id) }));
+  host.register(host.ctx, 'task', () => ({ key: taskKey, parent: 'project:alpha' }));
   t.after(async () => {
     await host.close();
     rmSync(directory, { recursive: true, force: true });

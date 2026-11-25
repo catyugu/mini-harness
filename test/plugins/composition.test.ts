@@ -849,6 +849,8 @@ export function apply(ctx) {
   const parent = ctx.harnessSessions.create();
   const child = ctx.harnessSessions.create({ parentId: parent.id });
   const scope = 'workspace:' + parent.workspaceId;
+  const workspaceKey = ctx.harnessWorkspaces.scope(parent.workspaceId!);
+  const childKey = ctx.harnessSessions.runScope(child.id);
   const configured = await request('/settings', 'PATCH', {
     scopes: {
       [scope]: {
@@ -868,6 +870,8 @@ export function apply(ctx) {
   assert.ok(!tools().some(({ name }) => name === 'workspace_contribution'));
   const enabled = await toggle(false);
   assert.equal(enabled.status, 200, JSON.stringify(enabled.body));
+  assert.equal(ctx.harnessWorkspaces.scope(parent.workspaceId!), workspaceKey);
+  assert.equal(ctx.harnessSessions.runScope(child.id), childKey);
   assert.ok(tools().some(({ name }) => name === 'workspace_contribution'));
   await ctx.harnessRuns.send(child.id, 'Continue after reactivation');
   assert.match(JSON.stringify(mock.requests.at(-1)?.messages), /Workspace contribution/);

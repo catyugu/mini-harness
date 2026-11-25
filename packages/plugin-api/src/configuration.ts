@@ -22,7 +22,8 @@ export interface ScopeBinding {
 }
 
 export interface ProfileScopes {
-  register(namespace: string, resolve: (id: string) => ScopeBinding | undefined, eager?: boolean): () => void;
+  /** The registering Fiber owns the namespace and all of its configured compositions. */
+  register(owner: Context, namespace: string, resolve: (id: string) => ScopeBinding | undefined): () => void;
   prepare(address: ScopeAddress, signal?: AbortSignal): Promise<void>;
   context(address?: ScopeAddress | null): Context;
   address(address: ScopeAddress): readonly ScopeAddress[];

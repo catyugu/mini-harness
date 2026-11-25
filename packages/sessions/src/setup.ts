@@ -10,7 +10,7 @@ export function setup(ctx: Context) {
     (keys) => ctx.harnessProfileConfig.forgetScopes(keys),
   );
   ctx.effect(() =>
-    ctx.harnessProfileScopes.register('session', (id) => {
+    ctx.harnessProfileScopes.register(ctx, 'session', (id) => {
       const record = registry.get(id);
       const key = registry.scope(id);
       return (
@@ -19,7 +19,7 @@ export function setup(ctx: Context) {
           key,
           parent: record.parentId
             ? `session:${record.parentId}`
-            : record.workspaceId && ctx.get('harnessWorkspaces')
+            : record.workspaceId
               ? `workspace:${record.workspaceId}`
               : undefined,
         }
@@ -30,6 +30,8 @@ export function setup(ctx: Context) {
     for (const { id, title } of registry.list()) options.push({ key: `session:${id}`, name: title });
   });
   ctx.inject(['harnessWorkspaces'], (workspace) => {
+    registry.bindWorkspaces(workspace.harnessWorkspaces);
+    workspace.effect(() => () => registry.bindWorkspaces());
     workspace.effect(() =>
       workspace.harnessWorkspaces.beforeRemove((id) => registry.removeWorkspaceSessions(id)),
     );

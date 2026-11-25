@@ -8,7 +8,7 @@ import { writeJson } from '@mini-harness/platform/json';
 import type { Paths } from '@mini-harness/platform/runtime-paths';
 import type { WorkspacePort } from '@mini-harness/workspaces/api';
 import type { RecordOwner, SessionRecords, SessionStore } from './records.ts';
-import { createScopeKey, scopeParentOf, type ScopeKey } from '@mini-harness/plugin-api/scopes';
+import { createScopeKey, scopeParentOf, setScopeParent, type ScopeKey } from '@mini-harness/plugin-api/scopes';
 import type { ScopeAddress } from '@mini-harness/plugin-api/configuration';
 import type { CapabilityObservation } from '@mini-harness/plugin-api/observations';
 import type { ConversationPermission, SessionRecord } from './shared/identity.ts';
@@ -28,13 +28,15 @@ import type { Attachment } from '@mini-harness/input/message';
 
 type Participant = Parameters<SessionStore['beforeDelete']>[0];
 
+const profileScopes = new WeakMap<Paths, Map<string, ScopeKey>>();
+
 export class SessionRegistry implements SessionStore {
   private state: CatalogState;
   private readonly deleting = new Set<string>();
   private readonly deletions = new Set<Promise<string[]>>();
   private readonly participants = new Set<Participant>();
   private readonly logs = new Map<string, SessionLog>();
-  private readonly runtimeScopes = new Map<string, ScopeKey>();
+  private readonly runtimeScopes: Map<string, ScopeKey>;
   private readonly latestRuns = new Map<string, RunInfo>();
   private readonly logErrors = new Map<string, string>();
   private closing = false;
@@ -47,7 +49,10 @@ export class SessionRegistry implements SessionStore {
     private readonly observe?: (event: CapabilityObservation, key?: ScopeKey) => void,
     private readonly forgetScopes?: (keys: ScopeAddress[]) => Promise<void>,
   ) {
+    this.runtimeScopes = profileScopes.get(paths) ?? new Map();
+    profileScopes.set(paths, this.runtimeScopes);
     this.state = loadCatalog(paths, workspaceService());
+    this.bindWorkspaces(workspaceService());
     for (const record of this.state.sessions) {
       try {
         this.openLog(record, 'recover')?.close();
@@ -86,11 +91,23 @@ export class SessionRegistry implements SessionStore {
       const standing = createScopeKey(
         record.parentId
           ? this.runScope(record.parentId)
-          : () => (record.workspaceId ? this.workspaceService()?.scope(record.workspaceId) : undefined),
+          : record.workspaceId
+            ? this.workspaceService()?.scope(record.workspaceId)
+            : undefined,
       );
       this.runtimeScopes.set(id, (key = createScopeKey(standing)));
     }
     return key;
+  }
+
+  /** Rebind the domain's existing roots when the optional workspace provider changes. */
+  bindWorkspaces(workspaces?: WorkspacePort) {
+    for (const { id, parentId, workspaceId } of this.state.sessions) {
+      if (parentId) continue;
+      const run = this.runtimeScopes.get(id);
+      const key = run && scopeParentOf(run);
+      if (key) setScopeParent(key, workspaceId ? workspaces?.scope(workspaceId) : undefined);
+    }
   }
 
   scope(id: string) {
@@ -118,7 +135,7 @@ export class SessionRegistry implements SessionStore {
   }
 
   dispose() {
-    this.runtimeScopes.clear();
+    this.bindWorkspaces();
     this.closing = true;
     for (const log of this.logs.values()) log.close();
     this.logs.clear();

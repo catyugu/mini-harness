@@ -1,3 +1,4 @@
+import { type Fiber } from '@mini-harness/cordis'
 import { Entry, type EntryOptions } from './entry.ts'
 
 /** Store the desired entries and their Cordis fibers for one runtime. */
@@ -56,7 +57,21 @@ export class EntryTree {
 
   private async settle() {
     while (true) {
-      const pending = [...this.entries.values()].flatMap(({ fiber }) => fiber?.inertia ?? [])
+      const roots = new Set([...this.entries.values()].flatMap(({ fiber }) => fiber ? [fiber] : []))
+      const first = roots.values().next().value
+      if (!first) return
+      const pending: Promise<void>[] = []
+      // Include child plugin lifecycles, not just the entrypoint fibers.
+      for (const runtime of first.ctx.registry.values()) {
+        for (const fiber of runtime.fibers) {
+          if (!fiber.inertia) continue
+          for (let owner: Fiber = fiber; owner.runtime; owner = owner.parent.fiber) {
+            if (!roots.has(owner)) continue
+            pending.push(fiber.inertia)
+            break
+          }
+        }
+      }
       if (!pending.length) return
       await Promise.all(pending)
     }

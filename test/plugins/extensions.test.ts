@@ -573,12 +573,11 @@ export function apply(ctx) {
   assert.equal(ctx.harnessModels.resolve(model), undefined);
   assert.equal(ctx.harnessModels.capabilities(model), undefined);
   assert.equal(ctx.harnessLlm.select(model), null);
-  await assert.rejects(
-    Array.fromAsync(
-      ctx.harnessLlm.stream({ model, messages: [], systemPrompt: '', signal: new AbortController().signal }),
-    ),
-    /Multiple model adapters/,
-  );
+  await assert.rejects(async () => {
+    for await (const _ of ctx.harnessLlm.stream({
+      model, messages: [], systemPrompt: '', signal: new AbortController().signal,
+    })) assert.fail('An ambiguous model must not stream');
+  }, /Multiple model adapters/);
   await toggle('model-tie', true);
   assert.equal(list()[0]?.name, 'model-high');
   await toggle('model-high', true);

@@ -3,18 +3,23 @@ import { Context } from 'mini-harness/cordis';
 /** Opaque, identity-compared runtime scope. Scope routing is not an access boundary. */
 export type ScopeKey = object;
 const scopeTag = Symbol('mini-harness.scope');
-type ScopeParent = ScopeKey | (() => ScopeKey | undefined);
-const parents = new WeakMap<ScopeKey, ScopeParent>();
+const parents = new WeakMap<ScopeKey, ScopeKey>();
 
-export function createScopeKey(parent?: ScopeParent): ScopeKey {
+export function createScopeKey(parent?: ScopeKey): ScopeKey {
   const key = {};
   if (parent) parents.set(key, parent);
   return key;
 }
 
+/** Change a runtime relationship explicitly. The topology is always acyclic. */
+export function setScopeParent(key: ScopeKey, parent?: ScopeKey) {
+  if (scopeChainOf(parent).includes(key)) throw new Error('Cyclic scope ancestry');
+  if (parent) parents.set(key, parent);
+  else parents.delete(key);
+}
+
 export function scopeParentOf(key: ScopeKey) {
-  const parent = parents.get(key);
-  return typeof parent === 'function' ? parent() : parent;
+  return parents.get(key);
 }
 
 /** Nearest scope first. */
@@ -54,12 +59,11 @@ export function scopeOf(ctx: Context): ScopeKey | undefined {
 
 /** Route to unscoped listeners and listeners on the target's ancestry. */
 export function scopeTarget(base: Context, key = scopeOf(base)) {
-  const chain = scopeChainOf(key);
   const filter = base[Context.filter];
   return base.extend({
     [Context.filter](ctx: Context) {
       const scope = scopeOf(ctx);
-      return (!filter || filter.call(base, ctx)) && (!scope || chain.includes(scope));
+      return (!filter || filter.call(base, ctx)) && (!scope || scopeChainOf(key).includes(scope));
     },
   });
 }
