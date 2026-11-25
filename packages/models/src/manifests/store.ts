@@ -8,14 +8,14 @@ export const metadata: PluginInfo = {
 };
 
 const plugin: Plugin.Object = {
-  inject: ['harnessState'],
-  provide: ['harnessModelStore', 'harnessModels'],
+  inject: ['harnessState', 'harnessModels'],
+  provide: ['harnessModelStore'],
   async apply(ctx) {
     const store = new ModelStore(ctx.harnessState.paths.home);
     ctx.effect(() => () => store.close());
     await store.refresh();
     ctx.provide('harnessModelStore', store);
-    ctx.provide('harnessModels', store);
+    ctx.effect(() => ctx.harnessModels.register(store, -1));
   },
 };
 

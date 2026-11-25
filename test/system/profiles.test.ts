@@ -213,35 +213,15 @@ test('a third-party plugin uses tools, models and subprocesses from a Profile wi
     await mock.close();
     rmSync(root, { recursive: true, force: true });
   });
-  const configFile = join(paths.home, 'models.json');
-  const config = JSON.parse(readFileSync(configFile, 'utf8'));
-  for (const provider of ['adapter-one', 'adapter-two']) {
-    config.providers[provider] = {
-      api: provider + '-protocol',
-      baseUrl: mock.url,
-      apiKey: 'fixture-key',
-      models: [{ id: 'fixture' }],
-    };
-  }
-  const blankKey = 'MINI_HARNESS_EMPTY_FIXTURE_KEY';
-  const previousKey = process.env[blankKey];
-  process.env[blankKey] = '';
-  t.after(() => {
-    if (previousKey === undefined) delete process.env[blankKey];
-    else process.env[blankKey] = previousKey;
-  });
-  config.providers['adapter-no-key'] = { ...config.providers['adapter-one'], apiKey: blankKey };
-  writeJson(configFile, config);
   const directory = initializeProfile('capabilities', paths);
   writeText(
     join(directory, 'cordis.patch.yml'),
     `plugins:
   - name: '@mini-harness/tools'
-  - name: '@mini-harness/model-store'
+  - name: '@mini-harness/model-catalog'
   - name: '@mini-harness/llm'
   - name: '@mini-harness/process-execution'
   - name: '@mini-harness/agent'
-  - name: '@mini-harness/tool-executor'
   - id: consumer
     name: ./consumer.mjs
 `,
@@ -250,14 +230,30 @@ test('a third-party plugin uses tools, models and subprocesses from a Profile wi
     join(directory, 'consumer.mjs'),
     `
     import { defineTool } from 'mini-harness/tools';
+    import { executeTools } from 'mini-harness/tools/execution';
+    export const provide = ['harnessToolExecutor'];
     export const inject = ['harnessTools', 'harnessLlm', 'harnessModels', 'harnessProcess', 'harnessState'];
     export function apply(ctx) {
-      for (const id of ['adapter-one', 'adapter-two'])
+      ctx.provide('harnessToolExecutor', {
+        present: (content, tools) => ({ ...content, tools: [...tools] }),
+        interpret: (message) => message,
+        execute: executeTools,
+      });
+      for (const id of ['adapter-one', 'adapter-two']) {
+        const resolve = (choice) => choice.provider === id
+          ? { provider: id, id: choice.id || 'fixture' }
+          : undefined;
+        const capabilities = (choice) => ({
+          id: choice.id, name: choice.id, input: ['text'],
+          contextWindow: 32000, maxTokens: 1024, reasoning: false,
+        });
+        ctx.effect(() => ctx.harnessModels.register({
+          list: () => [{ provider: id, id: 'fixture', name: 'fixture', configured: true, thinkingLevels: [], input: ['text'] }],
+          resolve, capabilities,
+        }));
         ctx.effect(() => ctx.harnessLlm.register({
-          accepts: (model) => ctx.harnessModels.connection(model)?.api === id + '-protocol',
+          accepts: (model) => model.provider === id,
           async *stream(request) {
-            if (await ctx.harnessModels.apiKey(request.model) !== 'fixture-key')
-              throw new Error('Adapter could not resolve the configured key');
             const last = request.messages.at(-1);
             const content = last?.role === 'toolResult'
               ? [{ type: 'text', text: id + ': ' + last.content[0].text }]
@@ -265,6 +261,7 @@ test('a third-party plugin uses tools, models and subprocesses from a Profile wi
             yield { type: 'done', message: { role: 'assistant', content, timestamp: Date.now() } };
           },
         }));
+      }
       ctx.effect(() => ctx.harnessTools.register(defineTool({
         name: 'read_model',
         description: 'Read subprocess output',
@@ -300,12 +297,11 @@ test('a third-party plugin uses tools, models and subprocesses from a Profile wi
       app.ctx.harnessModels.list().some(({ provider }) => provider === 'anthropic'),
       false,
     );
-    const unconfigured = app.ctx.harnessModels.list().find(({ provider }) => provider === 'adapter-no-key');
-    assert.equal(unconfigured?.configured, false);
-    assert.equal(
-      await app.ctx.harnessModels.apiKey({ provider: 'adapter-no-key', id: 'fixture' }),
-      undefined,
-    );
+    assert.equal(app.ctx.get('harnessModelStore'), undefined);
+    assert.deepEqual(app.ctx.harnessModels.resolve({ provider: 'adapter-one', id: 'dynamic' }), {
+      provider: 'adapter-one',
+      id: 'dynamic',
+    });
     for (const provider of ['adapter-one', 'adapter-two']) {
       const model = { provider, id: 'fixture' };
       assert.deepEqual(app.ctx.harnessModels.resolve(model), model);

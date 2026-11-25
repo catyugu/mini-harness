@@ -145,6 +145,7 @@ async function checkPackage() {
       `
       import { Context, type Plugin } from 'mini-harness/cordis';
       import type { LlmPort, ModelRequestContent } from 'mini-harness/llm';
+      import type { ModelSource } from 'mini-harness/models';
       import { createScopeKey, type ScopeKey } from 'mini-harness/scopes';
       import type { ProfileConfiguration, ScopeSettings } from 'mini-harness/configuration';
       import { defineTool } from 'mini-harness/tools';
@@ -167,6 +168,8 @@ async function checkPackage() {
       const scopedSettings: ProfileConfiguration['scopes'] = { 'session:example': scope };
       void scopedSettings;
       const llm: LlmPort | undefined = ctx.harnessLlm;
+      const source: ModelSource = { list: () => [], resolve: () => undefined, capabilities: () => undefined };
+      ctx.effect(() => ctx.harnessModels.register(source));
       const scopeContext: Context = ctx.harnessProfileScopes.context('session:example');
       void scopeContext;
       const plugin: Plugin = {

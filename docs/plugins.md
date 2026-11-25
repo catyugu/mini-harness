@@ -67,7 +67,7 @@ Runs uses the `readOnly` tag to select and start tools for read-only conversatio
 
 ### Events
 
-A server plugin can add a model protocol by declaring a provider in `models.json` with its own `api` identifier and registering a matching adapter. The existing model catalog lists those models and manages their credentials. The adapter can query `harnessModels.connection(model)` and resolve a key with `harnessModels.apiKey(model)`.
+A server plugin can register its model source through `harnessModels.register(source, priority)` and its streaming adapter through `harnessLlm.register(adapter, priority)`. The source lists discoverable models and resolves model choices and capabilities, including dynamically resolved choices. Provider configuration, credentials and protocols belong to the adapter. `@mini-harness/model-catalog` works independently of the Pi model store.
 
 An independent Profile can compose `@mini-harness/agent` and `@mini-harness/llm` with its chosen adapter and Tool Executor. Pass `{ request, tools, signal }` to `harnessAgent.run(ctx, input)` to run an in-memory transcript. `request` takes the model, system prompt and messages. Runs prepares each turn when the conversation can accept queued input or switch models.
 
