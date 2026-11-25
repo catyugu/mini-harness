@@ -298,7 +298,6 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
       });
     }
   }
-
 }
 
 function queueEntry(item: InboxItem): QueueEntry {

@@ -224,11 +224,7 @@ export abstract class RecordLog<Event extends { type: string }> {
     return this.persist(event, this.leafId, expectedLeafId);
   }
 
-  revise(
-    event: Event,
-    parentId: string | null,
-    expectedLeafId: string | null,
-  ) {
+  revise(event: Event, parentId: string | null, expectedLeafId: string | null) {
     return this.persist(event, parentId, expectedLeafId);
   }
 
@@ -265,4 +261,3 @@ export function encodeLog(header: LogHeader, entries: LogEntry<{ type: string }>
     ].join('\n') + '\n'
   );
 }
-
