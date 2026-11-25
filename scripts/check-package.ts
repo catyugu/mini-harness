@@ -151,7 +151,8 @@ async function checkPackage() {
       import { defineTool } from 'mini-harness/tools';
       import { executeTools, type ToolExecutorPort } from 'mini-harness/tools/execution';
       import type { PluginData, PluginSecrets } from 'mini-harness/plugin-data';
-      import type { SessionRecords } from 'mini-harness/sessions';
+      import type { SessionRecords, SessionEvent, SessionLogPort } from 'mini-harness/sessions';
+      import { selectModel } from 'mini-harness/models/selection';
       import type { Execution } from 'mini-harness/execution';
       import type { InputContext } from 'mini-harness/agent/events';
       import type { PromptPort } from 'mini-harness/agent/prompt';
@@ -182,7 +183,12 @@ async function checkPackage() {
       const pluginData: PluginData = ctx.harnessPluginData;
       const pluginSecrets: PluginSecrets = ctx.harnessPluginSecrets;
       const execution: Execution = ctx.harnessExecution;
-      const records: SessionRecords = ctx.harnessSessions.records('session', { pluginId: 'fixture', instanceId: 'fixture' });
+      const records: SessionRecords<{ note: string }> = ctx.harnessSessions.records('session', { pluginId: 'fixture', instanceId: 'fixture' });
+      const log: SessionLogPort = ctx.harnessSessions.log('session');
+      const event: SessionEvent<{ note: string }> = { type: 'plugin-record', owner: { pluginId: 'fixture', instanceId: 'fixture' }, data: { note: 'hello' } };
+      void log.append(event);
+      void records.append({ note: 'hello' });
+      void selectModel;
       const executor: ToolExecutorPort = ctx.harnessToolExecutor;
       void executeTools;
       void executor;

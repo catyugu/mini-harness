@@ -120,11 +120,11 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
     if (
       entry.type === 'compaction' &&
       entry.keepFromId !== null &&
-      !this.branch(entry.parentId).some((item) => item.id === entry.keepFromId && item.type === 'message')
+      !this.branchEntries(entry.parentId).some((item) => item.id === entry.keepFromId && item.type === 'message')
     )
       throw new Error('Compaction boundary is not a message on the selected branch');
     if (entry.type === 'context-edit') {
-      const target = this.branch(entry.parentId).find(
+      const target = this.branchEntries(entry.parentId).find(
         (item) => item.id === entry.targetId && item.type === 'message',
       );
       if (target?.type !== 'message')
@@ -135,7 +135,7 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
   }
 
   protected recordAdded(entry: SessionEntry) {
-    this.cachedProjection = undefined;
+    if (!operational(entry) || entry.type === 'run') this.cachedProjection = undefined;
     if (entry.type === 'run') this.run = entry.run;
     if (entry.type === 'tool-schema') this.schemas.set(entry.hash, entry.tools);
     if (entry.type === 'inbox-enqueued') {
@@ -163,9 +163,16 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
     return [...Array.from(this.pendingInbox.values(), queueEntry), ...structuredClone(this.inboxFailures)];
   }
 
+  private project(leafId?: string | null) {
+    return projectLog(this.branchEntries(leafId), (id) => {
+      const raw = this.byId.get(id);
+      return raw?.type === 'tool-execution' ? raw.result : undefined;
+    }, this.run);
+  }
+
   projection(leafId?: string | null) {
-    if (leafId !== undefined) return structuredClone(projectLog(this.records, this.branchEntries(leafId)));
-    this.cachedProjection ??= projectLog(this.records, this.branchEntries());
+    if (leafId !== undefined) return structuredClone(this.project(leafId));
+    this.cachedProjection ??= this.project();
     return structuredClone(this.cachedProjection);
   }
 
@@ -226,7 +233,7 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
       tail.some(({ type }) => type === 'compaction' || type === 'context-edit')
     ) {
       recovery.checker = new RequestMessages();
-      recovery.checker.append(projectLog(this.records, this.branchEntries(leaf)).contextMessages);
+      recovery.checker.append(this.project(leaf).contextMessages);
     } else {
       const execution = (id: string) => {
         const raw = this.byId.get(id);
@@ -243,7 +250,7 @@ export class SessionLog extends RecordLog<SessionEvent> implements SessionLogPor
 
   private materializeRequest(entry: Extract<SessionEntry, { type: 'model-request' }>) {
     const { messagesPatch } = entry.request;
-    const context = projectLog(this.records, this.branchEntries(entry.parentId)).contextMessages;
+    const context = this.project(entry.parentId).contextMessages;
     let messages = context;
     if (messagesPatch) {
       const { start, deleteCount, insert } = messagesPatch;

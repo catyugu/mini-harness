@@ -3,6 +3,7 @@ import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { ViewMessage } from './shared/message.ts';
 import type { ConversationPermission, SessionRecord } from './shared/identity.ts';
 import type { SessionLogPort } from './log-api.ts';
+export type { SessionLogPort, SessionEntry, SessionEvent, SessionProjection } from './log-api.ts';
 import type { Attachment, ImageInput, PreparedMessage } from '@mini-harness/input/message';
 import type { RunInfo } from './shared/run-state.ts';
 

@@ -30,7 +30,7 @@ Its parent identifies the active branch snapshot. The optional `messagesPatch` s
 only changed messages into that snapshot, including transforms and compaction inputs.
 A content-addressed `tool-schema` record stores each distinct advertised tool list once
 per conversation. Model requests refer to its SHA-256 hash via `toolSchema`.
-`SessionLog.requestSnapshot(id)` reconstructs and validates the exact model-visible
+`SessionLog.requestSnapshot(id)` reconstructs the validated exact model-visible
 input for audit and retry. The session ID comes from the log header.
 
 An `executor-response` diagnostic preserves the original model response when an executor translates it into the native protocol.

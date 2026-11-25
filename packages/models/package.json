@@ -17,7 +17,8 @@
     "api": [
       "./api",
       "./browser/api",
-      "./catalog"
+      "./catalog",
+      "./selection"
     ],
     "profileModules": {
       "@mini-harness/pi-adapter": "./src/manifests/pi-adapter.ts",

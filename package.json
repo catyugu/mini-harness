@@ -250,6 +250,10 @@
     "./workspaces": {
       "types": "./dist/types/packages/workspaces/src/server/api.d.ts",
       "default": "./dist/packages/workspaces/src/server/api.js"
+    },
+    "./models/selection": {
+      "types": "./dist/types/packages/models/src/server/selection.d.ts",
+      "default": "./dist/packages/models/src/server/selection.js"
     }
   },
   "packageManager": "pnpm@10.34.9"

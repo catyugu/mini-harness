@@ -7,7 +7,7 @@ import { dirname } from 'node:path';
 import { writeJson } from '@mini-harness/platform/json';
 import type { Paths } from '@mini-harness/platform/runtime-paths';
 import type { WorkspacePort } from '@mini-harness/workspaces/api';
-import type { RecordDisplay, RecordOwner, SessionRecords, SessionStore } from './records.ts';
+import type { RecordOwner, SessionRecords, SessionStore } from './records.ts';
 import { createScopeKey, scopeParentOf, type ScopeKey } from '@mini-harness/plugin-api/scopes';
 import type { ScopeAddress } from '@mini-harness/plugin-api/configuration';
 import type { CapabilityObservation } from '@mini-harness/plugin-api/observations';
@@ -401,13 +401,8 @@ export class SessionRegistry implements SessionStore {
             }),
           true,
         ) ?? [],
-      append: async (data, display?: RecordDisplay) => {
+      append: async (data, display) => {
         this.assertAvailable(id);
-        if (
-          display &&
-          (typeof display.title !== 'string' || !display.title.trim() || display.title.length > 140)
-        )
-          throw new DomainError('invalid_input', 'Invalid session display title');
         return this.log(id).append({ type: 'plugin-record', owner, data, display }).id;
       },
     };
