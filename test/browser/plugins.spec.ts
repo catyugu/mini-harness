@@ -37,7 +37,7 @@ test('frontend plugins own UI contributions and clean up on disable and reconfig
     join(folder, 'web.js'),
     `
 export const inject = ["miniPrimitives","miniComposer","miniTabs","miniSlots","miniSettingsRegistry","miniMessages"];
-import { browserPluginId, browserPluginSettings } from "/packages/sdk/src/browser-plugin.js";
+import { browserPluginId, browserPluginSettings } from "mini-harness/ui-runtime/plugin-settings";
 
 export function apply(ctx, config) {
     const signal = ctx.fiber.signal;

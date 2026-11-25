@@ -11,14 +11,22 @@ export const inject = [
   'harnessPluginRoutes',
   'harnessModels',
 ];
-import { sessionService } from 'mini-harness/plugin';
-import { HttpError, type ConfigValidationContext, type Context } from 'mini-harness/plugin';
+import { sessionService } from 'mini-harness/plugin-scope';
+import { HttpError } from 'mini-harness/transport';
+import type { Context } from 'mini-harness/cordis';
+import type {} from 'mini-harness/sessions';
+import type {} from 'mini-harness/execution';
+import type {} from 'mini-harness/approvals';
+import type {} from 'mini-harness/plugin-data';
+import type {} from 'mini-harness/agent/prompt';
+import type {} from 'mini-harness/tools';
+import type {} from 'mini-harness/models';
 declare module 'mini-harness/cordis' {
   interface Context {
     taskNotes: { label(): string };
   }
 }
-export function validateConfig(config: Readonly<Record<string, unknown>>, _context: ConfigValidationContext) {
+export function validateConfig(config: Readonly<Record<string, unknown>>) {
   if (typeof config.label !== 'string' || !config.label.trim()) throw new Error('Enter a note label');
 }
 export function apply(ctx: Context) {
@@ -53,7 +61,7 @@ export function apply(ctx: Context) {
       },
     }),
   );
-  const running = new Map<string, import('mini-harness/plugin').ExecutionHandle>();
+  const running = new Map<string, import('mini-harness/execution').ExecutionHandle>();
   ctx.harnessPluginRoutes.register('POST', '/cancel-follow-up', async ({ body }) => {
     const { runId } = await body();
     return { cancelled: typeof runId === 'string' && (running.get(runId)?.cancel() ?? false) };

@@ -60,7 +60,7 @@ export const apply = (ctx) => {
         join(records, 'web.js'),
         `
 export const inject = ["miniConversation","miniMessages"];
-import { browserPluginId } from "/packages/sdk/src/browser-plugin.js";
+import { browserPluginId } from "mini-harness/ui-runtime/plugin-settings";
 
 export const apply = (ctx) => {
     const { miniConversation } = ctx;

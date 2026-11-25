@@ -95,7 +95,7 @@ test('scoped plugins inherit declared services and tool policies, and release th
     `
 export const provide = ["exampleGreeting"];
 export const inject = ["harnessSessions","harnessPluginRoutes","harnessPluginData","harnessPluginChanges","harnessTools"];
-import { pluginScope } from "${new URL('../../packages/sdk/src/plugin.js', import.meta.url).href}";
+import { pluginScope } from "${new URL('../../packages/plugin-api/src/scope-api.js', import.meta.url).href}";
 import { appendFileSync } from 'node:fs';
 export const apply = (ctx, config) => {
       if (config.fail) throw new Error('Scoped setup failed');

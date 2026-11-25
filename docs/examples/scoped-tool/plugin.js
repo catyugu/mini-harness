@@ -1,5 +1,5 @@
 export const inject = ['exampleGreeting', 'harnessTools'];
-import { pluginScope } from 'mini-harness/plugin';
+import { pluginScope } from 'mini-harness/plugin-scope';
 
 export function apply(ctx) {
   const greeting = ctx.exampleGreeting;

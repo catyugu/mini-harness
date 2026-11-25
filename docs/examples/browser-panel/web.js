@@ -1,4 +1,4 @@
-import { browserPluginId, browserPluginSettings } from '/packages/sdk/src/browser-plugin.js';
+import { browserPluginId, browserPluginSettings } from 'mini-harness/ui-runtime/plugin-settings';
 
 import { replaceComposer } from './web/composer.js';
 

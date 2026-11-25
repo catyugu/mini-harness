@@ -60,5 +60,5 @@ export type { SessionAccess } from '@mini-harness/sessions/records';
 export type { RecordDisplay, RecordProjection, SessionRecords } from '@mini-harness/sessions/records';
 
 export type {} from '@mini-harness/plugin-api/services';
-export { pluginScope, sessionService } from '@mini-harness/plugin-api/instance';
+export { pluginScope, sessionService } from '@mini-harness/plugin-api/scope-api';
 export type { PluginData, PluginSecrets } from '@mini-harness/plugin-api/services';
