@@ -184,7 +184,7 @@ export class PluginCatalog {
         scopeKey: _scopeKey,
         ...metadata
       } = descriptor;
-      const instances: NonNullable<PluginMetadata['instances']> = group.map((item) => {
+      const instances: PluginMetadata['instances'] = group.map((item) => {
         const key = item.scopeKey ? item.scopeKey + '/' + item.id : item.id;
         const enabled = this.enabled(item, settings);
         let error = failures.get(key) ?? item.error;

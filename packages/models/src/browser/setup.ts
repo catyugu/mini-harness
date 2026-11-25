@@ -20,6 +20,21 @@ const setup = async (ctx: Context) => {
   await state.refresh();
   ctx.effect(() => ctx.miniProjections.register('models', state));
   ctx.provide('miniModels', state);
+  ctx.on('settings/options', (schema, value) => {
+    if (!schema['x-modelChoice']) return;
+    const current = value as ModelChoice | null | undefined;
+    const { models, providers } = state.get();
+    const options: { label: string; value: ModelChoice | null; disabled?: boolean }[] = [
+      { label: 'Inherit parent model', value: null },
+      ...models.filter(({ configured }) => configured).map((model) => ({
+        label: model.name + ' · ' + (providers.find(({ id }) => id === model.provider)?.name ?? model.provider),
+        value: { provider: model.provider, id: model.id },
+      })),
+    ];
+    if (current && !options.some(({ value }) => value?.provider === current.provider && value?.id === current.id))
+      options.push({ label: current.provider + '/' + current.id + ' (unavailable)', value: current, disabled: true });
+    return options;
+  });
   ctx.effect(() =>
     ctx.miniSettingsRegistry.register(
       browserPluginId(ctx),

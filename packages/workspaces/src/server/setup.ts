@@ -16,6 +16,9 @@ export function setup(ctx: Context) {
       true,
     ),
   );
+  ctx.on('scopes/list', (options) => {
+    for (const { id, name } of catalog.list()) options.push({ key: `workspace:${id}`, name });
+  });
   const changes = ctx.harnessChanges;
   ctx.effect(() => changes.register('workspaces'));
   ctx.effect(() => {

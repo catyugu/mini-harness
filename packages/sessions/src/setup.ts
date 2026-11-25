@@ -22,6 +22,9 @@ export function setup(ctx: Context) {
       );
     }),
   );
+  ctx.on('scopes/list', (options) => {
+    for (const { id, title } of registry.list()) options.push({ key: `session:${id}`, name: title });
+  });
   ctx.effect(() => ctx.harnessWorkspaces.beforeRemove((id) => registry.removeWorkspaceSessions(id)));
   ctx.on('harness/ready', () => registry.recoverDeletion());
   ctx.on('harness/quiesce', () => registry.close());

@@ -1,9 +1,6 @@
 import { browserRequest } from '@mini-harness/ui-runtime/http';
-import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
+import type { ScopeKey, ScopeOption } from '@mini-harness/plugin-api/scopes';
 import type { Context } from 'mini-harness/cordis';
-import type { ModelCatalog } from '@mini-harness/models/catalog';
-import type { WorkspaceRecord } from '@mini-harness/workspaces/record';
-import type { Conversation } from '@mini-harness/conversation/view';
 import type { ProfileConfiguration } from '@mini-harness/plugin-api/configuration';
 import type { PluginMetadata } from '../shared/metadata.ts';
 import { RemoteStore } from '@mini-harness/ui-runtime/remote-store';
@@ -23,10 +20,8 @@ const setup = async (ctx: Context) => {
   const signal = ctx.fiber.signal;
   const {
     miniSettingsData: settings,
-    miniPages: pages,
     miniSwitch: syncPlugins,
     miniBrowserFailures: browserFailures,
-    miniModels: models,
   } = ctx;
   const plugins = new RemoteStore(() => browserRequest<PluginMetadata[]>(ctx, '/plugins'));
   await plugins.refresh();
@@ -46,9 +41,6 @@ const setup = async (ctx: Context) => {
       settings: settings.get(),
     }),
     refresh,
-    pages,
-    () => models.get(),
-    ctx.miniSettingsRegistry,
   );
   plugins.subscribe(catalog.refresh, signal);
   settings.subscribe(catalog.refresh, signal);
@@ -59,10 +51,8 @@ function pluginCatalog(
   ctx: Context,
   snapshot: () => { plugins: PluginMetadata[]; settings: ProfileConfiguration },
   refresh: () => Promise<void>,
-  pages: { open(id?: string): void; register(id: string, node: HTMLElement): () => void },
-  modelCatalog: () => ModelCatalog,
-  registry: Context['miniSettingsRegistry'],
 ) {
+  const { miniPages: pages, miniSettingsRegistry: registry } = ctx;
   const entry = fromMarkup<HTMLButtonElement>(
     '<button type="button" class="nav-action" aria-label="Browse plugins" aria-controls="pluginCatalog"><span class="nav-label">Plugins</span></button>',
   );
@@ -125,8 +115,8 @@ function pluginCatalog(
     required(section.querySelector('h1')).textContent = plugin.title;
     required(section.querySelector('p')).textContent = plugin.description;
     let schema = plugin.configSchema;
-    const scoped = plugin.instances?.some(({ scope }) => scope !== 'application') ?? false;
-    const application = plugin.instances?.some(({ scope }) => scope === 'application') ?? false;
+    const scoped = plugin.instances.some(({ scope }) => scope !== 'application');
+    const application = plugin.instances.some(({ scope }) => scope === 'application');
     const diagnostics = document.createElement('p');
     diagnostics.className = 'hint';
     diagnostics.textContent = plugin.error ?? '';
@@ -144,8 +134,7 @@ function pluginCatalog(
     const enabled = toggle('Enabled in this scope', false);
     const configFields = document.createElement('div');
     fields.append(scopedControls, configFields);
-    const locationsByKey = new Map<string, ScopeKey>();
-    const currentKey = () => locationsByKey.get(scopePicker.value);
+    const currentKey = () => scopePicker.value && scopePicker.value !== 'application' ? scopePicker.value as ScopeKey : undefined;
     const currentScope = () => {
       const key = currentKey();
       return (key && snapshot().settings.scopes[key]) || undefined;
@@ -160,7 +149,7 @@ function pluginCatalog(
       if (scoped || application) {
         const instance = snapshot()
           .plugins.find(({ id }) => id === plugin.id)
-          ?.instances?.find(({ scope }) => scope === scopePicker.value);
+          ?.instances.find(({ scope }) => scope === scopePicker.value);
         diagnostics.textContent =
           instance?.error ?? (instance?.state === 'inactive' ? 'Waiting for this scope to activate.' : '');
         const selected = currentKey()
@@ -186,10 +175,10 @@ function pluginCatalog(
               .filter((id) => currentSchema.properties?.[id])
               .map((id) => [id, currentSchema.properties[id]]),
           );
-          block.append(schemaFields(plugin.id, { ...currentSchema, properties }, values(), modelCatalog()));
+          block.append(schemaFields(ctx, plugin.id, { ...currentSchema, properties }, values()));
           configFields.append(block);
         }
-      } else configFields.append(schemaFields(plugin.id, currentSchema, values(), modelCatalog()));
+      } else configFields.append(schemaFields(ctx, plugin.id, currentSchema, values()));
     }
     if (scoped || application) {
       scopedControls.className = 'plugin-fields';
@@ -200,29 +189,16 @@ function pluginCatalog(
         control.disabled = true;
       });
       if (application) scopePicker.add(new Option('Application', 'application'));
-      const locations: Promise<{ key: ScopeKey; name: string }[]> = Promise.all([
-        browserRequest<WorkspaceRecord[]>(ctx, '/workspaces').then((items) =>
-          items.map(({ id, name }) => ({ key: `workspace:${id}` as ScopeKey, name })),
-        ),
-        browserRequest<Conversation[]>(ctx, '/sessions').then((items) =>
-          items.map(({ id, title }) => ({ key: `session:${id}` as ScopeKey, name: title })),
-        ),
-      ]).then(([workspaces, sessions]) => [...workspaces, ...sessions]);
-      void locations
+      void browserRequest<ScopeOption[]>(ctx, '/plugins/scopes', { signal: detailLifetime.signal })
         .then((items) => {
-          for (const { key, name } of items) {
-            locationsByKey.set(key, key);
-            scopePicker.add(new Option(name, key));
-          }
-          for (const { scope } of plugin.instances ?? [])
-            if (scope !== 'application' && !locationsByKey.has(scope)) {
-              locationsByKey.set(scope, scope);
+          for (const { key, name } of items) scopePicker.add(new Option(name, key));
+          for (const { scope } of plugin.instances)
+            if (scope !== 'application' && !items.some(({ key }) => key === scope))
               scopePicker.add(new Option(scope, scope));
-            }
           scopePicker.value =
-            plugin.instances?.find(({ error }) => error)?.scope ??
+            plugin.instances.find(({ error }) => error)?.scope ??
             (application ? 'application' : undefined) ??
-            plugin.instances?.[0]?.scope ??
+            plugin.instances[0]?.scope ??
             items[0]?.key ??
             '';
           const sync = () => {
@@ -242,7 +218,7 @@ function pluginCatalog(
       save.disabled = true;
       outcome.textContent = '';
       try {
-        const config = schema ? readPluginValues({ [plugin.id]: {} }, configFields)[plugin.id] : values();
+        const config = schema ? readPluginValues(configFields) : values();
         let patch: Partial<ProfileConfiguration> = {
           entries: { [plugin.id]: { config, disabled: !enabled.checked } },
         };
@@ -275,7 +251,7 @@ function pluginCatalog(
         );
         if (saved && !outcome.textContent) {
           const latest = snapshot().plugins.find(({ id }) => id === plugin.id);
-          const state = key ? latest?.instances?.find(({ scope }) => scope === key) : latest;
+          const state = key ? latest?.instances.find(({ scope }) => scope === key) : latest;
           diagnostics.textContent = state?.error ?? '';
           outcome.textContent =
             state?.error && (state.state === 'failed' || state.state === 'partial')
@@ -336,11 +312,11 @@ function pluginCatalog(
             partial: 'Partially ready',
             inactive: 'Inactive',
             disabled: 'Disabled',
-          }[plugin.state ?? 'disabled'];
+          }[plugin.state];
           required(row.querySelector('small')).textContent =
             state + ' · ' + (plugin.error ?? plugin.description);
           const controls = required(row.querySelector('.catalog-controls'));
-          const scoped = !plugin.instances?.some(({ scope }) => scope === 'application');
+          const scoped = !plugin.instances.some(({ scope }) => scope === 'application');
           const checked = scoped
             ? Object.values(settings.scopes).some(
                 (scope) => scope?.entries?.[plugin.id] && scope.entries[plugin.id].disabled !== true,
@@ -419,7 +395,6 @@ export default {
     'miniPages',
     'miniSwitch',
     'miniBrowserFailures',
-    'miniModels',
     'miniSlots',
   ],
   provide: [],

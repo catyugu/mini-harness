@@ -1,10 +1,10 @@
-import type { ModelCatalog } from '@mini-harness/models/catalog';
+import type { Context } from 'mini-harness/cordis';
 
 export function schemaFields(
+  ctx: Context,
   plugin: string,
   schema: Record<string, any>,
   values: any,
-  models: ModelCatalog,
   path: string[] = [],
 ) {
   const group = document.createElement('div');
@@ -21,37 +21,26 @@ export function schemaFields(
       section.className = 'plugin-config';
       const legend = document.createElement('legend');
       legend.textContent = title.textContent;
-      section.append(legend, schemaFields(plugin, property, current ?? {}, models, fieldPath));
+      section.append(legend, schemaFields(ctx, plugin, property, current ?? {}, fieldPath));
       group.append(section);
       continue;
     }
     let input: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
-    if (property['x-modelChoice']) {
+    const options = ctx.bail('settings/options', property, current);
+    if (options || property.enum) {
       const select = document.createElement('select');
-      select.add(new Option('Inherit parent model', 'null'));
-      let selected = 'null';
-      for (const model of models.models.filter(({ configured }) => configured)) {
-        const choice = JSON.stringify({ provider: model.provider, id: model.id });
-        const provider = models.providers.find(({ id }) => id === model.provider)?.name ?? model.provider;
-        select.add(new Option(model.name + ' · ' + provider, choice));
-        if (current?.provider === model.provider && current?.id === model.id) selected = choice;
-      }
-      if (current && selected === 'null') {
-        selected = JSON.stringify(current);
-        const label = typeof current === 'object' ? current.provider + '/' + current.id : String(current);
-        const unavailable = new Option(label + ' (unavailable)', selected);
-        unavailable.disabled = true;
-        select.add(unavailable);
-      }
-      select.value = selected;
-      input = select;
-      input.dataset.kind = 'enum';
-    } else if (property.enum) {
-      const select = document.createElement('select');
-      if (!schema.required?.includes(key)) select.add(new Option('Default', ''));
-      for (const [index, option] of property.enum.entries()) {
-        const label = Array.isArray(property['x-enumLabels']) ? property['x-enumLabels'][index] : undefined;
-        select.add(new Option(typeof label === 'string' ? label : String(option), JSON.stringify(option)));
+      if (options) {
+        for (const { label, value, disabled } of options) {
+          const option = new Option(label, JSON.stringify(value));
+          option.disabled = disabled ?? false;
+          select.add(option);
+        }
+      } else {
+        if (!schema.required?.includes(key)) select.add(new Option('Default', ''));
+        for (const [index, option] of property.enum.entries()) {
+          const label = property['x-enumLabels']?.[index] ?? String(option);
+          select.add(new Option(label, JSON.stringify(option)));
+        }
       }
       if (current !== undefined) select.value = JSON.stringify(current);
       input = select;
@@ -107,21 +96,16 @@ export function schemaFields(
   return group;
 }
 
-export function readPluginValues(current: Record<string, Record<string, unknown>>, container: HTMLElement) {
-  const config = structuredClone(current);
+export function readPluginValues(container: HTMLElement) {
+  const config: Record<string, unknown> = {};
   for (const field of container.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(
     '[data-plugin]',
   )) {
     if (field.matches(':disabled')) continue;
-    const plugin = field.dataset.plugin;
-    const encoded = field.dataset.path;
-    if (!plugin || !encoded) throw new Error('Invalid plugin configuration field');
-    const path: unknown = JSON.parse(encoded);
-    if (!Array.isArray(path) || !path.length || path.some((part) => typeof part !== 'string'))
-      throw new Error('Invalid configuration field path');
+    const path: string[] = JSON.parse(field.dataset.path!);
     const key = path[path.length - 1];
     const kind = field.dataset.kind;
-    let target = (config[plugin] ??= {});
+    let target = config;
     for (const key of path.slice(0, -1)) target = (target[key] ??= {}) as Record<string, unknown>;
     if (kind !== 'boolean' && !field.value && field.dataset.schemaRequired !== 'true') {
       delete target[key];

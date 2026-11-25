@@ -17,6 +17,11 @@ export type ScopeKey = `${Exclude<PluginScope['kind'], 'application'>}:${string}
 
 export type ScopeAddress = { scope: Exclude<PluginScope, { kind: 'application' }>; parent?: ScopeKey };
 
+export interface ScopeOption {
+  key: ScopeKey;
+  name: string;
+}
+
 export interface ScopePort {
   register(
     kind: ScopeAddress['scope']['kind'],
@@ -34,6 +39,9 @@ export interface ScopePort {
 }
 
 declare module 'mini-harness/cordis' {
+  interface Events {
+    'scopes/list'(options: ScopeOption[]): void;
+  }
   interface Context {
     harnessScopes: ScopePort;
   }

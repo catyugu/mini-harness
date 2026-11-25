@@ -1,4 +1,5 @@
 import type { Context } from 'mini-harness/cordis';
+import type { ScopeOption } from '@mini-harness/plugin-api/scopes';
 
 /** Publish catalog, configuration and scoped plugin requests. */
 export function setup(ctx: Context) {
@@ -22,6 +23,11 @@ export function setup(ctx: Context) {
       signal,
     ),
   );
+  add('GET', '/api/plugins/scopes', () => {
+    const options: ScopeOption[] = [];
+    ctx.emit('scopes/list', options);
+    return options;
+  });
   add('GET', '/api/plugins/diagnostics', () => ctx.harnessPluginCatalog.diagnostics());
   add('GET', '/api/plugins', () => ctx.harnessPluginCatalog.metadata());
 }

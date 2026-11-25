@@ -19,8 +19,8 @@ export interface PluginMetadata
   name?: string;
   package?: { name: string; version: string };
   error?: string;
-  state?: 'disabled' | 'inactive' | 'ready' | 'partial' | 'failed';
-  instances?: {
+  state: 'disabled' | 'inactive' | 'ready' | 'partial' | 'failed';
+  instances: {
     scope: 'application' | ScopeKey;
     name?: string;
     configSchema?: Record<string, any>;
