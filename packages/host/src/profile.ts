@@ -373,15 +373,18 @@ export async function loadProfile(name: string, paths: Paths, context: Context):
       row,
       module: packagedModules.has(row.name!) ? row.name! : resolveModule(row.name!, row.source!),
     }));
-  const roots = [directory, ...sources.flatMap(({ row, module }) =>
-    packagedModules.has(row.name!) ? [] : [dirname(fileURLToPath(module))],
-  )];
-  const imports = roots.length ? bindPluginImports(roots) : undefined;
+  const roots = [
+    directory,
+    ...sources.flatMap(({ row, module }) =>
+      packagedModules.has(row.name!) ? [] : [dirname(fileURLToPath(module))],
+    ),
+  ];
+  const imports = bindPluginImports(roots);
   let modules: Awaited<ReturnType<typeof nativeModule>>[];
   try {
     modules = await Promise.all(sources.map(({ row, module }) => nativeModule(row, module)));
   } catch (error) {
-    imports?.deregister();
+    imports.deregister();
     throw error;
   }
   const infrastructure = modules.flatMap(({ plugin }) =>
@@ -510,7 +513,7 @@ export async function loadProfile(name: string, paths: Paths, context: Context):
       try {
         await entries.close();
       } finally {
-        imports?.deregister();
+        imports.deregister();
       }
     },
   };

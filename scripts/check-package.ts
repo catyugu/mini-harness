@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import ts from 'typescript';
+import { moduleReferences } from './module-references.js';
 import { execFile as exec } from 'node:child_process';
 import { access, cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
@@ -113,7 +115,9 @@ async function checkPackage() {
     assert.deepEqual(Object.keys(manifest.exports).sort(), ['./browser-plugin', './cordis', './plugin']);
     for (const { path } of files.filter(({ path }) => /\.(?:js|d\.ts)$/.test(path))) {
       const emitted = await readFile(join(published, path), 'utf8');
-      assert.doesNotMatch(emitted, /['"]@mini-harness\//, path + ' depends on a private workspace');
+      const source = ts.createSourceFile(path, emitted, ts.ScriptTarget.Latest, true);
+      for (const { literal } of moduleReferences(source))
+        assert.ok(!literal.text.startsWith('@mini-harness/'), path + ' depends on a private workspace: ' + literal.text);
     }
     await execFile(
       process.execPath,
