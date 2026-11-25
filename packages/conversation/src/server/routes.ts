@@ -18,7 +18,7 @@ export function registerSessionRoutes(ctx: Context, read: (id: string) => Conver
   const add = (method: string, path: string, handler: Parameters<typeof ctx.harnessRoutes.register>[2]) =>
     ctx.effect(() => ctx.harnessRoutes.register(method, path, handler));
   const session = (id: string) => {
-    if (!validSession.test(id) || !ctx.harnessSessions.get(id))
+    if (!validSession.test(id) || !ctx.harnessRegistry.get(id))
       throw new HttpError('not_found', 'Conversation not found');
     return id;
   };
@@ -38,13 +38,13 @@ export function registerSessionRoutes(ctx: Context, read: (id: string) => Conver
       throw new HttpError('invalid_input', 'Invalid conversation selection');
     const records = requested.size
       ? [...requested].flatMap((id) => {
-          const record = ctx.harnessSessions.get(id);
+          const record = ctx.harnessRegistry.get(id);
           return record ? [record] : [];
         })
-      : ctx.harnessSessions.list();
+      : ctx.harnessRegistry.list();
     return records.map((record) => projectSession(ctx, record));
   });
-  add('GET', '/api/sessions/diagnostics', () => ctx.harnessSessions.diagnostics());
+  add('GET', '/api/sessions/diagnostics', () => ctx.harnessRegistry.diagnostics());
   add('GET', '/api/sessions/search', async ({ url, signal }) => {
     const query = (url.searchParams.get('q') ?? '').trim();
     if (query.length > 120) throw new HttpError('invalid_input', 'Search query is too long');
@@ -70,7 +70,7 @@ export function registerSessionRoutes(ctx: Context, read: (id: string) => Conver
       };
     }
     const hits: SessionSearchResult[] = [];
-    const candidates = ctx.harnessSessions.list().slice(-500).reverse();
+    const candidates = ctx.harnessRegistry.list().slice(-500).reverse();
     for (const [index, { id, title }] of candidates.entries()) {
       if (index % 10 === 0) {
         await scheduler.yield();
@@ -79,7 +79,7 @@ export function registerSessionRoutes(ctx: Context, read: (id: string) => Conver
       let hit = find(id, 'title', title);
       if (!hit) {
         const messages =
-          ctx.harnessSessions.inspectLog(id, (log) => log.projection().messages.slice(-500)) ?? [];
+          ctx.harnessRegistry.inspectLog(id, (log) => log.projection().messages.slice(-500)) ?? [];
         for (const message of messages.reverse()) {
           if (message.role === 'toolResult') continue;
           const content =
@@ -100,13 +100,13 @@ export function registerSessionRoutes(ctx: Context, read: (id: string) => Conver
   });
   add('POST', '/api/sessions', async ({ body }) => {
     const input = await body();
-    if (input?.workspaceId != null && typeof input.workspaceId !== 'string')
+    if (input?.workspaceId !== undefined && typeof input.workspaceId !== 'string')
       throw new HttpError('invalid_input', 'Invalid workspace ID');
     return new HttpReply(
       201,
       projectSession(
         ctx,
-        ctx.harnessSessions.create({
+        ctx.harnessRegistry.create({
           workspaceId: input?.workspaceId,
           permission: input?.permission === undefined ? undefined : permission(input.permission),
         }),
@@ -114,7 +114,7 @@ export function registerSessionRoutes(ctx: Context, read: (id: string) => Conver
     );
   });
   add('GET', '/api/workspaces/:id/sessions', ({ params }) =>
-    ctx.harnessSessions.list(workspace(params.id)).map((record) => projectSession(ctx, record)),
+    ctx.harnessRegistry.list(workspace(params.id)).map((record) => projectSession(ctx, record)),
   );
   add('POST', '/api/workspaces/:id/sessions', async ({ params, body }) => {
     const input = await body();
@@ -122,7 +122,7 @@ export function registerSessionRoutes(ctx: Context, read: (id: string) => Conver
       201,
       projectSession(
         ctx,
-        ctx.harnessSessions.create({
+        ctx.harnessRegistry.create({
           workspaceId: workspace(params.id),
           permission: input?.permission === undefined ? undefined : permission(input.permission),
         }),
@@ -130,14 +130,14 @@ export function registerSessionRoutes(ctx: Context, read: (id: string) => Conver
     );
   });
   add('GET', '/api/sessions/:id/attachments/:attachment', ({ params }) => {
-    const bytes = ctx.harnessSessions.readAttachment(session(params.id), params.attachment);
+    const bytes = ctx.harnessRegistry.readAttachment(session(params.id), params.attachment);
     if (!bytes) throw new HttpError('not_found', 'Attachment not found');
     return { data: bytes.toString('base64') };
   });
   add('GET', '/api/sessions/:id/queue', ({ params }) => {
     const id = session(params.id);
-    ctx.harnessSessions.assertAvailable(id);
-    return ctx.harnessSessions.inspectLog(id, (log) => log.queue(), true) ?? [];
+    ctx.harnessRegistry.assertAvailable(id);
+    return ctx.harnessRegistry.inspectLog(id, (log) => log.queue(), true) ?? [];
   });
   add('GET', '/api/sessions/:id/events', ({ params, url, response }) => {
     const id = session(params.id);
@@ -197,24 +197,24 @@ export function registerSessionRoutes(ctx: Context, read: (id: string) => Conver
       input = await body();
     if (typeof input.title !== 'string' || !input.title.trim() || input.title.length > 140)
       throw new HttpError('invalid_input', 'Title must contain 1–140 characters');
-    return projectSession(ctx, ctx.harnessSessions.rename(id, input.title.trim()));
+    return projectSession(ctx, ctx.harnessRegistry.rename(id, input.title.trim()));
   });
   add('PATCH', '/api/sessions/:id/permissions', async ({ params, body }) => {
     const id = session(params.id),
       input = await body();
-    const updated = ctx.harnessSessions.setPermission(id, permission(input?.permission));
+    const updated = ctx.harnessRegistry.setPermission(id, permission(input?.permission));
     if (updated.permission === 'fullAccess') ctx.harnessApprovals.approveSession(id);
     return projectSession(ctx, updated);
   });
   add('POST', '/api/sessions/delete', async ({ body, signal }) => {
     const input = await body();
-    return { deleted: await waitFor(ctx.harnessSessions.delete(input.ids), signal) };
+    return { deleted: await waitFor(ctx.harnessRegistry.delete(input.ids), signal) };
   });
   add('POST', '/api/sessions/export', async ({ body, response }) => {
     const input = await body();
     if (!Array.isArray(input.ids) || input.ids.length > 200)
       return new HttpReply(400, { error: 'Invalid selection' });
-    const records = ctx.harnessSessions.export(input.ids);
+    const records = ctx.harnessRegistry.export(input.ids);
     response.writeHead(200, {
       'Content-Type': 'application/json; charset=utf-8',
       'Content-Disposition': 'attachment; filename="mini-harness-sessions.json"',

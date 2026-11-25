@@ -39,14 +39,14 @@ test(
         },
       },
     });
-    const parent = app.runtime.plugins.ctx.harnessSessions.create();
+    const parent = app.runtime.plugins.ctx.harnessRegistry.create();
     const toolEvents: Extract<import('@mini-harness/runs/stream').StreamEvent, { type: 'tool' }>[] = [];
     await app.runtime.plugins.ctx.harnessRuns.send(parent.id, 'root task', (event) => {
       if (event.type === 'tool') toolEvents.push(event);
     });
-    const records = app.runtime.plugins.ctx.harnessSessions
+    const records = app.runtime.plugins.ctx.harnessRegistry
       .descendants([parent.id])
-      .map((id) => app.runtime.plugins.ctx.harnessSessions.get(id));
+      .map((id) => app.runtime.plugins.ctx.harnessRegistry.get(id));
     assert.deepEqual(
       records.map((record) => {
         assert.ok(record);
@@ -57,7 +57,7 @@ test(
     const childRecord = records[1],
       leafRecord = records[2];
     assert.ok(childRecord && leafRecord);
-    assert.deepEqual(app.runtime.plugins.ctx.harnessSessions.log(leafRecord.id).projection().model, {
+    assert.deepEqual(app.runtime.plugins.ctx.harnessRegistry.log(leafRecord.id).projection().model, {
       provider: 'local-mock',
       id: 'mock-model',
     });
@@ -65,16 +65,16 @@ test(
       app.runtime.plugins.ctx.harnessTools
         .list({
           resourceId: leafRecord.id,
-          scope: app.runtime.plugins.ctx.harnessSessions.runScope(leafRecord.id),
+          scope: app.runtime.plugins.ctx.harnessRegistry.runScope(leafRecord.id),
         })
         .map(({ name }) => name)
         .includes('delegate'),
       false,
     );
     assert.ok(toolEvents.some((event) => event.state === 'finished' && event.sessionId === childRecord.id));
-    const check = app.runtime.plugins.ctx.harnessSessions.create();
+    const check = app.runtime.plugins.ctx.harnessRegistry.create();
     await app.runtime.plugins.ctx.harnessRuns.send(check.id, 'read policy');
-    const failure = app.runtime.plugins.ctx.harnessSessions
+    const failure = app.runtime.plugins.ctx.harnessRegistry
       .log(check.id)
       .projection()
       .messages.find((message) => message.role === 'toolResult');
@@ -84,7 +84,7 @@ test(
     assert.doesNotMatch(JSON.stringify(failure.content), /private fixture/);
     await app.close();
     app = await createMiniHarnessServer(paths);
-    const exported = app.runtime.plugins.ctx.harnessSessions.export([parent.id, childRecord.id]);
+    const exported = app.runtime.plugins.ctx.harnessRegistry.export([parent.id, childRecord.id]);
     assert.deepEqual(
       exported.map(({ id, parentId }) => ({ id, parentId })),
       records.map((record) => {
@@ -94,7 +94,7 @@ test(
     );
     assert.ok(exported.every(({ log }) => log?.includes('"type":"session"')));
     assert.equal(
-      app.runtime.plugins.ctx.harnessSessions.log(leafRecord.id).projection().model?.id,
+      app.runtime.plugins.ctx.harnessRegistry.log(leafRecord.id).projection().model?.id,
       'mock-model',
     );
   },
@@ -127,7 +127,7 @@ test(
       await mock.close();
       rmSync(root, { recursive: true, force: true });
     });
-    const parent = app.runtime.plugins.ctx.harnessSessions.create();
+    const parent = app.runtime.plugins.ctx.harnessRegistry.create();
     const pending = app.runtime.plugins.ctx.harnessRuns.send(parent.id, 'start child');
     const aborted = assert.rejects(pending, /cancelled/);
     await waiting;
@@ -135,7 +135,7 @@ test(
     assert.equal(app.runtime.plugins.ctx.harnessRuns.cancel(parent.id), true);
     await aborted;
     assert.equal(app.runtime.plugins.ctx.harnessRuns.size, 0);
-    const child = app.runtime.plugins.ctx.harnessSessions.export([parent.id])[1];
+    const child = app.runtime.plugins.ctx.harnessRegistry.export([parent.id])[1];
     assert.ok(child);
     assert.equal(child.title, '[Cancelled] hold child');
     assert.ok(child.log?.includes('hold child'));
@@ -170,11 +170,11 @@ test(
       return 'Done';
     });
     await app.runtime.configuration.update({ entries: { subagents: { config: { maxParallel: 1 } } } });
-    const parent = app.runtime.plugins.ctx.harnessSessions.create();
+    const parent = app.runtime.plugins.ctx.harnessRegistry.create();
     const tools = app.runtime.plugins.ctx.harnessTools;
     const delegate = expectPresent(
       tools
-        .list({ resourceId: parent.id, scope: app.runtime.plugins.ctx.harnessSessions.runScope(parent.id) })
+        .list({ resourceId: parent.id, scope: app.runtime.plugins.ctx.harnessRegistry.runScope(parent.id) })
         .find(({ name }) => name === 'delegate'),
       'delegate tool',
     );
@@ -188,7 +188,7 @@ test(
     const aborted = assert.rejects(third, /cancelled/);
     const queued = await waitUntil(
       () =>
-        app.runtime.plugins.ctx.harnessSessions
+        app.runtime.plugins.ctx.harnessRegistry
           .list()
           .find(({ title }) => title === 'Cancelled queued child'),
       Boolean,
@@ -207,11 +207,11 @@ test(
       2,
       'Lowering the limit preserves existing executions',
     );
-    const child = app.runtime.plugins.ctx.harnessSessions.list().find(({ title }) => title === 'First child');
+    const child = app.runtime.plugins.ctx.harnessRegistry.list().find(({ title }) => title === 'First child');
     assert.ok(child);
     assert.equal(
       tools
-        .list({ resourceId: child.id, scope: app.runtime.plugins.ctx.harnessSessions.runScope(child.id) })
+        .list({ resourceId: child.id, scope: app.runtime.plugins.ctx.harnessRegistry.runScope(child.id) })
         .some(({ name }) => name === 'delegate'),
       false,
     );

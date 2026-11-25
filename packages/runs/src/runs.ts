@@ -14,9 +14,10 @@ import { RunInterrupted } from './stream.ts';
 import type { StreamEvent, RunEvent } from './stream.ts';
 import { isRunning, type RunInfo } from '@mini-harness/sessions/run-state';
 import { RunEvents } from './events.ts';
+import type { ModelPreference } from '@mini-harness/models/api';
 import type { ExecutionInput } from './execution.ts';
 import type { RunPort } from './api.ts';
-import type { SessionStore } from '@mini-harness/sessions/records';
+import type { SessionStore } from '@mini-harness/sessions/store';
 
 interface RunOptions {
   signal?: AbortSignal;
@@ -45,7 +46,7 @@ export class Runs implements RunPort {
     private readonly registry: SessionStore,
     private readonly scopes: ProfileScopes,
     private readonly observe: (event: CapabilityObservation, signal?: AbortSignal) => void,
-    private readonly recent: () => ModelChoice | undefined,
+    private readonly preference: ModelPreference,
     private readonly sessionRun: SessionRun,
   ) {}
 
@@ -106,7 +107,7 @@ export class Runs implements RunPort {
     preparedScope?: Activity,
   ) {
     validateModelOptions(model, thinkingLevel);
-    const fallback = this.recent();
+    const fallback = this.preference.recent();
     const record = this.registry.get(id);
     if (!record) throw new DomainError('not_found', 'Conversation not found');
     signal?.throwIfAborted();
@@ -160,36 +161,32 @@ export class Runs implements RunPort {
       this.changed(id);
       publish({ type: 'run', run: running });
       this.observe({ type: 'run-started', sessionId: id, run: running }, cancellation);
-      return this.withAgentContext(
-        id,
-        activity,
-        cancellation,
-        async (ctx, signal) => {
-          activity.inputSignal = signal;
-          try {
-            return await this.sessionRun.prompt(ctx, record, prepared.text, publish, {
-              fallback,
-              beginSubmission: () => {
-                info.inputEntryId = null;
-              },
-              signal,
-              source,
-              submissionId: info.id,
-              choice: model,
-              images: prepared.images,
-              input: prepared.input,
-              thinkingLevel,
-              revision,
-              changed: (path) => {
-                info.changedFiles = [...new Set([...(info.changedFiles ?? []), path])];
-              },
-            });
-          } finally {
-            activity.inputSignal = undefined;
-          }
-        },
-        Boolean(preparedScope),
-      );
+      if (!preparedScope) await this.scopes.prepare(`session:${id}`, cancellation);
+      cancellation.throwIfAborted();
+      return this.withAgentContext(id, activity, cancellation, async (ctx, signal) => {
+        activity.inputSignal = signal;
+        try {
+          return await this.sessionRun.prompt(ctx, record, prepared.text, publish, {
+            fallback,
+            beginSubmission: () => {
+              info.inputEntryId = null;
+            },
+            signal,
+            source,
+            submissionId: info.id,
+            choice: model,
+            images: prepared.images,
+            input: prepared.input,
+            thinkingLevel,
+            revision,
+            changed: (path) => {
+              info.changedFiles = [...new Set([...(info.changedFiles ?? []), path])];
+            },
+          });
+        } finally {
+          activity.inputSignal = undefined;
+        }
+      });
     };
     const finish = (state: RunInfo['state'], error?: string) => {
       const inbox = new Inbox(log);
@@ -459,7 +456,7 @@ export class Runs implements RunPort {
       mode,
       () => this.registry.prepareInput(id, message, attachments),
       models,
-      { model, thinkingLevel, fallback: this.recent() },
+      { model, thinkingLevel, fallback: this.preference.recent() },
     );
   }
 
@@ -484,9 +481,13 @@ export class Runs implements RunPort {
   async compact(id: string) {
     const activity = this.reserve(id);
     const { signal } = activity.controller;
-    const done = (activity.done = this.withAgentContext(id, activity, signal, (ctx, signal) =>
-      this.sessionRun.compact(ctx, id, signal),
-    ));
+    const done = (activity.done = this.scopes
+      .prepare(`session:${id}`, signal)
+      .then(() =>
+        this.withAgentContext(id, activity, signal, (ctx, signal) =>
+          this.sessionRun.compact(ctx, id, signal),
+        ),
+      ));
     try {
       await done;
     } finally {
@@ -499,11 +500,8 @@ export class Runs implements RunPort {
     activity: Activity,
     signal: AbortSignal,
     work: (ctx: Context, signal: AbortSignal) => Promise<T>,
-    prepared = false,
   ) {
     const key = `session:${id}` as const;
-    if (!prepared) await this.scopes.prepare(key, signal);
-    signal.throwIfAborted();
     const scope = this.scopes.context(key);
     const fiber = tagScope(scope.extend(), this.registry.runScope(id)!).inject(['harnessAgent'], () => {});
     try {

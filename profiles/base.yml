@@ -19,8 +19,6 @@ plugins:
     name: '@mini-harness/agent-prompt'
   - id: core:prompt-defaults
     name: '@mini-harness/prompt-defaults'
-  - id: core:model-catalog
-    name: '@mini-harness/model-catalog'
   - id: core:model-store
     name: '@mini-harness/model-store'
   - id: core:llm

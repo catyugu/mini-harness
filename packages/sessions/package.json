@@ -13,6 +13,7 @@
     "./records": "./src/records.ts",
     "./registry": "./src/registry.ts",
     "./run-state": "./src/shared/run-state.ts",
+    "./store": "./src/store.ts",
     "./manifests/tool-policy": "./src/permission-policy.ts",
     "./display-record": "./src/shared/display-record.ts"
   },
@@ -25,6 +26,7 @@
       "./queue",
       "./records",
       "./run-state",
+      "./store",
       "./display-record"
     ],
     "profileModules": {

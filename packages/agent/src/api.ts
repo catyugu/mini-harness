@@ -1,15 +1,14 @@
 import type { Context } from 'mini-harness/cordis';
 import type {
   LlmRequest,
-  ModelRequestContent,
   NativeAssistantMessage,
   NativeMessage,
   NativeToolMessage,
 } from '@mini-harness/llm/api';
-import type { ModelFailure, ModelRetry } from './events.ts';
+import type { ModelFailure, ModelRetry, ModelRequestContent } from './events.ts';
+import type { ToolSchema } from '@mini-harness/llm/vocabulary';
 import type { ToolCallPart } from '@mini-harness/llm/api';
-import type { ToolDefinition } from '@mini-harness/tools/api';
-import type { ToolExecution, ToolExecutorPort } from '@mini-harness/tools/execution';
+import type { ToolDefinition, ToolUpdate } from '@mini-harness/tools/api';
 
 type Request = Omit<LlmRequest, 'signal'>;
 
@@ -48,8 +47,37 @@ export type AgentRun = {
     }
 );
 
+export interface ToolTurn {
+  readonly model: LlmRequest['model'];
+  readonly turn: number;
+  readonly signal: AbortSignal;
+}
+
 export interface AgentPort {
   run(ctx: Context, input: AgentRun): Promise<NativeAssistantMessage>;
+}
+
+export interface ToolExecution {
+  readonly signal: AbortSignal;
+  /** Reports a started call and returns the reason to skip it, if any. */
+  start?(call: ToolCallPart): string | undefined;
+  update?(call: ToolCallPart, result: ToolUpdate): void;
+  deliver(result: NativeToolMessage, signal: AbortSignal): Promise<void>;
+}
+
+export interface ToolExecutorPort {
+  present(
+    content: ModelRequestContent,
+    tools: readonly ToolSchema[],
+    context: ToolTurn,
+  ): ModelRequestContent & { tools?: ToolSchema[] };
+  interpret(message: NativeAssistantMessage, context: ToolTurn): NativeAssistantMessage;
+  /** Interpret, execute and deliver a result for each call. */
+  execute(
+    calls: readonly ToolCallPart[],
+    tools: ReadonlyMap<string, ToolDefinition>,
+    execution: ToolExecution,
+  ): Promise<void>;
 }
 
 export interface CompactionInput {
@@ -68,13 +96,14 @@ export interface CompactionResult {
 }
 
 export interface CompactionPort {
-  shouldCompact(messages: NativeMessage[], limits: { contextWindow: number; maxTokens: number }): boolean;
+  shouldCompact(messages: NativeMessage[], budget: number): boolean;
   compact(input: CompactionInput): Promise<CompactionResult | undefined>;
 }
 
 declare module 'mini-harness/cordis' {
   interface Context {
     harnessAgent: AgentPort;
+    harnessToolExecutor: ToolExecutorPort;
     harnessCompaction: CompactionPort;
   }
 }

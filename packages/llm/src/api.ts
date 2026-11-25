@@ -81,11 +81,6 @@ export interface LlmRequest {
   signal: AbortSignal;
   maxTokens?: number;
 }
-export type ModelRequestContent = Pick<
-  LlmRequest,
-  'messages' | 'systemPrompt' | 'thinkingLevel' | 'maxTokens'
->;
-
 export type ModelRequestSnapshot = Omit<LlmRequest, 'signal' | 'messages'> & {
   messages?: NativeMessage[];
 };
@@ -163,7 +158,7 @@ export type LlmEvent =
   | { type: 'tool-call'; call: ToolCallPart }
   | { type: 'done'; message: NativeAssistantMessage };
 export interface LlmAdapter {
-  /** Pure predicate on the model choice; do not re-enter aggregate catalog or adapter selection. */
+  /** Select using the same model choice that the caller supplies to stream(). */
   accepts(model: Readonly<ModelChoice>): boolean;
   stream(request: LlmRequest): AsyncIterable<LlmEvent>;
 }
@@ -171,8 +166,6 @@ export interface LlmAdapter {
 export interface LlmPort {
   /** Select the nearest matching scope, then highest priority. A tie is ambiguous. */
   register(adapter: LlmAdapter, priority?: number): () => void;
-  /** Returns the selected adapter, null for an ambiguous match, or undefined for no match. */
-  select(model: ModelChoice): LlmAdapter | null | undefined;
   stream(request: LlmRequest): AsyncIterable<LlmEvent>;
 }
 

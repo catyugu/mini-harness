@@ -103,6 +103,29 @@ function openAsset(path: string) {
   }
 }
 
+function remoteRoute(method: string | undefined, path: string) {
+  if (method !== 'GET') return false;
+  const basic = [
+    '/api/bootstrap',
+    '/api/changes',
+    '/api/settings',
+    '/api/providers',
+    '/api/models',
+    '/api/plugins',
+    '/api/workspaces',
+    '/api/sessions',
+    '/api/sessions/search',
+    '/api/approvals',
+  ];
+  return (
+    basic.includes(path) ||
+    /^\/api\/sessions\/[a-f0-9-]{36}(?:\/(?:runs|events|queue))?$/.test(path) ||
+    /^\/api\/workspaces\/[a-f0-9]{32}\/(?:sessions|skills|files\/(?:tree|search|preview|changes|diff))$/.test(
+      path,
+    )
+  );
+}
+
 export function webServer(ctx: Context, token: string, shutdown: () => void) {
   const routes = ctx.harnessRoutes;
   const upgrades = ctx.harnessUpgrades;
@@ -129,6 +152,8 @@ export function webServer(ctx: Context, token: string, shutdown: () => void) {
         const origin = new URL(remote.origin);
         if (req.headers.host !== origin.host || (req.headers.origin && req.headers.origin !== origin.origin))
           throw new HttpError('forbidden', 'Origin not allowed');
+        if (pathname.startsWith('/api/') && !remoteRoute(req.method, pathname))
+          throw new HttpError('forbidden', 'This action requires local access');
       }
       if (!pathname.startsWith('/api/')) {
         if (req.method !== 'GET' && req.method !== 'HEAD')
@@ -201,7 +226,6 @@ export function webServer(ctx: Context, token: string, shutdown: () => void) {
         throw new HttpError('forbidden', 'Origin not allowed');
       }
       if (pathname === '/api/shutdown' && req.method === 'POST') {
-        if (remote) throw new HttpError('forbidden', 'Shutdown requires local access');
         res.once('finish', shutdown);
         return json(res, 202, { pid: process.pid });
       }

@@ -10,6 +10,7 @@
     "./manifests/prompt": "./src/manifests/prompt.ts",
     "./prompt-api": "./src/prompt-api.ts",
     "./model-request": "./src/model-request.ts",
+    "./tool-pipeline": "./src/tool-pipeline.ts",
     "./compaction": "./src/compaction.ts"
   },
   "miniHarness": {
@@ -22,7 +23,8 @@
       "@mini-harness/agent": "./src/manifests/agent.ts",
       "@mini-harness/agent-prompt": "./src/manifests/prompt.ts",
       "@mini-harness/prompt-defaults": "./src/prompt-defaults.ts",
-      "@mini-harness/compaction": "./src/manifests/compaction.ts"
+      "@mini-harness/tool-executor": "./src/strategies.ts#executor",
+      "@mini-harness/compaction": "./src/strategies.ts#compaction"
     }
   },
   "dependencies": {

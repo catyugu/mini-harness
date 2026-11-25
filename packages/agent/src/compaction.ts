@@ -27,8 +27,8 @@ function transcript(messages: NativeMessage[]) {
 
 /** Retain complete recent turns and summarize only their preceding context. */
 export const basicCompaction: CompactionPort = {
-  shouldCompact(messages, { contextWindow, maxTokens }) {
-    return transcript(messages).length / 4 > Math.max(1024, contextWindow * 0.8 - maxTokens);
+  shouldCompact(messages, budget) {
+    return transcript(messages).length / 4 > budget;
   },
   async compact({ messages, summarized, automatic, signal, request }) {
     const users = messages.flatMap((message, index) =>

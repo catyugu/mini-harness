@@ -19,6 +19,7 @@ const plugin: Plugin.Object = {
     'harnessRoutes',
     'harnessUpgrades',
     'harnessPluginCatalog',
+    'harnessGateway',
   ],
   provide: ['harnessWeb', 'harnessNetwork'],
   apply(ctx: Context, config: { port?: number }) {

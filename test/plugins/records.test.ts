@@ -33,7 +33,7 @@ export const apply = (ctx) => {
   await app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Persist this conversation');
   const route = '/extensions/records/entries';
   const value = { note: 'stored by the plugin' };
-  const beforePluginRecords = app.runtime.plugins.ctx.harnessSessions.log(session.id).projection().leafId;
+  const beforePluginRecords = app.runtime.plugins.ctx.harnessRegistry.log(session.id).projection().leafId;
   const notes = '/extensions/records/notes?id=' + session.id;
   const added = await request(route, 'POST', { id: session.id, value });
   assert.equal(added.status, 200);
@@ -58,7 +58,7 @@ export const apply = (ctx) => {
     [{ id: added.body, data: value }],
   );
   assert.equal(app.runtime.plugins.ctx.harnessRuns.size, 0);
-  const saved = app.runtime.plugins.ctx.harnessSessions.export([session.id])[0].log;
+  const saved = app.runtime.plugins.ctx.harnessRegistry.export([session.id])[0].log;
   assert.ok(
     saved
       .split('\n')
@@ -76,7 +76,7 @@ export const apply = (ctx) => {
     fetched.messages.some((message: { content: unknown }) => JSON.stringify(message).includes(value.note)),
     false,
   );
-  const log = app.runtime.plugins.ctx.harnessSessions.log(session.id);
+  const log = app.runtime.plugins.ctx.harnessRegistry.log(session.id);
   log.revise(
     { type: 'message', message: { role: 'user', content: 'New branch', timestamp: Date.now() } },
     beforePluginRecords,

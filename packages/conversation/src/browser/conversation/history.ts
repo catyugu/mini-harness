@@ -19,7 +19,7 @@ export function mountHistory(ctx: Context, extensions: MessageExtensions, signal
       report: extensions.report,
     },
     () => ({
-      workspaceId: control.get().session?.workspaceId ?? undefined,
+      workspaceId: control.get().session?.workspaceId,
       sessionId: control.get().session?.id,
       leafId: control.get().history.leafId,
     }),

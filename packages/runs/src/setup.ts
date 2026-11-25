@@ -6,13 +6,13 @@ import { SessionRun } from './session-run.ts';
 import { Runs } from './runs.ts';
 
 export function setup(ctx: Context) {
-  const { harnessSessions: catalog, harnessProfileScopes: scopes } = ctx;
+  const { harnessRegistry: catalog, harnessProfileScopes: scopes } = ctx;
   const runs = new Runs(
     catalog,
     scopes,
     (event, signal) => observe(ctx, event, signal, catalog.runScope(event.sessionId)),
-    () => ctx.get('harnessModelPreference')?.recent(),
-    new SessionRun(catalog),
+    ctx.harnessModelPreference,
+    new SessionRun(catalog, () => ctx.fiber.effectiveConfig as { autoCompact: boolean }),
   );
   ctx.provide('harnessRuns', runs);
   ctx.provide(

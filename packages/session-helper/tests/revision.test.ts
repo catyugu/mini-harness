@@ -33,7 +33,7 @@ test('conversation edits branch the native session instead of appending and enfo
   );
   assert.ok(first?.id, 'Session Log identity must be present on persisted user messages');
   assert.ok(before.leafId, 'API must expose current branch leaf');
-  const beforeProjection = app.runtime.plugins.ctx.harnessSessions.log(session.id).projection();
+  const beforeProjection = app.runtime.plugins.ctx.harnessRegistry.log(session.id).projection();
   const invalid = [
     { message: 'Invalid model', model: { provider: 'unknown-provider', id: 'unknown-model' } },
     {
@@ -51,7 +51,7 @@ test('conversation edits branch the native session instead of appending and enfo
     });
     if (result.status === 200) assert.equal((await finish(session.id)).body.run.state, 'failed');
     else assert.equal(result.status, 400, JSON.stringify(result.body));
-    const unchanged = app.runtime.plugins.ctx.harnessSessions.log(session.id).projection();
+    const unchanged = app.runtime.plugins.ctx.harnessRegistry.log(session.id).projection();
     assert.equal(
       unchanged.leafId,
       beforeProjection.leafId,
@@ -91,7 +91,7 @@ test('conversation edits branch the native session instead of appending and enfo
     false,
   );
   assert.notEqual(after.leafId, before.leafId);
-  const exportFile = app.runtime.plugins.ctx.harnessSessions.export([session.id])[0].log;
+  const exportFile = app.runtime.plugins.ctx.harnessRegistry.export([session.id])[0].log;
   for (const message of ['Original first', 'Original second', 'Revised first'])
     assert.ok(exportFile.includes(message));
   assert.equal(

@@ -22,10 +22,13 @@ export interface ScopeBinding {
 }
 
 export interface ProfileScopes {
-  /** Publish a resource for the lifetime of its owning Fiber. Dispose to remove that resource. */
-  register(owner: Context, address: ScopeAddress, binding: ScopeBinding): () => void;
+  register(namespace: string, resolve: (id: string) => ScopeBinding | undefined, eager?: boolean): () => void;
   prepare(address: ScopeAddress, signal?: AbortSignal): Promise<void>;
   context(address?: ScopeAddress | null): Context;
+  require<Name extends keyof Context & string>(
+    address: ScopeAddress | null | undefined,
+    service: Name,
+  ): NonNullable<Context[Name]>;
   address(address: ScopeAddress): readonly ScopeAddress[];
 }
 

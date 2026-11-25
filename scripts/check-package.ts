@@ -144,17 +144,14 @@ async function checkPackage() {
       join(installed, 'plugin-types.mts'),
       `
       import { Context, type Plugin } from 'mini-harness/cordis';
-      import type { LlmPort, ModelRequestContent } from 'mini-harness/llm';
-      import type { ModelSource } from 'mini-harness/models';
+      import type { LlmPort } from 'mini-harness/llm';
       import { createScopeKey, type ScopeKey } from 'mini-harness/scopes';
       import type { ProfileConfiguration, ScopeSettings } from 'mini-harness/configuration';
       import { defineTool } from 'mini-harness/tools';
-      import { executeTools, type ToolExecutorPort } from 'mini-harness/tools/execution';
       import type { PluginData, PluginSecrets } from 'mini-harness/plugin-data';
-      import type { SessionRecords, SessionEvent, SessionLogPort } from 'mini-harness/sessions';
-      import { selectModel } from 'mini-harness/models/selection';
+      import type { SessionRecords } from 'mini-harness/sessions';
       import type { Execution } from 'mini-harness/execution';
-      import type { InputContext } from 'mini-harness/agent/events';
+      import type { ModelRequestContent, InputContext } from 'mini-harness/agent/events';
       import type { PromptPort } from 'mini-harness/agent/prompt';
       import type { CapabilityObservation } from 'mini-harness/observations';
       import type { ToolProjection } from 'mini-harness/conversation/display-events';
@@ -169,11 +166,7 @@ async function checkPackage() {
       const scopedSettings: ProfileConfiguration['scopes'] = { 'session:example': scope };
       void scopedSettings;
       const llm: LlmPort | undefined = ctx.harnessLlm;
-      const source: ModelSource = { list: () => [], resolve: () => undefined, capabilities: () => undefined };
-      ctx.effect(() => ctx.harnessModels.register(source, { accepts: () => false, async *stream() {} }));
       const scopeContext: Context = ctx.harnessProfileScopes.context('session:example');
-      const releaseScope = ctx.harnessProfileScopes.register(ctx, 'example:resource', { key: {} });
-      void releaseScope;
       void scopeContext;
       const plugin: Plugin = {
         apply(ctx) { ctx.provide('example', { greet: (name: string) => name.toUpperCase() }); }
@@ -181,23 +174,12 @@ async function checkPackage() {
       ctx.example.greet('world');
       // @ts-expect-error The run scheduler is private.
       ctx.harnessRuns;
-      ctx.harnessSessions.history('session');
+      // @ts-expect-error The full session registry is private.
+      ctx.harnessRegistry;
       const pluginData: PluginData = ctx.harnessPluginData;
       const pluginSecrets: PluginSecrets = ctx.harnessPluginSecrets;
       const execution: Execution = ctx.harnessExecution;
-      const records: SessionRecords<{ note: string }> = ctx.harnessSessions.records('session', { pluginId: 'fixture', instanceId: 'fixture' });
-      const log: SessionLogPort = ctx.harnessSessions.log('session');
-      const event: SessionEvent<{ note: string }> = { type: 'plugin-record', owner: { pluginId: 'fixture', instanceId: 'fixture' }, data: { note: 'hello' } };
-      void log.append(event);
-      // @ts-expect-error The registry owns the writer lifecycle.
-      log.close();
-      // @ts-expect-error The public log has no filesystem path.
-      log.file;
-      void records.append({ note: 'hello' });
-      void selectModel;
-      const executor: ToolExecutorPort = ctx.harnessToolExecutor;
-      void executeTools;
-      void executor;
+      const records: SessionRecords = ctx.harnessSessions.records('session', { pluginId: 'fixture', instanceId: 'fixture' });
       const prompt: PromptPort = ctx.harnessPrompt;
       const routes: RoutePort = ctx.harnessRoutes;
       pluginData.write('state', { count: 1 });
@@ -211,7 +193,7 @@ async function checkPackage() {
         if (event.type === 'run-ended') void event.run.id;
       });
       ctx.on('conversation/tool-projection', ({ content }: ToolProjection) => content);
-      void records.append({ note: 'seen' });
+      void records.append({ seen: true });
       // @ts-expect-error Input listeners return native user content.
       ctx.on('agent/prepare-input', () => ({ arbitrary: true }));
       void ctx.harnessPluginSettings.set('showDetails', true);

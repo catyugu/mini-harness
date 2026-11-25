@@ -1,5 +1,4 @@
-import type { PluginRecord } from './records.ts';
-import type { LogEntry } from './record-log.ts';
+import type { RecordDisplay, RecordOwner } from './records.ts';
 import type { SessionDisplayRecord } from './shared/display-record.ts';
 import type { QueueEntry } from './shared/queue.ts';
 import type { ContentDelta } from './content-delta.ts';
@@ -37,7 +36,7 @@ export type RecordedModelRequest = Omit<ModelRequestSnapshot, 'messages' | 'tool
 };
 
 /** The durable session protocol is independent of any model SDK. */
-export type SessionEvent<Data = unknown> =
+export type SessionEvent =
   | {
       type: 'message';
       message: NativeMessage;
@@ -61,7 +60,7 @@ export type SessionEvent<Data = unknown> =
       code: 'invalid-tool-calls' | 'executor-response' | 'historical-record';
       data: unknown;
     }
-  | PluginRecord<Data>
+  | { type: 'plugin-record'; owner: RecordOwner; data: unknown; display?: RecordDisplay }
   | { type: 'compaction'; summary: string; keepFromId: string | null; tokensBefore?: number }
   | { type: 'context-edit'; targetId: string; replacement: NativeMessage['content'] | null }
   | { type: 'inbox-enqueued'; item: InboxItem }
@@ -70,7 +69,13 @@ export type SessionEvent<Data = unknown> =
   | { type: 'run'; run: RunInfo }
   | { type: 'branch' };
 
-export type SessionEntry<Data = unknown> = LogEntry<SessionEvent<Data>>;
+export type SessionEntry = SessionEvent & {
+  version: 1;
+  seq: number;
+  id: string;
+  parentId: string | null;
+  timestamp: string;
+};
 
 export interface SessionProjection {
   leafId: string | null;
@@ -86,6 +91,7 @@ export interface SessionProjection {
 }
 
 export interface SessionLogPort {
+  readonly file: string;
   readonly sessionId: string;
   entries(): SessionEntry[];
   inbox(): InboxItem[];
@@ -106,4 +112,5 @@ export interface SessionLogPort {
   acceptToolResult(executionId: string, content: NativeToolMessage['content']): SessionEntry;
   /** Reconstruct exact model-visible inputs for audits, including distinct tool schemas. */
   requestSnapshot(id: string): ModelRequestSnapshot & { messages: NativeMessage[] };
+  close(): void;
 }

@@ -21,13 +21,13 @@ export function setup(ctx: Context) {
       return () => source.removeEventListener('change', listener);
     });
   };
-  track(ctx.harnessSessions.events, (event) => (event.detail.queue ? 'queue' : 'sessions'));
+  track(ctx.harnessRegistry.events, (event) => (event.detail.queue ? 'queue' : 'sessions'));
   track(ctx.harnessRuns.events, () => 'sessions');
   track(ctx.harnessApprovals.events, () => 'sessions');
   registerSessionRoutes(ctx, (id): ConversationView => {
-    const record = ctx.harnessSessions.get(id);
+    const record = ctx.harnessRegistry.get(id);
     if (!record) throw new Error('Conversation not found');
-    const { harnessSessions: sessions, harnessRuns } = ctx;
+    const { harnessRegistry: sessions, harnessRuns } = ctx;
     sessions.assertAvailable(id);
     const history = sessions.inspectLog(id, (log) => ({ ...log.projection(), queue: log.queue() }));
     const { partial, tools } = harnessRuns.activity(id);

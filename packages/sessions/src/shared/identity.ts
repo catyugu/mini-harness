@@ -2,7 +2,7 @@ export type ConversationPermission = 'standard' | 'readOnly' | 'fullAccess';
 
 export interface SessionRecord {
   id: string;
-  workspaceId: string | null;
+  workspaceId: string;
   parentId: string | null;
   title: string;
   titleSource: 'auto' | 'manual';
