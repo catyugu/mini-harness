@@ -11,66 +11,39 @@ plugins:
       port: 3837
   - id: core:slots
     name: '@mini-harness/ui-slots'
-    client: true
   - id: core:theme
     name: '@mini-harness/ui-theme'
     live: true
-    client: true
   - id: core:primitives
     name: '@mini-harness/ui-primitives'
-    client: true
   - id: core:layout
     name: '@mini-harness/ui-layout'
-    client: true
   - id: core:workspaces-data
     name: '@mini-harness/workspaces-data'
-    client: true
   - id: core:sessions-data
     name: '@mini-harness/sessions-data'
-    client: true
   - id: core:settings
     name: '@mini-harness/ui-settings'
-    client: true
   - id: core:model-admin
     name: '@mini-harness/ui-models'
-    client: true
   - id: core:plugins
     name: '@mini-harness/ui-plugins'
-    client: true
   - id: core:ui
     name: '@mini-harness/web-gateway'
   - id: file-preview
     name: '@mini-harness/file-preview'
-    client: true
   - id: git-diff
     name: '@mini-harness/git-diff'
-    client: true
   - id: core:approval-data
     name: '@mini-harness/approvals-data'
-    client: true
   - id: core:navigation
     name: '@mini-harness/conversation-navigation'
-    client: true
   - id: core:workspace-navigation
     name: '@mini-harness/workspace-navigation'
-    client: true
   - id: core:conversation
     name: '@mini-harness/conversation'
     live: true
-    client: true
   - id: core:composer
     name: '@mini-harness/conversation-composer'
-    client: true
   - id: core:history
     name: '@mini-harness/conversation-history'
-    client: true
-  - id: files
-    client: true
-  - id: session-helper
-    client: true
-  - id: shell
-    client: true
-  - id: skills
-    client: true
-  - id: subagents
-    client: true

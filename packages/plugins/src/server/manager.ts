@@ -95,8 +95,8 @@ export class PluginHost implements ScopePort {
       }),
     };
     for (const [name, value] of Object.entries(services)) this.owner.provide(name, value);
-    this.catalog = new PluginCatalog(directory, builtins, ctx.get('harnessProfile'));
-    this.imports = bindPluginImports([directory]);
+    this.catalog = new PluginCatalog(builtins, ctx.get('harnessProfile'));
+    this.imports = bindPluginImports();
   }
 
   private browserState = publishBrowser([], [], () => false);
@@ -286,7 +286,7 @@ export class PluginHost implements ScopePort {
       if (!address) {
         for (const plugin of new Set([
           ...Object.entries(overrides?.entries ?? {})
-            .filter(([, entry]) => entry.disabled === false)
+            .filter(([, entry]) => entry.disabled !== true)
             .map(([id]) => id),
         ])) {
           const error = new Error('Configured scope does not exist: ' + key);
@@ -300,7 +300,7 @@ export class PluginHost implements ScopePort {
         settings,
         descriptors,
         address.scope.kind,
-        overrides,
+        key,
         (id, error) => unavailable(id, error, key),
       );
       const isolates = [...declared].sort();
@@ -414,7 +414,7 @@ export class PluginHost implements ScopePort {
     const changedScopes = updating
       ? scopeKeys(settings).filter((key) =>
           Object.entries(settings.scopes[key]?.entries ?? {}).some(
-            ([id, entry]) => entry.disabled === false && changedSelection(id, previous, settings, key),
+            ([id, entry]) => entry.disabled !== true && changedSelection(id, previous, settings, key),
           ),
         )
       : [];
@@ -426,11 +426,12 @@ export class PluginHost implements ScopePort {
       ...scoped.entries,
     ];
     const appChanged = descriptors.some((descriptor) => {
-      const { id, scope, plugin, source } = descriptor;
-      if (scope !== 'application' || !(plugin || source)) return false;
+      const { id, scopeKey, plugin, source } = descriptor;
+      if (scopeKey || !(plugin || source)) return false;
       const enabled = this.catalog.enabled(descriptor, settings);
       return (
         enabled !== this.catalog.enabled(descriptor, previous) ||
+        (enabled && settings.entries[id]?.name !== previous.entries[id]?.name) ||
         (enabled && settings.entries[id]?.live !== previous.entries[id]?.live) ||
         (enabled &&
           !settings.entries[id]?.live &&
@@ -445,13 +446,13 @@ export class PluginHost implements ScopePort {
           !isDeepStrictEqual(
             Object.fromEntries(
               Object.entries(before?.entries ?? {})
-                .filter(([, entry]) => entry.disabled !== undefined || entry.live !== undefined)
-                .map(([id, entry]) => [id, [entry.disabled, entry.live]]),
+                .filter(([, entry]) => entry.name !== undefined || entry.disabled !== undefined || entry.live !== undefined)
+                .map(([id, entry]) => [id, [entry.name, entry.disabled, entry.live]]),
             ),
             Object.fromEntries(
               Object.entries(after?.entries ?? {})
-                .filter(([, entry]) => entry.disabled !== undefined || entry.live !== undefined)
-                .map(([id, entry]) => [id, [entry.disabled, entry.live]]),
+                .filter(([, entry]) => entry.name !== undefined || entry.disabled !== undefined || entry.live !== undefined)
+                .map(([id, entry]) => [id, [entry.name, entry.disabled, entry.live]]),
             ),
           ) ||
           descriptors.some(
@@ -508,6 +509,7 @@ export class PluginHost implements ScopePort {
         );
         commit();
         this.started = true;
+        this.catalog.commit(descriptors);
         this.scopes = scoped.contexts;
         this.failures = failures;
         this.browserState = browserState;

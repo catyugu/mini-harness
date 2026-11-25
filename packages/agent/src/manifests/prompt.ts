@@ -3,7 +3,6 @@ import { Service, type Plugin } from 'mini-harness/cordis';
 import { Prompt } from '../prompt.ts';
 
 export const metadata: PluginInfo = {
-  scope: 'application',
   title: 'Prompt',
   description: 'System prompt composition',
 };

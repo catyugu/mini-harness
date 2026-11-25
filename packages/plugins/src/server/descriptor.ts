@@ -1,4 +1,4 @@
-import { isAbsolute, join, relative, sep } from 'node:path';
+import { dirname, isAbsolute, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { realpathSync } from 'node:fs';
@@ -12,7 +12,9 @@ import type { PluginMetadata } from '../shared/metadata.ts';
 
 export interface DiscoveredPlugin
   extends ResolvedPlugin,
-    Pick<PluginMetadata, 'trustedCode' | 'package' | 'error'> {
+    Pick<PluginMetadata, 'external' | 'package' | 'error'> {
+  scopeKey?: import('@mini-harness/plugin-api/scopes').ScopeKey;
+  name?: string;
   source?: string;
   module?: string;
   resources?: BrowserAssets;
@@ -28,8 +30,13 @@ export function describePlugin(id: string, folder: string, entry?: string): Disc
     exports?: unknown;
     miniHarness?: { plugin?: Partial<PluginInfo> & { browserDirectory?: unknown } };
   }>(packageFile, {});
+  const exports = packageInfo.exports;
+  const subpaths = exports && typeof exports === 'object' && !Array.isArray(exports) && Object.keys(exports).some((key) => key.startsWith('.')) ? exports as Record<string, unknown> : undefined;
+  const standardClient = packageInfo.name && subpaths && Object.hasOwn(subpaths, './client')
+    ? relative(realpathSync(folder), realpathSync(fileURLToPath(resolveModule(packageInfo.name + '/client', packageFile)))).split(sep).join('/')
+    : undefined;
   let source = entry;
-  if (!source && packageInfo.name && (packageInfo.exports !== undefined || packageInfo.main !== undefined)) {
+  if (!source && packageInfo.name && (exports !== undefined || packageInfo.main !== undefined) && (!subpaths || Object.hasOwn(subpaths, '.'))) {
     const resolved =
       packageInfo.exports !== undefined
         ? fileURLToPath(resolveModule(packageInfo.name, packageFile))
@@ -44,7 +51,7 @@ export function describePlugin(id: string, folder: string, entry?: string): Disc
     )
       throw new Error('Plugin entry must resolve inside its package');
     source = physical;
-  } else if (!source && isRegularFile(join(folder, 'plugin.js'))) {
+  } else if (!source && !standardClient && isRegularFile(join(folder, 'plugin.js'))) {
     source = join(folder, 'plugin.js');
   }
   const descriptor = join(folder, 'plugin.json');
@@ -53,7 +60,7 @@ export function describePlugin(id: string, folder: string, entry?: string): Disc
     : (packageInfo.miniHarness?.plugin ?? {});
   if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest))
     throw new Error('Expected an object in plugin.json');
-  const browser = manifest.browser ?? (isRegularFile(join(folder, 'web.js')) ? 'web.js' : undefined);
+  const browser = standardClient ?? manifest.browser ?? (isRegularFile(join(folder, 'web.js')) ? 'web.js' : undefined);
   if (browser !== undefined && typeof browser !== 'string') throw new Error('Invalid browser entry');
   const hasWeb = browser !== undefined;
   if (!source && !hasWeb) throw new Error('Provide a server or browser module');
@@ -62,22 +69,17 @@ export function describePlugin(id: string, folder: string, entry?: string): Disc
     typeof manifest.description === 'string'
       ? manifest.description.slice(0, 300)
       : 'Runs local JavaScript with your user permissions.';
-  const scope = manifest.scope ?? 'application';
-  if (scope !== 'application' && scope !== 'workspace' && scope !== 'session')
-    throw new Error('Invalid plugin scope');
-  if (scope !== 'application' && hasWeb) throw new Error('Browser entries belong to the application scope');
   if (!hasWeb && manifest.browserDirectory !== undefined)
     throw new Error('Browser assets require a browser entry');
+  const inferredDirectory = standardClient && dirname(standardClient) !== '.' ? dirname(standardClient) : undefined;
+  const browserDirectory = manifest.browserDirectory ?? inferredDirectory;
+  if (source && browser) {
+    const location = relative(realpathSync(folder), realpathSync(source)).split(sep).join('/');
+    if (location === browser || (typeof browserDirectory === 'string' && location.startsWith(browserDirectory.replace(/\/$/, '') + '/')))
+      throw new Error('Server entry cannot be inside the public browser asset directory');
+  }
   const resources =
-    browser !== undefined ? readBrowserAssets(id, folder, browser, manifest.browserDirectory) : undefined;
-  const configSchema = manifest.configSchema;
-  if (
-    configSchema &&
-    (configSchema.type !== 'object' ||
-      !configSchema.properties ||
-      typeof configSchema.properties !== 'object')
-  )
-    throw new Error('Expected an object configSchema for plugin: ' + id);
+    browser !== undefined ? readBrowserAssets(id, folder, browser, browserDirectory) : undefined;
   const { configGroups, configHint } = manifest;
   if (
     configGroups !== undefined &&
@@ -88,7 +90,7 @@ export function describePlugin(id: string, folder: string, entry?: string): Disc
           typeof group.title === 'string' &&
           Array.isArray(group.fields) &&
           group.fields.every(
-            (field) => typeof field === 'string' && Object.hasOwn(configSchema?.properties ?? {}, field),
+            (field) => typeof field === 'string',
           ),
       ))
   )
@@ -117,15 +119,13 @@ export function describePlugin(id: string, folder: string, entry?: string): Disc
       packageInfo.name && packageInfo.version
         ? { name: packageInfo.name, version: packageInfo.version }
         : undefined,
-    scope,
     id,
     title,
     description,
-    configSchema,
     configGroups,
     configHint,
     icon,
     web: hasWeb,
-    trustedCode: true,
+    external: true,
   };
 }

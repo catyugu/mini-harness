@@ -17,8 +17,15 @@ test('frontend plugins own UI contributions and clean up on disable and reconfig
   mkdirSync(folder);
   writeFileSync(
     join(folder, 'plugin.js'),
-    "import { defineConfig } from 'mini-harness/configuration';\nimport { readFileSync } from 'node:fs';\nexport const Config = defineConfig(JSON.parse(readFileSync(new URL('./plugin.json', import.meta.url), 'utf8')).configSchema);",
+    "import { defineConfig } from 'mini-harness/configuration';\nimport { readFileSync } from 'node:fs';\nexport const Config = defineConfig(JSON.parse(readFileSync(new URL('./schema.json', import.meta.url), 'utf8')));",
   );
+  writeFileSync(join(folder, 'schema.json'), JSON.stringify({
+        type: 'object',
+        properties: {
+          label: { type: 'string', title: 'Button label', default: 'Plugin entry' },
+          showDetails: { type: 'boolean', default: false },
+        },
+      }));
   writeFileSync(
     join(folder, 'plugin.json'),
     JSON.stringify({
@@ -26,13 +33,6 @@ test('frontend plugins own UI contributions and clean up on disable and reconfig
       icon: {
         path: 'M2 2h20v20H2z',
         viewBox: '0 0 24 24',
-      },
-      configSchema: {
-        type: 'object',
-        properties: {
-          label: { type: 'string', title: 'Button label', default: 'Plugin entry' },
-          showDetails: { type: 'boolean', default: false },
-        },
       },
     }),
   );
@@ -189,15 +189,15 @@ test('a failed browser plugin reports the saved state and can be retried', async
   mkdirSync(folder);
   writeFileSync(
     join(folder, 'plugin.js'),
-    "import { defineConfig } from 'mini-harness/configuration';\nimport { readFileSync } from 'node:fs';\nexport const Config = defineConfig(JSON.parse(readFileSync(new URL('./plugin.json', import.meta.url), 'utf8')).configSchema);",
+    "import { defineConfig } from 'mini-harness/configuration';\nimport { readFileSync } from 'node:fs';\nexport const Config = defineConfig(JSON.parse(readFileSync(new URL('./schema.json', import.meta.url), 'utf8')));",
   );
+  writeFileSync(join(folder, 'schema.json'), JSON.stringify({
+      type: 'object',
+      properties: { ready: { type: 'boolean', title: 'Ready', default: false } },
+    }));
   writeJson(join(folder, 'plugin.json'), {
     title: 'Retry UI',
     browserDirectory: 'web',
-    configSchema: {
-      type: 'object',
-      properties: { ready: { type: 'boolean', title: 'Ready', default: false } },
-    },
   });
   mkdirSync(join(folder, 'web'));
   writeFileSync(
@@ -217,6 +217,9 @@ export const apply = (ctx, config) => {
   };
 `,
   );
+  writeJson(join(paths.home, 'profiles', 'web', 'cordis.patch.yml'), {
+    plugins: [{ id: 'retry-ui', name: '../../plugins/retry-ui', disabled: true }],
+  });
   const service = await startIsolatedHost(paths);
   try {
     await page.goto(service.url + '/#token=' + service.token);
@@ -338,24 +341,23 @@ test('the Plugins page keeps stored settings when a workspace plugin setup fails
     { root, paths } = createFixturePaths(mock.url);
   const folder = join(paths.plugins, 'workspace-example');
   mkdirSync(folder);
-  writeJson(join(folder, 'plugin.json'), {
-    scope: 'workspace',
-    title: 'Workspace example',
-    configSchema: {
+  writeFileSync(join(folder, 'schema.json'), JSON.stringify({
       type: 'object',
       properties: { value: { type: 'integer', minimum: 1 } },
       required: ['value'],
-    },
+    }));
+  writeJson(join(folder, 'plugin.json'), {
+    title: 'Workspace example',
   });
   writeFileSync(
     join(folder, 'plugin.js'),
-    "import { defineConfig } from 'mini-harness/configuration';\nimport { readFileSync } from 'node:fs';\nexport const Config = defineConfig(JSON.parse(readFileSync(new URL('./plugin.json', import.meta.url), 'utf8')).configSchema);\nexport const apply = (ctx, config) => { if (config.value === 1) throw new Error('Workspace setup failed'); };",
+    "import { defineConfig } from 'mini-harness/configuration';\nimport { readFileSync } from 'node:fs';\nexport const Config = defineConfig(JSON.parse(readFileSync(new URL('./schema.json', import.meta.url), 'utf8')));\nexport const apply = (ctx, config) => { if (config.value === 1) throw new Error('Workspace setup failed'); };",
   );
   const key = 'workspace:' + workspaceId(realpathSync.native(paths.cwd));
   const initial = {
     scopes: {
       [key]: {
-        entries: { 'workspace-example': { disabled: false, config: { value: 'invalid' } } },
+        entries: { 'workspace-example': { name: '../../plugins/workspace-example', disabled: false, config: { value: 'invalid' } } },
       },
     },
   };

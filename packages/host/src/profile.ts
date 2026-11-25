@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
@@ -9,7 +9,7 @@ import { readJson, writeJson, writeText } from '@mini-harness/platform/json';
 import type { Paths } from '@mini-harness/platform/runtime-paths';
 import type { ResolvedPlugin, PluginInfo } from '@mini-harness/plugin-api/descriptor';
 import { PluginCatalog } from '@mini-harness/plugins/catalog';
-import { bindPluginImports, resolveModule } from '@mini-harness/plugins/module-resolution';
+import { bindPluginImports } from '@mini-harness/plugins/module-resolution';
 import { localPluginIdPattern, pluginIdPattern } from '@mini-harness/plugin-api/selection';
 import type { ProfileRuntime } from '@mini-harness/plugin-api/profile';
 import type { EntryConfiguration, ProfileConfiguration } from '@mini-harness/plugin-api/configuration';
@@ -17,8 +17,6 @@ import { parseSettings } from '@mini-harness/settings/config';
 
 interface Row extends EntryConfiguration {
   id: string;
-  name?: string;
-  client?: boolean;
 }
 
 interface Layer {
@@ -190,18 +188,26 @@ function rows(layers: readonly LoadedLayer[]) {
   return result;
 }
 
-function installedPath(file: string, directory: string) {
-  const path = relative(dirname(file), directory).split(sep).join('/');
-  return isAbsolute(path) || path.startsWith('../') ? path : './' + path;
+function moduleName(name: string, source: string) {
+  return name.startsWith('./') || name.startsWith('../') ? resolve(dirname(source), name) : name;
 }
 
-function localDirectory(row: ResolvedRow, paths: Paths) {
-  const name = row.name!;
-  if (!isAbsolute(name) && !name.startsWith('./') && !name.startsWith('../')) return;
-  const directory = resolve(dirname(row.source!), name);
-  const location = relative(paths.plugins, directory);
-  if (localPluginIdPattern.test(location) || statSync(directory, { throwIfNoEntry: false })?.isDirectory())
-    return location;
+function scopedEntries(selected: readonly LoadedLayer[]) {
+  const layer = [...selected].reverse().find(({ scopes }) => scopes !== undefined);
+  return Object.fromEntries(
+    Object.entries(layer?.scopes ?? {}).map(([key, scope]) => [
+      key,
+      {
+        ...scope,
+        entries: Object.fromEntries(
+          Object.entries(scope?.entries ?? {}).map(([id, entry]) => [
+            id,
+            { ...entry, ...(entry.name ? { name: moduleName(entry.name, layer!.file) } : {}) },
+          ]),
+        ),
+      },
+    ]),
+  );
 }
 
 export function recreateProfile(name: string, template: string, paths: Paths) {
@@ -259,7 +265,7 @@ export function dumpProfile(name: string, paths: Paths, patches: readonly string
           ? resolve(dirname(source!), row.name!)
           : row.name,
     })),
-    ...(scopes === undefined ? {} : { scopes }),
+    ...(scopes === undefined ? {} : { scopes: scopedEntries(selected) }),
   });
 }
 
@@ -343,28 +349,31 @@ async function moduleFor(name: string): Promise<{
   return { plugin: value, metadata, Config, browserConfig };
 }
 
+async function builtin(id: string, name: string, client: boolean): Promise<ResolvedPlugin | undefined> {
+  if (!packagedModules.has(name)) return;
+  const { plugin, metadata, Config, browserConfig } = await moduleFor(name);
+  return {
+    title: id,
+    description: '',
+    ...metadata,
+    plugin,
+    Config,
+    browserConfig,
+    id,
+    browser: client ? metadata?.browser : undefined,
+    browserStyles: client ? metadata?.browserStyles : undefined,
+  };
+}
+
 export async function profileDescriptors(entries: ReadonlyMap<string, Row>): Promise<ResolvedPlugin[]> {
+  const client = [...entries.values()].some(({ name }) => name === '@mini-harness/web-gateway');
   const descriptors = await Promise.all(
-    [...entries.values()]
-      .filter((row) => row.name && packagedModules.has(row.name))
-      .map(async (row) => {
-        const { plugin, metadata, Config, browserConfig } = await moduleFor(row.name!);
-        return {
-          title: row.id,
-          description: '',
-          scope: 'application' as const,
-          ...metadata,
-          plugin,
-          Config,
-          browserConfig,
-          id: row.id,
-          defaultEnabled: !row.disabled,
-          browser: row.client ? metadata?.browser : undefined,
-          browserStyles: row.client ? metadata?.browserStyles : undefined,
-        };
-      }),
+    [...entries.values()].map(async (row) => {
+      const descriptor = await builtin(row.id, row.name!, row.client ?? client);
+      return descriptor && { ...descriptor, defaultEnabled: !row.disabled };
+    }),
   );
-  return descriptors;
+  return descriptors.filter((item): item is NonNullable<typeof item> => item !== undefined);
 }
 
 export async function loadProfile(
@@ -379,26 +388,13 @@ export async function loadProfile(
   const official = rows(baseLayers);
   const persistentRows = rows([...shipped, ...userLayers]);
   const resolved = rows([...shipped, ...userLayers, ...overlays]);
-  const aliases = new Map<string, string>();
-  for (const row of resolved.values()) {
-    const location = localDirectory(row, paths);
-    if (location !== undefined) aliases.set(row.id, location);
-  }
-  const descriptors = await profileDescriptors(resolved);
-  const managedIds = new Set(descriptors.map(({ id }) => id));
   const overlayFiles = new Set(overlays.map(({ file }) => file));
-  const modules = new Map(
-    [...resolved.values()]
-      .filter((row) => !managedIds.has(row.id) && !aliases.has(row.id))
-      .map((row) => {
-        const name = row.name!;
-        // Command-line overlays can live outside the Profile's npm environment.
-        // Relative paths still belong to the file that declares them.
-        const bare = !isAbsolute(name) && !name.startsWith('./') && !name.startsWith('../');
-        const source = bare && overlayFiles.has(row.source!) ? join(directory, MANIFEST) : row.source!;
-        return [row.id, { name, source }];
-      }),
-  );
+  const source = (id: string, name: string) => {
+    const row = resolved.get(id);
+    if (row?.name && moduleName(row.name, row.source!) === name && !overlayFiles.has(row.source!))
+      return row.source!;
+    return join(directory, MANIFEST);
+  };
   const policy = readJson<{ scopedTools?: unknown }>(paths.settings, {});
   const scopedTools = object(policy.scopedTools) ? policy.scopedTools : {};
   function configurationFor(selected: ReadonlyMap<string, ResolvedRow>, selectedLayers: readonly Layer[]) {
@@ -407,32 +403,20 @@ export async function loadProfile(
         [...selected.values()].map((row) => [
           row.id,
           {
+            name: moduleName(row.name!, row.source!),
             disabled: Boolean(row.disabled),
+            ...(row.client === undefined ? {} : { client: row.client }),
             ...(row.live === undefined ? {} : { live: row.live }),
             ...(row.config === undefined ? {} : { config: row.config }),
           },
         ]),
       ),
-      scopes: withToolRules(Object.assign({}, ...shipped, ...selectedLayers).scopes ?? {}, scopedTools),
+      scopes: withToolRules(scopedEntries([...shipped, ...selectedLayers]), scopedTools),
     });
   }
   let persistent = configurationFor(persistentRows, userLayers);
   const effective = overlays.length ? configurationFor(resolved, [...userLayers, ...overlays]) : persistent;
-  const roots = [
-    directory,
-    ...[...aliases.values()].flatMap((location) => {
-      const directory = resolve(paths.plugins, location);
-      return existsSync(directory) ? [directory, realpathSync(directory)] : [directory];
-    }),
-    ...[...modules.values()].flatMap(({ name, source }) => {
-      try {
-        return [dirname(fileURLToPath(resolveModule(name, source)))];
-      } catch {
-        return [dirname(source)];
-      }
-    }),
-  ];
-  const imports = bindPluginImports(roots);
+  const imports = bindPluginImports();
   const entries = new EntryTree();
   let current = effective;
   function commit(runtime: ProfileConfiguration) {
@@ -444,20 +428,12 @@ export async function loadProfile(
       delete settings.entries[id];
     }
     const plugins: Row[] = [];
-    for (const id of new Set([
-      ...Object.keys(settings.entries),
-      ...(user.plugins ?? []).filter((row) => !aliases.has(row.id)).map((row) => row.id),
-    ])) {
+    for (const [id, entry] of Object.entries(settings.entries)) {
       const base = official.get(id);
-      const existing = persistentRows.get(id);
-      const config = settings.entries[id]?.config;
+      const config = entry.config;
       const row: Row = { id };
-      if (!base || existing?.name !== base.name)
-        row.name = existing?.name
-          ? existing.name.startsWith('./') || existing.name.startsWith('../')
-            ? installedPath(file, resolve(dirname(existing.source!), existing.name))
-            : existing.name
-          : installedPath(file, join(paths.plugins, id));
+      if (!entry.name) throw new Error('Profile entry requires a module name: ' + id);
+      if (!base || entry.name !== moduleName(base.name!, base.source!)) row.name = entry.name;
       const disabled = settings.entries[id]?.disabled;
       if (disabled !== undefined && (!base || disabled !== Boolean(base.disabled))) row.disabled = disabled;
       const live = settings.entries[id]?.live;
@@ -466,7 +442,7 @@ export async function loadProfile(
         Object.entries(config ?? {}).filter(([key, value]) => !isDeepStrictEqual(value, base?.config?.[key])),
       );
       if (Object.keys(changed).length) row.config = changed;
-      if (existing?.client !== undefined && existing.client !== base?.client) row.client = existing.client;
+      if (entry.client !== undefined && entry.client !== base?.client) row.client = entry.client;
       if (Object.keys(row).length > 1) plugins.push(row);
     }
     const rules = Object.fromEntries(
@@ -501,17 +477,16 @@ export async function loadProfile(
       else if (previous !== text) writeText(file, previous);
       throw error;
     }
-    for (const id of aliases.keys()) if (!Object.hasOwn(runtime.entries, id)) aliases.delete(id);
     persistent = settings;
     current = runtime;
   }
   const profile: ProfileRuntime = {
     directory,
-    descriptors,
-    modules,
+    builtin,
+    source,
     entries,
     async start() {
-      const catalog = new PluginCatalog(paths.plugins, descriptors, profile);
+      const catalog = new PluginCatalog([], profile);
       const settings = current;
       const errors = new Map<string, unknown>();
       const { plans } = catalog.plans(
@@ -531,10 +506,6 @@ export async function loadProfile(
       ))
         errors.set(id, error);
       return errors;
-    },
-    installed: aliases,
-    client(id) {
-      return resolved.get(id)?.client ?? descriptors.some((row) => row.browser);
     },
     read: () => current,
     commit,

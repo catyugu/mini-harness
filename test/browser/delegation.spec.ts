@@ -18,15 +18,14 @@ test('plugin schema controls, recursive tree navigation, batch export and perman
   });
   const { root, paths } = createFixturePaths(mock.url);
   writeJson(join(paths.home, 'profiles', 'web', 'cordis.patch.yml'), {
-    plugins: [{ id: 'subagents', config: { maxDepth: 2, maxParallel: 1, model: null } }],
+    plugins: [
+      { id: 'subagents', config: { maxDepth: 2, maxParallel: 1, model: null } },
+      { id: 'example', name: '../../plugins/example', disabled: true },
+    ],
   });
   const folder = join(paths.plugins, 'example');
   mkdirSync(folder);
-  writeFileSync(
-    join(folder, 'plugin.json'),
-    JSON.stringify({
-      title: 'Example',
-      configSchema: {
+  writeFileSync(join(folder, 'schema.json'), JSON.stringify({
         type: 'object',
         required: ['prefix', 'count', 'mode'],
         additionalProperties: false,
@@ -42,12 +41,16 @@ test('plugin schema controls, recursive tree navigation, batch export and perman
           },
           tags: { type: 'array', title: 'Tags', items: { type: 'string' }, default: ['base'] },
         },
-      },
+      }));
+  writeFileSync(
+    join(folder, 'plugin.json'),
+    JSON.stringify({
+      title: 'Example',
     }),
   );
   writeFileSync(
     join(folder, 'plugin.js'),
-    "import { defineConfig } from 'mini-harness/configuration';\nimport { readFileSync } from 'node:fs';\nexport const Config = defineConfig(JSON.parse(readFileSync(new URL('./plugin.json', import.meta.url), 'utf8')).configSchema);\nexport const apply = (ctx, config) => { if (config.prefix === \"bad\") throw new Error(\"Bad prefix\"); };",
+    "import { defineConfig } from 'mini-harness/configuration';\nimport { readFileSync } from 'node:fs';\nexport const Config = defineConfig(JSON.parse(readFileSync(new URL('./schema.json', import.meta.url), 'utf8')));\nexport const apply = (ctx, config) => { if (config.prefix === \"bad\") throw new Error(\"Bad prefix\"); };",
   );
   const service = await startIsolatedHost(paths);
   try {

@@ -36,7 +36,7 @@ export const apply = (ctx) => {
   writePlugin(
     paths.plugins,
     'child-prompt',
-    { scope: 'session' },
+    {},
     `
 export const inject = ["harnessPrompt"];
 export const apply = (ctx) => {
@@ -56,8 +56,8 @@ export const apply = (ctx) => {
     return expectPresent(system, 'system message').content;
   }
   const configured = await request('/settings', 'PATCH', {
-    entries: { 'app-prompt': { disabled: false }, 'more-prompt': { disabled: false } },
-    scopes: { ['session:' + parent.id]: { entries: { 'child-prompt': { disabled: false } } } },
+    entries: { 'app-prompt': { name: '../../plugins/app-prompt', disabled: false }, 'more-prompt': { name: '../../plugins/more-prompt', disabled: false } },
+    scopes: { ['session:' + parent.id]: { entries: { 'child-prompt': { name: '../../plugins/child-prompt', disabled: false } } } },
   });
   assert.equal(configured.status, 200, JSON.stringify(configured.body));
   assert.match(await prompt(child.id), /\[Plan\]\s+\[Extra\]\s+\[Child status\]/);
@@ -66,7 +66,7 @@ export const apply = (ctx) => {
   assert.match(siblingPrompt, /^\[Custom base\]/);
   assert.doesNotMatch(siblingPrompt, /You are mini-harness/);
   assert.equal(
-    (await request('/settings', 'PATCH', { entries: { 'more-prompt': { disabled: true } }, scopes: {} }))
+    (await request('/settings', 'PATCH', { entries: { 'more-prompt': { name: '../../plugins/more-prompt', disabled: true } }, scopes: {} }))
       .status,
     200,
   );
@@ -115,7 +115,7 @@ export const apply = (ctx) => {
   assert.equal(
     (
       await request('/settings', 'PATCH', {
-        entries: { 'input-z': { disabled: false }, 'input-a': { disabled: false } },
+        entries: { 'input-z': { name: '../../plugins/input-z', disabled: false }, 'input-a': { name: '../../plugins/input-a', disabled: false } },
       })
     ).status,
     200,
@@ -232,8 +232,8 @@ export const apply = (ctx) => {
   const configured = await request('/settings', 'PATCH', {
     entries: {
       'core:llm': { disabled: true },
-      transport: { disabled: false },
-      pipeline: { disabled: false },
+      transport: { name: '../../plugins/transport', disabled: false },
+      pipeline: { name: '../../plugins/pipeline', disabled: false },
     },
   });
   assert.equal(configured.status, 200, JSON.stringify(configured.body));
@@ -295,7 +295,7 @@ export const apply = (ctx) => {
   assert.ok(execution && accepted);
   assert.equal(accepted.executionId, execution.id);
   assert.ok(JSON.stringify(accepted).length < JSON.stringify(execution).length);
-  const missing = await request('/settings', 'PATCH', { entries: { transport: { disabled: true } } });
+  const missing = await request('/settings', 'PATCH', { entries: { transport: { name: '../../plugins/transport', disabled: true } } });
   assert.equal(missing.status, 200);
   assert.equal(app.runtime.plugins.ctx.get('harnessLlm'), undefined);
   assert.equal(app.runtime.plugins.ctx.get('harnessAgent'), undefined);
@@ -304,8 +304,8 @@ export const apply = (ctx) => {
       await request('/settings', 'PATCH', {
         entries: {
           'core:llm': { disabled: false },
-          transport: { disabled: true },
-          pipeline: { disabled: true },
+          transport: { name: '../../plugins/transport', disabled: true },
+          pipeline: { name: '../../plugins/pipeline', disabled: true },
         },
       })
     ).status,
@@ -340,7 +340,7 @@ export const apply = (ctx) => {
 `,
   );
   assert.equal(
-    (await request('/settings', 'PATCH', { entries: { redaction: { disabled: false } } })).status,
+    (await request('/settings', 'PATCH', { entries: { redaction: { name: '../../plugins/redaction', disabled: false } } })).status,
     200,
   );
   const session = app.runtime.plugins.ctx.harnessRegistry.create();
@@ -374,7 +374,7 @@ export const apply = (ctx) => {
 `,
   );
   assert.equal(
-    (await request('/settings', 'PATCH', { entries: { 'invalid-request': { disabled: false } } })).status,
+    (await request('/settings', 'PATCH', { entries: { 'invalid-request': { name: '../../plugins/invalid-request', disabled: false } } })).status,
     200,
   );
   const session = app.runtime.plugins.ctx.harnessRegistry.create();
@@ -441,7 +441,7 @@ export const apply = (ctx) => {
 `,
     );
     assert.equal(
-      (await request('/settings', 'PATCH', { entries: { 'slow-transform': { disabled: false } } })).status,
+      (await request('/settings', 'PATCH', { entries: { 'slow-transform': { name: '../../plugins/slow-transform', disabled: false } } })).status,
       200,
     );
     const session = app.runtime.plugins.ctx.harnessRegistry.create();
@@ -449,7 +449,7 @@ export const apply = (ctx) => {
     await started;
     try {
       assert.equal(
-        (await request('/settings', 'PATCH', { entries: { 'slow-transform': { disabled: true } } })).status,
+        (await request('/settings', 'PATCH', { entries: { 'slow-transform': { name: '../../plugins/slow-transform', disabled: true } } })).status,
         409,
       );
       assert.equal(aborted, false);
@@ -459,7 +459,7 @@ export const apply = (ctx) => {
     }
     await run;
     assert.equal(
-      (await request('/settings', 'PATCH', { entries: { 'slow-transform': { disabled: true } } })).status,
+      (await request('/settings', 'PATCH', { entries: { 'slow-transform': { name: '../../plugins/slow-transform', disabled: true } } })).status,
       200,
     );
     assert.equal(state.cleaned, true);
@@ -471,7 +471,7 @@ test('a decision hook can deny an inherited tool and is removed with its owner',
   writePlugin(
     paths.plugins,
     'policy',
-    { scope: 'session' },
+    {},
     `
 export function apply(ctx) {
       ctx.on("tools/decide", async ({ tool, signal }) => {
@@ -486,7 +486,7 @@ export function apply(ctx) {
   const child = app.runtime.plugins.ctx.harnessRegistry.create({ parentId: selected.id });
   const toggle = (scopes: unknown) => request('/settings', 'PATCH', { scopes });
   assert.equal(
-    (await toggle({ ['session:' + selected.id]: { entries: { policy: { disabled: false } } } })).status,
+    (await toggle({ ['session:' + selected.id]: { entries: { policy: { name: '../../plugins/policy', disabled: false } } } })).status,
     200,
   );
   await app.runtime.plugins.prepare(`session:${child.id}`);

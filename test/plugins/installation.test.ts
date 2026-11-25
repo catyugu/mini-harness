@@ -244,7 +244,7 @@ export function apply(ctx, config) {
   const route = '/extensions/local-module/echo';
   const id = 'local-module';
   assert.equal((await request(route, 'POST', { value: 1 })).status, 404);
-  assert.equal((await request('/settings', 'PATCH', { entries: { [id]: { disabled: false } } })).status, 200);
+  assert.equal((await request('/settings', 'PATCH', { entries: { [id]: { name: '../../plugins/local-module', disabled: false } } })).status, 200);
   const browser = (await request('/bootstrap')).body.ui.find(
     (entry: { id: string }) => entry.id === id,
   ).browser;
@@ -267,19 +267,19 @@ test('browser entries receive and edit their configuration without a field allow
   writeFileSync(join(folder, 'web.js'), 'export default () => {}');
   writeFileSync(
     join(folder, 'plugin.js'),
-    "import { defineConfig } from 'mini-harness/configuration';\nimport { readFileSync } from 'node:fs';\nexport const Config = defineConfig(JSON.parse(readFileSync(new URL('./plugin.json', import.meta.url), 'utf8')).configSchema);\n",
+    "import { defineConfig } from 'mini-harness/configuration';\nimport { readFileSync } from 'node:fs';\nexport const Config = defineConfig(JSON.parse(readFileSync(new URL('./schema.json', import.meta.url), 'utf8')));\n",
   );
-  writeJson(join(folder, 'plugin.json'), {
-    configSchema: {
+  writeFileSync(join(folder, 'schema.json'), JSON.stringify({
       type: 'object',
       properties: {
         label: { type: 'string', default: 'Visible' },
         detail: { type: 'string', default: 'Original' },
       },
-    },
+    }));
+  writeJson(join(folder, 'plugin.json'), {
   });
   assert.equal(
-    (await request('/settings', 'PATCH', { entries: { 'config-visibility': { disabled: false } } })).status,
+    (await request('/settings', 'PATCH', { entries: { 'config-visibility': { name: '../../plugins/config-visibility', disabled: false } } })).status,
     200,
   );
   const entry = async () =>

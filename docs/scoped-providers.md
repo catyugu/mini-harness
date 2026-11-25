@@ -12,7 +12,7 @@ scopes:
   workspace:0123456789abcdef0123456789abcdef:
     entries:
       workspace-greeting:
-        disabled: false
+        name: '@example/greeting'
 ```
 
 Scopes inherit services from application → workspace → ancestor session →
@@ -23,8 +23,7 @@ Changed scoped entries are prepared before configuration is committed.
 If a configured entry fails during startup, its isolated services remain
 unavailable rather than falling back silently.
 
-The current host infrastructure and final tool authorization services are
-protected. Business services use the normal Cordis composition mechanism.
+Scope is a property of an Entry, not a package. The same module can be declared at application, workspace, and session scope with independent configuration.
 
 Plugins declare required services in their Cordis `inject` declaration. A running
 plugin can use `await sessionService(ctx, sessionId, name, signal)` to access a service in a visible session. The native
@@ -39,6 +38,6 @@ Browser services use Cordis dependency injection directly. Enable the browser mo
 
 Read-only conversations admit any tool registration that declares read-only access. Descendant and workspace tool restrictions still apply before invocation. Tool declarations are semantic promises of trusted plugin code, not process isolation.
 
-Setup and live configuration callbacks register and update plugin resources. Scope preparation, session writes, execution submission and configuration writes are available from runtime handlers after the configuration commits. Use those operations from normal runtime handlers. A prepared scoped service is a current provider reference, not a stable proxy: resolve it again after configuration changes. Browser entries are published for active server entries; the browser resolves its own dependencies through Cordis.
+Setup and live configuration callbacks register and update plugin resources. Scope preparation, session writes, execution submission and configuration writes are available from runtime handlers after the configuration commits. Use those operations from normal runtime handlers. A prepared scoped service is a current provider reference, not a stable proxy: resolve it again after configuration changes. Browser entries resolve their own dependencies through Cordis.
 
 Enabled entries and scoped plugin configuration are written to the active [Profile](profiles.md). Scoped tool restrictions are saved as domain settings.

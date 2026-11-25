@@ -70,14 +70,13 @@ plugins:
     name: ./plugins/tool.mjs
   - id: local-panel
     name: /absolute/path/to/local-panel
-    client: true
 ```
 
 Install ordinary npm dependencies with `mini-harness plugin --profile rescue add <package>`, then add entries or bundles explicitly. The command forwards npm arguments in the Profile directory; use `remove`, `update`, local directories, tarballs or Git references as needed. npm lifecycle scripts follow the user's npm configuration and may execute package code.
 Installing a package does not activate it. A module may export a native Cordis
 function, class, or object with `apply(ctx, config)`; no plugin.json is needed
 for these entries. Disabled external entries are not imported. Local modules
-resolve relative to the layer that declares the name. A directory entry loads the package's server and browser modules; it can be managed in the Web Plugins page. YAML layers may include
+resolve relative to the layer that declares the name. A directory entry loads the package's server and browser modules; only explicitly declared entries are managed in the Web Plugins page. The Web profile includes browser exports by default; use `client: false` to suppress one. YAML layers may include
 other fragments using `include`; they cannot use executable YAML tags or cyclic
 references. The final entry ID determines the configuration override.
 

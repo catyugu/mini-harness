@@ -3,7 +3,6 @@ import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 import { PiModelStore } from '../server/pi-adapter.ts';
 
 export const metadata: PluginInfo = {
-  scope: 'application',
   title: 'Model store',
   description: 'Shared provider definitions and credentials',
 };

@@ -1,6 +1,6 @@
 import { registerHooks } from 'node:module';
 import { readFileSync } from 'node:fs';
-import { isAbsolute, join } from 'node:path';
+import { isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const manifest = new URL('../../../../../package.json', import.meta.url);
@@ -15,13 +15,10 @@ const sdk = new Map(
 );
 
 /** Resolve the public server SDK from this host for local, npm and development plugins. */
-export function bindPluginImports(directories: readonly string[]) {
-  const roots = directories.map((root) => pathToFileURL(join(root, '.')).href.replace(/\/$/, '') + '/');
+export function bindPluginImports() {
   return registerHooks({
     resolve(name, context, next) {
-      const entry = sdk.get(name);
-      const parent = context.parentURL;
-      return next(entry && parent && roots.some((root) => parent.startsWith(root)) ? entry : name, context);
+      return next(sdk.get(name) ?? name, context);
     },
   });
 }

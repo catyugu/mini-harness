@@ -4,7 +4,6 @@ import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 import { ToolRegistry } from './registry.ts';
 
 export const metadata: PluginInfo = {
-  scope: 'application',
   title: 'Tools',
   description: 'Tool registration and execution leases',
 };

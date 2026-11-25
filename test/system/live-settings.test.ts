@@ -116,7 +116,7 @@ test(
     });
     const folder = join(paths.plugins, 'staged');
     mkdirSync(folder);
-    writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ scope: 'workspace' }));
+    writeFileSync(join(folder, 'plugin.json'), JSON.stringify({}));
     writeFileSync(
       join(folder, 'plugin.js'),
       "export default () => globalThis[Symbol.for('mini-harness-test-admission')]();",
@@ -134,7 +134,7 @@ test(
     const workspace = `workspace:${target.workspaceId}` as const;
     const updating = runtime.configuration.update({
       scopes: {
-        [workspace]: { entries: { staged: { disabled: false } } },
+        [workspace]: { entries: { staged: { name: '../../plugins/staged', disabled: false } } },
         [obsoleteScope]: obsoleteConfig,
       },
     });

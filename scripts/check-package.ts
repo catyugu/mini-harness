@@ -481,7 +481,7 @@ async function checkPackage() {
     assert.equal(
       (
         await write('/api/settings', 'PATCH', {
-          scopes: { [scope]: { entries: { 'scoped-tool': { disabled: false } } } },
+          scopes: { [scope]: { entries: { 'scoped-tool': { name: 'mini-harness-sdk-scoped-tool', disabled: false } } } },
         })
       ).status,
       200,

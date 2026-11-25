@@ -3,7 +3,6 @@ import type { ToolPolicy } from '@mini-harness/tools/policy';
 import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 
 export const metadata: PluginInfo = {
-  scope: 'application',
   title: 'Tool permissions',
   description: 'Inherited conversation tool restrictions',
 };

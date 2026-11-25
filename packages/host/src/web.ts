@@ -9,7 +9,6 @@ import { webServer } from './server.ts';
 export const metadata: PluginInfo = {
   title: 'HTTP server',
   description: 'Serve the local Web application.',
-  scope: 'application',
 };
 
 const plugin: Plugin.Object = {
