@@ -830,7 +830,11 @@ export function apply(ctx) {
 
 test('existing sessions inherit workspace contributions after the workspace plugin is reactivated', async (t) => {
   const { app, paths, request, mock } = await fixture(t);
-  writePlugin(paths.plugins, 'workspace-reload', {}, `
+  writePlugin(
+    paths.plugins,
+    'workspace-reload',
+    {},
+    `
 export const inject = ['harnessPrompt', 'harnessTools'];
 export function apply(ctx) {
   ctx.effect(() => ctx.harnessPrompt.register({ id: 'workspace-reload', order: 500, render: () => '[Workspace contribution]' }));
@@ -839,18 +843,25 @@ export function apply(ctx) {
     async execute() { return { content: [{ type: 'text', text: 'Workspace contribution' }] }; }
   }));
 }
-`);
+`,
+  );
   const ctx = app.runtime.plugins.ctx;
   const parent = ctx.harnessSessions.create();
   const child = ctx.harnessSessions.create({ parentId: parent.id });
   const scope = 'workspace:' + parent.workspaceId;
   const configured = await request('/settings', 'PATCH', {
-    scopes: { [scope]: { entries: { 'workspace-reload': { name: '../../plugins/workspace-reload', disabled: false } } } },
+    scopes: {
+      [scope]: {
+        entries: { 'workspace-reload': { name: '../../plugins/workspace-reload', disabled: false } },
+      },
+    },
   });
   assert.equal(configured.status, 200, JSON.stringify(configured.body));
-  const tools = () => ctx.harnessTools.list({ resourceId: child.id, scope: ctx.harnessSessions.runScope(child.id) });
+  const tools = () =>
+    ctx.harnessTools.list({ resourceId: child.id, scope: ctx.harnessSessions.runScope(child.id) });
   assert.ok(tools().some(({ name }) => name === 'workspace_contribution'));
-  const toggle = (disabled: boolean) => request('/settings', 'PATCH', { entries: { 'core:workspace': { disabled } } });
+  const toggle = (disabled: boolean) =>
+    request('/settings', 'PATCH', { entries: { 'core:workspace': { disabled } } });
   const disabled = await toggle(true);
   assert.equal(disabled.status, 200, JSON.stringify(disabled.body));
   assert.equal(ctx.get('harnessWorkspaces'), undefined);

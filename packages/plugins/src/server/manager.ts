@@ -347,9 +347,10 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
       const plans = this.catalog.plans(descriptors, key, (id, error) => unavailable(id, error, key));
       const isolates = [...new Set(overrides.isolate)].sort();
       const existing = this.scopes.get(key);
-      const group = existing?.matches(parent, isolates) && scopeOf(existing.context) === address.key
-        ? existing
-        : new EntryGroup(parent, isolates);
+      const group =
+        existing?.matches(parent, isolates) && scopeOf(existing.context) === address.key
+          ? existing
+          : new EntryGroup(parent, isolates);
       if (group !== existing) tagScope(group.context, address.key);
       const { context } = group;
       if (active.has(key)) {
@@ -442,7 +443,8 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
     const application = plans
       .filter(({ id, descriptor }) => descriptor.native?.plugin && !failures.has(id))
       .map((plan) => this.catalog.entry(plan, this.ctx));
-    const planScopes = () => this.scopedEntries(settings, descriptors, unavailable, preparing, released, changedScopes);
+    const planScopes = () =>
+      this.scopedEntries(settings, descriptors, unavailable, preparing, released, changedScopes);
     let scoped = planScopes();
     let mounts = [...application, ...scoped.entries];
     const owner = this.owner.fiber.entry;

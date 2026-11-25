@@ -356,7 +356,11 @@ export class SessionRegistry implements SessionStore {
     return target;
   }
 
-  inspectLog<T>(id: string, read: (log: Pick<SessionLogPort, 'entries' | 'branch' | 'projection' | 'queue'>) => T, strict = false): T | undefined {
+  inspectLog<T>(
+    id: string,
+    read: (log: Pick<SessionLogPort, 'entries' | 'branch' | 'projection' | 'queue'>) => T,
+    strict = false,
+  ): T | undefined {
     const existing = this.logs.get(id);
     if (existing) return read(existing.port);
     const record = this.get(id);
