@@ -181,7 +181,11 @@ function pluginCatalog(
         for (const group of plugin.configGroups) {
           const block = fromMarkup('<section class="ui-section"><h3></h3></section>');
           required(block.querySelector('h3')).textContent = group.title;
-          const properties = Object.fromEntries(group.fields.filter((id) => currentSchema.properties?.[id]).map((id) => [id, currentSchema.properties[id]]));
+          const properties = Object.fromEntries(
+            group.fields
+              .filter((id) => currentSchema.properties?.[id])
+              .map((id) => [id, currentSchema.properties[id]]),
+          );
           block.append(schemaFields(plugin.id, { ...currentSchema, properties }, values(), modelCatalog()));
           configFields.append(block);
         }
