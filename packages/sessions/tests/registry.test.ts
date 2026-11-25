@@ -20,10 +20,13 @@ import { WorkspaceCatalog } from '@mini-harness/workspaces/catalog';
 function fixture(t: test.TestContext) {
   const temp = mkdtempSync(join(tmpdir(), 'mini-harness-sessions-'));
   const paths = getPaths(realpathSync.native(temp), { MINI_HARNESS_HOME: join(temp, 'home') });
-  const registry = new SessionRegistry(paths, (() => {
-    const workspaces = new WorkspaceCatalog(paths);
-    return () => workspaces;
-  })());
+  const registry = new SessionRegistry(
+    paths,
+    (() => {
+      const workspaces = new WorkspaceCatalog(paths);
+      return () => workspaces;
+    })(),
+  );
   t.after(() => {
     registry.dispose();
     rmSync(temp, { recursive: true, force: true });
@@ -95,12 +98,17 @@ test('restart finishes a journaled deletion after partial cleanup', async (t) =>
     }),
   );
   const forgotten: string[] = [];
-  const restored = new SessionRegistry(paths, (() => {
-    const workspaces = new WorkspaceCatalog(paths);
-    return () => workspaces;
-  })(), undefined, async (keys) => {
-    forgotten.push(...keys);
-  });
+  const restored = new SessionRegistry(
+    paths,
+    (() => {
+      const workspaces = new WorkspaceCatalog(paths);
+      return () => workspaces;
+    })(),
+    undefined,
+    async (keys) => {
+      forgotten.push(...keys);
+    },
+  );
   t.after(() => restored.dispose());
   await restored.recoverDeletion();
   assert.deepEqual(
@@ -150,10 +158,13 @@ test('a corrupt log is isolated, remains deletable and never creates a log for a
     .append({ type: 'message', message: { role: 'user', content: 'intact', timestamp: Date.now() } });
   registry.dispose();
   appendFileSync(invalid, '{"checksum":"bad"}\n');
-  const restored = new SessionRegistry(paths, (() => {
-    const workspaces = new WorkspaceCatalog(paths);
-    return () => workspaces;
-  })());
+  const restored = new SessionRegistry(
+    paths,
+    (() => {
+      const workspaces = new WorkspaceCatalog(paths);
+      return () => workspaces;
+    })(),
+  );
   t.after(() => restored.dispose());
   assert.equal(restored.list().length, 3);
   assert.equal(
@@ -234,7 +245,6 @@ test('a conversation can own history and descendants without a workspace', async
   assert.deepEqual(new Set(await registry.delete([root.id])), new Set([root.id, child.id]));
 });
 
-
 test('the session registry needs no workspace provider', async (t) => {
   const { paths, registry: previous } = fixture(t);
   previous.dispose();
@@ -242,7 +252,9 @@ test('the session registry needs no workspace provider', async (t) => {
   t.after(() => registry.dispose());
   const session = registry.create();
   assert.equal(session.workspaceId, null);
-  registry.log(session.id).append({ type: 'message', message: { role: 'user', content: 'Standalone', timestamp: 1 } });
+  registry
+    .log(session.id)
+    .append({ type: 'message', message: { role: 'user', content: 'Standalone', timestamp: 1 } });
   assert.equal(registry.history(session.id).messages[0].content, 'Standalone');
   assert.deepEqual(await registry.delete([session.id]), [session.id]);
 });
