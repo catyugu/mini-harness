@@ -207,3 +207,15 @@ test('a valid catalog keeps the deletion journal and rejects a partial one', (t)
   writeFileSync(paths.registry, JSON.stringify({ sessions: [], pendingDelete: { id: session.id } }));
   assert.throws(() => loadCatalog(paths, workspaces), /Invalid deletion journal/);
 });
+
+test('a conversation can own history and descendants without a workspace', async (t) => {
+  const { registry } = fixture(t);
+  const root = registry.create({ workspaceId: null });
+  const child = registry.create({ parentId: root.id });
+  assert.equal(child.workspaceId, null);
+  assert.equal(registry.workspacePath(root.id), undefined);
+  assert.deepEqual(registry.list(null).map(({ id }) => id), [root.id, child.id]);
+  registry.log(root.id).append({ type: 'message', message: { role: 'user', content: 'Unbound', timestamp: 1 } });
+  assert.equal(registry.history(root.id).messages.length, 1);
+  assert.deepEqual(new Set(await registry.delete([root.id])), new Set([root.id, child.id]));
+});

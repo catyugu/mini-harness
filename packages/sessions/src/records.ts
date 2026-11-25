@@ -33,8 +33,8 @@ export interface SessionCatalog {
   get(id: string): SessionRecord | undefined;
   scope(id: string): ScopeKey | undefined;
   runScope(id: string): ScopeKey | undefined;
-  list(workspaceId?: string): SessionRecord[];
-  workspacePath(id: string): string;
+  list(workspaceId?: string | null): SessionRecord[];
+  workspacePath(id: string): string | undefined;
   depth(id: string): number;
   descendants(ids: string[]): string[];
   modifiedAt(record: SessionRecord): string;
@@ -64,12 +64,12 @@ export interface SessionLifecycle {
   create(input?: {
     parentId?: string | null;
     title?: string;
-    workspaceId?: string;
+    workspaceId?: string | null;
     permission?: ConversationPermission;
   }): SessionRecord;
   setPermission(id: string, permission: ConversationPermission): SessionRecord;
   rename(id: string, title: string, source?: SessionRecord['titleSource']): SessionRecord;
-  assertAvailable(id?: string, workspaceId?: string): void;
+  assertAvailable(id?: string, workspaceId?: string | null): void;
   beforeDelete(handler: { quiesce(ids: string[]): Promise<void>; busy?(id: string): boolean }): () => void;
   export(ids: string[]): (SessionRecord & { log: string; attachments: Record<string, string> })[];
   delete(ids: string[]): Promise<string[]>;

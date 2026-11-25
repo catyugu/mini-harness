@@ -67,9 +67,9 @@ export class SessionRegistry implements SessionStore {
     this.events.dispatchEvent(new CustomEvent('change', { detail: { id, deleted, queue, records } }));
   }
 
-  list(workspaceId?: string) {
+  list(workspaceId?: string | null) {
     return this.state.sessions
-      .filter((entry) => !workspaceId || entry.workspaceId === workspaceId)
+      .filter((entry) => workspaceId === undefined || entry.workspaceId === workspaceId)
       .map((entry) => ({ ...entry }));
   }
 
@@ -85,7 +85,7 @@ export class SessionRegistry implements SessionStore {
     if (!key) {
       const parent = record.parentId
         ? this.runScope(record.parentId)
-        : this.workspaces.scope(record.workspaceId);
+        : record.workspaceId ? this.workspaces.scope(record.workspaceId) : undefined;
       this.runtimeScopes.set(id, (key = createScopeKey(createScopeKey(parent))));
     }
     return key;
@@ -132,17 +132,21 @@ export class SessionRegistry implements SessionStore {
     if (parentId && !parent) throw new DomainError('not_found', 'Parent conversation not found');
     if (parent && workspaceId !== undefined && workspaceId !== parent.workspaceId)
       throw new DomainError('invalid_input', 'Conversation workspace does not match its parent');
-    const targetWorkspace = parent?.workspaceId ?? workspaceId ?? this.workspaces.defaultId;
-    if (!targetWorkspace)
-      throw new DomainError('invalid_input', 'Create a workspace before starting a conversation');
-    const workspace = this.workspaces.get(targetWorkspace);
-    this.assertAvailable(parentId ?? undefined, workspace.id);
-    this.workspaces.resolveRoot(workspace.path, workspace.id);
+    const targetWorkspace = parent
+      ? parent.workspaceId
+      : workspaceId === undefined
+        ? (this.workspaces.defaultId ?? null)
+        : workspaceId;
+    this.assertAvailable(parentId ?? undefined, targetWorkspace);
+    if (targetWorkspace !== null) {
+      const workspace = this.workspaces.get(targetWorkspace);
+      this.workspaces.resolveRoot(workspace.path, workspace.id);
+    }
     const session: SessionRecord = {
       id: randomUUID(),
       title: title?.slice(0, 140) || 'New conversation',
       titleSource: title ? 'manual' : 'auto',
-      workspaceId: workspace.id,
+      workspaceId: targetWorkspace,
       parentId,
       createdAt: new Date().toISOString(),
       permission,
@@ -180,7 +184,7 @@ export class SessionRegistry implements SessionStore {
   }
 
   private nativeFile(record: Pick<SessionRecord, 'id' | 'workspaceId'>) {
-    return nativeFile(this.paths, this.workspaces, record);
+    return nativeFile(this.paths, record);
   }
 
   prepareInput(id: string, text: unknown, attachments?: Attachment[]) {
@@ -243,7 +247,7 @@ export class SessionRegistry implements SessionStore {
     };
     let log: SessionLog | undefined;
     try {
-      const file = nativeFile(this.paths, this.workspaces, record, mode === 'write');
+      const file = nativeFile(this.paths, record, mode === 'write');
       if (mode === 'recover') lstatSync(file);
       log = new SessionLog(
         file,
@@ -408,6 +412,7 @@ export class SessionRegistry implements SessionStore {
   workspacePath(id: string) {
     const item = this.get(id);
     if (!item) throw new DomainError('not_found', 'Conversation not found');
+    if (item.workspaceId === null) return;
     const workspace = this.workspaces.get(item.workspaceId);
     return this.workspaces.resolveRoot(workspace.path, workspace.id);
   }
@@ -441,7 +446,7 @@ export class SessionRegistry implements SessionStore {
 
   modifiedAt(record: SessionRecord) {
     try {
-      return lstatSync(nativeFile(this.paths, this.workspaces, record, false)).mtime.toISOString();
+      return lstatSync(nativeFile(this.paths, record, false)).mtime.toISOString();
     } catch {
       return record.createdAt;
     }

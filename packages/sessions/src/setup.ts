@@ -17,7 +17,9 @@ export function setup(ctx: Context) {
         record &&
         key && {
           key,
-          parent: record.parentId ? `session:${record.parentId}` : `workspace:${record.workspaceId}`,
+          parent: record.parentId
+            ? `session:${record.parentId}`
+            : record.workspaceId ? `workspace:${record.workspaceId}` : undefined,
         }
       );
     }),

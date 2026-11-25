@@ -7,7 +7,7 @@ import type { ToolResult } from '@mini-harness/tools/api';
 
 export interface StepContext extends ToolTurn {
   readonly sessionId: string;
-  readonly cwd: string;
+  readonly cwd?: string;
   readonly phase: 'turn' | 'compaction';
 }
 
@@ -30,7 +30,7 @@ export type ModelRetryHandler = (
 
 export interface InputContext {
   readonly sessionId: string;
-  readonly cwd: string;
+  readonly cwd?: string;
   readonly model: Readonly<ModelChoice>;
   readonly source: InputSource;
   readonly original: Readonly<PreparedMessage>;

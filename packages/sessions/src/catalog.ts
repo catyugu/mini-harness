@@ -33,13 +33,13 @@ export function validateCatalog(sessions: SessionRecord[], workspaces: Workspace
       !record ||
       !/^[a-f0-9-]{36}$/i.test(record.id) ||
       records.has(record.id) ||
-      typeof record.workspaceId !== 'string' ||
+      (record.workspaceId !== null && typeof record.workspaceId !== 'string') ||
       typeof record.title !== 'string' ||
       !['auto', 'manual'].includes(record.titleSource) ||
       !Number.isFinite(Date.parse(record.createdAt))
     )
       throw new Error('Invalid conversation index');
-    workspaces.get(record.workspaceId);
+    if (record.workspaceId !== null) workspaces.get(record.workspaceId);
     records.set(record.id, record);
   }
   for (const record of sessions) {

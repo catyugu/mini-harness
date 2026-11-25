@@ -28,7 +28,7 @@ export function setup(ctx: Context) {
     ctx.harnessPrompt.register({
       id: 'skills',
       order: 400,
-      render: ({ cwd }) => (typeof cwd === 'string' ? loader.prompt(cwd) : undefined),
+      render: ({ cwd }) => loader.prompt(typeof cwd === 'string' ? cwd : undefined),
     }),
   );
   ctx.inject(['harnessRoutes'], (web) => {

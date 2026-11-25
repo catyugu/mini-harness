@@ -100,7 +100,7 @@ export function registerSessionRoutes(ctx: Context, read: (id: string) => Conver
   });
   add('POST', '/api/sessions', async ({ body }) => {
     const input = await body();
-    if (input?.workspaceId !== undefined && typeof input.workspaceId !== 'string')
+    if (input?.workspaceId != null && typeof input.workspaceId !== 'string')
       throw new HttpError('invalid_input', 'Invalid workspace ID');
     return new HttpReply(
       201,
