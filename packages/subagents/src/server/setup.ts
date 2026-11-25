@@ -12,7 +12,7 @@ export function setup(ctx: Context) {
       throw new DomainError('invalid_input', 'Unknown child model: ' + model.provider + '/' + model.id);
   };
   validate(policy());
-  const delegation = new Delegation(ctx.harnessSessions.access(), ctx.harnessExecution, policy);
+  const delegation = new Delegation(ctx.harnessSessions, ctx.harnessExecution, policy);
   ctx.on('internal/update', (next) => {
     const config = next as unknown as SubagentPolicy;
     validate(config);

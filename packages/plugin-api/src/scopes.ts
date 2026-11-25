@@ -1,11 +1,6 @@
 import type { Context } from 'mini-harness/cordis';
 import type { EntryConfiguration } from './configuration.ts';
 
-export type PluginScope =
-  | { kind: 'application' }
-  | { kind: 'workspace'; workspaceId: string }
-  | { kind: 'session'; workspaceId: string; sessionId: string };
-
 export interface ScopeSettings {
   entries?: Record<string, EntryConfiguration>;
   /** Services isolated from the parent even if a local provider fails or is disabled. */
@@ -13,9 +8,12 @@ export interface ScopeSettings {
   disabledTools?: string[];
 }
 
-export type ScopeKey = `${Exclude<PluginScope['kind'], 'application'>}:${string}`;
+/** Stable namespaced key. Namespace and identity are defined by scope providers. */
+export type ScopeKey = `${string}:${string}`;
 
-export type ScopeAddress = { scope: Exclude<PluginScope, { kind: 'application' }>; parent?: ScopeKey };
+export interface ScopeAddress {
+  parent?: ScopeKey;
+}
 
 export interface ScopeOption {
   key: ScopeKey;
@@ -24,7 +22,7 @@ export interface ScopeOption {
 
 export interface ScopePort {
   register(
-    kind: ScopeAddress['scope']['kind'],
+    namespace: string,
     resolve: (id: string) => ScopeAddress | undefined,
     eager?: boolean,
   ): () => void;

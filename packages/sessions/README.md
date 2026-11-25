@@ -12,7 +12,7 @@ Maintains session ancestry and permissions, the append-only log, original upload
 
 ## API
 
-`harnessRegistry` groups internal catalog, history and lifecycle operations. The server SDK exposes scoped conversation creation and history through `harnessSessions.access()`, and branch-owned records through `harnessSessions.records(id)`.
+`harnessRegistry` groups internal catalog, history and lifecycle operations. The server SDK exposes conversation creation and history directly through `harnessSessions`, and branch-owned records through `harnessSessions.records(id, owner)`.
 
 ## Dependencies
 

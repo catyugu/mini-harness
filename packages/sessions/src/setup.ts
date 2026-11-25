@@ -1,5 +1,5 @@
 import { observe } from '@mini-harness/plugin-api/observations';
-import { sessionDirectory } from './records.ts';
+import type { SessionDirectory } from './records.ts';
 import type { Context } from 'mini-harness/cordis';
 import { SessionRegistry } from './registry.ts';
 
@@ -16,7 +16,6 @@ export function setup(ctx: Context) {
       const record = registry.get(id);
       return (
         record && {
-          scope: { kind: 'session', sessionId: id, workspaceId: record.workspaceId },
           parent: record.parentId ? `session:${record.parentId}` : `workspace:${record.workspaceId}`,
         }
       );
@@ -37,10 +36,7 @@ export function setup(ctx: Context) {
     );
   });
   ctx.provide('harnessRegistry', registry);
-  ctx.provide(
-    'harnessSessions',
-    sessionDirectory(
-      {
+  const sessions: SessionDirectory = {
         get: (id) => registry.get(id),
         list: (id) => registry.list(id),
         create: (input) => registry.create(input),
@@ -64,9 +60,8 @@ export function setup(ctx: Context) {
             ) ?? { messages: [], leafId: null }
           );
         },
-      },
-      (id, owner) => registry.records(id, owner),
-    ),
-  );
+      records: (id, owner) => registry.records(id, owner),
+  };
+  ctx.provide('harnessSessions', sessions);
   ctx.effect(() => () => registry.dispose());
 }

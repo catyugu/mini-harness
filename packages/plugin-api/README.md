@@ -4,7 +4,7 @@ Defines the product plugin descriptor, settings and scope contracts.
 
 ## Responsibilities
 
-Validates identifiers and user selections. Associates host-issued identity and scope with Cordis entries for caller-aware product services.
+Validates identifiers and user selections. Associates persistent Entry ownership and namespaced scope keys with Cordis entries.
 
 ## Structure
 

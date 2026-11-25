@@ -10,7 +10,8 @@ export function apply(ctx: Context) {
   const greeting: Greeting = ctx.exampleGreeting;
   const tools: ToolPort = ctx.harnessTools;
   const scope = pluginScope(ctx);
-  if (scope.kind !== 'session') throw new Error('This plugin belongs to a session');
+  if (!scope?.startsWith('session:')) throw new Error('This plugin belongs to a session');
+  const sessionId = scope.slice('session:'.length);
   ctx.effect(() =>
     tools.register({
       name: 'scoped_greeting',
@@ -18,7 +19,7 @@ export function apply(ctx: Context) {
       description: 'Return a greeting for this conversation.',
       parameters: { type: 'object', properties: {} },
       async execute() {
-        return { content: [{ type: 'text', text: greeting.greet(scope.sessionId) }] };
+        return { content: [{ type: 'text', text: greeting.greet(sessionId) }] };
       },
     }),
   );

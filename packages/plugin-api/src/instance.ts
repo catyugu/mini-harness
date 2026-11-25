@@ -1,9 +1,8 @@
 import { Context, type FiberEntry } from 'mini-harness/cordis';
-import type { PluginScope, ScopeKey } from './scopes.ts';
+import type { ScopeKey } from './scopes.ts';
 
 interface PluginInstance {
   pluginId: string;
-  scope: PluginScope;
   scopeKey?: ScopeKey;
   writableConfig: boolean;
 }
@@ -36,15 +35,6 @@ export function pluginInstance(ctx: Context) {
   const identity = findInstance(ctx);
   if (!identity) throw new Error('A server plugin instance is required');
   return identity;
-}
-
-export function sessionVisible(ctx: Context, id: string) {
-  const runScope = agentScopeOf(ctx);
-  const owner = findInstance(ctx);
-  const address = sessionAddress(ctx, id);
-  return [runScope, owner?.scopeKey].every(
-    (scope) => !scope || scope === `session:${id}` || address.includes(scope),
-  );
 }
 
 export function sessionAddress(ctx: Context, id: string) {

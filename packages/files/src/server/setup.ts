@@ -6,7 +6,7 @@ import { fileTools, fileToolNames } from './tools.ts';
 
 export function setup(ctx: Context) {
   const { harnessChanges: changes } = ctx;
-  const sessions = ctx.harnessSessions.access();
+  const sessions = ctx.harnessSessions;
 
   for (const [index, name] of fileToolNames.entries()) {
     const writes = name === 'edit' || name === 'write';

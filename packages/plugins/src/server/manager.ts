@@ -13,7 +13,6 @@ import { localPluginIdPattern, isScopeKey } from '@mini-harness/plugin-api/selec
 import { isDeepStrictEqual } from 'node:util';
 import type { ProfileRuntime } from '@mini-harness/plugin-api/profile';
 import type {
-  PluginScope,
   ScopeAddress,
   ScopeKey,
   ScopePort,
@@ -28,8 +27,6 @@ import { PluginRouteRegistry, scopeOperation } from './routes.ts';
 import { pluginSettings } from './plugin-settings.ts';
 import { pluginInstance } from '@mini-harness/plugin-api/instance';
 import { changedSelection, PluginCatalog } from './catalog.ts';
-
-const appScope: PluginScope = { kind: 'application' };
 
 /** Permission-only settings do not require a separate plugin context. */
 function hasComposition(scope: ScopeSettings | undefined): scope is ScopeSettings {
@@ -79,15 +76,7 @@ export class PluginHost implements ScopePort {
         invalidate() {
           const caller = Service.caller(this);
           caller.fiber.signal.throwIfAborted();
-          const { pluginId, scope } = pluginInstance(caller);
-          ctx.harnessChanges.invalidate(
-            'plugin:' + pluginId,
-            scope.kind === 'session'
-              ? { sessionId: scope.sessionId }
-              : scope.kind === 'workspace'
-                ? { workspaceId: scope.workspaceId }
-                : undefined,
-          );
+          ctx.harnessChanges.invalidate('plugin:' + pluginInstance(caller).pluginId);
         },
       }),
     };
@@ -127,7 +116,7 @@ export class PluginHost implements ScopePort {
           id: options.id,
           services,
           provides: [...fiber.provisions].map(({ name }) => name),
-          scope: identity.scope.kind,
+          scope: identity.scopeKey?.split(':')[0] ?? 'application',
           source: this.catalog.reserved(identity.pluginId) ? 'built-in' : 'local',
         },
       ];
@@ -154,7 +143,7 @@ export class PluginHost implements ScopePort {
     );
   }
   register(
-    kind: ScopeAddress['scope']['kind'],
+    kind: string,
     resolve: (id: string) => ScopeAddress | undefined,
     eager = false,
   ) {
@@ -166,7 +155,7 @@ export class PluginHost implements ScopePort {
   }
 
   private scopeSource(key: ScopeKey) {
-    return this.scopeSources.get(key.startsWith('workspace:') ? 'workspace' : 'session');
+    return this.scopeSources.get(key.slice(0, key.indexOf(':')));
   }
 
   private lookup(key: ScopeKey) {
@@ -292,7 +281,7 @@ export class PluginHost implements ScopePort {
       }
       const parent = address.parent ? visit(address.parent) : root;
       if (!hasComposition(overrides)) return parent;
-      const plans = this.catalog.plans(settings, descriptors, address.scope.kind, key, (id, error) =>
+      const plans = this.catalog.plans(settings, descriptors, key, (id, error) =>
         unavailable(id, error, key),
       );
       const isolates = [...new Set(overrides.isolate)].sort();
@@ -304,7 +293,7 @@ export class PluginHost implements ScopePort {
         for (const plan of plans) {
           if (!plan.descriptor.plugin) continue;
           const id = key + '/' + plan.id;
-          entries.push(this.catalog.entry(plan, context, address.scope, id, key));
+          entries.push(this.catalog.entry(plan, context, id, key));
           instances.set(id, { key, plugin: plan.id });
         }
       }
@@ -402,7 +391,7 @@ export class PluginHost implements ScopePort {
       failures.set(instance, message);
       return true;
     };
-    const plans = this.catalog.plans(settings, descriptors, 'application', undefined, unavailable);
+    const plans = this.catalog.plans(settings, descriptors, undefined, unavailable);
     const changedScopes = updating
       ? scopeKeys(settings).filter((key) =>
           Object.entries(settings.scopes[key]?.entries ?? {}).some(
@@ -414,7 +403,7 @@ export class PluginHost implements ScopePort {
     const mounts = [
       ...plans
         .filter(({ id, descriptor }) => descriptor.plugin && !failures.has(id))
-        .map((plan) => this.catalog.entry(plan, this.ctx, appScope)),
+        .map((plan) => this.catalog.entry(plan, this.ctx)),
       ...scoped.entries,
     ];
     const nextEntries = new Map(mounts.map((entry) => [entry.id, entry]));

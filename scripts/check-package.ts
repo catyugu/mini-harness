@@ -176,7 +176,7 @@ async function checkPackage() {
       const pluginData: PluginData = ctx.harnessPluginData;
       const pluginSecrets: PluginSecrets = ctx.harnessPluginSecrets;
       const execution: Execution = ctx.harnessExecution;
-      const records: SessionRecords = ctx.harnessSessions.records('session');
+      const records: SessionRecords = ctx.harnessSessions.records('session', { pluginId: 'fixture', instanceId: 'fixture' });
       const prompt: PromptPort = ctx.harnessPrompt;
       const routes: PluginRoutes = ctx.harnessPluginRoutes;
       pluginData.write('state', { count: 1 });

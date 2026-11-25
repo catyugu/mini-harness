@@ -1,13 +1,13 @@
 import { getTraceable, type Context } from 'mini-harness/cordis';
-import type { PluginScope } from './scopes.ts';
-import { pluginInstance, sessionAddress, sessionVisible } from './instance.ts';
+import type { ScopeKey } from './scopes.ts';
+import { findInstance } from './instance.ts';
 
-/** Scope assigned by the host to this plugin instance. */
-export function pluginScope(ctx: Context): PluginScope {
-  return pluginInstance(ctx).scope;
+/** The owning Entry's scope, or undefined for an application Entry. */
+export function pluginScope(ctx: Context): ScopeKey | undefined {
+  return findInstance(ctx)?.scopeKey;
 }
 
-/** Prepare a visible conversation and resolve its current service as the caller. */
+/** Resolve the current service for a conversation, including scoped overrides. */
 export async function sessionService<Name extends keyof Context & string>(
   ctx: Context,
   id: string,
@@ -16,12 +16,9 @@ export async function sessionService<Name extends keyof Context & string>(
 ) {
   const lifetime = ctx.fiber.signal;
   lifetime.throwIfAborted();
-  if (!sessionAddress(ctx, id).length || !sessionVisible(ctx, id))
-    throw new Error('Conversation outside plugin scope');
   const scopes = ctx.get('harnessScopes')!;
   const key = `session:${id}` as const;
   await scopes.prepare(key, signal ? AbortSignal.any([signal, lifetime]) : lifetime);
   lifetime.throwIfAborted();
-  if (!sessionVisible(ctx, id)) throw new Error('Conversation outside plugin scope');
   return getTraceable(ctx, scopes.require(key, name));
 }

@@ -10,7 +10,7 @@ import {
   type CompositionConfig,
   type EntryConfiguration,
 } from '@mini-harness/plugin-api/configuration';
-import type { PluginScope, ScopeKey } from '@mini-harness/plugin-api/scopes';
+import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
 import { resolveConfig, type Context, type EntryOptions } from 'mini-harness/cordis';
 import type { ResolvedPlugin } from '@mini-harness/plugin-api/descriptor';
 import { builtinBrowserAssets } from './browser-assets.ts';
@@ -230,7 +230,6 @@ export class PluginCatalog {
   entry(
     plan: ConfiguredPlugin,
     context: Context,
-    scope: PluginScope,
     id = plan.id,
     scopeKey?: ScopeKey,
   ): EntryOptions {
@@ -247,7 +246,6 @@ export class PluginCatalog {
       prepare: (ctx) => {
         bindInstance(ctx.fiber.entry!, {
           pluginId: plan.id,
-          scope,
           scopeKey,
           writableConfig: plan.live,
         });
@@ -275,7 +273,6 @@ export class PluginCatalog {
   plans(
     settings: CompositionConfig,
     descriptors: DiscoveredPlugin[],
-    scope: PluginScope['kind'],
     scopeKey?: ScopeKey,
     unavailable?: (id: string, error: unknown) => boolean,
   ) {
@@ -284,7 +281,7 @@ export class PluginCatalog {
       const { id } = item;
       if (item.scopeKey !== scopeKey || !this.enabled(item, settings)) continue;
       const entry =
-        scope === 'application' ? settings.entries[id] : settings.scopes[scopeKey!]?.entries?.[id];
+        scopeKey ? settings.scopes[scopeKey]?.entries?.[id] : settings.entries[id];
       try {
         if (item.error) throw new DomainError('invalid_input', 'Invalid plugin ' + id + ': ' + item.error);
         const values = entry?.config;

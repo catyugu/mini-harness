@@ -5,7 +5,7 @@ import { DomainError } from '@mini-harness/platform/errors';
 export const localPluginIdPattern = /^[a-z][a-z0-9-]{0,63}$/;
 export const pluginIdPattern = /^(?:core:)?[a-z][a-z0-9-]{0,63}$/;
 export function isScopeKey(value: string): value is ScopeKey {
-  return /^(?:workspace:[a-f0-9]{32}|session:[a-f0-9-]{36})$/.test(value);
+  return /^[a-z][a-z0-9-]*:[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(value);
 }
 
 export function validateEntries(entries: Record<string, unknown>) {

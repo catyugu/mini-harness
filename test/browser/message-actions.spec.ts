@@ -51,7 +51,7 @@ export const inject = ["harnessPluginRoutes","harnessSessions"];
 export const apply = (ctx) => {
           ctx.harnessPluginRoutes.register('POST', '/record', async ({ body }) => {
             const { id, visible } = await body();
-            return ctx.harnessSessions.records(id).append( 'fixture', visible ? { title: 'Saved record' } : undefined);
+            return ctx.harnessSessions.records(id, { pluginId: 'record-writer', instanceId: 'record-writer' }).append( 'fixture', visible ? { title: 'Saved record' } : undefined);
           });
         };
 `,

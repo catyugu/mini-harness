@@ -15,7 +15,7 @@ export const inject = [
 import { sessionService } from 'mini-harness/plugin-scope';
 import { HttpError } from 'mini-harness/transport';
 import type { Context } from 'mini-harness/cordis';
-import type { SessionAccess, SessionRecords } from 'mini-harness/sessions';
+import type { SessionDirectory, SessionRecords } from 'mini-harness/sessions';
 import type { Execution } from 'mini-harness/execution';
 import type { ApprovalRequests } from 'mini-harness/approvals';
 import type { PluginData, PluginSecrets } from 'mini-harness/plugin-data';
@@ -43,7 +43,7 @@ export const Config = defineConfig(
   (config) => (typeof config.label !== 'string' || !config.label.trim() ? 'Enter a note label' : undefined),
 );
 export function apply(ctx: Context) {
-  const sessions: SessionAccess = ctx.harnessSessions.access();
+  const sessions: SessionDirectory = ctx.harnessSessions;
   const execute: Execution = ctx.harnessExecution;
   const data: PluginData = ctx.harnessPluginData;
   const secrets: PluginSecrets = ctx.harnessPluginSecrets;
@@ -70,7 +70,7 @@ export function apply(ctx: Context) {
           },
           async execute(_call, input) {
             const note = String(input.note);
-            const records: SessionRecords = ctx.harnessSessions.records(sessionId);
+            const records: SessionRecords = ctx.harnessSessions.records(sessionId, { pluginId: 'task-notes', instanceId: 'task-notes' });
             await records.append({ note }, { title: label(), content: note });
             return { content: [{ type: 'text', text: 'Task note saved.' }] };
           },

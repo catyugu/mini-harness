@@ -76,7 +76,7 @@ import { appendFileSync } from 'node:fs';
 import { Context } from 'mini-harness/cordis';
 export const apply = (ctx, config) => {
       if (!(ctx instanceof Context)) throw new Error('Plugin loaded a different Cordis runtime');
-      const sessions = ctx.harnessSessions.access();
+      const sessions = ctx.harnessSessions;
       ctx.effect(() => () => appendFileSync(${JSON.stringify(log)}, 'dispose\\n'));
       ctx.effect(() => ctx.harnessTools.register({
         name: 'example_count', label: 'Count', description: 'Count sessions',
@@ -221,7 +221,7 @@ test('server entries support named Cordis declarations and reject an invalid mod
 export const inject = ["harnessSessions"];
 
 export function apply(ctx) {
-      if (ctx.harnessSessions.access().list().length !== 0) throw new Error('Unexpected sessions');
+      if (ctx.harnessSessions.list().length !== 0) throw new Error('Unexpected sessions');
     }
 `,
     ],
@@ -753,12 +753,11 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
   const ctx = new Context();
   ctx.provide('authority', {});
   const host = new PluginHost(ctx, directory, fixtureModules(builtins), () => settings);
-  host.register('workspace', (id) => ({ scope: { kind: 'workspace', workspaceId: id } }), true);
+  host.register('workspace', () => ({}), true);
   host.register('session', (id) => {
     const record = records.get(id);
     return (
       record && {
-        scope: { kind: 'session', sessionId: id, workspaceId: record.workspaceId },
         parent: record.parentId ? `session:${record.parentId}` : `workspace:${record.workspaceId}`,
       }
     );
@@ -895,7 +894,7 @@ test('configuration validation resolves the staged scope provider and rejects in
     },
   ];
   const host = new PluginHost(new Context(), directory, fixtureModules(builtins), () => settings);
-  host.register('workspace', (id) => ({ scope: { kind: 'workspace', workspaceId: id } }), true);
+  host.register('workspace', () => ({}), true);
   t.after(async () => {
     await host.close();
     rmSync(directory, { recursive: true, force: true });
@@ -947,7 +946,7 @@ test('setup and live configuration cannot await their own graph transaction', as
   const ctx = new Context();
   const host = new PluginHost(ctx, directory, fixtureModules(builtins), () => settings);
   ctx.provide('harnessScopes', host);
-  host.register('session', (id) => ({ scope: { kind: 'session', sessionId: id, workspaceId: 'workspace' } }));
+  host.register('session', () => ({}));
   t.after(async () => {
     await host.close();
     rmSync(directory, { recursive: true, force: true });
@@ -1010,4 +1009,32 @@ test('a failed server entry does not publish its browser module', async (t) => {
     ['ui'],
   );
   assert.equal(host.metadata().find(({ id }) => id === 'replacement')?.state, 'failed');
+});
+
+test('custom scope namespaces support normal Cordis composition and inheritance', async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'mini-custom-scopes-'));
+  const ctx = new Context();
+  const settings = mergeSettings(structuredClone(DEFAULTS), {
+    entries: { global: { name: 'global' } },
+    scopes: {
+      'project:alpha': {
+        isolate: ['greeting'],
+        entries: { local: { name: 'local' } },
+      },
+    },
+  });
+  const host = new PluginHost(ctx, directory, fixtureModules([
+    { id: 'global', title: 'Global', description: '', plugin: { provide: ['greeting'], apply(ctx) { ctx.provide('greeting', 'global'); } } },
+    { id: 'local', title: 'Local', description: '', plugin: { provide: ['greeting'], apply(ctx) { ctx.provide('greeting', 'project'); } } },
+  ]), () => settings);
+  host.register('project', () => ({}), true);
+  host.register('task', () => ({ parent: 'project:alpha' }));
+  t.after(async () => {
+    await host.close();
+    rmSync(directory, { recursive: true, force: true });
+  });
+  await host.start(settings);
+  await host.prepare('task:child');
+  assert.equal(host.context('task:child').get('greeting'), 'project');
+  assert.equal(host.context('project:beta').get('greeting'), 'global');
 });

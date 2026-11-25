@@ -477,7 +477,6 @@ export async function loadProfile(
       const plans = catalog.plans(
         settings,
         await catalog.runtimeDescriptors(settings),
-        'application',
         undefined,
         (id, error) => {
           errors.set(id, error);
@@ -487,7 +486,7 @@ export async function loadProfile(
       for (const [id, error] of await entries.update(
         plans
           .filter(({ descriptor }) => descriptor.plugin)
-          .map((plan) => catalog.entry(plan, context, { kind: 'application' })),
+          .map((plan) => catalog.entry(plan, context)),
       ))
         errors.set(id, error);
       return errors;

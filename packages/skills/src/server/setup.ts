@@ -5,7 +5,7 @@ import { defineTool } from '@mini-harness/tools/api';
 import { SkillLoader, defaultSkillRoots } from './loader.ts';
 
 export function setup(ctx: Context) {
-  const sessions = ctx.harnessSessions.access();
+  const sessions = ctx.harnessSessions;
   const loader = new SkillLoader(defaultSkillRoots(ctx.harnessState.paths.home), (path, error) =>
     ctx.logger.warn('Could not discover skill at %s: %s', path, String(error)),
   );

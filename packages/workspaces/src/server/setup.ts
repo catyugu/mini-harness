@@ -11,7 +11,7 @@ export function setup(ctx: Context) {
       'workspace',
       (id) =>
         catalog.list().some((entry) => entry.id === id)
-          ? { scope: { kind: 'workspace', workspaceId: id } }
+          ? {}
           : undefined,
       true,
     ),

@@ -140,14 +140,15 @@ import { appendFileSync } from 'node:fs';
 export const apply = (ctx, config) => {
       if (config.fail) throw new Error('Scoped setup failed');
       ctx.effect(() => () => appendFileSync(${JSON.stringify(cleaned)}, 'released\\n'));
-      ctx.provide('exampleGreeting', { greet: (name) => pluginScope(ctx).workspaceId + ':' + name });
-      const sessions = ctx.harnessSessions.access();
-      ctx.harnessPluginRoutes.scope('start', () => sessions.create({ title: 'Scoped root' }));
+      ctx.provide('exampleGreeting', { greet: (name) => pluginScope(ctx).slice('workspace:'.length) + ':' + name });
+      const sessions = ctx.harnessSessions;
+      ctx.harnessPluginRoutes.scope('start', () => sessions.create({ title: 'Scoped root', workspaceId: pluginScope(ctx).slice('workspace:'.length) }));
       ctx.harnessPluginRoutes.scope('tools', (id) => ctx.harnessTools.forSession(id).map(({ name }) => name));
+      ctx.harnessPluginRoutes.scope('lookup', (id) => sessions.get(id));
       ctx.harnessPluginRoutes.scope('greet', (input) => {
         ctx.harnessPluginData.write('seen', input);
         ctx.harnessPluginChanges.invalidate();
-        return { workspaceId: pluginScope(ctx).workspaceId, input };
+        return { workspaceId: pluginScope(ctx).slice('workspace:'.length), input };
       });
     };
 `,
@@ -183,6 +184,7 @@ export const apply = (ctx, config) => {
   assert.equal(created.status, 200);
   assert.equal(created.body.parentId, null);
   assert.equal(created.body.workspaceId, parent.workspaceId);
+  assert.equal((await request(operation(workspaceKey, 'lookup'), 'POST', { input: outside.id })).body.id, outside.id);
   assert.deepEqual((await request(operation(workspaceKey), 'POST', { input: 'World' })).body, {
     workspaceId: parent.workspaceId,
     input: 'World',
@@ -205,7 +207,7 @@ export const apply = (ctx, config) => {
       'scoped_greeting',
     ),
   );
-  assert.deepEqual((await request(operation(workspaceKey, 'tools'), 'POST', { input: outside.id })).body, []);
+  assert.ok((await request(operation(workspaceKey, 'tools'), 'POST', { input: outside.id })).body.includes('read'));
   assert.ok(names(child.id).includes('scoped_greeting'));
   assert.ok(!names(child.id).includes('read'));
   for (const id of [sibling.id, outside.id]) {

@@ -1,6 +1,6 @@
 import type { ApprovalRequests } from './server/api.ts';
 import { Service, type Plugin } from 'mini-harness/cordis';
-import { pluginInstance, sessionVisible } from '@mini-harness/plugin-api/instance';
+import { findInstance } from '@mini-harness/plugin-api/instance';
 import { isRunning } from '@mini-harness/sessions/run-state';
 import { DomainError } from '@mini-harness/platform/errors';
 import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
@@ -29,8 +29,7 @@ const plugin: Plugin.Object = {
     const requests: ApprovalRequests = Service.track({
       request(id, prompt, signal) {
         const caller = Service.caller(this);
-        const { instanceId } = pluginInstance(caller);
-        if (!sessionVisible(caller, id)) throw new Error('Conversation outside plugin scope');
+        const instanceId = findInstance(caller)?.instanceId ?? 'fiber:' + caller.fiber.uid;
         ctx.harnessRegistry.assertAvailable(id);
         if (!ctx.harnessRegistry.get(id)) throw new DomainError('not_found', 'Conversation not found');
         const run = ctx.harnessRuns.info(id);

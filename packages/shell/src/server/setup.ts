@@ -3,7 +3,7 @@ import type { Context } from 'mini-harness/cordis';
 import { Type } from 'typebox';
 
 export function setup(ctx: Context) {
-  const workspace = ctx.harnessSessions.access();
+  const workspace = ctx.harnessSessions;
   const requestApproval = ctx.harnessApprovalRequests.request.bind(ctx.harnessApprovalRequests);
   const options = ctx.fiber.effectiveConfig as { mode: 'isolated' | 'host'; timeoutSeconds: number };
   const tool = (sessionId: string) =>

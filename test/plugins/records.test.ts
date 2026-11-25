@@ -17,10 +17,10 @@ export const inject = ["harnessPluginRoutes","harnessSessions"];
 export const apply = (ctx) => {
     ctx.harnessPluginRoutes.register('POST', '/entries', async ({ body }) => {
       const { id, value } = await body();
-      return ctx.harnessSessions.records(id).append(value, { title: 'Progress', content: 'Browser summary' });
+      return ctx.harnessSessions.records(id, { pluginId: 'records', instanceId: 'records' }).append(value, { title: 'Progress', content: 'Browser summary' });
     });
-    ctx.harnessPluginRoutes.register('GET', '/entries', ({ url }) => ctx.harnessSessions.records(url.searchParams.get('id')).list());
-        ctx.harnessPluginRoutes.register('GET', '/notes', ({ url }) => ctx.harnessSessions.records(url.searchParams.get('id')).list().map(({ data }) => data.note));
+    ctx.harnessPluginRoutes.register('GET', '/entries', ({ url }) => ctx.harnessSessions.records(url.searchParams.get('id'), { pluginId: 'records', instanceId: 'records' }).list());
+        ctx.harnessPluginRoutes.register('GET', '/notes', ({ url }) => ctx.harnessSessions.records(url.searchParams.get('id'), { pluginId: 'records', instanceId: 'records' }).list().map(({ data }) => data.note));
   };
 `,
   );
