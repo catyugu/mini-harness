@@ -310,7 +310,7 @@ export function readProfile(name: string, paths?: Paths) {
 
 /** Resolve shipped module locations and static display metadata without executing plugin code. */
 export function profileDescriptors(entries: ReadonlyMap<string, Row>): ResolvedPlugin[] {
-  const metadata = readJson<Record<string, PluginInfo>>(
+  const metadata = readJson<Record<string, Partial<PluginInfo>>>(
     fileURLToPath(new URL('./profile-metadata.json', import.meta.url)),
     {},
   );
