@@ -1,4 +1,4 @@
-import { assertOutsideMountTransaction, withMountTransaction } from '@mini-harness/plugin-api/mutation-api';
+import { assertOutsideMountTransaction, withMountTransaction, pluginRequestFiber } from '@mini-harness/plugin-api/mutation-api';
 import { DomainError } from '@mini-harness/platform/errors';
 import { dirname, join } from 'node:path';
 import {
@@ -22,11 +22,10 @@ import type {
 } from '@mini-harness/plugin-api/scopes';
 import { planBrowser, publishBrowser } from './browser-assets.ts';
 import { addAbortListener } from 'node:events';
-import type { UpgradeHandler } from '@mini-harness/transport/routes';
 import { scopeKeys, type CompositionConfig } from '@mini-harness/plugin-api/configuration';
 import { bindPluginImports } from './module-resolution.ts';
 import { pluginData, pluginSecrets, removeScopeData } from './data.ts';
-import { PluginRouteRegistry, scopeOperation } from './routes.ts';
+import { ScopedRequests, scopeOperation } from './routes.ts';
 import { pluginSettings } from './plugin-settings.ts';
 import { pluginInstance } from '@mini-harness/plugin-api/instance';
 import { changedSelection, PluginCatalog } from './catalog.ts';
@@ -43,7 +42,7 @@ export class PluginHost implements ScopePort {
   private readonly catalog: PluginCatalog;
   private readonly entries: EntryTree;
   private readonly ownsTree: boolean;
-  private readonly pluginRoutes: PluginRouteRegistry;
+  private readonly scopedRequests: ScopedRequests;
   private readonly imports: ReturnType<typeof bindPluginImports>;
   private scopes = new Map<ScopeKey, EntryGroup>();
   private started = false;
@@ -59,7 +58,6 @@ export class PluginHost implements ScopePort {
     private readonly directory: string,
     builtins: ResolvedPlugin[],
     private readonly settings: () => CompositionConfig,
-    upgrade?: (path: string, handler: UpgradeHandler) => () => Promise<void>,
     private readonly writePlugin?: (
       id: string,
       key: ScopeKey | undefined,
@@ -71,10 +69,10 @@ export class PluginHost implements ScopePort {
   ) {
     this.entries = entries ?? new EntryTree();
     this.ownsTree = entries === undefined;
-    this.pluginRoutes = new PluginRouteRegistry(ctx, upgrade);
+    this.scopedRequests = new ScopedRequests();
     const directoryData = join(dirname(directory), 'plugin-data');
     const services = {
-      harnessPluginRoutes: this.pluginRoutes.service(),
+      harnessScopedRequests: this.scopedRequests.service(),
       harnessPluginSettings: pluginSettings(ctx, writePlugin),
       harnessPluginData: pluginData(directoryData),
       harnessPluginSecrets: pluginSecrets(directoryData),
@@ -332,7 +330,7 @@ export class PluginHost implements ScopePort {
     if (!this.lookup(key)) throw new DomainError('not_found', 'Plugin scope not found');
     await this.prepare(key, signal);
     const instance = key + '/' + plugin;
-    const handler = this.pluginRoutes.get(instance, operation);
+    const handler = this.scopedRequests.get(instance, operation);
     if (!this.lookup(key) || !this.entries.get(instance)?.active || !handler) {
       const failure = this.failures.get(instance);
       if (failure) throw new DomainError('unavailable', failure);
@@ -486,24 +484,28 @@ export class PluginHost implements ScopePort {
     try {
       // An Entry cannot dispose the Fiber whose active configuration transaction
       // is awaiting that disposal. The actual control-plane dependencies require restart.
-      if (updating) {
+      const requestOwner = pluginRequestFiber();
+      if (updating || requestOwner) {
         const visited = new Set<Context['fiber']>();
-        const check = (fiber: Context['fiber']) => {
+        const check = (fiber: Context['fiber'], request = false) => {
           if (visited.has(fiber)) return;
           visited.add(fiber);
           const entry = fiber.entry && this.entries.get(fiber.entry.options.id);
           if (entry) {
             const next = mounts.find(({ id }) => id === entry.options.id);
-            if (!next || !entry.matches(next) || !isDeepStrictEqual(next.config, entry.options.config))
+            if (!next || !entry.matches(next) || ((!request || !next.live) && !isDeepStrictEqual(next.config, entry.options.config)))
               throw new DomainError(
                 'conflict',
-                'Changing ' + entry.options.id + ' requires a Profile restart',
+                request
+                  ? 'Structural settings cannot be changed during a plugin request that would dispose ' + entry.options.id
+                  : 'Changing ' + entry.options.id + ' requires a Profile restart',
               );
           }
           for (const provision of Object.values(fiber.committed ?? {}))
-            if (provision) check(provision.ctx.fiber);
+            if (provision) check(provision.ctx.fiber, request);
         };
-        check(this.owner.fiber);
+        if (updating) check(this.owner.fiber);
+        if (requestOwner) check(requestOwner, true);
       }
       const activationErrors = await this.entries.update(mounts);
       for (const mounted of mounts) {

@@ -12,7 +12,7 @@ Owns route registration, HTTP errors and replies, event streams, and projection 
 
 ## API
 
-`harnessRoutes` and `harnessChanges` are host services. `harnessPluginRoutes` registers plugin-owned authenticated endpoints.
+All plugins use `harnessRoutes` and `harnessUpgrades` for Fiber-owned authenticated HTTP and WebSocket endpoints. `harnessScopedRequests` provides RPC dispatch to a particular mounted scope instance.
 
 ## Dependencies
 

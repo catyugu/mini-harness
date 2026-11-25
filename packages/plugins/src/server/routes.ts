@@ -1,82 +1,22 @@
-import { Service, type Context } from 'mini-harness/cordis';
+import { Service } from 'mini-harness/cordis';
 import { pluginInstance } from '@mini-harness/plugin-api/instance';
 import { withPluginRequest } from '@mini-harness/plugin-api/mutation-api';
 import { DomainError } from '@mini-harness/platform/errors';
-import type { PluginRoutes, UpgradeHandler } from '@mini-harness/transport/routes';
+import type { ScopedRequestPort } from '@mini-harness/transport/routes';
 
-const routePath = /^\/(?:[a-zA-Z0-9_-]+\/)*[a-zA-Z0-9_-]+$/;
 export const scopeOperation = /^[a-z][a-z0-9-]{0,63}$/;
 
-function networkEffect(ctx: Context, register: () => () => Promise<void>) {
-  const signal = ctx.fiber.signal;
-  return ctx.effect(() => {
-    const release = register();
-    let closing: Promise<void> | undefined;
-    const close = () => (closing ??= release());
-    // Closing the transport also aborts body reads and WebSocket I/O.
-    const abort = () => {
-      void close().catch(() => {});
-    };
-    signal.addEventListener('abort', abort, { once: true });
-    return () => {
-      signal.removeEventListener('abort', abort);
-      return close();
-    };
-  });
-}
-
-export class PluginRouteRegistry {
+export class ScopedRequests {
   private readonly requests = new Map<string, (input: unknown, signal: AbortSignal) => Promise<unknown>>();
-
-  constructor(
-    private readonly ctx: Context,
-    private readonly upgrade?: (path: string, handler: UpgradeHandler) => () => Promise<void>,
-  ) {}
 
   get(id: string, name: string) {
     return this.requests.get(id + '/' + name);
   }
 
-  service(): PluginRoutes {
-    const { ctx, upgrade, requests } = this;
+  service(): ScopedRequestPort {
+    const { requests } = this;
     return Service.track({
-      register(method, path, handler) {
-        const caller = Service.caller(this);
-        const { pluginId, scopeKey } = pluginInstance(caller);
-        if (scopeKey || !routePath.test(path) || !['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method))
-          throw new Error('Invalid plugin route');
-        const lifetime = caller.fiber.signal;
-        const fullPath = '/api/extensions/' + encodeURIComponent(pluginId) + path;
-        return networkEffect(caller, () =>
-          ctx.harnessRoutes.register(method, fullPath, (request) =>
-            caller.fiber
-              .run(
-                (signal) => withPluginRequest(signal, () => handler({ ...request, signal })),
-                request.signal,
-              )
-              .catch((error) => {
-                if (lifetime.aborted)
-                  throw new DomainError('invalid_input', 'Route is no longer available', { cause: error });
-                throw error;
-              }),
-          ),
-        );
-      },
-      upgrade(path, handler) {
-        const caller = Service.caller(this);
-        const { pluginId, scopeKey } = pluginInstance(caller);
-        if (scopeKey || !routePath.test(path) || !upgrade) throw new Error('Invalid WebSocket route');
-        const fullPath = '/api/extensions/' + encodeURIComponent(pluginId) + path;
-        return networkEffect(caller, () =>
-          upgrade(fullPath, (request, socket, head, signal) =>
-            caller.fiber.run(
-              (lifetime) => withPluginRequest(lifetime, () => handler(request, socket, head, lifetime)),
-              signal,
-            ),
-          ),
-        );
-      },
-      scope(name, handler) {
+      register(name, handler) {
         const caller = Service.caller(this);
         const { instanceId, scopeKey } = pluginInstance(caller);
         if (!scopeKey || !scopeOperation.test(name) || typeof handler !== 'function')

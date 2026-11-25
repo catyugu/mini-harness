@@ -70,21 +70,28 @@ declare module 'mini-harness/cordis' {
   }
 }
 
-export interface PluginRoutes {
+/** Scoped RPC selects a mounted instance by its persistent scope and entry ID. */
+export interface ScopedRequestPort {
   register(
-    method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
-    path: string,
-    handler: RouteHandler,
-  ): () => Promise<void>;
-  upgrade(path: string, handler: UpgradeHandler): () => Promise<void>;
-  scope(
     name: string,
     handler: (input: unknown, signal: AbortSignal) => unknown | Promise<unknown>,
   ): () => Promise<void>;
 }
 
+export interface UpgradePort {
+  register(path: string, handler: UpgradeHandler): () => Promise<void>;
+  dispatch(
+    path: string,
+    request: IncomingMessage,
+    socket: import('node:stream').Duplex,
+    head: Buffer,
+  ): boolean;
+  close(): void;
+}
+
 declare module 'mini-harness/cordis' {
   interface Context {
-    harnessPluginRoutes: PluginRoutes;
+    harnessScopedRequests: ScopedRequestPort;
+    harnessUpgrades: UpgradePort;
   }
 }

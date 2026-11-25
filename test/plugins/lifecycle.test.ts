@@ -535,20 +535,20 @@ test('unloading cancels and drains HTTP, scoped requests and upgrades before dis
     {},
     lifecycle +
       `
-export const inject = ["harnessPluginRoutes","harnessSettingsStore"];
+export const inject = ["harnessRoutes","harnessUpgrades","harnessSettingsStore"];
 export const apply = (ctx) => {
       ctx.effect(() => () => mark('app:disposed'));
-      ctx.harnessPluginRoutes.register('GET', '/wait', ({ signal }) => wait('http', signal));
-      ctx.harnessPluginRoutes.register('POST', '/body', async ({ body }) => {
+      ctx.harnessRoutes.register('GET', '/api/extensions/drain/wait', ({ signal }) => wait('http', signal));
+      ctx.harnessRoutes.register('POST', '/api/extensions/drain/body', async ({ body }) => {
         mark('body:entered');
         try { return await body(); }
         finally { mark('body:drained'); }
       });
-      ctx.harnessPluginRoutes.register('POST', '/disable', async () => {
+      ctx.harnessRoutes.register('POST', '/api/extensions/drain/disable', async () => {
         try { await ctx.harnessSettingsStore.update({ entries: { drain: { disabled: true } } }); }
         catch (error) { return { error: error.message }; }
       });
-      ctx.harnessPluginRoutes.upgrade('/socket', async (_request, _socket, _head, signal) => wait('ws', signal));
+      ctx.harnessUpgrades.register('/api/extensions/drain/socket', async (_request, _socket, _head, signal) => wait('ws', signal));
     };
 `,
   );
@@ -558,10 +558,10 @@ export const apply = (ctx) => {
     {},
     lifecycle +
       `
-export const inject = ["harnessPluginRoutes"];
+export const inject = ["harnessScopedRequests"];
 export const apply = (ctx) => {
       ctx.effect(() => () => mark('scope:disposed'));
-      ctx.harnessPluginRoutes.scope('wait', (_input, signal) => wait('scope', signal));
+      ctx.harnessScopedRequests.register('wait', (_input, signal) => wait('scope', signal));
     };
 `,
   );

@@ -114,7 +114,7 @@ test('scoped plugins inherit declared services and tool policies, and release th
     {},
     `
 export const provide = ["exampleGreeting"];
-export const inject = ["harnessSessions","harnessPluginRoutes","harnessPluginData","harnessPluginChanges","harnessTools"];
+export const inject = ["harnessSessions","harnessScopedRequests","harnessPluginData","harnessPluginChanges","harnessTools"];
 import { pluginScope } from 'mini-harness/plugin-scope';
 import { appendFileSync } from 'node:fs';
 export const apply = (ctx, config) => {
@@ -122,9 +122,9 @@ export const apply = (ctx, config) => {
       ctx.effect(() => () => appendFileSync(${JSON.stringify(cleaned)}, 'released\\n'));
       ctx.provide('exampleGreeting', { greet: (name) => pluginScope(ctx).workspaceId + ':' + name });
       const sessions = ctx.harnessSessions.access();
-      ctx.harnessPluginRoutes.scope('start', () => sessions.create({ title: 'Scoped root' }));
-      ctx.harnessPluginRoutes.scope('tools', (id) => ctx.harnessTools.forSession(id).map(({ name }) => name));
-      ctx.harnessPluginRoutes.scope('greet', (input) => {
+      ctx.harnessScopedRequests.register('start', () => sessions.create({ title: 'Scoped root' }));
+      ctx.harnessScopedRequests.register('tools', (id) => ctx.harnessTools.forSession(id).map(({ name }) => name));
+      ctx.harnessScopedRequests.register('greet', (input) => {
         ctx.harnessPluginData.write('seen', input);
         ctx.harnessPluginChanges.invalidate();
         return { workspaceId: pluginScope(ctx).workspaceId, input };

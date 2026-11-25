@@ -143,9 +143,9 @@ test(
         browserPreload: 'web/preload.js',
       }),
       'server/entry.mjs': `
-export const inject = ["harnessPluginRoutes"];
+export const inject = ["harnessRoutes"];
 import { label } from 'mini-setup-helper';
-export const apply = (ctx) => { ctx.harnessPluginRoutes.register('GET', '/label', () => label); };
+export const apply = (ctx) => { ctx.harnessRoutes.register('GET', '/api/installed-example/label', () => label); };
 `,
       'web/main.js': "export const inject = ['miniPages']; export function apply() {}",
       'web/panel.css': '.panel { color: inherit; }',
@@ -186,7 +186,7 @@ export const apply = (ctx) => { ctx.harnessPluginRoutes.register('GET', '/label'
     assert.equal(metadata.state, 'disabled');
     const response = await request('/settings', 'PATCH', { entries: { [id]: { disabled: false } } });
     assert.equal(response.status, 200, await response.text());
-    assert.equal(await (await request('/extensions/' + id + '/label')).json(), 'From dependency');
+    assert.equal(await (await request('/installed-example/label')).json(), 'From dependency');
     const bootstrap = await (await request('/bootstrap')).json();
     const entry = bootstrap.ui.find((entry: { id: string }) => entry.id === id);
     const asset = (path: string) => fetch('http://127.0.0.1:' + port + path);
@@ -223,9 +223,9 @@ test('local modules mount and unmount without a separate installer', async (t) =
   writeFileSync(
     join(folder, 'plugin.js'),
     `
-export const inject = ['harnessPluginRoutes'];
+export const inject = ['harnessRoutes'];
 export function apply(ctx, config) {
-  ctx.harnessPluginRoutes.register('POST', '/echo', async ({ body }) => ({ echo: await body() }));
+  ctx.harnessRoutes.register('POST', '/api/extensions/local-module/echo', async ({ body }) => ({ echo: await body() }));
   if (config.fail) throw new Error('Setup failed after registering a route');
 }
 `,

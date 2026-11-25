@@ -19,10 +19,14 @@ export function assertOutsideMountTransaction() {
     throw new Error('Operation is unavailable during plugin setup, configuration or teardown');
 }
 
-const pluginRequest = new AsyncLocalStorage<{ signal: AbortSignal; active: boolean }>();
+const pluginRequest = new AsyncLocalStorage<{ signal: AbortSignal; active: boolean; fiber?: Context['fiber'] }>();
 
-export async function withPluginRequest<T>(signal: AbortSignal, work: () => T | Promise<T>): Promise<T> {
-  const request = { signal, active: true };
+export async function withPluginRequest<T>(
+  signal: AbortSignal,
+  work: () => T | Promise<T>,
+  fiber?: Context['fiber'],
+): Promise<T> {
+  const request = { signal, active: true, fiber };
   try {
     return await pluginRequest.run(request, work);
   } finally {
@@ -35,8 +39,14 @@ export function pluginRequestSignal() {
   return request?.active ? request.signal : undefined;
 }
 
+export function pluginRequestFiber() {
+  const request = pluginRequest.getStore();
+  return request?.active ? request.fiber : undefined;
+}
+
 export function assertOutsidePluginRequest() {
-  if (pluginRequestSignal()) throw new Error('Structural settings cannot be changed during a plugin request');
+  if (pluginRequestSignal() && !pluginRequestFiber())
+    throw new Error('Structural settings cannot be changed during a scoped request');
 }
 
 export interface MutationPort {

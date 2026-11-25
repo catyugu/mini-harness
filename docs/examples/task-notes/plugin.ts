@@ -9,7 +9,7 @@ export const inject = [
   'harnessPluginSecrets',
   'harnessPrompt',
   'harnessTools',
-  'harnessPluginRoutes',
+  'harnessRoutes',
 ];
 import { sessionService } from 'mini-harness/plugin-scope';
 import { HttpError } from 'mini-harness/transport';
@@ -21,7 +21,7 @@ import type { PluginData, PluginSecrets } from 'mini-harness/plugin-data';
 import type { PromptPort } from 'mini-harness/agent/prompt';
 import type { ToolDefinition } from 'mini-harness/tools';
 import type { ModelCatalogPort } from 'mini-harness/models';
-import type { PluginRoutes } from 'mini-harness/transport';
+import type { RoutePort } from 'mini-harness/transport';
 declare module 'mini-harness/cordis' {
   interface Context {
     taskNotes: { label(): string };
@@ -47,7 +47,7 @@ export function apply(ctx: Context) {
   const data: PluginData = ctx.harnessPluginData;
   const secrets: PluginSecrets = ctx.harnessPluginSecrets;
   const prompt: PromptPort = ctx.harnessPrompt;
-  const routes: PluginRoutes = ctx.harnessPluginRoutes;
+  const routes: RoutePort = ctx.harnessRoutes;
   const approvals: ApprovalRequests = ctx.harnessApprovalRequests;
   const confirm = approvals.request.bind(approvals);
   const label = () => ctx.harnessPluginSettings.get<string>('label');
@@ -78,23 +78,23 @@ export function apply(ctx: Context) {
     }),
   );
   const running = new Map<string, import('mini-harness/execution').ExecutionHandle>();
-  routes.register('POST', '/cancel-follow-up', async ({ body }) => {
+  routes.register('POST', '/api/extensions/task-notes/cancel-follow-up', async ({ body }) => {
     const { runId } = await body();
     return { cancelled: typeof runId === 'string' && (running.get(runId)?.cancel() ?? false) };
   });
-  routes.register('GET', '/smoke', () => ({
+  routes.register('GET', '/api/extensions/task-notes/smoke', () => ({
     label: label(),
     ready: data.read('seen', false),
     credential: hasCredential(),
   }));
-  routes.register('PUT', '/credential', async ({ body }) => {
+  routes.register('PUT', '/api/extensions/task-notes/credential', async ({ body }) => {
     const token = (await body())?.token;
     if (typeof token !== 'string' || !token.trim())
       throw new HttpError('invalid_input', 'Enter a service token');
     secrets.write('service-token', token);
     return { credential: hasCredential() };
   });
-  routes.register('POST', '/follow-up', async ({ body, signal }) => {
+  routes.register('POST', '/api/extensions/task-notes/follow-up', async ({ body, signal }) => {
     const { parentId, message, requireApproval } = (await body()) ?? {};
     if (
       typeof parentId !== 'string' ||

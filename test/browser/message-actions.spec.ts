@@ -47,9 +47,9 @@ export const apply = (ctx) => {
         'record-writer',
         {},
         `
-export const inject = ["harnessPluginRoutes","harnessSessions"];
+export const inject = ["harnessRoutes","harnessSessions"];
 export const apply = (ctx) => {
-          ctx.harnessPluginRoutes.register('POST', '/record', async ({ body }) => {
+          ctx.harnessRoutes.register('POST', '/api/extensions/record-writer/record', async ({ body }) => {
             const { id, visible } = await body();
             return ctx.harnessSessions.records(id).append( 'fixture', visible ? { title: 'Saved record' } : undefined);
           });
