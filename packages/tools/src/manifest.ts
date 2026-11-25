@@ -9,10 +9,8 @@ export const metadata: PluginInfo = {
 };
 
 const plugin: Plugin.Object = {
-  inject: ['harnessToolPolicy'],
   provide: ['harnessTools'],
   apply(ctx) {
-    const { harnessToolPolicy } = ctx;
     ctx.provide(
       'harnessTools',
       new ToolRegistry(async (request, scope) => {
@@ -26,7 +24,7 @@ const plugin: Plugin.Object = {
           if (decision !== 'deny') throw new Error('Invalid tool policy decision');
           return decision;
         }
-      }, harnessToolPolicy).service(),
+      }, (id, tool) => ctx.get('harnessToolPolicy')?.(id, tool) ?? true).service(),
     );
   },
 };

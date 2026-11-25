@@ -20,14 +20,7 @@ Cordis activates and disposes consumers according to their dependencies. Changed
 
 Prepare a Profile address with `await ctx.harnessProfileScopes.prepare(address, signal)`, then use the selected Cordis context directly: `ctx.harnessProfileScopes.context(address).harnessModels`, for example. Resolve it again after configuration changes. Perform configuration preparation in runtime handlers.
 
-Read-only tool grants belong to the active Profile. Grant only registrations which declare read-only access. For example, the default bundle includes:
-
-```yaml
-readOnlyTools:
-  files: [read, ls, find, grep]
-```
-
-The plugin Settings detail can grant or revoke read-only tools by Entry ID. The same policy applies to shipped and third-party entries. Existing conversation and workspace restrictions still apply.
+Scope configuration contains only Entry composition and service isolation. The optional conversation tool policy handles read-only mode independently of Profile addresses; there is no separate per-plugin grant list.
 
 ## Runtime scopes
 

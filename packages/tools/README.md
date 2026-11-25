@@ -24,9 +24,8 @@ Uses Cordis fibers for plugin-owned calls and session ancestry for tool visibili
 
 ## Configuration
 
-Scoped `disabledTools` can restrict tools through an entire descendant tree.
 
-Sessions supplies the default `harnessToolPolicy`, interpreting inherited permissions and Profile tool grants.
+Sessions supplies an optional `harnessToolPolicy`, interpreting the inherited conversation mode and the declared read-only property. Tools runs without this provider or any session service.
 
 ## Testing
 

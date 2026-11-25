@@ -18,8 +18,6 @@ plugins:
     name: '@mini-harness/ui-primitives'
   - id: core:layout
     name: '@mini-harness/ui-layout'
-  - id: core:permission-settings
-    name: '@mini-harness/ui-permission-settings'
   - id: core:workspaces-data
     name: '@mini-harness/workspaces-data'
   - id: core:sessions-data

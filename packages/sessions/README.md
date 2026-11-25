@@ -4,7 +4,7 @@ Owns durable conversation identity, history and deletion.
 
 ## Responsibilities
 
-Maintains session ancestry and permissions, the append-only log, original uploads, durable inbox and run projections, read-only tool grants and recovery of interrupted deletions.
+Maintains session ancestry and permissions, the append-only log, original uploads, durable inbox and run projections, and recovery of interrupted deletions.
 
 ## Structure
 

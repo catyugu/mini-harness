@@ -1,10 +1,9 @@
 export interface ToolAccess {
   name: string;
-  pluginId?: string;
   readOnly: boolean;
 }
 
-/** The host checks the selected registration when advertising a tool and before invocation. */
+/** Optional business policy for selecting tools and checking model-requested calls. */
 export type ToolPolicy = (sessionId: string, tool: Readonly<ToolAccess>) => boolean;
 
 declare module 'mini-harness/cordis' {

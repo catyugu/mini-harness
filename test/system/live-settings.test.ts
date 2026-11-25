@@ -56,13 +56,11 @@ test('appearance, parallelism and child defaults update without interrupting a r
   );
   assert.equal(runtime.settings.entries.subagents?.config?.model, undefined);
   assert.equal(runtime.settings.entries.subagents?.config?.maxParallel, 2);
-  const target = 'session:' + item.id;
   await assert.rejects(
     runtime.configuration.update({ entries: { files: { disabled: true } } }),
     /Stop the affected conversations/,
   );
   assert.equal(runtime.settings.entries.files?.disabled, false);
-  await runtime.configuration.update({ scopes: { [target]: { disabledTools: ['shell'] } } });
   assert.equal(runtime.plugins.ctx.harnessRuns.active(item.id), true);
   release();
   assert.equal(await pending, 'Done');
@@ -125,7 +123,7 @@ test(
     const target = runtime.plugins.ctx.harnessRegistry.create();
     const obsolete = runtime.plugins.ctx.harnessRegistry.create();
     const obsoleteScope = `session:${obsolete.id}` as const;
-    const obsoleteConfig = { disabledTools: ['shell'] };
+    const obsoleteConfig = { entries: {} };
     await runtime.configuration.update({ scopes: { [obsoleteScope]: obsoleteConfig } });
     const otherDirectory = join(root, 'other');
     mkdirSync(otherDirectory);

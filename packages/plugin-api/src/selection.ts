@@ -34,7 +34,6 @@ export function validateEntries(entries: Record<string, unknown>) {
 export const DEFAULTS: Readonly<ProfileConfiguration> = Object.freeze({
   entries: {},
   scopes: {},
-  readOnlyTools: {},
 });
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -51,38 +50,24 @@ export function validateSettings(input: unknown): asserts input is ProfileConfig
   if (!isObject(input)) throw new DomainError('invalid_input', 'Invalid settings object');
   if (Object.keys(input).some((key) => !Object.hasOwn(DEFAULTS, key)))
     throw new DomainError('invalid_input', 'Unknown settings field');
-  const { entries, scopes, readOnlyTools } = input;
-  for (const [key, value] of Object.entries({ entries, scopes, readOnlyTools }))
+  const { entries, scopes } = input;
+  for (const [key, value] of Object.entries({ entries, scopes }))
     if (!isObject(value)) throw new DomainError('invalid_input', 'Invalid settings section: ' + key);
   validateEntries(entries as Record<string, unknown>);
   for (const [key, scope] of Object.entries(scopes as Record<string, unknown>)) {
     if (
       !isScopeAddress(key) ||
       !isObject(scope) ||
-      Object.keys(scope).some((field) => !['entries', 'disabledTools', 'isolate'].includes(field))
+      Object.keys(scope).some((field) => !['entries', 'isolate'].includes(field))
     )
       throw new DomainError('invalid_input', 'Invalid plugin scope: ' + key);
-    const { disabledTools, isolate } = scope;
+    const { isolate } = scope;
     if (
       isolate !== undefined &&
       (!Array.isArray(isolate) || !isolate.every((name: unknown) => typeof name === 'string' && !!name))
     )
       throw new DomainError('invalid_input', 'Invalid service isolation: ' + key);
-    if (
-      disabledTools !== undefined &&
-      (!Array.isArray(disabledTools) ||
-        !disabledTools.every((name: unknown) => typeof name === 'string' && !!name))
-    )
-      throw new DomainError('invalid_input', 'Invalid scoped tool restriction: ' + key);
     validateEntries(section(scope.entries, key + '.entries'));
-  }
-  for (const [plugin, tools] of Object.entries(readOnlyTools as Record<string, unknown>)) {
-    if (
-      !pluginIdPattern.test(plugin) ||
-      !Array.isArray(tools) ||
-      !tools.every((name: unknown) => typeof name === 'string' && !!name)
-    )
-      throw new DomainError('invalid_input', 'Invalid read-only tool grant: ' + plugin);
   }
 }
 

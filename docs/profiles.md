@@ -85,4 +85,4 @@ The Web Plugins page edits the user patch, including ordinary module entries.
 Changes to services currently executing the configuration transaction require a
 Profile restart. Scoped overrides and the installed bundle
 format remain described in [scoped providers](scoped-providers.md) and
-[plugins](plugins.md). The Profile package must be initialized explicitly or by the first Web launch. YAML layers own plugin configuration, scoped tool restrictions and read-only grants. All changes are persisted to the active Profile's user layer; no global settings file or migration is used. Session data, credentials and plugin data remain in their existing locations.
+[plugins](plugins.md). The Profile package must be initialized explicitly or by the first Web launch. YAML layers own plugin configuration and scoped composition. All changes are persisted to the active Profile's user layer; no global settings file or migration is used. Session data, credentials and plugin data remain in their existing locations.

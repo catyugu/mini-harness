@@ -152,13 +152,13 @@ export function apply(ctx, config) {
   try {
     profile.commit({
       ...profile.read(),
-      scopes: { ['workspace:' + 'a'.repeat(32)]: { disabledTools: ['read'] } },
+      scopes: { ['workspace:' + 'a'.repeat(32)]: { isolate: ['greeting'] } },
     });
   } finally {
     await profile.close();
   }
   const persisted = readFileSync(file, 'utf8');
-  assert.deepEqual(parse(persisted).scopes['workspace:' + 'a'.repeat(32)], { disabledTools: ['read'] });
+  assert.deepEqual(parse(persisted).scopes['workspace:' + 'a'.repeat(32)], { isolate: ['greeting'] });
   assert.match(readFileSync(manifest, 'utf8'), /profile-bundle/);
   assert.match(persisted, /value: patched/);
   assert.ok(persisted.includes('name: ./waiting.mjs'));
@@ -177,7 +177,7 @@ export function apply(ctx, config) {
     const profile = patched.ctx.harnessProfile;
     profile.commit({
       ...profile.read(),
-      scopes: { ['workspace:' + 'a'.repeat(32)]: { disabledTools: ['read', 'search'] } },
+      scopes: { ['workspace:' + 'a'.repeat(32)]: { isolate: ['greeting', 'extra'] } },
     });
     assert.doesNotMatch(readFileSync(file, 'utf8'), /temporary/);
   } finally {
@@ -187,8 +187,8 @@ export function apply(ctx, config) {
   try {
     assert.equal(reopened.ctx.get('profileResult'), 'patched!');
     assert.deepEqual(
-      reopened.ctx.harnessProfile.read().scopes[`workspace:${'a'.repeat(32)}`]?.disabledTools,
-      ['read', 'search'],
+      reopened.ctx.harnessProfile.read().scopes[`workspace:${'a'.repeat(32)}`]?.isolate,
+      ['greeting', 'extra'],
     );
   } finally {
     await reopened.close();

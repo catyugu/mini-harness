@@ -2,7 +2,6 @@ import { ScopedLayers, scopeOf, type ScopeKey } from '@mini-harness/plugin-api/s
 import { toolNamePattern } from '@mini-harness/llm/vocabulary';
 import { Check, Errors } from 'typebox/value';
 import { Service, type Context } from 'mini-harness/cordis';
-import { findInstance } from '@mini-harness/plugin-api/instance';
 import { isToolContent, type ToolDefinition, type ToolPort, type ToolRegistrationOptions } from './api.ts';
 import type { ToolDecision } from './events.ts';
 import type { ToolAccess, ToolPolicy } from './policy.ts';
@@ -35,7 +34,6 @@ export class ToolRegistry {
       },
       forSession: registry.forSession.bind(registry),
       isAvailable: registry.isAvailable.bind(registry),
-      readOnlyRegistrations: this.readOnlyRegistrations.bind(this),
     });
   }
 
@@ -54,12 +52,10 @@ export class ToolRegistry {
     const registry = this;
     const active = new Set<Promise<unknown>>();
     const signal = owner?.fiber.signal;
-    const identity = owner && findInstance(owner);
     const expired = () => lifetime.signal.aborted || signal?.aborted === true;
     const entry: ToolRegistration = {
       name,
       readOnly: access === 'readOnly',
-      pluginId: identity?.pluginId,
       visible: (id) => !expired() && (visible?.(id) ?? true),
       bind(id, scope) {
         const tool = bind(id);
@@ -77,7 +73,7 @@ export class ToolRegistry {
             const execute = async (signal: AbortSignal) => {
               signal.throwIfAborted();
               assertAuthorized();
-              const inputs = structuredClone(args);
+              const inputs = args;
               if (!Check(tool.parameters, inputs)) {
                 const issue = [...Errors(tool.parameters, inputs)][0];
                 throw new Error(
@@ -149,16 +145,6 @@ export class ToolRegistry {
       this.selected(id, lease.entry.name, lease.scope) === lease.entry &&
       this.authorize(id, lease.entry)
     );
-  }
-
-  readOnlyRegistrations(pluginId: string): string[] {
-    return [
-      ...new Set(
-        [...this.tools.values()]
-          .filter((entry) => entry.pluginId === pluginId && entry.readOnly)
-          .map(({ name }) => name),
-      ),
-    ].sort();
   }
 
   forSession(id: string, scope?: ScopeKey) {

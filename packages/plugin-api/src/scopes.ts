@@ -67,7 +67,4 @@ export class ScopedLayers<T> {
     });
   }
 
-  *values() {
-    for (const layer of this.layers.values()) yield* layer.values();
-  }
 }

@@ -124,7 +124,7 @@ test('Shell delegates to a selected external process provider and still requires
   assert.match(JSON.stringify(response.content), /Preview command/);
 });
 
-test('scoped plugins inherit declared services and tool policies, and release their own resources', async (t) => {
+test('scoped plugins inherit services and contributions and release their own resources', async (t) => {
   const { app, paths, root, request, mock } = await fixture(t, ({ messages }) =>
     messages.at(-1)?.role === 'tool' ? 'Finished greeting' : { tool: 'scoped_greeting', args: {} },
   );
@@ -176,7 +176,6 @@ export const apply = (ctx, config) => {
     },
     [sessionKey]: {
       entries: { 'scoped-tool': { name: '../../plugins/scoped-tool', disabled: false } },
-      disabledTools: ['read'],
     },
   };
   const enabled = await request('/settings', 'PATCH', { scopes });
@@ -219,7 +218,7 @@ export const apply = (ctx, config) => {
     (await request(operation(workspaceKey, 'tools'), 'POST', { input: outside.id })).body.includes('read'),
   );
   assert.ok(names(child.id).includes('scoped_greeting'));
-  assert.ok(!names(child.id).includes('read'));
+  assert.ok(names(child.id).includes('read'));
   for (const id of [sibling.id, outside.id]) {
     assert.ok(!names(id).includes('scoped_greeting'));
     assert.ok(names(id).includes('read'));
@@ -278,7 +277,7 @@ export const apply = (ctx, config) => {
   assert.ok(names(outside.id).includes('read'));
 });
 
-test('read-only grants follow the same policy for every plugin', async (t) => {
+test('read-only tool declarations follow the same policy for every plugin', async (t) => {
   const { app, mock, paths, request } = await fixture(t);
   writePlugin(
     paths.plugins,
@@ -317,46 +316,22 @@ export const apply = (ctx) => {
     200,
   );
   await plugins.prepare(`session:${child.id}`);
-  assert.ok(!list(child.id).some(({ name }) => name === 'read' || name === 'custom'));
+  assert.ok(list(child.id).some(({ name }) => name === 'read'));
+  assert.ok(list(child.id).some(({ name }) => name === 'custom'));
   assert.ok(!list(child.id).some(({ name }) => name === 'write_like'));
   assert.ok(list(parent.id).some(({ name }) => name === 'read'));
   await assert.rejects(original.execute('old', { path: 'README.md' }), /Tool denied/);
   await app.runtime.plugins.ctx.harnessRuns.send(child.id, 'Continue');
   const sent = expectPresent(mock.requests.at(-1), 'request with tools');
-  assert.equal(JSON.stringify(sent.tools).includes('"name":"read"'), false);
-  assert.equal(JSON.stringify(sent.tools).includes('"name":"custom"'), false);
+  assert.equal(JSON.stringify(sent.tools).includes('"name":"read"'), true);
+  assert.equal(JSON.stringify(sent.tools).includes('"name":"custom"'), true);
   assert.equal(JSON.stringify(sent.tools).includes('"name":"write_like"'), false);
   assert.equal(JSON.stringify(sent.tools).includes('"name":"load_skill"'), true);
-  assert.deepEqual((await request('/permissions/plugins/replacement')).body.tools, ['custom', 'read']);
-  assert.equal(
-    (await request('/permissions/plugins/replacement', 'PATCH', { tool: 'write_like', allowed: true }))
-      .status,
-    400,
-  );
-  assert.equal(
-    (await request('/permissions/plugins/replacement', 'PATCH', { tool: 'custom', allowed: true })).status,
-    200,
-  );
   const custom = expectPresent(
     list(child.id).find(({ name }) => name === 'custom'),
     'read-only registration',
   );
   assert.match(JSON.stringify(await custom.execute('read', {})), /Authorized local read/);
-  assert.equal(
-    (
-      await request('/settings', 'PATCH', {
-        scopes: {
-          ['session:' + child.id]: {
-            entries: { replacement: { name: '../../plugins/replacement', disabled: false } },
-            disabledTools: ['custom'],
-          },
-        },
-      })
-    ).status,
-    200,
-  );
-  assert.ok(!list(child.id).some(({ name }) => name === 'custom'));
-  await assert.rejects(custom.execute('restricted', {}), /Tool denied/);
 });
 
 test('explicit Profile composition can replace the default tool policy without a provider whitelist', async (t) => {
@@ -391,6 +366,10 @@ export function apply(ctx) {
   });
   assert.equal(replacement.status, 200, JSON.stringify(replacement.body));
   assert.deepEqual(root.harnessTools.forSession(session.id, root.harnessRegistry.runScope(session.id)), []);
+  assert.equal((await request('/settings', 'PATCH', {
+    entries: { 'deny-tools': { disabled: true } },
+  })).status, 200);
+  assert.ok(root.harnessTools.forSession(session.id, root.harnessRegistry.runScope(session.id)).some(({ name }) => name === 'read'));
   const restored = await request('/settings', 'PATCH', {
     entries: {
       'core:tool-policy': { disabled: false },
@@ -493,7 +472,7 @@ export const apply = (ctx, config) => { ctx.provide('harnessLlm', {
       await request('/settings', 'PATCH', {
         scopes: {
           ['session:' + parent.id]: scopes['session:' + parent.id],
-          ['session:' + child.id]: { disabledTools: ['sandbox_shell'] },
+          ['session:' + child.id]: {},
         },
       })
     ).status,

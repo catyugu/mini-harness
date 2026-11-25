@@ -54,6 +54,3 @@ plugins:
     name: '@mini-harness/process-execution'
   - id: core:tools
     name: '@mini-harness/tools'
-readOnlyTools:
-  files: [read, ls, find, grep]
-  skills: [load_skill]

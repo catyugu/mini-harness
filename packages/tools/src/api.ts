@@ -42,7 +42,6 @@ export interface ToolPort {
     options?: ToolRegistrationOptions,
   ): () => Promise<void>;
   forSession(id: string, scope?: ScopeKey): ToolDefinition[];
-  readOnlyRegistrations(pluginId: string): string[];
   isAvailable(id: string, tool: ToolDefinition): boolean;
 }
 

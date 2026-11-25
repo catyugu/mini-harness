@@ -17,7 +17,7 @@ import type { ScopeBinding, ProfileScopes } from '@mini-harness/plugin-api/confi
 import { planBrowser, publishBrowser } from './browser-assets.ts';
 import { addAbortListener } from 'node:events';
 import type { UpgradeHandler } from '@mini-harness/transport/routes';
-import { scopeAddresses, type CompositionConfig } from '@mini-harness/plugin-api/configuration';
+import { scopeAddresses, type ProfileConfiguration } from '@mini-harness/plugin-api/configuration';
 import { pluginData, pluginSecrets, removeScopeData } from './data.ts';
 import { PluginRouteRegistry, scopeOperation } from './routes.ts';
 import { pluginSettings } from './plugin-settings.ts';
@@ -25,7 +25,7 @@ import { pluginInstance } from '@mini-harness/plugin-api/instance';
 import { scopeOf, tagScope } from '@mini-harness/plugin-api/scopes';
 import { changedSelection, PluginCatalog } from './catalog.ts';
 
-/** Permission-only settings do not require a separate plugin context. */
+/** Empty scope configuration inherits the parent's composition. */
 function hasComposition(scope: ScopeSettings | undefined): scope is ScopeSettings {
   return !!scope && (Object.keys(scope.entries ?? {}).length > 0 || !!scope.isolate?.length);
 }
@@ -49,7 +49,7 @@ export class PluginHost implements ProfileScopes {
     readonly ctx: Context,
     private readonly directory: string,
     profile: Pick<ProfileRuntime, 'builtin' | 'source'>,
-    private readonly settings: () => CompositionConfig,
+    private readonly settings: () => ProfileConfiguration,
     upgrade?: (path: string, handler: UpgradeHandler) => () => Promise<void>,
     private readonly writePlugin?: (
       id: string,
@@ -236,7 +236,7 @@ export class PluginHost implements ProfileScopes {
   }
 
   private scopedEntries(
-    settings: CompositionConfig,
+    settings: ProfileConfiguration,
     descriptors: ReturnType<PluginCatalog['descriptors']>,
     unavailable: (id: string, error: unknown, key?: ScopeAddress) => boolean,
     preparing?: ScopeAddress,
@@ -322,13 +322,13 @@ export class PluginHost implements ProfileScopes {
     return this.browserState.assets.get(url);
   }
 
-  async start(settings: CompositionConfig) {
+  async start(settings: ProfileConfiguration) {
     await this.apply({ ...settings, scopes: {} }, () => {}, true);
     await this.ctx.parallel('harness/ready');
     await this.apply(this.settings(), () => {}, true);
   }
 
-  async configure(settings: CompositionConfig, commit = () => {}, released?: ReadonlySet<ScopeAddress>) {
+  async configure(settings: ProfileConfiguration, commit = () => {}, released?: ReadonlySet<ScopeAddress>) {
     assertOutsideMountTransaction();
     while (this.applying) await this.applying.catch(() => {});
     if (this.closing) throw new Error('Plugin host is closing');
@@ -337,7 +337,7 @@ export class PluginHost implements ProfileScopes {
   }
 
   private apply(
-    settings: CompositionConfig,
+    settings: ProfileConfiguration,
     commit: () => void,
     starting: boolean,
     preparing?: ScopeAddress,
@@ -353,7 +353,7 @@ export class PluginHost implements ProfileScopes {
   }
 
   private async configureGraph(
-    settings: CompositionConfig,
+    settings: ProfileConfiguration,
     commit: () => void,
     starting: boolean,
     preparing?: ScopeAddress,

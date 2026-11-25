@@ -1,3 +1,5 @@
+import { Context } from 'mini-harness/cordis';
+import toolsPlugin from '../src/manifest.ts';
 import { createScopeKey } from '@mini-harness/plugin-api/scopes';
 import { expectPresent } from '../../../test/support/required.ts';
 import test from 'node:test';
@@ -159,4 +161,26 @@ test('a permission change while awaiting a tool decision prevents execution', as
   assert.deepEqual(registry.forSession('session'), []);
   release();
   await result;
+});
+
+test('Tools activates and registers a definition without Sessions or a policy provider', async () => {
+  const ctx = new Context();
+  const fiber = ctx.plugin(toolsPlugin);
+  try {
+    await fiber;
+    const tools = expectPresent(ctx.get('harnessTools'), 'standalone tools');
+    const remove = tools.register(defineTool({
+      name: 'example',
+      description: 'Standalone tool',
+      parameters: Type.Object({}),
+      async execute() { return { content: [{ type: 'text', text: 'ready' }] }; },
+    }));
+    try {
+      assert.deepEqual((await tools.forSession('example')[0].execute('call', {})).content, [{ type: 'text', text: 'ready' }]);
+    } finally {
+      await remove();
+    }
+  } finally {
+    await fiber.dispose();
+  }
 });

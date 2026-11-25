@@ -23,7 +23,6 @@ interface Layer {
   include?: string[];
   plugins?: Row[];
   scopes?: ProfileConfiguration['scopes'];
-  readOnlyTools?: ProfileConfiguration['readOnlyTools'];
 }
 
 interface LoadedLayer extends Layer {
@@ -117,7 +116,7 @@ function load(file: string, optional = false): Layer | undefined {
       throw new Error([...doc.errors, ...doc.warnings].map((error) => error.message).join('\n'));
     const value: unknown = doc.toJS({ maxAliasCount: 0 });
     if (value == null) return {};
-    const fields = ['include', 'detached', 'plugins', 'scopes', 'readOnlyTools'];
+    const fields = ['include', 'detached', 'plugins', 'scopes'];
     if (!object(value) || Object.keys(value).some((key) => !fields.includes(key)))
       throw new Error('Expected a Profile object');
     if (value.detached !== undefined && typeof value.detached !== 'boolean')
@@ -266,7 +265,6 @@ export function dumpProfile(name: string, paths: Paths, patches: readonly string
           : row.name,
     })),
     ...(scopes === undefined ? {} : { scopes: scopedEntries(selected) }),
-    readOnlyTools: Object.assign({}, ...selected.map((layer) => layer.readOnlyTools)),
   });
 }
 
@@ -295,7 +293,6 @@ export const profileSchema = {
       },
     },
     scopes: { type: 'object' },
-    readOnlyTools: { type: 'object' },
   },
 };
 
@@ -404,10 +401,6 @@ export async function loadProfile(
         ]),
       ),
       scopes: scopedEntries([...shipped, ...selectedLayers]),
-      readOnlyTools: Object.assign(
-        {},
-        ...[...shipped, ...selectedLayers].map((layer) => layer.readOnlyTools),
-      ),
     });
   }
   let persistent = configurationFor(persistentRows, userLayers);
@@ -459,7 +452,6 @@ export async function loadProfile(
       ...(user.detached === undefined ? {} : { detached: user.detached }),
       plugins,
       scopes: settings.scopes,
-      readOnlyTools: settings.readOnlyTools,
     };
     writeText(file, stringify(next));
     persistent = settings;

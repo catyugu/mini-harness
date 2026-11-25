@@ -41,19 +41,14 @@ declare module 'mini-harness/cordis' {
 export interface ScopeSettings {
   entries?: Record<string, EntryConfiguration>;
   isolate?: string[];
-  disabledTools?: string[];
 }
 
-export interface CompositionConfig {
+export interface ProfileConfiguration {
   entries: Record<string, EntryConfiguration>;
   scopes: Partial<Record<ScopeAddress, ScopeSettings>>;
 }
 
-export interface ProfileConfiguration extends CompositionConfig {
-  readOnlyTools: Record<string, string[]>;
-}
-
-export function scopeAddresses(configuration: CompositionConfig) {
+export function scopeAddresses(configuration: ProfileConfiguration) {
   return Object.keys(configuration.scopes) as ScopeAddress[];
 }
 

@@ -79,7 +79,7 @@ export function mountComposer(ctx: Context, signal: AbortSignal) {
   const permissionOptions: Array<{ value: ConversationPermission; description: string }> = [
     { value: 'fullAccess', description: 'Run enabled tools without approval prompts, including Shell' },
     { value: 'standard', description: 'Ask before Shell commands; follow existing tool policies' },
-    { value: 'readOnly', description: 'Only read files, search and load skills; no edits or Shell' },
+    { value: 'readOnly', description: 'Only tools declared read-only; no edits or Shell' },
   ];
   function renderPermission() {
     const current = model.permission();

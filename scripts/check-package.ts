@@ -163,7 +163,7 @@ async function checkPackage() {
       declare const ctx: Context;
       const scopeKey: ScopeKey = createScopeKey();
       void scopeKey;
-      const scope: ScopeSettings = { disabledTools: ['write'] };
+      const scope: ScopeSettings = { isolate: ['example'] };
       const scopedSettings: ProfileConfiguration['scopes'] = { 'session:example': scope };
       void scopedSettings;
       const llm: LlmPort | undefined = ctx.harnessLlm;

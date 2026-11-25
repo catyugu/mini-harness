@@ -7,7 +7,7 @@ import { dirname, isAbsolute, join, resolve } from 'node:path';
 import {
   defineConfig,
   scopeAddresses,
-  type CompositionConfig,
+  type ProfileConfiguration,
   type EntryConfiguration,
 } from '@mini-harness/plugin-api/configuration';
 import type { ScopeAddress } from '@mini-harness/plugin-api/configuration';
@@ -34,7 +34,7 @@ export class PluginCatalog {
     >,
   ) {}
 
-  enabled(descriptor: DiscoveredPlugin, settings: CompositionConfig) {
+  enabled(descriptor: DiscoveredPlugin, settings: ProfileConfiguration) {
     const entry = descriptor.scopeAddress
       ? settings.scopes[descriptor.scopeAddress]?.entries?.[descriptor.id]
       : settings.entries[descriptor.id];
@@ -98,7 +98,7 @@ export class PluginCatalog {
     }
   }
 
-  async runtimeDescriptors(settings: CompositionConfig): Promise<DiscoveredPlugin[]> {
+  async runtimeDescriptors(settings: ProfileConfiguration): Promise<DiscoveredPlugin[]> {
     const client = Object.values(settings.entries).some(
       ({ name, disabled }) => name === '@mini-harness/web-gateway' && !disabled,
     );
@@ -160,7 +160,7 @@ export class PluginCatalog {
   }
 
   metadata(
-    settings: CompositionConfig,
+    settings: ProfileConfiguration,
     failures: ReadonlyMap<string, string>,
     mounted: (id: string) => boolean,
   ): PluginMetadata[] {
@@ -247,8 +247,8 @@ export class PluginCatalog {
   /** Disabled entries with a known schema can still reject malformed input without mounting. */
   validateDisabled(
     descriptors: DiscoveredPlugin[],
-    previous: CompositionConfig,
-    settings: CompositionConfig,
+    previous: ProfileConfiguration,
+    settings: ProfileConfiguration,
   ) {
     for (const descriptor of descriptors) {
       const { id, scopeAddress } = descriptor;
@@ -260,7 +260,7 @@ export class PluginCatalog {
   }
 
   plans(
-    settings: CompositionConfig,
+    settings: ProfileConfiguration,
     descriptors: DiscoveredPlugin[],
     scopeAddress?: ScopeAddress,
     unavailable?: (id: string, error: unknown) => boolean,
@@ -302,8 +302,8 @@ export class PluginCatalog {
 
 export function changedSelection(
   id: string,
-  previous: CompositionConfig,
-  settings: CompositionConfig,
+  previous: ProfileConfiguration,
+  settings: ProfileConfiguration,
   key?: ScopeAddress,
 ) {
   const before = key ? previous.scopes[key]?.entries?.[id] : previous.entries[id];
