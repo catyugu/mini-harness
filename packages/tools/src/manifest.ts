@@ -19,6 +19,7 @@ const plugin: Plugin.Object = {
         (id) => scopes.address(`session:${id}`),
         async (request) => {
           const { signal, ...input } = request;
+          let result: 'allow' | 'ask' | undefined;
           for (const { context, callback } of ctx.events.listeners(
             'tools/decide',
             sessionEvent(ctx, request.sessionId),
@@ -27,12 +28,19 @@ const plugin: Plugin.Object = {
               (signal) => callback({ ...structuredClone(input), signal }),
               signal,
             );
-            if (decision === undefined) continue;
-            if (decision !== 'deny') throw new Error('Invalid tool policy decision');
-            return decision;
+            if (decision === 'deny') return 'deny';
+            if (decision === 'ask') result = 'ask';
+            else if (decision === 'allow') result ??= 'allow';
+            else if (decision !== undefined) throw new Error('Invalid tool policy decision');
           }
+          return result;
         },
         harnessToolPolicy,
+        (request, prompt, owner) => {
+          const approvals = (owner ?? ctx).get('harnessApprovalRequests');
+          if (!approvals) throw new Error('User approval is unavailable');
+          return approvals.request(request.sessionId, prompt, request.signal);
+        },
       ).service(),
     );
   },

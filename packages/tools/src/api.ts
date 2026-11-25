@@ -14,10 +14,19 @@ export interface ToolContext {
   assertAuthorized?(): void;
   waitForApproval?(request: () => Promise<void>): Promise<void>;
 }
+export interface ToolApproval {
+  title: string;
+  message: string;
+  context?: string;
+  followFullAccess?: boolean;
+}
+
 export interface ToolDefinition<Arguments = Record<string, any>> extends ToolSchema {
   label?: string;
   promptSnippet?: string;
   promptGuidelines?: string[];
+  /** Return the approval required by this operation under current conversation policy. */
+  approval?(args: Arguments): ToolApproval | undefined;
   /** Calls are serial unless this returns true for the validated arguments. */
   isConcurrencySafe?(args: Arguments): boolean;
   execute(

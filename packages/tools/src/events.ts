@@ -6,7 +6,8 @@ export interface ToolDecision {
   signal: AbortSignal;
 }
 
-export type ToolDecisionHandler = (request: ToolDecision) => 'deny' | undefined | Promise<'deny' | undefined>;
+export type ToolDecisionResult = 'allow' | 'deny' | 'ask' | undefined;
+export type ToolDecisionHandler = (request: ToolDecision) => ToolDecisionResult | Promise<ToolDecisionResult>;
 
 declare module 'mini-harness/cordis' {
   interface Events {

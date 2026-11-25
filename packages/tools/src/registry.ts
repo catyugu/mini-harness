@@ -3,8 +3,8 @@ import { toolNamePattern } from '@mini-harness/llm/vocabulary';
 import { Check, Errors } from 'typebox/value';
 import { Service, type Context } from 'mini-harness/cordis';
 import { agentScopeOf, findInstance, sessionVisible } from '@mini-harness/plugin-api/instance';
-import { isToolContent, type ToolDefinition, type ToolPort, type ToolRegistrationOptions } from './api.ts';
-import type { ToolDecision } from './events.ts';
+import { isToolContent, type ToolDefinition, type ToolPort, type ToolRegistrationOptions, type ToolApproval } from './api.ts';
+import type { ToolDecision, ToolDecisionResult } from './events.ts';
 import type { ToolAccess, ToolPolicy } from './policy.ts';
 
 interface ToolRegistration extends ToolAccess {
@@ -19,8 +19,9 @@ export class ToolRegistry {
 
   constructor(
     private readonly address: (id: string) => readonly ScopeKey[] = () => [],
-    private readonly decide?: (request: ToolDecision) => Promise<'deny' | undefined>,
+    private readonly decide?: (request: ToolDecision) => Promise<ToolDecisionResult>,
     private readonly authorize: ToolPolicy = () => true,
+    private readonly approve?: (request: ToolDecision, prompt: ToolApproval, owner?: Context) => Promise<boolean>,
   ) {}
 
   service(): ToolPort {
@@ -100,16 +101,32 @@ export class ToolRegistry {
                     (issue ? ': ' + issue.instancePath + ' ' + issue.message : ''),
                 );
               }
-              if (
-                (await registry.decide?.({
-                  sessionId: id,
-                  tool: name,
-                  callId: call,
-                  arguments: inputs,
-                  signal,
-                })) === 'deny'
-              )
-                throw new Error('Tool denied by conversation or plugin policy: ' + name);
+              const request = { sessionId: id, tool: name, callId: call, arguments: inputs, signal };
+              const decision = await registry.decide?.(request);
+              if (decision === 'deny') throw new Error('Tool denied by conversation or plugin policy: ' + name);
+              const ask = async (prompt: ToolApproval) => {
+                if (!registry.approve) throw new Error('User approval is unavailable');
+                signal.throwIfAborted();
+                assertAuthorized();
+                let automatic = false;
+                const confirm = async () => { automatic = await registry.approve!(request, prompt, owner); };
+                if (context?.waitForApproval) await context.waitForApproval(confirm);
+                else await confirm();
+                signal.throwIfAborted();
+                assertAuthorized();
+                return automatic;
+              };
+              if (decision === 'ask') {
+                const prompt = tool.approval?.(inputs) ?? {
+                  title: 'Tool approval: ' + name,
+                  message: JSON.stringify(inputs).slice(0, 16000),
+                  context: name,
+                };
+                await ask({ ...prompt, followFullAccess: false });
+              } else {
+                for (let prompt = tool.approval?.(inputs); prompt; prompt = tool.approval?.(inputs))
+                  if (!(await ask(prompt))) break;
+              }
               signal.throwIfAborted();
               assertAuthorized();
               const result = await tool.execute(
