@@ -12,7 +12,7 @@ Resolves scoped registrations and checks them against the host’s authorization
 
 ## API
 
-`harnessTools.register` owns registration and `defineTool` infers argument types. The `tools/decide` event can restrict an invocation. The host protects the provider.
+`harnessTools.register` owns registration and `defineTool` infers argument types. `tools/decide` composes allow, deny and ask decisions; denial wins. A definition can declare an approval prompt. The registry rechecks authority after approval.
 
 ## Dependencies
 
@@ -26,7 +26,7 @@ Uses Cordis fibers for plugin-owned calls and session ancestry for tool visibili
 
 Scoped `disabledTools` can restrict tools through an entire descendant tree.
 
-The registry receives the mandatory tool policy through `harnessToolPolicy`. Sessions interprets inherited permissions and user grants, and the registry checks the selected registration again before execution.
+Sessions supplies the default `harnessToolPolicy`, interpreting inherited permissions and per-Profile module-bound grants.
 
 ## Testing
 

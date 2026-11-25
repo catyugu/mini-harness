@@ -16,7 +16,7 @@ Registers tools with `harnessTools` and contributes the browser panel and comple
 
 ## Dependencies
 
-Uses [File Access](../file-access/README.md) and [Workspaces](../workspaces/README.md) to constrain paths. The host grants Files read-only tool registration.
+Uses [File Access](../file-access/README.md) and [Workspaces](../workspaces/README.md) to constrain paths. The default Profile explicitly grants read-only file tools.
 
 ## Lifecycle
 

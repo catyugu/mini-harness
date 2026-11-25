@@ -428,7 +428,7 @@ export class PluginHost implements ScopePort {
       ),
     );
     let appChanged = false;
-    for (const id of new Set([...this.entries.keys(), ...nextEntries.keys()])) {
+    for (const id of new Set([...previousEntries.map(({ id }) => id), ...nextEntries.keys()])) {
       const before = this.entries.get(id);
       const after = nextEntries.get(id);
       if (

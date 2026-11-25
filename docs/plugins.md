@@ -14,7 +14,7 @@ mini-harness plugin --profile web remove <package>
 
 Installing a package changes only the selected Profile's npm dependencies. Declare an Entry in the Profile to activate it; restart before updating or removing packages used by a running application. npm lifecycle scripts default to disabled; authorize them explicitly with `--ignore-scripts=false`. To develop locally, declare the built package directory as an entry name in a Profile. Multiple local packages can run together. Use the Web Plugins page to enable and configure available entries; it does not install or delete code.
 
-The manifest supplies display information, scope (`application`, `workspace`, or `session`), and optional configuration-form metadata. Browser modules declare their dependencies and services directly with Cordis `inject` and `provide`. A browser entry receives its configuration as a whole and can update it through `browserPluginSettings(ctx)` when the entry exposes a configuration contract. Keep server-only secrets in `harnessPluginSecrets` or a separate server entry; do not put them in browser entry configuration. Set `browser` to the browser entry module and `browserDirectory` to its dedicated build output directory. JavaScript chunks, styles, fonts and other supported assets inside that directory are published together; never put private files there. Use `browserPreload` for a published module that exports a function receiving an activation signal and optionally returning cleanup.
+Metadata supplies display information, not scope or authority. Package exports can declare `./client`; local bundles may use `browser` and `browserDirectory`. Publish only dedicated browser build output. A server module must export `browserConfig(config)` to expose an explicit public projection; otherwise its browser receives `{}`. Browser-only entries use their own configuration. Keep credentials in `harnessPluginSecrets`.
 
 ## Declare a Cordis plugin
 
@@ -58,7 +58,9 @@ A service provider declares `provide = ['exampleGreeting']` and calls `ctx.provi
 | `harnessPluginSettings`                        | Read the current effective config, subscribe to committed changes or write this instance's configuration when the Profile marks its Entry as live.                                                              |
 | `harnessPluginChanges`                         | Invalidate the plugin's browser projection after a domain mutation.                                                                                                                                             |
 
-Use `await sessionService(ctx, sessionId, serviceName, signal)` to prepare a visible conversation and access a declared service with the caller's identity. Session writes and scope preparation belong in runtime calls after plugin setup. See [scoped providers](scoped-providers.md).
+Use `await sessionService(ctx, sessionId, serviceName, signal)` to prepare a visible conversation and access a service with the caller's identity. Session writes and scope preparation belong in runtime calls after plugin setup. See [scoped providers](scoped-providers.md).
+
+Tool definitions may declare an `approval(args)` prompt; the shared registry obtains the user's decision and rechecks the invocation lease. An alternative `harnessToolExecutor` can present tools and interpret model messages in another protocol, while scheduling and executing only authorized calls.
 
 ### Events
 
@@ -72,13 +74,13 @@ Register listeners with `ctx.on(event, handler, { order })`. Listeners are owned
 | `agent/model-request`          | Transform the system prompt, model-visible messages, thinking level or token limit.                                     |
 | `agent/model-retry`            | Return `{ delayMs }` to retry a model attempt before output has streamed. The first decision applies.                   |
 | `agent/tool-result`            | Transform successful results after persistence of the original execution.                                               |
-| `tools/decide`                 | Return `'deny'` to restrict a tool call or `undefined` to defer.                                                        |
+| `tools/decide`                 | Return `'deny'`, `'ask'`, `'allow'` or `undefined`; denial and explicit approval requirements cannot be overridden by allow.                                                        |
 | `conversation/tool-projection` | Synchronously transform tool output in the conversation display.                                                        |
 | `harness/observe`              | Observe session, run or turn events with an activation-bound cancellation signal.                                       |
 
 ### Configuration
 
-Export a synchronous Standard Schema `Config` (or attach `Config` to a default Cordis plugin object or class). Cordis resolves this schema before activation and updates. The optional SDK helper `defineConfig` from `mini-harness/configuration` builds a Standard Schema from JSON Schema and supplies defaults; its `jsonSchema` is also used for configuration forms. A manifest `configSchema`, if supplied, describes the form for unloaded entries only and does not validate runtime input. A browser-only package may export `Config` without an `apply` module on the server to validate its configuration without mounting a server fiber.
+Export a synchronous Standard Schema `Config` (or attach `Config` to a default Cordis plugin object or class). Cordis resolves this schema before activation and updates. The optional SDK helper `defineConfig` from `mini-harness/configuration` builds a Standard Schema from JSON Schema and supplies defaults; its `jsonSchema` is also used for configuration forms. Static `configSchema`, if supplied, supports validation and forms without importing disabled modules; mounted entries validate with native `Config`. A browser-only package may export `Config` without an `apply` module on the server to validate its configuration without mounting a server fiber.
 
 Set `live: true` on the Entry in `cordis.yml` or a Profile patch to allow in-place configuration changes. Register `ctx.on('internal/update', next => ...)` for resource changes or service-dependent checks, and check those constraints inside `apply` when mounting. Errors reject the candidate and restore the previous configuration. Non-live entries restart on configuration changes. Profile files contain user-supplied config, not schema defaults.
 
@@ -116,6 +118,4 @@ Declare the services you use:
 
 The [Task notes example](examples/task-notes/) uses both entry points. The [browser panel](examples/browser-panel/) shows a keyed composer renderer. The [scoped examples](scoped-providers.md) show local service replacement.
 
-### Profile entries
-
-Declare npm modules by their package name in the [active Profile](profiles.md). Local file bundles can be enabled in the Web Plugins page or declared by their directory path. The server entry's `inject` and `provide` declarations govern Cordis. Missing required services leave the consuming entry waiting until Cordis can activate it.
+Declare npm packages and local paths explicitly in the [active Profile](profiles.md). Missing injected services leave a consumer waiting until Cordis can activate it.

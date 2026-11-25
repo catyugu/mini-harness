@@ -76,8 +76,7 @@ plugins:
 Install ordinary npm dependencies with `mini-harness plugin --profile rescue add <package>`, then add entries or bundles explicitly. The command forwards npm arguments in the Profile directory; use `remove`, `update`, local directories, tarballs or Git references as needed. npm lifecycle scripts are disabled by default; explicitly pass `--ignore-scripts=false` to authorize them.
 Installing a package does not activate it. A module may export a native Cordis
 function, class, or object with `apply(ctx, config)`; no plugin.json is needed
-for these entries. Disabled external entries are not imported. Local modules
-resolve relative to the layer that declares the name. A directory entry loads the package's server and browser modules; it can be managed in the Web Plugins page. YAML layers may include
+for these entries. Disabled entries, shipped or installed, are not imported. Local paths resolve relative to the declaring layer. The Web Plugins page manages declared entries. YAML layers may include
 other fragments using `include`; they cannot use executable YAML tags or cyclic
 references. The final entry ID determines the configuration override.
 
@@ -86,4 +85,4 @@ The Web Plugins page edits the user patch, including ordinary module entries.
 Changes to services currently executing the configuration transaction require a
 Profile restart. Scoped overrides and the installed bundle
 format remain described in [scoped providers](scoped-providers.md) and
-[plugins](plugins.md). The Profile package must be initialized explicitly or by the first Web launch. Only YAML layers define plugin configuration; `settings.json` contains domain tool policy. Session data, credentials and plugin data remain in their existing locations.
+[plugins](plugins.md). The Profile package must be initialized explicitly or by the first Web launch. YAML layers own plugin configuration and read-only grants; `settings.json` holds scoped tool restrictions. Session data, credentials and plugin data remain in their existing locations.
