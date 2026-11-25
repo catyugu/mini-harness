@@ -366,10 +366,19 @@ export function apply(ctx) {
   });
   assert.equal(replacement.status, 200, JSON.stringify(replacement.body));
   assert.deepEqual(root.harnessTools.forSession(session.id, root.harnessRegistry.runScope(session.id)), []);
-  assert.equal((await request('/settings', 'PATCH', {
-    entries: { 'deny-tools': { disabled: true } },
-  })).status, 200);
-  assert.ok(root.harnessTools.forSession(session.id, root.harnessRegistry.runScope(session.id)).some(({ name }) => name === 'read'));
+  assert.equal(
+    (
+      await request('/settings', 'PATCH', {
+        entries: { 'deny-tools': { disabled: true } },
+      })
+    ).status,
+    200,
+  );
+  assert.ok(
+    root.harnessTools
+      .forSession(session.id, root.harnessRegistry.runScope(session.id))
+      .some(({ name }) => name === 'read'),
+  );
   const restored = await request('/settings', 'PATCH', {
     entries: {
       'core:tool-policy': { disabled: false },

@@ -13,7 +13,11 @@ const plugin: Plugin.Object = {
   apply(ctx) {
     const sessions = ctx.harnessRegistry;
     const authorize: ToolPolicy = (id, tool) => {
-      for (let record = sessions.get(id); record; record = record.parentId ? sessions.get(record.parentId) : undefined)
+      for (
+        let record = sessions.get(id);
+        record;
+        record = record.parentId ? sessions.get(record.parentId) : undefined
+      )
         if (record.permission === 'readOnly') return tool.readOnly;
       return true;
     };

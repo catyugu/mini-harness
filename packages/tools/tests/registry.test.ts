@@ -169,14 +169,20 @@ test('Tools activates and registers a definition without Sessions or a policy pr
   try {
     await fiber;
     const tools = expectPresent(ctx.get('harnessTools'), 'standalone tools');
-    const remove = tools.register(defineTool({
-      name: 'example',
-      description: 'Standalone tool',
-      parameters: Type.Object({}),
-      async execute() { return { content: [{ type: 'text', text: 'ready' }] }; },
-    }));
+    const remove = tools.register(
+      defineTool({
+        name: 'example',
+        description: 'Standalone tool',
+        parameters: Type.Object({}),
+        async execute() {
+          return { content: [{ type: 'text', text: 'ready' }] };
+        },
+      }),
+    );
     try {
-      assert.deepEqual((await tools.forSession('example')[0].execute('call', {})).content, [{ type: 'text', text: 'ready' }]);
+      assert.deepEqual((await tools.forSession('example')[0].execute('call', {})).content, [
+        { type: 'text', text: 'ready' },
+      ]);
     } finally {
       await remove();
     }

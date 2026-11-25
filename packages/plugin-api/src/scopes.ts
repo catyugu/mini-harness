@@ -66,5 +66,4 @@ export class ScopedLayers<T> {
       return layer ? [layer] : [];
     });
   }
-
 }
