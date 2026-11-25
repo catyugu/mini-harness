@@ -16,5 +16,10 @@
     "@mini-harness/sessions": "workspace:*",
     "@mini-harness/tools": "workspace:*",
     "@mini-harness/ui-primitives": "workspace:*"
+  },
+  "miniHarness": {
+    "profileModules": {
+      "@mini-harness/subagents": "./src/manifest.ts#manifest"
+    }
   }
 }

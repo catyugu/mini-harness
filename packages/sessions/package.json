@@ -28,7 +28,12 @@
       "./run-state",
       "./store",
       "./display-record"
-    ]
+    ],
+    "profileModules": {
+      "@mini-harness/sessions": "./src/manifest.ts#manifest",
+      "@mini-harness/tool-policy": "./src/permission-policy.ts#manifest",
+      "@mini-harness/ui-permission-settings": "./src/permission-policy.ts#permissionSettingsManifest"
+    }
   },
   "dependencies": {
     "@mini-harness/input": "workspace:*",

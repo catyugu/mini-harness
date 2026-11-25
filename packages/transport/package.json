@@ -19,7 +19,11 @@
       "./projection-notice",
       "./routes",
       "./runtime"
-    ]
+    ],
+    "profileModules": {
+      "@mini-harness/http-routing": "./src/runtime.ts#http",
+      "@mini-harness/transport-runtime": "./src/runtime.ts"
+    }
   },
   "dependencies": {
     "@mini-harness/platform": "workspace:*",

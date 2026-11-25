@@ -32,6 +32,14 @@ interface Layer {
 
 const bundled = new URL('../../../../profiles/', import.meta.url);
 const installed = new URL('../../../', import.meta.url);
+const packagedModules = new Map(
+  Object.entries(
+    JSON.parse(readFileSync(new URL('./profile-modules.json', import.meta.url), 'utf8')) as Record<
+      string,
+      { path: string; exportName: string }
+    >,
+  ),
+);
 const object = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
 
@@ -110,15 +118,10 @@ export function readProfile(name: string) {
 }
 
 async function moduleFor(name: string) {
-  const [path, entry = 'default'] = name.split('#');
-  if (
-    !/^packages\/[a-z][a-z0-9-]*\/src\/(?:[a-zA-Z0-9_-]+\/)*[a-zA-Z0-9_-]+\.js$/.test(path) ||
-    !/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(entry) ||
-    name.split('#').length > 2
-  )
-    throw new Error('Invalid Profile module: ' + name);
-  const exports = await import(new URL(path, installed).href);
-  const value: unknown = exports[entry];
+  const target = packagedModules.get(name);
+  if (!target) throw new Error('Unknown packaged Profile plugin: ' + name);
+  const exports = await import(new URL(target.path, installed).href);
+  const value: unknown = exports[target.exportName];
   if (value == null) throw new Error('Profile module export not found: ' + name);
   return value;
 }

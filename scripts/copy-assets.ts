@@ -1,10 +1,28 @@
 import { build } from 'esbuild';
 import { createRequire } from 'node:module';
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 
 const require = createRequire(import.meta.url);
+const profileModules = new Map<string, { path: string; exportName: string }>();
 for (const { name, parentPath } of readdirSync('packages', { withFileTypes: true })) {
+  const { miniHarness } = JSON.parse(readFileSync(join(parentPath, name, 'package.json'), 'utf8')) as {
+    miniHarness?: { profileModules?: Record<string, string> };
+  };
+  for (const [specifier, target] of Object.entries(miniHarness?.profileModules ?? {})) {
+    const [source, exportName = 'default'] = target.split('#');
+    if (!/^@mini-harness\/[a-z][a-z0-9-]*$/.test(specifier) || profileModules.has(specifier))
+      throw new Error('Invalid or duplicate Profile plugin: ' + specifier);
+    if (
+      !/^\.\/src\/(?:[a-zA-Z0-9_-]+\/)*[a-zA-Z0-9_-]+\.ts$/.test(source) ||
+      !/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(exportName) ||
+      target.split('#').length > 2
+    )
+      throw new Error('Invalid Profile plugin target: ' + specifier + ' -> ' + target);
+    const path = 'packages/' + name + '/' + source.slice(2, -3) + '.js';
+    if (!existsSync(join('dist', path))) throw new Error('Missing compiled Profile plugin: ' + specifier);
+    profileModules.set(specifier, { path, exportName });
+  }
   const source = join(parentPath, name, 'src');
   for (const asset of readdirSync(source, { recursive: true, withFileTypes: true })) {
     if (!asset.isFile() || asset.name.endsWith('.ts')) continue;
@@ -14,6 +32,11 @@ for (const { name, parentPath } of readdirSync('packages', { withFileTypes: true
     copyFileSync(file, target);
   }
 }
+
+writeFileSync(
+  'dist/packages/host/src/profile-modules.json',
+  JSON.stringify(Object.fromEntries(profileModules), null, 2) + '\n',
+);
 
 mkdirSync('dist/packages/ui-primitives/src/browser/vendor', { recursive: true });
 copyFileSync(

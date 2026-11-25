@@ -10,6 +10,7 @@ plugins:
     config:
       port: 3838
   - id: git-diff
+    name: '@mini-harness/git-diff'
     disabled: true
   - id: task-notes
     name: installed:task-notes
@@ -18,7 +19,7 @@ plugins:
       label: Progress
 ```
 
-`name` identifies a module export. A packaged module uses a package-relative path such as `packages/files/src/manifest.js#manifest`. An installed plugin uses `installed:<id>`. Installing a plugin adds its files and metadata. A Profile entry controls activation. `client` controls whether a configured module contributes its browser entry to the Web bootstrap.
+`name` identifies a plugin. Built-in plugins use stable scoped names such as `@mini-harness/conversation-history` or `@mini-harness/ui-settings`. Each workspace package declares the names it owns, and the build resolves them inside the single `mini-harness` distribution. An installed plugin uses `installed:<id>`. Installing a plugin adds its files and metadata. A Profile entry controls activation. `client` controls whether a configured module contributes its browser entry to the Web bootstrap.
 
 Use `providers` for service-to-entry selections, `browserProviders` for browser service selections, and `scopes` for workspace and conversation overrides. See [scoped providers](scoped-providers.md). Required entries are declared by the shipped Profile. Custom YAML tags and aliases are rejected. Changes made outside the app take effect on restart.
 

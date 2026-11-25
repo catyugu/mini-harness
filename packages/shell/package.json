@@ -15,5 +15,10 @@
     "@mini-harness/sessions": "workspace:*",
     "@mini-harness/tools": "workspace:*",
     "@mini-harness/transport": "workspace:*"
+  },
+  "miniHarness": {
+    "profileModules": {
+      "@mini-harness/shell": "./src/manifest.ts#manifest"
+    }
   }
 }

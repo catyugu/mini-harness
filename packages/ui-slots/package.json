@@ -10,7 +10,10 @@
   "miniHarness": {
     "api": [
       "./browser/api"
-    ]
+    ],
+    "profileModules": {
+      "@mini-harness/ui-slots": "./src/manifest.ts#manifest"
+    }
   },
   "dependencies": {
     "@mini-harness/plugin-api": "workspace:*",

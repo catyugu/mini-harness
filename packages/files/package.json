@@ -18,5 +18,10 @@
     "@mini-harness/ui-layout": "workspace:*",
     "@mini-harness/ui-primitives": "workspace:*",
     "@mini-harness/ui-runtime": "workspace:*"
+  },
+  "miniHarness": {
+    "profileModules": {
+      "@mini-harness/files": "./src/manifest.ts#manifest"
+    }
   }
 }

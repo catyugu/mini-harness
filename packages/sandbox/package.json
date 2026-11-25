@@ -11,7 +11,10 @@
   "miniHarness": {
     "api": [
       "./api"
-    ]
+    ],
+    "profileModules": {
+      "@mini-harness/sandbox": "./src/manifest.ts#manifest"
+    }
   },
   "dependencies": {
     "@mini-harness/execution": "workspace:*",

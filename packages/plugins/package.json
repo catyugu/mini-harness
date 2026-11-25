@@ -13,7 +13,11 @@
   "miniHarness": {
     "api": [
       "./api-types"
-    ]
+    ],
+    "profileModules": {
+      "@mini-harness/plugins-runtime": "./src/server/runtime.ts",
+      "@mini-harness/ui-plugins": "./src/manifest.ts#manifest"
+    }
   },
   "dependencies": {
     "@mini-harness/conversation": "workspace:*",

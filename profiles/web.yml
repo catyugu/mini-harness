@@ -3,87 +3,87 @@ include:
   - ./base.yml
 plugins:
   - id: core:http-routes
-    name: packages/transport/src/runtime.js#http
+    name: '@mini-harness/http-routing'
     bootstrap: true
   - id: core:web-auth
-    name: packages/host/src/instance-credential.js#authentication
+    name: '@mini-harness/web-authentication'
     bootstrap: true
   - id: core:web-server
-    name: packages/host/src/web.js#manifest
+    name: '@mini-harness/web-server'
     required: true
     config:
       port: 3837
   - id: core:slots
-    name: packages/ui-slots/src/manifest.js#manifest
+    name: '@mini-harness/ui-slots'
     required: true
     client: true
   - id: core:theme
-    name: packages/ui-theme/src/manifest.js#manifest
+    name: '@mini-harness/ui-theme'
     required: true
     client: true
   - id: core:primitives
-    name: packages/ui-primitives/src/manifest.js#manifest
+    name: '@mini-harness/ui-primitives'
     required: true
     client: true
   - id: core:layout
-    name: packages/ui-layout/src/manifest.js#manifest
+    name: '@mini-harness/ui-layout'
     required: true
     client: true
   - id: core:permission-settings
-    name: packages/sessions/src/permission-policy.js#permissionSettingsManifest
+    name: '@mini-harness/ui-permission-settings'
     required: true
     client: true
   - id: core:workspaces-data
-    name: packages/workspaces/src/manifests/data.js#manifest
+    name: '@mini-harness/workspaces-data'
     required: true
     client: true
   - id: core:sessions-data
-    name: packages/conversation/src/manifests/session-data.js#manifest
+    name: '@mini-harness/sessions-data'
     required: true
     client: true
   - id: core:settings
-    name: packages/settings/src/manifest.js#manifest
+    name: '@mini-harness/ui-settings'
     required: true
     client: true
   - id: core:model-admin
-    name: packages/models/src/manifests/models.js#administrationManifest
+    name: '@mini-harness/ui-models'
     required: true
     client: true
   - id: core:plugins
-    name: packages/plugins/src/manifest.js#manifest
+    name: '@mini-harness/ui-plugins'
     required: true
     client: true
   - id: core:ui
-    name: packages/ui-gateway/src/manifest.js#manifest
+    name: '@mini-harness/web-gateway'
     required: true
   - id: file-preview
-    name: packages/file-preview/src/manifest.js#manifest
+    name: '@mini-harness/file-preview'
     client: true
   - id: git-diff
-    name: packages/git-diff/src/manifest.js#manifest
+    name: '@mini-harness/git-diff'
     client: true
   - id: core:approval-data
-    name: packages/approvals/src/browser/manifest.js#manifest
+    name: '@mini-harness/approvals-data'
     required: true
     client: true
   - id: core:navigation
-    name: packages/conversation/src/manifests/navigation.js#manifest
+    name: '@mini-harness/conversation-navigation'
     required: true
     client: true
   - id: core:workspace-navigation
-    name: packages/conversation/src/manifests/workspace.js#manifest
+    name: '@mini-harness/workspace-navigation'
     required: true
     client: true
   - id: core:conversation
-    name: packages/conversation/src/manifests/conversation.js#manifest
+    name: '@mini-harness/conversation'
     required: true
     client: true
   - id: core:composer
-    name: packages/conversation/src/manifests/conversation.js#composerManifest
+    name: '@mini-harness/conversation-composer'
     required: true
     client: true
   - id: core:history
-    name: packages/conversation/src/manifests/conversation.js#historyManifest
+    name: '@mini-harness/conversation-history'
     required: true
     client: true
   - id: files

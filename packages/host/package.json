@@ -16,5 +16,11 @@
     "@mini-harness/settings": "workspace:*",
     "@mini-harness/transport": "workspace:*",
     "@mini-harness/ui-runtime": "workspace:*"
+  },
+  "miniHarness": {
+    "profileModules": {
+      "@mini-harness/web-authentication": "./src/instance-credential.ts#authentication",
+      "@mini-harness/web-server": "./src/web.ts#manifest"
+    }
   }
 }

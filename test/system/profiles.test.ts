@@ -14,7 +14,10 @@ test('YAML Profile composes through Cordis and persists Web entry changes', asyn
     rmSync(root, { recursive: true, force: true });
   });
   const configure = (name: string) => join(paths.home, 'profiles', name, 'cordis.yml');
-  writeText(configure('web'), 'plugins:\n  - id: git-diff\n    disabled: true\n');
+  writeText(
+    configure('web'),
+    "plugins:\n  - id: git-diff\n    name: '@mini-harness/git-diff'\n    disabled: true\n",
+  );
   const launch = { interactive: false, shutdown() {} };
   const web = await bootProfile('web', paths, launch);
   try {

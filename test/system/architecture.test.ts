@@ -12,7 +12,7 @@ interface Manifest {
   private?: boolean;
   exports?: Record<string, string>;
   dependencies?: Record<string, string>;
-  miniHarness?: { api: string[] };
+  miniHarness?: { api?: string[]; profileModules?: Record<string, string> };
 }
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
@@ -120,7 +120,7 @@ test('workspace dependencies use domain APIs and keep providers at the applicati
         assert.notEqual(name, owner, reason);
         assert.notEqual(owner, 'host', reason);
         assert.notEqual(owner, 'sdk', reason);
-        if (name !== 'host') assert.ok(dependency?.miniHarness?.api.includes(entry), reason);
+        if (name !== 'host') assert.ok(dependency?.miniHarness?.api?.includes(entry), reason);
         actual.add(owner);
         if (area === 'browser' || area === 'shared')
           assert.ok(!relative(join(packages, owner), target).split(sep).includes('server'), reason);
@@ -162,13 +162,17 @@ test('workspace dependencies use domain APIs and keep providers at the applicati
   const entries = readProfile('web');
   const plugins = await profileDescriptors(entries);
   const browserIds = new Set(plugins.filter(({ browser }) => browser).map(({ id }) => id));
-  const descriptorOwners = new Map([...entries].map(([id, row]) => [id, row.name?.split('/')[1]]));
+  const moduleOwners = new Map(
+    [...manifests].flatMap(([owner, manifest]) =>
+      Object.keys(manifest.miniHarness?.profileModules ?? {}).map((specifier) => [specifier, owner] as const),
+    ),
+  );
   for (const { id, browser, browserStyles, browserRequires } of plugins) {
     if (!browser) {
       assert.ok(!browserStyles?.length, id + ' has styles without a browser entry');
       continue;
     }
-    const owner = descriptorOwners.get(id);
+    const owner = moduleOwners.get(entries.get(id)?.name ?? '');
     assert.ok(owner, id + ' is missing its descriptor owner');
     const prefix = '/packages/' + owner + '/src/browser/';
     for (const resource of [browser, ...(browserStyles ?? [])]) {
