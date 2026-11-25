@@ -21,7 +21,6 @@ export interface PluginDescriptor {
   icon?: PluginIcon;
   configGroups?: { title: string; fields: string[] }[];
   configHint?: string;
-  requires?: string[];
   provides?: string[];
   configSchema?: Record<string, any>;
   /** A mounted plugin may opt in to configuration updates without a restart. */

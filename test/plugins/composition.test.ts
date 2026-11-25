@@ -22,7 +22,8 @@ test('external services and their declared consumers share Cordis provider selec
   copyExample(paths.plugins, 'greeting-service');
   const patch = (data: unknown) => request('/settings', 'PATCH', data);
   const endpoint = '/extensions/greeting-route/hello?name=Harness';
-  assert.match((await patch({ plugins: { 'greeting-route': true } })).body.error, /No enabled provider/);
+  assert.equal((await patch({ plugins: { 'greeting-route': true } })).status, 200);
+  assert.equal((await request(endpoint)).status, 404);
   assert.equal((await patch({ plugins: { 'greeting-route': true, 'greeting-service': true } })).status, 200);
   assert.equal((await request(endpoint)).body.greeting, 'Hello, Harness');
   writePlugin(

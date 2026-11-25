@@ -167,13 +167,6 @@ export class PluginCatalog {
             throw new Error('Plugin ' + id + ' must export a Cordis plugin with apply(ctx, config)');
           const inject = Object.keys(Inject.resolve(plugin.inject));
           const provides = typeof plugin.provide === 'string' ? [plugin.provide] : (plugin.provide ?? []);
-          if (descriptor.inject && !isDeepStrictEqual([...inject].sort(), [...descriptor.inject].sort()))
-            throw new Error('Injected service declarations disagree with the manifest for ' + id);
-          if (
-            descriptor.provides &&
-            !isDeepStrictEqual([...provides].sort(), [...descriptor.provides].sort())
-          )
-            throw new Error('Provided service declarations disagree with the manifest for ' + id);
           if (descriptor.optional?.some((name) => inject.includes(name) || provides.includes(name)))
             throw new Error('Conflicting service declarations for ' + id);
           if (

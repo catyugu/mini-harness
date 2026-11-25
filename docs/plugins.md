@@ -105,4 +105,4 @@ The [Task notes example](examples/task-notes/) uses both entry points. The [brow
 
 ### Profile entries
 
-Installing a plugin makes it available in the catalog. To enable it, use the Web Plugins page or add an `installed:<id>` entry to the [active Profile](profiles.md). The server entry's `inject` and `provide` declarations govern Cordis. Optional manifest declarations are verified against the module. Browser service declarations are checked against both the published module and its registrations.
+Installing a plugin makes it available in the catalog. To enable it, use the Web Plugins page or add an `installed:<id>` entry to the [active Profile](profiles.md). The server entry's `inject` and `provide` declarations govern Cordis. Missing required services leave the consuming entry waiting until Cordis can activate it.

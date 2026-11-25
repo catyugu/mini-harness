@@ -121,7 +121,7 @@ export const apply = (ctx, config) => {
   assert.ok(activeNames().includes('example_count'));
 });
 
-test('file tools have a plugin lifecycle and required plugins cannot be disabled independently', async (t) => {
+test('file tools and dependent services follow their Cordis lifetimes', async (t) => {
   const mock = await createMockProvider();
   const { root, paths } = createFixturePaths(mock.url);
   const runtime = new MiniHarnessRuntime(paths);
@@ -130,20 +130,21 @@ test('file tools have a plugin lifecycle and required plugins cannot be disabled
     await mock.close();
     rmSync(root, { recursive: true, force: true });
   });
+  writePlugin(paths.plugins, 'base', {}, `export const provide = ['fixtureGreeting']; export const apply = (ctx) => ctx.provide('fixtureGreeting', 'ok');`);
   const folder = join(paths.plugins, 'dependent');
   mkdirSync(folder);
   writeFileSync(
     join(folder, 'plugin.json'),
-    JSON.stringify({ inject: ['harnessTools'], requires: ['files'] }),
+    JSON.stringify({}),
   );
   writeFileSync(
     join(folder, 'plugin.js'),
     `
-export const inject = ["harnessTools"];
+export const inject = ["harnessTools", "fixtureGreeting"];
 
 export const apply = (ctx) => {
     ctx.effect(() => ctx.harnessTools.register({ name: 'dependent_tool', description: 'Fixture', parameters: { type: 'object', properties: {} },
-      execute: async () => ({ content: [{ type: 'text', text: 'ok' }] }) }));
+      execute: async () => ({ content: [{ type: 'text', text: ctx.fixtureGreeting }] }) }));
   };
 `,
   );
@@ -155,10 +156,15 @@ export const apply = (ctx) => {
   await runtime.configuration.update({ plugins: { files: false } });
   assert.ok(!activeNames().includes('read'));
   await runtime.configuration.update({ plugins: { files: true, dependent: true } });
-  await assert.rejects(runtime.configuration.update({ plugins: { files: false } }), /No enabled provider/);
-  assert.equal(runtime.settings.plugins.files, true);
+  assert.ok(!activeNames().includes('dependent_tool'));
+  await runtime.configuration.update({ plugins: { base: true } });
   assert.ok(activeNames().includes('dependent_tool'));
-  await runtime.configuration.update({ plugins: { files: false, dependent: false } });
+  await runtime.configuration.update({ plugins: { base: false } });
+  assert.ok(!activeNames().includes('dependent_tool'));
+  assert.ok(activeNames().includes('read'));
+  await runtime.configuration.update({ plugins: { base: true } });
+  assert.ok(activeNames().includes('dependent_tool'));
+  await runtime.configuration.update({ plugins: { files: false, base: false, dependent: false } });
   assert.equal(
     runtime.plugins.ctx.harnessTools
       .forSession(item.id)
@@ -312,12 +318,13 @@ test('dependent plugins restart in order and partial setup or persistence failur
     mkdirSync(folder);
     writeFileSync(
       join(folder, 'plugin.json'),
-      JSON.stringify({ inject: ['harnessTools'], requires: id === 'dependent' ? ['base'] : [] }),
+      JSON.stringify({}),
     );
     writeFileSync(
       join(folder, 'plugin.js'),
       `
-export const inject = ["harnessTools"];
+export const inject = ${JSON.stringify(id === 'dependent' ? ['harnessTools', 'fixtureBase'] : ['harnessTools'])};
+export const provide = ${JSON.stringify(id === 'base' ? ['fixtureBase'] : [])};
 
 import { appendFileSync } from 'node:fs';
 export const apply = (ctx, config) => {
@@ -326,6 +333,7 @@ export const apply = (ctx, config) => {
         ctx.effect(() => ctx.harnessTools.register({ name: '${id}_tool', description: 'Fixture', parameters: {type: 'object', properties: {}},
           execute: async () => ({content: [{type: 'text', text: String(config.value ?? 'original')}]}) }));
         if (config.fail) throw new Error('Partial setup failed');
+        if ('${id}' === 'base') ctx.provide('fixtureBase', config.value ?? 'original');
       };
 `,
     );
@@ -365,7 +373,7 @@ export const apply = (ctx, config) => {
   );
 });
 
-test('cyclic dependencies reject a configuration before mounting either plugin', async (t) => {
+test('cyclic services stay waiting without activating either plugin', async (t) => {
   const mock = await createMockProvider();
   const { root, paths } = createFixturePaths(mock.url);
   const runtime = new MiniHarnessRuntime(paths);
@@ -380,18 +388,17 @@ test('cyclic dependencies reject a configuration before mounting either plugin',
   ]) {
     const folder = join(paths.plugins, id);
     mkdirSync(folder);
-    writeFileSync(join(folder, 'plugin.json'), JSON.stringify({ requires: [dependency] }));
+    writeFileSync(join(folder, 'plugin.json'), JSON.stringify({}));
     writeFileSync(
       join(folder, 'plugin.js'),
-      'export default () => { throw new Error("Should not mount"); };',
+      `export const inject = [${JSON.stringify(dependency)}]; export const provide = [${JSON.stringify(id)}]; export function apply() { throw new Error('Should not mount'); }`,
     );
   }
   await runtime.start();
-  await assert.rejects(
-    runtime.configuration.update({ plugins: { first: true, second: true } }),
-    /No enabled provider/,
-  );
-  assert.equal(runtime.settings.plugins.first, undefined);
+  await runtime.configuration.update({ plugins: { first: true, second: true } });
+  assert.equal(runtime.settings.plugins.first, true);
+  for (const id of ['first', 'second'])
+    assert.equal(runtime.plugins.metadata().find((plugin) => plugin.id === id)?.state, 'inactive');
 });
 
 test('malformed plugin manifests fail discovery instead of silently dropping their metadata', async (t) => {

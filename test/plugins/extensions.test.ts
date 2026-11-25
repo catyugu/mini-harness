@@ -81,7 +81,9 @@ test('input contributions run at delivery in stable order and keep the submitted
     {},
     `
 import { appendFileSync } from 'node:fs';
+export const provide = ['inputTransform'];
 export const apply = (ctx) => {
+      ctx.provide('inputTransform', true);
       ctx.on("agent/prepare-input", (content, { original }) => {
         appendFileSync(${JSON.stringify(trace)}, 'prepare ' + original.userText + '\\n');
         if (original.userText === 'Blocked') return { reject: 'fixture input denied' };
@@ -93,8 +95,9 @@ export const apply = (ctx) => {
   writePlugin(
     paths.plugins,
     'input-a',
-    { requires: ['input-z'] },
+    {},
     `
+export const inject = ['inputTransform'];
 export const apply = (ctx) => {
       ctx.on("agent/prepare-input", (content, { original }) => {
         original.userText = 'lost';

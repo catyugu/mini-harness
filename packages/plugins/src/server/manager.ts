@@ -121,22 +121,15 @@ export class PluginHost implements ScopePort {
       if (!active || !fiber || this.nativeEntries.some((entry) => entry.id === options.id)) return [];
       const identity = pluginInstance(fiber.ctx);
       const inject = Object.keys(fiber.inject);
-      const services = Object.fromEntries(
-        inject
-          .filter((name) => !name.startsWith('entry:'))
-          .flatMap((name) => {
+      const services = Object.fromEntries(inject.flatMap((name) => {
             const provider = fiber.committed?.[name]?.ctx.fiber;
             return provider ? [[name, provider.entry?.options.id ?? 'application']] : [];
-          }),
-      );
+      }));
       return [
         {
           id: options.id,
           services,
-          requires: inject.filter((name) => name.startsWith('entry:')).map((name) => name.slice(6)),
-          provides: [...fiber.provisions]
-            .map(({ name }) => name)
-            .filter((name) => !name.startsWith('entry:')),
+          provides: [...fiber.provisions].map(({ name }) => name),
           scope: identity.scope.kind,
           source: this.catalog.reserved(identity.pluginId) ? 'built-in' : 'local',
         },
@@ -274,7 +267,6 @@ export class PluginHost implements ScopePort {
     descriptors: ReturnType<PluginCatalog['descriptors']>,
     appProviders: ReadonlyMap<string, string>,
     unavailable: (id: string, error: unknown, key?: ScopeKey) => boolean,
-    requestedIdentities: ReadonlySet<string>,
     preparing?: ScopeKey,
     released: ReadonlySet<ScopeKey> = new Set(),
     validating: readonly ScopeKey[] = [],
@@ -344,7 +336,6 @@ export class PluginHost implements ScopePort {
       for (const { id, provides } of enabled) {
         for (const service of provides ?? [])
           if (providers.get(service) === id || !parent.providers.has(service)) isolated.add(service);
-        if (requestedIdentities.has(id)) isolated.add('entry:' + id);
       }
       const isolates = [...isolated].sort();
       const existing = this.scopes.get(key);
@@ -356,7 +347,7 @@ export class PluginHost implements ScopePort {
         contexts.set(key, group);
         for (const plan of plans) {
           const id = key + '/' + plan.id;
-          entries.push(this.entry(plan, address.scope, requestedIdentities.has(plan.id), id, key, context));
+          entries.push(this.entry(plan, address.scope, id, key, context));
           instances.set(id, { key, plugin: plan.id });
         }
       }
@@ -377,7 +368,6 @@ export class PluginHost implements ScopePort {
   private entry(
     plan: ConfiguredPlugin,
     scope: PluginScope,
-    identity: boolean,
     id = plan.id,
     scopeKey?: ScopeKey,
     context = this.ctx,
@@ -387,8 +377,7 @@ export class PluginHost implements ScopePort {
       id,
       context,
       config: plan.config ?? {},
-      module: (descriptor.module ?? plan.id) + (identity ? ':identity' : ''),
-      inject: descriptor.requires?.map((dependency) => 'entry:' + dependency),
+      module: descriptor.module ?? plan.id,
       live: descriptor.configChanges === 'live',
       load: () => descriptor.plugin ?? { apply() {} },
       prepare: (ctx) => {
@@ -409,17 +398,6 @@ export class PluginHost implements ScopePort {
           descriptor.validateConfig,
           id,
         );
-      },
-      verify: (ctx) => {
-        const registered = new Set(
-          [...ctx.fiber.provisions].map(({ name }) => name).filter((name) => name !== 'entry:' + plan.id),
-        );
-        const declared = descriptor.provides ?? [];
-        const unexpected = [...registered].find((name) => !declared.includes(name));
-        if (unexpected) throw new Error('Undeclared service: ' + unexpected);
-        if (declared.some((name) => !registered.has(name)))
-          throw new Error('Plugin did not publish all declared services: ' + id);
-        if (identity) ctx.provide('entry:' + plan.id, true);
       },
     };
   }
@@ -528,13 +506,11 @@ export class PluginHost implements ScopePort {
           )
         : [],
     );
-    const requestedIdentities = new Set(descriptors.flatMap((row) => row.requires ?? []));
     const scoped = this.scopedEntries(
       settings,
       descriptors,
       providers,
       unavailable,
-      requestedIdentities,
       preparing,
       released,
       [...requiredScopes, ...validations.flatMap(({ key }) => (key ? [key] : []))],
@@ -543,7 +519,7 @@ export class PluginHost implements ScopePort {
     const mounts = [
       ...plans
         .filter(({ id }) => !failures.has(id))
-        .map((plan) => this.entry(plan, appScope, requestedIdentities.has(plan.id))),
+        .map((plan) => this.entry(plan, appScope)),
       ...scoped.entries,
     ];
     const appChanged =
@@ -583,15 +559,9 @@ export class PluginHost implements ScopePort {
     try {
       const activationErrors = await this.entries.update([...this.nativeEntries, ...mounts]);
       for (const mounted of mounts) {
-        const entry = this.entries.get(mounted.id)!;
-        if (entry.active && !entry.error) continue;
+        if (!activationErrors.has(mounted.id)) continue;
         const scope = scoped.instances.get(mounted.id);
-        const missing = Object.keys(entry.fiber?.inject ?? {}).filter(
-          (service) => entry.options.context.get(service) == null,
-        );
-        const error =
-          activationErrors.get(mounted.id) ??
-          new Error('No enabled provider for ' + missing.join(', ') + ' (' + mounted.id + ')');
+        const error = activationErrors.get(mounted.id);
         if (!(scope ? unavailable(scope.plugin, error, scope.key) : unavailable(mounted.id, error)))
           throw error;
       }

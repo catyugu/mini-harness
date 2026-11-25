@@ -3,7 +3,6 @@ export interface Capability {
   provides?: string[];
   inject?: string[];
   optional?: string[];
-  requires?: string[];
 }
 
 export class ProtectedProviderError extends Error {
