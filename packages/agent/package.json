@@ -22,7 +22,7 @@
       "@mini-harness/agent": "./src/manifests/agent.ts",
       "@mini-harness/agent-prompt": "./src/manifests/prompt.ts",
       "@mini-harness/prompt-defaults": "./src/prompt-defaults.ts",
-      "@mini-harness/compaction": "./src/compaction.ts#compaction"
+      "@mini-harness/compaction": "./src/manifests/compaction.ts"
     }
   },
   "dependencies": {
