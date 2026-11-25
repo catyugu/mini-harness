@@ -17,7 +17,15 @@ import { defineConfig } from '@mini-harness/plugin-api/configuration';
 import type { SessionRecord } from '@mini-harness/sessions/identity';
 import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 import { PluginHost } from '@mini-harness/plugins/manager';
-import { createScopeKey, scopeChainOf, scopeOf, scopeTarget, setScopeParent, tagScope, type ScopeKey } from '@mini-harness/plugin-api/scopes';
+import {
+  createScopeKey,
+  scopeChainOf,
+  scopeOf,
+  scopeTarget,
+  setScopeParent,
+  tagScope,
+  type ScopeKey,
+} from '@mini-harness/plugin-api/scopes';
 
 declare module 'mini-harness/cordis' {
   interface Context {
@@ -1348,39 +1356,60 @@ test('configured subtrees follow late scope owners, including owners installed b
   const project = createScopeKey();
   const task = createScopeKey(project);
   const effects: string[] = [];
-  const host = new PluginHost(ctx, directory, fixtureProfile(directory, [
-    {
-      id: 'source', title: 'Source', description: '',
-      plugin: {
-        apply(owner) {
-          owner.harnessProfileScopes.register(owner, 'project', (id) => id === 'alpha' ? { key: project } : undefined);
+  const host = new PluginHost(
+    ctx,
+    directory,
+    fixtureProfile(
+      directory,
+      [
+        {
+          id: 'source',
+          title: 'Source',
+          description: '',
+          plugin: {
+            apply(owner) {
+              owner.harnessProfileScopes.register(owner, 'project', (id) =>
+                id === 'alpha' ? { key: project } : undefined,
+              );
+            },
+            inject: ['harnessProfileScopes'],
+          },
         },
-        inject: ['harnessProfileScopes'],
-      },
-    },
-    {
-      id: 'nested', title: 'Nested owner', description: '',
-      plugin: {
-        apply(owner) {
-          owner.harnessProfileScopes.register(owner, 'task', (id) =>
-            id === 'child' ? { key: task, parent: 'project:alpha' } : undefined,
-          );
+        {
+          id: 'nested',
+          title: 'Nested owner',
+          description: '',
+          plugin: {
+            apply(owner) {
+              owner.harnessProfileScopes.register(owner, 'task', (id) =>
+                id === 'child' ? { key: task, parent: 'project:alpha' } : undefined,
+              );
+            },
+            inject: ['harnessProfileScopes'],
+          },
         },
-        inject: ['harnessProfileScopes'],
-      },
-    },
-    {
-      id: 'local', title: 'Local', description: '',
-      plugin: {
-        provide: ['greeting'],
-        apply(owner) {
-          effects.push('mounted');
-          owner.provide('greeting', 'nested');
-          owner.effect(() => () => { effects.push('disposed'); });
+        {
+          id: 'local',
+          title: 'Local',
+          description: '',
+          plugin: {
+            provide: ['greeting'],
+            apply(owner) {
+              effects.push('mounted');
+              owner.provide('greeting', 'nested');
+              owner.effect(() => () => {
+                effects.push('disposed');
+              });
+            },
+          },
         },
+      ],
+      () => settings,
+      (next) => {
+        settings = next;
       },
-    },
-  ], () => settings, (next) => { settings = next; }));
+    ),
+  );
   ctx.provide('harnessProfileScopes', host);
   t.after(async () => {
     await host.close();

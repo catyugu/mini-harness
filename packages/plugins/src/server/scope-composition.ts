@@ -111,7 +111,10 @@ export function scopeEntry(
               const next = lookupScope(child, address);
               if (!next) throw new Error('Configured scope does not exist: ' + address);
               await connect(
-                child, binding, next.parent, new Set([...seen, address]),
+                child,
+                binding,
+                next.parent,
+                new Set([...seen, address]),
                 nearest ?? (options().configured.has(address) ? address : undefined),
               );
             }),
