@@ -1,7 +1,6 @@
-import { addAbortListener } from 'node:events';
 import { Service, type Context } from 'mini-harness/cordis';
-import { pluginInstance } from '@mini-harness/plugin-api/instance';
-import { assertOutsideMountTransaction } from '@mini-harness/plugin-api/mutation-api';
+import { pluginEntryFiber } from '@mini-harness/plugin-api/plugin-configuration';
+import { entryAddress } from './entry-address.ts';
 import { pluginConfiguration, type PluginConfiguration } from '@mini-harness/plugin-api/plugin-configuration';
 import type { ScopeAddress } from '@mini-harness/plugin-api/configuration';
 
@@ -10,9 +9,13 @@ type ConfigWriter = (
   key: ScopeAddress | undefined,
   patch: unknown,
   check: () => void,
+  signal: AbortSignal,
 ) => Promise<void>;
 
-export function pluginSettings(root: Context, writer?: ConfigWriter): PluginConfiguration {
+export function pluginSettings(
+  writer: ConfigWriter,
+  committed: (notify: () => void) => () => void,
+): PluginConfiguration {
   const handles = new WeakMap<AbortSignal, PluginConfiguration>();
   function configuration(caller: Context) {
     const lifetime = caller.fiber.signal;
@@ -20,23 +23,12 @@ export function pluginSettings(root: Context, writer?: ConfigWriter): PluginConf
     if (handle) return handle;
     handle = pluginConfiguration(
       caller,
-      async (values, signal) => {
-        assertOutsideMountTransaction();
-        const { pluginId, scopeAddress, writableConfig } = pluginInstance(caller);
-        const check = () => signal.throwIfAborted();
-        check();
-        if (!writer || !writableConfig) throw new Error('Plugin configuration writes require a live Entry');
-        let listener: ReturnType<typeof addAbortListener> | undefined;
-        const aborted = new Promise<never>((_, reject) => {
-          listener = addAbortListener(signal, () => reject(signal.reason));
-        });
-        try {
-          await Promise.race([writer(pluginId, scopeAddress, structuredClone(values), check), aborted]);
-        } finally {
-          listener?.[Symbol.dispose]();
-        }
+      (values, signal) => {
+        const entry = pluginEntryFiber(caller).entry!;
+        const { id, scope } = entryAddress(entry.options.id);
+        return writer(id, scope, structuredClone(values), () => signal.throwIfAborted(), signal);
       },
-      (notify) => root.harnessSettingsStore.subscribe(notify),
+      committed,
     );
     handles.set(lifetime, handle);
     return handle;

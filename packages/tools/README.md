@@ -4,7 +4,7 @@ Owns tool registration, validation and invocation leases.
 
 ## Responsibilities
 
-Resolves registrations through opaque runtime scope layers shared with Prompt. `forSession(id, scope)` selects contributions for the supplied runtime key; the session ID binds the tool's input environment. The tool policy remains a separate domain service. The registry rechecks each lease after asynchronous authorization.
+Resolves tool registrations through opaque runtime scope layers shared with Prompt. A selected definition holds a lease that expires when its registration is replaced or unloaded.
 
 ## Structure
 
@@ -12,7 +12,7 @@ Resolves registrations through opaque runtime scope layers shared with Prompt. `
 
 ## API
 
-`harnessTools.register` owns registration and `defineTool` infers argument types. `tools/decide` can deny an invocation.
+`harnessTools.register` accepts a definition or a resource-specific factory. `harnessTools.list()` selects plain registrations. Pass `{ scope, resourceId }` to resolve scoped or resource-specific registrations. `defineTool` infers argument types from the schema.
 
 ## Dependencies
 

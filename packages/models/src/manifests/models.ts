@@ -101,7 +101,6 @@ export const administration: Plugin.Object = {
     'harnessModelPreference',
     'harnessState',
     'harnessRoutes',
-    'harnessMutations',
     'harnessChanges',
   ],
   apply: setupAdministration,

@@ -35,6 +35,6 @@ export function setup(ctx: Context) {
       },
     });
   ctx.effect(() =>
-    ctx.harnessTools.register({ name: 'delegate', bind: tool }, { visible: (id) => delegation.visible(id) }),
+    ctx.harnessTools.register({ name: 'delegate', resolve: tool, visible: (id) => delegation.visible(id) }),
   );
 }

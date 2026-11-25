@@ -66,6 +66,7 @@ declare module 'mini-harness/cordis' {
     /** Configure capabilities owned by a single Agent run before its first step. */
     'agent/setup'(ctx: Context, sessionId: string, signal: AbortSignal): void | Promise<void>;
     'agent/tool-result': ToolResultTransform;
+    'agent/tool-decision': ToolDecisionHandler;
     'agent/prepare-input': InputPreparation;
     'agent/model-request': ModelRequestTransform;
     'agent/model-retry': ModelRetryHandler;
@@ -91,3 +92,13 @@ declare module '@mini-harness/plugin-api/observations' {
     };
   }
 }
+
+export interface ToolDecision {
+  sessionId: string;
+  tool: string;
+  callId: string;
+  arguments: Readonly<Record<string, unknown>>;
+  signal: AbortSignal;
+}
+
+export type ToolDecisionHandler = (request: ToolDecision) => 'deny' | undefined | Promise<'deny' | undefined>;

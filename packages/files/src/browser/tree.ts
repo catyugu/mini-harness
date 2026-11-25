@@ -1,4 +1,8 @@
-import { fileRoute, refreshOnFileChange, type WorkspaceView } from '@mini-harness/file-access/browser/views';
+import {
+  fileRoute,
+  refreshOnFileChange,
+  type WorkspaceView,
+} from '@mini-harness/workspaces/browser/file-views';
 import { browserRequest } from '@mini-harness/ui-runtime/http';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { button as control, iconButton } from '@mini-harness/ui-primitives/primitives';

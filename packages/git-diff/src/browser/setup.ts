@@ -1,4 +1,4 @@
-import { fileRoute, refreshOnFileChange } from '@mini-harness/file-access/browser/views';
+import { fileRoute, refreshOnFileChange } from '@mini-harness/workspaces/browser/file-views';
 import { button, iconButton } from '@mini-harness/ui-primitives/primitives';
 import { browserRequest } from '@mini-harness/ui-runtime/http';
 import type { Context } from 'mini-harness/cordis';

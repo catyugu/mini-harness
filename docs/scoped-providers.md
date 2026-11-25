@@ -16,7 +16,7 @@ scopes:
 
 Inheritance follows application → workspace → ancestor session → session. Only the services listed in `isolate` are masked. An unavailable replacement does not fall back to its parent; remove the isolation declaration to restore inheritance. Siblings are unaffected.
 
-Cordis activates and disposes consumers according to their dependencies. Changed scopes are prepared before commit; a failed update restores the previous entries. Deleting a session or workspace releases its entries and removes scoped settings and data. Changes to services executing a configuration transaction require a Profile restart.
+Cordis activates and disposes consumers according to their dependencies. Changed scopes are prepared before commit; a failed update restores the previous entries. Deleting a session or workspace releases its entries and removes scoped settings and data. Changing the live composition owner requires a Profile restart.
 
 Prepare a Profile address with `await ctx.harnessProfileScopes.prepare(address, signal)`, then use the selected Cordis context directly: `ctx.harnessProfileScopes.context(address).harnessModels`, for example. Resolve it again after configuration changes. Perform configuration preparation in runtime handlers.
 

@@ -26,7 +26,6 @@
     }
   },
   "dependencies": {
-    "@mini-harness/platform": "workspace:*",
-    "@mini-harness/plugin-api": "workspace:*"
+    "@mini-harness/platform": "workspace:*"
   }
 }

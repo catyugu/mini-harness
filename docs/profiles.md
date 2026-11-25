@@ -82,7 +82,6 @@ references. The final entry ID determines the configuration override.
 
 All declared server modules use the same Cordis EntryTree and configuration path.
 The Web Plugins page edits the user patch, including ordinary module entries.
-Changes to services currently executing the configuration transaction require a
-Profile restart. Scoped overrides and the installed bundle
+Changing the live composition owner requires a Profile restart. Scoped overrides and the installed bundle
 format remain described in [scoped providers](scoped-providers.md) and
 [plugins](plugins.md). The Profile package must be initialized explicitly or by the first Web launch. YAML layers own plugin configuration and scoped composition. All changes are persisted to the active Profile's user layer; no global settings file or migration is used. Session data, credentials and plugin data remain in their existing locations.

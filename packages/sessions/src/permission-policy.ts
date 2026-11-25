@@ -1,5 +1,13 @@
 import type { Plugin } from 'mini-harness/cordis';
-import type { ToolPolicy } from '@mini-harness/tools/policy';
+import type { ToolDefinition } from '@mini-harness/tools/api';
+
+export type ToolPolicy = (sessionId: string, tool: ToolDefinition) => boolean;
+
+declare module 'mini-harness/cordis' {
+  interface Context {
+    harnessToolPolicy: ToolPolicy;
+  }
+}
 import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 
 export const metadata: PluginInfo = {
@@ -18,7 +26,7 @@ const plugin: Plugin.Object = {
         record;
         record = record.parentId ? sessions.get(record.parentId) : undefined
       )
-        if (record.permission === 'readOnly') return tool.readOnly;
+        if (record.permission === 'readOnly') return tool.tags?.includes('readOnly') === true;
       return true;
     };
     ctx.provide('harnessToolPolicy', authorize);

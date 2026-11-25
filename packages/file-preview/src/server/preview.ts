@@ -1,4 +1,4 @@
-import type { WorkspaceFileAccess } from '@mini-harness/file-access/api';
+import type { RootedFileAccess } from '@mini-harness/file-access/api';
 import { DomainError } from '@mini-harness/platform/errors';
 import {
   decodeText,
@@ -9,7 +9,7 @@ import {
 } from '../shared/content.ts';
 
 export async function workspacePreview(
-  files: WorkspaceFileAccess,
+  files: RootedFileAccess,
   path: string,
   signal: AbortSignal,
 ): Promise<PreviewContent> {
@@ -39,7 +39,7 @@ export async function workspacePreview(
   return text === undefined ? { kind: 'binary' } : { kind: 'text', text, truncated };
 }
 
-export async function downloadWorkspaceFile(files: WorkspaceFileAccess, path: string, signal: AbortSignal) {
+export async function downloadWorkspaceFile(files: RootedFileAccess, path: string, signal: AbortSignal) {
   const bytes = await files.readFile(path);
   signal.throwIfAborted();
   if (bytes.length > workspaceReadLimit)

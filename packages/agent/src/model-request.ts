@@ -20,10 +20,10 @@ export async function requestModel(
   options: {
     delta(text: string): void;
     ended(attempt: number, failed: boolean): void;
-    retry?(failure: ModelFailure): Promise<ModelRetry | undefined>;
+    retry?(failure: Omit<ModelFailure, 'sessionId'>): Promise<ModelRetry | undefined>;
   },
 ): Promise<NativeAssistantMessage> {
-  const { signal, model, sessionId } = request;
+  const { signal, model } = request;
   for (let attempt = 1; ; attempt++) {
     let message: NativeAssistantMessage | undefined;
     let streamed = false,
@@ -58,9 +58,7 @@ export async function requestModel(
     )
       return message;
     try {
-      if (!sessionId) return message; // A plugin retry requires an owned conversation.
       const retry = await options.retry?.({
-        sessionId,
         model,
         attempt,
         signal,

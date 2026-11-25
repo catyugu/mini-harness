@@ -1,10 +1,8 @@
 import { Context } from 'mini-harness/cordis';
 import { tagScope, scopeTarget } from '@mini-harness/plugin-api/scopes';
 import type { ThinkingLevel, ModelChoice } from '@mini-harness/llm/vocabulary';
-import type { ScopeAddress } from '@mini-harness/plugin-api/configuration';
 import type { ProfileScopes } from '@mini-harness/plugin-api/configuration';
 import { DomainError } from '@mini-harness/platform/errors';
-import type { MutationPort } from '@mini-harness/plugin-api/mutation-api';
 import { randomUUID } from 'node:crypto';
 import { imageMimeType } from '@mini-harness/input/prepare';
 import { validateModelOptions } from '@mini-harness/llm/options';
@@ -39,12 +37,12 @@ interface Activity {
 
 export class Runs implements RunPort {
   readonly events = new EventTarget();
+  private closing = false;
   private readonly work = new Map<string, Activity>();
 
   constructor(
     private readonly registry: SessionStore,
     private readonly scopes: ProfileScopes,
-    private readonly mutations: MutationPort,
     private readonly observe: (event: CapabilityObservation, signal?: AbortSignal) => void,
     private readonly preference: ModelPreference,
   ) {}
@@ -56,13 +54,17 @@ export class Runs implements RunPort {
   get size() {
     return this.work.size;
   }
+
   active(id: string) {
     return this.work.has(id);
   }
-  activeInScope(scopes: ReadonlySet<ScopeAddress>) {
-    return [...this.work.keys()].some((id) =>
-      this.scopes.address(`session:${id}`).some((key) => scopes.has(key)),
-    );
+
+  seal() {
+    this.closing = true;
+  }
+
+  private assertOpen() {
+    if (this.closing) throw new DomainError('unavailable', 'Runs are closing');
   }
   completion(id: string) {
     return this.work.get(id)?.done;
@@ -87,7 +89,7 @@ export class Runs implements RunPort {
 
   private reserve(id: string): Activity {
     this.registry.assertAvailable(id);
-    this.mutations.admit(this.scopes.address(`session:${id}`));
+    this.assertOpen();
     if (this.active(id)) throw new DomainError('conflict', 'Conversation is already running');
     const activity: Activity = { controller: new AbortController() };
     this.work.set(id, activity);
@@ -441,7 +443,7 @@ export class Runs implements RunPort {
     id: string,
     { message, mode, attachments, model, thinkingLevel }: Parameters<RunPort['queueInput']>[1],
   ) {
-    this.mutations.admit(this.scopes.address(`session:${id}`));
+    this.assertOpen();
     const activity = this.work.get(id);
     const signal = activity?.inputSignal;
     if (!activity?.context || !signal || signal.aborted)
@@ -456,7 +458,7 @@ export class Runs implements RunPort {
   async cancelQueue(id: string, itemId?: string, signal?: AbortSignal) {
     const key = `session:${id}` as const;
     if (!this.work.get(id)?.inputSignal) await this.scopes.prepare(key, signal);
-    this.mutations.admit(this.scopes.address(key));
+    this.assertOpen();
     return this.agent(id).cancelQueue(id, itemId);
   }
 
@@ -537,6 +539,7 @@ export class Runs implements RunPort {
   }
 
   async stop() {
+    this.seal();
     const active = [...this.work.values()];
     for (const { controller } of active) controller.abort(new RunInterrupted());
     await Promise.allSettled(active.map(({ done }) => done));

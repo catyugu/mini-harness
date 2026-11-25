@@ -9,8 +9,6 @@
     "./selection": "./src/selection.ts",
     "./services": "./src/services.ts",
     "./plugin-configuration": "./src/shared/plugin-configuration.ts",
-    "./instance": "./src/instance.ts",
-    "./mutation-api": "./src/mutation-api.ts",
     "./observations": "./src/observations.ts",
     "./scopes": "./src/scopes.ts",
     "./profile": "./src/profile.ts"
@@ -22,8 +20,6 @@
       "./selection",
       "./services",
       "./plugin-configuration",
-      "./instance",
-      "./mutation-api",
       "./observations",
       "./scopes",
       "./profile"

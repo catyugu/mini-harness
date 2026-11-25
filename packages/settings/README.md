@@ -1,26 +1,26 @@
 # @mini-harness/settings
 
-Owns stored application configuration and the settings dialog.
+Provides the settings dialog and HTTP routes for the active Profile.
 
 ## Responsibilities
 
-Validates settings, serializes mutations, commits atomic writes and publishes revisions. The plugin host plans and applies the graph derived from each candidate.
+Reads the committed Profile and forwards edits to its configuration owner.
 
 ## Structure
 
-`src/server/` contains transactions and routes. Parsing and validation belong to Plugin API. `src/browser/` owns the settings panel and contributions.
+`src/server/` contains the settings routes. `src/browser/` owns the settings panel and contributions.
 
 ## API
 
-`harnessSettingsStore` exposes committed settings and transactions. `miniSettingsRegistry.register` is available through the browser SDK.
+`miniSettingsRegistry.register` contributes settings pages through the browser SDK.
 
 ## Dependencies
 
-Uses [Plugin API](../plugin-api/README.md) for selection contracts and [Platform](../platform/README.md) for atomic persistence.
+The server routes use the `harnessProfileConfig` service.
 
 ## Lifecycle
 
-`core:settings` registers application routes. Entry updates and scope deletion share one queue. Browser controls release subscriptions when removed.
+`core:settings` registers application routes. Browser controls release subscriptions when removed.
 
 ## Configuration
 

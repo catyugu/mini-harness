@@ -4,25 +4,15 @@ import { executeProcess } from './executor.ts';
 
 export const metadata: PluginInfo = {
   title: 'Process execution',
-  description: 'Isolated and explicitly authorized host processes',
+  description: 'Run subprocesses with cancellation, time and output limits',
 };
 
 const plugin: Plugin.Object = {
-  inject: ['harnessSandbox', 'harnessProfileScopes', 'harnessRegistry'],
   provide: ['harnessProcess'],
   apply(ctx) {
     ctx.provide('harnessProcess', {
       run(request: Parameters<typeof executeProcess>[0]) {
-        return ctx.fiber.run((signal) => {
-          const environment = ctx.harnessProfileScopes.require(
-            request.sessionId ? `session:${request.sessionId}` : undefined,
-            'harnessSandbox',
-          );
-          const attachments = request.sessionId
-            ? ctx.harnessRegistry.attachmentDirectory(request.sessionId)
-            : undefined;
-          return executeProcess({ ...request, signal }, environment, attachments);
-        }, request.signal);
+        return ctx.fiber.run((signal) => executeProcess({ ...request, signal }), request.signal);
       },
     });
   },

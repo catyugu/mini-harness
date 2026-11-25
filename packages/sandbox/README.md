@@ -1,6 +1,6 @@
 # @mini-harness/sandbox
 
-Prepares the isolated process environment for standard-permission conversations.
+Prepares a subprocess command for isolated execution.
 
 ## Responsibilities
 
@@ -12,15 +12,15 @@ Owns the isolation plan and platform-specific setup. Process Execution owns runn
 
 ## API
 
-`harnessSandbox` and `SandboxPort` allow the execution host to prepare isolation.
+`harnessSandbox.prepare(command, { cpuSeconds, mounts, signal })` returns a command for Process Execution. Mounts identify a host source, target path and read-only mode.
 
 ## Dependencies
 
-Uses [Execution](../execution/README.md) and platform isolation discovery.
+Uses [Process Execution](../process-execution/README.md) and platform isolation discovery.
 
 ## Lifecycle
 
-`core:sandbox` mounts at application scope. Isolation is prepared for the individual process request. Only the owning conversation's upload directory is exposed, read-only at `/attachments`.
+`core:sandbox` mounts at application scope. Isolation is prepared for the individual process request.
 
 ## Testing
 

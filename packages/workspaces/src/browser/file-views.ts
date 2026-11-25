@@ -1,4 +1,4 @@
-import { workspaceRoute } from '@mini-harness/workspaces/browser/route';
+import { workspaceRoute } from './route.ts';
 import type { Context } from 'mini-harness/cordis';
 
 export interface WorkspaceView {

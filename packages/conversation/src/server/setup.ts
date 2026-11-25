@@ -12,9 +12,9 @@ export function setup(ctx: Context) {
   const track = (source: EventTarget, domain: (event: CustomEvent) => string) => {
     const listener = (event: Event) => {
       if (!(event instanceof CustomEvent)) return;
-      const scope = { sessionId: event.detail.id };
-      changes.invalidate(domain(event), scope);
-      if (event.detail.records) changes.invalidate('conversation-records', scope);
+      const resourceId = event.detail.id;
+      changes.invalidate(domain(event), resourceId);
+      if (event.detail.records) changes.invalidate('conversation-records', resourceId);
     };
     ctx.effect(() => {
       source.addEventListener('change', listener);

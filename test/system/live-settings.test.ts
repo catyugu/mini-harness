@@ -56,11 +56,8 @@ test('appearance, parallelism and child defaults update without interrupting a r
   );
   assert.equal(runtime.settings.entries.subagents?.config?.model, undefined);
   assert.equal(runtime.settings.entries.subagents?.config?.maxParallel, 2);
-  await assert.rejects(
-    runtime.configuration.update({ entries: { files: { disabled: true } } }),
-    /Stop the affected conversations/,
-  );
-  assert.equal(runtime.settings.entries.files?.disabled, false);
+  await runtime.configuration.update({ entries: { files: { disabled: true } } });
+  assert.equal(runtime.settings.entries.files?.disabled, true);
   assert.equal(runtime.plugins.ctx.harnessRuns.active(item.id), true);
   release();
   assert.equal(await pending, 'Done');
@@ -78,14 +75,14 @@ test('appearance, parallelism and child defaults update without interrupting a r
   );
   assert.ok(
     !runtime.plugins.ctx.harnessTools
-      .forSession(item.id, runtime.plugins.ctx.harnessRegistry.runScope(item.id))
+      .list({ resourceId: item.id, scope: runtime.plugins.ctx.harnessRegistry.runScope(item.id) })
       .map(({ name }) => name)
       .includes('read'),
   );
 });
 
 test(
-  'a scoped plugin transaction excludes new runs in its subtree until commit',
+  'a run waits for scoped composition while another scope can be removed',
   { timeout: 10000 },
   async (t) => {
     let enter = () => {};
@@ -136,15 +133,13 @@ test(
         [obsoleteScope]: obsoleteConfig,
       },
     });
+    let targetRun: Promise<string>;
     let sibling: Promise<string>;
     let deletion: Promise<string[]>;
     try {
       await entered;
-      assert.throws(
-        () => runtime.plugins.ctx.harnessRuns.startRun(target.id, 'Cannot cross the transaction'),
-        /configuration is changing/,
-      );
-      assert.equal(runtime.plugins.ctx.harnessRuns.info(target.id), undefined);
+      targetRun = runtime.plugins.ctx.harnessRuns.send(target.id, 'Wait for the new composition');
+      assert.equal(runtime.plugins.ctx.harnessRuns.info(target.id)?.state, 'queued');
       sibling = runtime.plugins.ctx.harnessRuns.send(other.id, 'Unaffected workspace');
       deletion = runtime.plugins.ctx.harnessRegistry.delete([obsolete.id]);
     } finally {
@@ -155,6 +150,6 @@ test(
     assert.equal((await storedProfile(paths)).scopes[obsoleteScope], undefined);
     assert.equal((await storedProfile(paths)).scopes[workspace]?.entries?.staged?.disabled, false);
     assert.equal(await sibling, 'Mock response');
-    assert.equal(await runtime.plugins.ctx.harnessRuns.send(target.id, 'After commit'), 'Mock response');
+    assert.equal(await targetRun, 'Mock response');
   },
 );

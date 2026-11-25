@@ -12,7 +12,8 @@
     "@mini-harness/platform": "workspace:*",
     "@mini-harness/plugin-api": "workspace:*",
     "@mini-harness/ui-primitives": "workspace:*",
-    "@mini-harness/ui-runtime": "workspace:*"
+    "@mini-harness/ui-runtime": "workspace:*",
+    "@mini-harness/workspaces": "workspace:*"
   },
   "miniHarness": {
     "api": [

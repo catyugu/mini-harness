@@ -151,11 +151,10 @@ async function checkPackage() {
       import type { PluginData, PluginSecrets } from 'mini-harness/plugin-data';
       import type { SessionRecords } from 'mini-harness/sessions';
       import type { Execution } from 'mini-harness/execution';
-      import type { ModelRequestContent, InputContext } from 'mini-harness/agent/events';
+      import type { ModelRequestContent, InputContext, ToolDecision } from 'mini-harness/agent/events';
       import type { PromptPort } from 'mini-harness/agent/prompt';
       import type { CapabilityObservation } from 'mini-harness/observations';
       import type { ToolProjection } from 'mini-harness/conversation/display-events';
-      import type { ToolDecision } from 'mini-harness/tools/events';
       import type { RoutePort } from 'mini-harness/transport';
       declare module 'mini-harness/cordis' {
         interface Context { example: { greet(name: string): string } }
@@ -194,7 +193,7 @@ async function checkPackage() {
         if (event.type === 'run-ended') void event.run.id;
       });
       ctx.on('conversation/tool-projection', ({ content }: ToolProjection) => content);
-      ctx.on('tools/decide', ({ tool }: ToolDecision) => tool === 'change' ? 'deny' : undefined);
+      ctx.on('agent/tool-decision', ({ tool }: ToolDecision) => tool === 'change' ? 'deny' : undefined);
       void records.append({ seen: true });
       // @ts-expect-error Input listeners return native user content or a rejection.
       ctx.on('agent/prepare-input', () => ({ arbitrary: true }));
@@ -416,7 +415,7 @@ async function checkPackage() {
     }
     assert.ok(bootstrap.ui.some(({ id }: { id: string }) => id === 'core:conversation'));
     assert.ok(!bootstrap.ui.some(({ id }: { id: string }) => id === 'shell'));
-    assert.deepEqual(await (await get('/api/extensions/greeting-route/hello?name=SDK')).json(), {
+    assert.deepEqual(await (await get('/api/greeting/hello/SDK')).json(), {
       greeting: 'Hello, SDK',
     });
     assert.equal(
@@ -427,7 +426,7 @@ async function checkPackage() {
       ).status,
       200,
     );
-    assert.deepEqual(await (await get('/api/extensions/greeting-route/hello?name=SDK')).json(), {
+    assert.deepEqual(await (await get('/api/greeting/hello/SDK')).json(), {
       greeting: 'Installed, SDK',
     });
     const panel = bootstrap.ui.find(({ id }) => id === 'browser-panel');

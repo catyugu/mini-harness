@@ -8,11 +8,15 @@ export interface PluginConfiguration {
 }
 
 import { FiberState, type Context, type Fiber } from 'mini-harness/cordis';
-
-export function pluginEntryFiber(ctx: Context): Fiber {
+export function entryFiber(ctx: Context) {
   for (let fiber = ctx.fiber; fiber.runtime; fiber = fiber.parent.fiber) {
     if (fiber.entry) return fiber;
   }
+}
+
+export function pluginEntryFiber(ctx: Context): Fiber {
+  const fiber = entryFiber(ctx);
+  if (fiber) return fiber;
   throw new Error('Plugin configuration requires a Loader entry');
 }
 

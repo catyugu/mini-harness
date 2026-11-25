@@ -8,7 +8,7 @@ export function setup(ctx: Context) {
     ctx.harnessState.paths,
     ctx.harnessWorkspaces,
     (event, key) => observe(ctx, event, undefined, key),
-    (keys) => ctx.harnessSettingsStore.forgetScopes(keys),
+    (keys) => ctx.harnessProfileConfig.forgetScopes(keys),
   );
   ctx.effect(() =>
     ctx.harnessProfileScopes.register('session', (id) => {

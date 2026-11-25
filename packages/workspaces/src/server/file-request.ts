@@ -1,3 +1,4 @@
+import type { RootedFileAccess } from '@mini-harness/file-access/api';
 import { DomainError } from '@mini-harness/platform/errors';
 import type { RouteRequest } from '@mini-harness/transport/routes';
 import type { Context } from 'mini-harness/cordis';
@@ -12,9 +13,11 @@ export async function workspaceFiles(ctx: Context, { params, url, signal }: Rout
   if (session && !scopes.address(key).includes(owner))
     throw new DomainError('not_found', 'Conversation not found');
   await scopes.prepare(key, signal);
+  const root = ctx.harnessWorkspaces.resolveRoot(workspace.path, workspace.id);
+  const files: RootedFileAccess = scopes.require(key, 'harnessFileAccess').open(root);
   return {
-    files: scopes.require(key, 'harnessFileAccess').open(workspace.id),
-    root: ctx.harnessWorkspaces.resolveRoot(workspace.path, workspace.id),
+    files,
+    root,
     path: url.searchParams.get('path') ?? '.',
   };
 }

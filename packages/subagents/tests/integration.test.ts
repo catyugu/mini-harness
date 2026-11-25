@@ -63,7 +63,10 @@ test(
     });
     assert.equal(
       app.runtime.plugins.ctx.harnessTools
-        .forSession(leafRecord.id, app.runtime.plugins.ctx.harnessRegistry.runScope(leafRecord.id))
+        .list({
+          resourceId: leafRecord.id,
+          scope: app.runtime.plugins.ctx.harnessRegistry.runScope(leafRecord.id),
+        })
         .map(({ name }) => name)
         .includes('delegate'),
       false,
@@ -77,7 +80,7 @@ test(
       .messages.find((message) => message.role === 'toolResult');
     assert.ok(failure);
     assert.equal(failure.isError, true);
-    assert.match(JSON.stringify(failure.content), /permitted workspace/);
+    assert.match(JSON.stringify(failure.content), /permitted root/);
     assert.doesNotMatch(JSON.stringify(failure.content), /private fixture/);
     await app.close();
     app = await createMiniHarnessServer(paths);
@@ -171,7 +174,7 @@ test(
     const tools = app.runtime.plugins.ctx.harnessTools;
     const delegate = expectPresent(
       tools
-        .forSession(parent.id, app.runtime.plugins.ctx.harnessRegistry.runScope(parent.id))
+        .list({ resourceId: parent.id, scope: app.runtime.plugins.ctx.harnessRegistry.runScope(parent.id) })
         .find(({ name }) => name === 'delegate'),
       'delegate tool',
     );
@@ -208,7 +211,7 @@ test(
     assert.ok(child);
     assert.equal(
       tools
-        .forSession(child.id, app.runtime.plugins.ctx.harnessRegistry.runScope(child.id))
+        .list({ resourceId: child.id, scope: app.runtime.plugins.ctx.harnessRegistry.runScope(child.id) })
         .some(({ name }) => name === 'delegate'),
       false,
     );

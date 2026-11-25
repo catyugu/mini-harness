@@ -55,6 +55,7 @@
     "@codemirror/commands": "6.10.3",
     "@codemirror/state": "6.7.6",
     "@codemirror/view": "6.43.15",
+    "@mini-harness/agent": "workspace:*",
     "@mini-harness/file-access": "workspace:*",
     "@mini-harness/host": "workspace:*",
     "@mini-harness/input": "workspace:*",
@@ -209,10 +210,6 @@
     "./tools": {
       "types": "./dist/types/packages/tools/src/api.d.ts",
       "default": "./dist/packages/tools/src/api.js"
-    },
-    "./tools/events": {
-      "types": "./dist/types/packages/tools/src/events.d.ts",
-      "default": "./dist/packages/tools/src/events.js"
     },
     "./transport": {
       "types": "./dist/types/packages/transport/src/routes.d.ts",

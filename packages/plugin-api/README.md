@@ -8,7 +8,7 @@ Validates persisted selections and supplies generic runtime scope primitives.
 
 ## Structure
 
-`src/descriptor.ts` defines metadata. `configuration.ts` and `selection.ts` describe stored selections. `instance.ts` describes persistent Entry ownership; `scopes.ts` provides opaque runtime identities, event targets and contribution layers. `profile.ts` owns the separate configuration-address contract. `mutation-api.ts` supplies the settings transaction and request guards.
+`src/descriptor.ts` defines metadata. `configuration.ts` and `selection.ts` describe stored selections. `shared/plugin-configuration.ts` locates the owning Entry Fiber. `scopes.ts` provides opaque runtime identities, event targets and contribution layers. `profile.ts` owns the separate configuration-address contract.
 
 ## API
 

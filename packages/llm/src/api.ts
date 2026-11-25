@@ -79,10 +79,9 @@ export interface LlmRequest {
   tools?: ToolSchema[];
   thinkingLevel?: ThinkingLevel;
   signal: AbortSignal;
-  sessionId?: string;
   maxTokens?: number;
 }
-export type ModelRequestSnapshot = Omit<LlmRequest, 'signal' | 'sessionId' | 'messages'> & {
+export type ModelRequestSnapshot = Omit<LlmRequest, 'signal' | 'messages'> & {
   messages?: NativeMessage[];
 };
 

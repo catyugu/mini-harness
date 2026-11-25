@@ -111,7 +111,6 @@ export async function executeTool(
   call: ToolCallPart,
   tool: ToolDefinition | undefined,
   options: {
-    sessionId: string;
     cwd: string;
     signal: AbortSignal;
     phase(state: 'approval' | 'running'): void;
@@ -132,7 +131,6 @@ export async function executeTool(
       options.signal,
       options.update,
       {
-        sessionId: options.sessionId,
         cwd: options.cwd,
         async waitForApproval(request) {
           inApproval = true;

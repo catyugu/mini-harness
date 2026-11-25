@@ -4,7 +4,7 @@ Implements the process execution capability and enforces output, timeout and can
 
 ## Responsibilities
 
-Chooses the execution environment for a request and captures process results. Shell supplies approval policy and Sandbox prepares isolation.
+Starts the supplied executable and arguments in a working directory and captures the result. A caller can pass a command prepared by an execution environment such as Sandbox.
 
 ## Structure
 
@@ -12,15 +12,7 @@ Chooses the execution environment for a request and captures process results. Sh
 
 ## API
 
-`harnessProcess` and `ProcessExecutionPort` expose execution to authorized callers.
-
-## Dependencies
-
-Uses [Execution](../execution/README.md) for requests, [Sessions](../sessions/README.md) for the current conversation's upload directory, and [Sandbox](../sandbox/README.md) for isolated execution preparation.
-
-## Lifecycle
-
-`core:process` mounts at application scope. Requests carry cancellation and output limits.
+`harnessProcess.run({ file, args, cwd, env, timeoutSeconds, signal })` runs a subprocess and returns its exit status and captured output.
 
 ## Testing
 

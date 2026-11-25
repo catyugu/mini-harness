@@ -1,3 +1,4 @@
+import { waitFor } from '@mini-harness/platform/wait';
 import type { Context } from 'mini-harness/cordis';
 import { WorkspaceCatalog } from './catalog.ts';
 import { HttpError, HttpReply } from '@mini-harness/transport/routes';
@@ -48,9 +49,12 @@ export function setup(ctx: Context) {
     add('PATCH', '/api/workspaces/:id', async ({ params, body }) =>
       catalog.rename(requireId(params.id), (await body())?.name),
     );
-    add('DELETE', '/api/workspaces/:id', ({ params }) => {
+    add('DELETE', '/api/workspaces/:id', ({ params, signal }) => {
       const id = requireId(params.id);
-      return catalog.remove(id, () => ctx.harnessSettingsStore.forgetScopes([`workspace:${id}`]));
+      return waitFor(
+        catalog.remove(id, () => ctx.harnessProfileConfig.forgetScopes([`workspace:${id}`])),
+        signal,
+      );
     });
   });
 }

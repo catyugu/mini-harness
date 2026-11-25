@@ -9,7 +9,8 @@
     "./json": "./src/json.ts",
     "./local-secret": "./src/local-secret.ts",
     "./paths": "./src/paths.ts",
-    "./runtime-paths": "./src/runtime-paths.ts"
+    "./runtime-paths": "./src/runtime-paths.ts",
+    "./wait": "./src/wait.ts"
   },
   "miniHarness": {
     "api": [
@@ -18,7 +19,8 @@
       "./json",
       "./local-secret",
       "./paths",
-      "./runtime-paths"
+      "./runtime-paths",
+      "./wait"
     ]
   }
 }

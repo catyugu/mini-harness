@@ -1,44 +1,20 @@
 import { spawn } from 'node:child_process';
-import { realpath } from 'node:fs/promises';
-import type { IsolatedProcess, SandboxPort } from '@mini-harness/sandbox/api';
-import type { ProcessRequest, ProcessResult } from '@mini-harness/execution/request';
+import type { ProcessRequest, ProcessResult } from './api.ts';
 
-async function hostCommand(command: string, cwd: string, attachments?: string): Promise<IsolatedProcess> {
-  const root = await realpath(cwd);
-  const env: NodeJS.ProcessEnv = { ...process.env };
-  if (attachments) env.MINI_HARNESS_ATTACHMENTS = attachments;
-  else delete env.MINI_HARNESS_ATTACHMENTS;
-  return process.platform === 'win32'
-    ? { file: env.ComSpec || 'cmd.exe', args: ['/d', '/s', '/c', '"' + command + '"'], cwd: root, env }
-    : { file: '/bin/sh', args: ['-c', command], cwd: root, env };
-}
-
-export async function executeProcess(request: ProcessRequest, sandbox: SandboxPort, attachments?: string) {
-  const { command, cwd, mode, timeoutSeconds, signal } = request;
+export async function executeProcess(request: ProcessRequest) {
+  const { file, args = [], cwd, env, timeoutSeconds, signal, windowsVerbatimArguments } = request;
   signal?.throwIfAborted();
-  if (typeof command !== 'string' || !command.trim() || command.length > 16000)
-    throw new Error('Invalid command');
-  if (!Number.isInteger(timeoutSeconds) || timeoutSeconds < 1 || timeoutSeconds > 300)
-    throw new Error('Invalid shell timeout');
-  if (mode !== 'host' && mode !== 'isolated') throw new Error('Unknown sandbox mode');
-  const {
-    file,
-    args,
-    cwd: root,
-    env,
-  } = mode === 'isolated'
-    ? await sandbox.prepare(request, attachments)
-    : await hostCommand(command, cwd, attachments);
-  signal?.throwIfAborted();
+  if (!Number.isFinite(timeoutSeconds) || timeoutSeconds <= 0 || timeoutSeconds * 1000 > 2_147_483_647)
+    throw new Error('Invalid process timeout');
   const windows = process.platform === 'win32';
 
   return await new Promise<ProcessResult>((resolve, reject) => {
     const child = spawn(file, args, {
-      cwd: root,
+      cwd,
       env,
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
-      windowsVerbatimArguments: windows,
+      windowsVerbatimArguments,
       detached: !windows,
     });
     const streams = { stdout: [] as Buffer[], stderr: [] as Buffer[] };

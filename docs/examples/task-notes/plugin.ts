@@ -59,7 +59,7 @@ export function apply(ctx: Context) {
   ctx.effect(() =>
     ctx.harnessTools.register({
       name: 'save_task_note',
-      bind(sessionId): ToolDefinition {
+      resolve(sessionId): ToolDefinition {
         return {
           name: 'save_task_note',
           description: 'Record one line of task progress.',

@@ -14,7 +14,7 @@ import {
   type FileHandle,
 } from 'node:fs/promises';
 import { basename, dirname, matchesGlob, parse, relative, resolve, sep } from 'node:path';
-import type { SearchInput, WorkspaceFileAccess } from './api.ts';
+import type { SearchInput, RootedFileAccess } from './api.ts';
 import { RE2 } from 're2-wasm';
 import ignore from 'ignore';
 
@@ -34,17 +34,17 @@ function checkName(name: string) {
       /[ .]$/.test(name) ||
       /^(?:con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/i.test(name))
   ) {
-    throw new DomainError('invalid_input', 'Unsupported workspace path component');
+    throw new DomainError('invalid_input', 'Unsupported path component');
   }
 }
 
 function samePath(a: string, b: string) {
   return relative(a, b) === '';
 }
-const denied = () => new DomainError('forbidden', 'Path is outside the permitted workspace or is a link');
+const denied = () => new DomainError('forbidden', 'Path is outside the permitted root or is a link');
 const missing = (error: unknown) => (error as NodeJS.ErrnoException).code === 'ENOENT';
 
-export class Workspace implements WorkspaceFileAccess {
+export class RootedFiles implements RootedFileAccess {
   constructor(
     private readonly cwd: string,
     private readonly state: string,

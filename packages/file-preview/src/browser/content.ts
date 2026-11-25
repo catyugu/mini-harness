@@ -1,4 +1,4 @@
-import { fileRoute, type WorkspaceView } from '@mini-harness/file-access/browser/views';
+import { fileRoute, type WorkspaceView } from '@mini-harness/workspaces/browser/file-views';
 import { browserRequest } from '@mini-harness/ui-runtime/http';
 import type { Context } from 'mini-harness/cordis';
 import { decodeText, mediaType, textLimit, type PreviewContent } from '../shared/content.ts';

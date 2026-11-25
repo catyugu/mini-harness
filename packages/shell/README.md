@@ -4,7 +4,7 @@ Provides the shell tool and command result rendering.
 
 ## Responsibilities
 
-Owns the shell tool and its UI. Uses Approvals for decisions and Process Execution for command execution.
+Owns the shell tool and its UI. Uses Approvals for decisions, resolves the working directory and attachment directory, and passes the command to Process Execution. In isolated mode Shell asks Sandbox to mount attachments read-only at `/attachments`.
 
 ## Structure
 

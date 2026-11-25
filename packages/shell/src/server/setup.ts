@@ -1,8 +1,10 @@
 import { defineTool } from '@mini-harness/tools/api';
 import type { Context } from 'mini-harness/cordis';
+import type { ProcessCommand } from '@mini-harness/process-execution/api';
 import { Type } from 'typebox';
 
 export function setup(ctx: Context) {
+  ctx.effect(() => ctx.harnessChanges.register('files'));
   const workspace = ctx.harnessSessions;
   const requestApproval = ctx.harnessApprovalRequests.request.bind(ctx.harnessApprovalRequests);
   const options = ctx.fiber.effectiveConfig as { mode: 'isolated' | 'host'; timeoutSeconds: number };
@@ -14,7 +16,6 @@ export function setup(ctx: Context) {
         'Run a shell command in the workspace. Standard requires approval; Full access skips the approval prompt.',
       parameters: Type.Object({ command: Type.String({ minLength: 1, maxLength: 16000 }) }),
       execute: async (_id, args, signal, _update, context) => {
-        await ctx.harnessProfileScopes.prepare(`session:${sessionId}`, signal);
         const cwd = workspace.workspacePath(sessionId);
         // A pending Standard approval may be released when the user selects Full access.
         // If the permission is reduced again before resuming, request approval anew.
@@ -38,18 +39,52 @@ export function setup(ctx: Context) {
         }
         // Permission changes also apply while a Shell command is awaiting approval.
         context?.assertAuthorized?.();
-        const execution = ctx.harnessProfileScopes.require(`session:${sessionId}`, 'harnessProcess');
+        const key = `session:${sessionId}` as const;
+        const execution = ctx.harnessProfileScopes.require(key, 'harnessProcess');
+        const attachments = ctx.harnessRegistry.attachmentDirectory(sessionId);
+        const { mode, timeoutSeconds } = options;
+        let command: ProcessCommand;
+        if (mode === 'isolated') {
+          const sandbox = ctx.harnessProfileScopes.require(key, 'harnessSandbox');
+          command = await sandbox.prepare(
+            {
+              file: '/bin/sh',
+              args: ['-c', args.command],
+              cwd,
+              env: attachments ? { MINI_HARNESS_ATTACHMENTS: '/attachments' } : undefined,
+            },
+            {
+              cpuSeconds: timeoutSeconds,
+              mounts: attachments ? [{ source: attachments, target: '/attachments', readOnly: true }] : [],
+              signal,
+            },
+          );
+        } else {
+          const env = { ...process.env };
+          if (attachments) env.MINI_HARNESS_ATTACHMENTS = attachments;
+          else delete env.MINI_HARNESS_ATTACHMENTS;
+          command =
+            process.platform === 'win32'
+              ? {
+                  file: env.ComSpec || 'cmd.exe',
+                  args: ['/d', '/s', '/c', '"' + args.command + '"'],
+                  cwd,
+                  env,
+                  windowsVerbatimArguments: true,
+                }
+              : { file: '/bin/sh', args: ['-c', args.command], cwd, env };
+        }
         try {
-          const output = await execution.run({ command: args.command, cwd, ...options, signal, sessionId });
+          const output = await execution.run({ ...command, timeoutSeconds, signal });
           return {
             content: [{ type: 'text', text: JSON.stringify(output) }],
             details: { ...output, exitCode: output.code },
           };
         } finally {
           const workspaceId = workspace.get(sessionId)?.workspaceId;
-          if (workspaceId) ctx.harnessChanges.invalidate('files', { workspaceId });
+          if (workspaceId) ctx.harnessChanges.invalidate('files', workspaceId);
         }
       },
     });
-  ctx.effect(() => ctx.harnessTools.register({ name: 'sandbox_shell', bind: tool }));
+  ctx.effect(() => ctx.harnessTools.register({ name: 'sandbox_shell', resolve: tool }));
 }

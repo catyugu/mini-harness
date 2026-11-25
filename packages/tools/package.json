@@ -5,16 +5,12 @@
   "type": "module",
   "exports": {
     "./api": "./src/api.ts",
-    "./events": "./src/events.ts",
     "./manifest": "./src/manifest.ts",
-    "./registry": "./src/registry.ts",
-    "./policy": "./src/policy.ts"
+    "./registry": "./src/registry.ts"
   },
   "miniHarness": {
     "api": [
-      "./api",
-      "./events",
-      "./policy"
+      "./api"
     ],
     "profileModules": {
       "@mini-harness/tools": "./src/manifest.ts"

@@ -35,8 +35,14 @@ function fixtureKeys() {
   };
 }
 
-function fixtureModules(modules: ResolvedPlugin[]) {
+function fixtureProfile(
+  modules: ResolvedPlugin[],
+  read: () => typeof DEFAULTS,
+  commit = (_next: typeof DEFAULTS) => {},
+) {
   return {
+    read,
+    commit,
     builtin: (_id: string, name: string) => modules.find((item) => item.id === name),
     source: () => {
       throw new Error('Unknown test module');
@@ -115,12 +121,12 @@ export const apply = (ctx, config) => {
   await runtime.plugins.prepare(`session:${item.id}`);
   const activeNames = () =>
     runtime.plugins.ctx.harnessTools
-      .forSession(item.id, runtime.plugins.ctx.harnessRegistry.runScope(item.id))
+      .list({ resourceId: item.id, scope: runtime.plugins.ctx.harnessRegistry.runScope(item.id) })
       .map(({ name }) => name);
   assert.ok(activeNames().includes('example_count'));
   const tool = expectPresent(
     runtime.plugins.ctx.harnessTools
-      .forSession(item.id, runtime.plugins.ctx.harnessRegistry.runScope(item.id))
+      .list({ resourceId: item.id, scope: runtime.plugins.ctx.harnessRegistry.runScope(item.id) })
       .find(({ name }) => name === 'example_count'),
     'example count tool',
   );
@@ -192,7 +198,7 @@ export const apply = (ctx) => {
   await runtime.plugins.prepare(`session:${item.id}`);
   const activeNames = () =>
     runtime.plugins.ctx.harnessTools
-      .forSession(item.id, runtime.plugins.ctx.harnessRegistry.runScope(item.id))
+      .list({ resourceId: item.id, scope: runtime.plugins.ctx.harnessRegistry.runScope(item.id) })
       .map(({ name }) => name);
   assert.ok(activeNames().includes('read'));
   await runtime.configuration.update({ entries: { files: { disabled: true } } });
@@ -217,7 +223,7 @@ export const apply = (ctx) => {
   });
   assert.equal(
     runtime.plugins.ctx.harnessTools
-      .forSession(item.id, runtime.plugins.ctx.harnessRegistry.runScope(item.id))
+      .list({ resourceId: item.id, scope: runtime.plugins.ctx.harnessRegistry.runScope(item.id) })
       .some(({ name }) => name === 'read' || name === 'dependent_tool'),
     false,
   );
@@ -321,7 +327,7 @@ export const apply = (ctx) => {
   const item = runtime.plugins.ctx.harnessRegistry.create();
   const tool = expectPresent(
     runtime.plugins.ctx.harnessTools
-      .forSession(item.id, runtime.plugins.ctx.harnessRegistry.runScope(item.id))
+      .list({ resourceId: item.id, scope: runtime.plugins.ctx.harnessRegistry.runScope(item.id) })
       .find(({ name }) => name === 'schema_value'),
     'schema tool',
   );
@@ -355,7 +361,7 @@ export const apply = (ctx) => {
     await tool.execute('test', {}, undefined, undefined, undefined),
     await expectPresent(
       runtime.plugins.ctx.harnessTools
-        .forSession(item.id, runtime.plugins.ctx.harnessRegistry.runScope(item.id))
+        .list({ resourceId: item.id, scope: runtime.plugins.ctx.harnessRegistry.runScope(item.id) })
         .find(({ name }) => name === 'schema_value'),
       'registered schema tool',
     ).execute('test', {}, undefined, undefined, undefined),
@@ -412,20 +418,26 @@ export const apply = (ctx, config) => {
   const item = runtime.plugins.ctx.harnessRegistry.create();
   assert.equal(
     runtime.plugins.ctx.harnessTools
-      .forSession(item.id, runtime.plugins.ctx.harnessRegistry.runScope(item.id))
+      .list({ resourceId: item.id, scope: runtime.plugins.ctx.harnessRegistry.runScope(item.id) })
       .filter(({ name }) => name === 'base_tool').length,
     1,
   );
-  const next = mergeSettings(runtime.settings, { entries: { base: { config: { value: 'replacement' } } } });
-  await assert.rejects(
-    runtime.plugins.configure(next, () => {
-      throw new Error('Persistence failed');
-    }),
-    /Persistence failed/,
-  );
+  const profile = runtime.plugins.ctx.harnessProfile;
+  const commit = profile.commit;
+  profile.commit = () => {
+    throw new Error('Persistence failed');
+  };
+  try {
+    await assert.rejects(
+      runtime.configuration.update({ entries: { base: { config: { value: 'replacement' } } } }),
+      /Persistence failed/,
+    );
+  } finally {
+    profile.commit = commit;
+  }
   const restored = expectPresent(
     runtime.plugins.ctx.harnessTools
-      .forSession(item.id, runtime.plugins.ctx.harnessRegistry.runScope(item.id))
+      .list({ resourceId: item.id, scope: runtime.plugins.ctx.harnessRegistry.runScope(item.id) })
       .find(({ name }) => name === 'base_tool'),
     'restored tool',
   );
@@ -435,7 +447,7 @@ export const apply = (ctx, config) => {
   );
   assert.ok(
     runtime.plugins.ctx.harnessTools
-      .forSession(item.id, runtime.plugins.ctx.harnessRegistry.runScope(item.id))
+      .list({ resourceId: item.id, scope: runtime.plugins.ctx.harnessRegistry.runScope(item.id) })
       .some(({ name }) => name === 'dependent_tool'),
   );
 });
@@ -541,7 +553,10 @@ test('disabled optional builtins cannot block boot or reload because their confi
   });
   assert.ok(
     restored.plugins.ctx.harnessTools
-      .forSession(conversation.id, restored.plugins.ctx.harnessRegistry.runScope(conversation.id))
+      .list({
+        resourceId: conversation.id,
+        scope: restored.plugins.ctx.harnessRegistry.runScope(conversation.id),
+      })
       .some(({ name }) => name === 'delegate'),
   );
 });
@@ -602,7 +617,7 @@ test('ordinary routes and upgrades drain on unload and can request their own rem
     {},
     lifecycle +
       `
-export const inject = ["harnessRoutes","harnessUpgrades","harnessSettingsStore"];
+export const inject = ["harnessRoutes","harnessUpgrades","harnessProfileConfig"];
 export const apply = (ctx) => {
       ctx.effect(() => {
         const routes = ctx.harnessRoutes;
@@ -613,8 +628,8 @@ export const apply = (ctx) => {
             try { return await body(); }
             finally { mark('body:drained'); }
           }),
-          routes.register('POST', '/api/extensions/drain/disable', async () => {
-            await ctx.harnessSettingsStore.update({ entries: { drain: { name: '../../plugins/drain', disabled: true } } });
+          routes.register('POST', '/api/extensions/drain/disable', async ({ signal }) => {
+            await ctx.harnessProfileConfig.update({ entries: { drain: { name: '../../plugins/drain', disabled: true } } }, signal);
             return { disabled: true };
           }),
           ctx.harnessUpgrades.register('/api/extensions/drain/socket', async (_request, _socket, _head, signal) => wait('ws', signal)),
@@ -646,7 +661,7 @@ export const apply = (ctx) => {
 `,
   );
   const session = app.runtime.plugins.ctx.harnessRegistry.create();
-  const scope = `session:${session.id}`;
+  const scope = `session:${session.id}` as const;
   const toggle = (active: boolean) =>
     request('/settings', 'PATCH', {
       entries: { drain: { name: '../../plugins/drain', disabled: !active } },
@@ -799,7 +814,17 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
   };
   const ctx = new Context();
   ctx.provide('authority', {});
-  const host = new PluginHost(ctx, directory, fixtureModules(builtins), () => settings);
+  const host = new PluginHost(
+    ctx,
+    directory,
+    fixtureProfile(
+      builtins,
+      () => settings,
+      (next) => {
+        settings = next;
+      },
+    ),
+  );
   const workspaceKeys = fixtureKeys();
   host.register('workspace', (id) => ({ key: workspaceKeys(id) }), true);
   const sessionKeys = fixtureKeys();
@@ -816,15 +841,13 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
     await host.close();
     rmSync(directory, { recursive: true, force: true });
   });
-  await host.start(settings);
+  await host.start();
   assert.equal(host.metadata().find(({ id }) => id === 'workspace')?.state, 'failed');
   assert.throws(() => host.require('session:sibling', 'greeting'), /Invalid configuration/);
   assert.equal(host.require('session:independent', 'greeting'), 'global');
   const configure = (scopes: typeof settings.scopes) => {
     const next = { ...settings, scopes };
-    return host.configure(next, () => {
-      settings = next;
-    });
+    return host.update(next);
   };
   const parent = {
     isolate: ['greeting'],
@@ -943,14 +966,24 @@ test('configuration validation resolves the staged scope provider and rejects in
       },
     },
   ];
-  const host = new PluginHost(new Context(), directory, fixtureModules(builtins), () => settings);
+  const host = new PluginHost(
+    new Context(),
+    directory,
+    fixtureProfile(
+      builtins,
+      () => settings,
+      (next) => {
+        settings = next;
+      },
+    ),
+  );
   const workspaceKeys = fixtureKeys();
   host.register('workspace', (id) => ({ key: workspaceKeys(id) }), true);
   t.after(async () => {
     await host.close();
     rmSync(directory, { recursive: true, force: true });
   });
-  await host.start(settings);
+  await host.start();
   const configure = (expected: string) => {
     const next = {
       ...settings,
@@ -964,9 +997,7 @@ test('configuration validation resolves the staged scope provider and rejects in
         },
       },
     };
-    return host.configure(next, () => {
-      settings = next;
-    });
+    return host.update(next);
   };
   await configure('local');
   assert.equal(host.metadata().find(({ id }) => id === 'consumer')?.state, 'ready');
@@ -995,7 +1026,17 @@ test('setup and live configuration cannot await their own graph transaction', as
     },
   ];
   const ctx = new Context();
-  const host = new PluginHost(ctx, directory, fixtureModules(builtins), () => settings);
+  const host = new PluginHost(
+    ctx,
+    directory,
+    fixtureProfile(
+      builtins,
+      () => settings,
+      (next) => {
+        settings = next;
+      },
+    ),
+  );
   ctx.provide('harnessProfileScopes', host);
   const sessionKey = createScopeKey();
   host.register('session', () => ({ key: sessionKey }));
@@ -1003,20 +1044,18 @@ test('setup and live configuration cannot await their own graph transaction', as
     await host.close();
     rmSync(directory, { recursive: true, force: true });
   });
-  await host.start(settings);
+  await host.start();
   const configure = (prepare: boolean) => {
     const next = {
       ...settings,
       entries: { reentrant: { name: 'reentrant', disabled: false, live: true, config: { prepare } } },
     };
-    return host.configure(next, () => {
-      settings = next;
-    });
+    return host.update(next);
   };
-  await assert.rejects(configure(true), /during plugin setup, configuration or teardown/);
+  await assert.rejects(configure(true), /cannot wait for its own Profile update/);
   await configure(false);
   const committed = settings;
-  await assert.rejects(configure(true), /during plugin setup, configuration or teardown/);
+  await assert.rejects(configure(true), /cannot wait for its own Profile update/);
   assert.strictEqual(settings, committed);
   await host.prepare('session:session');
 });
@@ -1050,12 +1089,16 @@ test('a failed server entry does not publish its browser module', async (t) => {
       replacement: { name: 'replacement', client: true, disabled: false, config: { fail: true } },
     },
   };
-  const host = new PluginHost(new Context(), directory, fixtureModules(builtins), () => settings);
+  const host = new PluginHost(
+    new Context(),
+    directory,
+    fixtureProfile(builtins, () => settings),
+  );
   t.after(async () => {
     await host.close();
     rmSync(directory, { recursive: true, force: true });
   });
-  await host.start(settings);
+  await host.start();
   assert.deepEqual(
     host.browser().map(({ id }) => id),
     ['ui'],
@@ -1078,31 +1121,33 @@ test('custom scope namespaces support normal Cordis composition and inheritance'
   const host = new PluginHost(
     ctx,
     directory,
-    fixtureModules([
-      {
-        id: 'global',
-        title: 'Global',
-        description: '',
-        plugin: {
-          provide: ['greeting'],
-          apply(ctx) {
-            ctx.provide('greeting', 'global');
+    fixtureProfile(
+      [
+        {
+          id: 'global',
+          title: 'Global',
+          description: '',
+          plugin: {
+            provide: ['greeting'],
+            apply(ctx) {
+              ctx.provide('greeting', 'global');
+            },
           },
         },
-      },
-      {
-        id: 'local',
-        title: 'Local',
-        description: '',
-        plugin: {
-          provide: ['greeting'],
-          apply(ctx) {
-            ctx.provide('greeting', 'project');
+        {
+          id: 'local',
+          title: 'Local',
+          description: '',
+          plugin: {
+            provide: ['greeting'],
+            apply(ctx) {
+              ctx.provide('greeting', 'project');
+            },
           },
         },
-      },
-    ]),
-    () => settings,
+      ],
+      () => settings,
+    ),
   );
   const projectKeys = fixtureKeys();
   const taskKey = createScopeKey(projectKeys('alpha'));
@@ -1112,7 +1157,7 @@ test('custom scope namespaces support normal Cordis composition and inheritance'
     await host.close();
     rmSync(directory, { recursive: true, force: true });
   });
-  await host.start(settings);
+  await host.start();
   await host.prepare('task:child');
   assert.equal(host.context('task:child').get('greeting'), 'project');
   assert.equal(host.context('project:beta').get('greeting'), 'global');

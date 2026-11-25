@@ -10,7 +10,7 @@ export const metadata: PluginInfo = {
 };
 
 const plugin: Plugin.Object = {
-  inject: ['harnessPluginCatalog', 'harnessRoutes', 'harnessMutations', 'harnessChanges'],
+  inject: ['harnessPluginCatalog', 'harnessRoutes', 'harnessChanges'],
   provide: [],
   apply: setup,
 };

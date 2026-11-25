@@ -12,7 +12,7 @@ Owns route registration, HTTP errors and replies, event streams, and projection 
 
 ## API
 
-`harnessRoutes`, `harnessUpgrades` and `harnessChanges` are host services. All plugins use the same HTTP and upgrade registry; register routes in a Cordis effect to remove them on unload.
+`harnessRoutes`, `harnessUpgrades` and `harnessChanges` are host services. Projection changes identify a domain, a revision and an optional resource ID. All plugins use the same HTTP and upgrade registry; register routes in a Cordis effect to remove them on unload.
 
 ## Dependencies
 

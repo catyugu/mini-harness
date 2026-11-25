@@ -35,6 +35,7 @@ const plugin: Plugin.Object = {
   Config,
   inject: [
     'harnessSessions',
+    'harnessRegistry',
     'harnessApprovalRequests',
     'harnessProcess',
     'harnessTools',

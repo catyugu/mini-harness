@@ -2,51 +2,44 @@ import { ScopedLayers, scopeOf, type ScopeKey } from '@mini-harness/plugin-api/s
 import { toolNamePattern } from '@mini-harness/llm/vocabulary';
 import { Check, Errors } from 'typebox/value';
 import { Service, type Context } from 'mini-harness/cordis';
-import { isToolContent, type ToolDefinition, type ToolPort, type ToolRegistrationOptions } from './api.ts';
-import type { ToolDecision } from './events.ts';
-import type { ToolAccess, ToolPolicy } from './policy.ts';
-
-interface ToolRegistration extends ToolAccess {
-  bind(id: string, scope?: ScopeKey): ToolDefinition;
-  visible(id: string): boolean;
+import {
+  isToolContent,
+  type ToolDefinition,
+  type ToolPort,
+  type ToolFactory,
+  type ToolSelection,
+} from './api.ts';
+interface ToolRegistration {
+  name: string;
+  resolve(selection: ToolSelection): ToolDefinition;
+  visible(resourceId?: string): boolean;
 }
 
 export class ToolRegistry {
   private readonly tools = new ScopedLayers<ToolRegistration>();
   private readonly leases = new WeakMap<
     ToolDefinition,
-    { id: string; scope?: ScopeKey; entry: ToolRegistration }
+    { selection: ToolSelection; entry: ToolRegistration }
   >();
-
-  constructor(
-    private readonly decide?: (request: ToolDecision, scope?: ScopeKey) => Promise<'deny' | undefined>,
-    private readonly authorize: ToolPolicy = () => true,
-  ) {}
 
   service(): ToolPort {
     const registry = this;
     return Service.track<ToolPort>({
-      register(definition, options) {
+      register(definition) {
         const context = Service.caller(this);
-        const scope = scopeOf(context);
-        const bind = 'bind' in definition ? definition.bind : () => definition;
-        return registry.registerBinding(definition.name, bind, { ...options, context, scope });
+        return registry.register(definition, { context, scope: scopeOf(context) });
       },
-      forSession: registry.forSession.bind(registry),
+      list: registry.list.bind(registry),
       isAvailable: registry.isAvailable.bind(registry),
     });
   }
 
-  registerBinding(
-    name: string,
-    bind: (id: string) => ToolDefinition,
-    {
-      visible,
-      scope,
-      context: owner,
-      access,
-    }: ToolRegistrationOptions & { context?: Context; scope?: ScopeKey } = {},
+  register(
+    definition: ToolDefinition | ToolFactory,
+    { context: owner, scope }: { context?: Context; scope?: ScopeKey } = {},
   ) {
+    const { name } = definition;
+    const factory = 'resolve' in definition ? definition : undefined;
     if (!toolNamePattern.test(name)) throw new Error('Invalid tool name: ' + name);
     const lifetime = new AbortController();
     const registry = this;
@@ -55,24 +48,22 @@ export class ToolRegistry {
     const expired = () => lifetime.signal.aborted || signal?.aborted === true;
     const entry: ToolRegistration = {
       name,
-      readOnly: access === 'readOnly',
-      visible: (id) => !expired() && (visible?.(id) ?? true),
-      bind(id, scope) {
-        const tool = bind(id);
+      visible: (resourceId) =>
+        !expired() && (!factory || (resourceId !== undefined && (factory.visible?.(resourceId) ?? true))),
+      resolve(selection) {
+        const tool = 'resolve' in definition ? definition.resolve(selection.resourceId!) : definition;
         if (tool.name !== name) throw new Error('Tool binding changed its registered name: ' + name);
-        const assertAuthorized = () => {
-          if (expired()) throw new Error('Tool is no longer available: ' + name);
-          if (!registry.isAvailable(id, leased))
-            throw new Error('Tool denied by conversation or plugin policy: ' + name);
+        const assertAvailable = () => {
+          if (!registry.isAvailable(leased)) throw new Error('Tool is no longer available: ' + name);
         };
         const leased: ToolDefinition = {
           ...tool,
           async execute(call, args, signal, update, context) {
-            assertAuthorized();
+            assertAvailable();
             const combined = signal ? AbortSignal.any([signal, lifetime.signal]) : lifetime.signal;
             const execute = async (signal: AbortSignal) => {
               signal.throwIfAborted();
-              assertAuthorized();
+              assertAvailable();
               const inputs = args;
               if (!Check(tool.parameters, inputs)) {
                 const issue = [...Errors(tool.parameters, inputs)][0];
@@ -82,28 +73,7 @@ export class ToolRegistry {
                     (issue ? ': ' + issue.instancePath + ' ' + issue.message : ''),
                 );
               }
-              if (
-                (await registry.decide?.(
-                  {
-                    sessionId: id,
-                    tool: name,
-                    callId: call,
-                    arguments: inputs,
-                    signal,
-                  },
-                  scope,
-                )) === 'deny'
-              )
-                throw new Error('Tool denied by conversation or plugin policy: ' + name);
-              signal.throwIfAborted();
-              assertAuthorized();
-              const result = await tool.execute(
-                call,
-                inputs,
-                signal,
-                update,
-                context && { ...context, assertAuthorized },
-              );
+              const result = await tool.execute(call, inputs, signal, update, context);
               if (!result || !isToolContent(result.content))
                 throw new Error('Invalid result from tool: ' + name);
               return result;
@@ -119,7 +89,7 @@ export class ToolRegistry {
             }
           },
         };
-        registry.leases.set(leased, { id, scope, entry });
+        registry.leases.set(leased, { selection, entry });
         return leased;
       },
     };
@@ -131,33 +101,30 @@ export class ToolRegistry {
     };
   }
 
-  private selected(id: string, name: string, scope?: ScopeKey) {
+  private selected(name: string, { scope, resourceId }: ToolSelection) {
     for (const layer of this.tools.chain(scope)) {
       const candidate = layer.get(name);
-      if (candidate?.visible(id)) return candidate;
+      if (candidate?.visible(resourceId)) return candidate;
     }
   }
 
-  isAvailable(id: string, tool: ToolDefinition) {
+  isAvailable(tool: ToolDefinition) {
     const lease = this.leases.get(tool);
-    return (
-      lease?.id === id &&
-      this.selected(id, lease.entry.name, lease.scope) === lease.entry &&
-      this.authorize(id, lease.entry)
-    );
+    return !!lease && this.selected(lease.entry.name, lease.selection) === lease.entry;
   }
 
-  forSession(id: string, scope?: ScopeKey) {
+  list(selection: ToolSelection = {}) {
+    selection = { ...selection };
     const names = new Set(
       this.tools
-        .chain(scope)
+        .chain(selection.scope)
         .reverse()
         .flatMap((layer) => [...layer.keys()]),
     );
     const available: ToolDefinition[] = [];
     for (const name of names) {
-      const selected = this.selected(id, name, scope);
-      if (selected && this.authorize(id, selected)) available.push(selected.bind(id, scope));
+      const selected = this.selected(name, selection);
+      if (selected) available.push(selected.resolve(selection));
     }
     return available;
   }

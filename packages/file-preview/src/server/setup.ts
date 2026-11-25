@@ -1,4 +1,4 @@
-import { workspaceFiles } from '@mini-harness/file-access/request';
+import { workspaceFiles } from '@mini-harness/workspaces/file-request';
 import type { Context } from 'mini-harness/cordis';
 import { downloadWorkspaceFile, workspacePreview } from './preview.ts';
 

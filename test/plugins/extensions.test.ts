@@ -1,3 +1,4 @@
+import { conversationTools } from '@mini-harness/agent/tool-selection';
 import { expectPresent } from '../support/required.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -227,7 +228,7 @@ export const apply = (ctx) => {
       messages: [...request.messages, { role: 'user', content: 'Temporary context', timestamp: Date.now() }]
     }) : undefined, { prepend: true });
     ctx.on("agent/model-retry", ({ error, attempt }) => error === 'transient transport failure' && attempt === 1 ? {} : undefined);
-    ctx.on("tools/decide", ({ tool, callId, arguments: args }) => tool === 'check' && callId === 'denied' && args.mode === 'denied' ? 'deny' : undefined);
+    ctx.on("agent/tool-decision", ({ tool, callId, arguments: args }) => tool === 'check' && callId === 'denied' && args.mode === 'denied' ? 'deny' : undefined);
     ctx.effect(() => ctx.harnessTools.register({ name: 'check', description: 'Check mode', parameters: { type: 'object' },
       async execute(_id, { mode }) {
         if (mode !== 'allowed') throw new Error('denied invocation ran');
@@ -416,43 +417,39 @@ export const apply = (ctx) => {
   );
 });
 
-test(
-  'configuration cannot unmount an active request hook and can retry after the run',
-  { timeout: 5000 },
-  async (t) => {
-    const { app, paths, request } = await fixture(t);
-    const key = Symbol.for('mini-harness-test-hook-drain');
-    let entered: () => void = () => {
-      throw new Error('Not started');
-    };
-    let cancelled: () => void = () => {
-      throw new Error('Not started');
-    };
-    let release: () => void = () => {
-      throw new Error('Not started');
-    };
-    const started = new Promise<void>((resolve) => {
-      entered = resolve;
-    });
-    const hold = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    let aborted = false;
-    cancelled = () => {
-      aborted = true;
-    };
-    const state = { entered, cancelled, hold, cleaned: false };
-    const shared = globalThis as typeof globalThis & Record<symbol, typeof state>;
-    shared[key] = state;
-    t.after(() => {
-      release();
-      delete shared[key];
-    });
-    writePlugin(
-      paths.plugins,
-      'slow-transform',
-      {},
-      `
+test('unloading a request hook signals cancellation and waits for cleanup', { timeout: 5000 }, async (t) => {
+  const { app, paths, request } = await fixture(t);
+  const key = Symbol.for('mini-harness-test-hook-drain');
+  let entered: () => void = () => {
+    throw new Error('Not started');
+  };
+  let cancelled: () => void = () => {
+    throw new Error('Not started');
+  };
+  let release: () => void = () => {
+    throw new Error('Not started');
+  };
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const hold = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const aborted = new Promise<void>((resolve) => {
+    cancelled = resolve;
+  });
+  const state = { entered, cancelled, hold, cleaned: false };
+  const shared = globalThis as typeof globalThis & Record<symbol, typeof state>;
+  shared[key] = state;
+  t.after(() => {
+    release();
+    delete shared[key];
+  });
+  writePlugin(
+    paths.plugins,
+    'slow-transform',
+    {},
+    `
 export const apply = (ctx) => {
     const state = globalThis[Symbol.for('mini-harness-test-hook-drain')];
     ctx.on("agent/model-request", async (_request, { signal }) => {
@@ -463,44 +460,34 @@ export const apply = (ctx) => {
     ctx.effect(() => () => { state.cleaned = true; });
   };
 `,
-    );
-    assert.equal(
-      (
-        await request('/settings', 'PATCH', {
-          entries: { 'slow-transform': { name: '../../plugins/slow-transform', disabled: false } },
-        })
-      ).status,
-      200,
-    );
-    const session = app.runtime.plugins.ctx.harnessRegistry.create();
-    const run = app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Keep the active hook');
-    await started;
-    try {
-      assert.equal(
-        (
-          await request('/settings', 'PATCH', {
-            entries: { 'slow-transform': { name: '../../plugins/slow-transform', disabled: true } },
-          })
-        ).status,
-        409,
-      );
-      assert.equal(aborted, false);
-      assert.equal(state.cleaned, false);
-    } finally {
-      release();
-    }
-    await run;
-    assert.equal(
-      (
-        await request('/settings', 'PATCH', {
-          entries: { 'slow-transform': { name: '../../plugins/slow-transform', disabled: true } },
-        })
-      ).status,
-      200,
-    );
-    assert.equal(state.cleaned, true);
-  },
-);
+  );
+  assert.equal(
+    (
+      await request('/settings', 'PATCH', {
+        entries: { 'slow-transform': { name: '../../plugins/slow-transform', disabled: false } },
+      })
+    ).status,
+    200,
+  );
+  const session = app.runtime.plugins.ctx.harnessRegistry.create();
+  const run = assert.rejects(
+    app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Unload the active hook'),
+    /slow-transform could not prepare transformed data/,
+  );
+  await started;
+  const updating = request('/settings', 'PATCH', {
+    entries: { 'slow-transform': { name: '../../plugins/slow-transform', disabled: true } },
+  });
+  try {
+    await aborted;
+    assert.equal(state.cleaned, false);
+  } finally {
+    release();
+  }
+  assert.equal((await updating).status, 200);
+  await run;
+  assert.equal(state.cleaned, true);
+});
 
 test('a decision hook can deny an inherited tool and is removed with its owner', async (t) => {
   const { app, paths, request } = await fixture(t);
@@ -510,7 +497,7 @@ test('a decision hook can deny an inherited tool and is removed with its owner',
     {},
     `
 export function apply(ctx) {
-      ctx.on("tools/decide", async ({ tool, signal }) => {
+      ctx.on("agent/tool-decision", async ({ tool, signal }) => {
         signal.throwIfAborted();
         return tool === 'ls' ? 'deny' : undefined;
       });
@@ -532,12 +519,10 @@ export function apply(ctx) {
     200,
   );
   await app.runtime.plugins.prepare(`session:${child.id}`);
-  const tools = app.runtime.plugins.ctx.harnessTools;
+  const ctx = app.runtime.plugins.ctx;
   const call = (id: string) =>
     expectPresent(
-      tools
-        .forSession(id, app.runtime.plugins.ctx.harnessRegistry.runScope(id))
-        .find(({ name }) => name === 'ls'),
+      conversationTools(ctx, id, ctx.harnessRegistry.runScope(id)).find(({ name }) => name === 'ls'),
       'ls tool',
     ).execute('policy', { path: '.' }, undefined, undefined, undefined);
   await assert.rejects(call(child.id), /Tool denied by conversation or plugin policy/);

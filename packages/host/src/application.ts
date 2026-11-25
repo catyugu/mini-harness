@@ -26,7 +26,7 @@ export async function bootProfile(name: string, paths: Paths, launch: LaunchOpti
     })());
   try {
     const errors = await profile.start();
-    if (errors.size && !ctx.get('harnessComposition'))
+    if (errors.size && !ctx.get('harnessPluginCatalog'))
       throw new AggregateError(
         [...errors.values()],
         'Profile entries failed: ' + [...errors.keys()].join(', '),

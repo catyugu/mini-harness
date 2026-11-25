@@ -1,8 +1,6 @@
 plugins:
   - id: core:transport
     name: '@mini-harness/transport-runtime'
-  - id: core:settings-runtime
-    name: '@mini-harness/settings-runtime'
   - id: core:plugins-runtime
     name: '@mini-harness/plugins-runtime'
   - id: core:workspace

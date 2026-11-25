@@ -10,7 +10,8 @@
     "@mini-harness/conversation": "workspace:*",
     "@mini-harness/platform": "workspace:*",
     "@mini-harness/plugin-api": "workspace:*",
-    "@mini-harness/tools": "workspace:*"
+    "@mini-harness/tools": "workspace:*",
+    "@mini-harness/process-execution": "workspace:*"
   },
   "miniHarness": {
     "profileModules": {

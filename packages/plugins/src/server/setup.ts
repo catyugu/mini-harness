@@ -9,10 +9,8 @@ export function setup(ctx: Context) {
   ctx.effect(() => changes.register('plugins'));
   add('PATCH', '/api/settings/plugins/:id', async ({ body, params, signal }) => {
     const patch = await body();
-    return ctx.harnessMutations.run(async () => {
-      await ctx.harnessPluginCatalog.writeBrowserConfig(params.id, patch, signal);
-      return { ok: true };
-    });
+    await ctx.harnessPluginCatalog.writeBrowserConfig(params.id, patch, signal);
+    return { ok: true };
   });
   add('GET', '/api/plugins/scopes', () => {
     const options: ScopeOption[] = [];

@@ -1,3 +1,4 @@
+import { conversationTools } from './tool-selection.ts';
 import type { Context } from 'mini-harness/cordis';
 import { scopeOf, scopeTarget } from '@mini-harness/plugin-api/scopes';
 import { observe } from '@mini-harness/plugin-api/observations';
@@ -488,7 +489,7 @@ export class NativeAgent implements AgentPort {
         const current = log.projection();
         const registry: ToolPort = requireService(ctx, 'harnessTools');
         const executor: ToolExecutorPort = requireService(ctx, 'harnessToolExecutor');
-        const tools = registry.forSession(id, scopeOf(ctx));
+        const tools = conversationTools(ctx, id, scopeOf(ctx), registry);
         const advertisedTools = new Map(tools.map((tool) => [tool.name, tool]));
         const toolMetadata = tools.map(
           ({ name, description, parameters, label, promptSnippet, promptGuidelines }) => ({
@@ -511,8 +512,7 @@ export class NativeAgent implements AgentPort {
           step,
           { systemPrompt, messages: current.contextMessages, thinkingLevel: current.thinkingLevel },
           (content) => {
-            for (const [name, tool] of advertisedTools)
-              if (!registry.isAvailable(id, tool)) advertisedTools.delete(name);
+            for (const [name, tool] of advertisedTools) if (!tool.available()) advertisedTools.delete(name);
             const available = toolMetadata
               .filter(({ name }) => advertisedTools.has(name))
               .map(({ name, description, parameters }) => ({ name, description, parameters }));
@@ -584,7 +584,6 @@ export class NativeAgent implements AgentPort {
           else {
             const hooks = ctx.events.listeners('agent/tool-result', scopeTarget(ctx));
             output = await executeTool(call, tool, {
-              sessionId: id,
               cwd,
               signal: toolSignal,
               phase: (state) =>
@@ -731,7 +730,7 @@ export class NativeAgent implements AgentPort {
     const input = capabilities?.input.includes('image')
       ? prepared.messages
       : withoutImages(prepared.messages);
-    const snapshot: Omit<LlmRequest, 'signal' | 'sessionId'> = JSON.parse(
+    const snapshot: Omit<LlmRequest, 'signal'> = JSON.parse(
       JSON.stringify({
         ...base,
         tools: prepared.tools,
@@ -774,7 +773,7 @@ export class NativeAgent implements AgentPort {
       },
       projected.leafId,
     );
-    return { ...snapshot, sessionId: context.sessionId, signal: context.signal };
+    return { ...snapshot, signal: context.signal };
   }
 
   private request(
@@ -787,7 +786,7 @@ export class NativeAgent implements AgentPort {
       delta,
       ended: (attempt, failed) =>
         observe(ctx, { type: 'model-attempt-ended', sessionId: id, attempt, failed }, request.signal),
-      retry: (failure) => retryModel(ctx, failure),
+      retry: (failure) => retryModel(ctx, { ...failure, sessionId: id }),
     });
   }
 

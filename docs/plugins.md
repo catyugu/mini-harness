@@ -48,19 +48,22 @@ A service provider declares `provide = ['exampleGreeting']` and calls `ctx.provi
 
 | Service                                        | Contract                                                                                                                                                                                                        |
 | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `harnessTools`                                 | Register a definition or a `{ name, bind(sessionId) }` factory. Read-only access also requires authorization for the selected registration.                                                                     |
+| `harnessTools`                                 | Register a definition or a `{ name, resolve(resourceId) }` factory. Use `list()` to select standalone tools and `list({ scope, resourceId })` for scoped or resource-specific tools.                            |
+| `harnessLlm`                                   | Stream a model response with `stream({ model, systemPrompt, messages, signal })`.                                                                                                                               |
+| `harnessProcess`                               | Run an executable with arguments, a working directory, and an optional explicit environment.                                                                                                                    |
+| `harnessFileAccess`                            | Open a file access handle with `open(root)`.                                                                                                                                                                    |
 | `harnessPrompt`                                | Register a named section, with an optional order and a render callback. The nearest scope wins for a shared ID.                                                                                                 |
 | `harnessSessions`                              | Direct conversation methods accept explicit IDs. `records(id, owner)` reads or appends records for the selected owner on the active branch. Use `append(data, { title, content })` to publish a display record. |
 | `harnessExecution`                             | `submit(id, input, { signal })` goes through normal admission and returns a handle with its own result and cancellation.                                                                                        |
 | `harnessApprovalRequests`                      | `request(id, prompt, signal)` requests a user decision for a conversation.                                                                                                                                      |
 | `harnessRoutes` and `harnessUpgrades`          | Register ordinary authenticated HTTP routes (including dynamic path parameters) and WebSocket upgrades. Use `ctx.effect(() => service.register(...))` for lifecycle ownership.                                  |
 | `harnessPluginData` and `harnessPluginSecrets` | Read, write and remove data in the caller's own plugin and scope namespace.                                                                                                                                     |
-| `harnessPluginSettings`                        | Read the current effective config, subscribe to committed changes or write this instance's configuration when the Profile marks its Entry as live.                                                              |
+| `harnessPluginSettings`                        | Read the current effective config, subscribe to committed changes or write the owning Entry's configuration. A non-live Entry can restart and end the calling Fiber.                                            |
 | `harnessPluginChanges`                         | Invalidate the plugin's browser projection after a domain mutation.                                                                                                                                             |
 
 Runtime scopes use opaque object identities. Use `scopeOf(ctx)` from `mini-harness/scopes` to inspect the current registration scope. Resolve configured services directly from `harnessProfileScopes.context(address)` after preparing the Profile address. See [scoped providers](scoped-providers.md).
 
-An alternative `harnessToolExecutor` can present tools and interpret model messages in another protocol, while scheduling and executing only authorized calls.
+The Agent recognizes the `readOnly` tool tag when selecting tools for read-only conversations. An alternative `harnessToolExecutor` can present tools and interpret model messages in another protocol, while scheduling and executing only authorized calls.
 
 ### Events
 
@@ -74,7 +77,7 @@ Register listeners with `ctx.on(event, handler)`. Listeners are owned by the Fib
 | `agent/model-request`          | Transform the system prompt, model-visible messages, thinking level or token limit.                                     |
 | `agent/model-retry`            | Return `{ delayMs }` to retry a model attempt before output has streamed. The first decision applies.                   |
 | `agent/tool-result`            | Transform successful results after persistence of the original execution.                                               |
-| `tools/decide`                 | Return `'deny'` to restrict a call or `undefined` to defer.                                                             |
+| `agent/tool-decision`          | Return `'deny'` to restrict a call or `undefined` to defer.                                                             |
 | `conversation/tool-projection` | Synchronously transform tool output in the conversation display.                                                        |
 | `harness/observe`              | Observe session, run or turn events with an activation-bound cancellation signal.                                       |
 

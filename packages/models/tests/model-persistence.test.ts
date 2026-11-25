@@ -37,7 +37,7 @@ test('recent main model survives child overrides and a restart through the nativ
   assert.equal(mock.requests.at(-1)?.model, 'second-model');
   const delegate = expectPresent(
     runtime.plugins.ctx.harnessTools
-      .forSession(old.id, runtime.plugins.ctx.harnessRegistry.runScope(old.id))
+      .list({ resourceId: old.id, scope: runtime.plugins.ctx.harnessRegistry.runScope(old.id) })
       .find(({ name }) => name === 'delegate'),
     'delegate tool',
   );

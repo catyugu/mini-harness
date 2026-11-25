@@ -34,11 +34,11 @@ test('YAML Profile composes through Cordis and persists Web entry changes', asyn
     assert.equal(web.ctx.harnessProfile.entries.get('core:layout'), undefined);
     assert.ok(web.ctx.harnessPluginCatalog.browser().some(({ id }) => id === 'core:layout'));
     assert.ok(!web.ctx.harnessPluginCatalog.browser().some(({ id }) => id === 'git-diff'));
-    await web.ctx.harnessSettingsStore.update({ entries: { 'core:layout': { disabled: true } } });
+    await web.ctx.harnessProfileConfig.update({ entries: { 'core:layout': { disabled: true } } });
     assert.ok(!web.ctx.harnessPluginCatalog.browser().some(({ id }) => id === 'core:layout'));
-    await web.ctx.harnessSettingsStore.update({ entries: { 'core:layout': { disabled: false } } });
+    await web.ctx.harnessProfileConfig.update({ entries: { 'core:layout': { disabled: false } } });
     assert.ok(web.ctx.harnessPluginCatalog.browser().some(({ id }) => id === 'core:layout'));
-    await web.ctx.harnessSettingsStore.update({ entries: { 'file-preview': { disabled: true } } });
+    await web.ctx.harnessProfileConfig.update({ entries: { 'file-preview': { disabled: true } } });
     assert.match(readFileSync(configure('web'), 'utf8'), /id: file-preview\s+disabled: true/);
   } finally {
     await web.close();
@@ -204,6 +204,72 @@ export function apply(ctx, config) {
 
   writeText(fragment, 'include: [' + JSON.stringify(fragment) + ']\n');
   await assert.rejects(bootProfile('custom', paths, launch), /Cyclic Profile include/);
+});
+
+test('a third-party plugin uses tools, models and subprocesses from a Profile without Sessions', async (t) => {
+  const mock = await createMockProvider();
+  const { paths, root } = createFixturePaths(mock.url);
+  t.after(async () => {
+    await mock.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+  const directory = initializeProfile('capabilities', paths);
+  writeText(
+    join(directory, 'cordis.patch.yml'),
+    `plugins:
+  - name: '@mini-harness/tools'
+  - name: '@mini-harness/model-store'
+  - name: '@mini-harness/llm'
+  - name: '@mini-harness/process-execution'
+  - id: consumer
+    name: ./consumer.mjs
+`,
+  );
+  writeText(
+    join(directory, 'consumer.mjs'),
+    `
+    import { defineTool } from 'mini-harness/tools';
+    export const inject = ['harnessTools', 'harnessLlm', 'harnessProcess', 'harnessState'];
+    export function apply(ctx) {
+      ctx.effect(() => ctx.harnessTools.register(defineTool({
+        name: 'read_model',
+        description: 'Read the model response',
+        parameters: { type: 'object', properties: {} },
+        async execute(_call, _args, signal) {
+          const child = await ctx.harnessProcess.run({
+            file: process.execPath,
+            args: ['-e', 'process.stdout.write(process.env.QUERY)'],
+            cwd: ctx.harnessState.paths.cwd,
+            env: { QUERY: 'standalone' },
+            timeoutSeconds: 10,
+            signal,
+          });
+          if (child.code !== 0) throw new Error(child.stderr);
+          const stream = ctx.harnessLlm.stream({
+            model: { provider: 'local-mock', id: 'mock-model' },
+            messages: [{ role: 'user', content: child.stdout, timestamp: Date.now() }],
+            systemPrompt: '',
+            signal,
+          });
+          let text = '';
+          for await (const event of stream) if (event.type === 'text-delta') text += event.text;
+          return { content: [{ type: 'text', text }] };
+        },
+      })));
+    }
+  `,
+  );
+  const app = await bootProfile('capabilities', paths, { interactive: false, shutdown() {} });
+  try {
+    assert.equal(app.ctx.get('harnessRegistry'), undefined);
+    assert.equal(app.ctx.get('harnessProfileScopes'), undefined);
+    const [tool] = app.ctx.harnessTools.list();
+    assert.equal(tool.name, 'read_model');
+    assert.deepEqual((await tool.execute('call', {})).content, [{ type: 'text', text: 'Mock response' }]);
+    assert.match(JSON.stringify(mock.requests[0]), /standalone/);
+  } finally {
+    await app.close();
+  }
 });
 
 test('launcher inspects and recreates named Profile packages without mounting', (t) => {

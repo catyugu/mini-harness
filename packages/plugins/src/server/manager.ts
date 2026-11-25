@@ -1,4 +1,5 @@
-import { assertOutsideMountTransaction, withMountTransaction } from '@mini-harness/plugin-api/mutation-api';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { mergeSettings } from '@mini-harness/plugin-api/selection';
 import { DomainError } from '@mini-harness/platform/errors';
 import { dirname, join } from 'node:path';
 import {
@@ -10,15 +11,16 @@ import {
   type EntryOptions,
 } from 'mini-harness/cordis';
 import { isDeepStrictEqual } from 'node:util';
-import type { ProfileRuntime } from '@mini-harness/plugin-api/profile';
+import type { ProfileConfigurationPort, ProfileRuntime } from '@mini-harness/plugin-api/profile';
 import type { ScopeAddress, ScopeSettings } from '@mini-harness/plugin-api/configuration';
 import type { ScopeBinding, ProfileScopes } from '@mini-harness/plugin-api/configuration';
 import { planBrowser, publishBrowser } from './browser-assets.ts';
-import { addAbortListener } from 'node:events';
+import { waitFor } from '@mini-harness/platform/wait';
 import { scopeAddresses, type ProfileConfiguration } from '@mini-harness/plugin-api/configuration';
 import { pluginData, pluginSecrets, removeScopeData } from './data.ts';
 import { pluginSettings } from './plugin-settings.ts';
-import { pluginInstance } from '@mini-harness/plugin-api/instance';
+import { entryFiber } from '@mini-harness/plugin-api/plugin-configuration';
+import { entryAddress } from './entry-address.ts';
 import { scopeOf, tagScope } from '@mini-harness/plugin-api/scopes';
 import { changedSelection, PluginCatalog } from './catalog.ts';
 
@@ -28,7 +30,7 @@ function hasComposition(scope: ScopeSettings | undefined): scope is ScopeSetting
 }
 
 /** The descriptor and its resolved graph are the source of both server and browser mounts. */
-export class PluginHost implements ProfileScopes {
+export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
   private readonly catalog: PluginCatalog;
   private readonly entries: EntryTree;
   private readonly ownsTree: boolean;
@@ -39,19 +41,16 @@ export class PluginHost implements ProfileScopes {
     { resolve: (id: string) => ScopeBinding | undefined; eager: boolean }
   >();
   private applying?: Promise<void>;
+  private readonly lifecycle = new AsyncLocalStorage<object>();
+  private transaction?: object;
+  private pending = Promise.resolve();
+  private readonly listeners = new Set<() => void>();
   private closing = false;
 
   constructor(
     readonly ctx: Context,
     private readonly directory: string,
-    profile: Pick<ProfileRuntime, 'builtin' | 'source'>,
-    private readonly settings: () => ProfileConfiguration,
-    private readonly writePlugin?: (
-      id: string,
-      key: ScopeAddress | undefined,
-      patch: unknown,
-      check: () => void,
-    ) => Promise<void>,
+    private readonly profile: Pick<ProfileRuntime, 'builtin' | 'source' | 'read' | 'commit'>,
     private readonly owner = ctx,
     entries?: EntryTree,
   ) {
@@ -59,14 +58,15 @@ export class PluginHost implements ProfileScopes {
     this.ownsTree = entries === undefined;
     const directoryData = join(dirname(directory), 'plugin-data');
     const services = {
-      harnessPluginSettings: pluginSettings(ctx, writePlugin),
+      harnessPluginSettings: pluginSettings(this.writePlugin.bind(this), this.subscribe.bind(this)),
       harnessPluginData: pluginData(directoryData),
       harnessPluginSecrets: pluginSecrets(directoryData),
       harnessPluginChanges: Service.track({
         invalidate() {
           const caller = Service.caller(this);
           caller.fiber.signal.throwIfAborted();
-          ctx.harnessChanges.invalidate('plugin:' + pluginInstance(caller).pluginId);
+          const entry = entryFiber(caller)?.entry;
+          if (entry) ctx.get('harnessChanges')?.invalidate('plugin:' + entryAddress(entry.options.id).id);
         },
       }),
     };
@@ -82,18 +82,118 @@ export class PluginHost implements ProfileScopes {
   }
 
   async writeBrowserConfig(id: string, patch: unknown, signal: AbortSignal) {
-    if (!this.writePlugin) throw new DomainError('unavailable', 'Plugin settings are unavailable');
-    await this.writePlugin(id, undefined, patch, () => {
-      signal.throwIfAborted();
-      if (!this.browserState.configurable.has(id))
-        throw new DomainError('not_found', 'Plugin settings are unavailable');
+    await this.writePlugin(
+      id,
+      undefined,
+      patch,
+      () => {
+        if (!this.browserState.configurable.has(id))
+          throw new DomainError('not_found', 'Plugin settings are unavailable');
+      },
+      signal,
+    );
+  }
+
+  get settings() {
+    return this.profile.read();
+  }
+
+  subscribe(listener: () => void) {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  private publish() {
+    for (const listener of this.listeners) {
+      try {
+        listener();
+      } catch (error) {
+        this.ctx.logger.error(error);
+      }
+    }
+  }
+
+  private async enqueue<T>(operation: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+    this.assertCanWait();
+    if (this.closing) throw new DomainError('unavailable', 'Profile configuration is closing');
+    signal?.throwIfAborted();
+    const work = this.pending.then(async () => {
+      while (this.applying)
+        await waitFor(
+          this.applying.catch(() => {}),
+          signal,
+        );
+      signal?.throwIfAborted();
+      return operation();
     });
+    this.pending = work.then(
+      () => {},
+      () => {},
+    );
+    return waitFor(work, signal);
+  }
+
+  update(patch: unknown, signal?: AbortSignal) {
+    return this.enqueue(async () => {
+      const next = mergeSettings(this.settings, patch);
+      await this.apply(next, false);
+      this.publish();
+      return this.settings;
+    }, signal);
+  }
+
+  forgetScopes(keys: ScopeAddress[]) {
+    return this.enqueue(async () => {
+      const released = new Set(keys);
+      const scopes = { ...this.settings.scopes };
+      for (const key of keys) delete scopes[key];
+      const next = { ...this.settings, scopes };
+      const changed = !isDeepStrictEqual(next, this.settings);
+      await this.apply(next, false, undefined, released);
+      if (released.size) removeScopeData(join(dirname(this.directory), 'plugin-data'), released);
+      if (changed) this.publish();
+    });
+  }
+
+  private writePlugin(
+    id: string,
+    key: ScopeAddress | undefined,
+    patch: unknown,
+    check: () => void,
+    signal?: AbortSignal,
+  ) {
+    return this.enqueue(async () => {
+      check();
+      const values = configurationPatch(patch);
+      const entries = key ? this.settings.scopes[key]?.entries : this.settings.entries;
+      const entry = entries?.[id];
+      const config = { ...entry?.config, ...values };
+      const next = mergeSettings(
+        this.settings,
+        key
+          ? {
+              scopes: {
+                ...this.settings.scopes,
+                [key]: {
+                  ...this.settings.scopes[key],
+                  entries: { ...entries, [id]: { ...entry, config } },
+                },
+              },
+            }
+          : { entries: { [id]: { config } } },
+      );
+      if (isDeepStrictEqual(next, this.settings)) return;
+      await this.apply(next, false);
+      this.publish();
+    }, signal);
   }
 
   diagnostics() {
     return [...this.entries.values()].flatMap(({ active, options, fiber }) => {
       if (!active || !fiber) return [];
-      const identity = pluginInstance(fiber.ctx);
+      const { id, scope } = entryAddress(options.id);
       const inject = Object.keys(fiber.inject);
       const services = Object.fromEntries(
         inject.flatMap((name) => {
@@ -106,8 +206,8 @@ export class PluginHost implements ProfileScopes {
           id: options.id,
           services,
           provides: [...fiber.provisions].map(({ name }) => name),
-          scope: identity.scopeAddress?.split(':')[0] ?? 'application',
-          source: this.catalog.reserved(identity.pluginId) ? 'built-in' : 'local',
+          scope: scope?.split(':')[0] ?? 'application',
+          source: this.catalog.reserved(id) ? 'built-in' : 'local',
         },
       ];
     });
@@ -126,7 +226,7 @@ export class PluginHost implements ProfileScopes {
 
   metadata() {
     return this.catalog.metadata(
-      this.settings(),
+      this.settings,
       this.failures,
       (id) =>
         this.entries.get(id)?.active === true || this.browserState.entries.some((entry) => entry.id === id),
@@ -165,7 +265,7 @@ export class PluginHost implements ProfileScopes {
     if (!key) return this.ctx;
     const ancestry = this.ancestry(key);
     if (!ancestry.length) throw new DomainError('not_found', 'Plugin scope not found: ' + key);
-    const settings = this.settings();
+    const settings = this.settings;
     for (const ancestor of ancestry)
       if (hasComposition(settings.scopes[ancestor]) && !this.scopes.has(ancestor))
         throw new DomainError('unavailable', 'Plugin scope is not prepared: ' + ancestor);
@@ -195,37 +295,27 @@ export class PluginHost implements ProfileScopes {
     return value;
   }
 
+  private assertCanWait() {
+    if (this.transaction && this.lifecycle.getStore() === this.transaction)
+      throw new DomainError('conflict', 'A plugin lifecycle callback cannot wait for its own Profile update');
+  }
+
   async prepare(key: ScopeAddress, signal?: AbortSignal) {
-    assertOutsideMountTransaction();
-    if (this.closing) throw new Error('Plugin host is closing');
-    signal?.throwIfAborted();
     while (this.applying) {
-      const current = this.applying.catch(() => {});
-      if (!signal) {
-        await current;
-        continue;
-      }
-      let listener: ReturnType<typeof addAbortListener> | undefined;
-      try {
-        await Promise.race([
-          current,
-          new Promise<never>((_, reject) => {
-            listener = addAbortListener(signal, () => reject(signal.reason));
-          }),
-        ]);
-      } finally {
-        listener?.[Symbol.dispose]();
-      }
+      this.assertCanWait();
+      await waitFor(
+        this.applying.catch(() => {}),
+        signal,
+      );
     }
     signal?.throwIfAborted();
-    if (this.closing) throw new Error('Plugin host is closing');
+    if (this.closing) throw new DomainError('unavailable', 'Profile configuration is closing');
     const ancestry = this.ancestry(key);
     if (!ancestry.length) throw new DomainError('not_found', 'Plugin scope not found: ' + key);
     if (!this.started) return;
-    const settings = this.settings();
-    if (!ancestry.some((item) => hasComposition(settings.scopes[item]) && !this.scopes.has(item))) return;
-    await this.apply(settings, () => {}, false, key);
-    signal?.throwIfAborted();
+    if (!ancestry.some((item) => hasComposition(this.settings.scopes[item]) && !this.scopes.has(item)))
+      return;
+    await waitFor(this.apply(this.settings, false, key), signal);
   }
 
   private scopedEntries(
@@ -238,7 +328,6 @@ export class PluginHost implements ProfileScopes {
   ) {
     const contexts = new Map<ScopeAddress, EntryGroup>();
     const entries: EntryOptions[] = [];
-    const instances = new Map<string, { key: ScopeAddress; plugin: string }>();
     const active = new Set([
       ...scopeAddresses(settings).filter((key) => this.scopeSource(key)?.eager),
       ...this.scopes.keys(),
@@ -281,9 +370,7 @@ export class PluginHost implements ProfileScopes {
         contexts.set(key, group);
         for (const plan of plans) {
           if (!plan.descriptor.plugin) continue;
-          const id = key + '/' + plan.id;
-          entries.push(this.catalog.entry(plan, context, id));
-          instances.set(id, { key, plugin: plan.id });
+          entries.push(this.catalog.entry(plan, context, key + '/' + plan.id));
         }
       }
       planned.set(key, context);
@@ -293,46 +380,40 @@ export class PluginHost implements ProfileScopes {
       this.ancestry(key); // validate domain ancestry before evaluating scope selections
       visit(key);
     }
-    return { contexts, entries, instances };
+    return { contexts, entries };
   }
 
   browserAsset(url: string) {
     return this.browserState.assets.get(url);
   }
 
-  async start(settings: ProfileConfiguration) {
-    await this.apply({ ...settings, scopes: {} }, () => {}, true);
+  async start() {
+    await this.apply({ ...this.settings, scopes: {} }, true);
     await this.ctx.parallel('harness/ready');
-    await this.apply(this.settings(), () => {}, true);
-  }
-
-  async configure(settings: ProfileConfiguration, commit = () => {}, released?: ReadonlySet<ScopeAddress>) {
-    assertOutsideMountTransaction();
-    while (this.applying) await this.applying.catch(() => {});
-    if (this.closing) throw new Error('Plugin host is closing');
-    await this.apply(settings, commit, false, undefined, released);
-    if (released?.size) removeScopeData(join(dirname(this.directory), 'plugin-data'), released);
+    await this.apply(this.settings, true);
   }
 
   private apply(
     settings: ProfileConfiguration,
-    commit: () => void,
     starting: boolean,
     preparing?: ScopeAddress,
     released?: ReadonlySet<ScopeAddress>,
   ) {
-    const work = withMountTransaction(() =>
-      Promise.resolve().then(() => this.configureGraph(settings, commit, starting, preparing, released)),
+    const transaction = (this.transaction = {});
+    const work = this.lifecycle.run(transaction, () =>
+      Promise.resolve().then(() => this.configureGraph(settings, starting, preparing, released)),
     );
     this.applying = work;
     return work.finally(() => {
-      if (this.applying === work) this.applying = undefined;
+      if (this.applying === work) {
+        this.applying = undefined;
+        this.transaction = undefined;
+      }
     });
   }
 
   private async configureGraph(
     settings: ProfileConfiguration,
-    commit: () => void,
     starting: boolean,
     preparing?: ScopeAddress,
     released?: ReadonlySet<ScopeAddress>,
@@ -343,7 +424,7 @@ export class PluginHost implements ProfileScopes {
     );
     const previousEntries = oldEntries.map(({ options }) => options);
     const failures = new Map<string, string>();
-    const previous = this.settings();
+    const previous = this.settings;
     const descriptors = await this.catalog.runtimeDescriptors(settings);
     const updating = !starting && !preparing && !released;
     if (updating) this.catalog.validateDisabled(descriptors, previous, settings);
@@ -380,60 +461,20 @@ export class PluginHost implements ProfileScopes {
         .map((plan) => this.catalog.entry(plan, this.ctx)),
       ...scoped.entries,
     ];
-    const nextEntries = new Map(mounts.map((entry) => [entry.id, entry]));
-    const scopeChanges = new Set(
-      [...scopeAddresses(previous), ...scopeAddresses(settings)].filter(
-        (key) => !isDeepStrictEqual(previous.scopes[key]?.isolate, settings.scopes[key]?.isolate),
-      ),
-    );
-    let appChanged = false;
-    for (const id of new Set([...previousEntries.map(({ id }) => id), ...nextEntries.keys()])) {
-      const before = this.entries.get(id);
-      const after = nextEntries.get(id);
-      if (
-        before &&
-        after &&
-        before.matches(after) &&
-        (after.live || isDeepStrictEqual(before.options.config, after.config))
-      )
-        continue;
-      const slash = id.indexOf('/');
-      if (slash < 0) appChanged = true;
-      else scopeChanges.add(id.slice(0, slash) as ScopeAddress);
+    const owner = this.owner.fiber.entry;
+    if (updating && owner) {
+      const entry = this.entries.get(owner.options.id);
+      const next = mounts.find(({ id }) => id === owner.options.id);
+      if (entry && (!next || !entry.matches(next) || !isDeepStrictEqual(entry.options.config, next.config)))
+        throw new DomainError('conflict', 'Changing ' + owner.options.id + ' requires a Profile restart');
     }
-    const release =
-      !starting && !preparing && !released && (appChanged || scopeChanges.size)
-        ? this.ctx.get('harnessMutations')?.protect(appChanged ? undefined : scopeChanges)
-        : undefined;
     try {
-      // An Entry cannot dispose the Fiber whose active configuration transaction
-      // is awaiting that disposal. The actual control-plane dependencies require restart.
-      if (updating) {
-        const visited = new Set<Context['fiber']>();
-        const check = (fiber: Context['fiber']) => {
-          if (visited.has(fiber)) return;
-          visited.add(fiber);
-          const entry = fiber.entry && this.entries.get(fiber.entry.options.id);
-          if (entry) {
-            const next = mounts.find(({ id }) => id === entry.options.id);
-            if (!next || !entry.matches(next) || !isDeepStrictEqual(next.config, entry.options.config))
-              throw new DomainError(
-                'conflict',
-                'Changing ' + entry.options.id + ' requires a Profile restart',
-              );
-          }
-          for (const provision of Object.values(fiber.committed ?? {}))
-            if (provision) check(provision.ctx.fiber);
-        };
-        check(this.owner.fiber);
-      }
       const activationErrors = await this.entries.update(mounts);
       for (const mounted of mounts) {
         if (!activationErrors.has(mounted.id)) continue;
-        const scope = scoped.instances.get(mounted.id);
         const error = activationErrors.get(mounted.id);
-        if (!(scope ? unavailable(scope.plugin, error, scope.key) : unavailable(mounted.id, error)))
-          throw error;
+        const { id, scope } = entryAddress(mounted.id);
+        if (!unavailable(id, error, scope)) throw error;
       }
       {
         const browserState = publishBrowser(
@@ -441,7 +482,7 @@ export class PluginHost implements ProfileScopes {
           plans,
           (id) => !failures.has(id),
         );
-        commit();
+        if (!starting && !preparing && !isDeepStrictEqual(settings, previous)) this.profile.commit(settings);
         this.started = true;
         this.catalog.commit(descriptors);
         this.scopes = scoped.contexts;
@@ -461,18 +502,40 @@ export class PluginHost implements ProfileScopes {
         throw new AggregateError([error, restore], 'Could not restore plugin configuration');
       }
       throw error;
-    } finally {
-      release?.();
     }
   }
 
-  async close() {
+  drain() {
     this.closing = true;
+    return this.pending;
+  }
+
+  async close() {
+    await this.drain();
     await this.applying?.catch(() => {});
     try {
-      if (this.ownsTree) await withMountTransaction(() => this.entries.close());
+      if (this.ownsTree) await this.entries.close();
     } finally {
       this.scopes.clear();
     }
+  }
+}
+
+function configurationPatch(patch: unknown): Record<string, unknown> {
+  if (!patch || typeof patch !== 'object' || Array.isArray(patch))
+    throw new DomainError('invalid_input', 'Expected a plugin configuration object');
+  try {
+    return JSON.parse(
+      JSON.stringify(patch, (_key, value: unknown) => {
+        if (
+          (typeof value === 'number' && !Number.isFinite(value)) ||
+          ['undefined', 'function', 'symbol', 'bigint'].includes(typeof value)
+        )
+          throw new Error('Invalid JSON value');
+        return value;
+      }),
+    );
+  } catch {
+    throw new DomainError('invalid_input', 'Plugin settings must be JSON values');
   }
 }
