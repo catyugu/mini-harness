@@ -323,7 +323,12 @@ function isPlugin(value: unknown): value is Plugin {
 
 async function moduleFor(
   name: string,
-): Promise<{ plugin?: Plugin; metadata?: PluginInfo; Config?: Plugin.Base['Config']; browserConfig?: ResolvedPlugin['browserConfig'] }> {
+): Promise<{
+  plugin?: Plugin;
+  metadata?: PluginInfo;
+  Config?: Plugin.Base['Config'];
+  browserConfig?: ResolvedPlugin['browserConfig'];
+}> {
   const target = packagedModules.get(name);
   if (!target) throw new Error('Unknown packaged Profile plugin: ' + name);
   const exports = await import(new URL(target.path, installed).href);
@@ -335,7 +340,8 @@ async function moduleFor(
   if (!value && !metadata?.browser) throw new Error('Profile module export not found: ' + name);
   const Config =
     value?.Config ?? exports[target.exportName === 'default' ? 'Config' : target.exportName + 'Config'];
-  const browserConfig = exports[target.exportName === 'default' ? 'browserConfig' : target.exportName + 'BrowserConfig'];
+  const browserConfig =
+    exports[target.exportName === 'default' ? 'browserConfig' : target.exportName + 'BrowserConfig'];
   return { plugin: value, metadata, Config, browserConfig };
 }
 

@@ -424,12 +424,6 @@ importers:
       '@mini-harness/tools':
         specifier: workspace:*
         version: link:../tools
-      '@mini-harness/ui-primitives':
-        specifier: workspace:*
-        version: link:../ui-primitives
-      '@mini-harness/ui-runtime':
-        specifier: workspace:*
-        version: link:../ui-runtime
       '@mini-harness/workspaces':
         specifier: workspace:*
         version: link:../workspaces
