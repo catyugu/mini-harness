@@ -244,15 +244,23 @@ export async function manageProfilePackages(
   const manifestPath = join(directory, MANIFEST);
   const read = () => readJson<ProfileManifest>(manifestPath, {});
   const dependencies = (manifest: ProfileManifest) =>
-    new Set(Object.keys({ ...manifest.dependencies, ...manifest.devDependencies, ...manifest.optionalDependencies }));
+    new Set(
+      Object.keys({
+        ...manifest.dependencies,
+        ...manifest.devDependencies,
+        ...manifest.optionalDependencies,
+      }),
+    );
   const before = read();
   const installed = dependencies(before);
   const add = ['add', 'install', 'i', 'in'].includes(args[0]);
   const remove = ['remove', 'uninstall', 'rm', 'un', 'unlink'].includes(args[0]);
   if (!add && !remove) return npm(directory, args);
-  const selected = new Set([...installed].filter((dependency) =>
-    args.slice(1).some((argument) => argument === dependency || argument.startsWith(dependency + '@')),
-  ));
+  const selected = new Set(
+    [...installed].filter((dependency) =>
+      args.slice(1).some((argument) => argument === dependency || argument.startsWith(dependency + '@')),
+    ),
+  );
   const { shipped, userLayers } = profileLayers(name, paths);
   const effective = rows([...shipped, ...userLayers]);
   const rootPath = join(directory, ROOT);
@@ -267,12 +275,18 @@ export async function manageProfilePackages(
     // An included, user-owned layer must be edited by its author rather than rewritten.
     for (const layer of [...shipped, ...userLayers]) {
       if ([rootPath, patchPath].includes(layer.file)) continue;
-      if ([...selected].some((dependency) =>
-        layer.file.startsWith(join(directory, 'node_modules', dependency) + sep),
-      )) continue;
-      if (layer.plugins?.some((row) => refers(row.name, selected)) ||
-          Object.values(layer.scopes ?? {}).some((scope) =>
-            Object.values(scope?.entries ?? {}).some((entry) => refers(entry.name, selected))))
+      if (
+        [...selected].some((dependency) =>
+          layer.file.startsWith(join(directory, 'node_modules', dependency) + sep),
+        )
+      )
+        continue;
+      if (
+        layer.plugins?.some((row) => refers(row.name, selected)) ||
+        Object.values(layer.scopes ?? {}).some((scope) =>
+          Object.values(scope?.entries ?? {}).some((entry) => refers(entry.name, selected)),
+        )
+      )
         throw new Error('Remove plugin references from ' + layer.file + ' before uninstalling');
     }
   }
@@ -285,13 +299,19 @@ export async function manageProfilePackages(
   if (add) {
     for (const dependency of current) {
       if (installed.has(dependency) && !selected.has(dependency)) continue;
-      const info = readJson<{ miniHarness?: { bundle?: { patch?: unknown } } }>(join(directory, 'node_modules', dependency, MANIFEST), {});
+      const info = readJson<{ miniHarness?: { bundle?: { patch?: unknown } } }>(
+        join(directory, 'node_modules', dependency, MANIFEST),
+        {},
+      );
       if (info.miniHarness?.bundle?.patch !== undefined) {
         bundleLayers(dependency, directory);
         if (!bundles.includes(dependency)) bundles.push(dependency);
-      } else if (![...effective.values()].some((row) => row.name === dependency) &&
+      } else if (
+        ![...effective.values()].some((row) => row.name === dependency) &&
         !Object.values(scopedEntries([...shipped, ...userLayers])).some((scope) =>
-          Object.values(scope.entries).some((entry) => entry.name === dependency))) {
+          Object.values(scope.entries).some((entry) => entry.name === dependency),
+        )
+      ) {
         const id = entryId(dependency);
         if (effective.has(id) || patch.plugins?.some((row) => row.id === id))
           throw new Error('Profile Entry ID already exists: ' + id);
@@ -306,7 +326,8 @@ export async function manageProfilePackages(
       if (removed.has(bundles[index])) bundles.splice(index, 1);
     function clean(layer: Layer) {
       const previous = stringify(layer);
-      if (layer.plugins) layer.plugins = layer.plugins.filter((row) => !ids.has(row.id) && !refers(row.name, removed));
+      if (layer.plugins)
+        layer.plugins = layer.plugins.filter((row) => !ids.has(row.id) && !refers(row.name, removed));
       for (const scope of Object.values(layer.scopes ?? {}))
         if (scope?.entries) {
           for (const [id, entry] of Object.entries(scope.entries))
