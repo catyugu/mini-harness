@@ -442,14 +442,14 @@ export const apply = (ctx) => {
         const render = () => { node.textContent = 'Replacement history: ' + (miniConversation.get().run?.state ?? 'idle'); };
         miniConversation.subscribe(['run'], render, signal); render();
         return node;
-      }));
+      }, { order: 10 }));
       ctx.effect(() => ctx.miniSlots.registerKeyed('sidebar.primary', 'new-conversation', signal => {
         const button = miniPrimitives.button('Replacement conversation', 'quiet');
         window.addEventListener('slot-test', () => {
           document.body.dataset.slotEvents = String(Number(document.body.dataset.slotEvents ?? 0) + 1);
         }, { signal });
         return { node: button, dispose() { document.body.dataset.slotDisposed = 'yes'; } };
-      }));
+      }, { order: 10 }));
     };
 `,
     );
