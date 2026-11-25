@@ -5,15 +5,18 @@
   "type": "module",
   "exports": {
     "./api": "./src/api.ts",
+    "./execution": "./src/execution.ts",
     "./manifest": "./src/manifest.ts",
     "./registry": "./src/registry.ts"
   },
   "miniHarness": {
     "api": [
-      "./api"
+      "./api",
+      "./execution"
     ],
     "profileModules": {
-      "@mini-harness/tools": "./src/manifest.ts"
+      "@mini-harness/tools": "./src/manifest.ts",
+      "@mini-harness/tool-executor": "./src/execution.ts#executor"
     }
   },
   "dependencies": {

@@ -1,5 +1,5 @@
 import type { Execution } from '@mini-harness/runs/execution';
-import type { SessionDirectory } from '@mini-harness/sessions/records';
+import type { SessionStore } from '@mini-harness/sessions/records';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 
 export interface SubagentPolicy {
@@ -121,7 +121,7 @@ export class Delegation {
   private readonly leases = new Map<string, ChildLease>();
 
   constructor(
-    private readonly sessions: SessionDirectory,
+    private readonly sessions: SessionStore,
     private readonly execution: Execution,
     private readonly settings: () => SubagentPolicy,
   ) {

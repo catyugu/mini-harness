@@ -5,7 +5,7 @@ import type { SessionLogPort, InboxItem } from '@mini-harness/sessions/log-api';
 import type { ModelCatalogPort } from '@mini-harness/models/api';
 import { validateModelOptions } from '@mini-harness/llm/options';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
-import { selectModel } from './model-selection.ts';
+import { selectModel } from '@mini-harness/models/selection';
 import type { QueueEntry } from '@mini-harness/sessions/queue';
 
 /** Inbox acknowledgments and deliveries are committed to the same session log. */

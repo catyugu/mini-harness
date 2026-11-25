@@ -21,6 +21,6 @@ Session messages and inbox acknowledgments are flushed before completion is repo
 
 The conversation catalog is validated at startup: invalid identities, unknown workspaces and broken ancestry are rejected instead of loading a partial index.
 
-A trusted gateway plugin may expose a separately authenticated viewer. The host limits this path to read-only UI and workspace inspection routes. Pairing credentials and listener lifecycle belong to the gateway.
+A trusted gateway plugin may expose a separately authenticated viewer. The gateway owns viewer authentication, route authorization, pairing credentials and listener lifecycle. The Host forwards any authorized registered route without a business-route allowlist; it still checks the forwarded Origin/Host and restricts shutdown to local access. A gateway that intends read-only access must enforce that policy itself.
 
 The Profile YAML parser accepts data-only configuration layers. Disabled entries are not imported; npm lifecycle scripts are disabled by default. Browser entries receive their configuration. Store credentials in the existing secrets service rather than in browser configuration. Preview routes use the selected scoped File Access provider or the owning conversation’s attachment store. Media uses temporary Blob URLs. Uploaded markup is displayed as source or passed through the app’s sanitized Markdown renderer.

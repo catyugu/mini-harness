@@ -17,7 +17,9 @@ export async function workspaceFiles(ctx: Context, { params, url, signal }: Rout
   await scopes.prepare(key, signal);
   const root = ctx.harnessWorkspaces.resolveRoot(workspace.path, workspace.id);
   const state = await realpath(ctx.harnessState.paths.home);
-  const files: RootedFileAccess = scopes.require(key, 'harnessFileAccess').open(root, {
+  const access = scopes.context(key).get('harnessFileAccess');
+  if (!access) throw new DomainError('unavailable', 'File access is unavailable in this scope');
+  const files: RootedFileAccess = access.open(root, {
     exclude: (path) => containsPath(state, path),
   });
   return {

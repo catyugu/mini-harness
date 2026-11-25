@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdirSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { createMiniHarnessServer } from '../support/profile.ts';
+import { nativeFile } from '../../packages/sessions/src/storage.ts';
 import { createMockProvider, createFixturePaths } from '../helpers/mock-provider.ts';
 
 test(
@@ -83,7 +84,7 @@ test(
 
     const stored = await (await get('/api/sessions/' + session.id)).json();
     assert.equal(stored.title, 'Test native integration');
-    const file = app.runtime.plugins.ctx.harnessRegistry.log(session.id).file;
+    const file = nativeFile(paths, session);
     assert.ok(file && existsSync(file));
     assert.ok(stored.messages.some((m: { role: string }) => m.role === 'assistant'));
 
@@ -122,10 +123,10 @@ test(
     assert.match(sentAfterChange, /Mention the verification skill/);
     assert.match(sentAfterChange, /\/skill:unavailable/);
     assert.doesNotMatch(sentAfterChange, /Changed skill body/);
-    const child = app.runtime.plugins.ctx.harnessRegistry.create({ parentId: session.id });
+    const child = app.runtime.plugins.ctx.harnessSessions.create({ parentId: session.id });
     await runs.send(child.id, '/skill:unavailable', undefined, { source: 'agent' });
     await assert.rejects(runs.send(child.id, '/skill:unavailable'), /Unknown skill: unavailable/);
-    await app.runtime.plugins.ctx.harnessRegistry.delete([child.id]);
+    await app.runtime.plugins.ctx.harnessSessions.delete([child.id]);
 
     // Use the new server's token after restart.
     const newPort = await app.listen(0);
@@ -153,7 +154,7 @@ test(
     });
     assert.equal(deleted.status, 200);
     assert.equal((await deleted.json()).deleted[0], session.id);
-    assert.equal((await app.runtime.plugins.ctx.harnessRegistry.list()).length, 0);
+    assert.equal((await app.runtime.plugins.ctx.harnessSessions.list()).length, 0);
     assert.equal(existsSync(file), false);
   },
 );
