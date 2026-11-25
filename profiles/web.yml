@@ -1,6 +1,4 @@
 detached: true
-include:
-  - ./base.yml
 plugins:
   - id: core:http-routes
     name: '@mini-harness/http-routing'

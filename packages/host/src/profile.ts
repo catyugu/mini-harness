@@ -1,6 +1,6 @@
-import { readFileSync, realpathSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { registerHooks } from 'node:module';
-import { dirname, isAbsolute, join, resolve } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import { parseDocument, stringify } from 'yaml';
@@ -42,6 +42,66 @@ interface ResolvedRow extends Row {
 
 const bundled = new URL('../../../../profiles/', import.meta.url);
 const installed = new URL('../../../', import.meta.url);
+const officialBundles = new Map([
+  ['@mini-harness/base', 'base.yml'],
+  ['@mini-harness/web', 'web.yml'],
+]);
+
+export const WEB_BUNDLES = [...officialBundles.keys()];
+const ROOT = 'cordis.yml';
+const PATCH = 'cordis.patch.yml';
+const MANIFEST = 'package.json';
+
+function profileDirectory(name: string, paths: Paths) {
+  if (!/^[a-z0-9][a-z0-9._-]*$/i.test(name) || name.toLowerCase() === 'node_modules')
+    throw new Error('Invalid Profile name: ' + name);
+  return join(paths.home, 'profiles', name);
+}
+
+/** Create an ordinary private npm package; an existing Profile is never overwritten. */
+export function initializeProfile(name: string, paths: Paths, bundles: readonly string[] = []) {
+  const directory = profileDirectory(name, paths);
+  const manifest = join(directory, MANIFEST);
+  if (existsSync(manifest)) throw new Error('Profile already exists: ' + name);
+  mkdirSync(directory, { recursive: true, mode: 0o700 });
+  const root = join(directory, ROOT);
+  const patch = join(directory, PATCH);
+  // Before Profiles were packages, the user configuration lived in cordis.yml.
+  // Move it to the user patch before writing the package manifest.
+  if (!existsSync(patch)) writeText(patch, existsSync(root) ? readFileSync(root, 'utf8') : 'plugins: []\n');
+  writeText(root, 'plugins: []\n');
+  writeJson(manifest, {
+    name: 'mini-harness-profile-' + name.toLowerCase(),
+    private: true,
+    type: 'module',
+    dependencies: {},
+    miniHarness: { profile: { bundles: [...bundles] } },
+  });
+  return directory;
+}
+
+function bundleLayers(name: string, directory: string): LoadedLayer[] {
+  const shipped = officialBundles.get(name);
+  if (shipped) return layers(fileURLToPath(new URL(shipped, bundled)));
+  if (!/^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/i.test(name))
+    throw new Error('Invalid Profile bundle package name: ' + name);
+  const root = join(directory, 'node_modules', name);
+  const manifest = readJson<{ miniHarness?: { bundle?: { patch?: unknown } } }>(
+    join(root, MANIFEST),
+    {},
+  );
+  const declared = manifest.miniHarness?.bundle?.patch;
+  const patches = typeof declared === 'string' ? [declared] : declared;
+  if (!Array.isArray(patches) || !patches.length || patches.some((file) => typeof file !== 'string'))
+    throw new Error('Profile bundle must declare miniHarness.bundle.patch: ' + name);
+  return patches.flatMap((file: string) => {
+    const path = resolve(root, file);
+    const location = relative(root, path);
+    if (!location || isAbsolute(location) || location === '..' || location.startsWith('..' + sep))
+      throw new Error('Profile bundle patch must be inside its package: ' + name);
+    return layers(path);
+  });
+}
 const packagedModules = new Map(
   Object.entries(
     JSON.parse(readFileSync(new URL('./profile-modules.json', import.meta.url), 'utf8')) as Record<
@@ -131,20 +191,27 @@ function rows(layers: readonly LoadedLayer[]) {
   return result;
 }
 
-function profileFile(name: string, paths?: Paths) {
-  if (name === 'web') return fileURLToPath(new URL('web.yml', bundled));
-  if (/^[a-z][a-z0-9-]*$/.test(name) && paths)
-    return join(paths.home, 'profiles', name, 'cordis.yml');
-  return resolve(name);
-}
-
 function profileLayers(name: string, paths: Paths) {
-  if (name !== 'web') {
-    const file = profileFile(name, paths);
-    return { file, shipped: [], userLayers: layers(file) };
+  const directory = profileDirectory(name, paths);
+  const manifestPath = join(directory, MANIFEST);
+  if (!existsSync(manifestPath)) {
+    if (name !== 'web') throw new Error('Unknown Profile package: ' + name);
+    initializeProfile(name, paths, WEB_BUNDLES);
   }
-  const file = join(paths.home, 'profiles', name, 'cordis.yml');
-  return { file, shipped: layers(profileFile(name)), userLayers: layers(file, true) };
+  const manifest = readJson<{ miniHarness?: { profile?: { bundles?: unknown } } }>(manifestPath, {});
+  const bundles = manifest.miniHarness?.profile?.bundles;
+  if (!Array.isArray(bundles) || bundles.some((bundle) => typeof bundle !== 'string'))
+    throw new Error(manifestPath + ': expected miniHarness.profile.bundles');
+  const file = join(directory, PATCH);
+  return {
+    directory,
+    file,
+    shipped: [
+      ...layers(join(directory, ROOT)),
+      ...bundles.flatMap((bundle: string) => bundleLayers(bundle, directory)),
+    ],
+    userLayers: layers(file),
+  };
 }
 
 export function allowsDetachment(name: string, paths: Paths) {
@@ -153,7 +220,10 @@ export function allowsDetachment(name: string, paths: Paths) {
 }
 
 export function readProfile(name: string, paths?: Paths) {
-  if (!paths) return rows(layers(profileFile(name)));
+  if (!paths) {
+    if (name !== 'web') throw new Error('Unknown shipped Profile template: ' + name);
+    return rows(WEB_BUNDLES.flatMap((bundle) => bundleLayers(bundle, '')));
+  }
   const { shipped, userLayers } = profileLayers(name, paths);
   return rows([...shipped, ...userLayers]);
 }
@@ -225,7 +295,7 @@ export async function profileDescriptors(entries: ReadonlyMap<string, Row>) {
 }
 
 export async function loadProfile(name: string, paths: Paths, context: Context): Promise<ProfileRuntime> {
-  const { file, shipped, userLayers } = profileLayers(name, paths);
+  const { directory, file, shipped, userLayers } = profileLayers(name, paths);
   const user: Layer = userLayers.at(-1) ?? {};
   const baseLayers = [...shipped, ...userLayers.slice(0, -1)];
   const official = rows(baseLayers);
@@ -303,9 +373,9 @@ export async function loadProfile(name: string, paths: Paths, context: Context):
       row,
       module: packagedModules.has(row.name!) ? row.name! : resolveModule(row.name!, row.source!),
     }));
-  const roots = sources.flatMap(({ row, module }) =>
+  const roots = [directory, ...sources.flatMap(({ row, module }) =>
     packagedModules.has(row.name!) ? [] : [dirname(fileURLToPath(module))],
-  );
+  )];
   const imports = roots.length ? bindPluginImports(roots) : undefined;
   let modules: Awaited<ReturnType<typeof nativeModule>>[];
   try {
@@ -422,6 +492,7 @@ export async function loadProfile(name: string, paths: Paths, context: Context):
     current = settings;
   }
   return {
+    directory,
     descriptors,
     nativeEntries,
     entries,

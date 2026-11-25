@@ -87,7 +87,7 @@ test('a failed recent-model write does not delay accepted input or terminate exe
   const context = runtime.plugins.ctx;
   const { harnessRegistry: registry, harnessRuns: runs } = context;
   const session = registry.create();
-  const config = join(paths.home, 'profiles', 'web', 'cordis.yml');
+  const config = join(paths.home, 'profiles', 'web', 'cordis.patch.yml');
   const old = config + '.original';
   renameSync(config, old);
   mkdirSync(config);

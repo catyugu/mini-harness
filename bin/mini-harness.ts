@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { bootProfile } from '@mini-harness/host/application';
-import { allowsDetachment, loadProfile, readProfile } from '@mini-harness/host/profile';
+import { allowsDetachment, initializeProfile, loadProfile, readProfile, WEB_BUNDLES } from '@mini-harness/host/profile';
 import { Context } from 'mini-harness/cordis';
 import { spawn } from 'node:child_process';
 import { openSync, closeSync } from 'node:fs';
@@ -18,18 +18,19 @@ function help() {
   console.log(`mini-harness — minimal native agent harness
 
 Usage:
-  mini-harness [--profile web|name|path.yml] [--port 3837]              Start the local web interface
+  mini-harness [--profile name] [--port 3837]              Start the local web interface
   mini-harness --detached [--port 3837]   Run independently of this terminal
   mini-harness --no-open                 Start without opening a browser
   mini-harness status                    Show server status
   mini-harness stop                      Stop the running server
   mini-harness reset-token               Stop the server and replace its browser credential
+  mini-harness profile init <name> [--from web]   Create an independent Profile package
   mini-harness plugin dev <directory>    Build and reload a plugin in an isolated host
   mini-harness plugin install <id> <package[@version-or-tag]>
   mini-harness plugin update <id> [package[@version-or-tag]]
   mini-harness --help                    Show help
 
-Configuration: ~/.mini-harness/profiles/<profile>/cordis.yml (or MINI_HARNESS_HOME)
+Configuration: ~/.mini-harness/profiles/<profile>/cordis.patch.yml (or MINI_HARNESS_HOME)
 Workspace Skills: .mini-harness/skills/
 Access: localhost only; bearer token required for all API endpoints.
 `);
@@ -54,7 +55,7 @@ function parse(argv: string[]) {
       if (!argv[i + 1]) throw new Error('--cwd requires a value');
       args.cwd = resolve(argv[++i]);
     } else if (flag === '--profile') {
-      if (!argv[i + 1]) throw new Error('--profile requires a name or YAML path');
+      if (!argv[i + 1]) throw new Error('--profile requires a name');
       args.profile = argv[++i];
     } else if (flag === 'status' || flag === 'stop' || flag === 'reset-token') {
       if (args.command) throw new Error('Specify one command');
@@ -150,6 +151,20 @@ async function serve(
 
 async function main() {
   const argv = process.argv.slice(2);
+  if (argv[0] === 'profile' && argv[1] === 'init') {
+    const [, , name, ...flags] = argv;
+    if (!name || (flags.length && (flags.length !== 2 || flags[0] !== '--from' || flags[1] !== 'web')))
+      throw new Error('Usage: mini-harness profile init <name> [--from web]');
+    const paths = getPaths();
+    ensurePaths(paths);
+    const unlock = await lockInstance(paths.home);
+    try {
+      console.log(initializeProfile(name, paths, flags.length ? WEB_BUNDLES : []));
+    } finally {
+      await unlock();
+    }
+    return;
+  }
   if (argv[0] === 'plugin' && argv[1] === 'dev') {
     if (argv.length !== 3) throw new Error('Usage: mini-harness plugin dev <directory>');
     const { pluginDev } = await import('./plugin-dev.js');
@@ -228,9 +243,6 @@ async function main() {
     } else console.log(info ? 'mini-harness stopped' : 'mini-harness is not running');
     return;
   }
-  // A relative YAML path belongs to the invoking directory, not the detached
-  // child's workspace directory.
-  if (!/^[a-z][a-z0-9-]*$/.test(args.profile)) args.profile = resolve(args.profile);
   if (args.detached && !args.serve) await detached(paths, args.profile, args.flags);
   else await serve(paths, args.profile, args.flags, args.serve);
 }

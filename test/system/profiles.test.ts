@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { writeText, writeJson } from '@mini-harness/platform/json';
 import { getPaths, ensurePaths } from '@mini-harness/platform/paths';
 import { Context } from 'mini-harness/cordis';
-import { allowsDetachment, loadProfile } from '@mini-harness/host/profile';
+import { allowsDetachment, initializeProfile, loadProfile } from '@mini-harness/host/profile';
 import { bootProfile } from '@mini-harness/host/application';
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
 
@@ -17,7 +17,7 @@ test('YAML Profile composes through Cordis and persists Web entry changes', asyn
     await mock.close();
     rmSync(root, { recursive: true, force: true });
   });
-  const configure = (name: string) => join(paths.home, 'profiles', name, 'cordis.yml');
+  const configure = (name: string) => join(paths.home, 'profiles', name, 'cordis.patch.yml');
   writeText(
     configure('web'),
     "plugins:\n  - id: git-diff\n    name: '@mini-harness/git-diff'\n    disabled: true\n",
@@ -52,7 +52,7 @@ test('YAML Profile composes through Cordis and persists Web entry changes', asyn
   }
 
   writeText(configure('web'), 'plugins:\n  - id: files\n    disabled: !!js arbitrary()\n');
-  await assert.rejects(bootProfile('web', paths, launch), /cordis\.yml.*tag/is);
+  await assert.rejects(bootProfile('web', paths, launch), /cordis\.patch\.yml.*tag/is);
 });
 
 test('custom Profiles load native local and npm entries without the plugin manager', async (t) => {
@@ -60,10 +60,22 @@ test('custom Profiles load native local and npm entries without the plugin manag
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const paths = getPaths(root, { MINI_HARNESS_HOME: join(root, 'home') });
   ensurePaths(paths);
-  const file = join(paths.home, 'profiles', 'custom', 'cordis.yml');
-  const fragment = join(root, 'fragments', 'provider.yml');
+  const directory = initializeProfile('custom', paths);
+  const file = join(directory, 'cordis.patch.yml');
+  const bundle = join(directory, 'node_modules', 'profile-bundle');
+  const fragment = join(bundle, 'provider.yml');
+  writeJson(join(bundle, 'package.json'), {
+    name: 'profile-bundle',
+    type: 'module',
+    miniHarness: { bundle: { patch: './provider.yml' } },
+  });
+  const manifest = join(directory, 'package.json');
+  const metadata = JSON.parse(readFileSync(manifest, 'utf8'));
+  metadata.dependencies = { 'profile-bundle': '1.0.0', 'profile-consumer': '1.0.0' };
+  metadata.miniHarness.profile.bundles = ['profile-bundle'];
+  writeJson(manifest, metadata);
   writeText(
-    join(root, 'fragments', 'provider.mjs'),
+    join(bundle, 'provider.mjs'),
     `import { Context } from 'mini-harness/cordis';
 export default {
   provide: 'profileValue',
@@ -74,16 +86,16 @@ export default {
 };`,
   );
   writeText(
-    join(root, 'fragments', 'disabled.mjs'),
+    join(bundle, 'disabled.mjs'),
     "throw new Error('A disabled entry was imported');",
   );
-  writeJson(join(root, 'fragments', 'node_modules', 'profile-consumer', 'package.json'), {
+  writeJson(join(directory, 'node_modules', 'profile-consumer', 'package.json'), {
     name: 'profile-consumer',
     type: 'module',
     exports: { import: './entry.js' },
   });
   writeText(
-    join(root, 'fragments', 'node_modules', 'profile-consumer', 'entry.js'),
+    join(directory, 'node_modules', 'profile-consumer', 'entry.js'),
     `export const inject = ['profileValue'];
 export const provide = 'profileResult';
 export function apply(ctx, config) {
@@ -106,11 +118,9 @@ export function apply(ctx, config) {
     disabled: true
 `,
   );
-  const include = JSON.stringify(fragment);
   writeText(
     file,
-    `include: [${include}]
-plugins:
+    `plugins:
   - id: provider
     config:
       value: patched
@@ -126,7 +136,7 @@ plugins:
 };`,
   );
   const launch = { interactive: false, shutdown() {} };
-  for (const name of ['custom', file]) {
+  for (const name of ['custom']) {
     const app = await bootProfile(name, paths, launch);
     try {
       assert.equal(app.ctx.get('harnessPluginCatalog'), undefined);
@@ -146,17 +156,19 @@ plugins:
     await profile.close();
   }
   const persisted = readFileSync(file, 'utf8');
-  assert.match(persisted, /include:/);
+  assert.match(readFileSync(manifest, 'utf8'), /profile-bundle/);
   assert.match(persisted, /value: patched/);
-  assert.match(persisted, /name: \\.\\/waiting\\.mjs/);
+  assert.ok(persisted.includes('name: ./waiting.mjs'));
   assert.equal(readFileSync(fragment, 'utf8').includes('value: base'), true);
-  const reopened = await bootProfile(file, paths, launch);
+  assert.equal(readFileSync(join(directory, 'cordis.yml'), 'utf8'), 'plugins: []\n');
+  await assert.rejects(bootProfile(file, paths, launch), /Invalid Profile name/);
+  const reopened = await bootProfile('custom', paths, launch);
   try {
     assert.equal(reopened.ctx.get('profileResult'), 'patched!');
   } finally {
     await reopened.close();
   }
 
-  writeText(fragment, 'include: [' + JSON.stringify(file) + ']\\n');
-  await assert.rejects(bootProfile(file, paths, launch), /Cyclic Profile include/);
+  writeText(fragment, 'include: [' + JSON.stringify(fragment) + ']\n');
+  await assert.rejects(bootProfile('custom', paths, launch), /Cyclic Profile include/);
 });

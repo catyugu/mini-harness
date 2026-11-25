@@ -8,6 +8,7 @@ export interface ProfileConfiguration extends PluginSettings {
 }
 
 export interface ProfileRuntime {
+  readonly directory: string;
   readonly descriptors: PluginDescriptor[];
   readonly nativeEntries: readonly EntryOptions[];
   readonly entries: EntryTree;
