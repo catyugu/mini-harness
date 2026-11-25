@@ -642,7 +642,6 @@ export const apply = (ctx) => {
   assert.equal(mock.requests.length, 1);
 });
 
-
 test('a replacement Agent receives a scoped run Fiber and releases its resources on success and failure', async (t) => {
   const { app, paths, request } = await fixture(t);
   const file = join(paths.plugins, 'agent-lifetime.log');
@@ -670,8 +669,8 @@ export function apply(ctx) {
   });
   assert.equal(configured.status, 200, JSON.stringify(configured.body));
   assert.equal(await root.harnessRuns.send(session.id, 'success'), 'Custom answer');
-  assert.equal(readFileSync(file, 'utf8'), 'success\\n');
+  assert.equal(readFileSync(file, 'utf8'), 'success\n');
   await assert.rejects(root.harnessRuns.send(session.id, 'fail'), /Expected custom agent failure/);
-  assert.equal(readFileSync(file, 'utf8'), 'success\\nfail\\n');
+  assert.equal(readFileSync(file, 'utf8'), 'success\nfail\n');
   assert.notEqual(await root.harnessRuns.send(sibling.id, 'Default loop'), 'Custom answer');
 });
