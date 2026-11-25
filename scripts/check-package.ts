@@ -157,7 +157,7 @@ async function checkPackage() {
       import type { PromptPort } from 'mini-harness/agent/prompt';
       import type { CapabilityObservation } from 'mini-harness/observations';
       import type { ToolProjection } from 'mini-harness/conversation/display-events';
-      import type { ToolDecision } from 'mini-harness/tools/events';
+      import type { ToolInvocation } from 'mini-harness/tools/events';
       import type { PluginRoutes } from 'mini-harness/transport';
       declare module 'mini-harness/cordis' {
         interface Context { example: { greet(name: string): string } }
@@ -192,7 +192,7 @@ async function checkPackage() {
         if (event.type === 'run-ended') void event.run.id;
       });
       ctx.on('conversation/tool-projection', ({ content }: ToolProjection) => content);
-      ctx.on('tools/decide', ({ tool }: ToolDecision) => tool === 'change' ? 'deny' : undefined);
+      ctx.on('tools/pre-execute', ({ tool }: ToolInvocation) => tool === 'change' ? 'deny' : undefined);
       void records.append({ seen: true });
       // @ts-expect-error Input listeners return native user content or a rejection.
       ctx.on('agent/prepare-input', () => ({ arbitrary: true }));

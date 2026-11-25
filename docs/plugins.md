@@ -74,7 +74,7 @@ Register listeners with `ctx.on(event, handler, { order })`. Listeners are owned
 | `agent/model-request`          | Transform the system prompt, model-visible messages, thinking level or token limit.                                     |
 | `agent/model-retry`            | Return `{ delayMs }` to retry a model attempt before output has streamed. The first decision applies.                   |
 | `agent/tool-result`            | Transform successful results after persistence of the original execution.                                               |
-| `tools/decide`                 | Return `'deny'` to restrict a tool call or `undefined` to defer.                                                        |
+| `tools/pre-execute`                 | Return `'deny'`, replacement `{ arguments }` or `undefined` to defer.                                                        |
 | `conversation/tool-projection` | Synchronously transform tool output in the conversation display.                                                        |
 | `harness/observe`              | Observe session, run or turn events with an activation-bound cancellation signal.                                       |
 

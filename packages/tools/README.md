@@ -12,7 +12,7 @@ Resolves scoped registrations and checks them against the host’s authorization
 
 ## API
 
-`harnessTools.register` owns registration and `defineTool` infers argument types. The `tools/decide` event can restrict an invocation. The host protects the provider.
+`harnessTools.register` owns registration and `defineTool` infers argument types. The `tools/pre-execute` event can deny an invocation or return replacement arguments. The registry validates replacement arguments and rechecks authorization before executing. The host protects the provider.
 
 ## Dependencies
 

@@ -19,20 +19,25 @@ const plugin: Plugin.Object = {
         (id) => scopes.address(`session:${id}`),
         async (request) => {
           const { signal, ...input } = request;
+          let args: Record<string, unknown> | undefined;
           for (const { context, callback } of ctx.events.listeners(
-            'tools/decide',
+            'tools/pre-execute',
             sessionEvent(ctx, request.sessionId),
           )) {
             const decision = await context.fiber.run(
-              (signal) => callback({ ...structuredClone(input), signal }),
+              (signal) => callback({ ...input, arguments: structuredClone(args ?? input.arguments), signal }),
               signal,
             );
             if (decision === undefined) continue;
-            if (decision !== 'deny') throw new Error('Invalid tool policy decision');
-            return decision;
+            if (decision === 'deny') return decision;
+            if (!decision || typeof decision.arguments !== 'object' || !decision.arguments || Array.isArray(decision.arguments))
+              throw new Error('Invalid tool preparation');
+            args = structuredClone(decision.arguments);
           }
+          return args === undefined ? undefined : { arguments: args };
         },
         harnessToolPolicy,
+        (id) => ctx.events.listeners('tools/pre-execute', sessionEvent(ctx, id)).length > 0,
       ).service(),
     );
   },

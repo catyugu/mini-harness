@@ -213,10 +213,11 @@ export const apply = (ctx) => {
       messages: [...request.messages, { role: 'user', content: 'Temporary context', timestamp: Date.now() }]
     }) : undefined, { order: 1 });
     ctx.on("agent/model-retry", ({ error, attempt }) => error === 'transient transport failure' && attempt === 1 ? {} : undefined);
-    ctx.on("tools/decide", ({ tool, callId, arguments: args }) => tool === 'check' && callId === 'denied' && args.mode === 'denied' ? 'deny' : undefined);
+    ctx.on("tools/pre-execute", ({ tool, callId, arguments: args }) => tool === 'check' && callId === 'denied' && args.mode === 'denied' ? 'deny' : undefined);
+    ctx.on("tools/pre-execute", ({ tool, arguments: args }) => tool === 'check' ? { arguments: { ...args, mode: 'prepared' } } : undefined);
     ctx.effect(() => ctx.harnessTools.register({ name: 'check', description: 'Check mode', parameters: { type: 'object' },
       async execute(_id, { mode }) {
-        if (mode !== 'allowed') throw new Error('denied invocation ran');
+        if (mode !== 'prepared') throw new Error('unprepared invocation ran');
         return { content: [{ type: 'text', text: 'Value' }] };
       }
     }));
@@ -474,7 +475,7 @@ test('a decision hook can deny an inherited tool and is removed with its owner',
     {},
     `
 export function apply(ctx) {
-      ctx.on("tools/decide", async ({ tool, signal }) => {
+      ctx.on("tools/pre-execute", async ({ tool, signal }) => {
         signal.throwIfAborted();
         return tool === 'ls' ? 'deny' : undefined;
       });

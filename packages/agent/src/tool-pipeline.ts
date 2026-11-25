@@ -125,10 +125,9 @@ export async function executeTool(
     options.signal.throwIfAborted();
     if (!tool) throw new Error('Tool is no longer available: ' + call.name);
     if (call.argumentsError) throw new Error('Invalid tool arguments: ' + call.argumentsError);
-    if (!Check(tool.parameters, call.arguments)) throw new Error('Invalid arguments for tool: ' + call.name);
     const result = await tool.execute(
       call.id,
-      structuredClone(call.arguments),
+      call.arguments,
       options.signal,
       options.update,
       {

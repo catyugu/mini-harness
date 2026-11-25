@@ -292,8 +292,7 @@ export class PluginCatalog {
     }
     for (const item of descriptors) {
       const { id } = item;
-      if (!(isApp ? this.enabled(item, settings) : overrides?.entries?.[id]?.disabled === false))
-        continue;
+      if (!(isApp ? this.enabled(item, settings) : overrides?.entries?.[id]?.disabled === false)) continue;
       // Child groups isolate the services declared by their Cordis modules.
       const provide = item.plugin?.provide;
       for (const service of typeof provide === 'string' ? [provide] : (provide ?? [])) declared.add(service);

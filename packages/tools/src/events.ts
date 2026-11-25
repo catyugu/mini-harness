@@ -1,4 +1,4 @@
-export interface ToolDecision {
+export interface ToolInvocation {
   sessionId: string;
   tool: string;
   callId: string;
@@ -6,10 +6,11 @@ export interface ToolDecision {
   signal: AbortSignal;
 }
 
-export type ToolDecisionHandler = (request: ToolDecision) => 'deny' | undefined | Promise<'deny' | undefined>;
+export type ToolPreparation = 'deny' | { arguments: Record<string, unknown> } | undefined;
+export type ToolPreparationHandler = (request: ToolInvocation) => ToolPreparation | Promise<ToolPreparation>;
 
 declare module 'mini-harness/cordis' {
   interface Events {
-    'tools/decide': ToolDecisionHandler;
+    'tools/pre-execute': ToolPreparationHandler;
   }
 }

@@ -4,7 +4,7 @@ import { Check, Errors } from 'typebox/value';
 import { Service, type Context } from 'mini-harness/cordis';
 import { agentScopeOf, findInstance, sessionVisible } from '@mini-harness/plugin-api/instance';
 import { isToolContent, type ToolDefinition, type ToolPort, type ToolRegistrationOptions } from './api.ts';
-import type { ToolDecision } from './events.ts';
+import type { ToolInvocation, ToolPreparation } from './events.ts';
 import type { ToolAccess, ToolPolicy } from './policy.ts';
 
 interface ToolRegistration extends ToolAccess {
@@ -19,8 +19,9 @@ export class ToolRegistry {
 
   constructor(
     private readonly address: (id: string) => readonly ScopeKey[] = () => [],
-    private readonly decide?: (request: ToolDecision) => Promise<'deny' | undefined>,
+    private readonly prepare?: (request: ToolInvocation) => Promise<ToolPreparation>,
     private readonly authorize: ToolPolicy = () => true,
+    private readonly hasPreparation: (id: string) => boolean = () => Boolean(prepare),
   ) {}
 
   service(): ToolPort {
@@ -80,31 +81,41 @@ export class ToolRegistry {
         };
         const leased: ToolDefinition = {
           ...tool,
+          isConcurrencySafe: tool.isConcurrencySafe
+            ? (args) => !registry.hasPreparation(id) && tool.isConcurrencySafe!(args)
+            : undefined,
           async execute(call, args, signal, update, context) {
             assertAuthorized();
             const combined = signal ? AbortSignal.any([signal, lifetime.signal]) : lifetime.signal;
             const execute = async (signal: AbortSignal) => {
               signal.throwIfAborted();
               assertAuthorized();
-              const inputs = structuredClone(args);
-              if (!Check(tool.parameters, inputs)) {
-                const issue = [...Errors(tool.parameters, inputs)][0];
+              let inputs = structuredClone(args);
+              const validate = (value: Record<string, unknown>) => {
+                if (Check(tool.parameters, value)) return;
+                const issue = [...Errors(tool.parameters, value)][0];
                 throw new Error(
                   'Invalid arguments for ' +
                     name +
                     (issue ? ': ' + issue.instancePath + ' ' + issue.message : ''),
                 );
+              };
+              validate(inputs);
+              const prepared = await registry.prepare?.({
+                sessionId: id,
+                tool: name,
+                callId: call,
+                arguments: structuredClone(inputs),
+                signal,
+              });
+              if (prepared === 'deny') throw new Error('Tool denied by conversation or plugin policy: ' + name);
+              if (prepared !== undefined) {
+                const next = structuredClone(prepared.arguments);
+                validate(next);
+                if (tool.isConcurrencySafe?.(inputs) && !tool.isConcurrencySafe(next))
+                  throw new Error('Tool preparation cannot turn a parallel-safe call into a serial call: ' + name);
+                inputs = next;
               }
-              if (
-                (await registry.decide?.({
-                  sessionId: id,
-                  tool: name,
-                  callId: call,
-                  arguments: inputs,
-                  signal,
-                })) === 'deny'
-              )
-                throw new Error('Tool denied by conversation or plugin policy: ' + name);
               signal.throwIfAborted();
               assertAuthorized();
               const result = await tool.execute(
