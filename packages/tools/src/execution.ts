@@ -1,7 +1,42 @@
-import { isToolContent, type ToolDefinition } from '@mini-harness/tools/api';
+import { isToolContent, type ToolDefinition, type ToolUpdate } from './api.ts';
 import { Check } from 'typebox/value';
-import type { ToolCallPart, NativeToolMessage } from '@mini-harness/llm/api';
-import type { ToolExecutorPort } from './api.ts';
+import type {
+  LlmRequest,
+  ModelRequestContent,
+  NativeAssistantMessage,
+  NativeToolMessage,
+  ToolCallPart,
+} from '@mini-harness/llm/api';
+import type { ToolSchema } from '@mini-harness/llm/vocabulary';
+
+export interface ToolTurn {
+  readonly model: LlmRequest['model'];
+  readonly turn: number;
+  readonly signal: AbortSignal;
+}
+
+export interface ToolExecution {
+  readonly signal: AbortSignal;
+  /** Reports a started call and returns the reason to skip it, if any. */
+  start?(call: ToolCallPart): string | undefined;
+  update?(call: ToolCallPart, result: ToolUpdate): void;
+  deliver(result: NativeToolMessage, signal: AbortSignal): Promise<void>;
+}
+
+export interface ToolExecutorPort {
+  present(
+    content: ModelRequestContent,
+    tools: readonly ToolSchema[],
+    context: ToolTurn,
+  ): ModelRequestContent & { tools?: ToolSchema[] };
+  interpret(message: NativeAssistantMessage, context: ToolTurn): NativeAssistantMessage;
+  /** Interpret, execute and deliver a result for each call. */
+  execute(
+    calls: readonly ToolCallPart[],
+    tools: ReadonlyMap<string, ToolDefinition>,
+    execution: ToolExecution,
+  ): Promise<void>;
+}
 
 const parallelLimit = 16;
 
@@ -95,5 +130,11 @@ async function executeTool(
       ...failedTool(call, error instanceof Error ? error.message : String(error)),
       elapsedMs: performance.now() - start,
     };
+  }
+}
+
+declare module 'mini-harness/cordis' {
+  interface Context {
+    harnessToolExecutor: ToolExecutorPort;
   }
 }

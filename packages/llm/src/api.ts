@@ -81,6 +81,11 @@ export interface LlmRequest {
   signal: AbortSignal;
   maxTokens?: number;
 }
+export type ModelRequestContent = Pick<
+  LlmRequest,
+  'messages' | 'systemPrompt' | 'thinkingLevel' | 'maxTokens'
+>;
+
 export type ModelRequestSnapshot = Omit<LlmRequest, 'signal' | 'messages'> & {
   messages?: NativeMessage[];
 };

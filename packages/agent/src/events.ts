@@ -1,8 +1,8 @@
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { InputSource, PreparedMessage } from '@mini-harness/input/message';
-import type { NativeUserMessage, LlmRequest } from '@mini-harness/llm/api';
+import type { NativeUserMessage, ModelRequestContent } from '@mini-harness/llm/api';
 
-import type { ToolTurn } from './api.ts';
+import type { ToolTurn } from '@mini-harness/tools/execution';
 import type { ToolResult } from '@mini-harness/tools/api';
 
 export interface StepContext extends ToolTurn {
@@ -10,11 +10,6 @@ export interface StepContext extends ToolTurn {
   readonly cwd: string;
   readonly phase: 'turn' | 'compaction';
 }
-
-export type ModelRequestContent = Pick<
-  LlmRequest,
-  'messages' | 'systemPrompt' | 'thinkingLevel' | 'maxTokens'
->;
 
 type Transform<Value, Input> = (
   value: Value,

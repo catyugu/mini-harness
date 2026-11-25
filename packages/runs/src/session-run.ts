@@ -1,12 +1,7 @@
 import { conversationTools } from './tool-selection.ts';
 import type { Context } from 'mini-harness/cordis';
 import { scopeTarget } from '@mini-harness/plugin-api/scopes';
-import type {
-  InputContext,
-  ModelFailure,
-  ModelRequestContent,
-  StepContext,
-} from '@mini-harness/agent/events';
+import type { InputContext, ModelFailure, StepContext } from '@mini-harness/agent/events';
 import { DomainError } from '@mini-harness/platform/errors';
 import { isDeepStrictEqual } from 'node:util';
 import type { SessionCatalog, SessionLifecycle, SessionStore } from '@mini-harness/sessions/store';
@@ -15,6 +10,7 @@ import type { SessionRecord } from '@mini-harness/sessions/identity';
 import {
   validateNativeMessage,
   type LlmRequest,
+  type ModelRequestContent,
   type NativeAssistantMessage,
   type NativeMessage,
   type NativeUserMessage,
@@ -26,7 +22,7 @@ import type { SessionLogPort, InboxItem } from '@mini-harness/sessions/log-api';
 import { Inbox } from './inbox.ts';
 import { isToolContent } from '@mini-harness/tools/api';
 import { applyTransforms } from './transforms.ts';
-import { failedTool } from '@mini-harness/agent/tool-pipeline';
+import { failedTool } from '@mini-harness/tools/execution';
 import { resolveThinking, selectModel } from './model-selection.ts';
 import { NothingToCompact } from '@mini-harness/agent/compaction';
 import { requestModel } from '@mini-harness/agent/model-request';

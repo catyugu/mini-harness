@@ -144,14 +144,15 @@ async function checkPackage() {
       join(installed, 'plugin-types.mts'),
       `
       import { Context, type Plugin } from 'mini-harness/cordis';
-      import type { LlmPort } from 'mini-harness/llm';
+      import type { LlmPort, ModelRequestContent } from 'mini-harness/llm';
       import { createScopeKey, type ScopeKey } from 'mini-harness/scopes';
       import type { ProfileConfiguration, ScopeSettings } from 'mini-harness/configuration';
       import { defineTool } from 'mini-harness/tools';
+      import { executeTools, type ToolExecutorPort } from 'mini-harness/tools/execution';
       import type { PluginData, PluginSecrets } from 'mini-harness/plugin-data';
       import type { SessionRecords } from 'mini-harness/sessions';
       import type { Execution } from 'mini-harness/execution';
-      import type { ModelRequestContent, InputContext } from 'mini-harness/agent/events';
+      import type { InputContext } from 'mini-harness/agent/events';
       import type { PromptPort } from 'mini-harness/agent/prompt';
       import type { CapabilityObservation } from 'mini-harness/observations';
       import type { ToolProjection } from 'mini-harness/conversation/display-events';
@@ -180,6 +181,9 @@ async function checkPackage() {
       const pluginSecrets: PluginSecrets = ctx.harnessPluginSecrets;
       const execution: Execution = ctx.harnessExecution;
       const records: SessionRecords = ctx.harnessSessions.records('session', { pluginId: 'fixture', instanceId: 'fixture' });
+      const executor: ToolExecutorPort = ctx.harnessToolExecutor;
+      void executeTools;
+      void executor;
       const prompt: PromptPort = ctx.harnessPrompt;
       const routes: RoutePort = ctx.harnessRoutes;
       pluginData.write('state', { count: 1 });

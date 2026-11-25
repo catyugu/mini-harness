@@ -10,7 +10,6 @@
     "./manifests/prompt": "./src/manifests/prompt.ts",
     "./prompt-api": "./src/prompt-api.ts",
     "./model-request": "./src/model-request.ts",
-    "./tool-pipeline": "./src/tool-pipeline.ts",
     "./compaction": "./src/compaction.ts"
   },
   "miniHarness": {
