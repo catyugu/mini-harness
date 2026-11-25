@@ -1,15 +1,20 @@
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { InputSource, PreparedMessage } from '@mini-harness/input/message';
-import type { NativeUserMessage, ModelRequestContent } from '@mini-harness/llm/api';
+import type { NativeUserMessage, LlmRequest } from '@mini-harness/llm/api';
 
-import type { ToolTurn } from '@mini-harness/tools/execution';
+import type { ToolTurn } from './api.ts';
 import type { ToolResult } from '@mini-harness/tools/api';
 
 export interface StepContext extends ToolTurn {
   readonly sessionId: string;
-  readonly cwd?: string;
+  readonly cwd: string;
   readonly phase: 'turn' | 'compaction';
 }
+
+export type ModelRequestContent = Pick<
+  LlmRequest,
+  'messages' | 'systemPrompt' | 'thinkingLevel' | 'maxTokens'
+>;
 
 type Transform<Value, Input> = (
   value: Value,
@@ -30,7 +35,7 @@ export type ModelRetryHandler = (
 
 export interface InputContext {
   readonly sessionId: string;
-  readonly cwd?: string;
+  readonly cwd: string;
   readonly model: Readonly<ModelChoice>;
   readonly source: InputSource;
   readonly original: Readonly<PreparedMessage>;

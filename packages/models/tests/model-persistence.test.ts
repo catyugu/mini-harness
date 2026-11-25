@@ -23,27 +23,27 @@ test('recent main model survives child overrides and a restart through the nativ
     rmSync(root, { recursive: true, force: true });
   });
   await runtime.start();
-  const old = runtime.plugins.ctx.harnessSessions.create();
-  const other = runtime.plugins.ctx.harnessSessions.create();
+  const old = runtime.plugins.ctx.harnessRegistry.create();
+  const other = runtime.plugins.ctx.harnessRegistry.create();
   await runtime.plugins.ctx.harnessRuns.send(old.id, 'First');
-  const original = runtime.plugins.ctx.harnessSessions.log(old.id).projection();
+  const original = runtime.plugins.ctx.harnessRegistry.log(old.id).projection();
   await runtime.configuration.update({
     entries: { 'core:models': { config: { model: { provider: 'local-mock', id: 'second-model' } } } },
   });
   assert.equal(runtime.plugins.ctx.harnessModelPreference.recent().id, 'second-model');
-  assert.deepEqual(runtime.plugins.ctx.harnessSessions.log(old.id).projection().messages, original.messages);
-  assert.deepEqual(runtime.plugins.ctx.harnessSessions.log(old.id).projection().model, original.model);
+  assert.deepEqual(runtime.plugins.ctx.harnessRegistry.log(old.id).projection().messages, original.messages);
+  assert.deepEqual(runtime.plugins.ctx.harnessRegistry.log(old.id).projection().model, original.model);
   await runtime.plugins.ctx.harnessRuns.send(old.id, 'Switch the recent model');
   assert.equal(mock.requests.at(-1)?.model, 'second-model');
   const delegate = expectPresent(
     runtime.plugins.ctx.harnessTools
-      .list({ resourceId: old.id, scope: runtime.plugins.ctx.harnessSessions.runScope(old.id) })
+      .list({ resourceId: old.id, scope: runtime.plugins.ctx.harnessRegistry.runScope(old.id) })
       .find(({ name }) => name === 'delegate'),
     'delegate tool',
   );
   await delegate.execute('override', { task: 'Child override', provider: 'local-mock', model: 'mock-model' });
   assert.equal(runtime.plugins.ctx.harnessModelPreference.recent().id, 'second-model');
-  runtime.plugins.ctx.harnessSessions.log(other.id).append({
+  runtime.plugins.ctx.harnessRegistry.log(other.id).append({
     type: 'inbox-enqueued',
     item: {
       id: 'recovered',
@@ -84,7 +84,7 @@ test('a failed recent-model write does not delay accepted input or terminate exe
   });
   await runtime.start();
   const context = runtime.plugins.ctx;
-  const { harnessSessions: registry, harnessRuns: runs } = context;
+  const { harnessRegistry: registry, harnessRuns: runs } = context;
   const session = registry.create();
   const config = join(paths.home, 'profiles', 'web', 'cordis.patch.yml');
   const old = config + '.original';
@@ -106,22 +106,4 @@ test('a failed recent-model write does not delay accepted input or terminate exe
     rmSync(config, { recursive: true, force: true });
     renameSync(old, config);
   }
-});
-
-test('explicit and stored models work without the recent-model plugin', async (t) => {
-  const mock = await createMockProvider();
-  const { root, paths } = createFixturePaths(mock.url);
-  const runtime = new MiniHarnessRuntime(paths);
-  t.after(async () => {
-    await runtime.stop();
-    await mock.close();
-    rmSync(root, { recursive: true, force: true });
-  });
-  await runtime.start();
-  await runtime.configuration.update({ entries: { 'core:models': { disabled: true } } });
-  const ctx = runtime.plugins.ctx;
-  const session = ctx.harnessSessions.create();
-  const model = { provider: 'local-mock', id: 'mock-model' };
-  assert.equal(await ctx.harnessRuns.send(session.id, 'Explicit', undefined, { model }), 'Mock response');
-  assert.equal(await ctx.harnessRuns.send(session.id, 'Stored'), 'Mock response');
 });

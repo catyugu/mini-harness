@@ -4,13 +4,14 @@ import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 
 type Skill = { name: string; description: string; content: string; file: string; root: string };
-export type SkillRoots = (cwd: string | undefined) => readonly string[];
+export type SkillRoots = (cwd: string) => readonly string[];
 
 export function defaultSkillRoots(appHome: string, userHome = homedir()): SkillRoots {
   return (cwd) => [
     join(userHome, '.agents', 'skills'),
     join(appHome, 'skills'),
-    ...(cwd ? [join(cwd, '.agents', 'skills'), join(cwd, '.mini-harness', 'skills')] : []),
+    join(cwd, '.agents', 'skills'),
+    join(cwd, '.mini-harness', 'skills'),
   ];
 }
 
@@ -65,7 +66,7 @@ export class SkillLoader {
     private readonly diagnose: (path: string, error: unknown) => void,
   ) {}
 
-  async discover(cwd: string | undefined): Promise<Skill[]> {
+  async discover(cwd: string): Promise<Skill[]> {
     const skills = new Map<string, Skill>();
     const files = new Set<string>();
     let entriesLeft = maximumEntries;
@@ -115,17 +116,17 @@ export class SkillLoader {
     return [...skills.values()].sort((a, b) => a.name.localeCompare(b.name, 'en'));
   }
 
-  async list(cwd: string | undefined) {
+  async list(cwd: string) {
     return (await this.discover(cwd)).map(({ name, description }) => ({ name, description }));
   }
 
-  async load(cwd: string | undefined, name: string) {
+  async load(cwd: string, name: string) {
     const skill = (await this.discover(cwd)).find((item) => item.name === name);
     if (!skill) throw new Error('Unknown skill: ' + name);
     return skill;
   }
 
-  async prompt(cwd: string | undefined) {
+  async prompt(cwd: string) {
     const skills = await this.list(cwd);
     if (!skills.length) return '';
     return (
@@ -137,7 +138,7 @@ export class SkillLoader {
       '\n</available_skills>'
     );
   }
-  async invocation(cwd: string | undefined, text: string) {
+  async invocation(cwd: string, text: string) {
     const match = /(?<!\S)\/skill:([a-z0-9-]+)(?=\s|$)/.exec(text);
     if (!match) return;
     const skill = await this.load(cwd, match[1]);

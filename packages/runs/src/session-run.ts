@@ -1,17 +1,22 @@
 import { conversationTools } from './tool-selection.ts';
 import type { Context } from 'mini-harness/cordis';
 import { scopeTarget } from '@mini-harness/plugin-api/scopes';
-import type { InputContext, ModelFailure, StepContext } from '@mini-harness/agent/events';
+import type {
+  InputContext,
+  ModelFailure,
+  ModelRequestContent,
+  StepContext,
+} from '@mini-harness/agent/events';
 import { DomainError } from '@mini-harness/platform/errors';
 import { isDeepStrictEqual } from 'node:util';
-import type { SessionCatalog, SessionLifecycle, SessionStore } from '@mini-harness/sessions/records';
+import type { SessionCatalog, SessionLifecycle, SessionStore } from '@mini-harness/sessions/store';
 import type { ModelChoice, ThinkingLevel } from '@mini-harness/llm/vocabulary';
 import type { SessionRecord } from '@mini-harness/sessions/identity';
 import {
   validateNativeMessage,
   type LlmRequest,
-  type ModelRequestContent,
   type NativeAssistantMessage,
+  type NativeMessage,
   type NativeUserMessage,
   type ToolCallPart,
 } from '@mini-harness/llm/api';
@@ -21,13 +26,8 @@ import type { SessionLogPort, InboxItem } from '@mini-harness/sessions/log-api';
 import { Inbox } from './inbox.ts';
 import { isToolContent } from '@mini-harness/tools/api';
 import { applyTransforms } from './transforms.ts';
-import { failedTool } from '@mini-harness/tools/execution';
-import {
-  prepareModelMessages,
-  resolveThinking,
-  selectModel,
-  assertImageInput,
-} from '@mini-harness/models/selection';
+import { failedTool } from '@mini-harness/agent/tool-pipeline';
+import { resolveThinking, selectModel } from './model-selection.ts';
 import { NothingToCompact } from '@mini-harness/agent/compaction';
 import { requestModel } from '@mini-harness/agent/model-request';
 
@@ -51,6 +51,20 @@ const textOf = (message: NativeAssistantMessage) =>
     .filter((part) => part.type === 'text')
     .map((part) => part.text)
     .join('');
+const imageNotice = '[Image unavailable to this model]';
+
+function withoutImages(messages: NativeMessage[]): NativeMessage[] {
+  return messages.map((message) => {
+    if (message.role === 'assistant' || !Array.isArray(message.content)) return message;
+    return {
+      ...message,
+      content: message.content.map((part) =>
+        part.type === 'image' ? { type: 'text' as const, text: imageNotice } : part,
+      ),
+    };
+  });
+}
+
 interface SessionPrompt {
   signal: AbortSignal;
   source?: InputSource;
@@ -70,6 +84,7 @@ export class SessionRun {
     private readonly sessions: Pick<SessionCatalog, 'workspacePath'> &
       Pick<SessionLifecycle, 'assertAvailable' | 'rename'> &
       Pick<SessionStore, 'log'>,
+    private readonly policy: () => { autoCompact: boolean },
   ) {}
 
   /** Never retry an unknown tool outcome after restart or provider failure. */
@@ -143,7 +158,8 @@ export class SessionRun {
         unavailable: queued ? 'The queued model is no longer available' : undefined,
       });
       if (queued) {
-        assertImageInput(models.capabilities(selected.model), item.images.length, true);
+        if (item.images.length && !models.capabilities(selected.model)?.input.includes('image'))
+          throw new Error('The selected model does not support queued image input');
         validateNativeMessage({
           role: 'user',
           content: [{ type: 'text', text: item.text }, ...item.images],
@@ -173,10 +189,13 @@ export class SessionRun {
       validateNativeMessage({ role: 'user', content, timestamp: 0 });
       const preparedImages =
         typeof content === 'string' ? [] : content.filter((part) => part.type === 'image');
-      assertImageInput(
-        requireService(ctx, 'harnessModels').capabilities(selected.model),
-        preparedImages.length,
-      );
+      if (
+        preparedImages.length &&
+        !requireService(ctx, 'harnessModels').capabilities(selected.model)?.input.includes('image')
+      )
+        throw new Error(
+          'The selected model does not support image input. Choose an image-capable model and retry.',
+        );
       signal.throwIfAborted();
       this.sessions.assertAvailable(id);
       return {
@@ -284,8 +303,14 @@ export class SessionRun {
         const cwd = this.sessions.workspacePath(id);
         const step: StepContext = { sessionId: id, turn, phase: 'turn', cwd, model, signal };
         if (
+          this.policy().autoCompact &&
           capabilities &&
-          ctx.get('harnessCompaction')?.shouldCompact(current.contextMessages, capabilities)
+          ctx
+            .get('harnessCompaction')
+            ?.shouldCompact(
+              current.contextMessages,
+              Math.max(1024, capabilities.contextWindow * 0.8 - capabilities.maxTokens),
+            )
         ) {
           await this.compactLog(ctx, id, log, signal, true);
           current = log.projection();
@@ -293,15 +318,18 @@ export class SessionRun {
         const executor = requireService(ctx, 'harnessToolExecutor');
         const tools = conversationTools(ctx, id);
         const advertisedTools = new Map(tools.map((tool) => [tool.name, tool]));
-        const toolMetadata = tools.map(({ name, description, parameters, label, metadata }) => ({
-          name,
-          description,
-          parameters,
-          label,
-          metadata,
-        }));
-        const systemPrompt =
-          (await ctx.get('harnessPrompt')?.build({ sessionId: id, cwd, tools: toolMetadata, signal })) ?? '';
+        const toolMetadata = tools.map(
+          ({ name, description, parameters, label, promptSnippet, promptGuidelines }) => ({
+            name,
+            description,
+            parameters,
+            label,
+            promptSnippet,
+            promptGuidelines,
+          }),
+        );
+        const promptService = requireService(ctx, 'harnessPrompt');
+        const systemPrompt = await promptService.build({ sessionId: id, cwd, tools: toolMetadata, signal });
         const request = await this.prepareRequest(
           ctx,
           step,
@@ -417,7 +445,10 @@ export class SessionRun {
     resolveThinking(capabilities, prepared.thinkingLevel);
     return {
       ...prepared,
-      messages: prepareModelMessages(capabilities, prepared.messages),
+      messages:
+        Array.isArray(prepared.messages) && !capabilities?.input.includes('image')
+          ? withoutImages(prepared.messages)
+          : prepared.messages,
       model: context.model,
       signal: context.signal,
     };

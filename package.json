@@ -211,10 +211,6 @@
       "types": "./dist/types/packages/tools/src/api.d.ts",
       "default": "./dist/packages/tools/src/api.js"
     },
-    "./tools/execution": {
-      "types": "./dist/types/packages/tools/src/execution.d.ts",
-      "default": "./dist/packages/tools/src/execution.js"
-    },
     "./transport": {
       "types": "./dist/types/packages/transport/src/routes.d.ts",
       "default": "./dist/packages/transport/src/routes.js"
@@ -250,10 +246,6 @@
     "./workspaces": {
       "types": "./dist/types/packages/workspaces/src/server/api.d.ts",
       "default": "./dist/packages/workspaces/src/server/api.js"
-    },
-    "./models/selection": {
-      "types": "./dist/types/packages/models/src/server/selection.d.ts",
-      "default": "./dist/packages/models/src/server/selection.js"
     }
   },
   "packageManager": "pnpm@10.34.9"

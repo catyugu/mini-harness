@@ -42,7 +42,7 @@ export function fileTools(cwd: string, access: () => RootedFileAccess): ToolDefi
       name: 'read',
       label: 'Read',
       description: 'Read a UTF-8 file or image inside the workspace. Text offsets are 1-based line numbers.',
-      metadata: { guidance: ['Read workspace files'] },
+      promptSnippet: 'Read workspace files',
       parameters: Type.Object(
         { path: pathSchema, offset: Type.Optional(Type.Integer({ minimum: 1 })), limit: limitSchema },
         { additionalProperties: false },
@@ -73,7 +73,7 @@ export function fileTools(cwd: string, access: () => RootedFileAccess): ToolDefi
       name: 'write',
       label: 'Write',
       description: 'Create or replace a UTF-8 file inside the workspace. Creates parent directories.',
-      metadata: { guidance: ['Write workspace files'] },
+      promptSnippet: 'Write workspace files',
       parameters: Type.Object(
         { path: pathSchema, content: Type.String({ maxLength: 2 * 1024 * 1024 }) },
         { additionalProperties: false },
@@ -92,7 +92,7 @@ export function fileTools(cwd: string, access: () => RootedFileAccess): ToolDefi
       label: 'Edit',
       description:
         'Apply exact text replacements to a workspace file. Each oldText must occur exactly once. All edits are validated before writing.',
-      metadata: { guidance: ['Edit workspace files with exact text replacements'] },
+      promptSnippet: 'Edit workspace files with exact text replacements',
       parameters: Type.Object(
         {
           path: pathSchema,
@@ -153,7 +153,7 @@ export function fileTools(cwd: string, access: () => RootedFileAccess): ToolDefi
       label: 'Find',
       description:
         'Find files and directories matching a glob in the workspace. Respects .gitignore and skips links.',
-      metadata: { guidance: ['Find files by workspace glob'] },
+      promptSnippet: 'Find files by workspace glob',
       parameters: Type.Object(
         {
           pattern: Type.String({ minLength: 1, maxLength: 4096 }),
@@ -175,7 +175,7 @@ export function fileTools(cwd: string, access: () => RootedFileAccess): ToolDefi
       label: 'Search',
       description:
         'Search workspace text files with a literal or RE2 pattern. Respects .gitignore and skips links.',
-      metadata: { guidance: ['Search text files in the workspace'] },
+      promptSnippet: 'Search text files in the workspace',
       parameters: Type.Object(
         {
           pattern: Type.String({ minLength: 1, maxLength: 4096 }),

@@ -78,12 +78,12 @@ test('workspace registration, session navigation and scoped tools leave an activ
       assert.equal(event.resourceId, other.id);
       assert.equal(other.workspaceId, workspace.id);
       assert.equal(
-        app.runtime.plugins.ctx.harnessSessions.create({ parentId: other.id }).workspaceId,
+        app.runtime.plugins.ctx.harnessRegistry.create({ parentId: other.id }).workspaceId,
         workspace.id,
       );
       assert.throws(
         () =>
-          app.runtime.plugins.ctx.harnessSessions.create({
+          app.runtime.plugins.ctx.harnessRegistry.create({
             parentId: other.id,
             workspaceId: session.workspaceId,
           }),

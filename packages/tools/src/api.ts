@@ -18,8 +18,8 @@ export interface ToolDefinition<Arguments = Record<string, any>> extends ToolSch
   /** Tags are interpreted by the tool consumer. */
   tags?: readonly string[];
   label?: string;
-  /** Optional consumer-owned presentation or behavior metadata. */
-  metadata?: Record<string, unknown>;
+  promptSnippet?: string;
+  promptGuidelines?: string[];
   /** Calls are serial unless this returns true for the validated arguments. */
   isConcurrencySafe?(args: Arguments): boolean;
   execute(

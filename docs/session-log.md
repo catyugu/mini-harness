@@ -8,11 +8,11 @@ open or write session files.
 
 `~/.mini-harness/sessions.json` is the conversation catalog. Each record
 contains `id`, `workspaceId`, `parentId`, `title`, `titleSource` and `createdAt`.
-Workspace identity is stored separately in `workspaces.json`; `workspaceId: null` means the conversation is independent of local workspace storage and tools.
+Workspace identity is stored separately in `workspaces.json`.
 
 Each conversation has one native JSONL file under
 `~/.mini-harness/sessions/<workspace-hash>/<conversation-id>.jsonl`. The Session
-Registry owns the writer and resolves this path from catalog identity. The shared SessionLogPort exposes durable record operations, not the file path or close operation. Unbound conversations use the `sessions/unbound/` directory. It does
+Registry owns the writer and resolves this path from catalog identity. It does
 not accept an arbitrary path from an API request. Session directories must remain
 inside managed storage; symlinked directories, symlinked files, aliased hardlinks
 and files replaced while open are rejected. New directories use mode `0700` and
@@ -20,7 +20,7 @@ new log files use `0600` where supported.
 
 Original uploads are stored under `<conversation-id>/attachments/<sha256>` beside the JSONL file. The original name, MIME type, byte size and content identity are recorded in message or inbox presentation metadata. The store validates and flushes the uploads before acknowledging input; identical bytes share a file only within the same conversation. Historical model inputs remain in the log.
 
-`RecordLog` owns the common durable envelope, sequence, ancestry, indexing, checksums and flush operations. `SessionLog` interprets native domain events, performs semantic validation and provides conversation projections. The log starts with a version 1 `session` header. Every later line contains a
+The log starts with a version 1 `session` header. Every later line contains a
 native event, a monotonically increasing `seq`, a stable hexadecimal `id`, a
 `parentId`, an ISO timestamp and a SHA-256 checksum. Native IDs contain 32
 hexadecimal characters.
@@ -30,7 +30,7 @@ Its parent identifies the active branch snapshot. The optional `messagesPatch` s
 only changed messages into that snapshot, including transforms and compaction inputs.
 A content-addressed `tool-schema` record stores each distinct advertised tool list once
 per conversation. Model requests refer to its SHA-256 hash via `toolSchema`.
-`SessionLog.requestSnapshot(id)` reconstructs the validated exact model-visible
+`SessionLog.requestSnapshot(id)` reconstructs and validates the exact model-visible
 input for audit and retry. The session ID comes from the log header.
 
 An `executor-response` diagnostic preserves the original model response when an executor translates it into the native protocol.
@@ -124,7 +124,7 @@ Deletion first marks the selected tree as unavailable, drains registered partici
 cascades through its conversations while retaining the user's project files.
 There is no archive state.
 
-Plugin records use a typed payload (`PluginRecord<Data>` / `SessionRecords<Data>`) in the same record log with an explicit owner (plugin ID and instance ID), data, and optional display metadata. The storage reader converts old custom record envelopes after validating their original checksums, retaining IDs, parents and payloads. An unscoped historical plugin record belongs to the application instance. Unmapped historical envelopes remain available as diagnostic records in native exports. New records use explicit plugin owners or diagnostic codes. The browser receives the explicitly supplied display data and the preceding message identity on the selected branch. Model context omits these records. Deleting its owning conversation removes both the records and private data for that session’s plugin instances.
+Plugin records use a dedicated event with an explicit owner (plugin ID and instance ID), data, and optional display metadata. The storage reader converts old custom record envelopes after validating their original checksums, retaining IDs, parents and payloads. An unscoped historical plugin record belongs to the application instance. Unmapped historical envelopes remain available as diagnostic records in native exports. New records use explicit plugin owners or diagnostic codes. The browser receives the explicitly supplied display data and the preceding message identity on the selected branch. Model context omits these records. Deleting its owning conversation removes both the records and private data for that session’s plugin instances.
 
 A failed run records the stable entry ID for its active input, including inbox deliveries. An explicit retry can retrieve that input from the native log. A null ID indicates the run failed before accepting the current submission. Older records with ambiguous input or missing attachment content require user input before resubmission.
 

@@ -20,7 +20,7 @@ export function projectTool(ctx: Context, projection: ToolProjection) {
   let { content } = projection;
   for (const { context, callback } of ctx.events.listeners(
     'conversation/tool-projection',
-    scopeTarget(ctx, ctx.harnessSessions.runScope(projection.sessionId)),
+    scopeTarget(ctx, ctx.harnessRegistry.runScope(projection.sessionId)),
   )) {
     try {
       const result = callback(structuredClone({ ...projection, content }));

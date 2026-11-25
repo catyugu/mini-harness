@@ -15,7 +15,7 @@ export const inject = [
   'harnessProfileScopes',
 ];
 import { HttpError } from 'mini-harness/transport';
-import type { SessionStore, SessionRecords } from 'mini-harness/sessions';
+import type { SessionDirectory, SessionRecords } from 'mini-harness/sessions';
 import type { Execution } from 'mini-harness/execution';
 import type { ApprovalRequests } from 'mini-harness/approvals';
 import type { PluginData, PluginSecrets } from 'mini-harness/plugin-data';
@@ -43,7 +43,7 @@ export const Config = defineConfig(
   (config) => (typeof config.label !== 'string' || !config.label.trim() ? 'Enter a note label' : undefined),
 );
 export function apply(ctx: Context) {
-  const sessions: SessionStore = ctx.harnessSessions;
+  const sessions: SessionDirectory = ctx.harnessSessions;
   const execute: Execution = ctx.harnessExecution;
   const data: PluginData = ctx.harnessPluginData;
   const secrets: PluginSecrets = ctx.harnessPluginSecrets;

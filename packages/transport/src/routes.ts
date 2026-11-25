@@ -46,7 +46,7 @@ declare module 'mini-harness/cordis' {
   }
 }
 
-/** A trusted gateway authenticates the viewer and authorizes the requested route before forwarding. */
+/** A trusted gateway authenticates the viewer before forwarding a request. */
 export interface GatewayRequest {
   origin: string;
   /** Closing a device session aborts every forwarded response for it. */

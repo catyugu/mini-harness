@@ -25,8 +25,7 @@ export const mountApprovals = (ctx: Context) => {
           const command = document.createElement('pre');
           command.textContent = approval.message;
           const origin = document.createElement('small');
-          const workspace =
-            (session.workspaceId && services.workspaceRecord(session.workspaceId)?.path) || session.title;
+          const workspace = services.workspaceRecord(session.workspaceId)?.path ?? session.title;
           origin.textContent = approval.plugin + ' · ' + workspace;
           const heading = document.createElement('header');
           heading.className = 'approval-heading';

@@ -1,7 +1,6 @@
 import { ApprovalDenied } from '@mini-harness/approvals/api';
 import { defineTool, type ToolResult } from '@mini-harness/tools/api';
 import type { Context } from 'mini-harness/cordis';
-import { DomainError } from '@mini-harness/platform/errors';
 import type { ProcessCommand } from '@mini-harness/process-execution/api';
 import { Type } from 'typebox';
 import { realpath } from 'node:fs/promises';
@@ -23,7 +22,6 @@ export function setup(ctx: Context) {
       parameters: Type.Object({ command: Type.String({ minLength: 1, maxLength: 16000 }) }),
       execute: async (_id, args, signal, update): Promise<ToolResult> => {
         const cwd = workspace.workspacePath(sessionId);
-        if (!cwd) throw new DomainError('unavailable', 'Shell requires a workspace');
         const allowed = () => caller.get('harnessToolPolicy')?.(sessionId, { name: 'sandbox_shell' }) ?? true;
         let approvalMs: number | undefined;
         if (!allowed()) throw new Error('Tool denied by conversation policy: sandbox_shell');
@@ -62,7 +60,7 @@ export function setup(ctx: Context) {
         signal?.throwIfAborted();
         const execution = caller.get('harnessProcess');
         if (!execution) throw new Error('Process execution is unavailable');
-        const attachments = ctx.harnessSessions.attachmentDirectory(sessionId);
+        const attachments = ctx.harnessRegistry.attachmentDirectory(sessionId);
         const { mode, timeoutSeconds } = options;
         let command: ProcessCommand;
         if (mode === 'isolated') {
@@ -122,11 +120,5 @@ export function setup(ctx: Context) {
         }
       },
     });
-  ctx.effect(() =>
-    ctx.harnessTools.register({
-      name: 'sandbox_shell',
-      resolve: tool,
-      visible: (id) => Boolean(workspace.get(id)?.workspaceId),
-    }),
-  );
+  ctx.effect(() => ctx.harnessTools.register({ name: 'sandbox_shell', resolve: tool }));
 }

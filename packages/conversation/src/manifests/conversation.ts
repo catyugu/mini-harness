@@ -25,7 +25,7 @@ const plugin: Plugin.Object = {
   Config,
   inject: [
     'harnessChanges',
-    'harnessSessions',
+    'harnessRegistry',
     'harnessRuns',
     'harnessWorkspaces',
     'harnessRoutes',

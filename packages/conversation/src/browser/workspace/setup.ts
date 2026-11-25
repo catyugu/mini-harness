@@ -46,7 +46,7 @@ interface DirectoryListing {
   directories: { name: string; path: string }[];
 }
 
-function workspacePicker(ctx: Context, sessions: () => { workspaceId: string | null }[]) {
+function workspacePicker(ctx: Context, sessions: () => { workspaceId: string }[]) {
   const signal = ctx.fiber.signal;
   const form = document.createElement('form');
   form.className = 'workspace-form';

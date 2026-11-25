@@ -10,7 +10,7 @@ export interface CatalogState {
 }
 
 /** The catalog owns conversation identity; every log lives under the managed session directory. */
-export function loadCatalog(paths: Paths, workspaces?: WorkspacePort): CatalogState {
+export function loadCatalog(paths: Paths, workspaces: WorkspacePort): CatalogState {
   const saved = readJson<Partial<CatalogState> | null>(paths.registry, { sessions: [] });
   if (!saved || !Array.isArray(saved.sessions)) throw new Error('Invalid conversation index');
   if (saved.pendingDelete !== undefined && !Array.isArray(saved.pendingDelete))
@@ -19,7 +19,7 @@ export function loadCatalog(paths: Paths, workspaces?: WorkspacePort): CatalogSt
   return { sessions: saved.sessions, ...(saved.pendingDelete ? { pendingDelete: saved.pendingDelete } : {}) };
 }
 
-export function validateCatalog(sessions: SessionRecord[], workspaces?: WorkspacePort) {
+export function validateCatalog(sessions: SessionRecord[], workspaces: WorkspacePort) {
   const records = new Map<string, SessionRecord>();
   for (const record of sessions) {
     if (
@@ -33,13 +33,13 @@ export function validateCatalog(sessions: SessionRecord[], workspaces?: Workspac
       !record ||
       !/^[a-f0-9-]{36}$/i.test(record.id) ||
       records.has(record.id) ||
-      (record.workspaceId !== null && typeof record.workspaceId !== 'string') ||
+      typeof record.workspaceId !== 'string' ||
       typeof record.title !== 'string' ||
       !['auto', 'manual'].includes(record.titleSource) ||
       !Number.isFinite(Date.parse(record.createdAt))
     )
       throw new Error('Invalid conversation index');
-    if (record.workspaceId !== null) workspaces?.get(record.workspaceId);
+    workspaces.get(record.workspaceId);
     records.set(record.id, record);
   }
   for (const record of sessions) {

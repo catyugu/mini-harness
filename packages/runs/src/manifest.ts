@@ -1,5 +1,7 @@
 import type { Plugin } from 'mini-harness/cordis';
 import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
+import { defineConfig } from '@mini-harness/plugin-api/configuration';
+import { Type } from 'typebox';
 import { setup } from './setup.ts';
 
 export const metadata: PluginInfo = {
@@ -8,7 +10,24 @@ export const metadata: PluginInfo = {
 };
 
 const plugin: Plugin.Object = {
-  inject: ['harnessProfileScopes', 'harnessSessions', 'harnessAgent', 'harnessModels', 'harnessToolExecutor'],
+  Config: defineConfig(
+    Type.Object(
+      {
+        autoCompact: Type.Boolean({ default: true, title: 'Automatically compact long conversations' }),
+      },
+      { additionalProperties: false },
+    ),
+  ),
+  inject: [
+    'harnessProfileScopes',
+    'harnessRegistry',
+    'harnessAgent',
+    'harnessModelPreference',
+    'harnessModels',
+    'harnessPrompt',
+    'harnessTools',
+    'harnessToolExecutor',
+  ],
   provide: ['harnessRuns', 'harnessExecution'],
   apply: setup,
 };

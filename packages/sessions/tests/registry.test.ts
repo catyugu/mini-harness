@@ -20,13 +20,7 @@ import { WorkspaceCatalog } from '@mini-harness/workspaces/catalog';
 function fixture(t: test.TestContext) {
   const temp = mkdtempSync(join(tmpdir(), 'mini-harness-sessions-'));
   const paths = getPaths(realpathSync.native(temp), { MINI_HARNESS_HOME: join(temp, 'home') });
-  const registry = new SessionRegistry(
-    paths,
-    (() => {
-      const workspaces = new WorkspaceCatalog(paths);
-      return () => workspaces;
-    })(),
-  );
+  const registry = new SessionRegistry(paths, new WorkspaceCatalog(paths));
   t.after(() => {
     registry.dispose();
     rmSync(temp, { recursive: true, force: true });
@@ -35,13 +29,13 @@ function fixture(t: test.TestContext) {
 }
 
 test('nested sessions cascade permanent deletion through native logs', async (t) => {
-  const { paths, registry } = fixture(t);
+  const { registry } = fixture(t);
   const parent = registry.create({ title: 'root' });
   const child = registry.create({ title: 'worker', parentId: parent.id });
   const second = registry.create({ title: 'unrelated' });
   const log = registry.log(child.id);
   log.append({ type: 'message', message: { role: 'user', content: 'hello', timestamp: Date.now() } });
-  const file = nativeFile(paths, child);
+  const file = log.file;
   assert.equal(registry.list().length, 3);
   assert.deepEqual(new Set(registry.descendants([parent.id])), new Set([parent.id, child.id]));
   const deleted = await registry.delete([parent.id]);
@@ -56,12 +50,11 @@ test('nested sessions cascade permanent deletion through native logs', async (t)
 });
 
 test('refuses export and deletion through a symlink outside managed storage', async (t) => {
-  const { temp, paths, registry } = fixture(t);
+  const { temp, registry } = fixture(t);
   const item = registry.create();
   const foreign = join(temp, 'other.jsonl');
   writeFileSync(foreign, 'keep');
-  registry.log(item.id);
-  const file = nativeFile(paths, item);
+  const file = registry.log(item.id).file;
   rmSync(file);
   symlinkSync(foreign, file);
   assert.throws(() => registry.export([item.id]), /outside managed storage/);
@@ -75,8 +68,7 @@ test('restart finishes a journaled deletion after partial cleanup', async (t) =>
   const parent = registry.create();
   const child = registry.create({ parentId: parent.id });
   const unrelated = registry.create();
-  registry.log(child.id);
-  const childFile = nativeFile(paths, child);
+  const childFile = registry.log(child.id).file;
   const upload = {
     name: 'document.pdf',
     mimeType: 'application/pdf',
@@ -100,17 +92,9 @@ test('restart finishes a journaled deletion after partial cleanup', async (t) =>
     }),
   );
   const forgotten: string[] = [];
-  const restored = new SessionRegistry(
-    paths,
-    (() => {
-      const workspaces = new WorkspaceCatalog(paths);
-      return () => workspaces;
-    })(),
-    undefined,
-    async (keys) => {
-      forgotten.push(...keys);
-    },
-  );
+  const restored = new SessionRegistry(paths, new WorkspaceCatalog(paths), undefined, async (keys) => {
+    forgotten.push(...keys);
+  });
   t.after(() => restored.dispose());
   await restored.recoverDeletion();
   assert.deepEqual(
@@ -154,27 +138,20 @@ test('a corrupt log is isolated, remains deletable and never creates a log for a
   const damaged = registry.create({ title: 'Damaged' });
   const healthy = registry.create({ title: 'Healthy' });
   const unopened = registry.create();
-  registry.log(damaged.id);
-  const invalid = nativeFile(paths, damaged);
+  const invalid = registry.log(damaged.id).file;
   registry
     .log(healthy.id)
     .append({ type: 'message', message: { role: 'user', content: 'intact', timestamp: Date.now() } });
   registry.dispose();
   appendFileSync(invalid, '{"checksum":"bad"}\n');
-  const restored = new SessionRegistry(
-    paths,
-    (() => {
-      const workspaces = new WorkspaceCatalog(paths);
-      return () => workspaces;
-    })(),
-  );
+  const restored = new SessionRegistry(paths, new WorkspaceCatalog(paths));
   t.after(() => restored.dispose());
   assert.equal(restored.list().length, 3);
   assert.equal(
     restored.inspectLog(unopened.id, (log) => log.entries()),
     undefined,
   );
-  assert.equal(existsSync(nativeFile(paths, unopened, false)), false);
+  assert.equal(existsSync(nativeFile(paths, new WorkspaceCatalog(paths), unopened, false)), false);
   assert.equal(restored.log(healthy.id).projection().messages[0].content, 'intact');
   assert.throws(() => restored.log(damaged.id), /session diagnostics/);
   assert.deepEqual(restored.diagnostics(), [{ id: damaged.id, message: 'Corrupt session log checksum' }]);
@@ -229,49 +206,4 @@ test('a valid catalog keeps the deletion journal and rejects a partial one', (t)
   assert.deepEqual(loadCatalog(paths, workspaces), { sessions: [], pendingDelete });
   writeFileSync(paths.registry, JSON.stringify({ sessions: [], pendingDelete: { id: session.id } }));
   assert.throws(() => loadCatalog(paths, workspaces), /Invalid deletion journal/);
-});
-
-test('a conversation can own history and descendants without a workspace', async (t) => {
-  const { registry } = fixture(t);
-  const root = registry.create({ workspaceId: null });
-  const child = registry.create({ parentId: root.id });
-  assert.equal(child.workspaceId, null);
-  assert.equal(registry.workspacePath(root.id), undefined);
-  assert.deepEqual(
-    registry.list(null).map(({ id }) => id),
-    [root.id, child.id],
-  );
-  registry
-    .log(root.id)
-    .append({ type: 'message', message: { role: 'user', content: 'Unbound', timestamp: 1 } });
-  assert.equal(registry.history(root.id).messages.length, 1);
-  assert.deepEqual(new Set(await registry.delete([root.id])), new Set([root.id, child.id]));
-});
-
-test('the session registry needs no workspace provider', async (t) => {
-  const { paths, registry: previous } = fixture(t);
-  previous.dispose();
-  const registry = new SessionRegistry(paths);
-  t.after(() => registry.dispose());
-  const session = registry.create();
-  assert.equal(session.workspaceId, null);
-  registry
-    .log(session.id)
-    .append({ type: 'message', message: { role: 'user', content: 'Standalone', timestamp: 1 } });
-  assert.equal(registry.history(session.id).messages[0].content, 'Standalone');
-  assert.deepEqual(await registry.delete([session.id]), [session.id]);
-});
-
-test('public session logs expose record operations but not the writer lifecycle', (t) => {
-  const { registry } = fixture(t);
-  const session = registry.create();
-  const log = registry.log(session.id);
-  assert.equal('close' in log, false);
-  assert.equal('file' in log, false);
-  registry.inspectLog(session.id, (view) => {
-    assert.equal('close' in view, false);
-    assert.equal('file' in view, false);
-  });
-  log.append({ type: 'message', message: { role: 'user', content: 'Still writable', timestamp: 1 } });
-  assert.equal(registry.history(session.id).messages[0].content, 'Still writable');
 });

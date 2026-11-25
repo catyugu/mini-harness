@@ -184,6 +184,17 @@ export class PluginCatalog {
     };
   }
 
+  /** Disabled entries with a known schema can still reject malformed input without mounting. */
+  validateDisabled(descriptors: ResolvedPlugin[], previous: ProfileConfiguration) {
+    for (const descriptor of descriptors) {
+      const { id, scopeAddress } = descriptor;
+      const before = scopeAddress ? previous.scopes[scopeAddress]?.entries?.[id] : previous.entries[id];
+      const { configuration } = descriptor;
+      if (configuration.disabled && !isDeepStrictEqual(before?.config, configuration.config))
+        this.configValues(descriptor, configuration.config);
+    }
+  }
+
   plans(
     descriptors: ResolvedPlugin[],
     scopeAddress?: ScopeAddress,
