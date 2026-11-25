@@ -53,6 +53,13 @@ export function createRightTabs(
     (current()?.tabs ?? []).filter((tab) => !tab.owner.sessionId || tab.owner.sessionId === scope?.sessionId);
   const home = document.createElement('div');
   home.className = 'right-start';
+  const menu = document.createElement('div');
+  menu.className = 'right-start-menu';
+  home.append(menu);
+  const homeTitle = document.createElement('span');
+  homeTitle.className = 'right-start-title';
+  homeTitle.append(icon('compass'), 'Start');
+  view.bar.before(homeTitle);
 
   function render(focus = false) {
     const tabs = visible();
@@ -85,13 +92,15 @@ export function createRightTabs(
     );
     if (tabs.length) view.bar.append(start);
     home.hidden = Boolean(active);
+    homeTitle.hidden = Boolean(active);
     const selectedScope = scope;
-    home.replaceChildren(
+    menu.replaceChildren(
+      ...(selectedScope && entries.size ? [icon('compass')] : []),
       ...(selectedScope
         ? [...entries]
             .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
             .map((entry) => {
-              const card = button('', 'quiet');
+              const card = button('');
               const label = document.createElement('span');
               const title = document.createElement('strong');
               title.textContent = entry.title;
