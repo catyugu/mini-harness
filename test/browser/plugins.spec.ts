@@ -3,7 +3,7 @@ import { rmSync, mkdirSync, realpathSync, writeFileSync, cpSync } from 'node:fs'
 import { join, resolve } from 'node:path';
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.ts';
 import { workspaceId } from '@mini-harness/workspaces/catalog';
-import { readJson, writeJson } from '@mini-harness/platform/json';
+import { writeJson } from '@mini-harness/platform/json';
 import { readWebProfile, startIsolatedHost, settingsSection, suggestions } from '../support/browser.ts';
 
 test('frontend plugins own UI contributions and clean up on disable and reconfiguration', async ({
@@ -103,8 +103,12 @@ export function apply(ctx) {
   }
 `,
   );
-  const settings = readJson<any>(paths.settings, {});
-  writeJson(paths.settings, { ...settings, plugins: { 'ui-example': true, 'a-dependent': true } });
+  writeJson(join(paths.home, 'profiles', 'web', 'cordis.patch.yml'), {
+    plugins: [
+      { id: 'ui-example', name: '../../plugins/ui-example', client: true },
+      { id: 'a-dependent', name: '../../plugins/a-dependent', client: true },
+    ],
+  });
   const service = await startIsolatedHost(paths);
   try {
     await page.goto(service.url + '/#token=' + service.token);
@@ -352,7 +356,6 @@ test('the Plugins page keeps stored settings when a workspace plugin setup fails
   );
   const key = 'workspace:' + workspaceId(realpathSync.native(paths.cwd));
   const initial = {
-    ...readJson<Record<string, unknown>>(paths.settings, {}),
     scopes: {
       [key]: {
         plugins: { 'workspace-example': true },
@@ -360,7 +363,7 @@ test('the Plugins page keeps stored settings when a workspace plugin setup fails
       },
     },
   };
-  writeJson(paths.settings, initial);
+  writeJson(join(paths.home, 'profiles', 'web', 'cordis.patch.yml'), initial);
   const service = await startIsolatedHost(paths);
   try {
     await page.goto(service.url + '/#token=' + service.token);
@@ -422,12 +425,16 @@ export const apply = (ctx) => {
 `,
     );
     cpSync(resolve('dist/docs/examples/browser-panel'), join(paths.plugins, 'browser-panel'), { recursive: true });
-    writeJson(paths.settings, {
-      pluginConfig: {
-        'core:models': { model: { provider: 'local-mock', id: 'mock-model' } },
-        'browser-panel': { replaceComposer: true },
-      },
-      plugins: { 'replace-new': true, 'browser-panel': true },
+    writeJson(join(paths.home, 'profiles', 'web', 'cordis.patch.yml'), {
+      plugins: [
+        { id: 'replace-new', name: '../../plugins/replace-new', client: true },
+        {
+          id: 'browser-panel',
+          name: '../../plugins/browser-panel',
+          client: true,
+          config: { replaceComposer: true },
+        },
+      ],
     });
     server = await startIsolatedHost(paths);
     await page.goto(server.url + '/#token=' + server.token);

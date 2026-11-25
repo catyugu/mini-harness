@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -34,7 +34,7 @@ test('YAML Profile composes through Cordis and persists Web entry changes', asyn
     assert.equal(web.ctx.harnessProfile.entries.get('core:layout'), undefined);
     assert.ok(web.ctx.harnessPluginCatalog.browser().some(({ id }) => id === 'core:layout'));
     assert.ok(!web.ctx.harnessPluginCatalog.browser().some(({ id }) => id === 'git-diff'));
-    assert.doesNotMatch(readFileSync(paths.settings, 'utf8'), /pluginConfig|providers|"plugins"/);
+    assert.equal(existsSync(paths.settings), false);
     await web.ctx.harnessSettingsStore.update({ plugins: { 'core:layout': false } });
     assert.ok(!web.ctx.harnessPluginCatalog.browser().some(({ id }) => id === 'core:layout'));
     await web.ctx.harnessSettingsStore.update({ plugins: { 'core:layout': true } });

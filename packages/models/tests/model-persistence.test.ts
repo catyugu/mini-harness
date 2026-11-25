@@ -16,9 +16,6 @@ test('recent main model survives child overrides and a restart through the nativ
     id: 'second-model',
   });
   writeJson(join(paths.home, 'models.json'), config);
-  writeJson(paths.settings, {
-    pluginConfig: { 'core:models': { model: { provider: 'local-mock', id: 'mock-model' } } },
-  });
   let runtime = new MiniHarnessRuntime(paths);
   t.after(async () => {
     await runtime.stop();

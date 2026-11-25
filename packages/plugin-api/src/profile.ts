@@ -17,7 +17,6 @@ export interface ProfileRuntime {
   client(id: string): boolean;
   read(): ProfileConfiguration;
   commit(settings: ProfileConfiguration): void;
-  finishMigration(): void;
   close(): Promise<void>;
 }
 

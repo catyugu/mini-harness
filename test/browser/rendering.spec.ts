@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.ts';
 import { join } from 'node:path';
-import { readJson, writeJson } from '@mini-harness/platform/json';
+import { writeJson } from '@mini-harness/platform/json';
 import { startIsolatedHost } from '../support/browser.ts';
 import { writePlugin } from '../support/plugin-fixture.ts';
 
@@ -59,7 +59,9 @@ export const apply = (ctx) => {
     };
 `,
   );
-  writeJson(paths.settings, { ...readJson(paths.settings, {}), plugins: { 'bad-renderer': true } });
+  writeJson(join(paths.home, 'profiles', 'web', 'cordis.patch.yml'), {
+    plugins: [{ id: 'bad-renderer', name: '../../plugins/bad-renderer', client: true }],
+  });
   const failures: string[] = [],
     unhandled: string[] = [];
   page.on('console', (message) => {
@@ -171,7 +173,9 @@ export const apply = (ctx) => {
     };
 `,
   );
-  writeJson(paths.settings, { ...readJson(paths.settings, {}), plugins: { 'stream-observer': true } });
+  writeJson(join(paths.home, 'profiles', 'web', 'cordis.patch.yml'), {
+    plugins: [{ id: 'stream-observer', name: '../../plugins/stream-observer', client: true }],
+  });
   const reported: string[] = [];
   page.on('console', (message) => {
     if (message.type() === 'error' && message.text().includes('broken history subscriber'))

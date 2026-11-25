@@ -17,10 +17,8 @@ test('plugin schema controls, recursive tree navigation, batch export and perman
     return 'Leaf result';
   });
   const { root, paths } = createFixturePaths(mock.url);
-  const settings = readJson<any>(paths.settings, {});
-  writeJson(paths.settings, {
-    ...settings,
-    pluginConfig: { ...settings.pluginConfig, subagents: { maxDepth: 2, maxParallel: 1, model: null } },
+  writeJson(join(paths.home, 'profiles', 'web', 'cordis.patch.yml'), {
+    plugins: [{ id: 'subagents', config: { maxDepth: 2, maxParallel: 1, model: null } }],
   });
   const folder = join(paths.plugins, 'example');
   mkdirSync(folder);

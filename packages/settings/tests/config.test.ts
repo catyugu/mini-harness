@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DEFAULTS, mergeSettings, readSettings, validateSettings } from '../src/server/config.ts';
+import { DEFAULTS, mergeSettings, validateSettings } from '../src/server/config.ts';
 import { getPaths } from '@mini-harness/platform/paths';
 
 test('config directories are independent and default safe', () => {
@@ -11,8 +11,6 @@ test('config directories are independent and default safe', () => {
   try {
     const paths = getPaths(folder, { MINI_HARNESS_HOME: join(folder, 'home') });
     assert.ok(paths.sessions.startsWith(paths.home));
-    assert.deepEqual(readSettings(paths).plugins, {});
-    assert.deepEqual(readSettings(paths).pluginConfig, {});
   } finally {
     rmSync(folder, { recursive: true, force: true });
   }

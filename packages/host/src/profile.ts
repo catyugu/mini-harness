@@ -9,7 +9,7 @@ import type { Paths } from '@mini-harness/platform/runtime-paths';
 import type { ResolvedPlugin, PluginInfo } from '@mini-harness/plugin-api/descriptor';
 import { PluginCatalog } from '@mini-harness/plugins/catalog';
 import { bindPluginImports, resolveModule } from '@mini-harness/plugins/module-resolution';
-import { isScopeKey, localPluginIdPattern, pluginIdPattern } from '@mini-harness/plugin-api/selection';
+import { localPluginIdPattern, pluginIdPattern } from '@mini-harness/plugin-api/selection';
 import type { ProfileConfiguration, ProfileRuntime } from '@mini-harness/plugin-api/profile';
 import { parseSettings } from '@mini-harness/settings/config';
 
@@ -62,9 +62,8 @@ export function initializeProfile(name: string, paths: Paths, bundles: readonly 
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   const root = join(directory, ROOT);
   const patch = join(directory, PATCH);
-  // Before Profiles were packages, the user configuration lived in cordis.yml.
-  // Move it to the user patch before writing the package manifest.
-  if (!existsSync(patch)) writeText(patch, existsSync(root) ? readFileSync(root, 'utf8') : 'plugins: []\n');
+  if (existsSync(root) || existsSync(patch)) throw new Error('Profile directory already contains configuration: ' + name);
+  writeText(patch, 'plugins: []\n');
   writeText(root, 'plugins: []\n');
   writeJson(manifest, {
     name: 'mini-harness-profile-' + name.toLowerCase(),
@@ -382,51 +381,20 @@ export async function loadProfile(
         return [row.id, { name, source }];
       }),
   );
-  const { legacy: previousSettings, product, scopedTools, migration: pendingMigration, raw } =
-    legacySettings(paths);
-  const legacy = name === 'web' ? previousSettings : parseSettings({});
-  const migration = name === 'web' && pendingMigration;
+  const policy = readJson<{ readOnlyTools?: unknown; scopedTools?: unknown }>(paths.settings, {});
+  const scopedTools = object(policy.scopedTools) ? policy.scopedTools : {};
   function configurationFor(selected: ReadonlyMap<string, ResolvedRow>, selectedLayers: readonly Layer[]) {
-    const overrides = {
-      plugins: Object.fromEntries(
-        [...selected.values()].map((row) => [row.id, !row.disabled]),
-      ),
+    return parseSettings({
+      plugins: Object.fromEntries([...selected.values()].map((row) => [row.id, !row.disabled])),
       pluginConfig: Object.fromEntries(
         [...selected.values()]
           .filter((row) => Object.keys(row.config ?? {}).length)
-          .map((row) => [row.id, { ...row.config, ...legacy.pluginConfig[row.id] }]),
+          .map((row) => [row.id, row.config]),
       ),
-      scopes: legacy.scopes,
-    };
-    Object.assign(overrides.plugins, legacy.plugins);
-    for (const [id, config] of Object.entries(legacy.pluginConfig))
-      overrides.pluginConfig[id] ??= config;
-    for (const layer of selectedLayers)
-      for (const row of layer.plugins ?? []) {
-        if (row.disabled !== undefined) overrides.plugins[row.id] = !row.disabled;
-        if (row.config) overrides.pluginConfig[row.id] = { ...overrides.pluginConfig[row.id], ...row.config };
-      }
-    const configuredPort = selected.get('core:web-server')?.config?.port;
-    const effective = parseSettings({
-      ...product,
-      ...overrides,
-      port: configuredPort ?? legacy.port,
-      scopes: withToolRules(Object.assign({}, ...shipped, ...selectedLayers).scopes ?? overrides.scopes, scopedTools),
+      port: selected.get('core:web-server')?.config?.port,
+      readOnlyTools: policy.readOnlyTools,
+      scopes: withToolRules(Object.assign({}, ...shipped, ...selectedLayers).scopes ?? {}, scopedTools),
     });
-    if (
-      migration &&
-      configuredPort !== undefined &&
-      !selectedLayers.some((layer) => layer.plugins?.some((row) => row.id === 'core:web-server' && row.config?.port !== undefined))
-    ) {
-      effective.port = legacy.port;
-      if (selected.has('core:web-server')) {
-        effective.pluginConfig['core:web-server'] = {
-          ...effective.pluginConfig['core:web-server'],
-          port: legacy.port,
-        };
-      }
-    }
-    return effective;
   }
   let persistent = configurationFor(persistentRows, userLayers);
   const effective = overlays.length
@@ -449,11 +417,10 @@ export async function loadProfile(
   const imports = bindPluginImports(roots);
   const entries = new EntryTree();
   let current = effective;
-  let migrate = migration;
   function commit(runtime: ProfileConfiguration) {
     const settings = overlays.length
       ? parseSettings(changedValues(persistent, current, runtime))
-      : runtime;
+      : structuredClone(runtime);
     for (const id of resolved.keys()) {
       if (persistentRows.has(id)) continue;
       delete settings.plugins[id];
@@ -505,18 +472,15 @@ export async function loadProfile(
       scopes,
     };
     const text = stringify(next);
-    // The YAML commit happens before removing legacy settings, so a crash is recoverable
-    // from the YAML layer. Ordinary product settings are saved only when they change.
+    // Domain tool policy is stored separately from the Profile configuration.
     const previous = readProfileText(file);
     if (previous !== text) writeText(file, text);
     const domain = {
-      ...(pendingMigration && name !== 'web' ? raw : {}),
       readOnlyTools: settings.readOnlyTools,
       scopedTools: rules,
     };
     try {
       if (
-        migrate ||
         !isDeepStrictEqual(persistent.readOnlyTools, settings.readOnlyTools) ||
         !isDeepStrictEqual(scopedRules(persistent.scopes), rules)
       )
@@ -526,7 +490,6 @@ export async function loadProfile(
       else if (previous !== text) writeText(file, previous);
       throw error;
     }
-    migrate = false;
     for (const id of aliases.keys())
       if (!Object.hasOwn(runtime.plugins, id) && !Object.hasOwn(runtime.pluginConfig, id))
         aliases.delete(id);
@@ -558,9 +521,6 @@ export async function loadProfile(
     },
     read: () => current,
     commit,
-    finishMigration() {
-      if (migrate) commit(current);
-    },
     async close() {
       try {
         await entries.close();
@@ -603,16 +563,3 @@ function withToolRules(scopes: ProfileConfiguration['scopes'], rules: Record<str
   };
 }
 
-function legacySettings(paths: Paths) {
-  const raw = readJson<Record<string, unknown>>(paths.settings, {});
-  const migration = ['plugins', 'pluginConfig', 'providers', 'scopes', 'port'].some(
-    (key) => Object.hasOwn(raw, key),
-  );
-  if (object(raw.providers) && Object.keys(raw.providers).length)
-    throw new Error('Plugin provider selections are no longer supported. Enable the desired entries and disable conflicting entries in the Profile.');
-  const legacy = parseSettings(raw);
-  const scopedTools = object(raw.scopedTools) ? raw.scopedTools : scopedRules(legacy.scopes);
-  if (Object.keys(scopedTools).some((key) => !isScopeKey(key)))
-    throw new Error('Invalid scoped tool settings');
-  return { raw, migration, legacy, scopedTools, product: { readOnlyTools: legacy.readOnlyTools } };
-}

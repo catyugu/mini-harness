@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getPaths, ensurePaths } from '@mini-harness/platform/paths';
 import { writeJson } from '@mini-harness/platform/json';
+import { initializeProfile, WEB_BUNDLES } from '@mini-harness/host/profile';
 
 export interface MockProvider {
   url: string;
@@ -131,8 +132,15 @@ export function createFixturePaths(mockUrl: string) {
       },
     },
   });
-  writeJson(paths.settings, {
-    pluginConfig: { 'core:models': { model: { provider: 'local-mock', id: 'mock-model' } } },
+  const profile = initializeProfile('web', paths, WEB_BUNDLES);
+  writeJson(join(profile, 'cordis.yml'), {
+    plugins: [
+      {
+        id: 'core:models',
+        name: '@mini-harness/models',
+        config: { model: { provider: 'local-mock', id: 'mock-model' } },
+      },
+    ],
   });
   return { root, paths };
 }

@@ -85,7 +85,4 @@ The Web Plugins page edits the user patch, including ordinary module entries.
 Changes to services currently executing the configuration transaction require a
 Profile restart. Scoped overrides and the installed bundle
 format remain described in [scoped providers](scoped-providers.md) and
-[plugins](plugins.md). The package layout migration moves the old Web
-`cordis.yml` user configuration into `cordis.patch.yml` before creating the
-manifest. Session data, credentials and plugin data remain in their existing
-locations.
+[plugins](plugins.md). The Profile package must be initialized explicitly or by the first Web launch. Only YAML layers define plugin configuration; `settings.json` contains domain tool policy. Session data, credentials and plugin data remain in their existing locations.

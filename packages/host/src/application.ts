@@ -35,7 +35,6 @@ export async function bootProfile(name: string, paths: Paths, launch: LaunchOpti
     if (name === 'web' && !ctx.get('harnessWeb'))
       throw new Error('The Web Profile requires an available HTTP server');
     await ctx.parallel('harness/open');
-    profile.finishMigration();
   } catch (error) {
     await close();
     const issues =

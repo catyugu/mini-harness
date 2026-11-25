@@ -1,5 +1,4 @@
 import { DomainError } from '@mini-harness/platform/errors';
-import type { Paths } from '@mini-harness/platform/runtime-paths';
 import type { Settings } from '../shared/settings.ts';
 import {
   localPluginIdPattern,
@@ -7,7 +6,6 @@ import {
   validatePluginSettings,
 } from '@mini-harness/plugin-api/selection';
 import { toolNamePattern } from '@mini-harness/llm/vocabulary';
-import { readJson } from '@mini-harness/platform/json';
 
 export const DEFAULTS = Object.freeze({
   port: 3837,
@@ -64,10 +62,6 @@ export function validateSettings(input: unknown): asserts input is Settings {
   }
   if (typeof port !== 'number' || !Number.isInteger(port) || port < 1024 || port > 65535)
     throw new DomainError('invalid_input', 'Invalid port');
-}
-
-export function readSettings(paths: Paths): Settings {
-  return parseSettings(readJson<unknown>(paths.settings, {}));
 }
 
 export function parseSettings(input: unknown): Settings {

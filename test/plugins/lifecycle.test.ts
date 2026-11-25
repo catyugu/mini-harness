@@ -9,7 +9,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { join } from 'node:path';
 import { MiniHarnessRuntime, storedProfile } from '../support/profile.ts';
 import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.ts';
-import { DEFAULTS, mergeSettings, readSettings } from '@mini-harness/settings/config';
+import { DEFAULTS, mergeSettings } from '@mini-harness/settings/config';
 import { writeJson } from '@mini-harness/platform/json';
 
 import { Context } from 'mini-harness/cordis';
@@ -434,11 +434,8 @@ test('disabled optional builtins cannot block boot or reload because their confi
     await mock.close();
     rmSync(root, { recursive: true, force: true });
   });
-  const settings = readSettings(paths);
-  writeJson(paths.settings, {
-    ...settings,
-    plugins: { subagents: false },
-    pluginConfig: { ...settings.pluginConfig, subagents: { maxDepth: 100 } },
+  writeJson(join(paths.home, 'profiles', 'web', 'cordis.patch.yml'), {
+    plugins: [{ id: 'subagents', disabled: true, config: { maxDepth: 100 } }],
   });
   const restored = new MiniHarnessRuntime(paths);
   t.after(() => restored.stop());
@@ -480,7 +477,9 @@ test('an optional plugin that fails at startup reports its state without blockin
   writeFileSync(join(folder, 'plugin.js'), "export default () => { throw new Error('Startup failed'); };");
   writeFileSync(join(folder, 'web.js'), 'export default () => {};');
   writeFileSync(join(folder, 'plugin.json'), JSON.stringify({}));
-  writeJson(paths.settings, { ...readSettings(paths), plugins: { 'fails-to-start': true } });
+  writeJson(join(paths.home, 'profiles', 'web', 'cordis.patch.yml'), {
+    plugins: [{ id: 'fails-to-start', name: '../../plugins/fails-to-start', client: true }],
+  });
   const restarted = new MiniHarnessRuntime(paths);
   t.after(async () => {
     await restarted.stop();

@@ -80,10 +80,12 @@ export const apply = (ctx) => {
         };
 `,
       );
-      const settings = readJson<Record<string, unknown>>(paths.settings, {});
-      writeJson(paths.settings, {
-        ...settings,
-        plugins: { 'old-editor': true, 'new-editor': true, 'record-writer': true },
+      writeJson(join(paths.home, 'profiles', 'web', 'cordis.patch.yml'), {
+        plugins: [
+          { id: 'old-editor', name: '../../plugins/old-editor', client: true },
+          { id: 'new-editor', name: '../../plugins/new-editor', client: true },
+          { id: 'record-writer', name: '../../plugins/record-writer' },
+        ],
       });
     },
   });
