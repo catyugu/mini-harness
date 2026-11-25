@@ -122,5 +122,11 @@ export function setup(ctx: Context) {
         }
       },
     });
-  ctx.effect(() => ctx.harnessTools.register({ name: 'sandbox_shell', resolve: tool, visible: (id) => Boolean(workspace.get(id)?.workspaceId) }));
+  ctx.effect(() =>
+    ctx.harnessTools.register({
+      name: 'sandbox_shell',
+      resolve: tool,
+      visible: (id) => Boolean(workspace.get(id)?.workspaceId),
+    }),
+  );
 }

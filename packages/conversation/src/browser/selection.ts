@@ -12,13 +12,19 @@ export class Selection extends EventTarget {
   }
 
   reconcileWorkspace(workspaces: WorkspaceRecord[]) {
-    if (!(this.activeConversation && this.selectedWorkspace === undefined) && !workspaces.some(({ id }) => id === this.selectedWorkspace)) this.selectWorkspace(workspaces[0]?.id);
+    if (
+      !(this.activeConversation && this.selectedWorkspace === undefined) &&
+      !workspaces.some(({ id }) => id === this.selectedWorkspace)
+    )
+      this.selectWorkspace(workspaces[0]?.id);
     this.changed();
   }
 
   initialConversation(sessions: Conversation[], workspaces: WorkspaceRecord[]) {
     const remembered = sessionStorage.getItem('mini-harness-active');
-    const available = sessions.filter(({ workspaceId }) => workspaceId === null || workspaces.some(({ id }) => id === workspaceId));
+    const available = sessions.filter(
+      ({ workspaceId }) => workspaceId === null || workspaces.some(({ id }) => id === workspaceId),
+    );
     return (
       available.find(({ id }) => id === remembered) ??
       available.find(({ parentId, workspaceId }) => !parentId && workspaceId === this.selectedWorkspace) ??

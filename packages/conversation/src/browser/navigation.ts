@@ -258,26 +258,26 @@ export function sessionNavigation(ctx: Context, options: NavigationServices) {
     }
     function sessionBranch(items: Conversation[], matches: boolean) {
       return sessionTree(items, {
-      active: state.activeConversation,
-      expanded,
-      selection,
-      selecting,
-      query: matches ? '' : query,
-      highlight: query,
-      matches: contentMatches,
-      render,
-      selectionChanged,
-      activate: options.activate,
-      rename,
-      remove(item) {
-        void confirmAction('Permanently delete "' + item.title + '" and all child conversations?', {
-          title: 'Delete conversation',
-          signal,
-        })
-          .then((confirmed) => (confirmed ? remove([item.id]) : undefined))
-          .catch(options.report);
-      },
-    });
+        active: state.activeConversation,
+        expanded,
+        selection,
+        selecting,
+        query: matches ? '' : query,
+        highlight: query,
+        matches: contentMatches,
+        render,
+        selectionChanged,
+        activate: options.activate,
+        rename,
+        remove(item) {
+          void confirmAction('Permanently delete "' + item.title + '" and all child conversations?', {
+            title: 'Delete conversation',
+            signal,
+          })
+            .then((confirmed) => (confirmed ? remove([item.id]) : undefined))
+            .catch(options.report);
+        },
+      });
     }
     function workspaceBranch(parent?: string) {
       const list = document.createElement('ul');
@@ -421,7 +421,9 @@ export function sessionNavigation(ctx: Context, options: NavigationServices) {
       workspaces = workspaceStore.get();
     const registered = new Set(workspaces.map(({ id }) => id));
     const available = new Set(
-      sessions.filter(({ workspaceId }) => (workspaceId === null || registered.has(workspaceId))).map(({ id }) => id),
+      sessions
+        .filter(({ workspaceId }) => workspaceId === null || registered.has(workspaceId))
+        .map(({ id }) => id),
     );
     for (const id of selection) if (!available.has(id)) selection.delete(id);
     const active = sessions.find(({ id }) => id === state.activeConversation);
