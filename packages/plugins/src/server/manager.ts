@@ -286,7 +286,9 @@ export class PluginHost implements ProfileScopes, ProfileConfigurationPort {
     if (this.closing) throw new DomainError('unavailable', 'Profile configuration is closing');
     const ancestry = this.ancestry(key);
     if (!ancestry.length) throw new DomainError('not_found', 'Plugin scope not found: ' + key);
-    await waitFor(this.entries.settle(ancestry.map((address) => '@scope/' + address)), signal);
+    const entries = ancestry.filter((address) => hasComposition(this.settings.scopes[address]));
+    if (entries.length)
+      await waitFor(this.entries.settle(entries.map((address) => '@scope/' + address)), signal);
   }
 
   private scopedEntries(

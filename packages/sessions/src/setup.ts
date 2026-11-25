@@ -1,6 +1,7 @@
 import { observe } from '@mini-harness/plugin-api/observations';
 import type { Context } from 'mini-harness/cordis';
 import { SessionRegistry } from './registry.ts';
+import type { SessionRecord } from './shared/identity.ts';
 
 export function setup(ctx: Context) {
   const registry = new SessionRegistry(
@@ -10,28 +11,31 @@ export function setup(ctx: Context) {
     (keys) => ctx.harnessProfileConfig.forgetScopes(keys),
   );
   const scopes = new Map<string, () => void>();
-  const syncScope = (id: string) => {
-    const record = registry.get(id);
-    if (!record) {
-      scopes.get(id)?.();
-      scopes.delete(id);
-    } else if (!scopes.has(id)) {
-      scopes.set(
-        id,
-        ctx.harnessProfileScopes.register(ctx, `session:${id}`, {
-          key: registry.scope(id)!,
-          parent: record.parentId
-            ? `session:${record.parentId}`
-            : record.workspaceId
-              ? `workspace:${record.workspaceId}`
-              : undefined,
-        }),
-      );
-    }
+  const publishScope = (record: SessionRecord) => {
+    scopes.set(
+      record.id,
+      ctx.harnessProfileScopes.register(ctx, `session:${record.id}`, {
+        key: registry.scope(record.id)!,
+        parent: record.parentId
+          ? `session:${record.parentId}`
+          : record.workspaceId
+            ? `workspace:${record.workspaceId}`
+            : undefined,
+      }),
+    );
   };
-  for (const { id } of registry.list()) syncScope(id);
+  for (const record of registry.list()) publishScope(record);
   ctx.effect(() => {
-    const changed = (event: Event) => syncScope((event as CustomEvent<{ id: string }>).detail.id);
+    const changed = (event: Event) => {
+      const { id, deleted } = (event as CustomEvent<{ id: string; deleted: boolean }>).detail;
+      if (deleted) {
+        scopes.get(id)?.();
+        scopes.delete(id);
+      } else if (!scopes.has(id)) {
+        const record = registry.get(id);
+        if (record) publishScope(record);
+      }
+    };
     registry.events.addEventListener('change', changed);
     return () => registry.events.removeEventListener('change', changed);
   });
