@@ -17,11 +17,7 @@ import type { SessionRecord } from './shared/identity.ts';
 
 export const missing = (error: unknown) => (error as NodeJS.ErrnoException).code === 'ENOENT';
 
-export function sessionDirectory(
-  paths: Paths,
-  workspaceId: string | null,
-  create = true,
-) {
+export function sessionDirectory(paths: Paths, workspaceId: string | null, create = true) {
   if (workspaceId !== null && !/^[a-f0-9]{32}$/.test(workspaceId))
     throw new Error('Invalid workspace identity');
   const expected = join(paths.home, 'sessions', workspaceId?.slice(0, 16) ?? 'unbound');
@@ -66,11 +62,7 @@ export function checkedStoredFile(
   return file;
 }
 
-export function nativeFile(
-  paths: Paths,
-  record: Pick<SessionRecord, 'id' | 'workspaceId'>,
-  create = true,
-) {
+export function nativeFile(paths: Paths, record: Pick<SessionRecord, 'id' | 'workspaceId'>, create = true) {
   if (!/^[a-f0-9-]{36}$/i.test(record.id)) throw new Error('Invalid conversation ID');
   return checkedStoredFile(
     paths,

@@ -214,8 +214,13 @@ test('a conversation can own history and descendants without a workspace', async
   const child = registry.create({ parentId: root.id });
   assert.equal(child.workspaceId, null);
   assert.equal(registry.workspacePath(root.id), undefined);
-  assert.deepEqual(registry.list(null).map(({ id }) => id), [root.id, child.id]);
-  registry.log(root.id).append({ type: 'message', message: { role: 'user', content: 'Unbound', timestamp: 1 } });
+  assert.deepEqual(
+    registry.list(null).map(({ id }) => id),
+    [root.id, child.id],
+  );
+  registry
+    .log(root.id)
+    .append({ type: 'message', message: { role: 'user', content: 'Unbound', timestamp: 1 } });
   assert.equal(registry.history(root.id).messages.length, 1);
   assert.deepEqual(new Set(await registry.delete([root.id])), new Set([root.id, child.id]));
 });

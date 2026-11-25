@@ -19,7 +19,9 @@ export function setup(ctx: Context) {
           key,
           parent: record.parentId
             ? `session:${record.parentId}`
-            : record.workspaceId ? `workspace:${record.workspaceId}` : undefined,
+            : record.workspaceId
+              ? `workspace:${record.workspaceId}`
+              : undefined,
         }
       );
     }),
