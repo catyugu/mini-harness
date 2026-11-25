@@ -62,7 +62,8 @@ export const apply = (ctx) => {
   assert.match(await prompt(child.id), /\[Plan\]\s+\[Extra\]\s+\[Child status\]/);
   assert.match(await prompt(sibling.id), /\[Plan\]\s+\[Extra\]\s+\[App status\]/);
   assert.equal(
-    (await request('/settings', 'PATCH', { entries: { 'more-prompt': { disabled: true } }, scopes: {} })).status,
+    (await request('/settings', 'PATCH', { entries: { 'more-prompt': { disabled: true } }, scopes: {} }))
+      .status,
     200,
   );
   assert.match(await prompt(child.id), /\[Plan\]\s+\[App status\]/);
@@ -108,7 +109,11 @@ export const apply = (ctx) => {
 `,
   );
   assert.equal(
-    (await request('/settings', 'PATCH', { entries: { 'input-z': { disabled: false }, 'input-a': { disabled: false } } })).status,
+    (
+      await request('/settings', 'PATCH', {
+        entries: { 'input-z': { disabled: false }, 'input-a': { disabled: false } },
+      })
+    ).status,
     200,
   );
   const { plugins } = app.runtime;
@@ -221,8 +226,11 @@ export const apply = (ctx) => {
   );
   const { harnessModels: models, harnessModelStore: store } = app.runtime.plugins.ctx;
   const configured = await request('/settings', 'PATCH', {
-    entries: { 'core:llm': { disabled: true }, transport: { disabled: false }, pipeline: { disabled: false } },
-
+    entries: {
+      'core:llm': { disabled: true },
+      transport: { disabled: false },
+      pipeline: { disabled: false },
+    },
   });
   assert.equal(configured.status, 200, JSON.stringify(configured.body));
   assert.equal(app.runtime.plugins.ctx.harnessModels, models);
@@ -290,8 +298,11 @@ export const apply = (ctx) => {
   assert.equal(
     (
       await request('/settings', 'PATCH', {
-        entries: { 'core:llm': { disabled: false }, transport: { disabled: true }, pipeline: { disabled: true } },
-
+        entries: {
+          'core:llm': { disabled: false },
+          transport: { disabled: true },
+          pipeline: { disabled: true },
+        },
       })
     ).status,
     200,
@@ -324,7 +335,10 @@ export const apply = (ctx) => {
   };
 `,
   );
-  assert.equal((await request('/settings', 'PATCH', { entries: { redaction: { disabled: false } } })).status, 200);
+  assert.equal(
+    (await request('/settings', 'PATCH', { entries: { redaction: { disabled: false } } })).status,
+    200,
+  );
   const session = app.runtime.plugins.ctx.harnessRegistry.create();
   const events: unknown[] = [];
   await assert.rejects(
@@ -355,7 +369,10 @@ export const apply = (ctx) => {
   };
 `,
   );
-  assert.equal((await request('/settings', 'PATCH', { entries: { 'invalid-request': { disabled: false } } })).status, 200);
+  assert.equal(
+    (await request('/settings', 'PATCH', { entries: { 'invalid-request': { disabled: false } } })).status,
+    200,
+  );
   const session = app.runtime.plugins.ctx.harnessRegistry.create();
   await assert.rejects(
     app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Use this request'),
@@ -419,7 +436,10 @@ export const apply = (ctx) => {
   };
 `,
     );
-    assert.equal((await request('/settings', 'PATCH', { entries: { 'slow-transform': { disabled: false } } })).status, 200);
+    assert.equal(
+      (await request('/settings', 'PATCH', { entries: { 'slow-transform': { disabled: false } } })).status,
+      200,
+    );
     const session = app.runtime.plugins.ctx.harnessRegistry.create();
     const run = app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Keep the active hook');
     await started;
@@ -434,7 +454,10 @@ export const apply = (ctx) => {
       release();
     }
     await run;
-    assert.equal((await request('/settings', 'PATCH', { entries: { 'slow-transform': { disabled: true } } })).status, 200);
+    assert.equal(
+      (await request('/settings', 'PATCH', { entries: { 'slow-transform': { disabled: true } } })).status,
+      200,
+    );
     assert.equal(state.cleaned, true);
   },
 );
@@ -458,7 +481,10 @@ export function apply(ctx) {
   const other = app.runtime.plugins.ctx.harnessRegistry.create();
   const child = app.runtime.plugins.ctx.harnessRegistry.create({ parentId: selected.id });
   const toggle = (scopes: unknown) => request('/settings', 'PATCH', { scopes });
-  assert.equal((await toggle({ ['session:' + selected.id]: { entries: { policy: { disabled: false } } } })).status, 200);
+  assert.equal(
+    (await toggle({ ['session:' + selected.id]: { entries: { policy: { disabled: false } } } })).status,
+    200,
+  );
   await app.runtime.plugins.prepare(`session:${child.id}`);
   const tools = app.runtime.plugins.ctx.harnessTools;
   const call = (id: string) =>

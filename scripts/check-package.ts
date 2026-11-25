@@ -115,13 +115,19 @@ async function checkPackage() {
     assert.ok(!Object.hasOwn(publicExports, './plugin') && !Object.hasOwn(publicExports, './browser-plugin'));
     for (const target of Object.values(publicExports)) {
       for (const path of [target.types, target.default])
-        assert.ok(files.some((file) => file.path === path.slice(2)), 'Missing public module: ' + path);
+        assert.ok(
+          files.some((file) => file.path === path.slice(2)),
+          'Missing public module: ' + path,
+        );
     }
     for (const { path } of files.filter(({ path }) => /\.(?:js|d\.ts)$/.test(path))) {
       const emitted = await readFile(join(published, path), 'utf8');
       const source = ts.createSourceFile(path, emitted, ts.ScriptTarget.Latest, true);
       for (const { literal } of moduleReferences(source))
-        assert.ok(!literal.text.startsWith('@mini-harness/'), path + ' depends on a private workspace: ' + literal.text);
+        assert.ok(
+          !literal.text.startsWith('@mini-harness/'),
+          path + ' depends on a private workspace: ' + literal.text,
+        );
     }
     await execFile(
       process.execPath,
@@ -265,8 +271,19 @@ async function checkPackage() {
       cwd: plugin,
     });
     await cli('web', '--dump-config');
-    const pluginPack = parseNpmPackResult((await npm(['pack', '--json', '--pack-destination', work], { cwd: plugin })).stdout);
-    await cli('plugin', '--profile', 'web', 'add', join(work, pluginPack.filename), '--legacy-peer-deps', '--no-audit', '--no-fund');
+    const pluginPack = parseNpmPackResult(
+      (await npm(['pack', '--json', '--pack-destination', work], { cwd: plugin })).stdout,
+    );
+    await cli(
+      'plugin',
+      '--profile',
+      'web',
+      'add',
+      join(work, pluginPack.filename),
+      '--legacy-peer-deps',
+      '--no-audit',
+      '--no-fund',
+    );
     const profileDirectory = join(paths.home, 'profiles', 'web');
     const profileManifest = JSON.parse(await readFile(join(profileDirectory, 'package.json'), 'utf8'));
     assert.ok(profileManifest.dependencies[pluginPack.name]);
@@ -390,7 +407,10 @@ async function checkPackage() {
     assert.equal(child.text, 'Mock response');
     assert.equal((await (await get('/api/sessions/' + child.childId)).json()).parentId, item.id);
 
-    assert.equal((await write('/api/settings', 'PATCH', { entries: { 'task-notes': { disabled: true } } })).status, 200);
+    assert.equal(
+      (await write('/api/settings', 'PATCH', { entries: { 'task-notes': { disabled: true } } })).status,
+      200,
+    );
     assert.equal((await get('/api/extensions/task-notes/smoke')).status, 404);
     const withoutPlugin = (await (await get('/api/bootstrap')).json()) as typeof bootstrap;
     assert.ok(!withoutPlugin.ui.some(({ id }) => id === 'task-notes'));
@@ -399,7 +419,16 @@ async function checkPackage() {
     assert.match((await cli('status')).stdout, /is running/);
     assert.match((await cli('stop')).stdout, /stopped/);
     started = false;
-    await cli('plugin', '--profile', 'web', 'remove', pluginPack.name, '--legacy-peer-deps', '--no-audit', '--no-fund');
+    await cli(
+      'plugin',
+      '--profile',
+      'web',
+      'remove',
+      pluginPack.name,
+      '--legacy-peer-deps',
+      '--no-audit',
+      '--no-fund',
+    );
     const afterRemoval = JSON.parse(await readFile(join(profileDirectory, 'package.json'), 'utf8'));
     assert.ok(!afterRemoval.dependencies?.[pluginPack.name]);
     await assert.rejects(access(join(profileDirectory, 'node_modules', pluginPack.name)));

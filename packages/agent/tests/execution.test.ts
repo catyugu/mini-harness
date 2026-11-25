@@ -55,18 +55,18 @@ function fixture(
   const ctx = new Context();
   ctx.provide('harnessTools', tools.service());
   ctx.provide('harnessModels', {
-      list: () => [],
-      available: async () => [],
-      resolve: (choice) => choice,
-      capabilities: (choice) => ({
-        id: model.id,
-        name: 'Fixture',
-        input: choice.id === 'text-only' ? ['text'] : ['text', 'image'],
-        contextWindow: 32000,
-        maxTokens: 1024,
-        reasoning: true,
-        thinkingLevels: thinkingLevels(choice.id),
-      }),
+    list: () => [],
+    available: async () => [],
+    resolve: (choice) => choice,
+    capabilities: (choice) => ({
+      id: model.id,
+      name: 'Fixture',
+      input: choice.id === 'text-only' ? ['text'] : ['text', 'image'],
+      contextWindow: 32000,
+      maxTokens: 1024,
+      reasoning: true,
+      thinkingLevels: thinkingLevels(choice.id),
+    }),
   });
   ctx.provide('harnessLlm', llm);
   ctx.provide('harnessToolExecutor', { schedule: scheduleTools });
@@ -102,7 +102,10 @@ test('duplicate tool call identities fail before executing any side effect', asy
     }),
   );
   await assert.rejects(
-    agent.prompt(ctx, record, 'Change it', () => {}, { fallback: model, signal: new AbortController().signal }),
+    agent.prompt(ctx, record, 'Change it', () => {}, {
+      fallback: model,
+      signal: new AbortController().signal,
+    }),
     /duplicate.*tool|tool.*duplicate/i,
   );
   assert.equal(executions, 0);
@@ -275,7 +278,10 @@ test('interrupted calls receive an error record before the next prompt and are n
     }),
   );
   sessions.log(record.id).append({ type: 'message', message: toolsAnswer(call('interrupted', 'change')) });
-  await agent.prompt(ctx, record, 'Continue', () => {}, { fallback: model, signal: new AbortController().signal });
+  await agent.prompt(ctx, record, 'Continue', () => {}, {
+    fallback: model,
+    signal: new AbortController().signal,
+  });
   assert.equal(executed, 0);
 });
 
@@ -552,15 +558,21 @@ test('a fatal pipeline failure stops dispatch and drains active calls', async ()
   const started: string[] = [];
   let drained = 0;
   await assert.rejects(
-    dispatchTools({ schedule: scheduleTools }, calls, tools, new AbortController().signal, async (call, _tool, signal) => {
-      started.push(call.id);
-      if (call.id === '0') throw new Error('Log write failed');
-      await new Promise<void>((resolve) => {
-        if (signal.aborted) return resolve();
-        signal.addEventListener('abort', () => resolve(), { once: true });
-      });
-      drained++;
-    }),
+    dispatchTools(
+      { schedule: scheduleTools },
+      calls,
+      tools,
+      new AbortController().signal,
+      async (call, _tool, signal) => {
+        started.push(call.id);
+        if (call.id === '0') throw new Error('Log write failed');
+        await new Promise<void>((resolve) => {
+          if (signal.aborted) return resolve();
+          signal.addEventListener('abort', () => resolve(), { once: true });
+        });
+        drained++;
+      },
+    ),
     /Log write failed/,
   );
   assert.equal(started.length, 16);
@@ -718,7 +730,9 @@ test('custom scheduling cannot substitute or duplicate an advertised tool call',
     calls,
     new Map(),
     signal,
-    async (call) => { seen.push(call.id); },
+    async (call) => {
+      seen.push(call.id);
+    },
   );
   assert.deepEqual(seen, ['two', 'one']);
   await assert.rejects(

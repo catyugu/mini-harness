@@ -18,7 +18,10 @@ export function validateEntries(entries: Record<string, unknown>) {
       throw new DomainError('invalid_input', 'Plugin disabled flags must be boolean');
     if (entry.live !== undefined && typeof entry.live !== 'boolean')
       throw new DomainError('invalid_input', 'Plugin live flags must be boolean');
-    if (entry.config !== undefined && (!entry.config || typeof entry.config !== 'object' || Array.isArray(entry.config)))
+    if (
+      entry.config !== undefined &&
+      (!entry.config || typeof entry.config !== 'object' || Array.isArray(entry.config))
+    )
       throw new DomainError('invalid_input', 'Invalid plugin configuration for ' + id);
   }
 }

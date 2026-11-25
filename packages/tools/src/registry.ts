@@ -2,7 +2,12 @@ import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
 import { toolNamePattern } from '@mini-harness/llm/vocabulary';
 import { Check, Errors } from 'typebox/value';
 import { Service, type Context } from 'mini-harness/cordis';
-import { agentScopeOf, findInstance, pluginInstance, sessionVisible } from '@mini-harness/plugin-api/instance';
+import {
+  agentScopeOf,
+  findInstance,
+  pluginInstance,
+  sessionVisible,
+} from '@mini-harness/plugin-api/instance';
 import { isToolContent, type ToolDefinition, type ToolPort, type ToolRegistrationOptions } from './api.ts';
 import type { ToolDecision } from './events.ts';
 import type { ToolAccess, ToolPolicy } from './policy.ts';
@@ -58,7 +63,7 @@ export class ToolRegistry {
   ) {
     if (!toolNamePattern.test(name)) throw new Error('Invalid tool name: ' + name);
     const runScope = owner && agentScopeOf(owner);
-    const key = (runScope ? 'agent/' + runScope : scope ?? '') + '/' + name;
+    const key = (runScope ? 'agent/' + runScope : (scope ?? '')) + '/' + name;
     if (this.tools.has(key)) throw new Error('Duplicate tool in scope: ' + name);
     const lifetime = new AbortController();
     const registry = this;

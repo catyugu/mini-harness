@@ -55,7 +55,10 @@ export function validateSettings(input: unknown): asserts input is ProfileConfig
 
 export function parseSettings(input: unknown): ProfileConfiguration {
   if (!isObject(input)) throw new DomainError('invalid_input', 'Invalid settings object');
-  const settings = { ...DEFAULTS, ...Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined)) };
+  const settings = {
+    ...DEFAULTS,
+    ...Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined)),
+  };
   validateSettings(settings);
   return settings;
 }

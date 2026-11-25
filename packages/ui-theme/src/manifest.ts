@@ -2,14 +2,16 @@ import { defineConfig } from '@mini-harness/plugin-api/configuration';
 import { Type } from 'typebox';
 import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 
-export const Config = defineConfig(Type.Object(
+export const Config = defineConfig(
+  Type.Object(
     {
       appearance: Type.Union([Type.Literal('system'), Type.Literal('light'), Type.Literal('dark')], {
         default: 'system',
       }),
     },
     { additionalProperties: false },
-  ));
+  ),
+);
 
 export const metadata: PluginInfo = {
   scope: 'application',

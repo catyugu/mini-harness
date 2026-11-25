@@ -23,4 +23,3 @@ export function assertPeerCompatibility(folder: string) {
   if (!satisfies(version, range))
     throw new Error('Plugin requires mini-harness ' + range + ' (running ' + version + ')');
 }
-

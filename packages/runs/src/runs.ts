@@ -476,7 +476,9 @@ export class Runs implements RunPort {
     const done = (activity.done = this.scopes
       .prepare(`session:${id}`, signal)
       .then(() =>
-        this.withAgentContext(id, activity, signal, (ctx, signal) => ctx.harnessAgent.compact(ctx, id, signal)),
+        this.withAgentContext(id, activity, signal, (ctx, signal) =>
+          ctx.harnessAgent.compact(ctx, id, signal),
+        ),
       ));
     try {
       await done;
@@ -516,7 +518,10 @@ export class Runs implements RunPort {
         throw new DomainError('unavailable', 'Required service is unavailable: harnessAgent');
       activity.context = fiber.ctx;
       return await fiber.run(async (signal) => {
-        for (const { context, callback } of fiber.ctx.events.listeners('agent/setup', sessionEvent(fiber.ctx, id)))
+        for (const { context, callback } of fiber.ctx.events.listeners(
+          'agent/setup',
+          sessionEvent(fiber.ctx, id),
+        ))
           await context.fiber.run((signal) => callback(fiber.ctx, id, signal), signal);
         return work(fiber.ctx, signal);
       }, signal);

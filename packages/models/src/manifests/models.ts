@@ -6,7 +6,8 @@ import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 import { setupAdministration } from '../server/administration.ts';
 
-const Config = defineConfig(Type.Object(
+const Config = defineConfig(
+  Type.Object(
     {
       model: Type.Object(
         {
@@ -17,13 +18,13 @@ const Config = defineConfig(Type.Object(
       ),
     },
     { additionalProperties: false },
-  ));
+  ),
+);
 
 export const metadata: PluginInfo = {
   scope: 'application',
   title: 'Recent model',
   description: 'Accepted user model selection',
-
 };
 
 const plugin: Plugin.Object = {

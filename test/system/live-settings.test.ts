@@ -67,7 +67,9 @@ test('appearance, parallelism and child defaults update without interrupting a r
   release();
   assert.equal(await pending, 'Done');
   const firstMessage = runtime.plugins.ctx.harnessRegistry.log(item.id).projection().messages[0].id;
-  await runtime.configuration.update({ entries: { files: { disabled: true }, 'session-helper': { disabled: true } } });
+  await runtime.configuration.update({
+    entries: { files: { disabled: true }, 'session-helper': { disabled: true } },
+  });
   await runtime.plugins.ctx.harnessRuns.send(item.id, 'After the policy changes');
   assert.equal(runtime.plugins.ctx.harnessRegistry.log(item.id).projection().messages[0].id, firstMessage);
   assert.strictEqual(runtime.plugins.ctx.harnessRegistry.log(item.id), original);

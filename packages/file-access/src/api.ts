@@ -1,4 +1,3 @@
-
 export interface SearchInput {
   pattern: string;
   path?: string;

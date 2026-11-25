@@ -33,7 +33,11 @@ test(
     });
     writeFileSync(join(root, 'outside.txt'), 'private fixture');
     await app.runtime.configuration.update({
-      entries: { subagents: { config: { maxDepth: 2, maxParallel: 1, model: { provider: 'local-mock', id: 'mock-model' } } } },
+      entries: {
+        subagents: {
+          config: { maxDepth: 2, maxParallel: 1, model: { provider: 'local-mock', id: 'mock-model' } },
+        },
+      },
     });
     const parent = app.runtime.plugins.ctx.harnessRegistry.create();
     const toolEvents: Extract<import('@mini-harness/runs/stream').StreamEvent, { type: 'tool' }>[] = [];

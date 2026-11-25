@@ -54,13 +54,22 @@ function requireService<K extends keyof Context & string>(ctx: Context, name: K)
 
 async function retryModel(ctx: Context, failure: ModelFailure) {
   const { signal, ...input } = failure;
-  for (const { context, callback } of ctx.events.listeners('agent/model-retry', sessionEvent(ctx, failure.sessionId))) {
-    const retry = await context.fiber.run((signal) => callback({ ...structuredClone(input), signal }), signal);
+  for (const { context, callback } of ctx.events.listeners(
+    'agent/model-retry',
+    sessionEvent(ctx, failure.sessionId),
+  )) {
+    const retry = await context.fiber.run(
+      (signal) => callback({ ...structuredClone(input), signal }),
+      signal,
+    );
     if (retry === undefined) continue;
     if (
-      !retry || typeof retry !== 'object' ||
-      (retry.delayMs !== undefined && (!Number.isFinite(retry.delayMs) || retry.delayMs < 0 || retry.delayMs > 30000))
-    ) throw new Error('Invalid model retry decision');
+      !retry ||
+      typeof retry !== 'object' ||
+      (retry.delayMs !== undefined &&
+        (!Number.isFinite(retry.delayMs) || retry.delayMs < 0 || retry.delayMs > 30000))
+    )
+      throw new Error('Invalid model retry decision');
     return { delayMs: retry.delayMs };
   }
 }
@@ -471,10 +480,12 @@ export class NativeAgent implements AgentPort {
         if (
           this.policy().autoCompact &&
           capabilities &&
-          ctx.get('harnessCompaction')?.shouldCompact(
-            log.projection().contextMessages,
-            Math.max(1024, capabilities.contextWindow * 0.8 - capabilities.maxTokens),
-          )
+          ctx
+            .get('harnessCompaction')
+            ?.shouldCompact(
+              log.projection().contextMessages,
+              Math.max(1024, capabilities.contextWindow * 0.8 - capabilities.maxTokens),
+            )
         )
           await this.compactLog(ctx, id, log, signal, true);
         const current = log.projection();
@@ -610,7 +621,8 @@ export class NativeAgent implements AgentPort {
                   content: failure.content,
                   entry: { id: entry.id, parentId: entry.parentId, timestamp: failure.timestamp },
                 });
-                observe(ctx, 
+                observe(
+                  ctx,
                   {
                     type: 'tool-ended',
                     sessionId: id,
@@ -647,7 +659,8 @@ export class NativeAgent implements AgentPort {
             sessionId: typeof details?.sessionId === 'string' ? details.sessionId : undefined,
             exitCode: typeof details?.exitCode === 'number' ? details.exitCode : undefined,
           });
-          observe(ctx, 
+          observe(
+            ctx,
             {
               type: 'tool-ended',
               sessionId: id,
@@ -752,19 +765,27 @@ export class NativeAgent implements AgentPort {
     return { ...snapshot, sessionId: context.sessionId, signal: context.signal };
   }
 
-  private request(ctx: Context, id: string, request: Parameters<LlmPort['stream']>[0], delta = (_text: string) => {}) {
+  private request(
+    ctx: Context,
+    id: string,
+    request: Parameters<LlmPort['stream']>[0],
+    delta = (_text: string) => {},
+  ) {
     return requestModel(requireService(ctx, 'harnessLlm'), request, {
       delta,
       ended: (attempt, failed) =>
-        observe(ctx, 
-          { type: 'model-attempt-ended', sessionId: id, attempt, failed },
-          request.signal,
-        ),
+        observe(ctx, { type: 'model-attempt-ended', sessionId: id, attempt, failed }, request.signal),
       retry: (failure) => retryModel(ctx, failure),
     });
   }
 
-  private async compactLog(ctx: Context, id: string, log: SessionLogPort, signal: AbortSignal, automatic = false) {
+  private async compactLog(
+    ctx: Context,
+    id: string,
+    log: SessionLogPort,
+    signal: AbortSignal,
+    automatic = false,
+  ) {
     const strategy = ctx.get('harnessCompaction');
     if (!strategy) {
       if (automatic) return;
@@ -772,7 +793,8 @@ export class NativeAgent implements AgentPort {
     }
     this.closeUnfinishedTools(log);
     const projection = log.projection();
-    const userEntryIds = log.branch()
+    const userEntryIds = log
+      .branch()
       .filter((entry) => entry.type === 'message' && entry.message.role === 'user')
       .map(({ id }) => id);
     const result = await strategy.compact({
@@ -804,11 +826,17 @@ export class NativeAgent implements AgentPort {
       !result.summary.trim() ||
       !userEntryIds.includes(result.keepFromId) ||
       projection.contextEntryIds.indexOf(result.keepFromId) <= 0 ||
-      (result.tokensBefore !== undefined && (!Number.isFinite(result.tokensBefore) || result.tokensBefore < 0))
+      (result.tokensBefore !== undefined &&
+        (!Number.isFinite(result.tokensBefore) || result.tokensBefore < 0))
     )
       throw new Error('Invalid compaction result');
     log.append(
-      { type: 'compaction', summary: result.summary, keepFromId: result.keepFromId, tokensBefore: result.tokensBefore },
+      {
+        type: 'compaction',
+        summary: result.summary,
+        keepFromId: result.keepFromId,
+        tokensBefore: result.tokensBefore,
+      },
       projection.leafId,
     );
   }

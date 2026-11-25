@@ -13,7 +13,9 @@ declare module 'mini-harness/cordis' {
 }
 
 export const Config = defineConfig({
-  type: 'object', properties: { prefix: { type: 'string', default: 'Hello' } }, additionalProperties: false,
+  type: 'object',
+  properties: { prefix: { type: 'string', default: 'Hello' } },
+  additionalProperties: false,
 });
 
 export const provide = ['exampleGreeting'];

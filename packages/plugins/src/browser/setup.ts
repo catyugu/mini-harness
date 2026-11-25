@@ -299,7 +299,8 @@ function pluginCatalog(
       ...groups.map((group) => {
         const list = fromMarkup('<section class="catalog-group"><h2></h2></section>');
         required(list.querySelector('h2')).textContent = group.title;
-        if (!group.plugins.length) list.append(fromMarkup('<p class="hint">No external plugins available.</p>'));
+        if (!group.plugins.length)
+          list.append(fromMarkup('<p class="hint">No external plugins available.</p>'));
         for (const plugin of group.plugins) {
           const row = fromMarkup(`<article class="catalog-row">
           <button class="catalog-description ui-list-item" type="button">
@@ -343,7 +344,12 @@ function pluginCatalog(
             for (const peer of peers) peer.disabled = true;
             try {
               const saved = await mutate(
-                () => browserRequest(ctx, '/settings', payload('PATCH', { entries: { [plugin.id]: { disabled: !next } } })),
+                () =>
+                  browserRequest(
+                    ctx,
+                    '/settings',
+                    payload('PATCH', { entries: { [plugin.id]: { disabled: !next } } }),
+                  ),
                 (error) => {
                   status.textContent = error.message;
                 },

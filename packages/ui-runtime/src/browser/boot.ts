@@ -84,7 +84,8 @@ async function boot() {
     const status = document.getElementById('startupStatus');
     if (failures.size && !ctx.get('miniLayout') && status) {
       status.hidden = false;
-      status.textContent = 'Browser entries failed: ' + [...nextFailures].map(([id, message]) => id + ': ' + message).join('; ');
+      status.textContent =
+        'Browser entries failed: ' + [...nextFailures].map(([id, message]) => id + ': ' + message).join('; ');
     } else if (status?.textContent?.startsWith('Browser entries failed: ')) {
       status.hidden = true;
       status.textContent = '';

@@ -36,7 +36,11 @@ export class PluginCatalog {
     this.builtins = new Map(
       builtins.map((descriptor) => [
         descriptor.id,
-        this.withSchema({ ...descriptor, Config: descriptor.Config ?? descriptor.plugin?.Config, resources: builtinBrowserAssets(descriptor) }),
+        this.withSchema({
+          ...descriptor,
+          Config: descriptor.Config ?? descriptor.plugin?.Config,
+          resources: builtinBrowserAssets(descriptor),
+        }),
       ]),
     );
     if (this.builtins.size !== builtins.length) throw new Error('Duplicate builtin plugin ID');
@@ -107,7 +111,9 @@ export class PluginCatalog {
   descriptors(): DiscoveredPlugin[] {
     return [
       ...this.builtins.values(),
-      ...[...this.profile?.modules ?? []].map(([id, { name, source }]) => this.describeModule(id, name, source)),
+      ...[...(this.profile?.modules ?? [])].map(([id, { name, source }]) =>
+        this.describeModule(id, name, source),
+      ),
       ...this.discover(),
     ];
   }
@@ -121,16 +127,16 @@ export class PluginCatalog {
           scope === 'application'
             ? this.enabled(descriptor, settings)
             : scopeKeys(settings).some(
-                (key) => key.startsWith(scope + ':') && settings.scopes[key]?.entries?.[id]?.disabled === false,
+                (key) =>
+                  key.startsWith(scope + ':') && settings.scopes[key]?.entries?.[id]?.disabled === false,
               );
         if (!enabled) return descriptor;
         try {
           const module = pathToFileURL(source).href + '?v=' + lstatSync(source).mtimeMs;
           const exports = await import(module);
           const value = exports.default ?? exports;
-          const plugin: Plugin | undefined = typeof value === 'function' || typeof value?.apply === 'function'
-            ? value
-            : undefined;
+          const plugin: Plugin | undefined =
+            typeof value === 'function' || typeof value?.apply === 'function' ? value : undefined;
           const Config = plugin ? plugin.Config : exports.Config;
           if (!plugin && !(descriptor.resources && Config))
             throw new Error('Plugin ' + id + ' must export a Cordis plugin with apply(ctx, config)');
@@ -221,7 +227,13 @@ export class PluginCatalog {
       });
   }
 
-  entry(plan: ConfiguredPlugin, context: Context, scope: PluginScope, id = plan.id, scopeKey?: ScopeKey): EntryOptions {
+  entry(
+    plan: ConfiguredPlugin,
+    context: Context,
+    scope: PluginScope,
+    id = plan.id,
+    scopeKey?: ScopeKey,
+  ): EntryOptions {
     const { source, descriptor } = plan;
     const plugin = descriptor.plugin;
     if (!plugin) throw new Error('Missing server module: ' + plan.id);
@@ -247,7 +259,11 @@ export class PluginCatalog {
   }
 
   /** Disabled entries with a known schema can still reject malformed input without mounting. */
-  validateDisabled(descriptors: DiscoveredPlugin[], previous: CompositionConfig, settings: CompositionConfig) {
+  validateDisabled(
+    descriptors: DiscoveredPlugin[],
+    previous: CompositionConfig,
+    settings: CompositionConfig,
+  ) {
     for (const descriptor of descriptors) {
       const { id, scope } = descriptor;
       const before = previous.entries[id]?.config;
@@ -256,7 +272,8 @@ export class PluginCatalog {
         this.configValues(descriptor, after);
       if (scope !== 'application')
         for (const key of scopeKeys(settings)) {
-          if (!key.startsWith(scope + ':') || settings.scopes[key]?.entries?.[id]?.disabled === false) continue;
+          if (!key.startsWith(scope + ':') || settings.scopes[key]?.entries?.[id]?.disabled === false)
+            continue;
           const prior = { ...before, ...previous.scopes[key]?.entries?.[id]?.config };
           const next = { ...after, ...settings.scopes[key]?.entries?.[id]?.config };
           if (!isDeepStrictEqual(prior, next)) this.configValues(descriptor, next);
@@ -285,12 +302,18 @@ export class PluginCatalog {
     }
     if (isApp)
       for (const [id, entry] of Object.entries(settings.entries)) {
-        if (entry.disabled === false && descriptors.some((item) => item.id === id && item.scope !== 'application'))
+        if (
+          entry.disabled === false &&
+          descriptors.some((item) => item.id === id && item.scope !== 'application')
+        )
           throw new DomainError('invalid_input', 'Select a scope for plugin ' + id);
       }
     for (const item of descriptors) {
       const { id, scope: kind } = item;
-      if (kind !== scope || !(isApp ? this.enabled(item, settings) : overrides?.entries?.[id]?.disabled === false))
+      if (
+        kind !== scope ||
+        !(isApp ? this.enabled(item, settings) : overrides?.entries?.[id]?.disabled === false)
+      )
         continue;
       // Child groups isolate the services declared by their Cordis modules.
       const provide = item.plugin?.provide;
@@ -300,7 +323,8 @@ export class PluginCatalog {
         const values = isApp
           ? settings.entries[id]?.config
           : { ...settings.entries[id]?.config, ...overrides?.entries?.[id]?.config };
-        const live = (isApp ? undefined : overrides?.entries?.[id]?.live) ?? settings.entries[id]?.live ?? false;
+        const live =
+          (isApp ? undefined : overrides?.entries?.[id]?.live) ?? settings.entries[id]?.live ?? false;
         const config = item.plugin ? structuredClone(values ?? {}) : this.configValues(item, values);
         plans.push({ descriptor: item, id, source: item.source, config, live });
       } catch (error) {
@@ -312,9 +336,16 @@ export class PluginCatalog {
 
   configValues(descriptor: ResolvedPlugin, values: Record<string, unknown> | undefined) {
     try {
-      return resolveConfig(descriptor.Config ?? descriptor.plugin?.Config, structuredClone(values ?? {})) as Record<string, unknown>;
+      return resolveConfig(
+        descriptor.Config ?? descriptor.plugin?.Config,
+        structuredClone(values ?? {}),
+      ) as Record<string, unknown>;
     } catch (error) {
-      throw new DomainError('invalid_input', 'Invalid configuration for plugin: ' + descriptor.id + ': ' + String(error), { cause: error });
+      throw new DomainError(
+        'invalid_input',
+        'Invalid configuration for plugin: ' + descriptor.id + ': ' + String(error),
+        { cause: error },
+      );
     }
   }
 }

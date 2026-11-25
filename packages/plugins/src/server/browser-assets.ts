@@ -78,14 +78,10 @@ export function readBrowserAssets(
   if (
     !publicPath(entry) ||
     !['.js', '.mjs'].includes(extname(entry)) ||
-    (directory !== undefined &&
-      (typeof directory !== 'string' || !publicPath(directory)))
+    (directory !== undefined && (typeof directory !== 'string' || !publicPath(directory)))
   )
     throw new Error('Invalid browser entry or build directory: ' + id);
-  if (
-    entry.includes('/') &&
-    (typeof directory !== 'string' || !entry.startsWith(directory + '/'))
-  )
+  if (entry.includes('/') && (typeof directory !== 'string' || !entry.startsWith(directory + '/')))
     throw new Error('Browser entry must be inside its build directory: ' + id);
   const root = realpathSync(folder);
   const entries = new Map<string, Asset>();
@@ -133,14 +129,16 @@ export function planBrowser(plans: ConfiguredPlugin[], effective: (id: string) =
   return plans.flatMap(({ id, descriptor, config, live }) => {
     const resources = descriptor.resources;
     if (!resources) return [];
-    return [{
-      id,
-      browser: resources.entry,
-      styles: resources.styles,
-      preload: resources.preload,
-      config: (effective(id) ?? config) as Record<string, unknown>,
-      live,
-    }];
+    return [
+      {
+        id,
+        browser: resources.entry,
+        styles: resources.styles,
+        preload: resources.preload,
+        config: (effective(id) ?? config) as Record<string, unknown>,
+        live,
+      },
+    ];
   });
 }
 
@@ -155,6 +153,8 @@ export function publishBrowser(
   return {
     entries,
     assets: new Map(resources.flatMap(({ descriptor }) => [...(descriptor.resources?.urls ?? [])])),
-    configurable: new Set(resources.filter(({ descriptor }) => descriptor.Config || descriptor.configSchema).map(({ id }) => id)),
+    configurable: new Set(
+      resources.filter(({ descriptor }) => descriptor.Config || descriptor.configSchema).map(({ id }) => id),
+    ),
   };
 }

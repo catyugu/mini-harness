@@ -13,12 +13,13 @@ npx mini-harness development --from-default-profile web --dump-config
 ```
 
 In the generated Profile's `cordis.patch.yml`, add:
- 
+
 ```yaml
 plugins:
   - id: task-notes
     name: /absolute/path/to/task-notes
     client: true
+    live: true
 ```
 
 Start with `npx mini-harness --profile development`. Start a conversation with a configured model and ask it to save a task note. Edit the label under Settings → Extensions.
@@ -35,4 +36,4 @@ The extension endpoints accept local authenticated requests under `/api/extensio
 
 Disable the plugin to remove its tool, routes and browser contributions. Previously saved display records remain visible in the conversation.
 
-The package verification builds and exercises this same example using the npm tarball. See the [plugin guide](../../plugins.md) for details.
+The package verification builds this example independently against the installed SDK, packs it, installs it into a Profile and verifies activation, configuration, execution and removal. See the [plugin guide](../../plugins.md) for details.

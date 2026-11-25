@@ -6,27 +6,27 @@ import { Type } from 'typebox';
 
 /** One self-contained plugin schema. Changes to child limits are safe during active runs. */
 const Config = defineConfig({
-    ...Type.Object(
-      {
-        maxDepth: Type.Integer({ title: 'Maximum child depth', minimum: 0, maximum: 8, default: 1 }),
-        maxParallel: Type.Integer({ title: 'Parallel children', minimum: 1, maximum: 16, default: 4 }),
-        model: Type.Union(
-          [
-            Type.Null(),
-            Type.Object(
-              {
-                provider: Type.String({ minLength: 1, maxLength: 160 }),
-                id: Type.String({ minLength: 1, maxLength: 160 }),
-              },
-              { additionalProperties: false },
-            ),
-          ],
-          { title: 'Child model', default: null, 'x-modelChoice': true },
-        ),
-      },
-      { additionalProperties: false },
-    ),
-  });
+  ...Type.Object(
+    {
+      maxDepth: Type.Integer({ title: 'Maximum child depth', minimum: 0, maximum: 8, default: 1 }),
+      maxParallel: Type.Integer({ title: 'Parallel children', minimum: 1, maximum: 16, default: 4 }),
+      model: Type.Union(
+        [
+          Type.Null(),
+          Type.Object(
+            {
+              provider: Type.String({ minLength: 1, maxLength: 160 }),
+              id: Type.String({ minLength: 1, maxLength: 160 }),
+            },
+            { additionalProperties: false },
+          ),
+        ],
+        { title: 'Child model', default: null, 'x-modelChoice': true },
+      ),
+    },
+    { additionalProperties: false },
+  ),
+});
 
 export const metadata: PluginInfo = {
   scope: 'application',
@@ -38,7 +38,6 @@ export const metadata: PluginInfo = {
     { title: 'Run limits', fields: ['maxDepth', 'maxParallel'] },
     { title: 'Model selection', fields: ['model'] },
   ],
-
 };
 
 const plugin: Plugin.Object = {

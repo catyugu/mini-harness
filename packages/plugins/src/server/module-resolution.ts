@@ -34,9 +34,7 @@ export function resolveModule(name: string, source: string) {
     resolve(request, context, next) {
       return next(
         request,
-        request === specifier && context.parentURL === import.meta.url
-          ? { ...context, parentURL }
-          : context,
+        request === specifier && context.parentURL === import.meta.url ? { ...context, parentURL } : context,
       );
     },
   });

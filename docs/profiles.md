@@ -63,6 +63,7 @@ plugins:
     disabled: true
   - id: custom-provider
     name: '@example/custom-provider'
+    live: true
     config:
       label: Progress
   - id: local-tool

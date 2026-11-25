@@ -1,4 +1,3 @@
-
 export interface ToolAccess {
   name: string;
   pluginId?: string;

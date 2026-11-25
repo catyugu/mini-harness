@@ -201,7 +201,10 @@ test(
         () => request('/approvals'),
         (result) => result.body.length === 1,
       );
-      assert.equal((await request('/settings', 'PATCH', { entries: { shell: { disabled: true } } })).status, 409);
+      assert.equal(
+        (await request('/settings', 'PATCH', { entries: { shell: { disabled: true } } })).status,
+        409,
+      );
       const approval = (await request('/approvals')).body[0];
       assert.equal((await request('/approvals', 'POST', { id: approval.id, allow: false })).status, 200);
       assert.ok(app.runtime.plugins.ctx.harnessRuns.active(other.id));
@@ -218,7 +221,10 @@ test(
       release();
     }
     assert.equal(await pending, 'Unrelated task completed');
-    assert.equal((await request('/settings', 'PATCH', { entries: { shell: { disabled: true } } })).status, 200);
+    assert.equal(
+      (await request('/settings', 'PATCH', { entries: { shell: { disabled: true } } })).status,
+      200,
+    );
     assert.deepEqual((await request('/approvals')).body, []);
     const graph = (await request('/bootstrap')).body.ui;
     assert.ok(!graph.some(({ id }: { id: string }) => id === 'shell'));

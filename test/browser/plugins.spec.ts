@@ -15,7 +15,10 @@ test('frontend plugins own UI contributions and clean up on disable and reconfig
   const { root, paths } = createFixturePaths(mock.url),
     folder = join(paths.plugins, 'ui-example');
   mkdirSync(folder);
-  writeFileSync(join(folder, 'plugin.js'), "import { defineConfig } from 'mini-harness/configuration';\nimport { readFileSync } from 'node:fs';\nexport const Config = defineConfig(JSON.parse(readFileSync(new URL('./plugin.json', import.meta.url), 'utf8')).configSchema);\nexport function apply() {}");
+  writeFileSync(
+    join(folder, 'plugin.js'),
+    "import { defineConfig } from 'mini-harness/configuration';\nimport { readFileSync } from 'node:fs';\nexport const Config = defineConfig(JSON.parse(readFileSync(new URL('./plugin.json', import.meta.url), 'utf8')).configSchema);\nexport function apply() {}",
+  );
   writeFileSync(
     join(folder, 'plugin.json'),
     JSON.stringify({
@@ -86,10 +89,7 @@ export function apply(ctx, config) {
   const dependent = join(paths.plugins, 'a-dependent');
   mkdirSync(dependent);
   writeFileSync(join(dependent, 'plugin.js'), 'export function apply() {}');
-  writeFileSync(
-    join(dependent, 'plugin.json'),
-    JSON.stringify({ title: 'Dependent UI' }),
-  );
+  writeFileSync(join(dependent, 'plugin.json'), JSON.stringify({ title: 'Dependent UI' }));
   writeFileSync(
     join(dependent, 'web.js'),
     `
@@ -187,7 +187,10 @@ test('a failed browser plugin reports the saved state and can be retried', async
     { root, paths } = createFixturePaths(mock.url);
   const folder = join(paths.plugins, 'retry-ui');
   mkdirSync(folder);
-  writeFileSync(join(folder, 'plugin.js'), "import { defineConfig } from 'mini-harness/configuration';\nimport { readFileSync } from 'node:fs';\nexport const Config = defineConfig(JSON.parse(readFileSync(new URL('./plugin.json', import.meta.url), 'utf8')).configSchema);\nexport function apply() {}");
+  writeFileSync(
+    join(folder, 'plugin.js'),
+    "import { defineConfig } from 'mini-harness/configuration';\nimport { readFileSync } from 'node:fs';\nexport const Config = defineConfig(JSON.parse(readFileSync(new URL('./plugin.json', import.meta.url), 'utf8')).configSchema);\nexport function apply() {}",
+  );
   writeJson(join(folder, 'plugin.json'), {
     title: 'Retry UI',
     browserDirectory: 'web',
@@ -423,7 +426,9 @@ export const apply = (ctx) => {
     };
 `,
     );
-    cpSync(resolve('dist/docs/examples/browser-panel'), join(paths.plugins, 'browser-panel'), { recursive: true });
+    cpSync(resolve('dist/docs/examples/browser-panel'), join(paths.plugins, 'browser-panel'), {
+      recursive: true,
+    });
     writeJson(join(paths.home, 'profiles', 'web', 'cordis.patch.yml'), {
       plugins: [
         { id: 'replace-new', name: '../../plugins/replace-new', client: true },
@@ -487,7 +492,9 @@ export const apply = (ctx) => {
     const settings = await fetch(server.url + '/api/settings', {
       method: 'PATCH',
       headers: { Authorization: 'Bearer ' + server.token, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ entries: { 'replace-new': { disabled: true }, 'browser-panel': { disabled: true } } }),
+      body: JSON.stringify({
+        entries: { 'replace-new': { disabled: true }, 'browser-panel': { disabled: true } },
+      }),
     });
     expect(settings.status).toBe(200);
     await expect(page.getByRole('dialog', { name: 'Example preview' })).toHaveCount(0);

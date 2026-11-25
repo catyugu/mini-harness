@@ -30,7 +30,11 @@ test('GUI APIs configure providers, persist keys privately, discover Skills and 
   );
   assert.equal((await request(scope + '/files/tree?path=..')).status, 403);
   assert.equal(
-    (await request('/settings', 'PATCH', { entries: { files: { disabled: true }, skills: { disabled: true } } })).status,
+    (
+      await request('/settings', 'PATCH', {
+        entries: { files: { disabled: true }, skills: { disabled: true } },
+      })
+    ).status,
     200,
   );
   assert.equal((await request(scope + '/files/tree')).status, 404);
@@ -60,7 +64,11 @@ test('GUI APIs configure providers, persist keys privately, discover Skills and 
     400,
   );
   assert.equal((await request('/settings/plugins/files', 'PATCH', {})).status, 404);
-  assert.equal((await request('/bootstrap')).body.ui.find(({ id }: { id: string }) => id === 'core:theme')?.config.appearance, 'system');
+  assert.equal(
+    (await request('/bootstrap')).body.ui.find(({ id }: { id: string }) => id === 'core:theme')?.config
+      .appearance,
+    'system',
+  );
   const bootstrap = await request('/bootstrap');
   assert.equal(JSON.stringify(bootstrap.body).includes('gui-private-key'), false);
   assert.ok(readFileSync(join(paths.home, 'auth.json'), 'utf8').includes('gui-private-key'));

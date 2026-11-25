@@ -48,7 +48,9 @@ const plugin: Plugin.Object = {
     ctx.on('harness/open', async () => {
       if (!launch.interactive) return;
       if (help) {
-        console.log('Web options:\\n  --port <number>  Listen port (default 3837)\\n  --no-open        Do not open a browser');
+        console.log(
+          'Web options:\\n  --port <number>  Listen port (default 3837)\\n  --no-open        Do not open a browser',
+        );
         launch.shutdown();
         return;
       }

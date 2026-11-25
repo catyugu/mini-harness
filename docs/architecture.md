@@ -4,7 +4,7 @@ The Web application is assembled from [YAML Profile entries](profiles.md) and Co
 
 | Boundary | Responsibilities                                                                                               |
 | -------- | -------------------------------------------------------------------------------------------------------------- |
-| Profile  | Entry identities, module resolution, configuration layers, and browser projections         |
+| Profile  | Entry identities, module resolution, configuration layers, and browser projections                             |
 | Cordis   | Contexts, service isolation, injection, Entry Tree reconciliation, Fiber activation, typed events and disposal |
 | Product  | Conversation identity and persistence, Agent execution, tool authorization, transport, and UI                  |
 

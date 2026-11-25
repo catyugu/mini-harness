@@ -1,6 +1,12 @@
 #!/usr/bin/env node
 import { bootProfile } from '@mini-harness/host/application';
-import { allowsDetachment, dumpProfile, ensureProfile, profileSchema, recreateProfile } from '@mini-harness/host/profile';
+import {
+  allowsDetachment,
+  dumpProfile,
+  ensureProfile,
+  profileSchema,
+  recreateProfile,
+} from '@mini-harness/host/profile';
 import { spawn } from 'node:child_process';
 import { openSync, closeSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -90,13 +96,28 @@ function parse(argv: string[]) {
       selected = true;
     } else args.flags.push(flag);
   }
-  if (args.command && (selected || args.detached || args.serve || args.flags.length || args.patches.length || args.template || args.dump))
+  if (
+    args.command &&
+    (selected ||
+      args.detached ||
+      args.serve ||
+      args.flags.length ||
+      args.patches.length ||
+      args.template ||
+      args.dump)
+  )
     throw new Error('Profile startup flags require the start command');
   return args;
 }
 
-async function detached(paths: ReturnType<typeof getPaths>, profile: string, flags: string[], patches: string[]) {
-  if (!allowsDetachment(profile, paths, patches)) throw new Error('Profile ' + profile + ' does not support --detached');
+async function detached(
+  paths: ReturnType<typeof getPaths>,
+  profile: string,
+  flags: string[],
+  patches: string[],
+) {
+  if (!allowsDetachment(profile, paths, patches))
+    throw new Error('Profile ' + profile + ' does not support --detached');
   const running = await serverStatus(paths.home, paths.pid);
   if (running) throw new Error('mini-harness is already running (PID ' + running.pid + ')');
   const output = openSync(paths.log, 'a', 0o600);
@@ -104,7 +125,17 @@ async function detached(paths: ReturnType<typeof getPaths>, profile: string, fla
   try {
     child = spawn(
       process.execPath,
-      [executable, '--serve', '--profile', profile, '--cwd', paths.cwd, ...patches.flatMap((patch) => ['--patch', patch]), '--', ...flags],
+      [
+        executable,
+        '--serve',
+        '--profile',
+        profile,
+        '--cwd',
+        paths.cwd,
+        ...patches.flatMap((patch) => ['--patch', patch]),
+        '--',
+        ...flags,
+      ],
       {
         cwd: paths.cwd,
         detached: true,

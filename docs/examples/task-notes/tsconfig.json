@@ -6,8 +6,5 @@
     "noEmitOnError": true,
     "rewriteRelativeImportExtensions": true
   },
-  "files": [
-    "plugin.ts",
-    "web.ts"
-  ]
+  "files": ["plugin.ts", "web.ts"]
 }

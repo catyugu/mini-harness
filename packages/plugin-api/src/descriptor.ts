@@ -28,4 +28,3 @@ export interface ResolvedPlugin extends PluginInfo {
   plugin?: Plugin;
   Config?: Plugin.Base['Config'];
 }
-

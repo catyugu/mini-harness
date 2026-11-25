@@ -9,10 +9,9 @@ export const inject = ['miniPrimitives', 'miniMessages', 'miniSettingsRegistry']
 
 export function apply(ctx: Context) {
   const miniPrimitives: BrowserPrimitives = ctx.miniPrimitives;
-  const renderRecord: RecordRenderer = (record) => miniPrimitives.status(record.title + ': ' + String(record.content ?? ''));
-  ctx.effect(() =>
-    ctx.miniMessages.registerRecord(browserPluginId(ctx), renderRecord),
-  );
+  const renderRecord: RecordRenderer = (record) =>
+    miniPrimitives.status(record.title + ': ' + String(record.content ?? ''));
+  ctx.effect(() => ctx.miniMessages.registerRecord(browserPluginId(ctx), renderRecord));
   ctx.effect(() =>
     ctx.miniMessages.registerTool('save_task_note', () => miniPrimitives.status('Saved to task notes')),
   );

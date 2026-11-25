@@ -4,12 +4,14 @@ import { Type } from 'typebox';
 import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 import { setup } from '../server/setup.ts';
 
-const Config = defineConfig(Type.Object(
+const Config = defineConfig(
+  Type.Object(
     {
       queueMode: Type.Union([Type.Literal('steer'), Type.Literal('followUp')], { default: 'steer' }),
     },
     { additionalProperties: false },
-  ));
+  ),
+);
 
 export const metadata: PluginInfo = {
   scope: 'application',

@@ -132,13 +132,15 @@ test('file tools and dependent services follow their Cordis lifetimes', async (t
     await mock.close();
     rmSync(root, { recursive: true, force: true });
   });
-  writePlugin(paths.plugins, 'base', {}, `export const provide = ['fixtureGreeting']; export const apply = (ctx) => ctx.provide('fixtureGreeting', 'ok');`);
+  writePlugin(
+    paths.plugins,
+    'base',
+    {},
+    `export const provide = ['fixtureGreeting']; export const apply = (ctx) => ctx.provide('fixtureGreeting', 'ok');`,
+  );
   const folder = join(paths.plugins, 'dependent');
   mkdirSync(folder);
-  writeFileSync(
-    join(folder, 'plugin.json'),
-    JSON.stringify({}),
-  );
+  writeFileSync(join(folder, 'plugin.json'), JSON.stringify({}));
   writeFileSync(
     join(folder, 'plugin.js'),
     `
@@ -157,7 +159,9 @@ export const apply = (ctx) => {
   assert.ok(activeNames().includes('read'));
   await runtime.configuration.update({ entries: { files: { disabled: true } } });
   assert.ok(!activeNames().includes('read'));
-  await runtime.configuration.update({ entries: { files: { disabled: false }, dependent: { disabled: false } } });
+  await runtime.configuration.update({
+    entries: { files: { disabled: false }, dependent: { disabled: false } },
+  });
   assert.ok(!activeNames().includes('dependent_tool'));
   await runtime.configuration.update({ entries: { base: { disabled: false } } });
   assert.ok(activeNames().includes('dependent_tool'));
@@ -166,7 +170,9 @@ export const apply = (ctx) => {
   assert.ok(activeNames().includes('read'));
   await runtime.configuration.update({ entries: { base: { disabled: false } } });
   assert.ok(activeNames().includes('dependent_tool'));
-  await runtime.configuration.update({ entries: { files: { disabled: true }, base: { disabled: true }, dependent: { disabled: true } } });
+  await runtime.configuration.update({
+    entries: { files: { disabled: true }, base: { disabled: true }, dependent: { disabled: true } },
+  });
   assert.equal(
     runtime.plugins.ctx.harnessTools
       .forSession(item.id)
@@ -318,10 +324,7 @@ test('dependent plugins restart in order and partial setup or persistence failur
   for (const id of ['base', 'dependent']) {
     const folder = join(paths.plugins, id);
     mkdirSync(folder);
-    writeFileSync(
-      join(folder, 'plugin.json'),
-      JSON.stringify({}),
-    );
+    writeFileSync(join(folder, 'plugin.json'), JSON.stringify({}));
     writeFileSync(
       join(folder, 'plugin.js'),
       `
@@ -341,7 +344,9 @@ export const apply = (ctx, config) => {
     );
   }
   await runtime.start();
-  await runtime.configuration.update({ entries: { base: { disabled: false }, dependent: { disabled: false } } });
+  await runtime.configuration.update({
+    entries: { base: { disabled: false }, dependent: { disabled: false } },
+  });
   await assert.rejects(
     runtime.configuration.update({ entries: { base: { config: { fail: true } } } }),
     /Partial setup failed/,
@@ -397,7 +402,9 @@ test('cyclic services stay waiting without activating either plugin', async (t) 
     );
   }
   await runtime.start();
-  await runtime.configuration.update({ entries: { first: { disabled: false }, second: { disabled: false } } });
+  await runtime.configuration.update({
+    entries: { first: { disabled: false }, second: { disabled: false } },
+  });
   assert.equal(runtime.settings.entries.first?.disabled, false);
   for (const id of ['first', 'second'])
     assert.equal(runtime.plugins.metadata().find((plugin) => plugin.id === id)?.state, 'inactive');
@@ -665,7 +672,11 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
       title: 'Workspace',
       description: '',
       plugin: {
-        Config: defineConfig({ type: 'object', properties: { value: { type: 'string' } }, required: ['value'] }),
+        Config: defineConfig({
+          type: 'object',
+          properties: { value: { type: 'string' } },
+          required: ['value'],
+        }),
         provide: 'greeting',
         apply(ctx: Context, config: Record<string, unknown>) {
           ctx.provide('greeting', String(config.value));
@@ -825,8 +836,12 @@ test('configuration validation resolves the staged scope provider and rejects in
       description: '',
       plugin: {
         inject: ['greeting'],
-        Config: defineConfig({ type: 'object', properties: { expected: { type: 'string' } }, required: ['expected'] }),
-        apply(ctx, config) {
+        Config: defineConfig({
+          type: 'object',
+          properties: { expected: { type: 'string' } },
+          required: ['expected'],
+        }),
+        apply(ctx: Context, config: Record<string, unknown>) {
           if (config.expected !== ctx.get('greeting')) throw new Error('Wrong scoped greeting');
         },
       },
@@ -889,7 +904,10 @@ test('setup and live configuration cannot await their own graph transaction', as
   });
   await host.start(settings);
   const configure = (prepare: boolean) => {
-    const next = { ...settings, entries: { reentrant: { disabled: false, live: true, config: { prepare } } } };
+    const next = {
+      ...settings,
+      entries: { reentrant: { disabled: false, live: true, config: { prepare } } },
+    };
     return host.configure(next, () => {
       settings = next;
     });
@@ -937,6 +955,9 @@ test('a failed server entry does not publish its browser module', async (t) => {
     rmSync(directory, { recursive: true, force: true });
   });
   await host.start(settings);
-  assert.deepEqual(host.browser().map(({ id }) => id), ['ui']);
+  assert.deepEqual(
+    host.browser().map(({ id }) => id),
+    ['ui'],
+  );
   assert.equal(host.metadata().find(({ id }) => id === 'replacement')?.state, 'failed');
 });

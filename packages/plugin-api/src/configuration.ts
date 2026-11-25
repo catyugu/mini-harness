@@ -33,8 +33,10 @@ export function defineConfig(
       version: 1,
       vendor: 'mini-harness',
       validate(value) {
-        const config = configDefaults(schema, structuredClone(value ?? {}));
-        if (!Check(schema, config)) return { issues: [{ message: 'Invalid configuration' }] };
+        const candidate = configDefaults(schema, structuredClone(value ?? {}));
+        if (!Check(schema, candidate) || !candidate || typeof candidate !== 'object' || Array.isArray(candidate))
+          return { issues: [{ message: 'Invalid configuration' }] };
+        const config = candidate as Record<string, unknown>;
         const issue = refine?.(config);
         return issue ? { issues: [{ message: issue }] } : { value: config };
       },

@@ -12,7 +12,11 @@ import type { SettingsPort } from './api.ts';
 import type { ProfileConfiguration } from '@mini-harness/plugin-api/configuration';
 
 export interface PluginConfigurationPort {
-  configure(settings: ProfileConfiguration, commit?: () => void, released?: ReadonlySet<ScopeKey>): Promise<void>;
+  configure(
+    settings: ProfileConfiguration,
+    commit?: () => void,
+    released?: ReadonlySet<ScopeKey>,
+  ): Promise<void>;
 }
 
 export class SettingsManager implements SettingsPort {
@@ -87,8 +91,7 @@ export class SettingsManager implements SettingsPort {
     return this.transact(() => {
       check();
       const values = configurationPatch(patch);
-      if (!key)
-        return { entries: { [id]: { config: { ...this.stored.entries[id]?.config, ...values } } } };
+      if (!key) return { entries: { [id]: { config: { ...this.stored.entries[id]?.config, ...values } } } };
       const scope = this.stored.scopes[key];
       return {
         scopes: {

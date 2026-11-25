@@ -30,12 +30,18 @@ export function describePlugin(id: string, folder: string, entry?: string): Disc
   }>(packageFile, {});
   let source = entry;
   if (!source && packageInfo.name && (packageInfo.exports !== undefined || packageInfo.main !== undefined)) {
-    const resolved = packageInfo.exports !== undefined
-      ? fileURLToPath(resolveModule(packageInfo.name, packageFile))
-      : createRequire(packageFile).resolve(folder);
+    const resolved =
+      packageInfo.exports !== undefined
+        ? fileURLToPath(resolveModule(packageInfo.name, packageFile))
+        : createRequire(packageFile).resolve(folder);
     const physical = realpathSync(resolved);
     const location = relative(realpathSync(folder), physical);
-    if (isAbsolute(location) || location === '..' || location.startsWith('..' + sep) || !isRegularFile(physical))
+    if (
+      isAbsolute(location) ||
+      location === '..' ||
+      location.startsWith('..' + sep) ||
+      !isRegularFile(physical)
+    )
       throw new Error('Plugin entry must resolve inside its package');
     source = physical;
   } else if (!source && isRegularFile(join(folder, 'plugin.js'))) {
@@ -47,7 +53,7 @@ export function describePlugin(id: string, folder: string, entry?: string): Disc
         descriptor,
         null,
       )
-    : packageInfo.miniHarness?.plugin ?? {};
+    : (packageInfo.miniHarness?.plugin ?? {});
   if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest))
     throw new Error('Expected an object in plugin.json');
   const browser = manifest.browser ?? (isRegularFile(join(folder, 'web.js')) ? 'web.js' : undefined);
@@ -62,13 +68,13 @@ export function describePlugin(id: string, folder: string, entry?: string): Disc
   const scope = manifest.scope ?? 'application';
   if (scope !== 'application' && scope !== 'workspace' && scope !== 'session')
     throw new Error('Invalid plugin scope');
-  if (scope !== 'application' && hasWeb)
-    throw new Error('Browser entries belong to the application scope');
+  if (scope !== 'application' && hasWeb) throw new Error('Browser entries belong to the application scope');
   if (!hasWeb && (manifest.browserDirectory !== undefined || manifest.browserPreload !== undefined))
     throw new Error('Browser assets require a browser entry');
-  const resources = browser !== undefined
-    ? readBrowserAssets(id, folder, browser, manifest.browserDirectory, manifest.browserPreload)
-    : undefined;
+  const resources =
+    browser !== undefined
+      ? readBrowserAssets(id, folder, browser, manifest.browserDirectory, manifest.browserPreload)
+      : undefined;
   const configSchema = manifest.configSchema;
   if (
     configSchema &&
@@ -112,7 +118,10 @@ export function describePlugin(id: string, folder: string, entry?: string): Disc
   return {
     source,
     resources,
-    package: packageInfo.name && packageInfo.version ? { name: packageInfo.name, version: packageInfo.version } : undefined,
+    package:
+      packageInfo.name && packageInfo.version
+        ? { name: packageInfo.name, version: packageInfo.version }
+        : undefined,
     scope,
     id,
     title,

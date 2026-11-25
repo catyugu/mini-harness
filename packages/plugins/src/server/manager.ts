@@ -1,7 +1,14 @@
 import { assertOutsideMountTransaction, withMountTransaction } from '@mini-harness/plugin-api/mutation-api';
 import { DomainError } from '@mini-harness/platform/errors';
 import { dirname, join } from 'node:path';
-import { EntryGroup, EntryTree, Service, ValidationError, type Context, type EntryOptions } from 'mini-harness/cordis';
+import {
+  EntryGroup,
+  EntryTree,
+  Service,
+  ValidationError,
+  type Context,
+  type EntryOptions,
+} from 'mini-harness/cordis';
 import { localPluginIdPattern, isScopeKey } from '@mini-harness/plugin-api/selection';
 import { isDeepStrictEqual } from 'node:util';
 import type { ResolvedPlugin } from '@mini-harness/plugin-api/descriptor';
@@ -146,7 +153,8 @@ export class PluginHost implements ScopePort {
     return this.catalog.metadata(
       this.settings(),
       this.failures,
-      (id) => this.entries.get(id)?.active === true || this.browserState.entries.some((entry) => entry.id === id),
+      (id) =>
+        this.entries.get(id)?.active === true || this.browserState.entries.some((entry) => entry.id === id),
     );
   }
   register(
@@ -297,9 +305,7 @@ export class PluginHost implements ScopePort {
       );
       const isolates = [...declared].sort();
       const existing = this.scopes.get(key);
-      const group = existing?.matches(parent, isolates)
-        ? existing
-        : new EntryGroup(parent, isolates);
+      const group = existing?.matches(parent, isolates) ? existing : new EntryGroup(parent, isolates);
       const { context } = group;
       if (active.has(key)) {
         contexts.set(key, group);
@@ -378,9 +384,7 @@ export class PluginHost implements ScopePort {
   ) {
     const oldEntries = [...this.entries.values()];
     const previousActive = new Set(
-      oldEntries
-        .filter((entry) => entry.active)
-        .map(({ options }) => options.id),
+      oldEntries.filter((entry) => entry.active).map(({ options }) => options.id),
     );
     const previousEntries = oldEntries.map(({ options }) => options);
     const failures = new Map<string, string>();
@@ -390,17 +394,19 @@ export class PluginHost implements ScopePort {
     if (updating) this.catalog.validateDisabled(descriptors, previous, settings);
     const unavailable = (id: string, error: unknown, key?: ScopeKey) => {
       const instance = key ? key + '/' + id : id;
-      const message = error instanceof ValidationError
-        ? 'Invalid configuration for plugin: ' + instance + ': ' + error.message
-        : error instanceof Error ? error.message : String(error);
+      const message =
+        error instanceof ValidationError
+          ? 'Invalid configuration for plugin: ' + instance + ': ' + error.message
+          : error instanceof Error
+            ? error.message
+            : String(error);
       if (updating && changedSelection(id, previous, settings, key))
         throw new DomainError(
           error instanceof DomainError ? error.code : 'invalid_input',
           'Plugin ' + instance + ': ' + message,
           { cause: error },
         );
-      if (previousActive.has(instance))
-        return false;
+      if (previousActive.has(instance)) return false;
       failures.set(instance, message);
       return true;
     };
@@ -412,46 +418,47 @@ export class PluginHost implements ScopePort {
           ),
         )
       : [];
-    const scoped = this.scopedEntries(
-      settings,
-      descriptors,
-      unavailable,
-      preparing,
-      released,
-      changedScopes,
-    );
+    const scoped = this.scopedEntries(settings, descriptors, unavailable, preparing, released, changedScopes);
     const mounts = [
       ...plans
         .filter(({ id, descriptor }) => descriptor.plugin && !failures.has(id))
         .map((plan) => this.catalog.entry(plan, this.ctx, appScope)),
       ...scoped.entries,
     ];
-    const appChanged =
-      descriptors.some((descriptor) => {
-        const { id, scope, plugin, source } = descriptor;
-        if (scope !== 'application' || !(plugin || source)) return false;
-        const enabled = this.catalog.enabled(descriptor, settings);
-        return (
-          enabled !== this.catalog.enabled(descriptor, previous) ||
-          (enabled && settings.entries[id]?.live !== previous.entries[id]?.live) ||
-          (enabled &&
-            !settings.entries[id]?.live &&
-            !isDeepStrictEqual(settings.entries[id]?.config, previous.entries[id]?.config))
-        );
-      });
+    const appChanged = descriptors.some((descriptor) => {
+      const { id, scope, plugin, source } = descriptor;
+      if (scope !== 'application' || !(plugin || source)) return false;
+      const enabled = this.catalog.enabled(descriptor, settings);
+      return (
+        enabled !== this.catalog.enabled(descriptor, previous) ||
+        (enabled && settings.entries[id]?.live !== previous.entries[id]?.live) ||
+        (enabled &&
+          !settings.entries[id]?.live &&
+          !isDeepStrictEqual(settings.entries[id]?.config, previous.entries[id]?.config))
+      );
+    });
     const scopeChanges = new Set(
       [...scopeKeys(previous), ...scopeKeys(settings)].filter((key) => {
         const before = previous.scopes[key],
           after = settings.scopes[key];
         return (
           !isDeepStrictEqual(
-            Object.fromEntries(Object.entries(before?.entries ?? {}).filter(([, entry]) => entry.disabled !== undefined || entry.live !== undefined).map(([id, entry]) => [id, [entry.disabled, entry.live]])),
-            Object.fromEntries(Object.entries(after?.entries ?? {}).filter(([, entry]) => entry.disabled !== undefined || entry.live !== undefined).map(([id, entry]) => [id, [entry.disabled, entry.live]])),
+            Object.fromEntries(
+              Object.entries(before?.entries ?? {})
+                .filter(([, entry]) => entry.disabled !== undefined || entry.live !== undefined)
+                .map(([id, entry]) => [id, [entry.disabled, entry.live]]),
+            ),
+            Object.fromEntries(
+              Object.entries(after?.entries ?? {})
+                .filter(([, entry]) => entry.disabled !== undefined || entry.live !== undefined)
+                .map(([id, entry]) => [id, [entry.disabled, entry.live]]),
+            ),
           ) ||
           descriptors.some(
             ({ id }) =>
               after?.entries?.[id]?.disabled === false &&
-              ((before?.entries?.[id]?.live ?? previous.entries[id]?.live) !== (after.entries?.[id]?.live ?? settings.entries[id]?.live) ||
+              ((before?.entries?.[id]?.live ?? previous.entries[id]?.live) !==
+                (after.entries?.[id]?.live ?? settings.entries[id]?.live) ||
                 (!(after.entries?.[id]?.live ?? settings.entries[id]?.live) &&
                   (!isDeepStrictEqual(before?.entries?.[id]?.config, after.entries?.[id]?.config) ||
                     !isDeepStrictEqual(previous.entries[id]?.config, settings.entries[id]?.config)))),
@@ -475,7 +482,10 @@ export class PluginHost implements ScopePort {
           if (entry) {
             const next = mounts.find(({ id }) => id === entry.options.id);
             if (!next || !entry.matches(next) || !isDeepStrictEqual(next.config, entry.options.config))
-              throw new DomainError('conflict', 'Changing ' + entry.options.id + ' requires a Profile restart');
+              throw new DomainError(
+                'conflict',
+                'Changing ' + entry.options.id + ' requires a Profile restart',
+              );
           }
           for (const provision of Object.values(fiber.committed ?? {}))
             if (provision) check(provision.ctx.fiber);

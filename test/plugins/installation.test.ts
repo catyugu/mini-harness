@@ -4,13 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile as exec } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
@@ -100,7 +94,11 @@ test(
       npm_config_prefer_online: 'true',
     };
     const run = (...args: string[]) =>
-      execFile(process.execPath, [cli, 'plugin', '--profile', 'web', ...args], { env, cwd: paths.cwd, timeout: 12000 });
+      execFile(process.execPath, [cli, 'plugin', '--profile', 'web', ...args], {
+        env,
+        cwd: paths.cwd,
+        timeout: 12000,
+      });
 
     async function publish(
       name: string,
@@ -115,7 +113,11 @@ test(
         version,
         type: 'module',
         dependencies,
-        exports: files['index.js'] ? './index.js' : files['server/entry.mjs'] ? './server/entry.mjs' : undefined,
+        exports: files['index.js']
+          ? './index.js'
+          : files['server/entry.mjs']
+            ? './server/entry.mjs'
+            : undefined,
         scripts: { postinstall: 'node -e "process.exit(13)"' },
       };
       writeJson(join(cwd, 'package.json'), manifest);
@@ -198,7 +200,10 @@ export const apply = (ctx) => { ctx.harnessPluginRoutes.register('GET', '/label'
       await (await asset(entry.browser.replace(/main\.js$/, 'chunks/feature.mjs'))).text(),
       files['web/chunks/feature.mjs'],
     );
-    assert.equal((await request('/settings', 'PATCH', { entries: { [id]: { disabled: true } } })).status, 200);
+    assert.equal(
+      (await request('/settings', 'PATCH', { entries: { [id]: { disabled: true } } })).status,
+      200,
+    );
     assert.equal((await asset(entry.browser)).status, 404);
     assert.equal((await asset(entry.styles[0])).status, 404);
     await app.close();
@@ -250,7 +255,10 @@ test('browser entries receive and edit their configuration without a field allow
   const folder = join(paths.plugins, 'config-visibility');
   mkdirSync(folder);
   writeFileSync(join(folder, 'web.js'), 'export default () => {}');
-  writeFileSync(join(folder, 'plugin.js'), "import { defineConfig } from 'mini-harness/configuration';\nimport { readFileSync } from 'node:fs';\nexport const Config = defineConfig(JSON.parse(readFileSync(new URL('./plugin.json', import.meta.url), 'utf8')).configSchema);\n");
+  writeFileSync(
+    join(folder, 'plugin.js'),
+    "import { defineConfig } from 'mini-harness/configuration';\nimport { readFileSync } from 'node:fs';\nexport const Config = defineConfig(JSON.parse(readFileSync(new URL('./plugin.json', import.meta.url), 'utf8')).configSchema);\n",
+  );
   writeJson(join(folder, 'plugin.json'), {
     configSchema: {
       type: 'object',
@@ -260,12 +268,16 @@ test('browser entries receive and edit their configuration without a field allow
       },
     },
   });
-  assert.equal((await request('/settings', 'PATCH', { entries: { 'config-visibility': { disabled: false } } })).status, 200);
+  assert.equal(
+    (await request('/settings', 'PATCH', { entries: { 'config-visibility': { disabled: false } } })).status,
+    200,
+  );
   const entry = async () =>
-    (await request('/bootstrap')).body.ui.find(
-      ({ id }: { id: string }) => id === 'config-visibility',
-    );
+    (await request('/bootstrap')).body.ui.find(({ id }: { id: string }) => id === 'config-visibility');
   assert.deepEqual((await entry()).config, { label: 'Visible', detail: 'Original' });
-  assert.equal((await request('/settings/plugins/config-visibility', 'PATCH', { detail: 'Updated' })).status, 200);
+  assert.equal(
+    (await request('/settings/plugins/config-visibility', 'PATCH', { detail: 'Updated' })).status,
+    200,
+  );
   assert.deepEqual((await entry()).config, { label: 'Visible', detail: 'Updated' });
 });

@@ -61,7 +61,8 @@ export function initializeProfile(name: string, paths: Paths, bundles: readonly 
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   const root = join(directory, ROOT);
   const patch = join(directory, PATCH);
-  if (existsSync(root) || existsSync(patch)) throw new Error('Profile directory already contains configuration: ' + name);
+  if (existsSync(root) || existsSync(patch))
+    throw new Error('Profile directory already contains configuration: ' + name);
   writeText(patch, 'plugins: []\n');
   writeText(root, 'plugins: []\n');
   writeJson(manifest, {
@@ -80,10 +81,7 @@ function bundleLayers(name: string, directory: string): LoadedLayer[] {
   if (!/^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/i.test(name))
     throw new Error('Invalid Profile bundle package name: ' + name);
   const root = join(directory, 'node_modules', name);
-  const manifest = readJson<{ miniHarness?: { bundle?: { patch?: unknown } } }>(
-    join(root, MANIFEST),
-    {},
-  );
+  const manifest = readJson<{ miniHarness?: { bundle?: { patch?: unknown } } }>(join(root, MANIFEST), {});
   const declared = manifest.miniHarness?.bundle?.patch;
   const patches = typeof declared === 'string' ? [declared] : declared;
   if (!Array.isArray(patches) || !patches.length || patches.some((file) => typeof file !== 'string'))
@@ -139,9 +137,7 @@ function load(file: string, optional = false): Layer | undefined {
         ids.has(row.id) ||
         (row.name !== undefined && (typeof row.name !== 'string' || !row.name.trim())) ||
         (row.config !== undefined && !object(row.config)) ||
-        ['disabled', 'client', 'live'].some(
-          (key) => row[key] !== undefined && typeof row[key] !== 'boolean',
-        )
+        ['disabled', 'client', 'live'].some((key) => row[key] !== undefined && typeof row[key] !== 'boolean')
       )
         throw new Error('Invalid or duplicate plugin entry: ' + (object(row) ? row.id : row));
       ids.add(row.id);
@@ -249,9 +245,10 @@ export function dumpProfile(name: string, paths: Paths, patches: readonly string
     ...(detached === undefined ? {} : { detached }),
     plugins: [...rows(selected).values()].map(({ source, ...row }) => ({
       ...row,
-      name: row.name!.startsWith('./') || row.name!.startsWith('../')
-        ? resolve(dirname(source!), row.name!)
-        : row.name,
+      name:
+        row.name!.startsWith('./') || row.name!.startsWith('../')
+          ? resolve(dirname(source!), row.name!)
+          : row.name,
     })),
     ...(scopes === undefined ? {} : { scopes }),
   });
@@ -291,7 +288,10 @@ function changedValues(base: unknown, before: unknown, after: unknown): unknown 
   if (!object(before) || !object(after)) return after;
   const result = { ...(object(base) ? base : {}) };
   for (const key of new Set([...Object.keys(before), ...Object.keys(after)])) {
-    if (isDeepStrictEqual(before[key], after[key]) && Object.hasOwn(before, key) === Object.hasOwn(after, key))
+    if (
+      isDeepStrictEqual(before[key], after[key]) &&
+      Object.hasOwn(before, key) === Object.hasOwn(after, key)
+    )
       continue;
     if (!Object.hasOwn(after, key)) delete result[key];
     else result[key] = changedValues(result[key], before[key], after[key]);
@@ -312,7 +312,9 @@ function isPlugin(value: unknown): value is Plugin {
   return typeof value === 'function' || (object(value) && typeof value.apply === 'function');
 }
 
-async function moduleFor(name: string): Promise<{ plugin?: Plugin; metadata?: PluginInfo; Config?: Plugin.Base['Config'] }> {
+async function moduleFor(
+  name: string,
+): Promise<{ plugin?: Plugin; metadata?: PluginInfo; Config?: Plugin.Base['Config'] }> {
   const target = packagedModules.get(name);
   if (!target) throw new Error('Unknown packaged Profile plugin: ' + name);
   const exports = await import(new URL(target.path, installed).href);
@@ -322,7 +324,8 @@ async function moduleFor(name: string): Promise<{ plugin?: Plugin; metadata?: Pl
   if (value !== undefined && !isPlugin(value))
     throw new Error('Profile module must export a Cordis plugin: ' + name);
   if (!value && !metadata?.browser) throw new Error('Profile module export not found: ' + name);
-  const Config = value?.Config ?? exports[target.exportName === 'default' ? 'Config' : target.exportName + 'Config'];
+  const Config =
+    value?.Config ?? exports[target.exportName === 'default' ? 'Config' : target.exportName + 'Config'];
   return { plugin: value, metadata, Config };
 }
 
@@ -377,9 +380,7 @@ export async function loadProfile(
         // Command-line overlays can live outside the Profile's npm environment.
         // Relative paths still belong to the file that declares them.
         const bare = !isAbsolute(name) && !name.startsWith('./') && !name.startsWith('../');
-        const source = bare && overlayFiles.has(row.source!)
-          ? join(directory, MANIFEST)
-          : row.source!;
+        const source = bare && overlayFiles.has(row.source!) ? join(directory, MANIFEST) : row.source!;
         return [row.id, { name, source }];
       }),
   );
@@ -388,20 +389,21 @@ export async function loadProfile(
   function configurationFor(selected: ReadonlyMap<string, ResolvedRow>, selectedLayers: readonly Layer[]) {
     return parseSettings({
       entries: Object.fromEntries(
-        [...selected.values()].map((row) => [row.id, {
-          disabled: Boolean(row.disabled),
-          ...(row.live === undefined ? {} : { live: row.live }),
-          ...(row.config === undefined ? {} : { config: row.config }),
-        }]),
+        [...selected.values()].map((row) => [
+          row.id,
+          {
+            disabled: Boolean(row.disabled),
+            ...(row.live === undefined ? {} : { live: row.live }),
+            ...(row.config === undefined ? {} : { config: row.config }),
+          },
+        ]),
       ),
       readOnlyTools: policy.readOnlyTools,
       scopes: withToolRules(Object.assign({}, ...shipped, ...selectedLayers).scopes ?? {}, scopedTools),
     });
   }
   let persistent = configurationFor(persistentRows, userLayers);
-  const effective = overlays.length
-    ? configurationFor(resolved, [...userLayers, ...overlays])
-    : persistent;
+  const effective = overlays.length ? configurationFor(resolved, [...userLayers, ...overlays]) : persistent;
   const roots = [
     directory,
     ...[...aliases.values()].flatMap((location) => {
@@ -430,9 +432,7 @@ export async function loadProfile(
     const plugins: Row[] = [];
     for (const id of new Set([
       ...Object.keys(settings.entries),
-      ...(user.plugins ?? [])
-        .filter((row) => !aliases.has(row.id))
-        .map((row) => row.id),
+      ...(user.plugins ?? []).filter((row) => !aliases.has(row.id)).map((row) => row.id),
     ])) {
       const base = official.get(id);
       const existing = persistentRows.get(id);
@@ -492,9 +492,7 @@ export async function loadProfile(
       else if (previous !== text) writeText(file, previous);
       throw error;
     }
-    for (const id of aliases.keys())
-      if (!Object.hasOwn(runtime.entries, id))
-        aliases.delete(id);
+    for (const id of aliases.keys()) if (!Object.hasOwn(runtime.entries, id)) aliases.delete(id);
     persistent = settings;
     current = runtime;
   }
@@ -507,14 +505,22 @@ export async function loadProfile(
       const catalog = new PluginCatalog(paths.plugins, descriptors, profile);
       const settings = current;
       const errors = new Map<string, unknown>();
-      const { plans } = catalog.plans(settings, await catalog.runtimeDescriptors(settings), 'application', undefined,
+      const { plans } = catalog.plans(
+        settings,
+        await catalog.runtimeDescriptors(settings),
+        'application',
+        undefined,
         (id, error) => {
           errors.set(id, error);
           return true;
-        });
+        },
+      );
       for (const [id, error] of await entries.update(
-        plans.filter(({ descriptor }) => descriptor.plugin).map((plan) => catalog.entry(plan, context, { kind: 'application' })),
-      )) errors.set(id, error);
+        plans
+          .filter(({ descriptor }) => descriptor.plugin)
+          .map((plan) => catalog.entry(plan, context, { kind: 'application' })),
+      ))
+        errors.set(id, error);
       return errors;
     },
     installed: aliases,
@@ -564,4 +570,3 @@ function withToolRules(scopes: ProfileConfiguration['scopes'], rules: Record<str
     ),
   };
 }
-

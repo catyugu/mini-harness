@@ -28,18 +28,19 @@ declare module 'mini-harness/cordis' {
     taskNotes: { label(): string };
   }
 }
-export const Config = defineConfig({
-  "type": "object",
-  "properties": {
-    "label": {
-      "type": "string",
-      "title": "Note label",
-      "default": "Task progress"
-    }
+export const Config = defineConfig(
+  {
+    type: 'object',
+    properties: {
+      label: {
+        type: 'string',
+        title: 'Note label',
+        default: 'Task progress',
+      },
+    },
+    additionalProperties: false,
   },
-  "additionalProperties": false
-}, (config) =>
-  typeof config.label !== 'string' || !config.label.trim() ? 'Enter a note label' : undefined,
+  (config) => (typeof config.label !== 'string' || !config.label.trim() ? 'Enter a note label' : undefined),
 );
 export function apply(ctx: Context) {
   const sessions: SessionAccess = ctx.harnessSessions.access();
@@ -54,9 +55,7 @@ export function apply(ctx: Context) {
   ctx.provide('taskNotes', { label });
   data.write('seen', true);
   const hasCredential = () => secrets.read('service-token') !== undefined;
-  ctx.effect(() =>
-    prompt.register({ id: 'task-notes', render: () => 'Task notes are available.' }),
-  );
+  ctx.effect(() => prompt.register({ id: 'task-notes', render: () => 'Task notes are available.' }));
   ctx.effect(() =>
     ctx.harnessTools.register({
       name: 'save_task_note',

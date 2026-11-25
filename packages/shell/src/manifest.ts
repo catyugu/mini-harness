@@ -8,19 +8,19 @@ import { supportsIsolation } from '@mini-harness/platform/isolation';
 export const defaultShellMode = supportsIsolation() ? 'isolated' : 'host';
 
 const Config = defineConfig({
-    ...Type.Object(
-      {
-        mode: Type.String({
-          title: 'Shell policy',
-          enum: ['isolated', 'host'],
-          default: defaultShellMode,
-          'x-enumLabels': ['Isolated (Linux)', 'Host (conversation approval policy)'],
-        }),
-        timeoutSeconds: Type.Integer({ title: 'Timeout (seconds)', minimum: 1, maximum: 300, default: 60 }),
-      },
-      { additionalProperties: false },
-    ),
-  });
+  ...Type.Object(
+    {
+      mode: Type.String({
+        title: 'Shell policy',
+        enum: ['isolated', 'host'],
+        default: defaultShellMode,
+        'x-enumLabels': ['Isolated (Linux)', 'Host (conversation approval policy)'],
+      }),
+      timeoutSeconds: Type.Integer({ title: 'Timeout (seconds)', minimum: 1, maximum: 300, default: 60 }),
+    },
+    { additionalProperties: false },
+  ),
+});
 
 export const metadata: PluginInfo = {
   scope: 'application',
@@ -30,7 +30,6 @@ export const metadata: PluginInfo = {
   browser: '/packages/shell/src/browser/setup.js',
   configHint:
     'Isolated mode requires Linux bubblewrap. Host mode executes with your permissions; Full access conversations skip Shell approval.',
-
 };
 
 const plugin: Plugin.Object = {
