@@ -12,7 +12,7 @@ const plugin: Plugin.Object = {
   inject: ['harnessRegistry', 'harnessScopes', 'harnessSettingsStore'],
   provide: ['harnessToolPolicy'],
   apply(ctx) {
-    const authorize: ToolPolicy = (id, { name, readOnly, instanceId, module }) => {
+    const authorize: ToolPolicy = (id, { name, readOnly, pluginId }) => {
       const address = ctx.harnessScopes.address(`session:${id}`);
       const settings = ctx.harnessSettingsStore.settings;
       if (address.some((key) => settings.scopes[key]?.disabledTools?.includes(name))) return false;
@@ -21,13 +21,11 @@ const plugin: Plugin.Object = {
           key.startsWith('session:') &&
           ctx.harnessRegistry.get(key.slice('session:'.length))?.permission === 'readOnly',
       );
-      const grant =
-        instanceId && Object.hasOwn(settings.readOnlyTools, instanceId)
-          ? settings.readOnlyTools[instanceId]
-          : undefined;
+      const grants = settings.readOnlyTools;
       return (
         !requiresReadOnly ||
-        Boolean(readOnly && grant && grant.module === module && grant.tools.includes(name))
+        (readOnly &&
+          Boolean(pluginId && Object.hasOwn(grants, pluginId) && grants[pluginId].includes(name)))
       );
     };
     ctx.provide('harnessToolPolicy', authorize);

@@ -17,7 +17,7 @@ export interface CompositionConfig {
 }
 
 export interface ProfileConfiguration extends CompositionConfig {
-  readOnlyTools: Record<string, { module: string; tools: string[] }>;
+  readOnlyTools: Record<string, string[]>;
 }
 
 export function scopeKeys(configuration: CompositionConfig) {

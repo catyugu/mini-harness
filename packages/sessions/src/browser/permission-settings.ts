@@ -14,21 +14,15 @@ const setup = (ctx: Context) => {
           '<section class="ui-section" hidden><h3>Read-only conversation tools</h3><p class="hint">Grant access only to tools you trust to leave files and other state unchanged. Scope restrictions still apply.</p><p class="hint" role="status"></p></section>',
         );
         const status = required(section.querySelector<HTMLElement>('[role="status"]'));
-        void browserRequest<{ instanceId: string; module: string; name: string; granted: boolean }[]>(
-          ctx,
-          path,
-          { signal },
-        )
-          .then((registrations) => {
-            for (const { instanceId, module, name, granted } of registrations) {
-              const control = toggle('Allow ' + name + ' in read-only conversations', granted);
+        void browserRequest<{ tools: string[]; grants: string[] }>(ctx, path, { signal })
+          .then(({ tools, grants }) => {
+            for (const name of new Set([...tools, ...grants])) {
+              const control = toggle('Allow ' + name + ' in read-only conversations', grants.includes(name));
+              control.disabled = !grants.includes(name) && !tools.includes(name);
               saveToggle(control, async (allowed) => {
                 status.textContent = '';
                 try {
-                  await browserRequest(ctx, path, {
-                    ...payload('PATCH', { instanceId, module, tools: [name], allowed }),
-                    signal,
-                  });
+                  await browserRequest(ctx, path, { ...payload('PATCH', { tool: name, allowed }), signal });
                   return true;
                 } catch (error) {
                   if (!signal.aborted)
@@ -36,9 +30,9 @@ const setup = (ctx: Context) => {
                   return false;
                 }
               });
-              section.insertBefore(field(name + ' · ' + instanceId, control), status);
+              section.insertBefore(field(name, control), status);
             }
-            section.hidden = !registrations.length;
+            section.hidden = !tools.length && !grants.length;
           })
           .catch((error: unknown) => {
             if (signal.aborted) return;

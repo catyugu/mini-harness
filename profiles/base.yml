@@ -55,9 +55,5 @@ plugins:
   - id: core:tools
     name: '@mini-harness/tools'
 readOnlyTools:
-  files:
-    module: '@mini-harness/files'
-    tools: [read, ls, find, grep]
-  skills:
-    module: '@mini-harness/skills'
-    tools: [load_skill]
+  files: [read, ls, find, grep]
+  skills: [load_skill]

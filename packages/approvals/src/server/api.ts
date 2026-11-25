@@ -1,8 +1,13 @@
 import type { Approval } from '../shared/request.ts';
 
-import type { ToolApproval } from '@mini-harness/tools/api';
-
-export type ApprovalPrompt = ToolApproval;
+export interface ApprovalPrompt {
+  title: string;
+  message: string;
+  /** Allow the user to release this request by explicitly selecting Full access. */
+  followFullAccess?: boolean;
+  /** Scope repeated denials within this run to this operation. */
+  context?: string;
+}
 
 export interface ApprovalRequests {
   request(id: string, prompt: ApprovalPrompt, signal?: AbortSignal): Promise<boolean>;

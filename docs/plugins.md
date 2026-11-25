@@ -60,11 +60,11 @@ A service provider declares `provide = ['exampleGreeting']` and calls `ctx.provi
 
 Use `await sessionService(ctx, sessionId, serviceName, signal)` to prepare a visible conversation and access a service with the caller's identity. Session writes and scope preparation belong in runtime calls after plugin setup. See [scoped providers](scoped-providers.md).
 
-Tool definitions may declare an `approval(args)` prompt; the shared registry obtains the user's decision and rechecks the invocation lease. An alternative `harnessToolExecutor` can present tools and interpret model messages in another protocol, while scheduling and executing only authorized calls.
+An alternative `harnessToolExecutor` can present tools and interpret model messages in another protocol, while scheduling and executing only authorized calls.
 
 ### Events
 
-Use `agent/setup` to register capabilities for a particular running Agent. The callback receives its Cordis context, session ID and cancellation signal. Register run-local tools and prompt sections with `run.effect(() => run.get('harnessTools')!.register(...))` and `run.effect(() => run.get('harnessPrompt')!.register(...))`. These contributions are disposed with the run; child runs inherit active parent capabilities and keep their own overrides. Run-local registrations do not acquire a plugin's read-only authorization automatically.
+Use `agent/setup` to register capabilities for a particular running Agent. The callback receives its Cordis context, session ID and cancellation signal. Register run-local tools and prompt sections with `run.effect(() => run.get('harnessTools')!.register(...))` and `run.effect(() => run.get('harnessPrompt')!.register(...))`. These contributions are disposed with the run; child runs inherit active parent capabilities and keep their own overrides. 
 
 Register listeners with `ctx.on(event, handler, { order })`. Listeners are owned by the Fiber and visibility follows the target session's ancestry. Pipeline order is ascending, then by plugin instance ID.
 
@@ -74,7 +74,7 @@ Register listeners with `ctx.on(event, handler, { order })`. Listeners are owned
 | `agent/model-request`          | Transform the system prompt, model-visible messages, thinking level or token limit.                                          |
 | `agent/model-retry`            | Return `{ delayMs }` to retry a model attempt before output has streamed. The first decision applies.                        |
 | `agent/tool-result`            | Transform successful results after persistence of the original execution.                                                    |
-| `tools/decide`                 | Return `'deny'`, `'ask'`, `'allow'` or `undefined`; denial and explicit approval requirements cannot be overridden by allow. |
+| `tools/decide`                 | Return `'deny'` to restrict a call or `undefined` to defer. |
 | `conversation/tool-projection` | Synchronously transform tool output in the conversation display.                                                             |
 | `harness/observe`              | Observe session, run or turn events with an activation-bound cancellation signal.                                            |
 

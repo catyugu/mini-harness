@@ -6,7 +6,6 @@ interface PluginInstance {
   scope: PluginScope;
   scopeKey?: ScopeKey;
   writableConfig: boolean;
-  module: string;
 }
 
 const identities = new WeakMap<FiberEntry, PluginInstance>();

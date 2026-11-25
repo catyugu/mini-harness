@@ -67,12 +67,7 @@ export class SettingsManager implements SettingsPort {
           .filter((key) => !released.has(key))
           .map((key) => [key, this.stored.scopes[key]]),
       );
-      const readOnlyTools = Object.fromEntries(
-        Object.entries(this.stored.readOnlyTools).filter(
-          ([id]) => !released.has(id.split('/')[0] as ScopeKey),
-        ),
-      );
-      const next = { ...this.stored, scopes, readOnlyTools };
+      const next = { ...this.stored, scopes };
       const changed = !isDeepStrictEqual(next, this.stored);
       const host = this.host();
       if (!host) throw new DomainError('unavailable', 'Live Profile configuration is unavailable');

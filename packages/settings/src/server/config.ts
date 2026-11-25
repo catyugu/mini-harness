@@ -49,19 +49,13 @@ export function validateSettings(input: unknown): asserts input is ProfileConfig
       throw new DomainError('invalid_input', 'Invalid scoped tool restriction: ' + key);
     validateEntries(section(scope.entries, key + '.entries'));
   }
-  for (const [instance, grant] of Object.entries(section(readOnlyTools, 'readOnlyTools'))) {
-    const [scope, id, extra] = instance.split('/');
+  for (const [plugin, tools] of Object.entries(section(readOnlyTools, 'readOnlyTools'))) {
     if (
-      (id
-        ? !isScopeKey(scope) || !pluginIdPattern.test(id) || extra !== undefined
-        : !pluginIdPattern.test(scope)) ||
-      !isObject(grant) ||
-      typeof grant.module !== 'string' ||
-      !grant.module ||
-      !Array.isArray(grant.tools) ||
-      !grant.tools.every((name: unknown) => typeof name === 'string' && toolNamePattern.test(name))
+      !pluginIdPattern.test(plugin) ||
+      !Array.isArray(tools) ||
+      !tools.every((name: unknown) => typeof name === 'string' && toolNamePattern.test(name))
     )
-      throw new DomainError('invalid_input', 'Invalid read-only tool grant: ' + instance);
+      throw new DomainError('invalid_input', 'Invalid read-only tool grant: ' + plugin);
   }
 }
 

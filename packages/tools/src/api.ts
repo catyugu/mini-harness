@@ -14,19 +14,10 @@ export interface ToolContext {
   assertAuthorized?(): void;
   waitForApproval?(request: () => Promise<void>): Promise<void>;
 }
-export interface ToolApproval {
-  title: string;
-  message: string;
-  context?: string;
-  followFullAccess?: boolean;
-}
-
 export interface ToolDefinition<Arguments = Record<string, any>> extends ToolSchema {
   label?: string;
   promptSnippet?: string;
   promptGuidelines?: string[];
-  /** Return the approval required by this operation under current conversation policy. */
-  approval?(args: Arguments): ToolApproval | undefined;
   /** Calls are serial unless this returns true for the validated arguments. */
   isConcurrencySafe?(args: Arguments): boolean;
   execute(
@@ -39,7 +30,7 @@ export interface ToolDefinition<Arguments = Record<string, any>> extends ToolSch
 }
 
 export interface ToolRegistrationOptions {
-  /** Read-only tools require an explicit grant for the registered instance and module. */
+  /** Read-only access follows the conversation's tool policy. */
   access?: 'readOnly' | 'standard';
   visible?(sessionId: string): boolean;
 }
@@ -50,7 +41,7 @@ export interface ToolPort {
     options?: ToolRegistrationOptions,
   ): () => Promise<void>;
   forSession(id: string): ToolDefinition[];
-  readOnlyRegistrations(pluginId: string): { instanceId: string; module: string; name: string }[];
+  readOnlyRegistrations(pluginId: string): string[];
   isAvailable(id: string, tool: ToolDefinition): boolean;
 }
 

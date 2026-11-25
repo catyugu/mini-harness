@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import type { PluginMetadata } from '../shared/metadata.ts';
 import { DomainError } from '@mini-harness/platform/errors';
-import { existsSync, lstatSync, realpathSync, statSync } from 'node:fs';
+import { existsSync, lstatSync, statSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import {
@@ -250,9 +250,6 @@ export class PluginCatalog {
           scope,
           scopeKey,
           writableConfig: plan.live,
-          module: descriptor.source
-            ? pathToFileURL(realpathSync(descriptor.source)).href
-            : (descriptor.name ?? plan.id),
         });
         const changes = context.get('harnessChanges');
         if (changes) ctx.effect(() => changes.register('plugin:' + plan.id));
