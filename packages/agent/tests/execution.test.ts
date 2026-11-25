@@ -45,6 +45,7 @@ function fixture(
   llm: LlmPort,
   retryModel?: () => Promise<ModelRetry>,
   thinkingLevels: (id: string) => ThinkingLevel[] | undefined = () => undefined,
+  executor = nativeExecutor,
 ) {
   const { root, paths } = createFixturePaths('http://127.0.0.1:1/v1');
   const sessions = new SessionRegistry(paths, new WorkspaceCatalog(paths));
@@ -70,7 +71,7 @@ function fixture(
     }),
   });
   ctx.provide('harnessLlm', llm);
-  ctx.provide('harnessToolExecutor', nativeExecutor);
+  ctx.provide('harnessToolExecutor', executor);
   ctx.provide('harnessCompaction', basicCompaction);
   ctx.provide('harnessPrompt', { build: async () => 'Fixture', register: () => () => {} });
   if (retryModel) ctx.on('agent/model-retry', retryModel);
@@ -78,6 +79,39 @@ function fixture(
   const record = sessions.create();
   return { agent, ctx, sessions, tools, record };
 }
+
+test('an alternative executor translates a model protocol through the same tool lease', async (t) => {
+  let requests = 0, executions = 0;
+  const { agent, ctx, tools, record, sessions } = fixture(t, {
+    async *stream(request) {
+      assert.match(request.systemPrompt, /custom protocol/);
+      assert.equal(request.tools, undefined);
+      yield { type: 'done', message: requests++ === 0 ? answer('call change') : answer() };
+    },
+  }, undefined, undefined, {
+    ...nativeExecutor,
+    present: (content, tools) => ({
+      ...content,
+      systemPrompt: content.systemPrompt + ' custom protocol: ' + tools.map((tool) => tool.name).join(', '),
+    }),
+    interpret: (message) => message.content.some((part) => part.type === 'text' && part.text === 'call change')
+      ? toolsAnswer(call('custom-call', 'change'))
+      : message,
+  });
+  tools.registerBinding('change', () => defineTool({
+    name: 'change',
+    description: 'Change',
+    parameters: Type.Object({}),
+    async execute() {
+      executions++;
+      return { content: [{ type: 'text', text: 'changed' }] };
+    },
+  }));
+  await agent.prompt(ctx, record, 'Change it', () => {}, { fallback: model, signal: new AbortController().signal });
+  assert.equal(executions, 1);
+  assert.equal(requests, 2);
+  assert.ok(sessions.log(record.id).projection().contextMessages.some((message) => message.role === 'toolResult' && message.toolCallId === 'custom-call'));
+});
 
 test('duplicate tool call identities fail before executing any side effect', async (t) => {
   let requests = 0,

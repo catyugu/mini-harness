@@ -513,7 +513,7 @@ function validateEvent(event: SessionEvent) {
       return;
     }
     case 'diagnostic':
-      if (event.code !== 'invalid-tool-calls' && event.code !== 'historical-record')
+      if (event.code !== 'invalid-tool-calls' && event.code !== 'executor-response' && event.code !== 'historical-record')
         throw new Error('Invalid session diagnostic');
       return;
     case 'compaction':

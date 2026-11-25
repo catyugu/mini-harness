@@ -421,55 +421,22 @@ export class PluginHost implements ScopePort {
         .map((plan) => this.catalog.entry(plan, this.ctx, appScope)),
       ...scoped.entries,
     ];
-    const appChanged = descriptors.some((descriptor) => {
-      const { id, scopeKey, plugin, source, location } = descriptor;
-      if (scopeKey || !(plugin || source || location)) return false;
-      const enabled = this.catalog.enabled(descriptor, settings);
-      return (
-        enabled !== this.catalog.enabled(descriptor, previous) ||
-        (enabled && settings.entries[id]?.name !== previous.entries[id]?.name) ||
-        (enabled && settings.entries[id]?.live !== previous.entries[id]?.live) ||
-        (enabled &&
-          !settings.entries[id]?.live &&
-          !isDeepStrictEqual(settings.entries[id]?.config, previous.entries[id]?.config))
-      );
-    });
+    const nextEntries = new Map(mounts.map((entry) => [entry.id, entry]));
     const scopeChanges = new Set(
-      [...scopeKeys(previous), ...scopeKeys(settings)].filter((key) => {
-        const before = previous.scopes[key],
-          after = settings.scopes[key];
-        return (
-          !isDeepStrictEqual(before?.isolate, after?.isolate) ||
-          !isDeepStrictEqual(
-            Object.fromEntries(
-              Object.entries(before?.entries ?? {})
-                .filter(
-                  ([, entry]) =>
-                    entry.name !== undefined || entry.disabled !== undefined || entry.live !== undefined,
-                )
-                .map(([id, entry]) => [id, [entry.name, entry.disabled, entry.live]]),
-            ),
-            Object.fromEntries(
-              Object.entries(after?.entries ?? {})
-                .filter(
-                  ([, entry]) =>
-                    entry.name !== undefined || entry.disabled !== undefined || entry.live !== undefined,
-                )
-                .map(([id, entry]) => [id, [entry.name, entry.disabled, entry.live]]),
-            ),
-          ) ||
-          descriptors.some(
-            ({ id }) =>
-              after?.entries?.[id]?.disabled === false &&
-              ((before?.entries?.[id]?.live ?? previous.entries[id]?.live) !==
-                (after.entries?.[id]?.live ?? settings.entries[id]?.live) ||
-                (!(after.entries?.[id]?.live ?? settings.entries[id]?.live) &&
-                  (!isDeepStrictEqual(before?.entries?.[id]?.config, after.entries?.[id]?.config) ||
-                    !isDeepStrictEqual(previous.entries[id]?.config, settings.entries[id]?.config)))),
-          )
-        );
-      }),
+      [...scopeKeys(previous), ...scopeKeys(settings)].filter((key) =>
+        !isDeepStrictEqual(previous.scopes[key]?.isolate, settings.scopes[key]?.isolate),
+      ),
     );
+    let appChanged = false;
+    for (const id of new Set([...this.entries.keys(), ...nextEntries.keys()])) {
+      const before = this.entries.get(id);
+      const after = nextEntries.get(id);
+      if (before && after && before.matches(after) &&
+          (after.live || isDeepStrictEqual(before.options.config, after.config))) continue;
+      const slash = id.indexOf('/');
+      if (slash < 0) appChanged = true;
+      else scopeChanges.add(id.slice(0, slash) as ScopeKey);
+    }
     const release =
       !starting && !preparing && !released && (appChanged || scopeChanges.size)
         ? this.ctx.get('harnessMutations')?.protect(appChanged ? undefined : scopeChanges)
