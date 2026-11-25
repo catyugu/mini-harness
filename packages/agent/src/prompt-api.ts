@@ -1,4 +1,3 @@
-import type {} from 'mini-harness/cordis';
 import type { ToolDefinition } from '@mini-harness/tools/api';
 
 export interface PromptContext {

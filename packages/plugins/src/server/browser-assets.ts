@@ -4,8 +4,8 @@ import { extname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
 import type { BrowserEntry } from '@mini-harness/ui-runtime/bootstrap';
-import { selectProviders } from './providers.js';
-import type { ConfiguredPlugin } from './catalog.js';
+import { selectProviders } from './providers.ts';
+import type { ConfiguredPlugin } from './catalog.ts';
 
 export interface Asset {
   path: string;

@@ -1,5 +1,5 @@
-import { storedProfile } from '../support/profile.js';
-import { expectPresent } from '../support/required.js';
+import { storedProfile } from '../support/profile.ts';
+import { expectPresent } from '../support/required.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -7,10 +7,10 @@ import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { PluginCatalog } from '@mini-harness/plugins/catalog';
 import { DEFAULTS, mergeSettings, validateSettings } from '@mini-harness/settings/config';
-import { writePlugin } from '../support/plugin-fixture.js';
+import { writePlugin } from '../support/plugin-fixture.ts';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { fixture, waitUntil } from '../support/api-fixture.js';
+import { fixture, waitUntil } from '../support/api-fixture.ts';
 
 const examples = fileURLToPath(new URL('../../../docs/examples/', import.meta.url));
 function copyExample(directory: string, id: string) {

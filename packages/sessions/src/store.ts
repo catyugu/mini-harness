@@ -1,8 +1,7 @@
-import type {} from 'mini-harness/cordis';
-import type { ConversationPermission, SessionRecord } from './shared/identity.js';
-import type { SessionLogPort } from './log-api.js';
+import type { ConversationPermission, SessionRecord } from './shared/identity.ts';
+import type { SessionLogPort } from './log-api.ts';
 import type { Attachment, ImageInput, PreparedMessage } from '@mini-harness/input/message';
-import type { RunInfo } from './shared/run-state.js';
+import type { RunInfo } from './shared/run-state.ts';
 
 export interface SessionCatalog {
   readonly events: EventTarget;

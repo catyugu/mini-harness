@@ -1,6 +1,6 @@
 import { KeyedRegistry } from '@mini-harness/ui-runtime/keyed-registry';
 import type { SessionDisplayRecord } from '@mini-harness/sessions/display-record';
-import type { MessageAction, RecordRenderer, ToolRenderer, ToolView } from '../history-api.js';
+import type { MessageAction, RecordRenderer, ToolRenderer, ToolView } from '../history-api.ts';
 
 export class MessageExtensions {
   private readonly actions = new Map<string, MessageAction>();

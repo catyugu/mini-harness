@@ -1,4 +1,4 @@
-import type { ConversationView } from '../../shared/api.js';
+import type { ConversationView } from '../../shared/api.ts';
 
 export function renderQueue(
   panel: HTMLElement,

@@ -1,6 +1,6 @@
 import type { Context } from 'mini-harness/cordis';
-import { scheduleTools } from './tool-pipeline.js';
-import { basicCompaction } from './compaction.js';
+import { scheduleTools } from './tool-pipeline.ts';
+import { basicCompaction } from './compaction.ts';
 
 export const executor = {
   provide: ['harnessToolExecutor'],

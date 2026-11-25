@@ -1,12 +1,12 @@
-import type { RecordDisplay, RecordOwner } from './records.js';
-import type { SessionDisplayRecord } from './shared/display-record.js';
-import type { QueueEntry } from './shared/queue.js';
-import type { ContentDelta } from './content-delta.js';
+import type { RecordDisplay, RecordOwner } from './records.ts';
+import type { SessionDisplayRecord } from './shared/display-record.ts';
+import type { QueueEntry } from './shared/queue.ts';
+import type { ContentDelta } from './content-delta.ts';
 import type { ThinkingLevel, ModelChoice, ToolSchema } from '@mini-harness/llm/vocabulary';
 import type { ImageInput, PreparedMessage } from '@mini-harness/input/message';
 import type { ModelRequestSnapshot, NativeMessage, NativeToolMessage } from '@mini-harness/llm/api';
-import type { ViewMessage } from './shared/message.js';
-import type { RunInfo } from './shared/run-state.js';
+import type { ViewMessage } from './shared/message.ts';
+import type { RunInfo } from './shared/run-state.ts';
 
 export interface InboxItem {
   id: string;

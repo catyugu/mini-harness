@@ -1,8 +1,8 @@
 import { defineProperty, isNullable } from '@mini-harness/cosmokit'
 import type { Dict } from '@mini-harness/cosmokit'
-import { Context } from './context.js'
-import { getTraceable, symbols, withProps } from './utils.js'
-import { Fiber, FiberState } from './fiber.js'
+import { Context } from './context.ts'
+import { getTraceable, symbols, withProps } from './utils.ts'
+import { Fiber, FiberState } from './fiber.ts'
 
 declare module './context.js' {
   interface Context {

@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync, rmSync } from 'node:fs';
 import { dirname, join, resolve, sep } from 'node:path';
 import ts from 'typescript';
-import { moduleReferences } from './module-references.js';
+import { moduleReferences } from './module-references.ts';
 
 // Retain public domain declaration dependencies without publishing private provider types.
 const declarationRoot = resolve('dist/types');
@@ -19,7 +19,7 @@ function includeDeclaration(file: string) {
     literal: { text: specifier },
   } of moduleReferences(source)) {
     if (specifier.startsWith('.'))
-      includeDeclaration(resolve(dirname(file), specifier.replace(/\.js$/, '.d.ts')));
+      includeDeclaration(resolve(dirname(file), specifier.replace(/\.(?:js|ts)$/, '.d.ts')));
   }
 }
 for (const { types } of Object.values(manifest.exports)) includeDeclaration(resolve(types));

@@ -3,10 +3,10 @@ import { icon } from '@mini-harness/ui-primitives/icons';
 import type { Context } from 'mini-harness/cordis';
 import type { Attachment } from '@mini-harness/input/message';
 import type { PreviewResource } from '@mini-harness/file-preview/browser/api';
-import { decodedSize } from './attachment-card.js';
-import { attachmentView } from './attachment-view.js';
-import type { PromptEditor } from './prompt-editor.js';
-import type { ComposerCommand, ComposerModel, Suggestion } from '../composer-api.js';
+import { decodedSize } from './attachment-card.ts';
+import { attachmentView } from './attachment-view.ts';
+import type { PromptEditor } from './prompt-editor.ts';
+import type { ComposerCommand, ComposerModel, Suggestion } from '../composer-api.ts';
 
 export function createComposer(
   ctx: Context,

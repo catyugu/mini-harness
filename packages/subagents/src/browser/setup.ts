@@ -1,5 +1,4 @@
 import type { Context } from 'mini-harness/cordis';
-import type {} from '@mini-harness/conversation/browser/navigation-api';
 import { icon } from '@mini-harness/ui-primitives/icons';
 
 const setup = (ctx: Context) => {

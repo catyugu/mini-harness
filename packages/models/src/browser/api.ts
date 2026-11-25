@@ -1,6 +1,5 @@
-import type {} from 'mini-harness/cordis';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
-import type { ModelCatalog } from '../shared/catalog.js';
+import type { ModelCatalog } from '../shared/catalog.ts';
 
 declare module 'mini-harness/cordis' {
   interface Context {

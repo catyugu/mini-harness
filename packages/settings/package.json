@@ -26,10 +26,7 @@
     "@mini-harness/llm": "workspace:*",
     "@mini-harness/platform": "workspace:*",
     "@mini-harness/plugin-api": "workspace:*",
-    "@mini-harness/transport": "workspace:*",
-    "@mini-harness/ui-layout": "workspace:*",
     "@mini-harness/ui-primitives": "workspace:*",
-    "@mini-harness/ui-runtime": "workspace:*",
-    "@mini-harness/ui-theme": "workspace:*"
+    "@mini-harness/ui-runtime": "workspace:*"
   }
 }

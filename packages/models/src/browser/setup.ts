@@ -1,10 +1,9 @@
 import { browserPluginId, browserPluginSettings } from '@mini-harness/ui-runtime/plugin-settings';
 import { browserRequest } from '@mini-harness/ui-runtime/http';
 import type { Context } from 'mini-harness/cordis';
-import type {} from '@mini-harness/ui-runtime/projection-api';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 import { payload } from '@mini-harness/ui-runtime/http';
-import type { ModelCatalog, ProviderInfo, ProviderModel } from '../shared/catalog.js';
+import type { ModelCatalog, ProviderInfo, ProviderModel } from '../shared/catalog.ts';
 import { RemoteStore } from '@mini-harness/ui-runtime/remote-store';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { button, field, fromMarkup, confirmAction, required } from '@mini-harness/ui-primitives/primitives';

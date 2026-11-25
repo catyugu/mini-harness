@@ -1,5 +1,4 @@
-import type {} from 'mini-harness/cordis';
-import type { Conversation } from '../../shared/api.js';
+import type { Conversation } from '../../shared/api.ts';
 import type { WorkspaceRecord } from '@mini-harness/workspaces/record';
 
 export interface ConversationSessions {

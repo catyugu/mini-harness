@@ -167,7 +167,7 @@ async function main() {
   }
   if (argv[0] === 'plugin' && argv[1] === 'dev') {
     if (argv.length !== 3) throw new Error('Usage: mini-harness plugin dev <directory>');
-    const { pluginDev } = await import('./plugin-dev.js');
+    const { pluginDev } = await import('./plugin-dev.ts');
     await pluginDev(argv[2], executable);
     return;
   }

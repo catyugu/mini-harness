@@ -1,12 +1,11 @@
-import type {} from 'mini-harness/cordis';
 import type { NativeAssistantMessage, NativeMessage } from '@mini-harness/llm/api';
-import type { ModelRequestContent } from './events.js';
+import type { ModelRequestContent } from './events.ts';
 import type { InboxItem } from '@mini-harness/sessions/log-api';
 import type { QueueEntry } from '@mini-harness/sessions/queue';
 import type { SessionRecord } from '@mini-harness/sessions/identity';
 import type { ModelChoice, ThinkingLevel } from '@mini-harness/llm/vocabulary';
 import type { Attachment, ImageInput, InputSource, PreparedMessage } from '@mini-harness/input/message';
-import type { AgentEvent } from './stream.js';
+import type { AgentEvent } from './stream.ts';
 
 export interface RevisionTarget {
   parentId: string | null;

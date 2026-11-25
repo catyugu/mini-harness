@@ -3,10 +3,10 @@ import { join } from 'node:path';
 import { readJson } from '@mini-harness/platform/json';
 import { pluginIdPattern, serviceNamePattern } from '@mini-harness/plugin-api/selection';
 import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
-import { readBrowserAssets, type BrowserAssets } from './browser-assets.js';
-import { assertPeerCompatibility, isRegularFile } from './source.js';
+import { readBrowserAssets, type BrowserAssets } from './browser-assets.ts';
+import { assertPeerCompatibility, isRegularFile } from './source.ts';
 
-import type { PluginMetadata } from '../shared/metadata.js';
+import type { PluginMetadata } from '../shared/metadata.ts';
 
 export interface DiscoveredPlugin
   extends PluginDescriptor,

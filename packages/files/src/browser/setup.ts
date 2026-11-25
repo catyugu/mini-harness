@@ -1,8 +1,7 @@
 import type { WorkspaceView } from '@mini-harness/file-access/browser/views';
-import type {} from '@mini-harness/ui-layout/browser/api';
 import type { Context } from 'mini-harness/cordis';
-import { fileCompletion } from './completion.js';
-import { fileTree } from './tree.js';
+import { fileCompletion } from './completion.ts';
+import { fileTree } from './tree.ts';
 
 function setup(ctx: Context) {
   type Directory = { path: string; expanded: Set<string> };

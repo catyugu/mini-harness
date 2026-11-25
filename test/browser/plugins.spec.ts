@@ -1,10 +1,10 @@
 import { test, expect } from '@playwright/test';
 import { rmSync, mkdirSync, realpathSync, writeFileSync, cpSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
+import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.ts';
 import { workspaceId } from '@mini-harness/workspaces/catalog';
 import { readJson, writeJson } from '@mini-harness/platform/json';
-import { readWebProfile, startIsolatedHost, settingsSection, suggestions } from '../support/browser.js';
+import { readWebProfile, startIsolatedHost, settingsSection, suggestions } from '../support/browser.ts';
 
 test('frontend plugins own UI contributions and clean up on disable and reconfiguration', async ({
   page,

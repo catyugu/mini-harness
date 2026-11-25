@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import type { ApprovalPrompt } from './api.js';
-import type { Approval } from '../shared/request.js';
+import type { ApprovalPrompt } from './api.ts';
+import type { Approval } from '../shared/request.ts';
 import { ToolApprovalDenied } from '@mini-harness/tools/api';
 type Decision = 'allow' | 'automatic' | 'deny' | 'expired' | 'cancelled';
 

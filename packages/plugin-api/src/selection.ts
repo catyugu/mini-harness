@@ -1,4 +1,4 @@
-import type { ScopeKey } from './scopes.js';
+import type { ScopeKey } from './scopes.ts';
 import { DomainError } from '@mini-harness/platform/errors';
 
 export const localPluginIdPattern = /^[a-z][a-z0-9-]{0,63}$/;

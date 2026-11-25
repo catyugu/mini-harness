@@ -1,13 +1,9 @@
 import { observe } from '@mini-harness/plugin-api/observations';
-import type {} from '@mini-harness/models/api';
 import { DomainError } from '@mini-harness/platform/errors';
-import type {} from '@mini-harness/sessions/store';
-import type {} from '@mini-harness/plugin-api/scopes';
-import type {} from '@mini-harness/plugin-api/mutation-api';
 import type { Context } from 'mini-harness/cordis';
-import { registerRoutes } from './routes.js';
-import { sessionExecution } from './execution.js';
-import { Runs } from './runs.js';
+import { registerRoutes } from './routes.ts';
+import { sessionExecution } from './execution.ts';
+import { Runs } from './runs.ts';
 
 export function setup(ctx: Context) {
   const { harnessRegistry: catalog, harnessScopes: scopes, harnessMutations: mutations } = ctx;

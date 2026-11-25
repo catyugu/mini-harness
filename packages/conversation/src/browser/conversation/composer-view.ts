@@ -3,11 +3,11 @@ import type { ConversationPermission } from '@mini-harness/sessions/identity';
 import type { ThinkingLevel } from '@mini-harness/llm/vocabulary';
 import { fromMarkup, required, scopedElements } from '@mini-harness/ui-primitives/primitives';
 import { icon } from '@mini-harness/ui-primitives/icons';
-import { promptEditor } from './prompt-editor.js';
-import { createComposer } from './composer.js';
+import { promptEditor } from './prompt-editor.ts';
+import { createComposer } from './composer.ts';
 import { isRunning } from '@mini-harness/sessions/run-state';
-import { createModelPicker } from './model-picker.js';
-import { createThinkingPicker } from './thinking-picker.js';
+import { createModelPicker } from './model-picker.ts';
+import { createThinkingPicker } from './thinking-picker.ts';
 
 export function mountComposer(ctx: Context, signal: AbortSignal) {
   const { miniConversation: control, miniComposer: model } = ctx;

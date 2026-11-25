@@ -1,8 +1,8 @@
 import { defineProperty, hyphenate } from '@mini-harness/cosmokit'
-import { Context } from './context.js'
-import { Fiber } from './fiber.js'
-import { Service } from './service.js'
-import { createCallable, joinPrototype, symbols, type Tracker } from './utils.js'
+import { Context } from './context.ts'
+import { Fiber } from './fiber.ts'
+import { Service } from './service.ts'
+import { createCallable, joinPrototype, symbols, type Tracker } from './utils.ts'
 
 /** Logger method name and severity category. */
 export type LoggerType = 'error' | 'info' | 'warn' | 'debug'

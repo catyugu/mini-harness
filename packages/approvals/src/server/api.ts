@@ -1,5 +1,4 @@
-import type { Approval } from '../shared/request.js';
-import type {} from 'mini-harness/cordis';
+import type { Approval } from '../shared/request.ts';
 
 export interface ApprovalPrompt {
   title: string;

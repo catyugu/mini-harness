@@ -6,7 +6,7 @@ import {
 } from '@mini-harness/tools/api';
 import { Check } from 'typebox/value';
 import type { ToolCallPart, NativeToolMessage } from '@mini-harness/llm/api';
-import type { ToolDispatch, ToolExecutorPort } from './api.js';
+import type { ToolDispatch, ToolExecutorPort } from './api.ts';
 
 const parallelLimit = 16;
 

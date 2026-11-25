@@ -1,6 +1,6 @@
 import { defineProperty } from '@mini-harness/cosmokit'
-import type { Context } from './context.js'
-import type { Service } from './service.js'
+import type { Context } from './context.ts'
+import type { Service } from './service.ts'
 
 /** Ordered collection of disposable values with O(1) deletion by value. */
 export class DisposableList<T extends WeakKey> {

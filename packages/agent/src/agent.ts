@@ -9,11 +9,11 @@ import type {
   ModelRequestTransform,
   ModelRetry,
   StepContext,
-} from './events.js';
+} from './events.ts';
 import { DomainError } from '@mini-harness/platform/errors';
 import { isDeepStrictEqual } from 'node:util';
 import { createHash } from 'node:crypto';
-import type { AgentPort, CompactionPort, ToolExecutorPort } from './api.js';
+import type { AgentPort, CompactionPort, ToolExecutorPort } from './api.ts';
 import type {
   SessionCatalog,
   SessionHistory,
@@ -34,18 +34,18 @@ import {
   type NativeToolMessage,
   type ToolCallPart,
 } from '@mini-harness/llm/api';
-import type { PromptPort } from './prompt-api.js';
-import { RunInterrupted, type AgentEvent } from './stream.js';
+import type { PromptPort } from './prompt-api.ts';
+import { RunInterrupted, type AgentEvent } from './stream.ts';
 import type { Attachment, ImageInput, InputSource, PreparedMessage } from '@mini-harness/input/message';
 import type { SessionLogPort, MessagePatch, InboxItem } from '@mini-harness/sessions/log-api';
 import type { CapabilityObservation } from '@mini-harness/plugin-api/observations';
-import { Inbox } from './inbox.js';
+import { Inbox } from './inbox.ts';
 import { isToolContent, type ToolPort } from '@mini-harness/tools/api';
 import { contentDelta } from '@mini-harness/sessions/content-delta';
-import { applyTransforms, type AgentListener } from './transforms.js';
-import { dispatchTools, executeTool } from './tool-pipeline.js';
-import { resolveThinking, selectModel } from './model-selection.js';
-import { requestModel } from './model-request.js';
+import { applyTransforms, type AgentListener } from './transforms.ts';
+import { dispatchTools, executeTool } from './tool-pipeline.ts';
+import { resolveThinking, selectModel } from './model-selection.ts';
+import { requestModel } from './model-request.ts';
 
 interface AgentServices {
   models(id: string): ModelCatalogPort;

@@ -1,10 +1,10 @@
 import type { Dict } from '@mini-harness/cosmokit'
-import { EventsService } from './events.js'
-import { LoggerService } from './logger.js'
-import { ReflectService } from './reflect.js'
-import { RegistryService, type InjectKey } from './registry.js'
-import { getTraceable, symbols } from './utils.js'
-import { Fiber } from './fiber.js'
+import { EventsService } from './events.ts'
+import { LoggerService } from './logger.ts'
+import { ReflectService } from './reflect.ts'
+import { RegistryService, type InjectKey } from './registry.ts'
+import { getTraceable, symbols } from './utils.ts'
+import { Fiber } from './fiber.ts'
 
 const brand = Symbol.for('cordis.is')
 

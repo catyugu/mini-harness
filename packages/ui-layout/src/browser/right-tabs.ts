@@ -1,8 +1,8 @@
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { button, iconButton } from '@mini-harness/ui-primitives/primitives';
 import { Service } from 'mini-harness/cordis';
-import type { createLayout } from './layout.js';
-import type { RightPanelEntry, RightTab, RightTabType, TabOwner, TabScope } from './api.js';
+import type { createLayout } from './layout.ts';
+import type { RightPanelEntry, RightTab, RightTabType, TabOwner, TabScope } from './api.ts';
 
 interface Tab {
   id: string;

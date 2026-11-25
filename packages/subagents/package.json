@@ -7,9 +7,7 @@
     "./manifest": "./src/manifest.ts"
   },
   "dependencies": {
-    "@mini-harness/conversation": "workspace:*",
     "@mini-harness/llm": "workspace:*",
-    "@mini-harness/models": "workspace:*",
     "@mini-harness/platform": "workspace:*",
     "@mini-harness/plugin-api": "workspace:*",
     "@mini-harness/runs": "workspace:*",

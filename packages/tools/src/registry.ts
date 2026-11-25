@@ -3,9 +3,9 @@ import { toolNamePattern } from '@mini-harness/llm/vocabulary';
 import { Check, Errors } from 'typebox/value';
 import { Service, type Context } from 'mini-harness/cordis';
 import { pluginInstance, sessionVisible } from '@mini-harness/plugin-api/instance';
-import { isToolContent, type ToolDefinition, type ToolPort, type ToolRegistrationOptions } from './api.js';
-import type { ToolDecision } from './events.js';
-import type { ToolAccess, ToolPolicy } from './policy.js';
+import { isToolContent, type ToolDefinition, type ToolPort, type ToolRegistrationOptions } from './api.ts';
+import type { ToolDecision } from './events.ts';
+import type { ToolAccess, ToolPolicy } from './policy.ts';
 
 interface ToolRegistration extends ToolAccess {
   scope?: ScopeKey;

@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { createMiniHarnessServer } from '../support/profile.js';
-import { createMockProvider, createFixturePaths } from '../helpers/mock-provider.js';
+import { createMiniHarnessServer } from '../support/profile.ts';
+import { createMockProvider, createFixturePaths } from '../helpers/mock-provider.ts';
 
 test(
   'native agent through HTTP: streaming, persistence, Skills, export and permanent delete',

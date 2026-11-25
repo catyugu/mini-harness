@@ -1,6 +1,6 @@
 import { getTraceable, type Context } from 'mini-harness/cordis';
-import type { HostServices, PluginScope } from './scopes.js';
-import { pluginInstance, sessionAddress, sessionVisible } from './instance.js';
+import type { HostServices, PluginScope } from './scopes.ts';
+import { pluginInstance, sessionAddress, sessionVisible } from './instance.ts';
 
 /** Scope assigned by the host to this plugin instance. */
 export function pluginScope(ctx: Context): PluginScope {

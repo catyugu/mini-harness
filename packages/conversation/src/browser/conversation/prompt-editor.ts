@@ -9,8 +9,8 @@ import {
   placeholder,
   ViewPlugin,
   WidgetType,
-} from './editor-vendor.js';
-import { referenceButton, references } from './file-references.js';
+} from './editor-vendor.ts';
+import { referenceButton, references } from './file-references.ts';
 
 export function promptEditor(parent: HTMLElement, open: (path: string) => void, signal: AbortSignal) {
   class FileReference extends WidgetType {

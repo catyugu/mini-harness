@@ -1,8 +1,8 @@
-import { expectPresent } from '../../../test/support/required.js';
+import { expectPresent } from '../../../test/support/required.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { fixture, waitUntil } from '../../../test/support/api-fixture.js';
+import { fixture, waitUntil } from '../../../test/support/api-fixture.ts';
 
 test('shell approval gates execution, handles rejection and cancellation', async (t) => {
   const { app, request, finish } = await fixture(t, ({ messages }) =>

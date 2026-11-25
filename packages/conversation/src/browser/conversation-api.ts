@@ -1,5 +1,4 @@
-import type {} from 'mini-harness/cordis';
-import type { Conversation, ConversationView } from '../shared/api.js';
+import type { Conversation, ConversationView } from '../shared/api.ts';
 import type { ConversationPermission } from '@mini-harness/sessions/identity';
 import type { StreamEvent } from '@mini-harness/runs/stream';
 import type { ModelChoice, ThinkingLevel } from '@mini-harness/llm/vocabulary';

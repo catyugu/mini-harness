@@ -3,7 +3,7 @@
  * The registry has no knowledge of business features or Cordis.
  */
 import { KeyedRegistry } from '@mini-harness/ui-runtime/keyed-registry';
-import type { KeyedSlotOptions, SlotKind, SlotName, SlotRenderer } from './api.js';
+import type { KeyedSlotOptions, SlotKind, SlotName, SlotRenderer } from './api.ts';
 
 interface Entry {
   node?: HTMLElement;

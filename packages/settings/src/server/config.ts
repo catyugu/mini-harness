@@ -1,6 +1,6 @@
 import { DomainError } from '@mini-harness/platform/errors';
 import type { Paths } from '@mini-harness/platform/runtime-paths';
-import type { Settings } from '../shared/settings.js';
+import type { Settings } from '../shared/settings.ts';
 import {
   localPluginIdPattern,
   isScopeKey,

@@ -1,4 +1,3 @@
-import type {} from '@mini-harness/ui-runtime/projection-api';
 import { workspaceRoute } from '@mini-harness/workspaces/browser/route';
 import type { Context } from 'mini-harness/cordis';
 

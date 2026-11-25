@@ -1,9 +1,6 @@
-import type {} from '@mini-harness/plugin-api/scopes';
 import { sessionEvent } from '@mini-harness/plugin-api/instance';
-import type {} from './events.js';
 import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
-import type {} from './policy.js';
-import { ToolRegistry } from './registry.js';
+import { ToolRegistry } from './registry.ts';
 
 export const manifest: PluginDescriptor = {
   scope: 'application',

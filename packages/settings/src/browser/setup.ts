@@ -1,9 +1,6 @@
 import { browserRequest } from '@mini-harness/ui-runtime/http';
 import type { Context } from 'mini-harness/cordis';
-import type {} from '@mini-harness/ui-theme/browser/api';
-import type {} from '@mini-harness/ui-runtime/projection-api';
-import type {} from '@mini-harness/ui-layout/browser/api';
-import type { Settings } from '../shared/settings.js';
+import type { Settings } from '../shared/settings.ts';
 import { RemoteStore } from '@mini-harness/ui-runtime/remote-store';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import {
@@ -13,7 +10,7 @@ import {
   scopedElements,
 } from '@mini-harness/ui-primitives/primitives';
 
-import { SettingsRegistry } from './registry.js';
+import { SettingsRegistry } from './registry.ts';
 
 const setup = async (ctx: Context) => {
   const store = new RemoteStore(() => browserRequest<Settings>(ctx, '/settings'));

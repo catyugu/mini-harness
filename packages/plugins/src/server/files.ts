@@ -5,7 +5,7 @@ import { join, relative } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { writeJson } from '@mini-harness/platform/json';
 import type { PluginSettings } from '@mini-harness/plugin-api/configuration';
-import type { PluginMetadata } from '../shared/metadata.js';
+import type { PluginMetadata } from '../shared/metadata.ts';
 
 type PluginFilesHost = {
   paths: { plugins: string };

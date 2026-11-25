@@ -1,6 +1,6 @@
 import type { EntryOptions, EntryTree } from 'mini-harness/cordis';
-import type { PluginDescriptor } from './descriptor.js';
-import type { PluginSettings } from './configuration.js';
+import type { PluginDescriptor } from './descriptor.ts';
+import type { PluginSettings } from './configuration.ts';
 
 export interface ProfileConfiguration extends PluginSettings {
   port: number;

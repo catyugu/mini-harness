@@ -1,4 +1,4 @@
-import type { ComposerCommand } from '../composer-api.js';
+import type { ComposerCommand } from '../composer-api.ts';
 
 export class CommandRegistry {
   private commands = new Map<string, ComposerCommand>();

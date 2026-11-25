@@ -3,9 +3,7 @@ import { spawn } from 'node:child_process';
 import { rmSync } from 'node:fs';
 import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
 import { writeJson } from '@mini-harness/platform/json';
-import type {} from '@mini-harness/ui-runtime/bootstrap';
-import type {} from './instance-credential.js';
-import { webServer } from './server.js';
+import { webServer } from './server.ts';
 
 export const manifest: PluginDescriptor = {
   id: 'core:web-server',

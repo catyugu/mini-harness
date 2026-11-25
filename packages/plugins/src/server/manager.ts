@@ -1,5 +1,3 @@
-import type {} from '@mini-harness/transport/projection-api';
-import type {} from '@mini-harness/settings/api';
 import { assertOutsideMountTransaction, withMountTransaction } from '@mini-harness/plugin-api/mutation-api';
 import { DomainError } from '@mini-harness/platform/errors';
 import { dirname, join } from 'node:path';
@@ -15,18 +13,17 @@ import type {
   ScopePort,
   ScopeSettings,
 } from '@mini-harness/plugin-api/scopes';
-import { planBrowser, publishBrowser } from './browser-assets.js';
+import { planBrowser, publishBrowser } from './browser-assets.ts';
 import { addAbortListener } from 'node:events';
 import type { UpgradeHandler } from '@mini-harness/transport/routes';
 import { scopeKeys, type PluginSettings } from '@mini-harness/plugin-api/configuration';
-import { ProtectedProviderError } from './providers.js';
-import { bindPluginImports } from './module-resolution.js';
-import { pluginData, pluginSecrets, removeScopeData } from './data.js';
-import { PluginRouteRegistry, scopeOperation } from './routes.js';
-import { pluginSettings } from './plugin-settings.js';
-import type {} from '@mini-harness/plugin-api/services';
+import { ProtectedProviderError } from './providers.ts';
+import { bindPluginImports } from './module-resolution.ts';
+import { pluginData, pluginSecrets, removeScopeData } from './data.ts';
+import { PluginRouteRegistry, scopeOperation } from './routes.ts';
+import { pluginSettings } from './plugin-settings.ts';
 import { bindInstance, pluginInstance } from '@mini-harness/plugin-api/instance';
-import { changedSelection, PluginCatalog, type ConfiguredPlugin } from './catalog.js';
+import { changedSelection, PluginCatalog, type ConfiguredPlugin } from './catalog.ts';
 
 const appScope: PluginScope = { kind: 'application' };
 

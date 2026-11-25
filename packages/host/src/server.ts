@@ -18,8 +18,6 @@ import { fileURLToPath } from 'node:url';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import type { Context } from 'mini-harness/cordis';
-import type {} from '@mini-harness/transport/runtime';
-import type {} from '@mini-harness/plugins/api-types';
 import { errorStatus, HttpError, type GatewayRequest } from '@mini-harness/transport/routes';
 import { json } from '@mini-harness/transport/http';
 

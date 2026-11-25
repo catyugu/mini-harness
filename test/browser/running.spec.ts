@@ -1,8 +1,8 @@
-import { expectPresent } from '../support/required.js';
+import { expectPresent } from '../support/required.ts';
 import { test, expect } from '@playwright/test';
 import { rmSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs';
-import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
-import { startIsolatedHost, settingsSection } from '../support/browser.js';
+import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.ts';
+import { startIsolatedHost, settingsSection } from '../support/browser.ts';
 import { join } from 'node:path';
 import { readJson, writeJson } from '@mini-harness/platform/json';
 

@@ -1,9 +1,9 @@
 import { Context } from 'mini-harness/cordis';
-import { api, data, readEvents, wait, AuthenticationError } from './http.js';
-import { RemoteStore } from './remote-store.js';
-import { browserModules } from './modules.js';
-import { BrowserProjections } from './projections.js';
-import type { BrowserBootstrap } from '../shared/bootstrap.js';
+import { api, data, readEvents, wait, AuthenticationError } from './http.ts';
+import { RemoteStore } from './remote-store.ts';
+import { browserModules } from './modules.ts';
+import { BrowserProjections } from './projections.ts';
+import type { BrowserBootstrap } from '../shared/bootstrap.ts';
 import type { ProjectionNotice } from '@mini-harness/transport/projection-notice';
 
 /** A hash-only navigation does not reload ESM modules. Recover by reloading with the new credential. */

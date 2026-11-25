@@ -1,10 +1,10 @@
-import { expectPresent } from '../support/required.js';
+import { expectPresent } from '../support/required.ts';
 import { test, expect } from '@playwright/test';
 import { readFileSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
+import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.ts';
 import { readJson, writeJson } from '@mini-harness/platform/json';
-import { readWebProfile, startIsolatedHost } from '../support/browser.js';
+import { readWebProfile, startIsolatedHost } from '../support/browser.ts';
 
 test('plugin schema controls, recursive tree navigation, batch export and permanent deletion', async ({
   page,

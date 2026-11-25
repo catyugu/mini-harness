@@ -1,13 +1,7 @@
 import { observe } from '@mini-harness/plugin-api/observations';
-import type {} from '@mini-harness/platform/runtime-paths';
-import type {} from '@mini-harness/workspaces/api';
-import type {} from '@mini-harness/plugin-api/scopes';
-import type {} from '@mini-harness/plugin-api/mutation-api';
-import type {} from '@mini-harness/transport/routes';
-import type {} from '@mini-harness/settings/api';
-import { sessionDirectory } from './records.js';
+import { sessionDirectory } from './records.ts';
 import type { Context } from 'mini-harness/cordis';
-import { SessionRegistry } from './registry.js';
+import { SessionRegistry } from './registry.ts';
 
 export function setup(ctx: Context) {
   const registry = new SessionRegistry(

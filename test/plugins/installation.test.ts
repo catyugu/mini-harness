@@ -1,5 +1,5 @@
-import { fixture, waitUntil } from '../support/api-fixture.js';
-import { expectPresent } from '../support/required.js';
+import { fixture, waitUntil } from '../support/api-fixture.ts';
+import { expectPresent } from '../support/required.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile as exec } from 'node:child_process';
@@ -18,9 +18,9 @@ import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { readSettings } from '@mini-harness/settings/config';
 import { writeJson } from '@mini-harness/platform/json';
-import { createMiniHarnessServer } from '../support/profile.js';
-import { createFixturePaths } from '../helpers/mock-provider.js';
-import { parseNpmPackResult } from '../../scripts/npm-pack.js';
+import { createMiniHarnessServer } from '../support/profile.ts';
+import { createFixturePaths } from '../helpers/mock-provider.ts';
+import { parseNpmPackResult } from '../../scripts/npm-pack.ts';
 
 const execFile = promisify(exec);
 const npmCli =

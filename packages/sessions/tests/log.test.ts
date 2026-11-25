@@ -1,4 +1,4 @@
-import { expectPresent } from '../../../test/support/required.js';
+import { expectPresent } from '../../../test/support/required.ts';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import {
@@ -16,7 +16,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import type { NativeAssistantMessage } from '@mini-harness/llm/api';
-import { SessionLog } from '../src/log.js';
+import { SessionLog } from '../src/log.ts';
 
 function fixture(t: test.TestContext) {
   const root = mkdtempSync(join(tmpdir(), 'mini-harness-log-'));

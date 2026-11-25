@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import ts from 'typescript';
-import { moduleReferences } from './module-references.js';
+import { moduleReferences } from './module-references.ts';
 import { execFile as exec } from 'node:child_process';
 import { access, cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
@@ -10,9 +10,9 @@ import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { readJson, writeJson } from '@mini-harness/platform/json';
 import { readServerInfo } from '@mini-harness/host/process';
-import { parseNpmPackResult } from './npm-pack.js';
-import { waitUntil } from '../test/support/api-fixture.js';
-import { createFixturePaths, createMockProvider } from '../test/helpers/mock-provider.js';
+import { parseNpmPackResult } from './npm-pack.ts';
+import { waitUntil } from '../test/support/api-fixture.ts';
+import { createFixturePaths, createMockProvider } from '../test/helpers/mock-provider.ts';
 
 const execFile = promisify(exec);
 const npmPath =
@@ -140,16 +140,15 @@ async function checkPackage() {
       import type { LlmPort } from 'mini-harness/llm';
       import type { ScopeSettings } from 'mini-harness/scopes';
       import { defineTool } from 'mini-harness/tools';
-      import type {} from 'mini-harness/settings';
-      import type {} from 'mini-harness/plugin-data';
-      import type {} from 'mini-harness/sessions';
-      import type {} from 'mini-harness/execution';
-      import type {} from 'mini-harness/agent/events';
-      import type {} from 'mini-harness/agent/prompt';
-      import type {} from 'mini-harness/observations';
-      import type {} from 'mini-harness/conversation/display-events';
-      import type {} from 'mini-harness/tools/events';
-      import type {} from 'mini-harness/transport';
+      import type { PluginData, PluginSecrets } from 'mini-harness/plugin-data';
+      import type { SessionRecords } from 'mini-harness/sessions';
+      import type { Execution } from 'mini-harness/execution';
+      import type { ModelRequestContent, InputContext } from 'mini-harness/agent/events';
+      import type { PromptPort } from 'mini-harness/agent/prompt';
+      import type { CapabilityObservation } from 'mini-harness/observations';
+      import type { ToolProjection } from 'mini-harness/conversation/display-events';
+      import type { ToolDecision } from 'mini-harness/tools/events';
+      import type { PluginRoutes } from 'mini-harness/transport';
       declare module 'mini-harness/cordis' {
         interface Context { example: { greet(name: string): string } }
       }
@@ -164,23 +163,29 @@ async function checkPackage() {
       ctx.harnessRuns;
       // @ts-expect-error The full session registry is private.
       ctx.harnessRegistry;
-      ctx.harnessPluginData.write('state', { count: 1 });
-      ctx.harnessPluginSecrets.read('credential');
+      const pluginData: PluginData = ctx.harnessPluginData;
+      const pluginSecrets: PluginSecrets = ctx.harnessPluginSecrets;
+      const execution: Execution = ctx.harnessExecution;
+      const records: SessionRecords = ctx.harnessSessions.records('session');
+      const prompt: PromptPort = ctx.harnessPrompt;
+      const routes: PluginRoutes = ctx.harnessPluginRoutes;
+      pluginData.write('state', { count: 1 });
+      pluginSecrets.read('credential');
       ctx.on('internal/update', () => {});
-      ctx.on('agent/prepare-input', (content, context) => context.source === 'agent' ? content : undefined);
-      ctx.on('agent/model-request', (request) => ({ ...request, systemPrompt: request.systemPrompt.trim() }));
-      ctx.effect(() => ctx.harnessPrompt.register({ id: 'status', render: ({ cwd }) => cwd }));
+      ctx.on('agent/prepare-input', (content, context: InputContext) => context.source === 'agent' ? content : undefined);
+      ctx.on('agent/model-request', (request: ModelRequestContent) => ({ ...request, systemPrompt: request.systemPrompt.trim() }));
+      ctx.effect(() => prompt.register({ id: 'status', render: ({ cwd }) => cwd }));
       ctx.on('agent/tool-result', (content) => content);
-      ctx.on('harness/observe', (event) => {
+      ctx.on('harness/observe', (event: CapabilityObservation) => {
         if (event.type === 'run-ended') void event.run.id;
       });
-      ctx.on('conversation/tool-projection', ({ content }) => content);
-      ctx.on('tools/decide', ({ tool }) => tool === 'change' ? 'deny' : undefined);
-      void ctx.harnessSessions.records('session').append({ seen: true });
+      ctx.on('conversation/tool-projection', ({ content }: ToolProjection) => content);
+      ctx.on('tools/decide', ({ tool }): ToolDecision | undefined => tool === 'change' ? 'deny' : undefined);
+      void records.append({ seen: true });
       // @ts-expect-error Input listeners return native user content or a rejection.
       ctx.on('agent/prepare-input', () => ({ arbitrary: true }));
       void ctx.harnessPluginSettings.set('showDetails', true);
-      ctx.harnessPluginRoutes.upgrade('/updates', (_request, socket, _head, signal) => {
+      routes.upgrade('/updates', (_request, socket, _head, signal) => {
         if (signal.aborted) socket.destroy();
       });
       // @ts-expect-error The declared service takes a string.
@@ -188,7 +193,7 @@ async function checkPackage() {
       // @ts-expect-error TypeScript plugins declare their own services.
       ctx.undeclared;
       // @ts-expect-error Execution handles own cancellation.
-      ctx.harnessExecution.cancel('session');
+      execution.cancel('session');
     `,
     );
     await writeFile(
@@ -196,10 +201,11 @@ async function checkPackage() {
       `
       import { browserPluginSettings } from 'mini-harness/ui-runtime/plugin-settings';
       import type { SlotRenderer } from 'mini-harness/ui-slots';
-      import type {} from 'mini-harness/conversation/composer';
-      import type {} from 'mini-harness/conversation/controller';
-      import type {} from 'mini-harness/ui-settings';
-      import type {} from 'mini-harness/ui-primitives';
+      import type { ComposerModel } from 'mini-harness/conversation/composer';
+      import type { ConversationController } from 'mini-harness/conversation/controller';
+      import type { SettingsContribution } from 'mini-harness/ui-settings';
+      import type { BrowserPrimitives } from 'mini-harness/ui-primitives';
+      import type { RightTabsPort } from 'mini-harness/ui-layout';
       import type { Context } from 'mini-harness/cordis';
       declare module 'mini-harness/ui-slots' {
         interface SlotMap { 'example.panel': { kind: 'single' } }
@@ -211,7 +217,11 @@ async function checkPackage() {
         ctx.effect(() => ctx.miniSlots.registerKeyed('example.panel', 'example', render));
         // @ts-expect-error A keyed registration needs a renderer.
         ctx.effect(() => ctx.miniSlots.registerKeyed('sidebar.primary', 'example', document.body));
-        const model = ctx.miniComposer;
+        const model: ComposerModel = ctx.miniComposer;
+        const conversation: ConversationController = ctx.miniConversation;
+        const primitives: BrowserPrimitives = ctx.miniPrimitives;
+        const tabs: RightTabsPort = ctx.miniTabs;
+        tabs.onScopeChange(() => {}, signal);
         model.setText('Write a review');
         model.choose({ provider: 'local', id: 'example-model' });
         model.chooseThinking(null);
@@ -222,10 +232,10 @@ async function checkPackage() {
         void model.send();
         // @ts-expect-error The draft snapshot cannot be edited directly.
         model.draft().text = 'Replace this';
-        ctx.miniConversation.subscribe(['partial'], () => ctx.miniConversation.get().partial, signal);
+        conversation.subscribe(['partial'], () => conversation.get().partial, signal);
         ctx.effect(() => ctx.miniSettingsRegistry.register('example', { id: 'example', section: 'General', render: ({ configuration }) =>
-          ctx.miniPrimitives.status(String(configuration.get<boolean>('showDetails')))
-        }, browserPluginSettings(ctx)));
+          primitives.status(String(configuration.get<boolean>('showDetails')))
+        } satisfies SettingsContribution, browserPluginSettings(ctx)));
       }
     `,
     );

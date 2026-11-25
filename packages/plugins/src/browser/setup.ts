@@ -1,15 +1,11 @@
 import { browserRequest } from '@mini-harness/ui-runtime/http';
-import type {} from '@mini-harness/settings/browser/api';
 import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
 import type { Context } from 'mini-harness/cordis';
-import type {} from '@mini-harness/ui-runtime/graph-api';
-import type {} from '@mini-harness/models/browser/api';
-import type {} from '@mini-harness/ui-runtime/projection-api';
 import type { ModelCatalog } from '@mini-harness/models/catalog';
 import type { WorkspaceRecord } from '@mini-harness/workspaces/record';
 import type { Conversation } from '@mini-harness/conversation/view';
 import type { Settings, SettingsPatch } from '@mini-harness/settings/settings';
-import type { PluginMetadata } from '../shared/metadata.js';
+import type { PluginMetadata } from '../shared/metadata.ts';
 import { RemoteStore } from '@mini-harness/ui-runtime/remote-store';
 import { payload } from '@mini-harness/ui-runtime/http';
 import { icon } from '@mini-harness/ui-primitives/icons';
@@ -23,7 +19,7 @@ import {
   confirmAction,
   required,
 } from '@mini-harness/ui-primitives/primitives';
-import { readPluginValues, schemaFields } from './fields.js';
+import { readPluginValues, schemaFields } from './fields.ts';
 
 const setup = async (ctx: Context) => {
   const signal = ctx.fiber.signal;

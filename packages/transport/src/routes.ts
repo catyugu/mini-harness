@@ -1,4 +1,3 @@
-import type {} from 'mini-harness/cordis';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import { DomainError, type ErrorCode } from '@mini-harness/platform/errors';

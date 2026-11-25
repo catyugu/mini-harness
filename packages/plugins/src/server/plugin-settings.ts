@@ -4,7 +4,6 @@ import { pluginInstance } from '@mini-harness/plugin-api/instance';
 import { pluginRequestSignal, assertOutsideMountTransaction } from '@mini-harness/plugin-api/mutation-api';
 import { pluginConfiguration, type PluginConfiguration } from '@mini-harness/plugin-api/plugin-configuration';
 import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
-import type {} from '@mini-harness/settings/api';
 
 type ConfigWriter = (
   id: string,

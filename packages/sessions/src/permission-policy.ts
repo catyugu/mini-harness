@@ -1,8 +1,5 @@
-import { setupPermissionSettings } from './permission-settings.js';
+import { setupPermissionSettings } from './permission-settings.ts';
 import type { ToolPolicy } from '@mini-harness/tools/policy';
-import type {} from '@mini-harness/settings/api';
-import type {} from '@mini-harness/plugin-api/scopes';
-import type {} from './store.js';
 import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
 
 export const manifest: PluginDescriptor = {

@@ -1,10 +1,10 @@
-import { expectPresent } from '../support/required.js';
+import { expectPresent } from '../support/required.ts';
 import { test, expect } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import { rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
-import { startIsolatedHost, settingsSection, expectInViewport } from '../support/browser.js';
+import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.ts';
+import { startIsolatedHost, settingsSection, expectInViewport } from '../support/browser.ts';
 
 test('file inspection, responsive themes and reduced viewport height keep controls reachable', async ({
   browser,

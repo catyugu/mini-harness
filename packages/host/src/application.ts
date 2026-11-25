@@ -1,7 +1,7 @@
 import { Context } from 'mini-harness/cordis';
 import type { Paths } from '@mini-harness/platform/runtime-paths';
 import type { LaunchOptions } from '@mini-harness/plugin-api/profile';
-import { loadProfile } from './profile.js';
+import { loadProfile } from './profile.ts';
 
 /** The launcher supplies process state and loads the selected Profile onto a fresh Cordis tree. */
 export async function bootProfile(name: string, paths: Paths, launch: LaunchOptions) {

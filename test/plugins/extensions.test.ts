@@ -1,11 +1,11 @@
-import { expectPresent } from '../support/required.js';
+import { expectPresent } from '../support/required.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { appendFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fixture } from '../support/api-fixture.js';
+import { fixture } from '../support/api-fixture.ts';
 
-import { writePlugin } from '../support/plugin-fixture.js';
+import { writePlugin } from '../support/plugin-fixture.ts';
 
 test('prompt contributions coexist, override within a session tree and are removed with their plugins', async (t) => {
   const { app, paths, mock, request } = await fixture(t);

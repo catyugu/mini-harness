@@ -1,6 +1,6 @@
 import { Type } from 'typebox';
 import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
-import { setup } from '../server/setup.js';
+import { setup } from '../server/setup.ts';
 
 export const manifest: PluginDescriptor = {
   scope: 'application',

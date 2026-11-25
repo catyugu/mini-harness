@@ -1,5 +1,5 @@
 import type { PluginConfiguration } from '@mini-harness/plugin-api/plugin-configuration';
-import type { PluginSettingsContribution, SettingsContribution, SettingsSection } from './api.js';
+import type { PluginSettingsContribution, SettingsContribution, SettingsSection } from './api.ts';
 
 interface Entry {
   section: SettingsContribution['section'];

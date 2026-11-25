@@ -1,6 +1,3 @@
-import type {} from '@mini-harness/transport/routes';
-import type {} from '@mini-harness/plugins/api-types';
-import type {} from '@mini-harness/transport/projection-api';
 import type { BrowserBootstrap } from '@mini-harness/ui-runtime/bootstrap';
 import type { Context } from 'mini-harness/cordis';
 import { eventStream } from '@mini-harness/transport/http';

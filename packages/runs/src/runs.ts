@@ -1,4 +1,3 @@
-import type {} from '@mini-harness/agent/api';
 import type { ThinkingLevel, ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { ScopeKey, ScopePort } from '@mini-harness/plugin-api/scopes';
 import { DomainError } from '@mini-harness/platform/errors';
@@ -9,12 +8,12 @@ import { validateModelOptions } from '@mini-harness/llm/options';
 import type { Attachment, InputSource } from '@mini-harness/input/message';
 import type { CapabilityObservation } from '@mini-harness/plugin-api/observations';
 import { RunInterrupted } from '@mini-harness/agent/stream';
-import type { StreamEvent, RunEvent } from './stream.js';
+import type { StreamEvent, RunEvent } from './stream.ts';
 import { isRunning, type RunInfo } from '@mini-harness/sessions/run-state';
-import { RunEvents } from './events.js';
+import { RunEvents } from './events.ts';
 import type { ModelPreference } from '@mini-harness/models/api';
-import type { ExecutionInput } from './execution.js';
-import type { RunPort } from './api.js';
+import type { ExecutionInput } from './execution.ts';
+import type { RunPort } from './api.ts';
 import type { SessionStore } from '@mini-harness/sessions/store';
 
 interface RunOptions {

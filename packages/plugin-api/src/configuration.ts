@@ -1,4 +1,4 @@
-import type { ScopeKey, ScopeSettings } from './scopes.js';
+import type { ScopeKey, ScopeSettings } from './scopes.ts';
 
 export interface PluginSettings {
   plugins: Record<string, boolean>;

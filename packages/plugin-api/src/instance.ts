@@ -1,5 +1,5 @@
 import { Context, type FiberEntry } from 'mini-harness/cordis';
-import type { PluginScope, ScopeKey } from './scopes.js';
+import type { PluginScope, ScopeKey } from './scopes.ts';
 
 interface PluginInstance {
   pluginId: string;

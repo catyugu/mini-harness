@@ -6,7 +6,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:pat
 import { readJson, writeJson } from '@mini-harness/platform/json';
 import { type getPaths, containsPath } from '@mini-harness/platform/paths';
 
-import type { WorkspaceRecord } from '../shared/record.js';
+import type { WorkspaceRecord } from '../shared/record.ts';
 interface CatalogState {
   records: WorkspaceRecord[];
 }

@@ -1,7 +1,7 @@
 import { defineProperty, isNullable } from '@mini-harness/cosmokit'
-import { Context } from './context.js'
-import { locate } from './reflect.js'
-import { createCallable, joinPrototype, symbols, type Tracker } from './utils.js'
+import { Context } from './context.ts'
+import { locate } from './reflect.ts'
+import { createCallable, joinPrototype, symbols, type Tracker } from './utils.ts'
 
 /**
  * Base class for services that expose a named API on `ctx`.

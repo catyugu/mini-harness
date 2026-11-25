@@ -2,10 +2,10 @@ import { DomainError } from '@mini-harness/platform/errors';
 import { join } from 'node:path';
 import { readJson, writeJson } from '@mini-harness/platform/json';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
-import type { ModelCatalogPort } from './api.js';
-import type { ProviderInfo } from '../shared/catalog.js';
+import type { ModelCatalogPort } from './api.ts';
+import type { ProviderInfo } from '../shared/catalog.ts';
 
-import type { ProviderAdministration } from './store-api.js';
+import type { ProviderAdministration } from './store-api.ts';
 
 type ProviderHost = {
   paths: { home: string };

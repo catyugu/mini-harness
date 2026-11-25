@@ -2,12 +2,7 @@ import { Type } from 'typebox';
 import { DomainError } from '@mini-harness/platform/errors';
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
-import { setupAdministration } from '../server/administration.js';
-import type {} from '../server/api.js';
-import type {} from '@mini-harness/plugin-api/observations';
-import type {} from '@mini-harness/plugin-api/mutation-api';
-import type {} from '@mini-harness/plugin-api/services';
-import type {} from '@mini-harness/transport/projection-api';
+import { setupAdministration } from '../server/administration.ts';
 
 export const manifest: PluginDescriptor = {
   scope: 'application',

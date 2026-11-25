@@ -1,5 +1,5 @@
 import { EntryTree, type Context, type EntryOptions, type Plugin } from 'mini-harness/cordis';
-import type { BrowserBootstrap, BrowserEntry } from '../shared/bootstrap.js';
+import type { BrowserBootstrap, BrowserEntry } from '../shared/bootstrap.ts';
 
 function stylesheet(href: string, ctx: Context) {
   const signal = AbortSignal.any([ctx.fiber.signal, AbortSignal.timeout(8000)]);

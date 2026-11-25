@@ -1,22 +1,22 @@
 import { Context } from 'mini-harness/cordis';
-import { fixture as httpFixture } from '../../../test/support/api-fixture.js';
+import { fixture as httpFixture } from '../../../test/support/api-fixture.ts';
 import { prepareInput } from '@mini-harness/input/prepare';
 import type { ThinkingLevel } from '@mini-harness/llm/vocabulary';
-import { expectPresent } from '../../../test/support/required.js';
+import { expectPresent } from '../../../test/support/required.ts';
 import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { rmSync } from 'node:fs';
 import { Type } from 'typebox';
-import { NativeAgent } from '../src/agent.js';
-import { dispatchTools, scheduleTools } from '../src/tool-pipeline.js';
-import { basicCompaction } from '../src/compaction.js';
+import { NativeAgent } from '../src/agent.ts';
+import { dispatchTools, scheduleTools } from '../src/tool-pipeline.ts';
+import { basicCompaction } from '../src/compaction.ts';
 import { SessionRegistry } from '@mini-harness/sessions/registry';
 import { WorkspaceCatalog } from '@mini-harness/workspaces/catalog';
 import { ToolRegistry } from '@mini-harness/tools/registry';
 import { defineTool } from '@mini-harness/tools/api';
 import type { LlmPort, NativeAssistantMessage, ToolCallPart } from '@mini-harness/llm/api';
-import type { ModelRetry } from '../src/events.js';
-import { createFixturePaths } from '../../../test/helpers/mock-provider.js';
+import type { ModelRetry } from '../src/events.ts';
+import { createFixturePaths } from '../../../test/helpers/mock-provider.ts';
 
 const model = { provider: 'fixture', id: 'native' };
 const answer = (text = 'Done'): NativeAssistantMessage => ({

@@ -1,16 +1,8 @@
-import type {} from '@mini-harness/agent/events';
-import type {} from '@mini-harness/agent/prompt-api';
-import type {} from '@mini-harness/plugin-api/scopes';
-import type {} from '@mini-harness/sessions/records';
-import type {} from '@mini-harness/tools/api';
-import type {} from '@mini-harness/platform/runtime-paths';
-import type {} from '@mini-harness/transport/routes';
-import type {} from '@mini-harness/workspaces/api';
 import { DomainError } from '@mini-harness/platform/errors';
 import type { Context } from 'mini-harness/cordis';
 import { Type } from 'typebox';
 import { defineTool } from '@mini-harness/tools/api';
-import { SkillLoader, defaultSkillRoots } from './loader.js';
+import { SkillLoader, defaultSkillRoots } from './loader.ts';
 
 export function setup(ctx: Context) {
   const sessions = ctx.harnessSessions.access();

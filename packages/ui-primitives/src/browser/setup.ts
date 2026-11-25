@@ -1,7 +1,7 @@
 import type { Context } from 'mini-harness/cordis';
-import type { BrowserPrimitives } from './api.js';
-import { button, field, dialog } from './primitives.js';
-import { hydrateIcons, icon } from './icons.js';
+import type { BrowserPrimitives } from './api.ts';
+import { button, field, dialog } from './primitives.ts';
+import { hydrateIcons, icon } from './icons.ts';
 
 /** Elements contributed by plugins are hydrated without a global app-entry pass. */
 const setup = (ctx: Context) => {

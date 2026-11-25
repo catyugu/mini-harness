@@ -1,13 +1,9 @@
 import { browserPluginId, browserPluginSettings } from '@mini-harness/ui-runtime/plugin-settings';
 import type { Context } from 'mini-harness/cordis';
-import type {} from '@mini-harness/workspaces/browser/api';
-import type {} from '@mini-harness/models/browser/api';
-import type {} from '@mini-harness/ui-layout/browser/api';
-import type {} from '@mini-harness/ui-runtime/projection-api';
-import { createConversationController } from './controller.js';
+import { createConversationController } from './controller.ts';
 import { fromMarkup, required, toggle } from '@mini-harness/ui-primitives/primitives';
-import { mountApprovals } from './approval-panel.js';
-import { mountConversationLayout } from './view.js';
+import { mountApprovals } from './approval-panel.ts';
+import { mountConversationLayout } from './view.ts';
 
 const setup = (ctx: Context) => {
   const signal = ctx.fiber.signal;

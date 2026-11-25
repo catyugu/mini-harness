@@ -1,13 +1,7 @@
 import { sessionEvent } from '@mini-harness/plugin-api/instance';
-import type {} from './events.js';
 import { observe } from '@mini-harness/plugin-api/observations';
-import type {} from '@mini-harness/sessions/store';
-import type {} from '@mini-harness/plugin-api/scopes';
-import type {} from '@mini-harness/models/api';
-import type {} from '@mini-harness/llm/api';
-import type {} from '@mini-harness/tools/api';
 import type { Context } from 'mini-harness/cordis';
-import { NativeAgent } from './agent.js';
+import { NativeAgent } from './agent.ts';
 
 export function setup(ctx: Context) {
   const { harnessRegistry: catalog, harnessScopes: scopes } = ctx;

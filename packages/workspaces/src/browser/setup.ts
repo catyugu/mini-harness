@@ -1,7 +1,6 @@
 import { browserRequest } from '@mini-harness/ui-runtime/http';
 import type { Context } from 'mini-harness/cordis';
-import type {} from '@mini-harness/ui-runtime/projection-api';
-import type { WorkspaceRecord } from '../shared/record.js';
+import type { WorkspaceRecord } from '../shared/record.ts';
 import { RemoteStore } from '@mini-harness/ui-runtime/remote-store';
 
 const setup = async (ctx: Context) => {

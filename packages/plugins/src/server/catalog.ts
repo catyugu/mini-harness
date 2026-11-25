@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
-import type { PluginMetadata } from '../shared/metadata.js';
+import type { PluginMetadata } from '../shared/metadata.ts';
 import { localPluginIdPattern } from '@mini-harness/plugin-api/selection';
 import { DomainError } from '@mini-harness/platform/errors';
 import { lstatSync, readdirSync } from 'node:fs';
@@ -8,12 +8,12 @@ import { basename, join } from 'node:path';
 import { Check } from 'typebox/value';
 import { scopeKeys, type PluginSettings } from '@mini-harness/plugin-api/configuration';
 import type { PluginScope, ScopeKey, ScopeSettings } from '@mini-harness/plugin-api/scopes';
-import { ProtectedProviderError, selectProviders } from './providers.js';
-import { pluginBundle } from './source.js';
+import { ProtectedProviderError, selectProviders } from './providers.ts';
+import { pluginBundle } from './source.ts';
 import { Inject, type Context, type Plugin } from 'mini-harness/cordis';
 import type { ConfigValidationContext, PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
-import { builtinBrowserAssets } from './browser-assets.js';
-import { describePlugin, type DiscoveredPlugin } from './descriptor.js';
+import { builtinBrowserAssets } from './browser-assets.ts';
+import { describePlugin, type DiscoveredPlugin } from './descriptor.ts';
 
 function configDefaults(schema: Record<string, any>, value: any): any {
   if (value === undefined && Object.hasOwn(schema, 'default')) value = structuredClone(schema.default);

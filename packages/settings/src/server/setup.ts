@@ -1,6 +1,3 @@
-import type {} from '@mini-harness/transport/projection-api';
-import type {} from '@mini-harness/plugin-api/mutation-api';
-import type {} from '@mini-harness/transport/routes';
 import type { Context } from 'mini-harness/cordis';
 
 export function setup(ctx: Context) {

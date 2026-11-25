@@ -2,12 +2,12 @@ import type { Context } from 'mini-harness/cordis';
 import type { SessionDisplayRecord } from '@mini-harness/sessions/display-record';
 import type { MessageContent, ViewMessage } from '@mini-harness/sessions/message';
 import type { StreamEvent } from '@mini-harness/runs/stream';
-import type { ToolView, MessageAction, MessageActionContext } from '../history-api.js';
+import type { ToolView, MessageAction, MessageActionContext } from '../history-api.ts';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import { renderMarkdown } from '@mini-harness/ui-primitives/markdown';
-import { imageMime } from './attachment-card.js';
-import { attachmentView } from './attachment-view.js';
-import { renderReferences } from './file-references.js';
+import { imageMime } from './attachment-card.ts';
+import { attachmentView } from './attachment-view.ts';
+import { renderReferences } from './file-references.ts';
 
 export function createMessageView(
   ctx: Context,

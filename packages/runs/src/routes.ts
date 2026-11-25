@@ -1,4 +1,3 @@
-import type {} from '@mini-harness/sessions/store';
 import type { Context } from 'mini-harness/cordis';
 import { HttpError, HttpReply } from '@mini-harness/transport/routes';
 

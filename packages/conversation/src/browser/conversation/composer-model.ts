@@ -3,9 +3,9 @@ import type { Attachment } from '@mini-harness/input/message';
 import type { ConversationPermission } from '@mini-harness/sessions/identity';
 import type { ModelChoice, ThinkingLevel } from '@mini-harness/llm/vocabulary';
 import { isRunning } from '@mini-harness/sessions/run-state';
-import type { Completer, ComposerDraft, ComposerModel, DraftMode } from '../composer-api.js';
-import { CommandRegistry } from './commands.js';
-import { exportSessions } from '../session-client.js';
+import type { Completer, ComposerDraft, ComposerModel, DraftMode } from '../composer-api.ts';
+import { CommandRegistry } from './commands.ts';
+import { exportSessions } from '../session-client.ts';
 
 interface Draft {
   text: string;

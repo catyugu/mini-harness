@@ -1,9 +1,8 @@
-import type {} from 'mini-harness/cordis';
 import type { ThinkingLevel, ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { Attachment, InputSource } from '@mini-harness/input/message';
-import type { RunEvent, StreamEvent } from './stream.js';
+import type { RunEvent, StreamEvent } from './stream.ts';
 import type { QueueEntry } from '@mini-harness/sessions/queue';
-import type { ExecutionHandle, ExecutionInput } from './execution.js';
+import type { ExecutionHandle, ExecutionInput } from './execution.ts';
 import type { RunInfo } from '@mini-harness/sessions/run-state';
 
 export interface RunPort {

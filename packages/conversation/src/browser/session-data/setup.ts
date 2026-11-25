@@ -1,12 +1,9 @@
 import { browserRequest } from '@mini-harness/ui-runtime/http';
 import type { Context } from 'mini-harness/cordis';
-import type {} from './api.js';
-import type {} from '@mini-harness/workspaces/browser/api';
-import type {} from '@mini-harness/ui-runtime/projection-api';
-import type { Conversation } from '../../shared/api.js';
-import type { ConversationBrowserPort } from '../navigation-api.js';
+import type { Conversation } from '../../shared/api.ts';
+import type { ConversationBrowserPort } from '../navigation-api.ts';
 import { RemoteStore } from '@mini-harness/ui-runtime/remote-store';
-import { Selection } from '../selection.js';
+import { Selection } from '../selection.ts';
 
 const setup = async (ctx: Context) => {
   const signal = ctx.fiber.signal;

@@ -1,7 +1,5 @@
 import type { Context } from 'mini-harness/cordis';
-import type {} from '@mini-harness/ui-layout/browser/api';
-import type {} from '@mini-harness/workspaces/browser/api';
-import { sessionNavigation } from '../navigation.js';
+import { sessionNavigation } from '../navigation.ts';
 
 const setup = (ctx: Context) => {
   const {

@@ -1,12 +1,7 @@
-import type {} from '@mini-harness/plugin-api/scopes';
-import type {} from '@mini-harness/sessions/records';
-import type {} from '@mini-harness/tools/api';
 import type { Context } from 'mini-harness/cordis';
-import type {} from '@mini-harness/runs/execution';
-import type {} from '@mini-harness/models/api';
 import { defineTool } from '@mini-harness/tools/api';
 import { Type } from 'typebox';
-import { Delegation, type SubagentPolicy } from './delegation.js';
+import { Delegation, type SubagentPolicy } from './delegation.ts';
 
 /** Optional plugin: delegation, scheduling and child-model rules exist only while mounted. */
 export function setup(ctx: Context) {

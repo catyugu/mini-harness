@@ -1,13 +1,13 @@
-import { expectPresent } from '../../../test/support/required.js';
+import { expectPresent } from '../../../test/support/required.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs, { readFileSync, rmSync } from 'node:fs';
 import { syncBuiltinESMExports } from 'node:module';
-import { createMiniHarnessServer } from '../../../test/support/profile.js';
+import { createMiniHarnessServer } from '../../../test/support/profile.ts';
 import { SessionRegistry } from '@mini-harness/sessions/registry';
 import { WorkspaceCatalog } from '@mini-harness/workspaces/catalog';
-import type { RunEvent } from '../src/stream.js';
-import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.js';
+import type { RunEvent } from '../src/stream.ts';
+import { createFixturePaths, createMockProvider } from '../../../test/helpers/mock-provider.ts';
 
 function gate() {
   let release: () => void;

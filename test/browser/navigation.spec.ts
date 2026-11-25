@@ -1,5 +1,5 @@
 import { expect } from '@playwright/test';
-import { browserTest as test } from '../support/browser.js';
+import { browserTest as test } from '../support/browser.ts';
 
 test('search, rename, switch conversations and enter bulk selection', async ({ page, launch }) => {
   const { host } = await launch();

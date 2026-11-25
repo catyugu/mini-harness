@@ -1,10 +1,6 @@
-import type {} from '@mini-harness/platform/runtime-paths';
-import type {} from '@mini-harness/transport/routes';
-import type {} from '@mini-harness/transport/projection-api';
-import type {} from '@mini-harness/plugin-api/mutation-api';
 import { DomainError } from '@mini-harness/platform/errors';
 import type { Context } from 'mini-harness/cordis';
-import { providerSettings, saveProvider } from './provider-settings.js';
+import { providerSettings, saveProvider } from './provider-settings.ts';
 
 export function setupAdministration(ctx: Context) {
   const { recent, remember } = ctx.harnessModelPreference;

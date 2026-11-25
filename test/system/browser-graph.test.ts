@@ -3,8 +3,8 @@ import test from 'node:test';
 import ts from 'typescript';
 import type { BrowserBootstrap } from '@mini-harness/ui-runtime/bootstrap';
 import { profileDescriptors, readProfile } from '@mini-harness/host/profile';
-import { moduleReferences } from '../../scripts/module-references.js';
-import { fixture } from '../support/api-fixture.js';
+import { moduleReferences } from '../../scripts/module-references.ts';
+import { fixture } from '../support/api-fixture.ts';
 
 test('the composed browser graph serves its runtime dependencies and excludes server code', async (t) => {
   const { base, request } = await fixture(t);

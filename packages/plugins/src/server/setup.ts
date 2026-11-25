@@ -1,11 +1,7 @@
-import type {} from '@mini-harness/platform/runtime-paths';
-import type {} from '@mini-harness/settings/api';
-import type {} from '@mini-harness/transport/projection-api';
-import type {} from '@mini-harness/plugin-api/mutation-api';
 import { join } from 'node:path';
 import type { Context } from 'mini-harness/cordis';
 import { HttpReply } from '@mini-harness/transport/routes';
-import { installPlugin, stagePluginRemoval } from './files.js';
+import { installPlugin, stagePluginRemoval } from './files.ts';
 
 /** All local plugin filesystem mutations belong to Plugins. */
 export function setup(ctx: Context) {

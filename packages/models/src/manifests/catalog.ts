@@ -1,4 +1,3 @@
-import type {} from '../server/store-api.js';
 import type { PluginDescriptor } from '@mini-harness/plugin-api/descriptor';
 
 export const manifest: PluginDescriptor = {

@@ -1,5 +1,5 @@
 import { isRunning, type RunInfo } from '@mini-harness/sessions/run-state';
-import type { RunEvent, StreamEvent } from './stream.js';
+import type { RunEvent, StreamEvent } from './stream.ts';
 
 export class RunEvents {
   private events: RunEvent[] = [];

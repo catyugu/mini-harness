@@ -1,6 +1,6 @@
 import { DomainError } from '@mini-harness/platform/errors';
 import type { NativeMessage } from '@mini-harness/llm/api';
-import type { CompactionPort } from './api.js';
+import type { CompactionPort } from './api.ts';
 
 const imageNotice = '[Image unavailable to this model]';
 

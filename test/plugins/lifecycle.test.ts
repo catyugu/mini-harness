@@ -1,14 +1,14 @@
 import { request as httpRequest } from 'node:http';
 import { tmpdir } from 'node:os';
-import { fixture, waitUntil } from '../support/api-fixture.js';
-import { writePlugin } from '../support/plugin-fixture.js';
-import { expectPresent } from '../support/required.js';
+import { fixture, waitUntil } from '../support/api-fixture.ts';
+import { writePlugin } from '../support/plugin-fixture.ts';
+import { expectPresent } from '../support/required.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { MiniHarnessRuntime, storedProfile } from '../support/profile.js';
-import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.js';
+import { MiniHarnessRuntime, storedProfile } from '../support/profile.ts';
+import { createFixturePaths, createMockProvider } from '../helpers/mock-provider.ts';
 import { DEFAULTS, mergeSettings, readSettings } from '@mini-harness/settings/config';
 import { writeJson } from '@mini-harness/platform/json';
 

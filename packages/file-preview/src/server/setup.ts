@@ -1,7 +1,6 @@
 import { workspaceFiles } from '@mini-harness/file-access/request';
-import type {} from '@mini-harness/transport/routes';
 import type { Context } from 'mini-harness/cordis';
-import { downloadWorkspaceFile, workspacePreview } from './preview.js';
+import { downloadWorkspaceFile, workspacePreview } from './preview.ts';
 
 export function setup(ctx: Context) {
   const { harnessRoutes: routes } = ctx;

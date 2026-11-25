@@ -1,5 +1,4 @@
-import type {} from 'mini-harness/cordis';
-import { mediaType } from '../shared/content.js';
+import { mediaType } from '../shared/content.ts';
 
 interface FileLabel {
   name: string;

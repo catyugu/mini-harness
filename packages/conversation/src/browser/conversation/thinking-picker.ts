@@ -1,7 +1,7 @@
 import type { ThinkingLevel } from '@mini-harness/llm/vocabulary';
 import { scopedElements } from '@mini-harness/ui-primitives/primitives';
 import { icon } from '@mini-harness/ui-primitives/icons';
-import { positionPicker } from './picker-position.js';
+import { positionPicker } from './picker-position.ts';
 
 const labels: Record<ThinkingLevel, string> = {
   off: 'Off',

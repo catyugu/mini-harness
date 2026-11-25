@@ -1,9 +1,9 @@
 import { defineProperty } from '@mini-harness/cosmokit'
 import type { Dict } from '@mini-harness/cosmokit'
 import type { StandardSchemaV1 } from '@standard-schema/spec'
-import { Context } from './context.js'
-import { Fiber, type FiberEntry } from './fiber.js'
-import { buildOuterStack, DisposableList, symbols, withProps } from './utils.js'
+import { Context } from './context.ts'
+import { Fiber, type FiberEntry } from './fiber.ts'
+import { buildOuterStack, DisposableList, symbols, withProps } from './utils.ts'
 
 function isApplicable(object: Plugin) {
   return object && typeof object === 'object' && typeof object.apply === 'function'

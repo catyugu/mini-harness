@@ -1,4 +1,4 @@
-import { icon } from './icons.js';
+import { icon } from './icons.ts';
 
 export function fromMarkup<T extends HTMLElement = HTMLElement>(markup: string): T {
   const template = document.createElement('template');

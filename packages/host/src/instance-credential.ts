@@ -1,6 +1,4 @@
 import type { Context } from 'mini-harness/cordis';
-import type {} from '@mini-harness/plugin-api/profile';
-import type {} from '@mini-harness/platform/runtime-paths';
 import { protectLocal } from '@mini-harness/platform/local-secret';
 import { randomBytes } from 'node:crypto';
 import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync, realpathSync } from 'node:fs';

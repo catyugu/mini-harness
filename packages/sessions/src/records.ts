@@ -1,6 +1,6 @@
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
-import type { ViewMessage } from './shared/message.js';
-import type { SessionRecord } from './shared/identity.js';
+import type { ViewMessage } from './shared/message.ts';
+import type { SessionRecord } from './shared/identity.ts';
 import { assertOutsideMountTransaction } from '@mini-harness/plugin-api/mutation-api';
 import { Service, type Context } from 'mini-harness/cordis';
 import { pluginInstance, sessionVisible } from '@mini-harness/plugin-api/instance';

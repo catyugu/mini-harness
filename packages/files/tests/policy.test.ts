@@ -1,6 +1,6 @@
-import { expectPresent } from '../../../test/support/required.js';
+import { expectPresent } from '../../../test/support/required.ts';
 import test from 'node:test';
-import { fileTools } from '../src/server/tools.js';
+import { fileTools } from '../src/server/tools.ts';
 import assert from 'node:assert/strict';
 
 import { mkdtempSync, mkdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';

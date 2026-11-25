@@ -1,5 +1,5 @@
 import { DomainError } from '@mini-harness/platform/errors';
-import { isThinkingLevel } from './vocabulary.js';
+import { isThinkingLevel } from './vocabulary.ts';
 
 export function validateModelOptions(model: unknown, thinkingLevel: unknown) {
   if (thinkingLevel !== undefined && thinkingLevel !== null && !isThinkingLevel(thinkingLevel))

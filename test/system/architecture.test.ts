@@ -5,7 +5,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { profileDescriptors, readProfile } from '@mini-harness/host/profile';
-import { moduleReferences } from '../../scripts/module-references.js';
+import { moduleReferences } from '../../scripts/module-references.ts';
 
 interface Manifest {
   name: string;
@@ -93,7 +93,7 @@ test('workspace dependencies use domain APIs and keep providers at the applicati
         if (specifier.startsWith('.')) {
           const target = resolve(dirname(file), specifier);
           assert.ok(target.startsWith(directory + sep), reason);
-          if (!typeOnly) imports.push(target.replace(/\.js$/, '.ts'));
+          if (!typeOnly) imports.push(target);
           if (area === 'browser' || area === 'shared')
             assert.ok(!relative(directory, target).split(sep).includes('server'), reason);
           continue;

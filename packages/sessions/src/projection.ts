@@ -1,7 +1,7 @@
 import type { NativeMessage, NativeToolMessage } from '@mini-harness/llm/api';
-import type { MessageContent, ViewMessage } from './shared/message.js';
-import type { SessionEntry, SessionProjection } from './log-api.js';
-import { applyContentDelta } from './content-delta.js';
+import type { MessageContent, ViewMessage } from './shared/message.ts';
+import type { SessionEntry, SessionProjection } from './log-api.ts';
+import { applyContentDelta } from './content-delta.ts';
 
 export function projectMessage(
   entry: SessionEntry,

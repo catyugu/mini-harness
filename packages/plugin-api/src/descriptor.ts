@@ -1,5 +1,5 @@
 import type { Context, Plugin } from 'mini-harness/cordis';
-import type { PluginScope } from './scopes.js';
+import type { PluginScope } from './scopes.ts';
 
 /** A symbolic icon name or an inline SVG path for plugin-defined artwork. */
 export type PluginIcon = string | { path: string; viewBox?: string };

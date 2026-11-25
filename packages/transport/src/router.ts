@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { HttpError, HttpReply, type RouteHandler, type RoutePort } from './routes.js';
-import { json } from './http.js';
+import { HttpError, HttpReply, type RouteHandler, type RoutePort } from './routes.ts';
+import { json } from './http.ts';
 
 function requestBody(req: IncomingMessage, max = 1024 * 1024, signal?: AbortSignal): Promise<any> {
   return new Promise((resolve, reject) => {

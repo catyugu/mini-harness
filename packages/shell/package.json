@@ -7,14 +7,10 @@
     "./manifest": "./src/manifest.ts"
   },
   "dependencies": {
-    "@mini-harness/approvals": "workspace:*",
     "@mini-harness/conversation": "workspace:*",
     "@mini-harness/platform": "workspace:*",
     "@mini-harness/plugin-api": "workspace:*",
-    "@mini-harness/process-execution": "workspace:*",
-    "@mini-harness/sessions": "workspace:*",
-    "@mini-harness/tools": "workspace:*",
-    "@mini-harness/transport": "workspace:*"
+    "@mini-harness/tools": "workspace:*"
   },
   "miniHarness": {
     "profileModules": {

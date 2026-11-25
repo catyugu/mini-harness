@@ -1,9 +1,9 @@
 import { defineProperty, isNullable } from '@mini-harness/cosmokit'
 import type { Awaitable, Dict } from '@mini-harness/cosmokit'
-import { Context } from './context.js'
-import type { Inject, Plugin } from './registry.js'
-import { buildOuterStack, composeError, DisposableList, getTraceable, isConstructor, isObject, symbols } from './utils.js'
-import type { Impl } from './reflect.js'
+import { Context } from './context.ts'
+import type { Inject, Plugin } from './registry.ts'
+import { buildOuterStack, composeError, DisposableList, getTraceable, isConstructor, isObject, symbols } from './utils.ts'
+import type { Impl } from './reflect.ts'
 import type { StandardSchemaV1 } from '@standard-schema/spec'
 
 declare module './context.js' {
