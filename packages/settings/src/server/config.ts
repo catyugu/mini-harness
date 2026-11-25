@@ -1,16 +1,10 @@
 import { DomainError } from '@mini-harness/platform/errors';
-import type { Settings } from '../shared/settings.ts';
-import {
-  localPluginIdPattern,
-  isScopeKey,
-  validatePluginSettings,
-} from '@mini-harness/plugin-api/selection';
+import type { ProfileConfiguration } from '@mini-harness/plugin-api/configuration';
+import { localPluginIdPattern, isScopeKey, validateEntries } from '@mini-harness/plugin-api/selection';
 import { toolNamePattern } from '@mini-harness/llm/vocabulary';
 
 export const DEFAULTS = Object.freeze({
-  port: 3837,
-  plugins: {},
-  pluginConfig: {},
+  entries: {},
   scopes: {},
   readOnlyTools: {},
 });
@@ -25,19 +19,19 @@ function section(value: unknown, name: string) {
   return value;
 }
 
-export function validateSettings(input: unknown): asserts input is Settings {
+export function validateSettings(input: unknown): asserts input is ProfileConfiguration {
   if (!isObject(input)) throw new DomainError('invalid_input', 'Invalid settings object');
-  const { plugins, pluginConfig, scopes, port, readOnlyTools } = input;
-  for (const [key, value] of Object.entries({ plugins, pluginConfig, scopes, readOnlyTools }))
+  if (Object.keys(input).some((key) => !Object.hasOwn(DEFAULTS, key)))
+    throw new DomainError('invalid_input', 'Unknown settings field');
+  const { entries, scopes, readOnlyTools } = input;
+  for (const [key, value] of Object.entries({ entries, scopes, readOnlyTools }))
     if (!isObject(value)) throw new DomainError('invalid_input', 'Invalid settings section: ' + key);
-  validatePluginSettings(section(plugins, 'plugins'), section(pluginConfig, 'pluginConfig'));
+  validateEntries(section(entries, 'entries'));
   for (const [key, scope] of Object.entries(section(scopes, 'scopes'))) {
     if (
       !isScopeKey(key) ||
       !isObject(scope) ||
-      Object.keys(scope).some(
-        (field) => !['plugins', 'pluginConfig', 'disabledTools'].includes(field),
-      )
+      Object.keys(scope).some((field) => !['entries', 'disabledTools'].includes(field))
     )
       throw new DomainError('invalid_input', 'Invalid plugin scope: ' + key);
     const { disabledTools } = scope;
@@ -47,10 +41,7 @@ export function validateSettings(input: unknown): asserts input is Settings {
         !disabledTools.every((name: unknown) => typeof name === 'string' && toolNamePattern.test(name)))
     )
       throw new DomainError('invalid_input', 'Invalid scoped tool restriction: ' + key);
-    validatePluginSettings(
-      section(scope.plugins, key + '.plugins'),
-      section(scope.pluginConfig, key + '.pluginConfig'),
-    );
+    validateEntries(section(scope.entries, key + '.entries'));
   }
   for (const [plugin, tools] of Object.entries(section(readOnlyTools, 'readOnlyTools'))) {
     if (
@@ -60,36 +51,31 @@ export function validateSettings(input: unknown): asserts input is Settings {
     )
       throw new DomainError('invalid_input', 'Invalid read-only tool grant: ' + plugin);
   }
-  if (typeof port !== 'number' || !Number.isInteger(port) || port < 1024 || port > 65535)
-    throw new DomainError('invalid_input', 'Invalid port');
 }
 
-export function parseSettings(input: unknown): Settings {
+export function parseSettings(input: unknown): ProfileConfiguration {
   if (!isObject(input)) throw new DomainError('invalid_input', 'Invalid settings object');
-  const settings = {
-    port: input.port === undefined ? DEFAULTS.port : input.port,
-    plugins: section(input.plugins, 'plugins'),
-    pluginConfig: section(input.pluginConfig, 'pluginConfig'),
-    scopes: section(input.scopes, 'scopes'),
-    readOnlyTools: section(input.readOnlyTools, 'readOnlyTools'),
-  };
+  const settings = { ...DEFAULTS, ...input };
   validateSettings(settings);
   return settings;
 }
 
-export function mergeSettings(current: Settings, patch: unknown): Settings {
+export function mergeSettings(current: ProfileConfiguration, patch: unknown): ProfileConfiguration {
   if (!isObject(patch)) throw new DomainError('invalid_input', 'Invalid settings patch');
   if (Object.keys(patch).some((key) => !Object.hasOwn(DEFAULTS, key)))
     throw new DomainError('invalid_input', 'Unknown settings field');
-  const plugins = section(patch.plugins, 'plugins');
-  const pluginConfig = section(patch.pluginConfig, 'pluginConfig');
-  validatePluginSettings(plugins, pluginConfig);
+  const entries = section(patch.entries, 'entries');
+  validateEntries(entries);
   const next = {
     ...current,
     ...patch,
     scopes: patch.scopes === undefined ? current.scopes : section(patch.scopes, 'scopes'),
-    plugins: { ...current.plugins, ...plugins },
-    pluginConfig: { ...current.pluginConfig, ...pluginConfig },
+    entries: {
+      ...current.entries,
+      ...Object.fromEntries(
+        Object.entries(entries).map(([id, value]) => [id, { ...current.entries[id], ...(value as object) }]),
+      ),
+    },
   };
   validateSettings(next);
   return next;

@@ -6,7 +6,7 @@ import { existsSync, lstatSync, readdirSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 import { Check } from 'typebox/value';
-import { scopeKeys, type PluginSettings } from '@mini-harness/plugin-api/configuration';
+import { scopeKeys, type CompositionConfig } from '@mini-harness/plugin-api/configuration';
 import type { PluginScope, ScopeKey, ScopeSettings } from '@mini-harness/plugin-api/scopes';
 import type { Context, EntryOptions, Plugin } from 'mini-harness/cordis';
 import type { ConfigValidationContext, ResolvedPlugin } from '@mini-harness/plugin-api/descriptor';
@@ -63,19 +63,21 @@ export class PluginCatalog {
     if (this.builtins.size !== builtins.length) throw new Error('Duplicate builtin plugin ID');
   }
 
-  effective<Settings extends PluginSettings>(settings: Settings): Settings {
-    const plugins = { ...settings.plugins };
-    const pluginConfig = { ...settings.pluginConfig };
+  effective<Settings extends CompositionConfig>(settings: Settings): Settings {
+    const entries = { ...settings.entries };
     for (const { id, scope, configSchema, defaultEnabled } of this.builtins.values()) {
-      if (scope === 'application') plugins[id] ??= defaultEnabled ?? false;
+      const entry = { ...entries[id] };
+      if (scope === 'application') entry.disabled ??= !defaultEnabled;
       if (configSchema)
-        pluginConfig[id] = configDefaults(configSchema, structuredClone(pluginConfig[id] ?? {}));
+        entry.config = configDefaults(configSchema, structuredClone(entry.config ?? {}));
+      entries[id] = entry;
     }
-    return { ...settings, plugins, pluginConfig };
+    return { ...settings, entries };
   }
 
-  enabled(descriptor: ResolvedPlugin, settings: PluginSettings) {
-    return (settings.plugins[descriptor.id] ?? descriptor.defaultEnabled) === true;
+  enabled(descriptor: ResolvedPlugin, settings: CompositionConfig) {
+    const disabled = settings.entries[descriptor.id]?.disabled;
+    return disabled === undefined ? descriptor.defaultEnabled === true : !disabled;
   }
 
   reserved(id: string) {
@@ -143,7 +145,7 @@ export class PluginCatalog {
     ];
   }
 
-  async runtimeDescriptors(settings: PluginSettings): Promise<DiscoveredPlugin[]> {
+  async runtimeDescriptors(settings: CompositionConfig): Promise<DiscoveredPlugin[]> {
     return Promise.all(
       this.descriptors().map(async (descriptor) => {
         const { id, source, scope } = descriptor;
@@ -152,7 +154,7 @@ export class PluginCatalog {
           scope === 'application'
             ? this.enabled(descriptor, settings)
             : scopeKeys(settings).some(
-                (key) => key.startsWith(scope + ':') && settings.scopes[key]?.plugins?.[id],
+                (key) => key.startsWith(scope + ':') && settings.scopes[key]?.entries?.[id]?.disabled === false,
               );
         if (!enabled) return descriptor;
         try {
@@ -177,7 +179,7 @@ export class PluginCatalog {
   }
 
   metadata(
-    settings: PluginSettings,
+    settings: CompositionConfig,
     failures: ReadonlyMap<string, string>,
     mounted: (id: string) => boolean,
     context: (scope?: ScopeKey) => Context,
@@ -198,8 +200,8 @@ export class PluginCatalog {
         const configurationError = (key?: ScopeKey) => {
           try {
             const values = key
-              ? { ...settings.pluginConfig[id], ...settings.scopes[key]?.pluginConfig?.[id] }
-              : settings.pluginConfig[id];
+              ? { ...settings.entries[id]?.config, ...settings.scopes[key]?.entries?.[id]?.config }
+              : settings.entries[id]?.config;
             const config = this.configValues(id, values, descriptor.configSchema);
             this.validateConfig(
               descriptor,
@@ -219,8 +221,8 @@ export class PluginCatalog {
             : scopeKeys(settings).flatMap((scope) => {
                 const value = settings.scopes[scope];
                 if (!value || !scope.startsWith(metadata.scope + ':')) return [];
-                const enabled = value.plugins?.[id] === true;
-                return enabled || Object.hasOwn(value.pluginConfig ?? {}, id) ? [{ scope, enabled }] : [];
+                const enabled = value.entries?.[id]?.disabled === false;
+                return enabled || Object.hasOwn(value.entries ?? {}, id) ? [{ scope, enabled }] : [];
               });
         const instances = scopes.map(
           ({ scope, enabled }): NonNullable<PluginMetadata['instances']>[number] => {
@@ -318,7 +320,7 @@ export class PluginCatalog {
     }
   }
 
-  changedConfig(descriptors: DiscoveredPlugin[], previous: PluginSettings, settings: PluginSettings) {
+  changedConfig(descriptors: DiscoveredPlugin[], previous: CompositionConfig, settings: CompositionConfig) {
     const validations: { descriptor: DiscoveredPlugin; config: Record<string, unknown>; key?: ScopeKey }[] =
       [];
     for (const descriptor of descriptors) {
@@ -332,18 +334,18 @@ export class PluginCatalog {
         const config = this.configValues(id, values, configSchema);
         if (descriptor.validateConfig || descriptor.source) validations.push({ descriptor, config, key });
       };
-      if (scope === 'application') validate(settings.pluginConfig[id], previous.pluginConfig[id]);
+      if (scope === 'application') validate(settings.entries[id]?.config, previous.entries[id]?.config);
       else {
-        validate(settings.pluginConfig[id], previous.pluginConfig[id]);
+        validate(settings.entries[id]?.config, previous.entries[id]?.config);
         for (const key of scopeKeys(settings)) {
           if (!key.startsWith(scope + ':')) continue;
-          const changed = settings.scopes[key]?.pluginConfig?.[id];
-          const before = previous.scopes[key]?.pluginConfig?.[id];
+          const changed = settings.scopes[key]?.entries?.[id]?.config;
+          const before = previous.scopes[key]?.entries?.[id]?.config;
           const selected = settings.scopes[key];
-          if (changed === undefined && !selected?.plugins?.[id]) continue;
+          if (changed === undefined && selected?.entries?.[id]?.disabled !== false) continue;
           validate(
-            { ...settings.pluginConfig[id], ...changed },
-            { ...previous.pluginConfig[id], ...before },
+            { ...settings.entries[id]?.config, ...changed },
+            { ...previous.entries[id]?.config, ...before },
             key,
           );
         }
@@ -353,7 +355,7 @@ export class PluginCatalog {
   }
 
   plans(
-    settings: PluginSettings,
+    settings: CompositionConfig,
     descriptors: DiscoveredPlugin[],
     scope: PluginScope['kind'],
     overrides?: ScopeSettings,
@@ -362,8 +364,8 @@ export class PluginCatalog {
     const isApp = scope === 'application';
     const plans: ConfiguredPlugin[] = [];
     const declared = new Set<string>();
-    for (const [id, active] of Object.entries(overrides?.plugins ?? {})) {
-      if (active && !descriptors.some((item) => item.id === id && item.scope === scope)) {
+    for (const [id, entry] of Object.entries(overrides?.entries ?? {})) {
+      if (entry.disabled === false && !descriptors.some((item) => item.id === id && item.scope === scope)) {
         const error = new DomainError(
           'invalid_input',
           'Plugin ' + id + ' is unavailable in ' + scope + ' scope',
@@ -372,13 +374,13 @@ export class PluginCatalog {
       }
     }
     if (isApp)
-      for (const [id, active] of Object.entries(settings.plugins)) {
-        if (active && descriptors.some((item) => item.id === id && item.scope !== 'application'))
+      for (const [id, entry] of Object.entries(settings.entries)) {
+        if (entry.disabled === false && descriptors.some((item) => item.id === id && item.scope !== 'application'))
           throw new DomainError('invalid_input', 'Select a scope for plugin ' + id);
       }
     for (const item of descriptors) {
       const { id, scope: kind } = item;
-      if (kind !== scope || !(isApp ? this.enabled(item, settings) : overrides?.plugins?.[id] === true))
+      if (kind !== scope || !(isApp ? this.enabled(item, settings) : overrides?.entries?.[id]?.disabled === false))
         continue;
       // Child groups isolate the services declared by their Cordis modules.
       const provide = item.plugin?.provide;
@@ -386,8 +388,8 @@ export class PluginCatalog {
       try {
         if (item.error) throw new DomainError('invalid_input', 'Invalid plugin ' + id + ': ' + item.error);
         const values = isApp
-          ? settings.pluginConfig[id]
-          : { ...settings.pluginConfig[id], ...overrides?.pluginConfig?.[id] };
+          ? settings.entries[id]?.config
+          : { ...settings.entries[id]?.config, ...overrides?.entries?.[id]?.config };
         plans.push({ descriptor: item, id, source: item.source, config: this.configValues(id, values, item.configSchema) });
       } catch (error) {
         if (!unavailable?.(id, error)) throw error;
@@ -408,20 +410,20 @@ export class PluginCatalog {
 
 export function changedSelection(
   id: string,
-  previous: PluginSettings,
-  settings: PluginSettings,
+  previous: CompositionConfig,
+  settings: CompositionConfig,
   key?: ScopeKey,
 ) {
   if (!key)
     return (
-      settings.plugins[id] !== previous.plugins[id] ||
-      !isDeepStrictEqual(previous.pluginConfig[id], settings.pluginConfig[id])
+      settings.entries[id]?.disabled !== previous.entries[id]?.disabled ||
+      !isDeepStrictEqual(previous.entries[id]?.config, settings.entries[id]?.config)
     );
   const before = previous.scopes[key],
     after = settings.scopes[key];
   return (
-    before?.plugins?.[id] !== after?.plugins?.[id] ||
-    !isDeepStrictEqual(before?.pluginConfig?.[id], after?.pluginConfig?.[id]) ||
-    !isDeepStrictEqual(previous.pluginConfig[id], settings.pluginConfig[id])
+    before?.entries?.[id]?.disabled !== after?.entries?.[id]?.disabled ||
+    !isDeepStrictEqual(before?.entries?.[id]?.config, after?.entries?.[id]?.config) ||
+    !isDeepStrictEqual(previous.entries[id]?.config, settings.entries[id]?.config)
   );
 }

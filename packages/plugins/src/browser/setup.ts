@@ -4,7 +4,7 @@ import type { Context } from 'mini-harness/cordis';
 import type { ModelCatalog } from '@mini-harness/models/catalog';
 import type { WorkspaceRecord } from '@mini-harness/workspaces/record';
 import type { Conversation } from '@mini-harness/conversation/view';
-import type { Settings, SettingsPatch } from '@mini-harness/settings/settings';
+import type { ProfileConfiguration } from '@mini-harness/plugin-api/configuration';
 import type { PluginMetadata } from '../shared/metadata.ts';
 import { RemoteStore } from '@mini-harness/ui-runtime/remote-store';
 import { payload } from '@mini-harness/ui-runtime/http';
@@ -57,7 +57,7 @@ const setup = async (ctx: Context) => {
 
 function pluginCatalog(
   ctx: Context,
-  snapshot: () => { plugins: PluginMetadata[]; settings: Settings },
+  snapshot: () => { plugins: PluginMetadata[]; settings: ProfileConfiguration },
   refresh: () => Promise<void>,
   pages: { open(id?: string): void; register(id: string, node: HTMLElement): () => void },
   modelCatalog: () => ModelCatalog,
@@ -150,8 +150,8 @@ function pluginCatalog(
       return (key && snapshot().settings.scopes[key]) || undefined;
     };
     const values = () => ({
-      ...snapshot().settings.pluginConfig[plugin.id],
-      ...currentScope()?.pluginConfig?.[plugin.id],
+      ...snapshot().settings.entries[plugin.id]?.config,
+      ...currentScope()?.entries?.[plugin.id]?.config,
     });
     function renderFields() {
       configFields.replaceChildren();
@@ -161,7 +161,7 @@ function pluginCatalog(
           ?.instances?.find(({ scope }) => scope === scopePicker.value);
         diagnostics.textContent =
           instance?.error ?? (instance?.state === 'inactive' ? 'Waiting for this scope to activate.' : '');
-        enabled.checked = currentScope()?.plugins?.[plugin.id] === true;
+        enabled.checked = currentScope()?.entries?.[plugin.id]?.disabled === false;
       }
       if (!schema) return;
       if (plugin.configHint) {
@@ -233,7 +233,7 @@ function pluginCatalog(
       outcome.textContent = '';
       try {
         const config = readPluginValues({ [plugin.id]: {} }, configFields)[plugin.id];
-        let patch: SettingsPatch = { pluginConfig: { [plugin.id]: config } };
+        let patch: Partial<ProfileConfiguration> = { entries: { [plugin.id]: { config } } };
         const key = currentKey();
         if (scoped) {
           if (!key) return;
@@ -243,8 +243,10 @@ function pluginCatalog(
               ...snapshot().settings.scopes,
               [key]: {
                 ...current,
-                plugins: { ...current.plugins, [plugin.id]: enabled.checked },
-                pluginConfig: { ...current.pluginConfig, [plugin.id]: config },
+                entries: {
+                  ...current.entries,
+                  [plugin.id]: { disabled: !enabled.checked, config },
+                },
               },
             },
           };
@@ -323,8 +325,8 @@ function pluginCatalog(
           const controls = required(row.querySelector('.catalog-controls'));
           const scoped = plugin.scope && plugin.scope !== 'application';
           const checked = scoped
-            ? Object.values(settings.scopes).some((scope) => scope?.plugins?.[plugin.id])
-            : Boolean(settings.plugins[plugin.id]);
+            ? Object.values(settings.scopes).some((scope) => scope?.entries?.[plugin.id]?.disabled === false)
+            : settings.entries[plugin.id]?.disabled === false;
           const control = toggle(plugin.title, checked);
           control.dataset.pluginToggle = plugin.id;
           if (scoped) {
@@ -341,7 +343,7 @@ function pluginCatalog(
             for (const peer of peers) peer.disabled = true;
             try {
               const saved = await mutate(
-                () => browserRequest(ctx, '/settings', payload('PATCH', { plugins: { [plugin.id]: next } })),
+                () => browserRequest(ctx, '/settings', payload('PATCH', { entries: { [plugin.id]: { disabled: !next } } })),
                 (error) => {
                   status.textContent = error.message;
                 },

@@ -10,7 +10,8 @@ import type { ResolvedPlugin, PluginInfo } from '@mini-harness/plugin-api/descri
 import { PluginCatalog } from '@mini-harness/plugins/catalog';
 import { bindPluginImports, resolveModule } from '@mini-harness/plugins/module-resolution';
 import { localPluginIdPattern, pluginIdPattern } from '@mini-harness/plugin-api/selection';
-import type { ProfileConfiguration, ProfileRuntime } from '@mini-harness/plugin-api/profile';
+import type { ProfileRuntime } from '@mini-harness/plugin-api/profile';
+import type { ProfileConfiguration } from '@mini-harness/plugin-api/configuration';
 import { parseSettings } from '@mini-harness/settings/config';
 
 interface Row {
@@ -385,13 +386,12 @@ export async function loadProfile(
   const scopedTools = object(policy.scopedTools) ? policy.scopedTools : {};
   function configurationFor(selected: ReadonlyMap<string, ResolvedRow>, selectedLayers: readonly Layer[]) {
     return parseSettings({
-      plugins: Object.fromEntries([...selected.values()].map((row) => [row.id, !row.disabled])),
-      pluginConfig: Object.fromEntries(
-        [...selected.values()]
-          .filter((row) => Object.keys(row.config ?? {}).length)
-          .map((row) => [row.id, row.config]),
+      entries: Object.fromEntries(
+        [...selected.values()].map((row) => [row.id, {
+          disabled: Boolean(row.disabled),
+          config: row.config ?? {},
+        }]),
       ),
-      port: selected.get('core:web-server')?.config?.port,
       readOnlyTools: policy.readOnlyTools,
       scopes: withToolRules(Object.assign({}, ...shipped, ...selectedLayers).scopes ?? {}, scopedTools),
     });
@@ -423,20 +423,18 @@ export async function loadProfile(
       : structuredClone(runtime);
     for (const id of resolved.keys()) {
       if (persistentRows.has(id)) continue;
-      delete settings.plugins[id];
-      delete settings.pluginConfig[id];
+      delete settings.entries[id];
     }
     const plugins: Row[] = [];
     for (const id of new Set([
-      ...Object.keys(settings.plugins),
-      ...Object.keys(settings.pluginConfig),
+      ...Object.keys(settings.entries),
       ...(user.plugins ?? [])
         .filter((row) => !aliases.has(row.id))
         .map((row) => row.id),
     ])) {
       const base = official.get(id);
       const existing = persistentRows.get(id);
-      const config = settings.pluginConfig[id];
+      const config = settings.entries[id]?.config;
       const row: Row = { id };
       if (!base || existing?.name !== base.name)
         row.name = existing?.name
@@ -444,7 +442,7 @@ export async function loadProfile(
             ? installedPath(file, resolve(dirname(existing.source!), existing.name))
             : existing.name
           : installedPath(file, join(paths.plugins, id));
-      const disabled = settings.plugins[id] === undefined ? undefined : !settings.plugins[id];
+      const disabled = settings.entries[id]?.disabled;
       if (disabled !== undefined && (!base || disabled !== Boolean(base.disabled))) row.disabled = disabled;
       const changed = Object.fromEntries(
         Object.entries(config ?? {}).filter(([key, value]) => !isDeepStrictEqual(value, base?.config?.[key])),
@@ -491,7 +489,7 @@ export async function loadProfile(
       throw error;
     }
     for (const id of aliases.keys())
-      if (!Object.hasOwn(runtime.plugins, id) && !Object.hasOwn(runtime.pluginConfig, id))
+      if (!Object.hasOwn(runtime.entries, id))
         aliases.delete(id);
     persistent = settings;
     current = runtime;

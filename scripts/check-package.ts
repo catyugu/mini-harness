@@ -138,7 +138,7 @@ async function checkPackage() {
       import { Context, type Plugin } from 'mini-harness/cordis';
       import type { LlmPort } from 'mini-harness/llm';
       import type { ScopeSettings } from 'mini-harness/scopes';
-      import type { Settings } from 'mini-harness/settings';
+      import type { ProfileConfiguration } from 'mini-harness/configuration';
       import { defineTool } from 'mini-harness/tools';
       import type { PluginData, PluginSecrets } from 'mini-harness/plugin-data';
       import type { SessionRecords } from 'mini-harness/sessions';
@@ -154,7 +154,7 @@ async function checkPackage() {
       }
       declare const ctx: Context;
       const scope: ScopeSettings = { disabledTools: ['write'] };
-      const scopedSettings: Settings['scopes'] = { 'session:example': scope };
+      const scopedSettings: ProfileConfiguration['scopes'] = { 'session:example': scope };
       void scopedSettings;
       const llm: LlmPort | undefined = ctx.harnessLlm;
       const plugin: Plugin = {
@@ -384,7 +384,7 @@ async function checkPackage() {
     assert.equal(child.text, 'Mock response');
     assert.equal((await (await get('/api/sessions/' + child.childId)).json()).parentId, item.id);
 
-    assert.equal((await write('/api/settings', 'PATCH', { plugins: { 'task-notes': false } })).status, 200);
+    assert.equal((await write('/api/settings', 'PATCH', { entries: { 'task-notes': { disabled: true } } })).status, 200);
     assert.equal((await get('/api/extensions/task-notes/smoke')).status, 404);
     const withoutPlugin = (await (await get('/api/bootstrap')).json()) as typeof bootstrap;
     assert.ok(!withoutPlugin.ui.some(({ id }) => id === 'task-notes'));

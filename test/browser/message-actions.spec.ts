@@ -180,7 +180,7 @@ export const apply = (ctx) => {
   async function disablePlugin(id: string) {
     const response = await page.request.patch(host.url + '/api/settings', {
       headers: { Authorization: 'Bearer ' + host.token },
-      data: { plugins: { [id]: false } },
+      data: { entries: { [id]: { disabled: true } } },
     });
     expect(response.ok()).toBe(true);
   }

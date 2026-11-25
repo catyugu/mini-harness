@@ -182,7 +182,7 @@ export const apply = (ctx) => { ctx.harnessPluginRoutes.register('GET', '/label'
     );
     assert.deepEqual(metadata.package, { name, version: '1.1.0' }, metadata.error);
     assert.equal(metadata.state, 'disabled');
-    const response = await request('/settings', 'PATCH', { plugins: { [id]: true } });
+    const response = await request('/settings', 'PATCH', { entries: { [id]: { disabled: false } } });
     assert.equal(response.status, 200, await response.text());
     assert.equal(await (await request('/extensions/' + id + '/label')).json(), 'From dependency');
     const bootstrap = await (await request('/bootstrap')).json();
@@ -198,7 +198,7 @@ export const apply = (ctx) => { ctx.harnessPluginRoutes.register('GET', '/label'
       await (await asset(entry.browser.replace(/main\.js$/, 'chunks/feature.mjs'))).text(),
       files['web/chunks/feature.mjs'],
     );
-    assert.equal((await request('/settings', 'PATCH', { plugins: { [id]: false } })).status, 200);
+    assert.equal((await request('/settings', 'PATCH', { entries: { [id]: { disabled: true } } })).status, 200);
     assert.equal((await asset(entry.browser)).status, 404);
     assert.equal((await asset(entry.styles[0])).status, 404);
     await app.close();
@@ -229,17 +229,17 @@ export function apply(ctx, config) {
   const route = '/extensions/local-module/echo';
   const id = 'local-module';
   assert.equal((await request(route, 'POST', { value: 1 })).status, 404);
-  assert.equal((await request('/settings', 'PATCH', { plugins: { [id]: true } })).status, 200);
+  assert.equal((await request('/settings', 'PATCH', { entries: { [id]: { disabled: false } } })).status, 200);
   const browser = (await request('/bootstrap')).body.ui.find(
     (entry: { id: string }) => entry.id === id,
   ).browser;
   assert.match(await (await fetch(base + browser)).text(), /function/);
   assert.deepEqual((await request(route, 'POST', { value: 1 })).body, { echo: { value: 1 } });
-  const failure = await request('/settings', 'PATCH', { pluginConfig: { [id]: { fail: true } } });
+  const failure = await request('/settings', 'PATCH', { entries: { [id]: { config: { fail: true } } } });
   assert.equal(failure.status, 400);
   assert.match(failure.body.error, /Setup failed after registering a route/);
   assert.deepEqual((await request(route, 'POST', { value: 2 })).body, { echo: { value: 2 } });
-  assert.equal((await request('/settings', 'PATCH', { plugins: { [id]: false } })).status, 200);
+  assert.equal((await request('/settings', 'PATCH', { entries: { [id]: { disabled: true } } })).status, 200);
   assert.equal((await request(route, 'POST', { value: 2 })).status, 404);
   assert.equal((await fetch(base + browser)).status, 404);
   assert.ok(existsSync(folder));
@@ -259,7 +259,7 @@ test('browser entries receive and edit their configuration without a field allow
       },
     },
   });
-  assert.equal((await request('/settings', 'PATCH', { plugins: { 'config-visibility': true } })).status, 200);
+  assert.equal((await request('/settings', 'PATCH', { entries: { 'config-visibility': { disabled: false } } })).status, 200);
   const entry = async () =>
     (await request('/bootstrap')).body.ui.find(
       ({ id }: { id: string }) => id === 'config-visibility',

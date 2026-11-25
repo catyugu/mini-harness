@@ -24,7 +24,7 @@ export const apply = (ctx) => {
   };
 `,
   );
-  const toggle = (enabled: boolean) => request('/settings', 'PATCH', { plugins: { records: enabled } });
+  const toggle = (enabled: boolean) => request('/settings', 'PATCH', { entries: { records: { disabled: !enabled } } });
   assert.equal((await toggle(true)).status, 200);
   const { body: session } = await request('/sessions', 'POST', {});
   await app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Persist this conversation');

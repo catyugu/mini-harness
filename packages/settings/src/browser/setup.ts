@@ -1,6 +1,6 @@
 import { browserRequest } from '@mini-harness/ui-runtime/http';
 import type { Context } from 'mini-harness/cordis';
-import type { Settings } from '../shared/settings.ts';
+import type { ProfileConfiguration } from '@mini-harness/plugin-api/configuration';
 import { RemoteStore } from '@mini-harness/ui-runtime/remote-store';
 import { icon } from '@mini-harness/ui-primitives/icons';
 import {
@@ -13,7 +13,7 @@ import {
 import { SettingsRegistry } from './registry.ts';
 
 const setup = async (ctx: Context) => {
-  const store = new RemoteStore(() => browserRequest<Settings>(ctx, '/settings'));
+  const store = new RemoteStore(() => browserRequest<ProfileConfiguration>(ctx, '/settings'));
   await store.refresh();
   ctx.effect(() => ctx.miniProjections.register('settings', store));
   ctx.provide('miniSettingsData', store);

@@ -16,7 +16,7 @@ import type {
 import { planBrowser, publishBrowser } from './browser-assets.ts';
 import { addAbortListener } from 'node:events';
 import type { UpgradeHandler } from '@mini-harness/transport/routes';
-import { scopeKeys, type PluginSettings } from '@mini-harness/plugin-api/configuration';
+import { scopeKeys, type CompositionConfig } from '@mini-harness/plugin-api/configuration';
 import { bindPluginImports } from './module-resolution.ts';
 import { pluginData, pluginSecrets, removeScopeData } from './data.ts';
 import { PluginRouteRegistry, scopeOperation } from './routes.ts';
@@ -28,7 +28,7 @@ const appScope: PluginScope = { kind: 'application' };
 
 /** Permission-only settings do not require a separate plugin context. */
 function hasComposition(scope: ScopeSettings | undefined): scope is ScopeSettings {
-  return !!scope && [scope.plugins, scope.pluginConfig].some((map) => Object.keys(map ?? {}).length > 0);
+  return !!scope && Object.keys(scope.entries ?? {}).length > 0;
 }
 
 /** The descriptor and its resolved graph are the source of both server and browser mounts. */
@@ -51,7 +51,7 @@ export class PluginHost implements ScopePort {
     readonly ctx: Context,
     private readonly directory: string,
     builtins: ResolvedPlugin[],
-    private readonly settings: () => PluginSettings,
+    private readonly settings: () => CompositionConfig,
     upgrade?: (path: string, handler: UpgradeHandler) => () => Promise<void>,
     private readonly writePlugin?: (
       id: string,
@@ -95,7 +95,7 @@ export class PluginHost implements ScopePort {
   private browserState = publishBrowser([], [], () => false);
   private failures = new Map<string, string>();
 
-  effective<Settings extends PluginSettings>(settings: Settings) {
+  effective<Settings extends CompositionConfig>(settings: Settings) {
     return this.catalog.effective(settings);
   }
   browser() {
@@ -252,7 +252,7 @@ export class PluginHost implements ScopePort {
   }
 
   private scopedEntries(
-    settings: PluginSettings,
+    settings: CompositionConfig,
     descriptors: ReturnType<PluginCatalog['descriptors']>,
     unavailable: (id: string, error: unknown, key?: ScopeKey) => boolean,
     preparing?: ScopeKey,
@@ -281,8 +281,8 @@ export class PluginHost implements ScopePort {
       if (released.has(key)) return root;
       if (!address) {
         for (const plugin of new Set([
-          ...Object.entries(overrides?.plugins ?? {})
-            .filter(([, enabled]) => enabled)
+          ...Object.entries(overrides?.entries ?? {})
+            .filter(([, entry]) => entry.disabled === false)
             .map(([id]) => id),
         ])) {
           const error = new Error('Configured scope does not exist: ' + key);
@@ -343,13 +343,13 @@ export class PluginHost implements ScopePort {
     return this.browserState.assets.get(url);
   }
 
-  async start(settings: PluginSettings) {
+  async start(settings: CompositionConfig) {
     await this.apply({ ...settings, scopes: {} }, () => {}, true);
     await this.ctx.parallel('harness/ready');
     await this.apply(this.settings(), () => {}, true);
   }
 
-  async configure(settings: PluginSettings, commit = () => {}, released?: ReadonlySet<ScopeKey>) {
+  async configure(settings: CompositionConfig, commit = () => {}, released?: ReadonlySet<ScopeKey>) {
     assertOutsideMountTransaction();
     while (this.applying) await this.applying.catch(() => {});
     if (this.closing) throw new Error('Plugin host is closing');
@@ -358,7 +358,7 @@ export class PluginHost implements ScopePort {
   }
 
   private apply(
-    settings: PluginSettings,
+    settings: CompositionConfig,
     commit: () => void,
     starting: boolean,
     preparing?: ScopeKey,
@@ -374,7 +374,7 @@ export class PluginHost implements ScopePort {
   }
 
   private async configureGraph(
-    settings: PluginSettings,
+    settings: CompositionConfig,
     commit: () => void,
     starting: boolean,
     preparing?: ScopeKey,
@@ -409,8 +409,8 @@ export class PluginHost implements ScopePort {
     const { plans } = this.catalog.plans(settings, descriptors, 'application', undefined, unavailable);
     const changedScopes = updating
       ? scopeKeys(settings).filter((key) =>
-          Object.entries(settings.scopes[key]?.plugins ?? {}).some(
-            ([id, enabled]) => enabled && changedSelection(id, previous, settings, key),
+          Object.entries(settings.scopes[key]?.entries ?? {}).some(
+            ([id, entry]) => entry.disabled === false && changedSelection(id, previous, settings, key),
           ),
         )
       : [];
@@ -438,7 +438,7 @@ export class PluginHost implements ScopePort {
           enabled !== this.catalog.enabled(descriptor, previous) ||
           (enabled &&
             configChanges !== 'live' &&
-            !isDeepStrictEqual(settings.pluginConfig[id], previous.pluginConfig[id]))
+            !isDeepStrictEqual(settings.entries[id]?.config, previous.entries[id]?.config))
         );
       });
     const scopeChanges = new Set(
@@ -446,13 +446,16 @@ export class PluginHost implements ScopePort {
         const before = previous.scopes[key],
           after = settings.scopes[key];
         return (
-          !isDeepStrictEqual(before?.plugins, after?.plugins) ||
+          !isDeepStrictEqual(
+            Object.fromEntries(Object.entries(before?.entries ?? {}).map(([id, entry]) => [id, entry.disabled])),
+            Object.fromEntries(Object.entries(after?.entries ?? {}).map(([id, entry]) => [id, entry.disabled])),
+          ) ||
           descriptors.some(
             ({ id, configChanges }) =>
               configChanges !== 'live' &&
-              after?.plugins?.[id] &&
-              (!isDeepStrictEqual(before?.pluginConfig?.[id], after.pluginConfig?.[id]) ||
-                !isDeepStrictEqual(previous.pluginConfig[id], settings.pluginConfig[id])),
+              after?.entries?.[id]?.disabled === false &&
+              (!isDeepStrictEqual(before?.entries?.[id]?.config, after.entries?.[id]?.config) ||
+                !isDeepStrictEqual(previous.entries[id]?.config, settings.entries[id]?.config)),
           )
         );
       }),

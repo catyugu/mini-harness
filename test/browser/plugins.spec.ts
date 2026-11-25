@@ -358,8 +358,7 @@ test('the Plugins page keeps stored settings when a workspace plugin setup fails
   const initial = {
     scopes: {
       [key]: {
-        plugins: { 'workspace-example': true },
-        pluginConfig: { 'workspace-example': { value: 'invalid' } },
+        entries: { 'workspace-example': { disabled: false, config: { value: 'invalid' } } },
       },
     },
   };
@@ -377,7 +376,7 @@ test('the Plugins page keeps stored settings when a workspace plugin setup fails
     await expect(
       page.getByText(/Plugin workspace:.*\/workspace-example: Workspace setup failed/),
     ).toBeVisible();
-    expect(readWebProfile(paths).scopes[key].pluginConfig['workspace-example'].value).toBe('invalid');
+    expect(readWebProfile(paths).scopes[key].entries['workspace-example']?.config?.value).toBe('invalid');
     await value.fill('2');
     await page.getByRole('button', { name: 'Save configuration' }).click();
     await expect(page.getByText('Saved.', { exact: true })).toBeVisible();
@@ -488,7 +487,7 @@ export const apply = (ctx) => {
     const settings = await fetch(server.url + '/api/settings', {
       method: 'PATCH',
       headers: { Authorization: 'Bearer ' + server.token, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ plugins: { 'replace-new': false, 'browser-panel': false } }),
+      body: JSON.stringify({ entries: { 'replace-new': { disabled: true }, 'browser-panel': { disabled: true } } }),
     });
     expect(settings.status).toBe(200);
     await expect(page.getByRole('dialog', { name: 'Example preview' })).toHaveCount(0);

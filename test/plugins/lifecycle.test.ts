@@ -80,8 +80,7 @@ export const apply = (ctx, config) => {
     viewBox: '0 0 24 24',
   });
   await runtime.configuration.update({
-    plugins: { example: true },
-    pluginConfig: { example: { prefix: 'Total' } },
+    entries: { example: { disabled: false, config: { prefix: 'Total' } } },
   });
   await runtime.plugins.prepare(`session:${item.id}`);
   const activeNames = () => runtime.plugins.ctx.harnessTools.forSession(item.id).map(({ name }) => name);
@@ -93,30 +92,30 @@ export const apply = (ctx, config) => {
   assert.equal((await tool.execute('test', {}, undefined, undefined, undefined)).content[0].type, 'text');
   assert.match(JSON.stringify(await tool.execute('test', {}, undefined, undefined, undefined)), /Total: 1/);
   await assert.rejects(
-    runtime.configuration.update({ pluginConfig: { example: { prefix: 12 } } }),
+    runtime.configuration.update({ entries: { example: { config: { prefix: 12 } } } }),
     /Invalid configuration/,
   );
-  assert.equal(runtime.settings.pluginConfig.example.prefix, 'Total');
+  assert.equal(runtime.settings.entries.example?.config?.prefix, 'Total');
   await runtime.plugins.prepare(`session:${item.id}`);
   assert.match(
     JSON.stringify(await tool.execute('after-invalid-config', {}, undefined, undefined, undefined)),
     /Total: 1/,
   );
   assert.equal(activeNames().filter((name) => name === 'example_count').length, 1);
-  await runtime.configuration.update({ plugins: { shell: true } });
+  await runtime.configuration.update({ entries: { shell: { disabled: false } } });
   assert.throws(
     () => readFileSync(log),
     { code: 'ENOENT' },
     'Unrelated switches and invalid config preserve an active plugin',
   );
-  await runtime.configuration.update({ plugins: { example: false } });
+  await runtime.configuration.update({ entries: { example: { disabled: true } } });
   assert.equal(readFileSync(log, 'utf8'), 'dispose\n');
   assert.ok(!activeNames().includes('example_count'));
   await assert.rejects(
     tool.execute('after-unload', {}, undefined, undefined, undefined),
     /no longer available/,
   );
-  await runtime.configuration.update({ plugins: { example: true } });
+  await runtime.configuration.update({ entries: { example: { disabled: false } } });
   assert.ok(activeNames().includes('example_count'));
 });
 
@@ -152,18 +151,18 @@ export const apply = (ctx) => {
   await runtime.plugins.prepare(`session:${item.id}`);
   const activeNames = () => runtime.plugins.ctx.harnessTools.forSession(item.id).map(({ name }) => name);
   assert.ok(activeNames().includes('read'));
-  await runtime.configuration.update({ plugins: { files: false } });
+  await runtime.configuration.update({ entries: { files: { disabled: true } } });
   assert.ok(!activeNames().includes('read'));
-  await runtime.configuration.update({ plugins: { files: true, dependent: true } });
+  await runtime.configuration.update({ entries: { files: { disabled: false }, dependent: { disabled: false } } });
   assert.ok(!activeNames().includes('dependent_tool'));
-  await runtime.configuration.update({ plugins: { base: true } });
+  await runtime.configuration.update({ entries: { base: { disabled: false } } });
   assert.ok(activeNames().includes('dependent_tool'));
-  await runtime.configuration.update({ plugins: { base: false } });
+  await runtime.configuration.update({ entries: { base: { disabled: true } } });
   assert.ok(!activeNames().includes('dependent_tool'));
   assert.ok(activeNames().includes('read'));
-  await runtime.configuration.update({ plugins: { base: true } });
+  await runtime.configuration.update({ entries: { base: { disabled: false } } });
   assert.ok(activeNames().includes('dependent_tool'));
-  await runtime.configuration.update({ plugins: { files: false, base: false, dependent: false } });
+  await runtime.configuration.update({ entries: { files: { disabled: true }, base: { disabled: true }, dependent: { disabled: true } } });
   assert.equal(
     runtime.plugins.ctx.harnessTools
       .forSession(item.id)
@@ -199,14 +198,14 @@ export function apply(ctx) {
     writeFileSync(join(paths.plugins, id, 'plugin.json'), JSON.stringify({}));
   }
   await runtime.start();
-  await runtime.configuration.update({ plugins: { 'function-entry': true } });
+  await runtime.configuration.update({ entries: { 'function-entry': { disabled: false } } });
   await assert.rejects(
-    runtime.configuration.update({ plugins: { 'named-entry': true } }),
+    runtime.configuration.update({ entries: { 'named-entry': { disabled: false } } }),
     /must export a Cordis plugin/,
   );
-  assert.equal(runtime.settings.plugins['function-entry'], true);
-  assert.equal(runtime.settings.plugins['named-entry'], undefined);
-  assert.equal((await storedProfile(paths)).plugins['named-entry'], undefined);
+  assert.equal(runtime.settings.entries['function-entry']?.disabled, false);
+  assert.equal(runtime.settings.entries['named-entry']?.disabled, undefined);
+  assert.equal((await storedProfile(paths)).entries['named-entry']?.disabled, undefined);
 });
 
 test('plugin JSON Schema applies defaults and rejects invalid changes before setup', async (t) => {
@@ -261,7 +260,7 @@ export const apply = (ctx) => {
 `,
   );
   await runtime.start();
-  await runtime.configuration.update({ plugins: { schema: true } });
+  await runtime.configuration.update({ entries: { schema: { disabled: false } } });
   const item = runtime.plugins.ctx.harnessRegistry.create();
   const tool = expectPresent(
     runtime.plugins.ctx.harnessTools.forSession(item.id).find(({ name }) => name === 'schema_value'),
@@ -272,12 +271,12 @@ export const apply = (ctx) => {
     tool.execute('set-count', { count: 7 }, undefined, undefined, undefined),
     tool.execute('set-options', { options: { enabled: false } }, undefined, undefined, undefined),
   ]);
-  assert.deepEqual((await storedProfile(paths)).pluginConfig.schema, {
+  assert.deepEqual((await storedProfile(paths)).entries.schema?.config, {
     count: 7,
     options: { enabled: false },
   });
   await assert.rejects(tool.execute('rejected-semantics', { count: 5 }), /Five is reserved/);
-  assert.deepEqual((await storedProfile(paths)).pluginConfig.schema, {
+  assert.deepEqual((await storedProfile(paths)).entries.schema?.config, {
     count: 7,
     options: { enabled: false },
   });
@@ -290,7 +289,7 @@ export const apply = (ctx) => {
     /7:false:7/,
   );
   await assert.rejects(
-    runtime.configuration.update({ pluginConfig: { schema: { count: 0 } } }),
+    runtime.configuration.update({ entries: { schema: { config: { count: 0 } } } }),
     /Invalid configuration/,
   );
   assert.deepEqual(
@@ -338,9 +337,9 @@ export const apply = (ctx, config) => {
     );
   }
   await runtime.start();
-  await runtime.configuration.update({ plugins: { base: true, dependent: true } });
+  await runtime.configuration.update({ entries: { base: { disabled: false }, dependent: { disabled: false } } });
   await assert.rejects(
-    runtime.configuration.update({ pluginConfig: { base: { fail: true } } }),
+    runtime.configuration.update({ entries: { base: { config: { fail: true } } } }),
     /Partial setup failed/,
   );
   assert.match(
@@ -352,7 +351,7 @@ export const apply = (ctx, config) => {
     runtime.plugins.ctx.harnessTools.forSession(item.id).filter(({ name }) => name === 'base_tool').length,
     1,
   );
-  const next = mergeSettings(runtime.settings, { pluginConfig: { base: { value: 'replacement' } } });
+  const next = mergeSettings(runtime.settings, { entries: { base: { config: { value: 'replacement' } } } });
   await assert.rejects(
     runtime.plugins.configure(next, () => {
       throw new Error('Persistence failed');
@@ -394,8 +393,8 @@ test('cyclic services stay waiting without activating either plugin', async (t) 
     );
   }
   await runtime.start();
-  await runtime.configuration.update({ plugins: { first: true, second: true } });
-  assert.equal(runtime.settings.plugins.first, true);
+  await runtime.configuration.update({ entries: { first: { disabled: false }, second: { disabled: false } } });
+  assert.equal(runtime.settings.entries.first?.disabled, false);
   for (const id of ['first', 'second'])
     assert.equal(runtime.plugins.metadata().find((plugin) => plugin.id === id)?.state, 'inactive');
 });
@@ -419,10 +418,10 @@ test('malformed plugin manifests fail discovery instead of silently dropping the
     /JSON|Unexpected|parse/i,
   );
   await assert.rejects(
-    runtime.configuration.update({ plugins: { 'broken-manifest': true } }),
+    runtime.configuration.update({ entries: { 'broken-manifest': { disabled: false } } }),
     /Invalid plugin/,
   );
-  assert.equal(runtime.settings.plugins['broken-manifest'], undefined);
+  assert.equal(runtime.settings.entries['broken-manifest']?.disabled, undefined);
 });
 
 test('disabled optional builtins cannot block boot or reload because their config is malformed', async (t) => {
@@ -445,24 +444,23 @@ test('disabled optional builtins cannot block boot or reload because their confi
     /Invalid configuration/,
   );
   await assert.rejects(
-    restored.configuration.update({ pluginConfig: { subagents: { maxDepth: 101 } } }),
+    restored.configuration.update({ entries: { subagents: { config: { maxDepth: 101 } } } }),
     /Invalid configuration/,
   );
   await assert.rejects(
     restored.configuration.update({
-      pluginConfig: { subagents: { model: { provider: 'unknown', id: 'missing' } } },
+      entries: { subagents: { config: { model: { provider: 'unknown', id: 'missing' } } } },
     }),
     /Unknown child model/,
   );
-  await restored.configuration.update({ pluginConfig: { 'core:theme': { appearance: 'dark' } } });
+  await restored.configuration.update({ entries: { 'core:theme': { config: { appearance: 'dark' } } } });
   const conversation = restored.plugins.ctx.harnessRegistry.create();
   assert.equal(
     await restored.plugins.ctx.harnessRuns.send(conversation.id, 'Main agent still works'),
     'Mock response',
   );
   await restored.configuration.update({
-    plugins: { subagents: true },
-    pluginConfig: { subagents: { maxDepth: 2 } },
+    entries: { subagents: { disabled: false, config: { maxDepth: 2 } } },
   });
   assert.ok(
     restored.plugins.ctx.harnessTools.forSession(conversation.id).some(({ name }) => name === 'delegate'),
@@ -494,9 +492,9 @@ test('an optional plugin that fails at startup reports its state without blockin
   assert.equal(status.state, 'failed');
   assert.match(expectPresent(status.error, 'startup error'), /Startup failed/);
   assert.ok(!restarted.plugins.browser().some(({ id }) => id === status.id));
-  await restarted.configuration.update({ pluginConfig: { 'core:theme': { appearance: 'dark' } } });
-  assert.equal(restarted.settings.pluginConfig['core:theme'].appearance, 'dark');
-  await restarted.configuration.update({ plugins: { 'fails-to-start': false } });
+  await restarted.configuration.update({ entries: { 'core:theme': { config: { appearance: 'dark' } } } });
+  assert.equal(restarted.settings.entries['core:theme']?.config?.appearance, 'dark');
+  await restarted.configuration.update({ entries: { 'fails-to-start': { disabled: true } } });
   assert.equal(
     expectPresent(
       restarted.plugins.metadata().find(({ id }) => id === status.id),
@@ -535,7 +533,7 @@ export const apply = (ctx) => {
         finally { mark('body:drained'); }
       });
       ctx.harnessPluginRoutes.register('POST', '/disable', async () => {
-        try { await ctx.harnessSettingsStore.update({ plugins: { drain: false } }); }
+        try { await ctx.harnessSettingsStore.update({ entries: { drain: { disabled: true } } }); }
         catch (error) { return { error: error.message }; }
       });
       ctx.harnessPluginRoutes.upgrade('/socket', async (_request, _socket, _head, signal) => wait('ws', signal));
@@ -559,13 +557,13 @@ export const apply = (ctx) => {
   const scope = `session:${session.id}`;
   const toggle = (active: boolean) =>
     request('/settings', 'PATCH', {
-      plugins: { drain: active },
-      scopes: { [scope]: { plugins: { 'scoped-drain': active } } },
+      entries: { drain: { disabled: !active } },
+      scopes: { [scope]: { entries: { 'scoped-drain': { disabled: !active } } } },
     });
   assert.equal((await toggle(true)).status, 200);
   const attempted = await request('/extensions/drain/disable', 'POST');
   assert.match(attempted.body.error, /Structural settings cannot be changed during a plugin request/);
-  assert.equal(app.runtime.settings.plugins.drain, true);
+  assert.equal(app.runtime.settings.entries.drain?.disabled, false);
   const current = request('/extensions/drain/wait');
   const currentScope = request('/plugins/scoped-drain/scopes/' + scope + '/wait', 'POST', {});
   const bodyStatus = new Promise<number | undefined>((resolve, reject) => {
@@ -688,14 +686,12 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
   ];
   const workspaceKey = 'workspace:' + workspaceId;
   const workspace = {
-    plugins: { workspace: true },
-
-    pluginConfig: { workspace: { value: 'workspace' } },
+    entries: { workspace: { disabled: false, config: { value: 'workspace' } } },
   };
   let settings: typeof DEFAULTS = {
     ...structuredClone(DEFAULTS),
     scopes: {
-      [workspaceKey]: { ...workspace, pluginConfig: { workspace: { value: 42 } } },
+      [workspaceKey]: { ...workspace, entries: { workspace: { disabled: false, config: { value: 42 } } } },
     },
   };
   const ctx = new Context();
@@ -726,16 +722,12 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
     });
   };
   const parent = {
-    plugins: { layer: true },
-
-    pluginConfig: { layer: { value: 'parent' } },
+    entries: { layer: { disabled: false, config: { value: 'parent' } } },
   };
   const child = {
-    plugins: { layer: true },
-
-    pluginConfig: { layer: { value: 'child' } },
+    entries: { layer: { disabled: false, config: { value: 'child' } } },
   };
-  const broken = { ...parent, pluginConfig: { layer: { fail: true } } };
+  const broken = { ...parent, entries: { layer: { disabled: false, config: { fail: true } } } };
   await assert.rejects(
     configure({
       [workspaceKey]: workspace,
@@ -758,7 +750,7 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
   assert.equal(host.require('session:independent', 'greeting'), 'global');
   await configure({
     ...settings.scopes,
-    'session:sibling': { ...parent, pluginConfig: { layer: { value: 'fixed' } } },
+    'session:sibling': { ...parent, entries: { layer: { disabled: false, config: { value: 'fixed' } } } },
   });
   assert.equal(host.require('session:sibling', 'greeting'), 'fixed');
   assert.equal(host.metadata().find(({ id }) => id === 'layer')?.state, 'ready');
@@ -768,7 +760,7 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
       ...settings.scopes,
       'session:parent': {
         ...parent,
-        pluginConfig: { layer: { value: 'broken', fail: true } },
+        entries: { layer: { disabled: false, config: { value: 'broken', fail: true } } },
       },
     }),
     /Scoped setup failed/,
@@ -846,9 +838,7 @@ test('configuration validation resolves the staged scope provider and rejects in
       ...settings,
       scopes: {
         [key]: {
-          plugins: { consumer: true, local: true },
-
-          pluginConfig: { consumer: { expected } },
+          entries: { consumer: { disabled: false, config: { expected } }, local: { disabled: false } },
         },
       },
     };
@@ -894,7 +884,7 @@ test('setup and live configuration cannot await their own graph transaction', as
   });
   await host.start(settings);
   const configure = (prepare: boolean) => {
-    const next = { ...settings, plugins: { reentrant: true }, pluginConfig: { reentrant: { prepare } } };
+    const next = { ...settings, entries: { reentrant: { disabled: false, config: { prepare } } } };
     return host.configure(next, () => {
       settings = next;
     });
@@ -934,8 +924,7 @@ test('a failed server entry does not publish its browser module', async (t) => {
   ];
   const settings = {
     ...structuredClone(DEFAULTS),
-    plugins: { replacement: true },
-    pluginConfig: { replacement: { fail: true } },
+    entries: { replacement: { disabled: false, config: { fail: true } } },
   };
   const host = new PluginHost(new Context(), directory, builtins, () => settings);
   t.after(async () => {

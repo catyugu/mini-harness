@@ -642,7 +642,7 @@ test('text models see historical placeholders in the request and audit snapshot,
 
 test('native compaction reduces context and preserves message identities and history', async (t) => {
   const { app, mock, request } = await httpFixture(t);
-  await app.runtime.configuration.update({ pluginConfig: { 'core:agent': { autoCompact: false } } });
+  await app.runtime.configuration.update({ entries: { 'core:agent': { config: { autoCompact: false } } } });
   const { body: session } = await request('/sessions', 'POST', {});
   const compact = () => request('/sessions/' + session.id + '/compact', 'POST');
   const small = await compact();

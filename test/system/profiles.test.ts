@@ -35,11 +35,11 @@ test('YAML Profile composes through Cordis and persists Web entry changes', asyn
     assert.ok(web.ctx.harnessPluginCatalog.browser().some(({ id }) => id === 'core:layout'));
     assert.ok(!web.ctx.harnessPluginCatalog.browser().some(({ id }) => id === 'git-diff'));
     assert.equal(existsSync(paths.settings), false);
-    await web.ctx.harnessSettingsStore.update({ plugins: { 'core:layout': false } });
+    await web.ctx.harnessSettingsStore.update({ entries: { 'core:layout': { disabled: true } } });
     assert.ok(!web.ctx.harnessPluginCatalog.browser().some(({ id }) => id === 'core:layout'));
-    await web.ctx.harnessSettingsStore.update({ plugins: { 'core:layout': true } });
+    await web.ctx.harnessSettingsStore.update({ entries: { 'core:layout': { disabled: false } } });
     assert.ok(web.ctx.harnessPluginCatalog.browser().some(({ id }) => id === 'core:layout'));
-    await web.ctx.harnessSettingsStore.update({ plugins: { 'file-preview': false } });
+    await web.ctx.harnessSettingsStore.update({ entries: { 'file-preview': { disabled: true } } });
     assert.match(readFileSync(configure('web'), 'utf8'), /id: file-preview\s+disabled: true/);
   } finally {
     await web.close();

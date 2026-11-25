@@ -206,10 +206,6 @@
       "types": "./dist/types/packages/sessions/src/shared/display-record.d.ts",
       "default": "./dist/packages/sessions/src/shared/display-record.js"
     },
-    "./settings": {
-      "types": "./dist/types/packages/settings/src/shared/settings.d.ts",
-      "default": "./dist/packages/settings/src/shared/settings.js"
-    },
     "./tools": {
       "types": "./dist/types/packages/tools/src/api.d.ts",
       "default": "./dist/packages/tools/src/api.js"

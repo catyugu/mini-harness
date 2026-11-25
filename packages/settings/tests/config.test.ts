@@ -17,23 +17,24 @@ test('config directories are independent and default safe', () => {
 });
 
 test('settings merge preserves other sections and validates bounds', () => {
-  const before = structuredClone(DEFAULTS) as import('../src/shared/settings.ts').Settings;
-  before.plugins.example = true;
+  const before = structuredClone(DEFAULTS) as import('@mini-harness/plugin-api/configuration').ProfileConfiguration;
+  before.entries.example = { disabled: false };
   const after = mergeSettings(before, {
-    plugins: { shell: true },
-    pluginConfig: { subagents: { maxParallel: 4 } },
+    entries: { shell: { disabled: false }, subagents: { config: { maxParallel: 4 } } },
   });
-  assert.equal(after.plugins.example, true);
-  assert.equal(after.plugins.shell, true);
-  assert.equal(after.pluginConfig.subagents.maxParallel, 4);
-  assert.equal(before.plugins.shell, undefined);
+  assert.equal(after.entries.example?.disabled, false);
+  assert.equal(after.entries.shell?.disabled, false);
+  assert.equal(after.entries.subagents?.config?.maxParallel, 4);
+  assert.equal(before.entries.shell, undefined);
   assert.throws(() => mergeSettings(before, { queueMode: 'steer' }), /Unknown settings field/);
   assert.throws(() => mergeSettings(before, { model: { provider: 'example' } }), /Unknown settings field/);
   assert.throws(
-    () => validateSettings({ ...before, pluginConfig: { shell: null } }),
+    () => validateSettings({ ...before, entries: { shell: { config: null } } }),
     /Invalid plugin configuration/,
   );
   assert.throws(() => mergeSettings(before, { sandbox: { mode: 'host' } }), /Unknown settings field/);
   assert.throws(() => mergeSettings(before, { bogus: true }), /Unknown/);
-  assert.throws(() => validateSettings({ ...before, plugins: { shell: 'true' } }), /boolean/);
+  assert.throws(() => mergeSettings(before, { plugins: {} }), /Unknown/);
+  assert.throws(() => mergeSettings(before, { pluginConfig: {} }), /Unknown/);
+  assert.throws(() => validateSettings({ ...before, entries: { shell: { disabled: 'true' } } }), /boolean/);
 });
