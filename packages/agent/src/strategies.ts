@@ -1,12 +1,12 @@
 import type { Context } from 'mini-harness/cordis';
-import { scheduleTools } from './tool-pipeline.ts';
+import { executeTools } from './tool-pipeline.ts';
 import { basicCompaction } from './compaction.ts';
 import type { ToolExecutorPort } from './api.ts';
 
 export const nativeExecutor: ToolExecutorPort = {
   present: (content, tools) => ({ ...content, tools: [...tools] }),
   interpret: (message) => message,
-  schedule: scheduleTools,
+  execute: executeTools,
 };
 
 export const executor = {

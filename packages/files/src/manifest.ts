@@ -14,6 +14,7 @@ export const metadata: PluginInfo = {
 const plugin: Plugin.Object = {
   inject: [
     'harnessFileAccess',
+    'harnessState',
     'harnessWorkspaces',
     'harnessSessions',
     'harnessTools',

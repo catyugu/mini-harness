@@ -1,30 +1,27 @@
-export interface SearchInput {
-  pattern: string;
-  path?: string;
-  glob?: string;
-  literal?: boolean;
-  ignoreCase?: boolean;
-  limit?: number;
-  context?: number;
-}
+import type * as fs from 'node:fs/promises';
+import type { createReadStream } from 'node:fs';
 
 export interface FileAccessPort {
-  open(root: string): RootedFileAccess;
+  /** Node file operations, with the same access as the hosting process. */
+  readonly native: typeof fs & { createReadStream: typeof createReadStream };
+  /** A directory view for paths supplied to a scoped consumer. */
+  open(root: string, options?: { exclude?: (absolutePath: string) => boolean }): RootedFileAccess;
 }
 
 export interface RootedFileAccess {
   validatePath(path: string): Promise<void>;
-  searchFiles(query: string, signal?: AbortSignal): Promise<string[]>;
   access(path: string): Promise<void>;
   readFile(path: string): Promise<Buffer>;
-  writeFile(path: string, content: string, create?: boolean, signal?: AbortSignal): Promise<void>;
+  writeFile(
+    path: string,
+    content: string | Uint8Array,
+    create?: boolean,
+    signal?: AbortSignal,
+  ): Promise<void>;
   chunks(path: string, signal?: AbortSignal): AsyncIterable<Uint8Array>;
-  imageType(path: string): Promise<'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp' | null>;
   mkdir(path: string): Promise<void>;
   stat(path: string): Promise<{ isDirectory(): boolean; size?: number }>;
   entries(path?: string): Promise<{ name: string; directory: boolean }[]>;
-  find(pattern: string, root: string, limit: number): Promise<string[]>;
-  grep(input: SearchInput, signal?: AbortSignal): Promise<{ matches: string[]; limited: boolean }>;
 }
 
 declare module 'mini-harness/cordis' {

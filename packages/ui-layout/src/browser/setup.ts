@@ -153,7 +153,7 @@ function createAppFrame(
       required(frame.querySelector('.plugin-page-body')).append(content);
       const unregister = pages.register(id, frame);
       try {
-        const release = slotRegistry.register('sidebar.actions', entry, order);
+        const release = slotRegistry.register('sidebar.actions', entry, { order });
         return () => {
           try {
             release();

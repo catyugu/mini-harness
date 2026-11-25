@@ -1,14 +1,13 @@
 import { defineConfig } from '@mini-harness/plugin-api/configuration';
 import type { Plugin } from 'mini-harness/cordis';
 import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
-import { setup } from '../setup.ts';
+import { AgentLoop } from '../agent.ts';
 import { Type } from 'typebox';
 
 const Config = defineConfig(
   Type.Object(
     {
       maxTurns: Type.Integer({ minimum: 1, maximum: 1024, default: 128, title: 'Maximum turns per run' }),
-      autoCompact: Type.Boolean({ default: true, title: 'Automatically compact long conversations' }),
     },
     { additionalProperties: false },
   ),
@@ -16,22 +15,19 @@ const Config = defineConfig(
 
 export const metadata: PluginInfo = {
   title: 'Agent',
-  description: 'Native agent execution, inbox and tool pipeline',
+  description: 'Model and tool execution loop',
 };
 
 const plugin: Plugin.Object = {
   Config,
-  inject: [
-    'harnessProfileScopes',
-    'harnessRegistry',
-    'harnessTools',
-    'harnessModels',
-    'harnessLlm',
-    'harnessPrompt',
-    'harnessToolExecutor',
-  ],
+  inject: ['harnessLlm'],
   provide: ['harnessAgent'],
-  apply: setup,
+  apply(ctx) {
+    ctx.provide(
+      'harnessAgent',
+      new AgentLoop(() => (ctx.fiber.effectiveConfig as { maxTurns: number }).maxTurns),
+    );
+  },
 };
 
 export default plugin;

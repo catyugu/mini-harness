@@ -23,7 +23,6 @@
     "@mini-harness/platform": "workspace:*",
     "@mini-harness/plugin-api": "workspace:*",
     "@mini-harness/sessions": "workspace:*",
-    "@mini-harness/tools": "workspace:*",
     "@mini-harness/ui-runtime": "workspace:*"
   }
 }

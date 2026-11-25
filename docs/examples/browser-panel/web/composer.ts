@@ -61,6 +61,6 @@ export function replaceComposer(ctx: Context) {
     return form;
   };
   ctx.effect(() =>
-    ctx.miniSlots.registerKeyed('conversation.composer-view', 'composer', renderComposer, { priority: -1 }),
+    ctx.miniSlots.register('conversation.composer-view', renderComposer, { key: 'composer', priority: 1 }),
   );
 }

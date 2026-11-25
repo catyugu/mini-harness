@@ -50,9 +50,8 @@ const setup = (ctx: Context) => {
     state.dispatchEvent(new Event('focus-composer'));
   }
   ctx.effect(() =>
-    ctx.miniSlots.registerKeyed(
+    ctx.miniSlots.register(
       'sidebar.primary',
-      'new-conversation',
       (signal) => {
         const button = document.createElement('button');
         button.type = 'button';
@@ -69,7 +68,7 @@ const setup = (ctx: Context) => {
         );
         return button;
       },
-      { order: -1 },
+      { key: 'new-conversation', order: -1 },
     ),
   );
   state.addEventListener(

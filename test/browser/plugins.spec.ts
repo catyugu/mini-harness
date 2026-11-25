@@ -437,19 +437,19 @@ export const inject = ["miniPrimitives","miniConversation","miniSlots"];
 
 export const apply = (ctx) => {
     const { miniPrimitives, miniConversation } = ctx;
-      ctx.effect(() => ctx.miniSlots.registerKeyed('conversation.history', 'history', signal => {
+      ctx.effect(() => ctx.miniSlots.register('conversation.history', signal => {
         const node = miniPrimitives.status('Replacement history');
         const render = () => { node.textContent = 'Replacement history: ' + (miniConversation.get().run?.state ?? 'idle'); };
         miniConversation.subscribe(['run'], render, signal); render();
         return node;
-      }, { priority: -1 }));
-      ctx.effect(() => ctx.miniSlots.registerKeyed('sidebar.primary', 'new-conversation', signal => {
+      }, { key: 'history', priority: 1 }));
+      ctx.effect(() => ctx.miniSlots.register('sidebar.primary', signal => {
         const button = miniPrimitives.button('Replacement conversation', 'quiet');
         window.addEventListener('slot-test', () => {
           document.body.dataset.slotEvents = String(Number(document.body.dataset.slotEvents ?? 0) + 1);
         }, { signal });
         return { node: button, dispose() { document.body.dataset.slotDisposed = 'yes'; } };
-      }, { priority: -1 }));
+      }, { key: 'new-conversation', priority: 1 }));
     };
 `,
     );

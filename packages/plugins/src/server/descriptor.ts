@@ -1,7 +1,7 @@
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
-import { realpathSync } from 'node:fs';
+import { lstatSync, realpathSync } from 'node:fs';
 import { readJson } from '@mini-harness/platform/json';
 import type { PluginInfo, ResolvedPlugin } from '@mini-harness/plugin-api/descriptor';
 import { readBrowserAssets, type BrowserAssets } from './browser-assets.ts';
@@ -15,7 +15,6 @@ export interface DiscoveredPlugin
     Pick<PluginMetadata, 'external' | 'package' | 'error'> {
   scopeAddress?: import('@mini-harness/plugin-api/configuration').ScopeAddress;
   name?: string;
-  source?: string;
   module?: string;
   resources?: BrowserAssets;
 }
@@ -131,7 +130,7 @@ export function describePlugin(id: string, folder: string, entry?: string): Disc
   )
     throw new Error('Invalid plugin icon: ' + id);
   return {
-    source,
+    location: source ? { url: pathToFileURL(source).href + '?v=' + lstatSync(source).mtimeMs } : undefined,
     resources,
     package:
       packageInfo.name && packageInfo.version

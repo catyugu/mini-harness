@@ -156,7 +156,7 @@ export const apply = (ctx) => {
       miniConversation.subscribe(['history'], () => {
         if (miniConversation.get().history.messages.length) throw new Error('broken history subscriber');
       }, signal);
-      const remove = ctx.effect(() => ctx.miniSlots.registerKeyed('conversation.history', 'history', (signal) => {
+      const remove = ctx.effect(() => ctx.miniSlots.register('conversation.history', (signal) => {
         const node = document.createElement('div');
         node.id = 'replacement-stream';
         const update = () => {
@@ -168,7 +168,7 @@ export const apply = (ctx) => {
         miniConversation.subscribe(['partial', 'history'], update, signal);
         update();
         return node;
-      }, { priority: -1 }));
+      }, { key: 'history', priority: 1 }));
       window.addEventListener('restore-history', remove, { once: true, signal: signal });
     };
 `,

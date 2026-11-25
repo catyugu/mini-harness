@@ -15,12 +15,11 @@ function failedMessage({ model, signal }: LlmRequest, error: unknown, partial = 
 }
 
 export async function requestModel(
-  llm: LlmPort,
+  llm: Pick<LlmPort, 'stream'>,
   request: LlmRequest,
   options: {
-    delta(text: string): void;
-    ended(attempt: number, failed: boolean): void;
-    retry?(failure: Omit<ModelFailure, 'sessionId'>): Promise<ModelRetry | undefined>;
+    delta?(text: string): void;
+    retry?(failure: ModelFailure): ModelRetry | undefined | Promise<ModelRetry | undefined>;
   },
 ): Promise<NativeAssistantMessage> {
   const { signal, model } = request;
@@ -37,7 +36,7 @@ export async function requestModel(
           streamed = true;
           if (event.type === 'text-delta') {
             partial += event.text;
-            options.delta(event.text);
+            options.delta?.(event.text);
           }
         }
       }
@@ -47,15 +46,7 @@ export async function requestModel(
     }
     const failed =
       !!message.errorMessage || message.stopReason === 'error' || message.stopReason === 'aborted';
-    options.ended(attempt, failed);
-    if (
-      !failed ||
-      streamed ||
-      message.content.length ||
-      signal.aborted ||
-      message.stopReason === 'aborted' ||
-      attempt >= 3
-    )
+    if (!failed || streamed || message.content.length || signal.aborted || message.stopReason === 'aborted')
       return message;
     try {
       const retry = await options.retry?.({
@@ -65,7 +56,11 @@ export async function requestModel(
         error: message.errorMessage || 'Model request failed',
       });
       if (!retry) return message;
-      if (retry.delayMs) await sleep(retry.delayMs, undefined, { signal });
+      if (retry.delayMs !== undefined) {
+        if (!Number.isSafeInteger(retry.delayMs) || retry.delayMs < 0 || retry.delayMs > 2_147_483_647)
+          throw new Error('Invalid model retry delay');
+        if (retry.delayMs) await sleep(retry.delayMs, undefined, { signal });
+      }
     } catch (error) {
       return failedMessage(request, error);
     }

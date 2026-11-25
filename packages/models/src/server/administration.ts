@@ -1,7 +1,7 @@
 import { waitFor } from '@mini-harness/platform/wait';
 import { DomainError } from '@mini-harness/platform/errors';
 import type { Context } from 'mini-harness/cordis';
-import { providerSettings, saveProvider } from './provider-settings.ts';
+import { saveProvider } from './provider-settings.ts';
 
 export function setupAdministration(ctx: Context) {
   const { recent, remember } = ctx.harnessModelPreference;
@@ -25,7 +25,7 @@ export function setupAdministration(ctx: Context) {
     return work;
   };
   ctx.effect(() => () => pending);
-  add('GET', '/api/providers', () => providerSettings(host));
+  add('GET', '/api/providers', () => host.admin.providers());
   for (const method of ['PUT', 'DELETE']) {
     add(method, '/api/providers', async ({ body, signal }) => {
       const input = await body();

@@ -4,11 +4,11 @@ Schedules and owns active runs and their replay streams.
 
 ## Responsibilities
 
-Owns run IDs, task and inbox admission, cancellation, compaction scheduling, current activity and bounded event replay. Sessions owns durable run state.
+Owns run IDs, admission, model selection, input queues, compaction scheduling and bounded event replay. It prepares requests for the Agent Loop and writes accepted input, request snapshots and results to Sessions.
 
 ## Structure
 
-`src/runs.ts` coordinates execution. `events.ts` retains bounded server replay and the current response. `routes.ts` adapts run commands and `stream.ts` defines the event union.
+`src/runs.ts` coordinates execution. `session-run.ts` connects the Agent Loop to conversation history. `events.ts` retains bounded server replay and the current response. `routes.ts` adapts run commands and `stream.ts` defines the event union.
 
 ## API
 

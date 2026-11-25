@@ -117,18 +117,9 @@ importers:
       '@mini-harness/llm':
         specifier: workspace:*
         version: link:../llm
-      '@mini-harness/models':
-        specifier: workspace:*
-        version: link:../models
-      '@mini-harness/platform':
-        specifier: workspace:*
-        version: link:../platform
       '@mini-harness/plugin-api':
         specifier: workspace:*
         version: link:../plugin-api
-      '@mini-harness/sessions':
-        specifier: workspace:*
-        version: link:../sessions
       '@mini-harness/tools':
         specifier: workspace:*
         version: link:../tools
@@ -144,9 +135,6 @@ importers:
       '@mini-harness/sessions':
         specifier: workspace:*
         version: link:../sessions
-      '@mini-harness/tools':
-        specifier: workspace:*
-        version: link:../tools
       '@mini-harness/ui-runtime':
         specifier: workspace:*
         version: link:../ui-runtime
@@ -297,6 +285,9 @@ importers:
       '@mini-harness/platform':
         specifier: workspace:*
         version: link:../platform
+      '@mini-harness/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
 
   packages/models:
     dependencies:
@@ -368,6 +359,9 @@ importers:
       '@mini-harness/sessions':
         specifier: workspace:*
         version: link:../sessions
+      '@mini-harness/tools':
+        specifier: workspace:*
+        version: link:../tools
       '@mini-harness/transport':
         specifier: workspace:*
         version: link:../transport
@@ -428,6 +422,9 @@ importers:
 
   packages/shell:
     dependencies:
+      '@mini-harness/approvals':
+        specifier: workspace:*
+        version: link:../approvals
       '@mini-harness/conversation':
         specifier: workspace:*
         version: link:../conversation

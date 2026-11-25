@@ -8,9 +8,10 @@ export interface SlotMount {
 }
 export type SlotRenderer = (signal: AbortSignal) => HTMLElement | SlotMount;
 
-export interface KeyedSlotOptions {
+export interface SlotOptions {
+  key?: string;
   order?: number;
-  /** Lower priority wins for the same key. Equal priorities conflict. */
+  /** Higher priority wins for the same key. Equal priorities conflict. */
   priority?: number;
 }
 
@@ -18,13 +19,7 @@ declare module 'mini-harness/cordis' {
   interface Context {
     miniSlots: {
       define(name: SlotName, container: HTMLElement, kind?: SlotKind): () => void;
-      register(name: SlotName, node: HTMLElement, order?: number): () => void;
-      registerKeyed(
-        name: SlotName,
-        key: string,
-        render: SlotRenderer,
-        options?: KeyedSlotOptions,
-      ): () => void;
+      register(name: SlotName, contribution: HTMLElement | SlotRenderer, options?: SlotOptions): () => void;
     };
   }
 }

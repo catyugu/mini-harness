@@ -7,7 +7,9 @@ export interface SandboxMount {
 }
 
 export interface SandboxOptions {
-  cpuSeconds: number;
+  /** Working directory inside the isolation environment. */
+  workingDirectory: string;
+  limits?: { cpuSeconds?: number; openFiles?: number; fileBytes?: number; coreBytes?: number };
   mounts?: readonly SandboxMount[];
   signal?: AbortSignal;
 }

@@ -151,7 +151,7 @@ async function checkPackage() {
       import type { PluginData, PluginSecrets } from 'mini-harness/plugin-data';
       import type { SessionRecords } from 'mini-harness/sessions';
       import type { Execution } from 'mini-harness/execution';
-      import type { ModelRequestContent, InputContext, ToolDecision } from 'mini-harness/agent/events';
+      import type { ModelRequestContent, InputContext } from 'mini-harness/agent/events';
       import type { PromptPort } from 'mini-harness/agent/prompt';
       import type { CapabilityObservation } from 'mini-harness/observations';
       import type { ToolProjection } from 'mini-harness/conversation/display-events';
@@ -187,15 +187,14 @@ async function checkPackage() {
       ctx.on('internal/update', () => {});
       ctx.on('agent/prepare-input', (content, context: InputContext) => context.source === 'agent' ? content : undefined);
       ctx.on('agent/model-request', (request: ModelRequestContent) => ({ ...request, systemPrompt: request.systemPrompt.trim() }));
-      ctx.effect(() => prompt.register({ id: 'status', render: ({ cwd }) => cwd }));
+      ctx.effect(() => prompt.register({ id: 'status', render: ({ cwd }) => typeof cwd === 'string' ? cwd : undefined }));
       ctx.on('agent/tool-result', (content) => content);
       ctx.on('harness/observe', (event: CapabilityObservation) => {
         if (event.type === 'run-ended') void event.run.id;
       });
       ctx.on('conversation/tool-projection', ({ content }: ToolProjection) => content);
-      ctx.on('agent/tool-decision', ({ tool }: ToolDecision) => tool === 'change' ? 'deny' : undefined);
       void records.append({ seen: true });
-      // @ts-expect-error Input listeners return native user content or a rejection.
+      // @ts-expect-error Input listeners return native user content.
       ctx.on('agent/prepare-input', () => ({ arbitrary: true }));
       void ctx.harnessPluginSettings.set('showDetails', true);
       ctx.effect(() => routes.register('GET', '/api/example/:id', ({ params }) => params.id));
@@ -227,10 +226,10 @@ async function checkPackage() {
       declare const render: SlotRenderer;
       export function apply(ctx: Context) {
         const signal = ctx.fiber.signal;
-        ctx.effect(() => ctx.miniSlots.registerKeyed('sidebar.primary', 'example', render));
-        ctx.effect(() => ctx.miniSlots.registerKeyed('example.panel', 'example', render));
-        // @ts-expect-error A keyed registration needs a renderer.
-        ctx.effect(() => ctx.miniSlots.registerKeyed('sidebar.primary', 'example', document.body));
+        ctx.effect(() => ctx.miniSlots.register('sidebar.primary', render, { key: 'example' }));
+        ctx.effect(() => ctx.miniSlots.register('example.panel', render, { key: 'example' }));
+        // @ts-expect-error The contribution must be an element or a renderer.
+        ctx.effect(() => ctx.miniSlots.register('sidebar.primary', 'example', { key: 'example' }));
         const model: ComposerModel = ctx.miniComposer;
         const conversation: ConversationController = ctx.miniConversation;
         const primitives: BrowserPrimitives = ctx.miniPrimitives;
@@ -253,24 +252,21 @@ async function checkPackage() {
       }
     `,
     );
-    await Promise.all(
-      ['plugin-types.mts', 'browser-types.mts'].map((file) =>
-        execFile(
-          process.execPath,
-          [
-            resolve('node_modules/typescript/bin/tsc'),
-            '--strict',
-            '--noEmit',
-            '--target',
-            'ES2022',
-            '--module',
-            'NodeNext',
-            file,
-          ],
-          { cwd: installed },
-        ),
-      ),
-    );
+    for (const file of ['plugin-types.mts', 'browser-types.mts'])
+      await execFile(
+        process.execPath,
+        [
+          resolve('node_modules/typescript/bin/tsc'),
+          '--strict',
+          '--noEmit',
+          '--target',
+          'ES2022',
+          '--module',
+          'NodeNext',
+          file,
+        ],
+        { cwd: installed },
+      );
     assert.match((await cli('--help')).stdout, /minimal native agent harness/);
     await cp(resolve('docs/examples/task-notes'), plugin, { recursive: true });
     await execFile(process.execPath, [resolve('node_modules/typescript/bin/tsc'), '-p', 'tsconfig.json'], {

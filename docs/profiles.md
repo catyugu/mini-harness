@@ -76,7 +76,7 @@ plugins:
 Install ordinary npm dependencies with `mini-harness plugin --profile rescue add <package>`, then add entries or bundles explicitly. The command forwards npm arguments in the Profile directory; use `remove`, `update`, local directories, tarballs or Git references as needed. npm lifecycle scripts are disabled by default; explicitly pass `--ignore-scripts=false` to authorize them.
 Installing a package does not activate it. A module may export a native Cordis
 function, class, or object with `apply(ctx, config)`; no plugin.json is needed
-for these entries. Disabled entries, shipped or installed, are not imported. Local paths resolve relative to the declaring layer. The Web Plugins page manages declared entries. Use the package's `/client` export as a separate Entry to mount its browser implementation independently, with its own configuration. The same convention works for shipped module names; set `client: false` on a server Entry when publishing its UI separately. YAML layers may include
+for these entries. Disabled entries, shipped or installed, are not imported. Local paths resolve relative to the declaring layer. The Web Plugins page manages declared entries. Use the package's `/client` export as a separate Entry to mount its browser implementation independently, with its own configuration. The same convention works for shipped module names. The browser publisher uses the declared resources when present; set `client: false` on a server Entry when publishing its UI separately. YAML layers may include
 other fragments using `include`; they cannot use executable YAML tags or cyclic
 references. The final entry ID determines the configuration override.
 

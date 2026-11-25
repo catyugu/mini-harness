@@ -117,7 +117,7 @@ export function validateRequestSnapshot(request: ModelRequestSnapshot) {
   if (!Array.isArray(request.messages)) throw new Error('Invalid model request messages');
   const checker = new RequestMessages();
   checker.append(request.messages);
-  checker.complete();
+  return checker.complete();
 }
 
 /** Incremental tool-call validation for a single linear request context. */
@@ -148,6 +148,7 @@ export class RequestMessages {
 
   complete() {
     if (this.pending.size) throw new Error('Model request contains unfinished tool calls');
+    return this.identities as ReadonlySet<string>;
   }
 }
 
@@ -156,7 +157,15 @@ export type LlmEvent =
   | { type: 'thinking-delta'; text: string }
   | { type: 'tool-call'; call: ToolCallPart }
   | { type: 'done'; message: NativeAssistantMessage };
+export interface LlmAdapter {
+  /** Select using the same model choice that the caller supplies to stream(). */
+  accepts(model: Readonly<ModelChoice>): boolean;
+  stream(request: LlmRequest): AsyncIterable<LlmEvent>;
+}
+
 export interface LlmPort {
+  /** Select the nearest matching scope, then highest priority. A tie is ambiguous. */
+  register(adapter: LlmAdapter, priority?: number): () => void;
   stream(request: LlmRequest): AsyncIterable<LlmEvent>;
 }
 

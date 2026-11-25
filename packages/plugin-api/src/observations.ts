@@ -18,7 +18,7 @@ export function observe(
 ) {
   for (const { context, callback } of ctx.events.listeners('harness/observe', scopeTarget(ctx, scope))) {
     void context.fiber
-      .run((signal) => callback(structuredClone(event), signal), request)
+      .run((signal) => callback(event, signal), request)
       .catch((error) => {
         if (!context.fiber.signal.aborted && !request?.aborted) context.logger.warn(String(error));
       });

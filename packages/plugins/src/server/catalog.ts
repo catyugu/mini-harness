@@ -1,8 +1,8 @@
 import { isDeepStrictEqual } from 'node:util';
 import type { PluginMetadata } from '../shared/metadata.ts';
 import { DomainError } from '@mini-harness/platform/errors';
-import { existsSync, lstatSync, statSync } from 'node:fs';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { existsSync, statSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import {
   defineConfig,
@@ -20,7 +20,6 @@ import { loadPluginModule, resolveModule } from './module-resolution.ts';
 export interface ConfiguredPlugin {
   descriptor: DiscoveredPlugin;
   id: string;
-  source?: string;
   config: Record<string, unknown>;
   live: boolean;
 }
@@ -66,23 +65,20 @@ export class PluginCatalog {
     return describePlugin(id, directory, entry);
   }
 
-  private async describe(
+  private describe(
     id: string,
     entry: EntryConfiguration,
     client: boolean,
     scopeAddress?: ScopeAddress,
-  ): Promise<DiscoveredPlugin> {
+  ): DiscoveredPlugin {
     const name = entry.name;
     try {
       if (!name) throw new Error('Profile entry requires a module name: ' + id);
       const builtin = this.profile.builtin(id, name, client);
-      let descriptor: DiscoveredPlugin;
-      if (builtin) {
-        descriptor = { ...builtin, id, resources: client ? builtinBrowserAssets(builtin) : undefined };
-      } else {
-        descriptor = this.describeModule(id, name, this.profile.source(id, name));
-      }
-      if (!client || scopeAddress) delete descriptor.resources;
+      const descriptor = builtin
+        ? { ...builtin, resources: builtinBrowserAssets(builtin) }
+        : this.describeModule(id, name, this.profile.source(id, name));
+      if (!client) delete descriptor.resources;
       return this.withSchema({ ...descriptor, name, scopeAddress, defaultEnabled: entry.disabled !== true });
     } catch (error) {
       return {
@@ -99,12 +95,9 @@ export class PluginCatalog {
   }
 
   async runtimeDescriptors(settings: ProfileConfiguration): Promise<DiscoveredPlugin[]> {
-    const client = Object.values(settings.entries).some(
-      ({ name, disabled }) => name === '@mini-harness/web-gateway' && !disabled,
-    );
     const declarations = [
       ...Object.entries(settings.entries).map(([id, entry]) =>
-        this.describe(id, entry, entry.client ?? (client || !!entry.name?.endsWith('/client'))),
+        this.describe(id, entry, entry.client ?? true),
       ),
       ...scopeAddresses(settings).flatMap((key) =>
         Object.entries(settings.scopes[key]?.entries ?? {}).map(([id, entry]) =>
@@ -113,28 +106,27 @@ export class PluginCatalog {
       ),
     ];
     return Promise.all(
-      (await Promise.all(declarations)).map(async (descriptor) => {
-        const { id, source, location } = descriptor;
-        if ((!source && !location) || descriptor.error) return descriptor;
+      declarations.map(async (descriptor) => {
+        const { id, location } = descriptor;
+        if (!location || descriptor.error) return descriptor;
         if (!this.enabled(descriptor, settings)) {
           const key = descriptor.scopeAddress ? descriptor.scopeAddress + '/' + id : id;
           const previous = this.resolved.get(key);
           return previous &&
-            previous.source === source &&
             previous.location?.url === location?.url &&
             previous.location?.exportName === location?.exportName
             ? this.withSchema({ ...descriptor, Config: previous.Config })
             : descriptor;
         }
         try {
-          const url = location?.url ?? pathToFileURL(source!).href + '?v=' + lstatSync(source!).mtimeMs;
-          const { plugin, Config, metadata } = await loadPluginModule(url, location?.exportName);
+          const { url, exportName } = location;
+          const { plugin, Config, metadata } = await loadPluginModule(url, exportName);
           if (!plugin && !descriptor.resources && !metadata?.browser)
             throw new Error('Plugin ' + id + ' must export a Cordis plugin with apply(ctx, config)');
           return this.withSchema({
             ...descriptor,
             plugin,
-            module: url + '#' + (location?.exportName ?? 'default'),
+            module: url + '#' + (exportName ?? 'default'),
             Config,
           });
         } catch (error) {
@@ -173,7 +165,6 @@ export class PluginCatalog {
     return [...groups.values()].map((group) => {
       const descriptor = group.find((item) => !item.scopeAddress) ?? group[0];
       const {
-        source,
         resources,
         plugin: _plugin,
         browserStyles,
@@ -274,7 +265,7 @@ export class PluginCatalog {
         if (item.error) throw new DomainError('invalid_input', 'Invalid plugin ' + id + ': ' + item.error);
         const values = entry?.config;
         const config = item.plugin ? structuredClone(values ?? {}) : this.configValues(item, values);
-        plans.push({ descriptor: item, id, source: item.source, config, live: entry?.live ?? false });
+        plans.push({ descriptor: item, id, config, live: entry?.live ?? false });
       } catch (error) {
         if (!unavailable?.(id, error)) throw error;
       }

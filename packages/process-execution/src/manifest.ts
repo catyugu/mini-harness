@@ -1,20 +1,25 @@
 import type { Plugin } from 'mini-harness/cordis';
 import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
-import { executeProcess } from './executor.ts';
+import type { ProcessExecutionPort } from './api.ts';
+import { startProcess } from './executor.ts';
 
 export const metadata: PluginInfo = {
   title: 'Process execution',
-  description: 'Run subprocesses with cancellation, time and output limits',
+  description: 'Start subprocesses with streaming stdio and cancellation',
 };
 
 const plugin: Plugin.Object = {
   provide: ['harnessProcess'],
   apply(ctx) {
-    ctx.provide('harnessProcess', {
-      run(request: Parameters<typeof executeProcess>[0]) {
-        return ctx.fiber.run((signal) => executeProcess({ ...request, signal }), request.signal);
+    const execution: ProcessExecutionPort = {
+      start(command, signal) {
+        const owner = ctx.fiber.signal;
+        const child = startProcess(command, signal ? AbortSignal.any([owner, signal]) : owner);
+        void ctx.fiber.run(() => child.finished).catch(() => {});
+        return child;
       },
-    });
+    };
+    ctx.provide('harnessProcess', execution);
   },
 };
 

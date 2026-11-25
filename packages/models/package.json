@@ -7,8 +7,7 @@
     "./api": "./src/server/api.ts",
     "./browser/api": "./src/browser/api.ts",
     "./catalog": "./src/shared/catalog.ts",
-    "./manifests/catalog": "./src/manifests/catalog.ts",
-    "./manifests/llm": "./src/manifests/llm.ts",
+    "./manifests/pi-adapter": "./src/manifests/pi-adapter.ts",
     "./manifests/models": "./src/manifests/models.ts",
     "./manifests/store": "./src/manifests/store.ts"
   },
@@ -19,8 +18,7 @@
       "./catalog"
     ],
     "profileModules": {
-      "@mini-harness/llm": "./src/manifests/llm.ts",
-      "@mini-harness/model-catalog": "./src/manifests/catalog.ts",
+      "@mini-harness/pi-adapter": "./src/manifests/pi-adapter.ts",
       "@mini-harness/model-store": "./src/manifests/store.ts",
       "@mini-harness/models": "./src/manifests/models.ts",
       "@mini-harness/ui-models": "./src/manifests/models.ts#administration"

@@ -1,3 +1,4 @@
+import { containsPath } from '@mini-harness/platform/paths';
 import { RootedFiles } from '@mini-harness/file-access/root';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -22,7 +23,7 @@ test('Git inspection includes staged, unstaged and untracked files and rejects o
   writeFileSync(join(paths.cwd, 'file.txt'), 'after\n');
   writeFileSync(join(paths.cwd, 'new.txt'), 'new\n');
   const cwd = realpathSync.native(paths.cwd);
-  const inspection = new GitInspection(cwd, new RootedFiles(cwd, paths.home));
+  const inspection = new GitInspection(cwd, new RootedFiles(cwd, (path) => containsPath(paths.home, path)));
   const changes = await inspection.changes();
   assert.equal(
     changes.available,
@@ -37,7 +38,8 @@ test('Git inspection includes staged, unstaged and untracked files and rejects o
   const alias = join(root, 'workspace-alias');
   symlinkSync(paths.cwd, alias, process.platform === 'win32' ? 'junction' : 'dir');
   assert.equal(
-    (await new GitInspection(alias, new RootedFiles(cwd, paths.home)).changes()).available,
+    (await new GitInspection(alias, new RootedFiles(cwd, (path) => containsPath(paths.home, path))).changes())
+      .available,
     true,
     'Directory aliases must resolve to the same repository root',
   );
@@ -51,13 +53,17 @@ test('Git inspection includes staged, unstaged and untracked files and rejects o
   assert.match(bounded.content, /\+modified change/);
   assert.ok(Buffer.byteLength(bounded.content) < 2 * 1024 * 1024);
   await assert.rejects(inspection.diff('../home/profiles/web/cordis.patch.yml'));
-  const nestedState = join(paths.cwd, 'private');
+  const nestedState = join(cwd, 'private');
   mkdirSync(nestedState);
   writeFileSync(join(nestedState, 'secret.txt'), 'private contents');
   git('add', '.');
   git('commit', '-qm', 'track state for denial test');
   rmSync(join(nestedState, 'secret.txt'));
-  await assert.rejects(new GitInspection(cwd, new RootedFiles(cwd, nestedState)).diff('private/secret.txt'));
+  await assert.rejects(
+    new GitInspection(cwd, new RootedFiles(cwd, (path) => containsPath(nestedState, path))).diff(
+      'private/secret.txt',
+    ),
+  );
   if (process.platform !== 'win32') {
     const outside = join(root, 'secret');
     writeFileSync(outside, 'outside');

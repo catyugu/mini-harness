@@ -1,4 +1,4 @@
-import { conversationTools } from '@mini-harness/agent/tool-selection';
+import { conversationTools } from '@mini-harness/runs/tool-selection';
 import { expectPresent } from '../support/required.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -115,7 +115,7 @@ test('Shell delegates to a selected external process provider and still requires
       .find(({ name }) => name === 'sandbox_shell'),
     'shell tool',
   );
-  const execution = tool.execute('preview', { command: 'Preview command' }, undefined, undefined, undefined);
+  const execution = tool.execute('preview', { command: 'Preview command' });
   const pending = await waitUntil(
     () => request('/approvals'),
     ({ body }) => body.length === 1,
@@ -237,10 +237,7 @@ export const apply = (ctx, config) => {
       .find(({ name }) => name === 'scoped_greeting'),
     'scoped greeting tool',
   );
-  assert.match(
-    JSON.stringify(await tool.execute('scope', {}, undefined, undefined, undefined)),
-    new RegExp(parent.id),
-  );
+  assert.match(JSON.stringify(await tool.execute('scope', {})), new RegExp(parent.id));
   assert.equal(
     await app.runtime.plugins.ctx.harnessRuns.send(parent.id, 'Run scoped greeting'),
     'Finished greeting',
@@ -420,7 +417,6 @@ export function apply(ctx) {
         access: async () => {},
         readFile: async () => data,
         stat: async () => ({ size: data.length, isDirectory: () => false }),
-        imageType: async () => null,
         async *chunks() { yield data; }
       }) });
     }
@@ -443,9 +439,7 @@ export function apply(ctx) {
     'read tool',
   );
   assert.match(
-    JSON.stringify(
-      (await tool.execute('virtual', { path: 'virtual.txt' }, undefined, undefined, undefined)).content,
-    ),
+    JSON.stringify((await tool.execute('virtual', { path: 'virtual.txt' })).content),
     /Provided file content/,
   );
 });
@@ -457,22 +451,22 @@ test('native runs use the nearest scoped LLM provider while siblings retain the 
     'scoped-llm',
     {},
     `
-export const provide = ["harnessLlm"];
-export const apply = (ctx, config) => { ctx.provide('harnessLlm', {
+export const inject = ["harnessLlm"];
+export const apply = (ctx, config) => { ctx.effect(() => ctx.harnessLlm.register({
+      accepts: ({ provider }) => provider === 'local-mock',
       async *stream(request) {
         request.signal.throwIfAborted();
         yield { type: 'text-delta', text: config.answer };
         yield { type: 'done', message: { role: 'assistant', timestamp: Date.now(),
           content: [{ type: 'text', text: config.answer }], stopReason: 'stop' } };
       }
-    }); };
+    })); };
 `,
   );
   const parent = app.runtime.plugins.ctx.harnessRegistry.create();
   const child = app.runtime.plugins.ctx.harnessRegistry.create({ parentId: parent.id });
   const sibling = app.runtime.plugins.ctx.harnessRegistry.create();
   const scope = (answer: string) => ({
-    isolate: ['harnessLlm'],
     entries: { 'scoped-llm': { name: '../../plugins/scoped-llm', disabled: false, config: { answer } } },
   });
   const scopes = {
@@ -539,7 +533,6 @@ export const provide = ["harnessFileAccess","harnessSandbox"];
 export const apply = (ctx) => {
       ctx.provide('harnessFileAccess', { open: () => ({
         access: async () => {}, stat: async () => ({ isDirectory: () => false }),
-        imageType: async () => null,
         readFile: async () => Buffer.from('scoped file'),
         async *chunks() { yield Buffer.from('scoped file'); }
       }) });
@@ -552,11 +545,17 @@ export const apply = (ctx) => {
     'scoped-process',
     {},
     `
+import { PassThrough, Readable } from "node:stream";
 export const provide = ["harnessProcess"];
 export const apply = (ctx) => { ctx.provide('harnessProcess', {
-      async run(request) {
+      start(request) {
         if (!request.file) throw new Error('Missing executable');
-        return { code: 0, signal: null, stdout: 'scoped process', stderr: '', truncated: false };
+        return {
+          stdin: new PassThrough(),
+          stdout: Readable.from([Buffer.from('scoped process')]),
+          stderr: Readable.from([]),
+          finished: Promise.resolve({ code: 0, signal: null }),
+        };
       }
     }); };
 `,
@@ -754,12 +753,15 @@ export const provide = ['harnessAgent', 'agentMarker'];
 export function apply(ctx) {
   ctx.provide('agentMarker', 'session service');
   ctx.provide('harnessAgent', {
-    async prompt(run, record, text) {
+    async run(run, input) {
       if (run.fiber === ctx.fiber || run.get('agentMarker') !== 'session service')
         throw new Error('Missing isolated run context');
+      const turn = await input.prepare(1);
+      const content = turn.request.messages.at(-1).content;
+      const text = typeof content === 'string' ? content : content[0].text;
       run.effect(() => () => appendFileSync(${JSON.stringify(file)}, text + '\\n'));
       if (text === 'fail') throw new Error('Expected custom agent failure');
-      return 'Custom answer';
+      return { role: 'assistant', content: [{ type: 'text', text: 'Custom answer' }], timestamp: Date.now() };
     },
   });
 }

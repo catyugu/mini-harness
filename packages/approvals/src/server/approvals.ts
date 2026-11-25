@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { ApprovalPrompt } from './api.ts';
 import type { Approval } from '../shared/request.ts';
-import { ToolApprovalDenied } from '@mini-harness/tools/api';
+import { ApprovalDenied } from './api.ts';
 type Decision = 'allow' | 'automatic' | 'deny' | 'expired' | 'cancelled';
 
 export class Approvals {
@@ -40,7 +40,7 @@ export class Approvals {
       throw new Error('Invalid approval prompt');
     const key = context === undefined ? undefined : JSON.stringify([sessionId, plugin, context, message]);
     if (runId && key && this.denials.get(runId)?.has(key))
-      return Promise.reject(new ToolApprovalDenied('Operation denied by user'));
+      return Promise.reject(new ApprovalDenied('Operation denied by user'));
     return new Promise<boolean>((resolve, reject) => {
       const info = {
         id: randomUUID(),
@@ -63,7 +63,7 @@ export class Approvals {
             previous.add(key);
             this.denials.set(runId, previous);
           }
-          reject(new ToolApprovalDenied('Operation denied by user'));
+          reject(new ApprovalDenied('Operation denied by user'));
         } else reject(new Error(decision === 'expired' ? 'User approval expired' : 'Operation cancelled'));
       };
       const abort = () => finish('cancelled');

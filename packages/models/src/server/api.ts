@@ -7,6 +7,10 @@ export interface ModelCatalogPort {
   /** Returns undefined when the choice is absent from this catalog. */
   resolve(choice: ModelChoice): ModelChoice | undefined;
   capabilities(choice: ModelChoice): ProviderModel | undefined;
+  /** The protocol identifier and endpoint from the configured model. */
+  connection(choice: ModelChoice): { api: string; baseUrl: string } | undefined;
+  /** Resolve the provider key for server-side adapter code. */
+  apiKey(choice: ModelChoice): Promise<string | undefined>;
 }
 
 export interface ModelPreference {

@@ -12,7 +12,7 @@ Maintains one credential and provider store. Publishes independent catalog and L
 
 ## API
 
-`harnessModels` and `harnessLlm` are replaceable capabilities. `harnessModelStore` and `harnessModelPreference` are internal. `core:model-admin` serves provider settings and the browser catalog by consuming those capabilities.
+`harnessModels` and `harnessLlm` are replaceable capabilities. The model store reads provider definitions and credentials independently of any LLM SDK. Pi contributes its built-in models through its adapter. Registered LLM adapters can use `harnessModels.connection(choice)` and `harnessModels.apiKey(choice)` for server-side provider configuration. `harnessModelStore` and `harnessModelPreference` are internal. `core:model-admin` serves provider settings and the browser catalog by consuming those capabilities.
 
 ## Dependencies
 

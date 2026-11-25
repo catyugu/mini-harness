@@ -1,5 +1,7 @@
 import type { Approval } from '../shared/request.ts';
 
+export class ApprovalDenied extends Error {}
+
 export interface ApprovalPrompt {
   title: string;
   message: string;

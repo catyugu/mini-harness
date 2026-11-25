@@ -49,10 +49,10 @@ A service provider declares `provide = ['exampleGreeting']` and calls `ctx.provi
 | Service                                        | Contract                                                                                                                                                                                                        |
 | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `harnessTools`                                 | Register a definition or a `{ name, resolve(resourceId) }` factory. Use `list()` to select standalone tools and `list({ scope, resourceId })` for scoped or resource-specific tools.                            |
-| `harnessLlm`                                   | Stream a model response with `stream({ model, systemPrompt, messages, signal })`.                                                                                                                               |
-| `harnessProcess`                               | Run an executable with arguments, a working directory, and an optional explicit environment.                                                                                                                    |
-| `harnessFileAccess`                            | Open a file access handle with `open(root)`.                                                                                                                                                                    |
-| `harnessPrompt`                                | Register a named section, with an optional order and a render callback. The nearest scope wins for a shared ID.                                                                                                 |
+| `harnessLlm`                                   | Register model streaming adapters and stream harness messages. The nearest matching scope wins, then higher priority.                                                                                           |
+| `harnessProcess`                               | Start an executable with `start(command, signal)` and use its stdio streams and exit promise.                                                                                                                   |
+| `harnessFileAccess`                            | Use Node operations through `native` or open a directory view with `open(root, options)`.                                                                                                                       |
+| `harnessPrompt`                                | Register a named section, with an optional order and a render callback. The nearest scope wins for a shared ID, then higher priority.                                                                           |
 | `harnessSessions`                              | Direct conversation methods accept explicit IDs. `records(id, owner)` reads or appends records for the selected owner on the active branch. Use `append(data, { title, content })` to publish a display record. |
 | `harnessExecution`                             | `submit(id, input, { signal })` goes through normal admission and returns a handle with its own result and cancellation.                                                                                        |
 | `harnessApprovalRequests`                      | `request(id, prompt, signal)` requests a user decision for a conversation.                                                                                                                                      |
@@ -63,23 +63,26 @@ A service provider declares `provide = ['exampleGreeting']` and calls `ctx.provi
 
 Runtime scopes use opaque object identities. Use `scopeOf(ctx)` from `mini-harness/scopes` to inspect the current registration scope. Resolve configured services directly from `harnessProfileScopes.context(address)` after preparing the Profile address. See [scoped providers](scoped-providers.md).
 
-The Agent recognizes the `readOnly` tool tag when selecting tools for read-only conversations. An alternative `harnessToolExecutor` can present tools and interpret model messages in another protocol, while scheduling and executing only authorized calls.
+Runs uses the `readOnly` tag to select and start tools for read-only conversations. A custom `harnessToolExecutor` can present tools, interpret model messages and execute calls in another protocol.
 
 ### Events
 
-Use `agent/setup` to register capabilities for a particular running Agent. The callback receives its Cordis context, session ID and cancellation signal. Register run-local tools and prompt sections with `run.effect(() => run.get('harnessTools')!.register(...))` and `run.effect(() => run.get('harnessPrompt')!.register(...))`. These contributions are disposed with the run; child runs inherit active parent capabilities and keep their own overrides.
+A server plugin can add a model protocol by declaring a provider in `models.json` with its own `api` identifier and registering a matching adapter. The existing model catalog lists those models and manages their credentials. The adapter can query `harnessModels.connection(model)` and resolve a key with `harnessModels.apiKey(model)`.
 
-Register listeners with `ctx.on(event, handler)`. Listeners are owned by the Fiber; the domain selects the applicable context. Cordis uses registration order and supports `prepend` for an explicit leading listener. Dependencies, not Entry IDs or numeric event options, determine activation.
+An independent Profile can compose `@mini-harness/agent` and `@mini-harness/llm` with its chosen adapter and Tool Executor. Pass `{ request, tools, signal }` to `harnessAgent.run(ctx, input)` to run an in-memory transcript. `request` takes the model, system prompt and messages. Runs prepares each turn when the conversation can accept queued input or switch models.
 
-| Event                          | Behavior                                                                                                                |
-| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
-| `agent/prepare-input`          | Transform delivered user content or return `{ reject: reason }`. Read `original.userText` for text entered by the user. |
-| `agent/model-request`          | Transform the system prompt, model-visible messages, thinking level or token limit.                                     |
-| `agent/model-retry`            | Return `{ delayMs }` to retry a model attempt before output has streamed. The first decision applies.                   |
-| `agent/tool-result`            | Transform successful results after persistence of the original execution.                                               |
-| `agent/tool-decision`          | Return `'deny'` to restrict a call or `undefined` to defer.                                                             |
-| `conversation/tool-projection` | Synchronously transform tool output in the conversation display.                                                        |
-| `harness/observe`              | Observe session, run or turn events with an activation-bound cancellation signal.                                       |
+Use `agent/setup` to register capabilities for a particular running Agent. The callback receives its Cordis context, session ID and cancellation signal. Register run-local tools and prompt sections with `run.effect(() => run.get('harnessTools')!.register(...))` and `run.effect(() => run.get('harnessPrompt')!.register(...))`. Child runs inherit active parent contributions through the scope, and disposal removes the originating run’s contributions.
+
+Register listeners with `ctx.on(event, handler)`. Return new values from transformation hooks and leave the supplied data intact. Listeners are owned by the Fiber; the domain selects the applicable context. Cordis uses registration order and supports `prepend` for an explicit leading listener. Plugin activation follows dependency declarations.
+
+| Event                          | Behavior                                                                                                             |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| `agent/prepare-input`          | Return transformed user content. Throw an error to reject delivery. Read `original.userText` for the submitted text. |
+| `agent/model-request`          | Transform the system prompt, model-visible messages, thinking level or token limit.                                  |
+| `agent/model-retry`            | Return `{ delayMs }` to retry a model attempt before output has streamed. The first decision applies.                |
+| `agent/tool-result`            | Transform successful results after persistence of the original execution.                                            |
+| `conversation/tool-projection` | Synchronously transform tool output in the conversation display.                                                     |
+| `harness/observe`              | Observe session and run events with an activation-bound cancellation signal.                                         |
 
 ### Configuration
 
@@ -112,7 +115,7 @@ export function apply(ctx) {
 
 Declare the services you use:
 
-- `miniSlots` defines outlets and registers elements or keyed renderers. Keyed renderers receive a signal for the view's lifetime. Use `order` for display sequence and a lower `priority` (for example `-1` against the default `0`) to replace a keyed contribution. Equal priorities at the same key conflict.
+- `miniSlots` defines outlets and registers elements or keyed renderers. Pass a node or renderer to `register(name, contribution, options)`. A renderer receives the view's lifetime signal. Use `order` for display sequence and provide the same `key` with higher `priority` to replace a contribution. Equal priorities at the same key conflict.
 - `miniPages`, `miniDialogs`, and `miniTabs` own page, dialog and tab resources. `miniTabs.register(type, definition)` returns a typed handle that accepts an owner, stable key, and payload. `miniTabs.contribute` adds an entry to the workspace panel.
 - `miniFilePreview.open(resource, placement)` renders a workspace file, conversation attachment or temporary resource. Declare `miniFilePreview` for a required dependency or use optional access for integrations that also work with previews disabled.
 - `miniComposer` handles drafts, commands and completions. `miniMessages` owns actions and renderers for history.

@@ -1,18 +1,18 @@
+import type { Context } from 'mini-harness/cordis';
 import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
 import type { Static, TSchema } from 'typebox';
 import type { TextPart, ImagePart } from '@mini-harness/llm/api';
 
 import type { ToolSchema } from '@mini-harness/llm/vocabulary';
-export class ToolApprovalDenied extends Error {}
 
-export interface ToolResult {
-  content: (TextPart | ImagePart)[];
+export interface ToolUpdate {
+  content?: (TextPart | ImagePart)[];
   details?: Record<string, unknown>;
 }
-export interface ToolContext {
-  cwd: string;
-  assertAuthorized?(): void;
-  waitForApproval?(request: () => Promise<void>): Promise<void>;
+export interface ToolResult extends ToolUpdate {
+  content: (TextPart | ImagePart)[];
+  isError?: boolean;
+  elapsedMs?: number;
 }
 export interface ToolDefinition<Arguments = Record<string, any>> extends ToolSchema {
   /** Tags are interpreted by the tool consumer. */
@@ -26,14 +26,13 @@ export interface ToolDefinition<Arguments = Record<string, any>> extends ToolSch
     callId: string,
     args: Arguments,
     signal?: AbortSignal,
-    onUpdate?: (result: ToolResult) => void,
-    context?: ToolContext,
+    onUpdate?: (update: ToolUpdate) => void,
   ): Promise<ToolResult>;
 }
 
 export interface ToolFactory {
   name: string;
-  resolve(resourceId: string): ToolDefinition;
+  resolve(resourceId: string, caller?: Context): ToolDefinition;
   visible?(resourceId: string): boolean;
 }
 
@@ -42,10 +41,13 @@ export interface ToolSelection {
   resourceId?: string;
 }
 
+export interface RegisteredTool extends ToolDefinition {
+  available(): boolean;
+}
+
 export interface ToolPort {
   register(tool: ToolDefinition | ToolFactory): () => Promise<void>;
-  list(selection?: ToolSelection): ToolDefinition[];
-  isAvailable(tool: ToolDefinition): boolean;
+  list(selection?: ToolSelection): RegisteredTool[];
 }
 
 export function isToolContent(value: unknown): value is ToolResult['content'] {

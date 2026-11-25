@@ -1,23 +1,5 @@
-# @mini-harness/llm
+# LLM
 
-Defines native provider-neutral messages, tool calls, model options and streaming requests.
+`harnessLlm` streams the harness message protocol. A Cordis plugin can register an adapter using `ctx.effect(() => ctx.harnessLlm.register(adapter))`. The adapter selects matching model choices with `accepts` and implements `stream`. The nearest scope with a matching adapter wins. Within that scope, higher priority wins and a tie reports an error. Disposing an adapter removes it from future selection, and unloading its plugin cancels its streams.
 
-## Responsibilities
-
-Owns model and thinking vocabulary, message validation, and the request snapshot contract used by execution and persistence.
-
-## Structure
-
-`src/api.ts` defines `LlmPort` and native protocol types. `vocabulary.ts` and `options.ts` centralize model fields and validation.
-
-## API
-
-`harnessLlm` and the native model interfaces are exported through the server SDK.
-
-## Dependencies
-
-[Models](../models/README.md) adapts the protocol to provider APIs and owns credentials.
-
-## Testing
-
-[Agent](../agent/tests/) and [Models](../models/tests/) verify native requests, message validation and adapter behavior.
+Profiles select the default Pi adapter through `@mini-harness/pi-adapter`. Other adapters can coexist with it and use the model catalog for configuration and credentials.
