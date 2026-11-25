@@ -49,7 +49,7 @@ A service provider declares `provide = ['exampleGreeting']` and calls `ctx.provi
 | Service                                        | Contract                                                                                                                                                                                                        |
 | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `harnessTools`                                 | Register a definition or a `{ name, bind(sessionId) }` factory. Read-only conversations admit registrations declaring read-only access, subject to inherited tool restrictions.                                 |
-| `harnessPrompt`                                | Register a named section, with an optional order and a render callback. The nearest scope wins for a shared ID.                                                                                                 |
+| `harnessPrompt`                                | Register a named section, with an optional order and a render callback. The nearest scope wins for a shared ID, then higher priority. Default prompt content is supplied by a separate plugin.                                                                                                 |
 | `harnessSessions`                              | `access()` returns the caller's visible conversation directory. `records(id)` reads or appends the instance's records on the active branch. Use `append(data, { title, content })` to publish a display record. |
 | `harnessExecution`                             | `submit(id, input, { signal })` goes through normal admission and returns a handle with its own result and cancellation.                                                                                        |
 | `harnessApprovalRequests`                      | `request(id, prompt, signal)` requests a user decision for a visible conversation.                                                                                                                              |
@@ -58,7 +58,7 @@ A service provider declares `provide = ['exampleGreeting']` and calls `ctx.provi
 | `harnessPluginSettings`                        | Read the current effective config, subscribe to committed changes or write this instance's configuration when the Profile marks its Entry as live.                                                              |
 | `harnessPluginChanges`                         | Invalidate the plugin's browser projection after a domain mutation.                                                                                                                                             |
 
-Use `await sessionService(ctx, sessionId, serviceName, signal)` to prepare a visible conversation and access a declared service with the caller's identity. Session writes and scope preparation belong in runtime calls after plugin setup. See [scoped providers](scoped-providers.md).
+Use `await sessionService(ctx, sessionId, serviceName, signal)` to prepare a visible conversation and access a service with the caller's identity. Session writes and scope preparation belong in runtime calls after plugin setup. See [scoped providers](scoped-providers.md).
 
 ### Events
 

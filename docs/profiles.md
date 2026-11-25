@@ -81,6 +81,8 @@ resolve relative to the layer that declares the name. A directory entry loads th
 other fragments using `include`; they cannot use executable YAML tags or cyclic
 references. The final entry ID determines the configuration override.
 
+A plugin row may specify only `name`; its default ID is deterministic. Repeated instances of a module must have distinct explicit IDs.
+
 All declared server modules use the same Cordis EntryTree and configuration path.
 The Web Plugins page edits the user patch, including ordinary module entries.
 Changes to services currently executing the configuration transaction require a

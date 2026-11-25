@@ -17,6 +17,7 @@ test('prompt contributions coexist, override within a session tree and are remov
 export const inject = ["harnessPrompt"];
 export const apply = (ctx) => {
     ctx.effect(() => ctx.harnessPrompt.register({ id: 'workspace-status', order: 600, render: () => '[App status]' }));
+    ctx.effect(() => ctx.harnessPrompt.register({ id: 'base', order: 0, render: () => '[Custom base]' }));
     ctx.effect(() => ctx.harnessPrompt.register({ id: 'plan', order: 500, render: async ({ tools }) => tools.some(({ name }) => name === 'load_skill') ? '[Plan]' : undefined }));
   };
 `,
@@ -60,7 +61,10 @@ export const apply = (ctx) => {
   });
   assert.equal(configured.status, 200, JSON.stringify(configured.body));
   assert.match(await prompt(child.id), /\[Plan\]\s+\[Extra\]\s+\[Child status\]/);
-  assert.match(await prompt(sibling.id), /\[Plan\]\s+\[Extra\]\s+\[App status\]/);
+  const siblingPrompt = await prompt(sibling.id);
+  assert.match(siblingPrompt, /\[Plan\]\s+\[Extra\]\s+\[App status\]/);
+  assert.match(siblingPrompt, /^\[Custom base\]/);
+  assert.doesNotMatch(siblingPrompt, /You are mini-harness/);
   assert.equal(
     (await request('/settings', 'PATCH', { entries: { 'more-prompt': { disabled: true } }, scopes: {} }))
       .status,
