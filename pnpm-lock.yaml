@@ -288,6 +288,9 @@ importers:
       '@mini-harness/platform':
         specifier: workspace:*
         version: link:../platform
+      '@mini-harness/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
 
   packages/models:
     dependencies:

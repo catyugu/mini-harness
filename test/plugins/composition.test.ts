@@ -456,22 +456,22 @@ test('native runs use the nearest scoped LLM provider while siblings retain the 
     'scoped-llm',
     {},
     `
-export const provide = ["harnessLlm"];
-export const apply = (ctx, config) => { ctx.provide('harnessLlm', {
+export const inject = ["harnessLlm"];
+export const apply = (ctx, config) => { ctx.effect(() => ctx.harnessLlm.register({
+      accepts: ({ provider }) => provider === 'local-mock',
       async *stream(request) {
         request.signal.throwIfAborted();
         yield { type: 'text-delta', text: config.answer };
         yield { type: 'done', message: { role: 'assistant', timestamp: Date.now(),
           content: [{ type: 'text', text: config.answer }], stopReason: 'stop' } };
       }
-    }); };
+    })); };
 `,
   );
   const parent = app.runtime.plugins.ctx.harnessRegistry.create();
   const child = app.runtime.plugins.ctx.harnessRegistry.create({ parentId: parent.id });
   const sibling = app.runtime.plugins.ctx.harnessRegistry.create();
   const scope = (answer: string) => ({
-    isolate: ['harnessLlm'],
     entries: { 'scoped-llm': { name: '../../plugins/scoped-llm', disabled: false, config: { answer } } },
   });
   const scopes = {

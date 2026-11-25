@@ -19,6 +19,7 @@
     ]
   },
   "dependencies": {
-    "@mini-harness/platform": "workspace:*"
+    "@mini-harness/platform": "workspace:*",
+    "@mini-harness/plugin-api": "workspace:*"
   }
 }

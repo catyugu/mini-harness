@@ -153,8 +153,12 @@ export class RootedFiles implements RootedFileAccess {
   async *chunks(path: string, signal?: AbortSignal): AsyncGenerator<Uint8Array> {
     const handle = await this.openFile(path);
     try {
-      for await (const chunk of handle.createReadStream({ autoClose: false, signal })) {
-        yield chunk as Buffer;
+      for (;;) {
+        signal?.throwIfAborted();
+        const chunk = Buffer.allocUnsafe(64 * 1024);
+        const { bytesRead } = await handle.read(chunk);
+        if (!bytesRead) break;
+        yield chunk.subarray(0, bytesRead);
       }
     } finally {
       await handle.close();
@@ -264,7 +268,7 @@ export class RootedFiles implements RootedFileAccess {
       const result: { name: string; directory: boolean }[] = [];
       for await (const entry of await opendir(dir)) {
         if (!(entry.isFile() || entry.isDirectory())) continue;
-        const child = resolve(path, entry.name);
+        const child = resolve(this.cwd, path, entry.name);
         if (this.exclude?.(child)) continue;
         checkName(entry.name);
         result.push({ name: entry.name, directory: entry.isDirectory() });

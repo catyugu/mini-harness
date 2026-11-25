@@ -163,7 +163,7 @@ export interface LlmAdapter {
 }
 
 export interface LlmPort {
-  /** The highest-priority matching adapter is used. Equal matching priorities are ambiguous. */
+  /** Select the nearest matching scope, then highest priority. A tie is ambiguous. */
   register(adapter: LlmAdapter, priority?: number): () => void;
   stream(request: LlmRequest): AsyncIterable<LlmEvent>;
 }

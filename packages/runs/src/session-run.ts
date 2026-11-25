@@ -586,6 +586,7 @@ export class SessionRun {
             },
             async deliver(output, toolSignal, call) {
               let executionId: string | undefined;
+              let transformError: Error | undefined;
               let originalContent: NativeToolMessage['content'] | undefined;
               if (!output.isError && hooks.length) {
                 executionId = log.append({ type: 'tool-execution', result: output }).id;
@@ -598,45 +599,29 @@ export class SessionRun {
                   });
                   output = { ...output, content };
                 } catch (error) {
-                  const failure = failedTool(
-                    call,
-                    'Tool execution completed, but the model-visible result transformation failed.',
-                  );
-                  const entry = log.append({ type: 'message', message: failure });
-                  emit({
-                    type: 'tool',
-                    id: call.id,
-                    name: call.name,
-                    state: 'error',
-                    arguments: call.arguments,
-                    content: failure.content,
-                    entry: { id: entry.id, parentId: entry.parentId, timestamp: failure.timestamp },
+                  output = {
+                    ...failedTool(
+                      call,
+                      'Tool execution completed, but the model-visible result transformation failed.',
+                    ),
+                    elapsedMs: output.elapsedMs,
+                  };
+                  transformError = new Error('Could not transform the result of ' + call.name, {
+                    cause: error,
                   });
-                  observe(
-                    ctx,
-                    {
-                      type: 'tool-ended',
-                      sessionId: id,
-                      tool: call.name,
-                      callId: call.id,
-                      failed: true,
-                      elapsedMs: output.elapsedMs,
-                    },
-                    toolSignal,
-                  );
-                  throw new Error('Could not transform the result of ' + call.name, { cause: error });
                 }
               }
-              const entry = executionId
-                ? log.append({
-                    type: 'tool-accepted',
-                    executionId,
-                    contentDelta: contentDelta(
-                      JSON.stringify(originalContent),
-                      JSON.stringify(output.content),
-                    ),
-                  })
-                : log.append({ type: 'message', message: output, elapsedMs: output.elapsedMs });
+              const entry =
+                executionId && !transformError
+                  ? log.append({
+                      type: 'tool-accepted',
+                      executionId,
+                      contentDelta: contentDelta(
+                        JSON.stringify(originalContent),
+                        JSON.stringify(output.content),
+                      ),
+                    })
+                  : log.append({ type: 'message', message: output, elapsedMs: output.elapsedMs });
               const details = output.details;
               if (!output.isError && typeof details?.changedPath === 'string') changed?.(details.changedPath);
               emit({
@@ -665,6 +650,7 @@ export class SessionRun {
                 toolSignal,
               );
 
+              if (transformError) throw transformError;
               return output;
             },
           };

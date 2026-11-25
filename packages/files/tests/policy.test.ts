@@ -55,6 +55,8 @@ test('workspace tools share one policy for reads, searches and writes', async (t
   assert.doesNotMatch(JSON.stringify(await execute('ls', { path: '.' })), /linked|state/);
   await assert.rejects(execute('read', { path: '../private/secret.txt' }), /permitted root/);
   await assert.rejects(execute('read', { path: 'state/secret.txt' }), /permitted root/);
+  const project = new RootedFiles(root, (path) => containsPath(state, path));
+  assert.ok((await project.entries('project')).every(({ name }) => name !== 'state'));
   await assert.rejects(execute('write', { path: 'linked/secret.txt', content: 'changed' }));
   await assert.rejects(execute('grep', { path: 'linked/secret.txt', pattern: 'secret' }));
   await assert.rejects(execute('find', { path: privateDir, pattern: '*.txt' }));
