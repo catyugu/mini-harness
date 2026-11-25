@@ -43,8 +43,7 @@ export class PluginRouteRegistry {
       register(method, path, handler) {
         const caller = Service.caller(this);
         const { pluginId, scopeKey } = pluginInstance(caller);
-        if (scopeKey || !path.startsWith('/'))
-          throw new Error('Invalid plugin route');
+        if (scopeKey || !path.startsWith('/')) throw new Error('Invalid plugin route');
         const lifetime = caller.fiber.signal;
         return networkEffect(caller, () =>
           ctx.harnessRoutes.register(method, '/api/extensions/' + pluginId + path, (request) =>

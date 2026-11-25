@@ -76,8 +76,16 @@ function configDefaults(schema: Record<string, any>, value: any): any {
 /** The form schema is an explicit public projection; write-only fields never leave the server. */
 export function publicConfigSchema(schema: Record<string, any> | undefined): Record<string, any> | undefined {
   if (!schema) return;
-  const properties = Object.fromEntries(Object.entries<Record<string, any>>(schema.properties ?? {})
-    .filter(([, property]) => !property.writeOnly && property.format !== 'password')
-    .map(([key, property]) => [key, property.properties ? publicConfigSchema(property) : property]));
-  return { ...schema, properties, ...(Array.isArray(schema.required) ? { required: schema.required.filter((key: string) => Object.hasOwn(properties, key)) } : {}) };
+  const properties = Object.fromEntries(
+    Object.entries<Record<string, any>>(schema.properties ?? {})
+      .filter(([, property]) => !property.writeOnly && property.format !== 'password')
+      .map(([key, property]) => [key, property.properties ? publicConfigSchema(property) : property]),
+  );
+  return {
+    ...schema,
+    properties,
+    ...(Array.isArray(schema.required)
+      ? { required: schema.required.filter((key: string) => Object.hasOwn(properties, key)) }
+      : {}),
+  };
 }
