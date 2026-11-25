@@ -40,7 +40,7 @@ export function pluginInstance(ctx: Context) {
 
 export function sessionVisible(ctx: Context, id: string) {
   const runScope = agentScopeOf(ctx);
-  const owner = runScope ? findInstance(ctx) : pluginInstance(ctx);
+  const owner = findInstance(ctx);
   const address = sessionAddress(ctx, id);
   return [runScope, owner?.scopeKey].every(
     (scope) => !scope || scope === `session:${id}` || address.includes(scope),

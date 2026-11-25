@@ -2,7 +2,7 @@ import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
 import { toolNamePattern } from '@mini-harness/llm/vocabulary';
 import { Check, Errors } from 'typebox/value';
 import { Service, type Context } from 'mini-harness/cordis';
-import { agentScopeOf, pluginInstance, sessionVisible } from '@mini-harness/plugin-api/instance';
+import { agentScopeOf, findInstance, sessionVisible } from '@mini-harness/plugin-api/instance';
 import { isToolContent, type ToolDefinition, type ToolPort, type ToolRegistrationOptions } from './api.ts';
 import type { ToolDecision } from './events.ts';
 import type { ToolAccess, ToolPolicy } from './policy.ts';
@@ -32,7 +32,7 @@ export class ToolRegistry {
     return Service.track<ToolPort>({
       register(definition, options) {
         const context = Service.caller(this);
-        const scopeKey = agentScopeOf(context) ?? pluginInstance(context).scopeKey;
+        const scopeKey = agentScopeOf(context) ?? findInstance(context)?.scopeKey;
         const bind = 'bind' in definition ? definition.bind : () => definition;
         return registry.registerBinding(definition.name, bind, { ...options, context, scope: scopeKey });
       },

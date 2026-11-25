@@ -234,7 +234,7 @@ export class PluginCatalog {
     id = plan.id,
     scopeKey?: ScopeKey,
   ): EntryOptions {
-    const { source, descriptor } = plan;
+    const { descriptor } = plan;
     const plugin = descriptor.plugin;
     if (!plugin) throw new Error('Missing server module: ' + plan.id);
     return {

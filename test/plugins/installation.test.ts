@@ -92,6 +92,7 @@ test(
       npm_config_cache: join(root, 'npm-cache'),
       npm_config_fetch_retries: '0',
       npm_config_prefer_online: 'true',
+      npm_config_ignore_scripts: 'false',
     };
     const run = (...args: string[]) =>
       execFile(process.execPath, [cli, 'plugin', '--profile', 'web', ...args], {
@@ -118,7 +119,7 @@ test(
           : files['server/entry.mjs']
             ? './server/entry.mjs'
             : undefined,
-        scripts: { postinstall: 'node -e "process.exit(13)"' },
+        scripts: { postinstall: 'node -e "require(\'node:fs\').writeFileSync(\'installed-by-npm\', \'yes\')"' },
       };
       writeJson(join(cwd, 'package.json'), manifest);
       for (const [file, source] of Object.entries(files)) {
@@ -162,10 +163,12 @@ export const apply = (ctx) => { ctx.harnessPluginRoutes.register('GET', '/label'
     let lock = JSON.parse(readFileSync(join(directory, 'package-lock.json'), 'utf8'));
     assert.equal(lock.packages['node_modules/mini-setup-helper'].version, '1.0.0');
     assert.equal(lock.packages['node_modules/' + name].version, '1.0.0');
+    assert.equal(readFileSync(join(directory, 'node_modules', name, 'installed-by-npm'), 'utf8'), 'yes');
     await publish(name, '1.1.0', files, { 'mini-setup-helper': '1.0.0' });
-    await run('add', name + '@1.1.0', '--no-audit', '--no-fund');
+    await run('add', name + '@1.1.0', '--no-audit', '--no-fund', '--ignore-scripts');
     lock = JSON.parse(readFileSync(join(directory, 'package-lock.json'), 'utf8'));
     assert.equal(lock.packages['node_modules/' + name].version, '1.1.0');
+    assert.ok(!existsSync(join(directory, 'node_modules', name, 'installed-by-npm')));
     writeJson(join(directory, 'cordis.patch.yml'), {
       plugins: [{ id, name, client: true, disabled: true, config: { greeting: 'preserved' } }],
     });

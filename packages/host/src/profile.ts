@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync } f
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
+import { createHash } from 'node:crypto';
 import { parseDocument, stringify } from 'yaml';
 import { Context, EntryTree, type Plugin } from 'mini-harness/cordis';
 import { readJson, writeJson, writeText } from '@mini-harness/platform/json';
@@ -105,6 +106,12 @@ const packagedModules = new Map(
 const object = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
 
+/** Module-only rows use a stable ID without requiring a second name. */
+function entryId(name: string) {
+  if (localPluginIdPattern.test(name)) return name;
+  return 'plugin-' + createHash('sha256').update(name).digest('hex').slice(0, 24);
+}
+
 function load(file: string, optional = false): Layer | undefined {
   try {
     const doc = parseDocument(readFileSync(file, 'utf8'), { schema: 'core', strict: true, uniqueKeys: true });
@@ -127,6 +134,8 @@ function load(file: string, optional = false): Layer | undefined {
       throw new Error('plugins must be a list');
     const ids = new Set<string>();
     for (const row of (value.plugins as unknown[]) ?? []) {
+      if (object(row) && row.id === undefined && typeof row.name === 'string' && row.name.trim())
+        row.id = entryId(row.name);
       if (
         !object(row) ||
         Object.keys(row).some(
@@ -266,7 +275,7 @@ export const profileSchema = {
       type: 'array',
       items: {
         type: 'object',
-        required: ['id'],
+        anyOf: [{ required: ['id'] }, { required: ['name'] }],
         additionalProperties: false,
         properties: {
           id: { type: 'string', pattern: pluginIdPattern.source },

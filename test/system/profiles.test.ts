@@ -106,8 +106,7 @@ export function apply(ctx, config) {
   writeText(
     fragment,
     `plugins:
-  - id: consumer
-    name: profile-consumer
+  - name: profile-consumer
     config:
       suffix: '!'
   - id: provider
@@ -170,7 +169,7 @@ export function apply(ctx, config) {
   await assert.rejects(bootProfile(standalone, paths, launch), /Invalid Profile name/);
   writeText(
     standalone,
-    'plugins:\n  - id: provider\n    config:\n      value: temporary\n  - id: consumer\n    name: profile-consumer\n',
+    'plugins:\n  - id: provider\n    config:\n      value: temporary\n  - name: profile-consumer\n',
   );
   const patched = await bootProfile('custom', paths, { ...launch, patches: [standalone] });
   try {

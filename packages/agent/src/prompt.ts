@@ -1,5 +1,5 @@
 import { Service, type Context } from 'mini-harness/cordis';
-import { agentScopeOf, pluginInstance, sessionAddress } from '@mini-harness/plugin-api/instance';
+import { agentScopeOf, findInstance, sessionAddress } from '@mini-harness/plugin-api/instance';
 import { constants } from 'node:fs';
 import { lstat, open } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -75,7 +75,7 @@ export class Prompt implements PromptPort {
   register(section: PromptSection) {
     const context = Service.caller(this);
     const runScope = agentScopeOf(context);
-    const instanceId = runScope ? 'agent:' + context.fiber.uid : pluginInstance(context).instanceId;
+    const instanceId = runScope ? 'agent:' + context.fiber.uid : findInstance(context)?.instanceId ?? 'fiber:' + context.fiber.uid;
     const { id, order = 500, render } = section;
     if (
       !/^[a-zA-Z][a-zA-Z0-9_.:-]{0,95}$/.test(id) ||
@@ -95,9 +95,9 @@ export class Prompt implements PromptPort {
     const contributed = [...this.sections.values()].flatMap(({ context: owner, section }) => {
       if (owner.fiber.signal.aborted) return [];
       const runScope = agentScopeOf(owner);
-      const identity = runScope ? undefined : pluginInstance(owner);
+      const identity = runScope ? undefined : findInstance(owner);
       const scopeKey = runScope ?? identity?.scopeKey;
-      const instanceId = identity?.instanceId ?? 'agent:' + owner.fiber.uid;
+      const instanceId = identity?.instanceId ?? (runScope ? 'agent:' : 'fiber:') + owner.fiber.uid;
       const address = sessionAddress(owner, context.sessionId);
       if (scopeKey && !address.includes(scopeKey)) return [];
       return [
