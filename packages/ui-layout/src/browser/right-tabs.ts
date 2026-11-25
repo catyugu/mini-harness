@@ -314,14 +314,19 @@ export function createRightTabs(
     inspect(title: string, node: HTMLElement, lifetime: AbortSignal) {
       if (!scope) return;
       const owner = Service.caller(this).fiber;
+      const key = String(owner.uid);
+      const signal = AbortSignal.any([owner.signal, selection.signal, lifetime]);
+      if (signal.aborted) return;
+      const previous = visible().find((tab) => tab.type === inspector && tab.key === key);
+      if (previous) remove(previous);
       open(
         inspector,
         { title: () => title, create: () => node },
         {
           owner: { ...scope },
-          key: String(owner.uid),
+          key,
           data: undefined,
-          signal: AbortSignal.any([owner.signal, selection.signal, lifetime]),
+          signal,
         },
       );
     },

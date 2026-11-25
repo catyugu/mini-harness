@@ -26,21 +26,7 @@ export default {
       root,
       paths.plugins,
       profile.descriptors,
-      [
-        'harnessState',
-        'harnessProfile',
-        'harnessLaunch',
-        ...profile.infrastructure.filter(
-          (name) =>
-            ![
-              'harnessPluginRoutes',
-              'harnessPluginSettings',
-              'harnessPluginData',
-              'harnessPluginSecrets',
-              'harnessPluginChanges',
-            ].includes(name),
-        ),
-      ],
+      ['harnessState', 'harnessProfile', 'harnessLaunch', ...profile.infrastructure],
       () => settings.settings,
       (path, handler) => {
         const upgrades = root.get('harnessUpgrades');

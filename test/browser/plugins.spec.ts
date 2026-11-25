@@ -47,7 +47,14 @@ export function apply(ctx, config) {
       if (node.tagName === 'BUTTON') node.type = 'button';
       node.dataset.exampleSlot = slot; node.textContent = slot === 'sidebar' ? config.label : 'Plugin ' + slot;
       if (slot === 'composer') node.onclick = () => miniComposer.insert('Inserted by plugin');
-      if (slot === 'inspector') node.onclick = () => {const p = document.createElement('p');p.textContent='Plugin preview';ctx.miniTabs.inspect('Example', p, signal);};
+      if (slot === 'inspector') {
+        let opened = 0;
+        node.onclick = () => {
+          const panel = document.createElement('p');
+          panel.textContent = ++opened === 1 ? 'Plugin preview' : 'Updated plugin preview';
+          ctx.miniTabs.inspect('Example', panel, signal);
+        };
+      }
       ctx.effect(() => ctx.miniSlots.register({sidebar:'sidebar.actions',composer:'conversation.composer',inspector:'conversation.header'}[slot], node));
     }
     ctx.effect(() => ctx.miniSettingsRegistry.register(browserPluginId(ctx), { section: 'General', id: 'preferences', order: 10, render({ bind }) {
@@ -112,6 +119,8 @@ export function apply(ctx) {
     await expect(page.getByText('Custom listing result')).toBeVisible();
     await page.getByRole('button', { name: 'Plugin inspector', exact: true }).click();
     await expect(page.getByText('Plugin preview', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Plugin inspector', exact: true }).click();
+    await expect(page.getByText('Updated plugin preview', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
     await settingsSection(page, 'General').click();
     await expect(page.getByRole('switch', { name: 'Add instructions' })).toBeVisible();
@@ -146,7 +155,7 @@ export function apply(ctx) {
     await page.getByRole('switch', { name: 'UI example', exact: true }).uncheck();
     await expect(page.locator('[data-example-slot]')).toHaveCount(0);
     await expect(page.locator('html')).toHaveAttribute('data-dependency-disposal', 'ordered');
-    await expect(page.getByText('Plugin preview', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('Updated plugin preview', { exact: true })).toHaveCount(0);
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
     await settingsSection(page, 'General').click();
     await expect(page.getByRole('switch', { name: 'Add instructions' })).toBeVisible();
