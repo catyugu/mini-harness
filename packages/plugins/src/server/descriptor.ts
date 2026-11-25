@@ -81,7 +81,7 @@ export async function describePlugin(
     )
       throw new Error('Plugin entry must resolve inside its package');
     source = physical;
-  } else if (!source && !standardClient && isRegularFile(join(folder, 'plugin.js'))) {
+  } else if (!clientOnly && !source && !standardClient && isRegularFile(join(folder, 'plugin.js'))) {
     source = join(folder, 'plugin.js');
   }
   const descriptor = join(folder, 'plugin.json');
@@ -120,7 +120,7 @@ export async function describePlugin(
   const resources = client && browser
     ? readBrowserAssets(id, folder, browser, info.browserDirectory ?? inferredDirectory, info.browserStyles)
     : undefined;
-  if (enabled && !native?.plugin && !resources)
+  if (enabled && !native?.plugin && !browser)
     throw new Error('Plugin ' + id + ' must export a Cordis plugin with apply(ctx, config) or a browser entry');
   const configSchema = (native?.Config as { jsonSchema?: Record<string, any> } | undefined)?.jsonSchema ?? info.configSchema;
   const { configGroups, configHint } = info;

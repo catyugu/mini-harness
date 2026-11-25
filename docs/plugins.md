@@ -1,6 +1,6 @@
 # Plugins
 
-An npm plugin can expose an ordinary Cordis module through its package.json `exports` or `main`. Presentation metadata is optional and may be declared in `miniHarness.plugin` in package.json. A local file bundle can also include optional `plugin.json` metadata. Local and npm plugins run trusted JavaScript. Review the code, dependencies and browser assets before installing it. See [SECURITY.md](../SECURITY.md).
+An npm plugin can expose an ordinary Cordis module through its package.json `exports` or `main`. Presentation metadata is optional. Export a `metadata` object from the server module; the same fields may be supplied statically in `plugin.json` or `miniHarness.plugin` in package.json. Native exports take precedence. An optional `<entry>.<exportName>.plugin.json` sidecar supplies module-specific static metadata (the default export uses `default`). Local and npm plugins run trusted JavaScript. Review the code, dependencies and browser assets before installing it. See [SECURITY.md](../SECURITY.md).
 
 ## Install and enable
 
@@ -14,7 +14,7 @@ mini-harness plugin --profile web remove <package>
 
 Installing a package changes only the selected Profile's npm dependencies. Declare an Entry in the Profile to activate it; restart before updating or removing packages used by a running application. npm lifecycle scripts default to disabled; authorize them explicitly with `--ignore-scripts=false`. To develop locally, declare the built package directory as an entry name in a Profile. Multiple local packages can run together. Use the Web Plugins page to enable and configure available entries; it does not install or delete code.
 
-Metadata supplies display information, not scope or authority. Package exports can declare `./client`; local bundles may use `browser` and `browserDirectory`. Publish only dedicated browser build output. Browser entries receive their configuration directly; independent client entries have their own config. Keep credentials in `harnessPluginSecrets`.
+Metadata supplies display information, not scope or authority. Any plugin may declare `browser`, `browserDirectory`, and ordered `browserStyles` relative to its distribution root. Package exports can also declare `./client` as the browser entry. Only the explicitly declared entry, styles and public build directory are published. If styles are omitted, CSS files in the public directory are discovered. Entries and their resources use versioned URLs regardless of their origin. Publish only dedicated browser build output. Browser entries receive their configuration directly; independent client entries have their own config. Keep credentials in `harnessPluginSecrets`.
 
 ## Declare a Cordis plugin
 

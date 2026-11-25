@@ -12,10 +12,10 @@ import { createFixturePaths, createMockProvider } from '../helpers/mock-provider
 import { DEFAULTS, mergeSettings } from '@mini-harness/plugin-api/selection';
 import { writeJson } from '@mini-harness/platform/json';
 
-import { Context } from 'mini-harness/cordis';
+import { Context, type Plugin } from 'mini-harness/cordis';
 import { defineConfig } from '@mini-harness/plugin-api/configuration';
 import type { SessionRecord } from '@mini-harness/sessions/identity';
-import type { ResolvedPlugin } from '@mini-harness/plugin-api/descriptor';
+import type { PluginInfo } from '@mini-harness/plugin-api/descriptor';
 import { PluginHost } from '@mini-harness/plugins/manager';
 import { createScopeKey, scopeChainOf, scopeOf, type ScopeKey } from '@mini-harness/plugin-api/scopes';
 
@@ -35,15 +35,33 @@ function fixtureKeys() {
   };
 }
 
+type FixtureModule = PluginInfo & { id: string; plugin?: Plugin };
+
 function fixtureProfile(
-  modules: ResolvedPlugin[],
+  directory: string,
+  modules: FixtureModule[],
   read: () => typeof DEFAULTS,
   commit = (_next: typeof DEFAULTS) => {},
 ) {
+  const locations = new Map<string, { folder: string; entry: string }>();
+  for (const { id, plugin, ...metadata } of modules) {
+    const folder = join(directory, id);
+    mkdirSync(folder, { recursive: true });
+    const entry = join(folder, 'plugin.mjs');
+    const key = entry;
+    Object.defineProperty(globalThis, key, { configurable: true, value: plugin });
+    if (metadata.browser) {
+      metadata.browser = 'web.js';
+      writeFileSync(join(folder, 'web.js'), 'export function apply() {}');
+    }
+    writeFileSync(entry, 'export const metadata = ' + JSON.stringify(metadata) +
+      '; export default globalThis[' + JSON.stringify(key) + ']; delete globalThis[' + JSON.stringify(key) + '];');
+    locations.set(id, { folder, entry });
+  }
   return {
     read,
     commit,
-    builtin: (_id: string, name: string) => modules.find((item) => item.id === name),
+    locate: (name: string) => locations.get(name),
     source: () => {
       throw new Error('Unknown test module');
     },
@@ -737,7 +755,7 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
     ['independent', { id: 'independent', workspaceId: otherWorkspace, parentId: null } as SessionRecord],
   ]);
   const released: string[] = [];
-  const builtins: ResolvedPlugin[] = [
+  const builtins: FixtureModule[] = [
     {
       id: 'global',
       title: 'Global',
@@ -802,7 +820,7 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
   const host = new PluginHost(
     ctx,
     directory,
-    fixtureProfile(
+    fixtureProfile(directory, 
       builtins,
       () => settings,
       (next) => {
@@ -911,7 +929,7 @@ test('configuration validation resolves the staged scope provider and rejects in
     ...structuredClone(DEFAULTS),
     entries: { global: { name: 'global' } },
   };
-  const builtins: ResolvedPlugin[] = [
+  const builtins: FixtureModule[] = [
     {
       id: 'global',
       title: 'Default',
@@ -954,7 +972,7 @@ test('configuration validation resolves the staged scope provider and rejects in
   const host = new PluginHost(
     new Context(),
     directory,
-    fixtureProfile(
+    fixtureProfile(directory, 
       builtins,
       () => settings,
       (next) => {
@@ -995,7 +1013,7 @@ test('configuration validation resolves the staged scope provider and rejects in
 test('setup and live configuration cannot await their own graph transaction', async (t) => {
   const directory = mkdtempSync(join(tmpdir(), 'mini-reentrant-'));
   let settings = structuredClone(DEFAULTS);
-  const builtins: ResolvedPlugin[] = [
+  const builtins: FixtureModule[] = [
     {
       id: 'reentrant',
       title: 'Reentrant',
@@ -1014,7 +1032,7 @@ test('setup and live configuration cannot await their own graph transaction', as
   const host = new PluginHost(
     ctx,
     directory,
-    fixtureProfile(
+    fixtureProfile(directory, 
       builtins,
       () => settings,
       (next) => {
@@ -1047,8 +1065,8 @@ test('setup and live configuration cannot await their own graph transaction', as
 
 test('a failed server entry does not publish its browser module', async (t) => {
   const directory = mkdtempSync(join(tmpdir(), 'mini-required-browser-'));
-  const browser = '/packages/ui-runtime/src/browser/boot.js';
-  const builtins: ResolvedPlugin[] = [
+  const browser = 'web.js';
+  const builtins: FixtureModule[] = [
     {
       id: 'ui',
       title: 'UI',
@@ -1077,7 +1095,7 @@ test('a failed server entry does not publish its browser module', async (t) => {
   const host = new PluginHost(
     new Context(),
     directory,
-    fixtureProfile(builtins, () => settings),
+    fixtureProfile(directory, builtins, () => settings),
   );
   t.after(async () => {
     await host.close();
@@ -1106,7 +1124,7 @@ test('custom scope namespaces support normal Cordis composition and inheritance'
   const host = new PluginHost(
     ctx,
     directory,
-    fixtureProfile(
+    fixtureProfile(directory, 
       [
         {
           id: 'global',

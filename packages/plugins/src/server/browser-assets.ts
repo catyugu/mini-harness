@@ -52,8 +52,10 @@ export function readBrowserAssets(
     (directory !== undefined && (typeof directory !== 'string' || !publicPath(directory)))
   )
     throw new Error('Invalid browser entry or build directory: ' + id);
-  if (typeof directory === 'string' && !entry.startsWith(directory + '/'))
+  if (entry.includes('/') && typeof directory === 'string' && !entry.startsWith(directory + '/'))
     throw new Error('Browser entry must be inside its build directory: ' + id);
+  if (styles !== undefined && (!Array.isArray(styles) || styles.some((style) => typeof style !== 'string')))
+    throw new Error('Invalid browser styles: ' + id);
   const root = realpathSync(folder);
   const entries = new Map<string, Asset>();
   const signature = createHash('sha256').update(root);

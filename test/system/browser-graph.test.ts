@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import ts from 'typescript';
 import type { BrowserBootstrap } from '@mini-harness/ui-runtime/bootstrap';
-import { profileDescriptors, readProfile } from '@mini-harness/host/profile';
 import { moduleReferences } from '../../scripts/module-references.ts';
 import { fixture } from '../support/api-fixture.ts';
 
@@ -11,11 +10,13 @@ test('the composed browser graph serves its runtime dependencies and excludes se
   const { body: snapshot }: { body: BrowserBootstrap } = await request('/bootstrap');
   const mounted = new Map(snapshot.ui.map((entry) => [entry.id, entry]));
   assert.equal(mounted.size, snapshot.ui.length);
-  const plugins = profileDescriptors(readProfile('web'));
-  assert.ok(plugins.length);
-  assert.ok(plugins.every(({ plugin, Config, location }) => !plugin && !Config && location));
-  for (const { id, browser, defaultEnabled } of plugins)
-    if (browser && defaultEnabled) assert.equal(mounted.get(id)?.browser, browser);
+  assert.ok(snapshot.ui.length);
+  for (const { id, browser, styles } of snapshot.ui) {
+    assert.ok(browser.startsWith('/plugin-assets/' + id + '/'), browser);
+    assert.ok(styles?.every((style) => style.startsWith('/plugin-assets/' + id + '/')));
+  }
+  const files = mounted.get('files');
+  assert.ok(files);
 
   for (const asset of [
     '/packages/host/src/application.js',
@@ -35,7 +36,7 @@ test('the composed browser graph serves its runtime dependencies and excludes se
     '/packages/ui-runtime/src/browser/boot.js',
     '/packages/ui-runtime/src/browser/plugin-settings.js',
   ];
-  for (const { browser } of plugins) if (browser) pending.push(browser);
+  for (const { browser } of snapshot.ui) pending.push(browser);
   const seenModules = new Set<string>();
   for (const path of pending) {
     if (seenModules.has(path)) continue;
@@ -74,6 +75,7 @@ test('the composed browser graph serves its runtime dependencies and excludes se
     changed.ui.some(({ id }) => id === 'files'),
     false,
   );
+  assert.equal((await fetch(base + files.browser)).status, 404);
   const shell = changed.ui.find(({ id }) => id === 'shell');
   assert.ok(shell);
   assert.match(await (await fetch(base + shell.browser)).text(), /inject: \['miniMessages'\]/);
