@@ -509,9 +509,11 @@ export class Runs implements RunPort {
           parent = parent.intercept(name, scope[Context.intercept][name]);
       break;
     }
-    const fiber = agentContext(parent, id).plugin(function agentRun() {});
+    const fiber = agentContext(parent, id).inject(['harnessAgent'], function agentRun() {});
     try {
       await fiber;
+      if (!fiber.ctx.get('harnessAgent'))
+        throw new DomainError('unavailable', 'Required service is unavailable: harnessAgent');
       activity.context = fiber.ctx;
       return await fiber.run(async (signal) => {
         for (const { context, callback } of fiber.ctx.events.listeners('agent/setup', sessionEvent(fiber.ctx, id)))

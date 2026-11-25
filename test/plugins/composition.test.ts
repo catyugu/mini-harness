@@ -663,14 +663,16 @@ test('Agent setup owns temporary tools and prompt sections and isolates sibling 
   writePlugin(paths.plugins, 'run-capabilities', {}, `
 export function apply(ctx) {
   ctx.on('agent/setup', (run, id) => {
-    if (!run.get('harnessTools') || !run.get('harnessPrompt')) throw new Error('Missing run services');
-    run.effect(() => run.harnessTools.register({
+    const tools = run.get('harnessTools');
+    const prompt = run.get('harnessPrompt');
+    if (!tools || !prompt) throw new Error('Missing run services');
+    run.effect(() => tools.register({
       name: 'run_marker',
       description: 'A run-local tool',
       parameters: { type: 'object', properties: {} },
       async execute() { return { content: [{ type: 'text', text: id }] }; }
     }));
-    run.effect(() => run.harnessPrompt.register({ id: 'run-marker', render: () => 'Run marker ' + id }));
+    run.effect(() => prompt.register({ id: 'run-marker', render: () => 'Run marker ' + id }));
   });
 }
 `);
