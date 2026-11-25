@@ -26,14 +26,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Check formatting
         if: runner.os == 'Linux' && matrix.node == '24'
-        continue-on-error: true
-        run: |
-          pnpm run format:check || {
-            pnpm run format
-            node --input-type=module -e 'import { execFileSync } from "node:child_process"; import { readFileSync } from "node:fs"; for (const path of execFileSync("git", ["diff", "--name-only", "-z"], {encoding:"utf8"}).split("\0").filter(Boolean)) { const content = readFileSync(path, "utf8"); const count = Math.ceil(content.length / 3000); for (let i=0; i<count; i++) console.log("FORMAT_CHUNK " + JSON.stringify({path,i,count,content:content.slice(i*3000,(i+1)*3000)})); }'
-            git restore .
-            exit 1
-          }
+        run: pnpm run format:check
       - name: Set up Linux workspace isolation
         if: runner.os == 'Linux'
         run: |
@@ -70,6 +63,8 @@ jobs:
         run: pnpm run build
       - name: Run Playwright tests
         run: pnpm run test:playwright
+      - name: Verify third-party plugins in the installed browser runtime
+        run: pnpm run pack:verify --browser
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

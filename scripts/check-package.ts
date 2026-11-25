@@ -415,7 +415,11 @@ async function checkPackage() {
       greeting: 'Hello, SDK',
     });
     assert.equal(
-      (await write('/api/settings', 'PATCH', { entries: { 'greeting-service': { config: { prefix: 'Installed' } } } })).status,
+      (
+        await write('/api/settings', 'PATCH', {
+          entries: { 'greeting-service': { config: { prefix: 'Installed' } } },
+        })
+      ).status,
       200,
     );
     assert.deepEqual(await (await get('/api/extensions/greeting-route/hello?name=SDK')).json(), {
@@ -475,9 +479,11 @@ async function checkPackage() {
 
     const scope = 'session:' + item.id;
     assert.equal(
-      (await write('/api/settings', 'PATCH', {
-        scopes: { [scope]: { entries: { 'scoped-tool': { disabled: false } } } },
-      })).status,
+      (
+        await write('/api/settings', 'PATCH', {
+          scopes: { [scope]: { entries: { 'scoped-tool': { disabled: false } } } },
+        })
+      ).status,
       200,
     );
     const runIn = async (id: string, message: string) => {
@@ -491,20 +497,50 @@ async function checkPackage() {
     await runIn(child.childId, 'Pack scoped test');
     assert.match(JSON.stringify(mock.requests.at(-1)), /scoped_greeting/);
     const scopedHistory = await (await get('/api/sessions/' + child.childId)).json();
-    assert.ok(scopedHistory.messages.some((message: { role: string; content: unknown }) =>
-      message.role === 'toolResult' && JSON.stringify(message.content).includes('Greeting returned.'),
-    ));
+    assert.ok(
+      scopedHistory.messages.some(
+        (message: { role: string; content: unknown }) =>
+          message.role === 'toolResult' && JSON.stringify(message.content).includes('Greeting returned.'),
+      ),
+    );
     const sibling = await (await write('/api/sessions', 'POST', {})).json();
     await runIn(sibling.id, 'Pack sibling test');
     assert.doesNotMatch(JSON.stringify(mock.requests.at(-1)?.tools), /scoped_greeting/);
     assert.equal((await write('/api/settings', 'PATCH', { scopes: {} })).status, 200);
     await runIn(child.childId, 'Pack after scope removal');
     assert.doesNotMatch(JSON.stringify(mock.requests.at(-1)?.tools), /scoped_greeting/);
-    assert.equal(
-      (await write('/api/settings', 'PATCH', { entries: { 'browser-panel': { disabled: true } } })).status,
-      200,
+    const disablePanel = async () => {
+      assert.equal(
+        (await write('/api/settings', 'PATCH', { entries: { 'browser-panel': { disabled: true } } })).status,
+        200,
+      );
+    };
+    if (process.argv.includes('--browser')) {
+      const { chromium, expect } = await import('@playwright/test');
+      const browser = await chromium.launch({ executablePath: process.env.MINI_HARNESS_CHROMIUM });
+      try {
+        const page = await browser.newPage();
+        await page.goto(info.url + '/#token=' + token);
+        const entry = page.getByRole('button', { name: 'Example panel', exact: true });
+        await entry.click();
+        await expect(page.getByText('Example panel is ready.')).toBeVisible();
+        await page.getByRole('button', { name: 'Preview', exact: true }).click();
+        const dialog = page.getByRole('dialog', { name: 'Example preview' });
+        await expect(dialog).toBeVisible();
+        await disablePanel();
+        await expect(dialog).toHaveCount(0);
+        await expect(entry).toHaveCount(0);
+      } finally {
+        await browser.close();
+      }
+    } else {
+      await disablePanel();
+    }
+    assert.ok(
+      !(await (await get('/api/bootstrap')).json()).ui.some(
+        ({ id }: { id: string }) => id === 'browser-panel',
+      ),
     );
-    assert.ok(!(await (await get('/api/bootstrap')).json()).ui.some(({ id }: { id: string }) => id === 'browser-panel'));
     assert.equal((await get(panel.browser)).status, 404);
 
     assert.equal(

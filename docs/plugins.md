@@ -18,7 +18,7 @@ The manifest supplies display information, scope (`application`, `workspace`, or
 
 ## Declare a Cordis plugin
 
-The CLI and browser load named `inject`, `provide` and `apply` exports or a default Cordis plugin. The host resolves public `mini-harness/*` modules from installed server plugins to the active installation. Import the public contract belonging to the service you use, such as `mini-harness/tools`, `mini-harness/agent`, or `mini-harness/llm`. Augment the public Cordis module to type your own services. Installed plugin code written for the old setup API needs migration to these declarations. Existing settings and owned records retain their namespace.
+The CLI and browser load named `inject`, `provide` and `apply` exports or a default Cordis plugin. The host resolves public `mini-harness/*` modules from installed server plugins to the active installation. Import the public contract belonging to the service you use, such as `mini-harness/tools`, `mini-harness/agent`, or `mini-harness/llm`. Augment the public Cordis module to type your own services. An Entry ID identifies its persisted configuration and owned records.
 
 ```ts
 import type { Context } from 'mini-harness/cordis';
