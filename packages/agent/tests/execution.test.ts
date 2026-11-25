@@ -12,7 +12,7 @@ import { Inbox } from '../../runs/src/inbox.ts';
 import type { Attachment } from '@mini-harness/input/message';
 import type { InboxItem } from '@mini-harness/sessions/log-api';
 import { SessionRun } from '../../runs/src/session-run.ts';
-import { nativeExecutor } from '../src/strategies.ts';
+import { nativeExecutor } from '@mini-harness/tools/execution';
 import { basicCompaction } from '../src/compaction.ts';
 import { SessionRegistry } from '@mini-harness/sessions/registry';
 import { WorkspaceCatalog } from '@mini-harness/workspaces/catalog';
@@ -51,7 +51,13 @@ function fixture(
   executor = nativeExecutor,
 ) {
   const { root, paths } = createFixturePaths('http://127.0.0.1:1/v1');
-  const sessions = new SessionRegistry(paths, new WorkspaceCatalog(paths));
+  const sessions = new SessionRegistry(
+    paths,
+    (() => {
+      const workspaces = new WorkspaceCatalog(paths);
+      return () => workspaces;
+    })(),
+  );
   t.after(() => {
     sessions.dispose();
     rmSync(root, { recursive: true, force: true });
@@ -61,8 +67,7 @@ function fixture(
   ctx.provide('harnessTools', tools.service());
   ctx.provide('harnessModels', {
     list: () => [],
-    connection: () => undefined,
-    apiKey: async () => undefined,
+    register: () => () => {},
     available: async () => [],
     resolve: (choice) => choice,
     capabilities: (choice) => ({
@@ -75,13 +80,13 @@ function fixture(
       thinkingLevels: thinkingLevels(choice.id),
     }),
   });
-  ctx.provide('harnessLlm', { ...llm, register: () => () => {} });
+  ctx.provide('harnessLlm', { ...llm, register: () => () => {}, select: () => undefined });
   ctx.provide('harnessToolExecutor', executor);
-  ctx.provide('harnessCompaction', basicCompaction);
+  ctx.provide('harnessCompaction', { ...basicCompaction, shouldCompact: () => false });
   ctx.provide('harnessPrompt', { build: async () => 'Fixture', register: () => () => {} });
   if (retryModel) ctx.on('agent/model-retry', retryModel);
   ctx.provide('harnessAgent', new AgentLoop(() => 8));
-  const agent = new SessionRun(sessions, () => ({ autoCompact: false }));
+  const agent = new SessionRun(sessions);
   const record = sessions.create();
   return { agent, ctx, sessions, tools, record };
 }
@@ -751,13 +756,15 @@ test('text models see historical placeholders in the request and audit snapshot,
 
 test('native compaction reduces context and preserves message identities and history', async (t) => {
   const { app, mock, request } = await httpFixture(t);
-  await app.runtime.configuration.update({ entries: { 'core:runs': { config: { autoCompact: false } } } });
+  await app.runtime.configuration.update({
+    entries: { 'core:compaction': { config: { autoCompact: false } } },
+  });
   const { body: session } = await request('/sessions', 'POST', {});
   const compact = () => request('/sessions/' + session.id + '/compact', 'POST');
   const small = await compact();
   assert.equal(small.status, 400);
   assert.match(small.body.error, /Nothing to compact/);
-  const log = app.runtime.plugins.ctx.harnessRegistry.log(session.id);
+  const log = app.runtime.plugins.ctx.harnessSessions.log(session.id);
   const image = { type: 'image' as const, mimeType: 'image/png', data: 'iVBORw0KGgo=' };
   log.append({ type: 'message', message: { role: 'user', content: [image], timestamp: 1 } });
   for (let turn = 0; turn < 6; turn++)
@@ -765,14 +772,14 @@ test('native compaction reduces context and preserves message identities and his
       session.id,
       'Turn ' + turn + ' ' + 'more context '.repeat(100),
     );
-  const before = app.runtime.plugins.ctx.harnessRegistry.log(session.id).projection().messages;
+  const before = app.runtime.plugins.ctx.harnessSessions.log(session.id).projection().messages;
   const compacted = await compact();
   assert.equal(compacted.status, 200, JSON.stringify(compacted.body));
   assert.equal(mock.requests.length, 7);
   assert.match(JSON.stringify(mock.requests.at(-1)), /Image unavailable/);
   assert.doesNotMatch(JSON.stringify(mock.requests.at(-1)), /iVBORw0KGgo=/);
   assert.ok(log.entries().some((entry) => entry.type === 'compaction'));
-  assert.deepEqual(app.runtime.plugins.ctx.harnessRegistry.log(session.id).projection().messages, before);
+  assert.deepEqual(app.runtime.plugins.ctx.harnessSessions.log(session.id).projection().messages, before);
   assert.equal(log.projection().contextMessages.length, 5);
   assert.match(JSON.stringify(log.projection().contextMessages[0]), /Summary of earlier conversation/);
 });

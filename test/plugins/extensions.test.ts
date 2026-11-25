@@ -44,9 +44,9 @@ export const apply = (ctx) => {
   };
 `,
   );
-  const parent = app.runtime.plugins.ctx.harnessRegistry.create();
-  const child = app.runtime.plugins.ctx.harnessRegistry.create({ parentId: parent.id });
-  const sibling = app.runtime.plugins.ctx.harnessRegistry.create();
+  const parent = app.runtime.plugins.ctx.harnessSessions.create();
+  const child = app.runtime.plugins.ctx.harnessSessions.create({ parentId: parent.id });
+  const sibling = app.runtime.plugins.ctx.harnessSessions.create();
   async function prompt(id: string) {
     await app.runtime.plugins.ctx.harnessRuns.send(id, 'Continue');
     const request = expectPresent(mock.requests.at(-1), 'recorded model request');
@@ -131,7 +131,7 @@ export const apply = (ctx) => {
     200,
   );
   const { plugins } = app.runtime;
-  const registry = plugins.ctx.harnessRegistry;
+  const registry = plugins.ctx.harnessSessions;
   const session = registry.create();
   const log = registry.log(session.id);
   log.append({
@@ -189,7 +189,7 @@ export const apply = (ctx) => {
     let attempts = 0;
     const modelCatalog = ctx.harnessModels;
     ctx.effect(() => ctx.harnessLlm.register({
-    accepts: (choice) => !!modelCatalog.resolve(choice),
+    accepts: (choice) => choice.provider === 'local-mock',
     async *stream(request) {
       if (!modelCatalog.resolve(request.model)) throw new Error('missing catalog');
       const terminal = (content, stopReason = 'stop') => ({ type: 'done', message: { role: 'assistant', timestamp: Date.now(), content, stopReason } });
@@ -246,16 +246,16 @@ export const apply = (ctx) => {
     },
   });
   assert.equal(configured.status, 200, JSON.stringify(configured.body));
-  assert.equal(app.runtime.plugins.ctx.harnessModels, models);
+  assert.deepEqual(app.runtime.plugins.ctx.harnessModels.list(), models.list());
   assert.equal(app.runtime.plugins.ctx.harnessModelStore, store);
-  const session = app.runtime.plugins.ctx.harnessRegistry.create();
+  const session = app.runtime.plugins.ctx.harnessSessions.create();
   assert.equal(
     await app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Use the alternate LLM'),
     'Alternate response',
   );
-  const log = app.runtime.plugins.ctx.harnessRegistry.log(session.id).projection();
+  const log = app.runtime.plugins.ctx.harnessSessions.log(session.id).projection();
   assert.equal(log.contextMessages.filter(({ role }) => role === 'user').length, 1);
-  const sessionLog = app.runtime.plugins.ctx.harnessRegistry.log(session.id);
+  const sessionLog = app.runtime.plugins.ctx.harnessSessions.log(session.id);
   const visible = await request('/sessions/' + session.id);
   assert.match(JSON.stringify(visible.body.messages), /Display value/);
   assert.doesNotMatch(JSON.stringify(log), /Display value/);
@@ -347,13 +347,13 @@ export const apply = (ctx) => {
     ).status,
     200,
   );
-  const session = app.runtime.plugins.ctx.harnessRegistry.create();
+  const session = app.runtime.plugins.ctx.harnessSessions.create();
   const events: unknown[] = [];
   await assert.rejects(
     app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Use the tool', (event) => events.push(event)),
     /Could not transform/,
   );
-  const log = app.runtime.plugins.ctx.harnessRegistry.log(session.id);
+  const log = app.runtime.plugins.ctx.harnessSessions.log(session.id);
   assert.equal(mock.requests.length, 1);
   assert.equal(log.entries().filter((entry) => entry.type === 'tool-execution').length, 1);
   assert.match(
@@ -385,14 +385,14 @@ export const apply = (ctx) => {
     ).status,
     200,
   );
-  const session = app.runtime.plugins.ctx.harnessRegistry.create();
+  const session = app.runtime.plugins.ctx.harnessSessions.create();
   await assert.rejects(
     app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Use this request'),
     /Unmatched model request tool result/,
   );
   assert.equal(mock.requests.length, 0);
   assert.equal(
-    app.runtime.plugins.ctx.harnessRegistry
+    app.runtime.plugins.ctx.harnessSessions
       .log(session.id)
       .entries()
       .some((entry) => entry.type === 'model-request'),
@@ -452,7 +452,7 @@ export const apply = (ctx) => {
     ).status,
     200,
   );
-  const session = app.runtime.plugins.ctx.harnessRegistry.create();
+  const session = app.runtime.plugins.ctx.harnessSessions.create();
   const run = assert.rejects(
     app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Unload the active hook'),
     /slow-transform could not prepare transformed data/,
@@ -470,4 +470,122 @@ export const apply = (ctx) => {
   assert.equal((await updating).status, 200);
   await run;
   assert.equal(state.cleaned, true);
+});
+
+test('Web runs with an independent model contribution and no Pi model store', async (t) => {
+  const { app, paths, request } = await fixture(t);
+  writePlugin(
+    paths.plugins,
+    'independent-model',
+    {},
+    `
+export const inject = ['harnessModels', 'harnessLlm'];
+export function apply(ctx) {
+  const resolve = (choice) => choice.provider === 'local-fixture'
+    ? { provider: 'local-fixture', id: choice.id || 'one' }
+    : undefined;
+  ctx.effect(() => ctx.harnessModels.register({
+    list: () => [{ provider: 'local-fixture', id: 'one', name: 'One', configured: true, thinkingLevels: [], input: ['text'] }],
+    resolve,
+    capabilities: (choice) => ({ ...choice, name: choice.id, input: ['text'], contextWindow: 32000, maxTokens: 1024, reasoning: false }),
+  }, {
+    accepts: (choice) => choice.provider === 'local-fixture',
+    async *stream() {
+      yield { type: 'done', message: { role: 'assistant', content: [{ type: 'text', text: 'Independent response' }], timestamp: Date.now() } };
+    },
+  }));
+}
+`,
+  );
+  const configured = await request('/settings', 'PATCH', {
+    entries: {
+      'core:model-store': { disabled: true },
+      'core:pi-adapter': { disabled: true },
+      'core:models': { disabled: true },
+      'core:fixture-model': { name: '../../plugins/independent-model', disabled: false },
+    },
+  });
+  assert.equal(configured.status, 200, JSON.stringify(configured.body));
+  assert.equal(app.runtime.plugins.ctx.get('harnessModelStore'), undefined);
+  const models = await request('/models');
+  assert.equal(models.status, 200);
+  assert.equal(models.body.canManageProviders, false);
+  assert.ok(models.body.models.some((model: { provider: string }) => model.provider === 'local-fixture'));
+  const session = app.runtime.plugins.ctx.harnessSessions.create({ workspaceId: null });
+  assert.equal(
+    await app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Use a dynamic model', undefined, {
+      model: { provider: 'local-fixture', id: 'dynamic' },
+    }),
+    'Independent response',
+  );
+});
+
+test('model contributions select matching capabilities and transport, and reject equal-ranked conflicts', async (t) => {
+  const { app, paths, request } = await fixture(t);
+  const model = { provider: 'local-mock', id: app.runtime.plugins.ctx.harnessModelPreference.recent().id };
+  const ctx = app.runtime.plugins.ctx;
+  const plugin = (name: string, priority: number, input: string[]) =>
+    writePlugin(
+      paths.plugins,
+      name,
+      {},
+      `
+export const inject = ['harnessModels'];
+export function apply(ctx) {
+  const model = ${JSON.stringify(model)};
+  const input = ${JSON.stringify(input)};
+  const resolve = (choice) => choice.provider === model.provider && (!choice.id || choice.id === model.id) ? model : undefined;
+  ctx.effect(() => ctx.harnessModels.register({
+    list: () => [{ ...model, name: ${JSON.stringify(name)}, configured: true, input, thinkingLevels: [] }],
+    resolve,
+    capabilities: () => ({ id: model.id, name: ${JSON.stringify(name)}, input, contextWindow: 64000, maxTokens: 4096, reasoning: false }),
+  }, {
+    accepts: (choice) => Boolean(resolve(choice)),
+    async *stream() {
+      yield { type: 'done', message: { role: 'assistant', content: [{ type: 'text', text: ${JSON.stringify(name)} }], timestamp: Date.now() } };
+    },
+  }, ${priority}));
+}
+`,
+    );
+  plugin('model-low', 0, ['text']);
+  plugin('model-high', 1, ['text', 'image']);
+  plugin('model-tie', 1, ['text']);
+  const toggle = async (name: string, disabled: boolean) => {
+    const response = await request('/settings', 'PATCH', {
+      entries: { [name]: { name: '../../plugins/' + name, disabled } },
+    });
+    assert.equal(response.status, 200, JSON.stringify(response.body));
+  };
+  const list = () =>
+    ctx.harnessModels.list().filter(({ provider, id }) => provider === model.provider && id === model.id);
+  const session = ctx.harnessSessions.create();
+  await toggle('model-low', false);
+  assert.equal(list()[0]?.name, 'model-low');
+  assert.deepEqual(ctx.harnessModels.capabilities(model)?.input, ['text']);
+  assert.equal(await ctx.harnessRuns.send(session.id, 'Low priority', undefined, { model }), 'model-low');
+  await toggle('model-high', false);
+  assert.equal(list()[0]?.name, 'model-high');
+  assert.deepEqual(ctx.harnessModels.capabilities(model)?.input, ['text', 'image']);
+  assert.equal(await ctx.harnessRuns.send(session.id, 'High priority', undefined, { model }), 'model-high');
+  await toggle('model-tie', false);
+  assert.deepEqual(list(), []);
+  assert.equal(ctx.harnessModels.resolve(model), undefined);
+  assert.equal(ctx.harnessModels.capabilities(model), undefined);
+  assert.equal(ctx.harnessLlm.select(model), null);
+  await assert.rejects(async () => {
+    for await (const _ of ctx.harnessLlm.stream({
+      model,
+      messages: [],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+    }))
+      assert.fail('An ambiguous model must not stream');
+  }, /Multiple model adapters/);
+  await toggle('model-tie', true);
+  assert.equal(list()[0]?.name, 'model-high');
+  await toggle('model-high', true);
+  assert.equal(list()[0]?.name, 'model-low');
+  await toggle('model-low', true);
+  assert.equal(await ctx.harnessRuns.send(session.id, 'Restore Pi', undefined, { model }), 'Mock response');
 });

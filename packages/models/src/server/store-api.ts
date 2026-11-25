@@ -1,5 +1,5 @@
 import type { ModelChoice } from '@mini-harness/llm/vocabulary';
-import type { ModelCatalogPort } from './api.ts';
+import type { ModelSource } from './api.ts';
 import type { ProviderInfo, ProviderModel } from '../shared/catalog.ts';
 import type { ModelStore } from './store.ts';
 
@@ -29,7 +29,9 @@ export interface ProviderAdministration {
   removeCredential(id: string): Promise<void>;
 }
 
-export interface ModelStorePort extends ModelCatalogPort, ProviderAdministration {
+export interface ModelStorePort extends ModelSource, ProviderAdministration {
+  connection(choice: ModelChoice): { api: string; baseUrl: string } | undefined;
+  apiKey(choice: ModelChoice): Promise<string | undefined>;
   readonly credentials: ModelStore['credentials'];
   configuredProvider(id: string): CatalogProvider | undefined;
   registerDefaults(providers: readonly CatalogProvider[]): Promise<() => Promise<void>>;

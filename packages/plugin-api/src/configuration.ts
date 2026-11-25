@@ -21,20 +21,24 @@ export interface ScopeBinding {
   parent?: ScopeAddress;
 }
 
+export type ScopeResolver = (id: string) => ScopeBinding | undefined;
+
 export interface ProfileScopes {
-  register(namespace: string, resolve: (id: string) => ScopeBinding | undefined, eager?: boolean): () => void;
+  /** Register a domain resolver for the lifetime of its owning Fiber. */
+  register(owner: Context, namespace: string, resolve: ScopeResolver): () => void;
+  /** Notify configured compositions after a resource is added, removed or rebound. */
+  changed(address: ScopeAddress): Promise<void>;
   prepare(address: ScopeAddress, signal?: AbortSignal): Promise<void>;
   context(address?: ScopeAddress | null): Context;
-  require<Name extends keyof Context & string>(
-    address: ScopeAddress | null | undefined,
-    service: Name,
-  ): NonNullable<Context[Name]>;
   address(address: ScopeAddress): readonly ScopeAddress[];
 }
 
 declare module 'mini-harness/cordis' {
   interface Context {
     harnessProfileScopes: ProfileScopes;
+  }
+  interface Events {
+    'profile/scope-changed'(address: ScopeAddress): void | Promise<void>;
   }
 }
 

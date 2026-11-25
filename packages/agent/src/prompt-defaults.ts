@@ -54,8 +54,8 @@ const plugin: Plugin.Object = {
         order: 100,
         render: ({ tools }) => {
           const guidance = (Array.isArray(tools) ? tools : [])
-            .flatMap((tool) => [tool.promptSnippet, ...(tool.promptGuidelines ?? [])])
-            .filter(Boolean);
+            .flatMap((tool) => tool.metadata?.guidance ?? [])
+            .filter((value) => typeof value === 'string' && value);
           return guidance.length ? 'Tool guidance:\n' + guidance.join('\n') : '';
         },
       },

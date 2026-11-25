@@ -11,11 +11,14 @@ import { button, field, fromMarkup, confirmAction, required } from '@mini-harnes
 const setup = async (ctx: Context) => {
   const { miniSettings: settings } = ctx;
   const state = new RemoteStore(async () => {
-    const [{ models, recent }, providers] = await Promise.all([
-      browserRequest<Pick<ModelCatalog, 'models'> & { recent: ModelChoice }>(ctx, '/models'),
+    const [{ models, recent, canManageProviders }, providers] = await Promise.all([
+      browserRequest<Pick<ModelCatalog, 'models'> & { recent: ModelChoice; canManageProviders: boolean }>(
+        ctx,
+        '/models',
+      ),
       browserRequest<ModelCatalog['providers']>(ctx, '/providers'),
     ]);
-    return { models, providers, recent };
+    return { models, providers, recent, canManageProviders };
   });
   await state.refresh();
   ctx.effect(() => ctx.miniProjections.register('models', state));
@@ -52,6 +55,12 @@ const setup = async (ctx: Context) => {
         id: 'providers',
         section: { title: 'Model', icon: 'model', order: 10 },
         render({ signal }) {
+          if (!state.get().canManageProviders) {
+            const hint = document.createElement('p');
+            hint.className = 'hint';
+            hint.textContent = 'Models are provided by plugins.';
+            return hint;
+          }
           const manager = providerManager(ctx, () => state.get().providers, state.refresh);
           settings.onClose(manager.reset, signal);
           state.subscribe(manager.render, signal);
