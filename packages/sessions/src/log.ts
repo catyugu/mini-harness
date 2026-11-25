@@ -25,7 +25,14 @@ import {
   type NativeMessage,
   type NativeToolMessage,
 } from '@mini-harness/llm/api';
-import type { InboxItem, MessagePatch, SessionEntry, SessionEvent, SessionLogPort, SessionProjection } from './log-api.ts';
+import type {
+  InboxItem,
+  MessagePatch,
+  SessionEntry,
+  SessionEvent,
+  SessionLogPort,
+  SessionProjection,
+} from './log-api.ts';
 import type { QueueEntry } from './shared/queue.ts';
 import { projectLog, projectMessage } from './projection.ts';
 import { applyContentDelta, contentDelta } from './content-delta.ts';
@@ -178,10 +185,7 @@ export class SessionLog implements SessionLogPort {
     )
       throw new Error('Invalid session log sequence or ancestry');
     validateEvent(entry);
-    if (
-      entry.type === 'tool-schema' &&
-      digest(entry.tools) !== entry.hash
-    )
+    if (entry.type === 'tool-schema' && digest(entry.tools) !== entry.hash)
       throw new Error('Tool schema digest does not match its content');
     if (entry.type === 'model-request') {
       if (!recovery || entry.request.messagesPatch !== undefined) this.materializeRequest(entry);
@@ -357,17 +361,28 @@ export class SessionLog implements SessionLogPort {
     const toolSchema = tools === undefined ? undefined : digest(tools);
     if (toolSchema && tools && !this.schemas.has(toolSchema))
       this.append({ type: 'tool-schema', hash: toolSchema, tools });
-    return this.append({
-      type: 'model-request',
-      request: { model, systemPrompt, thinkingLevel, maxTokens, toolSchema, ...(patch && { messagesPatch: patch }) },
-    }, projected.leafId);
+    return this.append(
+      {
+        type: 'model-request',
+        request: {
+          model,
+          systemPrompt,
+          thinkingLevel,
+          maxTokens,
+          toolSchema,
+          ...(patch && { messagesPatch: patch }),
+        },
+      },
+      projected.leafId,
+    );
   }
 
   acceptToolResult(executionId: string, content: NativeToolMessage['content']) {
     const raw = this.byId.get(executionId);
     if (raw?.type !== 'tool-execution') throw new Error('Tool acceptance references a missing execution');
     return this.append({
-      type: 'tool-accepted', executionId,
+      type: 'tool-accepted',
+      executionId,
       contentDelta: contentDelta(JSON.stringify(raw.result.content), JSON.stringify(content)),
     });
   }

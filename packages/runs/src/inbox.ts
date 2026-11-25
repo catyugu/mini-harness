@@ -29,8 +29,11 @@ export class Inbox {
     if (this.list().length >= 16) throw new DomainError('conflict', 'Queue is full');
     validateModelOptions(options.model, options.thinkingLevel);
     const { model } = selectModel(models, {
-      explicit: options.model, stored: this.log.projection().model, fallback: options.fallback,
-      preferStored: true, thinkingLevel: options.thinkingLevel,
+      explicit: options.model,
+      stored: this.log.projection().model,
+      fallback: options.fallback,
+      preferStored: true,
+      thinkingLevel: options.thinkingLevel,
     });
     const prepared = prepare();
     this.log.append({

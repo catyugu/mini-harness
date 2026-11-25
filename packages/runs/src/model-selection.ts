@@ -47,10 +47,14 @@ export function selectModel(
   for (const choice of choices) {
     if (!choice?.provider) continue;
     const model = catalog.resolve(choice);
-    if (model) return { model, thinkingLevel: resolveThinking(catalog.capabilities(model), thinkingLevel, inherited) };
+    if (model)
+      return { model, thinkingLevel: resolveThinking(catalog.capabilities(model), thinkingLevel, inherited) };
   }
   throw new DomainError(
     'invalid_input',
-    unavailable ?? (explicit ? 'Unknown model: ' + explicit.provider + '/' + explicit.id : 'Configure a model before sending a message'),
+    unavailable ??
+      (explicit
+        ? 'Unknown model: ' + explicit.provider + '/' + explicit.id
+        : 'Configure a model before sending a message'),
   );
 }

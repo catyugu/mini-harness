@@ -87,10 +87,20 @@ function fixture(
 }
 
 function queueInput(
-  ctx: Context, sessions: SessionRegistry, id: string, text: string,
-  mode: InboxItem['mode'], attachments?: Attachment[], options?: Pick<InboxItem, 'model' | 'thinkingLevel'>,
+  ctx: Context,
+  sessions: SessionRegistry,
+  id: string,
+  text: string,
+  mode: InboxItem['mode'],
+  attachments?: Attachment[],
+  options?: Pick<InboxItem, 'model' | 'thinkingLevel'>,
 ) {
-  return new Inbox(sessions.log(id)).enqueue(mode, () => sessions.prepareInput(id, text, attachments), ctx.harnessModels, options);
+  return new Inbox(sessions.log(id)).enqueue(
+    mode,
+    () => sessions.prepareInput(id, text, attachments),
+    ctx.harnessModels,
+    options,
+  );
 }
 
 test('an alternative executor owns the model protocol and executes without the registered implementation', async (t) => {
@@ -483,7 +493,9 @@ test('steering accepts off, skips deterministic failures and resets incompatible
     },
   });
   await queueInput(ctx, sessions, record.id, 'Actual instruction', 'steer');
-  await queueInput(ctx, sessions, record.id, 'Keep reasoning', 'followUp', undefined, { thinkingLevel: 'high' });
+  await queueInput(ctx, sessions, record.id, 'Keep reasoning', 'followUp', undefined, {
+    thinkingLevel: 'high',
+  });
   await queueInput(ctx, sessions, record.id, 'Switch model', 'followUp', undefined, {
     model: { ...model, id: 'new-model' },
   });

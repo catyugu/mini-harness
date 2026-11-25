@@ -161,7 +161,9 @@ export class SessionRun {
         if (item.images.length && !models.capabilities(selected.model)?.input.includes('image'))
           throw new Error('The selected model does not support queued image input');
         validateNativeMessage({
-          role: 'user', content: [{ type: 'text', text: item.text }, ...item.images], timestamp: 0,
+          role: 'user',
+          content: [{ type: 'text', text: item.text }, ...item.images],
+          timestamp: 0,
         });
       }
       return selected;
@@ -171,21 +173,36 @@ export class SessionRun {
     const prepare = async (item: Input, selected: ReturnType<typeof selection>, inputSource: InputSource) => {
       const presentation = item.input ?? { userText: item.text, attachments: [] };
       const context: InputContext = {
-        sessionId: id, model: selected.model, source: inputSource, signal,
+        sessionId: id,
+        model: selected.model,
+        source: inputSource,
+        signal,
         original: { ...presentation, images: item.images },
         cwd: this.sessions.workspacePath(id),
       };
       const initial: NativeUserMessage['content'] = [{ type: 'text', text: item.text }, ...item.images];
-      const content = await applyTransforms(ctx.events.listeners('agent/prepare-input', scopeTarget(ctx)), initial, context);
+      const content = await applyTransforms(
+        ctx.events.listeners('agent/prepare-input', scopeTarget(ctx)),
+        initial,
+        context,
+      );
       validateNativeMessage({ role: 'user', content, timestamp: 0 });
-      const preparedImages = typeof content === 'string' ? [] : content.filter((part) => part.type === 'image');
-      if (preparedImages.length && !requireService(ctx, 'harnessModels').capabilities(selected.model)?.input.includes('image'))
-        throw new Error('The selected model does not support image input. Choose an image-capable model and retry.');
+      const preparedImages =
+        typeof content === 'string' ? [] : content.filter((part) => part.type === 'image');
+      if (
+        preparedImages.length &&
+        !requireService(ctx, 'harnessModels').capabilities(selected.model)?.input.includes('image')
+      )
+        throw new Error(
+          'The selected model does not support image input. Choose an image-capable model and retry.',
+        );
       signal.throwIfAborted();
       this.sessions.assertAvailable(id);
       return {
         selection: selected,
-        presentation: isDeepStrictEqual(item.images, preparedImages) ? presentation : { ...presentation, images: item.images },
+        presentation: isDeepStrictEqual(item.images, preparedImages)
+          ? presentation
+          : { ...presentation, images: item.images },
         content,
       };
     };
@@ -195,22 +212,37 @@ export class SessionRun {
       this.sessions.assertAvailable(id);
       const edit = inboxId ? undefined : revision;
       const event = {
-        type: 'message', message: { role: 'user', content: prepared.content, timestamp: Date.now() },
-        presentation: prepared.presentation, selection: prepared.selection, submissionId, inboxId,
+        type: 'message',
+        message: { role: 'user', content: prepared.content, timestamp: Date.now() },
+        presentation: prepared.presentation,
+        selection: prepared.selection,
+        submissionId,
+        inboxId,
       } as const;
       const entry = edit ? log.revise(event, edit.parentId, edit.expectedLeafId) : log.append(event);
       const { userText, attachments } = prepared.presentation;
       await emit({
-        type: 'user', source: inboxId ? 'user' : source, ...prepared.selection,
-        id: entry.id, parentId: entry.parentId, revised: Boolean(edit), submissionId, inboxId,
+        type: 'user',
+        source: inboxId ? 'user' : source,
+        ...prepared.selection,
+        id: entry.id,
+        parentId: entry.parentId,
+        revised: Boolean(edit),
+        submissionId,
+        inboxId,
         timestamp: event.message.timestamp,
-        content: userText ? [{ type: 'text', text: userText }, ...item.images] : item.images, attachments,
+        content: userText ? [{ type: 'text', text: userText }, ...item.images] : item.images,
+        attachments,
       });
     };
-    const deliver = (mode: InboxItem['mode']) => inbox.deliver(
-      mode, signal, queuedSelection, (item, selected) => prepare(item, selected, 'user'),
-      (item, prepared) => commit(item, prepared, item.id),
-    );
+    const deliver = (mode: InboxItem['mode']) =>
+      inbox.deliver(
+        mode,
+        signal,
+        queuedSelection,
+        (item, selected) => prepare(item, selected, 'user'),
+        (item, prepared) => commit(item, prepared, item.id),
+      );
     // Drain recovered follow-ups as turns before committing the new manual input.
     let submitted = false;
     const submit = async () => {
@@ -219,7 +251,11 @@ export class SessionRun {
       const previous = log.projection(revision?.parentId);
       await commit(manual, await prepare(manual, selection(manual, previous), source));
       if (record.titleSource === 'auto' && !previous.messages.some((item) => item.role === 'user'))
-        this.sessions.rename(id, (input.userText || input.attachments[0]?.name || prompt).slice(0, 72), 'auto');
+        this.sessions.rename(
+          id,
+          (input.userText || input.attachments[0]?.name || prompt).slice(0, 72),
+          'auto',
+        );
       if (revision) this.closeUnfinishedTools(log);
       submitted = true;
     };
@@ -323,7 +359,8 @@ export class SessionRun {
                 arguments: call.arguments,
               });
               if (signal.aborted) return 'Agent run cancelled';
-              if (inbox.select('steer', queuedSelection)) return 'Skipped because a steering message arrived.';
+              if (inbox.select('steer', queuedSelection))
+                return 'Skipped because a steering message arrived.';
               const tool = advertisedTools.get(call.name);
               if (tool && ctx.get('harnessToolPolicy')?.(id, tool) === false)
                 return 'Tool denied by conversation policy: ' + call.name;

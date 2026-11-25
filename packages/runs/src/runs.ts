@@ -191,9 +191,13 @@ export class Runs implements RunPort {
     const finish = (state: RunInfo['state'], error?: string) => {
       const inbox = new Inbox(log);
       if (state === 'cancelled') inbox.cancel('Run cancelled');
-      else inbox.failPending('steer', state === 'interrupted'
-        ? 'The target run was interrupted before delivery'
-        : 'The target run ended before delivery');
+      else
+        inbox.failPending(
+          'steer',
+          state === 'interrupted'
+            ? 'The target run was interrupted before delivery'
+            : 'The target run ended before delivery',
+        );
       const terminal = {
         ...info,
         state,
@@ -449,7 +453,9 @@ export class Runs implements RunPort {
     const models = activity.context.get('harnessModels');
     if (!models) throw new DomainError('unavailable', 'Required service is unavailable: harnessModels');
     return new Inbox(this.registry.log(id)).enqueue(
-      mode, () => this.registry.prepareInput(id, message, attachments), models,
+      mode,
+      () => this.registry.prepareInput(id, message, attachments),
+      models,
       { model, thinkingLevel, fallback: this.preference.recent() },
     );
   }
