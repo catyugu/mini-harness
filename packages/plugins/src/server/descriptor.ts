@@ -1,4 +1,3 @@
-import { lstatSync } from 'node:fs';
 import { join } from 'node:path';
 import { readJson } from '@mini-harness/platform/json';
 import type { PluginInfo, ResolvedPlugin } from '@mini-harness/plugin-api/descriptor';
@@ -19,19 +18,19 @@ export function describePlugin(id: string, folder: string): DiscoveredPlugin {
   assertPeerCompatibility(folder);
   const source = join(folder, 'plugin.js');
   const hasHost = isRegularFile(source);
-  const hasWeb = isRegularFile(join(folder, 'web.js'));
-  if (!hasHost && !hasWeb) throw new Error('Provide plugin.js, web.js or both');
-  if (hasWeb && lstatSync(join(folder, 'web.js')).size > 1024 * 1024)
-    throw new Error('Plugin browser entry exceeds 1 MiB');
   const descriptor = join(folder, 'plugin.json');
   const manifest = isRegularFile(descriptor)
-    ? readJson<(Partial<PluginInfo> & { browserAssets?: unknown; browserPreload?: unknown }) | null>(
+    ? readJson<(Partial<PluginInfo> & { browserDirectory?: unknown; browserPreload?: unknown }) | null>(
         descriptor,
         null,
       )
     : null;
   if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest))
     throw new Error('Expected an object in plugin.json');
+  const browser = manifest.browser ?? (isRegularFile(join(folder, 'web.js')) ? 'web.js' : undefined);
+  if (browser !== undefined && typeof browser !== 'string') throw new Error('Invalid browser entry');
+  const hasWeb = browser !== undefined;
+  if (!hasHost && !hasWeb) throw new Error('Provide a server or browser module');
   const title = typeof manifest.title === 'string' ? manifest.title.slice(0, 100) : id;
   const description =
     typeof manifest.description === 'string'
@@ -42,10 +41,10 @@ export function describePlugin(id: string, folder: string): DiscoveredPlugin {
     throw new Error('Invalid plugin scope');
   if (scope !== 'application' && hasWeb)
     throw new Error('Browser entries belong to the application scope');
-  if (!hasWeb && (manifest.browserAssets !== undefined || manifest.browserPreload !== undefined))
-    throw new Error('Browser assets require web.js');
-  const resources = hasWeb
-    ? readBrowserAssets(id, folder, manifest.browserAssets, manifest.browserPreload)
+  if (!hasWeb && (manifest.browserDirectory !== undefined || manifest.browserPreload !== undefined))
+    throw new Error('Browser assets require a browser entry');
+  const resources = browser !== undefined
+    ? readBrowserAssets(id, folder, browser, manifest.browserDirectory, manifest.browserPreload)
     : undefined;
   if (manifest.configChanges !== undefined && manifest.configChanges !== 'live')
     throw new Error('Invalid plugin configChanges: ' + id);

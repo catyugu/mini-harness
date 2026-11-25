@@ -14,7 +14,7 @@ export interface PluginInfo {
   trustedContributor?: boolean;
   web?: boolean;
   browser?: string;
-  /** Styles shipped with a built-in browser entry. Local plugins declare browserAssets in plugin.json. */
+  /** Styles shipped with a built-in browser entry. Local plugins may declare a browser build directory. */
   browserStyles?: string[];
   icon?: PluginIcon;
   configGroups?: { title: string; fields: string[] }[];

@@ -186,7 +186,7 @@ test('a failed browser plugin reports the saved state and can be retried', async
   writeFileSync(join(folder, 'plugin.js'), 'export default () => {}');
   writeJson(join(folder, 'plugin.json'), {
     title: 'Retry UI',
-    browserAssets: ['web/preload.js'],
+    browserDirectory: 'web',
     browserPreload: 'web/preload.js',
     configSchema: {
       type: 'object',

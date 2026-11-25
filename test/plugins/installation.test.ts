@@ -139,7 +139,8 @@ test(
     const id = 'npm-plugin';
     const files = {
       'plugin.json': JSON.stringify({
-        browserAssets: ['web/panel.css', 'web/preload.js'],
+        browser: 'web/main.js',
+        browserDirectory: 'web',
         browserPreload: 'web/preload.js',
       }),
       'plugin.js': `
@@ -147,10 +148,11 @@ export const inject = ["harnessPluginRoutes"];
 import { label } from 'mini-setup-helper';
 export const apply = (ctx) => { ctx.harnessPluginRoutes.register('GET', '/label', () => label); };
 `,
-      'web.js': "export const inject = ['miniPages']; export function apply() {}",
+      'web/main.js': "export const inject = ['miniPages']; export function apply() {}",
       'web/panel.css': '.panel { color: inherit; }',
       'web/preload.js': 'export default (signal) => { signal.throwIfAborted(); };',
-      'web/private.js': 'export const privateValue = "not published";',
+      'private.js': 'export const privateValue = "not published";',
+      'web/chunks/feature.mjs': 'export const feature = true;',
     };
     await publish('mini-setup-helper', '1.0.0', {
       'index.js': 'export const label = "From dependency";',
@@ -201,12 +203,16 @@ export const apply = (ctx) => { ctx.harnessPluginRoutes.register('GET', '/label'
     const bootstrap = await (await request('/bootstrap')).json();
     const entry = bootstrap.ui.find((entry: { id: string }) => entry.id === id);
     const asset = (path: string) => fetch('http://127.0.0.1:' + port + path);
-    assert.equal(await (await asset(entry.browser)).text(), files['web.js']);
+    assert.equal(await (await asset(entry.browser)).text(), files['web/main.js']);
     const css = await asset(entry.styles[0]);
     assert.match(css.headers.get('Content-Type') ?? '', /^text\/css/);
     assert.equal(await css.text(), files['web/panel.css']);
     assert.equal(await (await asset(entry.preload)).text(), files['web/preload.js']);
-    assert.equal((await asset(entry.browser.replace(/web\.js$/, 'web/private.js'))).status, 404);
+    assert.equal((await asset(entry.browser.replace(/web\/main\.js$/, 'private.js'))).status, 404);
+    assert.equal(
+      await (await asset(entry.browser.replace(/main\.js$/, 'chunks/feature.mjs'))).text(),
+      files['web/chunks/feature.mjs'],
+    );
     assert.equal((await request('/settings', 'PATCH', { plugins: { [id]: false } })).status, 200);
     assert.equal((await asset(entry.browser)).status, 404);
     assert.equal((await asset(entry.styles[0])).status, 404);
