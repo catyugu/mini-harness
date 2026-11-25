@@ -487,7 +487,7 @@ export async function loadProfile(
     source,
     entries,
     async start() {
-      const catalog = new PluginCatalog([], profile);
+      const catalog = new PluginCatalog(profile);
       const settings = current;
       const errors = new Map<string, unknown>();
       const plans = catalog.plans(

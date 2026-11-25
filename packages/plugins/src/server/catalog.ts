@@ -27,33 +27,14 @@ export interface ConfiguredPlugin {
 }
 
 export class PluginCatalog {
-  private readonly builtins: Map<string, DiscoveredPlugin>;
   private resolved = new Map<string, DiscoveredPlugin>();
-  constructor(
-    builtins: ResolvedPlugin[],
-    private readonly profile?: Pick<
-      import('@mini-harness/plugin-api/profile').ProfileRuntime,
-      'builtin' | 'source' | 'directory'
-    >,
-  ) {
-    this.builtins = new Map(
-      builtins.map((descriptor) => [
-        descriptor.id,
-        this.withSchema({
-          ...descriptor,
-          Config: descriptor.Config ?? descriptor.plugin?.Config,
-          resources: builtinBrowserAssets(descriptor),
-        }),
-      ]),
-    );
-    if (this.builtins.size !== builtins.length) throw new Error('Duplicate builtin plugin ID');
-  }
+  constructor(private readonly profile: Pick<import('@mini-harness/plugin-api/profile').ProfileRuntime, 'builtin' | 'source'>) {}
 
   enabled(descriptor: DiscoveredPlugin, settings: CompositionConfig) {
     const entry = descriptor.scopeKey
       ? settings.scopes[descriptor.scopeKey]?.entries?.[descriptor.id]
       : settings.entries[descriptor.id];
-    return entry ? entry.disabled !== true : !descriptor.scopeKey && descriptor.defaultEnabled === true;
+    return !!entry && entry.disabled !== true;
   }
 
   reserved(id: string) {
@@ -89,13 +70,12 @@ export class PluginCatalog {
   ): Promise<DiscoveredPlugin> {
     const name = entry.name;
     try {
-      const supplied = this.builtins.get(name ?? id);
-      const builtin = supplied ?? (name && this.profile?.builtin(id, name, client));
+      if (!name) throw new Error('Profile entry requires a module name: ' + id);
+      const builtin = this.profile.builtin(id, name, client);
       let descriptor: DiscoveredPlugin;
       if (builtin) {
         descriptor = { ...builtin, id, resources: client ? builtinBrowserAssets(builtin) : undefined };
       } else {
-        if (!name || !this.profile) throw new Error('Profile entry requires a module name: ' + id);
         descriptor = this.describeModule(id, name, this.profile.source(id, name));
       }
       if (!client || scopeKey) delete descriptor.resources;
@@ -116,7 +96,6 @@ export class PluginCatalog {
 
   async runtimeDescriptors(settings: CompositionConfig): Promise<DiscoveredPlugin[]> {
     const client =
-      !this.profile ||
       Object.values(settings.entries).some(
         ({ name, disabled }) => name === '@mini-harness/web-gateway' && !disabled,
       );
@@ -124,9 +103,6 @@ export class PluginCatalog {
       ...Object.entries(settings.entries).map(([id, entry]) =>
         this.describe(id, entry, entry.client ?? client),
       ),
-      ...[...this.builtins.values()]
-        .filter(({ id, defaultEnabled }) => defaultEnabled && !settings.entries[id])
-        .map((descriptor) => Promise.resolve(descriptor)),
       ...scopeKeys(settings).flatMap((key) =>
         Object.entries(settings.scopes[key]?.entries ?? {}).map(([id, entry]) =>
           this.describe(id, entry, false, key),

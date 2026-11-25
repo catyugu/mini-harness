@@ -11,7 +11,7 @@ import {
 } from 'mini-harness/cordis';
 import { localPluginIdPattern, isScopeKey } from '@mini-harness/plugin-api/selection';
 import { isDeepStrictEqual } from 'node:util';
-import type { ResolvedPlugin } from '@mini-harness/plugin-api/descriptor';
+import type { ProfileRuntime } from '@mini-harness/plugin-api/profile';
 import type {
   HostServices,
   PluginScope,
@@ -24,7 +24,6 @@ import { planBrowser, publishBrowser } from './browser-assets.ts';
 import { addAbortListener } from 'node:events';
 import type { UpgradeHandler } from '@mini-harness/transport/routes';
 import { scopeKeys, type CompositionConfig } from '@mini-harness/plugin-api/configuration';
-import { bindPluginImports } from './module-resolution.ts';
 import { pluginData, pluginSecrets, removeScopeData } from './data.ts';
 import { PluginRouteRegistry, scopeOperation } from './routes.ts';
 import { pluginSettings } from './plugin-settings.ts';
@@ -44,7 +43,6 @@ export class PluginHost implements ScopePort {
   private readonly entries: EntryTree;
   private readonly ownsTree: boolean;
   private readonly pluginRoutes: PluginRouteRegistry;
-  private readonly imports?: ReturnType<typeof bindPluginImports>;
   private scopes = new Map<ScopeKey, EntryGroup>();
   private started = false;
   private readonly scopeSources = new Map<
@@ -57,7 +55,7 @@ export class PluginHost implements ScopePort {
   constructor(
     readonly ctx: Context,
     private readonly directory: string,
-    builtins: ResolvedPlugin[],
+    profile: Pick<ProfileRuntime, 'builtin' | 'source'>,
     private readonly settings: () => CompositionConfig,
     upgrade?: (path: string, handler: UpgradeHandler) => () => Promise<void>,
     private readonly writePlugin?: (
@@ -95,8 +93,7 @@ export class PluginHost implements ScopePort {
       }),
     };
     for (const [name, value] of Object.entries(services)) this.owner.provide(name, value);
-    this.catalog = new PluginCatalog(builtins, ctx.get('harnessProfile'));
-    if (!ctx.get('harnessProfile')) this.imports = bindPluginImports();
+    this.catalog = new PluginCatalog(profile);
   }
 
   private browserState = publishBrowser([], [], () => false);
@@ -520,7 +517,6 @@ export class PluginHost implements ScopePort {
     try {
       if (this.ownsTree) await withMountTransaction(() => this.entries.close());
     } finally {
-      this.imports?.deregister();
       this.scopes.clear();
     }
   }
