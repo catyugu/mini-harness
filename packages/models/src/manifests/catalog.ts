@@ -59,7 +59,9 @@ const plugin: Plugin.Object = {
         register(source, adapter, priority = 0) {
           const caller = Service.caller(this);
           const entry = { source, adapter, priority, owner: caller.fiber.signal, scope: scopeOf(caller) };
-          const release = caller.harnessLlm.register(adapter, priority);
+          const llm = caller.get('harnessLlm');
+          if (!llm) throw new Error('Model transport is unavailable in this scope');
+          const release = llm.register(adapter, priority);
           sources.add(entry);
           changed();
           return () => {
