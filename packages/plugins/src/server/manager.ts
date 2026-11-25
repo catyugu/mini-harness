@@ -9,17 +9,14 @@ import {
   type Context,
   type EntryOptions,
 } from 'mini-harness/cordis';
-import { localPluginIdPattern, isScopeAddress } from '@mini-harness/plugin-api/selection';
 import { isDeepStrictEqual } from 'node:util';
 import type { ProfileRuntime } from '@mini-harness/plugin-api/profile';
 import type { ScopeAddress, ScopeSettings } from '@mini-harness/plugin-api/configuration';
 import type { ScopeBinding, ProfileScopes } from '@mini-harness/plugin-api/configuration';
 import { planBrowser, publishBrowser } from './browser-assets.ts';
 import { addAbortListener } from 'node:events';
-import type { UpgradeHandler } from '@mini-harness/transport/routes';
 import { scopeAddresses, type ProfileConfiguration } from '@mini-harness/plugin-api/configuration';
 import { pluginData, pluginSecrets, removeScopeData } from './data.ts';
-import { PluginRouteRegistry, scopeOperation } from './routes.ts';
 import { pluginSettings } from './plugin-settings.ts';
 import { pluginInstance } from '@mini-harness/plugin-api/instance';
 import { scopeOf, tagScope } from '@mini-harness/plugin-api/scopes';
@@ -35,7 +32,6 @@ export class PluginHost implements ProfileScopes {
   private readonly catalog: PluginCatalog;
   private readonly entries: EntryTree;
   private readonly ownsTree: boolean;
-  private readonly pluginRoutes: PluginRouteRegistry;
   private scopes = new Map<ScopeAddress, EntryGroup>();
   private started = false;
   private readonly scopeSources = new Map<
@@ -50,7 +46,6 @@ export class PluginHost implements ProfileScopes {
     private readonly directory: string,
     profile: Pick<ProfileRuntime, 'builtin' | 'source'>,
     private readonly settings: () => ProfileConfiguration,
-    upgrade?: (path: string, handler: UpgradeHandler) => () => Promise<void>,
     private readonly writePlugin?: (
       id: string,
       key: ScopeAddress | undefined,
@@ -62,10 +57,8 @@ export class PluginHost implements ProfileScopes {
   ) {
     this.entries = entries ?? new EntryTree();
     this.ownsTree = entries === undefined;
-    this.pluginRoutes = new PluginRouteRegistry(ctx, upgrade);
     const directoryData = join(dirname(directory), 'plugin-data');
     const services = {
-      harnessPluginRoutes: this.pluginRoutes.service(),
       harnessPluginSettings: pluginSettings(ctx, writePlugin),
       harnessPluginData: pluginData(directoryData),
       harnessPluginSecrets: pluginSecrets(directoryData),
@@ -301,21 +294,6 @@ export class PluginHost implements ProfileScopes {
       visit(key);
     }
     return { contexts, entries, instances };
-  }
-
-  async requestScope(plugin: string, key: string, operation: string, input: unknown, signal: AbortSignal) {
-    if (!isScopeAddress(key) || !localPluginIdPattern.test(plugin) || !scopeOperation.test(operation))
-      throw new DomainError('invalid_input', 'Invalid scoped plugin request');
-    if (!this.lookup(key)) throw new DomainError('not_found', 'Plugin scope not found');
-    await this.prepare(key, signal);
-    const instance = key + '/' + plugin;
-    const handler = this.pluginRoutes.get(instance, operation);
-    if (!this.lookup(key) || !this.entries.get(instance)?.active || !handler) {
-      const failure = this.failures.get(instance);
-      if (failure) throw new DomainError('unavailable', failure);
-      throw new DomainError('not_found', 'Scoped plugin request is unavailable');
-    }
-    return handler(input, signal);
   }
 
   browserAsset(url: string) {

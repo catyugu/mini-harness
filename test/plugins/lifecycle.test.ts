@@ -583,7 +583,7 @@ test('an optional plugin that fails at startup reports its state without blockin
   );
 });
 
-test('unloading cancels and drains HTTP, scoped requests and upgrades before disposing resources', async (t) => {
+test('ordinary routes and upgrades drain on unload and can request their own removal', async (t) => {
   const { app, base, headers, paths, root, request } = await fixture(t);
   const trace = join(root, 'calls');
   const lifecycle = `
@@ -602,20 +602,28 @@ test('unloading cancels and drains HTTP, scoped requests and upgrades before dis
     {},
     lifecycle +
       `
-export const inject = ["harnessPluginRoutes","harnessSettingsStore"];
+export const inject = ["harnessRoutes","harnessUpgrades","harnessSettingsStore"];
 export const apply = (ctx) => {
-      ctx.effect(() => () => mark('app:disposed'));
-      ctx.harnessPluginRoutes.register('GET', '/wait', ({ signal }) => wait('http', signal));
-      ctx.harnessPluginRoutes.register('POST', '/body', async ({ body }) => {
-        mark('body:entered');
-        try { return await body(); }
-        finally { mark('body:drained'); }
+      ctx.effect(() => {
+        const routes = ctx.harnessRoutes;
+        const dispose = [
+          routes.register('GET', '/api/extensions/drain/wait', ({ signal }) => wait('http', signal)),
+          routes.register('POST', '/api/extensions/drain/body', async ({ body }) => {
+            mark('body:entered');
+            try { return await body(); }
+            finally { mark('body:drained'); }
+          }),
+          routes.register('POST', '/api/extensions/drain/disable', async () => {
+            await ctx.harnessSettingsStore.update({ entries: { drain: { name: '../../plugins/drain', disabled: true } } });
+            return { disabled: true };
+          }),
+          ctx.harnessUpgrades.register('/api/extensions/drain/socket', async (_request, _socket, _head, signal) => wait('ws', signal)),
+        ];
+        return async () => {
+          await Promise.all(dispose.map(fn => fn()));
+          mark('app:disposed');
+        };
       });
-      ctx.harnessPluginRoutes.register('POST', '/disable', async () => {
-        try { await ctx.harnessSettingsStore.update({ entries: { drain: { name: '../../plugins/drain', disabled: true } } }); }
-        catch (error) { return { error: error.message }; }
-      });
-      ctx.harnessPluginRoutes.upgrade('/socket', async (_request, _socket, _head, signal) => wait('ws', signal));
     };
 `,
   );
@@ -625,10 +633,15 @@ export const apply = (ctx) => {
     {},
     lifecycle +
       `
-export const inject = ["harnessPluginRoutes"];
+export const inject = ["harnessRoutes"];
 export const apply = (ctx) => {
-      ctx.effect(() => () => mark('scope:disposed'));
-      ctx.harnessPluginRoutes.scope('wait', (_input, signal) => wait('scope', signal));
+      ctx.effect(() => {
+        const dispose = ctx.harnessRoutes.register('POST', '/api/scoped-drain/wait', ({ signal }) => wait('scope', signal));
+        return async () => {
+          await dispose();
+          mark('scope:disposed');
+        };
+      });
     };
 `,
   );
@@ -642,11 +655,9 @@ export const apply = (ctx) => {
       },
     });
   assert.equal((await toggle(true)).status, 200);
-  const attempted = await request('/extensions/drain/disable', 'POST');
-  assert.match(attempted.body.error, /Structural settings cannot be changed during a plugin request/);
-  assert.equal(app.runtime.settings.entries.drain?.disabled, false);
+  await app.runtime.plugins.prepare(scope);
   const current = request('/extensions/drain/wait');
-  const currentScope = request('/plugins/scoped-drain/scopes/' + scope + '/wait', 'POST', {});
+  const currentScope = request('/scoped-drain/wait', 'POST', {});
   const bodyStatus = new Promise<number | undefined>((resolve, reject) => {
     const request = httpRequest(
       base + '/api/extensions/drain/body',
@@ -704,9 +715,15 @@ export const apply = (ctx) => {
   await closed;
   assert.equal((await current).status, 400);
   assert.equal(await bodyStatus, 400);
-  assert.equal((await currentScope).status, 503);
+  assert.equal((await currentScope).status, 400);
   assert.equal((await request('/extensions/drain/wait')).status, 404);
-  assert.equal((await request('/plugins/scoped-drain/scopes/' + scope + '/wait', 'POST', {})).status, 404);
+  assert.equal((await request('/scoped-drain/wait', 'POST', {})).status, 404);
+  assert.equal((await toggle(true)).status, 200);
+  const removed = await request('/extensions/drain/disable', 'POST');
+  assert.equal(removed.status, 200);
+  assert.equal(removed.body.disabled, true);
+  assert.equal(app.runtime.settings.entries.drain?.disabled, true);
+  assert.equal((await request('/extensions/drain/disable', 'POST')).status, 404);
 });
 
 test('live scoped providers isolate siblings, restore inheritance and roll back failed setup', async (t) => {

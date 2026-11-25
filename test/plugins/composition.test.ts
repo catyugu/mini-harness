@@ -17,7 +17,7 @@ test('external services and their declared consumers compose through Cordis serv
   copyExample(paths.plugins, 'greeting-route');
   copyExample(paths.plugins, 'greeting-service');
   const patch = (data: unknown) => request('/settings', 'PATCH', data);
-  const endpoint = '/extensions/greeting-route/hello?name=Harness';
+  const endpoint = '/greeting/hello/Harness';
   assert.equal(
     (
       await patch({
@@ -136,7 +136,7 @@ test('scoped plugins inherit services and contributions and release their own re
     {},
     `
 export const provide = ["exampleGreeting"];
-export const inject = ["harnessSessions","harnessWorkspaces","harnessPluginRoutes","harnessPluginData","harnessPluginChanges","harnessTools"];
+export const inject = ["harnessSessions","harnessWorkspaces","harnessRoutes","harnessPluginData","harnessPluginChanges","harnessTools"];
 import { scopeOf } from 'mini-harness/scopes';
 import { appendFileSync } from 'node:fs';
 export const apply = (ctx, config) => {
@@ -146,14 +146,19 @@ export const apply = (ctx, config) => {
       const workspaceId = workspaces.list().find(({ id }) => workspaces.scope(id) === scopeOf(ctx)).id;
       ctx.provide('exampleGreeting', { greet: (name) => workspaceId + ':' + name });
       const sessions = ctx.harnessSessions;
-      ctx.harnessPluginRoutes.scope('start', () => sessions.create({ title: 'Scoped root', workspaceId: workspaceId }));
-      ctx.harnessPluginRoutes.scope('tools', (id) => ctx.harnessTools.forSession(id, sessions.runScope(id)).map(({ name }) => name));
-      ctx.harnessPluginRoutes.scope('lookup', (id) => sessions.get(id));
-      ctx.harnessPluginRoutes.scope('greet', (input) => {
+      const prefix = '/api/workspace-greeting/' + workspaceId;
+      ctx.effect(() => ctx.harnessRoutes.register('POST', prefix + '/start', () => sessions.create({ title: 'Scoped root', workspaceId })));
+      ctx.effect(() => ctx.harnessRoutes.register('POST', prefix + '/tools', async ({ body }) => {
+        const { input: id } = await body();
+        return ctx.harnessTools.forSession(id, sessions.runScope(id)).map(({ name }) => name);
+      }));
+      ctx.effect(() => ctx.harnessRoutes.register('POST', prefix + '/lookup', async ({ body }) => sessions.get((await body()).input)));
+      ctx.effect(() => ctx.harnessRoutes.register('POST', prefix + '/greet', async ({ body }) => {
+        const { input } = await body();
         ctx.harnessPluginData.write('seen', input);
         ctx.harnessPluginChanges.invalidate();
-        return { workspaceId: workspaceId, input };
-      });
+        return { workspaceId, input };
+      }));
     };
 `,
   );
@@ -182,7 +187,7 @@ export const apply = (ctx, config) => {
   assert.equal(enabled.status, 200, JSON.stringify(enabled.body));
   assert.equal(existsSync(cleaned), false);
   const operation = (key: string, action = 'greet') =>
-    '/plugins/workspace-greeting/scopes/' + encodeURIComponent(key) + '/' + action;
+    '/workspace-greeting/' + key.slice('workspace:'.length) + '/' + action;
   const created = await request(operation(workspaceKey, 'start'), 'POST', {});
   assert.equal(created.status, 200);
   assert.equal(created.body.parentId, null);

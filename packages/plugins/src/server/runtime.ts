@@ -7,7 +7,6 @@ export default {
     'harnessProfileScopes',
     'harnessPluginCatalog',
     'harnessComposition',
-    'harnessPluginRoutes',
     'harnessPluginSettings',
     'harnessPluginData',
     'harnessPluginSecrets',
@@ -23,11 +22,6 @@ export default {
       paths.plugins,
       profile,
       () => settings.settings,
-      (path, handler) => {
-        const upgrades = root.get('harnessUpgrades');
-        if (!upgrades) throw new Error('WebSocket transport is unavailable in this Profile');
-        return upgrades.register(path, handler);
-      },
       async (id, key, patch, check) => {
         await settings.writePlugin(id, key, patch, check);
       },

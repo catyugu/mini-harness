@@ -1,9 +1,6 @@
 import { scopeAddresses } from '@mini-harness/plugin-api/configuration';
 import type { ScopeAddress } from '@mini-harness/plugin-api/configuration';
-import {
-  assertOutsideMountTransaction,
-  assertOutsidePluginRequest,
-} from '@mini-harness/plugin-api/mutation-api';
+import { assertOutsideMountTransaction } from '@mini-harness/plugin-api/mutation-api';
 import { DomainError } from '@mini-harness/platform/errors';
 import { isDeepStrictEqual } from 'node:util';
 import { mergeSettings } from '@mini-harness/plugin-api/selection';
@@ -51,7 +48,6 @@ export class SettingsManager implements SettingsPort {
   }
 
   forgetScopes(keys: ScopeAddress[]) {
-    assertOutsidePluginRequest();
     return this.enqueue(async () => {
       const released = new Set(keys);
       const scopes = Object.fromEntries(
@@ -75,7 +71,6 @@ export class SettingsManager implements SettingsPort {
   }
 
   update(patch: unknown) {
-    assertOutsidePluginRequest();
     return this.transact(() => patch);
   }
 

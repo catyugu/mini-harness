@@ -18,26 +18,6 @@ export function assertOutsideMountTransaction() {
     throw new Error('Operation is unavailable during plugin setup, configuration or teardown');
 }
 
-const pluginRequest = new AsyncLocalStorage<{ signal: AbortSignal; active: boolean }>();
-
-export async function withPluginRequest<T>(signal: AbortSignal, work: () => T | Promise<T>): Promise<T> {
-  const request = { signal, active: true };
-  try {
-    return await pluginRequest.run(request, work);
-  } finally {
-    request.active = false;
-  }
-}
-
-export function pluginRequestSignal() {
-  const request = pluginRequest.getStore();
-  return request?.active ? request.signal : undefined;
-}
-
-export function assertOutsidePluginRequest() {
-  if (pluginRequestSignal()) throw new Error('Structural settings cannot be changed during a plugin request');
-}
-
 export interface MutationPort {
   guard(check: (scopes?: ReadonlySet<ScopeAddress>) => void): () => void;
   protect(scopes?: ReadonlySet<ScopeAddress>): () => void;

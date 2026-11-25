@@ -32,8 +32,3 @@ export const http = {
   },
 };
 
-declare module 'mini-harness/cordis' {
-  interface Context {
-    harnessUpgrades: Pick<Upgrades, 'register' | 'dispatch' | 'close'>;
-  }
-}

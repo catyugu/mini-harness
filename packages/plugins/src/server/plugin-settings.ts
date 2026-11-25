@@ -1,7 +1,7 @@
 import { addAbortListener } from 'node:events';
 import { Service, type Context } from 'mini-harness/cordis';
 import { pluginInstance } from '@mini-harness/plugin-api/instance';
-import { pluginRequestSignal, assertOutsideMountTransaction } from '@mini-harness/plugin-api/mutation-api';
+import { assertOutsideMountTransaction } from '@mini-harness/plugin-api/mutation-api';
 import { pluginConfiguration, type PluginConfiguration } from '@mini-harness/plugin-api/plugin-configuration';
 import type { ScopeAddress } from '@mini-harness/plugin-api/configuration';
 
@@ -22,15 +22,13 @@ export function pluginSettings(root: Context, writer?: ConfigWriter): PluginConf
       caller,
       async (values, signal) => {
         assertOutsideMountTransaction();
-        const request = pluginRequestSignal();
-        const active = request ? AbortSignal.any([signal, request]) : signal;
         const { pluginId, scopeAddress, writableConfig } = pluginInstance(caller);
-        const check = () => active.throwIfAborted();
+        const check = () => signal.throwIfAborted();
         check();
         if (!writer || !writableConfig) throw new Error('Plugin configuration writes require a live Entry');
         let listener: ReturnType<typeof addAbortListener> | undefined;
         const aborted = new Promise<never>((_, reject) => {
-          listener = addAbortListener(active, () => reject(active.reason));
+          listener = addAbortListener(signal, () => reject(signal.reason));
         });
         try {
           await Promise.race([writer(pluginId, scopeAddress, structuredClone(values), check), aborted]);

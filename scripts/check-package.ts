@@ -156,7 +156,7 @@ async function checkPackage() {
       import type { CapabilityObservation } from 'mini-harness/observations';
       import type { ToolProjection } from 'mini-harness/conversation/display-events';
       import type { ToolDecision } from 'mini-harness/tools/events';
-      import type { PluginRoutes } from 'mini-harness/transport';
+      import type { RoutePort } from 'mini-harness/transport';
       declare module 'mini-harness/cordis' {
         interface Context { example: { greet(name: string): string } }
       }
@@ -182,7 +182,7 @@ async function checkPackage() {
       const execution: Execution = ctx.harnessExecution;
       const records: SessionRecords = ctx.harnessSessions.records('session', { pluginId: 'fixture', instanceId: 'fixture' });
       const prompt: PromptPort = ctx.harnessPrompt;
-      const routes: PluginRoutes = ctx.harnessPluginRoutes;
+      const routes: RoutePort = ctx.harnessRoutes;
       pluginData.write('state', { count: 1 });
       pluginSecrets.read('credential');
       ctx.on('internal/update', () => {});
@@ -199,9 +199,10 @@ async function checkPackage() {
       // @ts-expect-error Input listeners return native user content or a rejection.
       ctx.on('agent/prepare-input', () => ({ arbitrary: true }));
       void ctx.harnessPluginSettings.set('showDetails', true);
-      routes.upgrade('/updates', (_request, socket, _head, signal) => {
+      ctx.effect(() => routes.register('GET', '/api/example/:id', ({ params }) => params.id));
+      ctx.effect(() => ctx.harnessUpgrades.register('/api/example/updates', (_request, socket, _head, signal) => {
         if (signal.aborted) socket.destroy();
-      });
+      }));
       // @ts-expect-error The declared service takes a string.
       ctx.example.greet(1);
       // @ts-expect-error TypeScript plugins declare their own services.

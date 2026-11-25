@@ -2,7 +2,6 @@ import type { ScopeAddress } from '@mini-harness/plugin-api/configuration';
 import { DomainError } from '@mini-harness/platform/errors';
 import {
   assertOutsideMountTransaction,
-  assertOutsidePluginRequest,
   type MutationPort,
 } from '@mini-harness/plugin-api/mutation-api';
 
@@ -43,7 +42,6 @@ export class MutationGate implements MutationPort {
   async run<T>(operation: () => Promise<T> | T): Promise<T> {
     assertOutsideMountTransaction();
     if (this.closing) throw new DomainError('unavailable', 'Application is closing');
-    assertOutsidePluginRequest();
     if (this.active) throw new DomainError('conflict', 'Configuration is already changing');
     const work = Promise.resolve().then(operation);
     this.active = work;

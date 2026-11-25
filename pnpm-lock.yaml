@@ -325,9 +325,6 @@ importers:
       '@mini-harness/plugin-api':
         specifier: workspace:*
         version: link:../plugin-api
-      '@mini-harness/transport':
-        specifier: workspace:*
-        version: link:../transport
       '@mini-harness/ui-primitives':
         specifier: workspace:*
         version: link:../ui-primitives

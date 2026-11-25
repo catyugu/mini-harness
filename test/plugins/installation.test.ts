@@ -141,9 +141,9 @@ test(
     const id = 'npm-plugin';
     const files = {
       'server/entry.mjs': `
-export const inject = ["harnessPluginRoutes"];
+export const inject = ["harnessRoutes"];
 import { label } from 'mini-setup-helper';
-export const apply = (ctx) => { ctx.harnessPluginRoutes.register('GET', '/label', () => label); };
+export const apply = (ctx) => { ctx.effect(() => ctx.harnessRoutes.register('GET', '/api/extensions/npm-plugin/label', () => label)); };
 `,
       'web/main.js': "export const inject = ['miniPages']; export function apply() {}",
       'web/panel.css': '.panel { color: inherit; }',
@@ -252,9 +252,9 @@ test('local modules mount and unmount without a separate installer', async (t) =
   writeFileSync(
     join(folder, 'plugin.js'),
     `
-export const inject = ['harnessPluginRoutes'];
+export const inject = ['harnessRoutes'];
 export function apply(ctx, config) {
-  ctx.harnessPluginRoutes.register('POST', '/echo', async ({ body }) => ({ echo: await body() }));
+  ctx.effect(() => ctx.harnessRoutes.register('POST', '/api/extensions/local-module/echo', async ({ body }) => ({ echo: await body() })));
   if (config.fail) throw new Error('Setup failed after registering a route');
 }
 `,
