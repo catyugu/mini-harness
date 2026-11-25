@@ -16,10 +16,10 @@ export const metadata: PluginInfo = {
 };
 
 const plugin: Plugin.Object = {
-  inject: ['harnessRegistry'],
+  inject: ['harnessSessions'],
   provide: ['harnessToolPolicy'],
   apply(ctx) {
-    const sessions = ctx.harnessRegistry;
+    const sessions = ctx.harnessSessions;
     const authorize: ToolPolicy = (id, tool) => {
       for (
         let record = sessions.get(id);

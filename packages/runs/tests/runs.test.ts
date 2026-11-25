@@ -39,7 +39,7 @@ test(
     const port = await app.listen(0);
     const base = 'http://127.0.0.1:' + port;
     const headers = { Authorization: 'Bearer ' + app.token, 'Content-Type': 'application/json' };
-    const item = app.runtime.plugins.ctx.harnessRegistry.create();
+    const item = app.runtime.plugins.ctx.harnessSessions.create();
     const controller = new AbortController();
     const start = await fetch(base + '/api/sessions/' + item.id + '/runs', {
       method: 'POST',
@@ -73,7 +73,7 @@ test(
     const pending = runs.completion(item.id);
     const observed: RunEvent[] = [];
     const detach = runs.watch(item.id, runId, status.run.sequence, (event) => observed.push(event));
-    const record = app.runtime.plugins.ctx.harnessRegistry.log(item.id).append({
+    const record = app.runtime.plugins.ctx.harnessSessions.log(item.id).append({
       type: 'plugin-record',
       owner: { pluginId: 'fixture', instanceId: 'fixture' },
       data: 'private record',
@@ -97,7 +97,7 @@ test(
     const finishedRun = app.runtime.plugins.ctx.harnessRuns.info(item.id);
     assert.ok(finishedRun);
     assert.equal(finishedRun.state, 'completed');
-    const durable = readFileSync(app.runtime.plugins.ctx.harnessRegistry.log(item.id).file, 'utf8')
+    const durable = readFileSync(app.runtime.plugins.ctx.harnessSessions.log(item.id).file, 'utf8')
       .trim()
       .split('\n')
       .map((line) => JSON.parse(line));
@@ -127,21 +127,21 @@ test(
       await mock.close();
       rmSync(root, { recursive: true, force: true });
     });
-    const parent = app.runtime.plugins.ctx.harnessRegistry.create(),
-      other = app.runtime.plugins.ctx.harnessRegistry.create();
+    const parent = app.runtime.plugins.ctx.harnessSessions.create(),
+      other = app.runtime.plugins.ctx.harnessSessions.create();
     const first = app.runtime.plugins.ctx.harnessRuns.send(parent.id, 'Root one');
     const cancelled = assert.rejects(first, /cancelled/);
     const second = app.runtime.plugins.ctx.harnessRuns.send(other.id, 'Root two');
     await entered.promise;
     assert.equal(app.runtime.plugins.ctx.harnessRuns.size, 2);
     await assert.rejects(app.runtime.plugins.ctx.harnessRuns.send(parent.id, 'Duplicate'), /already running/);
-    const child = app.runtime.plugins.ctx.harnessRegistry.create({ parentId: parent.id });
+    const child = app.runtime.plugins.ctx.harnessSessions.create({ parentId: parent.id });
     const childWork = app.runtime.plugins.ctx.harnessRuns.send(child.id, 'Child');
     const childCancelled = assert.rejects(childWork, /cancelled/);
-    const deleted = await app.runtime.plugins.ctx.harnessRegistry.delete([parent.id]);
+    const deleted = await app.runtime.plugins.ctx.harnessSessions.delete([parent.id]);
     await Promise.all([cancelled, childCancelled]);
     assert.deepEqual(new Set(deleted), new Set([parent.id, child.id]));
-    assert.equal(app.runtime.plugins.ctx.harnessRegistry.get(parent.id), undefined);
+    assert.equal(app.runtime.plugins.ctx.harnessSessions.get(parent.id), undefined);
     assert.equal(app.runtime.plugins.ctx.harnessRuns.active(other.id), true);
     held.release();
     assert.equal(await second, 'Done');
@@ -211,7 +211,7 @@ test('startup durably interrupts runs, fails stale steering, and recovers idempo
     });
     assert.deepEqual(prompts, ['Recovered follow-up', 'New manual input']);
     assert.deepEqual(
-      restarted.runtime.plugins.ctx.harnessRegistry
+      restarted.runtime.plugins.ctx.harnessSessions
         .log(child.id)
         .queue()
         .map(({ id, state }) => [id, state]),
@@ -231,7 +231,7 @@ test('late observers receive a saved snapshot and stale cursors cannot attach to
     await mock.close();
     rmSync(root, { recursive: true, force: true });
   });
-  const item = app.runtime.plugins.ctx.harnessRegistry.create();
+  const item = app.runtime.plugins.ctx.harnessSessions.create();
   await app.runtime.plugins.ctx.harnessRuns.send(item.id, 'First');
   const first = app.runtime.plugins.ctx.harnessRuns.info(item.id);
   const events: RunEvent[] = [];
@@ -265,7 +265,7 @@ test('append, torn write and fsync failures evict the writer without acknowledgi
   });
   const base = 'http://127.0.0.1:' + (await app.listen(0));
   const headers = { Authorization: 'Bearer ' + app.token };
-  const rejected = app.runtime.plugins.ctx.harnessRegistry.create();
+  const rejected = app.runtime.plugins.ctx.harnessSessions.create();
   for (const invalid of [
     null,
     { message: 'Bad model', model: { provider: 42, id: 'invalid' } },
@@ -280,10 +280,10 @@ test('append, torn write and fsync failures evict the writer without acknowledgi
     assert.equal(response.status, 400);
   }
   assert.equal(app.runtime.plugins.ctx.harnessRuns.info(rejected.id), undefined);
-  const healthy = app.runtime.plugins.ctx.harnessRegistry.create();
+  const healthy = app.runtime.plugins.ctx.harnessSessions.create();
   for (const fault of ['append', 'torn', 'sync']) {
-    const session = app.runtime.plugins.ctx.harnessRegistry.create();
-    const log = app.runtime.plugins.ctx.harnessRegistry.log(session.id);
+    const session = app.runtime.plugins.ctx.harnessSessions.create();
+    const log = app.runtime.plugins.ctx.harnessSessions.log(session.id);
     const original = readFileSync(log.file);
     const write = fs.writeSync;
     let shortened = false;
@@ -334,7 +334,7 @@ test('append, torn write and fsync failures evict the writer without acknowledgi
       await app.runtime.plugins.ctx.harnessRuns.send(healthy.id, 'Healthy session'),
       'Mock response',
     );
-    const reopened = app.runtime.plugins.ctx.harnessRegistry.log(session.id);
+    const reopened = app.runtime.plugins.ctx.harnessSessions.log(session.id);
     assert.notStrictEqual(reopened, log);
     assert.equal(
       app.runtime.plugins.ctx.harnessRuns.info(session.id)?.state,
@@ -346,14 +346,14 @@ test('append, torn write and fsync failures evict the writer without acknowledgi
       'Mock response',
     );
     assert.deepEqual(
-      app.runtime.plugins.ctx.harnessRegistry
+      app.runtime.plugins.ctx.harnessSessions
         .log(session.id)
         .projection()
         .messages.filter(({ role }) => role === 'user')
         .map(({ content }) => (Array.isArray(content) ? content[0]?.text : content)),
       ['Accepted retry'],
     );
-    assert.equal(app.runtime.plugins.ctx.harnessRegistry.logError(session.id), undefined);
+    assert.equal(app.runtime.plugins.ctx.harnessSessions.logError(session.id), undefined);
   }
 });
 
@@ -379,7 +379,7 @@ test(
       await mock.close();
       rmSync(root, { recursive: true, force: true });
     });
-    const { harnessRegistry: registry, harnessRuns: runs } = app.runtime.plugins.ctx;
+    const { harnessSessions: registry, harnessRuns: runs } = app.runtime.plugins.ctx;
     const session = registry.create();
     const signal = new AbortController();
     const first = runs.submit(session.id, { message: 'First' }, signal.signal);
@@ -409,7 +409,7 @@ test('retry looks up the failed delivery by its native entry identity', async (t
     await mock.close();
     rmSync(root, { recursive: true, force: true });
   });
-  const { harnessRegistry: registry, harnessRuns: runs } = app.runtime.plugins.ctx;
+  const { harnessSessions: registry, harnessRuns: runs } = app.runtime.plugins.ctx;
   const session = registry.create();
   await runs.send(session.id, 'Earlier user message');
   const log = registry.log(session.id);

@@ -44,9 +44,9 @@ export const apply = (ctx) => {
   };
 `,
   );
-  const parent = app.runtime.plugins.ctx.harnessRegistry.create();
-  const child = app.runtime.plugins.ctx.harnessRegistry.create({ parentId: parent.id });
-  const sibling = app.runtime.plugins.ctx.harnessRegistry.create();
+  const parent = app.runtime.plugins.ctx.harnessSessions.create();
+  const child = app.runtime.plugins.ctx.harnessSessions.create({ parentId: parent.id });
+  const sibling = app.runtime.plugins.ctx.harnessSessions.create();
   async function prompt(id: string) {
     await app.runtime.plugins.ctx.harnessRuns.send(id, 'Continue');
     const request = expectPresent(mock.requests.at(-1), 'recorded model request');
@@ -131,7 +131,7 @@ export const apply = (ctx) => {
     200,
   );
   const { plugins } = app.runtime;
-  const registry = plugins.ctx.harnessRegistry;
+  const registry = plugins.ctx.harnessSessions;
   const session = registry.create();
   const log = registry.log(session.id);
   log.append({
@@ -248,14 +248,14 @@ export const apply = (ctx) => {
   assert.equal(configured.status, 200, JSON.stringify(configured.body));
   assert.equal(app.runtime.plugins.ctx.harnessModels, models);
   assert.equal(app.runtime.plugins.ctx.harnessModelStore, store);
-  const session = app.runtime.plugins.ctx.harnessRegistry.create();
+  const session = app.runtime.plugins.ctx.harnessSessions.create();
   assert.equal(
     await app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Use the alternate LLM'),
     'Alternate response',
   );
-  const log = app.runtime.plugins.ctx.harnessRegistry.log(session.id).projection();
+  const log = app.runtime.plugins.ctx.harnessSessions.log(session.id).projection();
   assert.equal(log.contextMessages.filter(({ role }) => role === 'user').length, 1);
-  const sessionLog = app.runtime.plugins.ctx.harnessRegistry.log(session.id);
+  const sessionLog = app.runtime.plugins.ctx.harnessSessions.log(session.id);
   const visible = await request('/sessions/' + session.id);
   assert.match(JSON.stringify(visible.body.messages), /Display value/);
   assert.doesNotMatch(JSON.stringify(log), /Display value/);
@@ -347,13 +347,13 @@ export const apply = (ctx) => {
     ).status,
     200,
   );
-  const session = app.runtime.plugins.ctx.harnessRegistry.create();
+  const session = app.runtime.plugins.ctx.harnessSessions.create();
   const events: unknown[] = [];
   await assert.rejects(
     app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Use the tool', (event) => events.push(event)),
     /Could not transform/,
   );
-  const log = app.runtime.plugins.ctx.harnessRegistry.log(session.id);
+  const log = app.runtime.plugins.ctx.harnessSessions.log(session.id);
   assert.equal(mock.requests.length, 1);
   assert.equal(log.entries().filter((entry) => entry.type === 'tool-execution').length, 1);
   assert.match(
@@ -385,14 +385,14 @@ export const apply = (ctx) => {
     ).status,
     200,
   );
-  const session = app.runtime.plugins.ctx.harnessRegistry.create();
+  const session = app.runtime.plugins.ctx.harnessSessions.create();
   await assert.rejects(
     app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Use this request'),
     /Unmatched model request tool result/,
   );
   assert.equal(mock.requests.length, 0);
   assert.equal(
-    app.runtime.plugins.ctx.harnessRegistry
+    app.runtime.plugins.ctx.harnessSessions
       .log(session.id)
       .entries()
       .some((entry) => entry.type === 'model-request'),
@@ -452,7 +452,7 @@ export const apply = (ctx) => {
     ).status,
     200,
   );
-  const session = app.runtime.plugins.ctx.harnessRegistry.create();
+  const session = app.runtime.plugins.ctx.harnessSessions.create();
   const run = assert.rejects(
     app.runtime.plugins.ctx.harnessRuns.send(session.id, 'Unload the active hook'),
     /slow-transform could not prepare transformed data/,

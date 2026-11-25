@@ -175,8 +175,7 @@ async function checkPackage() {
       ctx.example.greet('world');
       // @ts-expect-error The run scheduler is private.
       ctx.harnessRuns;
-      // @ts-expect-error The full session registry is private.
-      ctx.harnessRegistry;
+      ctx.harnessSessions.history('session');
       const pluginData: PluginData = ctx.harnessPluginData;
       const pluginSecrets: PluginSecrets = ctx.harnessPluginSecrets;
       const execution: Execution = ctx.harnessExecution;
