@@ -127,7 +127,7 @@ export function planBrowser(plans: ConfiguredPlugin[], effective: (id: string) =
         browser: resources.entry,
         styles: resources.styles,
         config: descriptor.plugin
-          ? descriptor.browserConfig?.((effective(id) ?? config) as Record<string, unknown>) ?? {}
+          ? (descriptor.browserConfig?.((effective(id) ?? config) as Record<string, unknown>) ?? {})
           : config,
         live,
       },
@@ -147,7 +147,9 @@ export function publishBrowser(
     entries,
     assets: new Map(resources.flatMap(({ descriptor }) => [...(descriptor.resources?.urls ?? [])])),
     configurable: new Set(
-      resources.filter(({ descriptor }) => descriptor.Config && (!descriptor.plugin || descriptor.browserConfig)).map(({ id }) => id),
+      resources
+        .filter(({ descriptor }) => descriptor.Config && (!descriptor.plugin || descriptor.browserConfig))
+        .map(({ id }) => id),
     ),
   };
 }

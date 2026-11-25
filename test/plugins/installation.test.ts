@@ -168,7 +168,15 @@ export const apply = (ctx) => { ctx.harnessPluginRoutes.register('GET', '/label'
     assert.equal(lock.packages['node_modules/' + name].version, '1.1.0');
     assert.ok(!existsSync(join(directory, 'node_modules', name, 'installed-by-npm')));
     writeJson(join(directory, 'cordis.patch.yml'), {
-      plugins: [{ id, name, client: true, disabled: true, config: { greeting: 'preserved', secret: 'server-only-value' } }],
+      plugins: [
+        {
+          id,
+          name,
+          client: true,
+          disabled: true,
+          config: { greeting: 'preserved', secret: 'server-only-value' },
+        },
+      ],
     });
 
     app = await createMiniHarnessServer(paths);

@@ -321,9 +321,7 @@ function isPlugin(value: unknown): value is Plugin {
   return typeof value === 'function' || (object(value) && typeof value.apply === 'function');
 }
 
-async function moduleFor(
-  name: string,
-): Promise<{
+async function moduleFor(name: string): Promise<{
   plugin?: Plugin;
   metadata?: PluginInfo;
   Config?: Plugin.Base['Config'];

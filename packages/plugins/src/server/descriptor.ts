@@ -49,10 +49,7 @@ export function describePlugin(id: string, folder: string, entry?: string): Disc
   }
   const descriptor = join(folder, 'plugin.json');
   const manifest = isRegularFile(descriptor)
-    ? readJson<(Partial<PluginInfo> & { browserDirectory?: unknown }) | null>(
-        descriptor,
-        null,
-      )
+    ? readJson<(Partial<PluginInfo> & { browserDirectory?: unknown }) | null>(descriptor, null)
     : (packageInfo.miniHarness?.plugin ?? {});
   if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest))
     throw new Error('Expected an object in plugin.json');
@@ -72,9 +69,7 @@ export function describePlugin(id: string, folder: string, entry?: string): Disc
   if (!hasWeb && manifest.browserDirectory !== undefined)
     throw new Error('Browser assets require a browser entry');
   const resources =
-    browser !== undefined
-      ? readBrowserAssets(id, folder, browser, manifest.browserDirectory)
-      : undefined;
+    browser !== undefined ? readBrowserAssets(id, folder, browser, manifest.browserDirectory) : undefined;
   const configSchema = manifest.configSchema;
   if (
     configSchema &&
