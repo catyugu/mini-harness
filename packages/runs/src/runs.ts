@@ -63,6 +63,22 @@ export class Runs implements RunPort {
       this.scopes.address(`session:${id}`).some((key) => scopes.has(key)),
     );
   }
+  /** Only committed Cordis providers can invalidate an existing run's dependency graph. */
+  affectedBy(fibers: ReadonlySet<Context['fiber']>, owner: Context['fiber']) {
+    if (!this.work.size || !fibers.size) return false;
+    const visited = new Set<Context['fiber']>();
+    const dependsOn = (fiber: Context['fiber']): boolean => {
+      if (fibers.has(fiber)) return true;
+      if (visited.has(fiber)) return false;
+      visited.add(fiber);
+      return Object.values(fiber.committed ?? {}).some((service) => dependsOn(service.ctx.fiber));
+    };
+    return (
+      dependsOn(owner) ||
+      [...this.work.values()].some((activity) => activity.context && dependsOn(activity.context.fiber))
+    );
+  }
+
   completion(id: string) {
     return this.work.get(id)?.done;
   }

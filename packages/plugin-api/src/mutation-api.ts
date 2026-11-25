@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import type { Context } from 'mini-harness/cordis';
 import type { ScopeKey } from './scopes.ts';
 
 // The marker follows only work initiated inside a graph transaction; unrelated requests may wait.
@@ -39,8 +40,8 @@ export function assertOutsidePluginRequest() {
 }
 
 export interface MutationPort {
-  guard(check: (scopes?: ReadonlySet<ScopeKey>) => void): () => void;
-  protect(scopes?: ReadonlySet<ScopeKey>): () => void;
+  guard(check: (scopes?: ReadonlySet<ScopeKey>, fibers?: ReadonlySet<Context['fiber']>) => void): () => void;
+  protect(scopes?: ReadonlySet<ScopeKey>, fibers?: ReadonlySet<Context['fiber']>): () => void;
   admit(scopeKeys: readonly ScopeKey[]): void;
   run<T>(operation: () => Promise<T> | T): Promise<T>;
 }

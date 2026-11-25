@@ -1,3 +1,4 @@
+import type { Context } from 'mini-harness/cordis';
 import type { ScopeKey } from '@mini-harness/plugin-api/scopes';
 import { DomainError } from '@mini-harness/platform/errors';
 import {
@@ -12,9 +13,9 @@ export class MutationGate implements MutationPort {
   private closing = false;
   private readonly structural = new Set<{ scopes?: ReadonlySet<ScopeKey> }>();
 
-  private readonly guards = new Set<(scopes?: ReadonlySet<ScopeKey>) => void>();
+  private readonly guards = new Set<(scopes?: ReadonlySet<ScopeKey>, fibers?: ReadonlySet<Context['fiber']>) => void>();
 
-  guard(check: (scopes?: ReadonlySet<ScopeKey>) => void) {
+  guard(check: (scopes?: ReadonlySet<ScopeKey>, fibers?: ReadonlySet<Context['fiber']>) => void) {
     this.guards.add(check);
     return () => {
       this.guards.delete(check);
@@ -25,8 +26,8 @@ export class MutationGate implements MutationPort {
     this.closing = true;
   }
 
-  protect(scopes?: ReadonlySet<ScopeKey>) {
-    for (const check of this.guards) check(scopes);
+  protect(scopes?: ReadonlySet<ScopeKey>, fibers?: ReadonlySet<Context['fiber']>) {
+    for (const check of this.guards) check(scopes, fibers);
     const guard = { scopes };
     this.structural.add(guard);
     return () => {

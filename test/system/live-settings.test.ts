@@ -57,11 +57,20 @@ test('appearance, parallelism and child defaults update without interrupting a r
   assert.equal(runtime.settings.entries.subagents?.config?.model, undefined);
   assert.equal(runtime.settings.entries.subagents?.config?.maxParallel, 2);
   const target = 'session:' + item.id;
+  const folder = join(paths.plugins, 'unrelated');
+  mkdirSync(folder);
+  writeFileSync(join(folder, 'plugin.js'), 'export default () => {}');
+  await runtime.configuration.update({ entries: { unrelated: { disabled: false } } });
+  await runtime.configuration.update({ entries: { unrelated: { disabled: true } } });
+  assert.equal(runtime.plugins.ctx.harnessRuns.active(item.id), true);
   await assert.rejects(
-    runtime.configuration.update({ entries: { files: { disabled: true } } }),
+    runtime.configuration.update({ entries: { 'core:llm': { disabled: true } } }),
     /Stop the affected conversations/,
   );
-  assert.equal(runtime.settings.entries.files?.disabled, false);
+  const read = runtime.plugins.ctx.harnessTools.forSession(item.id).find(({ name }) => name === 'read');
+  assert.ok(read);
+  await runtime.configuration.update({ entries: { files: { disabled: true } } });
+  await assert.rejects(read.execute('stale', {}), /Tool is no longer available/);
   await runtime.configuration.update({ scopes: { [target]: { disabledTools: ['shell'] } } });
   assert.equal(runtime.plugins.ctx.harnessRuns.active(item.id), true);
   release();

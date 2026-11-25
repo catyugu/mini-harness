@@ -29,8 +29,8 @@ export function setup(ctx: Context) {
   ctx.effect(() => () => runs.stop());
   ctx.on('harness/quiesce', () => runs.stop());
   ctx.effect(() =>
-    mutations.guard((keys) => {
-      if (keys ? runs.activeInScope(keys) : runs.size > 0)
+    mutations.guard((keys, fibers) => {
+      if (keys ? runs.activeInScope(keys) : fibers ? runs.affectedBy(fibers, ctx.fiber) : runs.size > 0)
         throw new DomainError(
           'conflict',
           'Stop the affected conversations before changing their providers or plugins',

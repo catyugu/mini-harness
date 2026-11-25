@@ -425,7 +425,7 @@ export class PluginHost implements ScopePort {
         .map((plan) => this.catalog.entry(plan, this.ctx, appScope)),
       ...scoped.entries,
     ];
-    const appChanged = descriptors.some((descriptor) => {
+    const appChanged = descriptors.filter((descriptor) => {
       const { id, plugin, source } = descriptor;
       if (!(plugin || source)) return false;
       const enabled = this.catalog.enabled(descriptor, settings);
@@ -466,10 +466,23 @@ export class PluginHost implements ScopePort {
         );
       }),
     );
-    const release =
-      !starting && !preparing && !released && (appChanged || scopeChanges.size)
-        ? this.ctx.get('harnessMutations')?.protect(appChanged ? undefined : scopeChanges)
-        : undefined;
+    const releases: (() => void)[] = [];
+    const mutations = updating ? this.ctx.get('harnessMutations') : undefined;
+    if (mutations) {
+      try {
+        if (scopeChanges.size) releases.push(mutations.protect(scopeChanges));
+        if (appChanged.length) {
+          const changedIds = new Set(appChanged.map(({ id }) => id));
+          const fibers = new Set(
+            oldEntries.flatMap(({ options, fiber }) => (fiber && changedIds.has(options.id) ? [fiber] : [])),
+          );
+          releases.push(mutations.protect(undefined, fibers));
+        }
+      } catch (error) {
+        for (const release of releases) release();
+        throw error;
+      }
+    }
     try {
       // An Entry cannot dispose the Fiber whose active configuration transaction
       // is awaiting that disposal. The actual control-plane dependencies require restart.
@@ -527,7 +540,7 @@ export class PluginHost implements ScopePort {
       }
       throw error;
     } finally {
-      release?.();
+      for (const release of releases) release();
     }
   }
 
