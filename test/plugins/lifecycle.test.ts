@@ -28,7 +28,9 @@ declare module 'mini-harness/cordis' {
 function fixtureModules(modules: ResolvedPlugin[]) {
   return {
     builtin: (_id: string, name: string) => modules.find((item) => item.id === name),
-    source: () => { throw new Error('Unknown test module'); },
+    source: () => {
+      throw new Error('Unknown test module');
+    },
   };
 }
 
@@ -742,7 +744,10 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
     ...structuredClone(DEFAULTS),
     entries: { global: { name: 'global' } },
     scopes: {
-      [workspaceKey]: { ...workspace, entries: { workspace: { name: 'workspace', disabled: false, config: { value: 42 } } } },
+      [workspaceKey]: {
+        ...workspace,
+        entries: { workspace: { name: 'workspace', disabled: false, config: { value: 42 } } },
+      },
     },
   };
   const ctx = new Context();
@@ -780,7 +785,10 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
     isolate: ['greeting'],
     entries: { layer: { name: 'layer', disabled: false, config: { value: 'child' } } },
   };
-  const broken = { ...parent, entries: { layer: { name: 'layer', disabled: false, config: { fail: true } } } };
+  const broken = {
+    ...parent,
+    entries: { layer: { name: 'layer', disabled: false, config: { fail: true } } },
+  };
   await assert.rejects(
     configure({
       [workspaceKey]: workspace,
@@ -803,7 +811,10 @@ test('live scoped providers isolate siblings, restore inheritance and roll back 
   assert.equal(host.require('session:independent', 'greeting'), 'global');
   await configure({
     ...settings.scopes,
-    'session:sibling': { ...parent, entries: { layer: { name: 'layer', disabled: false, config: { value: 'fixed' } } } },
+    'session:sibling': {
+      ...parent,
+      entries: { layer: { name: 'layer', disabled: false, config: { value: 'fixed' } } },
+    },
   });
   assert.equal(host.require('session:sibling', 'greeting'), 'fixed');
   assert.equal(host.metadata().find(({ id }) => id === 'layer')?.state, 'ready');
@@ -839,7 +850,10 @@ test('configuration validation resolves the staged scope provider and rejects in
   const directory = mkdtempSync(join(tmpdir(), 'mini-validate-scope-'));
   const workspaceId = 'a'.repeat(32);
   const key = 'workspace:' + workspaceId;
-  let settings: import('@mini-harness/plugin-api/configuration').ProfileConfiguration = { ...structuredClone(DEFAULTS), entries: { global: { name: 'global' } } };
+  let settings: import('@mini-harness/plugin-api/configuration').ProfileConfiguration = {
+    ...structuredClone(DEFAULTS),
+    entries: { global: { name: 'global' } },
+  };
   const builtins: ResolvedPlugin[] = [
     {
       id: 'global',
@@ -893,7 +907,10 @@ test('configuration validation resolves the staged scope provider and rejects in
       scopes: {
         [key]: {
           isolate: ['greeting'],
-          entries: { consumer: { name: 'consumer', disabled: false, config: { expected } }, local: { name: 'local', disabled: false } },
+          entries: {
+            consumer: { name: 'consumer', disabled: false, config: { expected } },
+            local: { name: 'local', disabled: false },
+          },
         },
       },
     };
@@ -977,7 +994,10 @@ test('a failed server entry does not publish its browser module', async (t) => {
   ];
   const settings = {
     ...structuredClone(DEFAULTS),
-    entries: { ui: { name: 'ui', client: true }, replacement: { name: 'replacement', client: true, disabled: false, config: { fail: true } } },
+    entries: {
+      ui: { name: 'ui', client: true },
+      replacement: { name: 'replacement', client: true, disabled: false, config: { fail: true } },
+    },
   };
   const host = new PluginHost(new Context(), directory, fixtureModules(builtins), () => settings);
   t.after(async () => {

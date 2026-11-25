@@ -29,7 +29,12 @@ export interface ConfiguredPlugin {
 
 export class PluginCatalog {
   private resolved = new Map<string, DiscoveredPlugin>();
-  constructor(private readonly profile: Pick<import('@mini-harness/plugin-api/profile').ProfileRuntime, 'builtin' | 'source'>) {}
+  constructor(
+    private readonly profile: Pick<
+      import('@mini-harness/plugin-api/profile').ProfileRuntime,
+      'builtin' | 'source'
+    >,
+  ) {}
 
   enabled(descriptor: DiscoveredPlugin, settings: CompositionConfig) {
     const entry = descriptor.scopeKey
@@ -96,10 +101,9 @@ export class PluginCatalog {
   }
 
   async runtimeDescriptors(settings: CompositionConfig): Promise<DiscoveredPlugin[]> {
-    const client =
-      Object.values(settings.entries).some(
-        ({ name, disabled }) => name === '@mini-harness/web-gateway' && !disabled,
-      );
+    const client = Object.values(settings.entries).some(
+      ({ name, disabled }) => name === '@mini-harness/web-gateway' && !disabled,
+    );
     const declarations = [
       ...Object.entries(settings.entries).map(([id, entry]) =>
         this.describe(id, entry, entry.client ?? client),
