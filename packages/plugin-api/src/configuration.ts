@@ -1,3 +1,5 @@
+import type { Context } from 'mini-harness/cordis';
+import type { ScopeKey } from './scopes.ts';
 import { Check } from 'typebox/value';
 import type { StandardSchemaV1 } from '@standard-schema/spec';
 
@@ -12,6 +14,29 @@ export interface EntryConfiguration {
 
 /** Persistent address in a Profile, not a runtime scope key. */
 export type ScopeAddress = `${string}:${string}`;
+
+/** A domain's binding from persistent composition to a runtime identity. */
+export interface ScopeBinding {
+  key: ScopeKey;
+  parent?: ScopeAddress;
+}
+
+export interface ProfileScopes {
+  register(namespace: string, resolve: (id: string) => ScopeBinding | undefined, eager?: boolean): () => void;
+  prepare(address: ScopeAddress, signal?: AbortSignal): Promise<void>;
+  context(address?: ScopeAddress | null): Context;
+  require<Name extends keyof Context & string>(
+    address: ScopeAddress | null | undefined,
+    service: Name,
+  ): NonNullable<Context[Name]>;
+  address(address: ScopeAddress): readonly ScopeAddress[];
+}
+
+declare module 'mini-harness/cordis' {
+  interface Context {
+    harnessProfileScopes: ProfileScopes;
+  }
+}
 
 export interface ScopeSettings {
   entries?: Record<string, EntryConfiguration>;

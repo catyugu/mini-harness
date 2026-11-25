@@ -16,7 +16,6 @@ import type { ResolvedPlugin } from '@mini-harness/plugin-api/descriptor';
 import { builtinBrowserAssets } from './browser-assets.ts';
 import { describePlugin, type DiscoveredPlugin } from './descriptor.ts';
 import { loadPluginModule, resolveModule } from './module-resolution.ts';
-import { bindInstance } from '@mini-harness/plugin-api/instance';
 
 export interface ConfiguredPlugin {
   descriptor: DiscoveredPlugin;
@@ -227,7 +226,7 @@ export class PluginCatalog {
     });
   }
 
-  entry(plan: ConfiguredPlugin, context: Context, id = plan.id, scopeAddress?: ScopeAddress): EntryOptions {
+  entry(plan: ConfiguredPlugin, context: Context, id = plan.id): EntryOptions {
     const { descriptor } = plan;
     const plugin = descriptor.plugin;
     if (!plugin) throw new Error('Missing server module: ' + plan.id);
@@ -239,11 +238,6 @@ export class PluginCatalog {
       live: plan.live,
       load: () => plugin,
       prepare: (ctx) => {
-        bindInstance(ctx.fiber.entry!, {
-          pluginId: plan.id,
-          scopeAddress,
-          writableConfig: plan.live,
-        });
         const changes = context.get('harnessChanges');
         if (changes) ctx.effect(() => changes.register('plugin:' + plan.id));
       },

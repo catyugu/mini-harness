@@ -2,7 +2,7 @@ import { Context } from 'mini-harness/cordis';
 import { tagScope, scopeTarget } from '@mini-harness/plugin-api/scopes';
 import type { ThinkingLevel, ModelChoice } from '@mini-harness/llm/vocabulary';
 import type { ScopeAddress } from '@mini-harness/plugin-api/configuration';
-import type { ProfileScopes } from '@mini-harness/plugin-api/profile';
+import type { ProfileScopes } from '@mini-harness/plugin-api/configuration';
 import { DomainError } from '@mini-harness/platform/errors';
 import type { MutationPort } from '@mini-harness/plugin-api/mutation-api';
 import { randomUUID } from 'node:crypto';

@@ -13,7 +13,7 @@ import { localPluginIdPattern, isScopeAddress } from '@mini-harness/plugin-api/s
 import { isDeepStrictEqual } from 'node:util';
 import type { ProfileRuntime } from '@mini-harness/plugin-api/profile';
 import type { ScopeAddress, ScopeSettings } from '@mini-harness/plugin-api/configuration';
-import type { ScopeBinding, ProfileScopes } from '@mini-harness/plugin-api/profile';
+import type { ScopeBinding, ProfileScopes } from '@mini-harness/plugin-api/configuration';
 import { planBrowser, publishBrowser } from './browser-assets.ts';
 import { addAbortListener } from 'node:events';
 import type { UpgradeHandler } from '@mini-harness/transport/routes';
@@ -22,7 +22,7 @@ import { pluginData, pluginSecrets, removeScopeData } from './data.ts';
 import { PluginRouteRegistry, scopeOperation } from './routes.ts';
 import { pluginSettings } from './plugin-settings.ts';
 import { pluginInstance } from '@mini-harness/plugin-api/instance';
-import { tagScope } from '@mini-harness/plugin-api/scopes';
+import { scopeOf, tagScope } from '@mini-harness/plugin-api/scopes';
 import { changedSelection, PluginCatalog } from './catalog.ts';
 
 /** Permission-only settings do not require a separate plugin context. */
@@ -176,7 +176,9 @@ export class PluginHost implements ProfileScopes {
     for (const ancestor of ancestry)
       if (hasComposition(settings.scopes[ancestor]) && !this.scopes.has(ancestor))
         throw new DomainError('unavailable', 'Plugin scope is not prepared: ' + ancestor);
-    return this.configurationContext(key);
+    const context = this.configurationContext(key);
+    const scope = this.lookup(key)!.key;
+    return scopeOf(context) === scope ? context : tagScope(context.extend(), scope);
   }
 
   address(key: ScopeAddress) {
@@ -287,7 +289,7 @@ export class PluginHost implements ProfileScopes {
         for (const plan of plans) {
           if (!plan.descriptor.plugin) continue;
           const id = key + '/' + plan.id;
-          entries.push(this.catalog.entry(plan, context, id, key));
+          entries.push(this.catalog.entry(plan, context, id));
           instances.set(id, { key, plugin: plan.id });
         }
       }

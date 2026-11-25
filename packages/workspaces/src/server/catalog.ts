@@ -1,6 +1,5 @@
 import { createScopeKey, type ScopeKey } from '@mini-harness/plugin-api/scopes';
 import { DomainError } from '@mini-harness/platform/errors';
-import { createHash } from 'node:crypto';
 import { lstatSync, mkdirSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
@@ -8,16 +7,9 @@ import { readJson, writeJson } from '@mini-harness/platform/json';
 import { type getPaths, containsPath } from '@mini-harness/platform/paths';
 
 import type { WorkspaceRecord } from '../shared/record.ts';
+import { canonicalWorkspacePath, workspaceId } from './identity.ts';
 interface CatalogState {
   records: WorkspaceRecord[];
-}
-
-// Use the same native resolver as fs/promises.realpath, including Windows long path names.
-export const canonicalWorkspacePath = realpathSync.native;
-
-export function workspaceId(path: string) {
-  const key = process.platform === 'win32' ? path.toLowerCase() : path;
-  return createHash('sha256').update(key).digest('hex').slice(0, 32);
 }
 
 export class WorkspaceCatalog {

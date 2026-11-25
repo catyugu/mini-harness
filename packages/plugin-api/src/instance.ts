@@ -1,22 +1,18 @@
-import type { Context, FiberEntry } from 'mini-harness/cordis';
+import type { Context } from 'mini-harness/cordis';
 import type { ScopeAddress } from './configuration.ts';
-
-interface PluginInstance {
-  pluginId: string;
-  scopeAddress?: ScopeAddress;
-  writableConfig: boolean;
-}
-
-const identities = new WeakMap<FiberEntry, PluginInstance>();
-export function bindInstance(entry: FiberEntry, identity: PluginInstance) {
-  identities.set(entry, Object.freeze(identity));
-}
 
 export function findInstance(ctx: Context) {
   for (let fiber = ctx.fiber; fiber.runtime; fiber = fiber.parent.fiber) {
-    if (!fiber.entry) continue;
-    const identity = identities.get(fiber.entry);
-    if (identity) return { ...identity, instanceId: fiber.entry.options.id };
+    const entry = fiber.entry;
+    if (!entry) continue;
+    const { id: instanceId, live } = entry.options;
+    const slash = instanceId.indexOf('/');
+    return {
+      instanceId,
+      pluginId: instanceId.slice(slash + 1),
+      scopeAddress: slash < 0 ? undefined : instanceId.slice(0, slash) as ScopeAddress,
+      writableConfig: live === true,
+    };
   }
 }
 

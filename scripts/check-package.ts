@@ -167,6 +167,8 @@ async function checkPackage() {
       const scopedSettings: ProfileConfiguration['scopes'] = { 'session:example': scope };
       void scopedSettings;
       const llm: LlmPort | undefined = ctx.harnessLlm;
+      const scopeContext: Context = ctx.harnessProfileScopes.context('session:example');
+      void scopeContext;
       const plugin: Plugin = {
         apply(ctx) { ctx.provide('example', { greet: (name: string) => name.toUpperCase() }); }
       };
